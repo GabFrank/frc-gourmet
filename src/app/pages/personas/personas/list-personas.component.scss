@@ -1,0 +1,119 @@
+// Container layout
+.list-personas-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+// Filter card styles
+.filter-card {
+  flex: 0 0 auto;
+  margin-bottom: 16px;
+}
+
+.filter-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  
+  mat-form-field {
+    flex: 1;
+    min-width: 200px;
+  }
+}
+
+// Button row
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  
+  .spacer {
+    flex: 1;
+  }
+}
+
+// Table container
+.table-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.table-scroll-container {
+  flex: 1;
+  overflow: auto;
+}
+
+.paginator-container {
+  flex: 0 0 auto;
+}
+
+// Loading overlay
+.loading-shade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.15);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+// Table styles
+table {
+  width: 100%;
+}
+
+.mat-mdc-table {
+  overflow: auto;
+  max-height: 100%;  /* Allow table to scroll */
+}
+
+// Status badges
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.active {
+  background-color: #e6f4ea;
+  color: #137333;
+}
+
+.inactive {
+  background-color: #fce8e6;
+  color: #c5221f;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+// Responsive adjustments
+@media (max-width: 600px) {
+  .filter-row {
+    flex-direction: column;
+    
+    mat-form-field {
+      width: 100%;
+    }
+  }
+  
+  .table-container {
+    overflow-x: auto;
+  }
+} 

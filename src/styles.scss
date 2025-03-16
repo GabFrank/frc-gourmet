@@ -1,0 +1,648 @@
+/* You can add global styles to this file, and also import other style files */
+@use '@angular/material' as mat;
+
+// Import custom material icons
+@import 'assets/custom-material-icons.scss';
+
+// Include the common styles for Angular Material
+@include mat.core();
+
+// Custom palette definitions based on user requirements
+$custom-red-palette: (
+  50: #ffebee,
+  100: #ffcdd2,
+  200: #ef9a9a,
+  300: #e57373,
+  400: #ef5350,
+  500: #db392e,
+  // Primary
+  600: #b33026,
+  // Primary variant
+  700: #d32f2f,
+  800: #c62828,
+  900: #b71c1c,
+  A100: #ff8a80,
+  A200: #ff5252,
+  A400: #ff1744,
+  A700: #d50000,
+  contrast: (50: rgba(black, 0.87),
+    100: rgba(black, 0.87),
+    200: rgba(black, 0.87),
+    300: rgba(black, 0.87),
+    400: rgba(black, 0.87),
+    500: white,
+    600: white,
+    700: white,
+    800: white,
+    900: white,
+    A100: rgba(black, 0.87),
+    A200: white,
+    A400: white,
+    A700: white,
+  )
+);
+
+$custom-green-palette: (
+  50: #e8f5e9,
+  100: #c8e6c9,
+  200: #a5d6a7,
+  300: #81c784,
+  400: #66bb6a,
+  500: #43a047,
+  // Secondary
+  600: #38873c,
+  // Secondary variant
+  700: #388e3c,
+  800: #2e7d32,
+  900: #1b5e20,
+  A100: #b9f6ca,
+  A200: #69f0ae,
+  A400: #00e676,
+  A700: #00c853,
+  contrast: (50: rgba(black, 0.87),
+    100: rgba(black, 0.87),
+    200: rgba(black, 0.87),
+    300: rgba(black, 0.87),
+    400: rgba(black, 0.87),
+    500: white,
+    600: white,
+    700: white,
+    800: white,
+    900: white,
+    A100: rgba(black, 0.87),
+    A200: rgba(black, 0.87),
+    A400: rgba(black, 0.87),
+    A700: rgba(black, 0.87),
+  )
+);
+
+$custom-orange-palette: (
+  50: #fff3e0,
+  100: #ffe0b2,
+  200: #ffcc80,
+  300: #ffb74d,
+  400: #ffa726,
+  500: #f57c00,
+  // Accent/Warning
+  600: #fb8c00,
+  700: #f57c00,
+  800: #ef6c00,
+  900: #e65100,
+  A100: #ffd180,
+  A200: #ffab40,
+  A400: #ff9100,
+  A700: #ff6d00,
+  contrast: (50: rgba(black, 0.87),
+    100: rgba(black, 0.87),
+    200: rgba(black, 0.87),
+    300: rgba(black, 0.87),
+    400: rgba(black, 0.87),
+    500: white,
+    600: white,
+    700: white,
+    800: white,
+    900: white,
+    A100: rgba(black, 0.87),
+    A200: rgba(black, 0.87),
+    A400: rgba(black, 0.87),
+    A700: rgba(black, 0.87),
+  )
+);
+
+// Define the custom palettes
+$custom-primary: mat.define-palette($custom-red-palette, 500, 300, 700);
+$custom-accent: mat.define-palette($custom-orange-palette, 500);
+$custom-warn: mat.define-palette($custom-red-palette, 900);
+$custom-secondary: mat.define-palette($custom-green-palette, 500);
+
+// Create the typography config
+$custom-typography: mat.define-typography-config();
+
+// Create the light theme object
+$custom-light-theme: mat.define-light-theme((color: (primary: $custom-primary,
+        accent: $custom-accent,
+        warn: $custom-warn,
+      ),
+      typography: $custom-typography,
+      density: 0,
+    ));
+
+// Create the dark theme object
+$custom-dark-theme: mat.define-dark-theme((color: (primary: $custom-primary,
+        accent: $custom-accent,
+        warn: $custom-warn,
+      ),
+      typography: $custom-typography,
+      density: 0,
+    ));
+
+// Include the theme mixins for all components - light theme is default
+@include mat.all-component-themes($custom-light-theme);
+
+// Dark theme applied when .dark-theme class is present on body
+.dark-theme {
+  // Apply dark theme to all Angular Material components
+  @include mat.all-component-themes($custom-dark-theme);
+
+  // Custom dark theme styles
+  background-color: #424242;
+  color: #ffffff;
+
+  // Dark theme custom styles for cards, dialogs, etc.
+  .mat-mdc-card,
+  .mat-mdc-dialog-container {
+    background-color: #424242;
+    color: #ffffff;
+  }
+
+  // Dark theme custom table styles
+  .mat-mdc-table {
+    background-color: #424242;
+
+    .mat-mdc-header-cell,
+    .mat-mdc-cell {
+      color: #ffffff;
+    }
+  }
+
+  // Fix for text colors in various components
+  .mat-mdc-card-subtitle,
+  .mat-mdc-card-content,
+  .product-description,
+  .info-label,
+  .section-title,
+  .mat-mdc-list-base .mat-mdc-list-option,
+  .mat-mdc-list-base .mat-mdc-list-item,
+  .mat-mdc-list-item-content,
+  label,
+  .mat-mdc-form-field-label,
+  .mat-mdc-paginator,
+  .mat-mdc-select-value,
+  .mat-mdc-option-text,
+  .mat-mdc-tab-label {
+    color: rgba(255, 255, 255, 0.87) !important;
+  }
+
+  .mat-mdc-tab:not(.mat-mdc-tab-disabled).mdc-tab--active .mdc-tab__text-label,
+  .dark-theme .mat-mdc-tab-link:not(.mat-mdc-tab-disabled).mdc-tab--active .mdc-tab__text-label {
+    color: white;
+  }
+
+  // Lighter text for secondary content
+  .mat-hint,
+  .mat-mdc-form-field-hint-wrapper,
+  .mat-mdc-list-base .mat-mdc-list-item .mat-mdc-line:nth-child(n+2),
+  .mat-mdc-card-subtitle,
+  .product-description,
+  .info-label {
+    color: rgba(255, 255, 255, 0.7) !important;
+  }
+
+  // Override for input text colors
+  .mat-mdc-input-element,
+  textarea,
+  select,
+  input {
+    color: rgba(255, 255, 255, 0.87) !important;
+  }
+
+  // Fix for form fields
+  .mat-mdc-form-field-outline {
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .mat-focused .mat-mdc-form-field-label {
+    color: #fff;
+  }
+
+  // Order status styling in dark mode
+  .order-status {
+    &.status-pending {
+      background-color: #f57c00; // orange for pending
+      color: white;
+    }
+
+    &.status-preparing {
+      background-color: #38873c; // dark green
+      color: white;
+    }
+
+    &.status-ready {
+      background-color: #43a047; // green
+      color: white;
+    }
+
+    &.status-delivered {
+      background-color: #3949ab; // indigo
+      color: white;
+    }
+
+    &.status-cancelled {
+      background-color: #db392e; // red
+      color: white;
+    }
+  }
+
+  // Improve button visibility
+  .mat-mdc-button,
+  .mat-mdc-flat-button,
+  .mat-icon-button,
+  .mat-mdc-stroked-button {
+    &:not([color]) {
+      color: rgba(255, 255, 255, 0.87);
+    }
+  }
+
+  // Fix for product card
+  .product-card {
+    .product-price {
+      color: #ffb74d; // light orange for price in dark mode
+    }
+
+    &.unavailable {
+      opacity: 0.5;
+    }
+  }
+
+  // Improved menu items in dark mode
+  .mat-mdc-menu-panel {
+    background-color: #424242;
+
+    .mat-mdc-menu-item {
+      color: rgba(255, 255, 255, 0.87);
+
+      .mat-icon {
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      &:hover:not([disabled]) {
+        background-color: rgba(255, 255, 255, 0.1);
+      }
+    }
+  }
+
+  // Sidenav specific styles
+  .sidenav {
+    background-color: #303030;
+  }
+
+  // Button specific colors
+  .mat-accent {
+    // background-color: #f57c00;
+  }
+
+  .mat-primary {
+    // background-color: #db392e;
+  }
+
+  .mat-success {
+    // background-color: #43a047;
+  }
+
+  // Toolbar coloring
+  .mat-toolbar.mat-primary {
+    // background-color: #b33026; // Darker primary for header
+    color: white;
+  }
+
+  .mat-toolbar.mat-accent {
+    background-color: #f57c00;
+    color: white;
+  }
+
+  // Button coloring with proper text contrast
+  .mat-mdc-raised-button.mat-primary {
+    background-color: #db392e;
+    color: white !important;
+  }
+
+  .mat-mdc-raised-button.mat-accent {
+    background-color: #f57c00;
+    color: white !important;
+  }
+
+  .mat-mdc-raised-button.mat-success {
+    background-color: #43a047;
+    color: white !important;
+  }
+
+  // For flat and stroked buttons - ensure text has good contrast
+  .mat-mdc-button.mat-primary,
+  .mat-mdc-stroked-button.mat-primary,
+  .mat-mdc-outlined-button.mat-primary {
+    color: white !important;
+  }
+
+
+  .mat-mdc-button.mat-accent,
+  .mat-mdc-icon-button.mat-accent,
+  .mat-mdc-stroked-button.mat-accent {
+    color: #ff9800 !important;
+  }
+
+  // Active states
+  .active-link,
+  .active {
+    color: #ffb74d !important;
+    background-color: rgba(219, 57, 46, 0.2);
+  }
+
+  // Fix slider colors (prevent orange background)
+  .mat-mdc-slide-toggle {
+    &.mat-accent {
+      --mdc-switch-selected-track-color: #43a047;
+      --mdc-switch-selected-handle-color: #69f0ae;
+      --mdc-switch-unselected-track-color: #616161;
+      --mdc-switch-unselected-handle-color: #bdbdbd;
+    }
+  }
+
+  .mat-mdc-slide-toggle {
+    &.mat-primary {
+      --mdc-switch-selected-track-color: white;
+      color: white !important;
+    }
+  }
+
+  // Fix tabs appearance for better contrast
+  .mat-tab-group {
+    .mat-tab-header {
+      background-color: #303030;
+    }
+
+    .mat-tab-label {
+      color: rgba(255, 255, 255, 0.7);
+      opacity: 0.7;
+
+      &.mat-tab-label-active {
+        color: white;
+        opacity: 1;
+      }
+    }
+
+    .mat-tab-body-wrapper {
+      background-color: #424242;
+    }
+  }
+
+  // Additional styling for button icons that remain blue
+  .mat-mdc-button .mat-icon,
+  .mat-mdc-raised-button .mat-icon,
+  .mat-mdc-outlined-button .mat-icon,
+  .mat-mdc-unelevated-button .mat-icon,
+  .mat-mdc-fab .mat-icon,
+  .mat-mdc-mini-fab .mat-icon,
+  .mat-icon-button .mat-icon {
+    color: white !important;
+  }
+
+  // Target specifically unthemed icon buttons
+  .mat-unthemed.mat-mdc-icon-button .mat-icon,
+  .mat-unthemed.mdc-icon-button .mat-icon {
+    color: white !important;
+  }
+}
+
+
+// Global styles
+html,
+body {
+  height: 100%;
+  margin: 0;
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+}
+
+body {
+  transition: background-color 0.3s ease, color 0.3s ease;
+  background-color: #f5f5f5; // Light mode background
+}
+
+// Light theme specific styles
+.light-theme,
+body:not(.dark-theme) {
+  background-color: #f5f5f5; // Light mode background
+
+  .mat-mdc-card {
+    background-color: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  // Toolbar coloring
+  .mat-toolbar.mat-primary {
+    background-color: #db392e;
+    color: white;
+  }
+
+  .mat-toolbar.mat-accent {
+    background-color: #f57c00;
+    color: white;
+  }
+
+  // Sidenav specific styles
+  .sidenav {
+    background-color: white;
+
+    .mat-toolbar {
+      background-color: #db392e;
+    }
+  }
+
+  // Button specific colors with proper text contrast
+  .mat-mdc-raised-button.mat-primary {
+    background-color: #db392e;
+    color: white !important;
+  }
+
+  .mat-mdc-raised-button.mat-accent {
+    background-color: #f57c00;
+    color: white !important;
+  }
+
+  .mat-mdc-raised-button.mat-success {
+    background-color: #43a047;
+    color: white !important;
+  }
+
+  // For flat and stroked buttons - ensure text has good contrast
+  .mat-mdc-button.mat-primary,
+  .mat-mdc-icon-button.mat-primary,
+  .mat-mdc-stroked-button.mat-primary {
+    color: #db392e !important;
+  }
+
+  .mat-mdc-button.mat-accent,
+  .mat-mdc-icon-button.mat-accent,
+  .mat-mdc-stroked-button.mat-accent {
+    color: #f57c00 !important;
+  }
+
+  // Active states
+  .active-link,
+  .active {
+    color: #db392e !important;
+    background-color: rgba(219, 57, 46, 0.1);
+  }
+
+  // Fix slider colors
+  // .mat-mdc-slide-toggle {
+  //   &.mat-accent {
+  //     --mdc-switch-selected-track-color: #43a047;
+  //     --mdc-switch-selected-handle-color: #69f0ae;
+  //     --mdc-switch-unselected-track-color: #e0e0e0;
+  //     --mdc-switch-unselected-handle-color: #fafafa;
+  //   }
+  // }
+
+  // Fix tabs appearance for better contrast
+  .mat-tab-group {
+    .mat-tab-header {
+      background-color: #f0f0f0;
+    }
+
+    .mat-tab-label {
+      color: rgba(0, 0, 0, 0.7);
+
+      &.mat-tab-label-active {
+        color: #db392e;
+      }
+    }
+
+    .mat-tab-body-wrapper {
+      background-color: white;
+    }
+  }
+}
+
+// Improve button visibility in both themes
+.mat-mdc-raised-button,
+.mat-mdc-fab,
+.mat-mdc-mini-fab {
+  &.mat-primary {
+    color: white !important;
+  }
+
+  &.mat-accent {
+    color: white !important;
+  }
+}
+
+// Fix slide toggle colors to avoid red background
+.mat-slide-toggle {
+  &.mat-primary {
+    .mdc-switch:enabled .mdc-switch__track::after {
+      background: #43a047 !important; // green track when selected
+    }
+
+    .mdc-switch:enabled .mdc-switch__handle::after {
+      background: #69f0ae !important; // light green handle when selected
+    }
+
+    .mdc-switch:enabled:not(:checked) .mdc-switch__track::after {
+      background: rgba(0, 0, 0, 0.38) !important; // default track color when not selected
+    }
+
+    .mdc-switch:enabled:not(:checked) .mdc-switch__handle::after {
+      background: #fafafa !important; // default handle color when not selected
+    }
+  }
+}
+
+// Order status styling in light mode
+.order-status {
+  &.status-pending {
+    background-color: #fff3e0; // Light orange
+    color: #e65100; // Dark orange text
+  }
+
+  &.status-preparing {
+    background-color: #e8f5e9; // Light green
+    color: #2e7d32; // Dark green text
+  }
+
+  &.status-ready {
+    background-color: #43a047; // Green
+    color: white;
+  }
+
+  &.status-delivered {
+    background-color: #e8eaf6; // Light indigo
+    color: #283593; // Dark indigo text
+  }
+
+  &.status-cancelled {
+    background-color: #ffebee; // Light red
+    color: #b71c1c; // Dark red text
+  }
+}
+
+// Material Typography
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+}
+
+.mat-typography p {
+  margin: 0 0 12px;
+}
+
+// Fix for item that still has optional chaining in price column
+.items-table .mat-column-price {
+  text-align: right;
+}
+
+.items-table .mat-column-subtotal {
+  text-align: right;
+}
+
+// Force all inputs to uppercase with higher specificity
+input, 
+.mat-mdc-input-element,
+.mat-input-element,
+textarea, 
+select,
+.mat-select-value-text,
+.mat-mdc-select-value-text {
+  text-transform: uppercase !important;
+}
+
+// For mat-form-field inputs specifically
+.mat-mdc-form-field input,
+.mat-form-field input {
+  text-transform: uppercase !important;
+}
+
+// Target Angular Material inputs directly
+.mat-mdc-text-field-wrapper input {
+  text-transform: uppercase !important;
+}
+
+// Add this rule to transform input values as they're typed
+::placeholder {
+  text-transform: none !important; // Keep placeholders in their original case
+}
+
+// Fix icon colors to use the custom green instead of blue
+.mat-mdc-form-field {
+  .mat-icon {
+    &.mat-primary,
+    &[color="primary"] {
+      color: #43a047 !important;
+    }
+  }
+  
+  // Target the password visibility toggle icon
+  .mat-mdc-input-element+.mat-icon {
+    color: #43a047 !important;
+  }
+  
+  // Target search/dropdown icons
+  .mat-datepicker-toggle,
+  .mat-select-arrow,
+  .mat-form-field-suffix .mat-icon {
+    color: #43a047 !important;
+  }
+}

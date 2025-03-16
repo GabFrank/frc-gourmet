@@ -1,0 +1,139 @@
+.dialog-container {
+  min-width: 500px;
+  max-width: 900px;
+  width: 90vw;
+  
+  h1 {
+    margin-bottom: 16px;
+  }
+  
+  h3 {
+    margin-top: 24px;
+    margin-bottom: 12px;
+    color: #555;
+    font-weight: 500;
+    font-size: 16px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 8px;
+  }
+  
+  .mat-dialog-content {
+    max-height: 70vh;
+    padding-right: 8px;
+  }
+}
+
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 8px;
+  
+  .full-width {
+    width: 100%;
+  }
+  
+  .half-width {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 150px;
+  }
+  
+  .one-third-width {
+    flex: 1 1 calc(33.33% - 12px);
+    min-width: 120px;
+  }
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin: 16px 0;
+}
+
+.multiple-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  
+  .toggle-group {
+    display: flex;
+    gap: 24px;
+    flex: 1 1 auto;
+    margin-bottom: 16px;
+  }
+}
+
+.image-container {
+  margin: 16px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  
+  .image-preview {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid #ddd;
+    
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    
+    .remove-image-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      opacity: 0.9;
+    }
+  }
+  
+  .image-upload {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px;
+    border: 2px dashed #ccc;
+    border-radius: 4px;
+    width: 200px;
+    
+    .hint-text {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #777;
+    }
+  }
+}
+
+.spinner-button {
+  display: inline-block;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+// Responsive adjustments
+@media (max-width: 600px) {
+  .form-row {
+    flex-direction: column;
+    
+    .half-width,
+    .one-third-width {
+      width: 100%;
+    }
+  }
+  
+  .multiple-toggles {
+    .toggle-group {
+      flex-direction: column;
+      gap: 8px;
+    }
+  }
+  
+  .dialog-container {
+    min-width: auto;
+  }
+} 

@@ -1,0 +1,67 @@
+<div class="dialog-container">
+  <h2 mat-dialog-title>{{ config.title }}</h2>
+  
+  <div class="dialog-content-wrapper">
+    <div class="search-container">
+      <mat-form-field appearance="outline" class="search-field">
+        <mat-label>Buscar</mat-label>
+        <input matInput [formControl]="searchControl" (keydown)="onKeyDown($event)" placeholder="Ingrese texto para buscar">
+        <button mat-icon-button matSuffix (click)="search()" aria-label="Buscar">
+          <mat-icon>search</mat-icon>
+        </button>
+      </mat-form-field>
+    </div>
+    
+    <div class="table-scroll-container">
+      <div class="loading-shade" *ngIf="isLoading">
+        <mat-spinner diameter="50"></mat-spinner>
+      </div>
+      
+      <table mat-table [dataSource]="items" class="results-table">
+        <!-- Dynamic columns based on configuration -->
+        <ng-container *ngFor="let column of displayedColumns" [matColumnDef]="column">
+          <!-- Action column is special -->
+          <ng-container *ngIf="column === 'actions'; else dataColumn">
+            <th mat-header-cell *matHeaderCellDef>Acciones</th>
+            <td mat-cell *matCellDef="let item">
+              <button mat-icon-button color="primary" (click)="selectItem(item)" aria-label="Seleccionar">
+                <mat-icon>check_circle</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+          
+          <!-- Regular data columns -->
+          <ng-template #dataColumn>
+            <th mat-header-cell *matHeaderCellDef>{{ columnLabels[column] }}</th>
+            <td mat-cell *matCellDef="let item">{{ displayText(item, column) }}</td>
+          </ng-template>
+        </ng-container>
+        
+        <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+        
+        <!-- No results message -->
+        <tr class="mat-row" *matNoDataRow>
+          <td class="mat-cell no-data-cell" [attr.colspan]="displayedColumns.length">
+            No se encontraron resultados con los criterios de búsqueda.
+          </td>
+        </tr>
+      </table>
+    </div>
+    
+    <div class="fixed-footer">
+      <mat-paginator
+        [length]="totalItems"
+        [pageSize]="pageSize"
+        [pageSizeOptions]="pageSizeOptions"
+        (page)="onPageChange($event)"
+        showFirstLastButtons
+        aria-label="Seleccionar página">
+      </mat-paginator>
+      
+      <div class="dialog-actions">
+        <button mat-button (click)="cancel()" [disabled]="isLoading">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div> 

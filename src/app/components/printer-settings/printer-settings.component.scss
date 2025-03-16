@@ -1,0 +1,137 @@
+.printer-settings-container {
+  padding: 16px;
+  min-width: 700px;
+  max-height: 80vh;
+  overflow-y: auto;
+  
+  @media (max-width: 768px) {
+    min-width: auto;
+    width: 100%;
+  }
+}
+
+.settings-subtitle {
+  margin-top: -12px;
+  margin-bottom: 20px;
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 14px;
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  margin: 20px 0;
+}
+
+mat-card {
+  margin-bottom: 24px;
+  
+  mat-card-content {
+    padding: 16px 0;
+  }
+  
+  mat-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    
+    .header-actions {
+      margin-left: auto;
+    }
+  }
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  
+  @media (max-width: 599px) {
+    flex-direction: column;
+    gap: 0;
+  }
+}
+
+.full-width {
+  width: 100%;
+}
+
+.form-field-half {
+  flex: 1;
+  
+  @media (max-width: 599px) {
+    width: 100%;
+  }
+}
+
+.form-field-third {
+  flex: 1;
+  
+  @media (max-width: 599px) {
+    width: 100%;
+  }
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  margin-bottom: 16px;
+}
+
+.printers-table-card {
+  margin-top: 24px;
+}
+
+.printers-table {
+  width: 100%;
+  
+  .mat-column-name {
+    min-width: 120px;
+  }
+  
+  .mat-column-address {
+    min-width: 150px;
+  }
+  
+  .mat-column-isDefault {
+    width: 80px;
+    text-align: center;
+  }
+  
+  .mat-column-actions {
+    width: 140px;
+    text-align: right;
+    
+    button {
+      margin-left: 4px;
+    }
+  }
+}
+
+.no-printers {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  color: rgba(0, 0, 0, 0.54);
+  
+  mat-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    margin-bottom: 16px;
+  }
+  
+  p {
+    font-size: 16px;
+  }
+}
+
+// Dark theme support
+:host-context(.dark-theme) {
+  .no-printers {
+    color: rgba(255, 255, 255, 0.7);
+  }
+} 

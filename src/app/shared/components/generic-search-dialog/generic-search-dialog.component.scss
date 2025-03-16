@@ -1,0 +1,178 @@
+.dialog-container {
+  min-width: 700px;
+  max-width: 900px;
+  min-height: 60vh;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow: var(--mat-dialog-container-elevation-shadow);
+}
+
+.dialog-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  padding: 0 24px 16px;
+  height: 100%;
+}
+
+h2[mat-dialog-title] {
+  margin: 0;
+  padding: 16px 24px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--mat-divider-color);
+  font-size: 1.2rem;
+  letter-spacing: 0.5px;
+}
+
+.search-container {
+  margin: 16px 0;
+  flex-shrink: 0;
+}
+
+.search-field {
+  width: 100%;
+}
+
+/* Custom input styles */
+::ng-deep .search-field .mat-form-field-outline {
+  color: #4fc3f7 !important;
+  opacity: 0.7;
+}
+
+::ng-deep .search-field .mat-form-field-flex {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+::ng-deep .search-field .mat-input-element {
+  color: white;
+}
+
+::ng-deep .search-field .mat-form-field-label {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.table-scroll-container {
+  position: relative;
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 200px;
+  border-radius: 4px;
+  border: 1px solid var(--mat-divider-color);
+}
+
+.loading-shade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.15);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.results-table {
+  width: 100%;
+}
+
+.mat-header-row {
+  height: 48px;
+}
+
+.mat-header-cell {
+  font-weight: 500;
+  font-size: 0.9rem;
+  letter-spacing: 0.5px;
+}
+
+.mat-row {
+  height: 44px;
+  transition: background-color 0.2s ease;
+}
+
+.mat-row:hover {
+  background-color: var(--mat-table-hover-state-layer-color);
+}
+
+/* Remove these row background colors to let Angular Material handle it */
+.mat-row:nth-child(even) {
+  background-color: transparent;
+}
+
+.mat-row:nth-child(odd) {
+  background-color: transparent;
+}
+
+.mat-cell {
+  color: rgba(255, 255, 255, 0.87);
+}
+
+.no-data-cell {
+  padding: 40px;
+  text-align: center;
+  font-style: italic;
+}
+
+.fixed-footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--mat-divider-color);
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+::ng-deep .mat-paginator {
+  background-color: transparent;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+::ng-deep .mat-paginator-page-size-select {
+  margin: 0 4px 0 4px;
+  width: 56px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 0 0;
+}
+
+button[mat-button] {
+  padding: 4px 20px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  transition: all 0.2s ease;
+}
+
+/* Remove the background-color override */
+button[mat-button]:not([disabled]) {
+  background-color: transparent;
+}
+
+button[mat-button]:not([disabled]):hover {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+/* Remove button color overrides */
+button[mat-icon-button][color="primary"] {
+  color: inherit;
+}
+
+/* Remove button color overrides */
+button[mat-icon-button][matSuffix] {
+  color: inherit;
+}
+
+// Make dialog responsive for smaller screens
+@media (max-width: 768px) {
+  .dialog-container {
+    min-width: 300px;
+  }
+} 

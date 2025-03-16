@@ -1,0 +1,452 @@
+---
+description: 
+globs: 
+---
+# Guide for Creating tvides a comprehensive guide for creating new entities in the FRC Gourmet application. It covers all layers of the application stack and ensures consistency across the codebase.
+
+## 1. Entity Definition (TypeORM)
+
+First of all, look on codebase to confirm that entity.ts is not aready created
+Always edit .ts js inseat of .js
+
+### Files to Create:
+- `src/app/database/enttity-name].entity.ts`
+
+### Rules:
+- Entity classes should extend `BaseModel`
+- Use appropriate TypeORM decorators (`@Entity`, `@Column`, `@ManyToOne`, etc.)
+- Include proper relationships with other entities
+- Include JSDoc comments to document the entity
+- Fields should have explicit types
+- Define all required constraints (unique, nullable, etc.)
+
+### Example:
+
+```typescript
+import { Column, Entity, ManyToOne, JoinColumn } from 'typeorm';
+import { BaseModel } from '../base.entity';
+import { SomeOtherEntity } from '../some-other-entity';
+
+/**
+ * Entity representing a [description]
+ */
+@Entity('[table_name]')
+export class EntityName extends BaseModel {
+  @Column()
+  name!: string;
+
+  @Column({ nullable: true })
+  description?: string;
+
+  @Column({ default: true })
+  isActive!: boolean;
+
+  @ManyToOne(() => SomeOtherEntity)
+  @JoinColumn({ name: 'other_entity_id' })
+  otherEntity!: SomeOtherEntity;
+}
+```
+
+## 2. Database Configuration Update
+
+### Files to Modify:
+- `src/app/database/database.config.ts`
+
+### Rules:
+- Import the new entity at the top of the file
+- Add the entity to the `entities` array in the `getDataSourceOptions` function
+
+### Example:
+
+```typescript
+import { EntityName } from './entities/domain/entity-name.entity';
+
+// ...
+
+export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
+  return {
+    // ...
+    entities: [
+      // Existing entities
+      EntityName, // Add the new entity here
+    ],
+    // ...
+  };
+}
+```
+
+## 3. Repository Service Methods (Angular)
+
+### Files to Modify:
+- `src/app/database/repository.service.ts`
+
+### Rules:
+- Add interface extension for the ElectronAPI
+- Add methods for CRUD operations
+
+### Example:
+
+```typescript
+// In the ElectronAPI interface:
+getEntityNames: () => Promise<EntityName[]>;
+getEntityName: (id: number) => Promise<EntityName>;
+createEntityName: (data: any) => Promise<EntityName>;
+updateEntityName: (id: number, data: any) => Promise<any>;
+deleteEntityName: (id: number) => Promise<any>;
+getEntityNamesPaginated: (page: number, pageSize: number, filters?: any) => Promise<{items: EntityName[], total: number}>;
+
+// Then add the service methods:
+// EntityName methods
+getEntityNames(): Observable<EntityName[]> {
+  return from(this.api.getEntityNames());
+}
+
+getEntityName(id: number): Observable<EntityName> {
+  return from(this.api.getEntityName(id));
+}
+
+createEntityName(data: Partial<EntityName>): Observable<EntityName> {
+  return from(this.api.createEntityName(data));
+}
+
+updateEntityName(id: number, data: Partial<EntityName>): Observable<any> {
+  return from(this.api.updateEntityName(id, data));
+}
+
+deleteEntityName(id: number): Observable<any> {
+  return from(this.api.deleteEntityName(id));
+}
+
+getEntityNamesPaginated(page: number, pageSize: number, filters?: any): Observable<{items: EntityName[], total: number}> {
+  return from(this.api.getEntityNamesPaginated(page, pageSize, filters));
+}
+```
+
+## 4. Main Process IPC Handlers (Electron)
+
+### Files to Modify:
+- `main.ts`
+
+### Rules:
+- Import the entity at the top
+- Create handlers for all CRUD operations
+- Implement proper error handling
+- Use TypeORM's repository pattern consistently
+- For paginated queries, use the queryBuilder approach to support filtering
+- Document each handler with comments
+
+### Example:
+
+```typescript
+// Get all entity names
+ipcMain.handle('get-entity-names', async () => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const repository = dataSource.getRepository(EntityName);
+    return await repository.find({ 
+      relations: ['otherEntity'],
+      order: { name: 'ASC' }
+    });
+  } catch (error) {
+    console.error('Error getting entity names:', error);
+    throw error;
+  }
+});
+
+// Get entity name by ID
+ipcMain.handle('get-entity-name', async (_event: Electron.IpcMainInvokeEvent, id: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const repository = dataSource.getRepository(EntityName);
+    return await repository.findOne({
+      where: { id },
+      relations: ['otherEntity']
+    });
+  } catch (error) {
+    console.error('Error getting entity name:', error);
+    throw error;
+  }
+});
+
+// Create a new entity name
+ipcMain.handle('create-entity-name', async (_event: Electron.IpcMainInvokeEvent, data: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const repository = dataSource.getRepository(EntityName);
+    const otherEntityRepository = dataSource.getRepository(SomeOtherEntity);
+    
+    // Get related entity if necessary
+    const otherEntity = await otherEntityRepository.findOneBy({ id: data.otherEntityId });
+    if (!otherEntity) {
+      return {
+        success: false,
+        message: 'Related entity not found'
+      };
+    }
+    
+    // Create the entity
+    const entityName = repository.create({
+      name: data.name,
+      description: data.description,
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      otherEntity: otherEntity
+    });
+    
+    const savedEntity = await repository.save(entityName);
+    
+    // Fetch the complete entity with relations
+    const completeEntity = await repository.findOne({
+      where: { id: savedEntity.id },
+      relations: ['otherEntity']
+    });
+    
+    return {
+      success: true,
+      entityName: completeEntity
+    };
+  } catch (error) {
+    console.error('Error creating entity name:', error);
+    return {
+      success: false,
+      message: 'Error al crear: ' + (error as Error).message
+    };
+  }
+});
+
+// Update an entity name
+ipcMain.handle('update-entity-name', async (_event: Electron.IpcMainInvokeEvent, id: number, data: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const repository = dataSource.getRepository(EntityName);
+    const otherEntityRepository = dataSource.getRepository(SomeOtherEntity);
+    
+    // Get the current entity
+    const entity = await repository.findOne({
+      where: { id },
+      relations: ['otherEntity']
+    });
+    
+    if (!entity) {
+      return { success: false, message: 'Entity not found' };
+    }
+    
+    // Update relation if provided
+    if (data.otherEntityId !== undefined) {
+      const otherEntity = await otherEntityRepository.findOneBy({ id: data.otherEntityId });
+      if (!otherEntity) {
+        return { success: false, message: 'Related entity not found' };
+      }
+      entity.otherEntity = otherEntity;
+    }
+    
+    // Update fields
+    if (data.name !== undefined) entity.name = data.name;
+    if (data.description !== undefined) entity.description = data.description;
+    if (data.isActive !== undefined) entity.isActive = data.isActive;
+    
+    const updatedEntity = await repository.save(entity);
+    
+    return { success: true, entityName: updatedEntity };
+  } catch (error) {
+    console.error('Error updating entity name:', error);
+    return {
+      success: false,
+      message: 'Error al actualizar: ' + (error as Error).message
+    };
+  }
+});
+
+// Delete an entity name (soft delete by setting isActive to false)
+ipcMain.handle('delete-entity-name', async (_event: Electron.IpcMainInvokeEvent, id: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const repository = dataSource.getRepository(EntityName);
+    
+    const result = await repository.update(id, { isActive: false });
+    
+    if (result.affected && result.affected > 0) {
+      return { success: true };
+    } else {
+      return { success: false, message: 'Entity not found' };
+    }
+  } catch (error) {
+    console.error('Error deleting entity name:', error);
+    throw error;
+  }
+});
+
+// Get entity names with pagination and filtering
+ipcMain.handle('get-entity-names-paginated', async (_event: Electron.IpcMainInvokeEvent, page: number, pageSize: number, filters: any = {}) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const repository = dataSource.getRepository(EntityName);
+    
+    // Build query with relations
+    const queryBuilder = repository.createQueryBuilder('entityName')
+      .leftJoinAndSelect('entityName.otherEntity', 'otherEntity');
+    
+    // Apply filters if provided
+    if (filters && Object.keys(filters).length > 0) {
+      // Filter by name (case insensitive)
+      if (filters.name && typeof filters.name === 'string') {
+        queryBuilder.andWhere("LOWER(entityName.name) LIKE LOWER(:name)", { 
+          name: `%${filters.name}%` 
+        });
+      }
+      
+      // Filter by description (case insensitive)
+      if (filters.description && typeof filters.description === 'string') {
+        queryBuilder.andWhere("LOWER(entityName.description) LIKE LOWER(:description)", {
+          description: `%${filters.description}%`
+        });
+      }
+      
+      // Filter by active status
+      if (filters.isActive !== undefined && filters.isActive !== null && filters.isActive !== '') {
+        const isActiveValue = filters.isActive === 'true' || filters.isActive === true;
+        queryBuilder.andWhere('entityName.isActive = :isActive', { isActive: isActiveValue });
+      }
+      
+      // Filter by related entity
+      if (filters.otherEntityId) {
+        queryBuilder.andWhere('otherEntity.id = :otherEntityId', { 
+          otherEntityId: filters.otherEntityId 
+        });
+      }
+    }
+    
+    // Get total count with filters
+    const total = await queryBuilder.getCount();
+    
+    // Add pagination and ordering
+    queryBuilder
+      .orderBy('entityName.name', 'ASC')
+      .skip(page * pageSize)
+      .take(pageSize);
+    
+    // Execute query
+    const items = await queryBuilder.getMany();
+    
+    return {
+      items,
+      total
+    };
+  } catch (error) {
+    console.error('Error getting paginated entity names:', error);
+    throw error;
+  }
+});
+```
+
+## 5. Preload Scripts (Electron)
+
+### Files to Modify:
+- `preload.ts`
+- `preload.js` (auto-generated from preload.ts)
+
+### Rules:
+- Add type definitions in preload.ts
+- Implement IPC invocations for each handler
+
+### Example:
+
+```typescript
+// In preload.ts:
+interface ElectronAPI {
+  // ...existing methods
+  
+  // EntityName operations
+  getEntityNames: () => Promise<EntityName[]>;
+  getEntityName: (id: number) => Promise<EntityName>;
+  createEntityName: (data: any) => Promise<{ success: boolean, entityName?: EntityName, message?: string }>;
+  updateEntityName: (id: number, data: any) => Promise<{ success: boolean, entityName?: EntityName, message?: string }>;
+  deleteEntityName: (id: number) => Promise<{ success: boolean, message?: string }>;
+  getEntityNamesPaginated: (page: number, pageSize: number, filters?: any) => Promise<{ items: EntityName[], total: number }>;
+}
+
+// Expose the API
+const api: ElectronAPI = {
+  // ...existing implementations
+  
+  // EntityName operations
+  getEntityNames: async (): Promise<EntityName[]> => {
+    return await ipcRenderer.invoke('get-entity-names');
+  },
+  getEntityName: async (id: number): Promise<EntityName> => {
+    return await ipcRenderer.invoke('get-entity-name', id);
+  },
+  createEntityName: async (data: any): Promise<{ success: boolean, entityName?: EntityName, message?: string }> => {
+    return await ipcRenderer.invoke('create-entity-name', data);
+  },
+  updateEntityName: async (id: number, data: any): Promise<{ success: boolean, entityName?: EntityName, message?: string }> => {
+    return await ipcRenderer.invoke('update-entity-name', id, data);
+  },
+  deleteEntityName: async (id: number): Promise<{ success: boolean, message?: string }> => {
+    return await ipcRenderer.invoke('delete-entity-name', id);
+  },
+  getEntityNamesPaginated: async (page: number, pageSize: number, filters?: any): Promise<{ items: EntityName[], total: number }> => {
+    return await ipcRenderer.invoke('get-entity-names-paginated', page, pageSize, filters);
+  },
+};
+```
+
+## 6. Angular Components
+
+### Files to Create:
+- `src/app/pages/[domain]/[entity-names]/list-entity-names.component.ts`
+- `src/app/pages/[domain]/[entity-names]/list-entity-names.component.html`
+- `src/app/pages/[domain]/[entity-names]/list-entity-names.component.scss`
+- `src/app/pages/[domain]/[entity-names]/create-edit-entity-name.component.ts`
+- `src/app/pages/[domain]/[entity-names]/create-edit-entity-name.component.html`
+- `src/app/pages/[domain]/[entity-names]/create-edit-entity-name.component.scss`
+
+### Rules:
+- Use Angular standalone components
+- Import necessary Angular Material modules
+- Create separate components for listing and creating/editing
+- Implement proper typings
+- Use reactive forms
+- Implement pagination and filtering in list components
+- Use Material design patterns consistently
+- Add error handling
+- Provide user feedback with snackbars
+- All formControl with strings must be converted to uppercase before save or update, unless user explicitly indicate the opposite
+- always use [repository.service.ts](mdc:src/app/database/repository.service.ts) for crud methods
+
+### Example List Component:
+[list-usuarios.component.html](mdc:src/app/pages/personas/usuarios/list-usuarios.component.html)
+[list-usuarios.component.ts](mdc:src/app/pages/personas/usuarios/list-usuarios.component.ts)
+[list-usuarios.component.scss](mdc:src/app/pages/personas/usuarios/list-usuarios.component.scss)
+
+
+### Example Create/Edit Component:
+@create-edit-persona.component.ts
+[create-edit-persona.component.html](mdc:src/app/pages/personas/personas/create-edit-persona.component.html)
+[create-edit-persona.component.scss](mdc:src/app/pages/personas/personas/create-edit-persona.component.scss)
+
+## 9. Add Tab Opening Method
+
+### Files to Modify:
+- `src/app/app.component.ts`
+
+### Rules:
+- Follow the existing pattern for tab methods
+- Use consistent naming conventions
+
+### Example:
+
+```typescript
+openEntityNamesTab() {
+  this.tabsService.openTab({
+    id: 'entityNames',
+    title: 'Entity Names',
+    icon: 'entity_icon',
+    closable: true,
+    component: ListEntityNamesComponent
+  });
+}
+```
+
+## Conclusion
+
+Following these rules will ensure consistency across the application when creating new entities. The process involves several layers and files, but maintaining this structure makes the application maintainable and scalable.

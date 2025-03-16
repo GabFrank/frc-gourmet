@@ -1,0 +1,180 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+mat-tab-group {
+  flex: 0 0 auto; /* Take only as much space as needed for tab headers */
+}
+
+::ng-deep .mat-mdc-tab-body-wrapper {
+  display: none; /* Hide the default tab content area */
+}
+
+::ng-deep .mat-mdc-tab-body-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.tab-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.tab-group {
+  ::ng-deep {
+    .mat-tab-header {
+      border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+    }
+    
+    .mat-tab-label {
+      height: 48px;
+      padding: 0 16px;
+      position: relative;
+      overflow: visible;
+      
+      &.mat-tab-label-active {
+        opacity: 1;
+      }
+    }
+    
+    .mat-tab-body-wrapper {
+      flex: 1;
+      height: calc(100% - 49px);
+    }
+  }
+}
+
+.fixed-tabs {
+  ::ng-deep {
+    .mat-tab-header {
+      display: inline-flex !important;
+      overflow-x: auto;
+      max-height: 48px; // You can adjust this value as needed
+      border-bottom: 2px solid rgba(0, 0, 0, 0.12);
+    }
+
+    .mat-tab-labels {
+      display: inline-flex !important;
+    }
+
+    .mat-tab-label {
+      min-width: unset !important;
+      padding: 0 16px;
+      width: auto !important;
+      margin-right: 2px;
+      border-radius: 4px 4px 0 0;
+      
+      &.mat-tab-label-active {
+        background-color: rgba(0, 0, 0, 0.05);
+      }
+    }
+  }
+}
+
+.tab-close-button {
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  margin-left: 8px;
+  
+  .mat-icon {
+    font-size: 16px;
+    line-height: 16px;
+    height: 16px;
+    width: 16px;
+  }
+  
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+  }
+}
+
+.dynamic-component-container {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: 5px; /* Adjust this to match your tab header height */
+  bottom: 0;
+  left: 0;
+  right: 0;
+  overflow: auto;
+}
+
+::ng-deep .tab-group {
+  .mat-tab-header {
+    display: inline-flex;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  .mat-tab-label-container {
+    display: inline-flex;
+  }
+
+  .mat-tab-labels {
+    display: inline-flex;
+  }
+
+  .mat-tab-label {
+    min-width: unset;
+    padding: 0 16px;
+    width: auto;
+  }
+
+  .mat-tab-body-wrapper {
+    max-height: 400px; // Adjust this value as needed
+    overflow: auto;
+  }
+}
+
+// Make sure the tab close button doesn't trigger tab selection
+.tab-close-button {
+  z-index: 1000;
+}
+
+// Dark theme adjustments
+:host-context(.dark-theme) {
+  .tab-group ::ng-deep {
+    .mat-tab-header {
+      border-bottom-color: rgba(255, 255, 255, 0.12);
+    }
+    
+    .mat-tab-label-active {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+  }
+  
+  .tab-content {
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+  
+  .tab-close-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+.tab-placeholder {
+  display: none; /* Hide the placeholder content */
+}
+
+.dynamic-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding: 5px;
+}
+
+/* This will ensure any content inside gets full height */
+::ng-deep .dynamic-content > * {
+  flex: 1;
+  height: 100%;
+} 

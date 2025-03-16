@@ -1,0 +1,153 @@
+.sidenav-container {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+}
+
+.sidenav {
+  width: 250px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+// User profile in sidebar styles
+.user-profile-header {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  
+  .user-avatar {
+    margin-right: 12px;
+    
+    .avatar-icon {
+      font-size: 40px;
+      height: 40px;
+      width: 40px;
+      line-height: 40px;
+      color: #5f6368;
+    }
+  }
+  
+  .user-info {
+    flex: 1;
+    
+    .user-name {
+      font-weight: 500;
+      font-size: 16px;
+    }
+    
+    .user-last-login {
+      font-size: 12px;
+      color: rgba(0, 0, 0, 0.54);
+    }
+  }
+}
+
+.sidenav .mat-toolbar {
+  background: inherit;
+}
+
+.mat-toolbar.mat-primary {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.app-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  margin: 0 12px;
+  
+  .mat-icon {
+    margin: 0 4px;
+    font-size: 20px;
+    height: 20px;
+    width: 20px;
+    line-height: 20px;
+  }
+  
+  .mat-slide-toggle {
+    margin: 0 4px;
+  }
+}
+
+.main-content {
+  display: flex;
+  flex-direction: column;
+  height: calc(100% - 64px);
+  overflow: hidden;
+}
+
+.active {
+  background-color: rgba(0, 0, 0, 0.08);
+}
+
+.sidebar-actions {
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+  
+  button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 599px) {
+  .main-content {
+    min-height: calc(100vh - 56px);
+  }
+  
+  .theme-toggle {
+    margin-right: 8px;
+    
+    .mat-icon {
+      font-size: 18px;
+      height: 18px;
+      width: 18px;
+      line-height: 18px;
+    }
+  }
+}
+
+.sidenav-trigger {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 100%;
+  z-index: 999;
+  background-color: transparent;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.sidenav-trigger:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+mat-sidenav-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+app-tab-container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}

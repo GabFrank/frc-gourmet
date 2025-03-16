@@ -1,0 +1,195 @@
+<div class="printer-settings-container">
+  <h2 mat-dialog-title>Printer Settings</h2>
+  <p class="settings-subtitle">Configure receipt printers for your restaurant</p>
+
+  <div *ngIf="isLoading" class="loading-container">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+
+  <div mat-dialog-content>
+    <!-- Printer Form -->
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>{{ editingPrinterId ? 'Edit Printer' : 'Add New Printer' }}</mat-card-title>
+        <div class="header-actions">
+          <button mat-raised-button color="accent" type="button" (click)="setupCupsPrinter('ticket-58mm')" *ngIf="!editingPrinterId">
+            <mat-icon>print</mat-icon> Configure CUPS Printer
+          </button>
+        </div>
+      </mat-card-header>
+
+      <mat-card-content>
+        <form [formGroup]="printerForm" (ngSubmit)="onSubmit()">
+          <!-- Basic Information -->
+          <div class="form-row">
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Printer Name</mat-label>
+              <input matInput formControlName="name" placeholder="Enter printer name" required>
+              <mat-error *ngIf="printerForm.get('name')?.hasError('required')">
+                Printer name is required
+              </mat-error>
+            </mat-form-field>
+          </div>
+
+          <div class="form-row">
+            <mat-form-field appearance="outline" class="form-field-half">
+              <mat-label>Printer Type</mat-label>
+              <mat-select formControlName="type" required>
+                <mat-option *ngFor="let type of printerTypes" [value]="type.value">
+                  {{ type.displayName }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="form-field-half">
+              <mat-label>Connection Type</mat-label>
+              <mat-select formControlName="connectionType" required>
+                <mat-option *ngFor="let conn of connectionTypes" [value]="conn.value">
+                  {{ conn.displayName }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+
+          <!-- Connection Settings -->
+          <div class="form-row">
+            <mat-form-field appearance="outline" class="form-field-half">
+              <mat-label>Address</mat-label>
+              <input matInput formControlName="address" 
+                    [placeholder]="printerForm.get('connectionType')?.value === 'network' ? 'IP Address (e.g. 192.168.1.100)' : 
+                                 printerForm.get('connectionType')?.value === 'usb' ? 'Device Path' : 'MAC Address'" 
+                    required>
+              <mat-error *ngIf="printerForm.get('address')?.hasError('required')">
+                Address is required
+              </mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="form-field-half" 
+                          *ngIf="printerForm.get('connectionType')?.value === 'network'">
+              <mat-label>Port</mat-label>
+              <input matInput type="number" formControlName="port" placeholder="9100">
+              <mat-error *ngIf="printerForm.get('port')?.hasError('min')">
+                Port must be at least 1
+              </mat-error>
+              <mat-error *ngIf="printerForm.get('port')?.hasError('max')">
+                Port must be at most 65535
+              </mat-error>
+            </mat-form-field>
+          </div>
+
+          <!-- Advanced Settings -->
+          <div class="form-row">
+            <mat-form-field appearance="outline" class="form-field-third">
+              <mat-label>Width (mm)</mat-label>
+              <input matInput type="number" formControlName="width" placeholder="58">
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="form-field-third">
+              <mat-label>DPI</mat-label>
+              <input matInput type="number" formControlName="dpi" placeholder="203">
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="form-field-third">
+              <mat-label>Character Set</mat-label>
+              <mat-select formControlName="characterSet">
+                <mat-option *ngFor="let charset of characterSets" [value]="charset.value">
+                  {{ charset.displayName }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+
+          <div class="form-row">
+            <mat-slide-toggle formControlName="isDefault" color="primary">
+              Set as default printer
+            </mat-slide-toggle>
+          </div>
+
+          <div class="form-actions">
+            <button mat-raised-button color="primary" type="submit" [disabled]="printerForm.invalid || isLoading">
+              {{ editingPrinterId ? 'Update Printer' : 'Add Printer' }}
+            </button>
+            <button mat-button type="button" (click)="resetForm()" *ngIf="editingPrinterId">Cancel</button>
+          </div>
+        </form>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Printers Table -->
+    <mat-card class="printers-table-card">
+      <mat-card-header>
+        <mat-card-title>Configured Printers</mat-card-title>
+      </mat-card-header>
+
+      <mat-card-content>
+        <div *ngIf="printers.length === 0" class="no-printers">
+          <mat-icon>print_disabled</mat-icon>
+          <p>No printers configured yet</p>
+        </div>
+
+        <table mat-table [dataSource]="printers" class="printers-table" *ngIf="printers.length > 0">
+          <!-- Name Column -->
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef>Name</th>
+            <td mat-cell *matCellDef="let printer">{{ printer.name }}</td>
+          </ng-container>
+
+          <!-- Type Column -->
+          <ng-container matColumnDef="type">
+            <th mat-header-cell *matHeaderCellDef>Type</th>
+            <td mat-cell *matCellDef="let printer">{{ printer.type }}</td>
+          </ng-container>
+
+          <!-- Connection Type Column -->
+          <ng-container matColumnDef="connectionType">
+            <th mat-header-cell *matHeaderCellDef>Connection</th>
+            <td mat-cell *matCellDef="let printer">{{ printer.connectionType }}</td>
+          </ng-container>
+
+          <!-- Address Column -->
+          <ng-container matColumnDef="address">
+            <th mat-header-cell *matHeaderCellDef>Address</th>
+            <td mat-cell *matCellDef="let printer">
+              {{ printer.address }}{{ printer.connectionType === 'network' && printer.port ? ':' + printer.port : '' }}
+            </td>
+          </ng-container>
+
+          <!-- Default Printer Column -->
+          <ng-container matColumnDef="isDefault">
+            <th mat-header-cell *matHeaderCellDef>Default</th>
+            <td mat-cell *matCellDef="let printer">
+              <mat-icon *ngIf="printer.isDefault" color="primary">check_circle</mat-icon>
+              <button mat-icon-button color="primary" *ngIf="!printer.isDefault"
+                      (click)="setDefaultPrinter(printer)" matTooltip="Set as default">
+                <mat-icon>radio_button_unchecked</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+
+          <!-- Actions Column -->
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>Actions</th>
+            <td mat-cell *matCellDef="let printer">
+              <button mat-icon-button color="primary" (click)="printTestPage(printer)" matTooltip="Print test page">
+                <mat-icon>print</mat-icon>
+              </button>
+              <button mat-icon-button color="accent" (click)="editPrinter(printer)" matTooltip="Edit printer">
+                <mat-icon>edit</mat-icon>
+              </button>
+              <button mat-icon-button color="warn" (click)="deletePrinter(printer)" matTooltip="Delete printer">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+        </table>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <div mat-dialog-actions align="end">
+    <button mat-raised-button color="primary" (click)="onClose()">Close</button>
+  </div>
+</div> 

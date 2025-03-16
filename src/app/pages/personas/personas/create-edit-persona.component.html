@@ -1,0 +1,110 @@
+<div class="dialog-container">
+  <h2 mat-dialog-title>{{ isEditing ? 'Editar' : 'Crear' }} Persona</h2>
+  
+  <div class="dialog-content-wrapper">
+    <form [formGroup]="personaForm" class="form-container">
+      <div class="loading-shade" *ngIf="loading">
+        <mat-spinner diameter="50"></mat-spinner>
+      </div>
+      
+      <!-- Profile Image Upload -->
+      <div class="profile-image-container">
+        <div class="image-preview" *ngIf="imagePreviewUrl">
+          <img [src]="displayImageUrl(imagePreviewUrl)" alt="Imagen de perfil">
+          <button mat-icon-button color="warn" type="button" class="remove-image-btn" (click)="removeImage()">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+        
+        <div class="upload-button-container" *ngIf="!imagePreviewUrl">
+          <button mat-stroked-button type="button" (click)="fileInput.click()">
+            <mat-icon>add_photo_alternate</mat-icon>
+            Añadir imagen de perfil
+          </button>
+        </div>
+        
+        <div class="change-image-button" *ngIf="imagePreviewUrl">
+          <button mat-stroked-button type="button" (click)="fileInput.click()">
+            <mat-icon>photo_camera</mat-icon>
+            Cambiar imagen
+          </button>
+        </div>
+        
+        <input type="file" #fileInput style="display: none" accept="image/*" (change)="onImageSelected($event)">
+      </div>
+      
+      <!-- Nombre field -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Nombre*</mat-label>
+        <input matInput formControlName="nombre" placeholder="Ingrese el nombre" required>
+        <mat-error *ngIf="personaForm.get('nombre')?.hasError('required')">
+          El nombre es obligatorio
+        </mat-error>
+      </mat-form-field>
+      
+      <!-- Documento fields -->
+      <div class="row-fields">
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Tipo de Documento*</mat-label>
+          <mat-select formControlName="tipoDocumento" required>
+            <mat-option *ngFor="let tipo of documentoTipos" [value]="tipo">
+              {{ tipo }}
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="personaForm.get('tipoDocumento')?.hasError('required')">
+            El tipo de documento es obligatorio
+          </mat-error>
+        </mat-form-field>
+        
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Documento*</mat-label>
+          <input matInput formControlName="documento" placeholder="Ingrese el documento" required>
+          <mat-error *ngIf="personaForm.get('documento')?.hasError('required')">
+            El documento es obligatorio
+          </mat-error>
+        </mat-form-field>
+      </div>
+      
+      <!-- Tipo Persona field -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Tipo de Persona*</mat-label>
+        <mat-select formControlName="tipoPersona" required>
+          <mat-option *ngFor="let tipo of personaTipos" [value]="tipo">
+            {{ tipo === 'FISICA' ? 'Física' : 'Jurídica' }}
+          </mat-option>
+        </mat-select>
+        <mat-error *ngIf="personaForm.get('tipoPersona')?.hasError('required')">
+          El tipo de persona es obligatorio
+        </mat-error>
+      </mat-form-field>
+      
+      <!-- Telefono field -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Teléfono</mat-label>
+        <input matInput formControlName="telefono" placeholder="Ingrese el teléfono">
+      </mat-form-field>
+      
+      <!-- Direccion field -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Dirección</mat-label>
+        <input matInput formControlName="direccion" placeholder="Ingrese la dirección">
+      </mat-form-field>
+      
+      <!-- Active checkbox -->
+      <div class="checkbox-container">
+        <mat-checkbox formControlName="activo" color="primary">
+          Activo
+        </mat-checkbox>
+      </div>
+    </form>
+  </div>
+  
+  <div class="fixed-footer">
+    <div class="dialog-actions">
+      <button mat-button (click)="cancel()" [disabled]="loading">Cancelar</button>
+      <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="personaForm.invalid || loading">
+        {{ isEditing ? 'Actualizar' : 'Guardar' }}
+      </button>
+    </div>
+  </div>
+</div> 

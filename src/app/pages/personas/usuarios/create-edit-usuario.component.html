@@ -1,0 +1,72 @@
+<div class="dialog-container">
+  <h2 mat-dialog-title>{{ isEditing ? 'Editar' : 'Crear' }} Usuario</h2>
+  
+  <div class="dialog-content-wrapper">
+    <form [formGroup]="usuarioForm" class="form-container">
+      <div class="loading-shade" *ngIf="isLoading">
+        <mat-spinner diameter="50"></mat-spinner>
+      </div>
+      
+      <!-- Nickname field -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Usuario*</mat-label>
+        <input matInput formControlName="nickname" placeholder="Ingrese el nombre de usuario" required>
+        <mat-error *ngIf="usuarioForm.get('nickname')?.hasError('required')">
+          El nickname es obligatorio
+        </mat-error>
+      </mat-form-field>
+      
+      <!-- Password field -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Contraseña*</mat-label>
+        <input matInput [type]="hidePassword ? 'password' : 'text'" formControlName="password" 
+               placeholder="{{ isEditing ? 'Dejar en blanco para mantener la actual' : 'Ingrese la contraseña' }}">
+        <button mat-icon-button matSuffix (click)="hidePassword = !hidePassword" type="button">
+          <mat-icon>{{ hidePassword ? 'visibility_off' : 'visibility' }}</mat-icon>
+        </button>
+        <mat-error *ngIf="usuarioForm.get('password')?.hasError('required')">
+          La contraseña es obligatoria
+        </mat-error>
+        <mat-error *ngIf="usuarioForm.get('password')?.hasError('minlength')">
+          La contraseña debe tener al menos 4 caracteres
+        </mat-error>
+      </mat-form-field>
+      
+      <!-- Persona field with search button -->
+      <div class="search-field-container">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Persona</mat-label>
+          <input matInput [value]="selectedPersona?.nombre || ''" placeholder="Busque una persona" readonly (keydown.enter)="selectedPersona == null ? openPersonaSearch() : null">
+          <button mat-icon-button matSuffix (click)="openPersonaSearch()" type="button" aria-label="Buscar persona">
+            <mat-icon>search</mat-icon>
+          </button>
+          <mat-error *ngIf="usuarioForm.get('persona_id')?.hasError('required')">
+            La persona es obligatoria
+          </mat-error>
+        </mat-form-field>
+        <div class="persona-info" *ngIf="selectedPersona">
+          <div class="info-row">
+            <span class="info-label">Documento:</span>
+            <span class="info-value">{{ selectedPersona.tipoDocumento }} {{ selectedPersona.documento }}</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Active checkbox -->
+      <div class="checkbox-container">
+        <mat-checkbox formControlName="activo" color="primary">
+          Activo
+        </mat-checkbox>
+      </div>
+    </form>
+  </div>
+  
+  <div class="fixed-footer">
+    <div class="dialog-actions">
+      <button mat-button (click)="cancel()" [disabled]="isLoading">Cancelar</button>
+      <button mat-raised-button color="primary" (click)="save()" [disabled]="usuarioForm.invalid || isLoading">
+        Guardar
+      </button>
+    </div>
+  </div>
+</div> 

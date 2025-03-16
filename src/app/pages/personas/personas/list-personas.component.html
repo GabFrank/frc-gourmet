@@ -1,0 +1,166 @@
+<div class="list-personas-container">
+  <mat-card class="filter-card">
+    <mat-card-header>
+      <mat-card-title>Gestión de Personas</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <form [formGroup]="filterForm" class="filter-form">
+        <div class="filter-row">
+          <mat-form-field appearance="outline">
+            <mat-label>Nombre</mat-label>
+            <input matInput formControlName="nombre" placeholder="Buscar por nombre">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Documento</mat-label>
+            <input matInput formControlName="documento" placeholder="Buscar por documento">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Tipo Documento</mat-label>
+            <mat-select formControlName="tipoDocumento">
+              <mat-option value="">Todos</mat-option>
+              <mat-option *ngFor="let tipo of documentoTipos" [value]="tipo">{{ tipo }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Tipo Persona</mat-label>
+            <mat-select formControlName="tipoPersona">
+              <mat-option value="">Todos</mat-option>
+              <mat-option *ngFor="let tipo of personaTipos" [value]="tipo">
+                {{ tipo === 'FISICA' ? 'Física' : 'Jurídica' }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Estado</mat-label>
+            <mat-select formControlName="activo">
+              <mat-option value="">Todos</mat-option>
+              <mat-option value="true">Activo</mat-option>
+              <mat-option value="false">Inactivo</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="button-row">
+          <button mat-raised-button color="primary" (click)="buscar()">
+            <mat-icon>search</mat-icon>
+            Buscar
+          </button>
+          <button mat-raised-button (click)="clearFilters()">
+            <mat-icon>clear</mat-icon>
+            Limpiar
+          </button>
+          <span class="spacer"></span>
+          <button mat-raised-button color="accent" (click)="addPersona()">
+            <mat-icon>add</mat-icon>
+            Adicionar
+          </button>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <div class="table-container">
+    <div class="loading-shade" *ngIf="isLoading">
+      <mat-spinner></mat-spinner>
+    </div>
+
+    <mat-card class="table-scroll-container">
+      <table mat-table [dataSource]="personas.slice(currentPage * pageSize, (currentPage + 1) * pageSize)" 
+             matSort (matSortChange)="onSort($event)" class="mat-elevation-z8">
+        
+        <!-- Nombre Column -->
+        <ng-container matColumnDef="nombre">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Nombre</th>
+          <td mat-cell *matCellDef="let persona">{{ persona.nombre }}</td>
+        </ng-container>
+
+        <!-- Tipo Documento Column -->
+        <ng-container matColumnDef="tipoDocumento">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Tipo Doc.</th>
+          <td mat-cell *matCellDef="let persona">{{ getDocumentoTipoLabel(persona.tipoDocumento) }}</td>
+        </ng-container>
+
+        <!-- Documento Column -->
+        <ng-container matColumnDef="documento">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Documento</th>
+          <td mat-cell *matCellDef="let persona">{{ persona.documento }}</td>
+        </ng-container>
+
+        <!-- Tipo Persona Column -->
+        <ng-container matColumnDef="tipoPersona">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Tipo Persona</th>
+          <td mat-cell *matCellDef="let persona">{{ getPersonaTipoLabel(persona.tipoPersona) }}</td>
+        </ng-container>
+
+        <!-- Teléfono Column -->
+        <ng-container matColumnDef="telefono">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Teléfono</th>
+          <td mat-cell *matCellDef="let persona">{{ persona.telefono || '-' }}</td>
+        </ng-container>
+
+        <!-- Dirección Column -->
+        <ng-container matColumnDef="direccion">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Dirección</th>
+          <td mat-cell *matCellDef="let persona">{{ persona.direccion || '-' }}</td>
+        </ng-container>
+
+        <!-- Active Column -->
+        <ng-container matColumnDef="activo">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Estado</th>
+          <td mat-cell *matCellDef="let persona">
+            <span class="status-badge" [ngClass]="persona.activo ? 'active' : 'inactive'">
+              {{ persona.activo ? 'Activo' : 'Inactivo' }}
+            </span>
+          </td>
+        </ng-container>
+
+        <!-- Actions Column -->
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef>Acciones</th>
+          <td mat-cell *matCellDef="let persona">
+            <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="editPersona(persona)">
+                <mat-icon>edit</mat-icon>
+                <span>Editar</span>
+              </button>
+              <button mat-menu-item (click)="deletePersona(persona.id!)">
+                <mat-icon>delete</mat-icon>
+                <span>Eliminar</span>
+              </button>
+              <button mat-menu-item (click)="createEditUsuario(persona)">
+                <mat-icon>person</mat-icon>
+                <span>Crear/Editar Usuario</span>
+              </button>
+            </mat-menu>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+
+        <!-- Row shown when there is no data -->
+        <tr class="mat-row" *matNoDataRow>
+          <td class="mat-cell" colspan="8">No se encontraron personas con los filtros aplicados.</td>
+        </tr>
+      </table>
+    </mat-card>
+
+    <div class="paginator-container">
+      <mat-paginator 
+        [length]="totalPersonas"
+        [pageSize]="pageSize"
+        [pageSizeOptions]="pageSizeOptions"
+        (page)="onPageChange($event)"
+        showFirstLastButtons
+        aria-label="Seleccionar página">
+      </mat-paginator>
+    </div>
+  </div>
+</div> 
