@@ -1,27 +1,87 @@
-# FrcGourmet
+# FRC Gourmet
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 15.2.8.
+A modern Electron Angular desktop application for restaurant inventory management, product cataloging, and point of sale operations.
 
-## Development server
+## Features
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
+- **Product Management**: Comprehensive system for managing products, categories, and subcategories
+- **Inventory Control**: Keep track of stock, set reorder points, and manage product expiration
+- **User Management**: Secure multi-user system with role-based access control
+- **Profile Management**: Create and manage customer and employee profiles
+- **Image Handling**: Store product and profile images locally with the app
+- **Responsive UI**: Modern, user-friendly interface built with Angular Material
 
-## Code scaffolding
+## Tech Stack
 
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
+- **Frontend**: Angular 15 with TypeScript
+- **UI Framework**: Angular Material
+- **Desktop Framework**: Electron
+- **Database**: SQLite with TypeORM
+- **Build Tools**: Angular CLI, Electron Builder
 
-## Build
+## Development
 
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
+### Prerequisites
 
-## Running unit tests
+- Node.js 14+ and npm
+- Angular CLI (`npm install -g @angular/cli`)
 
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
+### Getting Started
 
-## Running end-to-end tests
+1. Clone the repository
+   ```
+   git clone https://github.com/GabFrank/frc-gourmet.git
+   cd frc-gourmet
+   ```
 
-Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
+2. Install dependencies
+   ```
+   npm install
+   ```
 
-## Further help
+3. Run the development server
+   ```
+   npm run start
+   ```
 
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.io/cli) page.
+4. Start Electron
+   ```
+   npm run electron
+   ```
+
+### Building for Production
+
+1. Build the Angular application
+   ```
+   npm run build:prod
+   ```
+
+2. Package the Electron application
+   ```
+   npm run electron:build
+   ```
+
+## Project Structure
+
+- **src/app/pages/**: Angular components organized by feature
+  - **personas/**: Customer and employee management
+  - **productos/**: Product, category, and subcategory management
+- **src/app/database/**: Database configuration and entity definitions
+- **src/app/services/**: Application services
+- **electron/**: Electron main process code and utilities
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Contact
+
+Project Link: [https://github.com/GabFrank/frc-gourmet](https://github.com/GabFrank/frc-gourmet)
