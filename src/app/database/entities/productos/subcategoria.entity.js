@@ -19,6 +19,7 @@ const producto_entity_1 = require("./producto.entity");
  */
 let Subcategoria = class Subcategoria extends base_entity_1.BaseModel {
 };
+exports.Subcategoria = Subcategoria;
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)
@@ -48,8 +49,7 @@ __decorate([
     (0, typeorm_1.OneToMany)(() => producto_entity_1.Producto, producto => producto.subcategoria),
     __metadata("design:type", Array)
 ], Subcategoria.prototype, "productos", void 0);
-Subcategoria = __decorate([
+exports.Subcategoria = Subcategoria = __decorate([
     (0, typeorm_1.Entity)('subcategorias')
 ], Subcategoria);
-exports.Subcategoria = Subcategoria;
 //# sourceMappingURL=subcategoria.entity.js.map

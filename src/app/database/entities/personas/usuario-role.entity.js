@@ -19,6 +19,7 @@ const role_entity_1 = require("./role.entity");
  */
 let UsuarioRole = class UsuarioRole extends base_entity_1.BaseModel {
 };
+exports.UsuarioRole = UsuarioRole;
 __decorate([
     (0, typeorm_1.ManyToOne)(() => usuario_entity_1.Usuario),
     (0, typeorm_1.JoinColumn)({ name: 'usuario_id' }),
@@ -29,8 +30,7 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'role_id' }),
     __metadata("design:type", role_entity_1.Role)
 ], UsuarioRole.prototype, "role", void 0);
-UsuarioRole = __decorate([
+exports.UsuarioRole = UsuarioRole = __decorate([
     (0, typeorm_1.Entity)('usuario_roles')
 ], UsuarioRole);
-exports.UsuarioRole = UsuarioRole;
 //# sourceMappingURL=usuario-role.entity.js.map

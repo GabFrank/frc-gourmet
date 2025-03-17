@@ -8,5 +8,5 @@ var PersonaTipo;
 (function (PersonaTipo) {
     PersonaTipo["FISICA"] = "FISICA";
     PersonaTipo["JURIDICA"] = "JURIDICA";
-})(PersonaTipo = exports.PersonaTipo || (exports.PersonaTipo = {}));
+})(PersonaTipo || (exports.PersonaTipo = PersonaTipo = {}));
 //# sourceMappingURL=persona-tipo.enum.js.map

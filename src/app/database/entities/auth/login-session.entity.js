@@ -18,6 +18,7 @@ const usuario_entity_1 = require("../personas/usuario.entity");
  */
 let LoginSession = class LoginSession extends base_entity_1.BaseModel {
 };
+exports.LoginSession = LoginSession;
 __decorate([
     (0, typeorm_1.ManyToOne)(() => usuario_entity_1.Usuario),
     (0, typeorm_1.JoinColumn)({ name: 'usuario_id' }),
@@ -63,8 +64,7 @@ __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], LoginSession.prototype, "os", void 0);
-LoginSession = __decorate([
+exports.LoginSession = LoginSession = __decorate([
     (0, typeorm_1.Entity)('login_sessions')
 ], LoginSession);
-exports.LoginSession = LoginSession;
 //# sourceMappingURL=login-session.entity.js.map

@@ -59,7 +59,7 @@ function createWindow() {
     // Load the app
     if (process.argv.indexOf('--serve') !== -1) {
         // Load from Angular dev server if --serve argument is provided
-        win.loadURL('http://localhost:4200');
+        win.loadURL('http://localhost:4201');
         // Open the DevTools automatically if in development mode
         win.webContents.openDevTools();
     }
