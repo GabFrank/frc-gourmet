@@ -14,10 +14,6 @@ const imageHandler = require('./electron/utils/image-handler');
 // Import TypeORM-related code
 import { DataSource } from 'typeorm';
 import { DatabaseService } from './src/app/database/database.service';
-import { Category } from './src/app/database/entities/category.entity';
-import { Product } from './src/app/database/entities/product.entity';
-import { Order } from './src/app/database/entities/order.entity';
-import { OrderItem } from './src/app/database/entities/order-item.entity';
 import { Printer } from './src/app/database/entities/printer.entity';
 import { Persona } from './src/app/database/entities/personas/persona.entity';
 import { Usuario } from './src/app/database/entities/personas/usuario.entity';
@@ -27,8 +23,8 @@ import { TipoCliente } from './src/app/database/entities/personas/tipo-cliente.e
 import { Cliente } from './src/app/database/entities/personas/cliente.entity';
 import { LoginSession } from './src/app/database/entities/auth/login-session.entity';
 import { Categoria } from './src/app/database/entities/productos/categoria.entity';
-import { Subcategoria } from './src/app/database/entities/productos/subcategoria.entityria.entity';
-import { Producto } from './src/app/database/entities/productos/producto.entitycto.entity';
+import { Subcategoria } from './src/app/database/entities/productos/subcategoria.entity';
+import { Producto } from './src/app/database/entities/productos/producto.entity';
 
 let win: any;
 let dbService: DatabaseService;
@@ -43,7 +39,7 @@ let currentUser: Usuario | null = null;
 function initializeDatabase() {
   // Get user data path
   const userDataPath = app.getPath('userData');
-  
+
   // Initialize database service
   dbService = DatabaseService.getInstance();
   dbService.initialize(userDataPath)
@@ -94,14 +90,14 @@ app.on('ready', () => {
   // Register the app:// protocol for handling profile images
   protocol.registerFileProtocol('app', (request: Electron.ProtocolRequest, callback: (response: Electron.ProtocolResponse) => void) => {
     const url = request.url.substring(6); // Remove 'app://'
-    
+
     if (url.startsWith('profile-images/')) {
       const fileName = url.replace('profile-images/', '');
       const imagesDir = path.join(app.getPath('userData'), 'profile-images');
       callback({ path: path.join(imagesDir, fileName) });
       return;
     }
-    
+
     // Handle other app:// URLs here if needed
     callback({ error: -2 /* ENOENT */ });
   });
@@ -131,204 +127,13 @@ app.on('activate', () => {
 
 // Handle IPC events for database operations using TypeORM
 
-// Get all categories
-ipcMain.handle('get-categories', async () => {
-  try {
-    const dataSource = dbService.getDataSource();
-    const categoryRepository = dataSource.getRepository(Category);
-    return await categoryRepository.find({ order: { name: 'ASC' } });
-  } catch (error) {
-    console.error('Error getting categories:', error);
-    throw error;
-  }
-});
-
-// Get all products
-ipcMain.handle('get-products', async () => {
-  try {
-    const dataSource = dbService.getDataSource();
-    const productRepository = dataSource.getRepository(Product);
-    return await productRepository.find({ 
-      relations: ['category'],
-      order: { name: 'ASC' } 
-    });
-  } catch (error) {
-    console.error('Error getting products:', error);
-    throw error;
-  }
-});
-
-// Get products by category
-ipcMain.handle('get-products-by-category', async (_event: any, categoryId: number) => {
-  try {
-    const dataSource = dbService.getDataSource();
-    const productRepository = dataSource.getRepository(Product);
-    return await productRepository.find({
-      where: { categoryId },
-      relations: ['category'],
-      order: { name: 'ASC' }
-    });
-  } catch (error) {
-    console.error('Error getting products by category:', error);
-    throw error;
-  }
-});
-
-// Create a new order
-ipcMain.handle('create-order', async (_event: any, orderData: any) => {
-  const dataSource = dbService.getDataSource();
-  const queryRunner = dataSource.createQueryRunner();
-  
-  await queryRunner.connect();
-  await queryRunner.startTransaction();
-  
-  try {
-    // Create order
-    const orderRepository = queryRunner.manager.getRepository(Order);
-    const order = orderRepository.create({
-      tableNumber: orderData.tableNumber,
-      customerName: orderData.customerName,
-      totalAmount: orderData.totalAmount,
-      status: 'pending'
-    });
-    
-    const savedOrder = await queryRunner.manager.save(order);
-    
-    // Create order items
-    const orderItemRepository = queryRunner.manager.getRepository(OrderItem);
-    const orderItems = orderData.items.map((item: any) => {
-      return orderItemRepository.create({
-        orderId: savedOrder.id,
-        productId: item.productId,
-        quantity: item.quantity,
-        notes: item.notes
-      });
-    });
-    
-    await queryRunner.manager.save(orderItems);
-    
-    // Commit transaction
-    await queryRunner.commitTransaction();
-    
-    return { orderId: savedOrder.id };
-  } catch (error) {
-    // Rollback transaction on error
-    await queryRunner.rollbackTransaction();
-    console.error('Error creating order:', error);
-    throw error;
-  } finally {
-    // Release query runner
-    await queryRunner.release();
-  }
-});
-
-// Get all orders
-ipcMain.handle('get-orders', async () => {
-  try {
-    const dataSource = dbService.getDataSource();
-    const orderRepository = dataSource.getRepository(Order);
-    return await orderRepository.find({
-      order: { orderTime: 'DESC' }
-    });
-  } catch (error) {
-    console.error('Error getting orders:', error);
-    throw error;
-  }
-});
-
-// Get order details (items in an order)
-ipcMain.handle('get-order-details', async (_event: any, orderId: number) => {
-  try {
-    const dataSource = dbService.getDataSource();
-    const orderItemRepository = dataSource.getRepository(OrderItem);
-    return await orderItemRepository.find({
-      where: { orderId },
-      relations: ['product']
-    });
-  } catch (error) {
-    console.error('Error getting order details:', error);
-    throw error;
-  }
-});
-
-// Update order status
-ipcMain.handle('update-order-status', async (_event: any, orderId: number, status: string) => {
-  try {
-    const dataSource = dbService.getDataSource();
-    const orderRepository = dataSource.getRepository(Order);
-    const result = await orderRepository.update(orderId, { status });
-    return { success: true, changes: result.affected };
-  } catch (error) {
-    console.error('Error updating order status:', error);
-    throw error;
-  }
-});
-
-// Create a new product
-ipcMain.handle('create-product', async (_event: any, productData: any) => {
-  try {
-    const dataSource = dbService.getDataSource();
-    const productRepository = dataSource.getRepository(Product);
-    const product = productRepository.create({
-      name: productData.name,
-      description: productData.description,
-      price: productData.price,
-      categoryId: productData.category_id,
-      isAvailable: productData.is_available || true
-    });
-    
-    // Save the product first
-    const savedProduct = await productRepository.save(product);
-    
-    // Then fetch it with the category relation
-    const productWithCategory = await productRepository.findOne({
-      where: { id: savedProduct.id },
-      relations: ['category']
-    });
-    
-    return productWithCategory;
-  } catch (error) {
-    console.error('Error creating product:', error);
-    throw error;
-  }
-});
-
-// Update an existing product
-ipcMain.handle('update-product', async (_event: any, productId: number, productData: any) => {
-  try {
-    const dataSource = dbService.getDataSource();
-    const productRepository = dataSource.getRepository(Product);
-    
-    const result = await productRepository.update(productId, {
-      name: productData.name,
-      description: productData.description,
-      price: productData.price,
-      categoryId: productData.category_id,
-      isAvailable: productData.is_available || false
-    });
-    
-    if (result.affected && result.affected > 0) {
-      // Fetch the updated product with category relation
-      const updatedProduct = await productRepository.findOne({
-        where: { id: productId },
-        relations: ['category']
-      });
-      return { success: true, product: updatedProduct };
-    } else {
-      return { success: false, message: 'No product found with that ID' };
-    }
-  } catch (error) {
-    console.error('Error updating product:', error);
-    throw error;
-  }
-});
 
 // IPC handler for getting all printers
 ipcMain.handle('get-printers', async () => {
   try {
     const dataSource = dbService.getDataSource();
     const printerRepository = dataSource.getRepository(Printer);
-    
+
     const printers = await printerRepository.find();
     return printers;
   } catch (error) {
@@ -342,12 +147,12 @@ ipcMain.handle('add-printer', async (_event: any, printer: any) => {
   try {
     const dataSource = dbService.getDataSource();
     const printerRepository = dataSource.getRepository(Printer);
-    
+
     // If this is a default printer, unset any existing defaults
     if (printer.isDefault) {
       await printerRepository.update({ isDefault: true }, { isDefault: false });
     }
-    
+
     // Create the new printer
     const newPrinter = printerRepository.create({
       name: printer.name,
@@ -361,7 +166,7 @@ ipcMain.handle('add-printer', async (_event: any, printer: any) => {
       isDefault: printer.isDefault,
       options: printer.options ? JSON.stringify(printer.options) : undefined
     });
-    
+
     const savedPrinter = await printerRepository.save(newPrinter);
     return { success: true, printer: savedPrinter };
   } catch (error) {
@@ -375,12 +180,12 @@ ipcMain.handle('update-printer', async (_event: any, printerId: number, printer:
   try {
     const dataSource = dbService.getDataSource();
     const printerRepository = dataSource.getRepository(Printer);
-    
+
     // If this is a default printer, unset any existing defaults
     if (printer.isDefault) {
       await printerRepository.update({ isDefault: true }, { isDefault: false });
     }
-    
+
     // Update the printer
     const result = await printerRepository.update(printerId, {
       name: printer.name,
@@ -394,7 +199,7 @@ ipcMain.handle('update-printer', async (_event: any, printerId: number, printer:
       isDefault: printer.isDefault,
       options: printer.options ? JSON.stringify(printer.options) : undefined
     });
-    
+
     if (result.affected && result.affected > 0) {
       // Get the updated printer
       const updatedPrinter = await printerRepository.findOneBy({ id: printerId });
@@ -413,9 +218,9 @@ ipcMain.handle('delete-printer', async (_event: any, printerId: number) => {
   try {
     const dataSource = dbService.getDataSource();
     const printerRepository = dataSource.getRepository(Printer);
-    
+
     const result = await printerRepository.delete(printerId);
-    
+
     if (result.affected && result.affected > 0) {
       return { success: true };
     } else {
@@ -430,10 +235,10 @@ ipcMain.handle('delete-printer', async (_event: any, printerId: number) => {
 // Helper function to generate receipt content
 function generateReceiptContent(order: any, orderItems: any[]): string {
   const dateTime = new Date(order.orderTime).toLocaleString();
-  
+
   let content = `
 ==============================
-         FRC GOURMET          
+         FRC GOURMET
 ==============================
 Order #: ${order.id}
 Date: ${dateTime}
@@ -464,8 +269,8 @@ SUBTOTAL: $${subtotal.toFixed(2)}
 TAX: $${(subtotal * 0.08).toFixed(2)}
 TOTAL: $${order.totalAmount.toFixed(2)}
 ==============================
-        THANK YOU!           
-   PLEASE COME AGAIN SOON    
+        THANK YOU!
+   PLEASE COME AGAIN SOON
 ==============================
 `;
 
@@ -476,7 +281,7 @@ TOTAL: $${order.totalAmount.toFixed(2)}
 function generateTestPageContent(printer: any): string {
   return `
 ==============================
-         TEST PAGE           
+         TEST PAGE
 ==============================
 Printer: ${printer.name}
 Type: ${printer.type}
@@ -484,15 +289,15 @@ Connection: ${printer.connectionType}
 Address: ${printer.address}
 ${printer.port ? `Port: ${printer.port}` : ''}
 ------------------------------
-This is a test page to verify 
-that your printer is working 
+This is a test page to verify
+that your printer is working
 correctly with FRC Gourmet.
 ==============================
 If you can read this message,
 your printer is correctly
 configured and working!
 ==============================
-        THANK YOU!           
+        THANK YOU!
 ==============================
 `;
 }
@@ -502,23 +307,23 @@ async function printThermalReceipt(printer: any, content: string): Promise<boole
   try {
     const thermalPrinter = new ThermalPrinter({
       type: getPrinterType(printer.type),
-      interface: printer.connectionType === 'network' 
-        ? `tcp://${printer.address}:${printer.port || 9100}` 
+      interface: printer.connectionType === 'network'
+        ? `tcp://${printer.address}:${printer.port || 9100}`
         : printer.address,
       width: printer.width || 48, // Default to 48 chars for 58mm paper
       characterSet: printer.characterSet || CharacterSet.PC437_USA,
       removeSpecialCharacters: false,
       options: printer.options ? JSON.parse(printer.options) : {}
     });
-    
+
     const isConnected = await thermalPrinter.isPrinterConnected();
     if (!isConnected) {
       throw new Error('Printer is not connected');
     }
-    
+
     thermalPrinter.print(content);
     thermalPrinter.cut();
-    
+
     await thermalPrinter.execute();
     console.log('Print completed successfully');
     return true;
@@ -534,47 +339,47 @@ async function printPosReceipt(printer: any, content: string): Promise<boolean> 
     // Special handling for CUPS printers
     if (printer.connectionType === 'usb' && printer.address.includes('ticket-')) {
       console.log("Detected CUPS printer. Using direct CUPS printing approach.");
-      
+
       // Use child_process to directly print to CUPS
       const { exec } = require('child_process');
-      
+
       // Create a temporary file for the content
       const tempFile = path.join(app.getPath('temp'), `receipt-${Date.now()}.txt`);
       fs.writeFileSync(tempFile, content, 'utf8');
-      
+
       // Print using lp command (standard CUPS printing command)
       const printCommand = `lp -d ${printer.address} ${tempFile}`;
       console.log(`Executing: ${printCommand}`);
-      
+
       return new Promise((resolve, reject) => {
         exec(printCommand, (error: any, stdout: string, stderr: string) => {
           // Clean up the temp file
           try { fs.unlinkSync(tempFile); } catch (e) { console.error('Failed to delete temp file:', e); }
-          
+
           if (error) {
             console.error(`CUPS printing error: ${error.message}`);
             console.error(`stderr: ${stderr}`);
             reject(error);
             return;
           }
-          
+
           console.log(`CUPS printing stdout: ${stdout}`);
           console.log("CUPS printing done!");
           resolve(true);
         });
       });
     }
-    
+
     // Regular thermal printer printing for non-CUPS printers
     // Create interface string based on connection type
     let interfaceConfig;
-    
+
     if (printer.connectionType === 'network') {
       // For regular network printers
       interfaceConfig = `tcp://${printer.address}:${printer.port || 9100}`;
     } else if (printer.connectionType === 'usb') {
       // For USB connected printers
-      interfaceConfig = printer.address; 
+      interfaceConfig = printer.address;
     } else if (printer.connectionType === 'bluetooth') {
       // For Bluetooth printers
       interfaceConfig = `bt:${printer.address}`;
@@ -582,12 +387,12 @@ async function printPosReceipt(printer: any, content: string): Promise<boolean> 
       // Fallback
       interfaceConfig = printer.address;
     }
-    
+
     console.log(`Using printer interface: ${interfaceConfig}`);
-    
+
     // Get the character set from the CharacterSet enum
     const characterSet = printer.characterSet ? getCharacterSet(printer.characterSet) : CharacterSet.PC437_USA;
-    
+
     // Use node-thermal-printer with the right configuration
     const thermalPrinter = new ThermalPrinter({
       type: getPrinterType(printer.type),
@@ -598,20 +403,20 @@ async function printPosReceipt(printer: any, content: string): Promise<boolean> 
       width: printer.width || 48, // Character width
       characterSet: characterSet,
     });
-    
+
     // Check connection
     const isConnected = await thermalPrinter.isPrinterConnected();
-    
+
     if (!isConnected) {
       console.error('Printer is not connected');
       return false;
     }
-    
+
     // Print receipt
     thermalPrinter.alignCenter();
     thermalPrinter.println(content);
     thermalPrinter.cut();
-    
+
     await thermalPrinter.execute();
     console.log("Print done!");
     return true;
@@ -677,19 +482,19 @@ ipcMain.handle('print-test-page', async (_event: any, printerId: number) => {
     // Get the printer configuration
     const dataSource = dbService.getDataSource();
     const printerRepository = dataSource.getRepository(Printer);
-    
+
     const printer = await printerRepository.findOneBy({ id: printerId });
-    
+
     if (!printer) {
       throw new Error('Printer not found');
     }
-    
+
     // Generate test page content
     const content = generateTestPageContent(printer);
-    
+
     // Print the test page
     const success = await printPosReceipt(printer, content);
-    
+
     return { success };
   } catch (error) {
     console.error('Error printing test page:', error);
@@ -698,55 +503,17 @@ ipcMain.handle('print-test-page', async (_event: any, printerId: number) => {
 });
 
 // IPC handler for printing a receipt
-ipcMain.handle('print-receipt', async (_event: any, orderId: number, printerId: number) => {
-  try {
-    const dataSource = dbService.getDataSource();
-    
-    // Get the printer configuration
-    const printerRepository = dataSource.getRepository(Printer);
-    const printer = await printerRepository.findOneBy({ id: printerId });
-    
-    if (!printer) {
-      throw new Error('Printer not found');
-    }
-    
-    // Get the order details
-    const orderRepository = dataSource.getRepository(Order);
-    const order = await orderRepository.findOneBy({ id: orderId });
-    
-    if (!order) {
-      throw new Error('Order not found');
-    }
-    
-    // Get the order items
-    const orderItemRepository = dataSource.getRepository(OrderItem);
-    const orderItems = await orderItemRepository.find({
-      where: { orderId },
-      relations: ['product']
-    });
-    
-    // Generate receipt content
-    const content = generateReceiptContent(order, orderItems);
-    
-    // Print the receipt
-    const success = await printPosReceipt(printer, content);
-    
-    return { success };
-  } catch (error) {
-    console.error('Error printing receipt:', error);
-    return { success: false, error: error instanceof Error ? error.message : String(error) };
-  }
-});
+
 
 // Helper function to handle user tracking for created/updated entities
 async function setEntityUserTracking(entity: any, usuarioId: number | undefined, isUpdate: boolean) {
   if (!usuarioId) return;
-  
+
   try {
     const dataSource = dbService.getDataSource();
     const usuarioRepository = dataSource.getRepository(Usuario);
     const usuario = await usuarioRepository.findOneBy({ id: usuarioId });
-    
+
     if (usuario) {
       if (!isUpdate) {
         entity.createdBy = usuario;
@@ -766,7 +533,7 @@ ipcMain.handle('get-personas', async () => {
   try {
     const dataSource = dbService.getDataSource();
     const personaRepository = dataSource.getRepository(Persona);
-    return await personaRepository.find({ 
+    return await personaRepository.find({
       order: { nombre: 'ASC' }
     });
   } catch (error) {
@@ -792,7 +559,7 @@ ipcMain.handle('create-persona', async (_event: any, personaData: any, usuarioId
   try {
     const dataSource = dbService.getDataSource();
     const personaRepository = dataSource.getRepository(Persona);
-    
+
     const persona = personaRepository.create({
       nombre: personaData.nombre,
       telefono: personaData.telefono,
@@ -803,24 +570,24 @@ ipcMain.handle('create-persona', async (_event: any, personaData: any, usuarioId
       activo: personaData.activo !== undefined ? personaData.activo : true,
       imageUrl: personaData.imageUrl // Add imageUrl field
     });
-    
+
     // Log the persona data before saving
     console.log('Creating persona with data:', {
       ...persona,
       imageUrl: persona.imageUrl // Log imageUrl specifically
     });
-    
+
     // Add user tracking
     await setEntityUserTracking(persona, usuarioId, false);
-    
+
     const savedPersona = await personaRepository.save(persona);
-    
+
     // Log the saved persona
     console.log('Persona created, saved data:', {
       ...savedPersona,
       imageUrl: savedPersona.imageUrl // Log imageUrl specifically
     });
-    
+
     return savedPersona;
   } catch (error) {
     console.error('Error creating persona:', error);
@@ -833,17 +600,17 @@ ipcMain.handle('update-persona', async (_event: any, personaId: number, personaD
   try {
     const dataSource = dbService.getDataSource();
     const personaRepository = dataSource.getRepository(Persona);
-    
+
     // First get the existing entity
     const persona = await personaRepository.findOne({
       where: { id: personaId },
       relations: ['createdBy', 'updatedBy']
     });
-    
+
     if (!persona) {
       return { success: false, message: 'No persona found with that ID' };
     }
-    
+
     // Update fields
     if (personaData.nombre !== undefined) persona.nombre = personaData.nombre;
     if (personaData.telefono !== undefined) persona.telefono = personaData.telefono;
@@ -852,30 +619,30 @@ ipcMain.handle('update-persona', async (_event: any, personaId: number, personaD
     if (personaData.documento !== undefined) persona.documento = personaData.documento;
     if (personaData.tipoPersona !== undefined) persona.tipoPersona = personaData.tipoPersona;
     if (personaData.activo !== undefined) persona.activo = personaData.activo;
-    
+
     // Handle imageUrl field explicitly
     if (personaData.imageUrl !== undefined) {
       console.log(`Updating persona imageUrl from ${persona.imageUrl} to ${personaData.imageUrl}`);
       persona.imageUrl = personaData.imageUrl;
     }
-    
+
     // Add user tracking
     await setEntityUserTracking(persona, usuarioId, true);
-    
+
     // Log the persona data before saving
     console.log('Updating persona with data:', {
       ...persona,
       imageUrl: persona.imageUrl // Log imageUrl specifically
     });
-    
+
     const savedPersona = await personaRepository.save(persona);
-    
+
     // Log the saved persona
     console.log('Persona updated, saved data:', {
       ...savedPersona,
       imageUrl: savedPersona.imageUrl // Log imageUrl specifically
     });
-    
+
     return { success: true, persona: savedPersona };
   } catch (error) {
     console.error('Error updating persona:', error);
@@ -888,26 +655,26 @@ ipcMain.handle('delete-persona', async (_event: any, personaId: number, usuarioI
   try {
     const dataSource = dbService.getDataSource();
     const personaRepository = dataSource.getRepository(Persona);
-    
+
     // First get the persona to update the updatedBy field
     const persona = await personaRepository.findOne({
       where: { id: personaId },
       relations: ['createdBy', 'updatedBy']
     });
-    
+
     if (!persona) {
       return { success: false, message: 'No persona found with that ID' };
     }
-    
+
     // Set activo to false
     persona.activo = false;
-    
+
     // Add user tracking for the update
     await setEntityUserTracking(persona, usuarioId, true);
-    
+
     // Save the updated persona
     await personaRepository.save(persona);
-    
+
     return { success: true };
   } catch (error) {
     console.error('Error deleting persona:', error);
@@ -922,7 +689,7 @@ ipcMain.handle('get-usuarios', async () => {
   try {
     const dataSource = dbService.getDataSource();
     const usuarioRepository = dataSource.getRepository(Usuario);
-    return await usuarioRepository.find({ 
+    return await usuarioRepository.find({
       relations: ['persona'],
       order: { nickname: 'ASC' }
     });
@@ -953,45 +720,45 @@ ipcMain.handle('create-usuario', async (_event: any, usuarioData: any) => {
     const dataSource = dbService.getDataSource();
     const usuarioRepository = dataSource.getRepository(Usuario);
     const personaRepository = dataSource.getRepository(Persona);
-    
+
     // Check if nickname already exists (case insensitive)
     const existingUsuarios = await usuarioRepository.find();
     const nicknameExists = existingUsuarios.some(
       u => u.nickname.toUpperCase() === usuarioData.nickname.toUpperCase()
     );
-    
+
     if (nicknameExists) {
       return {
         success: false,
         message: 'El nombre de usuario ya está en uso. Por favor, elija otro.'
       };
     }
-    
+
     // First get the persona
     const persona = await personaRepository.findOneBy({ id: usuarioData.persona_id });
-    
+
     if (!persona) {
       return {
         success: false,
         message: 'Persona no encontrada'
       };
     }
-    
+
     const usuario = usuarioRepository.create({
       persona: persona,
       nickname: usuarioData.nickname,
       password: usuarioData.password || "123", // Default password if not provided
       activo: usuarioData.activo !== undefined ? usuarioData.activo : true
     });
-    
+
     const savedUsuario = await usuarioRepository.save(usuario);
-    
+
     // Fetch the complete usuario with relations
     const completeUsuario = await usuarioRepository.findOne({
       where: { id: savedUsuario.id },
       relations: ['persona']
     });
-    
+
     return {
       success: true,
       usuario: completeUsuario
@@ -1011,27 +778,27 @@ ipcMain.handle('update-usuario', async (_event: any, usuarioId: number, usuarioD
     const dataSource = dbService.getDataSource();
     const usuarioRepository = dataSource.getRepository(Usuario);
     const personaRepository = dataSource.getRepository(Persona);
-    
+
     // Get the current usuario
     const usuario = await usuarioRepository.findOne({
       where: { id: usuarioId },
       relations: ['persona']
     });
-    
+
     if (!usuario) {
       return { success: false, message: 'No usuario found with that ID' };
     }
-    
+
     // If nickname is being updated, check for uniqueness (case-insensitive)
-    if (usuarioData.nickname !== undefined && 
+    if (usuarioData.nickname !== undefined &&
         usuarioData.nickname.toUpperCase() !== usuario.nickname.toUpperCase()) {
-      
+
       const existingUsuarios = await usuarioRepository.find();
       const nicknameExists = existingUsuarios.some(
-        u => u.id !== usuarioId && 
+        u => u.id !== usuarioId &&
         u.nickname.toUpperCase() === usuarioData.nickname.toUpperCase()
       );
-      
+
       if (nicknameExists) {
         return {
           success: false,
@@ -1039,7 +806,7 @@ ipcMain.handle('update-usuario', async (_event: any, usuarioId: number, usuarioD
         };
       }
     }
-   
+
     // If persona is being updated
     if (usuarioData.persona_id !== undefined) {
       const persona = await personaRepository.findOneBy({ id: usuarioData.persona_id });
@@ -1048,14 +815,14 @@ ipcMain.handle('update-usuario', async (_event: any, usuarioId: number, usuarioD
       }
       usuario.persona = persona;
     }
-    
+
     // Update fields
     if (usuarioData.nickname !== undefined) usuario.nickname = usuarioData.nickname;
     if (usuarioData.password !== undefined) usuario.password = usuarioData.password;
     if (usuarioData.activo !== undefined) usuario.activo = usuarioData.activo;
-    
+
     const updatedUsuario = await usuarioRepository.save(usuario);
-    
+
     return { success: true, usuario: updatedUsuario };
   } catch (error) {
     console.error('Error updating usuario:', error);
@@ -1071,9 +838,9 @@ ipcMain.handle('delete-usuario', async (_event: any, usuarioId: number) => {
   try {
     const dataSource = dbService.getDataSource();
     const usuarioRepository = dataSource.getRepository(Usuario);
-    
+
     const result = await usuarioRepository.update(usuarioId, { activo: false });
-    
+
     if (result.affected && result.affected > 0) {
       return { success: true };
     } else {
@@ -1092,7 +859,7 @@ ipcMain.handle('get-roles', async () => {
   try {
     const dataSource = dbService.getDataSource();
     const roleRepository = dataSource.getRepository(Role);
-    return await roleRepository.find({ 
+    return await roleRepository.find({
       order: { descripcion: 'ASC' }
     });
   } catch (error) {
@@ -1118,12 +885,12 @@ ipcMain.handle('create-role', async (_event: any, roleData: any) => {
   try {
     const dataSource = dbService.getDataSource();
     const roleRepository = dataSource.getRepository(Role);
-    
+
     const role = roleRepository.create({
       descripcion: roleData.descripcion,
       activo: roleData.activo !== undefined ? roleData.activo : true
     });
-    
+
     const savedRole = await roleRepository.save(role);
     return savedRole;
   } catch (error) {
@@ -1137,12 +904,12 @@ ipcMain.handle('update-role', async (_event: any, roleId: number, roleData: any)
   try {
     const dataSource = dbService.getDataSource();
     const roleRepository = dataSource.getRepository(Role);
-    
+
     const result = await roleRepository.update(roleId, {
       descripcion: roleData.descripcion,
       activo: roleData.activo
     });
-    
+
     if (result.affected && result.affected > 0) {
       const updatedRole = await roleRepository.findOneBy({ id: roleId });
       return { success: true, role: updatedRole };
@@ -1160,9 +927,9 @@ ipcMain.handle('delete-role', async (_event: any, roleId: number) => {
   try {
     const dataSource = dbService.getDataSource();
     const roleRepository = dataSource.getRepository(Role);
-    
+
     const result = await roleRepository.update(roleId, { activo: false });
-    
+
     if (result.affected && result.affected > 0) {
       return { success: true };
     } else {
@@ -1181,7 +948,7 @@ ipcMain.handle('get-usuario-roles', async (_event: any, usuarioId: number) => {
   try {
     const dataSource = dbService.getDataSource();
     const usuarioRoleRepository = dataSource.getRepository(UsuarioRole);
-    return await usuarioRoleRepository.find({ 
+    return await usuarioRoleRepository.find({
       where: { usuario: { id: usuarioId } },
       relations: ['usuario', 'role', 'usuario.persona']
     });
@@ -1198,18 +965,18 @@ ipcMain.handle('assign-role-to-usuario', async (_event: any, usuarioId: number, 
     const usuarioRoleRepository = dataSource.getRepository(UsuarioRole);
     const usuarioRepository = dataSource.getRepository(Usuario);
     const roleRepository = dataSource.getRepository(Role);
-    
+
     // Check if usuario and role exist
     const usuario = await usuarioRepository.findOneBy({ id: usuarioId });
     if (!usuario) {
       return { success: false, message: 'Usuario not found' };
     }
-    
+
     const role = await roleRepository.findOneBy({ id: roleId });
     if (!role) {
       return { success: false, message: 'Role not found' };
     }
-    
+
     // Check if this assignment already exists
     const existingAssignment = await usuarioRoleRepository.findOne({
       where: {
@@ -1217,25 +984,25 @@ ipcMain.handle('assign-role-to-usuario', async (_event: any, usuarioId: number, 
         role: { id: roleId }
       }
     });
-    
+
     if (existingAssignment) {
       return { success: false, message: 'This role is already assigned to this user' };
     }
-    
+
     // Create new assignment
     const usuarioRole = usuarioRoleRepository.create({
       usuario: usuario,
       role: role
     });
-    
+
     const savedUsuarioRole = await usuarioRoleRepository.save(usuarioRole);
-    
+
     // Fetch the complete usuarioRole with relations
     const completeUsuarioRole = await usuarioRoleRepository.findOne({
       where: { id: savedUsuarioRole.id },
       relations: ['usuario', 'role', 'usuario.persona']
     });
-    
+
     return { success: true, usuarioRole: completeUsuarioRole };
   } catch (error) {
     console.error('Error assigning role to usuario:', error);
@@ -1248,9 +1015,9 @@ ipcMain.handle('remove-role-from-usuario', async (_event: any, usuarioRoleId: nu
   try {
     const dataSource = dbService.getDataSource();
     const usuarioRoleRepository = dataSource.getRepository(UsuarioRole);
-    
+
     const result = await usuarioRoleRepository.delete(usuarioRoleId);
-    
+
     if (result.affected && result.affected > 0) {
       return { success: true };
     } else {
@@ -1269,7 +1036,7 @@ ipcMain.handle('get-tipo-clientes', async () => {
   try {
     const dataSource = dbService.getDataSource();
     const tipoClienteRepository = dataSource.getRepository(TipoCliente);
-    return await tipoClienteRepository.find({ 
+    return await tipoClienteRepository.find({
       order: { descripcion: 'ASC' }
     });
   } catch (error) {
@@ -1295,7 +1062,7 @@ ipcMain.handle('create-tipo-cliente', async (_event: any, tipoClienteData: any) 
   try {
     const dataSource = dbService.getDataSource();
     const tipoClienteRepository = dataSource.getRepository(TipoCliente);
-    
+
     const tipoCliente = tipoClienteRepository.create({
       descripcion: tipoClienteData.descripcion,
       activo: tipoClienteData.activo !== undefined ? tipoClienteData.activo : true,
@@ -1303,7 +1070,7 @@ ipcMain.handle('create-tipo-cliente', async (_event: any, tipoClienteData: any) 
       descuento: tipoClienteData.descuento !== undefined ? tipoClienteData.descuento : false,
       porcentaje_descuento: tipoClienteData.porcentaje_descuento || 0
     });
-    
+
     const savedTipoCliente = await tipoClienteRepository.save(tipoCliente);
     return savedTipoCliente;
   } catch (error) {
@@ -1317,7 +1084,7 @@ ipcMain.handle('update-tipo-cliente', async (_event: any, tipoClienteId: number,
   try {
     const dataSource = dbService.getDataSource();
     const tipoClienteRepository = dataSource.getRepository(TipoCliente);
-    
+
     const result = await tipoClienteRepository.update(tipoClienteId, {
       descripcion: tipoClienteData.descripcion,
       activo: tipoClienteData.activo,
@@ -1325,7 +1092,7 @@ ipcMain.handle('update-tipo-cliente', async (_event: any, tipoClienteId: number,
       descuento: tipoClienteData.descuento,
       porcentaje_descuento: tipoClienteData.porcentaje_descuento
     });
-    
+
     if (result.affected && result.affected > 0) {
       const updatedTipoCliente = await tipoClienteRepository.findOneBy({ id: tipoClienteId });
       return { success: true, tipoCliente: updatedTipoCliente };
@@ -1343,9 +1110,9 @@ ipcMain.handle('delete-tipo-cliente', async (_event: any, tipoClienteId: number)
   try {
     const dataSource = dbService.getDataSource();
     const tipoClienteRepository = dataSource.getRepository(TipoCliente);
-    
+
     const result = await tipoClienteRepository.update(tipoClienteId, { activo: false });
-    
+
     if (result.affected && result.affected > 0) {
       return { success: true };
     } else {
@@ -1364,7 +1131,7 @@ ipcMain.handle('get-clientes', async () => {
   try {
     const dataSource = dbService.getDataSource();
     const clienteRepository = dataSource.getRepository(Cliente);
-    return await clienteRepository.find({ 
+    return await clienteRepository.find({
       relations: ['persona', 'tipo_cliente'],
       order: {
         persona: {
@@ -1400,18 +1167,18 @@ ipcMain.handle('create-cliente', async (_event: any, clienteData: any) => {
     const clienteRepository = dataSource.getRepository(Cliente);
     const personaRepository = dataSource.getRepository(Persona);
     const tipoClienteRepository = dataSource.getRepository(TipoCliente);
-    
+
     // First get the persona and tipo_cliente
     const persona = await personaRepository.findOneBy({ id: clienteData.persona.id });
     if (!persona) {
       throw new Error('Persona not found');
     }
-    
+
     const tipoCliente = await tipoClienteRepository.findOneBy({ id: clienteData.tipo_cliente.id });
     if (!tipoCliente) {
       throw new Error('Tipo Cliente not found');
     }
-    
+
     const cliente = clienteRepository.create({
       persona: persona,
       tipo_cliente: tipoCliente,
@@ -1422,15 +1189,15 @@ ipcMain.handle('create-cliente', async (_event: any, clienteData: any) => {
       credito: clienteData.credito !== undefined ? clienteData.credito : false,
       limite_credito: clienteData.limite_credito || 0
     });
-    
+
     const savedCliente = await clienteRepository.save(cliente);
-    
+
     // Fetch the complete cliente with relations
     const completeCliente = await clienteRepository.findOne({
       where: { id: savedCliente.id },
       relations: ['persona', 'tipo_cliente']
     });
-    
+
     return completeCliente;
   } catch (error) {
     console.error('Error creating cliente:', error);
@@ -1445,17 +1212,17 @@ ipcMain.handle('update-cliente', async (_event: any, clienteId: number, clienteD
     const clienteRepository = dataSource.getRepository(Cliente);
     const personaRepository = dataSource.getRepository(Persona);
     const tipoClienteRepository = dataSource.getRepository(TipoCliente);
-    
+
     // Get the current cliente
     const cliente = await clienteRepository.findOne({
       where: { id: clienteId },
       relations: ['persona', 'tipo_cliente']
     });
-    
+
     if (!cliente) {
       return { success: false, message: 'No cliente found with that ID' };
     }
-    
+
     // If persona is being updated
     if (clienteData.persona && clienteData.persona.id) {
       const persona = await personaRepository.findOneBy({ id: clienteData.persona.id });
@@ -1464,7 +1231,7 @@ ipcMain.handle('update-cliente', async (_event: any, clienteId: number, clienteD
       }
       cliente.persona = persona;
     }
-    
+
     // If tipo_cliente is being updated
     if (clienteData.tipo_cliente && clienteData.tipo_cliente.id) {
       const tipoCliente = await tipoClienteRepository.findOneBy({ id: clienteData.tipo_cliente.id });
@@ -1473,7 +1240,7 @@ ipcMain.handle('update-cliente', async (_event: any, clienteId: number, clienteD
       }
       cliente.tipo_cliente = tipoCliente;
     }
-    
+
     // Update fields
     if (clienteData.ruc !== undefined) cliente.ruc = clienteData.ruc;
     if (clienteData.razon_social !== undefined) cliente.razon_social = clienteData.razon_social;
@@ -1481,9 +1248,9 @@ ipcMain.handle('update-cliente', async (_event: any, clienteId: number, clienteD
     if (clienteData.activo !== undefined) cliente.activo = clienteData.activo;
     if (clienteData.credito !== undefined) cliente.credito = clienteData.credito;
     if (clienteData.limite_credito !== undefined) cliente.limite_credito = clienteData.limite_credito;
-    
+
     const updatedCliente = await clienteRepository.save(cliente);
-    
+
     return { success: true, cliente: updatedCliente };
   } catch (error) {
     console.error('Error updating cliente:', error);
@@ -1496,9 +1263,9 @@ ipcMain.handle('delete-cliente', async (_event: any, clienteId: number) => {
   try {
     const dataSource = dbService.getDataSource();
     const clienteRepository = dataSource.getRepository(Cliente);
-    
+
     const result = await clienteRepository.update(clienteId, { activo: false });
-    
+
     if (result.affected && result.affected > 0) {
       return { success: true };
     } else {
@@ -1515,7 +1282,7 @@ ipcMain.handle('get-usuarios-paginated', async (_event: Electron.IpcMainInvokeEv
   try {
     const dataSource = dbService.getDataSource();
     const usuarioRepository = dataSource.getRepository(Usuario);
-    
+
     // Build query with relations
     const queryBuilder = usuarioRepository.createQueryBuilder('usuario')
       .leftJoinAndSelect('usuario.persona', 'persona');
@@ -1524,37 +1291,37 @@ ipcMain.handle('get-usuarios-paginated', async (_event: Electron.IpcMainInvokeEv
     if (filters && Object.keys(filters).length > 0) {
       // Filter by nickname (case insensitive)
       if (filters.nickname && typeof filters.nickname === 'string') {
-        queryBuilder.andWhere("LOWER(usuario.nickname) LIKE LOWER(:nickname)", { 
-          nickname: `%${filters.nickname}%` 
+        queryBuilder.andWhere("LOWER(usuario.nickname) LIKE LOWER(:nickname)", {
+          nickname: `%${filters.nickname}%`
         });
       }
-      
+
       // Filter by persona nombre (case insensitive)
       if (filters.nombrePersona && typeof filters.nombrePersona === 'string') {
         queryBuilder.andWhere("LOWER(persona.nombre) LIKE LOWER(:nombre)", {
           nombre: `%${filters.nombrePersona}%`
         });
       }
-      
+
       // Filter by active status
       if (filters.activo !== undefined && filters.activo !== null && filters.activo !== '') {
         const activoValue = filters.activo === 'true' || filters.activo === true;
         queryBuilder.andWhere('usuario.activo = :activo', { activo: activoValue });
       }
     }
-    
+
     // Get total count with filters
     const total = await queryBuilder.getCount();
-    
+
     // Add pagination and ordering
     queryBuilder
       .orderBy('usuario.nickname', 'ASC')
       .skip(page * pageSize)
       .take(pageSize);
-    
+
     // Execute query
     const items = await queryBuilder.getMany();
-    
+
     return {
       items,
       total
@@ -1579,9 +1346,9 @@ ipcMain.handle('login', async (_event: any, loginData: any) => {
     const usuarios = await userRepository.find({
       relations: ['persona']
     });
-    
+
     // Manually find user with case-insensitive comparison
-    const usuario = usuarios.find(u => 
+    const usuario = usuarios.find(u =>
       u.nickname.toUpperCase() === nickname.toUpperCase()
     );
 
@@ -1596,7 +1363,7 @@ ipcMain.handle('login', async (_event: any, loginData: any) => {
     // Verify password (in production, use bcrypt instead of direct comparison)
     const passwordValid = password === usuario.password;
     // For future: const passwordValid = await bcrypt.compare(password, usuario.password);
-    
+
     if (!passwordValid) {
       return {
         success: false,
@@ -1622,7 +1389,7 @@ ipcMain.handle('login', async (_event: any, loginData: any) => {
     session.last_activity_time = new Date();
     session.browser = deviceInfo.browser;
     session.os = deviceInfo.os;
-    
+
     // Save the session to database
     const savedSession = await sessionRepository.save(session);
 
@@ -1651,19 +1418,19 @@ ipcMain.handle('logout', async (_event: any, sessionId: number) => {
   try {
     const dataSource = dbService.getDataSource();
     const sessionRepository = dataSource.getRepository(LoginSession);
-    const session = await sessionRepository.findOne({ 
-      where: { id: sessionId } 
+    const session = await sessionRepository.findOne({
+      where: { id: sessionId }
     });
-    
+
     if (session) {
       session.is_active = false;
       session.logout_time = new Date();
       await sessionRepository.save(session);
     }
-    
+
     // Clear current user
     currentUser = null;
-    
+
     return true;
   } catch (error) {
     console.error('Logout error:', error);
@@ -1676,16 +1443,16 @@ ipcMain.handle('updateSessionActivity', async (_event: any, sessionId: number) =
   try {
     const dataSource = dbService.getDataSource();
     const sessionRepository = dataSource.getRepository(LoginSession);
-    const session = await sessionRepository.findOne({ 
-      where: { id: sessionId } 
+    const session = await sessionRepository.findOne({
+      where: { id: sessionId }
     });
-    
+
     if (session && session.is_active) {
       session.last_activity_time = new Date();
       await sessionRepository.save(session);
       return true;
     }
-    
+
     return false;
   } catch (error) {
     console.error('Update session activity error:', error);
@@ -1702,7 +1469,7 @@ ipcMain.handle('getLoginSessions', async (_event: any, usuarioId: number) => {
       where: { usuario: { id: usuarioId } },
       order: { login_time: 'DESC' }
     });
-    
+
     return sessions;
   } catch (error) {
     console.error('Get login sessions error:', error);
@@ -1759,8 +1526,8 @@ ipcMain.handle('getCategorias', async () => {
 ipcMain.handle('getCategoria', async (_event: any, categoriaId: number) => {
   try {
     const categoriaRepository = dbService.getDataSource().getRepository(Categoria);
-    const categoria = await categoriaRepository.findOne({ 
-      where: { id: categoriaId } 
+    const categoria = await categoriaRepository.findOne({
+      where: { id: categoriaId }
     });
     return categoria;
   } catch (error) {
@@ -1772,13 +1539,13 @@ ipcMain.handle('getCategoria', async (_event: any, categoriaId: number) => {
 ipcMain.handle('createCategoria', async (_event: any, categoriaData: any) => {
   try {
     const categoriaRepository = dbService.getDataSource().getRepository(Categoria);
-    
+
     // Create new categoria entity
     const newCategoria = categoriaRepository.create(categoriaData);
-    
+
     // Save to database
     const result = await categoriaRepository.save(newCategoria);
-    
+
     console.log('Categoria created:', result);
     return result;
   } catch (error) {
@@ -1790,22 +1557,22 @@ ipcMain.handle('createCategoria', async (_event: any, categoriaData: any) => {
 ipcMain.handle('updateCategoria', async (_event: any, categoriaId: number, categoriaData: any) => {
   try {
     const categoriaRepository = dbService.getDataSource().getRepository(Categoria);
-    
+
     // Find the categoria
-    const categoria = await categoriaRepository.findOne({ 
-      where: { id: categoriaId } 
+    const categoria = await categoriaRepository.findOne({
+      where: { id: categoriaId }
     });
-    
+
     if (!categoria) {
       throw new Error(`Categoria with ID ${categoriaId} not found`);
     }
-    
+
     // Update categoria properties
     categoriaRepository.merge(categoria, categoriaData);
-    
+
     // Save changes
     const result = await categoriaRepository.save(categoria);
-    
+
     console.log('Categoria updated:', result);
     return result;
   } catch (error) {
@@ -1817,19 +1584,19 @@ ipcMain.handle('updateCategoria', async (_event: any, categoriaId: number, categ
 ipcMain.handle('deleteCategoria', async (_event: any, categoriaId: number) => {
   try {
     const categoriaRepository = dbService.getDataSource().getRepository(Categoria);
-    
+
     // Find the categoria
-    const categoria = await categoriaRepository.findOne({ 
-      where: { id: categoriaId } 
+    const categoria = await categoriaRepository.findOne({
+      where: { id: categoriaId }
     });
-    
+
     if (!categoria) {
       throw new Error(`Categoria with ID ${categoriaId} not found`);
     }
-    
+
     // Delete the categoria
     const result = await categoriaRepository.remove(categoria);
-    
+
     console.log(`Categoria with ID ${categoriaId} deleted`);
     return result;
   } catch (error) {
@@ -1859,7 +1626,7 @@ ipcMain.handle('getSubcategorias', async () => {
 ipcMain.handle('getSubcategoria', async (_event: any, subcategoriaId: number) => {
   try {
     const subcategoriaRepository = dbService.getDataSource().getRepository(Subcategoria);
-    const subcategoria = await subcategoriaRepository.findOne({ 
+    const subcategoria = await subcategoriaRepository.findOne({
       where: { id: subcategoriaId },
       relations: ['categoria']
     });
@@ -1890,13 +1657,13 @@ ipcMain.handle('getSubcategoriasByCategoria', async (_event: any, categoriaId: n
 ipcMain.handle('createSubcategoria', async (_event: any, subcategoriaData: any) => {
   try {
     const subcategoriaRepository = dbService.getDataSource().getRepository(Subcategoria);
-    
+
     // Create new subcategoria entity
     const newSubcategoria = subcategoriaRepository.create(subcategoriaData);
-    
+
     // Save to database
     const result = await subcategoriaRepository.save(newSubcategoria);
-    
+
     console.log('Subcategoria created:', result);
     return result;
   } catch (error) {
@@ -1908,22 +1675,22 @@ ipcMain.handle('createSubcategoria', async (_event: any, subcategoriaData: any) 
 ipcMain.handle('updateSubcategoria', async (_event: any, subcategoriaId: number, subcategoriaData: any) => {
   try {
     const subcategoriaRepository = dbService.getDataSource().getRepository(Subcategoria);
-    
+
     // Find the subcategoria
-    const subcategoria = await subcategoriaRepository.findOne({ 
-      where: { id: subcategoriaId } 
+    const subcategoria = await subcategoriaRepository.findOne({
+      where: { id: subcategoriaId }
     });
-    
+
     if (!subcategoria) {
       throw new Error(`Subcategoria with ID ${subcategoriaId} not found`);
     }
-    
+
     // Update subcategoria properties
     subcategoriaRepository.merge(subcategoria, subcategoriaData);
-    
+
     // Save changes
     const result = await subcategoriaRepository.save(subcategoria);
-    
+
     console.log('Subcategoria updated:', result);
     return result;
   } catch (error) {
@@ -1935,19 +1702,19 @@ ipcMain.handle('updateSubcategoria', async (_event: any, subcategoriaId: number,
 ipcMain.handle('deleteSubcategoria', async (_event: any, subcategoriaId: number) => {
   try {
     const subcategoriaRepository = dbService.getDataSource().getRepository(Subcategoria);
-    
+
     // Find the subcategoria
-    const subcategoria = await subcategoriaRepository.findOne({ 
-      where: { id: subcategoriaId } 
+    const subcategoria = await subcategoriaRepository.findOne({
+      where: { id: subcategoriaId }
     });
-    
+
     if (!subcategoria) {
       throw new Error(`Subcategoria with ID ${subcategoriaId} not found`);
     }
-    
+
     // Delete the subcategoria
     const result = await subcategoriaRepository.remove(subcategoria);
-    
+
     console.log(`Subcategoria with ID ${subcategoriaId} deleted`);
     return result;
   } catch (error) {
@@ -1974,7 +1741,7 @@ ipcMain.handle('getProductos', async () => {
 ipcMain.handle('getProducto', async (_event: any, productoId: number) => {
   try {
     const productoRepository = dbService.getDataSource().getRepository(Producto);
-    const producto = await productoRepository.findOne({ 
+    const producto = await productoRepository.findOne({
       where: { id: productoId },
       relations: ['subcategoria', 'subcategoria.categoria']
     });
@@ -2002,13 +1769,13 @@ ipcMain.handle('getProductosBySubcategoria', async (_event: any, subcategoriaId:
 ipcMain.handle('createProducto', async (_event: any, productoData: any) => {
   try {
     const productoRepository = dbService.getDataSource().getRepository(Producto);
-    
+
     // Create new producto entity
     const newProducto = productoRepository.create(productoData);
-    
+
     // Save to database
     const result = await productoRepository.save(newProducto);
-    
+
     console.log('Producto created:', result);
     return result;
   } catch (error) {
@@ -2020,22 +1787,22 @@ ipcMain.handle('createProducto', async (_event: any, productoData: any) => {
 ipcMain.handle('updateProducto', async (_event: any, productoId: number, productoData: any) => {
   try {
     const productoRepository = dbService.getDataSource().getRepository(Producto);
-    
+
     // Find the producto
-    const producto = await productoRepository.findOne({ 
-      where: { id: productoId } 
+    const producto = await productoRepository.findOne({
+      where: { id: productoId }
     });
-    
+
     if (!producto) {
       throw new Error(`Producto with ID ${productoId} not found`);
     }
-    
+
     // Update producto properties
     productoRepository.merge(producto, productoData);
-    
+
     // Save changes
     const result = await productoRepository.save(producto);
-    
+
     console.log('Producto updated:', result);
     return result;
   } catch (error) {
@@ -2047,24 +1814,24 @@ ipcMain.handle('updateProducto', async (_event: any, productoId: number, product
 ipcMain.handle('deleteProducto', async (_event: any, productoId: number) => {
   try {
     const productoRepository = dbService.getDataSource().getRepository(Producto);
-    
+
     // Find the producto
-    const producto = await productoRepository.findOne({ 
-      where: { id: productoId } 
+    const producto = await productoRepository.findOne({
+      where: { id: productoId }
     });
-    
+
     if (!producto) {
       throw new Error(`Producto with ID ${productoId} not found`);
     }
-    
+
     // If producto has an image, delete it
     if (producto.imageUrl) {
       await imageHandler.deleteProductoImage(producto.imageUrl);
     }
-    
+
     // Delete the producto
     const result = await productoRepository.remove(producto);
-    
+
     console.log(`Producto with ID ${productoId} deleted`);
     return result;
   } catch (error) {
@@ -2078,23 +1845,23 @@ ipcMain.handle('saveProductoImage', async (_event: Electron.IpcMainInvokeEvent, 
     // Use the same image handler but with a different directory
     const userDataPath = app.getPath('userData');
     const productoImagesDir = path.join(userDataPath, 'producto-images');
-    
+
     // Ensure directory exists
     if (!fs.existsSync(productoImagesDir)) {
       fs.mkdirSync(productoImagesDir, { recursive: true });
     }
-    
+
     const filePath = path.join(productoImagesDir, fileName);
-    
+
     // Remove data URL prefix if present
     let imageData = base64Data;
     if (base64Data.includes(';base64,')) {
       imageData = base64Data.split(';base64,').pop() || '';
     }
-    
+
     // Write the file
     fs.writeFileSync(filePath, Buffer.from(imageData, 'base64'));
-    
+
     // Return a special URL format that will be handled by your app
     return { imageUrl: `app://producto-images/${fileName}` };
   } catch (error) {
@@ -2108,20 +1875,20 @@ ipcMain.handle('deleteProductoImage', async (_event: Electron.IpcMainInvokeEvent
     // Extract filename from the URL
     const fileName = imageUrl.split('/').pop();
     if (!fileName) return false;
-    
+
     const userDataPath = app.getPath('userData');
     const productoImagesDir = path.join(userDataPath, 'producto-images');
     const filePath = path.join(productoImagesDir, fileName);
-    
+
     // Check if file exists
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
       return true;
     }
-    
+
     return false;
   } catch (error) {
     console.error('Error deleting producto image:', error);
     return false;
   }
-}); 
+});

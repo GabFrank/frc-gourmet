@@ -1,23 +1,16 @@
-<div class="page-container">
-  <mat-card>
+<div class="list-categorias-container">
+  <mat-card class="filter-card">
     <mat-card-header>
-      <mat-card-title>Categorías</mat-card-title>
-      <div class="header-actions">
-        <button mat-raised-button color="primary" (click)="addCategoria()">
-          <mat-icon>add</mat-icon> Nueva Categoría
-        </button>
-      </div>
+      <mat-card-title>Gestión de Categorías</mat-card-title>
     </mat-card-header>
-    
     <mat-card-content>
-      <!-- Filters -->
-      <div class="filters-container">
         <form [formGroup]="filterForm" class="filter-form">
+        <div class="filter-row">
           <mat-form-field appearance="outline">
             <mat-label>Nombre</mat-label>
             <input matInput formControlName="nombre" placeholder="Buscar por nombre">
           </mat-form-field>
-          
+
           <mat-form-field appearance="outline">
             <mat-label>Estado</mat-label>
             <mat-select formControlName="activo">
@@ -26,102 +19,259 @@
               <mat-option value="false">Inactivo</mat-option>
             </mat-select>
           </mat-form-field>
-          
-          <div class="filter-actions">
+        </div>
+
+        <div class="button-row">
             <button mat-raised-button color="primary" (click)="buscar()">
-              <mat-icon>search</mat-icon> Buscar
+            <mat-icon>search</mat-icon>
+            Buscar
+          </button>
+          <button mat-raised-button (click)="clearFilters()">
+            <mat-icon>clear</mat-icon>
+            Limpiar
             </button>
-            <button mat-button (click)="clearFilters()">
-              <mat-icon>clear</mat-icon> Limpiar
+          <span class="spacer"></span>
+          <button mat-raised-button color="accent" (click)="addCategoria()">
+            <mat-icon>add</mat-icon>
+            Nueva Categoría
             </button>
           </div>
         </form>
-      </div>
-      
-      <!-- Results table -->
+    </mat-card-content>
+  </mat-card>
+
       <div class="table-container">
         <div class="loading-shade" *ngIf="isLoading">
-          <mat-spinner diameter="50"></mat-spinner>
+      <mat-spinner></mat-spinner>
         </div>
-        
-        <table mat-table [dataSource]="categorias.slice(currentPage * pageSize, (currentPage + 1) * pageSize)" matSort (matSortChange)="onSort($event)" class="mat-elevation-z8">
-          
+
+    <mat-card class="table-scroll-container">
+        <table mat-table [dataSource]="categorias.slice(currentPage * pageSize, (currentPage + 1) * pageSize)"
+               matSort (matSortChange)="onSort($event)"
+               class="mat-elevation-z8"
+               multiTemplateDataRows>
+
           <!-- Nombre Column -->
           <ng-container matColumnDef="nombre">
             <th mat-header-cell *matHeaderCellDef mat-sort-header>Nombre</th>
             <td mat-cell *matCellDef="let categoria">{{categoria.nombre}}</td>
           </ng-container>
-          
+
           <!-- Descripcion Column -->
           <ng-container matColumnDef="descripcion">
             <th mat-header-cell *matHeaderCellDef mat-sort-header>Descripción</th>
             <td mat-cell *matCellDef="let categoria">{{categoria.descripcion || '-'}}</td>
           </ng-container>
-          
+
           <!-- Posicion Column -->
           <ng-container matColumnDef="posicion">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header>Posición</th>
+            <th mat-header-cell *matHeaderCellDef mat-sort-header style="text-align: center;">Posición</th>
             <td mat-cell *matCellDef="let categoria">
-              {{categoria.posicion}}
-              <div class="order-buttons">
-                <button mat-icon-button (click)="reorderCategoria(categoria, 'up')" matTooltip="Mover arriba">
-                  <mat-icon>arrow_upward</mat-icon>
-                </button>
-                <button mat-icon-button (click)="reorderCategoria(categoria, 'down')" matTooltip="Mover abajo">
-                  <mat-icon>arrow_downward</mat-icon>
-                </button>
+              <div class="position-wrapper">
+                <div class="position-number">{{categoria.posicion}}</div>
+                <div class="arrow-buttons">
+                  <button mat-icon-button class="arrow-button" (click)="reorderCategoria(categoria, 'up')" matTooltip="Mover arriba">
+                    <mat-icon>arrow_upward</mat-icon>
+                  </button>
+                  <button mat-icon-button class="arrow-button" (click)="reorderCategoria(categoria, 'down')" matTooltip="Mover abajo">
+                    <mat-icon>arrow_downward</mat-icon>
+                  </button>
+                </div>
               </div>
             </td>
           </ng-container>
-          
+
           <!-- Activo Column -->
           <ng-container matColumnDef="activo">
             <th mat-header-cell *matHeaderCellDef mat-sort-header>Estado</th>
             <td mat-cell *matCellDef="let categoria">
-              <mat-icon [ngStyle]="{'color': categoria.activo ? 'green' : 'red'}">
-                {{categoria.activo ? 'check_circle' : 'cancel'}}
-              </mat-icon>
-              {{categoria.activo ? 'Activo' : 'Inactivo'}}
+            <span class="status-badge" [ngClass]="categoria.activo ? 'active' : 'inactive'">
+              {{ categoria.activo ? 'Activo' : 'Inactivo' }}
+            </span>
             </td>
           </ng-container>
-          
+
           <!-- Actions Column -->
           <ng-container matColumnDef="acciones">
             <th mat-header-cell *matHeaderCellDef>Acciones</th>
             <td mat-cell *matCellDef="let categoria">
-              <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
-                <mat-icon>more_vert</mat-icon>
-              </button>
-              <mat-menu #menu="matMenu">
-                <button mat-menu-item (click)="editCategoria(categoria)">
-                  <mat-icon>edit</mat-icon>
-                  <span>Editar</span>
+              <div class="actions-wrapper">
+                <button mat-icon-button class="expand-button" (click)="$event.stopPropagation(); toggleExpand(categoria)" [matTooltip]="expandedCategoria === categoria ? 'Cerrar subcategorías' : 'Ver subcategorías'">
+                  <mat-icon>{{ expandedCategoria === categoria ? 'expand_less' : 'expand_more' }}</mat-icon>
                 </button>
-                <button mat-menu-item (click)="deleteCategoria(categoria.id!)">
-                  <mat-icon>delete</mat-icon>
-                  <span>Eliminar</span>
+                <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+                  <mat-icon>more_vert</mat-icon>
                 </button>
-              </mat-menu>
+                <mat-menu #menu="matMenu">
+                  <button mat-menu-item (click)="editCategoria(categoria)">
+                    <mat-icon>edit</mat-icon>
+                    <span>Editar</span>
+                  </button>
+                  <button mat-menu-item (click)="deleteCategoria(categoria.id!)">
+                    <mat-icon>delete</mat-icon>
+                    <span>Eliminar</span>
+                  </button>
+                </mat-menu>
+              </div>
             </td>
           </ng-container>
-          
+
+          <!-- Expanded Content Column -->
+          <ng-container matColumnDef="expandedDetail">
+            <td mat-cell *matCellDef="let categoria" [attr.colspan]="displayedColumns.length" class="expanded-detail-cell">
+              <div class="expanded-detail-content"
+                   [@detailExpand]="expandedCategoria === categoria ? 'expanded' : 'collapsed'"
+                   [style.height]="expandedCategoria === categoria ? 'auto' : '0'">
+
+                <!-- Subcategorias container -->
+                <div class="subcategorias-container" *ngIf="expandedCategoria === categoria">
+                  <!-- Loading indicator for subcategorias -->
+                  <div class="subcategorias-loading" *ngIf="isLoadingSubcategorias">
+                    <mat-spinner diameter="30"></mat-spinner>
+                  </div>
+
+                  <!-- Form to add/edit subcategoria -->
+                  <mat-card class="subcategoria-form-card">
+                    <mat-card-header>
+                      <mat-card-title>{{ editingSubcategoria ? 'Editar' : 'Añadir' }} Subcategoría</mat-card-title>
+                    </mat-card-header>
+                    <mat-card-content>
+                      <form [formGroup]="subcategoriaForm" class="subcategoria-form">
+                        <div class="form-row">
+                          <mat-form-field appearance="outline">
+                            <mat-label>Nombre</mat-label>
+                            <input matInput formControlName="nombre" placeholder="Nombre de la subcategoría" required>
+                            <mat-error *ngIf="subcategoriaForm.get('nombre')?.hasError('required')">
+                              El nombre es obligatorio
+                            </mat-error>
+                          </mat-form-field>
+
+                          <mat-form-field appearance="outline">
+                            <mat-label>Descripción</mat-label>
+                            <input matInput formControlName="descripcion" placeholder="Descripción de la subcategoría">
+                          </mat-form-field>
+
+                          <mat-form-field appearance="outline" class="position-field">
+                            <mat-label>Posición</mat-label>
+                            <input matInput type="number" formControlName="posicion" min="0" required>
+                            <mat-error *ngIf="subcategoriaForm.get('posicion')?.hasError('required')">
+                              La posición es obligatoria
+                            </mat-error>
+                          </mat-form-field>
+
+                          <div class="active-toggle">
+                            <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
+                          </div>
+                        </div>
+
+                        <div class="subcategoria-form-actions">
+                          <button mat-button *ngIf="editingSubcategoria" (click)="cancelEditSubcategoria()">Cancelar</button>
+                          <button mat-raised-button color="primary" (click)="saveSubcategoria()" [disabled]="subcategoriaForm.invalid">
+                            {{ editingSubcategoria ? 'Actualizar' : 'Guardar' }}
+                          </button>
+                        </div>
+                      </form>
+                    </mat-card-content>
+                  </mat-card>
+
+                  <!-- Subcategorias list -->
+                  <div class="subcategorias-list" *ngIf="subcategorias[categoria.id!]?.length">
+                    <h3>Subcategorías</h3>
+                    <mat-card class="subcategorias-table-container">
+                      <table mat-table [dataSource]="subcategorias[categoria.id!]" class="subcategorias-table">
+                        <!-- Nombre Column -->
+                        <ng-container matColumnDef="nombre">
+                          <th mat-header-cell *matHeaderCellDef>Nombre</th>
+                          <td mat-cell *matCellDef="let subcategoria">{{ subcategoria.nombre }}</td>
+                        </ng-container>
+
+                        <!-- Descripcion Column -->
+                        <ng-container matColumnDef="descripcion">
+                          <th mat-header-cell *matHeaderCellDef>Descripción</th>
+                          <td mat-cell *matCellDef="let subcategoria">{{ subcategoria.descripcion || '-' }}</td>
+                        </ng-container>
+
+                        <!-- Posicion Column -->
+                        <ng-container matColumnDef="posicion">
+                          <th mat-header-cell *matHeaderCellDef style="text-align: center;">Posición</th>
+                          <td mat-cell *matCellDef="let subcategoria">
+                            <div class="position-wrapper">
+                              <div class="position-number">{{ subcategoria.posicion }}</div>
+                              <div class="arrow-buttons">
+                                <button mat-icon-button class="arrow-button" (click)="reorderSubcategoria(subcategoria, 'up')" matTooltip="Mover arriba">
+                                  <mat-icon>arrow_upward</mat-icon>
+                                </button>
+                                <button mat-icon-button class="arrow-button" (click)="reorderSubcategoria(subcategoria, 'down')" matTooltip="Mover abajo">
+                                  <mat-icon>arrow_downward</mat-icon>
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        </ng-container>
+
+                        <!-- Activo Column -->
+                        <ng-container matColumnDef="activo">
+                          <th mat-header-cell *matHeaderCellDef>Estado</th>
+                          <td mat-cell *matCellDef="let subcategoria">
+                            <span class="status-badge" [ngClass]="subcategoria.activo ? 'active' : 'inactive'">
+                              {{ subcategoria.activo ? 'Activo' : 'Inactivo' }}
+                            </span>
+                          </td>
+                        </ng-container>
+
+                        <!-- Actions Column -->
+                        <ng-container matColumnDef="acciones">
+                          <th mat-header-cell *matHeaderCellDef>Acciones</th>
+                          <td mat-cell *matCellDef="let subcategoria">
+                            <button mat-icon-button (click)="editSubcategoria(subcategoria)" matTooltip="Editar">
+                              <mat-icon>edit</mat-icon>
+                            </button>
+                            <button mat-icon-button (click)="deleteSubcategoria(subcategoria)" matTooltip="Eliminar">
+                              <mat-icon>delete</mat-icon>
+                            </button>
+                          </td>
+                        </ng-container>
+
+                        <tr mat-header-row *matHeaderRowDef="['nombre', 'descripcion', 'posicion', 'activo', 'acciones']"></tr>
+                        <tr mat-row *matRowDef="let row; columns: ['nombre', 'descripcion', 'posicion', 'activo', 'acciones'];"></tr>
+                      </table>
+                    </mat-card>
+                  </div>
+
+                  <!-- Empty state for subcategorias -->
+                  <div class="subcategorias-empty" *ngIf="!isLoadingSubcategorias && (!subcategorias[categoria.id!] || subcategorias[categoria.id!].length === 0)">
+                    <mat-icon>category</mat-icon>
+                    <p>No hay subcategorías para esta categoría</p>
+                    <p class="subcategorias-hint">Use el formulario de arriba para añadir subcategorías.</p>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </ng-container>
+
           <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
-          
+          <tr mat-row *matRowDef="let row; columns: displayedColumns;"
+              class="categoria-row"
+              [class.expanded-row]="expandedCategoria === row"
+              (click)="toggleExpand(row)"></tr>
+          <tr mat-row *matRowDef="let row; columns: ['expandedDetail']; when: isExpanded"
+              class="detail-row"></tr>
+
           <!-- No results row -->
           <tr class="mat-row" *matNoDataRow>
             <td class="mat-cell" colspan="5">No se encontraron categorías</td>
           </tr>
         </table>
-        
-        <mat-paginator 
-          [length]="totalCategorias" 
-          [pageSize]="pageSize" 
+    </mat-card>
+
+    <div class="paginator-container">
+        <mat-paginator
+          [length]="totalCategorias"
+          [pageSize]="pageSize"
           [pageSizeOptions]="pageSizeOptions"
           (page)="onPageChange($event)"
           aria-label="Seleccionar página">
         </mat-paginator>
       </div>
-    </mat-card-content>
-  </mat-card>
-</div> 
+  </div>
+</div>

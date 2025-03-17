@@ -11,6 +11,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatTabsModule } from '@angular/material/tabs';
+import { MatCardModule } from '@angular/material/card';
 import { RepositoryService } from '../../../database/repository.service';
 import { Producto } from '../../../database/entities/productos/producto.entity';
 import { Subcategoria } from '../../../database/entities/productos/subcategoria.entity';
@@ -32,6 +34,8 @@ import { firstValueFrom } from 'rxjs';
     MatProgressSpinnerModule,
     MatSlideToggleModule,
     MatDividerModule,
+    MatTabsModule,
+    MatCardModule,
     ReactiveFormsModule
   ],
   templateUrl: './create-edit-producto.component.html',
@@ -40,13 +44,14 @@ import { firstValueFrom } from 'rxjs';
 export class CreateEditProductoComponent implements OnInit {
   productoForm: FormGroup;
   isEditing = false;
-  loading = false;
+  isLoading = false;
   categorias: Categoria[] = [];
   subcategorias: Subcategoria[] = [];
   selectedImageFile: File | null = null;
   imagePreviewUrl: string | null = null;
   maxImageSize = 5 * 1024 * 1024; // 5MB
-  
+  activeTabIndex = 0;
+
   constructor(
     private dialogRef: MatDialogRef<CreateEditProductoComponent>,
     @Inject(MAT_DIALOG_DATA) public data: { producto?: Producto },
@@ -76,29 +81,29 @@ export class CreateEditProductoComponent implements OnInit {
       observacion: [''],
       activo: [true]
     });
-    
+
     this.isEditing = !!this.data.producto;
   }
 
   ngOnInit(): void {
     this.loadCategorias();
-    
+
     if (this.isEditing && this.data.producto) {
       this.loadProducto();
     }
-    
+
     // When categoria changes, load subcategorias
     this.productoForm.get('categoriaId')?.valueChanges.subscribe((categoriaId) => {
       if (categoriaId) {
         this.loadSubcategoriasByCategoria(categoriaId);
-        
+
         // Reset subcategoriaId if it belongs to a different categoria
         const currentSubcategoriaId = this.productoForm.get('subcategoriaId')?.value;
         if (currentSubcategoriaId) {
           const belongsToCategoria = this.subcategorias.some(
             s => s.id === currentSubcategoriaId && s.categoriaId === categoriaId
           );
-          
+
           if (!belongsToCategoria) {
             this.productoForm.get('subcategoriaId')?.setValue(null);
           }
@@ -108,7 +113,7 @@ export class CreateEditProductoComponent implements OnInit {
         this.productoForm.get('subcategoriaId')?.setValue(null);
       }
     });
-    
+
     // Toggle-dependent validators
     this.productoForm.get('hasVencimiento')?.valueChanges.subscribe(hasVencimiento => {
       const alertarControl = this.productoForm.get('alertarVencimientoDias');
@@ -118,7 +123,7 @@ export class CreateEditProductoComponent implements OnInit {
         alertarControl?.disable();
       }
     });
-    
+
     this.productoForm.get('hasStock')?.valueChanges.subscribe(hasStock => {
       const stockControl = this.productoForm.get('stock');
       if (hasStock) {
@@ -128,9 +133,9 @@ export class CreateEditProductoComponent implements OnInit {
       }
     });
   }
-  
+
   async loadCategorias(): Promise<void> {
-    this.loading = true;
+    this.isLoading = true;
     try {
       this.categorias = await firstValueFrom(this.repositoryService.getCategorias());
       // Sort categorias by nombre
@@ -138,10 +143,10 @@ export class CreateEditProductoComponent implements OnInit {
     } catch (error) {
       console.error('Error loading categorias:', error);
     } finally {
-      this.loading = false;
+      this.isLoading = false;
     }
   }
-  
+
   async loadSubcategoriasByCategoria(categoriaId: number): Promise<void> {
     try {
       this.subcategorias = await firstValueFrom(this.repositoryService.getSubcategoriasByCategoria(categoriaId));
@@ -154,14 +159,14 @@ export class CreateEditProductoComponent implements OnInit {
 
   loadProducto(): void {
     if (!this.data.producto) return;
-    
-    this.loading = true;
+
+    this.isLoading = true;
     try {
       // Set image preview if exists
       if (this.data.producto.imageUrl) {
         this.imagePreviewUrl = this.data.producto.imageUrl;
       }
-      
+
       // Get categoria ID from the subcategoria
       let categoriaId = null;
       if (this.data.producto.subcategoria?.categoriaId) {
@@ -169,7 +174,7 @@ export class CreateEditProductoComponent implements OnInit {
         // Load subcategorias for this categoria
         this.loadSubcategoriasByCategoria(categoriaId);
       }
-      
+
       // Patch form with existing producto data
       this.productoForm.patchValue({
         nombre: this.data.producto.nombre,
@@ -189,42 +194,42 @@ export class CreateEditProductoComponent implements OnInit {
         observacion: this.data.producto.observacion || '',
         activo: this.data.producto.activo !== false // Default to true
       });
-      
+
       // Apply conditional disabling
       if (!this.data.producto.hasVencimiento) {
         this.productoForm.get('alertarVencimientoDias')?.disable();
       }
-      
+
       if (!this.data.producto.hasStock) {
         this.productoForm.get('stock')?.disable();
       }
     } catch (error) {
       console.error('Error loading producto data:', error);
     } finally {
-      this.loading = false;
+      this.isLoading = false;
     }
   }
-  
+
   onImageSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     if (!input.files?.length) return;
-    
+
     const file = input.files[0];
-    
+
     // Check file size
     if (file.size > this.maxImageSize) {
       alert(`El tamaño de la imagen no debe superar los ${this.maxImageSize / (1024 * 1024)}MB`);
       return;
     }
-    
+
     // Check file type
     if (!file.type.startsWith('image/')) {
       alert('Por favor, seleccione un archivo de imagen válido');
       return;
     }
-    
+
     this.selectedImageFile = file;
-    
+
     // Create preview
     const reader = new FileReader();
     reader.onload = () => {
@@ -232,19 +237,23 @@ export class CreateEditProductoComponent implements OnInit {
     };
     reader.readAsDataURL(file);
   }
-  
+
   removeImage(): void {
     this.selectedImageFile = null;
     this.imagePreviewUrl = null;
     this.productoForm.patchValue({ imageUrl: null });
   }
-  
+
+  setActiveTab(index: number): void {
+    this.activeTabIndex = index;
+  }
+
   private async uploadImage(file: File): Promise<string> {
     try {
       // Generate a unique filename
       const ext = file.name.split('.').pop() || 'jpg';
       const fileName = `producto_${Date.now()}_${Math.floor(Math.random() * 10000)}.${ext}`;
-      
+
       // Read file as data URL
       const reader = new FileReader();
       return new Promise<string>((resolve, reject) => {
@@ -274,7 +283,7 @@ export class CreateEditProductoComponent implements OnInit {
       return;
     }
 
-    this.loading = true;
+    this.isLoading = true;
     try {
       // Handle image upload if a new file was selected
       let imageUrl = this.productoForm.get('imageUrl')?.value;
@@ -285,14 +294,14 @@ export class CreateEditProductoComponent implements OnInit {
             this.repositoryService.deleteProductoImage(this.data.producto.imageUrl)
           );
         }
-        
+
         // Upload the new image
         imageUrl = await this.uploadImage(this.selectedImageFile);
       }
-      
+
       // Get form values
       const formValues = this.productoForm.getRawValue();
-      
+
       // Prepare data for saving
       const productoData: Partial<Producto> = {
         ...formValues,
@@ -303,7 +312,7 @@ export class CreateEditProductoComponent implements OnInit {
         observacion: formValues.observacion?.toUpperCase() || null,
         imageUrl
       };
-      
+
       if (this.isEditing && this.data.producto) {
         // Update existing producto
         const updatedProducto = await firstValueFrom(
@@ -321,14 +330,14 @@ export class CreateEditProductoComponent implements OnInit {
       console.error('Error saving producto:', error);
       this.dialogRef.close({ success: false, error });
     } finally {
-      this.loading = false;
+      this.isLoading = false;
     }
   }
 
   cancel(): void {
     this.dialogRef.close();
   }
-  
+
   // Helper method to mark all form controls as touched to trigger validation errors
   private markFormGroupTouched(formGroup: FormGroup): void {
     Object.values(formGroup.controls).forEach(control => {
@@ -338,4 +347,4 @@ export class CreateEditProductoComponent implements OnInit {
       }
     });
   }
-} 
+}

@@ -38,7 +38,7 @@ interface DialogData {
 export class CreateEditCategoriaComponent implements OnInit {
   categoriaForm: FormGroup;
   isEditing = false;
-  loading = false;
+  isLoading = false;
 
   constructor(
     private dialogRef: MatDialogRef<CreateEditCategoriaComponent>,
@@ -52,7 +52,7 @@ export class CreateEditCategoriaComponent implements OnInit {
       posicion: [0, [Validators.required, Validators.min(0)]],
       activo: [true]
     });
-    
+
     this.isEditing = !!data?.id;
   }
 
@@ -63,8 +63,8 @@ export class CreateEditCategoriaComponent implements OnInit {
   }
 
   loadCategoria(id: number): void {
-    this.loading = true;
-    
+    this.isLoading = true;
+
     this.repository.getCategoria(id).subscribe({
       next: (categoria) => {
         if (categoria) {
@@ -75,11 +75,11 @@ export class CreateEditCategoriaComponent implements OnInit {
             activo: categoria.activo
           });
         }
-        this.loading = false;
+        this.isLoading = false;
       },
       error: (error) => {
         console.error('Error loading categoria:', error);
-        this.loading = false;
+        this.isLoading = false;
       }
     });
   }
@@ -88,30 +88,60 @@ export class CreateEditCategoriaComponent implements OnInit {
     if (this.categoriaForm.invalid) {
       return;
     }
-    
-    this.loading = true;
+
+    this.isLoading = true;
     const formData = this.categoriaForm.value;
-    
+
+    // Convert string fields to uppercase
+    if (formData.nombre) {
+      formData.nombre = formData.nombre.toUpperCase();
+    }
+    if (formData.descripcion) {
+      formData.descripcion = formData.descripcion.toUpperCase();
+    }
+
+    console.log('Submitting categoria form:', formData);
+
     if (this.isEditing && this.data.id) {
+      console.log('Updating categoria with ID:', this.data.id);
       this.repository.updateCategoria(this.data.id, formData).subscribe({
         next: (result) => {
-          this.dialogRef.close(result);
-          this.loading = false;
+          console.log('Categoria updated successfully:', result);
+          this.dialogRef.close({
+            success: true,
+            action: 'update',
+            categoria: result
+          });
+          this.isLoading = false;
         },
         error: (error) => {
           console.error('Error updating categoria:', error);
-          this.loading = false;
+          this.isLoading = false;
+          this.dialogRef.close({
+            success: false,
+            error
+          });
         }
       });
     } else {
+      console.log('Creating new categoria');
       this.repository.createCategoria(formData).subscribe({
         next: (result) => {
-          this.dialogRef.close(result);
-          this.loading = false;
+          console.log('Categoria created successfully:', result);
+          this.dialogRef.close({
+            success: true,
+            action: 'create',
+            categoria: result
+          });
+          this.isLoading = false;
         },
         error: (error) => {
           console.error('Error creating categoria:', error);
-          this.loading = false;
+          this.isLoading = false;
+          this.dialogRef.close({
+            success: false,
+            error
+          });
         }
       });
     }
@@ -130,4 +160,4 @@ export class CreateEditCategoriaComponent implements OnInit {
       }
     });
   }
-} 
+}

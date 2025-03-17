@@ -1,12 +1,12 @@
 <div class="dialog-container">
   <h2 mat-dialog-title>{{ isEditing ? 'Editar' : 'Crear' }} Categoría</h2>
-  
+
   <div class="dialog-content-wrapper">
     <form [formGroup]="categoriaForm" class="form-container">
-      <div class="loading-shade" *ngIf="loading">
+      <div class="loading-shade" *ngIf="isLoading">
         <mat-spinner diameter="50"></mat-spinner>
       </div>
-      
+
       <!-- Nombre field -->
       <mat-form-field appearance="outline" class="full-width">
         <mat-label>Nombre*</mat-label>
@@ -15,13 +15,13 @@
           El nombre es obligatorio
         </mat-error>
       </mat-form-field>
-      
+
       <!-- Descripcion field -->
       <mat-form-field appearance="outline" class="full-width">
         <mat-label>Descripción</mat-label>
         <textarea matInput formControlName="descripcion" placeholder="Ingrese la descripción" rows="3"></textarea>
       </mat-form-field>
-      
+
       <!-- Posicion field -->
       <mat-form-field appearance="outline" class="full-width">
         <mat-label>Posición*</mat-label>
@@ -33,7 +33,7 @@
           La posición debe ser un número positivo
         </mat-error>
       </mat-form-field>
-      
+
       <!-- Active checkbox -->
       <div class="checkbox-container">
         <mat-checkbox formControlName="activo" color="primary">
@@ -42,13 +42,13 @@
       </div>
     </form>
   </div>
-  
+
   <div class="fixed-footer">
     <div class="dialog-actions">
-      <button mat-button (click)="cancel()" [disabled]="loading">Cancelar</button>
-      <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="categoriaForm.invalid || loading">
+      <button mat-button (click)="cancel()" [disabled]="isLoading">Cancelar</button>
+      <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="categoriaForm.invalid || isLoading">
         {{ isEditing ? 'Actualizar' : 'Guardar' }}
       </button>
     </div>
   </div>
-</div> 
+</div>

@@ -27,10 +27,6 @@ exports.createDataSource = exports.getDataSourceOptions = void 0;
 const typeorm_1 = require("typeorm");
 const path = __importStar(require("path"));
 // Import all entities
-const category_entity_1 = require("./entities/category.entity");
-const product_entity_1 = require("./entities/product.entity");
-const order_entity_1 = require("./entities/order.entity");
-const order_item_entity_1 = require("./entities/order-item.entity");
 const printer_entity_1 = require("./entities/printer.entity");
 const persona_entity_1 = require("./entities/personas/persona.entity");
 const usuario_entity_1 = require("./entities/personas/usuario.entity");
@@ -39,6 +35,9 @@ const usuario_role_entity_1 = require("./entities/personas/usuario-role.entity")
 const tipo_cliente_entity_1 = require("./entities/personas/tipo-cliente.entity");
 const cliente_entity_1 = require("./entities/personas/cliente.entity");
 const login_session_entity_1 = require("./entities/auth/login-session.entity");
+const categoria_entity_1 = require("./entities/productos/categoria.entity");
+const subcategoria_entity_1 = require("./entities/productos/subcategoria.entity");
+const producto_entity_1 = require("./entities/productos/producto.entity");
 /**
  * Get the configuration for TypeORM
  * @param userDataPath Path to store the database file
@@ -50,10 +49,6 @@ function getDataSourceOptions(userDataPath) {
         database: path.join(userDataPath, 'frc-gourmet.db'),
         entities: [
             // Entity classes
-            category_entity_1.Category,
-            product_entity_1.Product,
-            order_entity_1.Order,
-            order_item_entity_1.OrderItem,
             printer_entity_1.Printer,
             persona_entity_1.Persona,
             usuario_entity_1.Usuario,
@@ -61,7 +56,10 @@ function getDataSourceOptions(userDataPath) {
             usuario_role_entity_1.UsuarioRole,
             tipo_cliente_entity_1.TipoCliente,
             cliente_entity_1.Cliente,
-            login_session_entity_1.LoginSession
+            login_session_entity_1.LoginSession,
+            categoria_entity_1.Categoria,
+            subcategoria_entity_1.Subcategoria,
+            producto_entity_1.Producto
         ],
         synchronize: true,
         logging: process.env['NODE_ENV'] === 'development',

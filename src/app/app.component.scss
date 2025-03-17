@@ -14,31 +14,36 @@
 
 // User profile in sidebar styles
 .user-profile-header {
-  padding: 16px;
+  padding: 24px 16px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   border-bottom: 1px solid rgba(0, 0, 0, 0.12);
-  
+
   .user-avatar {
-    margin-right: 12px;
-    
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: center;
+
     .avatar-icon {
-      font-size: 40px;
-      height: 40px;
-      width: 40px;
-      line-height: 40px;
+      font-size: 60px;
+      height: 60px;
+      width: 60px;
+      line-height: 60px;
       color: #5f6368;
     }
   }
-  
+
   .user-info {
-    flex: 1;
-    
+    text-align: center;
+    width: 100%;
+
     .user-name {
       font-weight: 500;
       font-size: 16px;
+      margin-bottom: 4px;
     }
-    
+
     .user-last-login {
       font-size: 12px;
       color: rgba(0, 0, 0, 0.54);
@@ -48,6 +53,40 @@
 
 .sidenav .mat-toolbar {
   background: inherit;
+}
+
+// Navigation menu styling
+.nav-expansion-panel {
+  .nav-panel-header {
+    height: 48px;
+    padding: 0 16px;
+  }
+
+  .mat-expansion-panel-header-title {
+    display: flex;
+    align-items: center;
+  }
+
+  .nav-icon {
+    margin-right: 16px;
+  }
+
+  .nav-title {
+    font-size: 14px;
+  }
+}
+
+.submenu-container {
+  padding-left: 0;
+
+  a[mat-list-item] {
+    height: 48px;
+    padding-left: 16px;
+
+    .mat-icon {
+      margin-right: 16px;
+    }
+  }
 }
 
 .mat-toolbar.mat-primary {
@@ -61,6 +100,23 @@
   top: 0;
   z-index: 2;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+  button[mat-icon-button] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    width: 40px;
+    line-height: 40px;
+
+    .mat-icon {
+      margin: 0;
+      font-size: 24px;
+      height: 24px;
+      width: 24px;
+      line-height: 24px;
+    }
+  }
 }
 
 .toolbar-spacer {
@@ -71,7 +127,7 @@
   display: flex;
   align-items: center;
   margin: 0 12px;
-  
+
   .mat-icon {
     margin: 0 4px;
     font-size: 20px;
@@ -79,7 +135,7 @@
     width: 20px;
     line-height: 20px;
   }
-  
+
   .mat-slide-toggle {
     margin: 0 4px;
   }
@@ -100,7 +156,7 @@
   padding: 16px;
   display: flex;
   justify-content: center;
-  
+
   button {
     width: 100%;
   }
@@ -110,10 +166,10 @@
   .main-content {
     min-height: calc(100vh - 56px);
   }
-  
+
   .theme-toggle {
     margin-right: 8px;
-    
+
     .mat-icon {
       font-size: 18px;
       height: 18px;
@@ -150,4 +206,10 @@ app-tab-container {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+// Override for notification badge to ensure proper placement
+button[mat-icon-button] .mat-badge-content {
+  top: -6px;
+  right: -6px;
 }

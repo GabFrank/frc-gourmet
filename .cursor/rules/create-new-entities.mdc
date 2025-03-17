@@ -412,6 +412,7 @@ const api: ElectronAPI = {
 - Provide user feedback with snackbars
 - All formControl with strings must be converted to uppercase before save or update, unless user explicitly indicate the opposite
 - always use [repository.service.ts](mdc:src/app/database/repository.service.ts) for crud methods
+- all string must be saved uppercase
 
 ### Example List Component:
 [list-usuarios.component.html](mdc:src/app/pages/personas/usuarios/list-usuarios.component.html)
@@ -420,9 +421,9 @@ const api: ElectronAPI = {
 
 
 ### Example Create/Edit Component:
-@create-edit-persona.component.ts
-[create-edit-persona.component.html](mdc:src/app/pages/personas/personas/create-edit-persona.component.html)
-[create-edit-persona.component.scss](mdc:src/app/pages/personas/personas/create-edit-persona.component.scss)
+@create-edit-usuario.component.ts
+@create-edit-usuario.component.html
+@create-edit-usuario.component.scss
 
 ## 9. Add Tab Opening Method
 

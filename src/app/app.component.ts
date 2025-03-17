@@ -30,6 +30,8 @@ import { Usuario } from './database/entities/personas/usuario.entity';
 import { LoginSession } from './database/entities/auth/login-session.entity';
 import { firstValueFrom } from 'rxjs';
 import { ListPersonasComponent } from './pages/personas/personas/list-personas.component';
+import { ListCategoriasComponent } from './pages/productos/categorias/list-categorias/list-categorias.component';
+import { ListProductosComponent } from './pages/productos/productos/list-productos.component';
 
 @Component({
   selector: 'app-root',
@@ -62,7 +64,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private sidenavHoverSubscription = new Subscription();
   private mouseLeaveSubscription = new Subscription();
   private closeDelayMs = 2000; // 2 seconds
-  
+
   // Authentication state
   isAuthenticated = false;
   currentUser: Usuario | null = null;
@@ -91,12 +93,12 @@ export class AppComponent implements OnInit, OnDestroy {
     this.authService.currentUser$.subscribe(user => {
       this.isAuthenticated = !!user;
       this.currentUser = user;
-      
+
       // If user is logged in, fetch login history
       if (this.isAuthenticated && user?.id) {
         this.fetchLastLoginTime(user.id);
       }
-      
+
       // If user is logged out, navigate to login page
       if (!this.isAuthenticated) {
         this.router.navigate(['/login']);
@@ -112,12 +114,12 @@ export class AppComponent implements OnInit, OnDestroy {
       const loginSessions = await firstValueFrom(
         this.authService.getLoginSessions(usuarioId)
       );
-      
+
       // Sort sessions by login time in descending order
-      const sortedSessions = loginSessions.sort((a, b) => 
+      const sortedSessions = loginSessions.sort((a, b) =>
         new Date(b.login_time).getTime() - new Date(a.login_time).getTime()
       );
-      
+
       // Get previous login session (not the current one)
       if (sortedSessions && sortedSessions.length > 1) {
         // The first session is the current one, so take the second one
@@ -139,34 +141,34 @@ export class AppComponent implements OnInit, OnDestroy {
       this.isDarkTheme = false;
       this.applyTheme();
     }
-    
+
     // Check authentication status
     this.isAuthenticated = this.authService.isLoggedIn;
     this.currentUser = this.authService.currentUser;
-    
+
     // If authenticated, initialize tabs
     if (this.isAuthenticated) {
       // If we have a current user, fetch login history
       if (this.currentUser?.id) {
         this.fetchLastLoginTime(this.currentUser.id);
       }
-      
+
       // Add a default home tab when the app starts
-      this.openPersonasTab();
-      
+      this.openCategoriasTab();
+
       // Add event listener for mouse movement after view is initialized
       setTimeout(() => this.setupSidenavHover(), 0);
-      
+
       // Start session activity tracker
       this.startSessionActivityTracker();
     }
   }
-  
+
   ngOnDestroy() {
     // Clean up subscriptions
     this.sidenavHoverSubscription.unsubscribe();
     this.mouseLeaveSubscription.unsubscribe();
-    
+
     // Clear any pending timeouts
     if (this.autoCloseTimeout) {
       clearTimeout(this.autoCloseTimeout);
@@ -200,7 +202,7 @@ export class AppComponent implements OnInit, OnDestroy {
       this.renderer.appendChild(document.body, triggerElement);
       this.sidenavTrigger = { nativeElement: triggerElement };
     }
-    
+
     // Subscribe to mouse hover events on the trigger area (left edge of screen)
     this.ngZone.runOutsideAngular(() => {
       this.sidenavHoverSubscription = fromEvent(this.sidenavTrigger.nativeElement, 'mouseenter')
@@ -212,14 +214,14 @@ export class AppComponent implements OnInit, OnDestroy {
               clearTimeout(this.autoCloseTimeout);
               this.autoCloseTimeout = null;
             }
-            
+
             // Open the sidenav
             if (this.sidenav && !this.sidenav.opened) {
               this.sidenav.open();
             }
           });
         });
-      
+
       // When mouse leaves the sidenav, start a timer to close it
       if (this.sidenav) {
         // Use querySelector to find the sidenav element without accessing private properties
@@ -233,7 +235,7 @@ export class AppComponent implements OnInit, OnDestroy {
                   if (this.autoCloseTimeout) {
                     clearTimeout(this.autoCloseTimeout);
                   }
-                  
+
                   // Set a new timeout to close the sidenav after delay
                   this.autoCloseTimeout = setTimeout(() => {
                     if (this.sidenav && this.sidenav.opened) {
@@ -253,7 +255,7 @@ export class AppComponent implements OnInit, OnDestroy {
     localStorage.setItem('darkTheme', this.isDarkTheme.toString());
     this.applyTheme();
   }
-  
+
   openPrinterSettings(): void {
     this.dialog.open(PrinterSettingsComponent, {
       width: '800px',
@@ -265,22 +267,31 @@ export class AppComponent implements OnInit, OnDestroy {
   openHomeTab() {
     this.tabsService.openTab('Dashboard', HomeComponent, { source: 'navigation' }, 'dashboard-tab', true);
   }
-  
+
   // RRHH related tab navigation methods
   openRrhhDashTab() {
     this.tabsService.openTab('RRHH Dashboard', RrhhDashComponent, { source: 'navigation' }, 'rrhh-dash-tab', true);
   }
-  
+
   openPersonasTab() {
     this.tabsService.openTab('Personas', ListPersonasComponent, { source: 'navigation' }, 'personas-tab', true);
   }
-  
+
   openUsuariosTab() {
     this.tabsService.openTab('Usuarios', ListUsuariosComponent, { source: 'navigation' }, 'usuarios-tab', true);
   }
-  
+
   openClientesTab() {
     this.tabsService.openTab('Clientes', ListClientesComponent, { source: 'navigation' }, 'clientes-tab', true);
+  }
+
+  // Productos related tab navigation methods
+  openCategoriasTab() {
+    this.tabsService.openTab('Categorías', ListCategoriasComponent, { source: 'navigation' }, 'categorias-tab', true);
+  }
+
+  openProductosTab() {
+    this.tabsService.openTab('Productos', ListProductosComponent, { source: 'navigation' }, 'productos-tab', true);
   }
 
   private applyTheme() {

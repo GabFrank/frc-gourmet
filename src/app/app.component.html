@@ -19,22 +19,22 @@
           </div>
         </div>
       </div>
-      
+
       <mat-nav-list>
         <a mat-list-item (click)="openHomeTab(); drawer.close()" routerLinkActive="active">
           <mat-icon matListItemIcon>dashboard</mat-icon>
           <span matListItemTitle>Dashboard</span>
         </a>
-        
+
         <!-- Recursos Humanos Menu -->
-        <mat-expansion-panel class="mat-elevation-z0">
-          <mat-expansion-panel-header>
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel">
+          <mat-expansion-panel-header class="nav-panel-header">
             <mat-panel-title>
-              <mat-icon matListItemIcon>people</mat-icon>
-              <span matListItemTitle>Recursos Humanos</span>
+              <mat-icon class="nav-icon">people</mat-icon>
+              <span class="nav-title">Recursos Humanos</span>
             </mat-panel-title>
           </mat-expansion-panel-header>
-          <mat-nav-list>
+          <div class="submenu-container">
             <a mat-list-item (click)="openRrhhDashTab(); drawer.close()">
               <mat-icon matListItemIcon>dashboard</mat-icon>
               <span matListItemTitle>RRHHDash</span>
@@ -51,7 +51,27 @@
               <mat-icon matListItemIcon>business</mat-icon>
               <span matListItemTitle>Clientes</span>
             </a>
-          </mat-nav-list>
+          </div>
+        </mat-expansion-panel>
+
+        <!-- Productos Menu -->
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel">
+          <mat-expansion-panel-header class="nav-panel-header">
+            <mat-panel-title>
+              <mat-icon class="nav-icon">inventory_2</mat-icon>
+              <span class="nav-title">Productos</span>
+            </mat-panel-title>
+          </mat-expansion-panel-header>
+          <div class="submenu-container">
+            <a mat-list-item (click)="openCategoriasTab(); drawer.close()">
+              <mat-icon matListItemIcon>category</mat-icon>
+              <span matListItemTitle>Categorías</span>
+            </a>
+            <a mat-list-item (click)="openProductosTab(); drawer.close()">
+              <mat-icon matListItemIcon>restaurant</mat-icon>
+              <span matListItemTitle>Productos</span>
+            </a>
+          </div>
         </mat-expansion-panel>
 
         <mat-divider></mat-divider>
@@ -59,10 +79,10 @@
           <mat-icon matListItemIcon>settings</mat-icon>
           <span matListItemTitle>Settings</span>
         </a>
-        
+
       </mat-nav-list>
     </mat-sidenav>
-    
+
     <!-- Main content -->
     <mat-sidenav-content>
       <mat-toolbar color="primary" class="app-toolbar">
@@ -76,13 +96,13 @@
         </button>
         <span>FRC Gourmet</span>
         <span class="toolbar-spacer"></span>
-        
+
         <!-- Theme toggle -->
         <div class="theme-toggle">
           <mat-icon>light_mode</mat-icon>
-          <mat-slide-toggle 
-            [checked]="isDarkTheme" 
-            (change)="toggleTheme()" 
+          <mat-slide-toggle
+            [checked]="isDarkTheme"
+            (change)="toggleTheme()"
             color="primary"
             matTooltip="Toggle theme">
           </mat-slide-toggle>
@@ -108,7 +128,7 @@
           </button>
         </mat-menu>
       </mat-toolbar>
-      
+
       <!-- Page content -->
       <div class="main-content" style="height: 100% !important;">
         <app-tab-container style="height: 100% !important;"></app-tab-container>

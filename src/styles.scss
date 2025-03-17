@@ -115,8 +115,22 @@ $custom-accent: mat.define-palette($custom-orange-palette, 500);
 $custom-warn: mat.define-palette($custom-red-palette, 900);
 $custom-secondary: mat.define-palette($custom-green-palette, 500);
 
-// Create the typography config
-$custom-typography: mat.define-typography-config();
+// Create the typography config with smaller sizes
+$custom-typography: mat.define-typography-config(
+  $font-family: 'Roboto, "Helvetica Neue", sans-serif',
+  $headline-1: mat.define-typography-level(24px, 32px, 400),
+  $headline-2: mat.define-typography-level(20px, 28px, 400),
+  $headline-3: mat.define-typography-level(18px, 24px, 400),
+  $headline-4: mat.define-typography-level(16px, 20px, 400),
+  $headline-5: mat.define-typography-level(14px, 20px, 400),
+  $headline-6: mat.define-typography-level(14px, 20px, 500),
+  $subtitle-1: mat.define-typography-level(14px, 20px, 400),
+  $subtitle-2: mat.define-typography-level(13px, 18px, 500),
+  $body-1: mat.define-typography-level(14px, 20px, 400),
+  $body-2: mat.define-typography-level(13px, 18px, 400),
+  $caption: mat.define-typography-level(12px, 16px, 400),
+  $button: mat.define-typography-level(13px, 14px, 500),
+);
 
 // Create the light theme object
 $custom-light-theme: mat.define-light-theme((color: (primary: $custom-primary,
@@ -124,7 +138,7 @@ $custom-light-theme: mat.define-light-theme((color: (primary: $custom-primary,
         warn: $custom-warn,
       ),
       typography: $custom-typography,
-      density: 0,
+      density: -2,
     ));
 
 // Create the dark theme object
@@ -133,7 +147,7 @@ $custom-dark-theme: mat.define-dark-theme((color: (primary: $custom-primary,
         warn: $custom-warn,
       ),
       typography: $custom-typography,
-      density: 0,
+      density: -2,
     ));
 
 // Include the theme mixins for all components - light theme is default
@@ -599,10 +613,10 @@ h6 {
 }
 
 // Force all inputs to uppercase with higher specificity
-input, 
+input,
 .mat-mdc-input-element,
 .mat-input-element,
-textarea, 
+textarea,
 select,
 .mat-select-value-text,
 .mat-mdc-select-value-text {
@@ -633,16 +647,719 @@ select,
       color: #43a047 !important;
     }
   }
-  
+
   // Target the password visibility toggle icon
   .mat-mdc-input-element+.mat-icon {
     color: #43a047 !important;
   }
-  
+
   // Target search/dropdown icons
   .mat-datepicker-toggle,
   .mat-select-arrow,
   .mat-form-field-suffix .mat-icon {
     color: #43a047 !important;
+  }
+}
+
+// Custom styles to reduce component sizing
+.mat-mdc-form-field {
+  .mat-mdc-text-field-wrapper {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .mat-mdc-form-field-flex {
+    min-height: unset;
+  }
+}
+
+// Reduce button size
+.mat-mdc-button, .mat-mdc-raised-button, .mat-mdc-outlined-button, .mat-mdc-icon-button {
+  padding: 0 12px !important;
+  line-height: 32px !important;
+  height: 32px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  .mat-mdc-button-touch-target {
+    height: 32px !important;
+  }
+
+  .mdc-button__label {
+    display: flex !important;
+    align-items: center !important;
+  }
+}
+
+// Reduce input field height
+.mat-mdc-input-element {
+  line-height: 1.2 !important;
+}
+
+// Reduce select field height
+.mat-mdc-select {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+// Reduce dropdown item height
+.mat-mdc-option {
+  height: 40px !important;
+  min-height: 40px !important;
+
+  .mdc-list-item__primary-text {
+    display: flex !important;
+    align-items: center !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    line-height: 1.2 !important;
+    min-height: 0 !important;
+    height: 100% !important;
+  }
+}
+
+// Table row height adjustments
+.mat-mdc-row, .mat-mdc-header-row {
+  height: 40px !important;
+}
+
+// Make card padding more compact
+.mat-mdc-card {
+  padding: 12px !important;
+}
+
+.mat-mdc-card-header {
+  padding: 8px 0 !important;
+}
+
+// Adjust form field margins
+.mat-mdc-form-field {
+  margin-bottom: 12px !important;
+}
+
+// Adjust table styling
+.mat-mdc-table {
+  .mat-mdc-cell,
+  .mat-mdc-header-cell {
+    padding: 0 8px !important;
+  }
+}
+
+// Make dialog more compact
+.mat-mdc-dialog-container {
+  .mat-mdc-dialog-content {
+    padding: 12px 16px !important;
+    max-height: 70vh !important;
+  }
+
+  .mat-mdc-dialog-actions {
+    padding: 8px 16px !important;
+    min-height: unset !important;
+  }
+}
+
+// Make tab headers more compact
+.mat-mdc-tab-header {
+  .mat-mdc-tab {
+    height: 40px !important;
+    padding: 0 16px !important;
+  }
+}
+
+// Make filter containers more compact
+.filters-container, .filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+
+  .mat-mdc-form-field {
+    flex: 1 1 200px;
+    min-width: 200px;
+    margin-bottom: 0 !important;
+  }
+
+  .filter-actions {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    margin-top: 4px;
+  }
+}
+
+// Comprehensive shared list component styles
+.list-container,
+.list-personas-container,
+.list-categorias-container,
+.list-productos-container,
+.list-usuarios-container {
+  padding: 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+
+  // Filter card
+  .filter-card {
+    flex: 0 0 auto;
+    margin-bottom: 16px;
+  }
+
+  // Filter form structure
+  .filter-form {
+    margin-bottom: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  // Filter row with inputs
+  .filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 0;
+
+    .mat-mdc-form-field {
+      flex: 1 1 200px;
+      min-width: 200px;
+    }
+  }
+
+  // Action buttons row
+  .button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 0;
+    align-items: center;
+    justify-content: flex-start;
+
+    .spacer {
+      flex: 1;
+    }
+
+    button {
+      min-width: 100px;
+    }
+  }
+
+  // Table structure
+  .table-container {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 200px;
+    overflow: hidden;
+
+    .loading-shade {
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.15);
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .table-scroll-container {
+      flex: 1;
+      overflow: auto;
+      margin-bottom: 16px;
+    }
+
+    table {
+      width: 100%;
+    }
+
+    .paginator-container {
+      margin-top: auto;
+    }
+  }
+
+  // Status badges
+  .status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+
+    &.active {
+      background-color: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    &.inactive {
+      background-color: #ffebee;
+      color: #b71c1c;
+    }
+  }
+
+  // Common action buttons styling
+  .action-buttons {
+    display: flex;
+    gap: 4px;
+
+    .mat-mdc-mini-fab {
+      width: 32px;
+      height: 32px;
+
+      .mat-icon {
+        font-size: 16px;
+        width: 16px;
+        height: 16px;
+        line-height: 16px;
+      }
+    }
+  }
+
+  // Common utilities
+  .spacer {
+    flex: 1 1 auto;
+  }
+
+  // Make sure MatMenuTrigger is clickable
+  ::ng-deep .mat-menu-trigger {
+    z-index: 2;
+  }
+
+  // Responsive adjustments for all lists
+  @media (max-width: 600px) {
+    .filter-row {
+      flex-direction: column;
+
+      mat-form-field {
+        width: 100%;
+      }
+    }
+
+    .table-container {
+      overflow-x: auto;
+    }
+  }
+
+  // Product image cell styling for reuse
+  .product-image-cell {
+    padding: 4px;
+
+    .product-thumbnail {
+      width: 40px;
+      height: 40px;
+      object-fit: cover;
+      border-radius: 4px;
+    }
+  }
+}
+
+// Make expansion panel more compact
+.mat-expansion-panel {
+  .mat-expansion-panel-header {
+    height: 40px !important;
+    padding: 0 16px !important;
+  }
+
+  .mat-expansion-panel-body {
+    padding: 0 16px 16px !important;
+  }
+}
+
+// Make list items more compact
+.mat-mdc-list {
+  .mat-mdc-list-item {
+    height: 40px !important;
+  }
+}
+
+// Additional form field size reductions
+.mat-mdc-form-field {
+  font-size: 14px !important;
+  line-height: 1.2 !important;
+
+  .mat-mdc-form-field-infix {
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+    min-height: 36px !important;
+  }
+
+  .mat-mdc-floating-label {
+    top: 16px !important;
+  }
+
+  &.mat-mdc-form-field-appearance-outline {
+    .mat-mdc-form-field-flex {
+      height: 40px !important;
+    }
+
+    .mat-mdc-form-field-infix {
+      padding: 8px 0 !important;
+    }
+  }
+
+  &.mat-mdc-form-field-appearance-fill {
+    .mat-mdc-form-field-flex {
+      height: 40px !important;
+    }
+
+    .mat-mdc-form-field-infix {
+      padding: 8px 0 !important;
+    }
+  }
+}
+
+// More compact form field wrapper
+.mdc-text-field--outlined {
+  height: 40px !important;
+
+  .mdc-floating-label {
+    font-size: 14px !important;
+  }
+}
+
+// Make inputs more compact
+input.mat-mdc-input-element {
+  height: 18px !important;
+  line-height: 18px !important;
+  font-size: 14px !important;
+}
+
+// Pagination style overrides
+.mat-mdc-paginator {
+  height: 40px !important;
+  min-height: 40px !important;
+
+  .mat-mdc-paginator-container {
+    height: 40px !important;
+    min-height: 40px !important;
+    padding: 0 8px !important;
+    font-size: 13px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+  }
+
+  .mat-mdc-paginator-range-label {
+    font-size: 13px !important;
+    margin: 0 12px !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .mat-mdc-paginator-range-actions {
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .mat-mdc-icon-button {
+    width: 32px !important;
+    height: 32px !important;
+    padding: 4px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+
+    .mat-icon {
+      font-size: 18px !important;
+      width: 18px !important;
+      height: 18px !important;
+      line-height: 18px !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+    }
+  }
+
+  .mat-mdc-select {
+    font-size: 13px !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .mat-mdc-select-value {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .mat-mdc-form-field-infix {
+    padding: 0 !important;
+    min-height: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .mat-mdc-paginator-page-size {
+    display: flex !important;
+    align-items: center !important;
+    height: 40px !important;
+  }
+
+  .mat-mdc-paginator-page-size-select {
+    margin: 0 4px 0 8px !important;
+    width: 56px !important;
+    display: flex !important;
+    align-items: center !important;
+    height: 40px !important;
+
+    .mat-mdc-form-field-flex {
+      height: 100% !important;
+      align-items: center !important;
+    }
+  }
+
+  .mat-mdc-form-field {
+    margin: 0 !important;
+
+    .mat-mdc-select-arrow-wrapper {
+      height: 16px !important;
+      display: flex !important;
+      align-items: center !important;
+    }
+
+    .mat-mdc-select-arrow {
+      border-top-width: 5px !important;
+      border-left-width: 5px !important;
+      border-right-width: 5px !important;
+    }
+  }
+}
+
+// Ensure pagination navigation buttons are properly aligned
+.mat-mdc-paginator-navigation-first,
+.mat-mdc-paginator-navigation-previous,
+.mat-mdc-paginator-navigation-next,
+.mat-mdc-paginator-navigation-last {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+// Fix for mat-paginator items per page dropdown
+.mat-mdc-paginator .mat-mdc-paginator-page-size-select {
+  .mat-mdc-form-field-subscript-wrapper {
+    display: none !important;
+  }
+
+  .mat-mdc-form-field-infix {
+    width: auto !important;
+  }
+}
+
+// Adjustments for select
+.mat-mdc-select-panel {
+  min-width: 100% !important;
+
+  .mat-mdc-option {
+    display: flex !important;
+    align-items: center !important;
+    padding: 0 16px !important;
+  }
+}
+
+// Fix vertical alignment in form fields
+.mat-mdc-form-field {
+  .mat-mdc-input-element {
+    margin-top: auto !important;
+    margin-bottom: auto !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    position: relative !important;
+    top: 0 !important;
+    height: 40px !important;
+    line-height: 40px !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .mat-mdc-select-value {
+    position: relative !important;
+    top: 0 !important;
+  }
+
+  .mat-mdc-select-placeholder {
+    position: relative !important;
+    top: 0 !important;
+  }
+
+  // Reset the problematic label positioning
+  .mat-mdc-floating-label:not(.mdc-floating-label--float-above) {
+    top: 12px !important;
+    transform: none !important;
+  }
+
+  &.mat-mdc-form-field-has-icon-suffix .mat-mdc-text-field-wrapper {
+    padding-right: 0 !important;
+  }
+
+  // Ensure the text field wrapper has proper height
+  .mat-mdc-text-field-wrapper {
+    height: 40px !important;
+    padding: 0 12px !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .mat-mdc-form-field-flex {
+    height: 40px !important;
+    align-items: center !important;
+  }
+
+  .mat-mdc-form-field-infix {
+    display: flex !important;
+    align-items: center !important;
+    padding: 0 !important;
+  }
+}
+
+// Fix alignment for outlined form fields
+.mdc-text-field--outlined {
+  .mdc-notched-outline__leading,
+  .mdc-notched-outline__trailing {
+    border-top-width: 1px !important;
+    border-bottom-width: 1px !important;
+  }
+
+  .mdc-notched-outline__notch {
+    border-top-width: 1px !important;
+    border-bottom-width: 1px !important;
+  }
+
+  // Fix label position for outlined fields
+  .mdc-floating-label {
+    top: 12px !important;
+    transform: none !important;
+  }
+
+  // Position for floated labels (when input has content or focus)
+  .mdc-floating-label--float-above {
+    top: 0 !important;
+    transform: translateY(-50%) scale(0.75) !important;
+  }
+
+  // Fix for input alignment in outlined fields
+  .mdc-text-field__input {
+    height: 40px !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+}
+
+// Fix select alignment
+.mat-mdc-select {
+  display: inline-flex !important;
+  align-items: center !important;
+
+  .mat-mdc-select-value {
+    display: flex !important;
+    align-items: center !important;
+    height: 40px !important;
+  }
+}
+
+// Fix alignment for mat-option
+.mat-mdc-option {
+  .mdc-list-item__primary-text {
+    display: flex !important;
+    align-items: center !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    line-height: 1.2 !important;
+    min-height: 0 !important;
+  }
+}
+
+// Fix for select dropdowns
+.mat-mdc-select-trigger {
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+// Fix for form field icons
+.mat-mdc-form-field-icon-suffix {
+  align-self: center !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding-right: 4px !important;
+}
+
+// Make all forms more compact
+.mat-mdc-form-field {
+  &.compact-form-field {
+    .mat-mdc-text-field-wrapper {
+      height: auto;
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+
+    .mat-mdc-form-field-infix {
+      padding-top: 8px;
+      padding-bottom: 8px;
+      min-height: 36px;
+    }
+
+    .mat-mdc-form-field-subscript-wrapper {
+      height: 0;
+    }
+  }
+}
+
+// Consistent styling for select dropdowns
+.mat-mdc-select {
+  &.compact-select {
+    .mat-mdc-select-trigger {
+      height: 36px;
+    }
+  }
+}
+
+// Global toolbar icon fixes with high specificity
+.mat-toolbar .mat-icon-button {
+  width: 40px !important;
+  height: 40px !important;
+  line-height: 40px !important;
+  padding: 8px !important;
+
+  .mat-icon {
+    margin: 0 !important;
+    font-size: 24px !important;
+    height: 24px !important;
+    width: 24px !important;
+    line-height: 24px !important;
+  }
+}
+
+// Fix for notification badge position
+.mat-toolbar .mat-icon-button .mat-badge-content {
+  top: -6px !important;
+  right: -6px !important;
+}
+
+// Specific fix for account icon and notification icon in toolbar
+.mat-toolbar button[mat-icon-button] {
+  height: 48px !important;
+  width: 48px !important;
+  line-height: 48px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  .mat-icon {
+    height: 32px !important;
+    width: 32px !important;
+    font-size: 32px !important;
+    line-height: 32px !important;
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
 }

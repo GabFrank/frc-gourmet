@@ -3,10 +3,6 @@ import * as path from 'path';
 import * as electron from 'electron';
 
 // Import all entities
-import { Category } from './entities/category.entity';
-import { Product } from './entities/product.entity';
-import { Order } from './entities/order.entity';
-import { OrderItem } from './entities/order-item.entity';
 import { Printer } from './entities/printer.entity';
 import { Persona } from './entities/personas/persona.entity';
 import { Usuario } from './entities/personas/usuario.entity';
@@ -15,6 +11,9 @@ import { UsuarioRole } from './entities/personas/usuario-role.entity';
 import { TipoCliente } from './entities/personas/tipo-cliente.entity';
 import { Cliente } from './entities/personas/cliente.entity';
 import { LoginSession } from './entities/auth/login-session.entity';
+import { Categoria } from './entities/productos/categoria.entity';
+import { Subcategoria } from './entities/productos/subcategoria.entity';
+import { Producto } from './entities/productos/producto.entity';
 
 /**
  * Get the configuration for TypeORM
@@ -27,10 +26,7 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
     database: path.join(userDataPath, 'frc-gourmet.db'),
     entities: [
       // Entity classes
-      Category,
-      Product,
-      Order,
-      OrderItem,
+
       Printer,
       Persona,
       Usuario,
@@ -38,7 +34,10 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       UsuarioRole,
       TipoCliente,
       Cliente,
-      LoginSession
+      LoginSession,
+      Categoria,
+      Subcategoria,
+      Producto
     ],
     synchronize: true, // Automatically creates tables in development
     logging: process.env['NODE_ENV'] === 'development',
@@ -53,4 +52,4 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
 export function createDataSource(userDataPath: string): Promise<DataSource> {
   const dataSource = new DataSource(getDataSourceOptions(userDataPath));
   return dataSource.initialize();
-} 
+}

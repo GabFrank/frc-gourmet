@@ -13,10 +13,6 @@ const jwt = require('jsonwebtoken');
 // Import the image handler module
 const imageHandler = require('./electron/utils/image-handler');
 const database_service_1 = require("./src/app/database/database.service");
-const category_entity_1 = require("./src/app/database/entities/category.entity");
-const product_entity_1 = require("./src/app/database/entities/product.entity");
-const order_entity_1 = require("./src/app/database/entities/order.entity");
-const order_item_entity_1 = require("./src/app/database/entities/order-item.entity");
 const printer_entity_1 = require("./src/app/database/entities/printer.entity");
 const persona_entity_1 = require("./src/app/database/entities/personas/persona.entity");
 const usuario_entity_1 = require("./src/app/database/entities/personas/usuario.entity");
@@ -25,9 +21,9 @@ const usuario_role_entity_1 = require("./src/app/database/entities/personas/usua
 const tipo_cliente_entity_1 = require("./src/app/database/entities/personas/tipo-cliente.entity");
 const cliente_entity_1 = require("./src/app/database/entities/personas/cliente.entity");
 const login_session_entity_1 = require("./src/app/database/entities/auth/login-session.entity");
-const categoria_entity_1 = require("./src/app/database/entities/categoria.entity");
-const subcategoria_entity_1 = require("./src/app/database/entities/subcategoria.entity");
-const producto_entity_1 = require("./src/app/database/entities/producto.entity");
+const categoria_entity_1 = require("./src/app/database/entities/productos/categoria.entity");
+const subcategoria_entity_1 = require("./src/app/database/entities/productos/subcategoria.entity");
+const producto_entity_1 = require("./src/app/database/entities/productos/producto.entity");
 let win;
 let dbService;
 // JWT Secret for token generation
@@ -115,188 +111,6 @@ app.on('activate', () => {
     }
 });
 // Handle IPC events for database operations using TypeORM
-// Get all categories
-ipcMain.handle('get-categories', async () => {
-    try {
-        const dataSource = dbService.getDataSource();
-        const categoryRepository = dataSource.getRepository(category_entity_1.Category);
-        return await categoryRepository.find({ order: { name: 'ASC' } });
-    }
-    catch (error) {
-        console.error('Error getting categories:', error);
-        throw error;
-    }
-});
-// Get all products
-ipcMain.handle('get-products', async () => {
-    try {
-        const dataSource = dbService.getDataSource();
-        const productRepository = dataSource.getRepository(product_entity_1.Product);
-        return await productRepository.find({
-            relations: ['category'],
-            order: { name: 'ASC' }
-        });
-    }
-    catch (error) {
-        console.error('Error getting products:', error);
-        throw error;
-    }
-});
-// Get products by category
-ipcMain.handle('get-products-by-category', async (_event, categoryId) => {
-    try {
-        const dataSource = dbService.getDataSource();
-        const productRepository = dataSource.getRepository(product_entity_1.Product);
-        return await productRepository.find({
-            where: { categoryId },
-            relations: ['category'],
-            order: { name: 'ASC' }
-        });
-    }
-    catch (error) {
-        console.error('Error getting products by category:', error);
-        throw error;
-    }
-});
-// Create a new order
-ipcMain.handle('create-order', async (_event, orderData) => {
-    const dataSource = dbService.getDataSource();
-    const queryRunner = dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-    try {
-        // Create order
-        const orderRepository = queryRunner.manager.getRepository(order_entity_1.Order);
-        const order = orderRepository.create({
-            tableNumber: orderData.tableNumber,
-            customerName: orderData.customerName,
-            totalAmount: orderData.totalAmount,
-            status: 'pending'
-        });
-        const savedOrder = await queryRunner.manager.save(order);
-        // Create order items
-        const orderItemRepository = queryRunner.manager.getRepository(order_item_entity_1.OrderItem);
-        const orderItems = orderData.items.map((item) => {
-            return orderItemRepository.create({
-                orderId: savedOrder.id,
-                productId: item.productId,
-                quantity: item.quantity,
-                notes: item.notes
-            });
-        });
-        await queryRunner.manager.save(orderItems);
-        // Commit transaction
-        await queryRunner.commitTransaction();
-        return { orderId: savedOrder.id };
-    }
-    catch (error) {
-        // Rollback transaction on error
-        await queryRunner.rollbackTransaction();
-        console.error('Error creating order:', error);
-        throw error;
-    }
-    finally {
-        // Release query runner
-        await queryRunner.release();
-    }
-});
-// Get all orders
-ipcMain.handle('get-orders', async () => {
-    try {
-        const dataSource = dbService.getDataSource();
-        const orderRepository = dataSource.getRepository(order_entity_1.Order);
-        return await orderRepository.find({
-            order: { orderTime: 'DESC' }
-        });
-    }
-    catch (error) {
-        console.error('Error getting orders:', error);
-        throw error;
-    }
-});
-// Get order details (items in an order)
-ipcMain.handle('get-order-details', async (_event, orderId) => {
-    try {
-        const dataSource = dbService.getDataSource();
-        const orderItemRepository = dataSource.getRepository(order_item_entity_1.OrderItem);
-        return await orderItemRepository.find({
-            where: { orderId },
-            relations: ['product']
-        });
-    }
-    catch (error) {
-        console.error('Error getting order details:', error);
-        throw error;
-    }
-});
-// Update order status
-ipcMain.handle('update-order-status', async (_event, orderId, status) => {
-    try {
-        const dataSource = dbService.getDataSource();
-        const orderRepository = dataSource.getRepository(order_entity_1.Order);
-        const result = await orderRepository.update(orderId, { status });
-        return { success: true, changes: result.affected };
-    }
-    catch (error) {
-        console.error('Error updating order status:', error);
-        throw error;
-    }
-});
-// Create a new product
-ipcMain.handle('create-product', async (_event, productData) => {
-    try {
-        const dataSource = dbService.getDataSource();
-        const productRepository = dataSource.getRepository(product_entity_1.Product);
-        const product = productRepository.create({
-            name: productData.name,
-            description: productData.description,
-            price: productData.price,
-            categoryId: productData.category_id,
-            isAvailable: productData.is_available || true
-        });
-        // Save the product first
-        const savedProduct = await productRepository.save(product);
-        // Then fetch it with the category relation
-        const productWithCategory = await productRepository.findOne({
-            where: { id: savedProduct.id },
-            relations: ['category']
-        });
-        return productWithCategory;
-    }
-    catch (error) {
-        console.error('Error creating product:', error);
-        throw error;
-    }
-});
-// Update an existing product
-ipcMain.handle('update-product', async (_event, productId, productData) => {
-    try {
-        const dataSource = dbService.getDataSource();
-        const productRepository = dataSource.getRepository(product_entity_1.Product);
-        const result = await productRepository.update(productId, {
-            name: productData.name,
-            description: productData.description,
-            price: productData.price,
-            categoryId: productData.category_id,
-            isAvailable: productData.is_available || false
-        });
-        if (result.affected && result.affected > 0) {
-            // Fetch the updated product with category relation
-            const updatedProduct = await productRepository.findOne({
-                where: { id: productId },
-                relations: ['category']
-            });
-            return { success: true, product: updatedProduct };
-        }
-        else {
-            return { success: false, message: 'No product found with that ID' };
-        }
-    }
-    catch (error) {
-        console.error('Error updating product:', error);
-        throw error;
-    }
-});
 // IPC handler for getting all printers
 ipcMain.handle('get-printers', async () => {
     try {
@@ -399,7 +213,7 @@ function generateReceiptContent(order, orderItems) {
     const dateTime = new Date(order.orderTime).toLocaleString();
     let content = `
 ==============================
-         FRC GOURMET          
+         FRC GOURMET
 ==============================
 Order #: ${order.id}
 Date: ${dateTime}
@@ -428,8 +242,8 @@ SUBTOTAL: $${subtotal.toFixed(2)}
 TAX: $${(subtotal * 0.08).toFixed(2)}
 TOTAL: $${order.totalAmount.toFixed(2)}
 ==============================
-        THANK YOU!           
-   PLEASE COME AGAIN SOON    
+        THANK YOU!
+   PLEASE COME AGAIN SOON
 ==============================
 `;
     return content;
@@ -438,7 +252,7 @@ TOTAL: $${order.totalAmount.toFixed(2)}
 function generateTestPageContent(printer) {
     return `
 ==============================
-         TEST PAGE           
+         TEST PAGE
 ==============================
 Printer: ${printer.name}
 Type: ${printer.type}
@@ -446,15 +260,15 @@ Connection: ${printer.connectionType}
 Address: ${printer.address}
 ${printer.port ? `Port: ${printer.port}` : ''}
 ------------------------------
-This is a test page to verify 
-that your printer is working 
+This is a test page to verify
+that your printer is working
 correctly with FRC Gourmet.
 ==============================
 If you can read this message,
 your printer is correctly
 configured and working!
 ==============================
-        THANK YOU!           
+        THANK YOU!
 ==============================
 `;
 }
@@ -642,38 +456,6 @@ ipcMain.handle('print-test-page', async (_event, printerId) => {
     }
 });
 // IPC handler for printing a receipt
-ipcMain.handle('print-receipt', async (_event, orderId, printerId) => {
-    try {
-        const dataSource = dbService.getDataSource();
-        // Get the printer configuration
-        const printerRepository = dataSource.getRepository(printer_entity_1.Printer);
-        const printer = await printerRepository.findOneBy({ id: printerId });
-        if (!printer) {
-            throw new Error('Printer not found');
-        }
-        // Get the order details
-        const orderRepository = dataSource.getRepository(order_entity_1.Order);
-        const order = await orderRepository.findOneBy({ id: orderId });
-        if (!order) {
-            throw new Error('Order not found');
-        }
-        // Get the order items
-        const orderItemRepository = dataSource.getRepository(order_item_entity_1.OrderItem);
-        const orderItems = await orderItemRepository.find({
-            where: { orderId },
-            relations: ['product']
-        });
-        // Generate receipt content
-        const content = generateReceiptContent(order, orderItems);
-        // Print the receipt
-        const success = await printPosReceipt(printer, content);
-        return { success };
-    }
-    catch (error) {
-        console.error('Error printing receipt:', error);
-        return { success: false, error: error instanceof Error ? error.message : String(error) };
-    }
-});
 // Helper function to handle user tracking for created/updated entities
 async function setEntityUserTracking(entity, usuarioId, isUpdate) {
     if (!usuarioId)

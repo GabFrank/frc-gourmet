@@ -1,43 +1,76 @@
-.dialog-container {
-  min-width: 500px;
-  max-width: 900px;
-  width: 90vw;
-  
+.page-container {
+  padding: 24px;
+  max-width: 100%;
+}
+
+.page-header {
+  margin-bottom: 24px;
+
   h1 {
-    margin-bottom: 16px;
-  }
-  
-  h3 {
-    margin-top: 24px;
-    margin-bottom: 12px;
-    color: #555;
+    margin: 0;
+    font-size: 28px;
     font-weight: 500;
-    font-size: 16px;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 8px;
-  }
-  
-  .mat-dialog-content {
-    max-height: 70vh;
-    padding-right: 8px;
+    color: #333;
   }
 }
 
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.7);
+}
+
+.tab-container {
+  margin-bottom: 24px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.tab-content {
+  padding: 24px;
+}
+
+.form-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+}
+
+h3 {
+  margin-top: 24px;
+  margin-bottom: 12px;
+  color: #555;
+  font-weight: 500;
+  font-size: 16px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 8px;
+}
+
+// Form layout
 .form-row {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 8px;
-  
+
   .full-width {
     width: 100%;
   }
-  
+
   .half-width {
     flex: 1 1 calc(50% - 8px);
     min-width: 150px;
   }
-  
+
   .one-third-width {
     flex: 1 1 calc(33.33% - 12px);
     min-width: 120px;
@@ -55,7 +88,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
-  
+
   .toggle-group {
     display: flex;
     gap: 24px;
@@ -64,12 +97,13 @@
   }
 }
 
+// Image upload and display
 .image-container {
   margin: 16px 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  
+
   .image-preview {
     position: relative;
     width: 200px;
@@ -77,13 +111,13 @@
     border-radius: 4px;
     overflow: hidden;
     border: 1px solid #ddd;
-    
+
     img {
       width: 100%;
       height: 100%;
       object-fit: contain;
     }
-    
+
     .remove-image-btn {
       position: absolute;
       top: 8px;
@@ -91,7 +125,7 @@
       opacity: 0.9;
     }
   }
-  
+
   .image-upload {
     display: flex;
     flex-direction: column;
@@ -100,7 +134,7 @@
     border: 2px dashed #ccc;
     border-radius: 4px;
     width: 200px;
-    
+
     .hint-text {
       margin-top: 8px;
       font-size: 12px;
@@ -109,31 +143,101 @@
   }
 }
 
+// Button styling
+.page-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 16px;
+}
+
+button[mat-button] {
+  padding: 4px 20px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  transition: all 0.2s ease;
+}
+
+button[mat-button]:not([disabled]):hover {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+button[mat-raised-button][color="primary"]:not([disabled]):hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  transform: translateY(-2px);
+}
+
 .spinner-button {
   display: inline-block;
   margin-right: 8px;
   vertical-align: middle;
 }
 
-// Responsive adjustments
+// Placeholder content for empty tabs
+.placeholder-content {
+  padding: 16px;
+  text-align: center;
+
+  h3 {
+    margin-top: 0;
+    text-align: left;
+  }
+
+  p {
+    color: #666;
+    margin-bottom: 32px;
+    text-align: left;
+  }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
+  border: 1px dashed #ccc;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+
+  mat-icon {
+    font-size: 48px;
+    height: 48px;
+    width: 48px;
+    color: #aaa;
+    margin-bottom: 16px;
+  }
+
+  p {
+    margin-top: 0;
+    margin-bottom: 24px;
+    color: #777;
+    font-size: 16px;
+    text-align: center;
+  }
+}
+
+// Make responsive for smaller screens
 @media (max-width: 600px) {
+  .page-container {
+    padding: 16px;
+  }
+
   .form-row {
     flex-direction: column;
-    
+
     .half-width,
     .one-third-width {
       width: 100%;
     }
   }
-  
+
   .multiple-toggles {
     .toggle-group {
       flex-direction: column;
       gap: 8px;
     }
   }
-  
-  .dialog-container {
-    min-width: auto;
-  }
-} 
+}
