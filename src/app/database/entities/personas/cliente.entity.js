@@ -19,6 +19,7 @@ const tipo_cliente_entity_1 = require("./tipo-cliente.entity");
  */
 let Cliente = class Cliente extends base_entity_1.BaseModel {
 };
+exports.Cliente = Cliente;
 __decorate([
     (0, typeorm_1.ManyToOne)(() => persona_entity_1.Persona),
     (0, typeorm_1.JoinColumn)({ name: 'persona_id' }),
@@ -53,8 +54,7 @@ __decorate([
     (0, typeorm_1.Column)({ type: 'float', default: 0 }),
     __metadata("design:type", Number)
 ], Cliente.prototype, "limite_credito", void 0);
-Cliente = __decorate([
+exports.Cliente = Cliente = __decorate([
     (0, typeorm_1.Entity)('clientes')
 ], Cliente);
-exports.Cliente = Cliente;
 //# sourceMappingURL=cliente.entity.js.map

@@ -116,21 +116,20 @@ $custom-warn: mat.define-palette($custom-red-palette, 900);
 $custom-secondary: mat.define-palette($custom-green-palette, 500);
 
 // Create the typography config with smaller sizes
-$custom-typography: mat.define-typography-config(
-  $font-family: 'Roboto, "Helvetica Neue", sans-serif',
-  $headline-1: mat.define-typography-level(24px, 32px, 400),
-  $headline-2: mat.define-typography-level(20px, 28px, 400),
-  $headline-3: mat.define-typography-level(18px, 24px, 400),
-  $headline-4: mat.define-typography-level(16px, 20px, 400),
-  $headline-5: mat.define-typography-level(14px, 20px, 400),
-  $headline-6: mat.define-typography-level(14px, 20px, 500),
-  $subtitle-1: mat.define-typography-level(14px, 20px, 400),
-  $subtitle-2: mat.define-typography-level(13px, 18px, 500),
-  $body-1: mat.define-typography-level(14px, 20px, 400),
-  $body-2: mat.define-typography-level(13px, 18px, 400),
-  $caption: mat.define-typography-level(12px, 16px, 400),
-  $button: mat.define-typography-level(13px, 14px, 500),
-);
+$custom-typography: mat.define-typography-config($font-family: 'Roboto, "Helvetica Neue", sans-serif',
+    $headline-1: mat.define-typography-level(24px, 32px, 400),
+    $headline-2: mat.define-typography-level(20px, 28px, 400),
+    $headline-3: mat.define-typography-level(18px, 24px, 400),
+    $headline-4: mat.define-typography-level(16px, 20px, 400),
+    $headline-5: mat.define-typography-level(14px, 20px, 400),
+    $headline-6: mat.define-typography-level(14px, 20px, 500),
+    $subtitle-1: mat.define-typography-level(14px, 20px, 400),
+    $subtitle-2: mat.define-typography-level(13px, 18px, 500),
+    $body-1: mat.define-typography-level(14px, 20px, 400),
+    $body-2: mat.define-typography-level(13px, 18px, 400),
+    $caption: mat.define-typography-level(12px, 16px, 400),
+    $button: mat.define-typography-level(13px, 14px, 500),
+  );
 
 // Create the light theme object
 $custom-light-theme: mat.define-light-theme((color: (primary: $custom-primary,
@@ -178,6 +177,7 @@ $custom-dark-theme: mat.define-dark-theme((color: (primary: $custom-primary,
       color: #ffffff;
     }
   }
+
 
   // Fix for text colors in various components
   .mat-mdc-card-subtitle,
@@ -357,8 +357,13 @@ $custom-dark-theme: mat.define-dark-theme((color: (primary: $custom-primary,
   // Active states
   .active-link,
   .active {
-    color: #ffb74d !important;
-    background-color: rgba(219, 57, 46, 0.2);
+    color: #e8f5e9;
+    background-color: #2e7d32;
+  }
+
+  .inactive {
+    color: white;
+    background-color: #db392e;
   }
 
   // Fix slider colors (prevent orange background)
@@ -493,8 +498,13 @@ body:not(.dark-theme) {
   // Active states
   .active-link,
   .active {
-    color: #db392e !important;
-    background-color: rgba(219, 57, 46, 0.1);
+    color: #e8f5e9;
+    background-color: #2e7d32;
+  }
+  .active-link,
+  .inactive {
+    color: white;
+    background-color: #db392e;
   }
 
   // Fix slider colors
@@ -642,6 +652,7 @@ select,
 // Fix icon colors to use the custom green instead of blue
 .mat-mdc-form-field {
   .mat-icon {
+
     &.mat-primary,
     &[color="primary"] {
       color: #43a047 !important;
@@ -674,7 +685,10 @@ select,
 }
 
 // Reduce button size
-.mat-mdc-button, .mat-mdc-raised-button, .mat-mdc-outlined-button, .mat-mdc-icon-button {
+.mat-mdc-button,
+.mat-mdc-raised-button,
+.mat-mdc-outlined-button,
+.mat-mdc-icon-button {
   padding: 0 12px !important;
   line-height: 32px !important;
   height: 32px !important;
@@ -720,7 +734,8 @@ select,
 }
 
 // Table row height adjustments
-.mat-mdc-row, .mat-mdc-header-row {
+.mat-mdc-row,
+.mat-mdc-header-row {
   height: 40px !important;
 }
 
@@ -740,6 +755,7 @@ select,
 
 // Adjust table styling
 .mat-mdc-table {
+
   .mat-mdc-cell,
   .mat-mdc-header-cell {
     padding: 0 8px !important;
@@ -768,7 +784,8 @@ select,
 }
 
 // Make filter containers more compact
-.filters-container, .filter-form {
+.filters-container,
+.filter-form {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
@@ -890,13 +907,13 @@ select,
     font-weight: 500;
 
     &.active {
-      background-color: #e8f5e9;
-      color: #2e7d32;
+      color: #e8f5e9;
+      background-color: #2e7d32;
     }
 
     &.inactive {
-      background-color: #ffebee;
-      color: #b71c1c;
+      color: #ffebee;
+      background-color: #b71c1c;
     }
   }
 
@@ -1219,6 +1236,7 @@ input.mat-mdc-input-element {
 
 // Fix alignment for outlined form fields
 .mdc-text-field--outlined {
+
   .mdc-notched-outline__leading,
   .mdc-notched-outline__trailing {
     border-top-width: 1px !important;
@@ -1366,7 +1384,9 @@ input.mat-mdc-input-element {
 
 // Global form field styles to fix icon alignment issues
 .mat-form-field-appearance-outline {
-  .mat-form-field-prefix, .mat-form-field-suffix {
+
+  .mat-form-field-prefix,
+  .mat-form-field-suffix {
     top: 0;
 
     .mat-icon {
@@ -1405,6 +1425,7 @@ input.mat-mdc-input-element {
     margin-left: 0;
 
     &.mat-form-field-empty {
+
       // Only apply extra spacing when label is not floating
       &.mat-form-field-label {
         padding-left: 8px;
@@ -1422,14 +1443,15 @@ input.mat-input-element {
 // Additional fix for Angular Material form fields
 .mat-mdc-form-field {
   &.mat-mdc-form-field-appearance-outline {
+
     // Space between prefix icon and input text
     .mat-mdc-text-field-wrapper {
       padding-left: 0;
     }
 
     // Fix icon alignment
-    .mat-mdc-form-field-icon-prefix > .mat-icon,
-    .mat-mdc-form-field-icon-suffix > .mat-icon {
+    .mat-mdc-form-field-icon-prefix>.mat-icon,
+    .mat-mdc-form-field-icon-suffix>.mat-icon {
       padding: 0.5em 0.5em;
       font-size: 150%;
       box-sizing: content-box;
@@ -1462,6 +1484,7 @@ input.mat-input-element {
 
 // Add global styles for icon buttons in forms
 .mat-form-field {
+
   .mat-icon-button.visibility-toggle,
   .mat-icon-button.search-button {
     width: 32px !important;

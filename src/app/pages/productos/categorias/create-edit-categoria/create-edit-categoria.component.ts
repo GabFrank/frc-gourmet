@@ -9,12 +9,14 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { RepositoryService } from '../../../../database/repository.service';
 import { Categoria } from '../../../../database/entities/productos/categoria.entity';
 import { firstValueFrom } from 'rxjs';
 
 interface DialogData {
   id?: number;
+  defaultPosition?: number;
 }
 
 @Component({
@@ -30,6 +32,7 @@ interface DialogData {
     MatCheckboxModule,
     MatIconModule,
     MatProgressSpinnerModule,
+    MatSnackBarModule,
     ReactiveFormsModule
   ],
   templateUrl: './create-edit-categoria.component.html',
@@ -39,26 +42,41 @@ export class CreateEditCategoriaComponent implements OnInit {
   categoriaForm: FormGroup;
   isEditing = false;
   isLoading = false;
+  allCategorias: Categoria[] = [];
 
   constructor(
     private dialogRef: MatDialogRef<CreateEditCategoriaComponent>,
     @Inject(MAT_DIALOG_DATA) private data: DialogData,
     private fb: FormBuilder,
-    private repository: RepositoryService
+    private repository: RepositoryService,
+    private snackBar: MatSnackBar
   ) {
+    const initialPosition = data?.defaultPosition !== undefined ? data.defaultPosition : 0;
+    
     this.categoriaForm = this.fb.group({
       nombre: ['', [Validators.required]],
       descripcion: [''],
-      posicion: [0, [Validators.required, Validators.min(0)]],
+      posicion: [initialPosition, [Validators.required, Validators.min(0)]],
       activo: [true]
     });
 
     this.isEditing = !!data?.id;
+    
+    if (initialPosition > 0) {
+      console.log(`Using initial position: ${initialPosition} for new category`);
+    }
   }
 
-  ngOnInit(): void {
-    if (this.isEditing && this.data.id) {
-      this.loadCategoria(this.data.id);
+  async ngOnInit(): Promise<void> {
+    try {
+      // Load all categories to check for duplicates
+      this.allCategorias = await firstValueFrom(this.repository.getCategorias());
+      
+      if (this.isEditing && this.data.id) {
+        this.loadCategoria(this.data.id);
+      }
+    } catch (error) {
+      console.error('Error loading categories:', error);
     }
   }
 
@@ -98,6 +116,21 @@ export class CreateEditCategoriaComponent implements OnInit {
     }
     if (formData.descripcion) {
       formData.descripcion = formData.descripcion.toUpperCase();
+    }
+
+    // Check for duplicate category name
+    const normalizedName = formData.nombre.trim().toUpperCase();
+    const duplicateCategoria = this.allCategorias.find(c => 
+      c.nombre && c.nombre.trim().toUpperCase() === normalizedName && 
+      (!this.isEditing || c.id !== this.data.id)
+    );
+
+    if (duplicateCategoria) {
+      this.snackBar.open('Ya existe una categoría con este nombre', 'Cerrar', {
+        duration: 5000
+      });
+      this.isLoading = false;
+      return;
     }
 
     console.log('Submitting categoria form:', formData);

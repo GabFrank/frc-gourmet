@@ -1,10 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatTableModule } from '@angular/material/table';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatSortModule, Sort } from '@angular/material/sort';
-import { MatInputModule } from '@angular/material/input';
+import { MatInput, MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -60,12 +60,18 @@ import { firstValueFrom } from 'rxjs';
   ],
 })
 export class ListCategoriasComponent implements OnInit {
+  @ViewChild('nombreInput') nombreInputRef!: ElementRef;
+  @ViewChild('nombreInput', { read: MatInput }) nombreInput!: MatInput;
+  @ViewChild('nombreSubcategoriaInput') nombreInputRefSubcategoria!: ElementRef;
+  @ViewChild('nombreSubcategoriaInput', { read: MatInput }) nombreInputSubcategoria!: MatInput;
+
   categorias: Categoria[] = [];
   subcategorias: { [categoriaId: number]: Subcategoria[] } = {};
   displayedColumns: string[] = ['nombre', 'descripcion', 'posicion', 'activo', 'acciones'];
   expandedCategoria: Categoria | null = null;
   isLoading = false;
   isLoadingSubcategorias = false;
+  isProcessingSubcategoria = false; // Flag to prevent multiple save operations
 
   // Pagination
   totalCategorias = 0;
@@ -113,7 +119,7 @@ export class ListCategoriasComponent implements OnInit {
       } = {
         nombre: this.filterForm.get('nombre')?.value?.trim() || undefined,
         activo: this.filterForm.get('activo')?.value === 'true' ? true :
-                this.filterForm.get('activo')?.value === 'false' ? false : undefined
+          this.filterForm.get('activo')?.value === 'false' ? false : undefined
       };
 
       // Filter out empty/null/undefined values
@@ -148,6 +154,18 @@ export class ListCategoriasComponent implements OnInit {
       // Sort by position
       this.categorias.sort((a, b) => a.posicion - b.posicion);
 
+      // Check if all categories have the same position (likely 0)
+      const allSamePosition = this.categorias.length > 1 &&
+        this.categorias.every(c => c.posicion === this.categorias[0].posicion);
+
+      // If all have same position, normalize them
+      if (allSamePosition) {
+        await this.normalizeCategoriaPositions();
+        // Reload after normalization
+        const updatedResult = await firstValueFrom(this.repositoryService.getCategorias());
+        this.categorias = updatedResult.sort((a, b) => a.posicion - b.posicion);
+      }
+
       this.totalCategorias = this.categorias.length;
 
     } catch (error) {
@@ -167,6 +185,18 @@ export class ListCategoriasComponent implements OnInit {
     try {
       const result = await firstValueFrom(this.repositoryService.getSubcategoriasByCategoria(categoria.id));
       this.subcategorias[categoria.id] = result.sort((a, b) => a.posicion - b.posicion);
+
+      // Check if all subcategories have the same position (likely 0)
+      const allSamePosition = this.subcategorias[categoria.id].length > 1 &&
+        this.subcategorias[categoria.id].every(s => s.posicion === this.subcategorias[categoria.id][0].posicion);
+
+      // If all have same position, normalize them
+      if (allSamePosition) {
+        await this.normalizeSubcategoriaPositions(categoria.id);
+        // Reload after normalization
+        const updatedResult = await firstValueFrom(this.repositoryService.getSubcategoriasByCategoria(categoria.id));
+        this.subcategorias[categoria.id] = updatedResult.sort((a, b) => a.posicion - b.posicion);
+      }
     } catch (error) {
       console.error('Error loading subcategorias:', error);
       this.snackBar.open('Error al cargar subcategorías', 'Cerrar', {
@@ -269,9 +299,15 @@ export class ListCategoriasComponent implements OnInit {
   }
 
   addCategoria(): void {
+    // Find the next available position
+    let nextPosition = 0;
+    if (this.categorias.length > 0) {
+      nextPosition = Math.max(...this.categorias.map(c => c.posicion)) + 1;
+    }
+
     const dialogRef = this.dialog.open(CreateEditCategoriaComponent, {
       width: '500px',
-      data: {}
+      data: { defaultPosition: nextPosition }
     });
 
     dialogRef.afterClosed().subscribe(result => {
@@ -294,6 +330,29 @@ export class ListCategoriasComponent implements OnInit {
     const currentIndex = this.categorias.findIndex(c => c.id === categoria.id);
     if (currentIndex === -1) return;
 
+    // Check if all categories have the same position
+    const allSamePosition = this.categorias.every(c => c.posicion === this.categorias[0].posicion);
+
+    // If positions are all the same, normalize them first
+    if (allSamePosition) {
+      this.isLoading = true;
+      this.normalizeCategoriaPositions().then(() => {
+        this.loadCategorias().then(() => {
+          // Re-attempt the reordering after normalization
+          setTimeout(() => {
+            this.reorderCategoria(categoria, direction);
+          }, 100);
+        });
+      }).catch(error => {
+        console.error('Error while normalizing category positions:', error);
+        this.snackBar.open('Error al normalizar posiciones de categorías', 'Cerrar', {
+          duration: 3000
+        });
+        this.isLoading = false;
+      });
+      return;
+    }
+
     // Calculate the target index
     let targetIndex = currentIndex;
     if (direction === 'up' && currentIndex > 0) {
@@ -307,11 +366,24 @@ export class ListCategoriasComponent implements OnInit {
     // Get the target categoria
     const targetCategoria = this.categorias[targetIndex];
 
+    // Make sure we have valid IDs before proceeding
+    if (!categoria.id || !targetCategoria.id) {
+      console.error('Invalid categoria IDs', {
+        categoriaId: categoria.id,
+        targetCategoriaId: targetCategoria.id
+      });
+      this.snackBar.open('Error: ID de categoría no válido', 'Cerrar', {
+        duration: 3000
+      });
+      return;
+    }
+
     // Swap positions
     const tempPosition = categoria.posicion;
     categoria.posicion = targetCategoria.posicion;
     targetCategoria.posicion = tempPosition;
 
+    this.isLoading = true;
     // Update both categories in the database
     Promise.all([
       firstValueFrom(this.repositoryService.updateCategoria(categoria.id!, { posicion: categoria.posicion })),
@@ -326,6 +398,12 @@ export class ListCategoriasComponent implements OnInit {
       this.snackBar.open('Error al actualizar el orden', 'Cerrar', {
         duration: 3000
       });
+
+      // Revert local changes on error
+      categoria.posicion = tempPosition;
+      targetCategoria.posicion = tempPosition;
+
+      this.isLoading = false;
     });
   }
 
@@ -351,6 +429,7 @@ export class ListCategoriasComponent implements OnInit {
       activo: true
     });
     this.editingSubcategoria = null;
+    // Don't set focus here, we'll do it after saving
   }
 
   editSubcategoria(subcategoria: Subcategoria) {
@@ -368,9 +447,12 @@ export class ListCategoriasComponent implements OnInit {
   }
 
   async saveSubcategoria() {
-    if (this.subcategoriaForm.invalid || !this.expandedCategoria?.id) {
+    // Prevent multiple executions in quick succession
+    if (this.isProcessingSubcategoria || this.subcategoriaForm.invalid || !this.expandedCategoria?.id) {
       return;
     }
+
+    this.isProcessingSubcategoria = true;
 
     const formData = { ...this.subcategoriaForm.value };
 
@@ -384,6 +466,37 @@ export class ListCategoriasComponent implements OnInit {
 
     // Add categoriaId to the formData
     formData.categoriaId = this.expandedCategoria.id;
+
+    // Check for duplicate name in the same category
+    const existingSubcategorias = this.subcategorias[this.expandedCategoria.id] || [];
+    const normalizedName = formData.nombre.trim().toUpperCase();
+
+    // When editing, exclude the current subcategory from the duplicate check
+    const duplicateSubcategoria = existingSubcategorias.find(s =>
+      s.nombre && s.nombre.trim().toUpperCase() === normalizedName &&
+      (!this.editingSubcategoria || s.id !== this.editingSubcategoria.id)
+    );
+
+    if (duplicateSubcategoria) {
+      this.snackBar.open('Ya existe una subcategoría con este nombre en esta categoría', 'Cerrar', {
+        duration: 5000
+      });
+      this.isProcessingSubcategoria = false;
+      return;
+    }
+
+    // For new subcategoria, set the position to be the next available position
+    if (!this.editingSubcategoria) {
+      const currentSubcategorias = this.subcategorias[this.expandedCategoria.id] || [];
+      if (currentSubcategorias.length > 0) {
+        // Find the maximum position and add 1
+        const maxPosition = Math.max(...currentSubcategorias.map(s => s.posicion));
+        formData.posicion = maxPosition + 1;
+      } else {
+        // First subcategoria in this category
+        formData.posicion = 0;
+      }
+    }
 
     this.isLoadingSubcategorias = true;
     try {
@@ -400,16 +513,77 @@ export class ListCategoriasComponent implements OnInit {
           duration: 3000
         });
       }
-      // Reload subcategorias and reset form
+
+      // Reload subcategorias 
       await this.loadSubcategorias(this.expandedCategoria);
+
+      // Reset form
       this.resetSubcategoriaForm();
+
+      // Set focus on the nombre input
+      this.setFocusOnNombreInput();
+
     } catch (error) {
       console.error('Error saving subcategoria:', error);
       this.snackBar.open('Error al guardar subcategoría', 'Cerrar', {
         duration: 3000
       });
+      this.isProcessingSubcategoria = false;
     } finally {
       this.isLoadingSubcategorias = false;
+    }
+  }
+
+  /**
+   * Sets focus on the nombre input field in the subcategoria form
+   */
+  private setFocusOnNombreInput(): void {
+    // Use a sequence of attempts with increasing delays
+    [0, 200, 500].forEach(delay => {
+      setTimeout(() => this.attemptFocusOnSubcategoriaInput(), delay);
+    });
+    
+    // Final attempt - reset processing flag regardless of focus success
+    setTimeout(() => {
+      this.attemptFocusOnSubcategoriaInput();
+      this.isProcessingSubcategoria = false;
+    }, 800);
+  }
+
+  /**
+   * Attempts to focus the subcategoria nombre input using the most reliable method
+   */
+  private attemptFocusOnSubcategoriaInput(): void {
+    try {
+      // Clear any existing focus
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+
+      // Find the visible expanded detail section
+      const expandedDetail = document.querySelector('.expanded-detail-content[style*="display: block"]');
+      if (expandedDetail) {
+        // Find the input within the expanded section
+        const input = expandedDetail.querySelector('#nombreSubcategoriaInput') as HTMLInputElement;
+        if (input) {
+          input.focus();
+          return;
+        }
+        
+        // Backup approach - find by form control name
+        const inputByName = expandedDetail.querySelector('input[formControlName="nombre"]') as HTMLInputElement;
+        if (inputByName) {
+          inputByName.focus();
+          return;
+        }
+      }
+      
+      // Fall back to the ElementRef if available
+      if (this.nombreInputRefSubcategoria?.nativeElement) {
+        this.nombreInputRefSubcategoria.nativeElement.focus();
+      }
+    } catch (error) {
+      // Silent error handling - no need to block form submission if focus fails
     }
   }
 
@@ -453,6 +627,31 @@ export class ListCategoriasComponent implements OnInit {
 
     if (currentIndex === -1) return;
 
+    // Check if all subcategories have the same position
+    const allSamePosition = currentSubcategorias.every(s => s.posicion === currentSubcategorias[0].posicion);
+
+    // If positions are all the same, normalize them first
+    if (allSamePosition) {
+      this.isLoadingSubcategorias = true;
+      try {
+        await this.normalizeSubcategoriaPositions(this.expandedCategoria.id);
+        await this.loadSubcategorias(this.expandedCategoria);
+
+        // Retry the reordering operation after normalization
+        setTimeout(() => {
+          this.reorderSubcategoria(subcategoria, direction);
+        }, 100);
+        return;
+      } catch (error) {
+        console.error('Error while normalizing positions:', error);
+        this.snackBar.open('Error al normalizar posiciones', 'Cerrar', {
+          duration: 3000
+        });
+        this.isLoadingSubcategorias = false;
+        return;
+      }
+    }
+
     // Calculate the target index
     let targetIndex = currentIndex;
     if (direction === 'up' && currentIndex > 0) {
@@ -466,6 +665,18 @@ export class ListCategoriasComponent implements OnInit {
     // Get the target subcategoria
     const targetSubcategoria = currentSubcategorias[targetIndex];
 
+    // Make sure we have valid IDs before proceeding
+    if (!subcategoria.id || !targetSubcategoria.id) {
+      console.error('Invalid subcategoria IDs', {
+        subcategoriaId: subcategoria.id,
+        targetSubcategoriaId: targetSubcategoria.id
+      });
+      this.snackBar.open('Error: ID de subcategoría no válido', 'Cerrar', {
+        duration: 3000
+      });
+      return;
+    }
+
     // Swap positions
     const tempPosition = subcategoria.posicion;
     subcategoria.posicion = targetSubcategoria.posicion;
@@ -474,21 +685,33 @@ export class ListCategoriasComponent implements OnInit {
     this.isLoadingSubcategorias = true;
     // Update both subcategorias in the database
     try {
+      // Convert IDs to numbers to ensure they're valid
+      const subId = typeof subcategoria.id === 'string' ? parseInt(subcategoria.id, 10) : subcategoria.id;
+      const targetId = typeof targetSubcategoria.id === 'string' ? parseInt(targetSubcategoria.id, 10) : targetSubcategoria.id;
+
       await Promise.all([
-        firstValueFrom(this.repositoryService.updateSubcategoria(subcategoria.id, { posicion: subcategoria.posicion })),
-        firstValueFrom(this.repositoryService.updateSubcategoria(targetSubcategoria.id!, { posicion: targetSubcategoria.posicion }))
+        firstValueFrom(this.repositoryService.updateSubcategoria(subId, { posicion: subcategoria.posicion })),
+        firstValueFrom(this.repositoryService.updateSubcategoria(targetId, { posicion: targetSubcategoria.posicion }))
       ]);
 
       this.snackBar.open('Orden actualizado correctamente', 'Cerrar', {
         duration: 2000
       });
 
+      // Update the local array to reflect changes before reloading
+      this.subcategorias[this.expandedCategoria.id] = [...currentSubcategorias];
+
+      // Reload from server to ensure data consistency
       await this.loadSubcategorias(this.expandedCategoria);
     } catch (error) {
       console.error('Error updating positions:', error);
       this.snackBar.open('Error al actualizar el orden', 'Cerrar', {
         duration: 3000
       });
+
+      // Revert local changes on error
+      subcategoria.posicion = tempPosition;
+      targetSubcategoria.posicion = subcategoria.posicion;
     } finally {
       this.isLoadingSubcategorias = false;
     }
@@ -497,5 +720,76 @@ export class ListCategoriasComponent implements OnInit {
   // Function to determine when to show the expanded row
   isExpanded(categoria: Categoria): boolean {
     return true; // Always return true to ensure the expansion row is available
+  }
+
+  /**
+   * Normalizes the positions of all subcategories in a category to ensure they are sequential
+   * starting from 0 and incrementing by 1
+   */
+  private async normalizeSubcategoriaPositions(categoriaId: number): Promise<void> {
+    try {
+      const subcategorias = this.subcategorias[categoriaId];
+      if (!subcategorias || subcategorias.length === 0) return;
+
+      // Sort by name as a fallback if all positions are the same
+      const sortedSubcategorias = [...subcategorias].sort((a, b) => {
+        if (a.posicion !== b.posicion) {
+          return a.posicion - b.posicion;
+        }
+        // Secondary sort by name if positions are the same
+        return (a.nombre || '').localeCompare(b.nombre || '');
+      });
+
+      // Update each subcategoria with its new position
+      const updatePromises = sortedSubcategorias.map((subcategoria, index) => {
+        if (subcategoria.posicion !== index) {
+          return firstValueFrom(this.repositoryService.updateSubcategoria(
+            subcategoria.id!,
+            { posicion: index }
+          ));
+        }
+        return Promise.resolve();
+      });
+
+      await Promise.all(updatePromises);
+    } catch (error) {
+      console.error('Error normalizing subcategoria positions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Normalizes the positions of all categories to ensure they are sequential
+   * starting from 0 and incrementing by 1
+   */
+  private async normalizeCategoriaPositions(): Promise<void> {
+    try {
+      if (!this.categorias || this.categorias.length === 0) return;
+
+      // Sort by name as a fallback if all positions are the same
+      const sortedCategorias = [...this.categorias].sort((a, b) => {
+        if (a.posicion !== b.posicion) {
+          return a.posicion - b.posicion;
+        }
+        // Secondary sort by name if positions are the same
+        return (a.nombre || '').localeCompare(b.nombre || '');
+      });
+
+      // Update each categoria with its new position
+      const updatePromises = sortedCategorias.map((categoria, index) => {
+        if (categoria.posicion !== index) {
+          return firstValueFrom(this.repositoryService.updateCategoria(
+            categoria.id!,
+            { posicion: index }
+          ));
+        }
+        return Promise.resolve();
+      });
+
+      await Promise.all(updatePromises);
+    } catch (error) {
+      console.error('Error normalizing categoria positions:', error);
+      throw error;
+    }
   }
 }

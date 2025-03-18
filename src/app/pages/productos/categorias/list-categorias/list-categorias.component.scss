@@ -195,6 +195,35 @@ table.mat-table {
   }
 }
 
+// Fix for form field alignment issue
+.subcategoria-form {
+  .mat-mdc-form-field-subscript-wrapper {
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  
+  .mat-mdc-form-field {
+    .mat-mdc-form-field-bottom-align {
+      height: 0 !important;
+      min-height: 0 !important;
+    }
+  }
+  
+  // Align all form elements in a row with proper vertical alignment
+  .form-layout-table tr {
+    height: 72px; // Fixed height for all rows
+  }
+  
+  .checkbox-cell {
+    padding-bottom: 17px !important; // Adjust checkbox position to align with mat-form-field
+  }
+  
+  .button-cell {
+    padding-bottom: 17px !important; // Adjust button position to align with mat-form-field
+  }
+}
+
 // Subcategorias list styling
 .subcategorias-list {
   margin-top: 16px;
@@ -250,7 +279,7 @@ table.mat-table {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  color: rgba(0, 0, 0, 0.54);
+  color: white
 
   mat-icon {
     font-size: 48px;
@@ -290,4 +319,29 @@ table.mat-table {
 tr.detail-row {
   height: auto !important;
   display: table-row !important;
+}
+
+
+.form-container {
+  width: 100%;
+}
+
+.form-container  .form-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.form-column {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.form-column mat-form-field {
+  width: 100%;
 }

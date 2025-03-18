@@ -14,6 +14,7 @@ const typeorm_1 = require("typeorm");
 const base_entity_1 = require("./base.entity");
 let Printer = class Printer extends base_entity_1.BaseModel {
 };
+exports.Printer = Printer;
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)
@@ -54,8 +55,7 @@ __decorate([
     (0, typeorm_1.Column)({ nullable: true, type: 'text' }),
     __metadata("design:type", String)
 ], Printer.prototype, "options", void 0);
-Printer = __decorate([
+exports.Printer = Printer = __decorate([
     (0, typeorm_1.Entity)('printers')
 ], Printer);
-exports.Printer = Printer;
 //# sourceMappingURL=printer.entity.js.map

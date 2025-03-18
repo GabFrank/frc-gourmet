@@ -133,39 +133,37 @@
                   <!-- Form to add/edit subcategoria -->
                   <div class="subcategoria-form-card">
                     <h3 class="form-title">{{ editingSubcategoria ? 'Editar' : 'Añadir' }} Subcategoría</h3>
-                    <div class="form-table">
-                      <form [formGroup]="subcategoriaForm" class="subcategoria-form">
-                        <table class="form-layout-table">
-                          <tr>
-                            <td class="form-cell">
-                              <mat-form-field appearance="outline">
-                                <mat-label>Nombre*</mat-label>
-                                <input matInput formControlName="nombre" placeholder="Nombre de subcategoría" required>
-                              </mat-form-field>
-                            </td>
-                            <td class="form-cell">
-                              <mat-form-field appearance="outline">
-                                <mat-label>Descripción</mat-label>
-                                <input matInput formControlName="descripcion" placeholder="Descripción de subcategoría">
-                              </mat-form-field>
-                            </td>
-                            <td class="form-cell small-cell">
-                              <mat-form-field appearance="outline" class="position-field">
-                                <mat-label>Posición*</mat-label>
-                                <input matInput type="number" formControlName="posicion" min="0">
-                              </mat-form-field>
-                            </td>
-                            <td class="form-cell checkbox-cell">
-                              <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
-                            </td>
-                            <td class="form-cell button-cell">
-                              <button mat-button *ngIf="editingSubcategoria" (click)="cancelEditSubcategoria()">Cancelar</button>
-                              <button mat-raised-button color="primary" (click)="saveSubcategoria()" [disabled]="subcategoriaForm.invalid">
-                                {{ editingSubcategoria ? 'Actualizar' : 'Guardar' }}
-                              </button>
-                            </td>
-                          </tr>
-                        </table>
+                    <div class="form-container">
+                      <form [formGroup]="subcategoriaForm" class="subcategoria-form" (ngSubmit)="$event.preventDefault()">
+                        <div class="form-row" style="align-items: center;">
+                          <div class="form-column" style="width: 30%">
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                              <mat-label>Nombre*</mat-label>
+                              <input #nombreSubcategoriaInput id="nombreSubcategoriaInput" matInput formControlName="nombre" placeholder="Nombre de subcategoría" required>
+                            </mat-form-field>
+                          </div>
+                          <div class="form-column" style="width: 40%">
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                              <mat-label>Descripción</mat-label>
+                              <input matInput formControlName="descripcion" placeholder="Descripción de subcategoría" (keydown.enter)="$event.preventDefault(); saveSubcategoria()">
+                            </mat-form-field>
+                          </div>
+                          <div class="form-column" style="width: 15%">
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                              <mat-label>Posición*</mat-label>
+                              <input matInput type="number" formControlName="posicion" min="0">
+                            </mat-form-field>
+                          </div>
+                          <div class="form-column" style="width: 15%">
+                            <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
+                          </div>
+                          <div class="form-column" style="width: 15%">
+                            <button style="width: 100%;" mat-button *ngIf="editingSubcategoria" (click)="cancelEditSubcategoria()">Cancelar</button>
+                            <button style="width: 100%;" mat-raised-button color="primary" (click)="saveSubcategoria()" [disabled]="subcategoriaForm.invalid">
+                              {{ editingSubcategoria ? 'Actualizar' : 'Guardar' }}
+                            </button>
+                          </div>
+                        </div>
                       </form>
                     </div>
                   </div>
@@ -272,3 +270,29 @@
       </div>
   </div>
 </div>
+
+<style>
+.form-container {
+  width: 100%;
+}
+
+.form-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.form-column {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.form-column mat-form-field {
+  width: 100%;
+}
+</style>
