@@ -90,19 +90,40 @@ table.mat-table {
 
 .expanded-detail-cell {
   padding: 0 !important;
+  border-bottom-width: 0 !important;
 }
 
 .expanded-detail-content {
-  overflow: hidden;
+  overflow: visible !important;
+  width: 100% !important;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  background-color: rgba(0, 0, 0, 0.03);
+
+  // Dark mode specific styling
+  :host-context(.dark-theme) &,
+  .dark-theme & {
+    background-color: rgba(0, 0, 0, 0.2); // Darker background for dark mode
+  }
 }
 
 // Subcategorias container styling
 .subcategorias-container {
   padding: 16px;
   position: relative;
-  background-color: rgba(0, 0, 0, 0.02);
+  width: 100%;
+  box-sizing: border-box;
   border-top: 1px solid rgba(0, 0, 0, 0.12);
   border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  background-color: transparent;
+
+  // Dark mode specific styling
+  :host-context(.dark-theme) &,
+  .dark-theme & {
+    border-color: rgba(255, 255, 255, 0.12);
+  }
 }
 
 .subcategorias-loading {
@@ -114,61 +135,112 @@ table.mat-table {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: rgba(255, 255, 255, 0.7);
   z-index: 10;
 }
 
 // Subcategoria form styling
 .subcategoria-form-card {
-  margin-bottom: 16px;
-}
+  margin-bottom: 20px;
+  background-color: rgba(255, 255, 255, 0.03);
+  padding: 16px;
 
-.subcategoria-form {
-  .form-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    align-items: flex-start;
-
-    mat-form-field {
-      flex: 1 1 200px;
-    }
-
-    .position-field {
-      flex: 0 0 120px;
-    }
-
-    .active-toggle {
-      flex: 0 0 100px;
-      padding-top: 12px;
-    }
+  .form-title {
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 16px;
+    font-weight: 500;
   }
 }
 
-.subcategoria-form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
+.form-layout-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 0;
+
+  .form-cell {
+    padding: 0 6px;
+    vertical-align: middle;
+
+    &:first-child {
+      padding-left: 0;
+    }
+
+    &:last-child {
+      padding-right: 0;
+      text-align: right;
+    }
+
+    &.small-cell {
+      width: 80px;
+    }
+
+    &.checkbox-cell {
+      width: 80px;
+      text-align: center;
+    }
+
+    &.button-cell {
+      width: 200px;
+      text-align: right;
+      white-space: nowrap;
+
+      button {
+        margin-left: 8px;
+      }
+    }
+
+    mat-form-field {
+      width: 100%;
+    }
+  }
 }
 
 // Subcategorias list styling
 .subcategorias-list {
   margin-top: 16px;
 
-  h3 {
+  .subcategorias-title {
+    color: white;
+    padding: 8px 16px;
+    margin-top: 16px;
     margin-bottom: 8px;
-    font-weight: 500;
-    color: rgba(0, 0, 0, 0.87);
+    background-color: transparent;
   }
 }
 
 .subcategorias-table-container {
   overflow-x: auto;
+
+  // Dark mode specific styling
+  :host-context(.dark-theme) &,
+  .dark-theme & {
+    background-color: rgba(0, 0, 0, 0.1); // Slightly darker for the table container
+  }
 }
 
 .subcategorias-table {
   width: 100%;
+
+  .mat-column-acciones {
+    width: 90px;
+    text-align: center;
+    padding: 0 4px;
+
+    button {
+      width: 24px !important;
+      height: 24px !important;
+      line-height: 24px !important;
+      margin: 0 2px !important;
+      padding: 0 !important;
+
+      .mat-icon {
+        font-size: 16px !important;
+        height: 16px !important;
+        width: 16px !important;
+        line-height: 16px !important;
+      }
+    }
+  }
 }
 
 // Empty state styling
@@ -198,24 +270,24 @@ table.mat-table {
   }
 }
 
-// Responsive adjustments specific to categorias
+// Override responsive styles
 @media (max-width: 600px) {
-  table {
-    .mat-column-descripcion {
-      display: none;
-    }
-  }
-
   .subcategoria-form {
     .form-row {
-      flex-direction: column;
+      flex-direction: row !important;
+      flex-wrap: nowrap !important;
+      overflow-x: auto !important;
 
-      mat-form-field,
-      .position-field,
-      .active-toggle {
-        width: 100%;
-        flex: 1 1 100%;
+      mat-form-field, .position-field, .active-toggle {
+        min-width: auto !important;
+        flex: 0 0 auto !important;
       }
     }
   }
+}
+
+// Expanded row visibility fix - stronger styling
+tr.detail-row {
+  height: auto !important;
+  display: table-row !important;
 }

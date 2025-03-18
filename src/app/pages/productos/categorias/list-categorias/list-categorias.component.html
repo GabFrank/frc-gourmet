@@ -121,62 +121,58 @@
             <td mat-cell *matCellDef="let categoria" [attr.colspan]="displayedColumns.length" class="expanded-detail-cell">
               <div class="expanded-detail-content"
                    [@detailExpand]="expandedCategoria === categoria ? 'expanded' : 'collapsed'"
-                   [style.height]="expandedCategoria === categoria ? 'auto' : '0'">
+                   [style.display]="expandedCategoria === categoria ? 'block' : 'none'">
 
                 <!-- Subcategorias container -->
-                <div class="subcategorias-container" *ngIf="expandedCategoria === categoria">
+                <div class="subcategorias-container">
                   <!-- Loading indicator for subcategorias -->
                   <div class="subcategorias-loading" *ngIf="isLoadingSubcategorias">
                     <mat-spinner diameter="30"></mat-spinner>
                   </div>
 
                   <!-- Form to add/edit subcategoria -->
-                  <mat-card class="subcategoria-form-card">
-                    <mat-card-header>
-                      <mat-card-title>{{ editingSubcategoria ? 'Editar' : 'Añadir' }} Subcategoría</mat-card-title>
-                    </mat-card-header>
-                    <mat-card-content>
+                  <div class="subcategoria-form-card">
+                    <h3 class="form-title">{{ editingSubcategoria ? 'Editar' : 'Añadir' }} Subcategoría</h3>
+                    <div class="form-table">
                       <form [formGroup]="subcategoriaForm" class="subcategoria-form">
-                        <div class="form-row">
-                          <mat-form-field appearance="outline">
-                            <mat-label>Nombre</mat-label>
-                            <input matInput formControlName="nombre" placeholder="Nombre de la subcategoría" required>
-                            <mat-error *ngIf="subcategoriaForm.get('nombre')?.hasError('required')">
-                              El nombre es obligatorio
-                            </mat-error>
-                          </mat-form-field>
-
-                          <mat-form-field appearance="outline">
-                            <mat-label>Descripción</mat-label>
-                            <input matInput formControlName="descripcion" placeholder="Descripción de la subcategoría">
-                          </mat-form-field>
-
-                          <mat-form-field appearance="outline" class="position-field">
-                            <mat-label>Posición</mat-label>
-                            <input matInput type="number" formControlName="posicion" min="0" required>
-                            <mat-error *ngIf="subcategoriaForm.get('posicion')?.hasError('required')">
-                              La posición es obligatoria
-                            </mat-error>
-                          </mat-form-field>
-
-                          <div class="active-toggle">
-                            <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
-                          </div>
-                        </div>
-
-                        <div class="subcategoria-form-actions">
-                          <button mat-button *ngIf="editingSubcategoria" (click)="cancelEditSubcategoria()">Cancelar</button>
-                          <button mat-raised-button color="primary" (click)="saveSubcategoria()" [disabled]="subcategoriaForm.invalid">
-                            {{ editingSubcategoria ? 'Actualizar' : 'Guardar' }}
-                          </button>
-                        </div>
+                        <table class="form-layout-table">
+                          <tr>
+                            <td class="form-cell">
+                              <mat-form-field appearance="outline">
+                                <mat-label>Nombre*</mat-label>
+                                <input matInput formControlName="nombre" placeholder="Nombre de subcategoría" required>
+                              </mat-form-field>
+                            </td>
+                            <td class="form-cell">
+                              <mat-form-field appearance="outline">
+                                <mat-label>Descripción</mat-label>
+                                <input matInput formControlName="descripcion" placeholder="Descripción de subcategoría">
+                              </mat-form-field>
+                            </td>
+                            <td class="form-cell small-cell">
+                              <mat-form-field appearance="outline" class="position-field">
+                                <mat-label>Posición*</mat-label>
+                                <input matInput type="number" formControlName="posicion" min="0">
+                              </mat-form-field>
+                            </td>
+                            <td class="form-cell checkbox-cell">
+                              <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
+                            </td>
+                            <td class="form-cell button-cell">
+                              <button mat-button *ngIf="editingSubcategoria" (click)="cancelEditSubcategoria()">Cancelar</button>
+                              <button mat-raised-button color="primary" (click)="saveSubcategoria()" [disabled]="subcategoriaForm.invalid">
+                                {{ editingSubcategoria ? 'Actualizar' : 'Guardar' }}
+                              </button>
+                            </td>
+                          </tr>
+                        </table>
                       </form>
-                    </mat-card-content>
-                  </mat-card>
+                    </div>
+                  </div>
 
                   <!-- Subcategorias list -->
                   <div class="subcategorias-list" *ngIf="subcategorias[categoria.id!]?.length">
-                    <h3>Subcategorías</h3>
+                    <h3 class="subcategorias-title">Subcategorías</h3>
                     <mat-card class="subcategorias-table-container">
                       <table mat-table [dataSource]="subcategorias[categoria.id!]" class="subcategorias-table">
                         <!-- Nombre Column -->
@@ -255,7 +251,8 @@
               [class.expanded-row]="expandedCategoria === row"
               (click)="toggleExpand(row)"></tr>
           <tr mat-row *matRowDef="let row; columns: ['expandedDetail']; when: isExpanded"
-              class="detail-row"></tr>
+              class="detail-row"
+              [style.display]="expandedCategoria === row ? 'table-row' : 'none'"></tr>
 
           <!-- No results row -->
           <tr class="mat-row" *matNoDataRow>

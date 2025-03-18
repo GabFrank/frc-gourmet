@@ -159,6 +159,9 @@ export class AppComponent implements OnInit, OnDestroy {
       // Add event listener for mouse movement after view is initialized
       setTimeout(() => this.setupSidenavHover(), 0);
 
+      // Initialize sidenav listeners after view is initialized
+      setTimeout(() => this.setupSidenavListeners(), 0);
+
       // Start session activity tracker
       this.startSessionActivityTracker();
     }
@@ -301,6 +304,17 @@ export class AppComponent implements OnInit, OnDestroy {
     } else {
       document.body.classList.remove('dark-theme');
       document.body.classList.add('light-theme');
+    }
+  }
+
+  // Setup sidenav open/close event listeners
+  private setupSidenavListeners() {
+    if (this.sidenav) {
+      // Force change detection when sidenav opens or closes
+      this.sidenav.openedChange.subscribe(() => {
+        // This will update the UI when the sidenav is opened or closed
+        console.log('Sidenav state changed:', this.sidenav.opened ? 'opened' : 'closed');
+      });
     }
   }
 }

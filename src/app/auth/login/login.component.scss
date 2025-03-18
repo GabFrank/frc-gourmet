@@ -97,7 +97,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  
+
   mat-icon {
     background-color: rgba(255, 255, 255, 0.2);
     border-radius: 50%;
@@ -109,7 +109,7 @@
     align-items: center;
     justify-content: center;
   }
-  
+
   span {
     font-size: 1rem;
   }
@@ -141,13 +141,13 @@
 
 mat-card-header {
   margin-bottom: 24px;
-  
+
   mat-card-title {
     font-size: 1.5rem;
     font-weight: 600;
     margin-bottom: 8px;
   }
-  
+
   mat-card-subtitle {
     font-size: 1rem;
     opacity: 0.8;
@@ -162,9 +162,60 @@ mat-card-header {
 
 .form-field {
   width: 100%;
-  
+
+  input.mat-input-element {
+    padding-left: 16px;
+  }
+
   ::ng-deep .mat-form-field-prefix {
     margin-right: 12px;
+    top: 0 !important;
+
+    .mat-icon {
+      font-size: 20px;
+      height: 20px;
+      width: 20px;
+      line-height: 20px;
+    }
+  }
+
+  ::ng-deep .mat-form-field-infix {
+    padding-left: 8px;
+  }
+
+  ::ng-deep .mat-form-field-suffix {
+    top: 0 !important;
+
+    button.mat-icon-button {
+      width: 32px !important;
+      height: 32px !important;
+      line-height: 32px !important;
+
+      .mat-icon {
+        font-size: 18px !important;
+        height: 18px !important;
+        width: 18px !important;
+        line-height: 18px !important;
+      }
+    }
+  }
+
+  ::ng-deep .mat-form-field-label-wrapper {
+    top: -0.75em;
+    padding-top: 0.75em;
+  }
+
+  ::ng-deep .mat-form-field-should-float .mat-form-field-label {
+    transform: translateY(-1.59375em) scale(0.75);
+    width: 133.33333333%;
+  }
+
+  ::ng-deep .mat-form-field-empty.mat-form-field-label {
+    padding-left: 36px;
+  }
+
+  ::ng-deep input::placeholder {
+    opacity: 0.6;
   }
 }
 
@@ -180,7 +231,7 @@ mat-card-header {
   text-decoration: none;
   color: var(--mat-primary-color);
   transition: all 0.2s ease;
-  
+
   &:hover {
     text-decoration: underline;
     opacity: 0.9;
@@ -195,7 +246,7 @@ mat-card-header {
   align-items: center;
   justify-content: center;
   transition: all 0.3s ease;
-  
+
   &:not(:disabled):hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
@@ -209,12 +260,12 @@ mat-card-actions {
 .help-text {
   font-size: 0.9rem;
   color: var(--mat-card-subtitle-text-color);
-  
+
   a {
     color: var(--mat-primary-color);
     text-decoration: none;
     font-weight: 500;
-    
+
     &:hover {
       text-decoration: underline;
     }
@@ -226,6 +277,22 @@ mat-card-actions {
   font-size: 0.85rem;
   opacity: 0.7;
   margin-top: 16px;
+}
+
+// Specific style for the visibility toggle button
+.visibility-toggle {
+  width: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  margin-right: 0 !important;
+  padding: 0 !important;
+
+  .mat-icon {
+    font-size: 18px !important;
+    height: 18px !important;
+    width: 18px !important;
+    line-height: 18px !important;
+  }
 }
 
 // Responsive styles
@@ -242,21 +309,21 @@ mat-card-actions {
     height: auto;
     max-height: none;
   }
-  
+
   .left-panel, .right-panel {
     flex: none;
     width: 100%;
     padding: 32px 24px;
   }
-  
+
   .left-panel {
     padding-bottom: 64px;
   }
-  
+
   .welcome-content {
     text-align: center;
   }
-  
+
   .welcome-features {
     align-items: center;
   }
@@ -268,24 +335,24 @@ mat-card-actions {
     min-height: 100vh;
     padding: 24px 0;
   }
-  
+
   .login-inner-container {
     width: 100%;
     border-radius: 0;
     height: auto;
   }
-  
+
   .left-panel {
     display: none;
   }
-  
+
   .right-panel {
     padding: 24px 16px;
   }
-  
+
   .form-options {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
   }
-} 
+}

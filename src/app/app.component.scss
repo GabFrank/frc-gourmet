@@ -101,6 +101,17 @@
   z-index: 2;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 
+  // Make the menu button more visible
+  button[mat-icon-button]:first-child {
+    margin-right: 8px;
+    background-color: rgba(255, 255, 255, 0.1);
+    transition: background-color 0.2s;
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+  }
+
   button[mat-icon-button] {
     display: flex;
     align-items: center;

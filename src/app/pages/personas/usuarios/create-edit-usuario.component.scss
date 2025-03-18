@@ -122,4 +122,47 @@ button[mat-raised-button][color="primary"]:not([disabled]):hover {
   .dialog-container {
     min-width: 300px;
   }
-} 
+}
+
+// Fix for the icon buttons
+.visibility-toggle {
+  width: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  .mat-icon {
+    font-size: 18px !important;
+    height: 18px !important;
+    width: 18px !important;
+    line-height: 18px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+}
+
+.search-button {
+  width: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  .mat-icon {
+    font-size: 18px !important;
+    height: 18px !important;
+    width: 18px !important;
+    line-height: 18px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+}

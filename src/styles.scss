@@ -1363,3 +1363,125 @@ input.mat-mdc-input-element {
     justify-content: center !important;
   }
 }
+
+// Global form field styles to fix icon alignment issues
+.mat-form-field-appearance-outline {
+  .mat-form-field-prefix, .mat-form-field-suffix {
+    top: 0;
+
+    .mat-icon {
+      font-size: 20px;
+      height: 20px;
+      width: 20px;
+      line-height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  }
+
+  .mat-form-field-prefix {
+    margin-right: 8px;
+  }
+
+  .mat-form-field-suffix {
+    margin-left: 4px;
+  }
+
+  .mat-form-field-infix {
+    display: flex;
+    align-items: center;
+  }
+
+  // Fix floating label position to prevent overlap with prefix icon
+  &.mat-focused .mat-form-field-label,
+  &.mat-form-field-should-float .mat-form-field-label {
+    transform: translateY(-1.59375em) scale(0.75);
+    width: 133.33333333%;
+  }
+
+  // Add more padding to the start of label when there's a prefix
+  .mat-form-field-label {
+    margin-left: 0;
+
+    &.mat-form-field-empty {
+      // Only apply extra spacing when label is not floating
+      &.mat-form-field-label {
+        padding-left: 8px;
+      }
+    }
+  }
+}
+
+// Make input margins consistent
+input.mat-input-element {
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+// Additional fix for Angular Material form fields
+.mat-mdc-form-field {
+  &.mat-mdc-form-field-appearance-outline {
+    // Space between prefix icon and input text
+    .mat-mdc-text-field-wrapper {
+      padding-left: 0;
+    }
+
+    // Fix icon alignment
+    .mat-mdc-form-field-icon-prefix > .mat-icon,
+    .mat-mdc-form-field-icon-suffix > .mat-icon {
+      padding: 0.5em 0.5em;
+      font-size: 150%;
+      box-sizing: content-box;
+    }
+
+    // Ensure proper floating label behavior
+    &.mat-mdc-form-field-has-icon-prefix .mdc-floating-label {
+      left: 36px; // Avoid overlapping with icon
+    }
+
+    // Fix for suffix icon (like visibility/password eye)
+    .mat-mdc-form-field-icon-suffix {
+      padding-right: 4px;
+
+      .mat-icon-button {
+        width: 32px !important;
+        height: 32px !important;
+        line-height: 32px !important;
+
+        .mat-icon {
+          font-size: 18px !important;
+          height: 18px !important;
+          width: 18px !important;
+          line-height: 18px !important;
+        }
+      }
+    }
+  }
+}
+
+// Add global styles for icon buttons in forms
+.mat-form-field {
+  .mat-icon-button.visibility-toggle,
+  .mat-icon-button.search-button {
+    width: 32px !important;
+    height: 32px !important;
+    line-height: 32px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+
+    .mat-icon {
+      font-size: 18px !important;
+      height: 18px !important;
+      width: 18px !important;
+      line-height: 18px !important;
+    }
+  }
+
+  // Fix for all suffix icon buttons
+  .mat-form-field-suffix .mat-icon-button {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+}

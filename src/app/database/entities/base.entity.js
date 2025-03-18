@@ -16,7 +16,6 @@ const typeorm_1 = require("typeorm");
  */
 class BaseModel extends typeorm_1.BaseEntity {
 }
-exports.BaseModel = BaseModel;
 __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)(),
     __metadata("design:type", Number)
@@ -39,4 +38,5 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'updated_by' }),
     __metadata("design:type", Object)
 ], BaseModel.prototype, "updatedBy", void 0);
+exports.BaseModel = BaseModel;
 //# sourceMappingURL=base.entity.js.map
