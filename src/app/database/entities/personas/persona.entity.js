@@ -19,7 +19,6 @@ const persona_tipo_enum_1 = require("./persona-tipo.enum");
  */
 let Persona = class Persona extends base_entity_1.BaseModel {
 };
-exports.Persona = Persona;
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)
@@ -60,7 +59,8 @@ __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], Persona.prototype, "imageUrl", void 0);
-exports.Persona = Persona = __decorate([
+Persona = __decorate([
     (0, typeorm_1.Entity)('personas')
 ], Persona);
+exports.Persona = Persona;
 //# sourceMappingURL=persona.entity.js.map

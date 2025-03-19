@@ -17,7 +17,6 @@ const base_entity_1 = require("../base.entity");
  */
 let TipoCliente = class TipoCliente extends base_entity_1.BaseModel {
 };
-exports.TipoCliente = TipoCliente;
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)
@@ -38,7 +37,8 @@ __decorate([
     (0, typeorm_1.Column)({ type: 'float', default: 0 }),
     __metadata("design:type", Number)
 ], TipoCliente.prototype, "porcentaje_descuento", void 0);
-exports.TipoCliente = TipoCliente = __decorate([
+TipoCliente = __decorate([
     (0, typeorm_1.Entity)('tipo_clientes')
 ], TipoCliente);
+exports.TipoCliente = TipoCliente;
 //# sourceMappingURL=tipo-cliente.entity.js.map

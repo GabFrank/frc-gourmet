@@ -17,7 +17,6 @@ const base_entity_1 = require("../base.entity");
  */
 let Usuario = class Usuario extends base_entity_1.BaseModel {
 };
-exports.Usuario = Usuario;
 __decorate([
     (0, typeorm_1.ManyToOne)('Persona'),
     (0, typeorm_1.JoinColumn)({ name: 'persona_id' }),
@@ -35,7 +34,8 @@ __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
 ], Usuario.prototype, "activo", void 0);
-exports.Usuario = Usuario = __decorate([
+Usuario = __decorate([
     (0, typeorm_1.Entity)('usuarios')
 ], Usuario);
+exports.Usuario = Usuario;
 //# sourceMappingURL=usuario.entity.js.map

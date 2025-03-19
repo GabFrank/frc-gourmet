@@ -1,1 +1,1 @@
-{"version":3,"file":"documento-tipo.enum.js","sourceRoot":"","sources":["documento-tipo.enum.ts"],"names":[],"mappings":";;;AAAA;;GAEG;AACH,IAAY,aAKX;AALD,WAAY,aAAa;IACvB,0BAAS,CAAA;IACT,4BAAW,CAAA;IACX,4BAAW,CAAA;IACX,wCAAuB,CAAA;AACzB,CAAC,EALW,aAAa,6BAAb,aAAa,QAKxB"}
+{"version":3,"file":"documento-tipo.enum.js","sourceRoot":"","sources":["documento-tipo.enum.ts"],"names":[],"mappings":";;;AAAA;;GAEG;AACH,IAAY,aAKX;AALD,WAAY,aAAa;IACvB,0BAAS,CAAA;IACT,4BAAW,CAAA;IACX,4BAAW,CAAA;IACX,wCAAuB,CAAA;AACzB,CAAC,EALW,aAAa,GAAb,qBAAa,KAAb,qBAAa,QAKxB"}

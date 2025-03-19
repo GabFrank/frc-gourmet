@@ -1,7 +1,6 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -13,18 +12,19 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatCardModule } from '@angular/material/card';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { RepositoryService } from '../../../database/repository.service';
 import { Producto } from '../../../database/entities/productos/producto.entity';
 import { Subcategoria } from '../../../database/entities/productos/subcategoria.entity';
 import { Categoria } from '../../../database/entities/productos/categoria.entity';
 import { firstValueFrom } from 'rxjs';
+import { TabsService } from '../../../services/tabs.service';
 
 @Component({
   selector: 'app-create-edit-producto',
   standalone: true,
   imports: [
     CommonModule,
-    MatDialogModule,
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
@@ -36,6 +36,7 @@ import { firstValueFrom } from 'rxjs';
     MatDividerModule,
     MatTabsModule,
     MatCardModule,
+    MatSnackBarModule,
     ReactiveFormsModule
   ],
   templateUrl: './create-edit-producto.component.html',
@@ -51,21 +52,22 @@ export class CreateEditProductoComponent implements OnInit {
   imagePreviewUrl: string | null = null;
   maxImageSize = 5 * 1024 * 1024; // 5MB
   activeTabIndex = 0;
+  producto?: Producto;
+  defaultNoImagePath = '/assets/images/no-image.png';
+  submitted = false;
+  loading = false;
 
   constructor(
-    private dialogRef: MatDialogRef<CreateEditProductoComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { producto?: Producto },
     private fb: FormBuilder,
-    private repositoryService: RepositoryService
+    private repositoryService: RepositoryService,
+    private tabsService: TabsService,
+    private snackBar: MatSnackBar
   ) {
     this.productoForm = this.fb.group({
       nombre: ['', [Validators.required]],
       nombreAlternativo: [''],
-      codigo: [''],
       descripcion: [''],
       iva: [10, [Validators.required, Validators.min(0), Validators.max(100)]],
-      precio: [0, [Validators.required, Validators.min(0)]],
-      costo: [0, [Validators.min(0)]],
       stock: [0, [Validators.min(0)]],
       subcategoriaId: [null, [Validators.required]],
       categoriaId: [null, [Validators.required]],
@@ -81,14 +83,22 @@ export class CreateEditProductoComponent implements OnInit {
       observacion: [''],
       activo: [true]
     });
-
-    this.isEditing = !!this.data.producto;
   }
 
   ngOnInit(): void {
+    // Get product data from tab if provided
+    const tabs = this.tabsService.getCurrentTabs();
+    const activeTabId = this.tabsService.getActiveTabId();
+    const activeTab = tabs.find(tab => tab.id === activeTabId);
+
+    if (activeTab?.data?.producto) {
+      this.producto = activeTab.data.producto;
+      this.isEditing = true;
+    }
+
     this.loadCategorias();
 
-    if (this.isEditing && this.data.producto) {
+    if (this.isEditing && this.producto) {
       this.loadProducto();
     }
 
@@ -158,49 +168,49 @@ export class CreateEditProductoComponent implements OnInit {
   }
 
   loadProducto(): void {
-    if (!this.data.producto) return;
+    if (!this.producto) return;
 
     this.isLoading = true;
     try {
       // Set image preview if exists
-      if (this.data.producto.imageUrl) {
-        this.imagePreviewUrl = this.data.producto.imageUrl;
+      if (this.producto.imageUrl) {
+        this.imagePreviewUrl = this.producto.imageUrl;
       }
 
       // Get categoria ID from the subcategoria
       let categoriaId = null;
-      if (this.data.producto.subcategoria?.categoriaId) {
-        categoriaId = this.data.producto.subcategoria.categoriaId;
+      if (this.producto.subcategoria?.categoriaId) {
+        categoriaId = this.producto.subcategoria.categoriaId;
         // Load subcategorias for this categoria
         this.loadSubcategoriasByCategoria(categoriaId);
       }
 
       // Patch form with existing producto data
       this.productoForm.patchValue({
-        nombre: this.data.producto.nombre,
-        nombreAlternativo: this.data.producto.nombreAlternativo || '',
-        iva: this.data.producto.iva || 10,
-        subcategoriaId: this.data.producto.subcategoriaId,
+        nombre: this.producto.nombre,
+        nombreAlternativo: this.producto.nombreAlternativo || '',
+        iva: this.producto.iva || 10,
+        subcategoriaId: this.producto.subcategoriaId,
         categoriaId: categoriaId,
-        isPesable: this.data.producto.isPesable || false,
-        isCombo: this.data.producto.isCombo || false,
-        isIngrediente: this.data.producto.isIngrediente || false,
-        isPromocion: this.data.producto.isPromocion || false,
-        isVendible: this.data.producto.isVendible !== false, // Default to true
-        hasVencimiento: this.data.producto.hasVencimiento || false,
-        hasStock: this.data.producto.hasStock || false,
-        alertarVencimientoDias: this.data.producto.alertarVencimientoDias || 30,
-        imageUrl: this.data.producto.imageUrl,
-        observacion: this.data.producto.observacion || '',
-        activo: this.data.producto.activo !== false // Default to true
+        isPesable: this.producto.isPesable || false,
+        isCombo: this.producto.isCombo || false,
+        isIngrediente: this.producto.isIngrediente || false,
+        isPromocion: this.producto.isPromocion || false,
+        isVendible: this.producto.isVendible !== false, // Default to true
+        hasVencimiento: this.producto.hasVencimiento || false,
+        hasStock: this.producto.hasStock || false,
+        alertarVencimientoDias: this.producto.alertarVencimientoDias || 30,
+        imageUrl: this.producto.imageUrl,
+        observacion: this.producto.observacion || '',
+        activo: this.producto.activo !== false // Default to true
       });
 
       // Apply conditional disabling
-      if (!this.data.producto.hasVencimiento) {
+      if (!this.producto.hasVencimiento) {
         this.productoForm.get('alertarVencimientoDias')?.disable();
       }
 
-      if (!this.data.producto.hasStock) {
+      if (!this.producto.hasStock) {
         this.productoForm.get('stock')?.disable();
       }
     } catch (error) {
@@ -289,9 +299,9 @@ export class CreateEditProductoComponent implements OnInit {
       let imageUrl = this.productoForm.get('imageUrl')?.value;
       if (this.selectedImageFile) {
         // If editing and has existing image, delete it first
-        if (this.isEditing && this.data.producto?.imageUrl) {
+        if (this.isEditing && this.producto?.imageUrl) {
           await firstValueFrom(
-            this.repositoryService.deleteProductoImage(this.data.producto.imageUrl)
+            this.repositoryService.deleteProductoImage(this.producto.imageUrl)
           );
         }
 
@@ -307,35 +317,55 @@ export class CreateEditProductoComponent implements OnInit {
         ...formValues,
         nombre: formValues.nombre?.toUpperCase() || '',
         nombreAlternativo: formValues.nombreAlternativo?.toUpperCase() || null,
-        codigo: formValues.codigo?.toUpperCase() || null,
         descripcion: formValues.descripcion?.toUpperCase() || null,
         observacion: formValues.observacion?.toUpperCase() || null,
         imageUrl
       };
 
-      if (this.isEditing && this.data.producto) {
+      if (this.isEditing && this.producto) {
         // Update existing producto
         const updatedProducto = await firstValueFrom(
-          this.repositoryService.updateProducto(this.data.producto.id!, productoData)
+          this.repositoryService.updateProducto(this.producto.id!, productoData)
         );
-        this.dialogRef.close({ success: true, action: 'update', producto: updatedProducto });
+        this.snackBar.open('Producto actualizado correctamente', 'Cerrar', { duration: 3000 });
+
+        // Close the tab
+        this.goBack();
       } else {
         // Create new producto
         const createdProducto = await firstValueFrom(
           this.repositoryService.createProducto(productoData)
         );
-        this.dialogRef.close({ success: true, action: 'create', producto: createdProducto });
+        this.snackBar.open('Producto creado correctamente', 'Cerrar', { duration: 3000 });
+
+        // Close the tab
+        this.goBack();
       }
     } catch (error) {
       console.error('Error saving producto:', error);
-      this.dialogRef.close({ success: false, error });
+      this.snackBar.open('Error al guardar el producto', 'Cerrar', { duration: 3000 });
     } finally {
       this.isLoading = false;
     }
   }
 
-  cancel(): void {
-    this.dialogRef.close();
+  goBack(): void {
+    // Close the current tab and return to the product list
+    const tabs = this.tabsService.getCurrentTabs();
+    const activeTabId = this.tabsService.getActiveTabId();
+
+    if (activeTabId) {
+      this.tabsService.removeTab(activeTabId);
+    }
+
+    // Find and activate the productos list tab if it exists
+    const productosTabId = tabs.find(tab =>
+      tab.componentType.name === 'ListProductosComponent' ||
+      tab.title === 'Productos')?.id;
+
+    if (productosTabId) {
+      this.tabsService.setActiveTab(productosTabId);
+    }
   }
 
   // Helper method to mark all form controls as touched to trigger validation errors
@@ -346,5 +376,9 @@ export class CreateEditProductoComponent implements OnInit {
         this.markFormGroupTouched(control as FormGroup);
       }
     });
+  }
+
+  cancel(): void {
+    this.goBack();
   }
 }

@@ -18,7 +18,6 @@ const base_entity_1 = require("../base.entity");
  */
 let Producto = class Producto extends base_entity_1.BaseModel {
 };
-exports.Producto = Producto;
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)
@@ -84,7 +83,8 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'subcategoria_id' }),
     __metadata("design:type", subcategoria_entity_1.Subcategoria)
 ], Producto.prototype, "subcategoria", void 0);
-exports.Producto = Producto = __decorate([
+Producto = __decorate([
     (0, typeorm_1.Entity)('productos')
 ], Producto);
+exports.Producto = Producto;
 //# sourceMappingURL=producto.entity.js.map
