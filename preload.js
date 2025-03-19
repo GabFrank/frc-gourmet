@@ -1,3 +1,5 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 // Preload script that will be executed before rendering the application
 const { contextBridge, ipcRenderer } = require('electron');
 // Expose protected methods that allow the renderer process to use
@@ -234,6 +236,19 @@ contextBridge.exposeInMainWorld('api', {
     },
     deleteProductoImage: async (imageUrl) => {
         return await ipcRenderer.invoke('deleteProductoImage', imageUrl);
+    },
+    // Product Image methods
+    getProductImages: async (productoId) => {
+        return await ipcRenderer.invoke('getProductImages', productoId);
+    },
+    createProductImage: async (imageData) => {
+        return await ipcRenderer.invoke('createProductImage', imageData);
+    },
+    updateProductImage: async (imageId, imageData) => {
+        return await ipcRenderer.invoke('updateProductImage', imageId, imageData);
+    },
+    deleteProductImage: async (imageId) => {
+        return await ipcRenderer.invoke('deleteProductImage', imageId);
     },
 });
 //# sourceMappingURL=preload.js.map

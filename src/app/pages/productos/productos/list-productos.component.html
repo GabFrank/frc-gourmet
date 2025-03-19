@@ -24,7 +24,7 @@
 
           <mat-form-field appearance="outline">
             <mat-label>Subcategoría</mat-label>
-            <mat-select formControlName="subcategoriaId" [disabled]="!filterForm.get('categoriaId')?.value">
+            <mat-select formControlName="subcategoriaId">
               <mat-option value="">Todas</mat-option>
               <mat-option *ngFor="let subcategoria of subcategorias" [value]="subcategoria.id">
                 {{ subcategoria.nombre }}

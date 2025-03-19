@@ -32,7 +32,7 @@
 
                 <!-- Categorización -->
                 <div class="form-row">
-                  <mat-form-field appearance="outline" class="half-width">
+                  <mat-form-field appearance="outline" class="equal-width">
                     <mat-label>Categoría</mat-label>
                     <mat-select formControlName="categoriaId">
                       <mat-option *ngFor="let categoria of categorias" [value]="categoria.id">
@@ -44,9 +44,9 @@
                     </mat-error>
                   </mat-form-field>
 
-                  <mat-form-field appearance="outline" class="half-width">
+                  <mat-form-field appearance="outline" class="equal-width">
                     <mat-label>Subcategoría</mat-label>
-                    <mat-select formControlName="subcategoriaId" [disabled]="!productoForm.get('categoriaId')?.value">
+                    <mat-select formControlName="subcategoriaId">
                       <mat-option *ngFor="let subcategoria of subcategorias" [value]="subcategoria.id">
                         {{ subcategoria.nombre }}
                       </mat-option>
@@ -55,11 +55,8 @@
                       La subcategoría es requerida
                     </mat-error>
                   </mat-form-field>
-                </div>
 
-                <!-- IVA -->
-                <div class="form-row">
-                  <mat-form-field appearance="outline" class="half-width">
+                  <mat-form-field appearance="outline" class="iva-width">
                     <mat-label>IVA (%)</mat-label>
                     <input matInput type="number" formControlName="iva" min="0" max="100">
                     <mat-error *ngIf="productoForm.get('iva')?.hasError('required')">
@@ -71,62 +68,48 @@
                   </mat-form-field>
                 </div>
 
-                <!-- Toggles Rows -->
-                <div class="toggles-container">
-                  <div class="toggles-row">
-                    <mat-slide-toggle formControlName="hasStock" color="primary">
-                      Controlar Stock
-                    </mat-slide-toggle>
+                <!-- Toggles in a grid -->
+                <div class="toggles-grid">
+                  <mat-slide-toggle formControlName="isVendible" color="primary">
+                    Vendible
+                  </mat-slide-toggle>
 
-                    <mat-slide-toggle formControlName="hasVencimiento" color="primary">
-                      Controlar Vencimiento
-                    </mat-slide-toggle>
-                  </div>
+                  <mat-slide-toggle formControlName="hasStock" color="primary">
+                    Controlar Stock
+                  </mat-slide-toggle>
 
-                  <div class="toggles-row">
-                    <mat-slide-toggle formControlName="isVendible" color="primary">
-                      Vendible
-                    </mat-slide-toggle>
+                  <mat-slide-toggle formControlName="hasVencimiento" color="primary">
+                    Controlar Vencimiento
+                  </mat-slide-toggle>
+                  
+                  <mat-slide-toggle formControlName="activo" color="primary">
+                    Activo
+                  </mat-slide-toggle>
 
-                    <mat-slide-toggle formControlName="isPesable" color="primary">
-                      Pesable
-                    </mat-slide-toggle>
-                  </div>
+                  <mat-slide-toggle formControlName="isPesable" color="primary">
+                    Pesable
+                  </mat-slide-toggle>
 
-                  <div class="toggles-row">
-                    <mat-slide-toggle formControlName="isCombo" color="primary">
-                      Combo
-                    </mat-slide-toggle>
+                  <mat-slide-toggle formControlName="isCombo" color="primary">
+                    Combo
+                  </mat-slide-toggle>
 
-                    <mat-slide-toggle formControlName="isIngrediente" color="primary">
-                      Ingrediente
-                    </mat-slide-toggle>
-                  </div>
+                  <mat-slide-toggle formControlName="isCompuesto" color="primary">
+                    Compuesto
+                  </mat-slide-toggle>
 
-                  <div class="toggles-row">
-                    <mat-slide-toggle formControlName="isPromocion" color="primary">
-                      Promoción
-                    </mat-slide-toggle>
-
-                    <mat-slide-toggle formControlName="activo" color="primary">
-                      Activo
-                    </mat-slide-toggle>
-                  </div>
+                  <mat-slide-toggle formControlName="isIngrediente" color="primary">
+                    Ingrediente
+                  </mat-slide-toggle>
+                  
+                  <mat-slide-toggle formControlName="isPromocion" color="primary">
+                    Promoción
+                  </mat-slide-toggle>
                 </div>
 
                 <!-- Conditional Fields -->
-                <div class="form-row" *ngIf="productoForm.get('hasStock')?.value">
-                  <mat-form-field appearance="outline" class="half-width">
-                    <mat-label>Stock Actual</mat-label>
-                    <input matInput type="number" formControlName="stock" min="0">
-                    <mat-error *ngIf="productoForm.get('stock')?.hasError('min')">
-                      El stock no puede ser negativo
-                    </mat-error>
-                  </mat-form-field>
-                </div>
-
                 <div class="form-row" *ngIf="productoForm.get('hasVencimiento')?.value">
-                  <mat-form-field appearance="outline" class="half-width">
+                  <mat-form-field appearance="outline" class="full-width">
                     <mat-label>Alertar Vencimiento (días)</mat-label>
                     <input matInput type="number" formControlName="alertarVencimientoDias" min="1">
                   </mat-form-field>
@@ -134,38 +117,10 @@
 
                 <!-- Additional Info -->
                 <div class="form-row">
-                  <mat-form-field appearance="outline" class="half-width">
-                    <mat-label>Descripción</mat-label>
-                    <textarea matInput formControlName="descripcion" rows="2" placeholder="Descripción del producto"></textarea>
-                  </mat-form-field>
-
-                  <mat-form-field appearance="outline" class="half-width">
+                  <mat-form-field appearance="outline" class="full-width">
                     <mat-label>Observación</mat-label>
                     <textarea matInput formControlName="observacion" rows="2" placeholder="Observaciones"></textarea>
                   </mat-form-field>
-                </div>
-              </div>
-
-              <!-- Image Section -->
-              <div class="image-section">
-                <div class="image-container">
-                  <div class="image-preview" *ngIf="imagePreviewUrl">
-                    <img [src]="imagePreviewUrl" alt="Vista previa">
-                    <button type="button" mat-mini-fab color="warn" (click)="removeImage()" class="remove-image-btn">
-                      <mat-icon>delete</mat-icon>
-                    </button>
-                  </div>
-
-                  <div class="image-preview no-image" *ngIf="!imagePreviewUrl">
-                    <img src="assets/images/no-image.png" alt="No hay imagen" class="no-image-placeholder">
-                    <button type="button" mat-stroked-button color="primary" (click)="fileInput.click()" class="upload-image-btn">
-                      <mat-icon>add_photo_alternate</mat-icon>
-                      Seleccionar Imagen
-                    </button>
-                  </div>
-
-                  <p class="hint-text">Formatos: JPG, PNG, GIF (máx. 5MB)</p>
-                  <input #fileInput type="file" accept="image/*" (change)="onImageSelected($event)" style="display: none">
                 </div>
               </div>
             </div>
@@ -211,9 +166,74 @@
     </mat-tab-group>
   </mat-card>
 
+  <!-- Images section at bottom of form -->
+  <mat-card class="images-section">
+    <mat-card-header>
+      <mat-card-title>Imágenes del Producto</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="images-gallery-container">
+        <div class="images-row">
+          <!-- Images in a row -->
+          <div *ngFor="let image of productImages; let i = index" 
+               class="image-card" 
+               [class.main-image]="image.isMain"
+               (click)="viewFullImage(image)">
+            <div class="image-container">
+              <img [src]="image.imageUrl" alt="Imagen del producto">
+            </div>
+            
+            <div class="main-badge" *ngIf="image.isMain">
+              <mat-icon>star</mat-icon>
+              Principal
+            </div>
+            
+            <div class="image-footer">
+              <button mat-icon-button color="warn" (click)="$event.stopPropagation(); removeCurrentImage(i)" matTooltip="Eliminar imagen">
+                <mat-icon>delete</mat-icon>
+              </button>
+              <button mat-icon-button color="primary" 
+                      [disabled]="image.isMain"
+                      (click)="$event.stopPropagation(); setMainImage(i)" 
+                      matTooltip="Establecer como imagen principal">
+                <mat-icon>star</mat-icon>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Loading placeholder for uploading images -->
+          <div *ngIf="isUploading" class="image-card loading-card">
+            <div class="loading-content">
+              <mat-icon>cloud_upload</mat-icon>
+              <p>Subiendo imagen...</p>
+              <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+            </div>
+          </div>
+          
+          <!-- Always show the add button -->
+          <div class="add-image-button">
+            <button type="button" mat-fab color="primary" (click)="openFileSelector()" matTooltip="Añadir imagen">
+              <mat-icon>add</mat-icon>
+            </button>
+          </div>
+        </div>
+        
+        <!-- Message when no images are present -->
+        <!-- <div *ngIf="productImages.length === 0 && !isUploading" class="no-images-message">
+          <mat-icon>image</mat-icon>
+          <p>No hay imágenes para este producto</p>
+        </div>
+         -->
+        <input #fileInput type="file" accept="image/*" (change)="onImageSelected($event)" style="display: none">
+      </div>
+    </mat-card-content>
+  </mat-card>
+
   <div class="page-actions">
-    <button mat-button (click)="cancel()" [disabled]="isLoading">Cancelar</button>
-    <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="productoForm.invalid || isLoading">
+    <button mat-raised-button (click)="cancel()" [disabled]="isLoading" class="action-button">
+      Cancelar
+    </button>
+    <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="productoForm.invalid || isLoading" class="action-button">
       <mat-spinner *ngIf="isLoading" diameter="20" class="spinner-button"></mat-spinner>
       <span *ngIf="!isLoading">{{ isEditing ? 'Actualizar' : 'Guardar' }}</span>
     </button>

@@ -14,6 +14,7 @@ import { LoginSession } from './entities/auth/login-session.entity';
 import { Categoria } from './entities/productos/categoria.entity';
 import { Subcategoria } from './entities/productos/subcategoria.entity';
 import { Producto } from './entities/productos/producto.entity';
+import { ProductoImage } from './entities/productos/producto-image.entity';
 
 /**
  * Get the configuration for TypeORM
@@ -37,7 +38,8 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       LoginSession,
       Categoria,
       Subcategoria,
-      Producto
+      Producto,
+      ProductoImage
     ],
     synchronize: true, // Automatically creates tables in development
     logging: process.env['NODE_ENV'] === 'development',

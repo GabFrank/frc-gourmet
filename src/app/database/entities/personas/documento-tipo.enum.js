@@ -10,5 +10,5 @@ var DocumentoTipo;
     DocumentoTipo["RUC"] = "RUC";
     DocumentoTipo["CPF"] = "CPF";
     DocumentoTipo["PASAPORTE"] = "PASAPORTE";
-})(DocumentoTipo = exports.DocumentoTipo || (exports.DocumentoTipo = {}));
+})(DocumentoTipo || (exports.DocumentoTipo = DocumentoTipo = {}));
 //# sourceMappingURL=documento-tipo.enum.js.map

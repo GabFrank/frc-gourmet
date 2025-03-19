@@ -14,6 +14,7 @@ import { DeviceInfo } from '../services/auth.service';
 import { Categoria } from './entities/productos/categoria.entity';
 import { Producto } from './entities/productos/producto.entity';
 import { Subcategoria } from './entities/productos/subcategoria.entity';
+import { ProductoImage } from './entities/productos/producto-image.entity';
 
 export interface LoginResult {
   success: boolean;
@@ -100,6 +101,11 @@ interface ElectronAPI {
   deleteProducto: (productoId: number) => Promise<any>;
   saveProductoImage: (base64Data: string, fileName: string) => Promise<{ imageUrl: string }>;
   deleteProductoImage: (imageUrl: string) => Promise<boolean>;
+  // Product Image methods
+  getProductImages: (productoId: number) => Promise<ProductoImage[]>;
+  createProductImage: (imageData: Partial<ProductoImage>) => Promise<ProductoImage>;
+  updateProductImage: (imageId: number, imageData: Partial<ProductoImage>) => Promise<ProductoImage>;
+  deleteProductImage: (imageId: number) => Promise<boolean>;
 }
 
 /**
@@ -453,5 +459,22 @@ export class RepositoryService {
   
   deleteProductoImage(imageUrl: string): Observable<boolean> {
     return from(this.api.deleteProductoImage(imageUrl));
+  }
+  
+  // New methods for product images
+  getProductImages(productoId: number): Observable<ProductoImage[]> {
+    return from(this.api.getProductImages(productoId));
+  }
+  
+  createProductImage(imageData: Partial<ProductoImage>): Observable<ProductoImage> {
+    return from(this.api.createProductImage(imageData));
+  }
+  
+  updateProductImage(imageId: number, imageData: Partial<ProductoImage>): Observable<ProductoImage> {
+    return from(this.api.updateProductImage(imageId, imageData));
+  }
+  
+  deleteProductImage(imageId: number): Observable<boolean> {
+    return from(this.api.deleteProductImage(imageId));
   }
 } 

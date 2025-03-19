@@ -25,6 +25,7 @@ import { LoginSession } from './src/app/database/entities/auth/login-session.ent
 import { Categoria } from './src/app/database/entities/productos/categoria.entity';
 import { Subcategoria } from './src/app/database/entities/productos/subcategoria.entity';
 import { Producto } from './src/app/database/entities/productos/producto.entity';
+import { ProductoImage } from './src/app/database/entities/productos/producto-image.entity';
 
 let win: any;
 let dbService: DatabaseService;
@@ -1829,23 +1830,112 @@ ipcMain.handle('deleteProducto', async (_event: any, productoId: number) => {
       await imageHandler.deleteProductoImage(producto.imageUrl);
     }
 
-    // Delete the producto
-    const result = await productoRepository.remove(producto);
+    // Remove the producto
+    await productoRepository.remove(producto);
 
     console.log(`Producto with ID ${productoId} deleted`);
-    return result;
+    return { success: true };
   } catch (error) {
     console.error(`Error deleting producto with ID ${productoId}:`, error);
     throw error;
   }
 });
 
+// Product Image Handlers
+ipcMain.handle('getProductImages', async (_event: any, productoId: number) => {
+  try {
+    const productoImageRepository = dbService.getDataSource().getRepository(ProductoImage);
+    const images = await productoImageRepository.find({
+      where: { productoId }
+    });
+    return images;
+  } catch (error) {
+    console.error(`Error getting images for producto ${productoId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('createProductImage', async (_event: any, imageData: any) => {
+  try {
+    const productoImageRepository = dbService.getDataSource().getRepository(ProductoImage);
+    
+    // Create new image entity
+    const productoImage = productoImageRepository.create(imageData);
+    
+    // Save to database
+    const result = await productoImageRepository.save(productoImage);
+    
+    console.log('ProductoImage created:', result);
+    return result;
+  } catch (error) {
+    console.error('Error creating productoImage:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('updateProductImage', async (_event: any, imageId: number, imageData: any) => {
+  try {
+    const productoImageRepository = dbService.getDataSource().getRepository(ProductoImage);
+
+    // Find the image
+    const productoImage = await productoImageRepository.findOne({
+      where: { id: imageId }
+    });
+
+    if (!productoImage) {
+      throw new Error(`ProductoImage with ID ${imageId} not found`);
+    }
+
+    // Update image properties
+    productoImageRepository.merge(productoImage, imageData);
+
+    // Save changes
+    const result = await productoImageRepository.save(productoImage);
+
+    console.log('ProductoImage updated:', result);
+    return result;
+  } catch (error) {
+    console.error(`Error updating productoImage with ID ${imageId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('deleteProductImage', async (_event: any, imageId: number) => {
+  try {
+    const productoImageRepository = dbService.getDataSource().getRepository(ProductoImage);
+
+    // Find the image
+    const productoImage = await productoImageRepository.findOne({
+      where: { id: imageId }
+    });
+
+    if (!productoImage) {
+      throw new Error(`ProductoImage with ID ${imageId} not found`);
+    }
+
+    // Delete the file from storage
+    if (productoImage.imageUrl) {
+      await imageHandler.deleteProductoImage(productoImage.imageUrl);
+    }
+
+    // Delete from database
+    await productoImageRepository.remove(productoImage);
+
+    console.log(`ProductoImage with ID ${imageId} deleted`);
+    return true;
+  } catch (error) {
+    console.error(`Error deleting productoImage with ID ${imageId}:`, error);
+    throw error;
+  }
+});
+
+// Product Image Handlers
 ipcMain.handle('saveProductoImage', async (_event: Electron.IpcMainInvokeEvent, { base64Data, fileName }: { base64Data: string, fileName: string }) => {
   try {
     // Use the same image handler but with a different directory
     const userDataPath = app.getPath('userData');
     const productoImagesDir = path.join(userDataPath, 'producto-images');
-
+    
     // Ensure directory exists
     if (!fs.existsSync(productoImagesDir)) {
       fs.mkdirSync(productoImagesDir, { recursive: true });

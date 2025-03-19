@@ -1,6 +1,7 @@
-import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { Subcategoria } from './subcategoria.entity';
 import { BaseModel } from '../base.entity';
+import { ProductoImage } from './producto-image.entity';
 
 /**
  * Entity representing a product
@@ -21,6 +22,9 @@ export class Producto extends BaseModel {
 
   @Column({ default: false, name: 'is_combo' })
   isCombo!: boolean;
+
+  @Column({ default: false, name: 'is_compuesto' })
+  isCompuesto!: boolean;
 
   @Column({ default: false, name: 'is_ingrediente' })
   isIngrediente!: boolean;
@@ -55,4 +59,7 @@ export class Producto extends BaseModel {
   @ManyToOne(() => Subcategoria, subcategoria => subcategoria.productos)
   @JoinColumn({ name: 'subcategoria_id' })
   subcategoria!: Subcategoria;
+
+  @OneToMany(() => ProductoImage, productoImage => productoImage.producto)
+  images!: ProductoImage[];
 } 

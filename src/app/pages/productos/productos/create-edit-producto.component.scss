@@ -49,10 +49,6 @@
 .form-layout {
   display: flex;
   gap: 20px;
-
-  @media (max-width: 768px) {
-    flex-direction: column-reverse;
-  }
 }
 
 .main-form-content {
@@ -73,113 +69,49 @@
     width: 100%;
   }
 
-  .half-width {
-    flex: 1 1 calc(50% - 6px);
-    min-width: 150px;
+  .equal-width {
+    flex: 1;
+    min-width: 40%;
   }
 
-  .one-third-width {
-    flex: 1 1 calc(33.33% - 8px);
-    min-width: 120px;
-  }
-}
-
-// Toggles layout
-.toggles-container {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 4px 0 8px;
-}
-
-.toggles-row {
-  display: flex;
-  gap: 24px;
-  margin: 2px 0;
-
-  mat-slide-toggle {
-    min-width: 120px;
+  .iva-width {
+    width: 80px;
   }
 }
 
-// Image section
-.image-section {
-  width: 200px;
-  flex-shrink: 0;
+// Improved toggles layout in a grid
+.toggles-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 16px 0;
+  align-items: center;
+  justify-items: start;
 
   @media (max-width: 768px) {
-    width: 100%;
-    margin-bottom: 16px;
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
   }
 }
 
-.image-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-
-  .image-preview {
-    position: relative;
-    width: 180px;
-    height: 180px;
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid #e0e0e0;
-    background-color: #f8f8f8;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-
-    img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
-
-    .remove-image-btn {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      opacity: 0.9;
-    }
-
-    &.no-image {
-      background-color: #f0f0f0;
-
-      .no-image-placeholder {
-        width: 100px;
-        height: 100px;
-        opacity: 0.5;
-        object-fit: contain;
-      }
-
-      .upload-image-btn {
-        margin-top: 12px;
-      }
-    }
-  }
-
-  .hint-text {
-    margin-top: 8px;
-    font-size: 11px;
-    color: #777;
-    text-align: center;
-  }
-}
-
-// Button styling
+// Button styling for main actions
 .page-actions {
   display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding-top: 12px;
-}
+  justify-content: center;
+  gap: 20px;
+  padding-top: 20px;
+  margin-top: 20px;
 
-button[mat-button] {
-  padding: 4px 16px;
-  border-radius: 4px;
-  font-weight: 500;
+  .action-button {
+    min-width: 120px;
+    font-size: 16px;
+    padding: 8px 24px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
 }
 
 .spinner-button {
@@ -235,56 +167,247 @@ button[mat-button] {
   }
 }
 
-// Make responsive for smaller screens
-@media (max-width: 600px) {
-  .page-container {
-    padding: 8px;
-  }
-
-  .tab-content {
-    padding: 12px;
-  }
-
-  .form-row {
-    flex-direction: column;
-    gap: 8px;
-
-    .half-width,
-    .one-third-width {
-      width: 100%;
+// Images section at the bottom
+.images-section {
+  border-radius: 8px;
+  overflow: hidden;
+  
+  mat-card-header {
+    padding: 16px;
+    
+    mat-card-title {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 500;
     }
   }
-
-  .toggles-row {
-    flex-direction: column;
-    gap: 4px;
+  
+  mat-card-content {
+    padding: 0 16px 24px;
   }
 }
 
-.form-section {
-  margin-bottom: 24px;
-  padding-bottom: 8px;
-  position: relative;
-
-  &:not(:last-child) {
-    border-bottom: 1px solid #f0f0f0;
-  }
+// Images gallery container
+.images-gallery-container {
+  width: 100%;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
 }
 
-.section-label {
-  color: #555;
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 12px;
-  letter-spacing: 0.3px;
+// Images in a row
+.images-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-top: 16px;
+  min-height: 250px;
+  padding: 16px;
+  background-color: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
   position: relative;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
 
-  &::after {
-    content: '';
+.image-card {
+  position: relative;
+  width: 240px;
+  height: 260px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid #e0e0e0;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  
+  &:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+  }
+  
+  &.main-image {
+    border-color: #ffc107;
+    transform: scale(1.05);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    
+    &:hover {
+      transform: translateY(-5px) scale(1.05);
+    }
+  }
+  
+  &.loading-card {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.03);
+    cursor: default;
+    
+    .loading-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      width: 80%;
+      
+      mat-icon {
+        font-size: 40px;
+        height: 40px;
+        width: 40px;
+        margin-bottom: 12px;
+        color: #3f51b5;
+      }
+      
+      p {
+        margin: 8px 0 16px;
+        color: rgba(0, 0, 0, 0.6);
+        text-align: center;
+      }
+      
+      mat-progress-bar {
+        width: 100%;
+      }
+    }
+  }
+  
+  .image-container {
+    width: 100%;
+    height: 210px;
+    background-color: #f8f8f8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
     display: block;
-    width: 24px;
-    height: 2px;
-    background-color: #3f51b5;
-    margin-top: 4px;
+  }
+  
+  .image-footer {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 4px;
+    background-color: rgba(0, 0, 0, 0.05);
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    height: 48px;
+    width: 100%;
+    
+    button {
+      margin: 0 2px;
+    }
+  }
+  
+  .main-badge {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    color: #ffc107;
+    padding: 6px 8px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    height: 32px;
+    
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+      margin-right: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  }
+}
+
+// No images message
+.no-images-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: rgba(0, 0, 0, 0.4);
+  margin-top: 16px;
+  
+  mat-icon {
+    font-size: 48px;
+    height: 48px;
+    width: 48px;
+    margin-bottom: 16px;
+    opacity: 0.6;
+  }
+  
+  p {
+    font-size: 16px;
+    margin: 0;
+  }
+}
+
+// Add image button
+.add-image-button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 260px;
+  width: 240px;
+  background-color: rgba(0, 0, 0, 0.02);
+  border: 2px dashed #bbb;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    background-color: rgba(63, 81, 181, 0.05);
+    border-color: #3f51b5;
+  }
+  
+  button {
+    transform: scale(1);
+    transition: transform 0.2s;
+    
+    &:hover {
+      transform: scale(1.1);
+    }
+  }
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  .image-card {
+    width: 140px;
+    height: 140px;
+  }
+  
+  .images-row {
+    gap: 16px;
+    padding: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .image-card {
+    width: 100px;
+    height: 100px;
+  }
+  
+  .images-row {
+    gap: 12px;
+    padding: 8px;
+  }
+  
+  .image-actions {
+    flex-direction: column;
+    gap: 0;
   }
 }

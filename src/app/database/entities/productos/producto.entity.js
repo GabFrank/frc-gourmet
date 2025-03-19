@@ -13,11 +13,13 @@ exports.Producto = void 0;
 const typeorm_1 = require("typeorm");
 const subcategoria_entity_1 = require("./subcategoria.entity");
 const base_entity_1 = require("../base.entity");
+const producto_image_entity_1 = require("./producto-image.entity");
 /**
  * Entity representing a product
  */
 let Producto = class Producto extends base_entity_1.BaseModel {
 };
+exports.Producto = Producto;
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)
@@ -38,6 +40,10 @@ __decorate([
     (0, typeorm_1.Column)({ default: false, name: 'is_combo' }),
     __metadata("design:type", Boolean)
 ], Producto.prototype, "isCombo", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ default: false, name: 'is_compuesto' }),
+    __metadata("design:type", Boolean)
+], Producto.prototype, "isCompuesto", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: false, name: 'is_ingrediente' }),
     __metadata("design:type", Boolean)
@@ -83,8 +89,11 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'subcategoria_id' }),
     __metadata("design:type", subcategoria_entity_1.Subcategoria)
 ], Producto.prototype, "subcategoria", void 0);
-Producto = __decorate([
+__decorate([
+    (0, typeorm_1.OneToMany)(() => producto_image_entity_1.ProductoImage, productoImage => productoImage.producto),
+    __metadata("design:type", Array)
+], Producto.prototype, "images", void 0);
+exports.Producto = Producto = __decorate([
     (0, typeorm_1.Entity)('productos')
 ], Producto);
-exports.Producto = Producto;
 //# sourceMappingURL=producto.entity.js.map

@@ -24,6 +24,7 @@ const login_session_entity_1 = require("./src/app/database/entities/auth/login-s
 const categoria_entity_1 = require("./src/app/database/entities/productos/categoria.entity");
 const subcategoria_entity_1 = require("./src/app/database/entities/productos/subcategoria.entity");
 const producto_entity_1 = require("./src/app/database/entities/productos/producto.entity");
+const producto_image_entity_1 = require("./src/app/database/entities/productos/producto-image.entity");
 let win;
 let dbService;
 // JWT Secret for token generation
@@ -1646,16 +1647,92 @@ ipcMain.handle('deleteProducto', async (_event, productoId) => {
         if (producto.imageUrl) {
             await imageHandler.deleteProductoImage(producto.imageUrl);
         }
-        // Delete the producto
-        const result = await productoRepository.remove(producto);
+        // Remove the producto
+        await productoRepository.remove(producto);
         console.log(`Producto with ID ${productoId} deleted`);
-        return result;
+        return { success: true };
     }
     catch (error) {
         console.error(`Error deleting producto with ID ${productoId}:`, error);
         throw error;
     }
 });
+// Product Image Handlers
+ipcMain.handle('getProductImages', async (_event, productoId) => {
+    try {
+        const productoImageRepository = dbService.getDataSource().getRepository(producto_image_entity_1.ProductoImage);
+        const images = await productoImageRepository.find({
+            where: { productoId }
+        });
+        return images;
+    }
+    catch (error) {
+        console.error(`Error getting images for producto ${productoId}:`, error);
+        throw error;
+    }
+});
+ipcMain.handle('createProductImage', async (_event, imageData) => {
+    try {
+        const productoImageRepository = dbService.getDataSource().getRepository(producto_image_entity_1.ProductoImage);
+        // Create new image entity
+        const productoImage = productoImageRepository.create(imageData);
+        // Save to database
+        const result = await productoImageRepository.save(productoImage);
+        console.log('ProductoImage created:', result);
+        return result;
+    }
+    catch (error) {
+        console.error('Error creating productoImage:', error);
+        throw error;
+    }
+});
+ipcMain.handle('updateProductImage', async (_event, imageId, imageData) => {
+    try {
+        const productoImageRepository = dbService.getDataSource().getRepository(producto_image_entity_1.ProductoImage);
+        // Find the image
+        const productoImage = await productoImageRepository.findOne({
+            where: { id: imageId }
+        });
+        if (!productoImage) {
+            throw new Error(`ProductoImage with ID ${imageId} not found`);
+        }
+        // Update image properties
+        productoImageRepository.merge(productoImage, imageData);
+        // Save changes
+        const result = await productoImageRepository.save(productoImage);
+        console.log('ProductoImage updated:', result);
+        return result;
+    }
+    catch (error) {
+        console.error(`Error updating productoImage with ID ${imageId}:`, error);
+        throw error;
+    }
+});
+ipcMain.handle('deleteProductImage', async (_event, imageId) => {
+    try {
+        const productoImageRepository = dbService.getDataSource().getRepository(producto_image_entity_1.ProductoImage);
+        // Find the image
+        const productoImage = await productoImageRepository.findOne({
+            where: { id: imageId }
+        });
+        if (!productoImage) {
+            throw new Error(`ProductoImage with ID ${imageId} not found`);
+        }
+        // Delete the file from storage
+        if (productoImage.imageUrl) {
+            await imageHandler.deleteProductoImage(productoImage.imageUrl);
+        }
+        // Delete from database
+        await productoImageRepository.remove(productoImage);
+        console.log(`ProductoImage with ID ${imageId} deleted`);
+        return true;
+    }
+    catch (error) {
+        console.error(`Error deleting productoImage with ID ${imageId}:`, error);
+        throw error;
+    }
+});
+// Product Image Handlers
 ipcMain.handle('saveProductoImage', async (_event, { base64Data, fileName }) => {
     try {
         // Use the same image handler but with a different directory

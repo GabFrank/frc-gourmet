@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ViewContainerRef, ComponentRef, ComponentFactoryResolver, AfterViewInit, ViewEncapsulation } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ViewContainerRef, ComponentRef, ComponentFactoryResolver, AfterViewInit, ViewEncapsulation, NgZone, ChangeDetectorRef } from '@angular/core';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
@@ -31,7 +31,9 @@ export class TabContainerComponent implements OnInit, OnDestroy, AfterViewInit {
 
   constructor(
     private tabsService: TabsService,
-    private componentFactoryResolver: ComponentFactoryResolver
+    private componentFactoryResolver: ComponentFactoryResolver,
+    private ngZone: NgZone,
+    private cd: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
@@ -59,13 +61,24 @@ export class TabContainerComponent implements OnInit, OnDestroy, AfterViewInit {
         // Find active tab index
         const activeTabIndex = this.tabs.findIndex(tab => tab.active);
         if (activeTabIndex !== -1) {
-          this.activeTabIndex = activeTabIndex;
+          // Run outside Angular's change detection to avoid ExpressionChangedAfterItHasBeenCheckedError
+          this.ngZone.runOutsideAngular(() => {
+            setTimeout(() => {
+              this.activeTabIndex = activeTabIndex;
+              this.cd.detectChanges();
+            });
+          });
         }
         
         // If coming from empty state, we need to refresh component
         if (this.wasEmptyBefore && tabs.length > 0) {
           this.wasEmptyBefore = false;
-          setTimeout(() => this.forceReloadActiveComponent(), 0);
+          this.ngZone.runOutsideAngular(() => {
+            setTimeout(() => {
+              this.forceReloadActiveComponent();
+              this.cd.detectChanges();
+            });
+          });
         }
       })
     );
@@ -76,9 +89,14 @@ export class TabContainerComponent implements OnInit, OnDestroy, AfterViewInit {
         if (activeTabId) {
           const tabIndex = this.tabs.findIndex(tab => tab.id === activeTabId);
           if (tabIndex !== -1) {
-            this.activeTabIndex = tabIndex;
-            // Force reload when active tab changes
-            setTimeout(() => this.loadComponentForActiveTab(), 0);
+            // Run outside Angular's change detection to avoid ExpressionChangedAfterItHasBeenCheckedError
+            this.ngZone.runOutsideAngular(() => {
+              setTimeout(() => {
+                this.activeTabIndex = tabIndex;
+                this.loadComponentForActiveTab();
+                this.cd.detectChanges();
+              });
+            });
           }
         } else {
           // No active tabs - clear container
@@ -111,9 +129,13 @@ export class TabContainerComponent implements OnInit, OnDestroy, AfterViewInit {
   onTabChange(index: number): void {
     const selectedTab = this.tabs[index];
     if (selectedTab) {
-      this.tabsService.setActiveTab(selectedTab.id);
-      // We need to force reload the component when tab changes
-      setTimeout(() => this.loadComponentForActiveTab(), 0);
+      // Run outside Angular's change detection to avoid ExpressionChangedAfterItHasBeenCheckedError
+      this.ngZone.runOutsideAngular(() => {
+        setTimeout(() => {
+          this.tabsService.setActiveTab(selectedTab.id);
+          this.cd.detectChanges();
+        });
+      });
     }
   }
 

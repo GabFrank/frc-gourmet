@@ -17,6 +17,7 @@ const base_entity_1 = require("../base.entity");
  */
 let Role = class Role extends base_entity_1.BaseModel {
 };
+exports.Role = Role;
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)
@@ -25,8 +26,7 @@ __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
 ], Role.prototype, "activo", void 0);
-Role = __decorate([
+exports.Role = Role = __decorate([
     (0, typeorm_1.Entity)('roles')
 ], Role);
-exports.Role = Role;
 //# sourceMappingURL=role.entity.js.map

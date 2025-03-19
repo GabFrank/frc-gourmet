@@ -1,5 +1,6 @@
 // Preload script that will be executed before rendering the application
 const { contextBridge, ipcRenderer } = require('electron');
+import { ProductoImage } from './src/app/database/entities/productos/producto-image.entity';
 
 // Define types for our API
 interface Category {
@@ -436,5 +437,22 @@ contextBridge.exposeInMainWorld('api', {
   },
   deleteProductoImage: async (imageUrl: string): Promise<{ success: boolean }> => {
     return await ipcRenderer.invoke('deleteProductoImage', imageUrl);
+  },
+
+  // Product Image methods
+  getProductImages: async (productoId: number): Promise<ProductoImage[]> => {
+    return await ipcRenderer.invoke('getProductImages', productoId);
+  },
+  
+  createProductImage: async (imageData: Partial<ProductoImage>): Promise<ProductoImage> => {
+    return await ipcRenderer.invoke('createProductImage', imageData);
+  },
+  
+  updateProductImage: async (imageId: number, imageData: Partial<ProductoImage>): Promise<ProductoImage> => {
+    return await ipcRenderer.invoke('updateProductImage', imageId, imageData);
+  },
+  
+  deleteProductImage: async (imageId: number): Promise<boolean> => {
+    return await ipcRenderer.invoke('deleteProductImage', imageId);
   },
 }); 

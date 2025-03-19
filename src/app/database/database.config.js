@@ -38,6 +38,7 @@ const login_session_entity_1 = require("./entities/auth/login-session.entity");
 const categoria_entity_1 = require("./entities/productos/categoria.entity");
 const subcategoria_entity_1 = require("./entities/productos/subcategoria.entity");
 const producto_entity_1 = require("./entities/productos/producto.entity");
+const producto_image_entity_1 = require("./entities/productos/producto-image.entity");
 /**
  * Get the configuration for TypeORM
  * @param userDataPath Path to store the database file
@@ -59,7 +60,8 @@ function getDataSourceOptions(userDataPath) {
             login_session_entity_1.LoginSession,
             categoria_entity_1.Categoria,
             subcategoria_entity_1.Subcategoria,
-            producto_entity_1.Producto
+            producto_entity_1.Producto,
+            producto_image_entity_1.ProductoImage
         ],
         synchronize: true,
         logging: process.env['NODE_ENV'] === 'development',
