@@ -15,6 +15,10 @@ import { Categoria } from './entities/productos/categoria.entity';
 import { Subcategoria } from './entities/productos/subcategoria.entity';
 import { Producto } from './entities/productos/producto.entity';
 import { ProductoImage } from './entities/productos/producto-image.entity';
+import { Presentacion } from './entities/productos/presentacion.entity';
+import { Codigo } from './entities/productos/codigo.entity';
+import { PrecioVenta } from './entities/productos/precio-venta.entity';
+import { Moneda } from './entities/financiero/moneda.entity';
 
 /**
  * Get the configuration for TypeORM
@@ -27,7 +31,6 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
     database: path.join(userDataPath, 'frc-gourmet.db'),
     entities: [
       // Entity classes
-
       Printer,
       Persona,
       Usuario,
@@ -39,7 +42,12 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       Categoria,
       Subcategoria,
       Producto,
-      ProductoImage
+      ProductoImage,
+      // New entities
+      Presentacion,
+      Codigo,
+      PrecioVenta,
+      Moneda
     ],
     synchronize: true, // Automatically creates tables in development
     logging: process.env['NODE_ENV'] === 'development',

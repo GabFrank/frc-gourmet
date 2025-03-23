@@ -2,6 +2,7 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { Subcategoria } from './subcategoria.entity';
 import { BaseModel } from '../base.entity';
 import { ProductoImage } from './producto-image.entity';
+import { Presentacion } from './presentacion.entity';
 
 /**
  * Entity representing a product
@@ -62,4 +63,7 @@ export class Producto extends BaseModel {
 
   @OneToMany(() => ProductoImage, productoImage => productoImage.producto)
   images!: ProductoImage[];
+  
+  @OneToMany(() => Presentacion, presentacion => presentacion.producto)
+  presentaciones!: Presentacion[];
 } 

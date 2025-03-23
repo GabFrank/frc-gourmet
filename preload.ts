@@ -190,6 +190,54 @@ interface Producto {
   updatedAt?: Date;
 }
 
+// Presentacion interface
+interface Presentacion {
+  id?: number;
+  descripcion: string;
+  tipoMedida: 'UNIDAD' | 'PAQUETE' | 'GRAMO' | 'LITRO';
+  cantidad: number;
+  principal: boolean;
+  activo: boolean;
+  productoId: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// Codigo interface
+interface Codigo {
+  id?: number;
+  codigo: string;
+  tipoCodigo: 'INTERNO' | 'BARRA' | 'QR';
+  principal: boolean;
+  activo: boolean;
+  presentacionId: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// Moneda interface
+interface Moneda {
+  id?: number;
+  denominacion: string;
+  simbolo: string;
+  principal: boolean;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// PrecioVenta interface
+interface PrecioVenta {
+  id?: number;
+  valor: number;
+  principal: boolean;
+  activo: boolean;
+  presentacionId: number;
+  monedaId: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('api', {
@@ -454,5 +502,101 @@ contextBridge.exposeInMainWorld('api', {
   
   deleteProductImage: async (imageId: number): Promise<boolean> => {
     return await ipcRenderer.invoke('deleteProductImage', imageId);
+  },
+
+  // Presentacion methods
+  getPresentaciones: async (): Promise<Presentacion[]> => {
+    return await ipcRenderer.invoke('getPresentaciones');
+  },
+  
+  getPresentacion: async (presentacionId: number): Promise<Presentacion> => {
+    return await ipcRenderer.invoke('getPresentacion', presentacionId);
+  },
+  
+  getPresentacionesByProducto: async (productoId: number): Promise<Presentacion[]> => {
+    return await ipcRenderer.invoke('getPresentacionesByProducto', productoId);
+  },
+  
+  createPresentacion: async (presentacionData: Partial<Presentacion>): Promise<Presentacion> => {
+    return await ipcRenderer.invoke('createPresentacion', presentacionData);
+  },
+  
+  updatePresentacion: async (presentacionId: number, presentacionData: Partial<Presentacion>): Promise<Presentacion> => {
+    return await ipcRenderer.invoke('updatePresentacion', presentacionId, presentacionData);
+  },
+  
+  deletePresentacion: async (presentacionId: number): Promise<boolean> => {
+    return await ipcRenderer.invoke('deletePresentacion', presentacionId);
+  },
+
+  // Codigo methods
+  getCodigos: async (): Promise<Codigo[]> => {
+    return await ipcRenderer.invoke('getCodigos');
+  },
+  
+  getCodigo: async (codigoId: number): Promise<Codigo> => {
+    return await ipcRenderer.invoke('getCodigo', codigoId);
+  },
+  
+  getCodigosByPresentacion: async (presentacionId: number): Promise<Codigo[]> => {
+    return await ipcRenderer.invoke('getCodigosByPresentacion', presentacionId);
+  },
+  
+  createCodigo: async (codigoData: Partial<Codigo>): Promise<Codigo> => {
+    return await ipcRenderer.invoke('createCodigo', codigoData);
+  },
+  
+  updateCodigo: async (codigoId: number, codigoData: Partial<Codigo>): Promise<Codigo> => {
+    return await ipcRenderer.invoke('updateCodigo', codigoId, codigoData);
+  },
+  
+  deleteCodigo: async (codigoId: number): Promise<boolean> => {
+    return await ipcRenderer.invoke('deleteCodigo', codigoId);
+  },
+
+  // Moneda methods
+  getMonedas: async (): Promise<Moneda[]> => {
+    return await ipcRenderer.invoke('getMonedas');
+  },
+  
+  getMoneda: async (monedaId: number): Promise<Moneda> => {
+    return await ipcRenderer.invoke('getMoneda', monedaId);
+  },
+  
+  createMoneda: async (monedaData: Partial<Moneda>): Promise<Moneda> => {
+    return await ipcRenderer.invoke('createMoneda', monedaData);
+  },
+  
+  updateMoneda: async (monedaId: number, monedaData: Partial<Moneda>): Promise<Moneda> => {
+    return await ipcRenderer.invoke('updateMoneda', monedaId, monedaData);
+  },
+  
+  deleteMoneda: async (monedaId: number): Promise<boolean> => {
+    return await ipcRenderer.invoke('deleteMoneda', monedaId);
+  },
+
+  // PrecioVenta methods
+  getPreciosVenta: async (): Promise<PrecioVenta[]> => {
+    return await ipcRenderer.invoke('getPreciosVenta');
+  },
+  
+  getPrecioVenta: async (precioVentaId: number): Promise<PrecioVenta> => {
+    return await ipcRenderer.invoke('getPrecioVenta', precioVentaId);
+  },
+  
+  getPreciosVentaByPresentacion: async (presentacionId: number): Promise<PrecioVenta[]> => {
+    return await ipcRenderer.invoke('getPreciosVentaByPresentacion', presentacionId);
+  },
+  
+  createPrecioVenta: async (precioVentaData: Partial<PrecioVenta>): Promise<PrecioVenta> => {
+    return await ipcRenderer.invoke('createPrecioVenta', precioVentaData);
+  },
+  
+  updatePrecioVenta: async (precioVentaId: number, precioVentaData: Partial<PrecioVenta>): Promise<PrecioVenta> => {
+    return await ipcRenderer.invoke('updatePrecioVenta', precioVentaId, precioVentaData);
+  },
+  
+  deletePrecioVenta: async (precioVentaId: number): Promise<boolean> => {
+    return await ipcRenderer.invoke('deletePrecioVenta', precioVentaId);
   },
 }); 

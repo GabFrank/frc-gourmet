@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { AfterViewInit, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatTableModule } from '@angular/material/table';
@@ -53,7 +53,7 @@ import { TabsService } from '../../../services/tabs.service';
   templateUrl: './list-productos.component.html',
   styleUrls: ['./list-productos.component.scss']
 })
-export class ListProductosComponent implements OnInit {
+export class ListProductosComponent implements OnInit, AfterViewInit {
   productos: Producto[] = [];
   categorias: Categoria[] = [];
   subcategorias: Subcategoria[] = [];
@@ -97,8 +97,14 @@ export class ListProductosComponent implements OnInit {
         this.filterForm.get('subcategoriaId')?.setValue('');
       }
     });
-//this is for test only, keep here
-    this.addProducto();
+
+  }
+
+  ngAfterViewInit(): void {
+    //this is for test only, keep here, settimeout
+    // setTimeout(() => {
+    //   this.addProducto();
+    // }, 1000);
   }
 
   async loadCategorias(): Promise<void> {

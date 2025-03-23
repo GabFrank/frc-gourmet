@@ -1,4 +1,4 @@
-import { Component, Inject, OnInit, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
+import { Component, Inject, OnInit, ViewChild, ElementRef, ChangeDetectorRef, Input, OnChanges, SimpleChanges, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -24,8 +24,13 @@ import { Categoria } from '../../../database/entities/productos/categoria.entity
 import { firstValueFrom } from 'rxjs';
 import { TabsService } from '../../../services/tabs.service';
 import { ImageViewerComponent } from '../../../components/image-viewer/image-viewer.component';
+import { CreateEditPresentacionComponent } from './create-edit-presentacion.component';
+import { CreateEditCodigoComponent } from './create-edit-codigo.component';
+import { CreateEditPrecioVentaComponent } from './create-edit-precio-venta.component';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Presentacion } from '../../../database/entities/productos/presentacion.entity';
 
-// Interface for product image handling
+// renamed to avoid conflict with the imported type
 interface ProductImageModel {
   id?: number;
   imageUrl: string;
@@ -56,12 +61,138 @@ interface ProductImageModel {
     MatSnackBarModule,
     MatTooltipModule,
     MatDialogModule,
-    ReactiveFormsModule
+    ReactiveFormsModule,
+    CreateEditPresentacionComponent,
+    CreateEditCodigoComponent,
+    CreateEditPrecioVentaComponent
   ],
   templateUrl: './create-edit-producto.component.html',
-  styleUrls: ['./create-edit-producto.component.scss']
+  styleUrls: ['./create-edit-producto.component.scss'],
+  styles: [`
+    .empty-tab-message {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    .empty-tab-message mat-icon {
+      font-size: 48px;
+      height: 48px;
+      width: 48px;
+      margin-bottom: 1rem;
+      color: #757575;
+    }
+
+    .empty-tab-message p {
+      margin-bottom: 1rem;
+      color: #616161;
+    }
+
+    .prices-info-container {
+      padding: 16px;
+    }
+
+    .info-message {
+      display: flex;
+      background-color: #e3f2fd;
+      padding: 16px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+    }
+
+    .info-message mat-icon {
+      color: #2196f3;
+      margin-right: 16px;
+      font-size: 24px;
+      height: 24px;
+      width: 24px;
+    }
+
+    .message-content {
+      flex: 1;
+    }
+
+    .message-content p {
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+
+    .message-content ol {
+      margin-top: 0;
+      padding-left: 20px;
+    }
+
+    .divider {
+      margin: 24px 0;
+    }
+
+    .presentations-summary h3 {
+      margin-top: 0;
+      margin-bottom: 16px;
+      font-size: 18px;
+      font-weight: 500;
+    }
+
+    .presentations-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+    }
+
+    .presentation-card {
+      padding: 16px;
+      border-radius: 4px;
+      transition: box-shadow 0.3s ease;
+    }
+
+    .presentation-card:hover {
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .presentation-name {
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+
+    .presentation-details {
+      display: flex;
+      align-items: center;
+      margin-bottom: 16px;
+      color: rgba(0, 0, 0, 0.6);
+    }
+
+    .principal-badge {
+      background-color: #e8f5e9;
+      color: #2e7d32;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      margin-left: 8px;
+    }
+
+    /* Dark theme adjustments */
+    :host-context(.dark-theme) {
+      .info-message {
+        background-color: #1a2737;
+      }
+      
+      .info-message mat-icon {
+        color: #90caf9;
+      }
+
+      .principal-badge {
+        background-color: #1b5e20;
+        color: #e8f5e9;
+      }
+    }
+  `]
 })
-export class CreateEditProductoComponent implements OnInit {
+export class CreateEditProductoComponent implements OnInit, OnChanges, AfterViewInit {
+  @Input() data: any;
   @ViewChild('fileInput') fileInput!: ElementRef<HTMLInputElement>;
   
   productoForm: FormGroup;
@@ -81,6 +212,9 @@ export class CreateEditProductoComponent implements OnInit {
   defaultNoImagePath = '/assets/images/no-image.png';
   submitted = false;
   loading = false;
+  
+  // Flag to track if data has been processed to prevent multiple processing
+  private dataProcessed = false;
 
   constructor(
     private fb: FormBuilder,
@@ -90,14 +224,13 @@ export class CreateEditProductoComponent implements OnInit {
     private cdr: ChangeDetectorRef,
     private dialog: MatDialog
   ) {
-    // Initialize the form with appropriate disabled states
+    // Initialize the form with default values
     this.productoForm = this.fb.group({
-      nombre: ['', [Validators.required]],
+      nombre: ['', Validators.required],
       nombreAlternativo: [''],
+      categoriaId: [null, Validators.required],
+      subcategoriaId: [null, Validators.required],
       iva: [10, [Validators.required, Validators.min(0), Validators.max(100)]],
-      stock: [{value: 0, disabled: false}, [Validators.min(0)]],
-      subcategoriaId: [{value: null, disabled: true}, [Validators.required]],
-      categoriaId: [null, [Validators.required]],
       isPesable: [false],
       isCombo: [false],
       isCompuesto: [false],
@@ -105,73 +238,73 @@ export class CreateEditProductoComponent implements OnInit {
       isPromocion: [false],
       isVendible: [true],
       hasVencimiento: [false],
-      hasStock: [true],
-      alertarVencimientoDias: [{value: 30, disabled: true}],
+      hasStock: [false],
+      alertarVencimientoDias: [null],
       observacion: [''],
       activo: [true]
     });
   }
 
   ngOnInit(): void {
-    // Get product data from tab if provided
-    const tabs = this.tabsService.getCurrentTabs();
-    const activeTabId = this.tabsService.getActiveTabId();
-    const activeTab = tabs.find(tab => tab.id === activeTabId);
-
-    if (activeTab?.data?.producto) {
-      this.producto = activeTab.data.producto;
-      this.isEditing = true;
-    }
-
+    // Load categories regardless of edit or create
     this.loadCategorias();
 
-    if (this.isEditing && this.producto) {
-      this.loadProducto();
-      this.loadProductImages();
+    // Setup form control listeners
+    this.setupFormControlListeners();
+    
+    // Apply initial data if available
+    if (this.data && !this.dataProcessed) {
+      this.setData(this.data);
+      this.dataProcessed = true;
     }
+  }
 
-    // When categoria changes, load subcategorias and enable subcategoria selector
-    this.productoForm.get('categoriaId')?.valueChanges.subscribe((categoriaId) => {
-      if (categoriaId) {
-        this.loadSubcategoriasByCategoria(categoriaId);
-        this.productoForm.get('subcategoriaId')?.enable();
+  ngAfterViewInit(): void {
+    // Only process data in AfterViewInit if it wasn't processed in ngOnInit
+    if (this.data && !this.dataProcessed) {
+      this.setData(this.data);
+      this.dataProcessed = true;
+    }
+  }
 
-        // Reset subcategoriaId if it belongs to a different categoria
-        const currentSubcategoriaId = this.productoForm.get('subcategoriaId')?.value;
-        if (currentSubcategoriaId) {
-          const belongsToCategoria = this.subcategorias.some(
-            s => s.id === currentSubcategoriaId && s.categoriaId === categoriaId
-          );
+  ngOnChanges(changes: SimpleChanges): void {
+    // Only process if data is new (not just the same reference)
+    if (changes['data'] && 
+        changes['data'].currentValue && 
+        changes['data'].currentValue !== changes['data'].previousValue && 
+        !this.dataProcessed) {
+      this.setData(changes['data'].currentValue);
+      this.dataProcessed = true;
+    }
+  }
 
-          if (!belongsToCategoria) {
-            this.productoForm.get('subcategoriaId')?.setValue(null);
-          }
-        }
-      } else {
-        this.subcategorias = [];
-        this.productoForm.get('subcategoriaId')?.setValue(null);
-        this.productoForm.get('subcategoriaId')?.disable();
-      }
-    });
-
-    // Toggle-dependent validators
-    this.productoForm.get('hasVencimiento')?.valueChanges.subscribe(hasVencimiento => {
-      const alertarControl = this.productoForm.get('alertarVencimientoDias');
-      if (hasVencimiento) {
-        alertarControl?.enable();
-      } else {
-        alertarControl?.disable();
-      }
-    });
-
-    this.productoForm.get('hasStock')?.valueChanges.subscribe(hasStock => {
-      const stockControl = this.productoForm.get('stock');
-      if (hasStock) {
-        stockControl?.enable();
-      } else {
-        stockControl?.disable();
-      }
-    });
+  // Used to set data from tab service
+  setData(data: any): void {
+    // If no data provided, return (new product mode)
+    if (!data) {
+      return;
+    }
+    
+    // Check if we have product data for editing
+    if (data.productoId) {
+      this.isEditing = true;
+      this.loadProducto(data.productoId);
+    } else if (data.producto) {
+      this.isEditing = true;
+      this.producto = data.producto;
+      this.loadProducto(data.producto.id);
+    }
+    
+    // Pre-select category if provided
+    if (data.categoriaId) {
+      this.productoForm.get('categoriaId')?.setValue(data.categoriaId);
+      this.loadSubcategoriasByCategoria(data.categoriaId);
+    }
+    
+    // Pre-select subcategory if provided
+    if (data.subcategoriaId) {
+      this.productoForm.get('subcategoriaId')?.setValue(data.subcategoriaId);
+    }
   }
 
   async loadCategorias(): Promise<void> {
@@ -197,113 +330,140 @@ export class CreateEditProductoComponent implements OnInit {
     }
   }
 
-  loadProducto(): void {
-    if (!this.producto) return;
-
+  loadProducto(productoId?: number): void {
     this.isLoading = true;
-    try {
-      // Get categoria ID from the subcategoria
-      let categoriaId = null;
-      if (this.producto.subcategoria?.categoriaId) {
-        categoriaId = this.producto.subcategoria.categoriaId;
-        // Load subcategorias for this categoria
-        this.loadSubcategoriasByCategoria(categoriaId);
-        // Make sure subcategoriaId is enabled if we have a categoriaId
-        if (categoriaId) {
-          this.productoForm.get('subcategoriaId')?.enable();
-        }
-      }
-
-      // Create form patch object
-      const patchObject: any = {
-        nombre: this.producto.nombre,
-        nombreAlternativo: this.producto.nombreAlternativo || '',
-        iva: this.producto.iva || 10,
-        subcategoriaId: this.producto.subcategoriaId,
-        categoriaId: categoriaId,
-        isPesable: this.producto.isPesable || false,
-        isCombo: this.producto.isCombo || false,
-        isCompuesto: this.producto.isCompuesto || false,
-        isIngrediente: this.producto.isIngrediente || false,
-        isPromocion: this.producto.isPromocion || false,
-        isVendible: this.producto.isVendible !== false, // Default to true
-        hasVencimiento: this.producto.hasVencimiento || false,
-        hasStock: this.producto.hasStock || false,
-        alertarVencimientoDias: this.producto.alertarVencimientoDias || 30,
-        observacion: this.producto.observacion || '',
-        activo: this.producto.activo !== false // Default to true
-      };
-
-      // Patch form with existing producto data
-      this.productoForm.patchValue(patchObject);
-
-      // Explicitly handle the form control states based on conditional values
-      // Note: This needs to run after the patchValue to ensure the values are set correctly
-      if (this.producto.hasVencimiento) {
-        this.productoForm.get('alertarVencimientoDias')?.enable();
-      } else {
-        this.productoForm.get('alertarVencimientoDias')?.disable();
-      }
-
-      if (this.producto.hasStock) {
-        this.productoForm.get('stock')?.enable();
-      } else {
-        this.productoForm.get('stock')?.disable();
-      }
-    } catch (error) {
-      console.error('Error loading producto data:', error);
-    } finally {
+    
+    // If we have a specific ID, use that, otherwise use the producto's ID
+    const idToLoad = productoId || (this.producto ? this.producto.id : undefined);
+    
+    if (!idToLoad) {
       this.isLoading = false;
+      console.error('No producto ID to load');
+      return;
+    }
+
+    this.repositoryService.getProducto(idToLoad).subscribe({
+      next: (producto) => {
+        if (producto) {
+          this.producto = producto;
+          this.isEditing = true;
+          
+          // Populate the form
+          this.productoForm.patchValue({
+            nombre: producto.nombre,
+            nombreAlternativo: producto.nombreAlternativo || '',
+            categoriaId: producto.subcategoria.categoria.id,
+            subcategoriaId: producto.subcategoriaId,
+            iva: producto.iva,
+            isPesable: producto.isPesable,
+            isCombo: producto.isCombo,
+            isCompuesto: producto.isCompuesto,
+            isIngrediente: producto.isIngrediente,
+            isPromocion: producto.isPromocion,
+            isVendible: producto.isVendible,
+            hasVencimiento: producto.hasVencimiento,
+            hasStock: producto.hasStock,
+            alertarVencimientoDias: producto.alertarVencimientoDias,
+            observacion: producto.observacion || '',
+            activo: producto.activo
+          });
+          
+          // Load subcategories for the selected category
+          this.loadSubcategoriasByCategoria(producto.subcategoria.categoria.id);
+          
+          // Load product images
+          this.loadProductImages();
+          
+          // Load presentations
+          this.loadProductoPresentaciones(producto.id);
+        } else {
+          this.snackBar.open('No se encontró el producto', 'Cerrar', { duration: 3000 });
+        }
+        this.isLoading = false;
+      },
+      error: (error) => {
+        console.error('Error loading producto:', error);
+        this.snackBar.open('Error al cargar el producto', 'Cerrar', { duration: 3000 });
+        this.isLoading = false;
+      }
+    });
+  }
+
+  // Set up listeners for form control changes
+  private setupFormControlListeners(): void {
+    // When categoria changes, load subcategorias
+    this.productoForm.get('categoriaId')?.valueChanges.subscribe((categoriaId) => {
+      if (categoriaId) {
+        this.loadSubcategoriasByCategoria(categoriaId);
+      } else {
+        this.subcategorias = [];
+      }
+    });
+
+    // Toggle-dependent validators
+    this.productoForm.get('hasVencimiento')?.valueChanges.subscribe(hasVencimiento => {
+      const alertarControl = this.productoForm.get('alertarVencimientoDias');
+      if (hasVencimiento) {
+        alertarControl?.setValidators([Validators.required, Validators.min(1)]);
+        if (!alertarControl?.value) {
+          alertarControl?.setValue(30); // Default value
+        }
+      } else {
+        alertarControl?.clearValidators();
+        alertarControl?.setValue(null);
+      }
+      alertarControl?.updateValueAndValidity();
+    });
+  }
+
+  async loadProductImages(): Promise<void> {
+    if (!this.producto || !this.producto.id) {
+      return;
+    }
+
+    try {
+      const images = await firstValueFrom(this.repositoryService.getProductImages(this.producto.id));
+      
+      // Map the images to the ProductImageModel format used by the component
+      this.productImages = images.map(image => ({
+        id: image.id,
+        imageUrl: this.getImagePath(image.imageUrl),
+        isMain: image.isMain,
+        orden: image.orden
+      }));
+      
+      // Sort by order and ensure main image is first
+      this.productImages.sort((a, b) => {
+        if (a.isMain) return -1;
+        if (b.isMain) return 1;
+        return a.orden - b.orden;
+      });
+      
+      this.cdr.detectChanges(); // Ensure UI updates
+    } catch (error) {
+      console.error('Error loading product images:', error);
+      this.snackBar.open('Error al cargar las imágenes del producto', 'Cerrar', { duration: 3000 });
     }
   }
 
-  // New method to load product images
-  async loadProductImages(): Promise<void> {
-    if (!this.producto?.id) return;
-
-    this.isLoading = true;
-    try {
-      // Get images from repository
-      const images = await firstValueFrom(this.repositoryService.getProductImages(this.producto.id));
-      
-      // If legacy single image exists but no images in the new system, add it
-      if (images.length === 0 && this.producto.imageUrl) {
-        this.productImages = [{
-          imageUrl: this.producto.imageUrl,
-          isMain: true,
-          orden: 0
-        }];
-      } else {
-        // Sort by order
-        this.productImages = images.sort((a, b) => a.orden - b.orden)
-          .map(img => ({
-            id: img.id,
-            imageUrl: img.imageUrl,
-            isMain: img.isMain,
-            orden: img.orden
-          }));
-      }
-
-      // Set current image to main image if exists
-      const mainImageIndex = this.productImages.findIndex(img => img.isMain);
-      if (mainImageIndex >= 0) {
-        this.currentImageIndex = mainImageIndex;
-      }
-    } catch (error) {
-      console.error('Error loading product images:', error);
-      this.snackBar.open('Error al cargar imágenes del producto', 'Cerrar', {
-        duration: 3000
-      });
-    } finally {
-      this.isLoading = false;
+  // Helper method to convert image URLs to proper format
+  private getImagePath(imageUrl: string): string {
+    if (!imageUrl) return this.defaultNoImagePath;
+    
+    // For app:// protocol URLs, just use the URL directly - they will be handled by our protocol handler
+    if (imageUrl.startsWith('app://')) {
+      // Return as is - Electron will handle it through the protocol handler
+      return imageUrl;
     }
+    
+    return imageUrl;
   }
 
   // Methods for image handling
   onImageSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     if (!input.files || input.files.length === 0) return;
-    
+
     const file = input.files[0];
 
     // Validate file size
@@ -370,66 +530,94 @@ export class CreateEditProductoComponent implements OnInit {
     }
   }
 
-  removeCurrentImage(index?: number): void {
-    // If index is provided, use it, otherwise use currentImageIndex
-    const imageIndex = typeof index === 'number' ? index : this.currentImageIndex;
+  /**
+   * Marks the current image for deletion.
+   * @param index Index of the image to mark for deletion
+   */
+  removeCurrentImage(index: number): void {
+    if (index < 0 || index >= this.productImages.length) return;
+
+    // Mark the image for deletion instead of removing it from the array
+    this.productImages[index].toDelete = true;
     
-    if (this.productImages.length === 0 || imageIndex < 0 || imageIndex >= this.productImages.length) return;
-    
-    const image = this.productImages[imageIndex];
-    
-    // If this is the main image, set the next one as main
-    if (image.isMain && this.productImages.length > 1) {
-      const nextIndex = (imageIndex + 1) % this.productImages.length;
-      this.productImages[nextIndex].isMain = true;
+    // If the deleted image was the main image, set a new main image
+    if (this.productImages[index].isMain) {
+      // Find the first non-deleted image to be the new main
+      const newMainImage = this.productImages.find(img => !img.toDelete);
+      if (newMainImage) {
+        this.setMainImageInternal(newMainImage);
+      }
     }
-    
-    // If it has an ID, mark for deletion instead of removing immediately
-    if (image.id) {
-      image.toDelete = true;
-    } else {
-      // Remove from array if it's a new image
-      this.productImages.splice(imageIndex, 1);
-    }
-    
-    // Adjust current index
-    if (this.productImages.length > 0) {
-      this.currentImageIndex = Math.min(imageIndex, this.productImages.length - 1);
-    } else {
-      this.currentImageIndex = -1;
-    }
-    
-    // Force change detection to update the UI
-    this.cdr.detectChanges();
+
+    // Notify UI of changes
+    this.cdr.markForCheck();
   }
 
+  /**
+   * Checks if there are any images marked for deletion.
+   * @returns true if any images are marked for deletion
+   */
+  hasPendingImageDeletions(): boolean {
+    return this.productImages.some(image => image.toDelete);
+  }
+
+  /**
+   * Restores an image that was marked for deletion.
+   * @param image The image to restore
+   */
+  restoreImage(image: ProductImageModel): void {
+    const foundImage = this.productImages.find(img => img === image);
+    if (foundImage) {
+      foundImage.toDelete = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /**
+   * Sets the specified image as the main image.
+   * @param index The index of the image to set as main
+   */
   setMainImage(index: number): void {
     if (index < 0 || index >= this.productImages.length) return;
+    if (this.productImages[index].toDelete) return; // Don't set deleted images as main
     
-    // Remove main flag from all images
-    this.productImages.forEach(img => img.isMain = false);
+    this.setMainImageInternal(this.productImages[index]);
+  }
+
+  /**
+   * Sets the specified image as the main image.
+   * @param image The image to set as main
+   */
+  private setMainImageInternal(image: ProductImageModel): void {
+    // Reset all images
+    this.productImages.forEach(img => {
+      img.isMain = false;
+    });
     
     // Set the selected image as main
-    this.productImages[index].isMain = true;
-    this.currentImageIndex = index;
-    
-    // Force change detection to update the UI
-    this.cdr.detectChanges();
+    image.isMain = true;
+    this.cdr.markForCheck();
   }
 
-  navigateImages(direction: 'prev' | 'next'): void {
-    if (this.productImages.length <= 1) return;
-    
-    if (direction === 'next') {
-      this.currentImageIndex = (this.currentImageIndex + 1) % this.productImages.length;
-    } else {
-      this.currentImageIndex = (this.currentImageIndex - 1 + this.productImages.length) % this.productImages.length;
-    }
-  }
-
+  /**
+   * Gets the current image to display.
+   * @returns The current image or null if none available
+   */
   getCurrentImage(): ProductImageModel | null {
-    if (this.productImages.length === 0 || this.currentImageIndex < 0) return null;
-    return this.productImages[this.currentImageIndex];
+    if (!this.productImages.length || this.currentImageIndex < 0 || this.currentImageIndex >= this.productImages.length) {
+      return null;
+    }
+    
+    // Get image at current index
+    const currentImage = this.productImages[this.currentImageIndex];
+    
+    // If current image is marked for deletion, find first non-deleted image
+    if (currentImage.toDelete) {
+      const visibleImage = this.productImages.find(image => !image.toDelete);
+      return visibleImage || null;
+    }
+    
+    return currentImage;
   }
 
   private async uploadImages(): Promise<void> {
@@ -482,19 +670,22 @@ export class CreateEditProductoComponent implements OnInit {
               this.repositoryService.saveProductoImage(base64Data, fileName)
             );
             
+            // Get the properly formatted image path
+            const imageUrl = this.getImagePath(result.imageUrl);
+            
             // If this is editing mode and the product ID exists, save the image association
             if (this.isEditing && this.producto?.id) {
               await firstValueFrom(
                 this.repositoryService.createProductImage({
                   productoId: this.producto.id,
-                  imageUrl: result.imageUrl,
+                  imageUrl: result.imageUrl, // Save the original URL to the database
                   isMain,
                   orden: this.productImages.findIndex(img => img.file === file)
                 })
               );
             }
             
-            resolve(result.imageUrl);
+            resolve(imageUrl);
           } catch (error) {
             reject(error);
           }
@@ -510,97 +701,131 @@ export class CreateEditProductoComponent implements OnInit {
 
   async onSubmit(): Promise<void> {
     if (this.productoForm.invalid) {
+      // Mark all fields as touched to show validation errors
       this.markFormGroupTouched(this.productoForm);
+      this.snackBar.open('Por favor complete todos los campos requeridos', 'Cerrar', { duration: 3000 });
       return;
     }
 
     this.isLoading = true;
+    this.submitted = true;
+
     try {
       // Get form values
-      const formValues = this.productoForm.getRawValue();
-
-      // Find main image
-      const mainImage = this.productImages.find(img => img.isMain && !img.toDelete);
+      const formData = { ...this.productoForm.value };
       
-      // Prepare data for saving
-      const productoData: Partial<Producto> = {
-        ...formValues,
-        nombre: formValues.nombre?.toUpperCase() || '',
-        nombreAlternativo: formValues.nombreAlternativo?.toUpperCase() || null,
-        observacion: formValues.observacion?.toUpperCase() || null,
-        imageUrl: mainImage?.imageUrl // Keep legacy support for main image
-      };
+      // Convert string values to uppercase
+      if (formData.nombre) formData.nombre = formData.nombre.toUpperCase();
+      if (formData.nombreAlternativo) formData.nombreAlternativo = formData.nombreAlternativo.toUpperCase();
+      if (formData.observacion) formData.observacion = formData.observacion.toUpperCase();
+      
+      // Set main image URL if it exists
+      const mainImage = this.productImages.find(img => img.isMain);
+      if (mainImage) {
+        formData.imageUrl = mainImage.imageUrl;
+      }
 
       let savedProducto: Producto;
       
-      if (this.isEditing && this.producto) {
-        // Update existing producto
+      if (this.isEditing && this.producto?.id) {
+        // Update existing product
         savedProducto = await firstValueFrom(
-          this.repositoryService.updateProducto(this.producto.id!, productoData)
+          this.repositoryService.updateProducto(this.producto.id, formData)
         );
-        this.snackBar.open('Producto actualizado correctamente', 'Cerrar', { duration: 3000 });
+        
+        this.snackBar.open('Producto actualizado exitosamente', 'Cerrar', { duration: 3000 });
       } else {
-        // Create new producto
+        // Create new product
         savedProducto = await firstValueFrom(
-          this.repositoryService.createProducto(productoData)
+          this.repositoryService.createProducto(formData)
         );
-        this.snackBar.open('Producto creado correctamente', 'Cerrar', { duration: 3000 });
+        
+        this.snackBar.open('Producto creado exitosamente', 'Cerrar', { duration: 3000 });
       }
 
-      // Handle all images (upload new, update existing, delete marked)
-      if (this.productImages.length > 0) {
-        // For new producto, we need to associate the images with the new product ID
-        if (!this.isEditing) {
-          // Find images that were just added (isNew flag)
-          const newImages = this.productImages.filter(img => img.isNew && !img.toDelete);
-          
-          // Associate each image with the new product
-          for (let i = 0; i < newImages.length; i++) {
-            const image = newImages[i];
-            if (!image.file) continue;
-            
-            const imageUrl = await this.uploadImage(image.file, image.isMain);
-            
-            await firstValueFrom(
-              this.repositoryService.createProductImage({
-                productoId: savedProducto.id!,
-                imageUrl,
-                isMain: image.isMain,
-                orden: i
-              })
-            );
-          }
-        } else {
-          // For existing productos, handle image changes
-          await this.uploadImages();
-        }
+      // Update component state with the saved product
+      this.producto = savedProducto;
+      this.isEditing = true;
+      
+      // Update any pending image associations
+      await this.uploadImages();
+      
+      // Reload the product to get the latest data including images
+      if (savedProducto.id) {
+        this.loadProducto(savedProducto.id);
       }
-
-      // Close the tab
-      this.goBack();
     } catch (error) {
       console.error('Error saving producto:', error);
       this.snackBar.open('Error al guardar el producto', 'Cerrar', { duration: 3000 });
     } finally {
       this.isLoading = false;
+      this.submitted = false;
     }
   }
 
   /**
-   * Cancel form and go back
+   * Cancels the current operation, resets the form to empty state
+   * allowing the user to create a new product
    */
   cancel(): void {
-    this.goBack();
+    // Reset form to default empty values
+    this.productoForm.reset({
+      nombre: '',
+      nombreAlternativo: '',
+      categoriaId: null,
+      subcategoriaId: null,
+      iva: 10, // Default IVA
+      isPesable: false,
+      isCombo: false,
+      isCompuesto: false,
+      isIngrediente: false,
+      isPromocion: false,
+      isVendible: true, // Default to true
+      hasVencimiento: false,
+      hasStock: false,
+      alertarVencimientoDias: null,
+      observacion: ''
+    });
+
+    // Clear images
+    this.productImages = [];
+    this.isEditing = false;
+    this.producto = undefined;
+    
+    // Enable all form fields
+    Object.keys(this.productoForm.controls).forEach(key => {
+      this.productoForm.get(key)?.enable();
+    });
+
+    // Mark form as pristine and untouched
+    this.productoForm.markAsPristine();
+    this.productoForm.markAsUntouched();
+    
+    this.snackBar.open('Formulario restablecido para nuevo producto', 'Cerrar', { duration: 3000 });
   }
 
   /**
-   * Go back to previous page or close tab
+   * Restores the form to the original product data
+   * Only works when editing an existing product
+   */
+  restablecer(): void {
+    if (!this.isEditing || !this.producto) {
+      this.snackBar.open('No hay datos originales para restablecer', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    // Load original product data
+    this.loadProducto();
+    this.snackBar.open('Datos del producto restablecidos', 'Cerrar', { duration: 3000 });
+  }
+
+  /**
+   * Navigates back to the product list
    */
   goBack(): void {
-    // Close the tab
     const activeTabId = this.tabsService.getActiveTabId();
     if (activeTabId) {
-      this.tabsService.removeTab(activeTabId);
+      this.tabsService.removeTabById(activeTabId);
     }
   }
 
@@ -620,7 +845,8 @@ export class CreateEditProductoComponent implements OnInit {
    * View full size image in a dialog
    */
   viewFullImage(image: ProductImageModel): void {
-    // Log to console to verify the image URL
+    // Make sure we have a valid image URL
+    const imageUrl = image.imageUrl || this.defaultNoImagePath;
     
     const dialogConfig = new MatDialogConfig();
     dialogConfig.width = '90%';
@@ -630,13 +856,40 @@ export class CreateEditProductoComponent implements OnInit {
       ? ['image-viewer-dialog', 'dark-theme'] 
       : 'image-viewer-dialog';
     dialogConfig.data = {
-      imageUrl: image.imageUrl,
-      title: this.productoForm.get('nombre')?.value || 'Imagen del Producto'
+      imageUrl: imageUrl,
+      title: this.productoForm.get('nombre')?.value?.toUpperCase() || 'IMAGEN DEL PRODUCTO'
     };
     
     const dialogRef = this.dialog.open(ImageViewerComponent, dialogConfig);
     
     // Prevent clicks inside dialog from closing it accidentally
     dialogRef.disableClose = true;
+  }
+
+  /**
+   * Navigate to the presentation prices management
+   */
+  navigateToPresentacionPrices(presentacion: Presentacion): void {
+    this.dialog.open(CreateEditPrecioVentaComponent, {
+      width: '800px',
+      maxHeight: '90vh',
+      panelClass: 'no-padding-dialog',
+      data: { presentacion }
+    });
+  }
+
+  /**
+   * Load product presentations
+   */
+  async loadProductoPresentaciones(productoId: number): Promise<void> {
+    try {
+      const presentaciones = await firstValueFrom(this.repositoryService.getPresentacionesByProducto(productoId));
+      if (this.producto) {
+        this.producto.presentaciones = presentaciones;
+      }
+    } catch (error) {
+      console.error('Error loading presentaciones:', error);
+      this.snackBar.open('Error al cargar las presentaciones del producto', 'Cerrar', { duration: 3000 });
+    }
   }
 }

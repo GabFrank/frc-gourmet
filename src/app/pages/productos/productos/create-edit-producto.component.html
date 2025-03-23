@@ -14,7 +14,7 @@
               <div class="main-form-content">
                 <!-- Nombre -->
                 <div class="form-row">
-                  <mat-form-field appearance="outline" class="full-width">
+                  <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
                     <mat-label>Nombre</mat-label>
                     <input matInput formControlName="nombre" placeholder="Ingrese nombre del producto" required>
                     <mat-error *ngIf="productoForm.get('nombre')?.hasError('required')">
@@ -24,7 +24,7 @@
                 </div>
 
                 <div class="form-row">
-                  <mat-form-field appearance="outline" class="full-width">
+                  <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
                     <mat-label>Nombre Alternativo</mat-label>
                     <input matInput formControlName="nombreAlternativo" placeholder="Nombre alternativo o abreviado">
                   </mat-form-field>
@@ -32,7 +32,7 @@
 
                 <!-- Categorización -->
                 <div class="form-row">
-                  <mat-form-field appearance="outline" class="equal-width">
+                  <mat-form-field appearance="outline" class="equal-width" subscriptSizing="dynamic">
                     <mat-label>Categoría</mat-label>
                     <mat-select formControlName="categoriaId">
                       <mat-option *ngFor="let categoria of categorias" [value]="categoria.id">
@@ -44,7 +44,7 @@
                     </mat-error>
                   </mat-form-field>
 
-                  <mat-form-field appearance="outline" class="equal-width">
+                  <mat-form-field appearance="outline" class="equal-width" subscriptSizing="dynamic">
                     <mat-label>Subcategoría</mat-label>
                     <mat-select formControlName="subcategoriaId">
                       <mat-option *ngFor="let subcategoria of subcategorias" [value]="subcategoria.id">
@@ -56,7 +56,7 @@
                     </mat-error>
                   </mat-form-field>
 
-                  <mat-form-field appearance="outline" class="iva-width">
+                  <mat-form-field appearance="outline" class="iva-width" subscriptSizing="dynamic">
                     <mat-label>IVA (%)</mat-label>
                     <input matInput type="number" formControlName="iva" min="0" max="100">
                     <mat-error *ngIf="productoForm.get('iva')?.hasError('required')">
@@ -109,7 +109,7 @@
 
                 <!-- Conditional Fields -->
                 <div class="form-row" *ngIf="productoForm.get('hasVencimiento')?.value">
-                  <mat-form-field appearance="outline" class="full-width">
+                  <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
                     <mat-label>Alertar Vencimiento (días)</mat-label>
                     <input matInput type="number" formControlName="alertarVencimientoDias" min="1">
                   </mat-form-field>
@@ -117,10 +117,77 @@
 
                 <!-- Additional Info -->
                 <div class="form-row">
-                  <mat-form-field appearance="outline" class="full-width">
+                  <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
                     <mat-label>Observación</mat-label>
                     <textarea matInput formControlName="observacion" rows="2" placeholder="Observaciones"></textarea>
                   </mat-form-field>
+                </div>
+
+                <!-- Images section moved into the Información General tab -->
+                <div class="images-section">
+                  <h3 class="section-title">Imágenes del Producto</h3>
+                  <div class="images-gallery-container">
+                    <!-- Banner to show when images are pending deletion -->
+                    <div *ngIf="hasPendingImageDeletions()" class="pending-deletion-banner">
+                      <mat-icon color="warn">warning</mat-icon>
+                      <span>Hay imágenes pendientes de eliminación que se borrarán al guardar</span>
+                    </div>
+                    
+                    <div class="images-row">
+                      <!-- All images in a row (including those marked for deletion) -->
+                      <div *ngFor="let image of productImages; let i = index" 
+                          class="image-card" 
+                          [class.main-image]="image.isMain">
+                        <div class="image-container" (click)="viewFullImage(image)">
+                          <img [src]="image.imageUrl" alt="Imagen del producto">
+                          
+                          <!-- Overlay for deleted images -->
+                          <div *ngIf="image.toDelete" class="delete-overlay" (click)="$event.stopPropagation(); restoreImage(image)">
+                            <mat-icon>delete_forever</mat-icon>
+                            <span class="restore-hint">Click para restaurar</span>
+                          </div>
+                        </div>
+                        
+                        <div class="main-badge" *ngIf="image.isMain">
+                          <mat-icon>star</mat-icon>
+                          Principal
+                        </div>
+                        
+                        <div class="image-footer">
+                          <button mat-icon-button color="warn" 
+                                 [class.deleted-button]="image.toDelete"
+                                 (click)="$event.stopPropagation(); image.toDelete ? restoreImage(image) : removeCurrentImage(i)" 
+                                 [matTooltip]="image.toDelete ? 'Restaurar imagen' : 'Eliminar imagen'">
+                            <mat-icon>{{ image.toDelete ? 'restore' : 'delete' }}</mat-icon>
+                          </button>
+                          <button mat-icon-button color="primary" 
+                                  [disabled]="image.isMain || image.toDelete"
+                                  (click)="$event.stopPropagation(); setMainImage(i)" 
+                                  matTooltip="Establecer como imagen principal">
+                            <mat-icon>star</mat-icon>
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <!-- Loading placeholder for uploading images -->
+                      <div *ngIf="isUploading" class="image-card loading-card">
+                        <div class="loading-content">
+                          <mat-icon>cloud_upload</mat-icon>
+                          <p>Subiendo imagen...</p>
+                          <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+                        </div>
+                      </div>
+                      
+                      <!-- Always show the add button -->
+                      <div class="add-image-button">
+                        <button type="button" mat-fab color="primary" (click)="openFileSelector()" matTooltip="Añadir imagen">
+                          <mat-icon>add</mat-icon>
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <input #fileInput type="file" accept="image/*" (change)="onImageSelected($event)" style="display: none">
+                  </div>
                 </div>
               </div>
             </div>
@@ -128,114 +195,170 @@
         </div>
       </mat-tab>
 
-      <!-- Tab 2: Presentaciones -->
-      <mat-tab label="Presentaciones">
-        <div class="tab-content">
-          <div class="placeholder-content">
-            <h3>Presentaciones del Producto</h3>
-            <p>Aquí se podrán gestionar las diferentes presentaciones del producto.</p>
-            <div class="empty-state">
-              <mat-icon>list_alt</mat-icon>
-              <p>No hay presentaciones configuradas</p>
-              <button mat-raised-button color="primary">
-                <mat-icon>add</mat-icon>
-                Agregar Presentación
-              </button>
-            </div>
+      <mat-tab label="Imágenes">
+        <div *ngIf="!producto?.id" class="empty-tab-message">
+          <mat-icon>info</mat-icon>
+          <p>Debe guardar el producto antes de poder agregar imágenes</p>
+          <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="productoForm.invalid || isLoading">
+            Guardar Producto
+          </button>
+        </div>
+
+        <div *ngIf="producto?.id" class="images-container">
+          <div class="loading-shade" *ngIf="isUploading">
+            <mat-spinner diameter="50"></mat-spinner>
           </div>
+
+          <mat-card>
+            <mat-card-header>
+              <mat-card-title>Imágenes del Producto</mat-card-title>
+              <mat-card-subtitle>Agregue imágenes para mostrar el producto. La imagen principal se mostrará en catálogos.</mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+              <div class="upload-area">
+                <button mat-raised-button color="primary" (click)="openFileSelector()">
+                  <mat-icon>file_upload</mat-icon>
+                  Seleccionar Imagen
+                </button>
+                <input hidden type="file" #fileInput (change)="onImageSelected($event)" accept="image/*">
+                <p class="hint-text">Formatos aceptados: JPG, PNG. Tamaño máximo: 5MB</p>
+              </div>
+
+              <mat-divider class="divider"></mat-divider>
+
+              <div *ngIf="productImages.length === 0" class="empty-list">
+                <mat-icon>image</mat-icon>
+                <p>No hay imágenes para este producto</p>
+                <p class="hint">Seleccione una imagen para añadirla al producto</p>
+              </div>
+
+              <div class="image-grid" *ngIf="productImages.length > 0">
+                <div class="image-item" *ngFor="let image of productImages">
+                  <div class="image-container" (click)="viewFullImage(image)">
+                    <img [src]="image.imageUrl" alt="Imagen de producto">
+                    <div class="image-overlay">
+                      <mat-icon>zoom_in</mat-icon>
+                    </div>
+                  </div>
+                  <div class="image-actions">
+                    <mat-checkbox 
+                      [checked]="image.isMain" 
+                      (change)="setMainImage(productImages.indexOf(image))"
+                      [disabled]="isUploading">
+                      Principal
+                    </mat-checkbox>
+                    <button mat-icon-button color="warn" (click)="removeCurrentImage(productImages.indexOf(image))" [disabled]="isUploading">
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </mat-card-content>
+          </mat-card>
         </div>
       </mat-tab>
 
+      <mat-tab label="Presentaciones" [disabled]="!isEditing">
+        <div *ngIf="!producto?.id" class="empty-tab-message">
+          <mat-icon>info</mat-icon>
+          <p>Debe guardar el producto antes de poder agregar presentaciones</p>
+          <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="productoForm.invalid || isLoading">
+            Guardar Producto
+          </button>
+        </div>
+
+        <app-create-edit-presentacion 
+          *ngIf="producto?.id" 
+          [producto]="producto!">
+        </app-create-edit-presentacion>
+      </mat-tab>
+
       <!-- Tab 3: Precios -->
-      <mat-tab label="Precios">
-        <div class="tab-content">
-          <div class="placeholder-content">
-            <h3>Configuración de Precios</h3>
-            <p>Aquí se podrán configurar los diferentes precios del producto según lista de precios y tipo de cliente.</p>
-            <div class="empty-state">
-              <mat-icon>attach_money</mat-icon>
-              <p>No hay precios adicionales configurados</p>
-              <button mat-raised-button color="primary">
-                <mat-icon>add</mat-icon>
-                Agregar Precio
-              </button>
-            </div>
-          </div>
+      <mat-tab label="Precios" [disabled]="!isEditing">
+        <div *ngIf="!producto?.id" class="empty-tab-message">
+          <mat-icon>info</mat-icon>
+          <p>Debe guardar el producto antes de poder gestionar los precios</p>
+          <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="productoForm.invalid || isLoading">
+            Guardar Producto
+          </button>
+        </div>
+
+        <div *ngIf="producto?.id" class="prices-info-container">
+          <mat-card>
+            <mat-card-header>
+              <mat-card-title>Gestión de Precios</mat-card-title>
+              <mat-card-subtitle>Los precios de venta se establecen por presentación del producto</mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+              <div class="info-message">
+                <mat-icon>info</mat-icon>
+                <div class="message-content">
+                  <p><strong>¿Cómo configurar los precios?</strong></p>
+                  <p>Para configurar los precios de venta, siga estos pasos:</p>
+                  <ol>
+                    <li>Vaya a la pestaña <strong>Presentaciones</strong></li>
+                    <li>Busque la presentación para la que desea configurar precios</li>
+                    <li>Haga clic en el botón <mat-icon inline>monetization_on</mat-icon> de la presentación</li>
+                    <li>En la ventana que se abre, podrá definir precios en diferentes monedas para esa presentación</li>
+                  </ol>
+                </div>
+              </div>
+
+              <mat-divider class="divider"></mat-divider>
+
+              <div class="presentations-summary" *ngIf="producto?.presentaciones?.length">
+                <h3>Presentaciones disponibles:</h3>
+                <div class="presentations-list">
+                  <mat-card *ngFor="let presentacion of producto?.presentaciones" class="presentation-card">
+                    <mat-card-content>
+                      <div class="presentation-name">{{ presentacion.descripcion }}</div>
+                      <div class="presentation-details">
+                        <span>{{ presentacion.cantidad }} {{ presentacion.tipoMedida }}</span>
+                        <span *ngIf="presentacion.principal" class="principal-badge">Principal</span>
+                      </div>
+                      <button mat-raised-button color="primary" (click)="navigateToPresentacionPrices(presentacion)">
+                        <mat-icon>monetization_on</mat-icon>
+                        Gestionar Precios
+                      </button>
+                    </mat-card-content>
+                  </mat-card>
+                </div>
+              </div>
+
+              <div class="empty-list" *ngIf="!producto?.presentaciones?.length">
+                <mat-icon>category</mat-icon>
+                <p>Este producto no tiene presentaciones configuradas</p>
+                <p class="hint">Añada presentaciones en la pestaña correspondiente para poder configurar precios</p>
+              </div>
+            </mat-card-content>
+          </mat-card>
         </div>
       </mat-tab>
     </mat-tab-group>
   </mat-card>
 
-  <!-- Images section at bottom of form -->
-  <mat-card class="images-section">
-    <mat-card-header>
-      <mat-card-title>Imágenes del Producto</mat-card-title>
-    </mat-card-header>
-    <mat-card-content>
-      <div class="images-gallery-container">
-        <div class="images-row">
-          <!-- Images in a row -->
-          <div *ngFor="let image of productImages; let i = index" 
-               class="image-card" 
-               [class.main-image]="image.isMain"
-               (click)="viewFullImage(image)">
-            <div class="image-container">
-              <img [src]="image.imageUrl" alt="Imagen del producto">
-            </div>
-            
-            <div class="main-badge" *ngIf="image.isMain">
-              <mat-icon>star</mat-icon>
-              Principal
-            </div>
-            
-            <div class="image-footer">
-              <button mat-icon-button color="warn" (click)="$event.stopPropagation(); removeCurrentImage(i)" matTooltip="Eliminar imagen">
-                <mat-icon>delete</mat-icon>
-              </button>
-              <button mat-icon-button color="primary" 
-                      [disabled]="image.isMain"
-                      (click)="$event.stopPropagation(); setMainImage(i)" 
-                      matTooltip="Establecer como imagen principal">
-                <mat-icon>star</mat-icon>
-              </button>
-            </div>
-          </div>
-          
-          <!-- Loading placeholder for uploading images -->
-          <div *ngIf="isUploading" class="image-card loading-card">
-            <div class="loading-content">
-              <mat-icon>cloud_upload</mat-icon>
-              <p>Subiendo imagen...</p>
-              <mat-progress-bar mode="indeterminate"></mat-progress-bar>
-            </div>
-          </div>
-          
-          <!-- Always show the add button -->
-          <div class="add-image-button">
-            <button type="button" mat-fab color="primary" (click)="openFileSelector()" matTooltip="Añadir imagen">
-              <mat-icon>add</mat-icon>
-            </button>
-          </div>
-        </div>
-        
-        <!-- Message when no images are present -->
-        <!-- <div *ngIf="productImages.length === 0 && !isUploading" class="no-images-message">
-          <mat-icon>image</mat-icon>
-          <p>No hay imágenes para este producto</p>
-        </div>
-         -->
-        <input #fileInput type="file" accept="image/*" (change)="onImageSelected($event)" style="display: none">
-      </div>
-    </mat-card-content>
-  </mat-card>
-
   <div class="page-actions">
-    <button mat-raised-button (click)="cancel()" [disabled]="isLoading" class="action-button">
-      Cancelar
+    <button mat-raised-button (click)="goBack()" class="action-button secondary-action">
+      <mat-icon>arrow_back</mat-icon>
+      Volver
     </button>
-    <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="productoForm.invalid || isLoading" class="action-button">
+    
+    <button mat-raised-button (click)="cancel()" class="action-button secondary-action" matTooltip="Restablece el formulario para un nuevo producto">
+      <mat-icon>refresh</mat-icon>
+      Limpiar
+    </button>
+    
+    <button mat-raised-button *ngIf="isEditing" (click)="restablecer()" [disabled]="isLoading" class="action-button secondary-action" matTooltip="Vuelve a los datos originales del producto">
+      <mat-icon>restore</mat-icon>
+      Restablecer
+    </button>
+    
+    <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="productoForm.invalid || isLoading" class="action-button primary-action">
       <mat-spinner *ngIf="isLoading" diameter="20" class="spinner-button"></mat-spinner>
-      <span *ngIf="!isLoading">{{ isEditing ? 'Actualizar' : 'Guardar' }}</span>
+      <span *ngIf="!isLoading">
+        <mat-icon>save</mat-icon>
+        {{ isEditing ? 'Actualizar' : 'Guardar' }}
+      </span>
     </button>
   </div>
 </div>

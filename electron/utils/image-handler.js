@@ -18,6 +18,19 @@ const getImagesDir = () => {
   return imagesDir;
 };
 
+// Base directory for storing product images
+const getProductoImagesDir = () => {
+  const userDataPath = app.getPath('userData');
+  const imagesDir = path.join(userDataPath, 'producto-images');
+  
+  // Ensure directory exists
+  if (!fs.existsSync(imagesDir)) {
+    fs.mkdirSync(imagesDir, { recursive: true });
+  }
+  
+  return imagesDir;
+};
+
 /**
  * Save a base64 image to the app data directory
  * @param {string} base64Data - The base64 encoded image data
@@ -70,6 +83,45 @@ exports.deleteProfileImage = async (imageUrl) => {
     return false;
   } catch (error) {
     console.error('Error deleting profile image:', error);
+    return false;
+  }
+};
+
+/**
+ * Delete a product image from the app data directory
+ * @param {string} imageUrl - The URL of the image to delete
+ * @returns {Promise<boolean>} True if successful, false otherwise
+ */
+exports.deleteProductoImage = async (imageUrl) => {
+  try {
+    // Extract filename from the URL
+    // Handle both app://producto-images/filename.jpg and full path formats
+    let fileName;
+    
+    if (imageUrl.startsWith('app://producto-images/')) {
+      fileName = imageUrl.replace('app://producto-images/', '');
+    } else {
+      fileName = imageUrl.split('/').pop();
+    }
+    
+    if (!fileName) return false;
+    
+    const imagesDir = getProductoImagesDir();
+    const filePath = path.join(imagesDir, fileName);
+    
+    console.log(`Attempting to delete product image: ${filePath}`);
+    
+    // Check if file exists
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log(`Successfully deleted product image: ${filePath}`);
+      return true;
+    }
+    
+    console.log(`Product image not found: ${filePath}`);
+    return false;
+  } catch (error) {
+    console.error('Error deleting product image:', error);
     return false;
   }
 };

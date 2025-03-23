@@ -15,6 +15,10 @@ import { Categoria } from './entities/productos/categoria.entity';
 import { Producto } from './entities/productos/producto.entity';
 import { Subcategoria } from './entities/productos/subcategoria.entity';
 import { ProductoImage } from './entities/productos/producto-image.entity';
+import { Presentacion } from './entities/productos/presentacion.entity';
+import { Codigo } from './entities/productos/codigo.entity';
+import { Moneda } from './entities/financiero/moneda.entity';
+import { PrecioVenta } from './entities/productos/precio-venta.entity';
 
 export interface LoginResult {
   success: boolean;
@@ -106,6 +110,33 @@ interface ElectronAPI {
   createProductImage: (imageData: Partial<ProductoImage>) => Promise<ProductoImage>;
   updateProductImage: (imageId: number, imageData: Partial<ProductoImage>) => Promise<ProductoImage>;
   deleteProductImage: (imageId: number) => Promise<boolean>;
+  // Presentacion methods
+  getPresentaciones: () => Promise<Presentacion[]>;
+  getPresentacion: (presentacionId: number) => Promise<Presentacion>;
+  getPresentacionesByProducto: (productoId: number) => Promise<Presentacion[]>;
+  createPresentacion: (presentacionData: any) => Promise<Presentacion>;
+  updatePresentacion: (presentacionId: number, presentacionData: any) => Promise<any>;
+  deletePresentacion: (presentacionId: number) => Promise<any>;
+  // Codigo methods
+  getCodigos: () => Promise<Codigo[]>;
+  getCodigo: (codigoId: number) => Promise<Codigo>;
+  getCodigosByPresentacion: (presentacionId: number) => Promise<Codigo[]>;
+  createCodigo: (codigoData: any) => Promise<Codigo>;
+  updateCodigo: (codigoId: number, codigoData: any) => Promise<any>;
+  deleteCodigo: (codigoId: number) => Promise<any>;
+  // Moneda methods
+  getMonedas: () => Promise<Moneda[]>;
+  getMoneda: (monedaId: number) => Promise<Moneda>;
+  createMoneda: (monedaData: any) => Promise<Moneda>;
+  updateMoneda: (monedaId: number, monedaData: any) => Promise<any>;
+  deleteMoneda: (monedaId: number) => Promise<any>;
+  // PrecioVenta methods
+  getPreciosVenta: () => Promise<PrecioVenta[]>;
+  getPrecioVenta: (precioVentaId: number) => Promise<PrecioVenta>;
+  getPreciosVentaByPresentacion: (presentacionId: number) => Promise<PrecioVenta[]>;
+  createPrecioVenta: (precioVentaData: any) => Promise<PrecioVenta>;
+  updatePrecioVenta: (precioVentaId: number, precioVentaData: any) => Promise<any>;
+  deletePrecioVenta: (precioVentaId: number) => Promise<any>;
 }
 
 /**
@@ -454,7 +485,24 @@ export class RepositoryService {
   }
   
   saveProductoImage(base64Data: string, fileName: string): Observable<{ imageUrl: string }> {
-    return from(this.api.saveProductoImage(base64Data, fileName));
+    console.log(`Saving product image with filename: ${fileName}`);
+    return from(this.api.saveProductoImage(base64Data, fileName)
+      .then(result => {
+        console.log('Image saved successfully:', result);
+        
+        // Ensure the URL uses the app:// protocol for correct loading in renderer
+        if (result.imageUrl && !result.imageUrl.startsWith('app://')) {
+          result.imageUrl = `app://${result.imageUrl.replace(/\\/g, '/')}`;
+          console.log('Adjusted image URL:', result.imageUrl);
+        }
+        
+        return result;
+      })
+      .catch(error => {
+        console.error('Error saving product image:', error);
+        throw error;
+      })
+    );
   }
   
   deleteProductoImage(imageUrl: string): Observable<boolean> {
@@ -476,5 +524,101 @@ export class RepositoryService {
   
   deleteProductImage(imageId: number): Observable<boolean> {
     return from(this.api.deleteProductImage(imageId));
+  }
+
+  // Presentacion methods
+  getPresentaciones(): Observable<Presentacion[]> {
+    return from(this.api.getPresentaciones());
+  }
+
+  getPresentacion(presentacionId: number): Observable<Presentacion> {
+    return from(this.api.getPresentacion(presentacionId));
+  }
+
+  getPresentacionesByProducto(productoId: number): Observable<Presentacion[]> {
+    return from(this.api.getPresentacionesByProducto(productoId));
+  }
+
+  createPresentacion(presentacionData: Partial<Presentacion>): Observable<Presentacion> {
+    return from(this.api.createPresentacion(presentacionData));
+  }
+
+  updatePresentacion(presentacionId: number, presentacionData: Partial<Presentacion>): Observable<any> {
+    return from(this.api.updatePresentacion(presentacionId, presentacionData));
+  }
+
+  deletePresentacion(presentacionId: number): Observable<any> {
+    return from(this.api.deletePresentacion(presentacionId));
+  }
+
+  // Codigo methods
+  getCodigos(): Observable<Codigo[]> {
+    return from(this.api.getCodigos());
+  }
+
+  getCodigo(codigoId: number): Observable<Codigo> {
+    return from(this.api.getCodigo(codigoId));
+  }
+
+  getCodigosByPresentacion(presentacionId: number): Observable<Codigo[]> {
+    return from(this.api.getCodigosByPresentacion(presentacionId));
+  }
+
+  createCodigo(codigoData: Partial<Codigo>): Observable<Codigo> {
+    return from(this.api.createCodigo(codigoData));
+  }
+
+  updateCodigo(codigoId: number, codigoData: Partial<Codigo>): Observable<any> {
+    return from(this.api.updateCodigo(codigoId, codigoData));
+  }
+
+  deleteCodigo(codigoId: number): Observable<any> {
+    return from(this.api.deleteCodigo(codigoId));
+  }
+
+  // Moneda methods
+  getMonedas(): Observable<Moneda[]> {
+    return from(this.api.getMonedas());
+  }
+
+  getMoneda(monedaId: number): Observable<Moneda> {
+    return from(this.api.getMoneda(monedaId));
+  }
+
+  createMoneda(monedaData: Partial<Moneda>): Observable<Moneda> {
+    return from(this.api.createMoneda(monedaData));
+  }
+
+  updateMoneda(monedaId: number, monedaData: Partial<Moneda>): Observable<any> {
+    return from(this.api.updateMoneda(monedaId, monedaData));
+  }
+
+  deleteMoneda(monedaId: number): Observable<any> {
+    return from(this.api.deleteMoneda(monedaId));
+  }
+
+  // PrecioVenta methods
+  getPreciosVenta(): Observable<PrecioVenta[]> {
+    return from(this.api.getPreciosVenta());
+  }
+
+  getPrecioVenta(precioVentaId: number): Observable<PrecioVenta> {
+    return from(this.api.getPrecioVenta(precioVentaId));
+  }
+
+  getPreciosVentaByPresentacion(presentacionId: number): Observable<PrecioVenta[]> {
+    return from(this.api.getPreciosVentaByPresentacion(presentacionId));
+  }
+
+  createPrecioVenta(precioVentaData: Partial<PrecioVenta>): Observable<PrecioVenta> {
+    return from(this.api.createPrecioVenta(precioVentaData));
+  }
+
+  updatePrecioVenta(precioVentaId: number, precioVentaData: Partial<PrecioVenta>): Observable<any> {
+    return from(this.api.updatePrecioVenta(precioVentaId, precioVentaData));
+  }
+
+  deletePrecioVenta(precioVentaId: number): Observable<any> {
+    return from(this.api.deletePrecioVenta(precioVentaId));
   }
 } 

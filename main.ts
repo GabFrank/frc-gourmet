@@ -84,23 +84,117 @@ function createWindow(): void {
   win.on('closed', () => {
     win = null;
   });
+
+  // Register the app:// protocol for serving local files
+  // @ts-ignore - TypeScript doesn't recognize Electron's protocol API correctly
+  protocol.registerFileProtocol('app', (request, callback) => {
+    const urlPath = request.url.substring(6); // Remove 'app://'
+    
+    // Handle profile images
+    if (urlPath.startsWith('profile-images/')) {
+      const fileName = urlPath.replace('profile-images/', '');
+      const imagesDir = path.join(app.getPath('userData'), 'profile-images');
+      
+      // Create directory if it doesn't exist
+      if (!fs.existsSync(imagesDir)) {
+        fs.mkdirSync(imagesDir, { recursive: true });
+      }
+      
+      callback({ path: path.join(imagesDir, fileName) });
+      return;
+    }
+    
+    // Handle product images
+    if (urlPath.startsWith('producto-images/')) {
+      const fileName = urlPath.replace('producto-images/', '');
+      const imagesDir = path.join(app.getPath('userData'), 'producto-images');
+      
+      // Create directory if it doesn't exist
+      if (!fs.existsSync(imagesDir)) {
+        fs.mkdirSync(imagesDir, { recursive: true });
+      }
+      
+      const imagePath = path.join(imagesDir, fileName);
+      console.log('Serving product image from:', imagePath);
+      
+      callback({ path: imagePath });
+      return;
+    }
+    
+    // Handle other app:// URLs - check in app folder first
+    let normalizedPath = path.normalize(`${app.getAppPath()}/${urlPath}`);
+    
+    if (fs.existsSync(normalizedPath)) {
+      callback({ path: normalizedPath });
+    } else {
+      // Try user data directory as fallback
+      const userDataPath = app.getPath('userData');
+      normalizedPath = path.normalize(`${userDataPath}/${urlPath}`);
+      
+      if (fs.existsSync(normalizedPath)) {
+        callback({ path: normalizedPath });
+      } else {
+        console.error(`File not found: ${normalizedPath}`);
+        callback({ error: -2 /* ENOENT */ });
+      }
+    }
+  });
 }
 
 // Initialize the database when the app is ready
 app.on('ready', () => {
-  // Register the app:// protocol for handling profile images
-  protocol.registerFileProtocol('app', (request: Electron.ProtocolRequest, callback: (response: Electron.ProtocolResponse) => void) => {
-    const url = request.url.substring(6); // Remove 'app://'
-
-    if (url.startsWith('profile-images/')) {
-      const fileName = url.replace('profile-images/', '');
+  // Register the app:// protocol for handling local files
+  protocol.registerFileProtocol('app', (request, callback) => {
+    const urlPath = request.url.substring(6); // Remove 'app://'
+    
+    // Handle profile images
+    if (urlPath.startsWith('profile-images/')) {
+      const fileName = urlPath.replace('profile-images/', '');
       const imagesDir = path.join(app.getPath('userData'), 'profile-images');
+      
+      // Create directory if it doesn't exist
+      if (!fs.existsSync(imagesDir)) {
+        fs.mkdirSync(imagesDir, { recursive: true });
+      }
+      
       callback({ path: path.join(imagesDir, fileName) });
       return;
     }
-
-    // Handle other app:// URLs here if needed
-    callback({ error: -2 /* ENOENT */ });
+    
+    // Handle product images
+    if (urlPath.startsWith('producto-images/')) {
+      const fileName = urlPath.replace('producto-images/', '');
+      const imagesDir = path.join(app.getPath('userData'), 'producto-images');
+      
+      // Create directory if it doesn't exist
+      if (!fs.existsSync(imagesDir)) {
+        fs.mkdirSync(imagesDir, { recursive: true });
+      }
+      
+      const imagePath = path.join(imagesDir, fileName);
+      console.log('Serving product image from:', imagePath);
+      
+      callback({ path: imagePath });
+      return;
+    }
+    
+    // Handle other app:// URLs - check in app folder first
+    let normalizedPath = path.normalize(`${app.getAppPath()}/${urlPath}`);
+    
+    if (fs.existsSync(normalizedPath)) {
+      callback({ path: normalizedPath });
+    } else {
+      // Try user data directory as fallback
+      const userDataPath = app.getPath('userData');
+      normalizedPath = path.normalize(`${userDataPath}/${urlPath}`);
+      
+      if (fs.existsSync(normalizedPath)) {
+        callback({ path: normalizedPath });
+      } else {
+        console.error(`File not found: ${normalizedPath}`);
+        callback({ error: -2 /* ENOENT */ });
+      }
+    }
   });
 
   initializeDatabase();

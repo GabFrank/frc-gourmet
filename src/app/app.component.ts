@@ -154,7 +154,7 @@ export class AppComponent implements OnInit, OnDestroy {
       }
 
       // Add a default home tab when the app starts
-      this.openProductosTab();
+      // this.openProductosTab();
 
       // Add event listener for mouse movement after view is initialized
       setTimeout(() => this.setupSidenavHover(), 0);
