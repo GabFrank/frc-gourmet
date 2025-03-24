@@ -57,7 +57,7 @@ export class ListProductosComponent implements OnInit, AfterViewInit {
   productos: Producto[] = [];
   categorias: Categoria[] = [];
   subcategorias: Subcategoria[] = [];
-  displayedColumns: string[] = ['nombre', 'subcategoria', 'precio', 'stock', 'activo', 'acciones'];
+  displayedColumns: string[] = ['id', 'nombre', 'subcategoria', 'precio', 'stock', 'activo', 'acciones'];
   isLoading = false;
 
   // Pagination
@@ -97,14 +97,33 @@ export class ListProductosComponent implements OnInit, AfterViewInit {
         this.filterForm.get('subcategoriaId')?.setValue('');
       }
     });
-
   }
 
   ngAfterViewInit(): void {
-    //this is for test only, keep here, settimeout
-    // setTimeout(() => {
-    //   this.addProducto();
-    // }, 1000);
+    // Open product with ID 2 as the initial tab
+    setTimeout(() => {
+      this.openProductWithId(2);
+    }, 500);
+  }
+
+  /**
+   * Opens a specific product in edit mode by its ID
+   */
+  private async openProductWithId(id: number): Promise<void> {
+    try {
+      const producto = await firstValueFrom(this.repositoryService.getProducto(id));
+      if (producto) {
+        this.tabsService.openTabWithData(
+          `Editar Producto: ${producto.nombre}`,
+          CreateEditProductoComponent,
+          { producto: producto }
+        );
+      } else {
+        console.error(`Product with ID ${id} not found`);
+      }
+    } catch (error) {
+      console.error(`Error loading product with ID ${id}:`, error);
+    }
   }
 
   async loadCategorias(): Promise<void> {

@@ -75,10 +75,26 @@
         </mat-expansion-panel>
 
         <mat-divider></mat-divider>
-        <a mat-list-item (click)="openPrinterSettings(); drawer.close()">
-          <mat-icon matListItemIcon>settings</mat-icon>
-          <span matListItemTitle>Settings</span>
-        </a>
+        
+        <!-- Settings Menu - Convert to expansion panel -->
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel">
+          <mat-expansion-panel-header class="nav-panel-header">
+            <mat-panel-title>
+              <mat-icon class="nav-icon">settings</mat-icon>
+              <span class="nav-title">Configuración</span>
+            </mat-panel-title>
+          </mat-expansion-panel-header>
+          <div class="submenu-container">
+            <a mat-list-item (click)="openPrinterSettings(); drawer.close()">
+              <mat-icon matListItemIcon>print</mat-icon>
+              <span matListItemTitle>Impresoras</span>
+            </a>
+            <a mat-list-item (click)="openMonedasTab(); drawer.close()">
+              <mat-icon matListItemIcon>monetization_on</mat-icon>
+              <span matListItemTitle>Monedas</span>
+            </a>
+          </div>
+        </mat-expansion-panel>
 
       </mat-nav-list>
     </mat-sidenav>

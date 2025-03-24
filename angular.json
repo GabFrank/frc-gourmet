@@ -32,7 +32,14 @@
             "styles": [
               "src/styles.scss"
             ],
-            "scripts": []
+            "scripts": [],
+            "allowedCommonJsDependencies": [
+              "typeorm",
+              "react-native-sqlite-storage",
+              "debug",
+              "buffer",
+              "sha.js"
+            ]
           },
           "configurations": {
             "production": {

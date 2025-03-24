@@ -15,9 +15,12 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatCardModule } from '@angular/material/card';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatMenuModule } from '@angular/material/menu';
 import { RepositoryService } from '../../../database/repository.service';
 import { Presentacion, TipoMedida } from '../../../database/entities/productos/presentacion.entity';
 import { Producto } from '../../../database/entities/productos/producto.entity';
+import { PrecioVenta } from '../../../database/entities/productos/precio-venta.entity';
+import { Codigo } from '../../../database/entities/productos/codigo.entity';
 import { firstValueFrom } from 'rxjs';
 import { CreateEditCodigoComponent } from './create-edit-codigo.component';
 import { CreateEditPrecioVentaComponent } from './create-edit-precio-venta.component';
@@ -41,7 +44,8 @@ import { CreateEditPrecioVentaComponent } from './create-edit-precio-venta.compo
     MatTooltipModule,
     MatCardModule,
     MatSnackBarModule,
-    MatDialogModule
+    MatDialogModule,
+    MatMenuModule
   ],
   template: `
     <div class="presentaciones-container">
@@ -59,10 +63,7 @@ import { CreateEditPrecioVentaComponent } from './create-edit-precio-venta.compo
             <div class="form-row">
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>Descripción</mat-label>
-                <input matInput formControlName="descripcion" placeholder="Ej: Caja de 12 unidades" required>
-                <mat-error *ngIf="presentacionForm.get('descripcion')?.hasError('required')">
-                  La descripción es requerida
-                </mat-error>
+                <input matInput formControlName="descripcion" placeholder="Ej: Caja de 12 unidades">
               </mat-form-field>
             </div>
 
@@ -121,7 +122,7 @@ import { CreateEditPrecioVentaComponent } from './create-edit-precio-venta.compo
           <!-- Descripcion Column -->
           <ng-container matColumnDef="descripcion">
             <th mat-header-cell *matHeaderCellDef>Descripción</th>
-            <td mat-cell *matCellDef="let item">{{ item.descripcion }}</td>
+            <td mat-cell *matCellDef="let item">{{ item.descripcion || 'Sin descripción' }}</td>
           </ng-container>
 
           <!-- Tipo Medida Column -->
@@ -134,6 +135,28 @@ import { CreateEditPrecioVentaComponent } from './create-edit-precio-venta.compo
           <ng-container matColumnDef="cantidad">
             <th mat-header-cell *matHeaderCellDef>Cantidad</th>
             <td mat-cell *matCellDef="let item">{{ item.cantidad }}</td>
+          </ng-container>
+          
+          <!-- Precio Principal Column -->
+          <ng-container matColumnDef="precioPrincipal">
+            <th mat-header-cell *matHeaderCellDef>Precio Principal</th>
+            <td mat-cell *matCellDef="let item">
+              <ng-container *ngIf="presentacionPrecios.get(item.id)">
+                {{ presentacionPrecios.get(item.id)?.valor | currency:presentacionPrecios.get(item.id)?.moneda?.simbolo || 'USD':true }}
+              </ng-container>
+              <span *ngIf="!presentacionPrecios.get(item.id)" class="no-data">Sin precio</span>
+            </td>
+          </ng-container>
+          
+          <!-- Código Principal Column -->
+          <ng-container matColumnDef="codigoPrincipal">
+            <th mat-header-cell *matHeaderCellDef>Código Principal</th>
+            <td mat-cell *matCellDef="let item">
+              <ng-container *ngIf="presentacionCodigos.get(item.id)">
+                {{ presentacionCodigos.get(item.id)?.codigo }}
+              </ng-container>
+              <span *ngIf="!presentacionCodigos.get(item.id)" class="no-data">Sin código</span>
+            </td>
           </ng-container>
 
           <!-- Principal Column -->
@@ -159,18 +182,27 @@ import { CreateEditPrecioVentaComponent } from './create-edit-precio-venta.compo
           <ng-container matColumnDef="acciones">
             <th mat-header-cell *matHeaderCellDef>Acciones</th>
             <td mat-cell *matCellDef="let item">
-              <button mat-icon-button color="primary" (click)="editPresentacion(item)" matTooltip="Editar">
-                <mat-icon>edit</mat-icon>
+              <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+                <mat-icon>more_vert</mat-icon>
               </button>
-              <button mat-icon-button color="warn" (click)="deletePresentacion(item)" matTooltip="Eliminar">
-                <mat-icon>delete</mat-icon>
-              </button>
-              <button mat-icon-button (click)="viewPrecios(item)" matTooltip="Ver Precios">
-                <mat-icon>monetization_on</mat-icon>
-              </button>
-              <button mat-icon-button (click)="viewCodigos(item)" matTooltip="Ver Códigos">
-                <mat-icon>qr_code</mat-icon>
-              </button>
+              <mat-menu #menu="matMenu">
+                <button mat-menu-item (click)="editPresentacion(item)">
+                  <mat-icon>edit</mat-icon>
+                  <span>Editar</span>
+                </button>
+                <button mat-menu-item (click)="deletePresentacion(item)">
+                  <mat-icon>delete</mat-icon>
+                  <span>Eliminar</span>
+                </button>
+                <button mat-menu-item (click)="viewPrecios(item)">
+                  <mat-icon>monetization_on</mat-icon>
+                  <span>Ver Precios</span>
+                </button>
+                <button mat-menu-item (click)="viewCodigos(item)">
+                  <mat-icon>qr_code</mat-icon>
+                  <span>Ver Códigos</span>
+                </button>
+              </mat-menu>
             </td>
           </ng-container>
 
@@ -291,6 +323,12 @@ import { CreateEditPrecioVentaComponent } from './create-edit-precio-venta.compo
       color: #c62828;
     }
 
+    .no-data {
+      color: #9e9e9e;
+      font-style: italic;
+      font-size: 0.9em;
+    }
+
     /* Dark theme styles */
     :host-context(.dark-theme) {
       .empty-list {
@@ -318,6 +356,10 @@ import { CreateEditPrecioVentaComponent } from './create-edit-precio-venta.compo
         background-color: #b71c1c;
         color: #ffebee;
       }
+
+      .no-data {
+        color: #757575;
+      }
     }
   `]
 })
@@ -326,10 +368,21 @@ export class CreateEditPresentacionComponent implements OnInit, OnChanges {
   
   presentacionForm: FormGroup;
   presentaciones: Presentacion[] = [];
+  presentacionPrecios: Map<number, PrecioVenta> = new Map();
+  presentacionCodigos: Map<number, Codigo> = new Map();
   isLoading = false;
   isEditing = false;
   currentPresentacionId?: number;
-  displayedColumns: string[] = ['descripcion', 'tipoMedida', 'cantidad', 'principal', 'activo', 'acciones'];
+  displayedColumns: string[] = [
+    'descripcion', 
+    'tipoMedida', 
+    'cantidad', 
+    'precioPrincipal', 
+    'codigoPrincipal', 
+    'principal', 
+    'activo', 
+    'acciones'
+  ];
   
   tiposMedida = [
     { value: TipoMedida.UNIDAD, label: 'Unidad' },
@@ -345,7 +398,7 @@ export class CreateEditPresentacionComponent implements OnInit, OnChanges {
     private dialog: MatDialog
   ) {
     this.presentacionForm = this.fb.group({
-      descripcion: ['', Validators.required],
+      descripcion: [''],
       tipoMedida: [TipoMedida.UNIDAD, Validators.required],
       cantidad: [1, [Validators.required, Validators.min(0.01)]],
       principal: [false],
@@ -371,11 +424,41 @@ export class CreateEditPresentacionComponent implements OnInit, OnChanges {
     this.isLoading = true;
     try {
       this.presentaciones = await firstValueFrom(this.repositoryService.getPresentacionesByProducto(this.producto.id));
+      this.loadPrincipalesData();
     } catch (error) {
       console.error('Error loading presentaciones:', error);
       this.snackBar.open('Error al cargar las presentaciones', 'Cerrar', { duration: 3000 });
     } finally {
       this.isLoading = false;
+    }
+  }
+
+  async loadPrincipalesData(): Promise<void> {
+    this.presentacionPrecios.clear();
+    this.presentacionCodigos.clear();
+    
+    for (const presentacion of this.presentaciones) {
+      if (presentacion.id) {
+        try {
+          const precios = await firstValueFrom(this.repositoryService.getPreciosVentaByPresentacion(presentacion.id));
+          const precioPrincipal = precios.find(p => p.principal);
+          if (precioPrincipal) {
+            this.presentacionPrecios.set(presentacion.id, precioPrincipal);
+          }
+        } catch (error) {
+          console.error(`Error loading prices for presentacion ${presentacion.id}:`, error);
+        }
+        
+        try {
+          const codigos = await firstValueFrom(this.repositoryService.getCodigosByPresentacion(presentacion.id));
+          const codigoPrincipal = codigos.find(c => c.principal);
+          if (codigoPrincipal) {
+            this.presentacionCodigos.set(presentacion.id, codigoPrincipal);
+          }
+        } catch (error) {
+          console.error(`Error loading codes for presentacion ${presentacion.id}:`, error);
+        }
+      }
     }
   }
 
@@ -494,20 +577,30 @@ export class CreateEditPresentacionComponent implements OnInit, OnChanges {
   }
 
   viewPrecios(presentacion: Presentacion): void {
-    this.dialog.open(CreateEditPrecioVentaComponent, {
+    const dialogRef = this.dialog.open(CreateEditPrecioVentaComponent, {
       width: '800px',
       maxHeight: '90vh',
       panelClass: 'no-padding-dialog',
       data: { presentacion }
     });
+    
+    // Refresh principal data when the dialog is closed
+    dialogRef.afterClosed().subscribe(() => {
+      this.loadPrincipalesData();
+    });
   }
 
   viewCodigos(presentacion: Presentacion): void {
-    this.dialog.open(CreateEditCodigoComponent, {
+    const dialogRef = this.dialog.open(CreateEditCodigoComponent, {
       width: '800px',
       maxHeight: '90vh',
       data: { presentacion },
       panelClass: 'custom-dialog-container',
+    });
+    
+    // Refresh principal data when the dialog is closed
+    dialogRef.afterClosed().subscribe(() => {
+      this.loadPrincipalesData();
     });
   }
 } 

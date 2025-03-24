@@ -250,5 +250,78 @@ contextBridge.exposeInMainWorld('api', {
     deleteProductImage: async (imageId) => {
         return await ipcRenderer.invoke('deleteProductImage', imageId);
     },
+    // Presentacion methods
+    getPresentaciones: async () => {
+        return await ipcRenderer.invoke('getPresentaciones');
+    },
+    getPresentacion: async (presentacionId) => {
+        return await ipcRenderer.invoke('getPresentacion', presentacionId);
+    },
+    getPresentacionesByProducto: async (productoId) => {
+        return await ipcRenderer.invoke('getPresentacionesByProducto', productoId);
+    },
+    createPresentacion: async (presentacionData) => {
+        return await ipcRenderer.invoke('createPresentacion', presentacionData);
+    },
+    updatePresentacion: async (presentacionId, presentacionData) => {
+        return await ipcRenderer.invoke('updatePresentacion', presentacionId, presentacionData);
+    },
+    deletePresentacion: async (presentacionId) => {
+        return await ipcRenderer.invoke('deletePresentacion', presentacionId);
+    },
+    // Codigo methods
+    getCodigos: async () => {
+        return await ipcRenderer.invoke('getCodigos');
+    },
+    getCodigo: async (codigoId) => {
+        return await ipcRenderer.invoke('getCodigo', codigoId);
+    },
+    getCodigosByPresentacion: async (presentacionId) => {
+        return await ipcRenderer.invoke('getCodigosByPresentacion', presentacionId);
+    },
+    createCodigo: async (codigoData) => {
+        return await ipcRenderer.invoke('createCodigo', codigoData);
+    },
+    updateCodigo: async (codigoId, codigoData) => {
+        return await ipcRenderer.invoke('updateCodigo', codigoId, codigoData);
+    },
+    deleteCodigo: async (codigoId) => {
+        return await ipcRenderer.invoke('deleteCodigo', codigoId);
+    },
+    // Moneda methods
+    getMonedas: async () => {
+        return await ipcRenderer.invoke('getMonedas');
+    },
+    getMoneda: async (monedaId) => {
+        return await ipcRenderer.invoke('getMoneda', monedaId);
+    },
+    createMoneda: async (monedaData) => {
+        return await ipcRenderer.invoke('createMoneda', monedaData);
+    },
+    updateMoneda: async (monedaId, monedaData) => {
+        return await ipcRenderer.invoke('updateMoneda', monedaId, monedaData);
+    },
+    deleteMoneda: async (monedaId) => {
+        return await ipcRenderer.invoke('deleteMoneda', monedaId);
+    },
+    // PrecioVenta methods
+    getPreciosVenta: async () => {
+        return await ipcRenderer.invoke('getPreciosVenta');
+    },
+    getPrecioVenta: async (precioVentaId) => {
+        return await ipcRenderer.invoke('getPrecioVenta', precioVentaId);
+    },
+    getPreciosVentaByPresentacion: async (presentacionId) => {
+        return await ipcRenderer.invoke('getPreciosVentaByPresentacion', presentacionId);
+    },
+    createPrecioVenta: async (precioVentaData) => {
+        return await ipcRenderer.invoke('createPrecioVenta', precioVentaData);
+    },
+    updatePrecioVenta: async (precioVentaId, precioVentaData) => {
+        return await ipcRenderer.invoke('updatePrecioVenta', precioVentaId, precioVentaData);
+    },
+    deletePrecioVenta: async (precioVentaId) => {
+        return await ipcRenderer.invoke('deletePrecioVenta', precioVentaId);
+    },
 });
 //# sourceMappingURL=preload.js.map

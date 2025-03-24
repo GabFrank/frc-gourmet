@@ -1,6 +1,6 @@
 import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseModel } from '../base.entity';
-import { Presentacion } from './presentacion.entity';
+import type { Presentacion } from './presentacion.entity';
 import { Moneda } from '../financiero/moneda.entity';
 
 /**
@@ -11,7 +11,7 @@ export class PrecioVenta extends BaseModel {
   @Column({ name: 'presentacion_id' })
   presentacionId!: number;
 
-  @ManyToOne(() => Presentacion, presentacion => presentacion.preciosVenta)
+  @ManyToOne('Presentacion', 'preciosVenta')
   @JoinColumn({ name: 'presentacion_id' })
   presentacion!: Presentacion;
 

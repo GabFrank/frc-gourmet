@@ -39,6 +39,10 @@ const categoria_entity_1 = require("./entities/productos/categoria.entity");
 const subcategoria_entity_1 = require("./entities/productos/subcategoria.entity");
 const producto_entity_1 = require("./entities/productos/producto.entity");
 const producto_image_entity_1 = require("./entities/productos/producto-image.entity");
+const presentacion_entity_1 = require("./entities/productos/presentacion.entity");
+const codigo_entity_1 = require("./entities/productos/codigo.entity");
+const precio_venta_entity_1 = require("./entities/productos/precio-venta.entity");
+const moneda_entity_1 = require("./entities/financiero/moneda.entity");
 /**
  * Get the configuration for TypeORM
  * @param userDataPath Path to store the database file
@@ -61,7 +65,12 @@ function getDataSourceOptions(userDataPath) {
             categoria_entity_1.Categoria,
             subcategoria_entity_1.Subcategoria,
             producto_entity_1.Producto,
-            producto_image_entity_1.ProductoImage
+            producto_image_entity_1.ProductoImage,
+            // New entities
+            presentacion_entity_1.Presentacion,
+            codigo_entity_1.Codigo,
+            precio_venta_entity_1.PrecioVenta,
+            moneda_entity_1.Moneda
         ],
         synchronize: true,
         logging: process.env['NODE_ENV'] === 'development',

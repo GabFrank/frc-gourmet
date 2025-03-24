@@ -1,8 +1,8 @@
 import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
-import { Subcategoria } from './subcategoria.entity';
+import type { Subcategoria } from './subcategoria.entity';
 import { BaseModel } from '../base.entity';
-import { ProductoImage } from './producto-image.entity';
-import { Presentacion } from './presentacion.entity';
+import type { ProductoImage } from './producto-image.entity';
+import type { Presentacion } from './presentacion.entity';
 
 /**
  * Entity representing a product
@@ -57,13 +57,13 @@ export class Producto extends BaseModel {
   @Column({ name: 'subcategoria_id' })
   subcategoriaId!: number;
 
-  @ManyToOne(() => Subcategoria, subcategoria => subcategoria.productos)
+  @ManyToOne('Subcategoria', 'productos')
   @JoinColumn({ name: 'subcategoria_id' })
   subcategoria!: Subcategoria;
 
-  @OneToMany(() => ProductoImage, productoImage => productoImage.producto)
+  @OneToMany('ProductoImage', 'producto')
   images!: ProductoImage[];
   
-  @OneToMany(() => Presentacion, presentacion => presentacion.producto)
+  @OneToMany('Presentacion', 'producto')
   presentaciones!: Presentacion[];
 } 

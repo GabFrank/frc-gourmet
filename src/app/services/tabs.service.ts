@@ -29,7 +29,7 @@ export class TabsService {
 
   constructor() { 
     // initialize with @create-edit-producto
-    this.addTab('Crear Producto', CreateEditProductoComponent, null, 'create-edit-producto');
+    this.addTab('Crear Producto', CreateEditProductoComponent, {productoId: 2}, 'create-edit-producto');
   }
 
   /**

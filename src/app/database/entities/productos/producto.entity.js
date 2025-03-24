@@ -11,9 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Producto = void 0;
 const typeorm_1 = require("typeorm");
-const subcategoria_entity_1 = require("./subcategoria.entity");
 const base_entity_1 = require("../base.entity");
-const producto_image_entity_1 = require("./producto-image.entity");
 /**
  * Entity representing a product
  */
@@ -85,14 +83,18 @@ __decorate([
     __metadata("design:type", Number)
 ], Producto.prototype, "subcategoriaId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => subcategoria_entity_1.Subcategoria, subcategoria => subcategoria.productos),
+    (0, typeorm_1.ManyToOne)('Subcategoria', 'productos'),
     (0, typeorm_1.JoinColumn)({ name: 'subcategoria_id' }),
-    __metadata("design:type", subcategoria_entity_1.Subcategoria)
+    __metadata("design:type", Function)
 ], Producto.prototype, "subcategoria", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => producto_image_entity_1.ProductoImage, productoImage => productoImage.producto),
+    (0, typeorm_1.OneToMany)('ProductoImage', 'producto'),
     __metadata("design:type", Array)
 ], Producto.prototype, "images", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)('Presentacion', 'producto'),
+    __metadata("design:type", Array)
+], Producto.prototype, "presentaciones", void 0);
 exports.Producto = Producto = __decorate([
     (0, typeorm_1.Entity)('productos')
 ], Producto);

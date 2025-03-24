@@ -1,8 +1,9 @@
 import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { BaseModel } from '../base.entity';
-import { Producto } from './producto.entity';
-import { Codigo } from './codigo.entity';
-import { PrecioVenta } from './precio-venta.entity';
+// Import only the type to avoid circular dependency
+import type { Producto } from './producto.entity';
+import type { Codigo } from './codigo.entity';
+import type { PrecioVenta } from './precio-venta.entity';
 
 /**
  * Tipo de medida para la presentación de un producto
@@ -22,12 +23,12 @@ export class Presentacion extends BaseModel {
   @Column({ name: 'producto_id' })
   productoId!: number;
 
-  @ManyToOne(() => Producto, producto => producto.presentaciones)
+  @ManyToOne('Producto', 'presentaciones')
   @JoinColumn({ name: 'producto_id' })
   producto!: Producto;
 
-  @Column()
-  descripcion!: string;
+  @Column({ nullable: true })
+  descripcion?: string;
 
   @Column({
     type: 'varchar',
@@ -46,9 +47,9 @@ export class Presentacion extends BaseModel {
   @Column({ default: true })
   activo!: boolean;
 
-  @OneToMany(() => Codigo, codigo => codigo.presentacion)
+  @OneToMany('Codigo', 'presentacion')
   codigos!: Codigo[];
 
-  @OneToMany(() => PrecioVenta, precioVenta => precioVenta.presentacion)
+  @OneToMany('PrecioVenta', 'presentacion')
   preciosVenta!: PrecioVenta[];
 } 

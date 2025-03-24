@@ -20,19 +20,19 @@ let Categoria = class Categoria extends base_entity_1.BaseModel {
 };
 exports.Categoria = Categoria;
 __decorate([
-    (0, typeorm_1.Column)(),
+    (0, typeorm_1.Column)({ type: 'varchar' }),
     __metadata("design:type", String)
 ], Categoria.prototype, "nombre", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ nullable: true }),
+    (0, typeorm_1.Column)({ type: 'varchar', nullable: true }),
     __metadata("design:type", String)
 ], Categoria.prototype, "descripcion", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ default: 0 }),
+    (0, typeorm_1.Column)({ type: 'integer', default: 0 }),
     __metadata("design:type", Number)
 ], Categoria.prototype, "posicion", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ default: true }),
+    (0, typeorm_1.Column)({ type: 'boolean', default: true }),
     __metadata("design:type", Boolean)
 ], Categoria.prototype, "activo", void 0);
 __decorate([

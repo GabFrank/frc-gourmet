@@ -195,69 +195,6 @@
         </div>
       </mat-tab>
 
-      <mat-tab label="Imágenes">
-        <div *ngIf="!producto?.id" class="empty-tab-message">
-          <mat-icon>info</mat-icon>
-          <p>Debe guardar el producto antes de poder agregar imágenes</p>
-          <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="productoForm.invalid || isLoading">
-            Guardar Producto
-          </button>
-        </div>
-
-        <div *ngIf="producto?.id" class="images-container">
-          <div class="loading-shade" *ngIf="isUploading">
-            <mat-spinner diameter="50"></mat-spinner>
-          </div>
-
-          <mat-card>
-            <mat-card-header>
-              <mat-card-title>Imágenes del Producto</mat-card-title>
-              <mat-card-subtitle>Agregue imágenes para mostrar el producto. La imagen principal se mostrará en catálogos.</mat-card-subtitle>
-            </mat-card-header>
-            <mat-card-content>
-              <div class="upload-area">
-                <button mat-raised-button color="primary" (click)="openFileSelector()">
-                  <mat-icon>file_upload</mat-icon>
-                  Seleccionar Imagen
-                </button>
-                <input hidden type="file" #fileInput (change)="onImageSelected($event)" accept="image/*">
-                <p class="hint-text">Formatos aceptados: JPG, PNG. Tamaño máximo: 5MB</p>
-              </div>
-
-              <mat-divider class="divider"></mat-divider>
-
-              <div *ngIf="productImages.length === 0" class="empty-list">
-                <mat-icon>image</mat-icon>
-                <p>No hay imágenes para este producto</p>
-                <p class="hint">Seleccione una imagen para añadirla al producto</p>
-              </div>
-
-              <div class="image-grid" *ngIf="productImages.length > 0">
-                <div class="image-item" *ngFor="let image of productImages">
-                  <div class="image-container" (click)="viewFullImage(image)">
-                    <img [src]="image.imageUrl" alt="Imagen de producto">
-                    <div class="image-overlay">
-                      <mat-icon>zoom_in</mat-icon>
-                    </div>
-                  </div>
-                  <div class="image-actions">
-                    <mat-checkbox 
-                      [checked]="image.isMain" 
-                      (change)="setMainImage(productImages.indexOf(image))"
-                      [disabled]="isUploading">
-                      Principal
-                    </mat-checkbox>
-                    <button mat-icon-button color="warn" (click)="removeCurrentImage(productImages.indexOf(image))" [disabled]="isUploading">
-                      <mat-icon>delete</mat-icon>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </mat-card-content>
-          </mat-card>
-        </div>
-      </mat-tab>
-
       <mat-tab label="Presentaciones" [disabled]="!isEditing">
         <div *ngIf="!producto?.id" class="empty-tab-message">
           <mat-icon>info</mat-icon>

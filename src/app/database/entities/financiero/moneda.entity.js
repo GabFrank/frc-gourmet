@@ -9,37 +9,37 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ProductoImage = void 0;
+exports.Moneda = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
+const precio_venta_entity_1 = require("../productos/precio-venta.entity");
 /**
- * Entity representing a product image
+ * Entity representing a currency
  */
-let ProductoImage = class ProductoImage extends base_entity_1.BaseModel {
+let Moneda = class Moneda extends base_entity_1.BaseModel {
 };
-exports.ProductoImage = ProductoImage;
+exports.Moneda = Moneda;
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)
-], ProductoImage.prototype, "imageUrl", void 0);
+], Moneda.prototype, "denominacion", void 0);
+__decorate([
+    (0, typeorm_1.Column)(),
+    __metadata("design:type", String)
+], Moneda.prototype, "simbolo", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ default: true }),
+    __metadata("design:type", Boolean)
+], Moneda.prototype, "activo", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: false }),
     __metadata("design:type", Boolean)
-], ProductoImage.prototype, "isMain", void 0);
+], Moneda.prototype, "principal", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'orden', default: 0 }),
-    __metadata("design:type", Number)
-], ProductoImage.prototype, "orden", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ name: 'producto_id' }),
-    __metadata("design:type", Number)
-], ProductoImage.prototype, "productoId", void 0);
-__decorate([
-    (0, typeorm_1.ManyToOne)('Producto', 'images'),
-    (0, typeorm_1.JoinColumn)({ name: 'producto_id' }),
-    __metadata("design:type", Function)
-], ProductoImage.prototype, "producto", void 0);
-exports.ProductoImage = ProductoImage = __decorate([
-    (0, typeorm_1.Entity)('producto_images')
-], ProductoImage);
-//# sourceMappingURL=producto-image.entity.js.map
+    (0, typeorm_1.OneToMany)(() => precio_venta_entity_1.PrecioVenta, precioVenta => precioVenta.moneda),
+    __metadata("design:type", Array)
+], Moneda.prototype, "preciosVenta", void 0);
+exports.Moneda = Moneda = __decorate([
+    (0, typeorm_1.Entity)('monedas')
+], Moneda);
+//# sourceMappingURL=moneda.entity.js.map

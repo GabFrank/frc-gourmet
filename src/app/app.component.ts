@@ -32,6 +32,7 @@ import { firstValueFrom } from 'rxjs';
 import { ListPersonasComponent } from './pages/personas/personas/list-personas.component';
 import { ListCategoriasComponent } from './pages/productos/categorias/list-categorias/list-categorias.component';
 import { ListProductosComponent } from './pages/productos/productos/list-productos.component';
+import { ListMonedasComponent } from './pages/financiero/monedas/list-monedas/list-monedas.component';
 
 @Component({
   selector: 'app-root',
@@ -295,6 +296,10 @@ export class AppComponent implements OnInit, OnDestroy {
 
   openProductosTab() {
     this.tabsService.openTab('Productos', ListProductosComponent, { source: 'navigation' }, 'productos-tab', true);
+  }
+
+  openMonedasTab() {
+    this.tabsService.openTab('Monedas', ListMonedasComponent, { source: 'navigation' }, 'monedas-tab', true);
   }
 
   private applyTheme() {
