@@ -1,3 +1,5 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 // Preload script that will be executed before rendering the application
 const { contextBridge, ipcRenderer } = require('electron');
 // Expose protected methods that allow the renderer process to use
@@ -172,7 +174,7 @@ contextBridge.exposeInMainWorld('api', {
     },
     // Utility functions
     on: (channel, callback) => {
-        // Deliberately strip event as it includes `sender` 
+        // Deliberately strip event as it includes `sender`
         ipcRenderer.on(channel, (_event, data) => callback(data));
     },
     // Categoria operations
@@ -234,6 +236,172 @@ contextBridge.exposeInMainWorld('api', {
     },
     deleteProductoImage: async (imageUrl) => {
         return await ipcRenderer.invoke('deleteProductoImage', imageUrl);
+    },
+    // Product Image methods
+    getProductImages: async (productoId) => {
+        return await ipcRenderer.invoke('getProductImages', productoId);
+    },
+    createProductImage: async (imageData) => {
+        return await ipcRenderer.invoke('createProductImage', imageData);
+    },
+    updateProductImage: async (imageId, imageData) => {
+        return await ipcRenderer.invoke('updateProductImage', imageId, imageData);
+    },
+    deleteProductImage: async (imageId) => {
+        return await ipcRenderer.invoke('deleteProductImage', imageId);
+    },
+    // Presentacion methods
+    getPresentaciones: async () => {
+        return await ipcRenderer.invoke('getPresentaciones');
+    },
+    getPresentacion: async (presentacionId) => {
+        return await ipcRenderer.invoke('getPresentacion', presentacionId);
+    },
+    getPresentacionesByProducto: async (productoId) => {
+        return await ipcRenderer.invoke('getPresentacionesByProducto', productoId);
+    },
+    createPresentacion: async (presentacionData) => {
+        return await ipcRenderer.invoke('createPresentacion', presentacionData);
+    },
+    updatePresentacion: async (presentacionId, presentacionData) => {
+        return await ipcRenderer.invoke('updatePresentacion', presentacionId, presentacionData);
+    },
+    deletePresentacion: async (presentacionId) => {
+        return await ipcRenderer.invoke('deletePresentacion', presentacionId);
+    },
+    // Codigo methods
+    getCodigos: async () => {
+        return await ipcRenderer.invoke('getCodigos');
+    },
+    getCodigo: async (codigoId) => {
+        return await ipcRenderer.invoke('getCodigo', codigoId);
+    },
+    getCodigosByPresentacion: async (presentacionId) => {
+        return await ipcRenderer.invoke('getCodigosByPresentacion', presentacionId);
+    },
+    createCodigo: async (codigoData) => {
+        return await ipcRenderer.invoke('createCodigo', codigoData);
+    },
+    updateCodigo: async (codigoId, codigoData) => {
+        return await ipcRenderer.invoke('updateCodigo', codigoId, codigoData);
+    },
+    deleteCodigo: async (codigoId) => {
+        return await ipcRenderer.invoke('deleteCodigo', codigoId);
+    },
+    // Moneda methods
+    getMonedas: async () => {
+        return await ipcRenderer.invoke('getMonedas');
+    },
+    getMoneda: async (monedaId) => {
+        return await ipcRenderer.invoke('getMoneda', monedaId);
+    },
+    createMoneda: async (monedaData) => {
+        return await ipcRenderer.invoke('createMoneda', monedaData);
+    },
+    updateMoneda: async (monedaId, monedaData) => {
+        return await ipcRenderer.invoke('updateMoneda', monedaId, monedaData);
+    },
+    deleteMoneda: async (monedaId) => {
+        return await ipcRenderer.invoke('deleteMoneda', monedaId);
+    },
+    // PrecioVenta methods
+    getPreciosVenta: async () => {
+        return await ipcRenderer.invoke('getPreciosVenta');
+    },
+    getPrecioVenta: async (precioVentaId) => {
+        return await ipcRenderer.invoke('getPrecioVenta', precioVentaId);
+    },
+    getPreciosVentaByPresentacion: async (presentacionId) => {
+        return await ipcRenderer.invoke('getPreciosVentaByPresentacion', presentacionId);
+    },
+    createPrecioVenta: async (precioVentaData) => {
+        return await ipcRenderer.invoke('createPrecioVenta', precioVentaData);
+    },
+    updatePrecioVenta: async (precioVentaId, precioVentaData) => {
+        return await ipcRenderer.invoke('updatePrecioVenta', precioVentaId, precioVentaData);
+    },
+    deletePrecioVenta: async (precioVentaId) => {
+        return await ipcRenderer.invoke('deletePrecioVenta', precioVentaId);
+    },
+    // Sabor methods
+    getSabores: async () => {
+        return await ipcRenderer.invoke('getSabores');
+    },
+    getSabor: async (saborId) => {
+        return await ipcRenderer.invoke('getSabor', saborId);
+    },
+    createSabor: async (saborData) => {
+        return await ipcRenderer.invoke('createSabor', saborData);
+    },
+    updateSabor: async (saborId, saborData) => {
+        return await ipcRenderer.invoke('updateSabor', saborId, saborData);
+    },
+    deleteSabor: async (saborId) => {
+        return await ipcRenderer.invoke('deleteSabor', saborId);
+    },
+    // PresentacionSabor methods
+    getPresentacionSaboresByPresentacion: async (presentacionId) => {
+        return await ipcRenderer.invoke('getPresentacionSaboresByPresentacion', presentacionId);
+    },
+    getPresentacionSabor: async (presentacionSaborId) => {
+        return await ipcRenderer.invoke('getPresentacionSabor', presentacionSaborId);
+    },
+    createPresentacionSabor: async (presentacionSaborData) => {
+        return await ipcRenderer.invoke('createPresentacionSabor', presentacionSaborData);
+    },
+    updatePresentacionSabor: async (presentacionSaborId, presentacionSaborData) => {
+        return await ipcRenderer.invoke('updatePresentacionSabor', presentacionSaborId, presentacionSaborData);
+    },
+    deletePresentacionSabor: async (presentacionSaborId) => {
+        return await ipcRenderer.invoke('deletePresentacionSabor', presentacionSaborId);
+    },
+    // Receta methods
+    getRecetas: async () => {
+        return await ipcRenderer.invoke('getRecetas');
+    },
+    getReceta: async (recetaId) => {
+        return await ipcRenderer.invoke('getReceta', recetaId);
+    },
+    createReceta: async (recetaData) => {
+        return await ipcRenderer.invoke('createReceta', recetaData);
+    },
+    updateReceta: async (recetaId, recetaData) => {
+        return await ipcRenderer.invoke('updateReceta', recetaId, recetaData);
+    },
+    deleteReceta: async (recetaId) => {
+        return await ipcRenderer.invoke('deleteReceta', recetaId);
+    },
+    // RecetaItem methods
+    getRecetaItems: async (recetaId) => {
+        return await ipcRenderer.invoke('getRecetaItems', recetaId);
+    },
+    getRecetaItem: async (recetaItemId) => {
+        return await ipcRenderer.invoke('getRecetaItem', recetaItemId);
+    },
+    createRecetaItem: async (recetaItemData) => {
+        return await ipcRenderer.invoke('createRecetaItem', recetaItemData);
+    },
+    updateRecetaItem: async (recetaItemId, recetaItemData) => {
+        return await ipcRenderer.invoke('updateRecetaItem', recetaItemId, recetaItemData);
+    },
+    deleteRecetaItem: async (recetaItemId) => {
+        return await ipcRenderer.invoke('deleteRecetaItem', recetaItemId);
+    },
+    // Ingrediente methods
+    getIngredientes: async () => {
+        return await ipcRenderer.invoke('getIngredientes');
+    },
+    getIngrediente: async (ingredienteId) => {
+        return await ipcRenderer.invoke('getIngrediente', ingredienteId);
+    },
+    createIngrediente: async (ingredienteData) => {
+        return await ipcRenderer.invoke('createIngrediente', ingredienteData);
+    },
+    updateIngrediente: async (ingredienteId, ingredienteData) => {
+        return await ipcRenderer.invoke('updateIngrediente', ingredienteId, ingredienteData);
+    },
+    deleteIngrediente: async (ingredienteId) => {
+        return await ipcRenderer.invoke('deleteIngrediente', ingredienteId);
     },
 });
 //# sourceMappingURL=preload.js.map

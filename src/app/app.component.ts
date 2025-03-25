@@ -32,6 +32,8 @@ import { firstValueFrom } from 'rxjs';
 import { ListPersonasComponent } from './pages/personas/personas/list-personas.component';
 import { ListCategoriasComponent } from './pages/productos/categorias/list-categorias/list-categorias.component';
 import { ListProductosComponent } from './pages/productos/productos/list-productos.component';
+import { ListMonedasComponent } from './pages/financiero/monedas/list-monedas/list-monedas.component';
+import { ListRecetasComponent } from './pages/productos/recetas/list-recetas.component';
 
 @Component({
   selector: 'app-root',
@@ -154,7 +156,7 @@ export class AppComponent implements OnInit, OnDestroy {
       }
 
       // Add a default home tab when the app starts
-      this.openProductosTab();
+      // this.openProductosTab();
 
       // Add event listener for mouse movement after view is initialized
       setTimeout(() => this.setupSidenavHover(), 0);
@@ -295,6 +297,20 @@ export class AppComponent implements OnInit, OnDestroy {
 
   openProductosTab() {
     this.tabsService.openTab('Productos', ListProductosComponent, { source: 'navigation' }, 'productos-tab', true);
+  }
+
+  openMonedasTab() {
+    this.tabsService.openTab('Monedas', ListMonedasComponent, { source: 'navigation' }, 'monedas-tab', true);
+  }
+
+  openRecetasTab() {
+    this.tabsService.openTab('Recetas ', ListRecetasComponent);
+  }
+
+  openIngredientesTab() {
+    // TODO: Create Ingredientes component
+    // For now, just show a placeholder message
+    this.tabsService.openTab('Ingredientes', HomeComponent);
   }
 
   private applyTheme() {

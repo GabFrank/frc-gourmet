@@ -12,13 +12,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductoImage = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
-const producto_entity_1 = require("./producto.entity");
 /**
  * Entity representing a product image
  */
 let ProductoImage = class ProductoImage extends base_entity_1.BaseModel {
 };
-exports.ProductoImage = ProductoImage;
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)
@@ -36,11 +34,12 @@ __decorate([
     __metadata("design:type", Number)
 ], ProductoImage.prototype, "productoId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => producto_entity_1.Producto, producto => producto.images),
+    (0, typeorm_1.ManyToOne)('Producto', 'images'),
     (0, typeorm_1.JoinColumn)({ name: 'producto_id' }),
-    __metadata("design:type", producto_entity_1.Producto)
+    __metadata("design:type", Function)
 ], ProductoImage.prototype, "producto", void 0);
-exports.ProductoImage = ProductoImage = __decorate([
+ProductoImage = __decorate([
     (0, typeorm_1.Entity)('producto_images')
 ], ProductoImage);
+exports.ProductoImage = ProductoImage;
 //# sourceMappingURL=producto-image.entity.js.map

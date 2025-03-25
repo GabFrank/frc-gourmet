@@ -38,6 +38,19 @@ const login_session_entity_1 = require("./entities/auth/login-session.entity");
 const categoria_entity_1 = require("./entities/productos/categoria.entity");
 const subcategoria_entity_1 = require("./entities/productos/subcategoria.entity");
 const producto_entity_1 = require("./entities/productos/producto.entity");
+const producto_image_entity_1 = require("./entities/productos/producto-image.entity");
+const presentacion_entity_1 = require("./entities/productos/presentacion.entity");
+const codigo_entity_1 = require("./entities/productos/codigo.entity");
+const precio_venta_entity_1 = require("./entities/productos/precio-venta.entity");
+const moneda_entity_1 = require("./entities/financiero/moneda.entity");
+const sabor_entity_1 = require("./entities/productos/sabor.entity");
+const presentacion_sabor_entity_1 = require("./entities/productos/presentacion-sabor.entity");
+const ingrediente_entity_1 = require("./entities/productos/ingrediente.entity");
+const receta_entity_1 = require("./entities/productos/receta.entity");
+const receta_item_entity_1 = require("./entities/productos/receta-item.entity");
+const combo_entity_1 = require("./entities/productos/combo.entity");
+const combo_item_entity_1 = require("./entities/productos/combo-item.entity");
+const intercambio_ingrediente_entity_1 = require("./entities/productos/intercambio-ingrediente.entity");
 /**
  * Get the configuration for TypeORM
  * @param userDataPath Path to store the database file
@@ -59,7 +72,22 @@ function getDataSourceOptions(userDataPath) {
             login_session_entity_1.LoginSession,
             categoria_entity_1.Categoria,
             subcategoria_entity_1.Subcategoria,
-            producto_entity_1.Producto
+            producto_entity_1.Producto,
+            producto_image_entity_1.ProductoImage,
+            // Product entities
+            presentacion_entity_1.Presentacion,
+            codigo_entity_1.Codigo,
+            precio_venta_entity_1.PrecioVenta,
+            moneda_entity_1.Moneda,
+            // New entities
+            sabor_entity_1.Sabor,
+            presentacion_sabor_entity_1.PresentacionSabor,
+            ingrediente_entity_1.Ingrediente,
+            receta_entity_1.Receta,
+            receta_item_entity_1.RecetaItem,
+            combo_entity_1.Combo,
+            combo_item_entity_1.ComboItem,
+            intercambio_ingrediente_entity_1.IntercambioIngrediente
         ],
         synchronize: true,
         logging: process.env['NODE_ENV'] === 'development',

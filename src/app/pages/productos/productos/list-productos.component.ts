@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { AfterViewInit, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatTableModule } from '@angular/material/table';
@@ -53,11 +53,11 @@ import { TabsService } from '../../../services/tabs.service';
   templateUrl: './list-productos.component.html',
   styleUrls: ['./list-productos.component.scss']
 })
-export class ListProductosComponent implements OnInit {
+export class ListProductosComponent implements OnInit, AfterViewInit {
   productos: Producto[] = [];
   categorias: Categoria[] = [];
   subcategorias: Subcategoria[] = [];
-  displayedColumns: string[] = ['nombre', 'subcategoria', 'precio', 'stock', 'activo', 'acciones'];
+  displayedColumns: string[] = ['id', 'nombre', 'subcategoria', 'precio', 'stock', 'activo', 'acciones'];
   isLoading = false;
 
   // Pagination
@@ -97,8 +97,33 @@ export class ListProductosComponent implements OnInit {
         this.filterForm.get('subcategoriaId')?.setValue('');
       }
     });
-//this is for test only, keep here
-    this.addProducto();
+  }
+
+  ngAfterViewInit(): void {
+    // Open product with ID 2 as the initial tab
+    setTimeout(() => {
+      this.openProductWithId(2);
+    }, 500);
+  }
+
+  /**
+   * Opens a specific product in edit mode by its ID
+   */
+  private async openProductWithId(id: number): Promise<void> {
+    try {
+      const producto = await firstValueFrom(this.repositoryService.getProducto(id));
+      if (producto) {
+        this.tabsService.openTabWithData(
+          `Editar Producto: ${producto.nombre}`,
+          CreateEditProductoComponent,
+          { producto: producto }
+        );
+      } else {
+        console.error(`Product with ID ${id} not found`);
+      }
+    } catch (error) {
+      console.error(`Error loading product with ID ${id}:`, error);
+    }
   }
 
   async loadCategorias(): Promise<void> {

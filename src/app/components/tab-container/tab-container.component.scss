@@ -5,26 +5,73 @@
   overflow: hidden;
 }
 
-mat-tab-group {
-  flex: 0 0 auto; /* Take only as much space as needed for tab headers */
+.tab-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.tab-header {
+  flex-shrink: 0;
+}
+
+.tab-content-container {
+  flex-grow: 1;
+  overflow: auto;
+  position: relative;
+}
+
+.tab-content {
+  height: 100%;
+  width: 100%;
+  overflow: auto;
+}
+
+.tab-label {
+  display: flex;
+  align-items: center;
+  
+  span {
+    margin-right: 8px;
+  }
+}
+
+.tab-close-button {
+  width: 24px;
+  height: 24px;
+  line-height: 24px;
+  
+  mat-icon {
+    font-size: 16px;
+    height: 16px;
+    width: 16px;
+    line-height: 16px;
+  }
+  
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+  }
 }
 
 ::ng-deep .mat-mdc-tab-body-wrapper {
   display: none; /* Hide the default tab content area */
 }
 
-::ng-deep .mat-mdc-tab-body-content {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
+.active-tab {
+  z-index: 1;
 }
 
-.tab-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
+/* Style for tab close button */
+.tab-close-button {
+  z-index: 1000;
+}
+
+/* Dark theme adjustments */
+:host-context(.dark-theme) {
+  .tab-close-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
 }
 
 .tab-group {
@@ -78,24 +125,6 @@ mat-tab-group {
   }
 }
 
-.tab-close-button {
-  width: 20px;
-  height: 20px;
-  line-height: 20px;
-  margin-left: 8px;
-  
-  .mat-icon {
-    font-size: 16px;
-    line-height: 16px;
-    height: 16px;
-    width: 16px;
-  }
-  
-  &:hover {
-    background-color: rgba(0, 0, 0, 0.04);
-  }
-}
-
 .dynamic-component-container {
   flex-grow: 1;
   display: flex;
@@ -132,32 +161,6 @@ mat-tab-group {
   .mat-tab-body-wrapper {
     max-height: 400px; // Adjust this value as needed
     overflow: auto;
-  }
-}
-
-// Make sure the tab close button doesn't trigger tab selection
-.tab-close-button {
-  z-index: 1000;
-}
-
-// Dark theme adjustments
-:host-context(.dark-theme) {
-  .tab-group ::ng-deep {
-    .mat-tab-header {
-      border-bottom-color: rgba(255, 255, 255, 0.12);
-    }
-    
-    .mat-tab-label-active {
-      background-color: rgba(255, 255, 255, 0.1);
-    }
-  }
-  
-  .tab-content {
-    border-color: rgba(255, 255, 255, 0.12);
-  }
-  
-  .tab-close-button:hover {
-    background-color: rgba(255, 255, 255, 0.1);
   }
 }
 

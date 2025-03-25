@@ -1,6 +1,10 @@
-import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
-import { Subcategoria } from './subcategoria.entity';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
+import type { Subcategoria } from './subcategoria.entity';
 import { BaseModel } from '../base.entity';
+import type { ProductoImage } from './producto-image.entity';
+import type { Presentacion } from './presentacion.entity';
+import type { Receta } from './receta.entity';
+import type { IntercambioIngrediente } from './intercambio-ingrediente.entity';
 
 /**
  * Entity representing a product
@@ -21,6 +25,9 @@ export class Producto extends BaseModel {
 
   @Column({ default: false, name: 'is_combo' })
   isCombo!: boolean;
+
+  @Column({ default: false, name: 'is_compuesto' })
+  isCompuesto!: boolean;
 
   @Column({ default: false, name: 'is_ingrediente' })
   isIngrediente!: boolean;
@@ -52,7 +59,23 @@ export class Producto extends BaseModel {
   @Column({ name: 'subcategoria_id' })
   subcategoriaId!: number;
 
-  @ManyToOne(() => Subcategoria, subcategoria => subcategoria.productos)
+  @ManyToOne('Subcategoria', 'productos')
   @JoinColumn({ name: 'subcategoria_id' })
   subcategoria!: Subcategoria;
-} 
+
+  @Column({ name: 'receta_id', nullable: true })
+  recetaId?: number;
+
+  @ManyToOne('Receta', { nullable: true })
+  @JoinColumn({ name: 'receta_id' })
+  receta?: Receta;
+
+  @OneToMany('ProductoImage', 'producto')
+  images!: ProductoImage[];
+
+  @OneToMany('Presentacion', 'producto')
+  presentaciones!: Presentacion[];
+
+  @OneToMany('IntercambioIngrediente', 'producto')
+  intercambioIngredientes!: IntercambioIngrediente[];
+}

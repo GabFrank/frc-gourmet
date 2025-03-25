@@ -1,0 +1,117 @@
+<div class="list-recetas-container">
+  <mat-card class="filter-card">
+    <mat-card-header>
+      <mat-card-title>Gestión de Recetas</mat-card-title>
+    </mat-card-header>
+
+    <mat-card-content>
+        <form [formGroup]="filterForm" class="filter-form">
+        <div class="filter-row">
+          <mat-form-field appearance="outline">
+            <mat-label>Nombre</mat-label>
+            <input matInput formControlName="nombre" placeholder="Buscar por nombre">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Estado</mat-label>
+            <mat-select formControlName="activo">
+              <mat-option value="">Todos</mat-option>
+              <mat-option value="true">Activo</mat-option>
+              <mat-option value="false">Inactivo</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="button-row">
+            <button mat-raised-button color="primary" (click)="buscar()">
+            <mat-icon>search</mat-icon>
+            Buscar
+          </button>
+          <button mat-raised-button (click)="clearFilters()">
+            <mat-icon>clear</mat-icon>
+            Limpiar
+            </button>
+          <span class="spacer"></span>
+          <button mat-raised-button color="accent" (click)="openCreateDialog()">
+            <mat-icon>add</mat-icon>
+            Nueva Receta
+            </button>
+          </div>
+        </form>
+    </mat-card-content>
+  </mat-card>
+
+      <div class="table-container">
+        <div class="loading-shade" *ngIf="isLoading">
+      <mat-spinner></mat-spinner>
+        </div>
+
+    <mat-card class="table-scroll-container">
+        <table mat-table [dataSource]="recetas" matSort class="mat-elevation-z8">
+
+          <!-- ID Column -->
+          <ng-container matColumnDef="id">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>ID</th>
+            <td mat-cell *matCellDef="let receta">{{ receta.id }}</td>
+          </ng-container>
+
+          <!-- Nombre Column -->
+          <ng-container matColumnDef="nombre">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Nombre</th>
+            <td mat-cell *matCellDef="let receta">{{ receta.nombre }}</td>
+          </ng-container>
+
+          <!-- Estado Column -->
+          <ng-container matColumnDef="activo">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Estado</th>
+            <td mat-cell *matCellDef="let receta">
+              <span class="status-badge" [ngClass]="receta.activo ? 'active' : 'inactive'">
+                {{ receta.activo ? 'Activo' : 'Inactivo' }}
+              </span>
+            </td>
+          </ng-container>
+
+          <!-- Actions Column -->
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>Acciones</th>
+            <td mat-cell *matCellDef="let receta">
+              <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+                <mat-icon>more_vert</mat-icon>
+              </button>
+              <mat-menu #menu="matMenu">
+                <button mat-menu-item (click)="openEditDialog(receta)">
+                  <mat-icon>edit</mat-icon>
+                  <span>Editar</span>
+                </button>
+                <button mat-menu-item (click)="openDeleteDialog(receta)">
+                  <mat-icon>delete</mat-icon>
+                  <span>Eliminar</span>
+                </button>
+                <button mat-menu-item (click)="toggleActive(receta)">
+                  <mat-icon>{{ receta.activo ? 'toggle_off' : 'toggle_on' }}</mat-icon>
+                  <span>{{ receta.activo ? 'Desactivar' : 'Activar' }}</span>
+                </button>
+              </mat-menu>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+
+          <!-- No results row -->
+          <tr class="mat-row" *matNoDataRow>
+          <td class="mat-cell" colspan="4">No se encontraron recetas</td>
+          </tr>
+        </table>
+    </mat-card>
+
+    <div class="paginator-container">
+        <mat-paginator
+          [length]="recetas.length"
+          [pageSize]="10"
+          [pageSizeOptions]="[5, 10, 25, 100]"
+          aria-label="Seleccionar página">
+        </mat-paginator>
+      </div>
+  </div>
+</div>

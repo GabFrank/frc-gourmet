@@ -1,0 +1,169 @@
+.list-recetas-container {
+  padding: 20px;
+  background-color: #333;
+  color: #fff;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.filter-card {
+  background-color: #444;
+  margin-bottom: 20px;
+}
+
+mat-card-title {
+  color: #fff;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.filter-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+}
+
+mat-form-field {
+  flex: 1;
+  min-width: 200px;
+}
+
+.button-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+::ng-deep .mat-form-field-appearance-outline .mat-form-field-outline {
+  color: #555;
+}
+
+::ng-deep .mat-form-field-appearance-outline.mat-focused .mat-form-field-outline-thick {
+  color: #f44336;
+}
+
+::ng-deep .mat-form-field-label {
+  color: #aaa !important;
+}
+
+::ng-deep .mat-input-element {
+  color: white !important;
+}
+
+::ng-deep .mat-select-value {
+  color: white;
+}
+
+::ng-deep .mat-select-arrow {
+  color: #aaa;
+}
+
+.table-container {
+  position: relative;
+}
+
+.loading-shade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.table-scroll-container {
+  background-color: #444;
+  overflow: auto;
+  max-height: calc(100vh - 300px);
+}
+
+table {
+  width: 100%;
+}
+
+::ng-deep .mat-table {
+  background: transparent !important;
+}
+
+::ng-deep .mat-header-cell {
+  background-color: #555;
+  color: #fff;
+  font-size: 14px;
+  border-bottom: 1px solid #666;
+}
+
+::ng-deep .mat-cell {
+  color: #fff;
+  border-bottom: 1px solid #555;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.active {
+  background-color: rgba(76, 175, 80, 0.2);
+  color: #4caf50;
+}
+
+.inactive {
+  background-color: rgba(244, 67, 54, 0.2);
+  color: #f44336;
+}
+
+.paginator-container {
+  background-color: #444;
+  border-radius: 0 0 4px 4px;
+}
+
+::ng-deep .mat-paginator {
+  background: transparent;
+  color: #aaa;
+}
+
+::ng-deep .mat-select-panel {
+  background: #555;
+}
+
+::ng-deep .mat-option {
+  color: white !important;
+}
+
+::ng-deep .mat-option.mat-active {
+  color: #f44336 !important;
+}
+
+@media (max-width: 768px) {
+  .filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  mat-form-field {
+    width: 100%;
+  }
+
+  .button-row {
+    flex-wrap: wrap;
+  }
+}

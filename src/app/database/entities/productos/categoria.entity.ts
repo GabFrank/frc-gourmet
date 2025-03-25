@@ -7,16 +7,16 @@ import { Subcategoria } from './subcategoria.entity';
  */
 @Entity('categorias')
 export class Categoria extends BaseModel {
-  @Column()
+  @Column({ type: 'varchar' })
   nombre!: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   descripcion?: string;
 
-  @Column({ default: 0 })
+  @Column({ type: 'integer', default: 0 })
   posicion!: number;
 
-  @Column({ default: true })
+  @Column({ type: 'boolean', default: true })
   activo!: boolean;
 
   @OneToMany(() => Subcategoria, subcategoria => subcategoria.categoria)

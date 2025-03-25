@@ -14,6 +14,19 @@ import { LoginSession } from './entities/auth/login-session.entity';
 import { Categoria } from './entities/productos/categoria.entity';
 import { Subcategoria } from './entities/productos/subcategoria.entity';
 import { Producto } from './entities/productos/producto.entity';
+import { ProductoImage } from './entities/productos/producto-image.entity';
+import { Presentacion } from './entities/productos/presentacion.entity';
+import { Codigo } from './entities/productos/codigo.entity';
+import { PrecioVenta } from './entities/productos/precio-venta.entity';
+import { Moneda } from './entities/financiero/moneda.entity';
+import { Sabor } from './entities/productos/sabor.entity';
+import { PresentacionSabor } from './entities/productos/presentacion-sabor.entity';
+import { Ingrediente } from './entities/productos/ingrediente.entity';
+import { Receta } from './entities/productos/receta.entity';
+import { RecetaItem } from './entities/productos/receta-item.entity';
+import { Combo } from './entities/productos/combo.entity';
+import { ComboItem } from './entities/productos/combo-item.entity';
+import { IntercambioIngrediente } from './entities/productos/intercambio-ingrediente.entity';
 
 /**
  * Get the configuration for TypeORM
@@ -26,7 +39,6 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
     database: path.join(userDataPath, 'frc-gourmet.db'),
     entities: [
       // Entity classes
-
       Printer,
       Persona,
       Usuario,
@@ -37,7 +49,22 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       LoginSession,
       Categoria,
       Subcategoria,
-      Producto
+      Producto,
+      ProductoImage,
+      // Product entities
+      Presentacion,
+      Codigo,
+      PrecioVenta,
+      Moneda,
+      // New entities
+      Sabor,
+      PresentacionSabor,
+      Ingrediente,
+      Receta,
+      RecetaItem,
+      Combo,
+      ComboItem,
+      IntercambioIngrediente
     ],
     synchronize: true, // Automatically creates tables in development
     logging: process.env['NODE_ENV'] === 'development',

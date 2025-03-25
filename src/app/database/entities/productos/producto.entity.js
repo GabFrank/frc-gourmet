@@ -11,7 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Producto = void 0;
 const typeorm_1 = require("typeorm");
-const subcategoria_entity_1 = require("./subcategoria.entity");
 const base_entity_1 = require("../base.entity");
 /**
  * Entity representing a product
@@ -38,6 +37,10 @@ __decorate([
     (0, typeorm_1.Column)({ default: false, name: 'is_combo' }),
     __metadata("design:type", Boolean)
 ], Producto.prototype, "isCombo", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ default: false, name: 'is_compuesto' }),
+    __metadata("design:type", Boolean)
+], Producto.prototype, "isCompuesto", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: false, name: 'is_ingrediente' }),
     __metadata("design:type", Boolean)
@@ -79,10 +82,31 @@ __decorate([
     __metadata("design:type", Number)
 ], Producto.prototype, "subcategoriaId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => subcategoria_entity_1.Subcategoria, subcategoria => subcategoria.productos),
+    (0, typeorm_1.ManyToOne)('Subcategoria', 'productos'),
     (0, typeorm_1.JoinColumn)({ name: 'subcategoria_id' }),
-    __metadata("design:type", subcategoria_entity_1.Subcategoria)
+    __metadata("design:type", Function)
 ], Producto.prototype, "subcategoria", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'receta_id', nullable: true }),
+    __metadata("design:type", Number)
+], Producto.prototype, "recetaId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)('Receta', { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'receta_id' }),
+    __metadata("design:type", Function)
+], Producto.prototype, "receta", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)('ProductoImage', 'producto'),
+    __metadata("design:type", Array)
+], Producto.prototype, "images", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)('Presentacion', 'producto'),
+    __metadata("design:type", Array)
+], Producto.prototype, "presentaciones", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)('IntercambioIngrediente', 'producto'),
+    __metadata("design:type", Array)
+], Producto.prototype, "intercambioIngredientes", void 0);
 Producto = __decorate([
     (0, typeorm_1.Entity)('productos')
 ], Producto);

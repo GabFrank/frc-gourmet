@@ -1,0 +1,59 @@
+<h2 mat-dialog-title>{{ data.editMode ? 'Editar' : 'Agregar' }} Presentación</h2>
+
+<form [formGroup]="presentacionForm" (ngSubmit)="save()">
+  <div mat-dialog-content>
+    <div class="form-row">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Descripción</mat-label>
+        <input matInput formControlName="descripcion" placeholder="Descripción de la presentación">
+        <mat-error *ngIf="presentacionForm.get('descripcion')?.hasError('required')">
+          La descripción es requerida
+        </mat-error>
+      </mat-form-field>
+    </div>
+
+    <div class="form-row">
+      <mat-form-field appearance="outline" class="half-width">
+        <mat-label>Tipo de Medida</mat-label>
+        <mat-select formControlName="tipoMedida">
+          <mat-option [value]="tipoMedida.UNIDAD">Unidad</mat-option>
+          <mat-option [value]="tipoMedida.PAQUETE">Paquete</mat-option>
+          <mat-option [value]="tipoMedida.GRAMO">Gramo</mat-option>
+          <mat-option [value]="tipoMedida.LITRO">Litro</mat-option>
+        </mat-select>
+        <mat-error *ngIf="presentacionForm.get('tipoMedida')?.hasError('required')">
+          El tipo de medida es requerido
+        </mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="half-width">
+        <mat-label>Cantidad</mat-label>
+        <input matInput type="number" min="0" formControlName="cantidad" placeholder="Cantidad">
+        <mat-error *ngIf="presentacionForm.get('cantidad')?.hasError('required')">
+          La cantidad es requerida
+        </mat-error>
+        <mat-error *ngIf="presentacionForm.get('cantidad')?.hasError('min')">
+          La cantidad debe ser mayor a 0
+        </mat-error>
+      </mat-form-field>
+    </div>
+
+    <div class="form-row checkboxes">
+      <mat-checkbox formControlName="principal" color="primary">
+        Presentación Principal
+      </mat-checkbox>
+
+      <mat-checkbox formControlName="activo" color="primary">
+        Activo
+      </mat-checkbox>
+    </div>
+  </div>
+
+  <div mat-dialog-actions align="end">
+    <button mat-button type="button" [mat-dialog-close]="false">Cancelar</button>
+    <button mat-raised-button color="primary" type="submit" [disabled]="presentacionForm.invalid || loading">
+      <mat-spinner *ngIf="loading" diameter="20"></mat-spinner>
+      <span *ngIf="!loading">{{ data.editMode ? 'Actualizar' : 'Guardar' }}</span>
+    </button>
+  </div>
+</form>

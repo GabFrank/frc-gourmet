@@ -1,0 +1,13 @@
+import { Component } from '@angular/core';
+import { CommonModule } from '@angular/common';
+
+@Component({
+  selector: 'app-list-monedas',
+  standalone: true,
+  imports: [CommonModule],
+  templateUrl: './list-monedas.component.html',
+  styleUrls: ['./list-monedas.component.scss']
+})
+export class ListMonedasComponent {
+
+}

@@ -71,14 +71,38 @@
               <mat-icon matListItemIcon>restaurant</mat-icon>
               <span matListItemTitle>Productos</span>
             </a>
+            <a mat-list-item (click)="openRecetasTab(); drawer.close()">
+              <mat-icon matListItemIcon>menu_book</mat-icon>
+              <span matListItemTitle>Recetas</span>
+            </a>
+            <a mat-list-item (click)="openIngredientesTab(); drawer.close()">
+              <mat-icon matListItemIcon>egg</mat-icon>
+              <span matListItemTitle>Ingredientes</span>
+            </a>
           </div>
         </mat-expansion-panel>
 
         <mat-divider></mat-divider>
-        <a mat-list-item (click)="openPrinterSettings(); drawer.close()">
-          <mat-icon matListItemIcon>settings</mat-icon>
-          <span matListItemTitle>Settings</span>
-        </a>
+
+        <!-- Settings Menu - Convert to expansion panel -->
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel">
+          <mat-expansion-panel-header class="nav-panel-header">
+            <mat-panel-title>
+              <mat-icon class="nav-icon">settings</mat-icon>
+              <span class="nav-title">Configuración</span>
+            </mat-panel-title>
+          </mat-expansion-panel-header>
+          <div class="submenu-container">
+            <a mat-list-item (click)="openPrinterSettings(); drawer.close()">
+              <mat-icon matListItemIcon>print</mat-icon>
+              <span matListItemTitle>Impresoras</span>
+            </a>
+            <a mat-list-item (click)="openMonedasTab(); drawer.close()">
+              <mat-icon matListItemIcon>monetization_on</mat-icon>
+              <span matListItemTitle>Monedas</span>
+            </a>
+          </div>
+        </mat-expansion-panel>
 
       </mat-nav-list>
     </mat-sidenav>
@@ -124,7 +148,7 @@
           <mat-divider></mat-divider>
           <button mat-menu-item (click)="logout()">
             <mat-icon>exit_to_app</mat-icon>
-            <span>Cerrar Sesión</span>
+            <span>Cerrar Sesión </span>
           </button>
         </mat-menu>
       </mat-toolbar>

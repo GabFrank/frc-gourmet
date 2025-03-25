@@ -1,7 +1,7 @@
 import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { BaseModel } from '../base.entity';
-import { Categoria } from './categoria.entity';
-import { Producto } from './producto.entity';
+import type { Categoria } from './categoria.entity';
+import type { Producto } from './producto.entity';
 
 /**
  * Entity representing a product subcategory
@@ -23,11 +23,11 @@ export class Subcategoria extends BaseModel {
   @Column({ name: 'categoria_id' })
   categoriaId!: number;
 
-  @ManyToOne(() => Categoria)
+  @ManyToOne('Categoria')
   @JoinColumn({ name: 'categoria_id' })
   categoria!: Categoria;
 
-  @OneToMany(() => Producto, producto => producto.subcategoria)
+  @OneToMany('Producto', 'subcategoria')
   productos?: Producto[];
 } 
 

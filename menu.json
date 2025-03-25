@@ -1,0 +1,69 @@
+{
+  "RESTAURANT_NAME": "DON FRANCO",
+  "CURRENCY": "PYG",
+  "MENU_TITLE": "LOS MAS PEDIDOS",
+  "SLOGAN": "DE BURGER LOVERS PARA BURGER LOVERS - LAS MEJORES HAMBURGUESAS DE LA REGIÓN HECHAS CON INGREDIENTES 100% ARTESANALES Y CALIDAD PREMIUM",
+  "MENU_ITEMS": [
+    {
+      "NAME": "FRANQUITO",
+      "INGREDIENTS": [
+        "Pan artesanal",
+        "130 gr. de carne",
+        "Bacon",
+        "Queso cheddar",
+        "Cebolla caramelizada",
+        "Salsa de la casa"
+      ],
+      "PRICE": 32000
+    },
+    {
+      "NAME": "DON FRANCO",
+      "INGREDIENTS": [
+        "Pan artesanal",
+        "200 gr. de carne",
+        "Bacon",
+        "Queso cheddar",
+        "Cebolla caramelizada", 
+        "Salsa de la casa"
+      ],
+      "PRICE": 45000
+    },
+    {
+      "NAME": "GRAN CHEESE",
+      "INGREDIENTS": [
+        "Pan artesanal",
+        "200 gr. de carne",
+        "Bacon",
+        "Queso cheddar",
+        "Couve crispy",
+        "Queso empanado",
+        "Salsa especial"
+      ],
+      "PRICE": 50000
+    },
+    {
+      "NAME": "MOZARE",
+      "INGREDIENTS": [
+        "Pan artesanal",
+        "Salsa especial",
+        "Queso empanado",
+        "Queso cheddar",
+        "Lechuga",
+        "Tomate",
+        "Mayonesa tártara"
+      ],
+      "PRICE": 35000
+    },
+    {
+      "NAME": "PARAISO DEL CHEDDAR",
+      "INGREDIENTS": [
+        "Pan artesanal",
+        "130 gr. de carne",
+        "Barbacoa",
+        "Queso cheddar",
+        "Piscina de cheddar y bacon extra"
+      ],
+      "PRICE": 45000
+    }
+  ]
+} 

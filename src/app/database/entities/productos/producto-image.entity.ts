@@ -1,6 +1,7 @@
 import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseModel } from '../base.entity';
-import { Producto } from './producto.entity';
+// Import only the type to avoid circular dependency
+import type { Producto } from './producto.entity';
 
 /**
  * Entity representing a product image
@@ -19,7 +20,7 @@ export class ProductoImage extends BaseModel {
   @Column({ name: 'producto_id' })
   productoId!: number;
 
-  @ManyToOne(() => Producto, producto => producto.images)
+  @ManyToOne('Producto', 'images')
   @JoinColumn({ name: 'producto_id' })
   producto!: Producto;
-} 
+}

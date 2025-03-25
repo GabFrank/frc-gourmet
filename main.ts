@@ -13,6 +13,7 @@ const imageHandler = require('./electron/utils/image-handler');
 
 // Import TypeORM-related code
 import { DataSource } from 'typeorm';
+import { Not } from 'typeorm';
 import { DatabaseService } from './src/app/database/database.service';
 import { Printer } from './src/app/database/entities/printer.entity';
 import { Persona } from './src/app/database/entities/personas/persona.entity';
@@ -25,6 +26,16 @@ import { LoginSession } from './src/app/database/entities/auth/login-session.ent
 import { Categoria } from './src/app/database/entities/productos/categoria.entity';
 import { Subcategoria } from './src/app/database/entities/productos/subcategoria.entity';
 import { Producto } from './src/app/database/entities/productos/producto.entity';
+import { ProductoImage } from './src/app/database/entities/productos/producto-image.entity';
+import { Presentacion } from './src/app/database/entities/productos/presentacion.entity';
+import { Moneda } from './src/app/database/entities/financiero/moneda.entity';
+import { PrecioVenta } from './src/app/database/entities/productos/precio-venta.entity';
+import { Codigo } from './src/app/database/entities/productos/codigo.entity';
+import { Sabor } from './src/app/database/entities/productos/sabor.entity';
+import { PresentacionSabor } from './src/app/database/entities/productos/presentacion-sabor.entity';
+import { Receta } from './src/app/database/entities/productos/receta.entity';
+import { RecetaItem } from './src/app/database/entities/productos/receta-item.entity';
+import { Ingrediente } from './src/app/database/entities/productos/ingrediente.entity';
 
 let win: any;
 let dbService: DatabaseService;
@@ -83,23 +94,117 @@ function createWindow(): void {
   win.on('closed', () => {
     win = null;
   });
+
+  // Register the app:// protocol for serving local files
+  // @ts-ignore - TypeScript doesn't recognize Electron's protocol API correctly
+  protocol.registerFileProtocol('app', (request, callback) => {
+const urlPath = request.url.substring(6); // Remove 'app://'
+
+    // Handle profile images
+    if (urlPath.startsWith('profile-images/')) {
+      const fileName = urlPath.replace('profile-images/', '');
+const imagesDir = path.join(app.getPath('userData'), 'profile-images');
+
+      // Create directory if it doesn't exist
+      if (!fs.existsSync(imagesDir)) {
+        fs.mkdirSync(imagesDir, { recursive: true });
+}
+
+      callback({ path: path.join(imagesDir, fileName) });
+      return;
+}
+
+    // Handle product images
+    if (urlPath.startsWith('producto-images/')) {
+      const fileName = urlPath.replace('producto-images/', '');
+const imagesDir = path.join(app.getPath('userData'), 'producto-images');
+
+      // Create directory if it doesn't exist
+      if (!fs.existsSync(imagesDir)) {
+        fs.mkdirSync(imagesDir, { recursive: true });
+}
+
+      const imagePath = path.join(imagesDir, fileName);
+console.log('Serving product image from:', imagePath);
+
+      callback({ path: imagePath });
+      return;
+}
+
+    // Handle other app:// URLs - check in app folder first
+let normalizedPath = path.normalize(`${app.getAppPath()}/${urlPath}`);
+
+    if (fs.existsSync(normalizedPath)) {
+      callback({ path: normalizedPath });
+    } else {
+      // Try user data directory as fallback
+      const userDataPath = app.getPath('userData');
+normalizedPath = path.normalize(`${userDataPath}/${urlPath}`);
+
+      if (fs.existsSync(normalizedPath)) {
+        callback({ path: normalizedPath });
+      } else {
+        console.error(`File not found: ${normalizedPath}`);
+        callback({ error: -2 /* ENOENT */ });
+      }
+    }
+  });
 }
 
 // Initialize the database when the app is ready
 app.on('ready', () => {
-  // Register the app:// protocol for handling profile images
-  protocol.registerFileProtocol('app', (request: Electron.ProtocolRequest, callback: (response: Electron.ProtocolResponse) => void) => {
-    const url = request.url.substring(6); // Remove 'app://'
+  // Register the app:// protocol for handling local files
+  protocol.registerFileProtocol('app', (request: any, callback: any) => {
+const urlPath = request.url.substring(6); // Remove 'app://'
 
-    if (url.startsWith('profile-images/')) {
-      const fileName = url.replace('profile-images/', '');
-      const imagesDir = path.join(app.getPath('userData'), 'profile-images');
+    // Handle profile images
+    if (urlPath.startsWith('profile-images/')) {
+      const fileName = urlPath.replace('profile-images/', '');
+const imagesDir = path.join(app.getPath('userData'), 'profile-images');
+
+      // Create directory if it doesn't exist
+      if (!fs.existsSync(imagesDir)) {
+        fs.mkdirSync(imagesDir, { recursive: true });
+}
+
       callback({ path: path.join(imagesDir, fileName) });
       return;
-    }
+}
 
-    // Handle other app:// URLs here if needed
-    callback({ error: -2 /* ENOENT */ });
+    // Handle product images
+    if (urlPath.startsWith('producto-images/')) {
+      const fileName = urlPath.replace('producto-images/', '');
+const imagesDir = path.join(app.getPath('userData'), 'producto-images');
+
+      // Create directory if it doesn't exist
+      if (!fs.existsSync(imagesDir)) {
+        fs.mkdirSync(imagesDir, { recursive: true });
+}
+
+      const imagePath = path.join(imagesDir, fileName);
+console.log('Serving product image from:', imagePath);
+
+      callback({ path: imagePath });
+      return;
+}
+
+    // Handle other app:// URLs - check in app folder first
+let normalizedPath = path.normalize(`${app.getAppPath()}/${urlPath}`);
+
+    if (fs.existsSync(normalizedPath)) {
+      callback({ path: normalizedPath });
+    } else {
+      // Try user data directory as fallback
+      const userDataPath = app.getPath('userData');
+normalizedPath = path.normalize(`${userDataPath}/${urlPath}`);
+
+      if (fs.existsSync(normalizedPath)) {
+        callback({ path: normalizedPath });
+      } else {
+        console.error(`File not found: ${normalizedPath}`);
+        callback({ error: -2 /* ENOENT */ });
+      }
+    }
   });
 
   initializeDatabase();
@@ -1813,38 +1918,123 @@ ipcMain.handle('updateProducto', async (_event: any, productoId: number, product
 
 ipcMain.handle('deleteProducto', async (_event: any, productoId: number) => {
   try {
-    const productoRepository = dbService.getDataSource().getRepository(Producto);
+    const dataSource = dbService.getDataSource();
+const productoRepository = dataSource.getRepository(Producto);
 
-    // Find the producto
-    const producto = await productoRepository.findOne({
-      where: { id: productoId }
-    });
+    // Find the producto to delete
+const producto = await productoRepository.findOneBy({ id: productoId });
 
     if (!producto) {
-      throw new Error(`Producto with ID ${productoId} not found`);
-    }
+      throw new Error('Producto not found');
+}
 
-    // If producto has an image, delete it
-    if (producto.imageUrl) {
-      await imageHandler.deleteProductoImage(producto.imageUrl);
-    }
+    // Set as inactive instead of deleting
+producto.activo = false;
 
-    // Delete the producto
-    const result = await productoRepository.remove(producto);
+    // Save the changes
+await productoRepository.save(producto);
 
-    console.log(`Producto with ID ${productoId} deleted`);
-    return result;
+    return { success: true };
   } catch (error) {
-    console.error(`Error deleting producto with ID ${productoId}:`, error);
+    console.error('Error deleting producto:', error);
     throw error;
   }
 });
 
+// Product Image Handlers
+ipcMain.handle('getProductImages', async (_event: any, productoId: number) => {
+  try {
+    const productoImageRepository = dbService.getDataSource().getRepository(ProductoImage);
+    const images = await productoImageRepository.find({
+      where: { productoId }
+    });
+    return images;
+  } catch (error) {
+    console.error(`Error getting images for producto ${productoId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('createProductImage', async (_event: any, imageData: any) => {
+  try {
+const productoImageRepository = dbService.getDataSource().getRepository(ProductoImage);
+
+    // Create new image entity
+const productoImage = productoImageRepository.create(imageData);
+
+    // Save to database
+const result = await productoImageRepository.save(productoImage);
+
+    console.log('ProductoImage created:', result);
+    return result;
+  } catch (error) {
+    console.error('Error creating productoImage:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('updateProductImage', async (_event: any, imageId: number, imageData: any) => {
+  try {
+    const productoImageRepository = dbService.getDataSource().getRepository(ProductoImage);
+
+    // Find the image
+    const productoImage = await productoImageRepository.findOne({
+      where: { id: imageId }
+    });
+
+    if (!productoImage) {
+      throw new Error(`ProductoImage with ID ${imageId} not found`);
+    }
+
+    // Update image properties
+    productoImageRepository.merge(productoImage, imageData);
+
+    // Save changes
+    const result = await productoImageRepository.save(productoImage);
+
+    console.log('ProductoImage updated:', result);
+    return result;
+  } catch (error) {
+    console.error(`Error updating productoImage with ID ${imageId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('deleteProductImage', async (_event: any, imageId: number) => {
+  try {
+    const productoImageRepository = dbService.getDataSource().getRepository(ProductoImage);
+
+    // Find the image
+    const productoImage = await productoImageRepository.findOne({
+      where: { id: imageId }
+    });
+
+    if (!productoImage) {
+      throw new Error(`ProductoImage with ID ${imageId} not found`);
+    }
+
+    // Delete the file from storage
+    if (productoImage.imageUrl) {
+      await imageHandler.deleteProductoImage(productoImage.imageUrl);
+    }
+
+    // Delete from database
+    await productoImageRepository.remove(productoImage);
+
+    console.log(`ProductoImage with ID ${imageId} deleted`);
+    return true;
+  } catch (error) {
+    console.error(`Error deleting productoImage with ID ${imageId}:`, error);
+    throw error;
+  }
+});
+
+// Product Image Handlers
 ipcMain.handle('saveProductoImage', async (_event: Electron.IpcMainInvokeEvent, { base64Data, fileName }: { base64Data: string, fileName: string }) => {
   try {
     // Use the same image handler but with a different directory
     const userDataPath = app.getPath('userData');
-    const productoImagesDir = path.join(userDataPath, 'producto-images');
+const productoImagesDir = path.join(userDataPath, 'producto-images');
 
     // Ensure directory exists
     if (!fs.existsSync(productoImagesDir)) {
@@ -1890,5 +2080,659 @@ ipcMain.handle('deleteProductoImage', async (_event: Electron.IpcMainInvokeEvent
   } catch (error) {
     console.error('Error deleting producto image:', error);
     return false;
+  }
+});
+
+// IPC handler for getting presentaciones by producto
+ipcMain.handle('getPresentacionesByProducto', async (_event: any, productoId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+const presentacionRepository = dataSource.getRepository(Presentacion);
+
+    return await presentacionRepository.find({
+      where: { productoId },
+      order: { principal: 'DESC', descripcion: 'ASC' }
+    });
+  } catch (error) {
+    console.error('Error getting presentaciones by producto:', error);
+    throw error;
+  }
+});
+
+// IPC handler for creating a presentacion
+ipcMain.handle('createPresentacion', async (_event: any, presentacionData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+const presentacionRepository = dataSource.getRepository(Presentacion);
+
+    // Create a new presentacion
+const presentacion = presentacionRepository.create(presentacionData);
+
+    // Save the presentacion
+    return await presentacionRepository.save(presentacion);
+  } catch (error) {
+    console.error('Error creating presentacion:', error);
+    throw error;
+  }
+});
+
+// IPC handler for updating a presentacion
+ipcMain.handle('updatePresentacion', async (_event: any, presentacionId: number, presentacionData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+const presentacionRepository = dataSource.getRepository(Presentacion);
+
+    // Find the presentacion to update
+const presentacion = await presentacionRepository.findOneBy({ id: presentacionId });
+
+    if (!presentacion) {
+      throw new Error('Presentacion not found');
+}
+
+    // Update the presentacion
+presentacionRepository.merge(presentacion, presentacionData);
+
+    // Save the changes
+    return await presentacionRepository.save(presentacion);
+  } catch (error) {
+    console.error('Error updating presentacion:', error);
+    throw error;
+  }
+});
+
+// IPC handler for deleting a presentacion
+ipcMain.handle('deletePresentacion', async (_event: any, presentacionId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+const presentacionRepository = dataSource.getRepository(Presentacion);
+
+    // Find the presentacion to delete
+const presentacion = await presentacionRepository.findOneBy({ id: presentacionId });
+
+    if (!presentacion) {
+      throw new Error('Presentacion not found');
+}
+
+    // Delete the presentacion
+await presentacionRepository.remove(presentacion);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting presentacion:', error);
+    throw error;
+  }
+});
+
+// IPC handler for getting monedas
+ipcMain.handle('getMonedas', async () => {
+  try {
+    const dataSource = dbService.getDataSource();
+const monedaRepository = dataSource.getRepository(Moneda);
+
+    return await monedaRepository.find({
+      order: { principal: 'DESC', denominacion: 'ASC' }
+    });
+  } catch (error) {
+    console.error('Error getting monedas:', error);
+    throw error;
+  }
+});
+
+// IPC handler for getting a moneda by ID
+ipcMain.handle('getMoneda', async (_event: any, monedaId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+const monedaRepository = dataSource.getRepository(Moneda);
+
+    return await monedaRepository.findOne({
+      where: { id: monedaId }
+    });
+  } catch (error) {
+    console.error(`Error getting moneda with ID ${monedaId}:`, error);
+    throw error;
+  }
+});
+
+// IPC handler for creating a moneda
+ipcMain.handle('createMoneda', async (_event: any, monedaData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+const monedaRepository = dataSource.getRepository(Moneda);
+
+    // If this new moneda is principal, unset any existing principal moneda
+    if (monedaData.principal) {
+      await monedaRepository.update({ principal: true }, { principal: false });
+}
+
+    // Create a new moneda
+const moneda = monedaRepository.create(monedaData);
+
+    // Save the moneda
+    return await monedaRepository.save(moneda);
+  } catch (error) {
+    console.error('Error creating moneda:', error);
+    throw error;
+  }
+});
+
+// IPC handler for updating a moneda
+ipcMain.handle('updateMoneda', async (_event: any, monedaId: number, monedaData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+const monedaRepository = dataSource.getRepository(Moneda);
+
+    // If this moneda is being set as principal, unset any existing principal moneda
+    if (monedaData.principal) {
+      await monedaRepository.update({ principal: true, id: Not(monedaId) }, { principal: false });
+}
+
+    // Find the moneda to update
+const moneda = await monedaRepository.findOneBy({ id: monedaId });
+
+    if (!moneda) {
+      throw new Error('Moneda not found');
+}
+
+    // Update the moneda
+monedaRepository.merge(moneda, monedaData);
+
+    // Save the changes
+    return await monedaRepository.save(moneda);
+  } catch (error) {
+    console.error(`Error updating moneda with ID ${monedaId}:`, error);
+    throw error;
+  }
+});
+
+// IPC handler for deleting a moneda
+ipcMain.handle('deleteMoneda', async (_event: any, monedaId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+const monedaRepository = dataSource.getRepository(Moneda);
+
+    // Find the moneda to delete
+const moneda = await monedaRepository.findOneBy({ id: monedaId });
+
+    if (!moneda) {
+      throw new Error('Moneda not found');
+}
+
+    // Check if it's the principal moneda
+    if (moneda.principal) {
+      throw new Error('No se puede eliminar la moneda principal. Establezca otra moneda como principal primero.');
+}
+
+    // In a real production app, we would need to check if the moneda is in use
+    // For now, just delete it
+await monedaRepository.remove(moneda);
+
+    return { success: true };
+  } catch (error) {
+    console.error(`Error deleting moneda with ID ${monedaId}:`, error);
+    throw error;
+  }
+});
+
+// IPC handler for getting precios de venta by presentacion
+ipcMain.handle('getPreciosVentaByPresentacion', async (_event: any, presentacionId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+const precioVentaRepository = dataSource.getRepository(PrecioVenta);
+
+    return await precioVentaRepository.find({
+      where: { presentacionId },
+      relations: ['moneda'],
+      order: { principal: 'DESC', valor: 'ASC' }
+    });
+  } catch (error) {
+    console.error('Error getting precios venta by presentacion:', error);
+    throw error;
+  }
+});
+
+// IPC handler for creating a precio de venta
+ipcMain.handle('createPrecioVenta', async (_event: any, precioVentaData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+const precioVentaRepository = dataSource.getRepository(PrecioVenta);
+
+    // Create a new precio venta
+const precioVenta = precioVentaRepository.create(precioVentaData);
+
+    // Save the precio venta
+    return await precioVentaRepository.save(precioVenta);
+  } catch (error) {
+    console.error('Error creating precio venta:', error);
+    throw error;
+  }
+});
+
+// IPC handler for updating a precio de venta
+ipcMain.handle('updatePrecioVenta', async (_event: any, precioVentaId: number, precioVentaData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+const precioVentaRepository = dataSource.getRepository(PrecioVenta);
+
+    // Find the precio venta to update
+const precioVenta = await precioVentaRepository.findOneBy({ id: precioVentaId });
+
+    if (!precioVenta) {
+      throw new Error('Precio Venta not found');
+}
+
+    // Update the precio venta
+precioVentaRepository.merge(precioVenta, precioVentaData);
+
+    // Save the changes
+    return await precioVentaRepository.save(precioVenta);
+  } catch (error) {
+    console.error('Error updating precio venta:', error);
+    throw error;
+  }
+});
+
+// IPC handler for deleting a precio de venta
+ipcMain.handle('deletePrecioVenta', async (_event: any, precioVentaId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+const precioVentaRepository = dataSource.getRepository(PrecioVenta);
+
+    // Find the precio venta to delete
+const precioVenta = await precioVentaRepository.findOneBy({ id: precioVentaId });
+
+    if (!precioVenta) {
+      throw new Error('Precio Venta not found');
+}
+
+    // Delete the precio venta
+await precioVentaRepository.remove(precioVenta);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting precio venta:', error);
+    throw error;
+  }
+});
+
+// IPC handler for getting codigos by presentacion
+ipcMain.handle('getCodigosByPresentacion', async (_event: any, presentacionId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+const codigoRepository = dataSource.getRepository(Codigo);
+
+    return await codigoRepository.find({
+      where: { presentacionId },
+      order: { principal: 'DESC', codigo: 'ASC' }
+    });
+  } catch (error) {
+    console.error('Error getting codigos by presentacion:', error);
+    throw error;
+  }
+});
+
+// IPC handler for creating a codigo
+ipcMain.handle('createCodigo', async (_event: any, codigoData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+const codigoRepository = dataSource.getRepository(Codigo);
+
+    // Create a new codigo
+const codigo = codigoRepository.create(codigoData);
+
+    // Save the codigo
+    return await codigoRepository.save(codigo);
+  } catch (error) {
+    console.error('Error creating codigo:', error);
+    throw error;
+  }
+});
+
+// IPC handler for updating a codigo
+ipcMain.handle('updateCodigo', async (_event: any, codigoId: number, codigoData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+const codigoRepository = dataSource.getRepository(Codigo);
+
+    // Find the codigo to update
+const codigo = await codigoRepository.findOneBy({ id: codigoId });
+
+    if (!codigo) {
+      throw new Error('Codigo not found');
+}
+
+    // Update the codigo
+codigoRepository.merge(codigo, codigoData);
+
+    // Save the changes
+    return await codigoRepository.save(codigo);
+  } catch (error) {
+    console.error('Error updating codigo:', error);
+    throw error;
+  }
+});
+
+// IPC handler for deleting a codigo
+ipcMain.handle('deleteCodigo', async (_event: any, codigoId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+const codigoRepository = dataSource.getRepository(Codigo);
+
+    // Find the codigo to delete
+const codigo = await codigoRepository.findOneBy({ id: codigoId });
+
+    if (!codigo) {
+      throw new Error('Codigo not found');
+}
+
+    // Delete the codigo
+await codigoRepository.remove(codigo);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting codigo:', error);
+    throw error;
+  }
+});
+
+// Sabor handlers
+ipcMain.handle('getSabores', async () => {
+  try {
+    // Get the repository from the dataSource
+    const dataSource = dbService.getDataSource();
+    const saborRepository = dataSource.getRepository(Sabor);
+    // Return all sabores
+    return await saborRepository.find({ order: { nombre: 'ASC' } });
+  } catch (error) {
+    console.error('Error fetching sabores:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('getSabor', async (_event: any, saborId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const saborRepository = dataSource.getRepository(Sabor);
+    return await saborRepository.findOne({ where: { id: saborId } });
+  } catch (error) {
+    console.error(`Error fetching sabor with ID ${saborId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('createSabor', async (_event: any, saborData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const saborRepository = dataSource.getRepository(Sabor);
+    const newSabor = saborRepository.create(saborData);
+    return await saborRepository.save(newSabor);
+  } catch (error) {
+    console.error('Error creating sabor:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('updateSabor', async (_event: any, saborId: number, saborData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const saborRepository = dataSource.getRepository(Sabor);
+    await saborRepository.update(saborId, saborData);
+    return await saborRepository.findOne({ where: { id: saborId } });
+  } catch (error) {
+    console.error(`Error updating sabor with ID ${saborId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('deleteSabor', async (_event: any, saborId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const saborRepository = dataSource.getRepository(Sabor);
+    const result = await saborRepository.delete(saborId);
+    return result.affected && result.affected > 0;
+  } catch (error) {
+    console.error(`Error deleting sabor with ID ${saborId}:`, error);
+    throw error;
+  }
+});
+
+// PresentacionSabor handlers
+ipcMain.handle('getPresentacionSaboresByPresentacion', async (_event: any, presentacionId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const presentacionSaborRepository = dataSource.getRepository(PresentacionSabor);
+    return await presentacionSaborRepository.find({
+      where: { presentacionId },
+      order: { id: 'ASC' }
+    });
+  } catch (error) {
+    console.error(`Error fetching presentacion sabores for presentacion ID ${presentacionId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('getPresentacionSabor', async (_event: any, presentacionSaborId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const presentacionSaborRepository = dataSource.getRepository(PresentacionSabor);
+    return await presentacionSaborRepository.findOne({ where: { id: presentacionSaborId } });
+  } catch (error) {
+    console.error(`Error fetching presentacion sabor with ID ${presentacionSaborId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('createPresentacionSabor', async (_event: any, presentacionSaborData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const presentacionSaborRepository = dataSource.getRepository(PresentacionSabor);
+    const newPresentacionSabor = presentacionSaborRepository.create(presentacionSaborData);
+    return await presentacionSaborRepository.save(newPresentacionSabor);
+  } catch (error) {
+    console.error('Error creating presentacion sabor:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('updatePresentacionSabor', async (_event: any, presentacionSaborId: number, presentacionSaborData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const presentacionSaborRepository = dataSource.getRepository(PresentacionSabor);
+    await presentacionSaborRepository.update(presentacionSaborId, presentacionSaborData);
+    return await presentacionSaborRepository.findOne({ where: { id: presentacionSaborId } });
+  } catch (error) {
+    console.error(`Error updating presentacion sabor with ID ${presentacionSaborId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('deletePresentacionSabor', async (_event: any, presentacionSaborId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const presentacionSaborRepository = dataSource.getRepository(PresentacionSabor);
+    const result = await presentacionSaborRepository.delete(presentacionSaborId);
+    return result.affected && result.affected > 0;
+  } catch (error) {
+    console.error(`Error deleting presentacion sabor with ID ${presentacionSaborId}:`, error);
+    throw error;
+  }
+});
+
+// Receta handlers
+ipcMain.handle('getRecetas', async () => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const recetaRepository = dataSource.getRepository(Receta);
+    return await recetaRepository.find({ order: { nombre: 'ASC' } });
+  } catch (error) {
+    console.error('Error fetching recetas:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('getReceta', async (_event: any, recetaId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const recetaRepository = dataSource.getRepository(Receta);
+    return await recetaRepository.findOne({ where: { id: recetaId } });
+  } catch (error) {
+    console.error(`Error fetching receta with ID ${recetaId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('createReceta', async (_event: any, recetaData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const recetaRepository = dataSource.getRepository(Receta);
+    const newReceta = recetaRepository.create(recetaData);
+    return await recetaRepository.save(newReceta);
+  } catch (error) {
+    console.error('Error creating receta:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('updateReceta', async (_event: any, recetaId: number, recetaData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const recetaRepository = dataSource.getRepository(Receta);
+    await recetaRepository.update(recetaId, recetaData);
+    return await recetaRepository.findOne({ where: { id: recetaId } });
+  } catch (error) {
+    console.error(`Error updating receta with ID ${recetaId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('deleteReceta', async (_event: any, recetaId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const recetaRepository = dataSource.getRepository(Receta);
+    const result = await recetaRepository.delete(recetaId);
+    return result.affected && result.affected > 0;
+  } catch (error) {
+    console.error(`Error deleting receta with ID ${recetaId}:`, error);
+    throw error;
+  }
+});
+
+// RecetaItem handlers
+ipcMain.handle('getRecetaItems', async (_event: any, recetaId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const recetaItemRepository = dataSource.getRepository(RecetaItem);
+    return await recetaItemRepository.find({
+      where: { recetaId },
+      order: { id: 'ASC' }
+    });
+  } catch (error) {
+    console.error(`Error fetching receta items for receta ID ${recetaId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('getRecetaItem', async (_event: any, recetaItemId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const recetaItemRepository = dataSource.getRepository(RecetaItem);
+    return await recetaItemRepository.findOne({ where: { id: recetaItemId } });
+  } catch (error) {
+    console.error(`Error fetching receta item with ID ${recetaItemId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('createRecetaItem', async (_event: any, recetaItemData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const recetaItemRepository = dataSource.getRepository(RecetaItem);
+    const newRecetaItem = recetaItemRepository.create(recetaItemData);
+    return await recetaItemRepository.save(newRecetaItem);
+  } catch (error) {
+    console.error('Error creating receta item:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('updateRecetaItem', async (_event: any, recetaItemId: number, recetaItemData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const recetaItemRepository = dataSource.getRepository(RecetaItem);
+    await recetaItemRepository.update(recetaItemId, recetaItemData);
+    return await recetaItemRepository.findOne({ where: { id: recetaItemId } });
+  } catch (error) {
+    console.error(`Error updating receta item with ID ${recetaItemId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('deleteRecetaItem', async (_event: any, recetaItemId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const recetaItemRepository = dataSource.getRepository(RecetaItem);
+    const result = await recetaItemRepository.delete(recetaItemId);
+    return result.affected && result.affected > 0;
+  } catch (error) {
+    console.error(`Error deleting receta item with ID ${recetaItemId}:`, error);
+    throw error;
+  }
+});
+
+// Ingrediente handlers
+ipcMain.handle('getIngredientes', async () => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const ingredienteRepository = dataSource.getRepository(Ingrediente);
+    return await ingredienteRepository.find({ order: { descripcion: 'ASC' } });
+  } catch (error) {
+    console.error('Error fetching ingredientes:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('getIngrediente', async (_event: any, ingredienteId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const ingredienteRepository = dataSource.getRepository(Ingrediente);
+    return await ingredienteRepository.findOne({ where: { id: ingredienteId } });
+  } catch (error) {
+    console.error(`Error fetching ingrediente with ID ${ingredienteId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('createIngrediente', async (_event: any, ingredienteData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const ingredienteRepository = dataSource.getRepository(Ingrediente);
+    const newIngrediente = ingredienteRepository.create(ingredienteData);
+    return await ingredienteRepository.save(newIngrediente);
+  } catch (error) {
+    console.error('Error creating ingrediente:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('updateIngrediente', async (_event: any, ingredienteId: number, ingredienteData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const ingredienteRepository = dataSource.getRepository(Ingrediente);
+    await ingredienteRepository.update(ingredienteId, ingredienteData);
+    return await ingredienteRepository.findOne({ where: { id: ingredienteId } });
+  } catch (error) {
+    console.error(`Error updating ingrediente with ID ${ingredienteId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('deleteIngrediente', async (_event: any, ingredienteId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const ingredienteRepository = dataSource.getRepository(Ingrediente);
+    const result = await ingredienteRepository.delete(ingredienteId);
+    return result.affected && result.affected > 0;
+  } catch (error) {
+    console.error(`Error deleting ingrediente with ID ${ingredienteId}:`, error);
+    throw error;
   }
 });
