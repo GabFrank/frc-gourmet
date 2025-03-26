@@ -1,0 +1,59 @@
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.form-row {
+  margin-bottom: 16px;
+}
+
+.form-row-2-columns {
+  display: flex;
+  gap: 16px;
+
+  mat-form-field {
+    flex: 1;
+  }
+}
+
+.full-width {
+  width: 100%;
+}
+
+.checkboxes-row {
+  display: flex;
+  gap: 16px;
+}
+
+mat-dialog-content {
+  min-width: 500px;
+  max-height: 70vh;
+}
+
+button.mat-raised-button mat-spinner {
+  display: inline-block;
+  margin-right: 8px;
+}
+
+mat-dialog-actions {
+  padding: 16px 0;
+}
+
+@media (max-width: 600px) {
+  mat-dialog-content {
+    min-width: auto;
+  }
+
+  .form-row-2-columns {
+    flex-direction: column;
+    gap: 8px;
+  }
+}

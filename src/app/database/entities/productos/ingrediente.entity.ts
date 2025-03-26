@@ -3,6 +3,7 @@ import { BaseModel } from '../base.entity';
 import type { Receta } from './receta.entity';
 import type { RecetaItem } from './receta-item.entity';
 import type { IntercambioIngrediente } from './intercambio-ingrediente.entity';
+import type { Moneda } from '../financiero/moneda.entity';
 
 /**
  * Tipo de medida para los ingredientes
@@ -45,6 +46,13 @@ export class Ingrediente extends BaseModel {
   @ManyToOne('Receta', { nullable: true })
   @JoinColumn({ name: 'receta_id' })
   receta?: Receta;
+
+  @Column({ name: 'moneda_id', nullable: true })
+  monedaId?: number;
+
+  @ManyToOne('Moneda', { nullable: true })
+  @JoinColumn({ name: 'moneda_id' })
+  moneda?: Moneda;
 
   @OneToMany('RecetaItem', 'ingrediente')
   recetaItems!: RecetaItem[];

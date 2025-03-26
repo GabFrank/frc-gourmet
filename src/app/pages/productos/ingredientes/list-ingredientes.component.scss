@@ -1,0 +1,245 @@
+.list-ingredientes-container {
+  padding: 20px;
+  background-color: #333;
+  color: #fff;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.filter-card {
+  background-color: #444;
+  margin-bottom: 20px;
+}
+
+mat-card-title {
+  color: #fff;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.filter-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+}
+
+mat-form-field {
+  flex: 1;
+  min-width: 200px;
+}
+
+.button-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+::ng-deep .mat-form-field-appearance-outline .mat-form-field-outline {
+  color: #555;
+}
+
+::ng-deep .mat-form-field-appearance-outline.mat-focused .mat-form-field-outline-thick {
+  color: #f44336;
+}
+
+::ng-deep .mat-form-field-label {
+  color: #aaa !important;
+}
+
+::ng-deep .mat-input-element {
+  color: white !important;
+}
+
+::ng-deep .mat-select-value {
+  color: white;
+}
+
+::ng-deep .mat-select-arrow {
+  color: #aaa;
+}
+
+.table-container {
+  position: relative;
+}
+
+.loading-shade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.table-scroll-container {
+  background-color: #444;
+  overflow: auto;
+  max-height: calc(100vh - 300px);
+}
+
+table {
+  width: 100%;
+}
+
+::ng-deep .mat-table {
+  background: transparent !important;
+}
+
+::ng-deep .mat-header-cell {
+  background-color: #555;
+  color: #fff;
+  font-size: 14px;
+  border-bottom: 1px solid #666;
+  text-align: center;
+}
+
+::ng-deep .mat-cell {
+  color: #fff;
+  border-bottom: 1px solid #555;
+  text-align: center;
+}
+
+.descripcion-cell {
+  font-weight: 500;
+  text-align: left;
+}
+
+.costo-cell {
+  text-align: right;
+  padding-right: 24px;
+  font-weight: 500;
+}
+
+.moneda-cell {
+  text-align: center;
+  font-weight: 500;
+}
+
+.centered-cell {
+  text-align: center;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.active {
+  background-color: rgba(76, 175, 80, 0.2);
+  color: #4caf50;
+}
+
+.inactive {
+  background-color: rgba(244, 67, 54, 0.2);
+  color: #f44336;
+}
+
+.paginator-container {
+  background-color: #444;
+  border-radius: 0 0 4px 4px;
+}
+
+::ng-deep .mat-paginator {
+  background: transparent;
+  color: #aaa;
+}
+
+::ng-deep .mat-select-panel {
+  background: #555;
+}
+
+::ng-deep .mat-option {
+  color: white !important;
+}
+
+::ng-deep .mat-option.mat-active {
+  color: #f44336 !important;
+}
+
+@media (max-width: 768px) {
+  .filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  mat-form-field {
+    width: 100%;
+  }
+
+  .button-row {
+    flex-wrap: wrap;
+  }
+}
+
+/* Apply specific alignments for ID column */
+:host ::ng-deep .mat-column-id {
+  width: 70px;
+  text-align: center;
+}
+
+/* Apply specific alignments for descripcion column */
+:host ::ng-deep .mat-column-descripcion {
+  text-align: left;
+}
+
+/* Apply specific alignments for cost column */
+:host ::ng-deep .mat-column-costo {
+  text-align: right;
+  padding-right: 24px;
+}
+
+/* Apply specific alignments for other columns */
+:host ::ng-deep .mat-column-tipoMedida,
+:host ::ng-deep .mat-column-isProduccion,
+:host ::ng-deep .mat-column-activo,
+:host ::ng-deep .mat-column-actions {
+  text-align: center;
+}
+
+.centered-header {
+  text-align: center !important;
+  justify-content: center;
+}
+
+.left-aligned-header {
+  text-align: left !important;
+  justify-content: flex-start;
+}
+
+.right-aligned-header {
+  text-align: right !important;
+  justify-content: flex-end;
+  padding-right: 24px;
+}
+
+::ng-deep .mat-sort-header-container {
+  display: flex;
+  justify-content: center;
+}
+
+:host ::ng-deep .mat-column-descripcion .mat-sort-header-container {
+  justify-content: flex-start;
+}
+
+:host ::ng-deep .mat-column-costo .mat-sort-header-container {
+  justify-content: flex-end;
+}

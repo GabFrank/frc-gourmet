@@ -62,6 +62,15 @@ __decorate([
     __metadata("design:type", Function)
 ], Ingrediente.prototype, "receta", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'moneda_id', nullable: true }),
+    __metadata("design:type", Number)
+], Ingrediente.prototype, "monedaId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)('Moneda', { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'moneda_id' }),
+    __metadata("design:type", Function)
+], Ingrediente.prototype, "moneda", void 0);
+__decorate([
     (0, typeorm_1.OneToMany)('RecetaItem', 'ingrediente'),
     __metadata("design:type", Array)
 ], Ingrediente.prototype, "recetaItems", void 0);

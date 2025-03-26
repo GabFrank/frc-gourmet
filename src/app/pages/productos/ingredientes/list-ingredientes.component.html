@@ -1,0 +1,172 @@
+<div class="list-ingredientes-container">
+  <mat-card class="filter-card">
+    <mat-card-header>
+      <mat-card-title>Gestión de Ingredientes</mat-card-title>
+    </mat-card-header>
+
+    <mat-card-content>
+        <form [formGroup]="filterForm" class="filter-form">
+        <div class="filter-row">
+          <mat-form-field appearance="outline">
+            <mat-label>Descripción</mat-label>
+            <input matInput formControlName="descripcion" placeholder="Buscar por descripción">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Tipo de Medida</mat-label>
+            <mat-select formControlName="tipoMedida">
+              <mat-option value="">Todos</mat-option>
+              <mat-option *ngFor="let tipo of tipoMedidaOptions" [value]="tipo">
+                {{getTipoMedidaText(tipo)}}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Moneda</mat-label>
+            <mat-select formControlName="monedaId">
+              <mat-option value="">Todas</mat-option>
+              <mat-option *ngFor="let moneda of monedas" [value]="moneda.id">
+                {{moneda.denominacion}} ({{moneda.simbolo}})
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Producción</mat-label>
+            <mat-select formControlName="isProduccion">
+              <mat-option value="">Todos</mat-option>
+              <mat-option value="true">Sí</mat-option>
+              <mat-option value="false">No</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Estado</mat-label>
+            <mat-select formControlName="activo">
+              <mat-option value="">Todos</mat-option>
+              <mat-option value="true">Activo</mat-option>
+              <mat-option value="false">Inactivo</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="button-row">
+            <button mat-raised-button color="primary" (click)="buscar()">
+            <mat-icon>search</mat-icon>
+            Buscar
+          </button>
+          <button mat-raised-button (click)="clearFilters()">
+            <mat-icon>clear</mat-icon>
+            Limpiar
+            </button>
+          <span class="spacer"></span>
+          <button mat-raised-button color="accent" (click)="openCreateDialog()">
+            <mat-icon>add</mat-icon>
+            Nuevo Ingrediente
+            </button>
+          </div>
+        </form>
+    </mat-card-content>
+  </mat-card>
+
+      <div class="table-container">
+        <div class="loading-shade" *ngIf="isLoading">
+      <mat-spinner></mat-spinner>
+        </div>
+
+    <mat-card class="table-scroll-container">
+        <table mat-table [dataSource]="ingredientes" matSort (matSortChange)="onSort($event)" class="mat-elevation-z8">
+
+          <!-- ID Column -->
+          <ng-container matColumnDef="id">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header style="text-align: center;">ID</th>
+            <td mat-cell *matCellDef="let ingrediente" style="text-align: center;">{{ingrediente.id}}</td>
+          </ng-container>
+
+          <!-- Descripcion Column -->
+          <ng-container matColumnDef="descripcion">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header class="left-aligned-header">Descripción</th>
+            <td mat-cell *matCellDef="let ingrediente" class="descripcion-cell">{{ ingrediente.descripcion }}</td>
+          </ng-container>
+
+          <!-- Tipo Medida Column -->
+          <ng-container matColumnDef="tipoMedida">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header class="centered-header">Tipo de Medida</th>
+            <td mat-cell *matCellDef="let ingrediente" class="centered-cell">
+              {{ getTipoMedidaText(ingrediente.tipoMedida) }}
+            </td>
+          </ng-container>
+
+          <!-- Costo Column -->
+          <ng-container matColumnDef="costo">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header class="right-aligned-header">Costo</th>
+            <td mat-cell *matCellDef="let ingrediente" class="costo-cell">
+              {{ formatCurrency(ingrediente.costo, ingrediente.monedaId) }}
+            </td>
+          </ng-container>
+
+          <!-- Producción Column -->
+          <ng-container matColumnDef="isProduccion">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header class="centered-header">Producción</th>
+            <td mat-cell *matCellDef="let ingrediente" class="centered-cell">
+              <mat-icon *ngIf="ingrediente.isProduccion" color="primary">check_circle</mat-icon>
+              <mat-icon *ngIf="!ingrediente.isProduccion" color="warn">cancel</mat-icon>
+            </td>
+          </ng-container>
+
+          <!-- Estado Column -->
+          <ng-container matColumnDef="activo">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header class="centered-header">Estado</th>
+            <td mat-cell *matCellDef="let ingrediente" class="centered-cell">
+              <span class="status-badge" [ngClass]="ingrediente.activo ? 'active' : 'inactive'">
+                {{ ingrediente.activo ? 'Activo' : 'Inactivo' }}
+              </span>
+            </td>
+          </ng-container>
+
+          <!-- Actions Column -->
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef class="centered-header">Acciones</th>
+            <td mat-cell *matCellDef="let ingrediente" class="centered-cell">
+              <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+                <mat-icon>more_vert</mat-icon>
+              </button>
+              <mat-menu #menu="matMenu">
+                <button mat-menu-item (click)="openEditDialog(ingrediente)">
+                  <mat-icon>edit</mat-icon>
+                  <span>Editar</span>
+                </button>
+                <button mat-menu-item (click)="openDeleteDialog(ingrediente)">
+                  <mat-icon>delete</mat-icon>
+                  <span>Eliminar</span>
+                </button>
+                <button mat-menu-item (click)="toggleActive(ingrediente)">
+                  <mat-icon>{{ ingrediente.activo ? 'toggle_off' : 'toggle_on' }}</mat-icon>
+                  <span>{{ ingrediente.activo ? 'Desactivar' : 'Activar' }}</span>
+                </button>
+              </mat-menu>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+
+          <!-- No results row -->
+          <tr class="mat-row" *matNoDataRow>
+          <td class="mat-cell" colspan="7">No se encontraron ingredientes</td>
+          </tr>
+        </table>
+    </mat-card>
+
+    <div class="paginator-container">
+        <mat-paginator
+          [length]="totalIngredientes"
+          [pageSize]="pageSize"
+          [pageSizeOptions]="pageSizeOptions"
+          (page)="onPageChange($event)"
+          aria-label="Seleccionar página">
+        </mat-paginator>
+      </div>
+  </div>
+</div>
