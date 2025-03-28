@@ -172,6 +172,7 @@ interface ElectronAPI {
   createIngrediente: (ingredienteData: any) => Promise<Ingrediente>;
   updateIngrediente: (ingredienteId: number, ingredienteData: any) => Promise<any>;
   deleteIngrediente: (ingredienteId: number) => Promise<any>;
+  searchIngredientesByDescripcion: (searchText: string) => Promise<Ingrediente[]>;
 }
 
 /**
@@ -760,5 +761,9 @@ export class RepositoryService {
 
   deleteIngrediente(ingredienteId: number): Observable<any> {
     return from(this.api.deleteIngrediente(ingredienteId));
+  }
+
+  searchIngredientesByDescripcion(searchText: string): Observable<Ingrediente[]> {
+    return from(this.api.searchIngredientesByDescripcion(searchText));
   }
 }

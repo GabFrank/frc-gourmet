@@ -196,7 +196,7 @@ export class ListIngredientesComponent implements OnInit {
 
     dialogRef.afterClosed().subscribe(result => {
       if (result) {
-        this.loadIngredientes();
+    this.loadIngredientes();
       }
     });
   }
@@ -229,11 +229,11 @@ export class ListIngredientesComponent implements OnInit {
   async deleteIngrediente(ingredienteId: number): Promise<void> {
     try {
       await firstValueFrom(this.repositoryService.deleteIngrediente(ingredienteId));
-      this.snackBar.open('Ingrediente eliminado correctamente', 'Cerrar', { duration: 3000 });
-      this.loadIngredientes();
+          this.snackBar.open('Ingrediente eliminado correctamente', 'Cerrar', { duration: 3000 });
+          this.loadIngredientes();
     } catch (error) {
       console.error('Error deleting ingrediente:', error);
-      this.snackBar.open('Error al eliminar el ingrediente', 'Cerrar', { duration: 3000 });
+          this.snackBar.open('Error al eliminar el ingrediente', 'Cerrar', { duration: 3000 });
     }
   }
 
@@ -259,9 +259,9 @@ export class ListIngredientesComponent implements OnInit {
         case 'isProduccion': return this.compare(a.isProduccion, b.isProduccion, isAsc);
         case 'activo': return this.compare(a.activo, b.activo, isAsc);
         default: return 0;
-      }
-    });
-  }
+        }
+      });
+    }
 
   private compare(a: any, b: any, isAsc: boolean): number {
     return (a < b ? -1 : 1) * (isAsc ? 1 : -1);

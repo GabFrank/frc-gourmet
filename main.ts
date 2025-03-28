@@ -2736,3 +2736,29 @@ ipcMain.handle('deleteIngrediente', async (_event: any, ingredienteId: number) =
     throw error;
   }
 });
+
+// Add search functionality for ingredientes by descripcion
+ipcMain.handle('searchIngredientesByDescripcion', async (event, searchText) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const ingredienteRepository = dataSource.getRepository(Ingrediente);
+
+    // If search text is empty, return a limited number of results
+    if (!searchText || searchText.trim() === '') {
+      return await ingredienteRepository.find({
+        order: { descripcion: 'ASC' },
+        take: 10
+      });
+    }
+
+    // Use LIKE query to find matching ingredientes
+    return await ingredienteRepository.createQueryBuilder('ingrediente')
+      .where('LOWER(ingrediente.descripcion) LIKE LOWER(:searchText)', { searchText: `%${searchText}%` })
+      .orWhere('CAST(ingrediente.id AS TEXT) LIKE :searchText', { searchText: `%${searchText}%` })
+      .orderBy('ingrediente.descripcion', 'ASC')
+      .getMany();
+  } catch (error) {
+    console.error('Error searching ingredientes:', error);
+    throw error;
+  }
+});

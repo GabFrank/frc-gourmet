@@ -75,20 +75,24 @@ export class CreateEditRecetaDialogComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.loadIngredientes();
+    // Set recetaId if available
+    if (this.data.receta && this.data.receta.id) {
+      this.recetaId = this.data.receta.id;
+    } else if (this.data.recetaId) {
+      this.recetaId = this.data.recetaId;
+    }
 
+    // Load data based on mode
     if (this.data.editMode) {
       if (this.data.receta) {
-        // If full receta object is provided
-        this.recetaId = this.data.receta.id;
         this.patchRecetaForm(this.data.receta);
         this.loadRecetaItems();
-      } else if (this.data.recetaId) {
-        // If only recetaId is provided, load the receta
-        this.recetaId = this.data.recetaId;
+      } else if (this.recetaId) {
         this.loadRecetaById(this.recetaId);
       }
     }
+
+    // Don't load all ingredients at startup - we'll use server-side filtering
   }
 
   private patchRecetaForm(receta: Receta): void {
@@ -114,30 +118,42 @@ export class CreateEditRecetaDialogComponent implements OnInit {
     }
   }
 
-  async loadIngredientes(): Promise<void> {
-    try {
-      this.loading = true;
-      const result = await firstValueFrom(this.repositoryService.getIngredientes());
-      this.ingredientes = result;
-    } catch (error) {
-      console.error('Error loading ingredientes:', error);
-      this.snackBar.open('Error al cargar ingredientes', 'Cerrar', { duration: 3000 });
-    } finally {
-      this.loading = false;
-    }
-  }
-
   async loadRecetaItems(): Promise<void> {
     if (!this.recetaId) return;
 
     try {
       this.loading = true;
       this.recetaItems = await firstValueFrom(this.repositoryService.getRecetaItems(this.recetaId));
+
+      // Load ingredient details for display
+      const ingredientIds = this.recetaItems.map(item => item.ingredienteId);
+      await this.loadIngredientesByIds(ingredientIds);
     } catch (error) {
       console.error('Error loading receta items:', error);
       this.snackBar.open('Error al cargar ingredientes de la receta', 'Cerrar', { duration: 3000 });
     } finally {
       this.loading = false;
+    }
+  }
+
+  async loadIngredientesByIds(ingredientIds: number[]): Promise<void> {
+    if (!ingredientIds.length) return;
+
+    try {
+      // Make sure the ingredientes array is initialized
+      if (!this.ingredientes) {
+        this.ingredientes = [];
+      }
+
+      // Add the ingredients we need for display purposes
+      for (const id of ingredientIds) {
+        if (!this.ingredientes.some(i => i.id === id)) {
+          const ingrediente = await firstValueFrom(this.repositoryService.getIngrediente(id));
+          this.ingredientes.push(ingrediente);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading specific ingredients:', error);
     }
   }
 
@@ -230,6 +246,11 @@ export class CreateEditRecetaDialogComponent implements OnInit {
       return;
     }
 
+    // If editing, make sure we have the ingredient loaded
+    if (recetaItem) {
+      this.loadIngredientesByIds([recetaItem.ingredienteId]);
+    }
+
     const dialogRef = this.dialog.open(CreateEditRecetaItemDialogComponent, {
       width: '500px',
       disableClose: true,
@@ -237,7 +258,7 @@ export class CreateEditRecetaDialogComponent implements OnInit {
         recetaId: this.recetaId,
         recetaItem: recetaItem,
         editMode: !!recetaItem,
-        ingredientes: this.ingredientes.filter(i => i.activo)
+        ingredientes: recetaItem ? this.ingredientes.filter(i => i.id === recetaItem.ingredienteId) : []
       }
     });
 
