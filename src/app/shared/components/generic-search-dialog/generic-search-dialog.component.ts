@@ -20,6 +20,11 @@ export interface GenericSearchConfig {
   displayFn?: (item: any) => string;
 }
 
+interface ItemWithDisplayValues {
+  [key: string]: any;
+  __displayValues?: { [key: string]: string };
+}
+
 @Component({
   selector: 'app-generic-search-dialog',
   standalone: true,
@@ -40,7 +45,7 @@ export interface GenericSearchConfig {
 })
 export class GenericSearchDialogComponent implements OnInit {
   searchControl = new FormControl('');
-  items: any[] = [];
+  items: ItemWithDisplayValues[] = [];
   displayedColumns: string[] = [];
   columnLabels: { [key: string]: string } = {};
   
@@ -81,7 +86,8 @@ export class GenericSearchDialogComponent implements OnInit {
     try {
       const query = this.searchControl.value || '';
       const result = await this.config.searchFn(query, this.currentPage, this.pageSize);
-      this.items = result.items;
+      // Pre-compute display values for each item
+      this.items = result.items.map(item => this.preComputeDisplayValues(item));
       this.totalItems = result.total;
     } catch (error) {
       console.error('Error searching:', error);
@@ -97,7 +103,13 @@ export class GenericSearchDialogComponent implements OnInit {
   }
   
   selectItem(item: any): void {
-    this.dialogRef.close(item);
+    // Remove the added display values property before returning the item
+    if (item.__displayValues) {
+      const { __displayValues, ...cleanItem } = item;
+      this.dialogRef.close(cleanItem);
+    } else {
+      this.dialogRef.close(item);
+    }
   }
   
   cancel(): void {
@@ -120,6 +132,18 @@ export class GenericSearchDialogComponent implements OnInit {
     }
     
     return item[column] !== undefined ? item[column].toString() : '';
+  }
+
+  // Pre-compute display values for all columns
+  private preComputeDisplayValues(item: any): ItemWithDisplayValues {
+    const itemWithDisplay: ItemWithDisplayValues = { ...item, __displayValues: {} };
+    
+    // For each display column, pre-compute its display text
+    for (const column of this.config.displayedColumns) {
+      itemWithDisplay.__displayValues![column] = this.displayText(item, column);
+    }
+    
+    return itemWithDisplay;
   }
   
   // Method to detect Enter key and trigger search

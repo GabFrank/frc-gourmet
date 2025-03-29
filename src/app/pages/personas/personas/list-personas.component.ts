@@ -28,6 +28,14 @@ import { TabsService } from 'src/app/services/tabs.service';
 import { ListUsuariosComponent } from '../usuarios/list-usuarios.component';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 
+// Extended interface to include display values
+interface PersonaViewModel extends Partial<Persona> {
+  displayValues: {
+    tipoDocumentoLabel: string;
+    tipoPersonaLabel: string;
+  };
+}
+
 @Component({
   selector: 'app-list-personas',
   standalone: true,
@@ -57,11 +65,24 @@ import { ConfirmationDialogComponent } from '../../../shared/components/confirma
   styleUrls: ['./list-personas.component.scss']
 })
 export class ListPersonasComponent implements OnInit {
-  personas: Partial<Persona>[] = [];
+  personas: PersonaViewModel[] = [];
   documentoTipos = Object.values(DocumentoTipo);
   personaTipos = Object.values(PersonaTipo);
   displayedColumns: string[] = ['nombre', 'tipoDocumento', 'documento', 'tipoPersona', 'telefono', 'direccion', 'activo', 'acciones'];
   isLoading = false;
+  
+  // Pre-computed label maps
+  documentoTipoLabels: Record<DocumentoTipo, string> = {
+    [DocumentoTipo.CI]: 'C.I.',
+    [DocumentoTipo.RUC]: 'RUC',
+    [DocumentoTipo.CPF]: 'CPF',
+    [DocumentoTipo.PASAPORTE]: 'Pasaporte'
+  };
+
+  personaTipoLabels: Record<PersonaTipo, string> = {
+    [PersonaTipo.FISICA]: 'Física',
+    [PersonaTipo.JURIDICA]: 'Jurídica'
+  };
   
   // Pagination
   totalPersonas = 0;
@@ -122,11 +143,12 @@ export class ListPersonasComponent implements OnInit {
       
       // Get data from repository service
       const result = await firstValueFrom(this.repositoryService.getPersonas());
-      this.personas = result as Partial<Persona>[];
+      const personas = result as Partial<Persona>[];
       
       // Apply filters manually
+      let filteredPersonas = personas;
       if (Object.keys(filters).length > 0) {
-        this.personas = this.personas.filter(persona => {
+        filteredPersonas = personas.filter(persona => {
           let matches = true;
           
           if (filters.nombre && persona.nombre) {
@@ -153,6 +175,8 @@ export class ListPersonasComponent implements OnInit {
         });
       }
       
+      // Convert to view model with pre-computed values
+      this.personas = filteredPersonas.map(persona => this.convertToViewModel(persona));
       this.totalPersonas = this.personas.length;
       
     } catch (error) {
@@ -163,6 +187,17 @@ export class ListPersonasComponent implements OnInit {
     } finally {
       this.isLoading = false;
     }
+  }
+
+  // Convert Persona to PersonaViewModel with pre-computed display values
+  private convertToViewModel(persona: Partial<Persona>): PersonaViewModel {
+    return {
+      ...persona,
+      displayValues: {
+        tipoDocumentoLabel: this.computeDocumentoTipoLabel(persona.tipoDocumento),
+        tipoPersonaLabel: this.computePersonaTipoLabel(persona.tipoPersona)
+      }
+    };
   }
   
   onPageChange(event: PageEvent): void {
@@ -202,195 +237,163 @@ export class ListPersonasComponent implements OnInit {
       tipoPersona: '',
       activo: ''
     });
-    
-    // Reset to first page and reload data
-    this.currentPage = 0;
     this.loadPersonas();
   }
   
   buscar(): void {
-    // Reset to first page when applying new filters
-    this.currentPage = 0;
     this.loadPersonas();
   }
   
-  editPersona(persona: Partial<Persona>): void {
+  editPersona(persona: PersonaViewModel): void {
     const dialogRef = this.dialog.open(CreateEditPersonaComponent, {
-      width: '600px',
-      data: { persona }
+      width: '800px',
+      disableClose: true,
+      data: {
+        persona: persona,
+        isEditMode: true
+      }
     });
-
+    
     dialogRef.afterClosed().subscribe(result => {
-      if (result && result.success) {
-        this.snackBar.open('Persona actualizada correctamente', 'Cerrar', {
-          duration: 3000
-        });
+      if (result) {
         this.loadPersonas();
-      } else if (result && !result.success) {
-        this.snackBar.open('Error al actualizar persona', 'Cerrar', {
-          duration: 3000
-        });
       }
     });
   }
   
   deletePersona(id: number): void {
-    if (confirm('¿Está seguro de que desea eliminar esta persona?')) {
-      firstValueFrom(this.repositoryService.deletePersona(id))
-        .then(result => {
-          this.snackBar.open('Persona eliminada correctamente', 'Cerrar', {
-            duration: 3000
-          });
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      width: '400px',
+      data: {
+        title: 'Eliminar Persona',
+        message: '¿Está seguro que desea eliminar esta persona?',
+        confirmText: 'Eliminar',
+        cancelText: 'Cancelar'
+      }
+    });
+    
+    dialogRef.afterClosed().subscribe(async result => {
+      if (result) {
+        try {
+          await firstValueFrom(this.repositoryService.deletePersona(id));
+          this.snackBar.open('Persona eliminada correctamente', 'Cerrar', { duration: 3000 });
           this.loadPersonas();
-        })
-        .catch(error => {
+        } catch (error) {
           console.error('Error deleting persona:', error);
-          this.snackBar.open('Error al eliminar persona', 'Cerrar', {
-            duration: 3000
-          });
-        });
-    }
+          this.snackBar.open('Error al eliminar la persona', 'Cerrar', { duration: 3000 });
+        }
+      }
+    });
   }
   
   addPersona(): void {
     const dialogRef = this.dialog.open(CreateEditPersonaComponent, {
-      width: '600px',
-      data: {}
+      width: '800px',
+      disableClose: true,
+      data: {
+        isEditMode: false
+      }
     });
-
+    
     dialogRef.afterClosed().subscribe(result => {
-      if (result && result.success) {
-        this.snackBar.open('Persona creada correctamente', 'Cerrar', {
-          duration: 3000
-        });
+      if (result) {
         this.loadPersonas();
-      } else if (result && !result.success) {
-        this.snackBar.open('Error al crear persona', 'Cerrar', {
-          duration: 3000
-        });
       }
     });
   }
   
-  getDocumentoTipoLabel(tipo?: DocumentoTipo): string {
-    return tipo || '';
-  }
-
-  getPersonaTipoLabel(tipo?: PersonaTipo): string {
-    return tipo === PersonaTipo.FISICA ? 'Física' : tipo === PersonaTipo.JURIDICA ? 'Jurídica' : '';
+  // Private computation methods
+  private computeDocumentoTipoLabel(tipo?: DocumentoTipo): string {
+    if (!tipo) return '-';
+    return this.documentoTipoLabels[tipo] || tipo;
   }
   
-  // Used to set data from tab service
-  setData(data: any): void {
-    // Reload data if necessary
-    this.loadPersonas();
+  private computePersonaTipoLabel(tipo?: PersonaTipo): string {
+    if (!tipo) return '-';
+    return this.personaTipoLabels[tipo] || tipo;
   }
-
-  async createEditUsuario(persona: Partial<Persona>): Promise<void> {
-    if (!persona.id) {
-      this.snackBar.open('Error: La persona no tiene un ID válido', 'Cerrar', {
-        duration: 3000
-      });
-      return;
-    }
-
-    this.isLoading = true;
+  
+  // Public methods - these shouldn't be called directly from the template
+  getDocumentoTipoLabel(tipo?: DocumentoTipo): string {
+    return this.computeDocumentoTipoLabel(tipo);
+  }
+  
+  getPersonaTipoLabel(tipo?: PersonaTipo): string {
+    return this.computePersonaTipoLabel(tipo);
+  }
+  
+  setData(data: any): void {
+    // This method can be used to receive data from other components
+    console.log('Received data:', data);
+  }
+  
+  async createEditUsuario(persona: PersonaViewModel): Promise<void> {
     try {
-      // Find if there's a usuario associated with this persona
+      // First, check if this persona already has a user
       const usuarios = await firstValueFrom(this.repositoryService.getUsuarios());
       const existingUsuario = usuarios.find(u => u.persona?.id === persona.id);
       
+      let dialogData: any;
+      
       if (existingUsuario) {
-        // If user exists, open edit dialog
-        const dialogRef = this.dialog.open(CreateEditUsuarioComponent, {
-          width: '600px',
-          data: { usuario: existingUsuario }
-        });
-
-        dialogRef.afterClosed().subscribe(result => {
-          if (result && result.success) {
-            this.snackBar.open('Usuario actualizado correctamente', 'Cerrar', {
-              duration: 3000
-            });
-            
-            // If usuario data is returned, ask user if they want to navigate
-            if (result.usuario) {
-              this.showNavigationConfirmation(result.usuario);
-            }
-          } else if (result && !result.success) {
-            this.snackBar.open('Error al actualizar usuario', 'Cerrar', {
-              duration: 3000
-            });
-          }
-        });
+        // Edit existing user
+        dialogData = {
+          usuario: existingUsuario,
+          persona: persona,
+          isEditMode: true
+        };
       } else {
-        // If no user exists, open create dialog with persona pre-selected
-        const dialogRef = this.dialog.open(CreateEditUsuarioComponent, {
-          width: '600px',
-          data: { 
-            preselectedPersona: persona
-          }
-        });
-
-        dialogRef.afterClosed().subscribe(result => {          
-          if (result && result.success) {
-            this.snackBar.open('Usuario creado correctamente', 'Cerrar', {
-              duration: 3000
-            });
-            
-            // If usuario data is returned, ask user if they want to navigate
-            if (result.usuario) {
-              this.showNavigationConfirmation(result);
-            }
-          } else if (result && !result.success) {
-            this.snackBar.open('Error al crear usuario', 'Cerrar', {
-              duration: 3000
-            });
-          }
-        });
+        // Create new user
+        dialogData = {
+          persona: persona,
+          isEditMode: false
+        };
       }
-    } catch (error) {
-      console.error('Error al buscar usuario:', error);
-      this.snackBar.open('Error al buscar información de usuario', 'Cerrar', {
-        duration: 3000
+      
+      // Open dialog
+      const dialogRef = this.dialog.open(CreateEditUsuarioComponent, {
+        width: '800px',
+        disableClose: true,
+        data: dialogData
       });
-    } finally {
-      this.isLoading = false;
+      
+      dialogRef.afterClosed().subscribe(result => {
+        if (result) {
+          // Ask user if they want to navigate to the usuarios list
+          this.showNavigationConfirmation(result);
+        }
+      });
+    } catch (error) {
+      console.error('Error checking for existing usuario:', error);
+      this.snackBar.open('Error al verificar usuario existente', 'Cerrar', { duration: 3000 });
     }
   }
   
-  // New method to show navigation confirmation dialog
   private showNavigationConfirmation(userData: any): void {
-    const confirmDialog = this.dialog.open(ConfirmationDialogComponent, {
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       width: '400px',
       data: {
-        title: 'Ir a Listado de Usuarios',
-        message: '¿Desea ir al listado de usuarios para ver los cambios?'
+        title: 'Usuario guardado',
+        message: '¿Desea ir a la lista de usuarios?',
+        confirmText: 'Sí',
+        cancelText: 'No'
       }
     });
-
-    confirmDialog.afterClosed().subscribe(result => {
-      if (result === true) {
-        // User confirmed, navigate to the usuarios tab
+    
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
         this.openUsuariosTab(userData);
       }
     });
   }
   
-  // Helper function to open the usuarios tab and set filter
   private openUsuariosTab(data: any): void {
-    // Create the tab data with the nickname filter
-    const tabData = {
-      filterData: {
-        nickname: data.usuario.nickname
-      }
-    };
-    
-    // Use the enhanced openTabWithData method that handles delayed data updates
-    this.tabService.openTabWithData(
+    this.tabService.openTab(
       'Usuarios',
       ListUsuariosComponent,
-      tabData
+      { source: 'persona', data: data },
+      'usuarios-tab',
+      true
     );
   }
 } 

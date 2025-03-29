@@ -1,89 +1,125 @@
-<h2 mat-dialog-title>{{ data.editMode ? 'Editar' : 'Nuevo' }} Ingrediente</h2>
+<div class="dialog-content">
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" *ngIf="loading">
+    <mat-spinner diameter="50"></mat-spinner>
+  </div>
 
-<div class="loading-overlay" *ngIf="loading || savingIngrediente">
-  <mat-spinner diameter="40"></mat-spinner>
-</div>
+  <h2 mat-dialog-title>{{ data.editMode ? 'Editar Ingrediente' : 'Nuevo Ingrediente' }}</h2>
 
-<div mat-dialog-content>
-  <!-- Ingrediente Form -->
-  <form [formGroup]="ingredienteForm">
-    <div class="form-row">
-      <mat-form-field appearance="outline" class="full-width">
-        <mat-label>Descripción</mat-label>
-        <input matInput formControlName="descripcion" placeholder="Descripción del ingrediente">
-        <mat-error *ngIf="ingredienteForm.get('descripcion')?.hasError('required')">
-          La descripción es requerida
-        </mat-error>
-      </mat-form-field>
-    </div>
+  <mat-dialog-content>
+    <form [formGroup]="ingredienteForm">
+      <!-- Descripción -->
+      <div class="form-row">
+        <mat-form-field class="full-width" appearance="outline">
+          <mat-label>Descripción</mat-label>
+          <input matInput formControlName="descripcion" required>
+          <mat-error *ngIf="ingredienteForm.get('descripcion')?.hasError('required')">
+            La descripción es requerida
+          </mat-error>
+        </mat-form-field>
+      </div>
 
-    <div class="form-row form-row-2-columns">
-      <mat-form-field appearance="outline">
-        <mat-label>Tipo de Medida</mat-label>
-        <mat-select formControlName="tipoMedida">
-          <mat-option *ngFor="let tipo of tipoMedidaOptions" [value]="tipo">
-            {{ getTipoMedidaText(tipo) }}
-          </mat-option>
-        </mat-select>
-        <mat-error *ngIf="ingredienteForm.get('tipoMedida')?.hasError('required')">
-          El tipo de medida es requerido
-        </mat-error>
-      </mat-form-field>
-    </div>
+      <!-- Tipo de Medida -->
+      <div class="form-row">
+        <mat-form-field class="full-width" appearance="outline">
+          <mat-label>Tipo de Medida</mat-label>
+          <mat-select formControlName="tipoMedida" required>
+            <mat-option *ngFor="let tipo of tipoMedidaOptions" [value]="tipo">
+              {{ tipoMedidaDisplayValues[tipo] }}
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="ingredienteForm.get('tipoMedida')?.hasError('required')">
+            El tipo de medida es requerido
+          </mat-error>
+        </mat-form-field>
+      </div>
 
-    <div class="form-row form-row-2-columns">
-      <mat-form-field appearance="outline">
-        <mat-label>Moneda</mat-label>
-        <mat-select formControlName="monedaId">
-          <mat-option *ngFor="let moneda of monedas" [value]="moneda.id">
-            {{ getMonedaLabel(moneda) }}
-          </mat-option>
-        </mat-select>
-        <mat-error *ngIf="ingredienteForm.get('monedaId')?.hasError('required')">
-          La moneda es requerida
-        </mat-error>
-      </mat-form-field>
+      <!-- Recipe Selection -->
+      <div class="form-row">
+        <mat-form-field class="full-width" appearance="outline">
+          <mat-label>Receta</mat-label>
+          <mat-select formControlName="recetaId">
+            <mat-option [value]="null">Ninguna</mat-option>
+            <mat-option *ngFor="let receta of recetas" [value]="receta.id">
+              {{ recetasDisplayValues[receta.id] }}
+            </mat-option>
+          </mat-select>
+          <mat-hint *ngIf="ingredienteForm.get('recetaId')?.value">
+            Al seleccionar una receta, el costo se calculará automáticamente
+          </mat-hint>
+        </mat-form-field>
+      </div>
 
-      <mat-form-field appearance="outline">
-        <mat-label>Costo ({{ getSelectedMonedaSymbol() }})</mat-label>
-        <input matInput type="number" min="0" step="0.01" formControlName="costo" placeholder="Costo">
-        <mat-error *ngIf="ingredienteForm.get('costo')?.hasError('required')">
-          El costo es requerido
-        </mat-error>
-        <mat-error *ngIf="ingredienteForm.get('costo')?.hasError('min')">
-          El costo debe ser mayor o igual a 0
-        </mat-error>
-      </mat-form-field>
-    </div>
+      <!-- Recipe Quantity (only shown when a recipe is selected) -->
+      <div class="form-row recipe-quantity-field" *ngIf="ingredienteForm.get('recetaId')?.value">
+        <mat-form-field class="full-width" appearance="outline">
+          <mat-label>Cantidad de Receta</mat-label>
+          <input matInput type="number" formControlName="recetaCantidad" min="0" step="0.01">
+          <mat-error *ngIf="ingredienteForm.get('recetaCantidad')?.hasError('min')">
+            La cantidad debe ser mayor o igual a 0
+          </mat-error>
+          <mat-hint>
+            <span *ngIf="calculating" class="calculating-indicator">
+              <mat-icon>autorenew</mat-icon> Calculando costo...
+            </span>
+            <span *ngIf="!calculating">Cantidad de la receta a utilizar para este ingrediente</span>
+          </mat-hint>
+        </mat-form-field>
+      </div>
 
-    <div class="form-row" *ngIf="ingredienteForm.get('isProduccion')?.value">
-      <mat-form-field appearance="outline" class="full-width">
-        <mat-label>Receta Asociada</mat-label>
-        <mat-select formControlName="recetaId">
-          <mat-option [value]="null">Ninguna</mat-option>
-          <mat-option *ngFor="let receta of recetas" [value]="receta.id">
-            {{ receta.nombre }}
-          </mat-option>
-        </mat-select>
-      </mat-form-field>
-    </div>
+      <!-- Costo y Moneda -->
+      <div class="form-row">
+        <mat-form-field class="half-width" appearance="outline">
+          <mat-label>Costo</mat-label>
+          <input matInput type="number" formControlName="costo" min="0" step="0.01">
+          <span matPrefix>{{ selectedMonedaSymbol }}&nbsp;</span>
+          <mat-error *ngIf="ingredienteForm.get('costo')?.hasError('required')">
+            El costo es requerido
+          </mat-error>
+          <mat-error *ngIf="ingredienteForm.get('costo')?.hasError('min')">
+            El costo debe ser mayor o igual a 0
+          </mat-error>
+          <mat-hint *ngIf="ingredienteForm.get('recetaId')?.value">
+            El costo se calcula basado en la receta seleccionada
+          </mat-hint>
+        </mat-form-field>
 
-    <div class="form-row checkboxes-row">
-      <mat-checkbox formControlName="isProduccion" color="primary">
-        De producción propia
-      </mat-checkbox>
+        <mat-form-field class="half-width" appearance="outline">
+          <mat-label>Moneda</mat-label>
+          <mat-select formControlName="monedaId" required>
+            <mat-option *ngFor="let moneda of monedas" [value]="moneda.id">
+              {{ monedasDisplayValues[moneda.id] }}
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="ingredienteForm.get('monedaId')?.hasError('required')">
+            La moneda es requerida
+          </mat-error>
+        </mat-form-field>
+      </div>
 
-      <mat-checkbox formControlName="activo" color="primary">
-        Activo
-      </mat-checkbox>
-    </div>
-  </form>
-</div>
+      <!-- Checkboxes -->
+      <div class="form-row">
+        <div class="checkbox-container">
+          <mat-checkbox formControlName="isProduccion" class="checkbox-margin">
+            Es de producción
+          </mat-checkbox>
+          <mat-checkbox formControlName="activo" class="checkbox-margin">
+            Activo
+          </mat-checkbox>
+        </div>
+      </div>
+    </form>
+  </mat-dialog-content>
 
-<div mat-dialog-actions align="end">
-  <button mat-button [mat-dialog-close]="false">Cancelar</button>
-  <button mat-raised-button color="primary" (click)="save()" [disabled]="ingredienteForm.invalid || savingIngrediente">
-    <mat-spinner *ngIf="savingIngrediente" diameter="20"></mat-spinner>
-    <span *ngIf="!savingIngrediente">{{ data.editMode ? 'Actualizar' : 'Guardar' }}</span>
-  </button>
+  <mat-dialog-actions align="end">
+    <button mat-button mat-dialog-close>Cancelar</button>
+    <button 
+      mat-raised-button 
+      color="primary" 
+      (click)="save()" 
+      [disabled]="ingredienteForm.invalid || savingIngrediente">
+      <mat-spinner *ngIf="savingIngrediente" diameter="20" class="button-spinner"></mat-spinner>
+      <span *ngIf="!savingIngrediente">{{ data.editMode ? 'Actualizar' : 'Crear' }}</span>
+    </button>
+  </mat-dialog-actions>
 </div>

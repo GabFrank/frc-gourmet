@@ -10,7 +10,9 @@ import type { Moneda } from '../financiero/moneda.entity';
  */
 export enum TipoMedida {
   UNIDAD = 'UNIDAD',
+  KILO = 'KILO',
   GRAMO = 'GRAMO',
+  LITRO = 'LITRO',
   MILILITRO = 'MILILITRO',
   PAQUETE = 'PAQUETE'
 }
@@ -46,6 +48,9 @@ export class Ingrediente extends BaseModel {
   @ManyToOne('Receta', { nullable: true })
   @JoinColumn({ name: 'receta_id' })
   receta?: Receta;
+
+  @Column({ name: 'receta_cantidad', type: 'decimal', precision: 10, scale: 2, default: 0, nullable: true })
+  recetaCantidad?: number;
 
   @Column({ name: 'moneda_id', nullable: true })
   monedaId?: number;

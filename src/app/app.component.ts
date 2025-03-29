@@ -34,6 +34,7 @@ import { ListCategoriasComponent } from './pages/productos/categorias/list-categ
 import { ListProductosComponent } from './pages/productos/productos/list-productos.component';
 import { ListMonedasComponent } from './pages/financiero/monedas/list-monedas/list-monedas.component';
 import { ListRecetasComponent } from './pages/productos/recetas/list-recetas.component';
+import { ListIngredientesComponent } from './pages/productos/ingredientes/list-ingredientes.component';
 
 @Component({
   selector: 'app-root',
@@ -308,9 +309,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   openIngredientesTab() {
-    // TODO: Create Ingredientes component
-    // For now, just show a placeholder message
-    this.tabsService.openTab('Ingredientes', HomeComponent);
+    this.tabsService.openTab('Ingredientes', ListIngredientesComponent);
   }
 
   private applyTheme() {

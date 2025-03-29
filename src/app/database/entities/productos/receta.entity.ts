@@ -1,6 +1,7 @@
 import { Column, Entity, OneToMany } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import type { RecetaItem } from './receta-item.entity';
+import { TipoMedida } from './ingrediente.entity';
 
 /**
  * Entity representing a product recipe
@@ -15,6 +16,20 @@ export class Receta extends BaseModel {
 
   @Column({ default: true })
   activo!: boolean;
+
+  @Column({
+    type: 'varchar',
+    name: 'tipo_medida',
+    enum: TipoMedida,
+    default: TipoMedida.UNIDAD
+  })
+  tipoMedida!: TipoMedida;
+
+  @Column({ name: 'calcular_cantidad', default: false })
+  calcularCantidad!: boolean;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  cantidad!: number;
 
   @OneToMany('RecetaItem', 'receta')
   items!: RecetaItem[];

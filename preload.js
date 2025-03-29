@@ -403,5 +403,8 @@ contextBridge.exposeInMainWorld('api', {
     deleteIngrediente: async (ingredienteId) => {
         return await ipcRenderer.invoke('deleteIngrediente', ingredienteId);
     },
+    searchIngredientesByDescripcion: async (searchText) => {
+        return await ipcRenderer.invoke('searchIngredientesByDescripcion', searchText);
+    },
 });
 //# sourceMappingURL=preload.js.map

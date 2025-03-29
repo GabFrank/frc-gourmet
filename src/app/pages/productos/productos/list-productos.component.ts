@@ -100,10 +100,7 @@ export class ListProductosComponent implements OnInit, AfterViewInit {
   }
 
   ngAfterViewInit(): void {
-    // Open product with ID 2 as the initial tab
-    setTimeout(() => {
-      this.openProductWithId(2);
-    }, 500);
+
   }
 
   /**

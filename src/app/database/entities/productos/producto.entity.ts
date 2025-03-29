@@ -44,6 +44,9 @@ export class Producto extends BaseModel {
   @Column({ default: false, name: 'has_stock' })
   hasStock!: boolean;
 
+  @Column({ default: false, name: 'has_variaciones' })
+  hasVariaciones!: boolean;
+
   @Column({ nullable: true, type: 'text' })
   observacion?: string;
 

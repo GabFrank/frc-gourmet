@@ -47,24 +47,48 @@
         </div>
 
     <mat-card class="table-scroll-container">
-        <table mat-table [dataSource]="recetas" matSort class="mat-elevation-z8">
+        <table mat-table [dataSource]="recetas" class="mat-elevation-z8">
 
           <!-- ID Column -->
           <ng-container matColumnDef="id">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header>ID</th>
-            <td mat-cell *matCellDef="let receta">{{ receta.id }}</td>
+            <th mat-header-cell *matHeaderCellDef class="center-align">ID</th>
+            <td mat-cell *matCellDef="let receta" class="center-align">{{ receta.id }}</td>
           </ng-container>
 
           <!-- Nombre Column -->
           <ng-container matColumnDef="nombre">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header>Nombre</th>
-            <td mat-cell *matCellDef="let receta">{{ receta.nombre }}</td>
+            <th mat-header-cell *matHeaderCellDef class="left-align">Nombre</th>
+            <td mat-cell *matCellDef="let receta" class="left-align">{{ receta.nombre }}</td>
+          </ng-container>
+
+          <!-- Tipo Medida Column -->
+          <ng-container matColumnDef="tipoMedida">
+            <th mat-header-cell *matHeaderCellDef class="center-align">Tipo de Medida</th>
+            <td mat-cell *matCellDef="let receta" class="center-align">{{ receta.tipoMedida || 'UNIDAD' }}</td>
+          </ng-container>
+
+          <!-- Cantidad Column -->
+          <ng-container matColumnDef="cantidad">
+            <th mat-header-cell *matHeaderCellDef class="center-align">Cantidad</th>
+            <td mat-cell *matCellDef="let receta" class="center-align">{{ receta.cantidad || 0 }}</td>
+          </ng-container>
+
+          <!-- Costo Total Column -->
+          <ng-container matColumnDef="costo">
+            <th mat-header-cell *matHeaderCellDef class="center-align">Costo de la receta</th>
+            <td mat-cell *matCellDef="let receta" class="center-align">{{ defaultMonedaSimbolo }} {{ receta.totalCost | number:'1.2-2' }}</td>
+          </ng-container>
+
+          <!-- Costo por Unidad Column -->
+          <ng-container matColumnDef="costoUnidad">
+            <th mat-header-cell *matHeaderCellDef class="center-align">Costo por medida</th>
+            <td mat-cell *matCellDef="let receta" class="center-align">{{ defaultMonedaSimbolo }} {{ receta.costPerUnit | number:'1.2-2' }}</td>
           </ng-container>
 
           <!-- Estado Column -->
           <ng-container matColumnDef="activo">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header>Estado</th>
-            <td mat-cell *matCellDef="let receta">
+            <th mat-header-cell *matHeaderCellDef class="center-align">Estado</th>
+            <td mat-cell *matCellDef="let receta" class="center-align">
               <span class="status-badge" [ngClass]="receta.activo ? 'active' : 'inactive'">
                 {{ receta.activo ? 'Activo' : 'Inactivo' }}
               </span>
@@ -73,8 +97,8 @@
 
           <!-- Actions Column -->
           <ng-container matColumnDef="actions">
-            <th mat-header-cell *matHeaderCellDef>Acciones</th>
-            <td mat-cell *matCellDef="let receta">
+            <th mat-header-cell *matHeaderCellDef class="center-align">Acciones</th>
+            <td mat-cell *matCellDef="let receta" class="center-align">
               <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
                 <mat-icon>more_vert</mat-icon>
               </button>
@@ -100,7 +124,7 @@
 
           <!-- No results row -->
           <tr class="mat-row" *matNoDataRow>
-          <td class="mat-cell" colspan="4">No se encontraron recetas</td>
+          <td class="mat-cell" colspan="8">No se encontraron recetas</td>
           </tr>
         </table>
     </mat-card>

@@ -22,6 +22,11 @@ import { CreateEditSubcategoriaComponent } from './create-edit-subcategoria.comp
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { firstValueFrom } from 'rxjs';
 
+// Extended interface to include display values
+interface SubcategoriaViewModel extends Partial<Subcategoria> {
+  categoriaName?: string;
+}
+
 @Component({
   selector: 'app-list-subcategorias',
   standalone: true,
@@ -48,10 +53,13 @@ import { firstValueFrom } from 'rxjs';
   styleUrls: ['./list-subcategorias.component.scss']
 })
 export class ListSubcategoriasComponent implements OnInit {
-  subcategorias: Subcategoria[] = [];
+  subcategorias: SubcategoriaViewModel[] = [];
   categorias: Categoria[] = [];
   displayedColumns: string[] = ['nombre', 'descripcion', 'categoria', 'posicion', 'activo', 'acciones'];
   isLoading = false;
+  
+  // Map for category names to avoid function calls in template
+  categoriaNamesMap: Map<number, string> = new Map();
   
   // Pagination
   totalSubcategorias = 0;
@@ -83,6 +91,14 @@ export class ListSubcategoriasComponent implements OnInit {
   async loadCategorias(): Promise<void> {
     try {
       this.categorias = await firstValueFrom(this.repositoryService.getCategorias());
+      
+      // Populate the categorias name map
+      this.categoriaNamesMap.clear();
+      this.categorias.forEach(categoria => {
+        if (categoria.id) {
+          this.categoriaNamesMap.set(categoria.id, categoria.nombre);
+        }
+      });
     } catch (error) {
       console.error('Error loading categorias:', error);
       this.snackBar.open('Error al cargar categorías', 'Cerrar', {
@@ -116,7 +132,9 @@ export class ListSubcategoriasComponent implements OnInit {
       
       // Get all subcategorias with their related categorias
       const result = await firstValueFrom(this.repositoryService.getSubcategorias());
-      this.subcategorias = result;
+      
+      // Convert to view models with pre-computed values
+      this.subcategorias = result.map(subcategoria => this.convertToViewModel(subcategoria));
       
       // Apply filters manually
       if (Object.keys(filters).length > 0) {
@@ -141,10 +159,10 @@ export class ListSubcategoriasComponent implements OnInit {
       
       // Sort by position then by name
       this.subcategorias.sort((a, b) => {
-        if (a.posicion !== b.posicion) {
-          return a.posicion - b.posicion;
+        if ((a.posicion ?? 0) !== (b.posicion ?? 0)) {
+          return (a.posicion ?? 0) - (b.posicion ?? 0);
         }
-        return a.nombre.localeCompare(b.nombre);
+        return (a.nombre || '').localeCompare(b.nombre || '');
       });
       
       this.totalSubcategorias = this.subcategorias.length;
@@ -157,6 +175,20 @@ export class ListSubcategoriasComponent implements OnInit {
     } finally {
       this.isLoading = false;
     }
+  }
+  
+  // Convert Subcategoria to SubcategoriaViewModel with pre-computed display values
+  private convertToViewModel(subcategoria: Partial<Subcategoria>): SubcategoriaViewModel {
+    return {
+      ...subcategoria,
+      categoriaName: this.computeCategoriaName(subcategoria.categoriaId)
+    };
+  }
+  
+  // Compute the categoria name from the id
+  private computeCategoriaName(categoriaId?: number): string {
+    if (!categoriaId) return 'N/A';
+    return this.categoriaNamesMap.get(categoriaId) || 'N/A';
   }
   
   onPageChange(event: PageEvent): void {
@@ -174,8 +206,8 @@ export class ListSubcategoriasComponent implements OnInit {
       switch (sortState.active) {
         case 'nombre': return this.compare(a.nombre || '', b.nombre || '', isAsc);
         case 'descripcion': return this.compare(a.descripcion || '', b.descripcion || '', isAsc);
-        case 'categoria': return this.compare(a.categoria?.nombre || '', b.categoria?.nombre || '', isAsc);
-        case 'posicion': return this.compare(a.posicion || 0, b.posicion || 0, isAsc);
+        case 'categoria': return this.compare(a.categoriaName || '', b.categoriaName || '', isAsc);
+        case 'posicion': return this.compare(a.posicion ?? 0, b.posicion ?? 0, isAsc);
         case 'activo': return this.compare(a.activo || false, b.activo || false, isAsc);
         default: return 0;
       }
@@ -204,22 +236,35 @@ export class ListSubcategoriasComponent implements OnInit {
     this.loadSubcategorias();
   }
   
-  editSubcategoria(subcategoria: Subcategoria): void {
+  addSubcategoria(): void {
     const dialogRef = this.dialog.open(CreateEditSubcategoriaComponent, {
       width: '500px',
-      data: { subcategoria }
+      data: {
+        editMode: false,
+        categorias: this.categorias
+      }
     });
 
     dialogRef.afterClosed().subscribe(result => {
-      if (result && result.success) {
-        this.snackBar.open('Subcategoría actualizada correctamente', 'Cerrar', {
-          duration: 3000
-        });
+      if (result) {
         this.loadSubcategorias();
-      } else if (result && !result.success) {
-        this.snackBar.open('Error al actualizar subcategoría', 'Cerrar', {
-          duration: 3000
-        });
+      }
+    });
+  }
+  
+  editSubcategoria(subcategoria: Subcategoria): void {
+    const dialogRef = this.dialog.open(CreateEditSubcategoriaComponent, {
+      width: '500px',
+      data: {
+        subcategoria,
+        editMode: true,
+        categorias: this.categorias
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        this.loadSubcategorias();
       }
     });
   }
@@ -227,9 +272,11 @@ export class ListSubcategoriasComponent implements OnInit {
   deleteSubcategoria(id: number): void {
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       width: '350px',
-      data: { 
-        title: 'Confirmar Eliminación', 
-        message: '¿Está seguro de que desea eliminar esta subcategoría? Esto también eliminará todos los productos asociados.'
+      data: {
+        title: 'Confirmar eliminación',
+        message: '¿Está seguro que desea eliminar esta subcategoría?',
+        confirmText: 'Eliminar',
+        cancelText: 'Cancelar'
       }
     });
 
@@ -252,52 +299,18 @@ export class ListSubcategoriasComponent implements OnInit {
     });
   }
   
-  addSubcategoria(): void {
-    const dialogRef = this.dialog.open(CreateEditSubcategoriaComponent, {
-      width: '500px',
-      data: {}
-    });
-
-    dialogRef.afterClosed().subscribe(result => {
-      if (result && result.success) {
-        this.snackBar.open('Subcategoría creada correctamente', 'Cerrar', {
-          duration: 3000
-        });
-        this.loadSubcategorias();
-      } else if (result && !result.success) {
-        this.snackBar.open('Error al crear subcategoría', 'Cerrar', {
-          duration: 3000
-        });
-      }
-    });
-  }
-
-  // Method to reorder subcategories (move up/down)
-  reorderSubcategoria(subcategoria: Subcategoria, direction: 'up' | 'down'): void {
-    // Find all subcategories in the same categoria
-    const sameCategoriaSubcategorias = this.subcategorias.filter(
-      s => s.categoriaId === subcategoria.categoriaId
-    );
-    
-    // Sort them by position
-    sameCategoriaSubcategorias.sort((a, b) => a.posicion - b.posicion);
-    
-    // Find the current index within this filtered array
-    const currentIndex = sameCategoriaSubcategorias.findIndex(s => s.id === subcategoria.id);
+  async reorderSubcategoria(subcategoria: Subcategoria, direction: 'up' | 'down'): Promise<void> {
+    const currentIndex = this.subcategorias.findIndex(s => s.id === subcategoria.id);
     if (currentIndex === -1) return;
     
-    // Calculate the target index
-    let targetIndex = currentIndex;
-    if (direction === 'up' && currentIndex > 0) {
-      targetIndex = currentIndex - 1;
-    } else if (direction === 'down' && currentIndex < sameCategoriaSubcategorias.length - 1) {
-      targetIndex = currentIndex + 1;
-    } else {
-      return; // No valid move
-    }
+    const isFirst = currentIndex === 0;
+    const isLast = currentIndex === this.subcategorias.length - 1;
     
-    // Get the target subcategoria
-    const targetSubcategoria = sameCategoriaSubcategorias[targetIndex];
+    if (direction === 'up' && isFirst) return;
+    if (direction === 'down' && isLast) return;
+    
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    const targetSubcategoria = this.subcategorias[targetIndex];
     
     // Swap positions
     const tempPosition = subcategoria.posicion;
@@ -306,8 +319,8 @@ export class ListSubcategoriasComponent implements OnInit {
     
     // Update both subcategorias in the database
     Promise.all([
-      firstValueFrom(this.repositoryService.updateSubcategoria(subcategoria.id!, { posicion: subcategoria.posicion })),
-      firstValueFrom(this.repositoryService.updateSubcategoria(targetSubcategoria.id!, { posicion: targetSubcategoria.posicion }))
+      firstValueFrom(this.repositoryService.updateSubcategoria(subcategoria.id as number, { posicion: subcategoria.posicion })),
+      firstValueFrom(this.repositoryService.updateSubcategoria(targetSubcategoria.id as number, { posicion: targetSubcategoria.posicion }))
     ]).then(() => {
       this.snackBar.open('Orden actualizado correctamente', 'Cerrar', {
         duration: 2000
@@ -321,10 +334,8 @@ export class ListSubcategoriasComponent implements OnInit {
     });
   }
   
-  // Get readable categoria name
+  // Get readable categoria name (kept for backwards compatibility but not called from template)
   getCategoriaName(categoriaId?: number): string {
-    if (!categoriaId) return 'N/A';
-    const categoria = this.categorias.find(c => c.id === categoriaId);
-    return categoria ? categoria.nombre : 'N/A';
+    return this.computeCategoriaName(categoriaId);
   }
 } 

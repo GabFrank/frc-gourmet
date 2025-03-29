@@ -1,0 +1,14 @@
+---
+description: read this rules before begin the work
+globs: 
+---
+this is a Angular material + electron + sqlite + typeorm project
+Never use functions directly on html, this can cause angular bad performance
+always save string as uppercase, unless user explicitly indicate another way
+always edit .ts files that will compile and generate .js files, or edit both
+Do not create a angular module for new components if i explicitly not ask to do, instead use the nearest module on path
+when creating a filter form, do not implement filter on value changes unless user explicitly ask
+Always remember that we have dark and light theme, so not use hardcored background colors
+when creating a table, always align center all itens, only leave with align start names and descriptions
+when creating a table do not add mat sort header unless user explicitly ask for
+We are using Typeorm for with synchronize: true, we will change it later for production

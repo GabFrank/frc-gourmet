@@ -80,20 +80,24 @@
 
         <!-- Tipo Documento Column -->
         <ng-container matColumnDef="tipoDocumento">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header>Tipo Doc.</th>
-          <td mat-cell *matCellDef="let persona">{{ getDocumentoTipoLabel(persona.tipoDocumento) }}</td>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header> Tipo Documento </th>
+          <td mat-cell *matCellDef="let persona"> 
+            {{ persona.displayValues.tipoDocumentoLabel }} 
+          </td>
         </ng-container>
 
         <!-- Documento Column -->
         <ng-container matColumnDef="documento">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header>Documento</th>
-          <td mat-cell *matCellDef="let persona">{{ persona.documento }}</td>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header> Documento </th>
+          <td mat-cell *matCellDef="let persona"> {{ persona.documento || '-' }} </td>
         </ng-container>
 
         <!-- Tipo Persona Column -->
         <ng-container matColumnDef="tipoPersona">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header>Tipo Persona</th>
-          <td mat-cell *matCellDef="let persona">{{ getPersonaTipoLabel(persona.tipoPersona) }}</td>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header> Tipo Persona </th>
+          <td mat-cell *matCellDef="let persona"> 
+            {{ persona.displayValues.tipoPersonaLabel }} 
+          </td>
         </ng-container>
 
         <!-- Teléfono Column -->

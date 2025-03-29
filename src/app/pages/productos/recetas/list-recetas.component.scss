@@ -98,6 +98,72 @@ table {
   width: 100%;
 }
 
+/* Column specific styling */
+::ng-deep .mat-column-id,
+::ng-deep th.mat-column-id,
+::ng-deep td.mat-column-id {
+  width: 60px;
+  text-align: center;
+}
+
+::ng-deep .mat-column-nombre,
+::ng-deep th.mat-column-nombre,
+::ng-deep td.mat-column-nombre {
+  min-width: 180px;
+  text-align: left;
+}
+
+::ng-deep .mat-column-tipoMedida,
+::ng-deep th.mat-column-tipoMedida,
+::ng-deep td.mat-column-tipoMedida {
+  width: 120px;
+  text-align: center;
+}
+
+::ng-deep .mat-column-cantidad,
+::ng-deep th.mat-column-cantidad,
+::ng-deep td.mat-column-cantidad {
+  width: 100px;
+  text-align: center;
+}
+
+::ng-deep .mat-column-costo,
+::ng-deep th.mat-column-costo,
+::ng-deep td.mat-column-costo,
+::ng-deep .mat-column-costoUnidad,
+::ng-deep th.mat-column-costoUnidad,
+::ng-deep td.mat-column-costoUnidad {
+  width: 150px;
+  text-align: center;
+}
+
+::ng-deep .mat-column-activo,
+::ng-deep th.mat-column-activo,
+::ng-deep td.mat-column-activo {
+  width: 100px;
+  text-align: center;
+}
+
+::ng-deep .mat-column-actions,
+::ng-deep th.mat-column-actions,
+::ng-deep td.mat-column-actions {
+  width: 80px;
+  text-align: center;
+}
+
+/* Ensure cell content is also centered */
+::ng-deep td.mat-cell, 
+::ng-deep th.mat-header-cell {
+  justify-content: center;
+  padding: 0 8px;
+}
+
+::ng-deep td.mat-column-nombre, 
+::ng-deep th.mat-column-nombre {
+  justify-content: flex-start;
+}
+
+/* Table styling */
 ::ng-deep .mat-table {
   background: transparent !important;
 }
@@ -107,11 +173,23 @@ table {
   color: #fff;
   font-size: 14px;
   border-bottom: 1px solid #666;
+  text-align: center;
+}
+
+::ng-deep .mat-header-row .mat-column-nombre {
+  text-align: left;
 }
 
 ::ng-deep .mat-cell {
   color: #fff;
   border-bottom: 1px solid #555;
+}
+
+/* For Angular Material tables, we need to add flex properties */
+::ng-deep .mat-cell, 
+::ng-deep .mat-header-cell {
+  display: flex !important;
+  align-items: center;
 }
 
 .status-badge {
@@ -166,4 +244,15 @@ table {
   .button-row {
     flex-wrap: wrap;
   }
+}
+
+/* Alignment classes */
+.center-align {
+  text-align: center !important;
+  justify-content: center !important;
+}
+
+.left-align {
+  text-align: left !important;
+  justify-content: flex-start !important;
 }
