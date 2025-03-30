@@ -18,12 +18,14 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTableModule } from '@angular/material/table';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { RepositoryService } from '../../../database/repository.service';
 import { Producto } from '../../../database/entities/productos/producto.entity';
 import { ProductoImage } from '../../../database/entities/productos/producto-image.entity';
 import { Subcategoria } from '../../../database/entities/productos/subcategoria.entity';
 import { Categoria } from '../../../database/entities/productos/categoria.entity';
-import { firstValueFrom } from 'rxjs';
+import { Receta } from '../../../database/entities/productos/receta.entity';
+import { firstValueFrom, Observable, of, map, startWith } from 'rxjs';
 import { TabsService } from '../../../services/tabs.service';
 import { ImageViewerComponent } from '../../../components/image-viewer/image-viewer.component';
 import { CreateEditCodigoComponent } from './create-edit-codigo.component';
@@ -42,6 +44,11 @@ interface ProductImageModel {
   orden: number;
   isNew?: boolean;
   toDelete?: boolean;
+}
+
+// Extended Presentacion interface with pre-computed display values
+interface PresentacionViewModel extends Presentacion {
+  tipoMedidaLabel?: string;
 }
 
 @Component({
@@ -66,6 +73,7 @@ interface ProductImageModel {
     MatDialogModule,
     MatTableModule,
     MatMenuModule,
+    MatAutocompleteModule,
     ReactiveFormsModule,
     CreateEditCodigoComponent,
     CreateEditPrecioVentaComponent,
@@ -187,6 +195,8 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   isUploading = false;
   categorias: Categoria[] = [];
   subcategorias: Subcategoria[] = [];
+  recetas: Receta[] = [];
+  filteredRecetas!: Observable<Receta[]>;
 
   // For image handling
   selectedImageFile: File | null = null;
@@ -212,6 +222,21 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   // Flag to track if data has been processed to prevent multiple processing
   private dataProcessed = false;
 
+  // Maps for pre-computed values
+  tipoMedidaLabels: Record<TipoMedida, string> = {
+    [TipoMedida.UNIDAD]: 'Unidad',
+    [TipoMedida.PAQUETE]: 'Paquete',
+    [TipoMedida.GRAMO]: 'Gramo',
+    [TipoMedida.LITRO]: 'Litro'
+  };
+
+  // Add these properties after the existing properties
+  selectedReceta: Receta | null = null;
+  recipeTotalCost: number = 0;
+  recipeCostPerUnit: number = 0;
+  recipeSuggestedPrice: number = 0;
+  defaultMonedaSimbolo: string = '$';
+
   constructor(
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
@@ -222,8 +247,8 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   ) {
     // Initialize the form with default values
     this.productoForm = this.fb.group({
-      nombre: ['', Validators.required],
-      nombreAlternativo: [''],
+      nombre: ['', [Validators.required, Validators.maxLength(255)]],
+      nombreAlternativo: ['', Validators.maxLength(255)],
       categoriaId: [null, Validators.required],
       subcategoriaId: [null, Validators.required],
       iva: [10, [Validators.required, Validators.min(0), Validators.max(100)]],
@@ -235,24 +260,26 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       isVendible: [true],
       hasVencimiento: [false],
       hasStock: [false],
-      alertarVencimientoDias: [null],
+      hasVariaciones: [false],
+      alertarVencimientoDias: [{ value: null, disabled: true }],
       observacion: [''],
-      activo: [true]
+      activo: [true],
+      recetaId: [null]
     });
   }
 
   ngOnInit(): void {
-    // Load categories regardless of edit or create
-    this.loadCategorias();
-
-    // Setup form control listeners
-    this.setupFormControlListeners();
-
-    // Apply initial data if available
-    if (this.data && !this.dataProcessed) {
+    // Handle the data if provided
+    if (this.data) {
       this.setData(this.data);
-      this.dataProcessed = true;
     }
+
+    this.setupFormControlListeners();
+    
+    // Load required data
+    this.loadCategorias();
+    this.loadRecetas();
+    this.loadMonedas();
   }
 
   ngAfterViewInit(): void {
@@ -326,6 +353,46 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     }
   }
 
+  async loadRecetas(): Promise<void> {
+    try {
+      this.recetas = await firstValueFrom(this.repositoryService.getRecetas());
+      
+      // Initialize the filtered recetas for autocomplete
+      this.filteredRecetas = this.productoForm.get('recetaId')!.valueChanges.pipe(
+        startWith(''),
+        map(value => this.filterRecetas(value || ''))
+      );
+
+    } catch (error) {
+      console.error('Error loading recetas:', error);
+      this.snackBar.open('Error al cargar las recetas', 'Cerrar', { duration: 3000 });
+    }
+  }
+
+  /**
+   * Filters recetas based on the search term
+   */
+  private filterRecetas(value: string | number): Receta[] {
+    if (typeof value === 'number') {
+      // If value is a number (recetaId), return the matching receta
+      return this.recetas.filter(receta => receta.id === value);
+    }
+    
+    const filterValue = value.toString().toLowerCase();
+    return this.recetas.filter(receta => 
+      receta.nombre.toLowerCase().includes(filterValue) && receta.activo
+    );
+  }
+
+  /**
+   * Displays the recipe name in the autocomplete
+   */
+  displayRecetaFn(recetaId: number): string {
+    if (!recetaId) return '';
+    const receta = this.recetas.find(r => r.id === recetaId);
+    return receta ? receta.nombre : '';
+  }
+
   loadProducto(productoId?: number): void {
     this.isLoading = true;
 
@@ -359,9 +426,11 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
             isVendible: producto.isVendible,
             hasVencimiento: producto.hasVencimiento,
             hasStock: producto.hasStock,
-            alertarVencimientoDias: producto.alertarVencimientoDias,
+            hasVariaciones: producto.hasVariaciones,
+            alertarVencimientoDias: producto.alertarVencimientoDias || '',
             observacion: producto.observacion || '',
-            activo: producto.activo
+            activo: producto.activo,
+            recetaId: producto.recetaId || null
           });
 
           // Load subcategories for the selected category
@@ -409,6 +478,38 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
         alertarControl?.setValue(null);
       }
       alertarControl?.updateValueAndValidity();
+    });
+
+    // Update alertarVencimientoDias to be enabled/disabled based on hasVencimiento
+    this.productoForm.get('hasVencimiento')?.valueChanges.subscribe(hasVencimiento => {
+      const alertarVencimientoDiasControl = this.productoForm.get('alertarVencimientoDias');
+      if (alertarVencimientoDiasControl) {
+        if (hasVencimiento) {
+          alertarVencimientoDiasControl.enable();
+        } else {
+          alertarVencimientoDiasControl.disable();
+        }
+      }
+    });
+
+    // Listen for changes in categoriaId to load subcategorias
+    this.productoForm.get('categoriaId')?.valueChanges.subscribe(categoriaId => {
+      if (categoriaId) {
+        this.loadSubcategoriasByCategoria(categoriaId);
+      }
+    });
+
+    // Add listener for recetaId changes to load recipe details
+    this.productoForm.get('recetaId')?.valueChanges.subscribe(recetaId => {
+      if (recetaId) {
+        this.loadRecipeDetails(recetaId);
+      } else {
+        // Clear recipe details if no recipe is selected
+        this.selectedReceta = null;
+        this.recipeTotalCost = 0;
+        this.recipeCostPerUnit = 0;
+        this.recipeSuggestedPrice = 0;
+      }
     });
   }
 
@@ -708,32 +809,53 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
 
     try {
       // Get form values
-      const formData = { ...this.productoForm.value };
+      const formValues = this.productoForm.value;
 
       // Convert string values to uppercase
-      if (formData.nombre) formData.nombre = formData.nombre.toUpperCase();
-      if (formData.nombreAlternativo) formData.nombreAlternativo = formData.nombreAlternativo.toUpperCase();
-      if (formData.observacion) formData.observacion = formData.observacion.toUpperCase();
+      if (formValues.nombre) formValues.nombre = formValues.nombre.toUpperCase();
+      if (formValues.nombreAlternativo) formValues.nombreAlternativo = formValues.nombreAlternativo.toUpperCase();
+      if (formValues.observacion) formValues.observacion = formValues.observacion.toUpperCase();
 
       // Set main image URL if it exists
       const mainImage = this.productImages.find(img => img.isMain);
       if (mainImage) {
-        formData.imageUrl = mainImage.imageUrl;
+        formValues.imageUrl = mainImage.imageUrl;
       }
+
+      // Update to include all properties
+      const productoData: Partial<Producto> = {
+        nombre: formValues.nombre,
+        nombreAlternativo: formValues.nombreAlternativo ? formValues.nombreAlternativo.toUpperCase() : null,
+        subcategoriaId: formValues.subcategoriaId,
+        iva: formValues.iva,
+        isPesable: formValues.isPesable,
+        isCombo: formValues.isCombo,
+        isCompuesto: formValues.isCompuesto,
+        isIngrediente: formValues.isIngrediente,
+        isPromocion: formValues.isPromocion,
+        isVendible: formValues.isVendible,
+        hasVencimiento: formValues.hasVencimiento,
+        hasStock: formValues.hasStock,
+        hasVariaciones: formValues.hasVariaciones,
+        alertarVencimientoDias: formValues.hasVencimiento ? formValues.alertarVencimientoDias : null,
+        observacion: formValues.observacion ? formValues.observacion.toUpperCase() : null,
+        activo: formValues.activo,
+        recetaId: formValues.recetaId || null
+      };
 
       let savedProducto: Producto;
 
       if (this.isEditing && this.producto?.id) {
         // Update existing product
         savedProducto = await firstValueFrom(
-          this.repositoryService.updateProducto(this.producto.id, formData)
+          this.repositoryService.updateProducto(this.producto.id, productoData)
         );
 
         this.snackBar.open('Producto actualizado exitosamente', 'Cerrar', { duration: 3000 });
       } else {
         // Create new product
         savedProducto = await firstValueFrom(
-          this.repositoryService.createProducto(formData)
+          this.repositoryService.createProducto(productoData)
         );
 
         this.snackBar.open('Producto creado exitosamente', 'Cerrar', { duration: 3000 });
@@ -779,8 +901,10 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       isVendible: true, // Default to true
       hasVencimiento: false,
       hasStock: false,
+      hasVariaciones: false,
       alertarVencimientoDias: null,
-      observacion: ''
+      observacion: '',
+      recetaId: null
     });
 
     // Clear images
@@ -881,12 +1005,25 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     try {
       const presentaciones = await firstValueFrom(this.repositoryService.getPresentacionesByProducto(productoId));
       if (this.producto) {
-        this.producto.presentaciones = presentaciones;
+        // Create enhanced presentaciones with labels
+        const enhancedPresentaciones = presentaciones.map(p => {
+          const presentacionWithLabel = { ...p };
+          (presentacionWithLabel as any).tipoMedidaLabel = this.computeTipoMedidaLabel(p.tipoMedida);
+          return presentacionWithLabel;
+        });
+        
+        // Type assertion to handle the type compatibility
+        this.producto.presentaciones = enhancedPresentaciones as unknown as any[];
       }
     } catch (error) {
       console.error('Error loading presentaciones:', error);
-      this.snackBar.open('Error al cargar las presentaciones del producto', 'Cerrar', { duration: 3000 });
+      this.snackBar.open('Error al cargar presentaciones', 'Cerrar', { duration: 3000 });
     }
+  }
+
+  // Private computation method
+  private computeTipoMedidaLabel(tipo: TipoMedida): string {
+    return this.tipoMedidaLabels[tipo] || tipo;
   }
 
   /**
@@ -973,15 +1110,79 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
 
   /**
    * Gets the display label for a TipoMedida enum value
+   * Kept for backwards compatibility but shouldn't be called from template
    */
   getTipoMedidaLabel(tipo: TipoMedida): string {
-    const labels: Record<TipoMedida, string> = {
-      [TipoMedida.UNIDAD]: 'Unidad',
-      [TipoMedida.PAQUETE]: 'Paquete',
-      [TipoMedida.GRAMO]: 'Gramo',
-      [TipoMedida.LITRO]: 'Litro'
-    };
+    return this.computeTipoMedidaLabel(tipo);
+  }
 
-    return labels[tipo] || tipo;
+  /**
+   * Loads recipe details including cost information
+   */
+  async loadRecipeDetails(recetaId: number): Promise<void> {
+    try {
+      // Get the recipe details
+      const receta = await firstValueFrom(this.repositoryService.getReceta(recetaId));
+      this.selectedReceta = receta;
+
+      // Get recipe items to calculate cost
+      const recetaItems = await firstValueFrom(this.repositoryService.getRecetaItems(recetaId));
+      
+      if (recetaItems.length > 0) {
+        // Get all ingredient IDs from the recipe items
+        const ingredientIds = recetaItems.map(item => item.ingredienteId);
+        
+        // Fetch all ingredients used in the recipe
+        let ingredients: any[] = [];
+        for (const id of ingredientIds) {
+          try {
+            const ingrediente = await firstValueFrom(this.repositoryService.getIngrediente(id));
+            ingredients.push(ingrediente);
+          } catch (error) {
+            console.error(`Error loading ingredient ${id}:`, error);
+          }
+        }
+        
+        // Calculate total cost of the recipe
+        let totalCost = 0;
+        for (const item of recetaItems) {
+          const ingredient = ingredients.find(i => i.id === item.ingredienteId);
+          if (ingredient) {
+            totalCost += (ingredient.costo || 0) * (item.cantidad || 0);
+          }
+        }
+        
+        this.recipeTotalCost = totalCost;
+        
+        // Calculate cost per unit
+        this.recipeCostPerUnit = receta.cantidad > 0 ? totalCost / receta.cantidad : 0;
+        
+        // Calculate suggested price (using 35% food cost as a standard)
+        this.recipeSuggestedPrice = this.recipeCostPerUnit > 0 ? this.recipeCostPerUnit / 0.35 : 0;
+      } else {
+        this.recipeTotalCost = 0;
+        this.recipeCostPerUnit = 0;
+        this.recipeSuggestedPrice = 0;
+      }
+    } catch (error) {
+      console.error('Error loading recipe details:', error);
+      this.snackBar.open('Error al cargar detalles de la receta', 'Cerrar', { duration: 3000 });
+    }
+  }
+
+  // Add at the end of loadMonedas method (create this method if it doesn't exist)
+  async loadMonedas(): Promise<void> {
+    try {
+      const monedas = await firstValueFrom(this.repositoryService.getMonedas());
+      // Find default moneda (principal == true)
+      const defaultMoneda = monedas.find(m => m.principal);
+      
+      // Set default moneda símbolo for template
+      if (defaultMoneda) {
+        this.defaultMonedaSimbolo = defaultMoneda.simbolo;
+      }
+    } catch (error) {
+      console.error('Error loading monedas:', error);
+    }
   }
 }

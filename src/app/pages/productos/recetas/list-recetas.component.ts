@@ -8,7 +8,7 @@ import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatPaginatorModule, MatPaginator, PageEvent } from '@angular/material/paginator';
-import { MatSortModule, MatSort, Sort } from '@angular/material/sort';
+import { MatSortModule } from '@angular/material/sort';
 import { MatCardModule } from '@angular/material/card';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -21,6 +21,14 @@ import { RepositoryService } from '../../../database/repository.service';
 import { Receta } from '../../../database/entities/productos/receta.entity';
 import { firstValueFrom } from 'rxjs';
 import { CreateEditRecetaDialogComponent } from './create-edit-receta-dialog.component';
+import { RecetaItem } from '../../../database/entities/productos/receta-item.entity';
+import { Ingrediente } from '../../../database/entities/productos/ingrediente.entity';
+import { Moneda } from '../../../database/entities/financiero/moneda.entity';
+
+interface RecetaViewModel extends Receta {
+  totalCost?: number;
+  costPerUnit?: number;
+}
 
 @Component({
   selector: 'app-list-recetas',
@@ -49,10 +57,15 @@ import { CreateEditRecetaDialogComponent } from './create-edit-receta-dialog.com
   styleUrls: ['./list-recetas.component.scss']
 })
 export class ListRecetasComponent implements OnInit {
-  recetas: Receta[] = [];
-  displayedColumns: string[] = ['id', 'nombre', 'activo', 'actions'];
+  recetas: RecetaViewModel[] = [];
+  recetaItems: Map<number, RecetaItem[]> = new Map();
+  ingredientes: Map<number, Ingrediente> = new Map();
+  displayedColumns: string[] = ['id', 'nombre', 'tipoMedida', 'cantidad', 'costo', 'costoUnidad', 'activo', 'actions'];
   isLoading = true;
   filterForm: FormGroup;
+  monedas: Moneda[] = [];
+  defaultMoneda?: Moneda;
+  defaultMonedaSimbolo: string = '$';
 
   // Pagination variables
   pageSize = 10;
@@ -61,8 +74,7 @@ export class ListRecetasComponent implements OnInit {
   totalRecetas = 0;
 
   @ViewChild(MatPaginator) paginator!: MatPaginator;
-  @ViewChild(MatSort) sort!: MatSort;
-  @ViewChild(MatTable) table!: MatTable<Receta>;
+  @ViewChild(MatTable) table!: MatTable<RecetaViewModel>;
 
   constructor(
     private repositoryService: RepositoryService,
@@ -77,37 +89,146 @@ export class ListRecetasComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.loadRecetas();
+    this.loadMonedas().then(() => {
+      this.loadRecetas();
+    });
+  }
+
+  async loadMonedas(): Promise<void> {
+    try {
+      this.monedas = await firstValueFrom(this.repositoryService.getMonedas());
+      // Find default moneda (principal == true)
+      this.defaultMoneda = this.monedas.find(m => m.principal);
+      // Pre-compute the default currency symbol
+      this.defaultMonedaSimbolo = this.defaultMoneda ? this.defaultMoneda.simbolo : '$';
+    } catch (error) {
+      console.error('Error loading monedas:', error);
+    }
   }
 
   async loadRecetas(): Promise<void> {
     this.isLoading = true;
     try {
-      let recetas = await firstValueFrom(this.repositoryService.getRecetas());
+      let recetasData = await firstValueFrom(this.repositoryService.getRecetas());
 
       // Apply filters
       const filters = this.filterForm.value;
 
       if (filters.nombre) {
         const searchTerm = filters.nombre.toLowerCase();
-        recetas = recetas.filter(receta =>
+        recetasData = recetasData.filter(receta =>
           receta.nombre.toLowerCase().includes(searchTerm)
         );
       }
 
       if (filters.activo !== '') {
         const isActive = filters.activo === 'true';
-        recetas = recetas.filter(receta => receta.activo === isActive);
+        recetasData = recetasData.filter(receta => receta.activo === isActive);
       }
 
-      this.recetas = recetas;
+      this.recetas = recetasData;
       this.totalRecetas = this.recetas.length;
+
+      // Load recipe items and ingredients for cost calculation
+      await this.loadRecetaItemsAndIngredientes();
+      
+      // Pre-compute costs for each recipe
+      this.calculateAllRecipeCosts();
     } catch (error) {
       console.error('Error loading recetas:', error);
       this.snackBar.open('Error al cargar las recetas', 'Cerrar', { duration: 3000 });
     } finally {
       this.isLoading = false;
     }
+  }
+
+  async loadRecetaItemsAndIngredientes(): Promise<void> {
+    // Clear previous data
+    this.recetaItems.clear();
+    this.ingredientes.clear();
+
+    // Load recipe items for each recipe
+    for (const receta of this.recetas) {
+      if (receta.id) {
+        try {
+          const items = await firstValueFrom(this.repositoryService.getRecetaItems(receta.id));
+          this.recetaItems.set(receta.id, items);
+
+          // Load ingredients for each recipe item
+          for (const item of items) {
+            if (!this.ingredientes.has(item.ingredienteId)) {
+              const ingrediente = await firstValueFrom(this.repositoryService.getIngrediente(item.ingredienteId));
+              this.ingredientes.set(item.ingredienteId, ingrediente);
+            }
+          }
+        } catch (error) {
+          console.error(`Error loading items for recipe ${receta.id}:`, error);
+        }
+      }
+    }
+  }
+
+  // Calculate costs for all recipes and store the results
+  calculateAllRecipeCosts(): void {
+    for (const receta of this.recetas) {
+      if (receta.id) {
+        // Calculate and store total cost
+        receta.totalCost = this.calculateTotalCost(receta.id);
+        
+        // Calculate and store cost per unit
+        receta.costPerUnit = this.calculateCostPerUnit(receta.id, receta.totalCost);
+      }
+    }
+  }
+
+  getRecetaItems(recetaId: number): RecetaItem[] {
+    return this.recetaItems.get(recetaId) || [];
+  }
+
+  getIngrediente(ingredienteId: number): Ingrediente | undefined {
+    return this.ingredientes.get(ingredienteId);
+  }
+
+  // Use these methods for calculation, but they won't be called directly from the template
+  calculateTotalCost(recetaId: number): number {
+    const items = this.getRecetaItems(recetaId);
+    let total = 0;
+    
+    for (const item of items) {
+      if (item.activo) {
+        const ingrediente = this.getIngrediente(item.ingredienteId);
+        if (ingrediente) {
+          total += ingrediente.costo * item.cantidad;
+        }
+      }
+    }
+    
+    return total;
+  }
+
+  calculateCostPerUnit(recetaId: number, totalCost?: number): number {
+    const receta = this.recetas.find(r => r.id === recetaId);
+    if (!receta || !receta.cantidad || receta.cantidad <= 0) {
+      return 0;
+    }
+    
+    const cost = totalCost !== undefined ? totalCost : this.calculateTotalCost(recetaId);
+    return cost / receta.cantidad;
+  }
+
+  // Keep these methods for compatibility but they should only be used internally
+  getTotalCost(recetaId: number): number {
+    const receta = this.recetas.find(r => r.id === recetaId);
+    return receta?.totalCost || 0;
+  }
+
+  getCostPerUnit(recetaId: number): number {
+    const receta = this.recetas.find(r => r.id === recetaId);
+    return receta?.costPerUnit || 0;
+  }
+
+  getDefaultMonedaSimbolo(): string {
+    return this.defaultMonedaSimbolo;
   }
 
   buscar(): void {
@@ -160,6 +281,9 @@ export class ListRecetasComponent implements OnInit {
       await firstValueFrom(this.repositoryService.updateReceta(receta.id, {
         nombre: receta.nombre,
         modo_preparo: receta.modo_preparo,
+        tipoMedida: receta.tipoMedida,
+        calcularCantidad: receta.calcularCantidad,
+        cantidad: receta.cantidad,
         activo: !receta.activo
       }));
 
@@ -192,26 +316,5 @@ export class ListRecetasComponent implements OnInit {
   onPageChange(event: PageEvent): void {
     this.pageSize = event.pageSize;
     this.currentPage = event.pageIndex;
-  }
-
-  // Sorting handling
-  onSort(sort: Sort): void {
-    if (!sort.active || sort.direction === '') {
-      return;
-    }
-
-    this.recetas = this.recetas.slice().sort((a, b) => {
-      const isAsc = sort.direction === 'asc';
-      switch (sort.active) {
-        case 'nombre': return this.compare(a.nombre, b.nombre, isAsc);
-        case 'id': return this.compare(a.id, b.id, isAsc);
-        case 'activo': return this.compare(a.activo, b.activo, isAsc);
-        default: return 0;
-      }
-    });
-  }
-
-  private compare(a: any, b: any, isAsc: boolean): number {
-    return (a < b ? -1 : 1) * (isAsc ? 1 : -1);
   }
 }

@@ -726,4 +726,7 @@ contextBridge.exposeInMainWorld('api', {
   deleteIngrediente: async (ingredienteId: number) => {
     return await ipcRenderer.invoke('deleteIngrediente', ingredienteId);
   },
+  searchIngredientesByDescripcion: async (searchText: string) => {
+    return await ipcRenderer.invoke('searchIngredientesByDescripcion', searchText);
+  },
 });

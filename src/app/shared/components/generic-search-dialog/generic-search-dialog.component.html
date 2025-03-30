@@ -33,7 +33,7 @@
           <!-- Regular data columns -->
           <ng-template #dataColumn>
             <th mat-header-cell *matHeaderCellDef>{{ columnLabels[column] }}</th>
-            <td mat-cell *matCellDef="let item">{{ displayText(item, column) }}</td>
+            <td mat-cell *matCellDef="let item">{{ item.__displayValues?.[column] }}</td>
           </ng-template>
         </ng-container>
         

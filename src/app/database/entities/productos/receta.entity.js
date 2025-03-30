@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Receta = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
+const ingrediente_entity_1 = require("./ingrediente.entity");
 /**
  * Entity representing a product recipe
  */
@@ -29,6 +30,23 @@ __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
 ], Receta.prototype, "activo", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        type: 'varchar',
+        name: 'tipo_medida',
+        enum: ingrediente_entity_1.TipoMedida,
+        default: ingrediente_entity_1.TipoMedida.UNIDAD
+    }),
+    __metadata("design:type", String)
+], Receta.prototype, "tipoMedida", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'calcular_cantidad', default: false }),
+    __metadata("design:type", Boolean)
+], Receta.prototype, "calcularCantidad", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'decimal', precision: 10, scale: 2, default: 0 }),
+    __metadata("design:type", Number)
+], Receta.prototype, "cantidad", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)('RecetaItem', 'receta'),
     __metadata("design:type", Array)

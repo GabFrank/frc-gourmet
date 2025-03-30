@@ -18,7 +18,9 @@ const base_entity_1 = require("../base.entity");
 var TipoMedida;
 (function (TipoMedida) {
     TipoMedida["UNIDAD"] = "UNIDAD";
+    TipoMedida["KILO"] = "KILO";
     TipoMedida["GRAMO"] = "GRAMO";
+    TipoMedida["LITRO"] = "LITRO";
     TipoMedida["MILILITRO"] = "MILILITRO";
     TipoMedida["PAQUETE"] = "PAQUETE";
 })(TipoMedida = exports.TipoMedida || (exports.TipoMedida = {}));
@@ -61,6 +63,10 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'receta_id' }),
     __metadata("design:type", Function)
 ], Ingrediente.prototype, "receta", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'receta_cantidad', type: 'decimal', precision: 10, scale: 2, default: 0, nullable: true }),
+    __metadata("design:type", Number)
+], Ingrediente.prototype, "recetaCantidad", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'moneda_id', nullable: true }),
     __metadata("design:type", Number)

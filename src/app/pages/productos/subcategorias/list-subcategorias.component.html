@@ -73,7 +73,7 @@
             <th mat-header-cell *matHeaderCellDef mat-sort-header>Categoría</th>
             <td mat-cell *matCellDef="let subcategoria">
               <span *ngIf="subcategoria.categoria">{{ subcategoria.categoria.nombre }}</span>
-              <span *ngIf="!subcategoria.categoria">{{ getCategoriaName(subcategoria.categoriaId) }}</span>
+              <span *ngIf="!subcategoria.categoria">{{ subcategoria.categoriaName }}</span>
             </td>
           </ng-container>
           

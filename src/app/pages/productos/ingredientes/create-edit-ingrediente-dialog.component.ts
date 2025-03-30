@@ -16,6 +16,8 @@ import { Moneda } from '../../../database/entities/financiero/moneda.entity';
 import { firstValueFrom } from 'rxjs';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { Receta } from '../../../database/entities/productos/receta.entity';
+import { RecetaItem } from '../../../database/entities/productos/receta-item.entity';
 
 interface DialogData {
   ingrediente?: Ingrediente | null;
@@ -50,8 +52,17 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
   savingIngrediente = false;
   ingredienteId?: number;
   tipoMedidaOptions = Object.values(TipoMedida);
-  recetas: any[] = [];
+  recetas: Receta[] = [];
+  recetaItems: Map<number, RecetaItem[]> = new Map();
+  ingredientes: Map<number, Ingrediente> = new Map();
   monedas: Moneda[] = [];
+  calculating = false;
+  
+  // Pre-computed values for the template - making these public
+  public tipoMedidaDisplayValues: { [key: string]: string } = {};
+  public recetasDisplayValues: { [key: number]: string } = {};
+  public monedasDisplayValues: { [key: number]: string } = {};
+  public selectedMonedaSymbol: string = '$';
 
   constructor(
     private fb: FormBuilder,
@@ -63,16 +74,39 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
     this.ingredienteForm = this.fb.group({
       descripcion: ['', Validators.required],
       tipoMedida: [TipoMedida.UNIDAD, Validators.required],
-      costo: [0, [Validators.required, Validators.min(0)]],
+      costo: [{value: 0, disabled: false}, [Validators.required, Validators.min(0)]],
       monedaId: [null, Validators.required],
       isProduccion: [false],
       recetaId: [null],
+      recetaCantidad: [{value: 0, disabled: true}, [Validators.min(0)]],
       activo: [true]
     });
 
     // Monitor changes to monedaId
     this.ingredienteForm.get('monedaId')?.valueChanges.subscribe(value => {
       console.log('monedaId changed to:', value);
+      this.updateSelectedMonedaSymbol();
+    });
+
+    // Monitor changes to recetaId
+    this.ingredienteForm.get('recetaId')?.valueChanges.subscribe(value => {
+      this.handleRecetaChange(value);
+    });
+
+    // Monitor changes to recetaCantidad
+    this.ingredienteForm.get('recetaCantidad')?.valueChanges.subscribe(value => {
+      if (this.ingredienteForm.get('recetaId')?.value) {
+        this.calculateCostFromReceta();
+      }
+    });
+
+    // Initialize the tipo medida display values
+    this.initTipoMedidaDisplayValues();
+  }
+
+  private initTipoMedidaDisplayValues(): void {
+    Object.values(TipoMedida).forEach(tipo => {
+      this.tipoMedidaDisplayValues[tipo] = this.computeTipoMedidaText(tipo);
     });
   }
 
@@ -108,6 +142,15 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
           await this.loadIngredienteById(this.ingredienteId);
         }
       }
+
+      // Handle initial receta state
+      const recetaId = this.ingredienteForm.get('recetaId')?.value;
+      if (recetaId) {
+        this.handleRecetaChange(recetaId);
+      }
+
+      // Update the selected moneda symbol
+      this.updateSelectedMonedaSymbol();
     } catch (error) {
       console.error('Error initializing form:', error);
       this.snackBar.open('Error al inicializar el formulario', 'Cerrar', { duration: 3000 });
@@ -146,6 +189,7 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
       monedaId: ingrediente.monedaId || null,
       isProduccion: ingrediente.isProduccion,
       recetaId: ingrediente.recetaId || null,
+      recetaCantidad: ingrediente.recetaCantidad || 0,
       activo: ingrediente.activo
     });
   }
@@ -164,6 +208,10 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
   async loadRecetas(): Promise<void> {
     try {
       this.recetas = await firstValueFrom(this.repositoryService.getRecetas());
+      // Pre-compute the display values for each receta
+      this.recetas.forEach(receta => {
+        this.recetasDisplayValues[receta.id] = this.computeRecetaLabel(receta);
+      });
     } catch (error) {
       console.error('Error loading recetas:', error);
       this.snackBar.open('Error al cargar las recetas', 'Cerrar', { duration: 3000 });
@@ -174,10 +222,109 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
     try {
       this.monedas = await firstValueFrom(this.repositoryService.getMonedas());
       console.log('Monedas loaded:', this.monedas);
+      // Pre-compute the display values for each moneda
+      this.monedas.forEach(moneda => {
+        this.monedasDisplayValues[moneda.id] = this.computeMonedaLabel(moneda);
+      });
     } catch (error) {
       console.error('Error loading monedas:', error);
       this.snackBar.open('Error al cargar las monedas', 'Cerrar', { duration: 3000 });
     }
+  }
+
+  async handleRecetaChange(recetaId: number | null): Promise<void> {
+    const costoControl = this.ingredienteForm.get('costo');
+    const recetaCantidadControl = this.ingredienteForm.get('recetaCantidad');
+
+    if (!recetaId) {
+      // No recipe selected, enable cost field and disable cantidad
+      costoControl?.enable();
+      recetaCantidadControl?.disable();
+      recetaCantidadControl?.setValue(0);
+      return;
+    }
+
+    // Recipe selected, disable cost field and enable cantidad
+    costoControl?.disable();
+    recetaCantidadControl?.enable();
+    
+    // Set a default value for cantidad if it's 0
+    if (!recetaCantidadControl?.value || recetaCantidadControl.value === 0) {
+      recetaCantidadControl?.setValue(1);
+    }
+
+    // Load recipe items if not already loaded
+    await this.loadRecipeData(recetaId);
+    
+    // Calculate cost based on recipe
+    this.calculateCostFromReceta();
+  }
+
+  async loadRecipeData(recetaId: number): Promise<void> {
+    if (!this.recetaItems.has(recetaId)) {
+      try {
+        this.calculating = true;
+        const items = await firstValueFrom(this.repositoryService.getRecetaItems(recetaId));
+        this.recetaItems.set(recetaId, items);
+
+        // Load ingredients for each recipe item
+        for (const item of items) {
+          if (!this.ingredientes.has(item.ingredienteId)) {
+            const ingrediente = await firstValueFrom(this.repositoryService.getIngrediente(item.ingredienteId));
+            this.ingredientes.set(item.ingredienteId, ingrediente);
+          }
+        }
+      } catch (error) {
+        console.error(`Error loading items for recipe ${recetaId}:`, error);
+        this.snackBar.open('Error al cargar los ingredientes de la receta', 'Cerrar', { duration: 3000 });
+      } finally {
+        this.calculating = false;
+      }
+    }
+  }
+
+  calculateCostFromReceta(): void {
+    const recetaId = this.ingredienteForm.get('recetaId')?.value;
+    const cantidad = this.ingredienteForm.get('recetaCantidad')?.value || 0;
+    
+    if (!recetaId || cantidad <= 0) {
+      this.ingredienteForm.get('costo')?.setValue(0);
+      return;
+    }
+
+    // Check if we have the recipe items loaded
+    const items = this.recetaItems.get(recetaId) || [];
+    if (items.length === 0) {
+      return;
+    }
+
+    // Calculate total cost of the recipe
+    let recipeTotalCost = 0;
+    for (const item of items) {
+      if (item.activo) {
+        const ingrediente = this.ingredientes.get(item.ingredienteId);
+        if (ingrediente) {
+          recipeTotalCost += ingrediente.costo * item.cantidad;
+        }
+      }
+    }
+
+    // Find the recipe to get its quantity
+    const receta = this.recetas.find(r => r.id === recetaId);
+    if (!receta || !receta.cantidad || receta.cantidad <= 0) {
+      // If recipe has no quantity, just multiply by the requested quantity
+      this.ingredienteForm.get('costo')?.setValue(recipeTotalCost * cantidad);
+      return;
+    }
+
+    // Calculate cost per unit of the recipe
+    const costPerUnit = recipeTotalCost / receta.cantidad;
+    
+    // Calculate total cost based on requested quantity
+    const totalCost = costPerUnit * cantidad;
+    
+    // Update the cost field
+    this.ingredienteForm.get('costo')?.setValue(totalCost);
   }
 
   async save(): Promise<void> {
@@ -189,7 +336,7 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
     this.savingIngrediente = true;
 
     try {
-      const formValues = this.ingredienteForm.value;
+      const formValues = this.ingredienteForm.getRawValue(); // Get values including disabled controls
 
       if (this.data.editMode && this.ingredienteId) {
         // Update existing ingrediente
@@ -200,6 +347,7 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
           monedaId: formValues.monedaId,
           isProduccion: formValues.isProduccion,
           recetaId: formValues.recetaId,
+          recetaCantidad: formValues.recetaId ? formValues.recetaCantidad : null,
           activo: formValues.activo
         }));
         this.snackBar.open('Ingrediente actualizado correctamente', 'Cerrar', { duration: 3000 });
@@ -212,6 +360,7 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
           monedaId: formValues.monedaId,
           isProduccion: formValues.isProduccion,
           recetaId: formValues.recetaId,
+          recetaCantidad: formValues.recetaId ? formValues.recetaCantidad : null,
           activo: formValues.activo
         }));
         this.ingredienteId = newIngrediente.id;
@@ -227,12 +376,17 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
     }
   }
 
-  getTipoMedidaText(tipo: TipoMedida): string {
+  // Helper methods to pre-compute values for the template
+  private computeTipoMedidaText(tipo: TipoMedida): string {
     switch (tipo) {
       case TipoMedida.UNIDAD:
         return 'Unidad';
+      case TipoMedida.KILO:
+        return 'Kilo';
       case TipoMedida.GRAMO:
         return 'Gramo';
+      case TipoMedida.LITRO:
+        return 'Litro';
       case TipoMedida.MILILITRO:
         return 'Mililitro';
       case TipoMedida.PAQUETE:
@@ -242,17 +396,44 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
     }
   }
 
-  getMonedaLabel(moneda: Moneda): string {
+  private computeMonedaLabel(moneda: Moneda): string {
     return moneda.principal ?
       `${moneda.denominacion} (${moneda.simbolo}) - Principal` :
       `${moneda.denominacion} (${moneda.simbolo})`;
   }
 
-  getSelectedMonedaSymbol(): string {
+  private computeRecetaLabel(receta: Receta): string {
+    if (receta.cantidad) {
+      return `${receta.nombre} (${receta.cantidad} ${receta.tipoMedida})`;
+    }
+    return receta.nombre;
+  }
+
+  private updateSelectedMonedaSymbol(): void {
     const monedaId = this.ingredienteForm.get('monedaId')?.value;
-    if (!monedaId) return '$';
+    if (!monedaId) {
+      this.selectedMonedaSymbol = '$';
+      return;
+    }
 
     const selectedMoneda = this.monedas.find(m => m.id === monedaId);
-    return selectedMoneda ? selectedMoneda.simbolo : '$';
+    this.selectedMonedaSymbol = selectedMoneda ? selectedMoneda.simbolo : '$';
+  }
+
+  // Keep these methods for backward compatibility, but they should no longer be called directly from the template
+  getTipoMedidaText(tipo: TipoMedida): string {
+    return this.tipoMedidaDisplayValues[tipo] || tipo;
+  }
+
+  getMonedaLabel(moneda: Moneda): string {
+    return this.monedasDisplayValues[moneda.id] || `${moneda.denominacion} (${moneda.simbolo})`;
+  }
+
+  getSelectedMonedaSymbol(): string {
+    return this.selectedMonedaSymbol;
+  }
+
+  getRecetaLabel(receta: Receta): string {
+    return this.recetasDisplayValues[receta.id] || receta.nombre;
   }
 }

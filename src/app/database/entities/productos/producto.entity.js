@@ -62,6 +62,10 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Producto.prototype, "hasStock", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ default: false, name: 'has_variaciones' }),
+    __metadata("design:type", Boolean)
+], Producto.prototype, "hasVariaciones", void 0);
+__decorate([
     (0, typeorm_1.Column)({ nullable: true, type: 'text' }),
     __metadata("design:type", String)
 ], Producto.prototype, "observacion", void 0);

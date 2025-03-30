@@ -661,3 +661,86 @@
     color: #ffebee;
   }
 }
+
+// Add styles for the recipe cost information
+.recipe-cost-info {
+  margin-bottom: 1.5rem;
+}
+
+.cost-card {
+  background-color: rgba(0, 0, 0, 0.03);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: -1rem;
+  margin-bottom: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid var(--primary-color, #3f51b5);
+}
+
+.cost-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cost-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cost-label {
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.cost-value {
+  font-weight: 600;
+  color: var(--primary-color, #3f51b5);
+}
+
+.suggested-price {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.1);
+}
+
+.suggested-price .cost-value {
+  color: #4caf50;
+  font-weight: 700;
+}
+
+.cost-hint {
+  font-size: 0.8rem;
+  color: rgba(0, 0, 0, 0.5);
+  font-style: italic;
+  margin-left: 8px;
+}
+
+/* Dark theme adjustments */
+:host-context(.dark-theme) {
+  .cost-card {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-left-color: var(--primary-color, #7986cb);
+  }
+
+  .cost-label {
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .cost-value {
+    color: var(--primary-color, #7986cb);
+  }
+
+  .suggested-price .cost-value {
+    color: #81c784;
+  }
+
+  .cost-hint {
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .suggested-price {
+    border-top-color: rgba(255, 255, 255, 0.1);
+  }
+}

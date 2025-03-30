@@ -31,8 +31,8 @@ export class TabsService {
 
   constructor() {
     // initialize with @ListRecetasComponent
-    // this.addTab('Ingredientes', ListIngredientesComponent, { source: 'navigation' }, 'ingredientes-tab', true);
-    this.addTab('Recetas', ListRecetasComponent, { source: 'navigation' }, 'recetas-tab', true);
+    this.addTab('Ingredientes', ListIngredientesComponent, { source: 'navigation' }, 'ingredientes-tab', true);
+    // this.addTab('Recetas', ListRecetasComponent, { source: 'navigation' }, 'recetas-tab', true);
   }
 
   /**
