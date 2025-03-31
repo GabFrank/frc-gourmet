@@ -275,7 +275,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     }
 
     this.setupFormControlListeners();
-    
+
     // Load required data
     this.loadCategorias();
     this.loadRecetas();

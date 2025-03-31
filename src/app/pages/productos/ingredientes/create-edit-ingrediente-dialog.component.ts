@@ -58,11 +58,11 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
   monedas: Moneda[] = [];
   calculating = false;
   
-  // Pre-computed values for the template - making these public
-  public tipoMedidaDisplayValues: { [key: string]: string } = {};
-  public recetasDisplayValues: { [key: number]: string } = {};
-  public monedasDisplayValues: { [key: number]: string } = {};
-  public selectedMonedaSymbol: string = '$';
+  // Pre-computed values for the template
+  tipoMedidaDisplayValues: { [key: string]: string } = {};
+  recetasDisplayValues: { [key: number]: string } = {};
+  monedasDisplayValues: { [key: number]: string } = {};
+  selectedMonedaSymbol: string = '$';
 
   constructor(
     private fb: FormBuilder,
