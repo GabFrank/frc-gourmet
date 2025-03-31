@@ -19,10 +19,13 @@ import { RepositoryService } from '../../../database/repository.service';
 import { PrecioVenta } from '../../../database/entities/productos/precio-venta.entity';
 import { Presentacion } from '../../../database/entities/productos/presentacion.entity';
 import { Moneda } from '../../../database/entities/financiero/moneda.entity';
+import { TipoPrecio } from '../../../database/entities/financiero/tipo-precio.entity';
 import { firstValueFrom } from 'rxjs';
 
 interface DialogData {
   presentacion: Presentacion;
+  precio?: PrecioVenta;
+  editMode?: boolean;
 }
 
 @Component({
@@ -60,7 +63,7 @@ interface DialogData {
         <mat-card-content>
           <form [formGroup]="precioForm" class="form-container">
             <div class="form-row">
-              <mat-form-field appearance="outline" class="equal-width">
+              <mat-form-field appearance="outline" class="field-moneda">
                 <mat-label>Moneda</mat-label>
                 <mat-select formControlName="monedaId" required>
                   <mat-option *ngFor="let moneda of monedas" [value]="moneda.id">
@@ -72,10 +75,9 @@ interface DialogData {
                 </mat-error>
               </mat-form-field>
 
-              <mat-form-field appearance="outline" class="equal-width">
+              <mat-form-field appearance="outline" class="field-valor">
                 <mat-label>Valor</mat-label>
                 <input matInput type="number" formControlName="valor" min="0.01" step="0.01" required>
-                <span matTextPrefix *ngIf="selectedMoneda">{{ selectedMoneda.simbolo }} </span>
                 <mat-error *ngIf="precioForm.get('valor')?.hasError('required')">
                   El valor es requerido
                 </mat-error>
@@ -85,13 +87,30 @@ interface DialogData {
               </mat-form-field>
             </div>
 
-            <div class="form-row checkbox-row">
-              <mat-checkbox formControlName="principal" color="primary">Precio Principal</mat-checkbox>
-              <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
+            <div class="form-row second-row">
+              <mat-form-field appearance="outline" class="field-tipo">
+                <mat-label>Tipo de Precio</mat-label>
+                <mat-select formControlName="tipoPrecioId">
+                  <mat-option [value]="null">Sin tipo específico</mat-option>
+                  <mat-option *ngFor="let tipoPrecio of tipoPrecios" [value]="tipoPrecio.id">
+                    {{ tipoPrecio.descripcion }}
+                  </mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <div class="checkbox-wrapper">
+                <div class="checkbox-group">
+                  <mat-checkbox formControlName="principal" color="primary">Principal</mat-checkbox>
+                  <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
+                </div>
+              </div>
             </div>
           </form>
         </mat-card-content>
         <mat-card-actions align="end">
+          <button mat-button (click)="closeDialog()" *ngIf="hasDialog">
+            Salir
+          </button>
           <button mat-button *ngIf="isEditing" (click)="cancelEdit()" [disabled]="isLoading">
             Cancelar
           </button>
@@ -103,66 +122,78 @@ interface DialogData {
 
       <!-- List Section -->
       <div class="list-section">
-        <h3>Precios de Venta de la Presentación</h3>
-        
+        <h4 class="list-title">Lista de precios</h4>
+
         <div *ngIf="precios.length === 0" class="empty-list">
           <mat-icon>monetization_on</mat-icon>
           <p>No hay precios configurados para esta presentación</p>
           <p class="hint">Complete el formulario para agregar un precio</p>
         </div>
 
-        <table mat-table [dataSource]="precios" class="mat-elevation-z1" *ngIf="precios.length > 0">
-          <!-- Moneda Column -->
-          <ng-container matColumnDef="moneda">
-            <th mat-header-cell *matHeaderCellDef>Moneda</th>
-            <td mat-cell *matCellDef="let item">
-              {{ item.moneda?.simbolo }} - {{ item.moneda?.denominacion }}
-            </td>
-          </ng-container>
+        <div class="table-container" *ngIf="precios.length > 0">
+          <table mat-table [dataSource]="precios" class="mat-elevation-z1">
+            <!-- Moneda Column -->
+            <ng-container matColumnDef="moneda">
+              <th mat-header-cell *matHeaderCellDef>Moneda</th>
+              <td mat-cell *matCellDef="let item">
+                {{ item.moneda?.simbolo }} - {{ item.moneda?.denominacion }}
+              </td>
+            </ng-container>
 
-          <!-- Valor Column -->
-          <ng-container matColumnDef="valor">
-            <th mat-header-cell *matHeaderCellDef>Valor</th>
-            <td mat-cell *matCellDef="let item">
-              {{ item.moneda?.simbolo }} {{ item.valor | number:'1.2-2' }}
-            </td>
-          </ng-container>
+            <!-- Valor Column -->
+            <ng-container matColumnDef="valor">
+              <th mat-header-cell *matHeaderCellDef>Valor</th>
+              <td mat-cell *matCellDef="let item">
+                {{ item.moneda?.simbolo }} {{ item.valor | number:'1.2-2' }}
+              </td>
+            </ng-container>
 
-          <!-- Principal Column -->
-          <ng-container matColumnDef="principal">
-            <th mat-header-cell *matHeaderCellDef>Principal</th>
-            <td mat-cell *matCellDef="let item">
-              <mat-icon *ngIf="item.principal" color="primary">check_circle</mat-icon>
-              <mat-icon *ngIf="!item.principal" color="disabled">radio_button_unchecked</mat-icon>
-            </td>
-          </ng-container>
+            <!-- Tipo Precio Column -->
+            <ng-container matColumnDef="tipoPrecio">
+              <th mat-header-cell *matHeaderCellDef>Tipo de Precio</th>
+              <td mat-cell *matCellDef="let item">
+                {{ item.tipoPrecio?.descripcion || 'Estándar' }}
+              </td>
+            </ng-container>
 
-          <!-- Activo Column -->
-          <ng-container matColumnDef="activo">
-            <th mat-header-cell *matHeaderCellDef>Activo</th>
-            <td mat-cell *matCellDef="let item">
-              <span class="status-badge" [ngClass]="item.activo ? 'active' : 'inactive'">
-                {{ item.activo ? 'Activo' : 'Inactivo' }}
-              </span>
-            </td>
-          </ng-container>
+            <!-- Principal Column -->
+            <ng-container matColumnDef="principal">
+              <th mat-header-cell *matHeaderCellDef>Principal</th>
+              <td mat-cell *matCellDef="let item">
+                <mat-icon *ngIf="item.principal" color="primary">check_circle</mat-icon>
+                <mat-icon *ngIf="!item.principal" color="disabled">radio_button_unchecked</mat-icon>
+              </td>
+            </ng-container>
 
-          <!-- Actions Column -->
-          <ng-container matColumnDef="acciones">
-            <th mat-header-cell *matHeaderCellDef>Acciones</th>
-            <td mat-cell *matCellDef="let item">
-              <button mat-icon-button color="primary" (click)="editPrecio(item)" matTooltip="Editar">
-                <mat-icon>edit</mat-icon>
-              </button>
-              <button mat-icon-button color="warn" (click)="deletePrecio(item)" matTooltip="Eliminar">
-                <mat-icon>delete</mat-icon>
-              </button>
-            </td>
-          </ng-container>
+            <!-- Activo Column -->
+            <ng-container matColumnDef="activo">
+              <th mat-header-cell *matHeaderCellDef>Activo</th>
+              <td mat-cell *matCellDef="let item">
+                <span class="status-badge" [ngClass]="item.activo ? 'active' : 'inactive'">
+                  {{ item.activo ? 'Activo' : 'Inactivo' }}
+                </span>
+              </td>
+            </ng-container>
 
-          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
-        </table>
+            <!-- Actions Column -->
+            <ng-container matColumnDef="acciones">
+              <th mat-header-cell *matHeaderCellDef>Acciones</th>
+              <td mat-cell *matCellDef="let item" class="actions-cell">
+                <div class="action-buttons">
+                  <button mat-icon-button color="primary" (click)="editPrecio(item)" matTooltip="Editar">
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                  <button mat-icon-button color="warn" (click)="deletePrecio(item)" matTooltip="Eliminar">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </div>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+          </table>
+        </div>
       </div>
     </div>
   `,
@@ -170,8 +201,11 @@ interface DialogData {
     .precios-container {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 12px;
       position: relative;
+      min-width: 750px;
+      max-width: 800px;
+      margin: 0 auto;
     }
 
     .loading-shade {
@@ -188,33 +222,57 @@ interface DialogData {
     }
 
     .form-card {
-      margin-bottom: 16px;
+      margin-bottom: 4px;
+      padding-bottom: 0;
     }
 
     .form-container {
       display: flex;
       flex-direction: column;
       gap: 8px;
+      width: 100%;
     }
 
     .form-row {
       display: flex;
-      gap: 16px;
+      align-items: center;
+      flex-wrap: nowrap;
+      gap: 8px;
       width: 100%;
     }
 
-    .full-width {
-      width: 100%;
+    .second-row {
+      margin-top: -8px;
     }
 
-    .equal-width {
-      flex: 1;
+    .field-moneda {
+      width: 60%;
+      min-width: 150px;
     }
 
-    .checkbox-row {
+    .field-valor {
+      width: 40%;
+      min-width: 100px;
+    }
+
+    .field-tipo {
+      width: 50%;
+      min-width: 150px;
+    }
+
+    .checkbox-wrapper {
+      width: 50%;
       display: flex;
-      gap: 24px;
-      margin-top: 8px;
+      align-items: flex-start;
+    }
+
+    .checkbox-group {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      white-space: nowrap;
+      padding-bottom: 30px;
+      padding-left: 10px;
     }
 
     .empty-list {
@@ -222,17 +280,16 @@ interface DialogData {
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 32px 16px;
+      padding: 24px 16px;
       background-color: #f5f5f5;
       border-radius: 4px;
-      margin-top: 16px;
     }
 
     .empty-list mat-icon {
       font-size: 48px;
       height: 48px;
       width: 48px;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
       color: #757575;
     }
 
@@ -243,20 +300,66 @@ interface DialogData {
     }
 
     .empty-list .hint {
-      margin-top: 8px;
+      margin-top: 6px;
       font-size: 0.9em;
       color: #9e9e9e;
     }
 
     .list-section {
-      margin-top: 16px;
+      margin-top: 4px;
     }
 
-    .list-section h3 {
+    .list-title {
       margin-top: 0;
-      margin-bottom: 16px;
-      font-size: 18px;
+      margin-bottom: 6px;
+      font-size: 14px;
       font-weight: 500;
+      padding-left: 16px;
+    }
+
+    .table-container {
+      height: 300px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      border-radius: 4px;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+    }
+
+    table {
+      width: 100%;
+    }
+
+    /* Style table headers and cells */
+    .mat-mdc-header-cell {
+      text-align: center;
+      justify-content: center;
+      padding: 0 8px;
+    }
+
+    .mat-mdc-cell {
+      text-align: center;
+      justify-content: center;
+      padding: 0 8px;
+    }
+
+    /* Keep action buttons side by side */
+    .mat-column-acciones {
+      width: 100px;
+    }
+
+    .actions-cell {
+      padding: 0 8px !important;
+    }
+
+    .action-buttons {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .action-buttons button {
+      margin: 0 2px;
     }
 
     .status-badge {
@@ -295,6 +398,10 @@ interface DialogData {
         color: #9e9e9e;
       }
 
+      .mat-mdc-header-cell, .mat-mdc-cell {
+        color: rgba(255, 255, 255, 0.87);
+      }
+
       .status-badge.active {
         background-color: #1b5e20;
         color: #e8f5e9;
@@ -304,20 +411,25 @@ interface DialogData {
         background-color: #b71c1c;
         color: #ffebee;
       }
+
+      .table-container {
+        border-color: rgba(255, 255, 255, 0.12);
+      }
     }
   `]
 })
 export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
   @Input() presentacion?: Presentacion;
-  
+
   precioForm: FormGroup;
   precios: PrecioVenta[] = [];
   monedas: Moneda[] = [];
+  tipoPrecios: TipoPrecio[] = [];
   isLoading = false;
   isEditing = false;
   currentPrecioId?: number;
-  displayedColumns: string[] = ['moneda', 'valor', 'principal', 'activo', 'acciones'];
-  
+  displayedColumns: string[] = ['moneda', 'valor', 'tipoPrecio', 'principal', 'activo', 'acciones'];
+
   get selectedMoneda(): Moneda | undefined {
     const monedaId = this.precioForm.get('monedaId')?.value;
     return this.monedas.find(m => m.id === monedaId);
@@ -333,11 +445,18 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
     // Initialize with dialog data if available
     if (this.dialogData?.presentacion) {
       this.presentacion = this.dialogData.presentacion;
+
+      // Handle editing existing precio
+      if (this.dialogData.editMode && this.dialogData.precio) {
+        this.isEditing = true;
+        this.currentPrecioId = this.dialogData.precio.id;
+      }
     }
 
     this.precioForm = this.fb.group({
       monedaId: ['', Validators.required],
       valor: [0, [Validators.required, Validators.min(0.01)]],
+      tipoPrecioId: [null],
       principal: [false],
       activo: [true]
     });
@@ -345,8 +464,20 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
 
   ngOnInit(): void {
     this.loadMonedas();
+    this.loadTipoPrecios();
     if (this.presentacion?.id) {
       this.loadPrecios();
+
+      // Pre-fill form if editing
+      if (this.isEditing && this.dialogData?.precio) {
+        this.precioForm.patchValue({
+          monedaId: this.dialogData.precio.monedaId,
+          valor: this.dialogData.precio.valor,
+          tipoPrecioId: this.dialogData.precio.tipoPrecioId,
+          principal: this.dialogData.precio.principal,
+          activo: this.dialogData.precio.activo
+        });
+      }
     }
   }
 
@@ -373,19 +504,35 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
     }
   }
 
+  async loadTipoPrecios(): Promise<void> {
+    this.isLoading = true;
+    try {
+      this.tipoPrecios = await firstValueFrom(this.repositoryService.getTipoPrecios());
+    } catch (error) {
+      console.error('Error loading tipo precios:', error);
+      this.snackBar.open('Error al cargar los tipos de precio', 'Cerrar', { duration: 3000 });
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
   async loadPrecios(): Promise<void> {
     if (!this.presentacion?.id) return;
-    
+
     this.isLoading = true;
     try {
       this.precios = await firstValueFrom(this.repositoryService.getPreciosVentaByPresentacion(this.presentacion.id));
-      
-      // Load moneda details for each precio
+
+      // Load moneda and tipoPrecio details for each precio
       for (const precio of this.precios) {
         try {
           precio.moneda = await firstValueFrom(this.repositoryService.getMoneda(precio.monedaId));
+
+          if (precio.tipoPrecioId) {
+            precio.tipoPrecio = await firstValueFrom(this.repositoryService.getTipoPrecio(precio.tipoPrecioId));
+          }
         } catch (error) {
-          console.error(`Error loading moneda for precio ${precio.id}:`, error);
+          console.error(`Error loading details for precio ${precio.id}:`, error);
         }
       }
     } catch (error) {
@@ -398,10 +545,10 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
 
   async savePrecio(): Promise<void> {
     if (this.precioForm.invalid || !this.presentacion?.id) return;
-    
+
     this.isLoading = true;
     const formValue = this.precioForm.value;
-    
+
     try {
       // If it's marked as principal, make sure to unmark others
       if (formValue.principal) {
@@ -414,7 +561,7 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
         // If this is the first precio, make it principal by default
         formValue.principal = true;
       }
-      
+
       if (this.isEditing && this.currentPrecioId) {
         // Update existing precio
         const result = await firstValueFrom(
@@ -422,7 +569,7 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
             ...formValue
           })
         );
-        
+
         this.snackBar.open('Precio actualizado exitosamente', 'Cerrar', { duration: 3000 });
       } else {
         // Create new precio
@@ -432,13 +579,13 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
             presentacionId: this.presentacion!.id
           })
         );
-        
+
         this.snackBar.open('Precio creado exitosamente', 'Cerrar', { duration: 3000 });
       }
-      
+
       // Reload precios
       this.loadPrecios();
-      
+
       // Reset form and editing state
       this.resetForm();
     } catch (error) {
@@ -452,10 +599,11 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
   editPrecio(precio: PrecioVenta): void {
     this.isEditing = true;
     this.currentPrecioId = precio.id;
-    
+
     this.precioForm.patchValue({
       monedaId: precio.monedaId,
       valor: precio.valor,
+      tipoPrecioId: precio.tipoPrecioId,
       principal: precio.principal,
       activo: precio.activo
     });
@@ -465,13 +613,13 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
     if (!confirm(`¿Está seguro que desea eliminar este precio?`)) {
       return;
     }
-    
+
     this.isLoading = true;
     try {
       await firstValueFrom(this.repositoryService.deletePrecioVenta(precio.id));
-      
+
       this.snackBar.open('Precio eliminado exitosamente', 'Cerrar', { duration: 3000 });
-      
+
       // Reload precios
       this.loadPrecios();
     } catch (error) {
@@ -489,17 +637,28 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
   resetForm(): void {
     this.isEditing = false;
     this.currentPrecioId = undefined;
-    
+
     // If there are monedas, set the first one as default
-    const defaultMonedaId = this.monedas.length > 0 ? 
-      (this.monedas.find(m => m.principal)?.id || this.monedas[0].id) : 
+    const defaultMonedaId = this.monedas.length > 0 ?
+      (this.monedas.find(m => m.principal)?.id || this.monedas[0].id) :
       '';
-    
+
     this.precioForm.reset({
       monedaId: defaultMonedaId,
       valor: 0,
+      tipoPrecioId: null,
       principal: false,
       activo: true
     });
   }
-} 
+
+  get hasDialog(): boolean {
+    return !!this.dialogRef;
+  }
+
+  closeDialog(): void {
+    if (this.dialogRef) {
+      this.dialogRef.close();
+    }
+  }
+}

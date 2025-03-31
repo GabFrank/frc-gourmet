@@ -309,7 +309,14 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   openIngredientesTab() {
-    this.tabsService.openTab('Ingredientes', ListIngredientesComponent);
+    this.tabsService.addTab('Ingredientes', ListIngredientesComponent);
+  }
+
+  openTipoPrecioTab() {
+    // Dynamically import the component to avoid circular dependencies
+    import('./pages/financiero/tipo-precio/tipo-precio.component').then(m => {
+      this.tabsService.addTab('Tipos de Precio', m.TipoPrecioComponent);
+    });
   }
 
   private applyTheme() {
