@@ -43,6 +43,7 @@ const presentacion_entity_1 = require("./entities/productos/presentacion.entity"
 const codigo_entity_1 = require("./entities/productos/codigo.entity");
 const precio_venta_entity_1 = require("./entities/productos/precio-venta.entity");
 const moneda_entity_1 = require("./entities/financiero/moneda.entity");
+const tipo_precio_entity_1 = require("./entities/financiero/tipo-precio.entity");
 const sabor_entity_1 = require("./entities/productos/sabor.entity");
 const presentacion_sabor_entity_1 = require("./entities/productos/presentacion-sabor.entity");
 const ingrediente_entity_1 = require("./entities/productos/ingrediente.entity");
@@ -79,6 +80,7 @@ function getDataSourceOptions(userDataPath) {
             codigo_entity_1.Codigo,
             precio_venta_entity_1.PrecioVenta,
             moneda_entity_1.Moneda,
+            tipo_precio_entity_1.TipoPrecio,
             // New entities
             sabor_entity_1.Sabor,
             presentacion_sabor_entity_1.PresentacionSabor,

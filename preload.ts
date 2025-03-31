@@ -226,6 +226,17 @@ interface Moneda {
   updatedAt?: Date;
 }
 
+// TipoPrecio interface
+interface TipoPrecio {
+  id?: number;
+  descripcion: string;
+  autorizacion: boolean;
+  autorizadoPorId?: number;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 // PrecioVenta interface
 interface PrecioVenta {
   id?: number;
@@ -234,6 +245,7 @@ interface PrecioVenta {
   activo: boolean;
   presentacionId: number;
   monedaId: number;
+  tipoPrecioId?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -607,6 +619,27 @@ contextBridge.exposeInMainWorld('api', {
 
   deleteMoneda: async (monedaId: number): Promise<boolean> => {
     return await ipcRenderer.invoke('deleteMoneda', monedaId);
+  },
+
+  // TipoPrecio methods
+  getTipoPrecios: async (): Promise<TipoPrecio[]> => {
+    return await ipcRenderer.invoke('getTipoPrecios');
+  },
+
+  getTipoPrecio: async (tipoPrecioId: number): Promise<TipoPrecio> => {
+    return await ipcRenderer.invoke('getTipoPrecio', tipoPrecioId);
+  },
+
+  createTipoPrecio: async (tipoPrecioData: Partial<TipoPrecio>): Promise<TipoPrecio> => {
+    return await ipcRenderer.invoke('createTipoPrecio', tipoPrecioData);
+  },
+
+  updateTipoPrecio: async (tipoPrecioId: number, tipoPrecioData: Partial<TipoPrecio>): Promise<TipoPrecio> => {
+    return await ipcRenderer.invoke('updateTipoPrecio', tipoPrecioId, tipoPrecioData);
+  },
+
+  deleteTipoPrecio: async (tipoPrecioId: number): Promise<boolean> => {
+    return await ipcRenderer.invoke('deleteTipoPrecio', tipoPrecioId);
   },
 
   // PrecioVenta methods

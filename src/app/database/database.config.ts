@@ -19,6 +19,7 @@ import { Presentacion } from './entities/productos/presentacion.entity';
 import { Codigo } from './entities/productos/codigo.entity';
 import { PrecioVenta } from './entities/productos/precio-venta.entity';
 import { Moneda } from './entities/financiero/moneda.entity';
+import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
 import { Sabor } from './entities/productos/sabor.entity';
 import { PresentacionSabor } from './entities/productos/presentacion-sabor.entity';
 import { Ingrediente } from './entities/productos/ingrediente.entity';
@@ -56,6 +57,7 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       Codigo,
       PrecioVenta,
       Moneda,
+      TipoPrecio,
       // New entities
       Sabor,
       PresentacionSabor,

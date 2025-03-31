@@ -12,105 +12,78 @@
             <div class="form-layout">
               <!-- Main Form Content -->
               <div class="main-form-content">
-                <!-- Nombre -->
-                <div class="form-row">
-                  <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
-                    <mat-label>Nombre</mat-label>
-                    <input matInput formControlName="nombre" placeholder="Ingrese nombre del producto" required>
-                    <mat-error *ngIf="productoForm.get('nombre')?.hasError('required')">
-                      El nombre es requerido
-                    </mat-error>
-                  </mat-form-field>
-                </div>
-
-                <div class="form-row">
-                  <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
-                    <mat-label>Nombre Alternativo</mat-label>
-                    <input matInput formControlName="nombreAlternativo" placeholder="Nombre alternativo o abreviado">
-                  </mat-form-field>
-                </div>
-
-                <!-- Categorización -->
-                <div class="form-row">
-                  <mat-form-field appearance="outline" class="equal-width" subscriptSizing="dynamic">
-                    <mat-label>Categoría</mat-label>
-                    <mat-select formControlName="categoriaId">
-                      <mat-option *ngFor="let categoria of categorias" [value]="categoria.id">
-                        {{ categoria.nombre }}
-                      </mat-option>
-                    </mat-select>
-                    <mat-error *ngIf="productoForm.get('categoriaId')?.hasError('required')">
-                      La categoría es requerida
-                    </mat-error>
-                  </mat-form-field>
-
-                  <mat-form-field appearance="outline" class="equal-width" subscriptSizing="dynamic">
-                    <mat-label>Subcategoría</mat-label>
-                    <mat-select formControlName="subcategoriaId">
-                      <mat-option *ngFor="let subcategoria of subcategorias" [value]="subcategoria.id">
-                        {{ subcategoria.nombre }}
-                      </mat-option>
-                    </mat-select>
-                    <mat-error *ngIf="productoForm.get('subcategoriaId')?.hasError('required')">
-                      La subcategoría es requerida
-                    </mat-error>
-                  </mat-form-field>
-
-                  <mat-form-field appearance="outline" class="iva-width" subscriptSizing="dynamic">
-                    <mat-label>IVA (%)</mat-label>
-                    <input matInput type="number" formControlName="iva" min="0" max="100">
-                    <mat-error *ngIf="productoForm.get('iva')?.hasError('required')">
-                      El IVA es requerido
-                    </mat-error>
-                    <mat-error *ngIf="productoForm.get('iva')?.hasError('min') || productoForm.get('iva')?.hasError('max')">
-                      El IVA debe estar entre 0 y 100
-                    </mat-error>
-                  </mat-form-field>
-                </div>
-
-                <!-- Receta Selection -->
-                <div class="form-row">
-                  <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
-                    <mat-label>Receta Asociada</mat-label>
-                    <input type="text" 
-                           matInput 
-                           formControlName="recetaId" 
-                           [matAutocomplete]="autoReceta" 
-                           placeholder="Buscar y seleccionar receta">
-                    <mat-autocomplete #autoReceta="matAutocomplete" 
-                                      [displayWith]="displayRecetaFn.bind(this)">
-                      <mat-option *ngFor="let receta of filteredRecetas | async" [value]="receta.id">
-                        {{ receta.nombre }}
-                      </mat-option>
-                    </mat-autocomplete>
-                    <mat-hint>Asocie una receta al producto para cálculos de costos y gestión de inventario</mat-hint>
-                    <button *ngIf="productoForm.get('recetaId')?.value" 
-                            matSuffix 
-                            mat-icon-button 
-                            type="button"
-                            (click)="productoForm.get('recetaId')?.setValue(null)">
-                      <mat-icon>clear</mat-icon>
-                    </button>
-                  </mat-form-field>
-                </div>
-
-                <!-- Recipe Cost Information -->
-                <div *ngIf="selectedReceta" class="recipe-cost-info">
-                  <div class="cost-card">
-                    <div class="cost-details">
-                      <div class="cost-item">
-                        <span class="cost-label">Costo Total:</span>
-                        <span class="cost-value">{{ defaultMonedaSimbolo }} {{ recipeTotalCost | number:'1.2-2' }}</span>
+                <!-- Top form section with image -->
+                <div class="top-form-section">
+                  <!-- Image Preview Section -->
+                  <div class="image-preview-section">
+                    <div class="main-image-preview">
+                      <img [src]="getMainImageUrl()" alt="Imagen del producto">
+                      <div class="image-placeholder" *ngIf="!hasMainImage()">
+                        <mat-icon>image</mat-icon>
+                        <span>No hay imagen</span>
                       </div>
-                      <div class="cost-item">
-                        <span class="cost-label">Costo por {{ selectedReceta.tipoMedida }}:</span>
-                        <span class="cost-value">{{ defaultMonedaSimbolo }} {{ recipeCostPerUnit | number:'1.2-2' }}</span>
-                      </div>
-                      <div class="cost-item suggested-price">
-                        <span class="cost-label">Precio Sugerido:</span>
-                        <span class="cost-value">{{ defaultMonedaSimbolo }} {{ recipeSuggestedPrice | number:'1.2-2' }}</span>
-                        <span class="cost-hint">(Food Cost: 35%)</span>
-                      </div>
+                      <button mat-mini-fab color="primary" class="upload-image-button" (click)="openFileSelector()" matTooltip="Añadir imagen">
+                        <mat-icon>add_a_photo</mat-icon>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Basic Info Fields -->
+                  <div class="basic-info-fields">
+                    <!-- Nombre -->
+                    <div class="form-row">
+                      <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+                        <mat-label>Nombre</mat-label>
+                        <input matInput formControlName="nombre" placeholder="Ingrese nombre del producto" required>
+                        <mat-error *ngIf="productoForm.get('nombre')?.hasError('required')">
+                          El nombre es requerido
+                        </mat-error>
+                      </mat-form-field>
+                    </div>
+
+                    <div class="form-row">
+                      <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+                        <mat-label>Nombre Alternativo</mat-label>
+                        <input matInput formControlName="nombreAlternativo" placeholder="Nombre alternativo o abreviado">
+                      </mat-form-field>
+                    </div>
+
+                    <!-- Categorización -->
+                    <div class="form-row category-row">
+                      <mat-form-field appearance="outline" class="categoria-field" subscriptSizing="dynamic">
+                        <mat-label>Categoría</mat-label>
+                        <mat-select formControlName="categoriaId">
+                          <mat-option *ngFor="let categoria of categorias" [value]="categoria.id">
+                            {{ categoria.nombre }}
+                          </mat-option>
+                        </mat-select>
+                        <mat-error *ngIf="productoForm.get('categoriaId')?.hasError('required')">
+                          La categoría es requerida
+                        </mat-error>
+                      </mat-form-field>
+
+                      <mat-form-field appearance="outline" class="subcategoria-field" subscriptSizing="dynamic">
+                        <mat-label>Subcategoría</mat-label>
+                        <mat-select formControlName="subcategoriaId">
+                          <mat-option *ngFor="let subcategoria of subcategorias" [value]="subcategoria.id">
+                            {{ subcategoria.nombre }}
+                          </mat-option>
+                        </mat-select>
+                        <mat-error *ngIf="productoForm.get('subcategoriaId')?.hasError('required')">
+                          La subcategoría es requerida
+                        </mat-error>
+                      </mat-form-field>
+
+                      <mat-form-field appearance="outline" class="iva-width" subscriptSizing="dynamic">
+                        <mat-label>IVA (%)</mat-label>
+                        <input matInput type="number" formControlName="iva" min="0" max="100">
+                        <mat-error *ngIf="productoForm.get('iva')?.hasError('required')">
+                          El IVA es requerido
+                        </mat-error>
+                        <mat-error *ngIf="productoForm.get('iva')?.hasError('min') || productoForm.get('iva')?.hasError('max')">
+                          El IVA debe estar entre 0 y 100
+                        </mat-error>
+                      </mat-form-field>
                     </div>
                   </div>
                 </div>
@@ -146,7 +119,7 @@
                   </mat-slide-toggle>
 
                   <mat-slide-toggle formControlName="isCompuesto" color="primary">
-                    Compuesto
+                    Posee receta
                   </mat-slide-toggle>
 
                   <mat-slide-toggle formControlName="isIngrediente" color="primary">
@@ -156,6 +129,186 @@
                   <mat-slide-toggle formControlName="isPromocion" color="primary">
                     Promoción
                   </mat-slide-toggle>
+                </div>
+
+                <!-- Receta Field (shows when isCompuesto is true) -->
+                <div *ngIf="productoForm.get('isCompuesto')?.value" class="receta-section">
+                  <h4 class="section-title">Receta Asociada</h4>
+                  <div class="form-row">
+                    <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+                      <mat-label>Receta Asociada</mat-label>
+                      <input type="text"
+                            matInput
+                            formControlName="recetaId"
+                            [matAutocomplete]="autoReceta"
+                            placeholder="Buscar y seleccionar receta">
+                      <mat-autocomplete #autoReceta="matAutocomplete"
+                                        [displayWith]="displayRecetaFn.bind(this)">
+                        <mat-option *ngFor="let receta of filteredRecetas | async" [value]="receta.id">
+                          {{ receta.nombre }}
+                        </mat-option>
+                      </mat-autocomplete>
+                      <mat-hint>Asocie una receta al producto para cálculos de costos y gestión de inventario</mat-hint>
+                      <button *ngIf="productoForm.get('recetaId')?.value"
+                              matSuffix
+                              mat-icon-button
+                              type="button"
+                              (click)="productoForm.get('recetaId')?.setValue(null)">
+                        <mat-icon>clear</mat-icon>
+                      </button>
+                    </mat-form-field>
+                  </div>
+
+                  <!-- Recipe Cost Information -->
+                  <div *ngIf="selectedReceta" class="recipe-cost-info">
+                    <div class="cost-card">
+                      <div class="cost-details">
+                        <div class="cost-item">
+                          <span class="cost-label">Costo Total:</span>
+                          <span class="cost-value">{{ defaultMonedaSimbolo }} {{ recipeTotalCost | number:'1.2-2' }}</span>
+                        </div>
+                        <div class="cost-item">
+                          <span class="cost-label">Costo por {{ selectedReceta.tipoMedida }}:</span>
+                          <span class="cost-value">{{ defaultMonedaSimbolo }} {{ recipeCostPerUnit | number:'1.2-2' }}</span>
+                        </div>
+                        <div class="cost-item suggested-price">
+                          <span class="cost-label">Precio Sugerido:</span>
+                          <span class="cost-value">{{ defaultMonedaSimbolo }} {{ recipeSuggestedPrice | number:'1.2-2' }}</span>
+                          <span class="cost-hint">(Food Cost: 35%)</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Default Presentacion Form (when hasVariaciones is false) -->
+                <div *ngIf="!productoForm.get('hasVariaciones')?.value" class="default-presentacion-form">
+                  <h4 class="section-title">Presentación Principal</h4>
+
+                  <!-- First row: Tipo de Medida and Cantidad -->
+                  <div class="form-row">
+                    <mat-form-field appearance="outline" class="equal-width" subscriptSizing="dynamic">
+                      <mat-label>Tipo de Medida</mat-label>
+                      <mat-select formControlName="defaultPresentacionTipoMedida">
+                        <mat-option value="UNIDAD">Unidad</mat-option>
+                        <mat-option value="PAQUETE">Paquete</mat-option>
+                        <mat-option value="GRAMO">Gramo</mat-option>
+                        <mat-option value="LITRO">Litro</mat-option>
+                      </mat-select>
+                      <mat-hint>Unidad de medida del producto</mat-hint>
+                    </mat-form-field>
+
+                    <mat-form-field appearance="outline" class="equal-width" subscriptSizing="dynamic">
+                      <mat-label>Cantidad a descontar del stock</mat-label>
+                      <input matInput type="number" formControlName="defaultPresentacionCantidad" min="0" step="0.01">
+                      <mat-hint>Cantidad que se descuenta del inventario</mat-hint>
+                    </mat-form-field>
+                  </div>
+
+                  <!-- Second row: Tipo de Código and Código -->
+                  <div class="form-row">
+                    <mat-form-field appearance="outline" class="equal-width" subscriptSizing="dynamic">
+                      <mat-label>Tipo de Código</mat-label>
+                      <mat-select formControlName="defaultPresentacionTipoCodigo">
+                        <mat-option [value]="TipoCodigo.MANUAL">Manual</mat-option>
+                        <mat-option [value]="TipoCodigo.BARRA">Código de Barras</mat-option>
+                        <mat-option [value]="TipoCodigo.QR">Código QR</mat-option>
+                      </mat-select>
+                      <mat-hint>Formato del código</mat-hint>
+                    </mat-form-field>
+
+                    <mat-form-field appearance="outline" class="equal-width" subscriptSizing="dynamic">
+                      <mat-label>Código</mat-label>
+                      <input matInput formControlName="defaultPresentacionCodigo" placeholder="Código opcional">
+                      <mat-hint>Código de identificación (opcional)</mat-hint>
+                    </mat-form-field>
+                  </div>
+
+                  <!-- Precios Section -->
+                  <div class="precios-section">
+                    <div class="precios-header">
+                      <h4 class="section-title">Precios de Venta</h4>
+                      <button mat-raised-button color="primary"
+                              [disabled]="!isEditing || !producto?.id"
+                              (click)="addDefaultPresentacionPrecio()"
+                              matTooltip="Debe guardar el producto primero para agregar precios">
+                        <mat-icon>add</mat-icon>
+                        Nuevo Precio
+                      </button>
+                    </div>
+
+                    <div class="precios-table-container" [class.disabled]="!isEditing || !producto?.id">
+                      <!-- Empty state message -->
+                      <div *ngIf="!defaultPresentacionPrecios || defaultPresentacionPrecios.length === 0" class="empty-precios">
+                        <mat-icon>monetization_on</mat-icon>
+                        <p>No hay precios configurados para esta presentación</p>
+                        <p class="hint" *ngIf="isEditing && producto?.id">Haga clic en "Nuevo Precio" para agregar</p>
+                        <p class="hint" *ngIf="!isEditing || !producto?.id">Debe guardar el producto primero para agregar precios</p>
+                      </div>
+
+                      <!-- Precios table -->
+                      <table mat-table [dataSource]="defaultPresentacionPrecios || []" class="mat-elevation-z1" *ngIf="defaultPresentacionPrecios && defaultPresentacionPrecios.length > 0">
+                        <!-- Moneda Column -->
+                        <ng-container matColumnDef="moneda">
+                          <th mat-header-cell *matHeaderCellDef>Moneda</th>
+                          <td mat-cell *matCellDef="let item">
+                            {{ item.moneda?.simbolo }} - {{ item.moneda?.denominacion }}
+                          </td>
+                        </ng-container>
+
+                        <!-- Valor Column -->
+                        <ng-container matColumnDef="valor">
+                          <th mat-header-cell *matHeaderCellDef>Valor</th>
+                          <td mat-cell *matCellDef="let item">
+                            {{ item.moneda?.simbolo }} {{ item.valor | number:'1.2-2' }}
+                          </td>
+                        </ng-container>
+
+                        <!-- Tipo Precio Column -->
+                        <ng-container matColumnDef="tipoPrecio">
+                          <th mat-header-cell *matHeaderCellDef>Tipo</th>
+                          <td mat-cell *matCellDef="let item">
+                            {{ item.tipoPrecio?.descripcion || 'Estándar' }}
+                          </td>
+                        </ng-container>
+
+                        <!-- Principal Column -->
+                        <ng-container matColumnDef="principal">
+                          <th mat-header-cell *matHeaderCellDef>Principal</th>
+                          <td mat-cell *matCellDef="let item">
+                            <mat-icon *ngIf="item.principal" color="primary">check_circle</mat-icon>
+                            <mat-icon *ngIf="!item.principal" color="disabled">radio_button_unchecked</mat-icon>
+                          </td>
+                        </ng-container>
+
+                        <!-- Activo Column -->
+                        <ng-container matColumnDef="activo">
+                          <th mat-header-cell *matHeaderCellDef>Activo</th>
+                          <td mat-cell *matCellDef="let item">
+                            <span class="status-badge" [ngClass]="item.activo ? 'active' : 'inactive'">
+                              {{ item.activo ? 'Activo' : 'Inactivo' }}
+                            </span>
+                          </td>
+                        </ng-container>
+
+                        <!-- Actions Column -->
+                        <ng-container matColumnDef="acciones">
+                          <th mat-header-cell *matHeaderCellDef>Acciones</th>
+                          <td mat-cell *matCellDef="let item" style="display: flex; flex-direction: row; align-items: center;">
+                            <button mat-icon-button color="primary" (click)="editDefaultPresentacionPrecio(item)" matTooltip="Editar">
+                              <mat-icon>edit</mat-icon>
+                            </button>
+                            <button mat-icon-button color="warn" (click)="deleteDefaultPresentacionPrecio(item)" matTooltip="Eliminar">
+                              <mat-icon>delete</mat-icon>
+                            </button>
+                          </td>
+                        </ng-container>
+
+                        <tr mat-header-row *matHeaderRowDef="preciosDisplayedColumns; sticky: true"></tr>
+                        <tr mat-row *matRowDef="let row; columns: preciosDisplayedColumns;"></tr>
+                      </table>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Conditional Fields -->
@@ -246,7 +399,7 @@
         </div>
       </mat-tab>
 
-      <mat-tab label="Presentaciones" [disabled]="!isEditing">
+      <mat-tab label="Presentaciones" [disabled]="!isEditing" *ngIf="productoForm.get('hasVariaciones')?.value">
         <div *ngIf="!producto?.id" class="empty-tab-message">
           <mat-icon>info</mat-icon>
           <p>Debe guardar el producto antes de poder agregar presentaciones</p>

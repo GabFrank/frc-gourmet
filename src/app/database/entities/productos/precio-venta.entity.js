@@ -13,6 +13,7 @@ exports.PrecioVenta = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
 const moneda_entity_1 = require("../financiero/moneda.entity");
+const tipo_precio_entity_1 = require("../financiero/tipo-precio.entity");
 /**
  * Entity representing a product sale price
  */
@@ -54,6 +55,15 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'moneda_id' }),
     __metadata("design:type", moneda_entity_1.Moneda)
 ], PrecioVenta.prototype, "moneda", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'tipo_precio_id', nullable: true }),
+    __metadata("design:type", Number)
+], PrecioVenta.prototype, "tipoPrecioId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => tipo_precio_entity_1.TipoPrecio, { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'tipo_precio_id' }),
+    __metadata("design:type", tipo_precio_entity_1.TipoPrecio)
+], PrecioVenta.prototype, "tipoPrecio", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'decimal', precision: 10, scale: 2 }),
     __metadata("design:type", Number)

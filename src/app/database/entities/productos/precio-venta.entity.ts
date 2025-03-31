@@ -4,6 +4,7 @@ import type { Presentacion } from './presentacion.entity';
 import type { PresentacionSabor } from './presentacion-sabor.entity';
 import type { Combo } from './combo.entity';
 import { Moneda } from '../financiero/moneda.entity';
+import { TipoPrecio } from '../financiero/tipo-precio.entity';
 
 /**
  * Entity representing a product sale price
@@ -37,6 +38,13 @@ export class PrecioVenta extends BaseModel {
   @ManyToOne(() => Moneda, moneda => moneda.preciosVenta)
   @JoinColumn({ name: 'moneda_id' })
   moneda!: Moneda;
+
+  @Column({ name: 'tipo_precio_id', nullable: true })
+  tipoPrecioId?: number;
+
+  @ManyToOne(() => TipoPrecio, { nullable: true })
+  @JoinColumn({ name: 'tipo_precio_id' })
+  tipoPrecio?: TipoPrecio;
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   valor!: number;

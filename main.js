@@ -35,6 +35,7 @@ const presentacion_sabor_entity_1 = require("./src/app/database/entities/product
 const receta_entity_1 = require("./src/app/database/entities/productos/receta.entity");
 const receta_item_entity_1 = require("./src/app/database/entities/productos/receta-item.entity");
 const ingrediente_entity_1 = require("./src/app/database/entities/productos/ingrediente.entity");
+const tipo_precio_entity_1 = require("./src/app/database/entities/financiero/tipo-precio.entity");
 let win;
 let dbService;
 // JWT Secret for token generation
@@ -2025,6 +2026,88 @@ ipcMain.handle('deleteMoneda', async (_event, monedaId) => {
     }
     catch (error) {
         console.error(`Error deleting moneda with ID ${monedaId}:`, error);
+        throw error;
+    }
+});
+// IPC handler for getting tipos de precio
+ipcMain.handle('getTipoPrecios', async () => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const tipoPrecioRepository = dataSource.getRepository(tipo_precio_entity_1.TipoPrecio);
+        return await tipoPrecioRepository.find({
+            order: { descripcion: 'ASC' }
+        });
+    }
+    catch (error) {
+        console.error('Error getting tipos de precio:', error);
+        throw error;
+    }
+});
+// IPC handler for getting a tipo de precio by ID
+ipcMain.handle('getTipoPrecio', async (_event, tipoPrecioId) => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const tipoPrecioRepository = dataSource.getRepository(tipo_precio_entity_1.TipoPrecio);
+        return await tipoPrecioRepository.findOne({
+            where: { id: tipoPrecioId }
+        });
+    }
+    catch (error) {
+        console.error(`Error getting tipo de precio with ID ${tipoPrecioId}:`, error);
+        throw error;
+    }
+});
+// IPC handler for creating a tipo de precio
+ipcMain.handle('createTipoPrecio', async (_event, tipoPrecioData) => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const tipoPrecioRepository = dataSource.getRepository(tipo_precio_entity_1.TipoPrecio);
+        // Create a new tipo precio
+        const tipoPrecio = tipoPrecioRepository.create(tipoPrecioData);
+        // Save the tipo precio
+        return await tipoPrecioRepository.save(tipoPrecio);
+    }
+    catch (error) {
+        console.error('Error creating tipo de precio:', error);
+        throw error;
+    }
+});
+// IPC handler for updating a tipo de precio
+ipcMain.handle('updateTipoPrecio', async (_event, tipoPrecioId, tipoPrecioData) => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const tipoPrecioRepository = dataSource.getRepository(tipo_precio_entity_1.TipoPrecio);
+        // Find the tipo precio to update
+        const tipoPrecio = await tipoPrecioRepository.findOneBy({ id: tipoPrecioId });
+        if (!tipoPrecio) {
+            throw new Error('Tipo Precio not found');
+        }
+        // Update the tipo precio
+        tipoPrecioRepository.merge(tipoPrecio, tipoPrecioData);
+        // Save the changes
+        return await tipoPrecioRepository.save(tipoPrecio);
+    }
+    catch (error) {
+        console.error(`Error updating tipo de precio with ID ${tipoPrecioId}:`, error);
+        throw error;
+    }
+});
+// IPC handler for deleting a tipo de precio
+ipcMain.handle('deleteTipoPrecio', async (_event, tipoPrecioId) => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const tipoPrecioRepository = dataSource.getRepository(tipo_precio_entity_1.TipoPrecio);
+        // Find the tipo precio to delete
+        const tipoPrecio = await tipoPrecioRepository.findOneBy({ id: tipoPrecioId });
+        if (!tipoPrecio) {
+            throw new Error('Tipo Precio not found');
+        }
+        // Delete the tipo precio
+        await tipoPrecioRepository.remove(tipoPrecio);
+        return { success: true };
+    }
+    catch (error) {
+        console.error(`Error deleting tipo de precio with ID ${tipoPrecioId}:`, error);
         throw error;
     }
 });

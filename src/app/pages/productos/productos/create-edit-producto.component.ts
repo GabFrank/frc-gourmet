@@ -34,6 +34,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { Presentacion, TipoMedida } from '../../../database/entities/productos/presentacion.entity';
 import { CreateEditPresentacionDialogComponent } from './create-edit-presentacion-dialog.component';
 import { CreateEditSaboresComponent } from './create-edit-sabores.component';
+import { TipoCodigo } from '../../../database/entities/productos/codigo.entity';
+import { PrecioVenta } from '../../../database/entities/productos/precio-venta.entity';
 
 // renamed to avoid conflict with the imported type
 interface ProductImageModel {
@@ -80,110 +82,7 @@ interface PresentacionViewModel extends Presentacion {
     CreateEditSaboresComponent
   ],
   templateUrl: './create-edit-producto.component.html',
-  styleUrls: ['./create-edit-producto.component.scss'],
-  styles: [`
-    .empty-tab-message {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem;
-      text-align: center;
-    }
-
-    .empty-tab-message mat-icon {
-      font-size: 48px;
-      height: 48px;
-      width: 48px;
-      margin-bottom: 1rem;
-      color: #757575;
-    }
-
-    .empty-tab-message p {
-      margin-bottom: 1rem;
-      color: #616161;
-    }
-
-    .presentaciones-tab-content {
-      padding: 16px;
-    }
-
-    .header-actions {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-
-    .header-actions h2 {
-      margin: 0;
-    }
-
-    .empty-list {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 32px 16px;
-      background-color: #f5f5f5;
-      border-radius: 4px;
-      margin-top: 16px;
-    }
-
-    .empty-list mat-icon {
-      font-size: 48px;
-      height: 48px;
-      width: 48px;
-      margin-bottom: 16px;
-      color: #757575;
-    }
-
-    .empty-list p {
-      margin: 0;
-      color: #616161;
-      text-align: center;
-    }
-
-    .empty-list .hint {
-      margin-top: 8px;
-      font-size: 0.9em;
-      color: #9e9e9e;
-    }
-
-    .status-badge {
-      padding: 4px 8px;
-      border-radius: 16px;
-      font-size: 12px;
-      text-transform: uppercase;
-    }
-
-    .active {
-      background-color: #e8f5e9;
-      color: #2e7d32;
-    }
-
-    .inactive {
-      background-color: #ffebee;
-      color: #c62828;
-    }
-
-    /* Dark theme adjustments */
-    :host-context(.dark-theme) {
-      .empty-list {
-        background-color: #1a2737;
-      }
-
-      .active {
-        background-color: #1b5e20;
-        color: #e8f5e9;
-      }
-
-      .inactive {
-        background-color: #621818;
-        color: #ffebee;
-      }
-    }
-  `]
+  styleUrls: ['./create-edit-producto.component.scss']
 })
 export class CreateEditProductoComponent implements OnInit, OnChanges, AfterViewInit {
   @Input() data: any;
@@ -219,6 +118,11 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     'acciones'
   ];
 
+  // Properties for the precios table
+  preciosDisplayedColumns: string[] = ['moneda', 'valor', 'tipoPrecio', 'principal', 'activo', 'acciones'];
+  defaultPresentacionPrecios: PrecioVenta[] = [];
+  defaultPresentacionId?: number;
+
   // Flag to track if data has been processed to prevent multiple processing
   private dataProcessed = false;
 
@@ -230,12 +134,15 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     [TipoMedida.LITRO]: 'Litro'
   };
 
+  // Add TipoCodigo to make it available in the template
+  TipoCodigo = TipoCodigo;
+
   // Add these properties after the existing properties
   selectedReceta: Receta | null = null;
-  recipeTotalCost: number = 0;
-  recipeCostPerUnit: number = 0;
-  recipeSuggestedPrice: number = 0;
-  defaultMonedaSimbolo: string = '$';
+  recipeTotalCost = 0;
+  recipeCostPerUnit = 0;
+  recipeSuggestedPrice = 0;
+  defaultMonedaSimbolo = '$';
 
   constructor(
     private fb: FormBuilder,
@@ -264,7 +171,13 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       alertarVencimientoDias: [{ value: null, disabled: true }],
       observacion: [''],
       activo: [true],
-      recetaId: [null]
+      recetaId: [{ value: null, disabled: true }],
+      // Default presentacion form controls
+      defaultPresentacionDesc: [''], // Kept for data model but not shown in UI
+      defaultPresentacionTipoMedida: ['UNIDAD'],
+      defaultPresentacionCantidad: [1],
+      defaultPresentacionCodigo: [''],
+      defaultPresentacionTipoCodigo: [TipoCodigo.MANUAL]
     });
   }
 
@@ -440,7 +353,48 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
           this.loadProductImages();
 
           // Load presentations
-          this.loadProductoPresentaciones(producto.id);
+          this.loadProductoPresentaciones(producto.id).then(() => {
+            // After presentations are loaded, if hasVariaciones is false, populate default presentacion form
+            if (!producto.hasVariaciones && this.producto?.presentaciones?.length) {
+              // Find the principal presentacion
+              const principalPresentacion = this.producto.presentaciones.find(p => p.principal);
+
+              // If principal presentacion exists, use its data
+              if (principalPresentacion) {
+                this.productoForm.patchValue({
+                  defaultPresentacionDesc: principalPresentacion.descripcion || '',
+                  defaultPresentacionTipoMedida: principalPresentacion.tipoMedida,
+                  defaultPresentacionCantidad: principalPresentacion.cantidad
+                });
+
+                // If presentacion has codigos, use the first one
+                if (principalPresentacion.codigos?.length) {
+                  const codigo = principalPresentacion.codigos[0];
+                  this.productoForm.patchValue({
+                    defaultPresentacionCodigo: codigo.codigo,
+                    defaultPresentacionTipoCodigo: codigo.tipoCodigo
+                  });
+                }
+              } else if (this.producto.presentaciones.length > 0) {
+                // If no principal presentacion exists but there are presentaciones, use the first one
+                const firstPresentacion = this.producto.presentaciones[0];
+                this.productoForm.patchValue({
+                  defaultPresentacionDesc: firstPresentacion.descripcion || '',
+                  defaultPresentacionTipoMedida: firstPresentacion.tipoMedida,
+                  defaultPresentacionCantidad: firstPresentacion.cantidad
+                });
+
+                // If presentacion has codigos, use the first one
+                if (firstPresentacion.codigos?.length) {
+                  const codigo = firstPresentacion.codigos[0];
+                  this.productoForm.patchValue({
+                    defaultPresentacionCodigo: codigo.codigo,
+                    defaultPresentacionTipoCodigo: codigo.tipoCodigo
+                  });
+                }
+              }
+            }
+          });
         } else {
           this.snackBar.open('No se encontró el producto', 'Cerrar', { duration: 3000 });
         }
@@ -454,13 +408,16 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     });
   }
 
-  // Set up listeners for form control changes
+  /**
+   * Setup form control change listeners
+   */
   private setupFormControlListeners(): void {
     // When categoria changes, load subcategorias
     this.productoForm.get('categoriaId')?.valueChanges.subscribe((categoriaId) => {
       if (categoriaId) {
         this.loadSubcategoriasByCategoria(categoriaId);
       } else {
+        // Clear subcategorias
         this.subcategorias = [];
       }
     });
@@ -470,11 +427,9 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       const alertarControl = this.productoForm.get('alertarVencimientoDias');
       if (hasVencimiento) {
         alertarControl?.setValidators([Validators.required, Validators.min(1)]);
-        if (!alertarControl?.value) {
-          alertarControl?.setValue(30); // Default value
-        }
       } else {
         alertarControl?.clearValidators();
+        // Reset value to null when disabled
         alertarControl?.setValue(null);
       }
       alertarControl?.updateValueAndValidity();
@@ -492,6 +447,63 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       }
     });
 
+    // Control recetaId based on isCompuesto value
+    this.productoForm.get('isCompuesto')?.valueChanges.subscribe(isCompuesto => {
+      const recetaIdControl = this.productoForm.get('recetaId');
+      if (recetaIdControl) {
+        if (isCompuesto) {
+          recetaIdControl.enable();
+        } else {
+          recetaIdControl.disable();
+          recetaIdControl.setValue(null);
+          this.selectedReceta = null;
+          this.recipeTotalCost = 0;
+          this.recipeCostPerUnit = 0;
+          this.recipeSuggestedPrice = 0;
+        }
+      }
+    });
+
+    // Handle hasVariaciones changes
+    this.productoForm.get('hasVariaciones')?.valueChanges.subscribe(hasVariaciones => {
+      // If editing a product and hasVariaciones is toggled off, show a confirmation dialog
+      if (this.isEditing && this.producto?.id && !hasVariaciones && this.producto.presentaciones?.length > 1) {
+        const confirmed = confirm(
+          'Este producto tiene múltiples presentaciones. Al desactivar "Posee variaciones", solo se mantendrá la presentación principal. ¿Desea continuar?'
+        );
+
+        if (!confirmed) {
+          // If not confirmed, revert the change
+          this.productoForm.get('hasVariaciones')?.setValue(true, { emitEvent: false });
+          return;
+        }
+      }
+
+      // Clear or update precios based on hasVariaciones value
+      if (hasVariaciones) {
+        // Reset precios section
+        this.defaultPresentacionId = undefined;
+        this.defaultPresentacionPrecios = [];
+      } else if (this.isEditing && this.producto?.id && this.producto.presentaciones?.length > 0) {
+        // Find principal presentacion to show precios
+        const principalPresentacion = this.producto.presentaciones.find(p => p.principal);
+        if (principalPresentacion) {
+          this.defaultPresentacionId = principalPresentacion.id;
+          this.loadDefaultPresentacionPrecios(principalPresentacion.id);
+        } else if (this.producto.presentaciones.length > 0) {
+          // If no principal presentacion exists, use the first one
+          this.defaultPresentacionId = this.producto.presentaciones[0].id;
+          this.loadDefaultPresentacionPrecios(this.producto.presentaciones[0].id);
+        }
+      }
+    });
+
+    // Initial execution of categoriaId change handling
+    const initialCategoriaId = this.productoForm.get('categoriaId')?.value;
+    if (initialCategoriaId) {
+      this.loadSubcategoriasByCategoria(initialCategoriaId);
+    }
+
     // Listen for changes in categoriaId to load subcategorias
     this.productoForm.get('categoriaId')?.valueChanges.subscribe(categoriaId => {
       if (categoriaId) {
@@ -504,7 +516,6 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       if (recetaId) {
         this.loadRecipeDetails(recetaId);
       } else {
-        // Clear recipe details if no recipe is selected
         this.selectedReceta = null;
         this.recipeTotalCost = 0;
         this.recipeCostPerUnit = 0;
@@ -751,7 +762,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     await Promise.all(uploadPromises);
   }
 
-  private async uploadImage(file: File, isMain: boolean = false): Promise<string> {
+  private async uploadImage(file: File, isMain = false): Promise<string> {
     try {
       // Generate a unique filename
       const ext = file.name.split('.').pop() || 'jpg';
@@ -796,11 +807,13 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     }
   }
 
+  /**
+   * Handle form submission
+   */
   async onSubmit(): Promise<void> {
-    if (this.productoForm.invalid) {
-      // Mark all fields as touched to show validation errors
+    if (this.productoForm.invalid || this.isLoading) {
+      // Mark all controls as touched to show validation errors
       this.markFormGroupTouched(this.productoForm);
-      this.snackBar.open('Por favor complete todos los campos requeridos', 'Cerrar', { duration: 3000 });
       return;
     }
 
@@ -808,24 +821,32 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     this.submitted = true;
 
     try {
-      // Get form values
-      const formValues = this.productoForm.value;
+      // Prepare form values
+      const formValues = { ...this.productoForm.getRawValue() };
 
-      // Convert string values to uppercase
-      if (formValues.nombre) formValues.nombre = formValues.nombre.toUpperCase();
-      if (formValues.nombreAlternativo) formValues.nombreAlternativo = formValues.nombreAlternativo.toUpperCase();
-      if (formValues.observacion) formValues.observacion = formValues.observacion.toUpperCase();
+      // Select only actual image files for upload
+      const imagesToUpload = this.productImages.filter(img => img.file && img.isNew);
 
-      // Set main image URL if it exists
-      const mainImage = this.productImages.find(img => img.isMain);
-      if (mainImage) {
-        formValues.imageUrl = mainImage.imageUrl;
+      // Upload new images first
+      if (imagesToUpload.length > 0) {
+        await this.uploadImages();
       }
 
-      // Update to include all properties
-      const productoData: Partial<Producto> = {
+      // Handle image deletions
+      const deletePromises = this.productImages
+        .filter(img => img.toDelete && img.id)
+        .map(img => firstValueFrom(this.repositoryService.deleteProductImage(img.id!)));
+
+      if (deletePromises.length > 0) {
+        await Promise.all(deletePromises);
+      }
+
+      if (this.isEditing && this.producto?.id) {
+        // Update existing product
+        const updatedProductData = {
         nombre: formValues.nombre,
-        nombreAlternativo: formValues.nombreAlternativo ? formValues.nombreAlternativo.toUpperCase() : null,
+          nombreAlternativo: formValues.nombreAlternativo,
+          categoriaId: formValues.categoriaId,
         subcategoriaId: formValues.subcategoriaId,
         iva: formValues.iva,
         isPesable: formValues.isPesable,
@@ -834,50 +855,143 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
         isIngrediente: formValues.isIngrediente,
         isPromocion: formValues.isPromocion,
         isVendible: formValues.isVendible,
-        hasVencimiento: formValues.hasVencimiento,
         hasStock: formValues.hasStock,
+          hasVencimiento: formValues.hasVencimiento,
         hasVariaciones: formValues.hasVariaciones,
         alertarVencimientoDias: formValues.hasVencimiento ? formValues.alertarVencimientoDias : null,
-        observacion: formValues.observacion ? formValues.observacion.toUpperCase() : null,
-        activo: formValues.activo,
-        recetaId: formValues.recetaId || null
-      };
+          recetaId: formValues.isCompuesto ? formValues.recetaId : null,
+          observacion: formValues.observacion,
+          activo: formValues.activo
+        };
 
-      let savedProducto: Producto;
-
-      if (this.isEditing && this.producto?.id) {
-        // Update existing product
-        savedProducto = await firstValueFrom(
-          this.repositoryService.updateProducto(this.producto.id, productoData)
+        // Update the product
+        const savedProducto = await firstValueFrom(
+          this.repositoryService.updateProducto(this.producto.id, updatedProductData)
         );
 
+        // If there was a change from hasVariaciones=true to false, we need to create a default presentacion
+        if (!updatedProductData.hasVariaciones && this.producto.hasVariaciones) {
+          await this.createDefaultPresentacion(savedProducto.id, formValues);
+        }
+
+        this.producto = { ...this.producto, ...savedProducto };
+        this.isLoading = false;
         this.snackBar.open('Producto actualizado exitosamente', 'Cerrar', { duration: 3000 });
+
+        // Refresh presentaciones data
+        if (this.producto?.id) {
+          await this.loadProductoPresentaciones(this.producto.id);
+        }
+
+        // If we have a default presentacion, refresh precios
+        if (this.defaultPresentacionId && !formValues.hasVariaciones) {
+          await this.loadDefaultPresentacionPrecios(this.defaultPresentacionId);
+        }
       } else {
         // Create new product
-        savedProducto = await firstValueFrom(
-          this.repositoryService.createProducto(productoData)
-        );
+        const newProductData = {
+          nombre: formValues.nombre,
+          nombreAlternativo: formValues.nombreAlternativo,
+          categoriaId: formValues.categoriaId,
+          subcategoriaId: formValues.subcategoriaId,
+          iva: formValues.iva,
+          isPesable: formValues.isPesable,
+          isCombo: formValues.isCombo,
+          isCompuesto: formValues.isCompuesto,
+          isIngrediente: formValues.isIngrediente,
+          isPromocion: formValues.isPromocion,
+          isVendible: formValues.isVendible,
+          hasStock: formValues.hasStock,
+          hasVencimiento: formValues.hasVencimiento,
+          hasVariaciones: formValues.hasVariaciones,
+          alertarVencimientoDias: formValues.hasVencimiento ? formValues.alertarVencimientoDias : null,
+          recetaId: formValues.isCompuesto ? formValues.recetaId : null,
+          observacion: formValues.observacion,
+          activo: formValues.activo
+        };
 
-        this.snackBar.open('Producto creado exitosamente', 'Cerrar', { duration: 3000 });
-      }
+        // Create the product
+        const savedProducto = await firstValueFrom(this.repositoryService.createProducto(newProductData));
 
-      // Update component state with the saved product
-      this.producto = savedProducto;
+        // If the product doesn't have variations, create a default presentacion
+        if (!savedProducto.hasVariaciones) {
+          await this.createDefaultPresentacion(savedProducto.id, formValues);
+        }
+
+        // Update image relationships to the new product
+        if (this.productImages.length > 0) {
+          const imageUpdatePromises = this.productImages
+            .filter(img => !img.toDelete && img.id)
+            .map(img =>
+              firstValueFrom(this.repositoryService.updateProductImage(img.id!, {
+                productoId: savedProducto.id
+              }))
+            );
+
+          if (imageUpdatePromises.length > 0) {
+            await Promise.all(imageUpdatePromises);
+          }
+        }
+
       this.isEditing = true;
+        this.producto = savedProducto;
+        this.isLoading = false;
+        this.snackBar.open('Producto creado exitosamente', 'Cerrar', { duration: 3000 });
 
-      // Update any pending image associations
-      await this.uploadImages();
+        // Refresh presentaciones data
+        if (this.producto?.id) {
+          await this.loadProductoPresentaciones(this.producto.id);
+        }
 
-      // Reload the product to get the latest data including images
-      if (savedProducto.id) {
-        this.loadProducto(savedProducto.id);
+        // If we have a default presentacion, refresh precios
+        if (this.defaultPresentacionId && !formValues.hasVariaciones) {
+          await this.loadDefaultPresentacionPrecios(this.defaultPresentacionId);
+        }
       }
     } catch (error) {
-      console.error('Error saving producto:', error);
-      this.snackBar.open('Error al guardar el producto', 'Cerrar', { duration: 3000 });
-    } finally {
+      console.error('Error saving product:', error);
       this.isLoading = false;
-      this.submitted = false;
+      this.snackBar.open('Error al guardar el producto', 'Cerrar', { duration: 3000 });
+    }
+  }
+
+  /**
+   * Creates a default presentacion for a product
+   */
+  private async createDefaultPresentacion(productoId: number, formValues: any): Promise<void> {
+    try {
+      // Create the presentacion
+      const presentacion = await firstValueFrom(
+        this.repositoryService.createPresentacion({
+          productoId: productoId,
+          descripcion: formValues.defaultPresentacionDesc || null, // Make it null if empty string
+          tipoMedida: formValues.defaultPresentacionTipoMedida,
+          cantidad: formValues.defaultPresentacionCantidad,
+          principal: true, // Always set as principal
+          activo: true
+        })
+      );
+
+      // Store the default presentacion ID for precios
+      this.defaultPresentacionId = presentacion.id;
+
+      // If a codigo was provided, create it for the presentacion
+      if (formValues.defaultPresentacionCodigo) {
+        await firstValueFrom(
+          this.repositoryService.createCodigo({
+            presentacionId: presentacion.id,
+            codigo: formValues.defaultPresentacionCodigo,
+            tipoCodigo: formValues.defaultPresentacionTipoCodigo,
+            activo: true
+          })
+        );
+      }
+
+      // Initialize empty precios for this presentacion
+      this.defaultPresentacionPrecios = [];
+    } catch (error) {
+      console.error('Error creating default presentacion:', error);
+      throw error;
     }
   }
 
@@ -904,7 +1018,13 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       hasVariaciones: false,
       alertarVencimientoDias: null,
       observacion: '',
-      recetaId: null
+      recetaId: null,
+      // Default presentacion form controls
+      defaultPresentacionDesc: '',
+      defaultPresentacionTipoMedida: 'UNIDAD',
+      defaultPresentacionCantidad: 1,
+      defaultPresentacionCodigo: '',
+      defaultPresentacionTipoCodigo: TipoCodigo.MANUAL
     });
 
     // Clear images
@@ -912,9 +1032,13 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     this.isEditing = false;
     this.producto = undefined;
 
-    // Enable all form fields
+    // Enable/disable appropriate form fields
     Object.keys(this.productoForm.controls).forEach(key => {
+      if (key === 'alertarVencimientoDias' || key === 'recetaId') {
+        this.productoForm.get(key)?.disable();
+      } else {
       this.productoForm.get(key)?.enable();
+      }
     });
 
     // Mark form as pristine and untouched
@@ -999,7 +1123,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   }
 
   /**
-   * Load product presentations
+   * Load product presentations and their prices
    */
   async loadProductoPresentaciones(productoId: number): Promise<void> {
     try {
@@ -1014,10 +1138,154 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
         
         // Type assertion to handle the type compatibility
         this.producto.presentaciones = enhancedPresentaciones as unknown as any[];
+
+        // Fetch codigos for each presentacion
+        for (const presentacion of this.producto.presentaciones) {
+          try {
+            const codigos = await firstValueFrom(this.repositoryService.getCodigosByPresentacion(presentacion.id));
+            presentacion.codigos = codigos;
+          } catch (error) {
+            console.error(`Error loading codigos for presentacion ${presentacion.id}:`, error);
+          }
+        }
+
+        // If the product doesn't have variations, get the principal presentation for precios
+        if (!this.producto.hasVariaciones && this.producto.presentaciones.length > 0) {
+          const principalPresentacion = this.producto.presentaciones.find(p => p.principal);
+          if (principalPresentacion) {
+            this.defaultPresentacionId = principalPresentacion.id;
+            await this.loadDefaultPresentacionPrecios(principalPresentacion.id);
+          } else if (this.producto.presentaciones.length > 0) {
+            // If no principal presentation exists, use the first one
+            this.defaultPresentacionId = this.producto.presentaciones[0].id;
+            await this.loadDefaultPresentacionPrecios(this.producto.presentaciones[0].id);
+          }
+        } else {
+          // Reset precios when has variations is true
+          this.defaultPresentacionId = undefined;
+          this.defaultPresentacionPrecios = [];
+        }
       }
     } catch (error) {
       console.error('Error loading presentaciones:', error);
       this.snackBar.open('Error al cargar presentaciones', 'Cerrar', { duration: 3000 });
+    }
+  }
+
+  /**
+   * Load prices for the default presentation
+   */
+  async loadDefaultPresentacionPrecios(presentacionId: number): Promise<void> {
+    try {
+      const precios = await firstValueFrom(this.repositoryService.getPreciosVentaByPresentacion(presentacionId));
+
+      // Load moneda and tipoPrecio details for each precio
+      for (const precio of precios) {
+        try {
+          precio.moneda = await firstValueFrom(this.repositoryService.getMoneda(precio.monedaId));
+
+          if (precio.tipoPrecioId) {
+            precio.tipoPrecio = await firstValueFrom(this.repositoryService.getTipoPrecio(precio.tipoPrecioId));
+          }
+        } catch (error) {
+          console.error(`Error loading details for precio ${precio.id}:`, error);
+        }
+      }
+
+      this.defaultPresentacionPrecios = precios;
+    } catch (error) {
+      console.error('Error loading precios for default presentacion:', error);
+      this.snackBar.open('Error al cargar los precios', 'Cerrar', { duration: 3000 });
+    }
+  }
+
+  /**
+   * Open dialog to add a new precio for the default presentacion
+   */
+  addDefaultPresentacionPrecio(): void {
+    if (!this.producto?.id || !this.defaultPresentacionId) {
+      this.snackBar.open('Debe guardar el producto primero', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    // Find the default presentacion
+    const presentacion = this.producto.presentaciones.find(p => p.id === this.defaultPresentacionId);
+    if (!presentacion) {
+      this.snackBar.open('No se encontró la presentación', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    const dialogRef = this.dialog.open(CreateEditPrecioVentaComponent, {
+      width: '800px',
+      disableClose: true,
+      data: {
+        presentacion: presentacion
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        // Reload prices after adding
+        this.loadDefaultPresentacionPrecios(this.defaultPresentacionId!);
+      }
+    });
+  }
+
+  /**
+   * Open dialog to edit an existing precio
+   */
+  editDefaultPresentacionPrecio(precio: PrecioVenta): void {
+    if (!this.producto?.id || !this.defaultPresentacionId) {
+      this.snackBar.open('Debe guardar el producto primero', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    // Find the default presentacion
+    const presentacion = this.producto.presentaciones.find(p => p.id === this.defaultPresentacionId);
+    if (!presentacion) {
+      this.snackBar.open('No se encontró la presentación', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    const dialogRef = this.dialog.open(CreateEditPrecioVentaComponent, {
+      width: '800px',
+      disableClose: true,
+      data: {
+        presentacion: presentacion,
+        precio: precio,
+        editMode: true
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        // Reload prices after editing
+        this.loadDefaultPresentacionPrecios(this.defaultPresentacionId!);
+      }
+    });
+  }
+
+  /**
+   * Delete a precio from the default presentacion
+   */
+  async deleteDefaultPresentacionPrecio(precio: PrecioVenta): Promise<void> {
+    if (!precio.id) return;
+
+    // Confirm deletion
+    const confirmed = confirm(`¿Está seguro de eliminar este precio de ${precio.moneda?.simbolo} ${precio.valor}?`);
+    if (!confirmed) return;
+
+    try {
+      await firstValueFrom(this.repositoryService.deletePrecioVenta(precio.id));
+      this.snackBar.open('Precio eliminado exitosamente', 'Cerrar', { duration: 3000 });
+
+      // Reload prices after deletion
+      if (this.defaultPresentacionId) {
+        this.loadDefaultPresentacionPrecios(this.defaultPresentacionId);
+      }
+    } catch (error) {
+      console.error('Error deleting precio:', error);
+      this.snackBar.open('Error al eliminar el precio', 'Cerrar', { duration: 3000 });
     }
   }
 
@@ -1035,13 +1303,26 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       return;
     }
 
+    // If hasVariaciones is false, check if we already have a presentacion
+    const hasVariaciones = this.productoForm.get('hasVariaciones')?.value;
+    if (!hasVariaciones && !presentacion && this.producto.presentaciones?.length > 0) {
+      // If we already have a presentacion and we're trying to create a new one
+      this.snackBar.open(
+        'Este producto está configurado sin variaciones. Debe activar "Posee variaciones" para agregar múltiples presentaciones.',
+        'Cerrar',
+        { duration: 5000 }
+      );
+      return;
+    }
+
     const dialogRef = this.dialog.open(CreateEditPresentacionDialogComponent, {
       width: '550px',
       disableClose: true,
       data: {
         producto: this.producto,
         presentacion: presentacion,
-        editMode: !!presentacion
+        editMode: !!presentacion,
+        hasVariaciones: hasVariaciones
       }
     });
 
@@ -1133,7 +1414,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
         const ingredientIds = recetaItems.map(item => item.ingredienteId);
         
         // Fetch all ingredients used in the recipe
-        let ingredients: any[] = [];
+        const ingredients: any[] = [];
         for (const id of ingredientIds) {
           try {
             const ingrediente = await firstValueFrom(this.repositoryService.getIngrediente(id));
@@ -1184,5 +1465,21 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     } catch (error) {
       console.error('Error loading monedas:', error);
     }
+  }
+
+  /**
+   * Returns the URL of the main product image for display in the preview
+   * Falls back to default image if no main image exists
+   */
+  getMainImageUrl(): string {
+    const mainImage = this.productImages.find(img => img.isMain && !img.toDelete);
+    return mainImage ? mainImage.imageUrl : this.defaultNoImagePath;
+  }
+
+  /**
+   * Checks if the product has a main image for display
+   */
+  hasMainImage(): boolean {
+    return this.productImages.some(img => img.isMain && !img.toDelete);
   }
 }

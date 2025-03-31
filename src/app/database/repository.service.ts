@@ -24,6 +24,7 @@ import { PresentacionSabor } from './entities/productos/presentacion-sabor.entit
 import { Receta } from './entities/productos/receta.entity';
 import { RecetaItem } from './entities/productos/receta-item.entity';
 import { Ingrediente } from './entities/productos/ingrediente.entity';
+import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
 
 export interface LoginResult {
   success: boolean;
@@ -135,10 +136,17 @@ interface ElectronAPI {
   createMoneda: (monedaData: any) => Promise<Moneda>;
   updateMoneda: (monedaId: number, monedaData: any) => Promise<any>;
   deleteMoneda: (monedaId: number) => Promise<any>;
+  // TipoPrecio methods
+  getTipoPrecios: () => Promise<TipoPrecio[]>;
+  getTipoPrecio: (tipoPrecioId: number) => Promise<TipoPrecio>;
+  createTipoPrecio: (tipoPrecioData: any) => Promise<TipoPrecio>;
+  updateTipoPrecio: (tipoPrecioId: number, tipoPrecioData: any) => Promise<TipoPrecio>;
+  deleteTipoPrecio: (tipoPrecioId: number) => Promise<boolean>;
   // PrecioVenta methods
   getPreciosVenta: () => Promise<PrecioVenta[]>;
   getPrecioVenta: (precioVentaId: number) => Promise<PrecioVenta>;
   getPreciosVentaByPresentacion: (presentacionId: number) => Promise<PrecioVenta[]>;
+  getPreciosVentaByTipoPrecio: (tipoPrecioId: number) => Promise<PrecioVenta[]>;
   createPrecioVenta: (precioVentaData: any) => Promise<PrecioVenta>;
   updatePrecioVenta: (precioVentaId: number, precioVentaData: any) => Promise<any>;
   deletePrecioVenta: (precioVentaId: number) => Promise<any>;
@@ -633,6 +641,27 @@ export class RepositoryService {
     return from(this.api.deleteMoneda(monedaId));
   }
 
+  // TipoPrecio methods
+  getTipoPrecios(): Observable<TipoPrecio[]> {
+    return from(this.api.getTipoPrecios());
+  }
+
+  getTipoPrecio(tipoPrecioId: number): Observable<TipoPrecio> {
+    return from(this.api.getTipoPrecio(tipoPrecioId));
+  }
+
+  createTipoPrecio(tipoPrecioData: Partial<TipoPrecio>): Observable<TipoPrecio> {
+    return from(this.api.createTipoPrecio(tipoPrecioData));
+  }
+
+  updateTipoPrecio(tipoPrecioId: number, tipoPrecioData: Partial<TipoPrecio>): Observable<TipoPrecio> {
+    return from(this.api.updateTipoPrecio(tipoPrecioId, tipoPrecioData));
+  }
+
+  deleteTipoPrecio(tipoPrecioId: number): Observable<boolean> {
+    return from(this.api.deleteTipoPrecio(tipoPrecioId));
+  }
+
   // PrecioVenta methods
   getPreciosVenta(): Observable<PrecioVenta[]> {
     return from(this.api.getPreciosVenta());
@@ -644,6 +673,10 @@ export class RepositoryService {
 
   getPreciosVentaByPresentacion(presentacionId: number): Observable<PrecioVenta[]> {
     return from(this.api.getPreciosVentaByPresentacion(presentacionId));
+  }
+
+  getPreciosVentaByTipoPrecio(tipoPrecioId: number): Observable<PrecioVenta[]> {
+    return from(this.api.getPreciosVentaByTipoPrecio(tipoPrecioId));
   }
 
   createPrecioVenta(precioVentaData: Partial<PrecioVenta>): Observable<PrecioVenta> {

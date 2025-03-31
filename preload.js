@@ -304,6 +304,22 @@ contextBridge.exposeInMainWorld('api', {
     deleteMoneda: async (monedaId) => {
         return await ipcRenderer.invoke('deleteMoneda', monedaId);
     },
+    // TipoPrecio methods
+    getTipoPrecios: async () => {
+        return await ipcRenderer.invoke('getTipoPrecios');
+    },
+    getTipoPrecio: async (tipoPrecioId) => {
+        return await ipcRenderer.invoke('getTipoPrecio', tipoPrecioId);
+    },
+    createTipoPrecio: async (tipoPrecioData) => {
+        return await ipcRenderer.invoke('createTipoPrecio', tipoPrecioData);
+    },
+    updateTipoPrecio: async (tipoPrecioId, tipoPrecioData) => {
+        return await ipcRenderer.invoke('updateTipoPrecio', tipoPrecioId, tipoPrecioData);
+    },
+    deleteTipoPrecio: async (tipoPrecioId) => {
+        return await ipcRenderer.invoke('deleteTipoPrecio', tipoPrecioId);
+    },
     // PrecioVenta methods
     getPreciosVenta: async () => {
         return await ipcRenderer.invoke('getPreciosVenta');
