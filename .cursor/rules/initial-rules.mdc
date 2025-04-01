@@ -12,3 +12,4 @@ Always remember that we have dark and light theme, so not use hardcored backgrou
 when creating a table, always align center all itens, only leave with align start names and descriptions
 when creating a table do not add mat sort header unless user explicitly ask for
 We are using Typeorm for with synchronize: true, we will change it later for production
+for confirm dialogs, always use [confirmation-dialog.component.ts](mdc:src/app/shared/components/confirmation-dialog/confirmation-dialog.component.ts)

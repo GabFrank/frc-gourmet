@@ -9,54 +9,45 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Receta = void 0;
+exports.RecetaVariacion = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
-const ingrediente_entity_1 = require("./ingrediente.entity");
 /**
- * Entity representing a product recipe
+ * Entity representing a variation of a recipe
  */
-let Receta = class Receta extends base_entity_1.BaseModel {
+let RecetaVariacion = class RecetaVariacion extends base_entity_1.BaseModel {
 };
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)
-], Receta.prototype, "nombre", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
-    __metadata("design:type", String)
-], Receta.prototype, "modo_preparo", void 0);
+], RecetaVariacion.prototype, "nombre", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
-], Receta.prototype, "activo", void 0);
+], RecetaVariacion.prototype, "activo", void 0);
 __decorate([
-    (0, typeorm_1.Column)({
-        type: 'varchar',
-        name: 'tipo_medida',
-        enum: ingrediente_entity_1.TipoMedida,
-        default: ingrediente_entity_1.TipoMedida.UNIDAD
-    }),
+    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
     __metadata("design:type", String)
-], Receta.prototype, "tipoMedida", void 0);
+], RecetaVariacion.prototype, "descripcion", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'calcular_cantidad', default: false }),
-    __metadata("design:type", Boolean)
-], Receta.prototype, "calcularCantidad", void 0);
+    (0, typeorm_1.Column)({ name: 'receta_id' }),
+    __metadata("design:type", Number)
+], RecetaVariacion.prototype, "recetaId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)('Receta', 'variaciones'),
+    (0, typeorm_1.JoinColumn)({ name: 'receta_id' }),
+    __metadata("design:type", Function)
+], RecetaVariacion.prototype, "receta", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'decimal', precision: 10, scale: 2, default: 0 }),
     __metadata("design:type", Number)
-], Receta.prototype, "cantidad", void 0);
+], RecetaVariacion.prototype, "costo", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)('RecetaItem', 'receta'),
+    (0, typeorm_1.OneToMany)('RecetaVariacionItem', 'variacion'),
     __metadata("design:type", Array)
-], Receta.prototype, "items", void 0);
-__decorate([
-    (0, typeorm_1.OneToMany)('RecetaVariacion', 'receta'),
-    __metadata("design:type", Array)
-], Receta.prototype, "variaciones", void 0);
-Receta = __decorate([
-    (0, typeorm_1.Entity)('producto_recetas')
-], Receta);
-exports.Receta = Receta;
-//# sourceMappingURL=receta.entity.js.map
+], RecetaVariacion.prototype, "items", void 0);
+RecetaVariacion = __decorate([
+    (0, typeorm_1.Entity)('producto_receta_variaciones')
+], RecetaVariacion);
+exports.RecetaVariacion = RecetaVariacion;
+//# sourceMappingURL=receta-variacion.entity.js.map

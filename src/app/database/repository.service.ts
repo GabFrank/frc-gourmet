@@ -25,6 +25,8 @@ import { Receta } from './entities/productos/receta.entity';
 import { RecetaItem } from './entities/productos/receta-item.entity';
 import { Ingrediente } from './entities/productos/ingrediente.entity';
 import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
+import { RecetaVariacion } from './entities/productos/receta-variacion.entity';
+import { RecetaVariacionItem } from './entities/productos/receta-variacion-item.entity';
 
 export interface LoginResult {
   success: boolean;
@@ -181,6 +183,18 @@ interface ElectronAPI {
   updateIngrediente: (ingredienteId: number, ingredienteData: any) => Promise<any>;
   deleteIngrediente: (ingredienteId: number) => Promise<any>;
   searchIngredientesByDescripcion: (searchText: string) => Promise<Ingrediente[]>;
+  // RecetaVariacion methods
+  getRecetaVariaciones: (recetaId: number) => Promise<RecetaVariacion[]>;
+  getRecetaVariacion: (variacionId: number) => Promise<RecetaVariacion>;
+  createRecetaVariacion: (variacionData: Partial<RecetaVariacion>) => Promise<RecetaVariacion>;
+  updateRecetaVariacion: (variacionId: number, variacionData: Partial<RecetaVariacion>) => Promise<any>;
+  deleteRecetaVariacion: (variacionId: number) => Promise<any>;
+  // RecetaVariacionItem methods
+  getRecetaVariacionItems: (variacionId: number) => Promise<RecetaVariacionItem[]>;
+  getRecetaVariacionItem: (variacionItemId: number) => Promise<RecetaVariacionItem>;
+  createRecetaVariacionItem: (variacionItemData: Partial<RecetaVariacionItem>) => Promise<RecetaVariacionItem>;
+  updateRecetaVariacionItem: (variacionItemId: number, variacionItemData: Partial<RecetaVariacionItem>) => Promise<any>;
+  deleteRecetaVariacionItem: (variacionItemId: number) => Promise<any>;
 }
 
 /**
@@ -798,5 +812,47 @@ export class RepositoryService {
 
   searchIngredientesByDescripcion(searchText: string): Observable<Ingrediente[]> {
     return from(this.api.searchIngredientesByDescripcion(searchText));
+  }
+
+  // RecetaVariacion methods
+  getRecetaVariaciones(recetaId: number): Observable<RecetaVariacion[]> {
+    return from(this.api.getRecetaVariaciones(recetaId));
+  }
+
+  getRecetaVariacion(variacionId: number): Observable<RecetaVariacion> {
+    return from(this.api.getRecetaVariacion(variacionId));
+  }
+
+  createRecetaVariacion(variacionData: Partial<RecetaVariacion>): Observable<RecetaVariacion> {
+    return from(this.api.createRecetaVariacion(variacionData));
+  }
+
+  updateRecetaVariacion(variacionId: number, variacionData: Partial<RecetaVariacion>): Observable<any> {
+    return from(this.api.updateRecetaVariacion(variacionId, variacionData));
+  }
+
+  deleteRecetaVariacion(variacionId: number): Observable<any> {
+    return from(this.api.deleteRecetaVariacion(variacionId));
+  }
+
+  // RecetaVariacionItem methods
+  getRecetaVariacionItems(variacionId: number): Observable<RecetaVariacionItem[]> {
+    return from(this.api.getRecetaVariacionItems(variacionId));
+  }
+
+  getRecetaVariacionItem(variacionItemId: number): Observable<RecetaVariacionItem> {
+    return from(this.api.getRecetaVariacionItem(variacionItemId));
+  }
+
+  createRecetaVariacionItem(variacionItemData: Partial<RecetaVariacionItem>): Observable<RecetaVariacionItem> {
+    return from(this.api.createRecetaVariacionItem(variacionItemData));
+  }
+
+  updateRecetaVariacionItem(variacionItemId: number, variacionItemData: Partial<RecetaVariacionItem>): Observable<any> {
+    return from(this.api.updateRecetaVariacionItem(variacionItemId, variacionItemData));
+  }
+
+  deleteRecetaVariacionItem(variacionItemId: number): Observable<any> {
+    return from(this.api.deleteRecetaVariacionItem(variacionItemId));
   }
 }

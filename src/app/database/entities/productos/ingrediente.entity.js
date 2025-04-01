@@ -81,6 +81,10 @@ __decorate([
     __metadata("design:type", Array)
 ], Ingrediente.prototype, "recetaItems", void 0);
 __decorate([
+    (0, typeorm_1.OneToMany)('RecetaVariacionItem', 'ingrediente'),
+    __metadata("design:type", Array)
+], Ingrediente.prototype, "variacionItems", void 0);
+__decorate([
     (0, typeorm_1.OneToMany)('IntercambioIngrediente', 'ingredienteOriginal'),
     __metadata("design:type", Array)
 ], Ingrediente.prototype, "intercambiosOrigen", void 0);

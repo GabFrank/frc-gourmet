@@ -2,6 +2,7 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import type { Receta } from './receta.entity';
 import type { RecetaItem } from './receta-item.entity';
+import type { RecetaVariacionItem } from './receta-variacion-item.entity';
 import type { IntercambioIngrediente } from './intercambio-ingrediente.entity';
 import type { Moneda } from '../financiero/moneda.entity';
 
@@ -61,6 +62,9 @@ export class Ingrediente extends BaseModel {
 
   @OneToMany('RecetaItem', 'ingrediente')
   recetaItems!: RecetaItem[];
+
+  @OneToMany('RecetaVariacionItem', 'ingrediente')
+  variacionItems!: RecetaVariacionItem[];
 
   @OneToMany('IntercambioIngrediente', 'ingredienteOriginal')
   intercambiosOrigen!: IntercambioIngrediente[];

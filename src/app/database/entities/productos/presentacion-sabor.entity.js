@@ -36,6 +36,15 @@ __decorate([
     __metadata("design:type", Function)
 ], PresentacionSabor.prototype, "sabor", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'receta_id', nullable: true }),
+    __metadata("design:type", Number)
+], PresentacionSabor.prototype, "recetaId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)('Receta', { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'receta_id' }),
+    __metadata("design:type", Function)
+], PresentacionSabor.prototype, "receta", void 0);
+__decorate([
     (0, typeorm_1.OneToMany)('PrecioVenta', 'presentacionSabor'),
     __metadata("design:type", Array)
 ], PresentacionSabor.prototype, "preciosVenta", void 0);

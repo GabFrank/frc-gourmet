@@ -35,7 +35,7 @@ import { CreateEditTipoPrecioComponent } from './create-edit-tipo-precio.compone
       </div>
 
       <div class="header-actions">
-        <h2>Tipos de Precio</h2>
+        <h2></h2>
         <button mat-raised-button color="primary" (click)="openCreateDialog()">
           <mat-icon>add</mat-icon>
           Nuevo Tipo de Precio
@@ -77,7 +77,7 @@ import { CreateEditTipoPrecioComponent } from './create-edit-tipo-precio.compone
         <!-- Actions Column -->
         <ng-container matColumnDef="acciones">
           <th mat-header-cell *matHeaderCellDef>Acciones</th>
-          <td mat-cell *matCellDef="let item">
+          <td mat-cell *matCellDef="let item" style="display: flex; justify-content: center; align-items: center;">
             <button mat-icon-button color="primary" (click)="editTipoPrecio(item)" matTooltip="Editar">
               <mat-icon>edit</mat-icon>
             </button>

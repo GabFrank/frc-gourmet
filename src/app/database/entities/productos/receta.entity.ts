@@ -1,6 +1,7 @@
 import { Column, Entity, OneToMany } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import type { RecetaItem } from './receta-item.entity';
+import type { RecetaVariacion } from './receta-variacion.entity';
 import { TipoMedida } from './ingrediente.entity';
 
 /**
@@ -33,4 +34,7 @@ export class Receta extends BaseModel {
 
   @OneToMany('RecetaItem', 'receta')
   items!: RecetaItem[];
+
+  @OneToMany('RecetaVariacion', 'receta')
+  variaciones!: RecetaVariacion[];
 }

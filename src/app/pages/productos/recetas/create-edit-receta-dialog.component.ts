@@ -31,7 +31,7 @@ interface RecetaItemViewModel {
   ingredienteId: number;
   cantidad: number;
   activo: boolean;
-  
+
   // Display values for template
   displayValues: {
     ingredienteName: string;
@@ -80,12 +80,12 @@ export class CreateEditRecetaDialogComponent implements OnInit {
   tipoMedidaOptions = Object.values(TipoMedida);
   monedas: Moneda[] = [];
   defaultMoneda?: Moneda;
-  
+
   // Pre-computed values for template
   defaultMonedaSimbolo: string = '$';
   totalCost: number = 0;
   costPerUnit: number = 0;
-  
+
   // Maps for display values
   ingredientNameMap: Map<number, string> = new Map();
   ingredientCostoMap: Map<number, number> = new Map();
@@ -108,7 +108,7 @@ export class CreateEditRecetaDialogComponent implements OnInit {
       cantidad: [0],
       activo: [true]
     });
-    
+
     // Listen for changes to recalculate costs
     this.recetaForm.get('cantidad')?.valueChanges.subscribe(() => {
       this.updateCalculatedValues();
@@ -151,7 +151,7 @@ export class CreateEditRecetaDialogComponent implements OnInit {
       this.monedas = await firstValueFrom(this.repositoryService.getMonedas());
       // Find default moneda (principal == true)
       this.defaultMoneda = this.monedas.find(m => m.principal);
-      
+
       // Set default moneda símbolo for template
       if (this.defaultMoneda) {
         this.defaultMonedaSimbolo = this.defaultMoneda.simbolo;
@@ -182,15 +182,15 @@ export class CreateEditRecetaDialogComponent implements OnInit {
     try {
       this.loading = true;
       const recetaItems = await firstValueFrom(this.repositoryService.getRecetaItems(this.recetaId));
-      
+
       if (recetaItems.length > 0) {
         // Load ingredients data for these items
         const ingredientIds = recetaItems.map((item: RecetaItem) => item.ingredienteId);
         await this.loadIngredientesByIds(ingredientIds);
-        
+
         // Convert to view models with display values
         this.recetaItems = recetaItems.map((item: RecetaItem) => this.createRecetaItemViewModel(item));
-        
+
         // Update calculated values
         this.updateCalculatedValues();
       } else {
@@ -210,12 +210,12 @@ export class CreateEditRecetaDialogComponent implements OnInit {
     const ingredienteName = ingrediente ? ingrediente.descripcion : 'Desconocido';
     const monedaSimbolo = ingrediente?.moneda?.simbolo || this.defaultMonedaSimbolo;
     const totalCosto = this.calculateIngredienteTotalCosto(item, ingrediente);
-    
+
     // Store in maps for backward compatibility
     this.ingredientNameMap.set(item.ingredienteId, ingredienteName);
     this.ingredientMonedaSimboloMap.set(item.ingredienteId, monedaSimbolo);
     this.ingredientTotalCostoMap.set(item.ingredienteId, totalCosto);
-    
+
     // Create and return the view model with type assertion
     return {
       id: item.id,
@@ -233,15 +233,15 @@ export class CreateEditRecetaDialogComponent implements OnInit {
 
   private calculateIngredienteTotalCosto(item: RecetaItem, ingrediente?: Ingrediente): number {
     if (!ingrediente) return 0;
-    
+
     let costo = ingrediente.costo || 0;
-    
+
     // If ingredient is based on a recipe, calculate the cost
     if (ingrediente.isProduccion && ingrediente.recetaId) {
       // For production ingredients, we use the pre-calculated cost
       costo = ingrediente.costo || 0;
     }
-    
+
     return costo * (item.cantidad || 0);
   }
 
@@ -281,7 +281,7 @@ export class CreateEditRecetaDialogComponent implements OnInit {
         cantidadControl.enable();
       }
     }
-    
+
     // Always update calculated values
     this.updateCalculatedValues();
   }
@@ -299,7 +299,7 @@ export class CreateEditRecetaDialogComponent implements OnInit {
     // Update the cantidad field
     this.recetaForm.get('cantidad')?.setValue(totalCantidad);
   }
-  
+
   // Calculate and update all pre-computed values for the template
   updateCalculatedValues(): void {
     // Calculate total cost
@@ -307,7 +307,7 @@ export class CreateEditRecetaDialogComponent implements OnInit {
       (total, item) => total + item.displayValues.totalCosto,
       0
     );
-    
+
     // Calculate cost per unit
     const cantidad = this.recetaForm.get('cantidad')?.value || 0;
     this.costPerUnit = cantidad > 0 ? this.totalCost / cantidad : 0;
@@ -323,7 +323,7 @@ export class CreateEditRecetaDialogComponent implements OnInit {
 
     try {
       const formValues = this.recetaForm.value;
-      
+
       // If calcularCantidad is true, ensure we have the latest total
       if (formValues.calcularCantidad) {
         this.updateCantidadTotal();
@@ -385,7 +385,7 @@ export class CreateEditRecetaDialogComponent implements OnInit {
 
     try {
       const formValues = this.recetaForm.value;
-      
+
       // If calcularCantidad is true, ensure we have the latest total
       if (formValues.calcularCantidad) {
         this.updateCantidadTotal();
@@ -458,7 +458,7 @@ export class CreateEditRecetaDialogComponent implements OnInit {
       cantidad: item.cantidad,
       activo: item.activo
     } as unknown as RecetaItem;
-    
+
     this.openRecetaItemDialog(recetaItem);
   }
 
@@ -501,7 +501,7 @@ export class CreateEditRecetaDialogComponent implements OnInit {
   getIngredienteCosto(ingredienteId: number): number {
     return this.ingredientCostoMap.get(ingredienteId) || 0;
   }
-  
+
   getIngredienteTotalCosto(ingredienteId: number): number {
     return this.ingredientTotalCostoMap.get(ingredienteId) || 0;
   }
@@ -522,11 +522,11 @@ export class CreateEditRecetaDialogComponent implements OnInit {
         cantidad: item.cantidad,
         activo: item.activo
       } as unknown as RecetaItem;
-      
+
       // Create a new view model with up-to-date display values
       return this.createRecetaItemViewModel(recetaItemData);
     });
-    
+
     // Update calculated values
     this.updateCalculatedValues();
   }

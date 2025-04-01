@@ -32,9 +32,9 @@ export class TabsService {
   constructor() {
     // initialize with @ListRecetasComponent
     // this.addTab('Ingredientes', ListIngredientesComponent, { source: 'navigation' }, 'ingredientes-tab', true);
-    // this.addTab('Recetas', ListRecetasComponent, { source: 'navigation' }, 'recetas-tab', true);
+    this.addTab('Recetas', ListRecetasComponent, { source: 'navigation' }, 'recetas-tab', true);
     //open edit producto with id 1,  use addTab with data
-    this.addTab('Editar Producto', CreateEditProductoComponent, { productoId: 1 });
+    // this.addTab('Editar Producto', CreateEditProductoComponent, { productoId: 2 });
   }
 
   /**

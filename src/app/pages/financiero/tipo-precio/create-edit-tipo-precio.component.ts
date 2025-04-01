@@ -149,6 +149,9 @@ export class CreateEditTipoPrecioComponent {
     if (this.tipoPrecioForm.invalid || this.isLoading) return;
 
     this.isLoading = true;
+    //get descripcion and set uppercase
+    const descripcion = this.tipoPrecioForm.get('descripcion')?.value.toUpperCase();
+    this.tipoPrecioForm.get('descripcion')?.setValue(descripcion);
     const formValue = this.tipoPrecioForm.value;
 
     try {

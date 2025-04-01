@@ -49,6 +49,8 @@ const presentacion_sabor_entity_1 = require("./entities/productos/presentacion-s
 const ingrediente_entity_1 = require("./entities/productos/ingrediente.entity");
 const receta_entity_1 = require("./entities/productos/receta.entity");
 const receta_item_entity_1 = require("./entities/productos/receta-item.entity");
+const receta_variacion_entity_1 = require("./entities/productos/receta-variacion.entity");
+const receta_variacion_item_entity_1 = require("./entities/productos/receta-variacion-item.entity");
 const combo_entity_1 = require("./entities/productos/combo.entity");
 const combo_item_entity_1 = require("./entities/productos/combo-item.entity");
 const intercambio_ingrediente_entity_1 = require("./entities/productos/intercambio-ingrediente.entity");
@@ -87,6 +89,8 @@ function getDataSourceOptions(userDataPath) {
             ingrediente_entity_1.Ingrediente,
             receta_entity_1.Receta,
             receta_item_entity_1.RecetaItem,
+            receta_variacion_entity_1.RecetaVariacion,
+            receta_variacion_item_entity_1.RecetaVariacionItem,
             combo_entity_1.Combo,
             combo_item_entity_1.ComboItem,
             intercambio_ingrediente_entity_1.IntercambioIngrediente

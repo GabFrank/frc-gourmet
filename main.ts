@@ -37,6 +37,8 @@ import { Receta } from './src/app/database/entities/productos/receta.entity';
 import { RecetaItem } from './src/app/database/entities/productos/receta-item.entity';
 import { Ingrediente } from './src/app/database/entities/productos/ingrediente.entity';
 import { TipoPrecio } from './src/app/database/entities/financiero/tipo-precio.entity';
+import { RecetaVariacion } from './src/app/database/entities/productos/receta-variacion.entity';
+import { RecetaVariacionItem } from './src/app/database/entities/productos/receta-variacion-item.entity';
 
 let win: any;
 let dbService: DatabaseService;
@@ -2854,6 +2856,133 @@ ipcMain.handle('searchIngredientesByDescripcion', async (event, searchText) => {
       .getMany();
   } catch (error) {
     console.error('Error searching ingredientes:', error);
+    throw error;
+  }
+});
+
+// RecetaVariacion handlers
+ipcMain.handle('getRecetaVariaciones', async (_event: any, recetaId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const variacionRepository = dataSource.getRepository(RecetaVariacion);
+    return await variacionRepository.find({
+      where: { recetaId },
+      order: { nombre: 'ASC' }
+    });
+  } catch (error) {
+    console.error(`Error getting variations for recipe ID ${recetaId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('getRecetaVariacion', async (_event: any, variacionId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const variacionRepository = dataSource.getRepository(RecetaVariacion);
+    return await variacionRepository.findOne({ where: { id: variacionId } });
+  } catch (error) {
+    console.error(`Error getting variation with ID ${variacionId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('createRecetaVariacion', async (_event: any, variacionData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const variacionRepository = dataSource.getRepository(RecetaVariacion);
+    const newVariacion = variacionRepository.create(variacionData);
+    return await variacionRepository.save(newVariacion);
+  } catch (error) {
+    console.error('Error creating recipe variation:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('updateRecetaVariacion', async (_event: any, variacionId: number, variacionData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const variacionRepository = dataSource.getRepository(RecetaVariacion);
+    await variacionRepository.update(variacionId, variacionData);
+    return await variacionRepository.findOne({ where: { id: variacionId } });
+  } catch (error) {
+    console.error(`Error updating recipe variation with ID ${variacionId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('deleteRecetaVariacion', async (_event: any, variacionId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const variacionRepository = dataSource.getRepository(RecetaVariacion);
+    const result = await variacionRepository.delete(variacionId);
+    return result;
+  } catch (error) {
+    console.error(`Error deleting recipe variation with ID ${variacionId}:`, error);
+    throw error;
+  }
+});
+
+// RecetaVariacionItem handlers
+ipcMain.handle('getRecetaVariacionItems', async (_event: any, variacionId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const variacionItemRepository = dataSource.getRepository(RecetaVariacionItem);
+    return await variacionItemRepository.find({
+      where: { variacionId },
+      relations: ['ingrediente'],
+    });
+  } catch (error) {
+    console.error(`Error getting items for recipe variation ID ${variacionId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('getRecetaVariacionItem', async (_event: any, variacionItemId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const variacionItemRepository = dataSource.getRepository(RecetaVariacionItem);
+    return await variacionItemRepository.findOne({
+      where: { id: variacionItemId },
+      relations: ['ingrediente'],
+    });
+  } catch (error) {
+    console.error(`Error getting recipe variation item with ID ${variacionItemId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('createRecetaVariacionItem', async (_event: any, variacionItemData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const variacionItemRepository = dataSource.getRepository(RecetaVariacionItem);
+    const newVariacionItem = variacionItemRepository.create(variacionItemData);
+    return await variacionItemRepository.save(newVariacionItem);
+  } catch (error) {
+    console.error('Error creating recipe variation item:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('updateRecetaVariacionItem', async (_event: any, variacionItemId: number, variacionItemData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const variacionItemRepository = dataSource.getRepository(RecetaVariacionItem);
+    await variacionItemRepository.update(variacionItemId, variacionItemData);
+    return await variacionItemRepository.findOne({ where: { id: variacionItemId } });
+  } catch (error) {
+    console.error(`Error updating recipe variation item with ID ${variacionItemId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('deleteRecetaVariacionItem', async (_event: any, variacionItemId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const variacionItemRepository = dataSource.getRepository(RecetaVariacionItem);
+    const result = await variacionItemRepository.delete(variacionItemId);
+    return result;
+  } catch (error) {
+    console.error(`Error deleting recipe variation item with ID ${variacionItemId}:`, error);
     throw error;
   }
 });

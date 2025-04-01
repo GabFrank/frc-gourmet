@@ -25,6 +25,8 @@ import { PresentacionSabor } from './entities/productos/presentacion-sabor.entit
 import { Ingrediente } from './entities/productos/ingrediente.entity';
 import { Receta } from './entities/productos/receta.entity';
 import { RecetaItem } from './entities/productos/receta-item.entity';
+import { RecetaVariacion } from './entities/productos/receta-variacion.entity';
+import { RecetaVariacionItem } from './entities/productos/receta-variacion-item.entity';
 import { Combo } from './entities/productos/combo.entity';
 import { ComboItem } from './entities/productos/combo-item.entity';
 import { IntercambioIngrediente } from './entities/productos/intercambio-ingrediente.entity';
@@ -64,6 +66,8 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       Ingrediente,
       Receta,
       RecetaItem,
+      RecetaVariacion,
+      RecetaVariacionItem,
       Combo,
       ComboItem,
       IntercambioIngrediente
