@@ -26,6 +26,10 @@ __decorate([
     __metadata("design:type", Boolean)
 ], RecetaVariacion.prototype, "activo", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ default: false }),
+    __metadata("design:type", Boolean)
+], RecetaVariacion.prototype, "principal", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: 'text', nullable: true }),
     __metadata("design:type", String)
 ], RecetaVariacion.prototype, "descripcion", void 0);

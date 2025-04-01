@@ -513,6 +513,11 @@
       Restablecer
     </button>
 
+    <button mat-raised-button *ngIf="isEditing" color="warn" (click)="deleteProducto()" [disabled]="isLoading" class="action-button secondary-action" matTooltip="Eliminar este producto">
+      <mat-icon>delete</mat-icon>
+      Eliminar
+    </button>
+
     <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="productoForm.invalid || isLoading" class="action-button primary-action">
       <mat-spinner *ngIf="isLoading" diameter="20" class="spinner-button"></mat-spinner>
       <span *ngIf="!isLoading">

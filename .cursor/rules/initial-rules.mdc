@@ -2,8 +2,6 @@
 description: read this rules before begin the work
 globs: 
 ---
-Electron + SQLite + TypeORM project:
-
 Project Context
 
 Overview:
@@ -17,14 +15,17 @@ Never call functions directly from your HTML templates. Angular evaluates these 
 String Handling Consistency
 
 Enforce Uppercase Storage:
-Always store strings in uppercase to maintain consistency across the application. Only deviate from this rule if the user explicitly specifies a different format. This helps standars throughout the codebase.
+Always store strings in uppercase to maintain consistency across the application. Only deviate from this rule if the user explicitly specifies a different format. This helps standardize data handling and comparisons throughout the codebase.
 
-Managing TypeScript and JavaScript Fiways modify the TypeScript (.ts) files, which are compiled into JavaScript (.js). Avoid editing generated .js files directly, as any changes will be overwritten during the next compilation. If a situation arises where both need editing, ensure they remain in sync.
+Managing TypeScript and JavaScript Files
+
+Source of Truth:
+Always modify the TypeScript (.ts) files, which are compiled into JavaScript (.js). Avoid editing generated .js files directly, as any changes will be overwritten during the next compilation. If a situation arises where both need editing, ensure they remain in sync.
 
 Angular Module Organization
 
 Reuse Existing Modules:
-Do not create a new Angular module for each new component unless specifically requested. Instead, integrate new components into the closest existing module along the project’s directory structure. This maintains a clean and manageable module hierarchy.
+Do not create a new Angular module for each new component unless specifically requested.. Instead, integrate new components into the closest existing module along the project’s directory structure. This maintains a clean and manageable module hierarchy.
 
 Filter Form Implementation
 
@@ -68,3 +69,24 @@ New Component Structure
 
 File Organization:
 For any new component, always create the associated .ts (logic), .html (template), and .scss (styles) files. This modular approach ensures that the component's functionality, presentation, and styling are cleanly separated and maintainable.
+
+Entity-Based Component Naming Conventions
+
+Consistent Naming Strategy:
+When creating a new component based on an entity, follow these naming rules to maintain clarity and uniformity across the project:
+
+List Component: Name the component as list-entity, where entity is replaced with the entity's name in lowercase (e.g., list-user for a User entity).
+
+Create/Edit Component: If the entity requires a component for creating a new record or updating an existing one, name it create-edit-entity (e.g., create-edit-product for a Product entity).
+
+Dialog Components: If the component is intended to function as a dialog, append dialog to the end of the name (e.g., 
+create-edit-product-dialog).
+
+
+Number pipe format: when formating a number pipe always use 1.0-2 format
+
+
+
+
+
+

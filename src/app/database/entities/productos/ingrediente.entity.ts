@@ -5,6 +5,7 @@ import type { RecetaItem } from './receta-item.entity';
 import type { RecetaVariacionItem } from './receta-variacion-item.entity';
 import type { IntercambioIngrediente } from './intercambio-ingrediente.entity';
 import type { Moneda } from '../financiero/moneda.entity';
+import type { RecetaVariacion } from './receta-variacion.entity';
 
 /**
  * Tipo de medida para los ingredientes
@@ -49,6 +50,13 @@ export class Ingrediente extends BaseModel {
   @ManyToOne('Receta', { nullable: true })
   @JoinColumn({ name: 'receta_id' })
   receta?: Receta;
+
+  @Column({ name: 'variacion_id', nullable: true })
+  variacionId?: number;
+
+  @ManyToOne('RecetaVariacion', { nullable: true })
+  @JoinColumn({ name: 'variacion_id' })
+  variacion?: RecetaVariacion;
 
   @Column({ name: 'receta_cantidad', type: 'decimal', precision: 10, scale: 2, default: 0, nullable: true })
   recetaCantidad?: number;

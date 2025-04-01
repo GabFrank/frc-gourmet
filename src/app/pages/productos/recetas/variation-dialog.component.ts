@@ -74,7 +74,8 @@ export class VariationDialogComponent implements OnInit {
     this.variationForm = this.fb.group({
       nombre: [data.variacion.nombre, Validators.required],
       descripcion: [data.variacion.descripcion || ''],
-      activo: [data.variacion.activo]
+      activo: [data.variacion.activo],
+      principal: [data.variacion.principal || false]
     });
 
     this.items = [...data.variacionItems];
@@ -265,25 +266,55 @@ export class VariationDialogComponent implements OnInit {
     }
 
     this.loading = true;
-
     try {
       const formValues = this.variationForm.value;
-      
-      // Update the variation
-      await firstValueFrom(
-        this.repositoryService.updateRecetaVariacion(this.data.variacion.id, {
-          nombre: formValues.nombre.toUpperCase(),
-          descripcion: formValues.descripcion ? formValues.descripcion.toUpperCase() : '',
-          activo: formValues.activo,
+      const updateData: Partial<RecetaVariacion> = {
+        nombre: formValues.nombre.toUpperCase(),
+        descripcion: formValues.descripcion ? formValues.descripcion.toUpperCase() : null,
+        activo: formValues.activo,
+        principal: formValues.principal
+      };
+
+      let result: RecetaVariacion;
+
+      // Check if we're setting this variation as principal and another one is already principal
+      if (formValues.principal && !this.data.variacion.principal) {
+        // Get all variations for this recipe to find the current principal
+        const allVariations = await firstValueFrom(
+          this.repositoryService.getRecetaVariaciones(this.data.variacion.recetaId)
+        );
+        
+        // Find current principal variation
+        const currentPrincipal = allVariations.find(v => v.principal && v.id !== this.data.variacion.id);
+        
+        // If there's a current principal, update it to not be principal
+        if (currentPrincipal) {
+          await firstValueFrom(
+            this.repositoryService.updateRecetaVariacion(currentPrincipal.id, { principal: false })
+          );
+        }
+      }
+
+      // Check if this is a new variation or an update
+      if (this.data.variacion.id === 0) {
+        // Creating a new variation
+        const newVariationData: Partial<RecetaVariacion> = {
+          ...updateData,
+          recetaId: this.data.variacion.recetaId,
           costo: this.totalCost
-        })
-      );
-      
-      this.snackBar.open('Variación actualizada exitosamente', 'Cerrar', { duration: 3000 });
+        };
+        
+        result = await firstValueFrom(this.repositoryService.createRecetaVariacion(newVariationData));
+      } else {
+        // Updating existing variation
+        updateData.costo = this.totalCost;
+        result = await firstValueFrom(this.repositoryService.updateRecetaVariacion(this.data.variacion.id, updateData));
+      }
+
       this.dialogRef.close(true);
     } catch (error) {
       console.error('Error saving variation:', error);
-      this.snackBar.open('Error al guardar variación', 'Cerrar', { duration: 3000 });
+      this.snackBar.open('Error al guardar la variación', 'Cerrar', { duration: 3000 });
     } finally {
       this.loading = false;
     }

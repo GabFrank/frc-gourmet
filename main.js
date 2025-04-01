@@ -1729,16 +1729,37 @@ ipcMain.handle('deleteProducto', async (_event, productoId) => {
     try {
         const dataSource = dbService.getDataSource();
         const productoRepository = dataSource.getRepository(producto_entity_1.Producto);
+        const presentacionRepository = dataSource.getRepository(presentacion_entity_1.Presentacion);
         // Find the producto to delete
         const producto = await productoRepository.findOneBy({ id: productoId });
         if (!producto) {
             throw new Error('Producto not found');
         }
-        // Set as inactive instead of deleting
-        producto.activo = false;
-        // Save the changes
-        await productoRepository.save(producto);
-        return { success: true };
+        try {
+            // First, find all related presentaciones
+            const presentaciones = await presentacionRepository.find({
+                where: { productoId: productoId }
+            });
+            // Delete all related presentaciones first
+            if (presentaciones.length > 0) {
+                console.log(`Deleting ${presentaciones.length} presentaciones for producto ${productoId}`);
+                await presentacionRepository.remove(presentaciones);
+            }
+            // Now attempt to delete the product from the database
+            await productoRepository.remove(producto);
+            console.log(`Producto with ID ${productoId} deleted successfully`);
+            return { success: true, deleted: true };
+        }
+        catch (error) {
+            console.log('Could not delete producto, setting as inactive instead:', error);
+            // If deletion failed (likely due to other foreign key constraints),
+            // set as inactive instead
+            producto.activo = false;
+            await productoRepository.save(producto);
+            // Throw a specific error to indicate why deletion failed
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            throw new Error(`No se pudo eliminar debido a restricciones: ${errorMessage}`);
+        }
     }
     catch (error) {
         console.error('Error deleting producto:', error);

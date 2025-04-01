@@ -1,4 +1,4 @@
-<h2 mat-dialog-title>Editar Variación</h2>
+<h2 mat-dialog-title>{{ data.variacion.id === 0 ? 'Crear' : 'Editar' }} Variación</h2>
 
 <div mat-dialog-content>
   <form [formGroup]="variationForm">
@@ -19,9 +19,13 @@
       </mat-form-field>
     </div>
 
-    <div class="form-row">
+    <div class="form-row checkbox-row">
       <mat-checkbox formControlName="activo" color="primary">
         Activo
+      </mat-checkbox>
+
+      <mat-checkbox formControlName="principal" color="primary">
+        Principal
       </mat-checkbox>
     </div>
   </form>

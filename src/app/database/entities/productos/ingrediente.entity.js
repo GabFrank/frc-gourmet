@@ -64,6 +64,15 @@ __decorate([
     __metadata("design:type", Function)
 ], Ingrediente.prototype, "receta", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'variacion_id', nullable: true }),
+    __metadata("design:type", Number)
+], Ingrediente.prototype, "variacionId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)('RecetaVariacion', { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'variacion_id' }),
+    __metadata("design:type", Function)
+], Ingrediente.prototype, "variacion", void 0);
+__decorate([
     (0, typeorm_1.Column)({ name: 'receta_cantidad', type: 'decimal', precision: 10, scale: 2, default: 0, nullable: true }),
     __metadata("design:type", Number)
 ], Ingrediente.prototype, "recetaCantidad", void 0);

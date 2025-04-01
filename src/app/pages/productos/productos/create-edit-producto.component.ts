@@ -521,6 +521,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
         this.recipeSuggestedPrice = 0;
       }
     });
+
   }
 
   // Helper method to update state when hasVariaciones changes
@@ -889,7 +890,10 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       if (deletePromises.length > 0) {
         await Promise.all(deletePromises);
       }
-
+      //set nombre, nombreAlternativo, observacion to uppercase
+      formValues.nombre = formValues.nombre?.toUpperCase();
+      formValues.nombreAlternativo = formValues.nombreAlternativo?.toUpperCase();
+      formValues.observacion = formValues.observacion?.toUpperCase();
       if (this.isEditing && this.producto?.id) {
         // Update existing product
         const updatedProductData = {
@@ -1544,5 +1548,83 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
    */
   hasMainImage(): boolean {
     return this.productImages.some(img => img.isMain && !img.toDelete);
+  }
+
+  /**
+   * Attempts to delete the product. If database restrictions exist,
+   * it will set the product as inactive instead of deleting it.
+   */
+  async deleteProducto(): Promise<void> {
+    if (!this.producto || !this.producto.id) {
+      this.snackBar.open('No hay producto para eliminar', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    // Store reference to producto to use within closure
+    const producto = this.producto;
+
+    // Confirm deletion first
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      width: '400px',
+      data: {
+        title: 'Confirmar Eliminación',
+        message: `¿Está seguro que desea eliminar el producto "${producto.nombre}"?`
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(async (result) => {
+      if (!result) return;
+
+      try {
+        this.isLoading = true;
+        await firstValueFrom(this.repositoryService.deleteProducto(producto.id));
+        
+        this.isLoading = false;
+        this.snackBar.open('Producto eliminado exitosamente', 'Cerrar', { duration: 3000 });
+        
+        // Close the current tab after successful deletion
+        this.goBack();
+      } catch (error: any) {
+        console.error('Error deleting producto:', error);
+        
+        // Check if error is due to database restrictions (foreign key constraint, etc.)
+        // The exact error message format depends on your backend implementation
+        const errorMessage = error?.message || '';
+        const hasRestrictions = 
+          errorMessage.includes('constraint') || 
+          errorMessage.includes('restrict') || 
+          errorMessage.includes('reference') ||
+          errorMessage.includes('FOREIGN KEY');
+
+        if (hasRestrictions) {
+          this.snackBar.open(
+            'No se puede eliminar el producto debido a restricciones en la base de datos. Se establecerá como inactivo.',
+            'Cerrar',
+            { duration: 5000 }
+          );
+          
+          // Set product as inactive instead
+          try {
+            await firstValueFrom(this.repositoryService.updateProducto(producto.id, { activo: false }));
+            
+            // Update local product object if it still exists
+            if (this.producto) {
+              this.producto.activo = false;
+              this.productoForm.get('activo')?.setValue(false);
+            }
+            
+            this.snackBar.open('Producto marcado como inactivo', 'Cerrar', { duration: 3000 });
+          } catch (updateError) {
+            console.error('Error setting product as inactive:', updateError);
+            this.snackBar.open('Error al marcar producto como inactivo', 'Cerrar', { duration: 3000 });
+          }
+        } else {
+          // Other error
+          this.snackBar.open('Error al eliminar producto: ' + (error?.message || 'Error desconocido'), 'Cerrar', { duration: 3000 });
+        }
+        
+        this.isLoading = false;
+      }
+    });
   }
 }

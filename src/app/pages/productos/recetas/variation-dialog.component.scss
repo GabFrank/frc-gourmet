@@ -65,4 +65,10 @@ th.mat-header-cell {
 
 td.mat-column-ingrediente, th.mat-column-ingrediente {
   text-align: start;
+}
+
+.checkbox-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
 } 

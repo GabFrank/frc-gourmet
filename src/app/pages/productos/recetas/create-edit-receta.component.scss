@@ -36,7 +36,7 @@ button mat-spinner {
 .no-data {
   text-align: center;
   padding: 16px;
-  color: rgba(0, 0, 0, 0.54);
+  color: var(--mat-text-secondary-color, rgba(0, 0, 0, 0.54));
 }
 
 /* New styles for table layout */
@@ -56,7 +56,7 @@ button mat-spinner {
 
 .inactive-variation {
   opacity: 0.7;
-  border-left: 4px solid #c62828;
+  border-left: 4px solid var(--mat-warn-color, #c62828);
 }
 
 .variation-header {
@@ -77,7 +77,11 @@ button mat-spinner {
 .variation-description {
   margin: 8px 0 0;
   font-size: 14px;
-  color: rgba(0, 0, 0, 0.6);
+  color: var(--mat-text-secondary-color, rgba(0, 0, 0, 0.6));
+}
+
+.theme-text {
+  color: var(--mat-text-color, inherit);
 }
 
 .variation-actions {
@@ -87,12 +91,38 @@ button mat-spinner {
 
 .ingredients-table {
   width: 100%;
+  
+  // Improve table column alignment
+  .mat-column-ingrediente {
+    text-align: left;
+    padding-left: 16px;
+  }
+  
+  .mat-column-cantidad,
+  .mat-column-costo_unitario,
+  .mat-column-costo_total {
+    text-align: right;
+    padding-right: 16px;
+  }
+  
+  .mat-column-activo {
+    text-align: center;
+  }
+  
+  .mat-column-acciones {
+    text-align: center;
+    width: 80px; // Fixed width for actions column
+  }
+  
+  th.mat-header-cell {
+    font-weight: 500;
+  }
 }
 
 .no-ingredients {
   padding: 16px;
   text-align: center;
-  color: rgba(0, 0, 0, 0.54);
+  color: var(--mat-text-secondary-color, rgba(0, 0, 0, 0.54));
   font-style: italic;
 }
 
@@ -104,31 +134,37 @@ button mat-spinner {
 
 .variation-cost-summary h4 {
   margin: 0;
-  color: #2e7d32;
+  color: var(--mat-primary-color, #2e7d32);
   font-weight: 500;
+}
+
+.variation-cost-summary .suggested-price {
+  margin-top: 8px;
+  color: #1976d2; /* Different color for the suggested price */
+  font-style: italic;
 }
 
 .inactive-row {
   opacity: 0.6;
   text-decoration: line-through;
-  background-color: #ffebee;
+  background-color: var(--mat-warn-lighter-color, #ffebee);
 }
 
 .status-badge {
-  font-size: 12px;
   padding: 4px 8px;
   border-radius: 4px;
-  margin-left: 8px;
+  font-size: 12px;
+  text-transform: uppercase;
 }
 
 .active {
-  background-color: #e6f7e6;
-  color: #2e7d32;
+  background-color: rgba(76, 175, 80, 0.2);
+  color: #4caf50;
 }
 
 .inactive {
-  background-color: #ffebee;
-  color: #c62828;
+  background-color: rgba(244, 67, 54, 0.2);
+  color: #f44336;
 }
 
 /* Combined row styles */
@@ -136,7 +172,6 @@ button mat-spinner {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 30px;
 }
 
 .field-tipo-medida {
@@ -151,5 +186,89 @@ button mat-spinner {
   flex: 1;
   display: flex;
   align-items: center;
+  justify-content: center;
   height: 52px; /* Match approximate height of mat-form-field */
+  padding-bottom: 30px; /* Move the padding from row to this element */
+}
+
+/* New Variation Form (Compact) */
+.new-variation-form {
+  margin-bottom: 24px;
+  border: 1px solid var(--mat-divider-color, rgba(0, 0, 0, 0.12));
+  border-radius: 4px;
+  padding: 16px;
+  background-color: var(--mat-background-hover-color, rgba(0, 0, 0, 0.03));
+}
+
+.compact-form-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.compact-form-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.field-nombre {
+  flex: 2;
+}
+
+.field-descripcion {
+  flex: 3;
+}
+
+.field-activo.compact {
+  flex: 1;
+  height: auto;
+  padding-bottom: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.field-principal.compact {
+  flex: 1;
+  height: auto;
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.field-principal mat-hint {
+  font-size: 12px;
+  margin-top: 4px;
+  color: var(--mat-primary-color, #1976d2);
+}
+
+.compact-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Utility classes for text alignment */
+.text-left {
+  text-align: left !important;
+}
+
+.text-center {
+  text-align: center !important;
+}
+
+.text-right {
+  text-align: right !important;
+}
+
+.principal-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  background-color: rgba(63, 81, 181, 0.2);
+  color: #3f51b5;
+  margin-left: 8px;
 } 

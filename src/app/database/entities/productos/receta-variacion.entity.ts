@@ -14,6 +14,9 @@ export class RecetaVariacion extends BaseModel {
   @Column({ default: true })
   activo!: boolean;
 
+  @Column({ default: false })
+  principal!: boolean;
+
   @Column({ type: 'text', nullable: true })
   descripcion?: string;
 

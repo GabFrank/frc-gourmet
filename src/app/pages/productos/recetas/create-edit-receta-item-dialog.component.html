@@ -1,0 +1,78 @@
+<div class="dialog-content">
+  <h2 mat-dialog-title>{{ data.editMode ? 'Editar' : 'Nuevo' }} Ingrediente</h2>
+
+  <div *ngIf="loading" class="loading-overlay">
+    <mat-spinner diameter="50"></mat-spinner>
+  </div>
+
+  <mat-dialog-content>
+    <form [formGroup]="recetaItemForm">
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Buscar Ingrediente</mat-label>
+          <input type="text"
+                 placeholder="Buscar ingrediente..."
+                 matInput
+                 formControlName="ingredienteSearch"
+                 [matAutocomplete]="auto">
+          <mat-icon matSuffix *ngIf="searchLoading" class="search-loading-icon">sync</mat-icon>
+          <mat-autocomplete #auto="matAutocomplete"
+                           [displayWith]="displayIngrediente"
+                           (optionSelected)="onIngredienteSelected($event)">
+            <mat-option *ngIf="searchLoading" disabled>
+              <span class="searching-text">Buscando...</span>
+            </mat-option>
+            <mat-option *ngFor="let ingrediente of filteredIngredientes | async" [value]="ingrediente">
+              <div class="option-content">
+                <span class="ingredient-id-name">{{ ingrediente.optionText }}</span>
+                <span class="option-details">Medida: {{ ingrediente.medidaText }}</span>
+              </div>
+            </mat-option>
+            <mat-option *ngIf="(filteredIngredientes | async)?.length === 0 && !searchLoading" disabled>
+              <span class="no-results-text">No se encontraron ingredientes</span>
+            </mat-option>
+          </mat-autocomplete>
+          <mat-error *ngIf="recetaItemForm.get('ingredienteSearch')?.hasError('required')">
+            Este campo es obligatorio
+          </mat-error>
+        </mat-form-field>
+      </div>
+
+      <!-- Hidden field to store the actual ingredienteId -->
+      <input type="hidden" formControlName="ingredienteId">
+
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Cantidad</mat-label>
+          <input matInput type="number" formControlName="cantidad" min="0.01" step="0.01">
+          <mat-error *ngIf="recetaItemForm.get('cantidad')?.hasError('required')">
+            Este campo es obligatorio
+          </mat-error>
+          <mat-error *ngIf="recetaItemForm.get('cantidad')?.hasError('min')">
+            La cantidad debe ser mayor a 0
+          </mat-error>
+          <span matSuffix *ngIf="selectedIngrediente">
+            {{ unidadSuffix }}
+          </span>
+        </mat-form-field>
+      </div>
+
+      <div class="form-row checkbox-row">
+        <mat-checkbox formControlName="activo">Activo</mat-checkbox>
+      </div>
+    </form>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button [mat-dialog-close]="false">Cancelar</button>
+    <button
+      mat-raised-button
+      color="primary"
+      (click)="save()"
+      [disabled]="recetaItemForm.invalid || loading"
+    >
+      <mat-spinner *ngIf="loading" diameter="20" class="button-spinner"></mat-spinner>
+      <span *ngIf="!loading">{{ data.editMode ? 'Actualizar' : 'Guardar' }}</span>
+    </button>
+  </mat-dialog-actions>
+</div>

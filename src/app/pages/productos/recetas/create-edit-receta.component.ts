@@ -25,7 +25,11 @@ import { RecetaVariacionItem } from '../../../database/entities/productos/receta
 import { Ingrediente, TipoMedida } from '../../../database/entities/productos/ingrediente.entity';
 import { firstValueFrom, Subscription } from 'rxjs';
 import { VariationDialogComponent } from './variation-dialog.component';
+import { CreateEditRecetaVariacionItemComponent } from './create-edit-receta-variacion-item/create-edit-receta-variacion-item.component';
 import { Moneda } from '../../../database/entities/financiero/moneda.entity';
+import { MatMenuModule } from '@angular/material/menu';
+import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { CopyVariationDialogComponent } from './copy-variation-dialog.component';
 
 interface DialogData {
   editMode: boolean;
@@ -54,7 +58,10 @@ interface DialogData {
     MatDividerModule,
     MatBadgeModule,
     MatListModule,
-    MatCardModule
+    MatCardModule,
+    MatMenuModule,
+    ConfirmationDialogComponent,
+    CopyVariationDialogComponent
   ],
   providers: [
     FormBuilder
@@ -64,6 +71,7 @@ interface DialogData {
 })
 export class CreateEditRecetaComponent implements OnInit, OnDestroy {
   recetaForm: FormGroup;
+  variationForm: FormGroup;
   loading = false;
   savingReceta = false;
   recetaCreated = false;
@@ -75,6 +83,11 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
   monedas: Moneda[] = [];
   defaultMoneda?: Moneda;
   defaultMonedaSimbolo = '$';
+  
+  // New properties
+  showNewVariationForm = false;
+  savingVariation = false;
+  sourceVariacionIdForCopy?: number;
 
   private subscriptions = new Subscription();
 
@@ -93,6 +106,14 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
       calcularCantidad: [false],
       cantidad: [0],
       activo: [true]
+    });
+    
+    // Initialize variation form
+    this.variationForm = this.fb.group({
+      nombre: ['', Validators.required],
+      descripcion: [''],
+      activo: [true],
+      principal: [false]
     });
   }
 
@@ -164,6 +185,16 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
     return ingrediente ? ingrediente.descripcion : 'Desconocido';
   }
 
+  getIngredientTipoMedida(ingredienteId: number): string {
+    const ingrediente = this.ingredientes.find(i => i.id === ingredienteId);
+    return ingrediente ? ingrediente.tipoMedida : '';
+  }
+
+  getIngredientMonedaSimbolo(ingredienteId: number): string {
+    const ingrediente = this.ingredientes.find(i => i.id === ingredienteId);
+    return ingrediente?.moneda?.simbolo || this.defaultMonedaSimbolo;
+  }
+
   getIngredientUnitCost(ingredienteId: number): number {
     const ingrediente = this.ingredientes.find(i => i.id === ingredienteId);
     return ingrediente ? ingrediente.costo || 0 : 0;
@@ -173,6 +204,26 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
     const ingrediente = this.ingredientes.find(i => i.id === item.ingredienteId);
     if (!ingrediente || !item.activo) return 0;
     return (ingrediente.costo || 0) * item.cantidad;
+  }
+
+  calculateVariationTotalCost(variacionId: number): number {
+    const items = this.getVariationIngredients(variacionId);
+    let total = 0;
+    
+    for (const item of items) {
+      if (item.activo) {
+        total += this.getIngredientTotalCost(item);
+      }
+    }
+    
+    return total;
+  }
+  
+  calculateSuggestedPrice(variacionId: number): number {
+    const totalCost = this.calculateVariationTotalCost(variacionId);
+    // Calculate the suggested price as total cost / 0.35
+    // This implies a markup where the cost represents 35% of the final price
+    return totalCost / 0.35;
   }
 
   private loadRecetaVariaciones(): void {
@@ -218,40 +269,225 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
   }
 
   addVariation(): void {
-    // Create a new variation
+    // Check if a receta has been created or if in edit mode
     if (!this.recetaId) return;
+    
+    // If there are no existing variations, just show the form without asking to copy
+    if (this.variaciones.length === 0) {
+      this.showNewVariationForm = true;
+      this.resetVariationForm();
+      return;
+    }
+    
+    // Open the copy dialog
+    const dialogRef = this.dialog.open(CopyVariationDialogComponent, {
+      width: '400px',
+      data: { variaciones: this.variaciones }
+    });
 
-    this.loading = true;
-
-    const newVariation: Partial<RecetaVariacion> = {
-      nombre: 'NUEVA VARIACIÓN',
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        this.showNewVariationForm = true;
+        this.resetVariationForm();
+        
+        // If the user chose to copy ingredients from an existing variation
+        if (result.shouldCopy && result.variacionId) {
+          // Store the source variation ID for later use when saving
+          this.sourceVariacionIdForCopy = result.variacionId;
+        }
+      }
+    });
+  }
+  
+  private resetVariationForm(): void {
+    // Reset the form values
+    this.variationForm.reset({
+      nombre: '',
+      descripcion: '',
       activo: true,
+      principal: false
+    });
+  }
+  
+  cancelAddVariation(): void {
+    this.showNewVariationForm = false;
+    this.sourceVariacionIdForCopy = undefined;
+  }
+  
+  saveNewVariation(): void {
+    if (this.variationForm.invalid) {
+      this.variationForm.markAllAsTouched();
+      return;
+    }
+    
+    if (!this.recetaId) return;
+    
+    this.savingVariation = true;
+    
+    const formValues = this.variationForm.value;
+    const newVariation: Partial<RecetaVariacion> = {
+      nombre: formValues.nombre.toUpperCase(),
+      descripcion: formValues.descripcion ? formValues.descripcion.toUpperCase() : null,
+      activo: formValues.activo,
+      principal: formValues.principal,
       recetaId: this.recetaId,
-      costo: 0
+      costo: 0 // Initial cost is 0
     };
+    
+    // If this variation is set as principal, we need to update any existing principal variation
+    const updatePrincipal = formValues.principal && this.variaciones.some(v => v.principal);
 
     this.repositoryService.createRecetaVariacion(newVariation)
       .subscribe({
-        next: (variation) => {
-          this.variaciones.push(variation);
-          this.variacionItems[variation.id] = [];
-          this.loading = false;
-
-          // Immediately open the edit dialog for the new variation
-          this.editVariation(variation);
-
+        next: (createdVariation) => {
+          // If this is the principal variation, update any existing principal
+          if (updatePrincipal) {
+            const oldPrincipal = this.variaciones.find(v => v.principal);
+            if (oldPrincipal) {
+              this.repositoryService.updateRecetaVariacion(oldPrincipal.id, { principal: false })
+                .subscribe({
+                  next: () => {
+                    console.log('Previous principal variation updated');
+                  },
+                  error: (error) => {
+                    console.error('Error updating previous principal variation:', error);
+                  }
+                });
+            }
+          }
+          
+          // Check if we need to copy ingredients from a source variation
+          if (this.sourceVariacionIdForCopy) {
+            const sourceVariation = this.variaciones.find(v => v.id === this.sourceVariacionIdForCopy);
+            if (sourceVariation) {
+              // Get all ingredients from the source variation
+              const sourceItems = this.variacionItems[sourceVariation.id] || [];
+              
+              // Create a copy of each item for the new variation
+              const copyPromises = sourceItems.map(item => {
+                const newItem: Partial<RecetaVariacionItem> = {
+                  variacionId: createdVariation.id,
+                  ingredienteId: item.ingredienteId,
+                  cantidad: item.cantidad,
+                  activo: item.activo
+                };
+                
+                return firstValueFrom(this.repositoryService.createRecetaVariacionItem(newItem));
+              });
+              
+              // Wait for all items to be copied
+              Promise.all(copyPromises)
+                .then(() => {
+                  // Update the cost of the new variation
+                  const totalCost = sourceItems.reduce((sum, item) => {
+                    if (item.activo) {
+                      const ingrediente = this.ingredientes.find(i => i.id === item.ingredienteId);
+                      if (ingrediente) {
+                        return sum + (ingrediente.costo || 0) * item.cantidad;
+                      }
+                    }
+                    return sum;
+                  }, 0);
+                  
+                  this.repositoryService.updateRecetaVariacion(createdVariation.id, { costo: totalCost })
+                    .subscribe({
+                      next: () => {
+                        console.log('Copied ingredients and updated variation cost');
+                      },
+                      error: (error) => {
+                        console.error('Error updating variation cost after copying ingredients:', error);
+                      }
+                    });
+                })
+                .catch(error => {
+                  console.error('Error copying ingredients:', error);
+                });
+            }
+          }
+          
+          // Reset the copy source
+          this.sourceVariacionIdForCopy = undefined;
+          
+          // Refresh variations list
+          this.loadRecetaVariaciones();
+          // Hide form
+          this.showNewVariationForm = false;
+          this.savingVariation = false;
           this.snackBar.open('Variación creada exitosamente', 'Cerrar', { duration: 3000 });
         },
         error: (error) => {
           console.error('Error creating variation:', error);
           this.snackBar.open('Error al crear variación', 'Cerrar', { duration: 3000 });
-          this.loading = false;
+          this.savingVariation = false;
         }
       });
   }
 
   editVariation(variacion: RecetaVariacion): void {
     this.openVariationDialog(variacion);
+  }
+  
+  addIngredientToVariation(variacion: RecetaVariacion): void {
+    // Open the ingredient dialog
+    const dialogRef = this.dialog.open(CreateEditRecetaVariacionItemComponent, {
+      width: '400px',
+      data: {
+        variacion: variacion,
+        ingredientes: this.ingredientes
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        this.loading = true;
+        
+        // Create new item
+        const newItem: Partial<RecetaVariacionItem> = {
+          variacionId: variacion.id,
+          ingredienteId: result.ingredienteId,
+          cantidad: result.cantidad,
+          activo: true
+        };
+        
+        this.repositoryService.createRecetaVariacionItem(newItem)
+          .subscribe({
+            next: (createdItem) => {
+              // Add to local collection
+              if (!this.variacionItems[variacion.id]) {
+                this.variacionItems[variacion.id] = [];
+              }
+              this.variacionItems[variacion.id].push(createdItem);
+              
+              // Calculate the new total cost
+              const newTotalCost = this.calculateVariationTotalCost(variacion.id);
+              
+              // Update the variation's cost in the database
+              this.repositoryService.updateRecetaVariacion(variacion.id, {
+                costo: newTotalCost
+              }).subscribe({
+                next: () => {
+                  // Update the local variation object
+                  const index = this.variaciones.findIndex(v => v.id === variacion.id);
+                  if (index !== -1) {
+                    this.variaciones[index].costo = newTotalCost;
+                  }
+                },
+                error: (error) => {
+                  console.error('Error updating variation cost:', error);
+                }
+              });
+              
+              this.loading = false;
+              this.snackBar.open('Ingrediente agregado exitosamente', 'Cerrar', { duration: 3000 });
+            },
+            error: (error) => {
+              console.error('Error adding ingredient:', error);
+              this.snackBar.open('Error al agregar ingrediente', 'Cerrar', { duration: 3000 });
+              this.loading = false;
+            }
+          });
+      }
+    });
   }
 
   deleteVariation(variacion: RecetaVariacion): void {
@@ -347,5 +583,112 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
     } finally {
       this.savingReceta = false;
     }
+  }
+
+  openVariacionItem(variacion: RecetaVariacion): void {
+    // Open the ingredient dialog with increased width
+    const dialogRef = this.dialog.open(CreateEditRecetaVariacionItemComponent, {
+      width: '600px',
+      data: {
+        variacion: variacion,
+        ingredientes: this.ingredientes
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        // Handle result if needed
+        this.loadRecetaVariaciones();
+      }
+    });
+  }
+
+  editIngredient(variacion: RecetaVariacion, item: RecetaVariacionItem): void {
+    const dialogRef = this.dialog.open(CreateEditRecetaVariacionItemComponent, {
+      width: '600px',
+      data: {
+        variacion: variacion,
+        ingredientes: this.ingredientes,
+        itemId: item.id,
+        ingredienteId: item.ingredienteId,
+        cantidad: item.cantidad
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        this.loading = true;
+        
+        // When editing, call the update service
+        this.repositoryService.updateRecetaVariacionItem(item.id, {
+          ingredienteId: result.ingredienteId,
+          cantidad: result.cantidad
+        }).subscribe({
+          next: (updatedItem) => {
+            // Update local data
+            const variacionItems = this.variacionItems[variacion.id];
+            const index = variacionItems.findIndex(i => i.id === item.id);
+            if (index !== -1) {
+              variacionItems[index] = updatedItem;
+            }
+            
+            // Update variation cost
+            const newTotalCost = this.calculateVariationTotalCost(variacion.id);
+            this.repositoryService.updateRecetaVariacion(variacion.id, {
+              costo: newTotalCost
+            }).subscribe({
+              next: () => {
+                // Update local variation
+                const variationIndex = this.variaciones.findIndex(v => v.id === variacion.id);
+                if (variationIndex !== -1) {
+                  this.variaciones[variationIndex].costo = newTotalCost;
+                }
+              },
+              error: (error) => {
+                console.error('Error updating variation cost:', error);
+              }
+            });
+            
+            this.loading = false;
+            this.snackBar.open('Ingrediente actualizado exitosamente', 'Cerrar', { duration: 3000 });
+          },
+          error: (error) => {
+            console.error('Error updating ingredient:', error);
+            this.snackBar.open('Error al actualizar ingrediente', 'Cerrar', { duration: 3000 });
+            this.loading = false;
+          }
+        });
+      }
+    });
+  }
+
+  deleteIngredient(variacion: RecetaVariacion, item: RecetaVariacionItem): void {
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Confirmar eliminación',
+        message: '¿Está seguro que desea eliminar este ingrediente de la variación?'
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        // Call service to delete the ingredient
+        this.repositoryService.deleteRecetaVariacionItem(item.id).subscribe({
+          next: () => {
+            this.snackBar.open('Ingrediente eliminado correctamente', 'Cerrar', {
+              duration: 3000
+            });
+            // Reload data
+            this.loadRecetaVariaciones();
+          },
+          error: (error) => {
+            console.error('Error deleting ingredient:', error);
+            this.snackBar.open('Error al eliminar el ingrediente', 'Cerrar', {
+              duration: 3000
+            });
+          }
+        });
+      }
+    });
   }
 }

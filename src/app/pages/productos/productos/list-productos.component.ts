@@ -295,18 +295,50 @@ export class ListProductosComponent implements OnInit, AfterViewInit {
 
     dialogRef.afterClosed().subscribe(result => {
       if (result) {
+        this.isLoading = true;
+        
         firstValueFrom(this.repositoryService.deleteProducto(id))
-          .then(() => {
-            this.snackBar.open('Producto eliminado correctamente', 'Cerrar', {
-              duration: 3000
-            });
+          .then((response) => {
+            this.isLoading = false;
+            if (response?.deleted) {
+              this.snackBar.open('Producto eliminado correctamente', 'Cerrar', {
+                duration: 3000
+              });
+            } else {
+              this.snackBar.open('Producto marcado como inactivo', 'Cerrar', {
+                duration: 3000
+              });
+            }
             this.loadProductos();
           })
-          .catch(error => {
+          .catch((error) => {
             console.error('Error deleting producto:', error);
-            this.snackBar.open('Error al eliminar producto', 'Cerrar', {
-              duration: 3000
-            });
+            
+            // Check if error is due to database restrictions
+            const errorMessage = error?.message || '';
+            const hasRestrictions = 
+              errorMessage.includes('restricciones') || 
+              errorMessage.includes('constraint') || 
+              errorMessage.includes('restrict') || 
+              errorMessage.includes('reference') ||
+              errorMessage.includes('FOREIGN KEY');
+
+            if (hasRestrictions) {
+              this.snackBar.open(
+                'No se puede eliminar el producto debido a restricciones en la base de datos. Se establecerá como inactivo.',
+                'Cerrar',
+                { duration: 5000 }
+              );
+              
+              // Set product as inactive instead - this is now handled by the backend
+              // Just reload the list to show updated status
+              this.loadProductos();
+              this.isLoading = false;
+            } else {
+              // Other error
+              this.snackBar.open('Error al eliminar producto: ' + (error?.message || 'Error desconocido'), 'Cerrar', { duration: 3000 });
+              this.isLoading = false;
+            }
           });
       }
     });

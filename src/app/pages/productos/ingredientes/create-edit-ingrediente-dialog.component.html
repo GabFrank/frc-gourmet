@@ -50,6 +50,21 @@
         </mat-form-field>
       </div>
 
+      <!-- Variation Selection (only shown when a recipe with variations is selected) -->
+      <div class="form-row" *ngIf="showVariacionSelect">
+        <mat-form-field class="full-width" appearance="outline">
+          <mat-label>Variación</mat-label>
+          <mat-select formControlName="variacionId">
+            <mat-option *ngFor="let variacion of recetaVariaciones.get(ingredienteForm.get('recetaId')?.value || 0) || []" [value]="variacion.id">
+              {{ variacionesDisplayValues[variacion.id] }}
+            </mat-option>
+          </mat-select>
+          <mat-hint>
+            Seleccione la variación de la receta para calcular el costo
+          </mat-hint>
+        </mat-form-field>
+      </div>
+
       <!-- Recipe Quantity (only shown when a recipe is selected) -->
       <div class="form-row recipe-quantity-field" *ngIf="ingredienteForm.get('recetaId')?.value">
         <mat-form-field class="full-width" appearance="outline">
@@ -100,9 +115,6 @@
       <!-- Checkboxes -->
       <div class="form-row">
         <div class="checkbox-container">
-          <mat-checkbox formControlName="isProduccion" class="checkbox-margin">
-            Es de producción
-          </mat-checkbox>
           <mat-checkbox formControlName="activo" class="checkbox-margin">
             Activo
           </mat-checkbox>

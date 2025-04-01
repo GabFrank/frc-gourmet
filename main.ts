@@ -1922,22 +1922,44 @@ ipcMain.handle('updateProducto', async (_event: any, productoId: number, product
 ipcMain.handle('deleteProducto', async (_event: any, productoId: number) => {
   try {
     const dataSource = dbService.getDataSource();
-const productoRepository = dataSource.getRepository(Producto);
+    const productoRepository = dataSource.getRepository(Producto);
+    const presentacionRepository = dataSource.getRepository(Presentacion);
 
     // Find the producto to delete
-const producto = await productoRepository.findOneBy({ id: productoId });
+    const producto = await productoRepository.findOneBy({ id: productoId });
 
     if (!producto) {
       throw new Error('Producto not found');
-}
+    }
 
-    // Set as inactive instead of deleting
-producto.activo = false;
+    try {
+      // First, find all related presentaciones
+      const presentaciones = await presentacionRepository.find({
+        where: { productoId: productoId }
+      });
 
-    // Save the changes
-await productoRepository.save(producto);
+      // Delete all related presentaciones first
+      if (presentaciones.length > 0) {
+        console.log(`Deleting ${presentaciones.length} presentaciones for producto ${productoId}`);
+        await presentacionRepository.remove(presentaciones);
+      }
 
-    return { success: true };
+      // Now attempt to delete the product from the database
+      await productoRepository.remove(producto);
+      console.log(`Producto with ID ${productoId} deleted successfully`);
+      return { success: true, deleted: true };
+    } catch (error) {
+      console.log('Could not delete producto, setting as inactive instead:', error);
+      
+      // If deletion failed (likely due to other foreign key constraints),
+      // set as inactive instead
+      producto.activo = false;
+      await productoRepository.save(producto);
+      
+      // Throw a specific error to indicate why deletion failed
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`No se pudo eliminar debido a restricciones: ${errorMessage}`);
+    }
   } catch (error) {
     console.error('Error deleting producto:', error);
     throw error;
@@ -2835,7 +2857,7 @@ ipcMain.handle('deleteIngrediente', async (_event: any, ingredienteId: number) =
 });
 
 // Add search functionality for ingredientes by descripcion
-ipcMain.handle('searchIngredientesByDescripcion', async (event, searchText) => {
+ipcMain.handle('searchIngredientesByDescripcion', async (event: Electron.IpcMainInvokeEvent, searchText: string) => {
   try {
     const dataSource = dbService.getDataSource();
     const ingredienteRepository = dataSource.getRepository(Ingrediente);
