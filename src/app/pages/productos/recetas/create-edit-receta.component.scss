@@ -1,0 +1,155 @@
+.form-row {
+  margin-bottom: 16px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+mat-dialog-content {
+  min-height: 400px;
+  max-height: 70vh;
+}
+
+button mat-spinner {
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.section-divider {
+  margin: 24px 0;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+}
+
+.no-data {
+  text-align: center;
+  padding: 16px;
+  color: rgba(0, 0, 0, 0.54);
+}
+
+/* New styles for table layout */
+.variations-container-tables {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.variation-table-container {
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.inactive-variation {
+  opacity: 0.7;
+  border-left: 4px solid #c62828;
+}
+
+.variation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.variation-title h3 {
+  margin: 0;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+}
+
+.variation-description {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.variation-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ingredients-table {
+  width: 100%;
+}
+
+.no-ingredients {
+  padding: 16px;
+  text-align: center;
+  color: rgba(0, 0, 0, 0.54);
+  font-style: italic;
+}
+
+.variation-cost-summary {
+  padding: 16px;
+  text-align: right;
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.variation-cost-summary h4 {
+  margin: 0;
+  color: #2e7d32;
+  font-weight: 500;
+}
+
+.inactive-row {
+  opacity: 0.6;
+  text-decoration: line-through;
+  background-color: #ffebee;
+}
+
+.status-badge {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
+.active {
+  background-color: #e6f7e6;
+  color: #2e7d32;
+}
+
+.inactive {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+/* Combined row styles */
+.combined-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 30px;
+}
+
+.field-tipo-medida {
+  flex: 2;
+}
+
+.field-cantidad {
+  flex: 1;
+}
+
+.field-activo {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 52px; /* Match approximate height of mat-form-field */
+} 

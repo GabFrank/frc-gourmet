@@ -22,9 +22,10 @@ import { RepositoryService } from '../../../database/repository.service';
 import { Receta } from '../../../database/entities/productos/receta.entity';
 import { RecetaVariacion } from '../../../database/entities/productos/receta-variacion.entity';
 import { RecetaVariacionItem } from '../../../database/entities/productos/receta-variacion-item.entity';
-import { Ingrediente } from '../../../database/entities/productos/ingrediente.entity';
+import { Ingrediente, TipoMedida } from '../../../database/entities/productos/ingrediente.entity';
 import { firstValueFrom, Subscription } from 'rxjs';
 import { VariationDialogComponent } from './variation-dialog.component';
+import { Moneda } from '../../../database/entities/financiero/moneda.entity';
 
 interface DialogData {
   editMode: boolean;
@@ -55,196 +56,14 @@ interface DialogData {
     MatListModule,
     MatCardModule
   ],
-  template: `
-    <h2 mat-dialog-title>{{ data.editMode ? 'Editar' : 'Crear' }} Receta</h2>
-
-    <div mat-dialog-content>
-      <!-- Basic recipe info -->
-      <form [formGroup]="recetaForm">
-        <div class="form-row">
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Nombre</mat-label>
-            <input matInput formControlName="nombre" placeholder="Nombre de la receta">
-            <mat-error *ngIf="recetaForm.get('nombre')?.hasError('required')">
-              El nombre es requerido
-            </mat-error>
-          </mat-form-field>
-        </div>
-
-        <div class="form-row">
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Modo de Preparación</mat-label>
-            <textarea matInput formControlName="modo_preparo" placeholder="Instrucciones de preparación" rows="3"></textarea>
-          </mat-form-field>
-        </div>
-
-        <div class="form-row">
-          <mat-checkbox formControlName="activo" color="primary">
-            Activo
-          </mat-checkbox>
-        </div>
-      </form>
-
-      <mat-divider class="section-divider"></mat-divider>
-
-      <!-- Variations section -->
-      <div class="section-header">
-        <h3>Variaciones de la Receta</h3>
-        <button
-          mat-raised-button
-          color="primary"
-          (click)="addVariation()"
-          [disabled]="loading || (!data.editMode && !recetaCreated)"
-          matTooltip="{{ (!data.editMode && !recetaCreated) ? 'Guarde la receta primero para agregar variaciones' : 'Agregar nueva variación' }}"
-        >
-          <mat-icon>add</mat-icon> Agregar Variación
-        </button>
-      </div>
-
-      <div *ngIf="loading" class="loading-container">
-        <mat-spinner diameter="40"></mat-spinner>
-      </div>
-
-      <div *ngIf="!loading && variaciones.length === 0" class="no-data">
-        {{ (!data.editMode && !recetaCreated) ? 'Guarde la receta primero para agregar variaciones' : 'No hay variaciones disponibles' }}
-      </div>
-
-      <div *ngIf="!loading && variaciones.length > 0" class="variations-container">
-        <mat-card *ngFor="let variacion of variaciones; let i = index" class="variation-card" [class.inactive-card]="!variacion.activo">
-          <mat-card-header>
-            <mat-card-title>
-              {{ variacion.nombre }}
-              <span class="status-badge" [class.active]="variacion.activo" [class.inactive]="!variacion.activo">
-                {{ variacion.activo ? 'Activo' : 'Inactivo' }}
-              </span>
-            </mat-card-title>
-            <mat-card-subtitle>
-              <span class="costo-badge">Costo: {{ variacion.costo | currency }}</span>
-              <span class="items-badge" *ngIf="getVariationIngredients(variacion.id).length > 0">
-                {{ getVariationIngredients(variacion.id).length }} ingrediente(s)
-              </span>
-            </mat-card-subtitle>
-          </mat-card-header>
-          <mat-card-content *ngIf="variacion.descripcion">
-            <p>{{ variacion.descripcion }}</p>
-          </mat-card-content>
-          <mat-card-actions align="end">
-            <button mat-button color="primary" (click)="editVariation(variacion)">
-              <mat-icon>edit</mat-icon> Editar
-            </button>
-            <button mat-button color="warn" (click)="deleteVariation(variacion)">
-              <mat-icon>delete</mat-icon> Eliminar
-            </button>
-          </mat-card-actions>
-        </mat-card>
-      </div>
-    </div>
-
-    <div mat-dialog-actions align="end">
-      <button mat-button type="button" [mat-dialog-close]="false">Cancelar</button>
-      <button mat-raised-button color="primary" (click)="save()" [disabled]="recetaForm.invalid || loading">
-        <mat-spinner *ngIf="loading" diameter="20"></mat-spinner>
-        <span *ngIf="!loading">{{ data.editMode ? 'Actualizar' : 'Guardar' }}</span>
-      </button>
-    </div>
-  `,
-  styles: [`
-    .form-row {
-      margin-bottom: 16px;
-    }
-
-    .full-width {
-      width: 100%;
-    }
-
-    mat-dialog-content {
-      min-height: 400px;
-      max-height: 70vh;
-    }
-
-    button mat-spinner {
-      display: inline-block;
-      margin-right: 8px;
-    }
-
-    .section-divider {
-      margin: 24px 0;
-    }
-
-    .section-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-
-    .loading-container {
-      display: flex;
-      justify-content: center;
-      padding: 24px;
-    }
-
-    .no-data {
-      text-align: center;
-      padding: 16px;
-      color: rgba(0, 0, 0, 0.54);
-    }
-
-    .variations-container {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 16px;
-    }
-
-    .variation-card {
-      margin-bottom: 16px;
-      border-left: 4px solid #2e7d32;
-    }
-
-    .inactive-card {
-      border-left-color: #c62828;
-      opacity: 0.7;
-    }
-
-    .status-badge {
-      font-size: 12px;
-      padding: 4px 8px;
-      border-radius: 4px;
-      margin-left: 8px;
-    }
-
-    .active {
-      background-color: #e6f7e6;
-      color: #2e7d32;
-    }
-
-    .inactive {
-      background-color: #ffebee;
-      color: #c62828;
-    }
-
-    .costo-badge {
-      font-weight: 500;
-      margin-right: 16px;
-    }
-
-    .items-badge {
-      background-color: #e3f2fd;
-      color: #1565c0;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-    }
-
-    mat-card-content {
-      margin-top: 8px;
-      white-space: pre-line;
-    }
-  `]
+  providers: [
+    FormBuilder
+  ],
+  templateUrl: './create-edit-receta.component.html',
+  styleUrls: ['./create-edit-receta.component.scss']
 })
 export class CreateEditRecetaComponent implements OnInit, OnDestroy {
   recetaForm: FormGroup;
-  variationForms: FormGroup[] = [];
   loading = false;
   savingReceta = false;
   recetaCreated = false;
@@ -252,6 +71,10 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
   variaciones: RecetaVariacion[] = [];
   variacionItems: { [key: number]: RecetaVariacionItem[] } = {};
   ingredientes: Ingrediente[] = [];
+  tipoMedidaOptions = Object.values(TipoMedida);
+  monedas: Moneda[] = [];
+  defaultMoneda?: Moneda;
+  defaultMonedaSimbolo = '$';
 
   private subscriptions = new Subscription();
 
@@ -266,6 +89,9 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
     this.recetaForm = this.fb.group({
       nombre: ['', Validators.required],
       modo_preparo: [''],
+      tipoMedida: [TipoMedida.UNIDAD],
+      calcularCantidad: [false],
+      cantidad: [0],
       activo: [true]
     });
   }
@@ -276,6 +102,9 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
       this.recetaForm.patchValue({
         nombre: this.data.receta.nombre,
         modo_preparo: this.data.receta.modo_preparo || '',
+        tipoMedida: this.data.receta.tipoMedida || TipoMedida.UNIDAD,
+        calcularCantidad: this.data.receta.calcularCantidad || false,
+        cantidad: this.data.receta.cantidad || 0,
         activo: this.data.receta.activo
       });
 
@@ -283,6 +112,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
     }
 
     this.loadIngredientes();
+    this.loadMonedas();
   }
 
   ngOnDestroy(): void {
@@ -305,6 +135,44 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
           }
         })
     );
+  }
+
+  private loadMonedas(): void {
+    this.subscriptions.add(
+      this.repositoryService.getMonedas()
+        .subscribe({
+          next: (monedas) => {
+            this.monedas = monedas;
+            // Find default moneda (principal == true)
+            this.defaultMoneda = this.monedas.find(m => m.principal);
+            // Pre-compute the default currency symbol
+            this.defaultMonedaSimbolo = this.defaultMoneda ? this.defaultMoneda.simbolo : '$';
+          },
+          error: (error) => {
+            console.error('Error loading monedas:', error);
+          }
+        })
+    );
+  }
+
+  getDefaultMonedaSimbolo(): string {
+    return this.defaultMonedaSimbolo;
+  }
+
+  getIngredientName(ingredienteId: number): string {
+    const ingrediente = this.ingredientes.find(i => i.id === ingredienteId);
+    return ingrediente ? ingrediente.descripcion : 'Desconocido';
+  }
+
+  getIngredientUnitCost(ingredienteId: number): number {
+    const ingrediente = this.ingredientes.find(i => i.id === ingredienteId);
+    return ingrediente ? ingrediente.costo || 0 : 0;
+  }
+
+  getIngredientTotalCost(item: RecetaVariacionItem): number {
+    const ingrediente = this.ingredientes.find(i => i.id === item.ingredienteId);
+    if (!ingrediente || !item.activo) return 0;
+    return (ingrediente.costo || 0) * item.cantidad;
   }
 
   private loadRecetaVariaciones(): void {
@@ -356,7 +224,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
     this.loading = true;
 
     const newVariation: Partial<RecetaVariacion> = {
-      nombre: 'Nueva Variación',
+      nombre: 'NUEVA VARIACIÓN',
       activo: true,
       recetaId: this.recetaId,
       costo: 0
@@ -433,37 +301,6 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
     });
   }
 
-  updateVariationCost(variacionId: number): void {
-    // Calculate total cost based on ingredients
-    const items = this.variacionItems[variacionId] || [];
-    let totalCost = 0;
-
-    for (const item of items) {
-      if (item.ingrediente && item.ingrediente.costo) {
-        totalCost += item.cantidad * item.ingrediente.costo;
-      }
-    }
-
-    // Update the variation cost
-    const variationIndex = this.variaciones.findIndex(v => v.id === variacionId);
-    if (variationIndex !== -1) {
-      this.loading = true;
-
-      this.repositoryService.updateRecetaVariacion(variacionId, { costo: totalCost })
-        .subscribe({
-          next: (updatedVariation) => {
-            // Update the variation in the array with spread operator maintaining the object type
-            this.variaciones[variationIndex].costo = updatedVariation.costo;
-            this.loading = false;
-          },
-          error: (error) => {
-            console.error('Error updating variation cost:', error);
-            this.loading = false;
-          }
-        });
-    }
-  }
-
   async save(): Promise<void> {
     if (this.recetaForm.invalid) {
       this.recetaForm.markAllAsTouched();
@@ -479,8 +316,11 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
         // Update existing receta
         await firstValueFrom(
           this.repositoryService.updateReceta(this.data.receta.id, {
-            nombre: formValues.nombre,
-            modo_preparo: formValues.modo_preparo,
+            nombre: formValues.nombre.toUpperCase(),
+            modo_preparo: formValues.modo_preparo ? formValues.modo_preparo.toUpperCase() : '',
+            tipoMedida: formValues.tipoMedida,
+            calcularCantidad: formValues.calcularCantidad,
+            cantidad: formValues.cantidad,
             activo: formValues.activo
           })
         );
@@ -489,8 +329,11 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
         // Create new receta
         const newReceta = await firstValueFrom(
           this.repositoryService.createReceta({
-            nombre: formValues.nombre,
-            modo_preparo: formValues.modo_preparo,
+            nombre: formValues.nombre.toUpperCase(),
+            modo_preparo: formValues.modo_preparo ? formValues.modo_preparo.toUpperCase() : '',
+            tipoMedida: formValues.tipoMedida,
+            calcularCantidad: formValues.calcularCantidad,
+            cantidad: formValues.cantidad,
             activo: formValues.activo
           })
         );

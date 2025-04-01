@@ -762,4 +762,38 @@ contextBridge.exposeInMainWorld('api', {
   searchIngredientesByDescripcion: async (searchText: string) => {
     return await ipcRenderer.invoke('searchIngredientesByDescripcion', searchText);
   },
+  
+  // RecetaVariacion methods
+  getRecetaVariaciones: async (recetaId: number) => {
+    return await ipcRenderer.invoke('getRecetaVariaciones', recetaId);
+  },
+  getRecetaVariacion: async (variacionId: number) => {
+    return await ipcRenderer.invoke('getRecetaVariacion', variacionId);
+  },
+  createRecetaVariacion: async (variacionData: any) => {
+    return await ipcRenderer.invoke('createRecetaVariacion', variacionData);
+  },
+  updateRecetaVariacion: async (variacionId: number, variacionData: any) => {
+    return await ipcRenderer.invoke('updateRecetaVariacion', variacionId, variacionData);
+  },
+  deleteRecetaVariacion: async (variacionId: number) => {
+    return await ipcRenderer.invoke('deleteRecetaVariacion', variacionId);
+  },
+  
+  // RecetaVariacionItem methods
+  getRecetaVariacionItems: async (variacionId: number) => {
+    return await ipcRenderer.invoke('getRecetaVariacionItems', variacionId);
+  },
+  getRecetaVariacionItem: async (variacionItemId: number) => {
+    return await ipcRenderer.invoke('getRecetaVariacionItem', variacionItemId);
+  },
+  createRecetaVariacionItem: async (variacionItemData: any) => {
+    return await ipcRenderer.invoke('createRecetaVariacionItem', variacionItemData);
+  },
+  updateRecetaVariacionItem: async (variacionItemId: number, variacionItemData: any) => {
+    return await ipcRenderer.invoke('updateRecetaVariacionItem', variacionItemId, variacionItemData);
+  },
+  deleteRecetaVariacionItem: async (variacionItemId: number) => {
+    return await ipcRenderer.invoke('deleteRecetaVariacionItem', variacionItemId);
+  },
 });

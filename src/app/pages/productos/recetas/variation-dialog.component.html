@@ -1,0 +1,117 @@
+<h2 mat-dialog-title>Editar Variación</h2>
+
+<div mat-dialog-content>
+  <form [formGroup]="variationForm">
+    <div class="form-row">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Nombre</mat-label>
+        <input matInput formControlName="nombre" placeholder="Nombre de la variación">
+        <mat-error *ngIf="variationForm.get('nombre')?.hasError('required')">
+          El nombre es requerido
+        </mat-error>
+      </mat-form-field>
+    </div>
+
+    <div class="form-row">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Descripción</mat-label>
+        <textarea matInput formControlName="descripcion" placeholder="Descripción de la variación" rows="2"></textarea>
+      </mat-form-field>
+    </div>
+
+    <div class="form-row">
+      <mat-checkbox formControlName="activo" color="primary">
+        Activo
+      </mat-checkbox>
+    </div>
+  </form>
+
+  <mat-divider class="section-divider"></mat-divider>
+
+  <div class="section-header">
+    <h3>Ingredientes</h3>
+    <button
+      mat-raised-button
+      color="primary"
+      (click)="addIngredient()"
+      [disabled]="loading"
+    >
+      <mat-icon>add</mat-icon> Agregar Ingrediente
+    </button>
+  </div>
+
+  <div *ngIf="loading" class="loading-container">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+
+  <div *ngIf="!loading && items.length === 0" class="no-data">
+    No hay ingredientes en esta variación
+  </div>
+
+  <table mat-table [dataSource]="items" class="ingredients-table" *ngIf="!loading && items.length > 0">
+    <!-- Ingredient Name Column -->
+    <ng-container matColumnDef="ingrediente">
+      <th mat-header-cell *matHeaderCellDef>Ingrediente</th>
+      <td mat-cell *matCellDef="let item">
+        {{ getIngredienteName(item.ingredienteId) }}
+      </td>
+    </ng-container>
+
+    <!-- Quantity Column -->
+    <ng-container matColumnDef="cantidad">
+      <th mat-header-cell *matHeaderCellDef>Cantidad</th>
+      <td mat-cell *matCellDef="let item">
+        {{ item.cantidad }}
+      </td>
+    </ng-container>
+
+    <!-- Cost Column -->
+    <ng-container matColumnDef="costo">
+      <th mat-header-cell *matHeaderCellDef>Costo</th>
+      <td mat-cell *matCellDef="let item">
+        {{ getIngredientSimbol(item.ingredienteId) }} {{ getIngredientTotalCost(item) | number:'1.2-2' }}
+      </td>
+    </ng-container>
+
+    <!-- Active Column -->
+    <ng-container matColumnDef="activo">
+      <th mat-header-cell *matHeaderCellDef>Activo</th>
+      <td mat-cell *matCellDef="let item">
+        <mat-icon [color]="item.activo ? 'primary' : 'warn'">
+          {{ item.activo ? 'check_circle' : 'cancel' }}
+        </mat-icon>
+      </td>
+    </ng-container>
+
+    <!-- Actions Column -->
+    <ng-container matColumnDef="acciones">
+      <th mat-header-cell *matHeaderCellDef>Acciones</th>
+      <td mat-cell *matCellDef="let item">
+        <button mat-icon-button color="primary" (click)="editIngredient(item)" matTooltip="Editar">
+          <mat-icon>edit</mat-icon>
+        </button>
+        <button mat-icon-button color="warn" (click)="toggleIngredientActive(item)" [matTooltip]="item.activo ? 'Desactivar' : 'Activar'">
+          <mat-icon>{{ item.activo ? 'visibility_off' : 'visibility' }}</mat-icon>
+        </button>
+        <button mat-icon-button color="warn" (click)="deleteIngredient(item)" matTooltip="Eliminar">
+          <mat-icon>delete</mat-icon>
+        </button>
+      </td>
+    </ng-container>
+
+    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+    <tr mat-row *matRowDef="let row; columns: displayedColumns;" [class.inactive-row]="!row.activo"></tr>
+  </table>
+
+  <div class="cost-summary" *ngIf="!loading && items.length > 0">
+    <h3>Costo Total: {{ defaultMonedaSimbolo }} {{ totalCost | number:'1.2-2' }}</h3>
+  </div>
+</div>
+
+<div mat-dialog-actions align="end">
+  <button mat-button type="button" [mat-dialog-close]="false">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="saveVariation()" [disabled]="variationForm.invalid || loading">
+    <mat-spinner *ngIf="loading" diameter="20"></mat-spinner>
+    <span *ngIf="!loading">Guardar</span>
+  </button>
+</div> 

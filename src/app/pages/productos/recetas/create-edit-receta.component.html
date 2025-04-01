@@ -1,0 +1,157 @@
+<h2 mat-dialog-title>{{ data.editMode ? 'Editar' : 'Crear' }} Receta</h2>
+
+<div mat-dialog-content>
+  <!-- Basic recipe info -->
+  <form [formGroup]="recetaForm">
+    <div class="form-row">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Nombre</mat-label>
+        <input matInput formControlName="nombre" placeholder="Nombre de la receta">
+        <mat-error *ngIf="recetaForm.get('nombre')?.hasError('required')">
+          El nombre es requerido
+        </mat-error>
+      </mat-form-field>
+    </div>
+
+    <div class="form-row">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Modo de Preparación</mat-label>
+        <textarea matInput formControlName="modo_preparo" placeholder="Instrucciones de preparación" rows="3"></textarea>
+      </mat-form-field>
+    </div>
+
+    <!-- Combined row for tipo de medida, cantidad, and activo -->
+    <div class="form-row combined-row">
+      <mat-form-field appearance="outline" class="field-tipo-medida">
+        <mat-label>Tipo de Medida</mat-label>
+        <mat-select formControlName="tipoMedida">
+          <mat-option *ngFor="let tipo of tipoMedidaOptions" [value]="tipo">
+            {{ tipo }}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="field-cantidad">
+        <mat-label>Cantidad</mat-label>
+        <input matInput type="number" formControlName="cantidad" min="0">
+      </mat-form-field>
+
+      <div class="field-activo">
+        <mat-checkbox formControlName="activo" color="primary">
+          Activo
+        </mat-checkbox>
+      </div>
+    </div>
+
+    <!-- Calcular Cantidad checkbox is hidden for now -->
+    <!-- <div class="form-row">
+      <mat-checkbox formControlName="calcularCantidad" color="primary">
+        Calcular Cantidad Automáticamente
+      </mat-checkbox>
+    </div> -->
+  </form>
+
+  <mat-divider class="section-divider"></mat-divider>
+
+  <!-- Variations section -->
+  <div class="section-header">
+    <h3>Variaciones de la Receta</h3>
+    <button
+      mat-raised-button
+      color="primary"
+      (click)="addVariation()"
+      [disabled]="loading || (!data.editMode && !recetaCreated)"
+      matTooltip="{{ (!data.editMode && !recetaCreated) ? 'Guarde la receta primero para agregar variaciones' : 'Agregar nueva variación' }}"
+    >
+      <mat-icon>add</mat-icon> Agregar Variación
+    </button>
+  </div>
+
+  <div *ngIf="loading" class="loading-container">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+
+  <div *ngIf="!loading && variaciones.length === 0" class="no-data">
+    {{ (!data.editMode && !recetaCreated) ? 'Guarde la receta primero para agregar variaciones' : 'No hay variaciones disponibles' }}
+  </div>
+
+  <!-- Table view for variations -->
+  <div *ngIf="!loading && variaciones.length > 0" class="variations-container-tables">
+    <div *ngFor="let variacion of variaciones; let i = index" class="variation-table-container" [class.inactive-variation]="!variacion.activo">
+      <div class="variation-header">
+        <div class="variation-title">
+          <h3>{{ variacion.nombre }}
+            <span class="status-badge" [class.active]="variacion.activo" [class.inactive]="!variacion.activo">
+              {{ variacion.activo ? 'Activo' : 'Inactivo' }}
+            </span>
+          </h3>
+          <p *ngIf="variacion.descripcion" class="variation-description">{{ variacion.descripcion }}</p>
+        </div>
+        <div class="variation-actions">
+          <button mat-icon-button color="primary" (click)="editVariation(variacion)" matTooltip="Editar variación">
+            <mat-icon>edit</mat-icon>
+          </button>
+          <button mat-icon-button color="warn" (click)="deleteVariation(variacion)" matTooltip="Eliminar variación">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </div>
+      </div>
+
+      <table mat-table [dataSource]="getVariationIngredients(variacion.id)" class="ingredients-table">
+        <!-- Ingredient Column -->
+        <ng-container matColumnDef="ingrediente">
+          <th mat-header-cell *matHeaderCellDef>Ingrediente</th>
+          <td mat-cell *matCellDef="let item">{{ getIngredientName(item.ingredienteId) }}</td>
+        </ng-container>
+
+        <!-- Quantity Column -->
+        <ng-container matColumnDef="cantidad">
+          <th mat-header-cell *matHeaderCellDef>Cantidad</th>
+          <td mat-cell *matCellDef="let item">{{ item.cantidad }}</td>
+        </ng-container>
+
+        <!-- Unit Cost Column -->
+        <ng-container matColumnDef="costo_unitario">
+          <th mat-header-cell *matHeaderCellDef>Costo Unitario</th>
+          <td mat-cell *matCellDef="let item">{{ getIngredientUnitCost(item.ingredienteId) | currency }}</td>
+        </ng-container>
+
+        <!-- Total Cost Column -->
+        <ng-container matColumnDef="costo_total">
+          <th mat-header-cell *matHeaderCellDef>Costo Total</th>
+          <td mat-cell *matCellDef="let item">{{ getIngredientTotalCost(item) | currency }}</td>
+        </ng-container>
+
+        <!-- Status Column -->
+        <ng-container matColumnDef="activo">
+          <th mat-header-cell *matHeaderCellDef>Estado</th>
+          <td mat-cell *matCellDef="let item">
+            <mat-icon [color]="item.activo ? 'primary' : 'warn'">
+              {{ item.activo ? 'check_circle' : 'cancel' }}
+            </mat-icon>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="['ingrediente', 'cantidad', 'costo_unitario', 'costo_total', 'activo']"></tr>
+        <tr mat-row *matRowDef="let row; columns: ['ingrediente', 'cantidad', 'costo_unitario', 'costo_total', 'activo'];"
+            [class.inactive-row]="!row.activo"></tr>
+      </table>
+
+      <div *ngIf="getVariationIngredients(variacion.id).length === 0" class="no-ingredients">
+        No hay ingredientes en esta variación
+      </div>
+
+      <div class="variation-cost-summary">
+        <h4>Costo Total: {{ getDefaultMonedaSimbolo() }} {{ variacion.costo | number:'1.2-2' }}</h4>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div mat-dialog-actions align="end">
+  <button mat-button type="button" [mat-dialog-close]="false">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="save()" [disabled]="recetaForm.invalid || loading">
+    <mat-spinner *ngIf="loading" diameter="20"></mat-spinner>
+    <span *ngIf="!loading">{{ data.editMode ? 'Actualizar' : 'Guardar' }}</span>
+  </button>
+</div> 

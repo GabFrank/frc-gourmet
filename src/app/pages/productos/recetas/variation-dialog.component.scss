@@ -1,0 +1,68 @@
+.form-row {
+  margin-bottom: 16px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+mat-dialog-content {
+  min-height: 400px;
+  max-height: 70vh;
+}
+
+button mat-spinner {
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.section-divider {
+  margin: 24px 0;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+}
+
+.no-data {
+  text-align: center;
+  padding: 16px;
+  color: rgba(0, 0, 0, 0.54);
+}
+
+.ingredients-table {
+  width: 100%;
+}
+
+.inactive-row {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+.cost-summary {
+  margin-top: 16px;
+  text-align: right;
+  color: #1976d2;
+  font-weight: bold;
+}
+
+td.mat-cell {
+  text-align: center;
+}
+
+th.mat-header-cell {
+  text-align: center;
+}
+
+td.mat-column-ingrediente, th.mat-column-ingrediente {
+  text-align: start;
+} 

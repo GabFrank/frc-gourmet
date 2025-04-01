@@ -20,8 +20,9 @@ import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { RepositoryService } from '../../../database/repository.service';
 import { Receta } from '../../../database/entities/productos/receta.entity';
 import { firstValueFrom } from 'rxjs';
-import { CreateEditRecetaDialogComponent } from './create-edit-receta-dialog.component';
-import { RecetaItem } from '../../../database/entities/productos/receta-item.entity';
+import { CreateEditRecetaComponent } from './create-edit-receta.component';
+import { RecetaVariacion } from '../../../database/entities/productos/receta-variacion.entity';
+import { RecetaVariacionItem } from '../../../database/entities/productos/receta-variacion-item.entity';
 import { Ingrediente } from '../../../database/entities/productos/ingrediente.entity';
 import { Moneda } from '../../../database/entities/financiero/moneda.entity';
 
@@ -58,7 +59,8 @@ interface RecetaViewModel extends Receta {
 })
 export class ListRecetasComponent implements OnInit {
   recetas: RecetaViewModel[] = [];
-  recetaItems: Map<number, RecetaItem[]> = new Map();
+  variaciones: Map<number, RecetaVariacion[]> = new Map();
+  variacionItems: Map<number, RecetaVariacionItem[]> = new Map();
   ingredientes: Map<number, Ingrediente> = new Map();
   displayedColumns: string[] = ['id', 'nombre', 'tipoMedida', 'cantidad', 'costo', 'costoUnidad', 'activo', 'actions'];
   isLoading = true;
@@ -129,8 +131,8 @@ export class ListRecetasComponent implements OnInit {
       this.recetas = recetasData;
       this.totalRecetas = this.recetas.length;
 
-      // Load recipe items and ingredients for cost calculation
-      await this.loadRecetaItemsAndIngredientes();
+      // Load recipe variations and ingredients for cost calculation
+      await this.loadVariacionesAndIngredientes();
       
       // Pre-compute costs for each recipe
       this.calculateAllRecipeCosts();
@@ -142,27 +144,34 @@ export class ListRecetasComponent implements OnInit {
     }
   }
 
-  async loadRecetaItemsAndIngredientes(): Promise<void> {
+  async loadVariacionesAndIngredientes(): Promise<void> {
     // Clear previous data
-    this.recetaItems.clear();
+    this.variaciones.clear();
+    this.variacionItems.clear();
     this.ingredientes.clear();
 
-    // Load recipe items for each recipe
+    // Load variations for each recipe
     for (const receta of this.recetas) {
       if (receta.id) {
         try {
-          const items = await firstValueFrom(this.repositoryService.getRecetaItems(receta.id));
-          this.recetaItems.set(receta.id, items);
+          const variaciones = await firstValueFrom(this.repositoryService.getRecetaVariaciones(receta.id));
+          this.variaciones.set(receta.id, variaciones);
 
-          // Load ingredients for each recipe item
-          for (const item of items) {
-            if (!this.ingredientes.has(item.ingredienteId)) {
-              const ingrediente = await firstValueFrom(this.repositoryService.getIngrediente(item.ingredienteId));
-              this.ingredientes.set(item.ingredienteId, ingrediente);
+          // Load variation items for each variation
+          for (const variacion of variaciones) {
+            const items = await firstValueFrom(this.repositoryService.getRecetaVariacionItems(variacion.id));
+            this.variacionItems.set(variacion.id, items);
+
+            // Load ingredients for each variation item
+            for (const item of items) {
+              if (!this.ingredientes.has(item.ingredienteId)) {
+                const ingrediente = await firstValueFrom(this.repositoryService.getIngrediente(item.ingredienteId));
+                this.ingredientes.set(item.ingredienteId, ingrediente);
+              }
             }
           }
         } catch (error) {
-          console.error(`Error loading items for recipe ${receta.id}:`, error);
+          console.error(`Error loading variations for recipe ${receta.id}:`, error);
         }
       }
     }
@@ -181,29 +190,39 @@ export class ListRecetasComponent implements OnInit {
     }
   }
 
-  getRecetaItems(recetaId: number): RecetaItem[] {
-    return this.recetaItems.get(recetaId) || [];
+  getRecetaVariaciones(recetaId: number): RecetaVariacion[] {
+    return this.variaciones.get(recetaId) || [];
+  }
+
+  getVariacionItems(variacionId: number): RecetaVariacionItem[] {
+    return this.variacionItems.get(variacionId) || [];
   }
 
   getIngrediente(ingredienteId: number): Ingrediente | undefined {
     return this.ingredientes.get(ingredienteId);
   }
 
-  // Use these methods for calculation, but they won't be called directly from the template
+  // Calculate the total cost of a recipe based on all its variations
   calculateTotalCost(recetaId: number): number {
-    const items = this.getRecetaItems(recetaId);
+    const variaciones = this.getRecetaVariaciones(recetaId);
     let total = 0;
     
-    for (const item of items) {
-      if (item.activo) {
-        const ingrediente = this.getIngrediente(item.ingredienteId);
-        if (ingrediente) {
-          total += ingrediente.costo * item.cantidad;
-        }
-      }
+    // If no variations, return 0
+    if (variaciones.length === 0) {
+      return 0;
     }
     
-    return total;
+    // Average the costs of all active variations
+    const activeVariaciones = variaciones.filter(v => v.activo);
+    if (activeVariaciones.length === 0) {
+      return 0;
+    }
+    
+    for (const variacion of activeVariaciones) {
+      total += variacion.costo || 0;
+    }
+    
+    return total / activeVariaciones.length;
   }
 
   calculateCostPerUnit(recetaId: number, totalCost?: number): number {
@@ -244,7 +263,7 @@ export class ListRecetasComponent implements OnInit {
   }
 
   openCreateDialog(): void {
-    const dialogRef = this.dialog.open(CreateEditRecetaDialogComponent, {
+    const dialogRef = this.dialog.open(CreateEditRecetaComponent, {
       width: '800px',
       disableClose: true,
       data: {
@@ -260,7 +279,7 @@ export class ListRecetasComponent implements OnInit {
   }
 
   openEditDialog(receta: Receta): void {
-    const dialogRef = this.dialog.open(CreateEditRecetaDialogComponent, {
+    const dialogRef = this.dialog.open(CreateEditRecetaComponent, {
       width: '800px',
       disableClose: true,
       data: {
