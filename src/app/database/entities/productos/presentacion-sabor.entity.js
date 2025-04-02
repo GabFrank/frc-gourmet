@@ -45,6 +45,15 @@ __decorate([
     __metadata("design:type", Function)
 ], PresentacionSabor.prototype, "receta", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'variacion_id', nullable: true }),
+    __metadata("design:type", Number)
+], PresentacionSabor.prototype, "variacionId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)('RecetaVariacion', { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'variacion_id' }),
+    __metadata("design:type", Function)
+], PresentacionSabor.prototype, "variacion", void 0);
+__decorate([
     (0, typeorm_1.OneToMany)('PrecioVenta', 'presentacionSabor'),
     __metadata("design:type", Array)
 ], PresentacionSabor.prototype, "preciosVenta", void 0);

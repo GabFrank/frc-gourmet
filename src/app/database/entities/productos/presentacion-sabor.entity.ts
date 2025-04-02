@@ -4,6 +4,7 @@ import type { Presentacion } from './presentacion.entity';
 import type { Sabor } from './sabor.entity';
 import type { PrecioVenta } from './precio-venta.entity';
 import type { Receta } from './receta.entity';
+import type { RecetaVariacion } from './receta-variacion.entity';
 
 /**
  * Entity representing a product presentation with flavor
@@ -30,6 +31,13 @@ export class PresentacionSabor extends BaseModel {
   @ManyToOne('Receta', { nullable: true })
   @JoinColumn({ name: 'receta_id' })
   receta?: Receta;
+
+  @Column({ name: 'variacion_id', nullable: true })
+  variacionId?: number;
+
+  @ManyToOne('RecetaVariacion', { nullable: true })
+  @JoinColumn({ name: 'variacion_id' })
+  variacion?: RecetaVariacion;
 
   @OneToMany('PrecioVenta', 'presentacionSabor')
   preciosVenta!: PrecioVenta[];

@@ -37,6 +37,8 @@ import { CreateEditSaboresComponent } from './create-edit-sabores.component';
 import { TipoCodigo } from '../../../database/entities/productos/codigo.entity';
 import { PrecioVenta } from '../../../database/entities/productos/precio-venta.entity';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { trigger, state, style, transition, animate } from '@angular/animations';
+import { PresentacionSabor } from '../../../database/entities/productos/presentacion-sabor.entity';
 
 // renamed to avoid conflict with the imported type
 interface ProductImageModel {
@@ -84,7 +86,14 @@ interface PresentacionViewModel extends Presentacion {
     ConfirmationDialogComponent
   ],
   templateUrl: './create-edit-producto.component.html',
-  styleUrls: ['./create-edit-producto.component.scss']
+  styleUrls: ['./create-edit-producto.component.scss'],
+  animations: [
+    trigger('detailExpand', [
+      state('collapsed', style({ height: '0px', minHeight: '0', visibility: 'hidden' })),
+      state('expanded', style({ height: '*', visibility: 'visible' })),
+      transition('expanded <=> collapsed', animate('225ms cubic-bezier(0.4, 0.0, 0.2, 1)')),
+    ]),
+  ],
 })
 export class CreateEditProductoComponent implements OnInit, OnChanges, AfterViewInit {
   @Input() data: any;
@@ -146,6 +155,25 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   recipeCostPerUnit = 0;
   recipeSuggestedPrice = 0;
   defaultMonedaSimbolo = '$';
+
+  expandedPresentacion: Presentacion | null = null;
+  presentacionSabores: { [presentacionId: number]: PresentacionSabor[] } = {};
+  loadingSabores = false;
+
+  // Columns for the sabores expanded table
+  saboresDisplayedColumns: string[] = [
+    'nombre',
+    'receta',
+    'variacion',
+    'costo',
+    'precio',
+    'activo'
+  ];
+
+  /**
+   * Load sabor data asynchronously
+   */
+  public saborCache: { [saborId: number]: string } = {};
 
   constructor(
     private fb: FormBuilder,
@@ -1578,21 +1606,21 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       try {
         this.isLoading = true;
         await firstValueFrom(this.repositoryService.deleteProducto(producto.id));
-        
+
         this.isLoading = false;
         this.snackBar.open('Producto eliminado exitosamente', 'Cerrar', { duration: 3000 });
-        
+
         // Close the current tab after successful deletion
         this.goBack();
       } catch (error: any) {
         console.error('Error deleting producto:', error);
-        
+
         // Check if error is due to database restrictions (foreign key constraint, etc.)
         // The exact error message format depends on your backend implementation
         const errorMessage = error?.message || '';
-        const hasRestrictions = 
-          errorMessage.includes('constraint') || 
-          errorMessage.includes('restrict') || 
+        const hasRestrictions =
+          errorMessage.includes('constraint') ||
+          errorMessage.includes('restrict') ||
           errorMessage.includes('reference') ||
           errorMessage.includes('FOREIGN KEY');
 
@@ -1602,17 +1630,17 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
             'Cerrar',
             { duration: 5000 }
           );
-          
+
           // Set product as inactive instead
           try {
             await firstValueFrom(this.repositoryService.updateProducto(producto.id, { activo: false }));
-            
+
             // Update local product object if it still exists
             if (this.producto) {
               this.producto.activo = false;
               this.productoForm.get('activo')?.setValue(false);
             }
-            
+
             this.snackBar.open('Producto marcado como inactivo', 'Cerrar', { duration: 3000 });
           } catch (updateError) {
             console.error('Error setting product as inactive:', updateError);
@@ -1622,9 +1650,174 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
           // Other error
           this.snackBar.open('Error al eliminar producto: ' + (error?.message || 'Error desconocido'), 'Cerrar', { duration: 3000 });
         }
-        
+
         this.isLoading = false;
       }
     });
+  }
+
+  /**
+   * Toggle expansion of a presentacion row to show sabores
+   */
+  toggleExpandPresentacion(presentacion: Presentacion): void {
+    if (this.expandedPresentacion === presentacion) {
+      this.expandedPresentacion = null;
+    } else {
+      this.expandedPresentacion = presentacion;
+      if (presentacion && presentacion.id) {
+        this.loadPresentacionSabores(presentacion.id);
+      }
+    }
+  }
+
+  /**
+   * Load sabores for a presentacion
+   */
+  async loadPresentacionSabores(presentacionId: number): Promise<void> {
+    if (this.presentacionSabores[presentacionId]?.length > 0) {
+      // Already loaded
+      return;
+    }
+
+    this.loadingSabores = true;
+    try {
+      const sabores = await firstValueFrom(this.repositoryService.getPresentacionSabores(presentacionId));
+      this.presentacionSabores[presentacionId] = sabores;
+
+      // Load additional details for each sabor
+      for (const sabor of sabores) {
+        if (sabor.recetaId && sabor.variacionId) {
+          await this.loadSaborCostoDetails(sabor);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading presentacion sabores:', error);
+      this.snackBar.open('Error al cargar los sabores de la presentación', 'Cerrar', { duration: 3000 });
+    } finally {
+      this.loadingSabores = false;
+    }
+  }
+
+  /**
+   * Load cost details for a sabor
+   */
+  private async loadSaborCostoDetails(sabor: PresentacionSabor): Promise<void> {
+    try {
+      if (sabor.variacionId) {
+        const variacion = await firstValueFrom(this.repositoryService.getRecetaVariacion(sabor.variacionId));
+        if (variacion) {
+          // Set the sabor's cost from the variation
+          (sabor as any).costo = variacion.costo || 0;
+        }
+      } else if (sabor.recetaId) {
+        const recetaItems = await firstValueFrom(this.repositoryService.getRecetaItems(sabor.recetaId));
+        if (recetaItems) {
+          // Calculate the total cost from all recipe items
+          const totalCost = recetaItems.reduce((sum, item) => sum + (item.cantidad * (item.ingrediente?.costo || 0)), 0);
+          (sabor as any).costo = totalCost;
+        }
+      }
+
+      // Try to load the precio venta
+      const precios = await firstValueFrom(this.repositoryService.getPreciosVentaByPresentacion(sabor.presentacionId));
+      if (precios && precios.length > 0) {
+        // Find the principal price if it exists, otherwise use the first one
+        const principalPrecio = precios.find((p: PrecioVenta) => p.principal) || precios[0];
+        (sabor as any).precio = principalPrecio.valor;
+        (sabor as any).moneda = principalPrecio.moneda;
+      }
+    } catch (error) {
+      console.error('Error loading sabor details:', error);
+    }
+  }
+
+  /**
+   * Get sabor name by ID
+   */
+  getSaborNombre(saborId: number): string {
+    // First check cache
+    if (this.saborCache[saborId]) {
+      return this.saborCache[saborId];
+    }
+
+    // Then find the sabor by ID from all presentacionSabores
+    for (const presentacionId in this.presentacionSabores) {
+      const sabor = this.presentacionSabores[presentacionId].find(s => s.saborId === saborId);
+      if (sabor && sabor.sabor) {
+        // Update cache
+        this.saborCache[saborId] = sabor.sabor.nombre;
+        return sabor.sabor.nombre;
+      }
+    }
+
+    // If we get here, the sabor object was not properly loaded
+    // Return a placeholder and load sabor data asynchronously
+    this.loadSaborData(saborId);
+    return `Sabor #${saborId}`;
+  }
+
+  /**
+   * Load sabor data asynchronously
+   */
+  private async loadSaborData(saborId: number): Promise<void> {
+    // If already in cache or currently loading, return
+    if (this.saborCache[saborId]) {
+      return;
+    }
+
+    try {
+      // Mark as loading
+      this.saborCache[saborId] = 'Cargando...';
+
+      // Load sabor data from repository
+      const sabor = await firstValueFrom(this.repositoryService.getSabor(saborId));
+
+      if (sabor) {
+        // Update cache with sabor name
+        this.saborCache[saborId] = sabor.nombre;
+
+        // Update all instances in presentacionSabores
+        for (const presentacionId in this.presentacionSabores) {
+          const sabores = this.presentacionSabores[presentacionId];
+          for (const s of sabores) {
+            if (s.saborId === saborId) {
+              s.sabor = sabor;
+            }
+          }
+        }
+
+        // Trigger change detection
+        this.cdr.detectChanges();
+      } else {
+        this.saborCache[saborId] = `Sabor #${saborId} (no encontrado)`;
+      }
+    } catch (error) {
+      console.error(`Error loading sabor data for ID ${saborId}:`, error);
+      this.saborCache[saborId] = `Sabor #${saborId} (error)`;
+    }
+  }
+
+  /**
+   * Get receta name by ID
+   */
+  getRecetaNombre(recetaId?: number): string {
+    if (!recetaId) return 'No asignada';
+    const receta = this.recetas.find(r => r.id === recetaId);
+    return receta ? receta.nombre : 'Receta desconocida';
+  }
+
+  /**
+   * Get variacion name by ID
+   */
+  getVariacionNombre(variacionId?: number): string {
+    if (!variacionId) return 'No asignada';
+    return 'Variación'; // This is a placeholder - we'd need to load all variations to show proper names
+  }
+
+  /**
+   * Check if we should show the expanded row
+   */
+  shouldShowExpandedRow(presentacion: Presentacion): boolean {
+    return true; // Always return true to ensure the expansion row is available
   }
 }

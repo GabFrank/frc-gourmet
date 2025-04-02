@@ -56,6 +56,19 @@
         </mat-form-field>
       </div>
 
+      <div class="form-row" *ngIf="saborForm.get('recetaId')?.value">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Variación de receta (opcional)</mat-label>
+          <mat-select formControlName="variacionId">
+            <mat-option [value]="null">Sin variación</mat-option>
+            <mat-option *ngFor="let variacion of allVariaciones" [value]="variacion.id">
+              {{ variacion.nombre }}
+            </mat-option>
+          </mat-select>
+          <mat-hint>Seleccione una variación de la receta específica para este sabor</mat-hint>
+        </mat-form-field>
+      </div>
+
       <div class="form-row">
         <mat-checkbox formControlName="activo" color="primary">
           Activo
@@ -112,6 +125,19 @@
         </mat-form-field>
       </div>
 
+      <div class="form-row" *ngIf="newSaborForm.get('recetaId')?.value">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Variación de receta (opcional)</mat-label>
+          <mat-select formControlName="variacionId">
+            <mat-option [value]="null">Sin variación</mat-option>
+            <mat-option *ngFor="let variacion of allVariaciones" [value]="variacion.id">
+              {{ variacion.nombre }}
+            </mat-option>
+          </mat-select>
+          <mat-hint>Seleccione una variación de la receta específica para este sabor</mat-hint>
+        </mat-form-field>
+      </div>
+
       <div class="form-row">
         <mat-checkbox formControlName="activo" color="primary">
           Activo
@@ -151,6 +177,19 @@
         </mat-form-field>
       </div>
 
+      <div class="form-row" *ngIf="recetaForm.get('recetaId')?.value">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Variación de receta</mat-label>
+          <mat-select formControlName="variacionId">
+            <mat-option [value]="null">Sin variación</mat-option>
+            <mat-option *ngFor="let variacion of allVariaciones" [value]="variacion.id">
+              {{ variacion.nombre }}
+            </mat-option>
+          </mat-select>
+          <mat-hint>Seleccione una variación de la receta específica para este sabor</mat-hint>
+        </mat-form-field>
+      </div>
+
       <div class="form-actions">
         <button mat-button type="button" (click)="cancelEditReceta()">Cancelar</button>
         <button mat-raised-button color="accent" type="submit" [disabled]="loading">
@@ -182,6 +221,12 @@
       <ng-container matColumnDef="receta">
         <th mat-header-cell *matHeaderCellDef>Receta</th>
         <td mat-cell *matCellDef="let item">{{ getRecetaNombre(item.recetaId) }}</td>
+      </ng-container>
+
+      <!-- Variacion Column -->
+      <ng-container matColumnDef="variacion">
+        <th mat-header-cell *matHeaderCellDef>Variación</th>
+        <td mat-cell *matCellDef="let item">{{ getVariacionNombre(item.variacionId, item.recetaId) }}</td>
       </ng-container>
 
       <!-- Activo Column -->

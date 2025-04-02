@@ -296,7 +296,7 @@ export class ListProductosComponent implements OnInit, AfterViewInit {
     dialogRef.afterClosed().subscribe(result => {
       if (result) {
         this.isLoading = true;
-        
+
         firstValueFrom(this.repositoryService.deleteProducto(id))
           .then((response) => {
             this.isLoading = false;
@@ -313,13 +313,13 @@ export class ListProductosComponent implements OnInit, AfterViewInit {
           })
           .catch((error) => {
             console.error('Error deleting producto:', error);
-            
+
             // Check if error is due to database restrictions
             const errorMessage = error?.message || '';
-            const hasRestrictions = 
-              errorMessage.includes('restricciones') || 
-              errorMessage.includes('constraint') || 
-              errorMessage.includes('restrict') || 
+            const hasRestrictions =
+              errorMessage.includes('restricciones') ||
+              errorMessage.includes('constraint') ||
+              errorMessage.includes('restrict') ||
               errorMessage.includes('reference') ||
               errorMessage.includes('FOREIGN KEY');
 
@@ -329,7 +329,7 @@ export class ListProductosComponent implements OnInit, AfterViewInit {
                 'Cerrar',
                 { duration: 5000 }
               );
-              
+
               // Set product as inactive instead - this is now handled by the backend
               // Just reload the list to show updated status
               this.loadProductos();

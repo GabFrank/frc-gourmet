@@ -1950,12 +1950,12 @@ ipcMain.handle('deleteProducto', async (_event: any, productoId: number) => {
       return { success: true, deleted: true };
     } catch (error) {
       console.log('Could not delete producto, setting as inactive instead:', error);
-      
+
       // If deletion failed (likely due to other foreign key constraints),
       // set as inactive instead
       producto.activo = false;
       await productoRepository.save(producto);
-      
+
       // Throw a specific error to indicate why deletion failed
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`No se pudo eliminar debido a restricciones: ${errorMessage}`);
@@ -2621,6 +2621,7 @@ ipcMain.handle('getPresentacionSaboresByPresentacion', async (_event: any, prese
     const presentacionSaborRepository = dataSource.getRepository(PresentacionSabor);
     return await presentacionSaborRepository.find({
       where: { presentacionId },
+      relations: ['sabor', 'receta', 'variacion'], // Include relations
       order: { id: 'ASC' }
     });
   } catch (error) {

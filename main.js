@@ -2341,6 +2341,7 @@ ipcMain.handle('getPresentacionSaboresByPresentacion', async (_event, presentaci
         const presentacionSaborRepository = dataSource.getRepository(presentacion_sabor_entity_1.PresentacionSabor);
         return await presentacionSaborRepository.find({
             where: { presentacionId },
+            relations: ['sabor', 'receta', 'variacion'],
             order: { id: 'ASC' }
         });
     }
