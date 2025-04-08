@@ -67,7 +67,7 @@ export class ListRecetasComponent implements OnInit {
   filterForm: FormGroup;
   monedas: Moneda[] = [];
   defaultMoneda?: Moneda;
-  defaultMonedaSimbolo: string = '$';
+  defaultMonedaSimbolo = '$';
 
   // Pagination variables
   pageSize = 10;
@@ -133,7 +133,7 @@ export class ListRecetasComponent implements OnInit {
 
       // Load recipe variations and ingredients for cost calculation
       await this.loadVariacionesAndIngredientes();
-      
+
       // Pre-compute costs for each recipe
       this.calculateAllRecipeCosts();
     } catch (error) {
@@ -169,6 +169,9 @@ export class ListRecetasComponent implements OnInit {
                 this.ingredientes.set(item.ingredienteId, ingrediente);
               }
             }
+
+            // Calculate and update the variation cost (to show current values)
+            variacion.costo = this.calculateVariationCost(variacion.id, items);
           }
         } catch (error) {
           console.error(`Error loading variations for recipe ${receta.id}:`, error);
@@ -177,51 +180,42 @@ export class ListRecetasComponent implements OnInit {
     }
   }
 
-  // Calculate costs for all recipes and store the results
-  calculateAllRecipeCosts(): void {
-    for (const receta of this.recetas) {
-      if (receta.id) {
-        // Calculate and store total cost
-        receta.totalCost = this.calculateTotalCost(receta.id);
-        
-        // Calculate and store cost per unit
-        receta.costPerUnit = this.calculateCostPerUnit(receta.id, receta.totalCost);
+  // Calculate the actual cost of a variation based on its ingredients
+  calculateVariationCost(variacionId: number, items?: RecetaVariacionItem[]): number {
+    const variacionItems = items || this.getVariacionItems(variacionId);
+    let totalCost = 0;
+
+    for (const item of variacionItems) {
+      const ingrediente = this.getIngrediente(item.ingredienteId);
+      if (ingrediente && item.activo) {
+        totalCost += item.cantidad * ingrediente.costo;
       }
     }
-  }
 
-  getRecetaVariaciones(recetaId: number): RecetaVariacion[] {
-    return this.variaciones.get(recetaId) || [];
-  }
-
-  getVariacionItems(variacionId: number): RecetaVariacionItem[] {
-    return this.variacionItems.get(variacionId) || [];
-  }
-
-  getIngrediente(ingredienteId: number): Ingrediente | undefined {
-    return this.ingredientes.get(ingredienteId);
+    return totalCost;
   }
 
   // Calculate the total cost of a recipe based on all its variations
   calculateTotalCost(recetaId: number): number {
     const variaciones = this.getRecetaVariaciones(recetaId);
     let total = 0;
-    
+
     // If no variations, return 0
     if (variaciones.length === 0) {
       return 0;
     }
-    
+
     // Average the costs of all active variations
     const activeVariaciones = variaciones.filter(v => v.activo);
     if (activeVariaciones.length === 0) {
       return 0;
     }
-    
+
     for (const variacion of activeVariaciones) {
-      total += variacion.costo || 0;
+      // Use the calculated cost instead of the static costo field
+      total += this.calculateVariationCost(variacion.id);
     }
-    
+
     return total / activeVariaciones.length;
   }
 
@@ -230,7 +224,7 @@ export class ListRecetasComponent implements OnInit {
     if (!receta || !receta.cantidad || receta.cantidad <= 0) {
       return 0;
     }
-    
+
     const cost = totalCost !== undefined ? totalCost : this.calculateTotalCost(recetaId);
     return cost / receta.cantidad;
   }
@@ -335,5 +329,30 @@ export class ListRecetasComponent implements OnInit {
   onPageChange(event: PageEvent): void {
     this.pageSize = event.pageSize;
     this.currentPage = event.pageIndex;
+  }
+
+  getRecetaVariaciones(recetaId: number): RecetaVariacion[] {
+    return this.variaciones.get(recetaId) || [];
+  }
+
+  getVariacionItems(variacionId: number): RecetaVariacionItem[] {
+    return this.variacionItems.get(variacionId) || [];
+  }
+
+  getIngrediente(ingredienteId: number): Ingrediente | undefined {
+    return this.ingredientes.get(ingredienteId);
+  }
+
+  // Calculate costs for all recipes and store the results
+  calculateAllRecipeCosts(): void {
+    for (const receta of this.recetas) {
+      if (receta.id) {
+        // Calculate and store total cost
+        receta.totalCost = this.calculateTotalCost(receta.id);
+
+        // Calculate and store cost per unit
+        receta.costPerUnit = this.calculateCostPerUnit(receta.id, receta.totalCost);
+      }
+    }
   }
 }

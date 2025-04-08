@@ -1,0 +1,121 @@
+<div class="dialog-container">
+  <h2 mat-dialog-title>Tipos de Cambio para {{ monedaOrigen.denominacion }} ({{ monedaOrigen.simbolo }})</h2>
+
+  <div mat-dialog-content>
+    <div *ngIf="loading" class="loading-container">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Cargando tipos de cambio...</p>
+    </div>
+
+    <div *ngIf="error" class="error-message">
+      <mat-icon>error</mat-icon>
+      <span>{{ error }}</span>
+    </div>
+
+    <div *ngIf="!loading && !error">
+      <p class="instructions">
+        Administre los tipos de cambio para la moneda {{ monedaOrigen.denominacion }}.
+      </p>
+
+      <div class="action-bar">
+        <button mat-raised-button color="primary" (click)="addCambio()">
+          <mat-icon>add</mat-icon>
+          Agregar Tipo de Cambio
+        </button>
+      </div>
+
+      <table mat-table [dataSource]="dataSource" matSort (matSortChange)="sortData($event)" class="cambios-table">
+        <!-- Moneda Destino Column -->
+        <ng-container matColumnDef="monedaDestino">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Moneda Destino</th>
+          <td mat-cell *matCellDef="let cambio" style="text-align: start !important;">
+            {{ cambio.monedaDestino.denominacion }} ({{ cambio.monedaDestino.simbolo }})
+          </td>
+        </ng-container>
+
+        <!-- Compra Oficial Column -->
+        <ng-container matColumnDef="compraOficial">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header class="text-center">Compra Oficial</th>
+          <td mat-cell *matCellDef="let cambio" class="text-center">
+            {{ cambio.compraOficial | number:'1.0-4' }}
+          </td>
+        </ng-container>
+
+        <!-- Venta Oficial Column -->
+        <ng-container matColumnDef="ventaOficial">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header class="text-center">Venta Oficial</th>
+          <td mat-cell *matCellDef="let cambio" class="text-center">
+            {{ cambio.ventaOficial | number:'1.0-4' }}
+          </td>
+        </ng-container>
+
+        <!-- Compra Local Column -->
+        <ng-container matColumnDef="compraLocal">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header class="text-center">Compra Local</th>
+          <td mat-cell *matCellDef="let cambio" class="text-center">
+            {{ cambio.compraLocal | number:'1.0-4' }}
+          </td>
+        </ng-container>
+
+        <!-- Venta Local Column -->
+        <ng-container matColumnDef="ventaLocal">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header class="text-center">Venta Local</th>
+          <td mat-cell *matCellDef="let cambio" class="text-center">
+            {{ cambio.ventaLocal | number:'1.0-4' }}
+          </td>
+        </ng-container>
+
+        <!-- Activo Column -->
+        <ng-container matColumnDef="activo">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header class="text-center">Estado</th>
+          <td mat-cell *matCellDef="let cambio" class="text-center">
+            <span class="status-badge" [ngClass]="cambio.activo ? 'active' : 'inactive'">
+              {{ cambio.activo ? 'Activo' : 'Inactivo' }}
+            </span>
+          </td>
+        </ng-container>
+
+        <!-- Acciones Column -->
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef class="text-center">Acciones</th>
+          <td mat-cell *matCellDef="let cambio" class="text-center actions-cell">
+            <div class="action-button-container">
+              <button mat-icon-button [matMenuTriggerFor]="menu" [disabled]="saving">
+                <mat-icon>more_vert</mat-icon>
+              </button>
+              <mat-menu #menu="matMenu">
+                <button mat-menu-item (click)="editCambio(cambio)" [disabled]="saving">
+                  <mat-icon>edit</mat-icon>
+                  <span>Editar</span>
+                </button>
+                <button mat-menu-item (click)="toggleActivo(cambio)" [disabled]="saving">
+                  <mat-icon [color]="cambio.activo ? 'warn' : 'accent'">
+                    {{ cambio.activo ? 'toggle_on' : 'toggle_off' }}
+                  </mat-icon>
+                  <span>{{ cambio.activo ? 'Desactivar' : 'Activar' }}</span>
+                </button>
+                <button mat-menu-item (click)="deleteCambio(cambio)" [disabled]="saving">
+                  <mat-icon color="warn">delete</mat-icon>
+                  <span>Eliminar</span>
+                </button>
+              </mat-menu>
+            </div>
+          </td>
+        </ng-container>
+
+        <!-- Row definitions -->
+        <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;"
+            [ngClass]="{'inactive-row': !row.activo}"></tr>
+      </table>
+
+      <div *ngIf="dataSource.data.length === 0" class="no-data">
+        <p>No hay tipos de cambio registrados para esta moneda.</p>
+      </div>
+    </div>
+  </div>
+
+  <div mat-dialog-actions align="end">
+    <button mat-button [disabled]="loading || saving" (click)="close()">Cerrar</button>
+  </div>
+</div>

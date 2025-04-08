@@ -1,0 +1,194 @@
+.page-container {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+
+  h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 500;
+  }
+
+  .actions {
+    display: flex;
+    gap: 10px;
+  }
+}
+
+.filters-container {
+  background-color: rgba(0, 0, 0, 0.03);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+
+  .filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 16px;
+    align-items: flex-start;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    mat-form-field {
+      flex: 1;
+      min-width: 150px;
+    }
+
+    .id-field {
+      max-width: 100px;
+      flex: 0 0 auto;
+    }
+
+    .usuario-field {
+      flex: 2;
+      min-width: 250px;
+    }
+
+    .filter-button {
+      align-self: center;
+      height: 48px;
+    }
+  }
+
+  .date-filters-row {
+    .date-container {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 10px;
+      flex: 1;
+    }
+
+    .date-field {
+      min-width: 260px;
+      flex: 1;
+    }
+
+    .date-toggle-container {
+      display: flex;
+      align-items: center;
+      margin-bottom: 20px;
+
+      .toggle-label {
+        margin-right: 8px;
+        color: rgba(0, 0, 0, 0.6);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .date-toggle {
+        height: 36px;
+
+        &.compact {
+          transform: scale(0.9);
+          margin-left: -8px;
+        }
+      }
+    }
+  }
+}
+
+.table-container {
+  flex: 1;
+  overflow: auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background-color: var(--mat-table-background-color);
+
+  .loading-message, .error-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: rgba(0, 0, 0, 0.6);
+  }
+
+  table {
+    width: 100%;
+  }
+
+  .mat-column-id {
+    width: 80px;
+  }
+
+  .mat-column-actions {
+    width: 100px;
+    text-align: center;
+  }
+
+  .mat-column-estado {
+    width: 120px;
+  }
+}
+
+/* Dark theme adjustments */
+:host-context(.dark-theme) {
+  .filters-container {
+    background-color: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+
+    .date-toggle-container {
+      .toggle-label {
+        color: rgba(255, 255, 255, 0.7);
+      }
+    }
+  }
+
+  .table-container {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+
+    .loading-message, .error-container {
+      color: rgba(255, 255, 255, 0.7);
+    }
+  }
+
+  .mat-button-toggle-group {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+.mat-mdc-row:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+:host-context(.dark-theme) .mat-mdc-row:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+@media (max-width: 768px) {
+  .filters-container {
+    .filter-row {
+      flex-direction: column;
+
+      .id-field, .usuario-field {
+        max-width: 100%;
+        width: 100%;
+      }
+
+      .filter-button {
+        align-self: flex-end;
+      }
+    }
+
+    .date-filters-row {
+      .date-container {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  }
+}
+

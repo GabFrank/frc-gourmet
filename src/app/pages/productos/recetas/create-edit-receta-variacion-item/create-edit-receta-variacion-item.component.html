@@ -5,14 +5,25 @@
     <div class="form-row">
       <mat-form-field appearance="outline" class="full-width">
         <mat-label>Ingrediente</mat-label>
-        <mat-select formControlName="ingredienteId">
-          <mat-option *ngFor="let ingrediente of data.ingredientes" [value]="ingrediente.id">
-            {{ ingrediente.descripcion }} ({{ ingrediente.tipoMedida }})
-          </mat-option>
-        </mat-select>
+        <input type="text"
+               matInput
+               formControlName="ingredienteSearch"
+               [matAutocomplete]="auto"
+               placeholder="Buscar ingrediente...">
+        <mat-spinner *ngIf="searchLoading" matSuffix diameter="20"></mat-spinner>
         <mat-error *ngIf="itemForm.get('ingredienteId')?.hasError('required')">
           Seleccione un ingrediente
         </mat-error>
+        <mat-autocomplete #auto="matAutocomplete"
+                          [displayWith]="displayIngrediente.bind(this)"
+                          (optionSelected)="onIngredienteSelected($event)">
+          <mat-option *ngFor="let ingrediente of filteredIngredientes | async" [value]="ingrediente">
+            {{ ingrediente.optionText }}
+          </mat-option>
+          <mat-option *ngIf="(filteredIngredientes | async)?.length === 0 && !searchLoading" [disabled]="true">
+            No se encontraron ingredientes
+          </mat-option>
+        </mat-autocomplete>
       </mat-form-field>
     </div>
 

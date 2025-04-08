@@ -1,6 +1,19 @@
-import { Component, Input, OnInit, OnChanges, SimpleChanges, Inject, Optional } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
+import {
+  Component,
+  Input,
+  OnInit,
+  OnChanges,
+  SimpleChanges,
+  Inject,
+  Optional,
+} from '@angular/core';
+import { CommonModule, DecimalPipe } from '@angular/common';
+import {
+  FormBuilder,
+  FormGroup,
+  Validators,
+  ReactiveFormsModule,
+} from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -14,18 +27,33 @@ import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatCardModule } from '@angular/material/card';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
+import {
+  MatDialogRef,
+  MAT_DIALOG_DATA,
+  MatDialogModule,
+} from '@angular/material/dialog';
 import { RepositoryService } from '../../../database/repository.service';
 import { PrecioVenta } from '../../../database/entities/productos/precio-venta.entity';
 import { Presentacion } from '../../../database/entities/productos/presentacion.entity';
+import { PresentacionSabor } from '../../../database/entities/productos/presentacion-sabor.entity';
 import { Moneda } from '../../../database/entities/financiero/moneda.entity';
 import { TipoPrecio } from '../../../database/entities/financiero/tipo-precio.entity';
 import { firstValueFrom } from 'rxjs';
+import { CurrencyInputComponent } from '../../../shared/components/currency-input/currency-input.component';
+import { CurrencyConfigService } from '../../../shared/services/currency-config.service';
 
 interface DialogData {
-  presentacion: Presentacion;
+  presentacion?: Presentacion;
+  presentacionSabor?: PresentacionSabor;
   precio?: PrecioVenta;
   editMode?: boolean;
+  recipeCost?: number;
+  suggestedPrice?: number;
+}
+
+interface PrecioVentaDisplay extends PrecioVenta {
+  formattedValue: string;
+  cmv: number;
 }
 
 @Component({
@@ -47,409 +75,90 @@ interface DialogData {
     MatTooltipModule,
     MatCardModule,
     MatSnackBarModule,
-    MatDialogModule
+    MatDialogModule,
+    CurrencyInputComponent,
   ],
-  template: `
-    <div class="precios-container">
-      <div class="loading-shade" *ngIf="isLoading">
-        <mat-spinner diameter="50"></mat-spinner>
-      </div>
-
-      <!-- Form Section -->
-      <mat-card class="form-card">
-        <mat-card-header>
-          <mat-card-title>{{ isEditing ? 'Editar' : 'Nuevo' }} Precio de Venta</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <form [formGroup]="precioForm" class="form-container">
-            <div class="form-row">
-              <mat-form-field appearance="outline" class="field-moneda">
-                <mat-label>Moneda</mat-label>
-                <mat-select formControlName="monedaId" required>
-                  <mat-option *ngFor="let moneda of monedas" [value]="moneda.id">
-                    {{ moneda.simbolo }} - {{ moneda.denominacion }}
-                  </mat-option>
-                </mat-select>
-                <mat-error *ngIf="precioForm.get('monedaId')?.hasError('required')">
-                  La moneda es requerida
-                </mat-error>
-              </mat-form-field>
-
-              <mat-form-field appearance="outline" class="field-valor">
-                <mat-label>Valor</mat-label>
-                <input matInput type="number" formControlName="valor" min="0.01" step="0.01" required>
-                <mat-error *ngIf="precioForm.get('valor')?.hasError('required')">
-                  El valor es requerido
-                </mat-error>
-                <mat-error *ngIf="precioForm.get('valor')?.hasError('min')">
-                  El valor debe ser mayor a 0
-                </mat-error>
-              </mat-form-field>
-            </div>
-
-            <div class="form-row second-row">
-              <mat-form-field appearance="outline" class="field-tipo">
-                <mat-label>Tipo de Precio</mat-label>
-                <mat-select formControlName="tipoPrecioId">
-                  <mat-option [value]="null">Sin tipo específico</mat-option>
-                  <mat-option *ngFor="let tipoPrecio of tipoPrecios" [value]="tipoPrecio.id">
-                    {{ tipoPrecio.descripcion }}
-                  </mat-option>
-                </mat-select>
-              </mat-form-field>
-
-              <div class="checkbox-wrapper">
-                <div class="checkbox-group">
-                  <mat-checkbox formControlName="principal" color="primary">Principal</mat-checkbox>
-                  <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
-                </div>
-              </div>
-            </div>
-          </form>
-        </mat-card-content>
-        <mat-card-actions align="end">
-          <button mat-button (click)="closeDialog()" *ngIf="hasDialog">
-            Salir
-          </button>
-          <button mat-button *ngIf="isEditing" (click)="cancelEdit()" [disabled]="isLoading">
-            Cancelar
-          </button>
-          <button mat-raised-button color="primary" (click)="savePrecio()" [disabled]="precioForm.invalid || isLoading">
-            {{ isEditing ? 'Actualizar' : 'Guardar' }}
-          </button>
-        </mat-card-actions>
-      </mat-card>
-
-      <!-- List Section -->
-      <div class="list-section">
-        <h4 class="list-title">Lista de precios</h4>
-
-        <div *ngIf="precios.length === 0" class="empty-list">
-          <mat-icon>monetization_on</mat-icon>
-          <p>No hay precios configurados para esta presentación</p>
-          <p class="hint">Complete el formulario para agregar un precio</p>
-        </div>
-
-        <div class="table-container" *ngIf="precios.length > 0">
-          <table mat-table [dataSource]="precios" class="mat-elevation-z1">
-            <!-- Moneda Column -->
-            <ng-container matColumnDef="moneda">
-              <th mat-header-cell *matHeaderCellDef>Moneda</th>
-              <td mat-cell *matCellDef="let item">
-                {{ item.moneda?.simbolo }} - {{ item.moneda?.denominacion }}
-              </td>
-            </ng-container>
-
-            <!-- Valor Column -->
-            <ng-container matColumnDef="valor">
-              <th mat-header-cell *matHeaderCellDef>Valor</th>
-              <td mat-cell *matCellDef="let item">
-                {{ item.moneda?.simbolo }} {{ item.valor | number:'1.2-2' }}
-              </td>
-            </ng-container>
-
-            <!-- Tipo Precio Column -->
-            <ng-container matColumnDef="tipoPrecio">
-              <th mat-header-cell *matHeaderCellDef>Tipo de Precio</th>
-              <td mat-cell *matCellDef="let item">
-                {{ item.tipoPrecio?.descripcion || 'Estándar' }}
-              </td>
-            </ng-container>
-
-            <!-- Principal Column -->
-            <ng-container matColumnDef="principal">
-              <th mat-header-cell *matHeaderCellDef>Principal</th>
-              <td mat-cell *matCellDef="let item">
-                <mat-icon *ngIf="item.principal" color="primary">check_circle</mat-icon>
-                <mat-icon *ngIf="!item.principal" color="disabled">radio_button_unchecked</mat-icon>
-              </td>
-            </ng-container>
-
-            <!-- Activo Column -->
-            <ng-container matColumnDef="activo">
-              <th mat-header-cell *matHeaderCellDef>Activo</th>
-              <td mat-cell *matCellDef="let item">
-                <span class="status-badge" [ngClass]="item.activo ? 'active' : 'inactive'">
-                  {{ item.activo ? 'Activo' : 'Inactivo' }}
-                </span>
-              </td>
-            </ng-container>
-
-            <!-- Actions Column -->
-            <ng-container matColumnDef="acciones">
-              <th mat-header-cell *matHeaderCellDef>Acciones</th>
-              <td mat-cell *matCellDef="let item" class="actions-cell">
-                <div class="action-buttons">
-                  <button mat-icon-button color="primary" (click)="editPrecio(item)" matTooltip="Editar">
-                    <mat-icon>edit</mat-icon>
-                  </button>
-                  <button mat-icon-button color="warn" (click)="deletePrecio(item)" matTooltip="Eliminar">
-                    <mat-icon>delete</mat-icon>
-                  </button>
-                </div>
-              </td>
-            </ng-container>
-
-            <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
-            <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
-          </table>
-        </div>
-      </div>
-    </div>
-  `,
-  styles: [`
-    .precios-container {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      position: relative;
-      min-width: 750px;
-      max-width: 800px;
-      margin: 0 auto;
-    }
-
-    .loading-shade {
-      position: absolute;
-      top: 0;
-      left: 0;
-      bottom: 0;
-      right: 0;
-      background: rgba(0, 0, 0, 0.15);
-      z-index: 1000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .form-card {
-      margin-bottom: 4px;
-      padding-bottom: 0;
-    }
-
-    .form-container {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      width: 100%;
-    }
-
-    .form-row {
-      display: flex;
-      align-items: center;
-      flex-wrap: nowrap;
-      gap: 8px;
-      width: 100%;
-    }
-
-    .second-row {
-      margin-top: -8px;
-    }
-
-    .field-moneda {
-      width: 60%;
-      min-width: 150px;
-    }
-
-    .field-valor {
-      width: 40%;
-      min-width: 100px;
-    }
-
-    .field-tipo {
-      width: 50%;
-      min-width: 150px;
-    }
-
-    .checkbox-wrapper {
-      width: 50%;
-      display: flex;
-      align-items: flex-start;
-    }
-
-    .checkbox-group {
-      display: flex;
-      gap: 16px;
-      align-items: center;
-      white-space: nowrap;
-      padding-bottom: 30px;
-      padding-left: 10px;
-    }
-
-    .empty-list {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 24px 16px;
-      background-color: #f5f5f5;
-      border-radius: 4px;
-    }
-
-    .empty-list mat-icon {
-      font-size: 48px;
-      height: 48px;
-      width: 48px;
-      margin-bottom: 12px;
-      color: #757575;
-    }
-
-    .empty-list p {
-      margin: 0;
-      color: #616161;
-      text-align: center;
-    }
-
-    .empty-list .hint {
-      margin-top: 6px;
-      font-size: 0.9em;
-      color: #9e9e9e;
-    }
-
-    .list-section {
-      margin-top: 4px;
-    }
-
-    .list-title {
-      margin-top: 0;
-      margin-bottom: 6px;
-      font-size: 14px;
-      font-weight: 500;
-      padding-left: 16px;
-    }
-
-    .table-container {
-      height: 300px;
-      overflow-y: auto;
-      overflow-x: hidden;
-      border-radius: 4px;
-      border: 1px solid rgba(0, 0, 0, 0.12);
-    }
-
-    table {
-      width: 100%;
-    }
-
-    /* Style table headers and cells */
-    .mat-mdc-header-cell {
-      text-align: center;
-      justify-content: center;
-      padding: 0 8px;
-    }
-
-    .mat-mdc-cell {
-      text-align: center;
-      justify-content: center;
-      padding: 0 8px;
-    }
-
-    /* Keep action buttons side by side */
-    .mat-column-acciones {
-      width: 100px;
-    }
-
-    .actions-cell {
-      padding: 0 8px !important;
-    }
-
-    .action-buttons {
-      display: flex;
-      flex-direction: row;
-      justify-content: center;
-      align-items: center;
-    }
-
-    .action-buttons button {
-      margin: 0 2px;
-    }
-
-    .status-badge {
-      display: inline-block;
-      padding: 4px 8px;
-      border-radius: 16px;
-      font-size: 12px;
-      font-weight: 500;
-    }
-
-    .status-badge.active {
-      background-color: #e8f5e9;
-      color: #2e7d32;
-    }
-
-    .status-badge.inactive {
-      background-color: #ffebee;
-      color: #c62828;
-    }
-
-    /* Dark theme styles */
-    :host-context(.dark-theme) {
-      .empty-list {
-        background-color: #424242;
-      }
-
-      .empty-list mat-icon {
-        color: #bdbdbd;
-      }
-
-      .empty-list p {
-        color: #e0e0e0;
-      }
-
-      .empty-list .hint {
-        color: #9e9e9e;
-      }
-
-      .mat-mdc-header-cell, .mat-mdc-cell {
-        color: rgba(255, 255, 255, 0.87);
-      }
-
-      .status-badge.active {
-        background-color: #1b5e20;
-        color: #e8f5e9;
-      }
-
-      .status-badge.inactive {
-        background-color: #b71c1c;
-        color: #ffebee;
-      }
-
-      .table-container {
-        border-color: rgba(255, 255, 255, 0.12);
-      }
-    }
-  `]
+  providers: [DecimalPipe],
+  templateUrl: './create-edit-precio-venta.component.html',
+  styleUrls: ['./create-edit-precio-venta.component.scss'],
 })
 export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
   @Input() presentacion?: Presentacion;
+  @Input() presentacionSabor?: PresentacionSabor;
 
   precioForm: FormGroup;
-  precios: PrecioVenta[] = [];
+  precios: PrecioVentaDisplay[] = [];
   monedas: Moneda[] = [];
   tipoPrecios: TipoPrecio[] = [];
   isLoading = false;
   isEditing = false;
   currentPrecioId?: number;
-  displayedColumns: string[] = ['moneda', 'valor', 'tipoPrecio', 'principal', 'activo', 'acciones'];
+  displayedColumns: string[] = [
+    'moneda',
+    'valor',
+    'cmv',
+    'tipoPrecio',
+    'principal',
+    'activo',
+    'acciones',
+  ];
 
-  get selectedMoneda(): Moneda | undefined {
-    const monedaId = this.precioForm.get('monedaId')?.value;
-    return this.monedas.find(m => m.id === monedaId);
+  // Recipe cost and suggested price
+  recipeCost = 0;
+  suggestedPrice = 0;
+  defaultMonedaSimbolo = '$';
+
+  // Selected currency for the currency input component
+  selectedMoneda: Moneda | null = null;
+
+  // Add a new property to store the formatted suggested price
+  formattedSuggestedPrice = '';
+
+  // Property to store the hint text
+  hintText = '';
+
+  get contextTitle(): string {
+    if (this.presentacionSabor) {
+      return 'Precios de Sabor';
+    }
+    return 'Precios de Presentación';
+  }
+
+  get hasDialog(): boolean {
+    return !!this.dialogRef;
   }
 
   constructor(
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
     private snackBar: MatSnackBar,
-    @Optional() private dialogRef?: MatDialogRef<CreateEditPrecioVentaComponent>,
-    @Optional() @Inject(MAT_DIALOG_DATA) private dialogData?: DialogData
+    private decimalPipe: DecimalPipe,
+    @Optional() public dialogRef: MatDialogRef<CreateEditPrecioVentaComponent>,
+    @Optional() @Inject(MAT_DIALOG_DATA) public dialogData: DialogData,
+    public currencyConfigService: CurrencyConfigService
   ) {
-    // Initialize with dialog data if available
-    if (this.dialogData?.presentacion) {
-      this.presentacion = this.dialogData.presentacion;
+    if (this.dialogData) {
+      if (this.dialogData.presentacion) {
+        this.presentacion = this.dialogData.presentacion;
+      }
 
-      // Handle editing existing precio
+      if (this.dialogData.presentacionSabor) {
+        this.presentacionSabor = this.dialogData.presentacionSabor;
+      }
+
       if (this.dialogData.editMode && this.dialogData.precio) {
         this.isEditing = true;
         this.currentPrecioId = this.dialogData.precio.id;
+      }
+
+      if (this.dialogData.recipeCost !== undefined) {
+        this.recipeCost = this.dialogData.recipeCost;
+      }
+
+      if (this.dialogData.suggestedPrice !== undefined) {
+        console.log(this.dialogData.suggestedPrice );
+
+        this.suggestedPrice = this.dialogData.suggestedPrice;
       }
     }
 
@@ -458,47 +167,143 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
       valor: [0, [Validators.required, Validators.min(0.01)]],
       tipoPrecioId: [null],
       principal: [false],
-      activo: [true]
+      activo: [true],
     });
   }
 
   ngOnInit(): void {
     this.loadMonedas();
     this.loadTipoPrecios();
+
+    // Load prices based on which entity type we have
     if (this.presentacion?.id) {
       this.loadPrecios();
+    } else if (this.presentacionSabor?.id) {
+      this.loadPreciosByPresentacionSabor();
+    }
 
-      // Pre-fill form if editing
-      if (this.isEditing && this.dialogData?.precio) {
-        this.precioForm.patchValue({
-          monedaId: this.dialogData.precio.monedaId,
-          valor: this.dialogData.precio.valor,
-          tipoPrecioId: this.dialogData.precio.tipoPrecioId,
-          principal: this.dialogData.precio.principal,
-          activo: this.dialogData.precio.activo
-        });
+    // Pre-populate valor field with suggested price if available
+    if (this.suggestedPrice > 0 && this.precioForm.get('valor')?.value === 0) {
+      let valueToSet = this.suggestedPrice;
+
+      // Round for PYG currency
+      if (
+        this.selectedMoneda?.denominacion?.toUpperCase() === 'PYG' ||
+        this.selectedMoneda?.denominacion?.toUpperCase() === 'GUARANI'
+      ) {
+        valueToSet = Math.round(valueToSet);
       }
+
+      this.precioForm.get('valor')?.setValue(valueToSet);
+    }
+
+    // Pre-fill form if editing
+    if (this.isEditing && this.dialogData?.precio) {
+      let valorToSet = this.dialogData.precio.valor;
+
+      // Round for PYG currency
+      if (
+        this.selectedMoneda?.denominacion?.toUpperCase() === 'PYG' ||
+        this.selectedMoneda?.denominacion?.toUpperCase() === 'GUARANI'
+      ) {
+        valorToSet = Math.round(valorToSet);
+      }
+
+      this.precioForm.patchValue({
+        monedaId: this.dialogData.precio.monedaId,
+        valor: valorToSet,
+        tipoPrecioId: this.dialogData.precio.tipoPrecioId,
+        principal: this.dialogData.precio.principal,
+        activo: this.dialogData.precio.activo,
+      });
+    }
+
+    // Format the suggested price once
+    if (this.suggestedPrice > 0) {
+      // this.updateFormattedSuggestedPrice();
+      this.updateHintText();
     }
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['presentacion'] && this.presentacion?.id) {
-      this.loadPrecios();
+    if (
+      (changes['presentacion'] && this.presentacion?.id) ||
+      (changes['presentacionSabor'] && this.presentacionSabor?.id)
+    ) {
+      if (this.presentacion?.id) {
+        this.loadPrecios();
+      } else if (this.presentacionSabor?.id) {
+        this.loadPreciosByPresentacionSabor();
+      }
     }
+
+    // Update formatted price when selectedMoneda or suggestedPrice changes
+    if (changes['selectedMoneda'] || this.suggestedPrice > 0) {
+      // this.updateFormattedSuggestedPrice();
+      this.updateHintText();
+    }
+  }
+
+  /**
+   * Format a value based on currency type
+   */
+  formatCurrencyValue(value: number): string {
+    return this.currencyConfigService.formatCurrencyByMoneda(
+      value,
+      this.selectedMoneda
+    );
+  }
+
+  /**
+   * Update the selected moneda when the dropdown changes
+   */
+  onMonedaChange(): void {
+    const monedaId = this.precioForm.get('monedaId')?.value;
+    this.selectedMoneda = this.monedas.find((m) => m.id === monedaId) || null;
+
+    // Update default currency symbol if a valid currency is selected
+    if (this.selectedMoneda?.simbolo) {
+      this.defaultMonedaSimbolo = this.selectedMoneda.simbolo;
+    }
+
+    // For PYG, we should round the value
+    if (
+      this.selectedMoneda?.denominacion?.toUpperCase() === 'PYG' ||
+      this.selectedMoneda?.denominacion?.toUpperCase() === 'GUARANI'
+    ) {
+      const currentValue = this.precioForm.get('valor')?.value;
+      if (currentValue) {
+        this.precioForm.get('valor')?.setValue(Math.round(currentValue));
+      }
+    }
+
+    // Update formatted suggested price when currency changes
+    // this.updateFormattedSuggestedPrice();
+    this.updateHintText();
   }
 
   async loadMonedas(): Promise<void> {
     this.isLoading = true;
     try {
       this.monedas = await firstValueFrom(this.repositoryService.getMonedas());
-      // If there are monedas, set the first one as default
       if (this.monedas.length > 0) {
-        const defaultMoneda = this.monedas.find(m => m.principal) || this.monedas[0];
+        const defaultMoneda =
+          this.monedas.find((m) => m.principal) || this.monedas[0];
         this.precioForm.get('monedaId')?.setValue(defaultMoneda.id);
+
+        if (defaultMoneda.simbolo) {
+          this.defaultMonedaSimbolo = defaultMoneda.simbolo;
+        }
+
+        // Set the selected moneda
+        this.selectedMoneda = defaultMoneda;
+        this.updateHintText();
       }
     } catch (error) {
       console.error('Error loading monedas:', error);
-      this.snackBar.open('Error al cargar las monedas', 'Cerrar', { duration: 3000 });
+      this.snackBar.open('Error al cargar las monedas', 'Cerrar', {
+        duration: 3000,
+      });
     } finally {
       this.isLoading = false;
     }
@@ -507,10 +312,14 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
   async loadTipoPrecios(): Promise<void> {
     this.isLoading = true;
     try {
-      this.tipoPrecios = await firstValueFrom(this.repositoryService.getTipoPrecios());
+      this.tipoPrecios = await firstValueFrom(
+        this.repositoryService.getTipoPrecios()
+      );
     } catch (error) {
       console.error('Error loading tipo precios:', error);
-      this.snackBar.open('Error al cargar los tipos de precio', 'Cerrar', { duration: 3000 });
+      this.snackBar.open('Error al cargar los tipos de precio', 'Cerrar', {
+        duration: 3000,
+      });
     } finally {
       this.isLoading = false;
     }
@@ -521,76 +330,173 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
 
     this.isLoading = true;
     try {
-      this.precios = await firstValueFrom(this.repositoryService.getPreciosVentaByPresentacion(this.presentacion.id));
-
-      // Load moneda and tipoPrecio details for each precio
-      for (const precio of this.precios) {
-        try {
-          precio.moneda = await firstValueFrom(this.repositoryService.getMoneda(precio.monedaId));
-
-          if (precio.tipoPrecioId) {
-            precio.tipoPrecio = await firstValueFrom(this.repositoryService.getTipoPrecio(precio.tipoPrecioId));
-          }
-        } catch (error) {
-          console.error(`Error loading details for precio ${precio.id}:`, error);
-        }
-      }
+      const precios = await firstValueFrom(
+        this.repositoryService.getPreciosVentaByPresentacion(
+          this.presentacion.id
+        )
+      );
+      await this.loadPrecioDetails(precios);
     } catch (error) {
       console.error('Error loading precios:', error);
-      this.snackBar.open('Error al cargar los precios', 'Cerrar', { duration: 3000 });
+      this.snackBar.open('Error al cargar los precios', 'Cerrar', {
+        duration: 3000,
+      });
     } finally {
       this.isLoading = false;
     }
   }
 
-  async savePrecio(): Promise<void> {
-    if (this.precioForm.invalid || !this.presentacion?.id) return;
+  async loadPreciosByPresentacionSabor(): Promise<void> {
+    console.log(this.presentacionSabor);
+
+    if (!this.presentacionSabor?.id) return;
 
     this.isLoading = true;
-    const formValue = this.precioForm.value;
+    try {
+      const precios = await firstValueFrom(
+        this.repositoryService.getPreciosVentaByPresentacionSabor(
+          this.presentacionSabor.id
+        )
+      );
+      await this.loadPrecioDetails(precios);
+    } catch (error) {
+      console.error('Error loading precios for presentacion sabor:', error);
+      this.snackBar.open('Error al cargar los precios', 'Cerrar', {
+        duration: 3000,
+      });
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  private async loadPrecioDetails(precios: PrecioVenta[]): Promise<void> {
+    const displayablePrecios: PrecioVentaDisplay[] = [];
+
+    for (const precio of precios) {
+      try {
+        precio.moneda = await firstValueFrom(
+          this.repositoryService.getMoneda(precio.monedaId)
+        );
+
+        if (precio.tipoPrecioId) {
+          precio.tipoPrecio = await firstValueFrom(
+            this.repositoryService.getTipoPrecio(precio.tipoPrecioId)
+          );
+        }
+
+        // Pre-format the currency value to avoid using function in template
+        const displayPrecio = precio as PrecioVentaDisplay;
+        displayPrecio.formattedValue =
+          this.currencyConfigService.formatCurrencyByMoneda(
+            precio.valor,
+            precio.moneda
+          );
+
+        // Calculate food cost percentage (CMV)
+        if (this.recipeCost > 0 && precio.valor > 0) {
+          displayPrecio.cmv = (this.recipeCost / precio.valor) * 100;
+        } else {
+          displayPrecio.cmv = 0;
+        }
+
+        displayablePrecios.push(displayPrecio);
+      } catch (error) {
+        console.error(`Error loading details for precio ${precio.id}:`, error);
+      }
+    }
+
+    this.precios = displayablePrecios;
+  }
+
+  async savePrecio(): Promise<void> {
+    if (this.precioForm.invalid) return;
+
+    if (!this.presentacion?.id && !this.presentacionSabor?.id) {
+      this.snackBar.open(
+        'Error: No se especificó presentación o sabor',
+        'Cerrar',
+        { duration: 3000 }
+      );
+      return;
+    }
+
+    this.isLoading = true;
+    const formValue = { ...this.precioForm.value };
+
+    // Ensure PYG values are rounded
+    if (
+      this.selectedMoneda?.denominacion?.toUpperCase() === 'PYG' ||
+      this.selectedMoneda?.denominacion?.toUpperCase() === 'GUARANI'
+    ) {
+      formValue.valor = Math.round(formValue.valor);
+    }
 
     try {
-      // If it's marked as principal, make sure to unmark others
       if (formValue.principal) {
         for (const precio of this.precios) {
           if (precio.id !== this.currentPrecioId && precio.principal) {
-            await firstValueFrom(this.repositoryService.updatePrecioVenta(precio.id, { principal: false }));
+            await firstValueFrom(
+              this.repositoryService.updatePrecioVenta(precio.id, {
+                principal: false,
+              })
+            );
           }
         }
       } else if (this.precios.length === 0) {
-        // If this is the first precio, make it principal by default
         formValue.principal = true;
       }
 
+      let newPriceId;
+
       if (this.isEditing && this.currentPrecioId) {
-        // Update existing precio
-        const result = await firstValueFrom(
+        await firstValueFrom(
           this.repositoryService.updatePrecioVenta(this.currentPrecioId, {
-            ...formValue
-          })
-        );
-
-        this.snackBar.open('Precio actualizado exitosamente', 'Cerrar', { duration: 3000 });
-      } else {
-        // Create new precio
-        const result = await firstValueFrom(
-          this.repositoryService.createPrecioVenta({
             ...formValue,
-            presentacionId: this.presentacion!.id
           })
         );
 
-        this.snackBar.open('Precio creado exitosamente', 'Cerrar', { duration: 3000 });
+        newPriceId = this.currentPrecioId;
+        this.snackBar.open('Precio actualizado exitosamente', 'Cerrar', {
+          duration: 3000,
+        });
+      } else {
+        const newPrecioData = {
+          ...formValue,
+          presentacionId: this.presentacion?.id,
+          presentacionSaborId: this.presentacionSabor?.id,
+        };
+
+        const result = await firstValueFrom(
+          this.repositoryService.createPrecioVenta(newPrecioData)
+        );
+
+        newPriceId = result.id;
+        this.snackBar.open('Precio creado exitosamente', 'Cerrar', {
+          duration: 3000,
+        });
       }
 
-      // Reload precios
-      this.loadPrecios();
+      if (this.presentacion?.id) {
+        this.loadPrecios();
+      } else if (this.presentacionSabor?.id) {
+        this.loadPreciosByPresentacionSabor();
+      }
 
-      // Reset form and editing state
       this.resetForm();
+
+      if (this.dialogRef) {
+        this.dialogRef.close({
+          success: true,
+          priceId: newPriceId,
+          presentacionId: this.presentacion?.id,
+          presentacionSaborId: this.presentacionSabor?.id,
+        });
+      }
     } catch (error) {
       console.error('Error saving precio:', error);
-      this.snackBar.open('Error al guardar el precio', 'Cerrar', { duration: 3000 });
+      this.snackBar.open('Error al guardar el precio', 'Cerrar', {
+        duration: 3000,
+      });
     } finally {
       this.isLoading = false;
     }
@@ -605,8 +511,12 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
       valor: precio.valor,
       tipoPrecioId: precio.tipoPrecioId,
       principal: precio.principal,
-      activo: precio.activo
+      activo: precio.activo,
     });
+
+    // Update selected moneda based on the price's monedaId
+    this.selectedMoneda =
+      this.monedas.find((m) => m.id === precio.monedaId) || null;
   }
 
   async deletePrecio(precio: PrecioVenta): Promise<void> {
@@ -618,13 +528,20 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
     try {
       await firstValueFrom(this.repositoryService.deletePrecioVenta(precio.id));
 
-      this.snackBar.open('Precio eliminado exitosamente', 'Cerrar', { duration: 3000 });
+      this.snackBar.open('Precio eliminado exitosamente', 'Cerrar', {
+        duration: 3000,
+      });
 
-      // Reload precios
-      this.loadPrecios();
+      if (this.presentacion?.id) {
+        this.loadPrecios();
+      } else if (this.presentacionSabor?.id) {
+        this.loadPreciosByPresentacionSabor();
+      }
     } catch (error) {
       console.error('Error deleting precio:', error);
-      this.snackBar.open('Error al eliminar el precio', 'Cerrar', { duration: 3000 });
+      this.snackBar.open('Error al eliminar el precio', 'Cerrar', {
+        duration: 3000,
+      });
     } finally {
       this.isLoading = false;
     }
@@ -638,27 +555,69 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
     this.isEditing = false;
     this.currentPrecioId = undefined;
 
-    // If there are monedas, set the first one as default
-    const defaultMonedaId = this.monedas.length > 0 ?
-      (this.monedas.find(m => m.principal)?.id || this.monedas[0].id) :
-      '';
+    const defaultMonedaId =
+      this.monedas.length > 0
+        ? this.monedas.find((m) => m.principal)?.id || this.monedas[0].id
+        : '';
 
     this.precioForm.reset({
       monedaId: defaultMonedaId,
       valor: 0,
       tipoPrecioId: null,
       principal: false,
-      activo: true
+      activo: true,
     });
-  }
 
-  get hasDialog(): boolean {
-    return !!this.dialogRef;
+    // Reset selected moneda to default
+    const defaultMoneda =
+      this.monedas.find((m) => m.id === defaultMonedaId) || null;
+    this.selectedMoneda = defaultMoneda;
   }
 
   closeDialog(): void {
     if (this.dialogRef) {
-      this.dialogRef.close();
+      this.dialogRef.close({
+        success: false,
+      });
     }
+  }
+
+  // Method to update the formatted price
+  // updateFormattedSuggestedPrice(): void {
+  //   if (this.suggestedPrice > 0) {
+  //     // Format with DecimalPipe, then update property
+  //     // if moneda is PYG so format with 1.0-0, else format with 1.0-2
+  //     let formattedNumber = this.decimalPipe.transform(
+  //       this.suggestedPrice,
+  //       '1.0-2'
+  //     );
+  //     if (this.selectedMoneda?.simbolo == 'PYG') {
+  //       formattedNumber = this.decimalPipe.transform(
+  //         this.suggestedPrice,
+  //         '1.0-0'
+  //       );
+  //     }
+  //     this.formattedSuggestedPrice =
+  //       formattedNumber || this.suggestedPrice.toString();
+  //   } else {
+  //     this.formattedSuggestedPrice = '';
+  //   }
+  // }
+
+  // Method to update the hint text
+  updateHintText(): void {
+    // Using our injected DecimalPipe
+    let formattedNumber = this.decimalPipe.transform(
+      this.suggestedPrice,
+      '1.0-2'
+    );
+
+    if (this.selectedMoneda?.simbolo == 'PYG') {
+      formattedNumber = this.decimalPipe.transform(
+        this.suggestedPrice,
+        '1.0-0'
+      );
+    }
+    this.hintText = `Precio sugerido: ${this.defaultMonedaSimbolo} ${formattedNumber} (CMV: 35%)`;
   }
 }

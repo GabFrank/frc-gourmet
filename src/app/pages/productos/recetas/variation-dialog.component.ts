@@ -60,8 +60,8 @@ export class VariationDialogComponent implements OnInit {
   allIngredientes: Ingrediente[] = [];
   loading = false;
   displayedColumns: string[] = ['ingrediente', 'cantidad', 'costo', 'activo', 'acciones'];
-  defaultMonedaSimbolo: string = '$';
-  totalCost: number = 0;
+  defaultMonedaSimbolo = '$';
+  totalCost = 0;
 
   constructor(
     private fb: FormBuilder,
@@ -122,6 +122,34 @@ export class VariationDialogComponent implements OnInit {
     this.totalCost = this.items.reduce((total, item) => {
       return total + this.getIngredientTotalCost(item);
     }, 0);
+
+    // Automatically update the cost in the database if we're editing an existing variation
+    if (this.data.variacion.id > 0) {
+      this.updateVariationCost();
+    }
+  }
+
+  // New method to update the cost in the database
+  private async updateVariationCost(): Promise<void> {
+    try {
+      // Only update if the cost has changed
+      if (this.data.variacion.costo !== this.totalCost) {
+        await firstValueFrom(
+          this.repositoryService.updateRecetaVariacion(this.data.variacion.id, {
+            costo: this.totalCost
+          })
+        );
+
+        // Update local data
+        this.data.variacion.costo = this.totalCost;
+
+        console.log(`Updated variation cost to ${this.totalCost}`);
+      }
+    } catch (error) {
+      console.error('Error updating variation cost:', error);
+      // Don't show snackbar because this happens automatically
+      // and we don't want to spam the user with notifications
+    }
   }
 
   addIngredient(): void {
@@ -137,21 +165,21 @@ export class VariationDialogComponent implements OnInit {
     // For now, we'll just use a simplified approach
     const ingredienteId = prompt('Enter ingredient ID:');
     const cantidad = prompt('Enter quantity:');
-    
+
     if (ingredienteId && cantidad) {
       this.loading = true;
-      
+
       try {
         const id = parseInt(ingredienteId);
         const cant = parseFloat(cantidad);
-        
+
         if (item) {
           // Update existing item - using partial update to avoid type issues
           const updatedItemData = {
             ingredienteId: id,
             cantidad: cant
           };
-          
+
           this.updateIngredient(item.id, updatedItemData);
         } else {
           // Create new item
@@ -161,7 +189,7 @@ export class VariationDialogComponent implements OnInit {
             cantidad: cant,
             activo: true
           };
-          
+
           this.createIngredient(newItem);
         }
       } catch (error) {
@@ -193,13 +221,13 @@ export class VariationDialogComponent implements OnInit {
       const updatedItem = await firstValueFrom(
         this.repositoryService.updateRecetaVariacionItem(itemId, updateData)
       );
-      
+
       // Update in the local array
       const index = this.items.findIndex(i => i.id === itemId);
       if (index !== -1) {
         this.items[index] = updatedItem;
       }
-      
+
       this.calculateTotalCost();
       this.snackBar.open('Ingrediente actualizado exitosamente', 'Cerrar', { duration: 3000 });
     } catch (error) {
@@ -218,13 +246,13 @@ export class VariationDialogComponent implements OnInit {
           activo: !item.activo
         })
       );
-      
+
       // Update in the local array
       const index = this.items.findIndex(i => i.id === item.id);
       if (index !== -1) {
         this.items[index] = updatedItem;
       }
-      
+
       this.calculateTotalCost();
       this.snackBar.open('Estado actualizado exitosamente', 'Cerrar', { duration: 3000 });
     } catch (error) {
@@ -242,13 +270,13 @@ export class VariationDialogComponent implements OnInit {
     try {
       this.loading = true;
       await firstValueFrom(this.repositoryService.deleteRecetaVariacionItem(item.id));
-      
+
       // Remove from local array
       const index = this.items.findIndex(i => i.id === item.id);
       if (index !== -1) {
         this.items.splice(index, 1);
       }
-      
+
       this.calculateTotalCost();
       this.snackBar.open('Ingrediente eliminado exitosamente', 'Cerrar', { duration: 3000 });
     } catch (error) {
@@ -283,10 +311,10 @@ export class VariationDialogComponent implements OnInit {
         const allVariations = await firstValueFrom(
           this.repositoryService.getRecetaVariaciones(this.data.variacion.recetaId)
         );
-        
+
         // Find current principal variation
         const currentPrincipal = allVariations.find(v => v.principal && v.id !== this.data.variacion.id);
-        
+
         // If there's a current principal, update it to not be principal
         if (currentPrincipal) {
           await firstValueFrom(
@@ -303,7 +331,7 @@ export class VariationDialogComponent implements OnInit {
           recetaId: this.data.variacion.recetaId,
           costo: this.totalCost
         };
-        
+
         result = await firstValueFrom(this.repositoryService.createRecetaVariacion(newVariationData));
       } else {
         // Updating existing variation
@@ -319,4 +347,4 @@ export class VariationDialogComponent implements OnInit {
       this.loading = false;
     }
   }
-} 
+}

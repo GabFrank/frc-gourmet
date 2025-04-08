@@ -1,8 +1,9 @@
 // Use CommonJS require syntax for Electron main process
-const { app, BrowserWindow, ipcMain, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, protocol, IpcMainInvokeEvent, dialog, shell } = require('electron');
 const path = require('path');
 const url = require('url');
 const fs = require('fs');
+const os = require('os');
 // Import TypeORM and reflect-metadata (required for TypeORM decorators)
 require('reflect-metadata');
 const { ThermalPrinter, PrinterTypes, CharacterSet } = require('node-thermal-printer');
@@ -39,6 +40,14 @@ import { Ingrediente } from './src/app/database/entities/productos/ingrediente.e
 import { TipoPrecio } from './src/app/database/entities/financiero/tipo-precio.entity';
 import { RecetaVariacion } from './src/app/database/entities/productos/receta-variacion.entity';
 import { RecetaVariacionItem } from './src/app/database/entities/productos/receta-variacion-item.entity';
+// Import new financial entities
+import { MonedaBillete } from './src/app/database/entities/financiero/moneda-billete.entity';
+import { Conteo } from './src/app/database/entities/financiero/conteo.entity';
+import { ConteoDetalle } from './src/app/database/entities/financiero/conteo-detalle.entity';
+import { Dispositivo } from './src/app/database/entities/financiero/dispositivo.entity';
+import { Caja, CajaEstado } from './src/app/database/entities/financiero/caja.entity';
+import { CajaMoneda } from './src/app/database/entities/financiero/caja-moneda.entity';
+import { MonedaCambio } from './src/app/database/entities/financiero/moneda-cambio.entity';
 
 let win: any;
 let dbService: DatabaseService;
@@ -99,8 +108,7 @@ function createWindow(): void {
   });
 
   // Register the app:// protocol for serving local files
-  // @ts-ignore - TypeScript doesn't recognize Electron's protocol API correctly
-  protocol.registerFileProtocol('app', (request, callback) => {
+  protocol.registerFileProtocol('app', (request: any, callback: any) => {
 const urlPath = request.url.substring(6); // Remove 'app://'
 
     // Handle profile images
@@ -2409,6 +2417,23 @@ const precioVentaRepository = dataSource.getRepository(PrecioVenta);
   }
 });
 
+// IPC handler for getting precios de venta by presentacion sabor
+ipcMain.handle('getPreciosVentaByPresentacionSabor', async (_event: any, presentacionSaborId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const precioVentaRepository = dataSource.getRepository(PrecioVenta);
+
+    return await precioVentaRepository.find({
+      where: { presentacionSaborId },
+      relations: ['moneda'],
+      order: { principal: 'DESC', valor: 'ASC' }
+    });
+  } catch (error) {
+    console.error('Error getting precios venta by presentacion sabor:', error);
+    throw error;
+  }
+});
+
 // IPC handler for creating a precio de venta
 ipcMain.handle('createPrecioVenta', async (_event: any, precioVentaData: any) => {
   try {
@@ -2571,7 +2596,10 @@ ipcMain.handle('getSabor', async (_event: any, saborId: number) => {
   try {
     const dataSource = dbService.getDataSource();
     const saborRepository = dataSource.getRepository(Sabor);
-    return await saborRepository.findOne({ where: { id: saborId } });
+    return await saborRepository.findOne({
+      where: { id: saborId },
+      relations: [] // Empty relations array to ensure we get the basic entity data
+    });
   } catch (error) {
     console.error(`Error fetching sabor with ID ${saborId}:`, error);
     throw error;
@@ -3007,5 +3035,1031 @@ ipcMain.handle('deleteRecetaVariacionItem', async (_event: any, variacionItemId:
   } catch (error) {
     console.error(`Error deleting recipe variation item with ID ${variacionItemId}:`, error);
     throw error;
+  }
+});
+
+// Set up IPC handlers for Moneda operations
+// ... existing code for Moneda operations ...
+
+// Set up IPC handlers for MonedaBillete operations
+ipcMain.handle('get-monedas-billetes', async () => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const monedaBilleteRepository = dataSource.getRepository(MonedaBillete);
+    return await monedaBilleteRepository.find({
+      relations: ['moneda']
+    });
+  } catch (error) {
+    console.error('Error getting monedas billetes:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('get-moneda-billete', async (event: Electron.IpcMainInvokeEvent, monedaBilleteId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const monedaBilleteRepository = dataSource.getRepository(MonedaBillete);
+    return await monedaBilleteRepository.findOne({
+      where: { id: monedaBilleteId },
+      relations: ['moneda']
+    });
+  } catch (error) {
+    console.error(`Error getting moneda billete ${monedaBilleteId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('create-moneda-billete', async (event: Electron.IpcMainInvokeEvent, monedaBilleteData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const monedaBilleteRepository = dataSource.getRepository(MonedaBillete);
+    const monedaRepository = dataSource.getRepository(Moneda);
+
+    // Get the moneda entity from the ID
+    if (monedaBilleteData.moneda && typeof monedaBilleteData.moneda === 'number') {
+      const monedaId = monedaBilleteData.moneda;
+      monedaBilleteData.moneda = await monedaRepository.findOne({
+        where: { id: monedaId }
+      });
+    }
+
+    // Create new moneda billete entity
+    const monedaBillete = monedaBilleteRepository.create(monedaBilleteData);
+
+    // Set tracking info
+    await setEntityUserTracking(monedaBillete, currentUser?.id, false);
+
+    // Save to database
+    return await monedaBilleteRepository.save(monedaBillete);
+  } catch (error) {
+    console.error('Error creating moneda billete:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('update-moneda-billete', async (event: Electron.IpcMainInvokeEvent, monedaBilleteId: number, monedaBilleteData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const monedaBilleteRepository = dataSource.getRepository(MonedaBillete);
+    const monedaRepository = dataSource.getRepository(Moneda);
+
+    // Find the existing moneda billete
+    const existingMonedaBillete = await monedaBilleteRepository.findOne({
+      where: { id: monedaBilleteId }
+    });
+
+    if (!existingMonedaBillete) {
+      throw new Error(`MonedaBillete with ID ${monedaBilleteId} not found`);
+    }
+
+    // Get the moneda entity from the ID if it's provided
+    if (monedaBilleteData.moneda && typeof monedaBilleteData.moneda === 'number') {
+      const monedaId = monedaBilleteData.moneda;
+      monedaBilleteData.moneda = await monedaRepository.findOne({
+        where: { id: monedaId }
+      });
+    }
+
+    // Update the entity
+    const updatedMonedaBillete = monedaBilleteRepository.merge(existingMonedaBillete, monedaBilleteData);
+
+    // Set tracking info
+    await setEntityUserTracking(updatedMonedaBillete, currentUser?.id, true);
+
+    // Save to database
+    return await monedaBilleteRepository.save(updatedMonedaBillete);
+  } catch (error) {
+    console.error(`Error updating moneda billete ${monedaBilleteId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('delete-moneda-billete', async (event: Electron.IpcMainInvokeEvent, monedaBilleteId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const monedaBilleteRepository = dataSource.getRepository(MonedaBillete);
+
+    // Find the moneda billete
+    const monedaBillete = await monedaBilleteRepository.findOne({
+      where: { id: monedaBilleteId }
+    });
+
+    if (!monedaBillete) {
+      throw new Error(`MonedaBillete with ID ${monedaBilleteId} not found`);
+    }
+
+    // Delete the moneda billete
+    return await monedaBilleteRepository.remove(monedaBillete);
+  } catch (error) {
+    console.error(`Error deleting moneda billete ${monedaBilleteId}:`, error);
+    throw error;
+  }
+});
+
+// Set up IPC handlers for Conteo operations
+ipcMain.handle('get-conteos', async () => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const conteoRepository = dataSource.getRepository(Conteo);
+    return await conteoRepository.find({
+      relations: ['detalles', 'detalles.monedaBillete', 'detalles.monedaBillete.moneda']
+    });
+  } catch (error) {
+    console.error('Error getting conteos:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('get-conteo', async (event: Electron.IpcMainInvokeEvent, conteoId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const conteoRepository = dataSource.getRepository(Conteo);
+    return await conteoRepository.findOne({
+      where: { id: conteoId },
+      relations: ['detalles', 'detalles.monedaBillete', 'detalles.monedaBillete.moneda']
+    });
+  } catch (error) {
+    console.error(`Error getting conteo ${conteoId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('create-conteo', async (event: Electron.IpcMainInvokeEvent, conteoData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const conteoRepository = dataSource.getRepository(Conteo);
+
+    // Create new conteo entity
+    const conteo = conteoRepository.create(conteoData);
+
+    // Set tracking info
+    await setEntityUserTracking(conteo, currentUser?.id, false);
+
+    // Save to database
+    return await conteoRepository.save(conteo);
+  } catch (error) {
+    console.error('Error creating conteo:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('update-conteo', async (event: Electron.IpcMainInvokeEvent, conteoId: number, conteoData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const conteoRepository = dataSource.getRepository(Conteo);
+
+    // Find the existing conteo
+    const existingConteo = await conteoRepository.findOne({
+      where: { id: conteoId }
+    });
+
+    if (!existingConteo) {
+      throw new Error(`Conteo with ID ${conteoId} not found`);
+    }
+
+    // Update the entity
+    const updatedConteo = conteoRepository.merge(existingConteo, conteoData);
+
+    // Set tracking info
+    await setEntityUserTracking(updatedConteo, currentUser?.id, true);
+
+    // Save to database
+    return await conteoRepository.save(updatedConteo);
+  } catch (error) {
+    console.error(`Error updating conteo ${conteoId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('delete-conteo', async (event: Electron.IpcMainInvokeEvent, conteoId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const conteoRepository = dataSource.getRepository(Conteo);
+
+    // Find the conteo
+    const conteo = await conteoRepository.findOne({
+      where: { id: conteoId }
+    });
+
+    if (!conteo) {
+      throw new Error(`Conteo with ID ${conteoId} not found`);
+    }
+
+    // Delete the conteo
+    return await conteoRepository.remove(conteo);
+  } catch (error) {
+    console.error(`Error deleting conteo ${conteoId}:`, error);
+    throw error;
+  }
+});
+
+// Set up IPC handlers for ConteoDetalle operations
+ipcMain.handle('get-conteo-detalles', async (event: Electron.IpcMainInvokeEvent, conteoId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const conteoDetalleRepository = dataSource.getRepository(ConteoDetalle);
+    return await conteoDetalleRepository.find({
+      where: { conteo: { id: conteoId } },
+      relations: ['monedaBillete', 'monedaBillete.moneda']
+    });
+  } catch (error) {
+    console.error(`Error getting conteo detalles for conteo ${conteoId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('get-conteo-detalle', async (event: Electron.IpcMainInvokeEvent, conteoDetalleId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const conteoDetalleRepository = dataSource.getRepository(ConteoDetalle);
+    return await conteoDetalleRepository.findOne({
+      where: { id: conteoDetalleId },
+      relations: ['conteo', 'monedaBillete', 'monedaBillete.moneda']
+    });
+  } catch (error) {
+    console.error(`Error getting conteo detalle ${conteoDetalleId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('create-conteo-detalle', async (event: Electron.IpcMainInvokeEvent, conteoDetalleData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const conteoDetalleRepository = dataSource.getRepository(ConteoDetalle);
+    const conteoRepository = dataSource.getRepository(Conteo);
+    const monedaBilleteRepository = dataSource.getRepository(MonedaBillete);
+
+    // Get the conteo entity from the ID
+    if (conteoDetalleData.conteo && typeof conteoDetalleData.conteo === 'number') {
+      const conteoId = conteoDetalleData.conteo;
+      conteoDetalleData.conteo = await conteoRepository.findOne({
+        where: { id: conteoId }
+      });
+    }
+
+    // Get the moneda billete entity from the ID
+    if (conteoDetalleData.monedaBillete && typeof conteoDetalleData.monedaBillete === 'number') {
+      const monedaBilleteId = conteoDetalleData.monedaBillete;
+      conteoDetalleData.monedaBillete = await monedaBilleteRepository.findOne({
+        where: { id: monedaBilleteId }
+      });
+    }
+
+    // Create new conteo detalle entity
+    const conteoDetalle = conteoDetalleRepository.create(conteoDetalleData);
+
+    // Set tracking info
+    await setEntityUserTracking(conteoDetalle, currentUser?.id, false);
+
+    // Save to database
+    return await conteoDetalleRepository.save(conteoDetalle);
+  } catch (error) {
+    console.error('Error creating conteo detalle:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('update-conteo-detalle', async (event: Electron.IpcMainInvokeEvent, conteoDetalleId: number, conteoDetalleData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const conteoDetalleRepository = dataSource.getRepository(ConteoDetalle);
+    const conteoRepository = dataSource.getRepository(Conteo);
+    const monedaBilleteRepository = dataSource.getRepository(MonedaBillete);
+
+    // Find the existing conteo detalle
+    const existingConteoDetalle = await conteoDetalleRepository.findOne({
+      where: { id: conteoDetalleId }
+    });
+
+    if (!existingConteoDetalle) {
+      throw new Error(`ConteoDetalle with ID ${conteoDetalleId} not found`);
+    }
+
+    // Get the conteo entity from the ID if it's provided
+    if (conteoDetalleData.conteo && typeof conteoDetalleData.conteo === 'number') {
+      const conteoId = conteoDetalleData.conteo;
+      conteoDetalleData.conteo = await conteoRepository.findOne({
+        where: { id: conteoId }
+      });
+    }
+
+    // Get the moneda billete entity from the ID if it's provided
+    if (conteoDetalleData.monedaBillete && typeof conteoDetalleData.monedaBillete === 'number') {
+      const monedaBilleteId = conteoDetalleData.monedaBillete;
+      conteoDetalleData.monedaBillete = await monedaBilleteRepository.findOne({
+        where: { id: monedaBilleteId }
+      });
+    }
+
+    // Update the entity
+    const updatedConteoDetalle = conteoDetalleRepository.merge(existingConteoDetalle, conteoDetalleData);
+
+    // Set tracking info
+    await setEntityUserTracking(updatedConteoDetalle, currentUser?.id, true);
+
+    // Save to database
+    return await conteoDetalleRepository.save(updatedConteoDetalle);
+  } catch (error) {
+    console.error(`Error updating conteo detalle ${conteoDetalleId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('delete-conteo-detalle', async (event: Electron.IpcMainInvokeEvent, conteoDetalleId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const conteoDetalleRepository = dataSource.getRepository(ConteoDetalle);
+
+    // Find the conteo detalle
+    const conteoDetalle = await conteoDetalleRepository.findOne({
+      where: { id: conteoDetalleId }
+    });
+
+    if (!conteoDetalle) {
+      throw new Error(`ConteoDetalle with ID ${conteoDetalleId} not found`);
+    }
+
+    // Delete the conteo detalle
+    return await conteoDetalleRepository.remove(conteoDetalle);
+  } catch (error) {
+    console.error(`Error deleting conteo detalle ${conteoDetalleId}:`, error);
+    throw error;
+  }
+});
+
+// Set up IPC handlers for Dispositivo operations
+ipcMain.handle('get-dispositivos', async () => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const dispositivoRepository = dataSource.getRepository(Dispositivo);
+    return await dispositivoRepository.find();
+  } catch (error) {
+    console.error('Error getting dispositivos:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('get-dispositivo', async (event: Electron.IpcMainInvokeEvent, dispositivoId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const dispositivoRepository = dataSource.getRepository(Dispositivo);
+    return await dispositivoRepository.findOne({
+      where: { id: dispositivoId }
+    });
+  } catch (error) {
+    console.error(`Error getting dispositivo ${dispositivoId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('create-dispositivo', async (event: Electron.IpcMainInvokeEvent, dispositivoData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const dispositivoRepository = dataSource.getRepository(Dispositivo);
+
+    // Check for duplicate name (case insensitive)
+    const existingWithSameName = await dispositivoRepository.createQueryBuilder('dispositivo')
+      .where('UPPER(dispositivo.nombre) = UPPER(:nombre)', { nombre: dispositivoData.nombre })
+      .getOne();
+
+    if (existingWithSameName) {
+      throw new Error(`Ya existe un dispositivo con el nombre '${dispositivoData.nombre}'.`);
+    }
+
+    // Check for duplicate MAC address if provided
+    if (dispositivoData.mac && dispositivoData.mac.trim() !== '') {
+      const existingWithSameMac = await dispositivoRepository.findOne({
+        where: { mac: dispositivoData.mac.trim() }
+      });
+
+      if (existingWithSameMac) {
+        throw new Error(`Ya existe un dispositivo con la dirección MAC '${dispositivoData.mac}'.`);
+      }
+    }
+
+    // Create new dispositivo entity
+    const dispositivo = dispositivoRepository.create(dispositivoData);
+
+    // Set tracking info
+    await setEntityUserTracking(dispositivo, currentUser?.id, false);
+
+    // Save to database
+    return await dispositivoRepository.save(dispositivo);
+  } catch (error) {
+    console.error('Error creating dispositivo:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('update-dispositivo', async (event: Electron.IpcMainInvokeEvent, dispositivoId: number, dispositivoData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const dispositivoRepository = dataSource.getRepository(Dispositivo);
+
+    // Find the existing dispositivo
+    const existingDispositivo = await dispositivoRepository.findOne({
+      where: { id: dispositivoId }
+    });
+
+    if (!existingDispositivo) {
+      throw new Error(`Dispositivo with ID ${dispositivoId} not found`);
+    }
+
+    // Check for duplicate name (case insensitive), excluding the current dispositivo
+    const existingWithSameName = await dispositivoRepository.createQueryBuilder('dispositivo')
+      .where('UPPER(dispositivo.nombre) = UPPER(:nombre)', { nombre: dispositivoData.nombre })
+      .andWhere('dispositivo.id != :id', { id: dispositivoId })
+      .getOne();
+
+    if (existingWithSameName) {
+      throw new Error(`Ya existe un dispositivo con el nombre '${dispositivoData.nombre}'.`);
+    }
+
+    // Check for duplicate MAC address if provided, excluding the current dispositivo
+    if (dispositivoData.mac && dispositivoData.mac.trim() !== '') {
+      const existingWithSameMac = await dispositivoRepository.createQueryBuilder('dispositivo')
+        .where('dispositivo.mac = :mac', { mac: dispositivoData.mac.trim() })
+        .andWhere('dispositivo.id != :id', { id: dispositivoId })
+        .getOne();
+
+      if (existingWithSameMac) {
+        throw new Error(`Ya existe un dispositivo con la dirección MAC '${dispositivoData.mac}'.`);
+      }
+    }
+
+    // Update the entity
+    const updatedDispositivo = dispositivoRepository.merge(existingDispositivo, dispositivoData);
+
+    // Set tracking info
+    await setEntityUserTracking(updatedDispositivo, currentUser?.id, true);
+
+    // Save to database
+    return await dispositivoRepository.save(updatedDispositivo);
+  } catch (error) {
+    console.error(`Error updating dispositivo ${dispositivoId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('delete-dispositivo', async (event: Electron.IpcMainInvokeEvent, dispositivoId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const dispositivoRepository = dataSource.getRepository(Dispositivo);
+
+    // Find the dispositivo
+    const dispositivo = await dispositivoRepository.findOne({
+      where: { id: dispositivoId }
+    });
+
+    if (!dispositivo) {
+      throw new Error(`Dispositivo with ID ${dispositivoId} not found`);
+    }
+
+    // Delete the dispositivo
+    return await dispositivoRepository.remove(dispositivo);
+  } catch (error) {
+    console.error(`Error deleting dispositivo ${dispositivoId}:`, error);
+    throw error;
+  }
+});
+
+// Set up IPC handlers for Caja operations
+ipcMain.handle('get-cajas', async () => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const cajaRepository = dataSource.getRepository(Caja);
+    return await cajaRepository.find({
+      relations: ['dispositivo', 'conteoApertura', 'conteoCierre', 'revisadoPor', 'revisadoPor.persona']
+    });
+  } catch (error) {
+    console.error('Error getting cajas:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('get-caja', async (event: Electron.IpcMainInvokeEvent, cajaId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const cajaRepository = dataSource.getRepository(Caja);
+    return await cajaRepository.findOne({
+      where: { id: cajaId },
+      relations: ['dispositivo', 'conteoApertura', 'conteoCierre', 'revisadoPor', 'revisadoPor.persona']
+    });
+  } catch (error) {
+    console.error(`Error getting caja ${cajaId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('get-caja-by-dispositivo', async (event: Electron.IpcMainInvokeEvent, dispositivoId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const cajaRepository = dataSource.getRepository(Caja);
+    return await cajaRepository.find({
+      where: { dispositivo: { id: dispositivoId } },
+      relations: ['dispositivo', 'conteoApertura', 'conteoCierre', 'revisadoPor', 'revisadoPor.persona']
+    });
+  } catch (error) {
+    console.error(`Error getting cajas for dispositivo ${dispositivoId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('create-caja', async (event: Electron.IpcMainInvokeEvent, cajaData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const cajaRepository = dataSource.getRepository(Caja);
+    const dispositivoRepository = dataSource.getRepository(Dispositivo);
+    const conteoRepository = dataSource.getRepository(Conteo);
+    const usuarioRepository = dataSource.getRepository(Usuario);
+
+    // Get the dispositivo entity from the ID
+    if (cajaData.dispositivo && typeof cajaData.dispositivo === 'number') {
+      const dispositivoId = cajaData.dispositivo;
+      cajaData.dispositivo = await dispositivoRepository.findOne({
+        where: { id: dispositivoId }
+      });
+    }
+
+    // Get the conteo apertura entity from the ID
+    if (cajaData.conteoApertura && typeof cajaData.conteoApertura === 'number') {
+      const conteoAperturaId = cajaData.conteoApertura;
+      cajaData.conteoApertura = await conteoRepository.findOne({
+        where: { id: conteoAperturaId }
+      });
+    }
+
+    // Get the conteo cierre entity from the ID if it's provided
+    if (cajaData.conteoCierre && typeof cajaData.conteoCierre === 'number') {
+      const conteoCierreId = cajaData.conteoCierre;
+      cajaData.conteoCierre = await conteoRepository.findOne({
+        where: { id: conteoCierreId }
+      });
+    }
+
+    // Get the usuario entity from the ID if it's provided
+    if (cajaData.revisadoPor && typeof cajaData.revisadoPor === 'number') {
+      const usuarioId = cajaData.revisadoPor;
+      cajaData.revisadoPor = await usuarioRepository.findOne({
+        where: { id: usuarioId }
+      });
+    }
+
+    // Create new caja entity
+    const caja = cajaRepository.create(cajaData);
+
+    // Set tracking info
+    await setEntityUserTracking(caja, currentUser?.id, false);
+
+    // Save to database
+    return await cajaRepository.save(caja);
+  } catch (error) {
+    console.error('Error creating caja:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('update-caja', async (event: Electron.IpcMainInvokeEvent, cajaId: number, cajaData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const cajaRepository = dataSource.getRepository(Caja);
+    const dispositivoRepository = dataSource.getRepository(Dispositivo);
+    const conteoRepository = dataSource.getRepository(Conteo);
+    const usuarioRepository = dataSource.getRepository(Usuario);
+
+    // Find the existing caja
+    const existingCaja = await cajaRepository.findOne({
+      where: { id: cajaId }
+    });
+
+    if (!existingCaja) {
+      throw new Error(`Caja with ID ${cajaId} not found`);
+    }
+
+    // Get the dispositivo entity from the ID if it's provided
+    if (cajaData.dispositivo && typeof cajaData.dispositivo === 'number') {
+      const dispositivoId = cajaData.dispositivo;
+      cajaData.dispositivo = await dispositivoRepository.findOne({
+        where: { id: dispositivoId }
+      });
+    }
+
+    // Get the conteo apertura entity from the ID if it's provided
+    if (cajaData.conteoApertura && typeof cajaData.conteoApertura === 'number') {
+      const conteoAperturaId = cajaData.conteoApertura;
+      cajaData.conteoApertura = await conteoRepository.findOne({
+        where: { id: conteoAperturaId }
+      });
+    }
+
+    // Get the conteo cierre entity from the ID if it's provided
+    if (cajaData.conteoCierre && typeof cajaData.conteoCierre === 'number') {
+      const conteoCierreId = cajaData.conteoCierre;
+      cajaData.conteoCierre = await conteoRepository.findOne({
+        where: { id: conteoCierreId }
+      });
+    }
+
+    // Get the usuario entity from the ID if it's provided
+    if (cajaData.revisadoPor && typeof cajaData.revisadoPor === 'number') {
+      const usuarioId = cajaData.revisadoPor;
+      cajaData.revisadoPor = await usuarioRepository.findOne({
+        where: { id: usuarioId }
+      });
+    }
+
+    // Update the entity
+    const updatedCaja = cajaRepository.merge(existingCaja, cajaData);
+
+    // Set tracking info
+    await setEntityUserTracking(updatedCaja, currentUser?.id, true);
+
+    // Save to database
+    return await cajaRepository.save(updatedCaja);
+  } catch (error) {
+    console.error(`Error updating caja ${cajaId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('delete-caja', async (event: Electron.IpcMainInvokeEvent, cajaId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const cajaRepository = dataSource.getRepository(Caja);
+
+    // Find the caja
+    const caja = await cajaRepository.findOne({
+      where: { id: cajaId }
+    });
+
+    if (!caja) {
+      throw new Error(`Caja with ID ${cajaId} not found`);
+    }
+
+    // Delete the caja
+    return await cajaRepository.remove(caja);
+  } catch (error) {
+    console.error(`Error deleting caja ${cajaId}:`, error);
+    throw error;
+  }
+});
+
+// Set up IPC handlers for CajaMoneda operations
+ipcMain.handle('get-cajas-monedas', async () => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const cajaMonedaRepository = dataSource.getRepository(CajaMoneda);
+
+    const cajasMonedas = await cajaMonedaRepository.find({
+      relations: ['moneda']
+    });
+
+    return cajasMonedas;
+  } catch (error) {
+    console.error('Error fetching cajas monedas:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('get-caja-moneda', async (event: Electron.IpcMainInvokeEvent, cajaMonedaId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const cajaMonedaRepository = dataSource.getRepository(CajaMoneda);
+
+    return await cajaMonedaRepository.findOne({
+      where: { id: cajaMonedaId },
+      relations: ['moneda']
+    });
+  } catch (error) {
+    console.error('Error getting caja moneda:', error);
+    return null;
+  }
+});
+
+ipcMain.handle('create-caja-moneda', async (event: Electron.IpcMainInvokeEvent, cajaMonedaData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const cajaMonedaRepository = dataSource.getRepository(CajaMoneda);
+
+    // Create a new entity instance correctly - no type assertion needed
+    const newCajaMoneda = new CajaMoneda();
+
+    // Manually copy properties from the input data
+    Object.assign(newCajaMoneda, cajaMonedaData);
+
+    // Save the entity
+    await cajaMonedaRepository.save(newCajaMoneda);
+
+    // Return the saved entity
+    return await cajaMonedaRepository.findOne({
+      where: { id: newCajaMoneda.id },
+      relations: ['moneda']
+    });
+  } catch (error) {
+    console.error('Error creating caja moneda:', error);
+    return null;
+  }
+});
+
+ipcMain.handle('update-caja-moneda', async (event: Electron.IpcMainInvokeEvent, cajaMonedaId: number, cajaMonedaData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const cajaMonedaRepository = dataSource.getRepository(CajaMoneda);
+
+    // Find the entity
+    const cajaMoneda = await cajaMonedaRepository.findOne({
+      where: { id: cajaMonedaId }
+    });
+
+    if (!cajaMoneda) {
+      throw new Error(`CajaMoneda with id ${cajaMonedaId} not found`);
+    }
+
+    // Update and save
+    cajaMonedaRepository.merge(cajaMoneda, cajaMonedaData);
+    await cajaMonedaRepository.save(cajaMoneda);
+
+    return cajaMoneda;
+  } catch (error) {
+    console.error('Error updating caja moneda:', error);
+    return null;
+  }
+});
+
+ipcMain.handle('delete-caja-moneda', async (event: Electron.IpcMainInvokeEvent, cajaMonedaId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const cajaMonedaRepository = dataSource.getRepository(CajaMoneda);
+
+    // Find the entity
+    const cajaMoneda = await cajaMonedaRepository.findOne({
+      where: { id: cajaMonedaId }
+    });
+
+    if (!cajaMoneda) {
+      throw new Error(`CajaMoneda with id ${cajaMonedaId} not found`);
+    }
+
+    // Delete and return result
+    await cajaMonedaRepository.remove(cajaMoneda);
+    return { success: true };
+  } catch (error: any) { // Type error as any to access error.message
+    console.error('Error deleting caja moneda:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('save-cajas-monedas', async (event: Electron.IpcMainInvokeEvent, updates: any[]) => {
+  try {
+    const dataSource = dbService.getDataSource();
+    const cajaMonedaRepository = dataSource.getRepository(CajaMoneda);
+    const monedaRepository = dataSource.getRepository(Moneda);
+    const queryRunner = dataSource.createQueryRunner();
+
+    console.log('Received CajaMoneda updates:', updates);
+
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const results = [];
+
+      for (const update of updates) {
+        // Process the update to ensure moneda relationship is properly set
+        const processedUpdate: any = {
+          activo: update.activo,
+          predeterminado: update.predeterminado,
+          orden: update.orden
+        };
+
+        // Set the moneda relationship properly
+        if (update.monedaId) {
+          const moneda = await monedaRepository.findOneBy({ id: update.monedaId });
+          if (!moneda) {
+            console.error(`Moneda with ID ${update.monedaId} not found`);
+            continue;
+          }
+          processedUpdate.moneda = moneda;
+        }
+
+        if (update.id) {
+          // Update existing
+          console.log(`Updating CajaMoneda ID ${update.id}:`, processedUpdate);
+          await queryRunner.manager.update(CajaMoneda, update.id, processedUpdate);
+          results.push({
+            success: true,
+            id: update.id,
+            operation: 'update'
+          });
+        } else {
+          // Insert new
+          console.log(`Creating new CajaMoneda:`, processedUpdate);
+          const result = await queryRunner.manager.insert(CajaMoneda, processedUpdate);
+          results.push({
+            success: true,
+            id: result.identifiers[0]['id'],
+            operation: 'insert'
+          });
+        }
+      }
+
+      await queryRunner.commitTransaction();
+      console.log('Transaction committed successfully, results:', results);
+      return { success: true, results };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Transaction rolled back due to error:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  } catch (error: any) {
+    console.error('Error saving cajas monedas:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Set up IPC handlers for MonedaCambio operations
+ipcMain.handle('get-monedas-cambio', async (event: Electron.IpcMainInvokeEvent) => {
+  try {
+    const dataSource = dbService.getDataSource();
+
+    const monedaCambioRepository = dataSource.getRepository(MonedaCambio);
+    return await monedaCambioRepository.find({
+      relations: ['monedaOrigen', 'monedaDestino'],
+      order: { createdAt: 'DESC' }
+    });
+  } catch (error) {
+    console.error('Error getting monedas cambio:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('get-monedas-cambio-by-moneda-origen', async (event: Electron.IpcMainInvokeEvent, monedaOrigenId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+
+    const monedaCambioRepository = dataSource.getRepository(MonedaCambio);
+    const monedaRepository = dataSource.getRepository(Moneda);
+
+    // Find the moneda origen
+    const monedaOrigen = await monedaRepository.findOne({
+      where: { id: monedaOrigenId }
+    });
+
+    if (!monedaOrigen) {
+      throw new Error(`Moneda with ID ${monedaOrigenId} not found`);
+    }
+
+    return await monedaCambioRepository.find({
+      where: { monedaOrigen: { id: monedaOrigenId } },
+      relations: ['monedaOrigen', 'monedaDestino'],
+      order: { createdAt: 'DESC' }
+    });
+  } catch (error) {
+    console.error(`Error getting monedas cambio for moneda origen ${monedaOrigenId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('get-moneda-cambio', async (event: Electron.IpcMainInvokeEvent, monedaCambioId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+
+    const monedaCambioRepository = dataSource.getRepository(MonedaCambio);
+    return await monedaCambioRepository.findOne({
+      where: { id: monedaCambioId },
+      relations: ['monedaOrigen', 'monedaDestino']
+    });
+  } catch (error) {
+    console.error(`Error getting moneda cambio ${monedaCambioId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('create-moneda-cambio', async (event: Electron.IpcMainInvokeEvent, monedaCambioData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+
+    const monedaRepository = dataSource.getRepository(Moneda);
+    const monedaCambioRepository = dataSource.getRepository(MonedaCambio);
+
+    // Handle monedaOrigen relation
+    if (monedaCambioData.monedaOrigen && typeof monedaCambioData.monedaOrigen === 'number') {
+      const monedaOrigenId = monedaCambioData.monedaOrigen;
+      monedaCambioData.monedaOrigen = await monedaRepository.findOne({
+        where: { id: monedaOrigenId }
+      });
+    }
+
+    // Handle monedaDestino relation
+    if (monedaCambioData.monedaDestino && typeof monedaCambioData.monedaDestino === 'number') {
+      const monedaDestinoId = monedaCambioData.monedaDestino;
+      monedaCambioData.monedaDestino = await monedaRepository.findOne({
+        where: { id: monedaDestinoId }
+      });
+    }
+
+    const monedaCambio = monedaCambioRepository.create(monedaCambioData);
+
+    // Add user tracking
+    await setEntityUserTracking(monedaCambio, currentUser?.id, false);
+
+    return await monedaCambioRepository.save(monedaCambio);
+  } catch (error) {
+    console.error('Error creating moneda cambio:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('update-moneda-cambio', async (event: Electron.IpcMainInvokeEvent, monedaCambioId: number, monedaCambioData: any) => {
+  try {
+    const dataSource = dbService.getDataSource();
+
+    const monedaRepository = dataSource.getRepository(Moneda);
+    const monedaCambioRepository = dataSource.getRepository(MonedaCambio);
+
+    // Find existing moneda cambio
+    const existingMonedaCambio = await monedaCambioRepository.findOne({
+      where: { id: monedaCambioId }
+    });
+
+    if (!existingMonedaCambio) {
+      throw new Error(`MonedaCambio with ID ${monedaCambioId} not found`);
+    }
+
+    // Handle monedaOrigen relation
+    if (monedaCambioData.monedaOrigen && typeof monedaCambioData.monedaOrigen === 'number') {
+      const monedaOrigenId = monedaCambioData.monedaOrigen;
+      monedaCambioData.monedaOrigen = await monedaRepository.findOne({
+        where: { id: monedaOrigenId }
+      });
+    }
+
+    // Handle monedaDestino relation
+    if (monedaCambioData.monedaDestino && typeof monedaCambioData.monedaDestino === 'number') {
+      const monedaDestinoId = monedaCambioData.monedaDestino;
+      monedaCambioData.monedaDestino = await monedaRepository.findOne({
+        where: { id: monedaDestinoId }
+      });
+    }
+
+    // Merge and update
+    const updatedMonedaCambio = monedaCambioRepository.merge(existingMonedaCambio, monedaCambioData);
+
+    // Add user tracking
+    await setEntityUserTracking(updatedMonedaCambio, currentUser?.id, true);
+
+    return await monedaCambioRepository.save(updatedMonedaCambio);
+  } catch (error) {
+    console.error(`Error updating moneda cambio ${monedaCambioId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('delete-moneda-cambio', async (event: Electron.IpcMainInvokeEvent, monedaCambioId: number) => {
+  try {
+    const dataSource = dbService.getDataSource();
+
+    const monedaCambioRepository = dataSource.getRepository(MonedaCambio);
+
+    // Find the moneda cambio
+    const monedaCambio = await monedaCambioRepository.findOne({
+      where: { id: monedaCambioId }
+    });
+
+    if (!monedaCambio) {
+      throw new Error(`MonedaCambio with ID ${monedaCambioId} not found`);
+    }
+
+    // Delete the moneda cambio
+    return await monedaCambioRepository.remove(monedaCambio);
+  } catch (error) {
+    console.error(`Error deleting moneda cambio ${monedaCambioId}:`, error);
+    throw error;
+  }
+});
+
+// IPC handler to get the system MAC address
+ipcMain.handle('get-system-mac-address', async () => {
+  try {
+    const networkInterfaces = os.networkInterfaces();
+    // Find the first non-internal MAC address
+    for (const interfaceName in networkInterfaces) {
+      const interfaces = networkInterfaces[interfaceName];
+      if (!interfaces) continue;
+
+      for (const iface of interfaces) {
+        // Skip internal and non-IPv4 interfaces
+        if (!iface.internal && iface.family === 'IPv4') {
+          return iface.mac;
+        }
+      }
+    }
+    // If no suitable interface was found
+    return '';
+  } catch (error) {
+    console.error('Error getting system MAC address:', error);
+    return '';
   }
 });

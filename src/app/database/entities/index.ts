@@ -34,3 +34,13 @@ export { Receta } from './productos/receta.entity';
 export { Combo } from './productos/combo.entity';
 export { ComboItem } from './productos/combo-item.entity';
 export { IntercambioIngrediente } from './productos/intercambio-ingrediente.entity';
+
+// Export financiero-related entities and enums
+export { Moneda } from './financiero/moneda.entity';
+export { TipoPrecio } from './financiero/tipo-precio.entity';
+export { MonedaBillete } from './financiero/moneda-billete.entity';
+export { Conteo } from './financiero/conteo.entity';
+export { ConteoDetalle } from './financiero/conteo-detalle.entity';
+export { Dispositivo } from './financiero/dispositivo.entity';
+export { Caja, CajaEstado } from './financiero/caja.entity';
+export { CajaMoneda } from './financiero/caja-moneda.entity';

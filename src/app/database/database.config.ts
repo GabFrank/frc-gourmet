@@ -31,6 +31,18 @@ import { Combo } from './entities/productos/combo.entity';
 import { ComboItem } from './entities/productos/combo-item.entity';
 import { IntercambioIngrediente } from './entities/productos/intercambio-ingrediente.entity';
 
+// Import new financial entities
+import { MonedaBillete } from './entities/financiero/moneda-billete.entity';
+import { Dispositivo } from './entities/financiero/dispositivo.entity';
+import { Conteo } from './entities/financiero/conteo.entity';
+import { ConteoDetalle } from './entities/financiero/conteo-detalle.entity';
+import { Caja } from './entities/financiero/caja.entity';
+import { CajaMoneda } from './entities/financiero/caja-moneda.entity';
+import { MonedaCambio } from './entities/financiero/moneda-cambio.entity';
+
+// Import new migration
+import { AddColumnsToConteo1624098765432 } from './migrations/1624098765432-AddColumnsToConteo';
+
 /**
  * Get the configuration for TypeORM
  * @param userDataPath Path to store the database file
@@ -70,10 +82,22 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       RecetaVariacionItem,
       Combo,
       ComboItem,
-      IntercambioIngrediente
+      IntercambioIngrediente,
+      // New financial entities
+      MonedaBillete,
+      Dispositivo,
+      Conteo,
+      ConteoDetalle,
+      Caja,
+      CajaMoneda,
+      MonedaCambio
     ],
     synchronize: true, // Automatically creates tables in development
     logging: process.env['NODE_ENV'] === 'development',
+    migrations: [
+      // ... other migrations
+      AddColumnsToConteo1624098765432
+    ],
   };
 }
 

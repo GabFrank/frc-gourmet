@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Observable, from, BehaviorSubject } from 'rxjs';
+import { Observable, from, BehaviorSubject, map } from 'rxjs';
 import { Printer } from './entities/printer.entity';
 import { Persona } from './entities/personas/persona.entity';
 import { DocumentoTipo } from './entities/personas/documento-tipo.enum';
@@ -27,6 +27,14 @@ import { Ingrediente } from './entities/productos/ingrediente.entity';
 import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
 import { RecetaVariacion } from './entities/productos/receta-variacion.entity';
 import { RecetaVariacionItem } from './entities/productos/receta-variacion-item.entity';
+// Import new financial entities
+import { MonedaBillete } from './entities/financiero/moneda-billete.entity';
+import { MonedaCambio } from './entities/financiero/moneda-cambio.entity';
+import { Conteo } from './entities/financiero/conteo.entity';
+import { ConteoDetalle } from './entities/financiero/conteo-detalle.entity';
+import { Dispositivo } from './entities/financiero/dispositivo.entity';
+import { Caja, CajaEstado } from './entities/financiero/caja.entity';
+import { CajaMoneda } from './entities/financiero/caja-moneda.entity';
 
 export interface LoginResult {
   success: boolean;
@@ -148,6 +156,7 @@ interface ElectronAPI {
   getPreciosVenta: () => Promise<PrecioVenta[]>;
   getPrecioVenta: (precioVentaId: number) => Promise<PrecioVenta>;
   getPreciosVentaByPresentacion: (presentacionId: number) => Promise<PrecioVenta[]>;
+  getPreciosVentaByPresentacionSabor: (presentacionSaborId: number) => Promise<PrecioVenta[]>;
   getPreciosVentaByTipoPrecio: (tipoPrecioId: number) => Promise<PrecioVenta[]>;
   createPrecioVenta: (precioVentaData: any) => Promise<PrecioVenta>;
   updatePrecioVenta: (precioVentaId: number, precioVentaData: any) => Promise<any>;
@@ -195,6 +204,51 @@ interface ElectronAPI {
   createRecetaVariacionItem: (variacionItemData: Partial<RecetaVariacionItem>) => Promise<RecetaVariacionItem>;
   updateRecetaVariacionItem: (variacionItemId: number, variacionItemData: Partial<RecetaVariacionItem>) => Promise<any>;
   deleteRecetaVariacionItem: (variacionItemId: number) => Promise<any>;
+  // MonedaBillete methods
+  getMonedasBilletes: () => Promise<MonedaBillete[]>;
+  getMonedaBillete: (monedaBilleteId: number) => Promise<MonedaBillete>;
+  createMonedaBillete: (monedaBilleteData: Partial<MonedaBillete>) => Promise<MonedaBillete>;
+  updateMonedaBillete: (monedaBilleteId: number, monedaBilleteData: Partial<MonedaBillete>) => Promise<any>;
+  deleteMonedaBillete: (monedaBilleteId: number) => Promise<any>;
+  // Conteo methods
+  getConteos: () => Promise<Conteo[]>;
+  getConteo: (conteoId: number) => Promise<Conteo>;
+  createConteo: (conteoData: Partial<Conteo>) => Promise<Conteo>;
+  updateConteo: (conteoId: number, conteoData: Partial<Conteo>) => Promise<any>;
+  deleteConteo: (conteoId: number) => Promise<any>;
+  // ConteoDetalle methods
+  getConteoDetalles: (conteoId: number) => Promise<ConteoDetalle[]>;
+  getConteoDetalle: (conteoDetalleId: number) => Promise<ConteoDetalle>;
+  createConteoDetalle: (conteoDetalleData: Partial<ConteoDetalle>) => Promise<ConteoDetalle>;
+  updateConteoDetalle: (conteoDetalleId: number, conteoDetalleData: Partial<ConteoDetalle>) => Promise<any>;
+  deleteConteoDetalle: (conteoDetalleId: number) => Promise<any>;
+  // Dispositivo methods
+  getDispositivos: () => Promise<Dispositivo[]>;
+  getDispositivo: (dispositivoId: number) => Promise<Dispositivo>;
+  createDispositivo: (dispositivoData: Partial<Dispositivo>) => Promise<Dispositivo>;
+  updateDispositivo: (dispositivoId: number, dispositivoData: Partial<Dispositivo>) => Promise<any>;
+  deleteDispositivo: (dispositivoId: number) => Promise<any>;
+  // Caja methods
+  getCajas: () => Promise<Caja[]>;
+  getCaja: (cajaId: number) => Promise<Caja>;
+  createCaja: (cajaData: Partial<Caja>) => Promise<Caja>;
+  updateCaja: (cajaId: number, cajaData: Partial<Caja>) => Promise<any>;
+  deleteCaja: (cajaId: number) => Promise<any>;
+  getCajaByDispositivo: (dispositivoId: number) => Promise<Caja[]>;
+  // CajaMoneda methods
+  getCajasMonedas: () => Promise<CajaMoneda[]>;
+  getCajaMoneda: (cajaMonedaId: number) => Promise<CajaMoneda>;
+  createCajaMoneda: (cajaMonedaData: Partial<CajaMoneda>) => Promise<CajaMoneda>;
+  updateCajaMoneda: (cajaMonedaId: number, cajaMonedaData: Partial<CajaMoneda>) => Promise<any>;
+  deleteCajaMoneda: (cajaMonedaId: number) => Promise<any>;
+  saveCajasMonedas: (updates: any[]) => Promise<any>;
+  // MonedaCambio methods
+  getMonedasCambio: () => Promise<MonedaCambio[]>;
+  getMonedasCambioByMonedaOrigen: (monedaOrigenId: number) => Promise<MonedaCambio[]>;
+  getMonedaCambio: (monedaCambioId: number) => Promise<MonedaCambio>;
+  createMonedaCambio: (monedaCambioData: Partial<MonedaCambio>) => Promise<MonedaCambio>;
+  updateMonedaCambio: (monedaCambioId: number, monedaCambioData: Partial<MonedaCambio>) => Promise<any>;
+  deleteMonedaCambio: (monedaCambioId: number) => Promise<any>;
 }
 
 /**
@@ -689,6 +743,10 @@ export class RepositoryService {
     return from(this.api.getPreciosVentaByPresentacion(presentacionId));
   }
 
+  getPreciosVentaByPresentacionSabor(presentacionSaborId: number): Observable<PrecioVenta[]> {
+    return from(this.api.getPreciosVentaByPresentacionSabor(presentacionSaborId));
+  }
+
   getPreciosVentaByTipoPrecio(tipoPrecioId: number): Observable<PrecioVenta[]> {
     return from(this.api.getPreciosVentaByTipoPrecio(tipoPrecioId));
   }
@@ -854,5 +912,164 @@ export class RepositoryService {
 
   deleteRecetaVariacionItem(variacionItemId: number): Observable<any> {
     return from(this.api.deleteRecetaVariacionItem(variacionItemId));
+  }
+
+  // MonedaBillete methods
+  getMonedasBilletes(): Observable<MonedaBillete[]> {
+    return from(this.api.getMonedasBilletes());
+  }
+
+  getMonedaBillete(monedaBilleteId: number): Observable<MonedaBillete> {
+    return from(this.api.getMonedaBillete(monedaBilleteId));
+  }
+
+  createMonedaBillete(monedaBilleteData: Partial<MonedaBillete>): Observable<MonedaBillete> {
+    return from(this.api.createMonedaBillete(monedaBilleteData));
+  }
+
+  updateMonedaBillete(monedaBilleteId: number, monedaBilleteData: Partial<MonedaBillete>): Observable<any> {
+    return from(this.api.updateMonedaBillete(monedaBilleteId, monedaBilleteData));
+  }
+
+  deleteMonedaBillete(monedaBilleteId: number): Observable<any> {
+    return from(this.api.deleteMonedaBillete(monedaBilleteId));
+  }
+
+  // Conteo methods
+  getConteos(): Observable<Conteo[]> {
+    return from(this.api.getConteos());
+  }
+
+  getConteo(conteoId: number): Observable<Conteo> {
+    return from(this.api.getConteo(conteoId));
+  }
+
+  createConteo(conteoData: Partial<Conteo>): Observable<Conteo> {
+    return from(this.api.createConteo(conteoData));
+  }
+
+  updateConteo(conteoId: number, conteoData: Partial<Conteo>): Observable<any> {
+    return from(this.api.updateConteo(conteoId, conteoData));
+  }
+
+  deleteConteo(conteoId: number): Observable<any> {
+    return from(this.api.deleteConteo(conteoId));
+  }
+
+  // ConteoDetalle methods
+  getConteoDetalles(conteoId: number): Observable<ConteoDetalle[]> {
+    return from(this.api.getConteoDetalles(conteoId));
+  }
+
+  getConteoDetalle(conteoDetalleId: number): Observable<ConteoDetalle> {
+    return from(this.api.getConteoDetalle(conteoDetalleId));
+  }
+
+  createConteoDetalle(conteoDetalleData: Partial<ConteoDetalle>): Observable<ConteoDetalle> {
+    return from(this.api.createConteoDetalle(conteoDetalleData));
+  }
+
+  updateConteoDetalle(conteoDetalleId: number, conteoDetalleData: Partial<ConteoDetalle>): Observable<any> {
+    return from(this.api.updateConteoDetalle(conteoDetalleId, conteoDetalleData));
+  }
+
+  deleteConteoDetalle(conteoDetalleId: number): Observable<any> {
+    return from(this.api.deleteConteoDetalle(conteoDetalleId));
+  }
+
+  // Dispositivo methods
+  getDispositivos(): Observable<Dispositivo[]> {
+    return from(this.api.getDispositivos());
+  }
+
+  getDispositivo(dispositivoId: number): Observable<Dispositivo> {
+    return from(this.api.getDispositivo(dispositivoId));
+  }
+
+  createDispositivo(dispositivoData: Partial<Dispositivo>): Observable<Dispositivo> {
+    return from(this.api.createDispositivo(dispositivoData));
+  }
+
+  updateDispositivo(dispositivoId: number, dispositivoData: Partial<Dispositivo>): Observable<any> {
+    return from(this.api.updateDispositivo(dispositivoId, dispositivoData));
+  }
+
+  deleteDispositivo(dispositivoId: number): Observable<any> {
+    return from(this.api.deleteDispositivo(dispositivoId));
+  }
+
+  // Caja methods
+  getCajas(): Observable<Caja[]> {
+    return from(this.api.getCajas());
+  }
+
+  getCaja(cajaId: number): Observable<Caja> {
+    return from(this.api.getCaja(cajaId));
+  }
+
+  createCaja(cajaData: Partial<Caja>): Observable<Caja> {
+    return from(this.api.createCaja(cajaData));
+  }
+
+  updateCaja(cajaId: number, cajaData: Partial<Caja>): Observable<any> {
+    return from(this.api.updateCaja(cajaId, cajaData));
+  }
+
+  deleteCaja(cajaId: number): Observable<any> {
+    return from(this.api.deleteCaja(cajaId));
+  }
+
+  getCajaByDispositivo(dispositivoId: number): Observable<Caja[]> {
+    return from(this.api.getCajaByDispositivo(dispositivoId));
+  }
+
+  // CajaMoneda methods
+  getCajasMonedas(): Observable<CajaMoneda[]> {
+    return from(this.api.getCajasMonedas());
+  }
+
+  getCajaMoneda(cajaMonedaId: number): Observable<CajaMoneda> {
+    return from(this.api.getCajaMoneda(cajaMonedaId));
+  }
+
+  createCajaMoneda(cajaMonedaData: Partial<CajaMoneda>): Observable<CajaMoneda> {
+    return from(this.api.createCajaMoneda(cajaMonedaData));
+  }
+
+  updateCajaMoneda(cajaMonedaId: number, cajaMonedaData: Partial<CajaMoneda>): Observable<any> {
+    return from(this.api.updateCajaMoneda(cajaMonedaId, cajaMonedaData));
+  }
+
+  deleteCajaMoneda(cajaMonedaId: number): Observable<any> {
+    return from(this.api.deleteCajaMoneda(cajaMonedaId));
+  }
+
+  saveCajasMonedas(updates: any[]): Observable<any> {
+    return from(this.api.saveCajasMonedas(updates));
+  }
+
+  // MonedaCambio methods
+  getMonedasCambio(): Observable<MonedaCambio[]> {
+    return from(this.api.getMonedasCambio());
+  }
+
+  getMonedasCambioByMonedaOrigen(monedaOrigenId: number): Observable<MonedaCambio[]> {
+    return from(this.api.getMonedasCambioByMonedaOrigen(monedaOrigenId));
+  }
+
+  getMonedaCambio(monedaCambioId: number): Observable<MonedaCambio> {
+    return from(this.api.getMonedaCambio(monedaCambioId));
+  }
+
+  createMonedaCambio(monedaCambioData: Partial<MonedaCambio>): Observable<MonedaCambio> {
+    return from(this.api.createMonedaCambio(monedaCambioData));
+  }
+
+  updateMonedaCambio(monedaCambioId: number, monedaCambioData: Partial<MonedaCambio>): Observable<any> {
+    return from(this.api.updateMonedaCambio(monedaCambioId, monedaCambioData));
+  }
+
+  deleteMonedaCambio(monedaCambioId: number): Observable<any> {
+    return from(this.api.deleteMonedaCambio(monedaCambioId));
   }
 }

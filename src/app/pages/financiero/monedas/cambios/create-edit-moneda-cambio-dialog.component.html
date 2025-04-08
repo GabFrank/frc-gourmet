@@ -1,0 +1,105 @@
+<div class="dialog-container">
+  <h2 mat-dialog-title>{{ isEditMode ? 'Editar' : 'Crear' }} Tipo de Cambio</h2>
+
+  <div mat-dialog-content>
+    <div *ngIf="loading" class="loading-container">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Cargando datos...</p>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" *ngIf="!loading">
+      <div class="form-grid">
+        <!-- Moneda de Origen -->
+        <mat-form-field appearance="outline">
+          <mat-label>Moneda de Origen</mat-label>
+          <mat-select formControlName="monedaOrigen" [compareWith]="compareMonedas">
+            <mat-option *ngFor="let moneda of monedas" [value]="moneda">
+              {{ moneda.denominacion }} ({{ moneda.simbolo }})
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="form.get('monedaOrigen')?.hasError('required')">
+            La moneda de origen es requerida
+          </mat-error>
+        </mat-form-field>
+
+        <!-- Moneda de Destino -->
+        <mat-form-field appearance="outline">
+          <mat-label>Moneda de Destino</mat-label>
+          <mat-select formControlName="monedaDestino" [compareWith]="compareMonedas">
+            <mat-option *ngFor="let moneda of monedas" [value]="moneda">
+              {{ moneda.denominacion }} ({{ moneda.simbolo }})
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="form.get('monedaDestino')?.hasError('required')">
+            La moneda de destino es requerida
+          </mat-error>
+        </mat-form-field>
+      </div>
+
+      <h3 class="section-title">Cambio Oficial</h3>
+      <div class="form-grid">
+        <!-- Compra Oficial -->
+        <app-currency-input
+          formControlName="compraOficial"
+          label="Compra Oficial"
+          placeholder="Ingrese valor de compra oficial"
+          [required]="true"
+          [moneda]="form.get('monedaOrigen')?.value"
+          [min]="0.0001"
+          hint="Valor oficial de compra del mercado">
+        </app-currency-input>
+
+        <!-- Venta Oficial -->
+        <app-currency-input
+          formControlName="ventaOficial"
+          label="Venta Oficial"
+          placeholder="Ingrese valor de venta oficial"
+          [required]="true"
+          [moneda]="form.get('monedaOrigen')?.value"
+          [min]="0.0001"
+          hint="Valor oficial de venta del mercado">
+        </app-currency-input>
+      </div>
+
+      <h3 class="section-title">Cambio Local</h3>
+      <div class="form-grid">
+        <!-- Compra Local -->
+        <app-currency-input
+          formControlName="compraLocal"
+          label="Compra Local"
+          placeholder="Ingrese valor de compra local"
+          [required]="true"
+          [moneda]="form.get('monedaOrigen')?.value"
+          [min]="0.0001"
+          hint="Valor de compra para su negocio">
+        </app-currency-input>
+
+        <!-- Venta Local -->
+        <app-currency-input
+          formControlName="ventaLocal"
+          label="Venta Local"
+          placeholder="Ingrese valor de venta local"
+          [required]="true"
+          [moneda]="form.get('monedaOrigen')?.value"
+          [min]="0.0001"
+          hint="Valor de venta para su negocio">
+        </app-currency-input>
+      </div>
+
+      <!-- Estado -->
+      <div class="form-row">
+        <mat-checkbox formControlName="activo" color="primary">
+          Activo
+        </mat-checkbox>
+      </div>
+    </form>
+  </div>
+
+  <div mat-dialog-actions align="end">
+    <button mat-button [disabled]="loading || saving" (click)="onCancel()">Cancelar</button>
+    <button mat-raised-button color="primary" [disabled]="loading || saving" (click)="onSubmit()">
+      <mat-icon>save</mat-icon>
+      {{ isEditMode ? 'Actualizar' : 'Crear' }}
+    </button>
+  </div>
+</div>

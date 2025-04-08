@@ -4,6 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { CreateEditProductoComponent } from '../pages/productos/productos/create-edit-producto.component';
 import { ListRecetasComponent } from '../pages/productos/recetas/list-recetas.component';
 import { ListIngredientesComponent } from '../pages/productos/ingredientes/list-ingredientes.component';
+import { ListCajasComponent } from '../pages/financiero/cajas/list-cajas.component';
+import { ListMonedasComponent } from '../pages/financiero/monedas/list-monedas/list-monedas.component';
 
 export interface Tab {
   id: string;
@@ -30,11 +32,8 @@ export class TabsService {
   activeTab$ = this.activeTabSubject.asObservable();
 
   constructor() {
-    // initialize with @ListRecetasComponent
-    // this.addTab('Ingredientes', ListIngredientesComponent, { source: 'navigation' }, 'ingredientes-tab', true);
-    // this.addTab('Recetas', ListRecetasComponent, { source: 'navigation' }, 'recetas-tab', true);
-    //open edit producto with id 1,  use addTab with data
-    this.addTab('Editar Producto', CreateEditProductoComponent, { productoId: 2 });
+    //load list cajas tab using addTab method
+    this.addTab('Listado de Cajas', ListCajasComponent);
   }
 
   /**

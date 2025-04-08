@@ -1,0 +1,724 @@
+// Theme variables with fallbacks for light/dark modes
+:host {
+  // Light theme defaults (will be overridden by CSS vars if available)
+  --text-primary: rgba(0, 0, 0, 0.87);
+  --text-secondary: rgba(0, 0, 0, 0.7);
+  --text-hint: rgba(0, 0, 0, 0.6);
+  --primary-color: #673ab7;
+  --primary-light: #b39ddb;
+  --divider-color: rgba(0, 0, 0, 0.12);
+  --surface-hover: rgba(0, 0, 0, 0.03);
+  --surface-background: white;
+  --shadow-light: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --disabled-color: rgba(0, 0, 0, 0.38);
+}
+
+// Apply dark theme overrides
+.dark-theme :host {
+  --text-primary: rgba(255, 255, 255, 0.87);
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-hint: rgba(255, 255, 255, 0.5);
+  --primary-color: #b39ddb;
+  --primary-light: #d1c4e9;
+  --divider-color: rgba(255, 255, 255, 0.12);
+  --surface-hover: rgba(255, 255, 255, 0.05);
+  --surface-background: #424242;
+  --shadow-light: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --disabled-color: rgba(255, 255, 255, 0.3);
+}
+
+// Automatically detect dark theme from Angular Material
+.mat-app-background.mat-theme-loaded-dark :host {
+  --text-primary: rgba(255, 255, 255, 0.87);
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-hint: rgba(255, 255, 255, 0.5);
+  --primary-color: #b39ddb;
+  --primary-light: #d1c4e9;
+  --divider-color: rgba(255, 255, 255, 0.12);
+  --surface-hover: rgba(255, 255, 255, 0.05);
+  --surface-background: #424242;
+  --shadow-light: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --disabled-color: rgba(255, 255, 255, 0.3);
+}
+
+.dialog-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--text-primary);
+}
+
+// Make the stepper take the full height of the dialog
+::ng-deep .mat-horizontal-stepper-wrapper {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+::ng-deep .mat-horizontal-content-container {
+  overflow: hidden !important;
+  flex: 1;
+  padding: 0 !important;
+}
+
+::ng-deep .mat-horizontal-stepper-content {
+  height: 100%;
+  overflow: hidden;
+}
+
+// Reduce tab header height
+::ng-deep .mat-tab-header {
+  height: 36px !important;
+  margin-bottom: 0 !important;
+}
+
+// Make the active tab indicator thinner
+::ng-deep .mat-ink-bar {
+  height: 2px !important;
+}
+
+// Reduce stepper header height
+::ng-deep .mat-horizontal-stepper-header-container {
+  height: 56px !important;
+}
+
+::ng-deep .mat-stepper-horizontal-line {
+  margin: 0 -8px !important;
+}
+
+// Reduce margins around tab content
+::ng-deep .mat-tab-body {
+  padding-top: 0 !important;
+}
+
+::ng-deep .mat-tab-body-content {
+  padding: 4px 0 !important;
+}
+
+// Hide the subscript wrapper completely
+::ng-deep .mat-mdc-form-field-subscript-wrapper {
+  height: 0 !important;
+  visibility: hidden !important;
+  display: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+// Compact form fields as much as possible
+::ng-deep .mat-mdc-form-field {
+  margin-bottom: 0;
+  line-height: 1.2;
+
+  .mat-mdc-text-field-wrapper {
+    padding: 0 !important;
+  }
+
+  .mat-mdc-form-field-infix {
+    padding: 6px 0 !important;
+    min-height: 26px !important;
+  }
+}
+
+.step-content {
+  padding: 8px 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  overflow: hidden;
+
+  h3 {
+    margin: 0 0 4px 0;
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 16px;
+  }
+
+  h4 {
+    margin: 4px 0;
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
+  .placeholder-text {
+    color: var(--text-hint);
+    font-style: italic;
+    padding: 16px;
+    background-color: var(--surface-hover);
+    border-radius: 4px;
+    text-align: center;
+  }
+}
+
+.content-container {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+// Billete grid styles - two vertical columns
+.billete-grid {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 16px;
+  background-color: rgba(0, 0, 0, 0.03);
+  border-radius: 4px;
+}
+
+.billete-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.billete-item {
+  width: 100%;
+
+  mat-form-field {
+    width: 100%;
+  }
+
+  .billete-prefix {
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-right: 4px;
+    font-size: 14px;
+    white-space: nowrap;
+    margin-left: 5px;
+  }
+
+  .billete-suffix {
+    color: var(--primary-color);
+    font-weight: 500;
+    margin-left: 4px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .billete-input {
+    text-align: right;
+    margin-right: 20px;
+  }
+}
+
+// Ultra compact field styles
+.compact-field {
+  .mat-mdc-text-field-wrapper {
+    padding: 0 4px !important;
+    background-color: transparent !important;
+  }
+
+  .mat-mdc-form-field-infix {
+    padding: 4px 0 !important;
+    min-height: 26px !important;
+  }
+
+  // Reduce overall height
+  ::ng-deep .mat-mdc-form-field-flex {
+    min-height: 26px !important;
+  }
+
+  // Make input text a bit smaller
+  input {
+    font-size: 14px;
+    color: var(--text-primary) !important;
+    caret-color: var(--primary-color) !important;
+
+    // Remove the spinning buttons from number inputs
+    &::-webkit-outer-spin-button,
+    &::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    &[type=number] {
+      -moz-appearance: textfield;
+    }
+  }
+
+  // Make outline match standard Material style
+  ::ng-deep .mdc-notched-outline__leading,
+  ::ng-deep .mdc-notched-outline__notch,
+  ::ng-deep .mdc-notched-outline__trailing {
+    border-color: var(--divider-color) !important;
+  }
+}
+
+// Reduce height of input fields
+::ng-deep .mat-mdc-form-field-flex {
+  min-height: 32px !important;
+}
+
+// Currency totals container - more compact
+.currency-totals-container {
+  margin-top: 12px;
+  padding: 12px;
+  background-color: var(--surface-hover);
+  border-radius: 4px;
+  box-shadow: var(--shadow-light);
+
+  h4 {
+    margin-top: 0;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 14px;
+  }
+}
+
+.currency-totals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.currency-total-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background-color: var(--surface-hover);
+  border-radius: 4px;
+  box-shadow: var(--shadow-light);
+  font-size: 13px;
+
+  .currency-total-label {
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .currency-total-value {
+    font-weight: 700;
+    color: var(--primary-color);
+  }
+}
+
+// Billete summary list
+.billete-summary-list {
+  padding: 12px;
+  background-color: rgba(0, 0, 0, 0.03);
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.billete-summary-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--divider-color);
+
+  .billete-summary-denom {
+    width: 100px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .billete-summary-qty {
+    width: 80px;
+    color: var(--text-secondary);
+  }
+
+  .billete-summary-total {
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-left: auto;
+  }
+}
+
+.billete-summary-total-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 2px solid var(--divider-color);
+
+  .billete-summary-total-label {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .billete-summary-total-value {
+    font-weight: 700;
+    color: var(--primary-color);
+  }
+}
+
+// All currencies total section
+.all-currencies-total {
+  margin-top: 16px;
+  padding: 12px;
+  background-color: var(--surface-hover);
+  border-radius: 4px;
+
+  h4 {
+    margin-top: 0;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .currency-total-item {
+    background-color: var(--surface-hover);
+    margin-bottom: 6px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+}
+
+.no-values, .no-currencies, .no-billetes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background-color: var(--surface-hover);
+  border-radius: 4px;
+  margin-bottom: 12px;
+  color: var(--text-hint);
+  font-style: italic;
+}
+
+.step-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--divider-color);
+
+  button {
+    line-height: 28px;
+    font-size: 13px;
+  }
+}
+
+.full-width {
+  width: 100%;
+}
+
+.device-detection-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background-color: var(--surface-hover);
+
+  &.success {
+    background-color: rgba(76, 175, 80, 0.12);
+  }
+
+  span {
+    color: var(--text-primary);
+  }
+}
+
+.detected-device {
+  font-style: italic;
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 16px 0;
+
+  span {
+    color: var(--text-secondary);
+  }
+}
+
+.currency-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+
+  button {
+    border-radius: 20px;
+    font-size: 14px;
+    transition: all 0.2s ease;
+
+    &.active-currency {
+      background-color: rgba(103, 58, 183, 0.2);
+      color: var(--primary-light);
+      border-color: var(--primary-color);
+    }
+
+    .predeterminado-icon {
+      font-size: 16px;
+      height: 16px;
+      width: 16px;
+      color: #ffc107;
+      margin-left: 6px;
+    }
+  }
+}
+
+// Tab styles for the currency tabs
+.mat-tab-group {
+  height: 100%;
+
+  ::ng-deep .mat-tab-body {
+    background-color: var(--surface-background);
+    border-radius: 0 0 4px 4px;
+  }
+}
+
+::ng-deep .mat-tab-body-wrapper {
+  flex: 1;
+  height: calc(100% - 36px);
+}
+
+// Adjust tab label colors for standard theme
+::ng-deep .mat-tab-label {
+  color: var(--text-hint);
+  opacity: 0.7;
+  height: 36px !important;
+  padding: 0 12px !important;
+  min-width: 100px !important;
+
+  &.mat-tab-label-active {
+    color: var(--primary-color);
+    opacity: 1;
+  }
+}
+
+::ng-deep .mat-tab-header {
+  border-bottom-color: var(--divider-color);
+}
+
+// Adjust stepper colors and sizes for standard theme
+::ng-deep .mat-step-header {
+  height: 56px !important;
+  padding: 0 12px !important;
+
+  .mat-step-icon {
+    width: 22px !important;
+    height: 22px !important;
+    font-size: 12px !important;
+  }
+
+  .mat-step-label {
+    color: var(--text-hint);
+    font-size: 13px !important;
+
+    &.mat-step-label-selected {
+      color: var(--text-primary);
+    }
+  }
+}
+
+::ng-deep .mat-step-header .mat-step-icon {
+  background-color: var(--disabled-color);
+
+  &.mat-step-icon-selected {
+    background-color: var(--primary-color);
+  }
+}
+
+// Confirmation section styles
+.confirmation-summary {
+  background-color: var(--surface-container-high);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+
+  &.compact-confirmation {
+    padding: 12px;
+    gap: 10px;
+  }
+}
+
+.confirmation-item {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+}
+
+.confirmation-label {
+  font-weight: 500;
+  color: var(--primary);
+}
+
+.confirmation-value {
+  font-weight: 500;
+  color: var(--primary-color);
+}
+
+.all-currencies-total {
+  background-color: var(--surface-container-low);
+  padding: 12px;
+  border-radius: 6px;
+
+  &.compact-totals {
+    padding: 8px;
+
+    h4 {
+      margin: 0 0 6px 0;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+  }
+
+  .currency-totals-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+  }
+}
+
+.currency-total-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: var(--surface-container);
+}
+
+.compact-title {
+  margin: 0 0 12px 0;
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.compact-summary-step {
+  .step-actions {
+    margin-top: 12px;
+  }
+}
+
+.positive-amount {
+  color: var(--md-sys-color-tertiary);
+}
+
+.negative-amount {
+  color: var(--md-sys-color-error);
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  // .dialog-content {
+  //   width: 90vw;
+  //   height: 90vh;
+  // }
+
+  .billete-grid {
+    flex-direction: column;
+  }
+
+  .billete-column {
+    width: 100%;
+  }
+}
+
+.denomination-cell {
+  width: 120px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.87);
+}
+
+// Overall more compact dialog title
+.compact-title {
+  margin: 0 !important;
+  padding: 12px 8px !important;
+  font-size: 16px !important;
+  line-height: 1.2 !important;
+  height: auto !important;
+}
+
+// Compact stepper styles
+.compact-stepper {
+  height: 100%;
+  ::ng-deep .mat-horizontal-stepper-header-container {
+    padding: 0 !important;
+    margin: 0 !important;
+    height: 48px !important;
+  }
+
+  ::ng-deep .mat-horizontal-content-container {
+    padding: 0 !important;
+  }
+}
+
+// Compact tabs
+.compact-tabs {
+  ::ng-deep .mat-tab-header {
+    height: 32px !important;
+    background-color: transparent;
+    border-radius: 4px 4px 0 0;
+  }
+
+  ::ng-deep .mat-tab-label {
+    height: 32px !important;
+    padding: 0 8px !important;
+    min-width: 80px !important;
+    font-size: 12px !important;
+  }
+
+  ::ng-deep .mat-tab-body-content {
+    padding: 8px !important;
+  }
+}
+
+.full-container {
+  width: 100%;
+  height: 100%;
+}
+
+.loading-overlay {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.8);
+  z-index: 10;
+  gap: 16px;
+
+  p {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+}
+
+.step-subtitle {
+  margin-bottom: 8px;
+  h4 {
+    font-size: 14px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin: 0;
+    padding: 4px 0;
+  }
+}
+
+.positive-amount {
+  color: #4caf50; // Green for positive values
+  font-weight: 700;
+}
+
+.negative-amount {
+  color: #f44336; // Red for negative values
+  font-weight: 700;
+}
+
+
+

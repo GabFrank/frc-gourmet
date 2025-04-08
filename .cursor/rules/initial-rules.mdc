@@ -2,91 +2,46 @@
 description: read this rules before begin the work
 globs: 
 ---
-Project Context
+# Project Guidelines
 
-Overview:
-This project is built using Angular Material for UI components, Electron for cross-platform desktop applications, SQLite as the database, and TypeORM for object-relational mapping. All coding decisions and guidelines should be considered within this technical framework.
+## Core Principles
+1. **KISS (Keep It Simple, Stupid)**: Write simple, straightforward code. Avoid complexity unless absolutely necessary.
 
-HTML and Angular Performance
+## Angular Template Performance
+2. **NO DIRECT FUNCTION CALLS IN TEMPLATES**: Never do `{{ calculateValue() }}` or `[prop]="service.format()"`. Instead:
+   - Store pre-computed values in component properties
+   - Update properties when inputs change
+   - Use pipes for transformations
+   - Use getters only for trivial operations
 
-Avoid Direct Function Calls in Templates:
-Never call functions directly from your HTML templates. Angular evaluates these functions during every change detection cycle, which can severely degrade performance. Instead, consider using pipes or pre-computed properties to avoid unnecessary re-evaluations.
+## Coding Standards
+3. **UPPERCASE STRINGS**: Store string values in UPPERCASE for consistency.
+4. **EDIT TS FILES ONLY**: Never modify JS files directly; they are auto-generated from TS.
+5. **NUMBER FORMATTING**: Always use `| number:'1.0-2'` format for numeric pipes.
 
-String Handling Consistency
+## Component Architecture
+6. **REUSE MODULES**: Don't create new modules unnecessarily. Add components to existing modules.
+7. **COMPONENT FILES**: Always create separate .ts, .html, and .scss files for components.
+8. **CONSISTENT NAMING**:
+   - List components: `list-entity`
+   - Create/Edit components: `create-edit-entity`
+   - Dialogs: Add `-dialog` suffix
 
-Enforce Uppercase Storage:
-Always store strings in uppercase to maintain consistency across the application. Only deviate from this rule if the user explicitly specifies a different format. This helps standardize data handling and comparisons throughout the codebase.
+## UI/UX Guidelines
+9. **FILTER IMPLEMENTATION**: Don't add live filtering unless requested. Use explicit filter buttons.
+10. **THEME COMPATIBILITY**: Don't hardcode colors. Use theme variables for dark/light mode support.
+11. **TABLE LAYOUT**:
+    - Center-align most content
+    - Left-align text fields
+    - Don't add sorting (`mat-sort-header`) unless specifically requested
 
-Managing TypeScript and JavaScript Files
+## Application Features
+12. **CONFIRMATION DIALOGS**: Always use `@confirmation-dialog.component.ts` for all confirmations.
+13. **TYPEORM SYNC**: Remember `synchronize: true` is for development only, not production.
 
-Source of Truth:
-Always modify the TypeScript (.ts) files, which are compiled into JavaScript (.js). Avoid editing generated .js files directly, as any changes will be overwritten during the next compilation. If a situation arises where both need editing, ensure they remain in sync.
-
-Angular Module Organization
-
-Reuse Existing Modules:
-Do not create a new Angular module for each new component unless specifically requested.. Instead, integrate new components into the closest existing module along the project’s directory structure. This maintains a clean and manageable module hierarchy.
-
-Filter Form Implementation
-
-Optimize Filtering Behavior:
-When creating filter forms, do not implement live filtering (filtering on every value change) unless explicitly instructed. This approach minimizes performance overhead and avoids unnecessary processing, making the user experience smoother.
-
-Theme Compatibility
-
-Dynamic Styling:
-The application supports both dark and light themes. Avoid hardcoding background colors or styles. Instead, use theme variables or classes to ensure that the UI adapts correctly to the current theme setting.
-
-Table Layout and Alignment
-
-Consistent and Readable Layouts:
-
-General Alignment: Center-align most table content to provide a balanced and neat presentation.
-
-Text Fields: For columns that contain names and descriptions (or other textual information), align the text to the start (left) to enhance readability.
-
-Table Sorting Features
-
-Conditional Implementation:
-Do not include Angular Material’s sorting feature (mat-sort-header) in tables unless explicitly requested by the user. This keeps the interface uncluttered and avoids introducing unnecessary complexity or performance issues.
-
-TypeORM Synchronization Setting
-
-Development vs. Production:
-The project currently uses TypeORM with synchronize: true, meaning the database schema automatically updates to match your entity definitions. Keep in mind that this is acceptable for development but should be revisited and changed when preparing for production deployment.
-
-Confirmation Dialogs
-
-Standardize Dialog Usage:
-For all confirmation dialogs, always use the @confirmation-dialog.component.ts component. This ensures a consistent look and behavior for dialog interactions throughout the application.
-
-New Entity Creation Guidelines
-
-Maintain Consistency:
-When creating a new entity, ensure that you generate both the TypeScript (.ts) and JavaScript (.js) files. Follow the detailed instructions provided in the @create-new-entities.mdc document to adhere to project-specific conventions and best practices.
-
-New Component Structure
-
-File Organization:
-For any new component, always create the associated .ts (logic), .html (template), and .scss (styles) files. This modular approach ensures that the component's functionality, presentation, and styling are cleanly separated and maintainable.
-
-Entity-Based Component Naming Conventions
-
-Consistent Naming Strategy:
-When creating a new component based on an entity, follow these naming rules to maintain clarity and uniformity across the project:
-
-List Component: Name the component as list-entity, where entity is replaced with the entity's name in lowercase (e.g., list-user for a User entity).
-
-Create/Edit Component: If the entity requires a component for creating a new record or updating an existing one, name it create-edit-entity (e.g., create-edit-product for a Product entity).
-
-Dialog Components: If the component is intended to function as a dialog, append dialog to the end of the name (e.g., 
-create-edit-product-dialog).
-
-
-Number pipe format: when formating a number pipe always use 1.0-2 format
-
-
-
-
+## Remember
+- These rules ensure application consistency and performance
+- Default to these guidelines unless specifically instructed otherwise
+- Follow this rules as our lives depends on it
 
 

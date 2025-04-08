@@ -6,7 +6,40 @@
   width: 100%;
 }
 
-button mat-spinner {
-  display: inline-block;
+/* Loading spinner styling */
+.mat-spinner {
   margin-right: 8px;
+  display: inline-block;
+}
+
+/* Make the autocomplete panel wider */
+::ng-deep .mat-autocomplete-panel {
+  max-width: 100% !important;
+  width: 100%;
+}
+
+/* Style autocomplete options */
+::ng-deep .mat-option {
+  line-height: 1.2;
+  height: auto;
+  min-height: 48px;
+  padding: 8px 16px;
+}
+
+/* Make the autocomplete panel scroll properly */
+::ng-deep .mat-autocomplete-panel {
+  max-height: 250px !important;
+}
+
+/* Style the "No results" option */
+::ng-deep .mat-option[disabled] {
+  color: rgba(0, 0, 0, 0.54);
+  font-style: italic;
+}
+
+/* Dark theme support */
+:host-context(.dark-theme) {
+  ::ng-deep .mat-option[disabled] {
+    color: rgba(255, 255, 255, 0.5);
+  }
 }

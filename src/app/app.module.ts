@@ -6,6 +6,7 @@ import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { HttpClientModule } from '@angular/common/http';
 import { RouterModule } from '@angular/router';
+import { NgxCurrencyModule } from 'ngx-currency';
 
 // Angular Material Imports
 import { MatToolbarModule } from '@angular/material/toolbar';
@@ -30,7 +31,6 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatTabsModule } from '@angular/material/tabs';
 
 import { AppRoutingModule } from './app-routing.module';
-import { HomeComponent } from './pages/home/home.component';
 
 // Tab navigation components
 import { TabContainerComponent } from './components/tab-container/tab-container.component';
@@ -47,6 +47,7 @@ import { TabsService } from './services/tabs.service';
     FormsModule,
     ReactiveFormsModule,
     HttpClientModule,
+    NgxCurrencyModule,
     MatToolbarModule,
     MatButtonModule,
     MatSidenavModule,

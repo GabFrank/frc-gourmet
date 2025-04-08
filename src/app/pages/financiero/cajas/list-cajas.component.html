@@ -1,0 +1,182 @@
+<div class="page-container">
+  <div class="header-container">
+    <h1>Cajas</h1>
+    <div class="actions">
+      <button mat-raised-button color="primary" (click)="openCaja()">
+        <mat-icon>add</mat-icon> Abrir Caja
+      </button>
+      <button mat-raised-button color="warn" (click)="clearFilters()">
+        <mat-icon>clear</mat-icon> Limpiar Filtros
+      </button>
+    </div>
+  </div>
+
+  <div class="filters-container" [formGroup]="filterForm" style="flex-direction: row;">
+    <div class="filter-row">
+      <mat-form-field appearance="outline" class="id-field">
+        <mat-label>ID Caja</mat-label>
+        <input matInput formControlName="cajaId" placeholder="Buscar por ID" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="usuario-field">
+        <mat-label>Usuario</mat-label>
+        <input
+          matInput
+          formControlName="usuario"
+          placeholder="Buscar por usuario"
+          [matAutocomplete]="usuarioAuto"
+        />
+        <mat-autocomplete
+          #usuarioAuto="matAutocomplete"
+          [displayWith]="displayUsuario"
+        >
+          <mat-option
+            *ngFor="let usuario of filteredUsuarios | async"
+            [value]="usuario"
+          >
+            {{ usuario.persona?.nombre }} ({{ usuario.nickname }})
+          </mat-option>
+        </mat-autocomplete>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="date-field">
+        <mat-label>Rango de fechas</mat-label>
+        <mat-date-range-input [rangePicker]="rangePicker">
+          <input
+            matStartDate
+            formControlName="fechaInicio"
+            placeholder="Fecha inicial"
+          />
+          <input
+            matEndDate
+            formControlName="fechaFin"
+            placeholder="Fecha final"
+          />
+        </mat-date-range-input>
+        <mat-datepicker-toggle
+          matSuffix
+          [for]="rangePicker"
+        ></mat-datepicker-toggle>
+        <mat-date-range-picker #rangePicker></mat-date-range-picker>
+      </mat-form-field>
+
+      <div class="date-toggle-container">
+        <span class="toggle-label">Tipo:</span>
+        <mat-button-toggle-group
+          formControlName="dateType"
+          class="date-toggle compact"
+        >
+          <mat-button-toggle value="apertura">Apertura</mat-button-toggle>
+          <mat-button-toggle value="cierre">Cierre</mat-button-toggle>
+        </mat-button-toggle-group>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <div *ngIf="loading" class="loading-message">
+      <p>Cargando cajas...</p>
+    </div>
+
+    <div *ngIf="error" class="error-container">
+      <p>{{ error }}</p>
+      <button mat-button color="primary" (click)="loadCajas()">
+        Reintentar
+      </button>
+    </div>
+
+    <table
+      mat-table
+      [dataSource]="dataSource"
+      matSort
+      class="mat-elevation-z2"
+      *ngIf="!loading && !error"
+    >
+      <!-- ID Column -->
+      <ng-container matColumnDef="id">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>ID</th>
+        <td mat-cell *matCellDef="let caja">{{ caja.id }}</td>
+      </ng-container>
+
+      <!-- Dispositivo Column -->
+      <ng-container matColumnDef="dispositivo">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Dispositivo</th>
+        <td mat-cell *matCellDef="let caja">
+          {{ caja.dispositivo?.nombre || "N/A" }}
+        </td>
+      </ng-container>
+
+      <!-- Cajero Column -->
+      <ng-container matColumnDef="cajero">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Cajero</th>
+        <td mat-cell *matCellDef="let caja">
+          {{ caja.cajero?.persona?.nombre || "N/A" }}
+        </td>
+      </ng-container>
+
+      <!-- Fecha Apertura Column -->
+      <ng-container matColumnDef="fechaApertura">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Apertura</th>
+        <td mat-cell *matCellDef="let caja">
+          {{ caja.fechaApertura | date : "dd/MM/yyyy HH:mm" }}
+        </td>
+      </ng-container>
+
+      <!-- Fecha Cierre Column -->
+      <ng-container matColumnDef="fechaCierre">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Cierre</th>
+        <td mat-cell *matCellDef="let caja">
+          {{
+            caja.fechaCierre
+              ? (caja.fechaCierre | date : "dd/MM/yyyy HH:mm")
+              : "No cerrado"
+          }}
+        </td>
+      </ng-container>
+
+      <!-- Estado Column -->
+      <ng-container matColumnDef="estado">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Estado</th>
+        <td mat-cell *matCellDef="let caja">
+          <mat-chip-set>
+            <mat-chip [color]="caja.estadoColor" selected>{{
+              caja.estado
+            }}</mat-chip>
+          </mat-chip-set>
+        </td>
+      </ng-container>
+
+      <!-- Actions Column -->
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef>Acciones</th>
+        <td mat-cell *matCellDef="let caja">
+          <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #menu="matMenu">
+            <button mat-menu-item (click)="handleAction('view', caja)">
+              <mat-icon>visibility</mat-icon>
+              <span>Ver detalles</span>
+            </button>
+            <button mat-menu-item *ngIf="caja.estado === cajaEstado.ABIERTO" (click)="handleAction('close', caja)">
+              <mat-icon>close</mat-icon>
+              <span>Cerrar caja</span>
+            </button>
+            <button mat-menu-item (click)="handleAction('conteo', caja)">
+              <mat-icon>account_balance_wallet</mat-icon>
+              <span>Ir a conteo</span>
+            </button>
+          </mat-menu>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+    </table>
+
+    <mat-paginator
+      [pageSizeOptions]="[5, 10, 25, 100]"
+      showFirstLastButtons
+    ></mat-paginator>
+  </div>
+</div>

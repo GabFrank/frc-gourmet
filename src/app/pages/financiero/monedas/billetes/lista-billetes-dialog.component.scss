@@ -1,0 +1,143 @@
+.dialog-container {
+  min-width: 500px;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+
+  p {
+    margin-top: 16px;
+    color: rgba(0, 0, 0, 0.6);
+  }
+}
+
+.error-message {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  margin: 8px 0;
+  background-color: rgba(211, 47, 47, 0.1);
+  border-radius: 4px;
+  color: #d32f2f;
+
+  mat-icon {
+    margin-right: 8px;
+  }
+}
+
+.instructions {
+  margin-bottom: 16px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.new-billete-form {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  align-items: center;
+
+  .valor-field {
+    flex: 1;
+  }
+
+  button {
+    height: 56px;
+    min-width: 120px;
+
+    mat-icon {
+      margin-right: 8px;
+    }
+  }
+}
+
+.billetes-table {
+  width: 100%;
+
+  .mat-column-valor {
+    font-weight: 500;
+    text-align: start;
+  }
+
+  .mat-column-activo {
+    width: 120px;
+    text-align: center;
+  }
+
+  .mat-column-acciones {
+    width: 120px;
+    text-align: center;
+  }
+
+  .actions-cell {
+    button {
+      opacity: 0.8;
+      transition: opacity 0.2s ease;
+
+      &:hover {
+        opacity: 1;
+      }
+    }
+
+    .action-button-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+  }
+}
+
+.text-center {
+  text-align: center !important;
+}
+
+.inactive-row {
+  opacity: 0.6;
+}
+
+.no-data {
+  display: flex;
+  justify-content: center;
+  padding: 40px 0;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+
+  &.active {
+    background-color: rgba(76, 175, 80, 0.15);
+    color: #2e7d32;
+  }
+
+  &.inactive {
+    background-color: rgba(117, 117, 117, 0.15);
+    color: #616161;
+  }
+}
+
+@media screen and (max-width: 600px) {
+  .dialog-container {
+    min-width: 100%;
+    width: 100%;
+  }
+
+  .new-billete-form {
+    flex-direction: column;
+
+    .valor-field {
+      width: 100%;
+    }
+
+    button {
+      width: 100%;
+    }
+  }
+}

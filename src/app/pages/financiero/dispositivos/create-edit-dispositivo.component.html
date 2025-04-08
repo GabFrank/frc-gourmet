@@ -1,0 +1,91 @@
+<div class="dialog-container">
+  <h2 mat-dialog-title>{{ isEditMode ? 'Editar' : 'Crear' }} Dispositivo</h2>
+
+  <div mat-dialog-content>
+    <div *ngIf="loading" class="loading-container">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Cargando datos...</p>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" *ngIf="!loading">
+      <!-- Nombre -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Nombre del Dispositivo</mat-label>
+        <input matInput formControlName="nombre" placeholder="Ingrese nombre del dispositivo" required>
+        <mat-error *ngIf="form.get('nombre')?.hasError('required')">
+          El nombre del dispositivo es requerido
+        </mat-error>
+        <mat-error *ngIf="nameError">
+          {{ nameError }}
+        </mat-error>
+      </mat-form-field>
+
+      <!-- MAC Address (optional) -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Dirección MAC (opcional)</mat-label>
+        <input matInput formControlName="mac" placeholder="Ingrese dirección MAC">
+        <button matSuffix mat-icon-button type="button" (click)="getSystemMacAddress()" [disabled]="loadingMacAddress">
+          <mat-icon *ngIf="!loadingMacAddress">computer</mat-icon>
+          <mat-spinner diameter="20" *ngIf="loadingMacAddress"></mat-spinner>
+        </button>
+        <mat-hint>Haga clic en el botón para obtener automáticamente la dirección MAC</mat-hint>
+        <mat-error *ngIf="macError">
+          {{ macError }}
+        </mat-error>
+      </mat-form-field>
+
+      <div class="checkbox-section">
+        <h3>Características del Dispositivo</h3>
+
+        <!-- isVenta -->
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="isVenta" color="primary">
+            Punto de Venta
+          </mat-checkbox>
+          <span class="checkbox-hint">Activar si el dispositivo es un punto de venta</span>
+        </div>
+
+        <!-- isCaja -->
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="isCaja" color="primary">
+            Terminal de Caja
+          </mat-checkbox>
+          <span class="checkbox-hint">Activar si el dispositivo es una terminal de caja</span>
+        </div>
+
+        <!-- isTouch -->
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="isTouch" color="primary">
+            Pantalla Táctil
+          </mat-checkbox>
+          <span class="checkbox-hint">Activar si el dispositivo tiene pantalla táctil</span>
+        </div>
+
+        <!-- isMobile -->
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="isMobile" color="primary">
+            Dispositivo Móvil
+          </mat-checkbox>
+          <span class="checkbox-hint">Activar si es un dispositivo móvil (tablet, celular, etc.)</span>
+        </div>
+
+        <!-- activo -->
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="activo" color="primary">
+            Activo
+          </mat-checkbox>
+          <span class="checkbox-hint">Estado del dispositivo</span>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div mat-dialog-actions align="end">
+    <button mat-button [disabled]="loading || saving" (click)="onCancel()">Cancelar</button>
+    <button mat-raised-button color="primary" [disabled]="loading || saving || form.invalid" (click)="onSubmit()">
+      <mat-icon>save</mat-icon>
+      {{ isEditMode ? 'Actualizar' : 'Crear' }}
+    </button>
+  </div>
+</div>
+

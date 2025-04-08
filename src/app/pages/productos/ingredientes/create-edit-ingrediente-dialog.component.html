@@ -36,17 +36,32 @@
 
       <!-- Recipe Selection -->
       <div class="form-row">
-        <mat-form-field class="full-width" appearance="outline">
+        <mat-form-field appearance="outline" *ngIf="recetas.length > 0" style="width: 100%;">
           <mat-label>Receta</mat-label>
-          <mat-select formControlName="recetaId">
-            <mat-option [value]="null">Ninguna</mat-option>
-            <mat-option *ngFor="let receta of recetas" [value]="receta.id">
-              {{ recetasDisplayValues[receta.id] }}
+          <input type="text"
+                 matInput
+                 formControlName="recetaSearch"
+                 [matAutocomplete]="recetaAuto"
+                 placeholder="Buscar receta...">
+          <mat-spinner *ngIf="recetaSearchLoading" matSuffix diameter="20"></mat-spinner>
+          <button *ngIf="!recetaSearchLoading && selectedReceta"
+                  matSuffix
+                  mat-icon-button
+                  aria-label="Clear"
+                  (click)="clearRecetaSelection(); $event.stopPropagation()">
+            <mat-icon>close</mat-icon>
+          </button>
+          <mat-autocomplete #recetaAuto="matAutocomplete"
+                            [displayWith]="displayReceta.bind(this)"
+                            (optionSelected)="onRecetaSelected($event)">
+            <mat-option *ngFor="let receta of filteredRecetas | async" [value]="receta">
+              {{ receta.optionText }}
             </mat-option>
-          </mat-select>
-          <mat-hint *ngIf="ingredienteForm.get('recetaId')?.value">
-            Al seleccionar una receta, el costo se calculará automáticamente
-          </mat-hint>
+            <mat-option *ngIf="(filteredRecetas | async)?.length === 0 && !recetaSearchLoading" [disabled]="true">
+              No se encontraron recetas
+            </mat-option>
+          </mat-autocomplete>
+          <mat-hint>Opcional: Calcular costo a partir de una receta</mat-hint>
         </mat-form-field>
       </div>
 
@@ -125,10 +140,10 @@
 
   <mat-dialog-actions align="end">
     <button mat-button mat-dialog-close>Cancelar</button>
-    <button 
-      mat-raised-button 
-      color="primary" 
-      (click)="save()" 
+    <button
+      mat-raised-button
+      color="primary"
+      (click)="save()"
       [disabled]="ingredienteForm.invalid || savingIngrediente">
       <mat-spinner *ngIf="savingIngrediente" diameter="20" class="button-spinner"></mat-spinner>
       <span *ngIf="!savingIngrediente">{{ data.editMode ? 'Actualizar' : 'Crear' }}</span>

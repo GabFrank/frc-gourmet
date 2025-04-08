@@ -284,6 +284,86 @@ interface Ingrediente {
   updatedAt?: Date;
 }
 
+// Define interfaces for the new financial entities
+interface MonedaBillete {
+  id?: number;
+  moneda: Moneda | number;
+  valor: number;
+  activo: boolean;
+  image_path?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface Conteo {
+  id?: number;
+  activo: boolean;
+  detalles?: ConteoDetalle[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface ConteoDetalle {
+  id?: number;
+  conteo: Conteo | number;
+  monedaBillete: MonedaBillete | number;
+  cantidad: number;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface Dispositivo {
+  id?: number;
+  nombre: string;
+  mac?: string;
+  isVenta: boolean;
+  isCaja: boolean;
+  isTouch: boolean;
+  isMobile: boolean;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+type CajaEstado = 'ABIERTO' | 'CERRADO' | 'CANCELADO';
+
+interface Caja {
+  id?: number;
+  dispositivo: Dispositivo | number;
+  fechaApertura: Date;
+  fechaCierre?: Date;
+  conteoApertura: Conteo | number;
+  conteoCierre?: Conteo | number;
+  estado: CajaEstado;
+  activo: boolean;
+  revisado: boolean;
+  revisadoPor?: Usuario | number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface RecetaVariacionItem {
+  id?: number;
+  recetaVariacionId: number;
+  ingredienteId: number;
+  cantidad: number;
+  modificado: boolean;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface CajaMoneda {
+  id?: number;
+  moneda: Moneda | number;
+  predeterminado: boolean;
+  activo: boolean;
+  orden?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('api', {
@@ -655,6 +735,10 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('getPreciosVentaByPresentacion', presentacionId);
   },
 
+  getPreciosVentaByPresentacionSabor: async (presentacionSaborId: number): Promise<PrecioVenta[]> => {
+    return await ipcRenderer.invoke('getPreciosVentaByPresentacionSabor', presentacionSaborId);
+  },
+
   createPrecioVenta: async (precioVentaData: Partial<PrecioVenta>): Promise<PrecioVenta> => {
     return await ipcRenderer.invoke('createPrecioVenta', precioVentaData);
   },
@@ -762,7 +846,7 @@ contextBridge.exposeInMainWorld('api', {
   searchIngredientesByDescripcion: async (searchText: string) => {
     return await ipcRenderer.invoke('searchIngredientesByDescripcion', searchText);
   },
-  
+
   // RecetaVariacion methods
   getRecetaVariaciones: async (recetaId: number) => {
     return await ipcRenderer.invoke('getRecetaVariaciones', recetaId);
@@ -779,7 +863,7 @@ contextBridge.exposeInMainWorld('api', {
   deleteRecetaVariacion: async (variacionId: number) => {
     return await ipcRenderer.invoke('deleteRecetaVariacion', variacionId);
   },
-  
+
   // RecetaVariacionItem methods
   getRecetaVariacionItems: async (variacionId: number) => {
     return await ipcRenderer.invoke('getRecetaVariacionItems', variacionId);
@@ -796,4 +880,123 @@ contextBridge.exposeInMainWorld('api', {
   deleteRecetaVariacionItem: async (variacionItemId: number) => {
     return await ipcRenderer.invoke('deleteRecetaVariacionItem', variacionItemId);
   },
+
+  // MonedaBillete methods
+  getMonedasBilletes: async () => {
+    return await ipcRenderer.invoke('get-monedas-billetes');
+  },
+  getMonedaBillete: async (monedaBilleteId: number) => {
+    return await ipcRenderer.invoke('get-moneda-billete', monedaBilleteId);
+  },
+  createMonedaBillete: async (monedaBilleteData: any) => {
+    return await ipcRenderer.invoke('create-moneda-billete', monedaBilleteData);
+  },
+  updateMonedaBillete: async (monedaBilleteId: number, monedaBilleteData: any) => {
+    return await ipcRenderer.invoke('update-moneda-billete', monedaBilleteId, monedaBilleteData);
+  },
+  deleteMonedaBillete: async (monedaBilleteId: number) => {
+    return await ipcRenderer.invoke('delete-moneda-billete', monedaBilleteId);
+  },
+
+  // Conteo methods
+  getConteos: async () => {
+    return await ipcRenderer.invoke('get-conteos');
+  },
+  getConteo: async (conteoId: number) => {
+    return await ipcRenderer.invoke('get-conteo', conteoId);
+  },
+  createConteo: async (conteoData: any) => {
+    return await ipcRenderer.invoke('create-conteo', conteoData);
+  },
+  updateConteo: async (conteoId: number, conteoData: any) => {
+    return await ipcRenderer.invoke('update-conteo', conteoId, conteoData);
+  },
+  deleteConteo: async (conteoId: number) => {
+    return await ipcRenderer.invoke('delete-conteo', conteoId);
+  },
+
+  // ConteoDetalle methods
+  getConteoDetalles: async (conteoId: number) => {
+    return await ipcRenderer.invoke('get-conteo-detalles', conteoId);
+  },
+  getConteoDetalle: async (conteoDetalleId: number) => {
+    return await ipcRenderer.invoke('get-conteo-detalle', conteoDetalleId);
+  },
+  createConteoDetalle: async (conteoDetalleData: any) => {
+    return await ipcRenderer.invoke('create-conteo-detalle', conteoDetalleData);
+  },
+  updateConteoDetalle: async (conteoDetalleId: number, conteoDetalleData: any) => {
+    return await ipcRenderer.invoke('update-conteo-detalle', conteoDetalleId, conteoDetalleData);
+  },
+  deleteConteoDetalle: async (conteoDetalleId: number) => {
+    return await ipcRenderer.invoke('delete-conteo-detalle', conteoDetalleId);
+  },
+
+  // Dispositivo methods
+  getDispositivos: async () => {
+    return await ipcRenderer.invoke('get-dispositivos');
+  },
+  getDispositivo: async (dispositivoId: number) => {
+    return await ipcRenderer.invoke('get-dispositivo', dispositivoId);
+  },
+  createDispositivo: async (dispositivoData: any) => {
+    return await ipcRenderer.invoke('create-dispositivo', dispositivoData);
+  },
+  updateDispositivo: async (dispositivoId: number, dispositivoData: any) => {
+    return await ipcRenderer.invoke('update-dispositivo', dispositivoId, dispositivoData);
+  },
+  deleteDispositivo: async (dispositivoId: number) => {
+    return await ipcRenderer.invoke('delete-dispositivo', dispositivoId);
+  },
+
+  // Caja methods
+  getCajas: async () => {
+    return await ipcRenderer.invoke('get-cajas');
+  },
+  getCaja: async (cajaId: number) => {
+    return await ipcRenderer.invoke('get-caja', cajaId);
+  },
+  getCajaByDispositivo: async (dispositivoId: number) => {
+    return await ipcRenderer.invoke('get-caja-by-dispositivo', dispositivoId);
+  },
+  createCaja: async (cajaData: any) => {
+    return await ipcRenderer.invoke('create-caja', cajaData);
+  },
+  updateCaja: async (cajaId: number, cajaData: any) => {
+    return await ipcRenderer.invoke('update-caja', cajaId, cajaData);
+  },
+  deleteCaja: async (cajaId: number) => {
+    return await ipcRenderer.invoke('delete-caja', cajaId);
+  },
+
+  // CajaMoneda methods
+  getCajasMonedas: () => ipcRenderer.invoke('get-cajas-monedas'),
+  getCajaMoneda: (cajaMonedaId: number) => ipcRenderer.invoke('get-caja-moneda', cajaMonedaId),
+  createCajaMoneda: (cajaMonedaData: Partial<CajaMoneda>) => ipcRenderer.invoke('create-caja-moneda', cajaMonedaData),
+  updateCajaMoneda: (cajaMonedaId: number, cajaMonedaData: Partial<CajaMoneda>) => ipcRenderer.invoke('update-caja-moneda', cajaMonedaId, cajaMonedaData),
+  deleteCajaMoneda: (cajaMonedaId: number) => ipcRenderer.invoke('delete-caja-moneda', cajaMonedaId),
+  saveCajasMonedas: (updates: any[]) => ipcRenderer.invoke('save-cajas-monedas', updates),
+
+  // MonedaCambio methods
+  getMonedasCambio: async () => {
+    return await ipcRenderer.invoke('get-monedas-cambio');
+  },
+  getMonedasCambioByMonedaOrigen: async (monedaOrigenId: number) => {
+    return await ipcRenderer.invoke('get-monedas-cambio-by-moneda-origen', monedaOrigenId);
+  },
+  getMonedaCambio: async (monedaCambioId: number) => {
+    return await ipcRenderer.invoke('get-moneda-cambio', monedaCambioId);
+  },
+  createMonedaCambio: async (monedaCambioData: any) => {
+    return await ipcRenderer.invoke('create-moneda-cambio', monedaCambioData);
+  },
+  updateMonedaCambio: async (monedaCambioId: number, monedaCambioData: any) => {
+    return await ipcRenderer.invoke('update-moneda-cambio', monedaCambioId, monedaCambioData);
+  },
+  deleteMonedaCambio: async (monedaCambioId: number) => {
+    return await ipcRenderer.invoke('delete-moneda-cambio', monedaCambioId);
+  },
+
+  // System information
+  getSystemMacAddress: () => ipcRenderer.invoke('get-system-mac-address'),
 });

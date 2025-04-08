@@ -1,0 +1,90 @@
+<div class="dialog-container">
+  <h2 mat-dialog-title>Configuración de Monedas para Cajas</h2>
+
+  <div mat-dialog-content>
+    <div *ngIf="loading" class="loading-container">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Cargando configuración de monedas...</p>
+    </div>
+
+    <div *ngIf="error" class="error-message">
+      <mat-icon>error</mat-icon>
+      <span>{{ error }}</span>
+    </div>
+
+    <div *ngIf="!loading && !error" class="table-container">
+      <p class="instructions">
+        Seleccione las monedas que desea utilizar en las cajas y defina cuál será la moneda predeterminada.
+        Puede arrastrar las filas para cambiar el orden de visualización.
+      </p>
+
+      <table mat-table [dataSource]="monedas" matSort (matSortChange)="sortData($event)" cdkDropList
+        (cdkDropListDropped)="drop($event)" class="monedas-table">
+
+        <!-- Drag Handle Column -->
+        <ng-container matColumnDef="drag">
+          <th mat-header-cell *matHeaderCellDef class="drag-column"> </th>
+          <td mat-cell *matCellDef="let moneda" class="drag-cell" cdkDragHandle>
+            <mat-icon class="drag-handle">drag_indicator</mat-icon>
+          </td>
+        </ng-container>
+
+        <!-- Denominación Column -->
+        <ng-container matColumnDef="denominacion">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header> Denominación </th>
+          <td mat-cell *matCellDef="let moneda"> {{moneda.denominacion}} </td>
+        </ng-container>
+
+        <!-- Símbolo Column -->
+        <ng-container matColumnDef="simbolo">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header> Símbolo </th>
+          <td mat-cell *matCellDef="let moneda"> {{moneda.simbolo}} </td>
+        </ng-container>
+
+        <!-- Activo Column -->
+        <ng-container matColumnDef="activo">
+          <th mat-header-cell *matHeaderCellDef> Activo </th>
+          <td mat-cell *matCellDef="let moneda">
+            <mat-checkbox
+              [checked]="moneda.activo"
+              (change)="moneda.activo = $event.checked"
+              [color]="'primary'">
+            </mat-checkbox>
+          </td>
+        </ng-container>
+
+        <!-- Predeterminado Column -->
+        <ng-container matColumnDef="predeterminado">
+          <th mat-header-cell *matHeaderCellDef> Predeterminado </th>
+          <td mat-cell *matCellDef="let moneda">
+            <mat-checkbox
+              [checked]="moneda.predeterminado"
+              (change)="togglePredeterminado(moneda)"
+              [color]="'accent'"
+              [disabled]="!moneda.activo">
+            </mat-checkbox>
+          </td>
+        </ng-container>
+
+        <!-- Row definition -->
+        <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;"
+            cdkDrag [cdkDragDisabled]="saving"
+            [class.inactive-row]="!row.activo">
+        </tr>
+      </table>
+
+      <div *ngIf="monedas.length === 0 && !loading" class="no-data">
+        <p>No hay monedas disponibles.</p>
+      </div>
+    </div>
+  </div>
+
+  <div mat-dialog-actions align="end">
+    <button mat-button [disabled]="loading || saving" (click)="onCancel()">Cancelar</button>
+    <button mat-raised-button color="primary" [disabled]="loading || saving" (click)="saveChanges()">
+      <mat-icon *ngIf="saving">sync</mat-icon>
+      <span>{{ saving ? 'Guardando...' : 'Guardar cambios' }}</span>
+    </button>
+  </div>
+</div>

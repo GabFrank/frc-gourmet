@@ -2,104 +2,174 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 16px;
+  padding: 20px;
   height: 100%;
   box-sizing: border-box;
-}
 
-.filter-card {
-  margin-bottom: 16px;
-}
+  .filter-card {
+    margin-bottom: 20px;
 
-.filter-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
+    mat-card-header {
+      margin-bottom: 16px;
+    }
 
-.filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
+    .filter-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
 
-  mat-form-field {
-    flex: 1;
-    min-width: 200px;
+      .filter-fields {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+
+        mat-form-field {
+          flex: 1;
+          min-width: 200px;
+        }
+      }
+
+      .filter-actions {
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 16px;
+
+        .left-actions {
+          display: flex;
+          gap: 8px;
+        }
+
+        .right-actions {
+          display: flex;
+          gap: 8px;
+        }
+
+        @media (max-width: 768px) {
+          flex-direction: column;
+
+          .left-actions,
+          .right-actions {
+            width: 100%;
+            justify-content: flex-start;
+          }
+        }
+      }
+    }
   }
-}
 
-.button-row {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-  flex-wrap: wrap;
-}
+  .table-container {
+    position: relative;
+    min-height: 200px;
 
-.spacer {
-  flex: 1;
-}
+    .loading-shade {
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      right: 0;
+      background: rgba(255, 255, 255, 0.8);
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
 
-.table-container {
-  position: relative;
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
+    .table-scroll-container {
+      overflow-x: auto;
+      margin-bottom: 16px;
 
-.table-scroll-container {
-  flex: 1;
-  overflow: auto;
-}
+      table {
+        width: 100%;
 
-.paginator-container {
-  margin-top: 16px;
-}
+        .mat-column-principal,
+        .mat-column-activo {
+          width: 100px;
+          text-align: center;
+        }
 
-.loading-shade {
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  right: 0;
-  background: rgba(0, 0, 0, 0.15);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+        .mat-column-acciones {
+          width: 80px;
+          text-align: center;
+        }
 
-table {
-  width: 100%;
-}
+        .inactive-row {
+          background-color: rgba(0, 0, 0, 0.04);
 
-.status-badge {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 16px;
-  font-size: 12px;
-  font-weight: 500;
-}
+          td {
+            color: rgba(0, 0, 0, 0.6);
+          }
+        }
 
-.status-badge.active {
-  background-color: #e8f5e9;
-  color: #2e7d32;
-}
+        .status-badge {
+          padding: 4px 8px;
+          border-radius: 16px;
+          font-size: 12px;
+          font-weight: 500;
 
-.status-badge.inactive {
-  background-color: #ffebee;
-  color: #c62828;
+          &.active {
+            background-color: #e6f7ed;
+            color: #00875a;
+          }
+
+          &.inactive {
+            background-color: #ffe8e8;
+            color: #d73a49;
+          }
+        }
+      }
+    }
+
+    .paginator-container {
+      margin-top: 16px;
+    }
+
+    .no-data {
+      display: flex;
+      justify-content: center;
+      padding: 20px;
+      color: rgba(0, 0, 0, 0.6);
+      font-style: italic;
+    }
+  }
 }
 
 /* Dark theme adjustments */
 :host-context(.dark-theme) {
-  .status-badge.active {
-    background-color: #1b5e20;
-    color: #e8f5e9;
-  }
+  .list-monedas-container {
+    .table-container {
+      .loading-shade {
+        background: rgba(33, 33, 33, 0.8);
+      }
 
-  .status-badge.inactive {
-    background-color: #b71c1c;
-    color: #ffebee;
+      .table-scroll-container {
+        table {
+          .inactive-row {
+            background-color: rgba(255, 255, 255, 0.04);
+
+            td {
+              color: rgba(255, 255, 255, 0.6);
+            }
+          }
+
+          .status-badge {
+            &.active {
+              background-color: rgba(0, 135, 90, 0.2);
+              color: #55d0a0;
+            }
+
+            &.inactive {
+              background-color: rgba(215, 58, 73, 0.2);
+              color: #ff6b6b;
+            }
+          }
+        }
+      }
+
+      .no-data {
+        color: rgba(255, 255, 255, 0.6);
+      }
+    }
   }
 }

@@ -1,0 +1,568 @@
+<div class="full-container">
+  <div style="width: 100%; text-align: center; padding-top: 10px;">
+    <h4>{{ dialogTitle }}</h4>
+  </div>
+  <mat-dialog-content class="dialog-content" style="height: 100%">
+    <div *ngIf="loading" class="loading-overlay">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Cargando datos...</p>
+    </div>
+    <mat-stepper
+      [linear]="isLinear"
+      #stepper
+      class="compact-stepper"
+      style="height: 100%"
+    >
+    <!-- Step 1: Select dispositivo and basic info -->
+      <mat-step [stepControl]="cajaInfoForm" [label]="dialogMode === 'conteo' ? 'INFORMACIÓN DE LA CAJA' : 'INFORMACIÓN DE CAJA'">
+        <form [formGroup]="cajaInfoForm" style="height: 100%">
+        <div class="step-content">
+            <div style="height: 100%">
+              <h4>{{ dialogMode === 'conteo' ? 'Dispositivo de la caja' : 'Seleccione el dispositivo para la caja' }}</h4>
+
+          <div *ngIf="loadingDeviceInfo" class="device-detection-status">
+                <mat-spinner diameter="16"></mat-spinner>
+                <span>DETECTANDO DISPOSITIVO ACTUAL...</span>
+          </div>
+
+              <div
+                *ngIf="detectedDispositivoId && !loadingDeviceInfo"
+                class="device-detection-status success"
+              >
+            <mat-icon color="primary">check_circle</mat-icon>
+                <span>DISPOSITIVO DETECTADO AUTOMÁTICAMENTE</span>
+          </div>
+
+              <mat-form-field
+                appearance="outline"
+                class="full-width compact-field"
+              >
+                <mat-label>DISPOSITIVO</mat-label>
+            <mat-select formControlName="dispositivoId">
+                  <mat-option
+                    *ngFor="let dispositivo of dispositivos"
+                    [value]="dispositivo.id"
+                  >
+                {{ dispositivo.nombre }}
+                    <span
+                      *ngIf="dispositivo.id === detectedDispositivoId"
+                      class="detected-device"
+                    >
+                      (DISPOSITIVO ACTUAL)</span
+                    >
+              </mat-option>
+            </mat-select>
+                <mat-error
+                  *ngIf="cajaInfoForm.get('dispositivoId')?.hasError('required')"
+                >
+                  DISPOSITIVO ES REQUERIDO
+            </mat-error>
+          </mat-form-field>
+            </div>
+
+          <div class="step-actions">
+              <button mat-button mat-dialog-close>CANCELAR</button>
+              <button
+                mat-button
+                matStepperNext
+                color="primary"
+                [disabled]="cajaInfoForm.invalid"
+              >
+                SIGUIENTE
+            </button>
+          </div>
+        </div>
+      </form>
+    </mat-step>
+
+    <!-- Step 2: Conteo Apertura -->
+      <mat-step [stepControl]="conteoInicialForm" [label]="dialogMode === 'conteo' ? 'CONTEO APERTURA' : 'CONTEO APERTURA'">
+        <form [formGroup]="conteoInicialForm" style="height: 100%">
+        <div class="step-content">
+          <div *ngIf="loading" class="loading-indicator">
+              <mat-spinner diameter="20"></mat-spinner>
+              <span>CARGANDO MONEDAS...</span>
+          </div>
+
+            <div
+              *ngIf="!loading && monedasConfig.length === 0"
+              class="no-currencies"
+            >
+              <p>
+                NO HAY MONEDAS CONFIGURADAS PARA CAJAS.POR FAVOR CONFIGURE LAS
+                MONEDAS PRIMERO.
+              </p>
+          </div>
+
+            <div
+              *ngIf="!loading && monedasConfig.length > 0"
+              class="content-container"
+            >
+              <div class="step-subtitle">
+                <h4>Conteo de Apertura</h4>
+              </div>
+
+            <!-- Currency selection using Material Tabs -->
+              <mat-tab-group
+                (selectedIndexChange)="onTabChange($event)"
+                [selectedIndex]="selectedTabIndex"
+                class="compact-tabs"
+                style="height: 100%; overflow-y: auto;"
+              >
+                <mat-tab
+                  *ngFor="let monedaConfig of monedasConfig"
+                  [label]="
+                    monedaConfig.moneda.simbolo +
+                    ' ' +
+                    monedaConfig.moneda.denominacion
+                  "
+                >
+                <!-- Conteo fields for selected currency -->
+                  <div
+                    *ngIf="
+                      activeCurrency &&
+                      activeCurrency.moneda.id === monedaConfig.moneda.id
+                    "
+                    class="conteo-fields"
+                  >
+                    <div
+                      *ngIf="activeCurrency.billetes.length === 0"
+                      class="no-billetes"
+                    >
+                      <p>NO HAY DENOMINACIONES REGISTRADAS PARA ESTA MONEDA.</p>
+                    </div>
+
+                    <div
+                      *ngIf="activeCurrency.billetes.length > 0"
+                      class="billete-grid"
+                    >
+                      <!-- Left column (first half of billetes) -->
+                      <div class="billete-column">
+                        <ng-container
+                          *ngFor="
+                            let billete of activeCurrency.billetes
+                              | slice
+                                : 0
+                                : (activeCurrency.billetes.length + 1) / 2;
+                            let i = index
+                          "
+                        >
+                          <div class="billete-item">
+                            <mat-form-field
+                              appearance="outline"
+                              class="compact-field"
+                            >
+                              <mat-label
+                                >{{ activeCurrency.moneda.simbolo }}
+                                {{ billete.valor | number : "1.0-2" }}</mat-label
+                              >
+                              <span matPrefix class="billete-prefix">
+                                {{ billete.valor | number : "1.0-2" }} ×
+                              </span>
+                              <input
+                                class="billete-input"
+                                matInput
+                                type="number"
+                                [formControlName]="'billete_' + billete.id"
+                                min="0"
+                                (focus)="selectAllContent($event)"
+                                (keyup.enter)="
+                                  navigateToNextField(i, activeCurrency.moneda.id)
+                                "
+                                [attr.data-index]="i"
+                                [attr.data-currency-id]="activeCurrency.moneda.id"
+                              />
+                              <!-- <span
+                                matSuffix
+                                *ngIf="
+                                  conteoInicialForm.get('billete_' + billete.id)
+                                    ?.value
+                                "
+                                class="billete-suffix"
+                              >
+                                =
+                                {{
+                                  conteoInicialForm.get("billete_" + billete.id)
+                                    ?.value * billete.valor | number : "1.0-2"
+                                }}
+                              </span> -->
+                            </mat-form-field>
+                          </div>
+                        </ng-container>
+                  </div>
+
+                      <!-- Right column (second half of billetes) -->
+                      <div class="billete-column">
+                        <ng-container
+                          *ngFor="
+                            let billete of activeCurrency.billetes
+                              | slice : (activeCurrency.billetes.length + 1) / 2;
+                            let i = index
+                          "
+                        >
+                          <div class="billete-item">
+                            <mat-form-field
+                              appearance="outline"
+                              class="compact-field"
+                            >
+                              <mat-label
+                                >{{ activeCurrency.moneda.simbolo }}
+                                {{ billete.valor | number : "1.0-2" }}
+                              </mat-label>
+                              <span
+                                matPrefix
+                                class="billete-prefix"
+                                >{{ billete.valor | number : "1.0-2" }} ×
+                              </span>
+                              <input
+                                class="billete-input"
+                                matInput
+                                type="number"
+                                [formControlName]="'billete_' + billete.id"
+                                min="0"
+                                (focus)="selectAllContent($event)"
+                                (keyup.enter)="
+                                  navigateToNextField(
+                                    i + (activeCurrency.billetes.length + 1) / 2,
+                                    activeCurrency.moneda.id
+                                  )
+                                "
+                                [attr.data-index]="
+                                  i + (activeCurrency.billetes.length + 1) / 2
+                                "
+                                [attr.data-currency-id]="activeCurrency.moneda.id"
+                              />
+                              <!-- <span
+                                matSuffix
+                                *ngIf="
+                                  conteoInicialForm.get('billete_' + billete.id)
+                                    ?.value
+                                "
+                                class="billete-suffix"
+                              >
+                                ={{
+                                  conteoInicialForm.get("billete_" + billete.id)
+                                    ?.value * billete.valor | number : "1.0-2"
+                                }}
+                              </span> -->
+                            </mat-form-field>
+                          </div>
+                        </ng-container>
+                      </div>
+                    </div>
+                  </div>
+                </mat-tab>
+              </mat-tab-group>
+
+              <!-- Currency totals below tabs -->
+              <div class="currency-totals-container">
+                <h4>TOTAL POR MONEDA:</h4>
+                <div class="currency-totals-grid">
+                  <div
+                    *ngFor="let monedaConfig of monedasConfig"
+                    class="currency-total-item"
+                  >
+                    <div class="currency-total-label">
+                      {{ monedaConfig.moneda.denominacion }}:
+                    </div>
+                    <div class="currency-total-value">
+                      {{ monedaConfig.moneda.simbolo }}
+                      {{
+                        currencyTotals[monedaConfig.moneda.id] | number : "1.0-2"
+                      }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+          </div>
+
+          <div class="step-actions">
+              <button mat-button matStepperPrevious>ATRÁS</button>
+              <button
+                mat-button
+                matStepperNext
+                color="primary"
+                [disabled]="conteoInicialForm.invalid"
+              >
+                SIGUIENTE
+              </button>
+          </div>
+        </div>
+      </form>
+    </mat-step>
+
+    <!-- Step 3: Conteo Cierre (New) -->
+      <mat-step [stepControl]="conteoCierreForm" [label]="'CONTEO CIERRE'" *ngIf="dialogMode === 'conteo'">
+        <form [formGroup]="conteoCierreForm" style="height: 100%">
+        <div class="step-content">
+          <div *ngIf="loading" class="loading-indicator">
+              <mat-spinner diameter="20"></mat-spinner>
+              <span>CARGANDO MONEDAS...</span>
+          </div>
+
+            <div
+              *ngIf="!loading && monedasConfig.length === 0"
+              class="no-currencies"
+            >
+              <p>
+                NO HAY MONEDAS CONFIGURADAS PARA CAJAS. POR FAVOR CONFIGURE LAS
+                MONEDAS PRIMERO.
+              </p>
+          </div>
+
+            <div
+              *ngIf="!loading && monedasConfig.length > 0"
+              class="content-container"
+            >
+              <div class="step-subtitle">
+                <h4>Conteo de Cierre</h4>
+              </div>
+
+            <!-- Currency selection using Material Tabs for Conteo Cierre -->
+              <mat-tab-group
+                (selectedIndexChange)="onCierreTabChange($event)"
+                [selectedIndex]="selectedCierreTabIndex"
+                class="compact-tabs"
+                style="height: 100%; overflow-y: auto;"
+              >
+                <mat-tab
+                  *ngFor="let monedaConfig of monedasConfig"
+                  [label]="
+                    monedaConfig.moneda.simbolo +
+                    ' ' +
+                    monedaConfig.moneda.denominacion
+                  "
+                >
+                <!-- Conteo fields for selected currency -->
+                  <div
+                    *ngIf="
+                      activeCierreCurrency &&
+                      activeCierreCurrency.moneda.id === monedaConfig.moneda.id
+                    "
+                    class="conteo-fields"
+                  >
+                    <div
+                      *ngIf="activeCierreCurrency.billetes.length === 0"
+                      class="no-billetes"
+                    >
+                      <p>NO HAY DENOMINACIONES REGISTRADAS PARA ESTA MONEDA.</p>
+                    </div>
+
+                    <div
+                      *ngIf="activeCierreCurrency.billetes.length > 0"
+                      class="billete-grid"
+                    >
+                      <!-- Left column (first half of billetes) -->
+                      <div class="billete-column">
+                        <ng-container
+                          *ngFor="
+                            let billete of activeCierreCurrency.billetes
+                              | slice
+                                : 0
+                                : (activeCierreCurrency.billetes.length + 1) / 2;
+                            let i = index
+                          "
+                        >
+                          <div class="billete-item">
+                            <mat-form-field
+                              appearance="outline"
+                              class="compact-field"
+                            >
+                              <mat-label
+                                >{{ activeCierreCurrency.moneda.simbolo }}
+                                {{ billete.valor | number : "1.0-2" }}</mat-label
+                              >
+                              <span matPrefix class="billete-prefix">
+                                {{ billete.valor | number : "1.0-2" }} ×
+                              </span>
+                              <input
+                                class="billete-input"
+                                matInput
+                                type="number"
+                                [formControlName]="'cierre_billete_' + billete.id"
+                                min="0"
+                                (focus)="selectAllContent($event)"
+                                (keyup.enter)="
+                                  navigateToNextCierreField(i, activeCierreCurrency.moneda.id)
+                                "
+                                [attr.data-index]="i"
+                                [attr.data-currency-id]="activeCierreCurrency.moneda.id"
+                              />
+                            </mat-form-field>
+                          </div>
+                        </ng-container>
+                      </div>
+
+                      <!-- Right column (second half of billetes) -->
+                      <div class="billete-column">
+                        <ng-container
+                          *ngFor="
+                            let billete of activeCierreCurrency.billetes
+                              | slice : (activeCierreCurrency.billetes.length + 1) / 2;
+                            let i = index
+                          "
+                        >
+                          <div class="billete-item">
+                            <mat-form-field
+                              appearance="outline"
+                              class="compact-field"
+                            >
+                              <mat-label
+                                >{{ activeCierreCurrency.moneda.simbolo }}
+                                {{ billete.valor | number : "1.0-2" }}
+                              </mat-label>
+                              <span
+                                matPrefix
+                                class="billete-prefix"
+                                >{{ billete.valor | number : "1.0-2" }} ×
+                              </span>
+                              <input
+                                class="billete-input"
+                                matInput
+                                type="number"
+                                [formControlName]="'cierre_billete_' + billete.id"
+                                min="0"
+                                (focus)="selectAllContent($event)"
+                                (keyup.enter)="
+                                  navigateToNextCierreField(
+                                    i + (activeCierreCurrency.billetes.length + 1) / 2,
+                                    activeCierreCurrency.moneda.id
+                                  )
+                                "
+                                [attr.data-index]="
+                                  i + (activeCierreCurrency.billetes.length + 1) / 2
+                                "
+                                [attr.data-currency-id]="activeCierreCurrency.moneda.id"
+                              />
+                            </mat-form-field>
+                          </div>
+                        </ng-container>
+                      </div>
+                    </div>
+                  </div>
+                </mat-tab>
+              </mat-tab-group>
+
+              <!-- Currency totals below tabs -->
+              <div class="currency-totals-container">
+                <h4>TOTAL POR MONEDA (CIERRE):</h4>
+                <div class="currency-totals-grid">
+                  <div
+                    *ngFor="let monedaConfig of monedasConfig"
+                    class="currency-total-item"
+                  >
+                    <div class="currency-total-label">
+                      {{ monedaConfig.moneda.denominacion }}:
+                    </div>
+                    <div class="currency-total-value">
+                      {{ monedaConfig.moneda.simbolo }}
+                      {{
+                        cierreCurrencyTotals[monedaConfig.moneda.id] | number : "1.0-2"
+                      }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+          </div>
+
+          <div class="step-actions">
+              <button mat-button matStepperPrevious>ATRÁS</button>
+              <button
+                mat-button
+                matStepperNext
+                color="primary"
+                [disabled]="conteoCierreForm.invalid"
+              >
+                SIGUIENTE
+              </button>
+          </div>
+        </div>
+      </form>
+    </mat-step>
+
+    <!-- Step 4: Resumen (formerly "Confirmation") -->
+      <mat-step [label]="'RESUMEN'">
+        <div class="step-content compact-summary-step" style="height: 100%">
+          <h3 class="compact-title">{{ dialogMode === 'conteo' ? 'RESUMEN DE CONTEO' : 'CONFIRMAR APERTURA DE CAJA' }}</h3>
+
+          <div class="confirmation-summary compact-confirmation">
+            <div class="confirmation-item">
+              <span class="confirmation-label">DISPOSITIVO:</span>
+              <span class="confirmation-value">{{ dispositivoName }}</span>
+            </div>
+
+            <!-- Total summary of all currencies -->
+            <div class="all-currencies-total compact-totals">
+              <h4>TOTAL CONTEO APERTURA:</h4>
+              <div class="currency-totals-grid">
+                <ng-container *ngFor="let monedaConfig of monedasConfig">
+                  <div
+                    class="currency-total-item"
+                    *ngIf="currencyHasValues[monedaConfig.moneda.id]"
+                  >
+                    <span>{{ monedaConfig.moneda.denominacion }}:</span>
+                    <span>{{
+                      currencyTotals[monedaConfig.moneda.id] | number : "1.0-2"
+                    }}</span>
+                  </div>
+                </ng-container>
+              </div>
+            </div>
+
+            <!-- Total summary of conteo cierre -->
+            <div class="all-currencies-total compact-totals" *ngIf="dialogMode === 'conteo'">
+              <h4>TOTAL CONTEO CIERRE:</h4>
+              <div class="currency-totals-grid">
+                <ng-container *ngFor="let monedaConfig of monedasConfig">
+                  <div
+                    class="currency-total-item"
+                    *ngIf="cierreCurrencyHasValues[monedaConfig.moneda.id]"
+                  >
+                    <span>{{ monedaConfig.moneda.denominacion }}:</span>
+                    <span>{{
+                      cierreCurrencyTotals[monedaConfig.moneda.id] | number : "1.0-2"
+                    }}</span>
+                  </div>
+                </ng-container>
+              </div>
+            </div>
+
+            <!-- Difference summary -->
+            <div class="all-currencies-total compact-totals" *ngIf="dialogMode === 'conteo'">
+              <h4>DIFERENCIA:</h4>
+              <div class="currency-totals-grid">
+                <ng-container *ngFor="let monedaConfig of monedasConfig">
+                  <div
+                    class="currency-total-item"
+                    *ngIf="currencyHasValues[monedaConfig.moneda.id] || cierreCurrencyHasValues[monedaConfig.moneda.id]"
+                  >
+                    <span>{{ monedaConfig.moneda.denominacion }}:</span>
+                    <span [ngClass]="{
+                      'positive-amount': getDifference(monedaConfig.moneda.id) > 0,
+                      'negative-amount': getDifference(monedaConfig.moneda.id) < 0
+                    }">{{
+                      getDifference(monedaConfig.moneda.id) | number : "1.0-2"
+                    }}</span>
+                  </div>
+                </ng-container>
+              </div>
+            </div>
+          </div>
+
+          <div class="step-actions">
+            <button mat-button matStepperPrevious>ATRÁS</button>
+            <button
+              mat-raised-button
+              color="primary"
+              (click)="onSubmit()"
+              [disabled]="loading"
+            >
+              <mat-icon>check</mat-icon>
+              {{ dialogMode === 'conteo' ? 'GUARDAR CONTEO' : 'ABRIR CAJA' }}
+            </button>
+          </div>
+        </div>
+      </mat-step>
+    </mat-stepper>
+  </mat-dialog-content>
+</div>

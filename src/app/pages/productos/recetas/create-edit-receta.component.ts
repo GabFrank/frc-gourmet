@@ -83,7 +83,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
   monedas: Moneda[] = [];
   defaultMoneda?: Moneda;
   defaultMonedaSimbolo = '$';
-  
+
   // New properties
   showNewVariationForm = false;
   savingVariation = false;
@@ -107,7 +107,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
       cantidad: [0],
       activo: [true]
     });
-    
+
     // Initialize variation form
     this.variationForm = this.fb.group({
       nombre: ['', Validators.required],
@@ -209,16 +209,16 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
   calculateVariationTotalCost(variacionId: number): number {
     const items = this.getVariationIngredients(variacionId);
     let total = 0;
-    
+
     for (const item of items) {
       if (item.activo) {
         total += this.getIngredientTotalCost(item);
       }
     }
-    
+
     return total;
   }
-  
+
   calculateSuggestedPrice(variacionId: number): number {
     const totalCost = this.calculateVariationTotalCost(variacionId);
     // Calculate the suggested price as total cost / 0.35
@@ -271,14 +271,14 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
   addVariation(): void {
     // Check if a receta has been created or if in edit mode
     if (!this.recetaId) return;
-    
+
     // If there are no existing variations, just show the form without asking to copy
     if (this.variaciones.length === 0) {
       this.showNewVariationForm = true;
       this.resetVariationForm();
       return;
     }
-    
+
     // Open the copy dialog
     const dialogRef = this.dialog.open(CopyVariationDialogComponent, {
       width: '400px',
@@ -289,7 +289,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
       if (result) {
         this.showNewVariationForm = true;
         this.resetVariationForm();
-        
+
         // If the user chose to copy ingredients from an existing variation
         if (result.shouldCopy && result.variacionId) {
           // Store the source variation ID for later use when saving
@@ -298,7 +298,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
       }
     });
   }
-  
+
   private resetVariationForm(): void {
     // Reset the form values
     this.variationForm.reset({
@@ -308,22 +308,22 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
       principal: false
     });
   }
-  
+
   cancelAddVariation(): void {
     this.showNewVariationForm = false;
     this.sourceVariacionIdForCopy = undefined;
   }
-  
+
   saveNewVariation(): void {
     if (this.variationForm.invalid) {
       this.variationForm.markAllAsTouched();
       return;
     }
-    
+
     if (!this.recetaId) return;
-    
+
     this.savingVariation = true;
-    
+
     const formValues = this.variationForm.value;
     const newVariation: Partial<RecetaVariacion> = {
       nombre: formValues.nombre.toUpperCase(),
@@ -333,7 +333,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
       recetaId: this.recetaId,
       costo: 0 // Initial cost is 0
     };
-    
+
     // If this variation is set as principal, we need to update any existing principal variation
     const updatePrincipal = formValues.principal && this.variaciones.some(v => v.principal);
 
@@ -355,14 +355,14 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
                 });
             }
           }
-          
+
           // Check if we need to copy ingredients from a source variation
           if (this.sourceVariacionIdForCopy) {
             const sourceVariation = this.variaciones.find(v => v.id === this.sourceVariacionIdForCopy);
             if (sourceVariation) {
               // Get all ingredients from the source variation
               const sourceItems = this.variacionItems[sourceVariation.id] || [];
-              
+
               // Create a copy of each item for the new variation
               const copyPromises = sourceItems.map(item => {
                 const newItem: Partial<RecetaVariacionItem> = {
@@ -371,10 +371,10 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
                   cantidad: item.cantidad,
                   activo: item.activo
                 };
-                
+
                 return firstValueFrom(this.repositoryService.createRecetaVariacionItem(newItem));
               });
-              
+
               // Wait for all items to be copied
               Promise.all(copyPromises)
                 .then(() => {
@@ -388,7 +388,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
                     }
                     return sum;
                   }, 0);
-                  
+
                   this.repositoryService.updateRecetaVariacion(createdVariation.id, { costo: totalCost })
                     .subscribe({
                       next: () => {
@@ -404,10 +404,10 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
                 });
             }
           }
-          
+
           // Reset the copy source
           this.sourceVariacionIdForCopy = undefined;
-          
+
           // Refresh variations list
           this.loadRecetaVariaciones();
           // Hide form
@@ -426,7 +426,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
   editVariation(variacion: RecetaVariacion): void {
     this.openVariationDialog(variacion);
   }
-  
+
   addIngredientToVariation(variacion: RecetaVariacion): void {
     // Open the ingredient dialog
     const dialogRef = this.dialog.open(CreateEditRecetaVariacionItemComponent, {
@@ -440,7 +440,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
     dialogRef.afterClosed().subscribe(result => {
       if (result) {
         this.loading = true;
-        
+
         // Create new item
         const newItem: Partial<RecetaVariacionItem> = {
           variacionId: variacion.id,
@@ -448,7 +448,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
           cantidad: result.cantidad,
           activo: true
         };
-        
+
         this.repositoryService.createRecetaVariacionItem(newItem)
           .subscribe({
             next: (createdItem) => {
@@ -457,10 +457,10 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
                 this.variacionItems[variacion.id] = [];
               }
               this.variacionItems[variacion.id].push(createdItem);
-              
+
               // Calculate the new total cost
               const newTotalCost = this.calculateVariationTotalCost(variacion.id);
-              
+
               // Update the variation's cost in the database
               this.repositoryService.updateRecetaVariacion(variacion.id, {
                 costo: newTotalCost
@@ -476,7 +476,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
                   console.error('Error updating variation cost:', error);
                 }
               });
-              
+
               this.loading = false;
               this.snackBar.open('Ingrediente agregado exitosamente', 'Cerrar', { duration: 3000 });
             },
@@ -618,7 +618,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
     dialogRef.afterClosed().subscribe(result => {
       if (result) {
         this.loading = true;
-        
+
         // When editing, call the update service
         this.repositoryService.updateRecetaVariacionItem(item.id, {
           ingredienteId: result.ingredienteId,
@@ -631,7 +631,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
             if (index !== -1) {
               variacionItems[index] = updatedItem;
             }
-            
+
             // Update variation cost
             const newTotalCost = this.calculateVariationTotalCost(variacion.id);
             this.repositoryService.updateRecetaVariacion(variacion.id, {
@@ -648,7 +648,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
                 console.error('Error updating variation cost:', error);
               }
             });
-            
+
             this.loading = false;
             this.snackBar.open('Ingrediente actualizado exitosamente', 'Cerrar', { duration: 3000 });
           },

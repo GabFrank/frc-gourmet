@@ -13,18 +13,29 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { RepositoryService } from '../../../database/repository.service';
 import { Ingrediente, TipoMedida } from '../../../database/entities/productos/ingrediente.entity';
 import { Moneda } from '../../../database/entities/financiero/moneda.entity';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Observable, of, startWith, map, debounceTime, distinctUntilChanged, switchMap, catchError } from 'rxjs';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Receta } from '../../../database/entities/productos/receta.entity';
 import { RecetaItem } from '../../../database/entities/productos/receta-item.entity';
 import { RecetaVariacion } from '../../../database/entities/productos/receta-variacion.entity';
 import { RecetaVariacionItem } from '../../../database/entities/productos/receta-variacion-item.entity';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 
 interface DialogData {
   ingrediente?: Ingrediente | null;
   ingredienteId?: number;
   editMode: boolean;
+}
+
+// Interface for the transformed receta with display properties
+interface RecetaViewModel {
+  id: number;
+  nombre: string;
+  tipoMedida: string;
+  cantidad: number;
+  displayText: string;  // For display in the input when selected
+  optionText: string;   // Name with detail for option display
 }
 
 @Component({
@@ -43,7 +54,8 @@ interface DialogData {
     MatDialogModule,
     MatSnackBarModule,
     MatDividerModule,
-    MatTooltipModule
+    MatTooltipModule,
+    MatAutocompleteModule
   ],
   templateUrl: './create-edit-ingrediente-dialog.component.html',
   styleUrls: ['./create-edit-ingrediente-dialog.component.scss']
@@ -61,13 +73,18 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
   ingredientes: Map<number, Ingrediente> = new Map();
   monedas: Moneda[] = [];
   calculating = false;
-  
+
+  // Search fields
+  recetaSearchLoading = false;
+  selectedReceta: RecetaViewModel | null = null;
+  filteredRecetas: Observable<RecetaViewModel[]>;
+
   // Pre-computed values for the template
   tipoMedidaDisplayValues: { [key: string]: string } = {};
   recetasDisplayValues: { [key: number]: string } = {};
   variacionesDisplayValues: { [key: number]: string } = {};
   monedasDisplayValues: { [key: number]: string } = {};
-  selectedMonedaSymbol: string = '$';
+  selectedMonedaSymbol = '$';
   showVariacionSelect = false;
 
   constructor(
@@ -83,20 +100,52 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
       costo: [{value: 0, disabled: false}, [Validators.required, Validators.min(0)]],
       monedaId: [null, Validators.required],
       recetaId: [null],
+      recetaSearch: [''],
       variacionId: [{value: null, disabled: true}],
       recetaCantidad: [{value: 0, disabled: true}, [Validators.min(0)]],
       activo: [true]
     });
 
+    // Set up autocomplete filtering for recetas
+    this.filteredRecetas = this.ingredienteForm.get('recetaSearch')!.valueChanges.pipe(
+      startWith(''),
+      debounceTime(300),
+      distinctUntilChanged(),
+      switchMap(value => {
+        // If value is already an object (selected receta), don't search again
+        if (typeof value === 'object' && value !== null) {
+          return of([value as RecetaViewModel]);
+        }
+
+        // If the value is empty or start typing, filter from loaded recetas
+        const searchText = value || '';
+        this.recetaSearchLoading = true;
+
+        // First try to search from already loaded recetas
+        if (this.recetas.length > 0) {
+          return of(this.filterRecetas(searchText));
+        }
+
+        // If no recetas are loaded yet, load them from the server
+        return this.repositoryService.getRecetas().pipe(
+          map(recetas => {
+            this.recetas = recetas;
+            this.recetaSearchLoading = false;
+            return this.filterRecetas(searchText);
+          }),
+          catchError(error => {
+            this.recetaSearchLoading = false;
+            console.error('Error loading recetas:', error);
+            return of([]);
+          })
+        );
+      })
+    );
+
     // Monitor changes to monedaId
     this.ingredienteForm.get('monedaId')?.valueChanges.subscribe(value => {
       console.log('monedaId changed to:', value);
       this.updateSelectedMonedaSymbol();
-    });
-
-    // Monitor changes to recetaId
-    this.ingredienteForm.get('recetaId')?.valueChanges.subscribe(value => {
-      this.handleRecetaChange(value);
     });
 
     // Monitor changes to variacionId
@@ -113,6 +162,52 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
 
     // Initialize the tipo medida display values
     this.initTipoMedidaDisplayValues();
+  }
+
+  private filterRecetas(searchText: string): RecetaViewModel[] {
+    const filteredRecetas = this.recetas.filter(receta =>
+      receta.nombre.toLowerCase().includes(searchText.toLowerCase()) && receta.activo
+    );
+
+    this.recetaSearchLoading = false;
+    return filteredRecetas.map(receta => this.transformReceta(receta));
+  }
+
+  private transformReceta(receta: Receta): RecetaViewModel {
+    const cantidadText = receta.cantidad ? `(${receta.cantidad} ${receta.tipoMedida})` : '';
+    return {
+      id: receta.id,
+      nombre: receta.nombre,
+      tipoMedida: receta.tipoMedida,
+      cantidad: receta.cantidad || 0,
+      displayText: `${receta.nombre} ${cantidadText}`,
+      optionText: `${receta.id} - ${receta.nombre} ${cantidadText}`
+    };
+  }
+
+  // Display function for the autocomplete
+  displayReceta(receta: RecetaViewModel): string {
+    if (!receta) return '';
+    return receta.displayText;
+  }
+
+  // Handle selection from autocomplete
+  onRecetaSelected(event: any): void {
+    this.selectedReceta = event.option.value as RecetaViewModel;
+    this.ingredienteForm.patchValue({
+      recetaId: this.selectedReceta.id
+    });
+    this.handleRecetaChange(this.selectedReceta.id);
+  }
+
+  // Clear receta selection
+  clearRecetaSelection(): void {
+    this.selectedReceta = null;
+    this.ingredienteForm.patchValue({
+      recetaId: null,
+      recetaSearch: ''
+    });
+    this.handleRecetaChange(null);
   }
 
   private initTipoMedidaDisplayValues(): void {
@@ -139,7 +234,7 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
         this.setDefaultMoneda();
       }
 
-      // Then load recetas
+      // Then load recetas for the dropdown
       await this.loadRecetas();
 
       if (this.data.editMode) {
@@ -158,7 +253,14 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
       const recetaId = this.ingredienteForm.get('recetaId')?.value;
       if (recetaId) {
         await this.handleRecetaChange(recetaId);
-        
+
+        // Find and set the selected receta for the autocomplete
+        const receta = this.recetas.find(r => r.id === recetaId);
+        if (receta) {
+          this.selectedReceta = this.transformReceta(receta);
+          this.ingredienteForm.get('recetaSearch')?.setValue(this.selectedReceta);
+        }
+
         // If there's a variacionId in the form, select it
         const variacionId = this.ingredienteForm.get('variacionId')?.value;
         if (variacionId) {
@@ -270,7 +372,7 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
     // Recipe selected, disable cost field and enable cantidad
     costoControl?.disable();
     recetaCantidadControl?.enable();
-    
+
     // Set a default value for cantidad if it's 0
     if (!recetaCantidadControl?.value || recetaCantidadControl.value === 0) {
       recetaCantidadControl?.setValue(1);
@@ -278,14 +380,14 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
 
     // Load recipe variations
     await this.loadRecetaVariaciones(recetaId);
-    
+
     // Check if there are variations
     const variaciones = this.recetaVariaciones.get(recetaId) || [];
     if (variaciones.length > 0) {
       // Enable variacion selection
       variacionIdControl?.enable();
       this.showVariacionSelect = true;
-      
+
       // Select the principal variation by default if none is selected
       if (!variacionIdControl?.value) {
         const principalVariacion = variaciones.find(v => v.principal);
@@ -300,11 +402,11 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
       variacionIdControl?.disable();
       variacionIdControl?.setValue(null);
       this.showVariacionSelect = false;
-      
+
       // Load recipe items if not already loaded
       await this.loadRecipeData(recetaId);
     }
-    
+
     // Calculate cost based on recipe
     this.calculateCostFromReceta();
   }
@@ -312,10 +414,10 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
   async handleVariacionChange(variacionId: number | null): Promise<void> {
     console.log('Variation changed to:', variacionId);
     if (!variacionId) return;
-    
+
     // Load variation items if not already loaded
     await this.loadVariacionItems(variacionId);
-    
+
     // Make sure we have the variation object loaded
     const recetaId = this.ingredienteForm.get('recetaId')?.value;
     if (recetaId) {
@@ -323,7 +425,7 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
       const variacion = variaciones.find(v => v.id === variacionId);
       console.log('Selected variation:', variacion);
     }
-    
+
     // Calculate cost
     this.calculateCostFromReceta();
   }
@@ -335,7 +437,7 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
         const variaciones = await firstValueFrom(this.repositoryService.getRecetaVariaciones(recetaId));
         console.log(`Loaded ${variaciones.length} variations for recipe ${recetaId}:`, variaciones);
         this.recetaVariaciones.set(recetaId, variaciones);
-        
+
         // Pre-compute the display values for each variacion
         variaciones.forEach(variacion => {
           const principalTag = variacion.principal ? ' (Principal)' : '';
@@ -400,9 +502,9 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
     const recetaId = this.ingredienteForm.get('recetaId')?.value;
     const variacionId = this.ingredienteForm.get('variacionId')?.value;
     const cantidad = parseFloat(this.ingredienteForm.get('recetaCantidad')?.value) || 0;
-    
+
     console.log('Calculating cost from receta - recetaId:', recetaId, 'variacionId:', variacionId, 'cantidad:', cantidad);
-    
+
     if (!recetaId || cantidad <= 0) {
       console.log('No recipe selected or cantidad is 0 or below, setting cost to 0');
       this.ingredienteForm.get('costo')?.setValue(0);
@@ -419,18 +521,18 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
 
   calculateCostFromVariation(variacionId: number, cantidad: number): void {
     console.log('Calculating cost from variation:', variacionId, 'cantidad:', cantidad);
-    
+
     // Get the variation object - the previous approach using Object.values and flat() isn't working correctly
     let variacion: RecetaVariacion | undefined;
-    
+
     // Iterate through the Map to find the variation
     for (const variations of this.recetaVariaciones.values()) {
       variacion = variations.find(v => v.id === variacionId);
       if (variacion) break;
     }
-    
+
     console.log('Found variation:', variacion);
-    
+
     if (!variacion) {
       console.error('Variation not found with ID:', variacionId);
       return;
@@ -443,11 +545,11 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
     // Find the recipe to get its quantity
     const receta = this.recetas.find(r => r.id === variacion?.recetaId);
     console.log('Recipe found:', receta);
-    
+
     if (!receta || !receta.cantidad || receta.cantidad <= 0) {
       // If recipe has no quantity, just use the variation cost directly
       const totalCost = variacionCosto * cantidad;
-      console.log('No recipe quantity available, using direct calculation:', 
+      console.log('No recipe quantity available, using direct calculation:',
                   variacionCosto, '*', cantidad, '=', totalCost);
       this.ingredienteForm.get('costo')?.setValue(totalCost);
       return;
@@ -459,18 +561,18 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
     // Calculate cost per unit of the variation using the pre-calculated variation cost
     const costPerUnit = variacionCosto / recetaCantidad;
     console.log('Cost per unit:', variacionCosto, '/', recetaCantidad, '=', costPerUnit);
-    
+
     // Calculate total cost based on requested quantity
     const totalCost = costPerUnit * cantidad;
     console.log('Total cost:', costPerUnit, '*', cantidad, '=', totalCost);
-    
+
     // Update the cost field with properly rounded value to 2 decimal places
     this.ingredienteForm.get('costo')?.setValue(Math.round(totalCost * 100) / 100);
   }
 
   calculateCostFromBaseRecipe(recetaId: number, cantidad: number): void {
     console.log('Calculating cost from base recipe:', recetaId, 'cantidad:', cantidad);
-    
+
     // Check if we have the recipe items loaded
     const items = this.recetaItems.get(recetaId) || [];
     if (items.length === 0) {
@@ -492,17 +594,17 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
         }
       }
     }
-    
+
     console.log('Recipe total cost:', recipeTotalCost);
 
     // Find the recipe to get its quantity
     const receta = this.recetas.find(r => r.id === recetaId);
     console.log('Recipe found:', receta);
-    
+
     if (!receta || !receta.cantidad || receta.cantidad <= 0) {
       // If recipe has no quantity, just multiply by the requested quantity
       const totalCost = recipeTotalCost * cantidad;
-      console.log('No recipe quantity available, using direct calculation:', 
+      console.log('No recipe quantity available, using direct calculation:',
                  recipeTotalCost, '*', cantidad, '=', totalCost);
       this.ingredienteForm.get('costo')?.setValue(Math.round(totalCost * 100) / 100);
       return;
@@ -514,11 +616,11 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
     // Calculate cost per unit of the recipe
     const costPerUnit = recipeTotalCost / recetaCantidad;
     console.log('Cost per unit:', recipeTotalCost, '/', recetaCantidad, '=', costPerUnit);
-    
+
     // Calculate total cost based on requested quantity
     const totalCost = costPerUnit * cantidad;
     console.log('Total cost:', costPerUnit, '*', cantidad, '=', totalCost);
-    
+
     // Update the cost field with properly rounded value
     this.ingredienteForm.get('costo')?.setValue(Math.round(totalCost * 100) / 100);
   }

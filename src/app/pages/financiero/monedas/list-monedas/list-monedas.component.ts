@@ -21,6 +21,10 @@ import { TabsService } from '../../../../services/tabs.service';
 import { firstValueFrom } from 'rxjs';
 import { CreateEditMonedaComponent } from '../create-edit-moneda/create-edit-moneda.component';
 import { ConfirmationDialogComponent } from '../../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { ConfigMonedasDialogComponent } from '../config-monedas/config-monedas-dialog.component';
+import { ListaBilletesDialogComponent } from '../billetes/lista-billetes-dialog.component';
+import { CreateEditMonedaCambioDialogComponent } from '../cambios/create-edit-moneda-cambio-dialog.component';
+import { ListMonedasCambioDialogComponent } from '../cambios/list-monedas-cambio-dialog.component';
 
 @Component({
   selector: 'app-list-monedas',
@@ -43,7 +47,9 @@ import { ConfirmationDialogComponent } from '../../../../shared/components/confi
     MatSnackBarModule,
     MatDialogModule,
     MatTooltipModule,
-    ConfirmationDialogComponent
+    ConfirmationDialogComponent,
+    CreateEditMonedaCambioDialogComponent,
+    ListMonedasCambioDialogComponent
   ],
   templateUrl: './list-monedas.component.html',
   styleUrls: ['./list-monedas.component.scss']
@@ -236,6 +242,81 @@ export class ListMonedasComponent implements OnInit {
       if (result) {
         this.loadMonedas();
       }
+    });
+  }
+
+  // Functions from the old MonedaComponent
+
+  openConfigDialog(): void {
+    const dialogRef = this.dialog.open(ConfigMonedasDialogComponent, {
+      width: '800px',
+      disableClose: true
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.success) {
+        this.snackBar.open('Configuración de monedas guardada correctamente', 'Cerrar', {
+          duration: 3000
+        });
+        this.loadMonedas();
+      }
+    });
+  }
+
+  openBilletesDialog(moneda: Moneda): void {
+    const dialogRef = this.dialog.open(ListaBilletesDialogComponent, {
+      width: '600px',
+      data: { moneda },
+      disableClose: true
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.success) {
+        this.snackBar.open('Billetes actualizados correctamente', 'Cerrar', {
+          duration: 3000
+        });
+      }
+    });
+  }
+
+  openCambiosDialog(moneda: Moneda): void {
+    try {
+      const dialogRef = this.dialog.open(ListMonedasCambioDialogComponent, {
+        width: '900px',
+        data: { monedaOrigen: moneda },
+        disableClose: true
+      });
+
+      dialogRef.afterClosed().subscribe(result => {
+        if (result) {
+          this.loadMonedas();
+        }
+      });
+    } catch (error) {
+      console.error('Error opening cambios dialog:', error);
+      this.snackBar.open(
+        'Error al abrir el diálogo de tipos de cambio. Es posible que el backend no tenga implementado el servicio para monedas de cambio.',
+        'Entendido',
+        { duration: 7000 }
+      );
+    }
+  }
+
+  toggleActivo(moneda: Moneda): void {
+    const updatedMoneda = { ...moneda, activo: !moneda.activo };
+
+    firstValueFrom(this.repositoryService.updateMoneda(moneda.id!, updatedMoneda))
+      .then(() => {
+        this.snackBar.open(`Moneda ${moneda.denominacion} ${moneda.activo ? 'desactivada' : 'activada'} correctamente`, 'Cerrar', {
+          duration: 3000
+        });
+        this.loadMonedas();
+      })
+      .catch((error) => {
+        console.error('Error toggling moneda status:', error);
+        this.snackBar.open(`Error al cambiar el estado de la moneda: ${error.message}`, 'Cerrar', {
+          duration: 3000
+        });
     });
   }
 }

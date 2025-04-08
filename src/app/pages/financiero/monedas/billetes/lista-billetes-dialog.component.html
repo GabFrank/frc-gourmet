@@ -1,0 +1,97 @@
+<div class="dialog-container">
+  <h2 mat-dialog-title>Billetes de {{ moneda.denominacion }} ({{ moneda.simbolo }})</h2>
+
+  <div mat-dialog-content>
+    <div *ngIf="loading" class="loading-container">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Cargando billetes...</p>
+    </div>
+
+    <div *ngIf="error" class="error-message">
+      <mat-icon>error</mat-icon>
+      <span>{{ error }}</span>
+    </div>
+
+    <div *ngIf="!loading && !error">
+      <p class="instructions">
+        Agregue, active, o elimine las denominaciones de la moneda {{ moneda.denominacion }}.
+      </p>
+
+      <div class="new-billete-form">
+        <app-currency-input
+          class="valor-field"
+          label="Nuevo valor"
+          placeholder="Ej: 100, 50, 20, etc."
+          [required]="true"
+          [moneda]="moneda"
+          [(ngModel)]="newBilleteValor">
+        </app-currency-input>
+
+        <button style="margin-bottom: 30px;" mat-raised-button color="primary" (click)="addBillete()" [disabled]="saving || !newBilleteValor">
+          <mat-icon>add</mat-icon>
+          Agregar
+        </button>
+      </div>
+
+      <table mat-table [dataSource]="dataSource" matSort (matSortChange)="sortData($event)" class="billetes-table">
+        <!-- Valor Column, align is start, all names and descriptions must aling start, also do not add currency symbol-->
+        <ng-container matColumnDef="valor">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Valor</th>
+          <td mat-cell *matCellDef="let billete" style="text-align: start !important;">
+           {{ billete.valor | number:'1.0-2' }}
+          </td>
+        </ng-container>
+
+        <!-- Activo Column -->
+        <ng-container matColumnDef="activo">
+          <th mat-header-cell *matHeaderCellDef class="text-center">Estado</th>
+          <td mat-cell *matCellDef="let billete" class="text-center">
+            <span class="status-badge" [ngClass]="billete.activo ? 'active' : 'inactive'">
+              {{ billete.activo ? 'Activo' : 'Inactivo' }}
+            </span>
+          </td>
+        </ng-container>
+
+        <!-- Acciones Column -->
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef class="text-center">Acciones</th>
+          <td mat-cell *matCellDef="let billete" class="text-center actions-cell">
+            <div class="action-button-container">
+              <button mat-icon-button [matMenuTriggerFor]="menu" [disabled]="saving">
+                <mat-icon>more_vert</mat-icon>
+              </button>
+              <mat-menu #menu="matMenu">
+                <button mat-menu-item (click)="toggleActivo(billete)" [disabled]="saving">
+                  <mat-icon [color]="billete.activo ? 'warn' : 'accent'">
+                    {{ billete.activo ? 'toggle_on' : 'toggle_off' }}
+                  </mat-icon>
+                  <span>{{ billete.activo ? 'Desactivar' : 'Activar' }}</span>
+                </button>
+                <button mat-menu-item (click)="deleteBillete(billete)" [disabled]="saving">
+                  <mat-icon color="warn">delete</mat-icon>
+                  <span>Eliminar</span>
+                </button>
+              </mat-menu>
+            </div>
+          </td>
+        </ng-container>
+
+        <!-- Row definitions -->
+        <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;"
+            [ngClass]="{'inactive-row': !row.activo}"></tr>
+      </table>
+
+      <div *ngIf="dataSource.data.length === 0" class="no-data">
+        <p>No hay billetes registrados para esta moneda.</p>
+      </div>
+    </div>
+  </div>
+
+  <div mat-dialog-actions align="end">
+    <button mat-button [disabled]="loading || saving" (click)="onCancel()">Cerrar</button>
+    <button mat-raised-button color="primary" [disabled]="loading || saving" (click)="onSave()">
+      <span>Guardar</span>
+    </button>
+  </div>
+</div>

@@ -27,6 +27,11 @@ export class RecetaVariacion extends BaseModel {
   @JoinColumn({ name: 'receta_id' })
   receta!: Receta;
 
+  /**
+   * Total cost of the variation, calculated from the sum of all ingredients' costs
+   * This field is stored in the database for reference but should be updated whenever
+   * ingredients or their quantities change
+   */
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   costo!: number;
 

@@ -25,7 +25,7 @@ import { ProductoImage } from '../../../database/entities/productos/producto-ima
 import { Subcategoria } from '../../../database/entities/productos/subcategoria.entity';
 import { Categoria } from '../../../database/entities/productos/categoria.entity';
 import { Receta } from '../../../database/entities/productos/receta.entity';
-import { firstValueFrom, Observable, of, map, startWith } from 'rxjs';
+import { firstValueFrom, Observable, of, map, startWith, debounceTime, distinctUntilChanged, switchMap } from 'rxjs';
 import { TabsService } from '../../../services/tabs.service';
 import { ImageViewerComponent } from '../../../components/image-viewer/image-viewer.component';
 import { CreateEditCodigoComponent } from './create-edit-codigo.component';
@@ -39,6 +39,8 @@ import { PrecioVenta } from '../../../database/entities/productos/precio-venta.e
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { trigger, state, style, transition, animate } from '@angular/animations';
 import { PresentacionSabor } from '../../../database/entities/productos/presentacion-sabor.entity';
+import { Moneda } from '../../../database/entities/financiero/moneda.entity';
+import { RecetaVariacion } from '../../../database/entities/productos/receta-variacion.entity';
 
 // renamed to avoid conflict with the imported type
 interface ProductImageModel {
@@ -54,6 +56,25 @@ interface ProductImageModel {
 // Extended Presentacion interface with pre-computed display values
 interface PresentacionViewModel extends Presentacion {
   tipoMedidaLabel?: string;
+}
+
+// Add this interface right after
+interface PresentacionSaborViewModel extends PresentacionSabor {
+  costoTotal?: number;
+  precioVenta?: number;
+  moneda?: Moneda;
+  codigoBarras?: string;
+  stock?: number;
+}
+
+// 1. First, add the RecetaViewModel interface after the existing interfaces
+interface RecetaViewModel {
+  id: number;
+  nombre: string;
+  tipoMedida: string;
+  cantidad: number;
+  displayText: string;  // For display in the input when selected
+  optionText: string;   // Name with ID for option display
 }
 
 @Component({
@@ -107,7 +128,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   categorias: Categoria[] = [];
   subcategorias: Subcategoria[] = [];
   recetas: Receta[] = [];
-  filteredRecetas!: Observable<Receta[]>;
+  filteredRecetas!: Observable<RecetaViewModel[]>;
 
   // For image handling
   selectedImageFile: File | null = null;
@@ -131,7 +152,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   ];
 
   // Properties for the precios table
-  preciosDisplayedColumns: string[] = ['moneda', 'valor', 'tipoPrecio', 'principal', 'activo', 'acciones'];
+  preciosDisplayedColumns: string[] = ['moneda', 'valor', 'cmv', 'tipoPrecio', 'principal', 'activo', 'acciones'];
   defaultPresentacionPrecios: PrecioVenta[] = [];
   defaultPresentacionId?: number;
 
@@ -157,7 +178,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   defaultMonedaSimbolo = '$';
 
   expandedPresentacion: Presentacion | null = null;
-  presentacionSabores: { [presentacionId: number]: PresentacionSabor[] } = {};
+  presentacionSabores: { [presentacionId: number]: PresentacionSaborViewModel[] } = {};
   loadingSabores = false;
 
   // Columns for the sabores expanded table
@@ -167,13 +188,20 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     'variacion',
     'costo',
     'precio',
-    'activo'
+    'cmv',
+    'activo',
+    'acciones'
   ];
 
   /**
    * Load sabor data asynchronously
    */
   public saborCache: { [saborId: number]: string } = {};
+
+  // 2. Add a property for selected recipe and filtered variations
+  selectedRecetaModel: RecetaViewModel | null = null;
+  filteredVariaciones: Observable<RecetaVariacion[]> = of([]);
+  variaciones: RecetaVariacion[] = [];
 
   constructor(
     private fb: FormBuilder,
@@ -203,6 +231,8 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       observacion: [''],
       activo: [true],
       recetaId: [{ value: null, disabled: true }],
+      recetaSearch: [{ value: null, disabled: true }], // Add new recetaSearch control
+      variacionId: [{ value: null, disabled: true }], // Add new variacionId control
       // Default presentacion form controls
       defaultPresentacionDesc: [''], // Kept for data model but not shown in UI
       defaultPresentacionTipoMedida: ['UNIDAD'],
@@ -213,17 +243,40 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   }
 
   ngOnInit(): void {
-    // Handle the data if provided
+    this.loadCategorias();
+    this.loadMonedas();
+    this.loadRecetas();  // Load recipes
+
+    // Initialize from input data if provided
     if (this.data) {
       this.setData(this.data);
     }
 
+    // Setup listeners
     this.setupFormControlListeners();
 
-    // Load required data
-    this.loadCategorias();
-    this.loadRecetas();
-    this.loadMonedas();
+    // Setup recipe search autocomplete
+    this.filteredRecetas = this.productoForm.get('recetaSearch')!.valueChanges.pipe(
+      startWith(''),
+      debounceTime(300),
+      distinctUntilChanged(),
+      switchMap(value => {
+        if (typeof value === 'object' && value !== null) {
+          return of([value as RecetaViewModel]);
+        }
+        return this.filterRecetas(value as string);
+      })
+    );
+
+    // Setup variation filtering
+    this.filteredVariaciones = this.productoForm.get('variacionId')!.valueChanges.pipe(
+      startWith(null),
+      map(variacionId => {
+        const recetaId = this.productoForm.get('recetaId')?.value;
+        if (!recetaId) return [];
+        return this.variaciones.filter(v => v.recetaId === recetaId);
+      })
+    );
   }
 
   ngAfterViewInit(): void {
@@ -300,41 +353,42 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   async loadRecetas(): Promise<void> {
     try {
       this.recetas = await firstValueFrom(this.repositoryService.getRecetas());
-
-      // Initialize the filtered recetas for autocomplete
-      this.filteredRecetas = this.productoForm.get('recetaId')!.valueChanges.pipe(
-        startWith(''),
-        map(value => this.filterRecetas(value || ''))
-      );
-
     } catch (error) {
       console.error('Error loading recetas:', error);
-      this.snackBar.open('Error al cargar las recetas', 'Cerrar', { duration: 3000 });
     }
   }
 
   /**
-   * Filters recetas based on the search term
+   * Filter recetas for autocomplete
    */
-  private filterRecetas(value: string | number): Receta[] {
-    if (typeof value === 'number') {
-      // If value is a number (recetaId), return the matching receta
-      return this.recetas.filter(receta => receta.id === value);
+  private filterRecetas(value: string): Observable<RecetaViewModel[]> {
+    if (!value || typeof value !== 'string') {
+      return of([]);
     }
 
-    const filterValue = value.toString().toLowerCase();
-    return this.recetas.filter(receta =>
-      receta.nombre.toLowerCase().includes(filterValue) && receta.activo
-    );
+    const filterValue = value.toLowerCase();
+
+    // Filter recetas
+    const filteredRecetas = this.recetas
+      .filter(receta => receta.nombre.toLowerCase().includes(filterValue))
+      .map(receta => this.transformReceta(receta));
+
+    return of(filteredRecetas);
   }
 
   /**
    * Displays the recipe name in the autocomplete
    */
-  displayRecetaFn(recetaId: number): string {
-    if (!recetaId) return '';
-    const receta = this.recetas.find(r => r.id === recetaId);
-    return receta ? receta.nombre : '';
+  displayRecetaFn(receta: RecetaViewModel | string): string {
+    if (!receta) return '';
+
+    if (typeof receta === 'object') {
+      return receta.displayText;
+    }
+
+    // If it's just an ID
+    const recetaById = this.recetas.find(r => r.id === +receta);
+    return recetaById ? recetaById.nombre : '';
   }
 
   loadProducto(productoId?: number): void {
@@ -380,6 +434,21 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
           // Load subcategories for the selected category
           this.loadSubcategoriasByCategoria(producto.subcategoria.categoria.id);
 
+          // Load recipes
+          this.loadRecetas().then(() => {
+            // If product has a recipe, load it
+            if (producto.recetaId) {
+              const receta = this.recetas.find(r => r.id === producto.recetaId);
+              if (receta) {
+                this.selectedRecetaModel = this.transformReceta(receta);
+                this.productoForm.patchValue({
+                  recetaSearch: this.selectedRecetaModel
+                });
+                this.loadRecipeVariations(producto.recetaId);
+              }
+            }
+          });
+
           // Load product images
           this.loadProductImages();
 
@@ -406,26 +475,12 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
                     defaultPresentacionTipoCodigo: codigo.tipoCodigo
                   });
                 }
-              } else if (this.producto.presentaciones.length > 0) {
-                // If no principal presentacion exists but there are presentaciones, use the first one
-                const firstPresentacion = this.producto.presentaciones[0];
-                this.productoForm.patchValue({
-                  defaultPresentacionDesc: firstPresentacion.descripcion || '',
-                  defaultPresentacionTipoMedida: firstPresentacion.tipoMedida,
-                  defaultPresentacionCantidad: firstPresentacion.cantidad
-                });
-
-                // If presentacion has codigos, use the first one
-                if (firstPresentacion.codigos?.length) {
-                  const codigo = firstPresentacion.codigos[0];
-                  this.productoForm.patchValue({
-                    defaultPresentacionCodigo: codigo.codigo,
-                    defaultPresentacionTipoCodigo: codigo.tipoCodigo
-                  });
-                }
               }
             }
           });
+
+          // Setup form controls based on loaded data
+          this.setupFormControlsBasedOnLoadedData();
         } else {
           this.snackBar.open('No se encontró el producto', 'Cerrar', { duration: 3000 });
         }
@@ -443,57 +498,39 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
    * Setup form control change listeners
    */
   private setupFormControlListeners(): void {
-    // When categoria changes, load subcategorias
-    this.productoForm.get('categoriaId')?.valueChanges.subscribe((categoriaId) => {
-      if (categoriaId) {
-        this.loadSubcategoriasByCategoria(categoriaId);
-      } else {
-        // Clear subcategorias
-        this.subcategorias = [];
-      }
-    });
-
-    // Toggle-dependent validators
-    this.productoForm.get('hasVencimiento')?.valueChanges.subscribe(hasVencimiento => {
-      const alertarControl = this.productoForm.get('alertarVencimientoDias');
-      if (hasVencimiento) {
-        alertarControl?.setValidators([Validators.required, Validators.min(1)]);
-      } else {
-        alertarControl?.clearValidators();
-        // Reset value to null when disabled
-        alertarControl?.setValue(null);
-      }
-      alertarControl?.updateValueAndValidity();
-    });
-
-    // Update alertarVencimientoDias to be enabled/disabled based on hasVencimiento
+    // Handle vencimiento checkbox
     this.productoForm.get('hasVencimiento')?.valueChanges.subscribe(hasVencimiento => {
       const alertarVencimientoDiasControl = this.productoForm.get('alertarVencimientoDias');
       if (alertarVencimientoDiasControl) {
         if (hasVencimiento) {
           alertarVencimientoDiasControl.enable();
+          alertarVencimientoDiasControl.setValue(30); // Default value
         } else {
           alertarVencimientoDiasControl.disable();
+          alertarVencimientoDiasControl.setValue(null);
         }
       }
     });
 
-    // Control recetaId based on isCompuesto value
+    // Handle isCompuesto toggling
     this.productoForm.get('isCompuesto')?.valueChanges.subscribe(isCompuesto => {
+      // Control recetaId based on isCompuesto value
+      const hasVariaciones = this.productoForm.get('hasVariaciones')?.value || false;
       const recetaIdControl = this.productoForm.get('recetaId');
-      if (recetaIdControl) {
-        const hasVariaciones = this.productoForm.get('hasVariaciones')?.value || false;
+      const recetaSearchControl = this.productoForm.get('recetaSearch');
+      const variacionIdControl = this.productoForm.get('variacionId');
 
+      if (recetaIdControl && recetaSearchControl && variacionIdControl) {
         if (isCompuesto && !hasVariaciones) {
           // Only enable if hasVariaciones is false
           recetaIdControl.enable();
+          recetaSearchControl.enable();
         } else {
           recetaIdControl.disable();
           recetaIdControl.setValue(null);
-          this.selectedReceta = null;
-          this.recipeTotalCost = 0;
-          this.recipeCostPerUnit = 0;
-          this.recipeSuggestedPrice = 0;
+          recetaSearchControl.disable();
+          recetaSearchControl.setValue(null);
+          variacionIdControl.disable();
         }
       }
     });
@@ -505,87 +542,65 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
         const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
           width: '450px',
           data: {
-            title: 'Confirmación',
+            title: 'Confirmar cambio',
             message: 'Este producto tiene múltiples presentaciones. Al desactivar "Posee variaciones", solo se mantendrá la presentación principal. ¿Desea continuar?'
           }
         });
 
         dialogRef.afterClosed().subscribe(result => {
           if (!result) {
-            // If not confirmed, revert the change
+            // User canceled, revert the change
             this.productoForm.get('hasVariaciones')?.setValue(true, { emitEvent: false });
             return;
           }
-          // If confirmed, continue with the rest of the logic
           this.updateHasVariacionesState(hasVariaciones);
         });
       } else {
-        // No confirmation needed, just update state
         this.updateHasVariacionesState(hasVariaciones);
-      }
-    });
-
-    // Initial execution of categoriaId change handling
-    const initialCategoriaId = this.productoForm.get('categoriaId')?.value;
-    if (initialCategoriaId) {
-      this.loadSubcategoriasByCategoria(initialCategoriaId);
-    }
-
-    // Listen for changes in categoriaId to load subcategorias
-    this.productoForm.get('categoriaId')?.valueChanges.subscribe(categoriaId => {
-      if (categoriaId) {
-        this.loadSubcategoriasByCategoria(categoriaId);
       }
     });
 
     // Add listener for recetaId changes to load recipe details
     this.productoForm.get('recetaId')?.valueChanges.subscribe(recetaId => {
       if (recetaId) {
-        this.loadRecipeDetails(recetaId);
-      } else {
-        this.selectedReceta = null;
-        this.recipeTotalCost = 0;
-        this.recipeCostPerUnit = 0;
-        this.recipeSuggestedPrice = 0;
+        // Recipe details are now loaded in loadRecipeVariations
+        // which is called when a recipe is selected from the autocomplete
       }
     });
-
   }
 
   // Helper method to update state when hasVariaciones changes
   private updateHasVariacionesState(hasVariaciones: boolean): void {
     // Handle recetaId field - disable it when hasVariaciones is true
     const recetaIdControl = this.productoForm.get('recetaId');
-    if (recetaIdControl) {
+    const recetaSearchControl = this.productoForm.get('recetaSearch');
+    const variacionIdControl = this.productoForm.get('variacionId');
+
+    if (recetaIdControl && recetaSearchControl && variacionIdControl) {
       if (hasVariaciones) {
         recetaIdControl.disable();
         recetaIdControl.setValue(null);
-        this.selectedReceta = null;
-        this.recipeTotalCost = 0;
-        this.recipeCostPerUnit = 0;
-        this.recipeSuggestedPrice = 0;
-      } else if (this.productoForm.get('isCompuesto')?.value) {
+        recetaSearchControl.disable();
+        recetaSearchControl.setValue(null);
+        variacionIdControl.disable();
+        variacionIdControl.setValue(null);
+      } else {
         // Only enable if isCompuesto is true
-        recetaIdControl.enable();
+        const isCompuesto = this.productoForm.get('isCompuesto')?.value;
+        if (isCompuesto) {
+          recetaIdControl.enable();
+          recetaSearchControl.enable();
+        }
       }
     }
 
     // Clear or update precios based on hasVariaciones value
     if (hasVariaciones) {
-      // Reset precios section
-      this.defaultPresentacionId = undefined;
+      // If switching to hasVariaciones=true, clear default presentacion precios
       this.defaultPresentacionPrecios = [];
-    } else if (this.isEditing && this.producto?.id && this.producto.presentaciones?.length > 0) {
-      // Find principal presentacion to show precios
-      const principalPresentacion = this.producto.presentaciones.find(p => p.principal);
-      if (principalPresentacion) {
-        this.defaultPresentacionId = principalPresentacion.id;
-        this.loadDefaultPresentacionPrecios(principalPresentacion.id);
-      } else if (this.producto.presentaciones.length > 0) {
-        // If no principal presentacion exists, use the first one
-        this.defaultPresentacionId = this.producto.presentaciones[0].id;
-        this.loadDefaultPresentacionPrecios(this.producto.presentaciones[0].id);
-      }
+    } else if (this.producto?.id && this.producto.presentaciones && this.producto.presentaciones.length > 0) {
+      // If switching to hasVariaciones=false, load the default presentacion precios
+      this.loadDefaultPresentacionPrecios(this.producto.presentaciones[0].id);
     }
   }
 
@@ -1100,6 +1115,8 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       alertarVencimientoDias: null,
       observacion: '',
       recetaId: null,
+      recetaSearch: null,
+      variacionId: null,
       // Default presentacion form controls
       defaultPresentacionDesc: '',
       defaultPresentacionTipoMedida: 'UNIDAD',
@@ -1112,13 +1129,15 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     this.productImages = [];
     this.isEditing = false;
     this.producto = undefined;
+    this.selectedRecetaModel = null;
+    this.variaciones = [];
 
     // Enable/disable appropriate form fields
     Object.keys(this.productoForm.controls).forEach(key => {
-      if (key === 'alertarVencimientoDias' || key === 'recetaId') {
+      if (key === 'alertarVencimientoDias' || key === 'recetaId' || key === 'recetaSearch' || key === 'variacionId') {
         this.productoForm.get(key)?.disable();
       } else {
-      this.productoForm.get(key)?.enable();
+        this.productoForm.get(key)?.enable();
       }
     });
 
@@ -1195,11 +1214,25 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
    * Navigate to the presentation prices management
    */
   navigateToPresentacionPrices(presentacion: Presentacion): void {
+    // Calculate recipe cost and suggested price if not a sabor
+    let recipeCost = 0;
+    let suggestedPrice = 0;
+
+    // If the product has a recipe, use its cost
+    if (this.producto?.recetaId && this.selectedRecetaModel) {
+      recipeCost = this.recipeCostPerUnit;
+      suggestedPrice = this.recipeSuggestedPrice;
+    }
+
     this.dialog.open(CreateEditPrecioVentaComponent, {
       width: '800px',
       maxHeight: '90vh',
       panelClass: 'no-padding-dialog',
-      data: { presentacion }
+      data: {
+        presentacion,
+        recipeCost,
+        suggestedPrice
+      }
     });
   }
 
@@ -1476,11 +1509,20 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
    * Open dialog to manage sabores for a presentacion
    */
   manageSabores(presentacion: Presentacion): void {
-    this.dialog.open(CreateEditSaboresComponent, {
+    const dialogRef = this.dialog.open(CreateEditSaboresComponent, {
       width: '800px',
       maxHeight: '90vh',
       disableClose: false,
       data: { presentacion }
+    });
+
+    // Reload presentacion sabores when dialog is closed
+    dialogRef.afterClosed().subscribe(() => {
+      if (presentacion.id) {
+        // Clear existing sabores data to force a fresh load
+        this.presentacionSabores[presentacion.id] = [];
+        this.loadPresentacionSabores(presentacion.id);
+      }
     });
   }
 
@@ -1493,7 +1535,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   }
 
   /**
-   * Loads recipe details including cost information
+   * Load recipe details and calculate costs
    */
   async loadRecipeDetails(recetaId: number): Promise<void> {
     try {
@@ -1530,11 +1572,18 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
 
         this.recipeTotalCost = totalCost;
 
-        // Calculate cost per unit
-        this.recipeCostPerUnit = receta.cantidad > 0 ? totalCost / receta.cantidad : 0;
+        // The cost per unit is the same as the total cost for our product calculation
+        // since we're using the full recipe or variation
+        this.recipeCostPerUnit = this.recipeTotalCost;
 
         // Calculate suggested price (using 35% food cost as a standard)
         this.recipeSuggestedPrice = this.recipeCostPerUnit > 0 ? this.recipeCostPerUnit / 0.35 : 0;
+
+        // Log the calculated costs
+        console.log(`Calculated recipe costs for recetaId ${recetaId}:`, {
+          totalCost: this.recipeTotalCost,
+          suggestedPrice: this.recipeSuggestedPrice
+        });
       } else {
         this.recipeTotalCost = 0;
         this.recipeCostPerUnit = 0;
@@ -1671,7 +1720,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   }
 
   /**
-   * Load sabores for a presentacion
+   * Load sabores for a specific presentacion
    */
   async loadPresentacionSabores(presentacionId: number): Promise<void> {
     if (this.presentacionSabores[presentacionId]?.length > 0) {
@@ -1682,12 +1731,42 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     this.loadingSabores = true;
     try {
       const sabores = await firstValueFrom(this.repositoryService.getPresentacionSabores(presentacionId));
-      this.presentacionSabores[presentacionId] = sabores;
+      this.presentacionSabores[presentacionId] = sabores as PresentacionSaborViewModel[];
 
-      // Load additional details for each sabor
-      for (const sabor of sabores) {
-        if (sabor.recetaId && sabor.variacionId) {
+      // Load any missing sabor names
+      for (const sabor of this.presentacionSabores[presentacionId]) {
+        if (!sabor.sabor?.nombre) {
+          this.loadSaborName(sabor.saborId);
+        }
+
+        // Initialize the ViewModel properties
+        sabor.costoTotal = 0;
+        sabor.precioVenta = undefined;
+        sabor.moneda = undefined;
+        sabor.stock = 0;
+
+        // Load additional cost details
+        if (sabor.recetaId || sabor.variacionId) {
           await this.loadSaborCostoDetails(sabor);
+        }
+
+        // Check if the sabor has any precios venta associated
+        try {
+          // We need to add a way to get precios by presentacionSaborId
+          if (sabor.id) {
+            const preciosVenta = await this.loadPreciosVentaBySaborId(sabor.id);
+            // Add a property to track if the sabor has precios
+            (sabor as any).hasPrecioVenta = preciosVenta.length > 0;
+            if (preciosVenta.length > 0) {
+              // Find the principal price
+              const principalPrecio = preciosVenta.find(p => p.principal) || preciosVenta[0];
+              sabor.precioVenta = principalPrecio.valor;
+              sabor.moneda = principalPrecio.moneda;
+            }
+          }
+        } catch (error) {
+          console.error('Error loading precios venta for sabor:', error);
+          (sabor as any).hasPrecioVenta = false;
         }
       }
     } catch (error) {
@@ -1699,22 +1778,118 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   }
 
   /**
+   * Load precio venta for a presentacion sabor
+   */
+  async loadPreciosVentaBySaborId(presentacionSaborId: number): Promise<PrecioVenta[]> {
+    try {
+      // Assuming there's a repository method to get precios by presentacionSaborId
+      // This endpoint may need to be added if it doesn't exist
+      const precios = await firstValueFrom(this.repositoryService.getPreciosVentaByPresentacionSabor(presentacionSaborId));
+
+      // Load moneda and tipoPrecio details for each precio
+      for (const precio of precios) {
+        try {
+          precio.moneda = await firstValueFrom(this.repositoryService.getMoneda(precio.monedaId));
+
+          if (precio.tipoPrecioId) {
+            precio.tipoPrecio = await firstValueFrom(this.repositoryService.getTipoPrecio(precio.tipoPrecioId));
+          }
+        } catch (error) {
+          console.error(`Error loading details for precio ${precio.id}:`, error);
+        }
+      }
+      return precios;
+    } catch (error) {
+      console.error('Error loading precios venta by sabor id:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Open dialog to add precio for a presentacion sabor
+   */
+  addPrecioToPresentacionSabor(sabor: PresentacionSabor): void {
+    const saborVM = sabor as PresentacionSaborViewModel;
+    const costoTotal = saborVM.costoTotal || 0;
+
+    const dialogRef = this.dialog.open(CreateEditPrecioVentaComponent, {
+      width: '900px',
+      data: {
+        presentacionSabor: sabor,
+        recipeCost: costoTotal,
+        suggestedPrice: costoTotal / 0.35 // Para que el costo represente el 35% del precio final
+      },
+      disableClose: false
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.success) {
+        // Clear the cache and reload to get the updated data with new prices
+        if (sabor.presentacionId) {
+          this.presentacionSabores[sabor.presentacionId] = [];
+          this.loadPresentacionSabores(sabor.presentacionId);
+        }
+      }
+    });
+  }
+
+  /**
+   * Simple function to load a sabor name and store it in cache
+   */
+  private loadSaborName(saborId: number): void {
+    // Skip if already loaded or loading
+    if (this.saborCache[saborId] && !this.saborCache[saborId].startsWith('Cargando')) {
+      return;
+    }
+
+    // Set loading state
+    this.saborCache[saborId] = `Cargando...`;
+
+    // Load the sabor data
+    this.repositoryService.getSabor(saborId).subscribe({
+      next: (sabor) => {
+        if (sabor) {
+          this.saborCache[saborId] = sabor.nombre;
+
+          // Update all instances of this sabor in all presentacionSabores
+          Object.values(this.presentacionSabores).forEach(sabores => {
+            sabores.forEach(s => {
+              if (s.saborId === saborId) {
+                s.sabor = sabor;
+              }
+            });
+          });
+
+          // Trigger change detection
+          this.cdr.detectChanges();
+        } else {
+          this.saborCache[saborId] = `Sabor #${saborId}`;
+        }
+      },
+      error: (error) => {
+        console.error(`Error loading sabor data for ID ${saborId}:`, error);
+        this.saborCache[saborId] = `Sabor #${saborId}`;
+      }
+    });
+  }
+
+  /**
    * Load cost details for a sabor
    */
-  private async loadSaborCostoDetails(sabor: PresentacionSabor): Promise<void> {
+  private async loadSaborCostoDetails(sabor: PresentacionSaborViewModel): Promise<void> {
     try {
       if (sabor.variacionId) {
         const variacion = await firstValueFrom(this.repositoryService.getRecetaVariacion(sabor.variacionId));
         if (variacion) {
           // Set the sabor's cost from the variation
-          (sabor as any).costo = variacion.costo || 0;
+          sabor.costoTotal = variacion.costo || 0;
         }
       } else if (sabor.recetaId) {
         const recetaItems = await firstValueFrom(this.repositoryService.getRecetaItems(sabor.recetaId));
         if (recetaItems) {
           // Calculate the total cost from all recipe items
           const totalCost = recetaItems.reduce((sum, item) => sum + (item.cantidad * (item.ingrediente?.costo || 0)), 0);
-          (sabor as any).costo = totalCost;
+          sabor.costoTotal = totalCost;
         }
       }
 
@@ -1723,8 +1898,8 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       if (precios && precios.length > 0) {
         // Find the principal price if it exists, otherwise use the first one
         const principalPrecio = precios.find((p: PrecioVenta) => p.principal) || precios[0];
-        (sabor as any).precio = principalPrecio.valor;
-        (sabor as any).moneda = principalPrecio.moneda;
+        sabor.precioVenta = principalPrecio.valor;
+        sabor.moneda = principalPrecio.moneda;
       }
     } catch (error) {
       console.error('Error loading sabor details:', error);
@@ -1732,7 +1907,14 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   }
 
   /**
-   * Get sabor name by ID
+   * Check if we should show the expanded row
+   */
+  shouldShowExpandedRow(presentacion: Presentacion): boolean {
+    return true; // Always return true to ensure the expansion row is available
+  }
+
+  /**
+   * Get sabor name by ID (maintained for backward compatibility)
    */
   getSaborNombre(saborId: number): string {
     // First check cache
@@ -1740,84 +1922,314 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       return this.saborCache[saborId];
     }
 
-    // Then find the sabor by ID from all presentacionSabores
-    for (const presentacionId in this.presentacionSabores) {
-      const sabor = this.presentacionSabores[presentacionId].find(s => s.saborId === saborId);
-      if (sabor && sabor.sabor) {
-        // Update cache
-        this.saborCache[saborId] = sabor.sabor.nombre;
-        return sabor.sabor.nombre;
-      }
-    }
-
-    // If we get here, the sabor object was not properly loaded
-    // Return a placeholder and load sabor data asynchronously
-    this.loadSaborData(saborId);
+    // Not in cache, start loading and return placeholder
+    this.loadSaborName(saborId);
     return `Sabor #${saborId}`;
   }
 
   /**
-   * Load sabor data asynchronously
-   */
-  private async loadSaborData(saborId: number): Promise<void> {
-    // If already in cache or currently loading, return
-    if (this.saborCache[saborId]) {
-      return;
-    }
-
-    try {
-      // Mark as loading
-      this.saborCache[saborId] = 'Cargando...';
-
-      // Load sabor data from repository
-      const sabor = await firstValueFrom(this.repositoryService.getSabor(saborId));
-
-      if (sabor) {
-        // Update cache with sabor name
-        this.saborCache[saborId] = sabor.nombre;
-
-        // Update all instances in presentacionSabores
-        for (const presentacionId in this.presentacionSabores) {
-          const sabores = this.presentacionSabores[presentacionId];
-          for (const s of sabores) {
-            if (s.saborId === saborId) {
-              s.sabor = sabor;
-            }
-          }
-        }
-
-        // Trigger change detection
-        this.cdr.detectChanges();
-      } else {
-        this.saborCache[saborId] = `Sabor #${saborId} (no encontrado)`;
-      }
-    } catch (error) {
-      console.error(`Error loading sabor data for ID ${saborId}:`, error);
-      this.saborCache[saborId] = `Sabor #${saborId} (error)`;
-    }
-  }
-
-  /**
-   * Get receta name by ID
+   * Get receta name by ID (maintained for backward compatibility)
    */
   getRecetaNombre(recetaId?: number): string {
     if (!recetaId) return 'No asignada';
     const receta = this.recetas.find(r => r.id === recetaId);
-    return receta ? receta.nombre : 'Receta desconocida';
+    return receta ? receta.nombre : 'No asignada';
   }
 
   /**
-   * Get variacion name by ID
+   * Get variacion name by ID (maintained for backward compatibility)
    */
   getVariacionNombre(variacionId?: number): string {
     if (!variacionId) return 'No asignada';
-    return 'Variación'; // This is a placeholder - we'd need to load all variations to show proper names
+    return 'No asignada';
   }
 
-  /**
-   * Check if we should show the expanded row
-   */
-  shouldShowExpandedRow(presentacion: Presentacion): boolean {
-    return true; // Always return true to ensure the expansion row is available
+  // Add these new methods for sabor actions
+
+  editSabor(sabor: PresentacionSabor): void {
+    // Navigate to edit sabor screen or open edit dialog
+    // This will depend on your sabor edit UI implementation
+    this.snackBar.open('Función de editar sabor en desarrollo', 'Cerrar', {
+      duration: 3000
+    });
+  }
+
+  async deleteSabor(sabor: PresentacionSabor): Promise<void> {
+    const confirmDelete = confirm(`¿Está seguro que desea eliminar el sabor "${this.getSaborNombre(sabor.saborId)}"?`);
+
+    if (!confirmDelete) {
+      return;
+    }
+
+    this.isLoading = true;
+
+    try {
+      await firstValueFrom(this.repositoryService.deletePresentacionSabor(sabor.id));
+      this.snackBar.open('Sabor eliminado exitosamente', 'Cerrar', { duration: 3000 });
+
+      // Reload the sabores for this presentacion
+      this.loadPresentacionSabores(sabor.presentacionId);
+    } catch (error) {
+      console.error('Error deleting sabor:', error);
+      this.snackBar.open('Error al eliminar el sabor', 'Cerrar', { duration: 3000 });
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  manageSaborPrecios(sabor: PresentacionSabor): void {
+    const saborVM = sabor as PresentacionSaborViewModel;
+    const costoTotal = saborVM.costoTotal || 0;
+
+    const dialogRef = this.dialog.open(CreateEditPrecioVentaComponent, {
+      width: '900px',
+      data: {
+        presentacionSabor: sabor,
+        recipeCost: costoTotal,
+        suggestedPrice: costoTotal / 0.35 // Para que el costo represente el 35% del precio final
+      },
+      disableClose: false
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.success) {
+        // Clear previous data to force a refresh and reload the sabores for this presentacion
+        if (sabor.presentacionId) {
+          this.presentacionSabores[sabor.presentacionId] = [];
+          this.loadPresentacionSabores(sabor.presentacionId);
+        }
+      }
+    });
+  }
+
+  // Method to transform a Receta to RecetaViewModel
+  private transformReceta(receta: Receta): RecetaViewModel {
+    const cantidadText = receta.cantidad ? `(${receta.cantidad} ${receta.tipoMedida})` : '';
+    return {
+      id: receta.id,
+      nombre: receta.nombre,
+      tipoMedida: receta.tipoMedida,
+      cantidad: receta.cantidad || 0,
+      displayText: `${receta.nombre} ${cantidadText}`,
+      optionText: `${receta.id} - ${receta.nombre} ${cantidadText}`
+    };
+  }
+
+  // Method to search recipes
+  private searchRecetas(searchText: string): Observable<RecetaViewModel[]> {
+    if (!searchText.trim()) {
+      return of(this.recetas.slice(0, 10).map(r => this.transformReceta(r)));
+    }
+
+    const filterValue = searchText.toLowerCase();
+    const filteredRecetas = this.recetas
+      .filter(receta => receta.nombre.toLowerCase().includes(filterValue))
+      .slice(0, 10)
+      .map(r => this.transformReceta(r));
+
+    return of(filteredRecetas);
+  }
+
+  // Handle recipe selection from autocomplete
+  onRecetaSelected(event: any): void {
+    const selectedReceta = event.option.value as RecetaViewModel;
+    this.selectedRecetaModel = selectedReceta;
+    this.productoForm.patchValue({
+      recetaId: selectedReceta.id
+    });
+
+    // Loading the selected recipe details
+    this.loadRecipeDetails(selectedReceta.id).then(() => {
+      // After recipe details are loaded, if there are no variations,
+      // ensure we display the correct cost values from the base recipe
+      if (this.variaciones.length === 0) {
+        this.recipeTotalCost = this.calculateTotalCostForRecipe(selectedReceta.id);
+        this.recipeCostPerUnit = this.recipeTotalCost;
+        this.recipeSuggestedPrice = this.recipeTotalCost > 0 ? this.recipeTotalCost / 0.35 : 0;
+      }
+    });
+
+    // Loading variations is handled by loadRecipeVariations
+    this.loadRecipeVariations(selectedReceta.id);
+  }
+
+  // Helper method to calculate total cost for a recipe from its items
+  private calculateTotalCostForRecipe(recetaId: number): number {
+    const receta = this.recetas.find(r => r.id === recetaId);
+    if (!receta) return 0;
+
+    // For now, return 0 since we don't have recipe items loaded here
+    // This will be overridden by loadRecipeDetails which properly calculates costs
+    return 0;
+  }
+
+  // Clear recipe selection
+  clearRecetaSelection(): void {
+    this.selectedRecetaModel = null;
+    this.productoForm.patchValue({
+      recetaId: null,
+      recetaSearch: '',
+      variacionId: null
+    });
+    this.variaciones = [];
+  }
+
+  // Load recipe variations
+  async loadRecipeVariations(recetaId: number): Promise<void> {
+    if (!recetaId) return;
+
+    try {
+      this.isLoading = true;
+      this.variaciones = await firstValueFrom(this.repositoryService.getRecetaVariaciones(recetaId));
+
+      // If variations exist, enable the variations dropdown
+      const variacionIdControl = this.productoForm.get('variacionId');
+      if (variacionIdControl) {
+        if (this.variaciones.length > 0) {
+          variacionIdControl.enable();
+
+          // Set up a listener for variation changes before setting the initial value
+          // to avoid duplicate cost calculations
+          const subscription = variacionIdControl.valueChanges.subscribe(variationId => {
+            if (variationId) {
+              this.updateRecipeVariationCosts(variationId);
+            }
+          });
+
+          // Store the subscription to avoid memory leaks
+          // (if you have a component destroy method, you should unsubscribe there)
+          // this.subscriptions.push(subscription);
+
+          // Select the principal variation by default
+          const principalVariation = this.variaciones.find(v => v.principal);
+          if (principalVariation) {
+            variacionIdControl.setValue(principalVariation.id);
+          } else if (this.variaciones.length > 0) {
+            variacionIdControl.setValue(this.variaciones[0].id);
+          }
+        } else {
+          variacionIdControl.disable();
+          variacionIdControl.setValue(null);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading recipe variations:', error);
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  // Add a new method to update costs for a specific variation
+  async updateRecipeVariationCosts(variationId: number): Promise<void> {
+    try {
+      const variation = this.variaciones.find(v => v.id === variationId);
+
+      if (variation) {
+        // Get the latest variation data to ensure we have the most up-to-date cost
+        const updatedVariation = await firstValueFrom(this.repositoryService.getRecetaVariacion(variationId));
+
+        // Update the recipe cost based on the variation cost - use the updated value from the server
+        this.recipeTotalCost = updatedVariation?.costo || variation.costo || 0;
+
+        // For product cost calculation, we only need the full cost of the variation
+        // We don't need to divide by recipe cantidad because the variation cost already
+        // represents the full cost of producing the item
+        this.recipeCostPerUnit = this.recipeTotalCost;
+
+        // Calculate suggested price (using 35% food cost as a standard)
+        this.recipeSuggestedPrice = this.recipeCostPerUnit > 0 ? this.recipeCostPerUnit / 0.35 : 0;
+
+        console.log(`Updated costs for variation ${variationId}:`, {
+          variationCost: this.recipeTotalCost,
+          suggestedPrice: this.recipeSuggestedPrice
+        });
+      }
+    } catch (error) {
+      console.error('Error updating variation costs:', error);
+    }
+  }
+
+  // Add a method to save the recipe variation association
+  async saveRecipeVariation(): Promise<void> {
+    const recetaId = this.productoForm.get('recetaId')?.value;
+    const variacionId = this.productoForm.get('variacionId')?.value;
+
+    if (!recetaId || !variacionId) {
+      this.snackBar.open('Seleccione una receta y variación para guardar', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    if (!this.producto?.id) {
+      this.snackBar.open('Debe guardar el producto primero antes de asociar una receta', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    try {
+      this.isLoading = true;
+
+      // Update the product with the selected recipe only, as that's what's available in the type
+      await firstValueFrom(this.repositoryService.updateProducto(this.producto.id, {
+        recetaId: recetaId
+      }));
+
+      // We may need to update the variation association separately if the API supports it
+      // or it might be handled through a different endpoint
+      // For now, we'll just update what we know works
+
+      this.snackBar.open('Receta guardada exitosamente', 'Cerrar', { duration: 3000 });
+
+      // Update local product data
+      if (this.producto) {
+        this.producto.recetaId = recetaId;
+        // Store variation ID in a data attribute or local variable if needed
+      }
+    } catch (error) {
+      console.error('Error saving recipe:', error);
+      this.snackBar.open('Error al guardar la receta', 'Cerrar', { duration: 3000 });
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  // Add a new method to setup form controls based on loaded data
+  private setupFormControlsBasedOnLoadedData(): void {
+    // Enable/disable controls based on current state
+    const hasVencimiento = this.productoForm.get('hasVencimiento')?.value;
+    const alertarVencimientoDiasControl = this.productoForm.get('alertarVencimientoDias');
+    if (alertarVencimientoDiasControl) {
+      if (hasVencimiento) {
+        alertarVencimientoDiasControl.enable();
+      } else {
+        alertarVencimientoDiasControl.disable();
+      }
+    }
+
+    const isCompuesto = this.productoForm.get('isCompuesto')?.value;
+    const hasVariaciones = this.productoForm.get('hasVariaciones')?.value;
+    const recetaIdControl = this.productoForm.get('recetaId');
+    const recetaSearchControl = this.productoForm.get('recetaSearch');
+    const variacionIdControl = this.productoForm.get('variacionId');
+
+    if (recetaIdControl && recetaSearchControl && variacionIdControl) {
+      if (isCompuesto && !hasVariaciones) {
+        recetaIdControl.enable();
+        recetaSearchControl.enable();
+      } else {
+        recetaIdControl.disable();
+        recetaSearchControl.disable();
+        variacionIdControl.disable();
+      }
+    }
+  }
+
+  // Helper method to get color for CMV percentage
+  getCMVColor(cmvPercentage: number): string {
+    if (cmvPercentage <= 35) {
+      return '#2e7d32'; // Green - good CMV
+    } else if (cmvPercentage <= 45) {
+      return '#ef6c00'; // Orange - warning CMV
+    } else {
+      return '#c62828'; // Red - high CMV
+    }
   }
 }

@@ -54,6 +54,16 @@ const receta_variacion_item_entity_1 = require("./entities/productos/receta-vari
 const combo_entity_1 = require("./entities/productos/combo.entity");
 const combo_item_entity_1 = require("./entities/productos/combo-item.entity");
 const intercambio_ingrediente_entity_1 = require("./entities/productos/intercambio-ingrediente.entity");
+// Import new financial entities
+const moneda_billete_entity_1 = require("./entities/financiero/moneda-billete.entity");
+const dispositivo_entity_1 = require("./entities/financiero/dispositivo.entity");
+const conteo_entity_1 = require("./entities/financiero/conteo.entity");
+const conteo_detalle_entity_1 = require("./entities/financiero/conteo-detalle.entity");
+const caja_entity_1 = require("./entities/financiero/caja.entity");
+const caja_moneda_entity_1 = require("./entities/financiero/caja-moneda.entity");
+const moneda_cambio_entity_1 = require("./entities/financiero/moneda-cambio.entity");
+// Import new migration
+const _1624098765432_AddColumnsToConteo_1 = require("./migrations/1624098765432-AddColumnsToConteo");
 /**
  * Get the configuration for TypeORM
  * @param userDataPath Path to store the database file
@@ -93,10 +103,22 @@ function getDataSourceOptions(userDataPath) {
             receta_variacion_item_entity_1.RecetaVariacionItem,
             combo_entity_1.Combo,
             combo_item_entity_1.ComboItem,
-            intercambio_ingrediente_entity_1.IntercambioIngrediente
+            intercambio_ingrediente_entity_1.IntercambioIngrediente,
+            // New financial entities
+            moneda_billete_entity_1.MonedaBillete,
+            dispositivo_entity_1.Dispositivo,
+            conteo_entity_1.Conteo,
+            conteo_detalle_entity_1.ConteoDetalle,
+            caja_entity_1.Caja,
+            caja_moneda_entity_1.CajaMoneda,
+            moneda_cambio_entity_1.MonedaCambio
         ],
         synchronize: true,
         logging: process.env['NODE_ENV'] === 'development',
+        migrations: [
+            // ... other migrations
+            _1624098765432_AddColumnsToConteo_1.AddColumnsToConteo1624098765432
+        ],
     };
 }
 exports.getDataSourceOptions = getDataSourceOptions;

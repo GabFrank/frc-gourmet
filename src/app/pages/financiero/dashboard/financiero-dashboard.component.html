@@ -1,0 +1,23 @@
+<div class="dashboard-container">
+  <h1 class="dashboard-title">Dashboard Financiero</h1>
+
+  <div class="dashboard-grid">
+    <mat-card *ngFor="let item of dashboardItems"
+              class="dashboard-card"
+              (click)="navigateTo(item.route)"
+              [ngStyle]="{'border-top': '4px solid ' + item.color}">
+      <mat-card-header>
+        <div mat-card-avatar class="card-icon" [ngStyle]="{'background-color': item.color}">
+          <mat-icon>{{item.icon}}</mat-icon>
+        </div>
+        <mat-card-title>{{item.title}}</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <p>{{item.description}}</p>
+      </mat-card-content>
+      <mat-card-actions align="end">
+        <button mat-button color="primary">ABRIR</button>
+      </mat-card-actions>
+    </mat-card>
+  </div>
+</div>

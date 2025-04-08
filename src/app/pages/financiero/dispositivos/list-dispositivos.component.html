@@ -1,0 +1,116 @@
+<div class="page-container">
+  <div class="header-container">
+    <h1></h1>
+    <div class="actions">
+      <button mat-raised-button color="primary" (click)="createDispositivo()">
+        <mat-icon>add</mat-icon> Nuevo Dispositivo
+      </button>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <mat-form-field appearance="outline" class="search-field">
+      <mat-label>Buscar</mat-label>
+      <input matInput placeholder="Buscar dispositivos...">
+      <mat-icon matSuffix>search</mat-icon>
+    </mat-form-field>
+
+    <div *ngIf="loading" class="loading-message">
+      <p>Cargando dispositivos...</p>
+    </div>
+
+    <div *ngIf="error" class="error-container">
+      <p>{{ error }}</p>
+      <button mat-button color="primary" (click)="loadDispositivos()">Reintentar</button>
+    </div>
+
+    <table mat-table [dataSource]="dataSource" matSort class="mat-elevation-z2" *ngIf="!loading && !error">
+      <!-- ID Column -->
+      <ng-container matColumnDef="id">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header> ID </th>
+        <td mat-cell *matCellDef="let dispositivo"> {{ dispositivo.id }} </td>
+      </ng-container>
+
+      <!-- Nombre Column -->
+      <ng-container matColumnDef="nombre">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header> Nombre </th>
+        <td mat-cell *matCellDef="let dispositivo"> {{ dispositivo.nombre }} </td>
+      </ng-container>
+
+      <!-- Is Venta Column -->
+      <ng-container matColumnDef="isVenta">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header> Punto de Venta </th>
+        <td mat-cell *matCellDef="let dispositivo">
+          <mat-icon color="primary" *ngIf="dispositivo.isVenta">check_circle</mat-icon>
+          <mat-icon color="warn" *ngIf="!dispositivo.isVenta">cancel</mat-icon>
+        </td>
+      </ng-container>
+
+      <!-- Is Caja Column -->
+      <ng-container matColumnDef="isCaja">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header> Terminal de Caja </th>
+        <td mat-cell *matCellDef="let dispositivo">
+          <mat-icon color="primary" *ngIf="dispositivo.isCaja">check_circle</mat-icon>
+          <mat-icon color="warn" *ngIf="!dispositivo.isCaja">cancel</mat-icon>
+        </td>
+      </ng-container>
+
+      <!-- Is Touch Column -->
+      <ng-container matColumnDef="isTouch">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header> Pantalla Táctil </th>
+        <td mat-cell *matCellDef="let dispositivo">
+          <mat-icon color="primary" *ngIf="dispositivo.isTouch">check_circle</mat-icon>
+          <mat-icon color="warn" *ngIf="!dispositivo.isTouch">cancel</mat-icon>
+        </td>
+      </ng-container>
+
+      <!-- Is Mobile Column -->
+      <ng-container matColumnDef="isMobile">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header> Dispositivo Móvil </th>
+        <td mat-cell *matCellDef="let dispositivo">
+          <mat-icon color="primary" *ngIf="dispositivo.isMobile">check_circle</mat-icon>
+          <mat-icon color="warn" *ngIf="!dispositivo.isMobile">cancel</mat-icon>
+        </td>
+      </ng-container>
+
+      <!-- Activo Column -->
+      <ng-container matColumnDef="activo">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header> Estado </th>
+        <td mat-cell *matCellDef="let dispositivo">
+          <mat-slide-toggle [checked]="dispositivo.activo"
+                          (change)="toggleActive(dispositivo)"
+                          color="primary">
+            {{ dispositivo.activo ? 'Activo' : 'Inactivo' }}
+          </mat-slide-toggle>
+        </td>
+      </ng-container>
+
+      <!-- Actions Column -->
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef class="text-center"> Acciones </th>
+        <td mat-cell *matCellDef="let dispositivo" class="text-center actions-cell">
+          <div class="action-button-container">
+            <button mat-icon-button [matMenuTriggerFor]="menu">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="editDispositivo(dispositivo)">
+                <mat-icon>edit</mat-icon>
+                <span>Editar</span>
+              </button>
+              <button mat-menu-item (click)="deleteDispositivo(dispositivo.id)">
+                <mat-icon color="warn">delete</mat-icon>
+                <span>Eliminar</span>
+              </button>
+            </mat-menu>
+          </div>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+
+    <mat-paginator [pageSizeOptions]="[5, 10, 25, 100]" showFirstLastButtons></mat-paginator>
+  </div>
+</div>

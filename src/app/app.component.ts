@@ -1,4 +1,12 @@
-import { Component, OnInit, ViewChild, ElementRef, NgZone, OnDestroy, Renderer2 } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  ViewChild,
+  ElementRef,
+  NgZone,
+  OnDestroy,
+  Renderer2,
+} from '@angular/core';
 import { Observable, Subscription, fromEvent } from 'rxjs';
 import { map, shareReplay, debounceTime, delay } from 'rxjs/operators';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
@@ -18,6 +26,7 @@ import { ThemeService } from './services/theme.service';
 import { MatDialog } from '@angular/material/dialog';
 import { PrinterSettingsComponent } from './components/printer-settings/printer-settings.component';
 import { MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { TabsService } from './services/tabs.service';
 import { TabContainerComponent } from './components/tab-container/tab-container.component';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -35,6 +44,10 @@ import { ListProductosComponent } from './pages/productos/productos/list-product
 import { ListMonedasComponent } from './pages/financiero/monedas/list-monedas/list-monedas.component';
 import { ListRecetasComponent } from './pages/productos/recetas/list-recetas.component';
 import { ListIngredientesComponent } from './pages/productos/ingredientes/list-ingredientes.component';
+import { ListDispositivosComponent } from './pages/financiero/dispositivos/list-dispositivos.component';
+import { ListCajasComponent } from './pages/financiero/cajas/list-cajas.component';
+import { FinancieroDashboardComponent } from './pages/financiero/dashboard/financiero-dashboard.component';
+import { TipoPrecioComponent } from './pages/financiero/tipo-precio/tipo-precio.component';
 
 @Component({
   selector: 'app-root',
@@ -56,8 +69,9 @@ import { ListIngredientesComponent } from './pages/productos/ingredientes/list-i
     MatExpansionModule,
     MatDialogModule,
     MatTooltipModule,
-    TabContainerComponent
-  ]
+    MatSnackBarModule,
+    TabContainerComponent,
+  ],
 })
 export class AppComponent implements OnInit, OnDestroy {
   title = 'FRC Gourmet';
@@ -76,9 +90,10 @@ export class AppComponent implements OnInit, OnDestroy {
   @ViewChild('drawer') sidenav!: MatSidenav;
   @ViewChild('sidenavTrigger') sidenavTrigger!: ElementRef;
 
-  isHandset$: Observable<boolean> = this.breakpointObserver.observe(Breakpoints.Handset)
+  isHandset$: Observable<boolean> = this.breakpointObserver
+    .observe(Breakpoints.Handset)
     .pipe(
-      map(result => result.matches),
+      map((result) => result.matches),
       shareReplay()
     );
 
@@ -90,10 +105,11 @@ export class AppComponent implements OnInit, OnDestroy {
     private ngZone: NgZone,
     private renderer: Renderer2,
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private snackBar: MatSnackBar
   ) {
     // Subscribe to authentication state changes
-    this.authService.currentUser$.subscribe(user => {
+    this.authService.currentUser$.subscribe((user) => {
       this.isAuthenticated = !!user;
       this.currentUser = user;
 
@@ -119,8 +135,9 @@ export class AppComponent implements OnInit, OnDestroy {
       );
 
       // Sort sessions by login time in descending order
-      const sortedSessions = loginSessions.sort((a, b) =>
-        new Date(b.login_time).getTime() - new Date(a.login_time).getTime()
+      const sortedSessions = loginSessions.sort(
+        (a, b) =>
+          new Date(b.login_time).getTime() - new Date(a.login_time).getTime()
       );
 
       // Get previous login session (not the current one)
@@ -211,7 +228,10 @@ export class AppComponent implements OnInit, OnDestroy {
 
     // Subscribe to mouse hover events on the trigger area (left edge of screen)
     this.ngZone.runOutsideAngular(() => {
-      this.sidenavHoverSubscription = fromEvent(this.sidenavTrigger.nativeElement, 'mouseenter')
+      this.sidenavHoverSubscription = fromEvent(
+        this.sidenavTrigger.nativeElement,
+        'mouseenter'
+      )
         .pipe(debounceTime(100))
         .subscribe(() => {
           this.ngZone.run(() => {
@@ -234,22 +254,24 @@ export class AppComponent implements OnInit, OnDestroy {
         setTimeout(() => {
           const sidenavElement = document.querySelector('mat-sidenav');
           if (sidenavElement) {
-            this.mouseLeaveSubscription = fromEvent(sidenavElement, 'mouseleave')
-              .subscribe(() => {
-                this.ngZone.run(() => {
-                  // Clear any existing timeout
-                  if (this.autoCloseTimeout) {
-                    clearTimeout(this.autoCloseTimeout);
-                  }
+            this.mouseLeaveSubscription = fromEvent(
+              sidenavElement,
+              'mouseleave'
+            ).subscribe(() => {
+              this.ngZone.run(() => {
+                // Clear any existing timeout
+                if (this.autoCloseTimeout) {
+                  clearTimeout(this.autoCloseTimeout);
+                }
 
-                  // Set a new timeout to close the sidenav after delay
-                  this.autoCloseTimeout = setTimeout(() => {
-                    if (this.sidenav && this.sidenav.opened) {
-                      this.sidenav.close();
-                    }
-                  }, this.closeDelayMs);
-                });
+                // Set a new timeout to close the sidenav after delay
+                this.autoCloseTimeout = setTimeout(() => {
+                  if (this.sidenav && this.sidenav.opened) {
+                    this.sidenav.close();
+                  }
+                }, this.closeDelayMs);
               });
+            });
           }
         }, 500); // Small delay to ensure sidenav is in the DOM
       }
@@ -265,43 +287,91 @@ export class AppComponent implements OnInit, OnDestroy {
   openPrinterSettings(): void {
     this.dialog.open(PrinterSettingsComponent, {
       width: '800px',
-      maxHeight: '90vh'
+      maxHeight: '90vh',
     });
   }
 
   // Tab navigation methods
   openHomeTab() {
-    this.tabsService.openTab('Dashboard', HomeComponent, { source: 'navigation' }, 'dashboard-tab', true);
+    this.tabsService.openTab(
+      'Dashboard',
+      HomeComponent,
+      { source: 'navigation' },
+      'dashboard-tab',
+      true
+    );
   }
 
   // RRHH related tab navigation methods
   openRrhhDashTab() {
-    this.tabsService.openTab('RRHH Dashboard', RrhhDashComponent, { source: 'navigation' }, 'rrhh-dash-tab', true);
+    this.tabsService.openTab(
+      'RRHH Dashboard',
+      RrhhDashComponent,
+      { source: 'navigation' },
+      'rrhh-dash-tab',
+      true
+    );
   }
 
   openPersonasTab() {
-    this.tabsService.openTab('Personas', ListPersonasComponent, { source: 'navigation' }, 'personas-tab', true);
+    this.tabsService.openTab(
+      'Personas',
+      ListPersonasComponent,
+      { source: 'navigation' },
+      'personas-tab',
+      true
+    );
   }
 
   openUsuariosTab() {
-    this.tabsService.openTab('Usuarios', ListUsuariosComponent, { source: 'navigation' }, 'usuarios-tab', true);
+    this.tabsService.openTab(
+      'Usuarios',
+      ListUsuariosComponent,
+      { source: 'navigation' },
+      'usuarios-tab',
+      true
+    );
   }
 
   openClientesTab() {
-    this.tabsService.openTab('Clientes', ListClientesComponent, { source: 'navigation' }, 'clientes-tab', true);
+    this.tabsService.openTab(
+      'Clientes',
+      ListClientesComponent,
+      { source: 'navigation' },
+      'clientes-tab',
+      true
+    );
   }
 
   // Productos related tab navigation methods
   openCategoriasTab() {
-    this.tabsService.openTab('Categorías', ListCategoriasComponent, { source: 'navigation' }, 'categorias-tab', true);
+    this.tabsService.openTab(
+      'Categorías',
+      ListCategoriasComponent,
+      { source: 'navigation' },
+      'categorias-tab',
+      true
+    );
   }
 
   openProductosTab() {
-    this.tabsService.openTab('Productos', ListProductosComponent, { source: 'navigation' }, 'productos-tab', true);
+    this.tabsService.openTab(
+      'Productos',
+      ListProductosComponent,
+      { source: 'navigation' },
+      'productos-tab',
+      true
+    );
   }
 
   openMonedasTab() {
-    this.tabsService.openTab('Monedas', ListMonedasComponent, { source: 'navigation' }, 'monedas-tab', true);
+    this.tabsService.openTab(
+      'Monedas',
+      ListMonedasComponent,
+      { source: 'navigation' },
+      'monedas-tab',
+      true
+    );
   }
 
   openRecetasTab() {
@@ -313,10 +383,39 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   openTipoPrecioTab() {
+      this.tabsService.addTab('Tipos de Precio', TipoPrecioComponent);
+  }
+
+  // New Financiero tab navigation methods
+  openFinancieroDashTab() {
+    this.tabsService.openTab(
+      'Financiero Dashboard',
+      FinancieroDashboardComponent,
+      { source: 'navigation' },
+      'financiero-dashboard-tab',
+      true
+    );
+  }
+
+  openCajasTab() {
+    this.tabsService.openTab(
+      'Cajas',
+      ListCajasComponent,
+      { source: 'navigation' },
+      'cajas-tab',
+      true
+    );
+  }
+
+  openDispositivosTab() {
     // Dynamically import the component to avoid circular dependencies
-    import('./pages/financiero/tipo-precio/tipo-precio.component').then(m => {
-      this.tabsService.addTab('Tipos de Precio', m.TipoPrecioComponent);
-    });
+    this.tabsService.openTab(
+      'Dispositivos y Puntos de Venta',
+      ListDispositivosComponent,
+      { source: 'navigation' },
+      'dispositivos-tab',
+      true
+    );
   }
 
   private applyTheme() {
@@ -335,7 +434,10 @@ export class AppComponent implements OnInit, OnDestroy {
       // Force change detection when sidenav opens or closes
       this.sidenav.openedChange.subscribe(() => {
         // This will update the UI when the sidenav is opened or closed
-        console.log('Sidenav state changed:', this.sidenav.opened ? 'opened' : 'closed');
+        console.log(
+          'Sidenav state changed:',
+          this.sidenav.opened ? 'opened' : 'closed'
+        );
       });
     }
   }

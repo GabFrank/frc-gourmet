@@ -1,0 +1,85 @@
+.dialog-container {
+  min-width: 800px;
+  max-width: 90vw;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.loading-container p {
+  margin-top: 16px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.error-message {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  margin: 8px 0;
+  background-color: rgba(211, 47, 47, 0.1);
+  border-radius: 4px;
+  color: #d32f2f;
+}
+
+.error-message mat-icon {
+  margin-right: 8px;
+}
+
+.instructions {
+  margin-bottom: 16px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.action-bar {
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cambios-table {
+  width: 100%;
+}
+
+.text-center {
+  text-align: center !important;
+}
+
+.actions-cell .action-button-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-badge.active {
+  background-color: rgba(76, 175, 80, 0.15);
+  color: #2e7d32;
+}
+
+.status-badge.inactive {
+  background-color: rgba(117, 117, 117, 0.15);
+  color: #616161;
+}
+
+.inactive-row {
+  opacity: 0.6;
+}
+
+.no-data {
+  display: flex;
+  justify-content: center;
+  padding: 40px 0;
+  color: rgba(0, 0, 0, 0.6);
+}

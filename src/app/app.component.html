@@ -82,6 +82,34 @@
           </div>
         </mat-expansion-panel>
 
+        <!-- Financiero Menu -->
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel">
+          <mat-expansion-panel-header class="nav-panel-header">
+            <mat-panel-title>
+              <mat-icon class="nav-icon">account_balance</mat-icon>
+              <span class="nav-title">Financiero</span>
+            </mat-panel-title>
+          </mat-expansion-panel-header>
+          <div class="submenu-container">
+            <a mat-list-item (click)="openFinancieroDashTab(); drawer.close()">
+              <mat-icon matListItemIcon>dashboard</mat-icon>
+              <span matListItemTitle>Dashboard</span>
+            </a>
+            <a mat-list-item (click)="openCajasTab(); drawer.close()">
+              <mat-icon matListItemIcon>point_of_sale</mat-icon>
+              <span matListItemTitle>Cajas</span>
+            </a>
+            <a mat-list-item (click)="openMonedasTab(); drawer.close()">
+              <mat-icon matListItemIcon>monetization_on</mat-icon>
+              <span matListItemTitle>Monedas</span>
+            </a>
+            <a mat-list-item (click)="openTipoPrecioTab(); drawer.close()">
+              <mat-icon matListItemIcon>sell</mat-icon>
+              <span matListItemTitle>Tipos de Precio</span>
+            </a>
+          </div>
+        </mat-expansion-panel>
+
         <mat-divider></mat-divider>
 
         <!-- Settings Menu - Convert to expansion panel -->
@@ -97,13 +125,9 @@
               <mat-icon matListItemIcon>print</mat-icon>
               <span matListItemTitle>Impresoras</span>
             </a>
-            <a mat-list-item (click)="openMonedasTab(); drawer.close()">
-              <mat-icon matListItemIcon>monetization_on</mat-icon>
-              <span matListItemTitle>Monedas</span>
-            </a>
-            <a mat-list-item (click)="openTipoPrecioTab(); drawer.close()">
-              <mat-icon matListItemIcon>sell</mat-icon>
-              <span matListItemTitle>Tipos de Precio</span>
+            <a mat-list-item (click)="openDispositivosTab(); drawer.close()">
+              <mat-icon matListItemIcon>devices</mat-icon>
+              <span matListItemTitle>Dispositivos y puntos de venta</span>
             </a>
           </div>
         </mat-expansion-panel>

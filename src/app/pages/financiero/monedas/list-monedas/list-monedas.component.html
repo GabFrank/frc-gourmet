@@ -6,7 +6,8 @@
 
     <mat-card-content>
       <form [formGroup]="filterForm" class="filter-form">
-        <div class="filter-row">
+        <!-- Form Fields in One Row -->
+        <div class="filter-fields">
           <mat-form-field appearance="outline">
             <mat-label>Denominación</mat-label>
             <input matInput formControlName="denominacion" placeholder="Buscar por denominación">
@@ -22,20 +23,28 @@
           </mat-form-field>
         </div>
 
-        <div class="button-row">
-          <button mat-raised-button color="primary" (click)="buscar()">
-            <mat-icon>search</mat-icon>
-            Buscar
-          </button>
-          <button mat-raised-button (click)="clearFilters()">
-            <mat-icon>clear</mat-icon>
-            Limpiar
-          </button>
-          <span class="spacer"></span>
-          <button mat-raised-button color="accent" (click)="addMoneda()">
-            <mat-icon>add</mat-icon>
-            Nueva Moneda
-          </button>
+        <!-- Action Buttons in Another Row -->
+        <div class="filter-actions">
+          <div class="left-actions">
+            <button mat-raised-button color="primary" (click)="buscar()">
+              <mat-icon>search</mat-icon>
+              Buscar
+            </button>
+            <button mat-button (click)="clearFilters()">
+              <mat-icon>clear</mat-icon>
+              Limpiar
+            </button>
+          </div>
+          <div class="right-actions">
+            <button mat-raised-button color="primary" (click)="openConfigDialog()">
+              <mat-icon>settings</mat-icon>
+              Configurar Monedas para Cajas
+            </button>
+            <button mat-raised-button color="accent" (click)="addMoneda()">
+              <mat-icon>add</mat-icon>
+              Nueva Moneda
+            </button>
+          </div>
         </div>
       </form>
     </mat-card-content>
@@ -92,16 +101,28 @@
                 <mat-icon>edit</mat-icon>
                 <span>Editar</span>
               </button>
+              <button mat-menu-item (click)="openBilletesDialog(moneda)">
+                <mat-icon>request_quote</mat-icon>
+                <span>Administrar billetes</span>
+              </button>
+              <button mat-menu-item (click)="openCambiosDialog(moneda)">
+                <mat-icon>currency_exchange</mat-icon>
+                <span>Tipo de cambio</span>
+              </button>
               <button mat-menu-item (click)="deleteMoneda(moneda.id!)">
                 <mat-icon>delete</mat-icon>
                 <span>Eliminar</span>
+              </button>
+              <button mat-menu-item (click)="toggleActivo(moneda)">
+                <mat-icon>{{ moneda.activo ? 'toggle_on' : 'toggle_off' }}</mat-icon>
+                <span>{{ moneda.activo ? 'Desactivar' : 'Activar' }}</span>
               </button>
             </mat-menu>
           </td>
         </ng-container>
 
         <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-        <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;" [ngClass]="{'inactive-row': !row.activo}"></tr>
 
         <!-- No results row -->
         <tr class="mat-row" *matNoDataRow>
