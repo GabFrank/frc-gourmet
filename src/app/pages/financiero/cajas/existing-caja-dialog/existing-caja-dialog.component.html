@@ -1,0 +1,43 @@
+<h2 mat-dialog-title>Caja abierta existente</h2>
+<mat-dialog-content>
+  <div class="existing-caja-message">
+    <p>Ya tienes una caja abierta en el dispositivo: <strong>{{ existingCaja?.dispositivo?.nombre || 'Desconocido' }}</strong></p>
+    <p>¿Qué deseas hacer?</p>
+  </div>
+
+  <div class="existing-caja-actions">
+    <div class="action">
+      <h3>Abrir caja existente</h3>
+      <p>Puedes continuar trabajando con la caja que ya está abierta.</p>
+      <button mat-raised-button color="primary" (click)="openExistingCaja()">
+        <mat-icon>open_in_new</mat-icon> Abrir caja existente
+      </button>
+    </div>
+
+    <div class="action" *ngIf="otherDispositivos.length > 0">
+      <h3>Crear nueva caja</h3>
+      <p>Puedes crear una nueva caja para otro dispositivo:</p>
+
+      <form [formGroup]="dispositivoForm">
+        <mat-form-field appearance="fill">
+          <mat-label>Dispositivo</mat-label>
+          <mat-select formControlName="dispositivoId">
+            <mat-option *ngFor="let dispositivo of otherDispositivos" [value]="dispositivo.id">
+              {{ dispositivo.nombre }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+      </form>
+
+      <button mat-raised-button color="accent"
+              [disabled]="!dispositivoForm.get('dispositivoId')?.value || otherDispositivos.length === 0"
+              (click)="createNewCaja()">
+        <mat-icon>add</mat-icon> Crear nueva caja
+      </button>
+    </div>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()">Cancelar</button>
+</mat-dialog-actions>

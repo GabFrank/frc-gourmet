@@ -20,6 +20,7 @@ import { Conteo } from 'src/app/database/entities/financiero/conteo.entity';
 import { ConteoDetalle } from 'src/app/database/entities/financiero/conteo-detalle.entity';
 import { forkJoin, Observable, of } from 'rxjs';
 import { catchError, finalize } from 'rxjs/operators';
+import { AuthService } from 'src/app/services/auth.service';
 
 interface MonedaConfig {
   moneda: Moneda;
@@ -85,12 +86,31 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   conteoDetalles: ConteoDetalle[] = [];
   conteoCierreDetalles: ConteoDetalle[] = []; // New property for conteo cierre details
 
+  // Add a property to store the excluded dispositivo ID
+  excludeDispositivoId: number | null = null;
+
   constructor(
     private dialogRef: MatDialogRef<CreateCajaDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: any,
     private formBuilder: FormBuilder,
-    private repositoryService: RepositoryService
+    private repositoryService: RepositoryService,
+    private authService: AuthService
   ) {
+    // Handle dialog data
+    if (data) {
+      // Check if we're in conteo mode
+      if (data.mode === 'conteo') {
+        this.dialogMode = 'conteo';
+        this.dialogTitle = 'Conteo de caja';
+      }
+
+      // Check if we have an excluded dispositivo ID (for preventing multiple cajas per device)
+      this.excludeDispositivoId = data.excludeDispositivoId;
+    }
+
+    // Initialize forms
+    this.initForms();
+
     // Set dialog size
     this.dialogRef.updateSize('80vw', '80vh');
 
@@ -99,13 +119,6 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
     if (dialogContainer) {
       dialogContainer.style.maxWidth = 'none';
       dialogContainer.style.maxHeight = 'none';
-    }
-
-    // Check if we're in conteo mode
-    if (data && data.mode === 'conteo') {
-      this.dialogMode = 'conteo';
-      this.dialogTitle = 'Detalle de conteo';
-      this.isLinear = false; // Allow jumping between steps in conteo mode
     }
   }
 
@@ -119,7 +132,7 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
       this.loadExistingCajaData(this.data.cajaId);
     } else {
       // Regular flow for creating a new caja
-      this.loadDispositivos();
+    this.loadDispositivos();
     }
   }
 
@@ -316,29 +329,39 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
 
   getBilleteValue(billeteId: number): number {
     const controlName = `billete_${billeteId}`;
-    const formControl = this.conteoInicialForm.get(controlName);
 
-    // First check the form for the active currency
+    // First check if there's a form control for this billete
+    const formControl = this.conteoInicialForm.get(controlName);
     if (formControl) {
       const value = formControl.value;
-      return value !== null && value !== undefined ? Number(value) : 0;
+      // If the value exists in the form, use it and also update the store
+      if (value !== null && value !== undefined) {
+        // Keep the store updated with the latest form value
+        this.billeteValuesStore[controlName] = Number(value);
+        return Number(value);
+      }
     }
 
-    // Otherwise check the billeteValuesStore with the correct key format
+    // If not in form or no value, fall back to stored value
     return this.billeteValuesStore[controlName] || 0;
   }
 
   getCierreBilleteValue(billeteId: number): number {
     const controlName = `cierre_billete_${billeteId}`;
-    const formControl = this.conteoCierreForm.get(controlName);
 
-    // First check the form for the active currency
+    // First check if there's a form control for this billete
+    const formControl = this.conteoCierreForm.get(controlName);
     if (formControl) {
       const value = formControl.value;
-      return value !== null && value !== undefined ? Number(value) : 0;
+      // If the value exists in the form, use it and also update the store
+      if (value !== null && value !== undefined) {
+        // Keep the store updated with the latest form value
+        this.cierreBilleteValuesStore[controlName] = Number(value);
+        return Number(value);
+      }
     }
 
-    // Otherwise check the cierreBilleteValuesStore with the correct key format
+    // If not in form or no value, fall back to stored value
     return this.cierreBilleteValuesStore[controlName] || 0;
   }
 
@@ -370,11 +393,17 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   }
 
   switchCurrency(monedaConfig: MonedaConfig): void {
+    // Sync form values to store before switching currency
+    this.syncFormValuesToStores();
+
     this.activeCurrency = monedaConfig;
     this.initConteoFields();
   }
 
   switchCierreCurrency(monedaConfig: MonedaConfig): void {
+    // Sync form values to store before switching currency
+    this.syncFormValuesToStores();
+
     this.activeCierreCurrency = monedaConfig;
     this.initConteoCierreFields();
   }
@@ -452,6 +481,59 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
     });
   }
 
+  // New method to handle input changes directly from billete inputs
+  onBilleteInputChange(event: Event, billeteId: number): void {
+    const input = event.target as HTMLInputElement;
+    const value = input ? Number(input.value) : 0;
+    const controlName = `billete_${billeteId}`;
+
+    // Immediately update the billeteValuesStore
+    this.billeteValuesStore[controlName] = value;
+
+    // Update the properties for template to refresh totals
+    this.updatePropertiesForTemplate();
+  }
+
+  // New method to handle input changes directly from cierre billete inputs
+  onCierreBilleteInputChange(event: Event, billeteId: number): void {
+    const input = event.target as HTMLInputElement;
+    const value = input ? Number(input.value) : 0;
+    const controlName = `cierre_billete_${billeteId}`;
+
+    // Immediately update the cierreBilleteValuesStore
+    this.cierreBilleteValuesStore[controlName] = value;
+
+    // Update the properties for template to refresh totals
+    this.updateCierrePropertiesForTemplate();
+  }
+
+  // New method to sync all current form values to the stores before any critical operation
+  syncFormValuesToStores(): void {
+    // Sync conteoInicialForm values
+    if (this.conteoInicialForm) {
+      Object.keys(this.conteoInicialForm.controls).forEach(controlName => {
+        const value = this.conteoInicialForm.get(controlName)?.value;
+        if (value !== undefined && value !== null) {
+          this.billeteValuesStore[controlName] = value;
+        }
+      });
+    }
+
+    // Sync conteoCierreForm values
+    if (this.conteoCierreForm) {
+      Object.keys(this.conteoCierreForm.controls).forEach(controlName => {
+        const value = this.conteoCierreForm.get(controlName)?.value;
+        if (value !== undefined && value !== null) {
+          this.cierreBilleteValuesStore[controlName] = value;
+        }
+      });
+    }
+
+    // Update properties for template to ensure totals are current
+    this.updatePropertiesForTemplate();
+    this.updateCierrePropertiesForTemplate();
+  }
+
   updatePropertiesForTemplate(): void {
     // Pre-calculate all bill values for better performance
     const billeteValues: { [key: number]: number } = {};
@@ -521,6 +603,9 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   }
 
   onSubmit(): void {
+    // Sync all form values to stores before submission
+    this.syncFormValuesToStores();
+
     if (this.cajaInfoForm.invalid || this.conteoInicialForm.invalid) {
       console.log('Form invalid:', {
         cajaInfoFormInvalid: this.cajaInfoForm.invalid,
@@ -592,6 +677,7 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
               fechaApertura: new Date(),
               conteoApertura: { id: conteo.id } as Conteo,
               activo: true
+              // Note: Usuario will be automatically set by the backend based on the authenticated user
             };
 
             this.repositoryService.createCaja(cajaData).subscribe(
@@ -647,13 +733,18 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
       dispositivos => {
         // Filter to only display active dispositivos with isCaja=true
         this.dispositivos = dispositivos.filter(d => d.activo && d.isCaja);
-        this.loading = false;
 
-        // After loading dispositivos, try to find current device by MAC address
-        this.detectCurrentDevice();
-
-        // Load monedas after dispositivos are loaded
-        this.loadMonedas();
+        // If we have an excluded dispositivo ID, filter it out or mark it as disabled
+        if (this.excludeDispositivoId) {
+          // Check for open cajas on each dispositivo
+          this.checkOpenCajas();
+        } else {
+          this.loading = false;
+          // After loading dispositivos, try to find current device by MAC address
+          this.detectCurrentDevice();
+          // Load monedas after dispositivos are loaded
+          this.loadMonedas();
+        }
       },
       error => {
         console.error('Error loading dispositivos:', error);
@@ -915,6 +1006,9 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   }
 
   private updateConteoDetalles(): void {
+    // Sync all form values to stores before updating conteo detalles
+    this.syncFormValuesToStores();
+
     if (!this.existingConteo || !this.existingConteo.id) {
       console.error('No conteo to update');
       return;
@@ -962,8 +1056,8 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
             conteo: { id: conteoId } as Conteo,
             monedaBillete: { id: billete.id } as MonedaBillete,
             cantidad: newCantidad,
-            activo: true
-          };
+      activo: true
+    };
           updateObservables.push(
             this.repositoryService.createConteoDetalle(newDetalle)
           );
@@ -981,9 +1075,9 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
     } else {
       // Create a new conteo cierre
       const cierreData: Partial<Conteo> = {
-        activo: true,
+          activo: true,
         tipo: 'CIERRE',
-        fecha: new Date(),
+          fecha: new Date(),
         observaciones: 'CONTEO DE CIERRE DE CAJA'
       };
       cierreObservable = this.repositoryService.createConteo(cierreData);
@@ -993,9 +1087,9 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
       const conteoCierreId = conteoCierre.id;
 
       // Now create or update conteo cierre detalles
-      this.monedasConfig.forEach(monedaConfig => {
-        monedaConfig.billetes.forEach(billete => {
-          if (!billete || !billete.id) return;
+            this.monedasConfig.forEach(monedaConfig => {
+                monedaConfig.billetes.forEach(billete => {
+                  if (!billete || !billete.id) return;
 
           const controlName = `cierre_billete_${billete.id}`;
           const newCantidad = this.getCierreBilleteValue(billete.id);
@@ -1019,15 +1113,15 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
             // Create new detalle if there's a value
             const newDetalle: Partial<ConteoDetalle> = {
               conteo: { id: conteoCierreId } as Conteo,
-              monedaBillete: { id: billete.id } as MonedaBillete,
+                      monedaBillete: { id: billete.id } as MonedaBillete,
               cantidad: newCantidad,
-              activo: true
-            };
+                      activo: true
+                    };
             updateObservables.push(
               this.repositoryService.createConteoDetalle(newDetalle)
-            );
-          }
-        });
+                    );
+                  }
+                });
       });
 
       // If this is a new conteo cierre, update the caja with the conteo cierre ID
@@ -1045,35 +1139,35 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
       // Process all updates
       if (updateObservables.length > 0) {
         forkJoin(updateObservables).subscribe(
-          () => {
-            this.loading = false;
-            this.dialogRef.close({
-              success: true,
+                () => {
+                  this.loading = false;
+                  this.dialogRef.close({
+                    success: true,
               message: 'CONTEO ACTUALIZADO CORRECTAMENTE'
-            });
-          },
+                  });
+                },
           (error: any) => {
             console.error('Error updating conteo detalles:', error);
+                  this.loading = false;
+                  this.dialogRef.close({
+                    success: false,
+              error: 'ERROR AL ACTUALIZAR DETALLES DEL CONTEO'
+                  });
+                }
+              );
+            } else {
+        // No changes needed
+              this.loading = false;
+              this.dialogRef.close({
+                success: true,
+          message: 'NO SE REALIZARON CAMBIOS'
+              });
+            }
+    }, error => {
+      console.error('Error creating conteo cierre:', error);
             this.loading = false;
             this.dialogRef.close({
               success: false,
-              error: 'ERROR AL ACTUALIZAR DETALLES DEL CONTEO'
-            });
-          }
-        );
-      } else {
-        // No changes needed
-        this.loading = false;
-        this.dialogRef.close({
-          success: true,
-          message: 'NO SE REALIZARON CAMBIOS'
-        });
-      }
-    }, error => {
-      console.error('Error creating conteo cierre:', error);
-      this.loading = false;
-      this.dialogRef.close({
-        success: false,
         error: 'ERROR AL CREAR CONTEO DE CIERRE'
       });
     });
@@ -1117,10 +1211,10 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
                 }
               }, 500);
             }
-          },
-          error => {
+      },
+      error => {
             console.error('Error loading dispositivos:', error);
-            this.loading = false;
+        this.loading = false;
           }
         );
       },
@@ -1241,6 +1335,46 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
       },
       (error: any) => {
         console.error('Error loading conteo cierre:', error);
+      }
+    );
+  }
+
+  // Add a method to check for open cajas for each dispositivo
+  private checkOpenCajas(): void {
+    // Get all cajas to check for open ones
+    this.repositoryService.getCajas().subscribe(
+      cajas => {
+        // Filter cajas by estado = ABIERTO and filter by dispositivo
+        const openCajas = cajas.filter(caja => caja.estado === 'ABIERTO');
+
+        // Create a map of dispositivo IDs with open cajas
+        const openDispositivoIds = new Set(openCajas.map(caja =>
+          caja.dispositivo?.id).filter(id => id !== undefined));
+
+        // Include the excluded dispositivo ID if provided
+        if (this.excludeDispositivoId && !openDispositivoIds.has(this.excludeDispositivoId)) {
+          openDispositivoIds.add(this.excludeDispositivoId);
+        }
+
+        // Filter out dispositivos that already have open cajas
+        this.dispositivos = this.dispositivos.filter(dispositivo =>
+          !openDispositivoIds.has(dispositivo.id));
+
+        this.loading = false;
+
+        // After filtering dispositivos, try to find current device by MAC address
+        this.detectCurrentDevice();
+
+        // Load monedas after dispositivos are loaded
+        this.loadMonedas();
+      },
+      error => {
+        console.error('Error checking open cajas:', error);
+        this.loading = false;
+
+        // Even in case of error, continue loading
+        this.detectCurrentDevice();
+        this.loadMonedas();
       }
     );
   }

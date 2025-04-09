@@ -29,47 +29,55 @@
                 *ngIf="detectedDispositivoId && !loadingDeviceInfo"
                 class="device-detection-status success"
               >
-            <mat-icon color="primary">check_circle</mat-icon>
+                <mat-icon color="primary">check_circle</mat-icon>
                 <span>DISPOSITIVO DETECTADO AUTOMÁTICAMENTE</span>
-          </div>
+              </div>
+
+              <div
+                *ngIf="dispositivos.length === 0 && !loading"
+                class="device-detection-status warning"
+              >
+                <mat-icon color="warn">warning</mat-icon>
+                <span>NO HAY DISPOSITIVOS DISPONIBLES. TODOS LOS DISPOSITIVOS YA TIENEN CAJAS ABIERTAS.</span>
+              </div>
 
               <mat-form-field
                 appearance="outline"
                 class="full-width compact-field"
               >
                 <mat-label>DISPOSITIVO</mat-label>
-            <mat-select formControlName="dispositivoId">
+                <mat-select formControlName="dispositivoId">
                   <mat-option
                     *ngFor="let dispositivo of dispositivos"
                     [value]="dispositivo.id"
                   >
-                {{ dispositivo.nombre }}
+                    {{ dispositivo.nombre }}
                     <span
                       *ngIf="dispositivo.id === detectedDispositivoId"
                       class="detected-device"
                     >
                       (DISPOSITIVO ACTUAL)</span
                     >
-              </mat-option>
-            </mat-select>
+                  </mat-option>
+                </mat-select>
                 <mat-error
                   *ngIf="cajaInfoForm.get('dispositivoId')?.hasError('required')"
                 >
                   DISPOSITIVO ES REQUERIDO
-            </mat-error>
-          </mat-form-field>
+                </mat-error>
+              </mat-form-field>
             </div>
 
           <div class="step-actions">
-              <button mat-button mat-dialog-close>CANCELAR</button>
+              <button mat-button mat-dialog-close>SALIR</button>
               <button
                 mat-button
                 matStepperNext
                 color="primary"
-                [disabled]="cajaInfoForm.invalid"
+                [disabled]="cajaInfoForm.invalid || dispositivos.length === 0"
               >
                 SIGUIENTE
-            </button>
+              </button>
           </div>
         </div>
       </form>
@@ -169,6 +177,7 @@
                                 (keyup.enter)="
                                   navigateToNextField(i, activeCurrency.moneda.id)
                                 "
+                                (input)="onBilleteInputChange($event, billete.id)"
                                 [attr.data-index]="i"
                                 [attr.data-currency-id]="activeCurrency.moneda.id"
                               />
@@ -227,6 +236,7 @@
                                     activeCurrency.moneda.id
                                   )
                                 "
+                                (input)="onBilleteInputChange($event, billete.id)"
                                 [attr.data-index]="
                                   i + (activeCurrency.billetes.length + 1) / 2
                                 "
@@ -277,6 +287,7 @@
           </div>
 
           <div class="step-actions">
+              <button mat-button mat-dialog-close>SALIR</button>
               <button mat-button matStepperPrevious>ATRÁS</button>
               <button
                 mat-button
@@ -294,7 +305,7 @@
     <!-- Step 3: Conteo Cierre (New) -->
       <mat-step [stepControl]="conteoCierreForm" [label]="'CONTEO CIERRE'" *ngIf="dialogMode === 'conteo'">
         <form [formGroup]="conteoCierreForm" style="height: 100%">
-        <div class="step-content">
+      <div class="step-content">
           <div *ngIf="loading" class="loading-indicator">
               <mat-spinner diameter="20"></mat-spinner>
               <span>CARGANDO MONEDAS...</span>
@@ -385,13 +396,14 @@
                                 (keyup.enter)="
                                   navigateToNextCierreField(i, activeCierreCurrency.moneda.id)
                                 "
+                                (input)="onCierreBilleteInputChange($event, billete.id)"
                                 [attr.data-index]="i"
                                 [attr.data-currency-id]="activeCierreCurrency.moneda.id"
                               />
                             </mat-form-field>
                           </div>
                         </ng-container>
-                      </div>
+                </div>
 
                       <!-- Right column (second half of billetes) -->
                       <div class="billete-column">
@@ -429,6 +441,7 @@
                                     activeCierreCurrency.moneda.id
                                   )
                                 "
+                                (input)="onCierreBilleteInputChange($event, billete.id)"
                                 [attr.data-index]="
                                   i + (activeCierreCurrency.billetes.length + 1) / 2
                                 "
@@ -438,10 +451,10 @@
                           </div>
                         </ng-container>
                       </div>
-                    </div>
-                  </div>
-                </mat-tab>
-              </mat-tab-group>
+                </div>
+              </div>
+            </mat-tab>
+          </mat-tab-group>
 
               <!-- Currency totals below tabs -->
               <div class="currency-totals-container">
@@ -463,9 +476,10 @@
                   </div>
                 </div>
               </div>
-          </div>
+        </div>
 
-          <div class="step-actions">
+        <div class="step-actions">
+              <button mat-button mat-dialog-close>SALIR</button>
               <button mat-button matStepperPrevious>ATRÁS</button>
               <button
                 mat-button
@@ -550,6 +564,7 @@
           </div>
 
           <div class="step-actions">
+            <button mat-button mat-dialog-close>SALIR</button>
             <button mat-button matStepperPrevious>ATRÁS</button>
             <button
               mat-raised-button
@@ -557,12 +572,12 @@
               (click)="onSubmit()"
               [disabled]="loading"
             >
-              <mat-icon>check</mat-icon>
+            <mat-icon>check</mat-icon>
               {{ dialogMode === 'conteo' ? 'GUARDAR CONTEO' : 'ABRIR CAJA' }}
-            </button>
-          </div>
+          </button>
         </div>
-      </mat-step>
-    </mat-stepper>
-  </mat-dialog-content>
+      </div>
+    </mat-step>
+  </mat-stepper>
+</mat-dialog-content>
 </div>

@@ -110,7 +110,7 @@
       <ng-container matColumnDef="cajero">
         <th mat-header-cell *matHeaderCellDef mat-sort-header>Cajero</th>
         <td mat-cell *matCellDef="let caja">
-          {{ caja.cajero?.persona?.nombre || "N/A" }}
+          {{ caja.createdBy?.persona?.nombre || "N/A" }}
         </td>
       </ng-container>
 

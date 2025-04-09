@@ -1,0 +1,45 @@
+.existing-caja-message {
+  margin-bottom: 24px;
+  padding: 16px;
+  border-radius: 4px;
+
+  p {
+    margin: 8px 0;
+  }
+}
+
+.existing-caja-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+
+  .action {
+    padding: 16px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    transition: box-shadow 0.3s ease;
+
+    &:hover {
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    h3 {
+      margin-top: 0;
+      color: #333;
+    }
+
+    mat-form-field {
+      width: 100%;
+      margin-bottom: 16px;
+    }
+  }
+}
+
+mat-dialog-content {
+  min-height: 300px;
+  max-height: 80vh;
+}
+
+mat-dialog-actions {
+  padding: 16px 0;
+}

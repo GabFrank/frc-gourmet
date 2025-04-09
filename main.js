@@ -3187,7 +3187,7 @@ ipcMain.handle('get-cajas', async () => {
         const dataSource = dbService.getDataSource();
         const cajaRepository = dataSource.getRepository(caja_entity_1.Caja);
         return await cajaRepository.find({
-            relations: ['dispositivo', 'conteoApertura', 'conteoCierre', 'revisadoPor', 'revisadoPor.persona']
+            relations: ['dispositivo', 'conteoApertura', 'conteoCierre', 'revisadoPor', 'revisadoPor.persona', 'createdBy', 'createdBy.persona']
         });
     }
     catch (error) {
@@ -3201,7 +3201,7 @@ ipcMain.handle('get-caja', async (event, cajaId) => {
         const cajaRepository = dataSource.getRepository(caja_entity_1.Caja);
         return await cajaRepository.findOne({
             where: { id: cajaId },
-            relations: ['dispositivo', 'conteoApertura', 'conteoCierre', 'revisadoPor', 'revisadoPor.persona']
+            relations: ['dispositivo', 'conteoApertura', 'conteoCierre', 'revisadoPor', 'revisadoPor.persona', 'createdBy', 'createdBy.persona']
         });
     }
     catch (error) {
@@ -3215,7 +3215,7 @@ ipcMain.handle('get-caja-by-dispositivo', async (event, dispositivoId) => {
         const cajaRepository = dataSource.getRepository(caja_entity_1.Caja);
         return await cajaRepository.find({
             where: { dispositivo: { id: dispositivoId } },
-            relations: ['dispositivo', 'conteoApertura', 'conteoCierre', 'revisadoPor', 'revisadoPor.persona']
+            relations: ['dispositivo', 'conteoApertura', 'conteoCierre', 'revisadoPor', 'revisadoPor.persona', 'createdBy', 'createdBy.persona']
         });
     }
     catch (error) {
@@ -3659,6 +3659,33 @@ ipcMain.handle('get-system-mac-address', async () => {
     catch (error) {
         console.error('Error getting system MAC address:', error);
         return '';
+    }
+});
+// Check if a user already has an open caja, optionally for a specific dispositivo
+ipcMain.handle('check-user-open-caja', async (event, usuarioId, dispositivoId) => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const cajaRepository = dataSource.getRepository(caja_entity_1.Caja);
+        // Base query: find open cajas created by this user
+        const whereClause = {
+            estado: caja_entity_1.CajaEstado.ABIERTO,
+            createdBy: { id: usuarioId }
+        };
+        // If dispositivo ID is provided, also filter by dispositivo
+        if (dispositivoId) {
+            whereClause.dispositivo = { id: dispositivoId };
+        }
+        // Query for open cajas
+        const openCajas = await cajaRepository.find({
+            where: whereClause,
+            relations: ['dispositivo', 'conteoApertura', 'conteoCierre', 'revisadoPor', 'revisadoPor.persona', 'createdBy', 'createdBy.persona']
+        });
+        // Return the first open caja or null if none found
+        return openCajas.length > 0 ? openCajas[0] : null;
+    }
+    catch (error) {
+        console.error(`Error checking user ${usuarioId} open cajas:`, error);
+        throw error;
     }
 });
 //# sourceMappingURL=main.js.map
