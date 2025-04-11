@@ -1,0 +1,151 @@
+.list-compras-container {
+  padding: 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+
+  // Filter card
+  .filter-card {
+    flex: 0 0 auto;
+    margin-bottom: 16px;
+  }
+
+  // Filter form structure
+  .filter-form {
+    margin-bottom: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  // Filter row with inputs
+  .filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 0;
+
+    .mat-mdc-form-field {
+      flex: 1 1 200px;
+      min-width: 200px;
+    }
+  }
+
+  // Action buttons row
+  .button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+    align-items: center;
+    justify-content: flex-start;
+
+    .spacer {
+      flex: 1;
+    }
+
+    button {
+      min-width: 100px;
+    }
+  }
+
+  // Table structure
+  .table-container {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 200px;
+    overflow: hidden;
+
+    .loading-shade {
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.15);
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .table-scroll-container {
+      flex: 1;
+      overflow: auto;
+      margin-bottom: 16px;
+    }
+
+    table {
+      width: 100%;
+
+      .mat-column-id {
+        width: 60px;
+        text-align: center;
+      }
+
+      .mat-column-fecha {
+        width: 160px;
+      }
+
+      .mat-column-recepcion {
+        width: 100px;
+        text-align: center;
+      }
+
+      .mat-column-estado {
+        width: 130px;
+      }
+
+      .mat-column-total {
+        width: 100px;
+        text-align: right;
+      }
+
+      .mat-column-moneda {
+        width: 100px;
+      }
+
+      .mat-column-acciones {
+        width: 60px;
+        text-align: center;
+      }
+    }
+  }
+
+  // Status badges
+  .status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    text-align: center;
+
+    &.active {
+      color: #e8f5e9;
+      background-color: #2e7d32;
+    }
+
+    &.warning {
+      color: #fff3e0;
+      background-color: #ef6c00;
+    }
+
+    &.inactive {
+      color: #ffebee;
+      background-color: #b71c1c;
+    }
+  }
+
+  // Success and danger text classes for icons
+  .text-success {
+    color: #2e7d32;
+  }
+
+  .text-danger {
+    color: #b71c1c;
+  }
+}

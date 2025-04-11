@@ -82,6 +82,26 @@
           </div>
         </mat-expansion-panel>
 
+        <!-- Compras Menu -->
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel">
+          <mat-expansion-panel-header class="nav-panel-header">
+            <mat-panel-title>
+              <mat-icon class="nav-icon">shopping_cart</mat-icon>
+              <span class="nav-title">Compras</span>
+            </mat-panel-title>
+          </mat-expansion-panel-header>
+          <div class="submenu-container">
+            <a mat-list-item (click)="openComprasDashTab(); drawer.close()">
+              <mat-icon matListItemIcon>dashboard</mat-icon>
+              <span matListItemTitle>Dashboard</span>
+            </a>
+            <a mat-list-item (click)="openComprasTab(); drawer.close()">
+              <mat-icon matListItemIcon>shopping_cart</mat-icon>
+              <span matListItemTitle>Compras</span>
+            </a>
+          </div>
+        </mat-expansion-panel>
+
         <!-- Financiero Menu -->
         <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel">
           <mat-expansion-panel-header class="nav-panel-header">

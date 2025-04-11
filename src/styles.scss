@@ -1550,7 +1550,7 @@ input.mat-input-element {
     width: 32px !important;
     height: 32px !important;
     padding: 4px !important;
-    
+
     .mat-icon {
       font-size: 18px !important;
       width: 18px !important;
@@ -1566,11 +1566,19 @@ input.mat-input-element {
   display: flex !important;
   align-items: center !important;
   gap: 4px !important;
-  
+
   .mat-icon {
     font-size: 18px !important;
     width: 18px !important;
     height: 18px !important;
     margin-right: 2px !important;
   }
+}
+
+.left {
+  text-align: left;
+}
+
+.center {
+  text-align: center;
 }

@@ -13,6 +13,7 @@ const { ThermalPrinter, PrinterTypes, CharacterSet } = require('node-thermal-pri
 const jwt = require('jsonwebtoken');
 // Import the image handler module
 const imageHandler = require('./electron/utils/image-handler');
+// Import TypeORM-related code
 const typeorm_1 = require("typeorm");
 const database_service_1 = require("./src/app/database/database.service");
 const printer_entity_1 = require("./src/app/database/entities/printer.entity");
@@ -47,6 +48,11 @@ const dispositivo_entity_1 = require("./src/app/database/entities/financiero/dis
 const caja_entity_1 = require("./src/app/database/entities/financiero/caja.entity");
 const caja_moneda_entity_1 = require("./src/app/database/entities/financiero/caja-moneda.entity");
 const moneda_cambio_entity_1 = require("./src/app/database/entities/financiero/moneda-cambio.entity");
+const proveedor_entity_1 = require("./src/app/database/entities/compras/proveedor.entity");
+const compra_entity_1 = require("./src/app/database/entities/compras/compra.entity");
+const compra_detalle_entity_1 = require("./src/app/database/entities/compras/compra-detalle.entity");
+const pago_entity_1 = require("./src/app/database/entities/compras/pago.entity");
+const pago_detalle_entity_1 = require("./src/app/database/entities/compras/pago-detalle.entity");
 let win;
 let dbService;
 // JWT Secret for token generation
@@ -751,6 +757,7 @@ ipcMain.handle('get-usuario', async (_event, usuarioId) => {
 });
 // Create a new usuario
 ipcMain.handle('create-usuario', async (_event, usuarioData) => {
+    console.log('usuarioData', usuarioData);
     try {
         const dataSource = dbService.getDataSource();
         const usuarioRepository = dataSource.getRepository(usuario_entity_1.Usuario);
@@ -765,8 +772,8 @@ ipcMain.handle('create-usuario', async (_event, usuarioData) => {
             };
         }
         // First get the persona
-        const persona = await personaRepository.findOneBy({ id: usuarioData.persona_id });
-        if (!persona) {
+        const persona = usuarioData.persona_id != null ? await personaRepository.findBy({ id: usuarioData.persona_id }) : null;
+        if (usuarioData.persona_id != null && !persona) {
             return {
                 success: false,
                 message: 'Persona no encontrada'
@@ -3661,30 +3668,455 @@ ipcMain.handle('get-system-mac-address', async () => {
         return '';
     }
 });
-// Check if a user already has an open caja, optionally for a specific dispositivo
-ipcMain.handle('check-user-open-caja', async (event, usuarioId, dispositivoId) => {
+// ------------------------------------------------------------------------
+// PROVEEDOR API HANDLERS
+// ------------------------------------------------------------------------
+// IPC handler for getting all proveedores
+ipcMain.handle('getProveedores', async () => {
     try {
         const dataSource = dbService.getDataSource();
-        const cajaRepository = dataSource.getRepository(caja_entity_1.Caja);
-        // Base query: find open cajas created by this user
-        const whereClause = {
-            estado: caja_entity_1.CajaEstado.ABIERTO,
-            createdBy: { id: usuarioId }
-        };
-        // If dispositivo ID is provided, also filter by dispositivo
-        if (dispositivoId) {
-            whereClause.dispositivo = { id: dispositivoId };
-        }
-        // Query for open cajas
-        const openCajas = await cajaRepository.find({
-            where: whereClause,
-            relations: ['dispositivo', 'conteoApertura', 'conteoCierre', 'revisadoPor', 'revisadoPor.persona', 'createdBy', 'createdBy.persona']
+        const proveedorRepository = dataSource.getRepository(proveedor_entity_1.Proveedor);
+        return await proveedorRepository.find({
+            relations: ['persona'],
+            order: { nombre: 'ASC' }
         });
-        // Return the first open caja or null if none found
-        return openCajas.length > 0 ? openCajas[0] : null;
     }
     catch (error) {
-        console.error(`Error checking user ${usuarioId} open cajas:`, error);
+        console.error('Error getting proveedores:', error);
+        throw error;
+    }
+});
+// IPC handler for getting a proveedor by ID
+ipcMain.handle('getProveedor', async (_event, proveedorId) => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const proveedorRepository = dataSource.getRepository(proveedor_entity_1.Proveedor);
+        return await proveedorRepository.findOne({
+            where: { id: proveedorId },
+            relations: ['persona']
+        });
+    }
+    catch (error) {
+        console.error(`Error getting proveedor with ID ${proveedorId}:`, error);
+        throw error;
+    }
+});
+// IPC handler for creating a proveedor
+ipcMain.handle('createProveedor', async (_event, proveedorData) => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const proveedorRepository = dataSource.getRepository(proveedor_entity_1.Proveedor);
+        // Create a new proveedor
+        const proveedor = proveedorRepository.create(proveedorData);
+        // Save the proveedor and use type assertion to properly handle the response
+        const savedProveedor = await proveedorRepository.save(proveedor);
+        // Extract the ID from the saved entity
+        const savedId = savedProveedor?.id || (Array.isArray(savedProveedor) ? savedProveedor[0]?.id : null);
+        if (!savedId) {
+            throw new Error('Failed to save proveedor');
+        }
+        // Return the proveedor with relations
+        return await proveedorRepository.findOne({
+            where: { id: savedId },
+            relations: ['persona']
+        });
+    }
+    catch (error) {
+        console.error('Error creating proveedor:', error);
+        throw error;
+    }
+});
+// IPC handler for updating a proveedor
+ipcMain.handle('updateProveedor', async (_event, proveedorId, proveedorData) => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const proveedorRepository = dataSource.getRepository(proveedor_entity_1.Proveedor);
+        // Find the proveedor to update
+        const proveedor = await proveedorRepository.findOneBy({ id: proveedorId });
+        if (!proveedor) {
+            throw new Error('Proveedor not found');
+        }
+        // Update the proveedor
+        proveedorRepository.merge(proveedor, proveedorData);
+        // Save the changes
+        await proveedorRepository.save(proveedor);
+        // Return the updated proveedor with relations
+        return await proveedorRepository.findOne({
+            where: { id: proveedorId },
+            relations: ['persona']
+        });
+    }
+    catch (error) {
+        console.error(`Error updating proveedor with ID ${proveedorId}:`, error);
+        throw error;
+    }
+});
+// IPC handler for deleting a proveedor
+ipcMain.handle('deleteProveedor', async (_event, proveedorId) => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const proveedorRepository = dataSource.getRepository(proveedor_entity_1.Proveedor);
+        const compraRepository = dataSource.getRepository(compra_entity_1.Compra);
+        // Find the proveedor to delete
+        const proveedor = await proveedorRepository.findOneBy({ id: proveedorId });
+        if (!proveedor) {
+            throw new Error('Proveedor not found');
+        }
+        // Check if there are any compras associated with this proveedor
+        const comprasCount = await compraRepository.count({
+            where: { proveedor: { id: proveedorId } }
+        });
+        if (comprasCount > 0) {
+            throw new Error('No se puede eliminar el proveedor porque tiene compras asociadas. Considere desactivarlo en su lugar.');
+        }
+        // Continue with deletion if no associations
+        await proveedorRepository.delete(proveedorId);
+        return { success: true };
+    }
+    catch (error) {
+        console.error(`Error deleting proveedor with ID ${proveedorId}:`, error);
+        throw error;
+    }
+});
+// Compra handlers
+ipcMain.handle('getCompras', async () => {
+    const dataSource = dbService.getDataSource();
+    const compraRepository = dataSource.getRepository(compra_entity_1.Compra);
+    try {
+        return await compraRepository.find({
+            relations: ['proveedor', 'moneda', 'detalles', 'detalles.producto', 'detalles.ingrediente', 'detalles.presentacion']
+        });
+    }
+    catch (error) {
+        console.error('Error getting compras:', error);
+        throw error;
+    }
+});
+ipcMain.handle('getCompra', async (_event, compraId) => {
+    const dataSource = dbService.getDataSource();
+    const compraRepository = dataSource.getRepository(compra_entity_1.Compra);
+    try {
+        const compra = await compraRepository.findOne({
+            where: { id: compraId },
+            relations: ['proveedor', 'moneda', 'detalles', 'detalles.producto', 'detalles.ingrediente', 'detalles.presentacion']
+        });
+        if (!compra) {
+            throw new Error(`Compra with id ${compraId} not found`);
+        }
+        return compra;
+    }
+    catch (error) {
+        console.error('Error getting compra:', error);
+        throw error;
+    }
+});
+ipcMain.handle('createCompra', async (_event, compraData) => {
+    const dataSource = dbService.getDataSource();
+    const compraRepository = dataSource.getRepository(compra_entity_1.Compra);
+    try {
+        // Remove detalles from compra data if present
+        const { detalles, ...compraOnly } = compraData;
+        // Create the compra without details
+        const compra = compraRepository.create(compraOnly);
+        const savedCompra = await compraRepository.save(compra);
+        // Return the saved compra
+        return savedCompra;
+    }
+    catch (error) {
+        console.error('Error creating compra:', error);
+        throw error;
+    }
+});
+ipcMain.handle('updateCompra', async (_event, compraId, compraData) => {
+    const dataSource = dbService.getDataSource();
+    const compraRepository = dataSource.getRepository(compra_entity_1.Compra);
+    try {
+        // Remove detalles if present - they'll be handled separately
+        const { detalles, ...compraOnly } = compraData;
+        // Find the compra
+        const compra = await compraRepository.findOne({
+            where: { id: compraId }
+        });
+        if (!compra) {
+            throw new Error(`Compra with id ${compraId} not found`);
+        }
+        // Update compra properties
+        Object.assign(compra, compraOnly);
+        // Save the updated compra
+        await compraRepository.save(compra);
+        // Return the updated compra
+        return compra;
+    }
+    catch (error) {
+        console.error('Error updating compra:', error);
+        throw error;
+    }
+});
+ipcMain.handle('deleteCompra', async (_event, compraId) => {
+    const dataSource = dbService.getDataSource();
+    const compraRepository = dataSource.getRepository(compra_entity_1.Compra);
+    try {
+        // Get the compra
+        const compra = await compraRepository.findOne({
+            where: { id: compraId }
+        });
+        if (!compra) {
+            throw new Error(`Compra with id ${compraId} not found`);
+        }
+        // Delete the compra
+        await compraRepository.remove(compra);
+        return { success: true };
+    }
+    catch (error) {
+        console.error('Error deleting compra:', error);
+        throw error;
+    }
+});
+// CompraDetalle handlers
+ipcMain.handle('getCompraDetalles', async (_event, compraId) => {
+    const dataSource = dbService.getDataSource();
+    const compraDetalleRepository = dataSource.getRepository(compra_detalle_entity_1.CompraDetalle);
+    try {
+        return await compraDetalleRepository.find({
+            where: { compra: { id: compraId } },
+            relations: ['producto', 'ingrediente', 'presentacion']
+        });
+    }
+    catch (error) {
+        console.error('Error getting compra detalles:', error);
+        throw error;
+    }
+});
+ipcMain.handle('createCompraDetalle', async (_event, detalleData) => {
+    const dataSource = dbService.getDataSource();
+    const compraDetalleRepository = dataSource.getRepository(compra_detalle_entity_1.CompraDetalle);
+    try {
+        const detalle = compraDetalleRepository.create(detalleData);
+        const savedDetalle = await compraDetalleRepository.save(detalle);
+        return savedDetalle;
+    }
+    catch (error) {
+        console.error('Error creating compra detalle:', error);
+        throw error;
+    }
+});
+ipcMain.handle('updateCompraDetalle', async (_event, detalleId, detalleData) => {
+    const dataSource = dbService.getDataSource();
+    const compraDetalleRepository = dataSource.getRepository(compra_detalle_entity_1.CompraDetalle);
+    try {
+        const detalle = await compraDetalleRepository.findOne({
+            where: { id: detalleId }
+        });
+        if (!detalle) {
+            throw new Error(`CompraDetalle with id ${detalleId} not found`);
+        }
+        Object.assign(detalle, detalleData);
+        const updatedDetalle = await compraDetalleRepository.save(detalle);
+        return updatedDetalle;
+    }
+    catch (error) {
+        console.error('Error updating compra detalle:', error);
+        throw error;
+    }
+});
+ipcMain.handle('deleteCompraDetalle', async (_event, detalleId) => {
+    const dataSource = dbService.getDataSource();
+    const compraDetalleRepository = dataSource.getRepository(compra_detalle_entity_1.CompraDetalle);
+    try {
+        const detalle = await compraDetalleRepository.findOne({
+            where: { id: detalleId }
+        });
+        if (!detalle) {
+            throw new Error(`CompraDetalle with id ${detalleId} not found`);
+        }
+        await compraDetalleRepository.remove(detalle);
+        return { success: true };
+    }
+    catch (error) {
+        console.error('Error deleting compra detalle:', error);
+        throw error;
+    }
+});
+// ============== PAGO APIS ==============
+// Get all pagos
+ipcMain.handle('getPagos', async () => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const pagoRepository = dataSource.getRepository(pago_entity_1.Pago);
+        const pagos = await pagoRepository.find({
+            where: { activo: true },
+            relations: ['caja', 'detalles', 'compras']
+        });
+        return pagos;
+    }
+    catch (error) {
+        console.error('Error fetching pagos:', error);
+        throw error;
+    }
+});
+// Get a single pago by ID
+ipcMain.handle('getPago', async (_event, pagoId) => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const pagoRepository = dataSource.getRepository(pago_entity_1.Pago);
+        const pago = await pagoRepository.findOne({
+            where: { id: pagoId },
+            relations: ['caja', 'detalles', 'compras']
+        });
+        if (!pago) {
+            throw new Error(`Pago with id ${pagoId} not found`);
+        }
+        return pago;
+    }
+    catch (error) {
+        console.error('Error fetching pago:', error);
+        throw error;
+    }
+});
+// Create a new pago
+ipcMain.handle('createPago', async (_event, pagoData) => {
+    try {
+        // Set usuarioCreacion if currentUser is available
+        if (currentUser) {
+            await setEntityUserTracking(pagoData, currentUser.id, false);
+        }
+        const dataSource = dbService.getDataSource();
+        const pagoRepository = dataSource.getRepository(pago_entity_1.Pago);
+        const pago = pagoRepository.create(pagoData);
+        const savedPago = await pagoRepository.save(pago);
+        return savedPago;
+    }
+    catch (error) {
+        console.error('Error creating pago:', error);
+        throw error;
+    }
+});
+// Update an existing pago
+ipcMain.handle('updatePago', async (_event, pagoId, pagoData) => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const pagoRepository = dataSource.getRepository(pago_entity_1.Pago);
+        const pago = await pagoRepository.findOne({
+            where: { id: pagoId }
+        });
+        if (!pago) {
+            throw new Error(`Pago with id ${pagoId} not found`);
+        }
+        // Set usuarioActualizacion if currentUser is available
+        if (currentUser) {
+            await setEntityUserTracking(pagoData, currentUser.id, true);
+        }
+        const updatedPago = await pagoRepository.save({
+            ...pago,
+            ...pagoData,
+            id: pagoId
+        });
+        return updatedPago;
+    }
+    catch (error) {
+        console.error('Error updating pago:', error);
+        throw error;
+    }
+});
+// Delete (soft delete) a pago
+ipcMain.handle('deletePago', async (_event, pagoId) => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const pagoRepository = dataSource.getRepository(pago_entity_1.Pago);
+        const pago = await pagoRepository.findOne({
+            where: { id: pagoId }
+        });
+        if (!pago) {
+            throw new Error(`Pago with id ${pagoId} not found`);
+        }
+        // Soft delete by setting activo to false
+        pago.activo = false;
+        await pagoRepository.save(pago);
+        return { success: true };
+    }
+    catch (error) {
+        console.error('Error deleting pago:', error);
+        throw error;
+    }
+});
+// ============== PAGO DETALLE APIS ==============
+// Get detalles for a specific pago
+ipcMain.handle('getPagoDetalles', async (_event, pagoId) => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const pagoDetalleRepository = dataSource.getRepository(pago_detalle_entity_1.PagoDetalle);
+        const detalles = await pagoDetalleRepository.find({
+            where: { pago: { id: pagoId }, activo: true },
+            relations: ['moneda']
+        });
+        return detalles;
+    }
+    catch (error) {
+        console.error('Error fetching pago detalles:', error);
+        throw error;
+    }
+});
+// Create a new pago detalle
+ipcMain.handle('createPagoDetalle', async (_event, detalleData) => {
+    try {
+        // Set usuarioCreacion if currentUser is available
+        if (currentUser) {
+            await setEntityUserTracking(detalleData, currentUser.id, false);
+        }
+        const dataSource = dbService.getDataSource();
+        const pagoDetalleRepository = dataSource.getRepository(pago_detalle_entity_1.PagoDetalle);
+        const detalle = pagoDetalleRepository.create(detalleData);
+        const savedDetalle = await pagoDetalleRepository.save(detalle);
+        return savedDetalle;
+    }
+    catch (error) {
+        console.error('Error creating pago detalle:', error);
+        throw error;
+    }
+});
+// Update an existing pago detalle
+ipcMain.handle('updatePagoDetalle', async (_event, detalleId, detalleData) => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const pagoDetalleRepository = dataSource.getRepository(pago_detalle_entity_1.PagoDetalle);
+        const detalle = await pagoDetalleRepository.findOne({
+            where: { id: detalleId }
+        });
+        if (!detalle) {
+            throw new Error(`PagoDetalle with id ${detalleId} not found`);
+        }
+        // Set usuarioActualizacion if currentUser is available
+        if (currentUser) {
+            await setEntityUserTracking(detalleData, currentUser.id, true);
+        }
+        const updatedDetalle = await pagoDetalleRepository.save({
+            ...detalle,
+            ...detalleData,
+            id: detalleId
+        });
+        return updatedDetalle;
+    }
+    catch (error) {
+        console.error('Error updating pago detalle:', error);
+        throw error;
+    }
+});
+// Delete (soft delete) a pago detalle
+ipcMain.handle('deletePagoDetalle', async (_event, detalleId) => {
+    try {
+        const dataSource = dbService.getDataSource();
+        const pagoDetalleRepository = dataSource.getRepository(pago_detalle_entity_1.PagoDetalle);
+        const detalle = await pagoDetalleRepository.findOne({
+            where: { id: detalleId }
+        });
+        if (!detalle) {
+            throw new Error(`PagoDetalle with id ${detalleId} not found`);
+        }
+        await pagoDetalleRepository.remove(detalle);
+        return { success: true };
+    }
+    catch (error) {
+        console.error('Error deleting pago detalle:', error);
         throw error;
     }
 });

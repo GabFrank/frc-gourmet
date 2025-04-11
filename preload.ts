@@ -364,6 +364,86 @@ interface CajaMoneda {
   updatedAt?: Date;
 }
 
+// Add the Proveedor interface after other interfaces
+interface Proveedor {
+  id?: number;
+  nombre: string;
+  razon_social?: string | null;
+  ruc?: string | null;
+  telefono?: string | null;
+  direccion?: string | null;
+  activo: boolean;
+  persona?: Persona | null;
+  persona_id?: number | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// Compra interfaces
+type CompraEstado = 'ABIERTO' | 'PAGADO' | 'CANCELADO';
+
+interface Compra {
+  id?: number;
+  estado: CompraEstado;
+  total: number;
+  isRecepcionMercaderia: boolean;
+  activo: boolean;
+  proveedor?: Proveedor;
+  pago?: Pago;
+  moneda: Moneda;
+  detalles?: CompraDetalle[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface CompraDetalle {
+  id?: number;
+  cantidad: number;
+  valor: number;
+  activo: boolean;
+  compra: Compra | number;
+  producto?: Producto;
+  ingrediente?: Ingrediente;
+  presentacion?: Presentacion;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+type PagoEstado = 'ABIERTO' | 'COMPLETADO' | 'CANCELADO';
+
+interface Pago {
+  id?: number;
+  estado: PagoEstado;
+  activo: boolean;
+  caja: Caja;
+  detalles?: PagoDetalle[];
+  compras?: Compra[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface PagoDetalle {
+  id?: number;
+  valor: number;
+  activo: boolean;
+  pago: Pago | number;
+  moneda: Moneda;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// ProveedorProducto interface
+interface ProveedorProducto {
+  id?: number;
+  activo: boolean;
+  proveedor: Proveedor | number;
+  producto?: Producto;
+  ingrediente?: Ingrediente;
+  compra?: Compra;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('api', {
@@ -995,6 +1075,102 @@ contextBridge.exposeInMainWorld('api', {
   },
   deleteMonedaCambio: async (monedaCambioId: number) => {
     return await ipcRenderer.invoke('delete-moneda-cambio', monedaCambioId);
+  },
+
+  // Proveedor methods
+  getProveedores: async () => {
+    return await ipcRenderer.invoke('getProveedores');
+  },
+  getProveedor: async (proveedorId: number) => {
+    return await ipcRenderer.invoke('getProveedor', proveedorId);
+  },
+  createProveedor: async (proveedorData: Partial<Proveedor>) => {
+    return await ipcRenderer.invoke('createProveedor', proveedorData);
+  },
+  updateProveedor: async (proveedorId: number, proveedorData: Partial<Proveedor>) => {
+    return await ipcRenderer.invoke('updateProveedor', proveedorId, proveedorData);
+  },
+  deleteProveedor: async (proveedorId: number) => {
+    return await ipcRenderer.invoke('deleteProveedor', proveedorId);
+  },
+
+  // Compra methods
+  getCompras: async () => {
+    return await ipcRenderer.invoke('getCompras');
+  },
+  getCompra: async (compraId: number) => {
+    return await ipcRenderer.invoke('getCompra', compraId);
+  },
+  createCompra: async (compraData: any) => {
+    return await ipcRenderer.invoke('createCompra', compraData);
+  },
+  updateCompra: async (compraId: number, compraData: any) => {
+    return await ipcRenderer.invoke('updateCompra', compraId, compraData);
+  },
+  deleteCompra: async (compraId: number) => {
+    return await ipcRenderer.invoke('deleteCompra', compraId);
+  },
+
+  // CompraDetalle methods
+  getCompraDetalles: async (compraId: number) => {
+    return await ipcRenderer.invoke('getCompraDetalles', compraId);
+  },
+  createCompraDetalle: async (detalleData: any) => {
+    return await ipcRenderer.invoke('createCompraDetalle', detalleData);
+  },
+  updateCompraDetalle: async (detalleId: number, detalleData: any) => {
+    return await ipcRenderer.invoke('updateCompraDetalle', detalleId, detalleData);
+  },
+  deleteCompraDetalle: async (detalleId: number) => {
+    return await ipcRenderer.invoke('deleteCompraDetalle', detalleId);
+  },
+
+  // Pago methods
+  getPagos: async () => {
+    return await ipcRenderer.invoke('getPagos');
+  },
+  getPago: async (pagoId: number) => {
+    return await ipcRenderer.invoke('getPago', pagoId);
+  },
+  createPago: async (pagoData: any) => {
+    return await ipcRenderer.invoke('createPago', pagoData);
+  },
+  updatePago: async (pagoId: number, pagoData: any) => {
+    return await ipcRenderer.invoke('updatePago', pagoId, pagoData);
+  },
+  deletePago: async (pagoId: number) => {
+    return await ipcRenderer.invoke('deletePago', pagoId);
+  },
+
+  // PagoDetalle methods
+  getPagoDetalles: async (pagoId: number) => {
+    return await ipcRenderer.invoke('getPagoDetalles', pagoId);
+  },
+  createPagoDetalle: async (detalleData: any) => {
+    return await ipcRenderer.invoke('createPagoDetalle', detalleData);
+  },
+  updatePagoDetalle: async (detalleId: number, detalleData: any) => {
+    return await ipcRenderer.invoke('updatePagoDetalle', detalleId, detalleData);
+  },
+  deletePagoDetalle: async (detalleId: number) => {
+    return await ipcRenderer.invoke('deletePagoDetalle', detalleId);
+  },
+
+  // ProveedorProducto methods
+  getProveedorProductos: async (proveedorId: number) => {
+    return await ipcRenderer.invoke('getProveedorProductos', proveedorId);
+  },
+  getProveedorProducto: async (proveedorProductoId: number) => {
+    return await ipcRenderer.invoke('getProveedorProducto', proveedorProductoId);
+  },
+  createProveedorProducto: async (proveedorProductoData: any) => {
+    return await ipcRenderer.invoke('createProveedorProducto', proveedorProductoData);
+  },
+  updateProveedorProducto: async (proveedorProductoId: number, proveedorProductoData: any) => {
+    return await ipcRenderer.invoke('updateProveedorProducto', proveedorProductoId, proveedorProductoData);
+  },
+  deleteProveedorProducto: async (proveedorProductoId: number) => {
+    return await ipcRenderer.invoke('deleteProveedorProducto', proveedorProductoId);
   },
 
   // System information

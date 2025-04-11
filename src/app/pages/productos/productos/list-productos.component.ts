@@ -53,7 +53,7 @@ import { TabsService } from '../../../services/tabs.service';
   templateUrl: './list-productos.component.html',
   styleUrls: ['./list-productos.component.scss']
 })
-export class ListProductosComponent implements OnInit, AfterViewInit {
+export class ListProductosComponent implements OnInit {
   productos: Producto[] = [];
   categorias: Categoria[] = [];
   subcategorias: Subcategoria[] = [];
@@ -97,10 +97,6 @@ export class ListProductosComponent implements OnInit, AfterViewInit {
         this.filterForm.get('subcategoriaId')?.setValue('');
       }
     });
-  }
-
-  ngAfterViewInit(): void {
-
   }
 
   /**

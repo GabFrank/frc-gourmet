@@ -39,13 +39,13 @@ export class CreateEditUsuarioComponent implements OnInit {
   isEditing = false;
   personas: Persona[] = [];
   hidePassword = true;
-  
+
   // Selected persona for display
   selectedPersona: Persona | null = null;
 
   constructor(
     private dialogRef: MatDialogRef<CreateEditUsuarioComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { 
+    @Inject(MAT_DIALOG_DATA) public data: {
       usuario?: Usuario,
       preselectedPersona?: Partial<Persona>
     },
@@ -57,15 +57,15 @@ export class CreateEditUsuarioComponent implements OnInit {
       nickname: ['', [Validators.required]],
       password: ['', this.data.usuario ? [] : [Validators.required, Validators.minLength(4)]],
       activo: [true],
-      persona_id: [null, [Validators.required]]
+      persona_id: [null]
     });
-    
+
     this.isEditing = !!this.data.usuario;
   }
 
   ngOnInit(): void {
     // No need to load all personas since we'll search them as needed
-    
+
     if (this.isEditing && this.data.usuario) {
       // Set form values when editing
       this.usuarioForm.patchValue({
@@ -73,10 +73,10 @@ export class CreateEditUsuarioComponent implements OnInit {
         activo: this.data.usuario.activo,
         persona_id: this.data.usuario.persona?.id || null
       });
-      
+
       // Store selected persona for display
       this.selectedPersona = this.data.usuario.persona;
-      
+
       // Make password optional when editing
       this.usuarioForm.get('password')?.setValidators([]);
       this.usuarioForm.get('password')?.updateValueAndValidity();
@@ -90,11 +90,11 @@ export class CreateEditUsuarioComponent implements OnInit {
       });
     }
   }
-  
+
   // Generate a suggested nickname based on persona data
   private generateSuggestedNickname(persona: Partial<Persona>): string {
     if (!persona) return '';
-    
+
     // Try to create a nickname from persona's name
     if (persona.nombre) {
       // Extract first name
@@ -108,12 +108,12 @@ export class CreateEditUsuarioComponent implements OnInit {
         return nameParts[0]; // Just use first name if no document
       }
     }
-    
+
     // If no name, try to use the document
     if (persona.documento) {
       return `user${persona.documento.replace(/\D/g, '')}`;
     }
-    
+
     // Default fallback
     return `user${new Date().getTime().toString().slice(-5)}`;
   }
@@ -134,20 +134,20 @@ export class CreateEditUsuarioComponent implements OnInit {
         try {
           const allPersonas = await firstValueFrom(this.repositoryService.getPersonas());
           let filteredPersonas = allPersonas;
-          
+
           if (query) {
             const lowerQuery = query.toLowerCase();
-            filteredPersonas = allPersonas.filter(p => 
-              p.nombre.toLowerCase().includes(lowerQuery) || 
+            filteredPersonas = allPersonas.filter(p =>
+              p.nombre.toLowerCase().includes(lowerQuery) ||
               p.documento.toLowerCase().includes(lowerQuery)
             );
           }
-          
+
           // Manual pagination
           const start = page * pageSize;
           const end = start + pageSize;
           const paginatedPersonas = filteredPersonas.slice(start, end);
-          
+
           return {
             items: paginatedPersonas,
             total: filteredPersonas.length
@@ -158,13 +158,13 @@ export class CreateEditUsuarioComponent implements OnInit {
         }
       }
     };
-    
+
     // Open the generic search dialog
     const dialogRef = this.dialog.open(GenericSearchDialogComponent, {
       width: '800px',
       data: searchConfig
     });
-    
+
     // Handle dialog close
     dialogRef.afterClosed().subscribe((persona: Persona | undefined) => {
       if (persona) {
@@ -183,16 +183,16 @@ export class CreateEditUsuarioComponent implements OnInit {
 
     this.isLoading = true;
     const formData = { ...this.usuarioForm.value };
-    
+
     // Convert string form controls to uppercase
     if (formData.nickname) {
       formData.nickname = formData.nickname.toUpperCase();
     }
-    
+
     if (formData.password) {
       formData.password = formData.password.toUpperCase();
     }
-    
+
     try {
       if (this.isEditing && this.data.usuario) {
         // Don't send empty password when updating
@@ -216,4 +216,4 @@ export class CreateEditUsuarioComponent implements OnInit {
   cancel(): void {
     this.dialogRef.close();
   }
-} 
+}

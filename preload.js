@@ -566,6 +566,22 @@ contextBridge.exposeInMainWorld('api', {
     deleteMonedaCambio: async (monedaCambioId) => {
         return await ipcRenderer.invoke('delete-moneda-cambio', monedaCambioId);
     },
+    // Proveedor methods
+    getProveedores: async () => {
+        return await ipcRenderer.invoke('getProveedores');
+    },
+    getProveedor: async (proveedorId) => {
+        return await ipcRenderer.invoke('getProveedor', proveedorId);
+    },
+    createProveedor: async (proveedorData) => {
+        return await ipcRenderer.invoke('createProveedor', proveedorData);
+    },
+    updateProveedor: async (proveedorId, proveedorData) => {
+        return await ipcRenderer.invoke('updateProveedor', proveedorId, proveedorData);
+    },
+    deleteProveedor: async (proveedorId) => {
+        return await ipcRenderer.invoke('deleteProveedor', proveedorId);
+    },
     // System information
     getSystemMacAddress: () => ipcRenderer.invoke('get-system-mac-address'),
 });

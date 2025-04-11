@@ -36,7 +36,7 @@
       <div class="search-field-container">
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Persona</mat-label>
-          <input matInput [value]="selectedPersona?.nombre || ''" placeholder="Busque una persona" readonly (keydown.enter)="selectedPersona == null ? openPersonaSearch() : null">
+          <input matInput [value]="selectedPersona?.nombre || ''" placeholder="Busque una persona" readonly (keydown.enter)="selectedPersona === null ? openPersonaSearch() : null">
           <button type="button" mat-icon-button matSuffix class="search-button" (click)="openPersonaSearch()" tabindex="-1" aria-label="Buscar persona">
             <mat-icon>search</mat-icon>
           </button>

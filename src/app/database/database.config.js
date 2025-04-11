@@ -62,6 +62,13 @@ const conteo_detalle_entity_1 = require("./entities/financiero/conteo-detalle.en
 const caja_entity_1 = require("./entities/financiero/caja.entity");
 const caja_moneda_entity_1 = require("./entities/financiero/caja-moneda.entity");
 const moneda_cambio_entity_1 = require("./entities/financiero/moneda-cambio.entity");
+// Import compras entities
+const proveedor_entity_1 = require("./entities/compras/proveedor.entity");
+const pago_entity_1 = require("./entities/compras/pago.entity");
+const pago_detalle_entity_1 = require("./entities/compras/pago-detalle.entity");
+const compra_entity_1 = require("./entities/compras/compra.entity");
+const compra_detalle_entity_1 = require("./entities/compras/compra-detalle.entity");
+const proveedor_producto_entity_1 = require("./entities/compras/proveedor-producto.entity");
 // Import new migration
 const _1624098765432_AddColumnsToConteo_1 = require("./migrations/1624098765432-AddColumnsToConteo");
 /**
@@ -111,7 +118,14 @@ function getDataSourceOptions(userDataPath) {
             conteo_detalle_entity_1.ConteoDetalle,
             caja_entity_1.Caja,
             caja_moneda_entity_1.CajaMoneda,
-            moneda_cambio_entity_1.MonedaCambio
+            moneda_cambio_entity_1.MonedaCambio,
+            // Compras entities
+            proveedor_entity_1.Proveedor,
+            pago_entity_1.Pago,
+            pago_detalle_entity_1.PagoDetalle,
+            compra_entity_1.Compra,
+            compra_detalle_entity_1.CompraDetalle,
+            proveedor_producto_entity_1.ProveedorProducto
         ],
         synchronize: true,
         logging: process.env['NODE_ENV'] === 'development',

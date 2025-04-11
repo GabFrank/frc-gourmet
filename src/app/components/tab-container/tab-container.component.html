@@ -1,32 +1,38 @@
 <div class="tab-container">
   <!-- The tab header section -->
-  <mat-tab-group [selectedIndex]="selectedTabIndex" 
-                 (selectedTabChange)="tabChanged($event)"
-                 animationDuration="0ms"
-                 class="tab-header">
+  <mat-tab-group
+    [selectedIndex]="selectedTabIndex"
+    (selectedTabChange)="tabChanged($event)"
+    animationDuration="0ms"
+    class="tab-header"
+  >
     <mat-tab *ngFor="let tab of tabs; let i = index">
       <ng-template mat-tab-label>
         <div class="tab-label">
-          <span>{{tab.title}}</span>
-          <button mat-icon-button 
-                 *ngIf="tab.closable"
-                 class="tab-close-button"
-                 (click)="$event.stopPropagation(); removeTab(i)"
-                 color="none"
-                 tabindex="-1">
+          <span>{{ tab.title }}</span>
+          <button
+            mat-icon-button
+            *ngIf="tab.closable"
+            class="tab-close-button"
+            (click)="$event.stopPropagation(); removeTab(i)"
+            color="none"
+            tabindex="-1"
+          >
             <mat-icon>close</mat-icon>
           </button>
         </div>
       </ng-template>
     </mat-tab>
   </mat-tab-group>
-  
+
   <!-- Tab content area - single container with all tab content components -->
   <div class="tab-content-container">
     <ng-container *ngFor="let tab of tabs; let i = index">
-      <div class="tab-content" [style.display]="i === selectedTabIndex ? 'block' : 'none'">
-        <app-tab-content [tab]="tab"></app-tab-content>
-      </div>
+      <app-tab-content
+        class="tab-content"
+        [style.display]="i === selectedTabIndex ? 'flex' : 'none'"
+        [tab]="tab"
+      ></app-tab-content>
     </ng-container>
   </div>
-</div> 
+</div>

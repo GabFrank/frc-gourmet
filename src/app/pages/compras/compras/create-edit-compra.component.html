@@ -1,0 +1,220 @@
+<div class="create-edit-compra-container">
+  <div class="loading-shade" *ngIf="isLoading">
+    <mat-spinner></mat-spinner>
+  </div>
+
+  <mat-card class="form-card">
+    <mat-card-header>
+      <mat-card-title>{{ isEditing ? 'Editar' : 'Crear' }} Compra</mat-card-title>
+    </mat-card-header>
+
+    <mat-card-content>
+      <form [formGroup]="compraForm">
+        <div class="section-container">
+          <h3 class="section-title">Datos de la Compra</h3>
+
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Proveedor</mat-label>
+              <input type="text" matInput formControlName="proveedor" [matAutocomplete]="autoProveedor">
+              <mat-autocomplete #autoProveedor="matAutocomplete" [displayWith]="displayProveedor">
+                <mat-option *ngFor="let proveedor of filteredProveedores | async" [value]="proveedor.id">
+                  {{ proveedor.nombre }} {{ proveedor.ruc ? '- RUC: ' + proveedor.ruc : '' }}
+                </mat-option>
+              </mat-autocomplete>
+              <mat-error *ngIf="compraForm.get('proveedor')?.hasError('required')">
+                El proveedor es requerido
+              </mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Moneda</mat-label>
+              <input type="text" matInput formControlName="moneda" [matAutocomplete]="autoMoneda">
+              <mat-autocomplete #autoMoneda="matAutocomplete" [displayWith]="displayMoneda">
+                <mat-option *ngFor="let moneda of filteredMonedas | async" [value]="moneda.id">
+                  {{ moneda.denominacion }} ({{ moneda.simbolo }})
+                </mat-option>
+              </mat-autocomplete>
+              <mat-error *ngIf="compraForm.get('moneda')?.hasError('required')">
+                La moneda es requerida
+              </mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Estado</mat-label>
+              <input matInput [value]="getEstadoLabel(compraForm.get('estado')?.value)" readonly>
+              <!-- Hidden select to maintain the form control -->
+              <select formControlName="estado" hidden>
+                <option *ngFor="let option of estadoOptions" [value]="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </mat-form-field>
+          </div>
+
+          <div class="form-row">
+            <div class="checkbox-container">
+              <mat-checkbox formControlName="isRecepcionMercaderia" color="primary">
+                Mercadería Recibida
+              </mat-checkbox>
+            </div>
+
+            <div class="checkbox-container">
+              <mat-checkbox formControlName="activo" color="primary">
+                Activo
+              </mat-checkbox>
+            </div>
+
+            <div class="actions-container">
+              <button mat-button type="button" (click)="cancel()">
+                Cancelar
+              </button>
+              <button mat-raised-button color="primary" (click)="saveCompra()" [disabled]="compraForm.invalid || isLoading">
+                {{ isEditing ? 'Actualizar' : 'Guardar' }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <mat-divider></mat-divider>
+
+        <div class="section-container" [class.disabled-section]="!canEditDetalles()">
+          <h3 class="section-title">Detalles de la Compra</h3>
+          <div *ngIf="!canEditDetalles()" class="disabled-message">
+            Los detalles de la compra solo pueden ser editados cuando la compra existe y su estado es ABIERTO.
+          </div>
+
+          <!-- Form to add new detalles -->
+          <div class="detalle-form-container">
+            <form [formGroup]="detalleForm" (ngSubmit)="addDetalle()" class="detalle-form">
+              <div class="detalle-form-row">
+                <mat-form-field appearance="outline">
+                  <mat-label>Tipo</mat-label>
+                  <mat-select formControlName="tipo">
+                    <mat-option value="producto">Producto</mat-option>
+                    <mat-option value="ingrediente">Ingrediente</mat-option>
+                  </mat-select>
+                </mat-form-field>
+
+                <ng-container *ngIf="selectedDetalleType === 'producto'">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Producto</mat-label>
+                    <input type="text" matInput formControlName="producto" [matAutocomplete]="autoProducto">
+                    <mat-autocomplete #autoProducto="matAutocomplete" [displayWith]="displayProducto">
+                      <mat-option *ngFor="let producto of filteredProductos | async" [value]="producto.id">
+                        {{ producto.nombre }}
+                      </mat-option>
+                    </mat-autocomplete>
+                  </mat-form-field>
+                </ng-container>
+
+                <ng-container *ngIf="selectedDetalleType === 'ingrediente'">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Ingrediente</mat-label>
+                    <input type="text" matInput formControlName="ingrediente" [matAutocomplete]="autoIngrediente">
+                    <mat-autocomplete #autoIngrediente="matAutocomplete" [displayWith]="displayIngrediente">
+                      <mat-option *ngFor="let ingrediente of filteredIngredientes | async" [value]="ingrediente.id">
+                        {{ ingrediente.descripcion }}
+                      </mat-option>
+                    </mat-autocomplete>
+                  </mat-form-field>
+                </ng-container>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Cantidad</mat-label>
+                  <input type="number" matInput formControlName="cantidad" min="0.01" step="0.01">
+                  <mat-error *ngIf="detalleForm.get('cantidad')?.hasError('required')">
+                    La cantidad es requerida
+                  </mat-error>
+                  <mat-error *ngIf="detalleForm.get('cantidad')?.hasError('min')">
+                    La cantidad debe ser mayor a 0
+                  </mat-error>
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Valor Unitario</mat-label>
+                  <input type="number" matInput formControlName="valor" min="0" step="0.01">
+                  <mat-error *ngIf="detalleForm.get('valor')?.hasError('required')">
+                    El valor es requerido
+                  </mat-error>
+                  <mat-error *ngIf="detalleForm.get('valor')?.hasError('min')">
+                    El valor debe ser mayor o igual a 0
+                  </mat-error>
+                </mat-form-field>
+
+                <button mat-raised-button color="primary" type="submit" class="add-button">
+                  <mat-icon>add</mat-icon> Agregar
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Table for detalles -->
+          <div class="table-container">
+            <table mat-table [dataSource]="detalles.controls" class="detalles-table">
+              <!-- Item Column -->
+              <ng-container matColumnDef="item">
+                <th mat-header-cell *matHeaderCellDef>Item</th>
+                <td mat-cell *matCellDef="let detalle">{{ getItemName(detalle.value) }}</td>
+              </ng-container>
+
+              <!-- Tipo Column -->
+              <ng-container matColumnDef="tipo">
+                <th mat-header-cell *matHeaderCellDef>Tipo</th>
+                <td mat-cell *matCellDef="let detalle">
+                  {{ detalle.value.tipo === 'producto' ? 'Producto' : 'Ingrediente' }}
+                </td>
+              </ng-container>
+
+              <!-- Cantidad Column -->
+              <ng-container matColumnDef="cantidad">
+                <th mat-header-cell *matHeaderCellDef>Cantidad</th>
+                <td mat-cell *matCellDef="let detalle">{{ detalle.value.cantidad }}</td>
+              </ng-container>
+
+              <!-- Valor Column -->
+              <ng-container matColumnDef="valor">
+                <th mat-header-cell *matHeaderCellDef>Valor Unitario</th>
+                <td mat-cell *matCellDef="let detalle">{{ detalle.value.valor | number:'1.2-2' }}</td>
+              </ng-container>
+
+              <!-- Subtotal Column -->
+              <ng-container matColumnDef="subtotal">
+                <th mat-header-cell *matHeaderCellDef>Subtotal</th>
+                <td mat-cell *matCellDef="let detalle">
+                  {{ getDetalleSubtotal(detalle.value) | number:'1.2-2' }}
+                </td>
+              </ng-container>
+
+              <!-- Actions Column -->
+              <ng-container matColumnDef="acciones">
+                <th mat-header-cell *matHeaderCellDef>Acciones</th>
+                <td mat-cell *matCellDef="let detalle; let i = index">
+                  <button mat-icon-button color="warn" (click)="removeDetalle(i)" matTooltip="Eliminar" [disabled]="!detallesActionsEnabled">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </td>
+              </ng-container>
+
+              <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+              <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+
+              <!-- No data row -->
+              <tr class="mat-row" *matNoDataRow>
+                <td class="mat-cell" [attr.colspan]="displayedColumns.length" style="text-align: center; padding: 16px;">
+                  No hay detalles agregados a la compra.
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Total -->
+          <div class="total-container">
+            <span class="total-label">Total:</span>
+            <span class="total-value">{{ compraForm.get('total')?.value | number:'1.2-2' }}</span>
+          </div>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+</div>

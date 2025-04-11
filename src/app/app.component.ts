@@ -6,6 +6,7 @@ import {
   NgZone,
   OnDestroy,
   Renderer2,
+  AfterViewInit,
 } from '@angular/core';
 import { Observable, Subscription, fromEvent } from 'rxjs';
 import { map, shareReplay, debounceTime, delay } from 'rxjs/operators';
@@ -48,6 +49,8 @@ import { ListDispositivosComponent } from './pages/financiero/dispositivos/list-
 import { ListCajasComponent } from './pages/financiero/cajas/list-cajas.component';
 import { FinancieroDashboardComponent } from './pages/financiero/dashboard/financiero-dashboard.component';
 import { TipoPrecioComponent } from './pages/financiero/tipo-precio/tipo-precio.component';
+import { ComprasDashboardComponent } from './pages/compras/dashboard/compras-dashboard.component';
+import { ListComprasComponent } from './pages/compras/compras/list-compras.component';
 
 @Component({
   selector: 'app-root',
@@ -73,7 +76,7 @@ import { TipoPrecioComponent } from './pages/financiero/tipo-precio/tipo-precio.
     TabContainerComponent,
   ],
 })
-export class AppComponent implements OnInit, OnDestroy {
+export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   title = 'FRC Gourmet';
   isDarkTheme = false;
   useTabNavigation = true;
@@ -81,6 +84,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private sidenavHoverSubscription = new Subscription();
   private mouseLeaveSubscription = new Subscription();
   private closeDelayMs = 2000; // 2 seconds
+  firsTime = true;
 
   // Authentication state
   isAuthenticated = false;
@@ -185,6 +189,13 @@ export class AppComponent implements OnInit, OnDestroy {
       // Start session activity tracker
       this.startSessionActivityTracker();
     }
+  }
+
+  ngAfterViewInit(): void {
+      this.sidenav.open();
+      setTimeout(() => {
+        this.sidenav.close();
+      }, 3000);
   }
 
   ngOnDestroy() {
@@ -414,6 +425,27 @@ export class AppComponent implements OnInit, OnDestroy {
       ListDispositivosComponent,
       { source: 'navigation' },
       'dispositivos-tab',
+      true
+    );
+  }
+
+  // Compras related tab navigation methods
+  openComprasDashTab() {
+    this.tabsService.openTab(
+      'Dashboard de Compras',
+      ComprasDashboardComponent,
+      { source: 'navigation' },
+      'compras-dashboard-tab',
+      true
+    );
+  }
+
+  openComprasTab() {
+    this.tabsService.openTab(
+      'Compras',
+      ListComprasComponent,
+      { source: 'navigation' },
+      'compras-tab',
       true
     );
   }

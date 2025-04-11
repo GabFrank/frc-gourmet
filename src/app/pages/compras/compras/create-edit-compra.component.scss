@@ -1,0 +1,195 @@
+.create-edit-compra-container {
+  padding: 16px;
+  position: relative;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+
+  // Loading overlay
+  .loading-shade {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  // Form card
+  .form-card {
+    margin-bottom: 16px;
+  }
+
+  // Section container
+  .section-container {
+    margin: 16px 0;
+
+    .section-title {
+      margin-bottom: 16px;
+      color: rgba(0, 0, 0, 0.7);
+      font-weight: 500;
+      font-size: 16px;
+    }
+  }
+
+  // Form rows
+  .form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 16px;
+
+    mat-form-field {
+      flex: 1 1 200px;
+    }
+
+    .checkbox-container {
+      display: flex;
+      align-items: center;
+      margin-right: 24px;
+      min-height: 54px; // Match height of form fields
+    }
+  }
+
+  // Detalle form
+  .detalle-form-container {
+    margin-bottom: 24px;
+    padding: 16px;
+    background-color: rgba(0, 0, 0, 0.02);
+    border-radius: 4px;
+
+    .detalle-form {
+      .detalle-form-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: center;
+
+        mat-form-field {
+          flex: 1 1 150px;
+        }
+
+        .add-button {
+          margin-top: -16px; // Align with form fields
+        }
+      }
+    }
+  }
+
+  // Table container
+  .table-container {
+    margin-bottom: 16px;
+    max-height: 300px;
+    overflow: auto;
+
+    .detalles-table {
+      width: 100%;
+
+      .mat-column-item {
+        min-width: 150px;
+      }
+
+      .mat-column-tipo {
+        min-width: 120px;
+      }
+
+      .mat-column-cantidad {
+        min-width: 120px;
+        text-align: center;
+      }
+
+      .mat-column-valor {
+        min-width: 120px;
+        text-align: right;
+      }
+
+      .mat-column-subtotal {
+        min-width: 120px;
+        text-align: right;
+      }
+
+      .mat-column-acciones {
+        width: 60px;
+        text-align: center;
+      }
+    }
+  }
+
+  // Total display
+  .total-container {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    margin-top: 24px;
+    padding: 8px 16px;
+    background-color: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+
+    .total-label {
+      font-weight: 500;
+      margin-right: 16px;
+    }
+
+    .total-value {
+      font-size: 18px;
+      font-weight: 700;
+    }
+  }
+}
+
+// Dark theme adjustments
+:host-context(.dark-theme) {
+  .create-edit-compra-container {
+    .section-container {
+      .section-title {
+        color: rgba(255, 255, 255, 0.7);
+      }
+    }
+
+    .detalle-form-container {
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .total-container {
+      background-color: rgba(255, 255, 255, 0.07);
+    }
+  }
+}
+
+.disabled-section {
+  position: relative;
+  opacity: 0.7;
+  pointer-events: none;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.03);
+    z-index: 1;
+  }
+}
+
+.disabled-message {
+  background-color: #fff3e0;
+  color: #e65100;
+  padding: 8px 16px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  border-left: 4px solid #ff9800;
+}
+
+.actions-container {
+  display: flex;
+  justify-content: flex-end;
+  margin-left: auto;
+  gap: 8px;
+}

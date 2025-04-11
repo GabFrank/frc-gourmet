@@ -6,6 +6,8 @@ import { ListRecetasComponent } from '../pages/productos/recetas/list-recetas.co
 import { ListIngredientesComponent } from '../pages/productos/ingredientes/list-ingredientes.component';
 import { ListCajasComponent } from '../pages/financiero/cajas/list-cajas.component';
 import { ListMonedasComponent } from '../pages/financiero/monedas/list-monedas/list-monedas.component';
+import { ListProductosComponent } from '../pages/productos/productos/list-productos.component';
+import { ListComprasComponent } from '../pages/compras/compras/list-compras.component';
 
 export interface Tab {
   id: string;
@@ -32,8 +34,10 @@ export class TabsService {
   activeTab$ = this.activeTabSubject.asObservable();
 
   constructor() {
-    //load list cajas tab using addTab method
-    this.addTab('Listado de Cajas', ListCajasComponent);
+    //load list ingredientes tab using addTab method
+    // this.addTab('Lista de productos', ListProductosComponent);
+    //open list compras
+    this.addTab('Lista de compras', ListComprasComponent)
   }
 
   /**

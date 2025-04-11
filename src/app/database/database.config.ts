@@ -40,6 +40,14 @@ import { Caja } from './entities/financiero/caja.entity';
 import { CajaMoneda } from './entities/financiero/caja-moneda.entity';
 import { MonedaCambio } from './entities/financiero/moneda-cambio.entity';
 
+// Import compras entities
+import { Proveedor } from './entities/compras/proveedor.entity';
+import { Pago } from './entities/compras/pago.entity';
+import { PagoDetalle } from './entities/compras/pago-detalle.entity';
+import { Compra } from './entities/compras/compra.entity';
+import { CompraDetalle } from './entities/compras/compra-detalle.entity';
+import { ProveedorProducto } from './entities/compras/proveedor-producto.entity';
+
 // Import new migration
 import { AddColumnsToConteo1624098765432 } from './migrations/1624098765432-AddColumnsToConteo';
 
@@ -90,7 +98,14 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       ConteoDetalle,
       Caja,
       CajaMoneda,
-      MonedaCambio
+      MonedaCambio,
+      // Compras entities
+      Proveedor,
+      Pago,
+      PagoDetalle,
+      Compra,
+      CompraDetalle,
+      ProveedorProducto
     ],
     synchronize: true, // Automatically creates tables in development
     logging: process.env['NODE_ENV'] === 'development',

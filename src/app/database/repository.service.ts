@@ -35,6 +35,8 @@ import { ConteoDetalle } from './entities/financiero/conteo-detalle.entity';
 import { Dispositivo } from './entities/financiero/dispositivo.entity';
 import { Caja, CajaEstado } from './entities/financiero/caja.entity';
 import { CajaMoneda } from './entities/financiero/caja-moneda.entity';
+import { Proveedor } from './entities/compras/proveedor.entity';
+import { Compra } from './entities/compras/compra.entity';
 
 export interface LoginResult {
   success: boolean;
@@ -249,6 +251,18 @@ interface ElectronAPI {
   createMonedaCambio: (monedaCambioData: Partial<MonedaCambio>) => Promise<MonedaCambio>;
   updateMonedaCambio: (monedaCambioId: number, monedaCambioData: Partial<MonedaCambio>) => Promise<any>;
   deleteMonedaCambio: (monedaCambioId: number) => Promise<any>;
+  // Proveedor methods
+  getProveedores: () => Promise<Proveedor[]>;
+  getProveedor: (proveedorId: number) => Promise<Proveedor>;
+  createProveedor: (proveedorData: Partial<Proveedor>) => Promise<Proveedor>;
+  updateProveedor: (proveedorId: number, proveedorData: Partial<Proveedor>) => Promise<any>;
+  deleteProveedor: (proveedorId: number) => Promise<any>;
+  // Compra methods
+  getCompras: () => Promise<Compra[]>;
+  getCompra: (compraId: number) => Promise<Compra>;
+  createCompra: (compraData: Partial<Compra>) => Promise<Compra>;
+  updateCompra: (compraId: number, compraData: Partial<Compra>) => Promise<any>;
+  deleteCompra: (compraId: number) => Promise<any>;
 }
 
 /**
@@ -330,6 +344,7 @@ export class RepositoryService {
   }
 
   createUsuario(usuarioData: Partial<Usuario>): Observable<Usuario> {
+    console.log(usuarioData);
     return from(this.api.createUsuario(usuarioData));
   }
 
@@ -1071,5 +1086,47 @@ export class RepositoryService {
 
   deleteMonedaCambio(monedaCambioId: number): Observable<any> {
     return from(this.api.deleteMonedaCambio(monedaCambioId));
+  }
+
+  // Proveedor methods
+  getProveedores(): Observable<Proveedor[]> {
+    return from(this.api.getProveedores());
+  }
+
+  getProveedor(proveedorId: number): Observable<Proveedor> {
+    return from(this.api.getProveedor(proveedorId));
+  }
+
+  createProveedor(proveedorData: Partial<Proveedor>): Observable<Proveedor> {
+    return from(this.api.createProveedor(proveedorData));
+  }
+
+  updateProveedor(proveedorId: number, proveedorData: Partial<Proveedor>): Observable<any> {
+    return from(this.api.updateProveedor(proveedorId, proveedorData));
+  }
+
+  deleteProveedor(proveedorId: number): Observable<any> {
+    return from(this.api.deleteProveedor(proveedorId));
+  }
+
+  // Compra methods
+  getCompras(): Observable<Compra[]> {
+    return from(this.api.getCompras());
+  }
+
+  getCompra(compraId: number): Observable<Compra> {
+    return from(this.api.getCompra(compraId));
+  }
+
+  createCompra(compraData: Partial<Compra>): Observable<Compra> {
+    return from(this.api.createCompra(compraData));
+  }
+
+  updateCompra(compraId: number, compraData: Partial<Compra>): Observable<any> {
+    return from(this.api.updateCompra(compraId, compraData));
+  }
+
+  deleteCompra(compraId: number): Observable<any> {
+    return from(this.api.deleteCompra(compraId));
   }
 }

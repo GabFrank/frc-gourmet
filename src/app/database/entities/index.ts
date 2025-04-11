@@ -44,3 +44,20 @@ export { ConteoDetalle } from './financiero/conteo-detalle.entity';
 export { Dispositivo } from './financiero/dispositivo.entity';
 export { Caja, CajaEstado } from './financiero/caja.entity';
 export { CajaMoneda } from './financiero/caja-moneda.entity';
+
+// Export compras-related entities and enums
+export { CompraEstado, PagoEstado } from './compras/estado.enum';
+export { Proveedor } from './compras/proveedor.entity';
+export { Pago } from './compras/pago.entity';
+export { PagoDetalle } from './compras/pago-detalle.entity';
+export { Compra } from './compras/compra.entity';
+export { CompraDetalle } from './compras/compra-detalle.entity';
+export { ProveedorProducto } from './compras/proveedor-producto.entity';
+export {
+  IPago,
+  IPagoDetalle,
+  ICompra,
+  ICompraDetalle,
+  IProveedor,
+  IProveedorProducto
+} from './compras/entity-types';

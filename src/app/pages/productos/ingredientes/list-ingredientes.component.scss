@@ -1,16 +1,16 @@
 .list-ingredientes-container {
-  padding: 20px;
+  padding: 10px;
   background-color: #333;
   color: #fff;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 10px;
+  overflow: auto;
 }
 
 .filter-card {
   background-color: #444;
-  margin-bottom: 20px;
 }
 
 mat-card-title {
@@ -89,9 +89,7 @@ mat-form-field {
 }
 
 .table-scroll-container {
-  background-color: #444;
-  overflow: auto;
-  max-height: calc(100vh - 300px);
+  overflow-y: auto;
 }
 
 table {

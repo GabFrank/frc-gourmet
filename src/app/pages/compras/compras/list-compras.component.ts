@@ -1,0 +1,342 @@
+import { Component, OnInit, Input } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MatCardModule } from '@angular/material/card';
+import { MatTableModule } from '@angular/material/table';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatSortModule, Sort } from '@angular/material/sort';
+import { MatInputModule } from '@angular/material/input';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { FormGroup, FormBuilder } from '@angular/forms';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { Observable, firstValueFrom } from 'rxjs';
+import { RepositoryService } from '../../../database/repository.service';
+import { Compra } from '../../../database/entities/compras/compra.entity';
+import { CompraEstado } from '../../../database/entities/compras/estado.enum';
+import { Proveedor } from '../../../database/entities/compras/proveedor.entity';
+import { Moneda } from '../../../database/entities/financiero/moneda.entity';
+import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { TabsService } from '../../../services/tabs.service';
+import { CreateEditCompraComponent } from './create-edit-compra.component';
+
+// Extend the compra type with display values for the view
+interface CompraViewModel {
+  id: number;
+  estado: CompraEstado;
+  isRecepcionMercaderia: boolean;
+  total: number;
+  activo: boolean;
+  createdAt: Date;
+  proveedor?: Proveedor;
+  moneda?: Moneda;
+  displayValues: {
+    estadoLabel: string;
+    proveedorNombre?: string;
+    monedaNombre?: string;
+  };
+}
+
+@Component({
+  selector: 'app-list-compras',
+  standalone: true,
+  imports: [
+    CommonModule,
+    MatCardModule,
+    MatTableModule,
+    MatPaginatorModule,
+    MatSortModule,
+    MatInputModule,
+    MatButtonModule,
+    MatIconModule,
+    MatMenuModule,
+    MatFormFieldModule,
+    MatSelectModule,
+    MatProgressSpinnerModule,
+    FormsModule,
+    ReactiveFormsModule,
+    MatSnackBarModule,
+    MatDialogModule,
+    ConfirmationDialogComponent
+  ],
+  templateUrl: './list-compras.component.html',
+  styleUrls: ['./list-compras.component.scss']
+})
+export class ListComprasComponent implements OnInit {
+  @Input() data: any;
+
+  // Data
+  compras: CompraViewModel[] = [];
+  proveedores: Proveedor[] = [];
+  monedas: Moneda[] = [];
+
+  // Table columns
+  displayedColumns: string[] = ['id', 'fecha', 'proveedor', 'estado', 'total', 'moneda', 'recepcion', 'acciones'];
+
+  // Loading state
+  isLoading = false;
+
+  // Pagination
+  totalCompras = 0;
+  pageSize = 10;
+  currentPage = 0;
+  pageSizeOptions: number[] = [5, 10, 25, 50];
+
+  // Filtering
+  filterForm: FormGroup;
+
+  // Estado options
+  estadoOptions = [
+    { value: CompraEstado.ABIERTO, label: 'Abierto' },
+    { value: CompraEstado.ACTIVO, label: 'Activo' },
+    { value: CompraEstado.FINALIZADO, label: 'Finalizado' },
+    { value: CompraEstado.CANCELADO, label: 'Cancelado' }
+  ];
+
+  constructor(
+    private repositoryService: RepositoryService,
+    private fb: FormBuilder,
+    private snackBar: MatSnackBar,
+    private dialog: MatDialog,
+    private tabsService: TabsService
+  ) {
+    this.filterForm = this.fb.group({
+      proveedorId: [''],
+      monedaId: [''],
+      estado: [''],
+      recepcion: ['']
+    });
+  }
+
+  ngOnInit(): void {
+    console.log('[ListComprasComponent] ngOnInit with data:', this.data);
+
+    // Load lookup data
+    this.loadProveedores();
+    this.loadMonedas();
+
+    // Apply initial data if available
+    if (this.data) {
+      this.processData();
+    } else {
+      // Otherwise just load all compras
+      this.loadCompras();
+    }
+  }
+
+  // Process data passed from tabs service
+  private processData(): void {
+    console.log('[ListComprasComponent] Processing data:', this.data);
+
+    if (this.data.source === 'dashboard') {
+      // If coming from dashboard, just load all compras
+      this.loadCompras();
+    } else if (this.data.filters) {
+      // If filters provided, apply them
+      this.filterForm.patchValue(this.data.filters);
+      this.buscar();
+    } else {
+      // Default case
+      this.loadCompras();
+    }
+  }
+
+  // Load compras with current filters and pagination
+  async loadCompras(): Promise<void> {
+    this.isLoading = true;
+
+    const filters = {
+      ...this.filterForm.value
+    };
+
+    // Convert string values to appropriate types
+    if (filters.proveedorId === '') filters.proveedorId = null;
+    if (filters.monedaId === '') filters.monedaId = null;
+    if (filters.estado === '') filters.estado = null;
+    if (filters.recepcion === '') filters.recepcion = null;
+    else filters.recepcion = filters.recepcion === 'true';
+
+    console.log('Loading compras with filters:', filters);
+
+    try {
+      // In a future implementation, we would call the real API with filter parameters
+      // For now, we'll implement client-side filtering since the mock implementation just filters locally
+      const allCompras: Compra[] = await firstValueFrom(this.repositoryService.getCompras());
+
+      // Apply filters
+      let filteredCompras = [...allCompras];
+
+      if (filters.proveedorId) {
+        filteredCompras = filteredCompras.filter((c: Compra) => c.proveedor?.id === Number(filters.proveedorId));
+      }
+
+      if (filters.monedaId) {
+        filteredCompras = filteredCompras.filter((c: Compra) => c.moneda?.id === Number(filters.monedaId));
+      }
+
+      if (filters.estado) {
+        filteredCompras = filteredCompras.filter((c: Compra) => c.estado === filters.estado);
+      }
+
+      if (filters.recepcion !== null) {
+        filteredCompras = filteredCompras.filter((c: Compra) => c.isRecepcionMercaderia === filters.recepcion);
+      }
+
+      // Calculate total for pagination
+      this.totalCompras = filteredCompras.length;
+
+      // Apply pagination
+      const start = this.currentPage * this.pageSize;
+      const end = start + this.pageSize;
+
+      // Convert to view model
+      this.compras = filteredCompras
+        .slice(start, end)
+        .map(compra => this.convertToViewModel(compra));
+
+    } catch (error: any) {
+      console.error('Error loading compras:', error);
+      this.snackBar.open('Error al cargar compras: ' + error.message, 'Cerrar', {
+        duration: 5000,
+        panelClass: ['error-snackbar']
+      });
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  // Load proveedores for filter dropdown
+  async loadProveedores(): Promise<void> {
+    try {
+      this.proveedores = await firstValueFrom(this.repositoryService.getProveedores());
+    } catch (error: any) {
+      console.error('Error loading proveedores:', error);
+    }
+  }
+
+  // Load monedas for filter dropdown
+  async loadMonedas(): Promise<void> {
+    try {
+      this.monedas = await firstValueFrom(this.repositoryService.getMonedas());
+    } catch (error: any) {
+      console.error('Error loading monedas:', error);
+    }
+  }
+
+  // Apply filters
+  buscar(): void {
+    this.currentPage = 0;
+    this.loadCompras();
+  }
+
+  // Clear all filters
+  clearFilters(): void {
+    this.filterForm.reset({
+      proveedorId: '',
+      monedaId: '',
+      estado: '',
+      recepcion: ''
+    });
+    this.buscar();
+  }
+
+  // Handle page change
+  onPageChange(event: PageEvent): void {
+    this.currentPage = event.pageIndex;
+    this.pageSize = event.pageSize;
+    this.loadCompras();
+  }
+
+  // Handle sort change
+  onSort(sort: Sort): void {
+    // Implement sorting logic
+    console.log('Sort changed:', sort);
+    this.loadCompras();
+  }
+
+  // Open tab to create new compra
+  addCompra(): void {
+    this.tabsService.openTab(
+      'Nueva Compra',
+      CreateEditCompraComponent,
+      {}, // No specific data needed for new compra
+      `nueva-compra-${Date.now()}`, // Unique ID for the tab
+      true // Closable
+    );
+  }
+
+  // Edit compra in a new tab
+  editCompra(compra: CompraViewModel): void {
+    this.tabsService.openTab(
+      `Editar Compra #${compra.id}`,
+      CreateEditCompraComponent,
+      { compra: compra }, // Pass the compra to edit
+      `editar-compra-${compra.id}`, // Unique ID for the tab
+      true // Closable
+    );
+  }
+
+  // Delete (deactivate) compra
+  deleteCompra(compra: CompraViewModel): void {
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Confirmar eliminación',
+        message: `¿Está seguro que desea eliminar la compra #${compra.id}?`,
+        confirmText: 'Eliminar',
+        cancelText: 'Cancelar'
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        this.isLoading = true;
+
+        // Mock implementation - replace with actual API call when available
+        setTimeout(() => {
+          this.snackBar.open('Compra eliminada correctamente', 'Cerrar', {
+            duration: 3000
+          });
+          this.loadCompras();
+        }, 500);
+      }
+    });
+  }
+
+  // Helper to display estado label
+  getEstadoLabel(estado: CompraEstado): string {
+    return this.estadoOptions.find(option => option.value === estado)?.label || estado;
+  }
+
+  // Convert Compra to ViewModel with display values
+  private convertToViewModel(compra: Compra): CompraViewModel {
+    return {
+      id: compra.id,
+      estado: compra.estado,
+      isRecepcionMercaderia: compra.isRecepcionMercaderia,
+      total: compra.total,
+      activo: compra.activo,
+      createdAt: compra.createdAt,
+      proveedor: compra.proveedor,
+      moneda: compra.moneda,
+      displayValues: {
+        estadoLabel: this.getEstadoLabel(compra.estado),
+        proveedorNombre: compra.proveedor?.nombre,
+        monedaNombre: compra.moneda?.denominacion
+      }
+    };
+  }
+
+  // Used by the tab service
+  setData(data: any): void {
+    console.log('Setting data for Compras list component:', data);
+    this.data = data;
+    if (data) {
+      this.processData();
+    }
+  }
+}
