@@ -222,6 +222,9 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Logout the user
   async logout(): Promise<void> {
+    // Close all tabs first
+    this.tabsService.removeAllTabs();
+    
     await this.authService.logout();
     // Router navigation is handled in the authService
   }

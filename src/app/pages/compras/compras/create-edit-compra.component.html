@@ -42,7 +42,7 @@
 
             <mat-form-field appearance="outline">
               <mat-label>Estado</mat-label>
-              <input matInput [value]="getEstadoLabel(compraForm.get('estado')?.value)" readonly>
+              <input matInput [value]="estadoLabel" readonly>
               <!-- Hidden select to maintain the form control -->
               <select formControlName="estado" hidden>
                 <option *ngFor="let option of estadoOptions" [value]="option.value">
@@ -88,41 +88,53 @@
           <div class="detalle-form-container">
             <form [formGroup]="detalleForm" (ngSubmit)="addDetalle()" class="detalle-form">
               <div class="detalle-form-row">
-                <mat-form-field appearance="outline">
-                  <mat-label>Tipo</mat-label>
-                  <mat-select formControlName="tipo">
-                    <mat-option value="producto">Producto</mat-option>
-                    <mat-option value="ingrediente">Ingrediente</mat-option>
-                  </mat-select>
+                <mat-form-field appearance="outline" class="search-field">
+                  <mat-label>Buscar Producto o Ingrediente</mat-label>
+                  <input type="text" matInput formControlName="item" [matAutocomplete]="autoItem">
+                  <mat-autocomplete #autoItem="matAutocomplete" [displayWith]="displayItem">
+                    <mat-option *ngFor="let item of filteredItems | async" [value]="item">
+                      {{ item.nombre }} ({{ item.tipo === 'producto' ? 'Producto' : 'Ingrediente' }})
+                    </mat-option>
+                  </mat-autocomplete>
+                  <mat-error *ngIf="detalleForm.get('item')?.hasError('required')">
+                    Debe seleccionar un producto o ingrediente
+                  </mat-error>
                 </mat-form-field>
 
-                <ng-container *ngIf="selectedDetalleType === 'producto'">
-                  <mat-form-field appearance="outline">
-                    <mat-label>Producto</mat-label>
-                    <input type="text" matInput formControlName="producto" [matAutocomplete]="autoProducto">
-                    <mat-autocomplete #autoProducto="matAutocomplete" [displayWith]="displayProducto">
-                      <mat-option *ngFor="let producto of filteredProductos | async" [value]="producto.id">
-                        {{ producto.nombre }}
-                      </mat-option>
-                    </mat-autocomplete>
-                  </mat-form-field>
-                </ng-container>
+                <!-- Show tipo_medida for ingredientes -->
+                <mat-form-field appearance="outline" class="tipo-medida-field" *ngIf="detalleForm.get('item')?.value?.tipo === 'ingrediente'">
+                  <mat-label>Unidad Base</mat-label>
+                  <input matInput [value]="detalleForm.get('item')?.value?.tipo_medida" readonly>
+                </mat-form-field>
 
-                <ng-container *ngIf="selectedDetalleType === 'ingrediente'">
-                  <mat-form-field appearance="outline">
-                    <mat-label>Ingrediente</mat-label>
-                    <input type="text" matInput formControlName="ingrediente" [matAutocomplete]="autoIngrediente">
-                    <mat-autocomplete #autoIngrediente="matAutocomplete" [displayWith]="displayIngrediente">
-                      <mat-option *ngFor="let ingrediente of filteredIngredientes | async" [value]="ingrediente.id">
-                        {{ ingrediente.descripcion }}
-                      </mat-option>
-                    </mat-autocomplete>
-                  </mat-form-field>
-                </ng-container>
+                <!-- Show unit selector for ingredientes -->
+                <mat-form-field appearance="outline" class="unit-selector-field" *ngIf="detalleForm.get('item')?.value?.tipo === 'ingrediente' && availableConversions.length > 0">
+                  <mat-label>Unidad</mat-label>
+                  <mat-select [formControl]="detalleForm.get('selectedUnit')" required>
+                    <mat-option *ngFor="let unit of getCompatibleUnits(detalleForm.get('item')?.value?.tipo_medida)" [value]="unit">
+                      {{ unit }}
+                    </mat-option>
+                  </mat-select>
+                  <mat-hint>Unidad de medida para la conversión</mat-hint>
+                </mat-form-field>
+
+                <!-- Show presentacion selector for productos -->
+                <mat-form-field appearance="outline" class="presentacion-field" *ngIf="detalleForm.get('item')?.value?.tipo === 'producto'">
+                  <mat-label>Presentación</mat-label>
+                  <input type="text" matInput formControlName="presentacion" [matAutocomplete]="autoPresentacion">
+                  <mat-autocomplete #autoPresentacion="matAutocomplete" [displayWith]="displayPresentacion">
+                    <mat-option *ngFor="let presentacion of filteredPresentaciones | async" [value]="presentacion">
+                      {{ presentacion.descripcion }} ({{ presentacion.cantidad }})
+                    </mat-option>
+                  </mat-autocomplete>
+                </mat-form-field>
 
                 <mat-form-field appearance="outline">
                   <mat-label>Cantidad</mat-label>
                   <input type="number" matInput formControlName="cantidad" min="0.01" step="0.01">
+                  <mat-hint *ngIf="detalleForm.get('item')?.value?.tipo === 'ingrediente'">
+                    En {{ detalleForm.get('selectedUnit')?.value || detalleForm.get('item')?.value?.tipo_medida }}
+                  </mat-hint>
                   <mat-error *ngIf="detalleForm.get('cantidad')?.hasError('required')">
                     La cantidad es requerida
                   </mat-error>
@@ -131,16 +143,26 @@
                   </mat-error>
                 </mat-form-field>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Valor Unitario</mat-label>
-                  <input type="number" matInput formControlName="valor" min="0" step="0.01">
-                  <mat-error *ngIf="detalleForm.get('valor')?.hasError('required')">
-                    El valor es requerido
-                  </mat-error>
-                  <mat-error *ngIf="detalleForm.get('valor')?.hasError('min')">
-                    El valor debe ser mayor o igual a 0
-                  </mat-error>
-                </mat-form-field>
+                <!-- Replace valor field with CurrencyInputComponent -->
+                <app-currency-input
+                  formControlName="valor"
+                  label="Valor Unitario"
+                  [moneda]="compraForm.get('moneda')?.value ? getMonedaById(compraForm.get('moneda')?.value) : null"
+                  [required]="true"
+                  [min]="0.01"
+                  [hint]="detalleForm.get('item')?.value?.tipo === 'ingrediente' && detalleForm.get('selectedUnit')?.value ? 'Por ' + detalleForm.get('selectedUnit')?.value.toLowerCase() : ''">
+                </app-currency-input>
+
+                <!-- Remove Valor convertido field -->
+
+                <!-- Replace total field with CurrencyInputComponent -->
+                <app-currency-input
+                  [formControl]="totalControl"
+                  label="Total Final"
+                  [moneda]="compraForm.get('moneda')?.value ? getMonedaById(compraForm.get('moneda')?.value) : null"
+                  [disabled]="true"
+                  [hint]="detalleForm.get('item')?.value?.tipo === 'ingrediente' && detalleForm.get('selectedUnit')?.value ? detalleForm.get('cantidad')?.value + ' × ' + detalleForm.get('valor')?.value : ''">
+                </app-currency-input>
 
                 <button mat-raised-button color="primary" type="submit" class="add-button">
                   <mat-icon>add</mat-icon> Agregar
@@ -151,45 +173,51 @@
 
           <!-- Table for detalles -->
           <div class="table-container">
-            <table mat-table [dataSource]="detalles.controls" class="detalles-table">
+            <table mat-table [dataSource]="detallesWithComputedValues" class="detalles-table">
               <!-- Item Column -->
               <ng-container matColumnDef="item">
                 <th mat-header-cell *matHeaderCellDef>Item</th>
-                <td mat-cell *matCellDef="let detalle">{{ getItemName(detalle.value) }}</td>
+                <td mat-cell *matCellDef="let row">{{ row.computedValues.itemName }}</td>
               </ng-container>
 
               <!-- Tipo Column -->
               <ng-container matColumnDef="tipo">
                 <th mat-header-cell *matHeaderCellDef>Tipo</th>
-                <td mat-cell *matCellDef="let detalle">
-                  {{ detalle.value.tipo === 'producto' ? 'Producto' : 'Ingrediente' }}
+                <td mat-cell *matCellDef="let row">
+                  {{ row.control.value.tipo === 'producto' ? 'Producto' : 'Ingrediente' }}
                 </td>
               </ng-container>
 
               <!-- Cantidad Column -->
               <ng-container matColumnDef="cantidad">
                 <th mat-header-cell *matHeaderCellDef>Cantidad</th>
-                <td mat-cell *matCellDef="let detalle">{{ detalle.value.cantidad }}</td>
+                <td mat-cell *matCellDef="let row">{{ row.control.value.cantidad }}</td>
               </ng-container>
 
               <!-- Valor Column -->
               <ng-container matColumnDef="valor">
                 <th mat-header-cell *matHeaderCellDef>Valor Unitario</th>
-                <td mat-cell *matCellDef="let detalle">{{ detalle.value.valor | number:'1.2-2' }}</td>
+                <td mat-cell *matCellDef="let row">
+                  {{ row.control.value.valor | number:'1.2-2' }}
+                  <span class="unit-conversion" *ngIf="row.control.value.unidadMedida" [matTooltip]="row.control.value.unidadMedida">
+                    {{ row.control.value.tipo_medida }}
+                    <mat-icon class="conversion-icon">swap_horiz</mat-icon>
+                  </span>
+                </td>
               </ng-container>
 
               <!-- Subtotal Column -->
               <ng-container matColumnDef="subtotal">
                 <th mat-header-cell *matHeaderCellDef>Subtotal</th>
-                <td mat-cell *matCellDef="let detalle">
-                  {{ getDetalleSubtotal(detalle.value) | number:'1.2-2' }}
+                <td mat-cell *matCellDef="let row">
+                  {{ row.computedValues.subtotal | number:'1.2-2' }}
                 </td>
               </ng-container>
 
               <!-- Actions Column -->
               <ng-container matColumnDef="acciones">
                 <th mat-header-cell *matHeaderCellDef>Acciones</th>
-                <td mat-cell *matCellDef="let detalle; let i = index">
+                <td mat-cell *matCellDef="let row; let i = index">
                   <button mat-icon-button color="warn" (click)="removeDetalle(i)" matTooltip="Eliminar" [disabled]="!detallesActionsEnabled">
                     <mat-icon>delete</mat-icon>
                   </button>
@@ -206,12 +234,12 @@
                 </td>
               </tr>
             </table>
-          </div>
 
-          <!-- Total -->
-          <div class="total-container">
-            <span class="total-label">Total:</span>
-            <span class="total-value">{{ compraForm.get('total')?.value | number:'1.2-2' }}</span>
+            <!-- Update total container to use currency formatting -->
+            <div class="total-container">
+              <span class="total-label">Total:</span>
+              <span class="total-value">{{ compraForm.get('total')?.value | number:'1.2-2' }}</span>
+            </div>
           </div>
         </div>
       </form>

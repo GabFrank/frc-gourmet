@@ -53,6 +53,7 @@ const compra_entity_1 = require("./src/app/database/entities/compras/compra.enti
 const compra_detalle_entity_1 = require("./src/app/database/entities/compras/compra-detalle.entity");
 const pago_entity_1 = require("./src/app/database/entities/compras/pago.entity");
 const pago_detalle_entity_1 = require("./src/app/database/entities/compras/pago-detalle.entity");
+const proveedor_producto_entity_1 = require("./src/app/database/entities/compras/proveedor-producto.entity");
 let win;
 let dbService;
 // JWT Secret for token generation
@@ -4120,4 +4121,103 @@ ipcMain.handle('deletePagoDetalle', async (_event, detalleId) => {
         throw error;
     }
 });
+// ============== PROVEEDOR PRODUCTO APIS ==============
+// Get all provider products for a provider
+ipcMain.handle('getProveedorProductos', async (_event, proveedorId) => {
+    try {
+        const proveedorProductoRepository = dbService.getDataSource().getRepository(proveedor_producto_entity_1.ProveedorProducto);
+        const proveedorProductos = await proveedorProductoRepository.find({
+            where: { proveedor: { id: proveedorId }, activo: true },
+            relations: ['producto', 'ingrediente', 'compra']
+        });
+        return proveedorProductos;
+    }
+    catch (error) {
+        console.error('Error fetching proveedor productos:', error);
+        throw error;
+    }
+});
+// Get a single provider product by ID
+ipcMain.handle('getProveedorProducto', async (_event, proveedorProductoId) => {
+    try {
+        const proveedorProductoRepository = dbService.getDataSource().getRepository(proveedor_producto_entity_1.ProveedorProducto);
+        const proveedorProducto = await proveedorProductoRepository.findOne({
+            where: { id: proveedorProductoId },
+            relations: ['producto', 'ingrediente', 'compra', 'proveedor']
+        });
+        if (!proveedorProducto) {
+            throw new Error(`ProveedorProducto with id ${proveedorProductoId} not found`);
+        }
+        return proveedorProducto;
+    }
+    catch (error) {
+        console.error('Error fetching proveedor producto:', error);
+        throw error;
+    }
+});
+// Create a new provider product
+ipcMain.handle('createProveedorProducto', async (_event, proveedorProductoData) => {
+    try {
+        // Set usuarioCreacion if currentUser is available
+        if (currentUser) {
+            await setEntityUserTracking(proveedorProductoData, currentUser.id, false);
+        }
+        const proveedorProductoRepository = dbService.getDataSource().getRepository(proveedor_producto_entity_1.ProveedorProducto);
+        const proveedorProducto = proveedorProductoRepository.create(proveedorProductoData);
+        const savedProveedorProducto = await proveedorProductoRepository.save(proveedorProducto);
+        return savedProveedorProducto;
+    }
+    catch (error) {
+        console.error('Error creating proveedor producto:', error);
+        throw error;
+    }
+});
+// Update an existing provider product
+ipcMain.handle('updateProveedorProducto', async (_event, proveedorProductoId, proveedorProductoData) => {
+    try {
+        const proveedorProductoRepository = dbService.getDataSource().getRepository(proveedor_producto_entity_1.ProveedorProducto);
+        const proveedorProducto = await proveedorProductoRepository.findOne({
+            where: { id: proveedorProductoId }
+        });
+        if (!proveedorProducto) {
+            throw new Error(`ProveedorProducto with id ${proveedorProductoId} not found`);
+        }
+        // Set usuarioActualizacion if currentUser is available
+        if (currentUser) {
+            await setEntityUserTracking(proveedorProductoData, currentUser.id, true);
+        }
+        const updatedProveedorProducto = await proveedorProductoRepository.save({
+            ...proveedorProducto,
+            ...proveedorProductoData,
+            id: proveedorProductoId
+        });
+        return updatedProveedorProducto;
+    }
+    catch (error) {
+        console.error('Error updating proveedor producto:', error);
+        throw error;
+    }
+});
+// Delete a provider product
+ipcMain.handle('deleteProveedorProducto', async (_event, proveedorProductoId) => {
+    try {
+        const proveedorProductoRepository = dbService.getDataSource().getRepository(proveedor_producto_entity_1.ProveedorProducto);
+        const proveedorProducto = await proveedorProductoRepository.findOne({
+            where: { id: proveedorProductoId }
+        });
+        if (!proveedorProducto) {
+            throw new Error(`ProveedorProducto with id ${proveedorProductoId} not found`);
+        }
+        // Use soft delete by setting activo to false
+        proveedorProducto.activo = false;
+        await proveedorProductoRepository.save(proveedorProducto);
+        return { success: true };
+    }
+    catch (error) {
+        console.error('Error deleting proveedor producto:', error);
+        throw error;
+    }
+});
+// ============== COMPRA APIS ==============
+// ... existing code ...
 //# sourceMappingURL=main.js.map

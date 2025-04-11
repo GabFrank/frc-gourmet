@@ -1,6 +1,6 @@
 import { Component, Input, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, FormArray, Validators, ReactiveFormsModule } from '@angular/forms';
+import { FormBuilder, FormGroup, FormArray, Validators, ReactiveFormsModule, FormControl } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -26,7 +26,19 @@ import { Producto } from '../../../database/entities';
 import { Ingrediente } from '../../../database/entities';
 import { Presentacion } from '../../../database/entities';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
-import { Observable, firstValueFrom, map, startWith } from 'rxjs';
+import { Observable, firstValueFrom, map, startWith, of } from 'rxjs';
+import { UnitConversionService, UnitConversion } from '../../../services/unit-conversion.service';
+import { CurrencyInputComponent } from '../../../shared/components/currency-input/currency-input.component';
+
+// Add interface for combined search results
+interface SearchItem {
+  id: number;
+  nombre: string;
+  tipo: 'producto' | 'ingrediente';
+  original: Producto | Ingrediente;
+  tipo_medida?: string; // For ingredientes
+  presentaciones?: Presentacion[]; // For productos
+}
 
 @Component({
   selector: 'app-create-edit-compra',
@@ -50,7 +62,8 @@ import { Observable, firstValueFrom, map, startWith } from 'rxjs';
     MatTabsModule,
     MatTooltipModule,
     MatAutocompleteModule,
-    ConfirmationDialogComponent
+    ConfirmationDialogComponent,
+    CurrencyInputComponent
   ],
   templateUrl: './create-edit-compra.component.html',
   styleUrls: ['./create-edit-compra.component.scss']
@@ -73,8 +86,8 @@ export class CreateEditCompraComponent implements OnInit {
   presentaciones: Presentacion[] = [];
 
   // Filter for autocomplete
-  filteredProductos: Observable<Producto[]>;
-  filteredIngredientes: Observable<Ingrediente[]>;
+  filteredItems: Observable<SearchItem[]>;
+  searchItems: SearchItem[] = [];
 
   // Add these properties for autocomplete
   filteredProveedores: Observable<Proveedor[]>;
@@ -97,12 +110,78 @@ export class CreateEditCompraComponent implements OnInit {
   // New properties for form state management
   detallesActionsEnabled = true;
 
+  // Add properties for presentacion handling
+  selectedPresentacion: Presentacion | null = null;
+  filteredPresentaciones: Observable<Presentacion[]>;
+
+  // Add new properties for unit conversion
+  availableConversions: UnitConversion[] = [
+    { from: 'GRAMO', to: 'KILOGRAMO', factor: 0.001, displayLabel: 'kg' },
+    { from: 'KILOGRAMO', to: 'GRAMO', factor: 1000, displayLabel: 'g' },
+    { from: 'LITRO', to: 'MILILITRO', factor: 1000, displayLabel: 'ml' },
+    { from: 'MILILITRO', to: 'LITRO', factor: 0.001, displayLabel: 'L' }
+  ];
+  selectedUnit: string | null = null;
+  convertedValue = 0;
+  baseValue = 0;
+  convertedQuantity = 0;
+
+  // Computed property for estado label
+  get estadoLabel(): string {
+    const estado = this.compraForm.get('estado')?.value;
+    const option = this.estadoOptions.find(opt => opt.value === estado);
+    return option ? option.label : '';
+  }
+
+  // Add map for detalle values to avoid function calls in template
+  private detalleValuesMap = new Map<string, {
+    itemName: string;
+    subtotal: number;
+  }>();
+
+  // Update the detalles getter to compute values
+  get detallesWithComputedValues() {
+    return this.detalles.controls.map(control => {
+      const value = control.value;
+      const key = `${value.tipo}-${value[value.tipo === 'producto' ? 'producto' : 'ingrediente']}-${value.cantidad}-${value.valor}`;
+      
+      if (!this.detalleValuesMap.has(key)) {
+        this.detalleValuesMap.set(key, {
+          itemName: this.computeItemName(value),
+          subtotal: value.cantidad * value.valor
+        });
+      }
+      
+      return {
+        control,
+        computedValues: this.detalleValuesMap.get(key)!
+      };
+    });
+  }
+
+  // Private method to compute item name
+  private computeItemName(detalle: any): string {
+    if (detalle.tipo === 'producto') {
+      const producto = this.getProductoById(detalle.producto);
+      return producto ? producto.nombre : '';
+    } else {
+      const ingrediente = this.getIngredienteById(detalle.ingrediente);
+      return ingrediente ? ingrediente.descripcion : '';
+    }
+  }
+
+  // Clear the cache when detalles change
+  private clearDetalleValuesCache(): void {
+    this.detalleValuesMap.clear();
+  }
+
   constructor(
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
-    private tabsService: TabsService
+    private tabsService: TabsService,
+    private unitConversionService: UnitConversionService
   ) {
     // Initialize forms
     this.compraForm = this.fb.group({
@@ -116,26 +195,67 @@ export class CreateEditCompraComponent implements OnInit {
     });
 
     this.detalleForm = this.fb.group({
-      tipo: ['producto', Validators.required],
-      producto: [null],
-      ingrediente: [null],
+      item: [null, Validators.required],
+      presentacion: [null],
       cantidad: [1, [Validators.required, Validators.min(0.01)]],
-      valor: [0, [Validators.required, Validators.min(0)]]
+      valor: [0, [Validators.required, Validators.min(0)]],
+      selectedUnit: [null],
+      convertedValue: [{ value: 0, disabled: true }],
+      convertedQuantity: [{ value: 0, disabled: true }],
+      total: [{ value: 0, disabled: true }]
     });
 
     // Initialize detallesActionsEnabled based on default estado (ABIERTO)
     this.detallesActionsEnabled = true;
 
-    // Setup autocomplete filters for productos and ingredientes
-    this.filteredProductos = this.detalleForm.get('producto')!.valueChanges.pipe(
+    // Setup autocomplete filter for combined items
+    this.filteredItems = this.detalleForm.get('item')!.valueChanges.pipe(
       startWith(''),
-      map(value => this._filterProductos(value || ''))
+      map(value => this._filterItems(value || ''))
     );
 
-    this.filteredIngredientes = this.detalleForm.get('ingrediente')!.valueChanges.pipe(
-      startWith(''),
-      map(value => this._filterIngredientes(value || ''))
-    );
+    // Subscribe to item changes to handle unit conversions
+    this.detalleForm.get('item')?.valueChanges.subscribe((selectedItem: SearchItem | null) => {
+      if (selectedItem) {
+        if (selectedItem.tipo === 'producto') {
+          this.detalleForm.get('presentacion')?.enable();
+          this.detalleForm.get('selectedUnit')?.disable();
+          this.detalleForm.get('selectedUnit')?.setValue(null);
+          this.availableConversions = [];
+          // Load presentaciones for the selected producto
+          this.loadPresentacionesForProducto(selectedItem.id);
+        } else {
+          this.detalleForm.get('presentacion')?.disable();
+          this.detalleForm.get('presentacion')?.setValue(null);
+          this.detalleForm.get('selectedUnit')?.enable();
+          // Load available conversions for the ingredient's unit type
+          this.availableConversions = this.unitConversionService.getAvailableConversions(selectedItem.tipo_medida || '');
+          // Set default unit to ingredient's base unit
+          this.detalleForm.get('selectedUnit')?.setValue(selectedItem.tipo_medida);
+        }
+      } else {
+        this.detalleForm.get('presentacion')?.disable();
+        this.detalleForm.get('selectedUnit')?.disable();
+        this.availableConversions = [];
+      }
+    });
+
+    // Subscribe to quantity changes to update conversions and total
+    this.detalleForm.get('cantidad')?.valueChanges.subscribe(() => {
+      this.updateConvertedValues();
+      this.updateTotal();
+    });
+
+    // Subscribe to value changes to update conversions and total
+    this.detalleForm.get('valor')?.valueChanges.subscribe(() => {
+      this.updateConvertedValues();
+      this.updateTotal();
+    });
+
+    // Subscribe to unit changes to update conversions
+    this.detalleForm.get('selectedUnit')?.valueChanges.subscribe(() => {
+      this.updateConvertedValues();
+    });
 
     // Setup autocomplete filters for proveedores and monedas
     this.filteredProveedores = this.compraForm.get('proveedor')!.valueChanges.pipe(
@@ -147,6 +267,12 @@ export class CreateEditCompraComponent implements OnInit {
       startWith(''),
       map(value => this._filterMonedas(value || ''))
     );
+
+    // Setup autocomplete filter for presentaciones
+    this.filteredPresentaciones = this.detalleForm.get('presentacion')!.valueChanges.pipe(
+      startWith(''),
+      map(value => this._filterPresentaciones(value || ''))
+    );
   }
 
   async ngOnInit(): Promise<void> {
@@ -157,27 +283,15 @@ export class CreateEditCompraComponent implements OnInit {
     await this.loadIngredientes();
     await this.loadPresentaciones();
 
+    // Combine productos and ingredientes into searchItems
+    this.updateSearchItems();
+
     // Check if we're editing an existing compra
     if (this.data && this.data.compra) {
       this.compra = this.data.compra;
       this.isEditing = true;
       await this.loadCompraDetails();
     }
-
-    // Form value changes for detalle type
-    this.detalleForm.get('tipo')?.valueChanges.subscribe(tipo => {
-      this.selectedDetalleType = tipo;
-
-      // Clear the other selection fields
-      if (tipo === 'producto') {
-        this.detalleForm.get('ingrediente')?.setValue(null);
-      } else if (tipo === 'ingrediente') {
-        this.detalleForm.get('producto')?.setValue(null);
-      }
-    });
-
-    // Initialize detalle type
-    this.selectedDetalleType = 'producto';
 
     // Set initial state of detalle form controls based on editability
     this.updateDetalleFormState();
@@ -210,6 +324,7 @@ export class CreateEditCompraComponent implements OnInit {
   async loadProductos(): Promise<void> {
     try {
       this.productos = await firstValueFrom(this.repositoryService.getProductos());
+      this.updateSearchItems();
     } catch (error: any) {
       console.error('Error loading productos:', error);
       this.showError('Error al cargar productos: ' + error.message);
@@ -219,6 +334,7 @@ export class CreateEditCompraComponent implements OnInit {
   async loadIngredientes(): Promise<void> {
     try {
       this.ingredientes = await firstValueFrom(this.repositoryService.getIngredientes());
+      this.updateSearchItems();
     } catch (error: any) {
       console.error('Error loading ingredientes:', error);
       this.showError('Error al cargar ingredientes: ' + error.message);
@@ -389,9 +505,9 @@ export class CreateEditCompraComponent implements OnInit {
 
   // Helper method to reset and focus the detalle form
   private resetAndFocusDetalleForm(): void {
-    // Reset the detalle form
     this.detalleForm.reset({
-      tipo: 'producto',
+      item: null,
+      presentacion: null,
       cantidad: 1,
       valor: 0
     });
@@ -399,7 +515,7 @@ export class CreateEditCompraComponent implements OnInit {
     // Focus on the first field of the detalle form
     setTimeout(() => {
       try {
-        const firstInput = document.querySelector('.detalle-form-container input, .detalle-form-container select');
+        const firstInput = document.querySelector('.detalle-form-container input');
         if (firstInput instanceof HTMLElement) {
           firstInput.focus();
         }
@@ -410,31 +526,15 @@ export class CreateEditCompraComponent implements OnInit {
   }
 
   // Helper to create a detalle form group
-  createDetalleFormGroup(detalle?: CompraDetalle): FormGroup {
+  createDetalleFormGroup(data: any = {}) {
     return this.fb.group({
-      id: [detalle?.id || null],
-      tipo: [this.getDetalleType(detalle), Validators.required],
-      producto: [detalle?.producto?.id || null],
-      productoObj: [detalle?.producto || null],
-      ingrediente: [detalle?.ingrediente?.id || null],
-      ingredienteObj: [detalle?.ingrediente || null],
-      presentacion: [detalle?.presentacion?.id || null],
-      presentacionObj: [detalle?.presentacion || null],
-      cantidad: [detalle?.cantidad || 1, [Validators.required, Validators.min(0.01)]],
-      valor: [detalle?.valor || 0, [Validators.required, Validators.min(0)]],
-      subtotal: [detalle ? detalle.cantidad * detalle.valor : 0]
+      item: [data.item || null, Validators.required],
+      cantidad: [data.cantidad || null, [Validators.required, Validators.min(0)]],
+      valor: [data.valor || null, [Validators.required, Validators.min(0)]],
+      tipo_medida: [data.tipo_medida || null],
+      unidadMedida: [data.unidadMedida || null],
+      selectedUnit: new FormControl<string>(data.selectedUnit || '')
     });
-  }
-
-  // Determine the type of detalle (producto, ingrediente, presentacion)
-  getDetalleType(detalle?: CompraDetalle): 'producto' | 'ingrediente' {
-    if (!detalle) return 'producto';
-
-    if (detalle.producto) return 'producto';
-    if (detalle.ingrediente) return 'ingrediente';
-
-    // Default to producto
-    return 'producto';
   }
 
   // Get the subtotal for a detalle
@@ -444,45 +544,49 @@ export class CreateEditCompraComponent implements OnInit {
 
   // Add a new detalle to the compra
   addDetalle(): void {
-    // First check if detalle actions are enabled
-    if (!this.detallesActionsEnabled) {
-      return;
-    }
-
     if (this.detalleForm.invalid) {
       this.markFormGroupTouched(this.detalleForm);
-      this.showError('Por favor complete todos los campos del detalle.');
       return;
     }
 
-    const formData = this.detalleForm.value;
+    const formValue = this.detalleForm.value;
+    const selectedItem = formValue.item as SearchItem;
 
-    // Create a new detalle form group
-    const detalleGroup = this.fb.group({
-      tipo: [formData.tipo, Validators.required],
-      producto: [formData.tipo === 'producto' ? formData.producto : null],
-      productoObj: [formData.tipo === 'producto' ? this.getProductoById(formData.producto) : null],
-      ingrediente: [formData.tipo === 'ingrediente' ? formData.ingrediente : null],
-      ingredienteObj: [formData.tipo === 'ingrediente' ? this.getIngredienteById(formData.ingrediente) : null],
-      presentacion: [null],
-      presentacionObj: [null],
-      cantidad: [formData.cantidad, [Validators.required, Validators.min(0.01)]],
-      valor: [formData.valor, [Validators.required, Validators.min(0)]],
-      subtotal: [formData.cantidad * formData.valor]
+    if (!selectedItem) {
+      this.showError('Por favor seleccione un producto o ingrediente');
+      return;
+    }
+
+    let valor = formValue.valor;
+    let cantidad = formValue.cantidad;
+    let unidadMedida = selectedItem.tipo_medida;
+    let tipo_medida = selectedItem.tipo_medida;
+
+    // For ingredients, use the converted values and show the conversion in a tooltip
+    if (selectedItem.tipo === 'ingrediente') {
+      valor = this.baseValue; // This is already converted to the base unit
+      cantidad = this.convertedQuantity; // Use the converted quantity
+      const selectedUnit = this.detalleForm.get('selectedUnit')?.value;
+      if (selectedUnit !== selectedItem.tipo_medida) {
+        unidadMedida = `${selectedItem.tipo_medida} (${formValue.cantidad} ${selectedUnit} = ${this.convertedQuantity.toFixed(2)} ${selectedItem.tipo_medida})`;
+        tipo_medida = selectedUnit; // Store the selected unit type
+      }
+    }
+
+    const detalleGroup = this.createDetalleFormGroup({
+      tipo: selectedItem.tipo,
+      [selectedItem.tipo === 'producto' ? 'producto' : 'ingrediente']: selectedItem.id,
+      presentacion: formValue.presentacion?.id,
+      cantidad: cantidad,
+      valor: valor,
+      unidadMedida: unidadMedida,
+      tipo_medida: tipo_medida
     });
 
-    // Add to the form array
     this.detalles.push(detalleGroup);
-
-    // Reset the detalle form
-    this.detalleForm.reset({
-      tipo: formData.tipo,
-      cantidad: 1,
-      valor: 0
-    });
-
-    // Recalculate total
     this.recalculateTotal();
+    this.resetAndFocusDetalleForm();
+    this.clearDetalleValuesCache();
   }
 
   // Remove a detalle from the compra
@@ -494,6 +598,7 @@ export class CreateEditCompraComponent implements OnInit {
 
     this.detalles.removeAt(index);
     this.recalculateTotal();
+    this.clearDetalleValuesCache();
   }
 
   // Recalculate the total based on detalles
@@ -515,28 +620,21 @@ export class CreateEditCompraComponent implements OnInit {
 
   // Get items of the appropriate type for each detalle
   getItemName(detalle: any): string {
-    if (detalle.tipo === 'producto' && detalle.productoObj) {
-      return detalle.productoObj.nombre;
-    } else if (detalle.tipo === 'ingrediente' && detalle.ingredienteObj) {
-      // Access nombre property, which might be custom-added to the object
-      return detalle.ingredienteObj.nombre;
-    } else if (detalle.presentacionObj) {
-      // Access nombre property, which might be custom-added to the object
-      return detalle.presentacionObj.nombre;
+    if (detalle.tipo === 'producto') {
+      const producto = this.getProductoById(detalle.producto);
+      return producto ? producto.nombre : '';
+    } else {
+      const ingrediente = this.getIngredienteById(detalle.ingrediente);
+      return ingrediente ? ingrediente.descripcion : '';
     }
-    return 'Sin nombre';
   }
 
   // Filter functions for autocomplete
-  private _filterProductos(value: string | Producto): Producto[] {
-    const filterValue = typeof value === 'string' ? value.toLowerCase() : value.nombre.toLowerCase();
-    return this.productos.filter(producto => producto.nombre.toLowerCase().includes(filterValue));
-  }
-
-  private _filterIngredientes(value: string | Ingrediente): Ingrediente[] {
-    // Access the nombre property safely using any type assertion
-    const filterValue = typeof value === 'string' ? value.toLowerCase() : (value as any).nombre.toLowerCase();
-    return this.ingredientes.filter(ingrediente => (ingrediente as any).nombre.toLowerCase().includes(filterValue));
+  private _filterItems(value: string | SearchItem): SearchItem[] {
+    const searchTerm = typeof value === 'string' ? value.toLowerCase() : '';
+    return this.searchItems.filter(item =>
+      item.nombre.toLowerCase().includes(searchTerm)
+    );
   }
 
   // Helper to get a Producto by ID
@@ -549,14 +647,10 @@ export class CreateEditCompraComponent implements OnInit {
     return this.ingredientes.find(i => i.id === id) || null;
   }
 
-  // Display functions for autocomplete
-  displayProducto(producto: Producto): string {
-    return producto ? producto.nombre : '';
-  }
-
-  displayIngrediente(ingrediente: Ingrediente): string {
-    // Access the nombre property safely
-    return ingrediente ? (ingrediente as any).nombre : '';
+  // Display function for autocomplete
+  displayItem = (item: SearchItem | null): string => {
+    if (!item) return '';
+    return `${item.nombre} (${item.tipo === 'producto' ? 'Producto' : 'Ingrediente'})`;
   }
 
   // Helper to show success messages
@@ -701,5 +795,123 @@ export class CreateEditCompraComponent implements OnInit {
 
     // Also disable delete buttons in the detalles table by using flag
     this.detallesActionsEnabled = false;
+  }
+
+  // Update search items when productos or ingredientes change
+  private updateSearchItems(): void {
+    this.searchItems = [
+      ...this.productos.map(p => ({
+        id: p.id,
+        nombre: p.nombre,
+        tipo: 'producto' as const,
+        original: p,
+        presentaciones: this.presentaciones.filter(pres => pres.productoId === p.id)
+      })),
+      ...this.ingredientes.map(i => ({
+        id: i.id,
+        nombre: i.descripcion,
+        tipo: 'ingrediente' as const,
+        original: i,
+        tipo_medida: i.tipoMedida
+      }))
+    ];
+  }
+
+  // Add method to load presentaciones for a producto
+  private async loadPresentacionesForProducto(productoId: number): Promise<void> {
+    try {
+      // TODO: Replace with actual API call when available
+      this.presentaciones = [
+        { 
+          id: 1, 
+          descripcion: 'Presentación 1', 
+          cantidad: 10,
+          unidadMedida: 'unidades',
+          activo: true 
+        } as unknown as Presentacion,
+        { 
+          id: 2, 
+          descripcion: 'Presentación 2', 
+          cantidad: 20,
+          unidadMedida: 'unidades',
+          activo: true 
+        } as unknown as Presentacion
+      ];
+    } catch (error) {
+      console.error('Error loading presentaciones:', error);
+      this.showError('Error al cargar presentaciones');
+    }
+  }
+
+  // Add filter method for presentaciones
+  private _filterPresentaciones(value: string | Presentacion): Presentacion[] {
+    const filterValue = typeof value === 'string' ? value.toLowerCase() : '';
+    return this.presentaciones.filter(p => 
+      p?.descripcion?.toLowerCase().includes(filterValue)
+    );
+  }
+
+  // Add display method for presentaciones
+  displayPresentacion = (presentacion: Presentacion | null): string => {
+    if (!presentacion) return '';
+    return `${presentacion.descripcion} (${presentacion.cantidad})`;
+  }
+
+  // Update the method to handle both quantity and price conversions
+  private updateConvertedValues(): void {
+    const selectedItem = this.detalleForm.get('item')?.value as SearchItem;
+    if (!selectedItem || selectedItem.tipo !== 'ingrediente') {
+      return;
+    }
+
+    const baseUnit = selectedItem.tipo_medida;
+    const selectedUnit = this.detalleForm.get('selectedUnit')?.value;
+    const valor = this.detalleForm.get('valor')?.value || 0;
+    const cantidad = this.detalleForm.get('cantidad')?.value || 0;
+
+    if (baseUnit && selectedUnit) {
+      // Convert price from selected unit to base unit
+      const convertedValue = this.unitConversionService.convert(valor, selectedUnit, baseUnit);
+      this.detalleForm.get('convertedValue')?.setValue(convertedValue);
+      this.baseValue = convertedValue;
+
+      // Convert quantity from selected unit to base unit
+      const convertedQuantity = this.unitConversionService.convert(cantidad, selectedUnit, baseUnit);
+      this.detalleForm.get('convertedQuantity')?.setValue(convertedQuantity);
+      this.convertedQuantity = convertedQuantity;
+    }
+  }
+
+  // Add method to calculate total
+  calculateTotal(): number {
+    const selectedItem = this.detalleForm.get('item')?.value as SearchItem;
+    if (!selectedItem) {
+      return 0;
+    }
+
+    const cantidad = this.detalleForm.get('cantidad')?.value || 0;
+    const valor = this.detalleForm.get('valor')?.value || 0;
+
+    return cantidad * valor;
+  }
+
+  // Add method to update total
+  private updateTotal(): void {
+    const cantidad = this.detalleForm.get('cantidad')?.value || 0;
+    const valor = this.detalleForm.get('valor')?.value || 0;
+    const total = cantidad * valor;
+    this.detalleForm.get('total')?.setValue(total, { emitEvent: false });
+  }
+
+  // Add getter for total form control
+  get totalControl(): FormControl {
+    return this.detalleForm.get('total') as FormControl;
+  }
+
+  getCompatibleUnits(baseUnit: string): string[] {
+    if (!baseUnit) return [];
+    
+    const conversions = this.availableConversions.filter(conv => conv.from === baseUnit);
+    return [baseUnit, ...conversions.map(conv => conv.to)];
   }
 }

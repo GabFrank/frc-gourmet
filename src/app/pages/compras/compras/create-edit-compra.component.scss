@@ -65,16 +65,46 @@
     .detalle-form {
       .detalle-form-row {
         display: flex;
-        flex-wrap: wrap;
         gap: 16px;
-        align-items: center;
+        align-items: flex-start;
+
+        .search-field {
+          flex: 2;
+          min-width: 250px;
+        }
+
+        .tipo-medida-field {
+          flex: 1;
+          min-width: 120px;
+        }
+
+        .unit-selector-field {
+          flex: 1;
+          min-width: 150px;
+        }
+
+        .presentacion-field {
+          flex: 1.5;
+          min-width: 200px;
+        }
 
         mat-form-field {
-          flex: 1 1 150px;
+          flex: 1;
+          min-width: 120px;
+
+          &.converted-value-field {
+            background-color: rgba(0, 0, 0, 0.02);
+            border-radius: 4px;
+            
+            ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+              padding: 0 8px;
+            }
+          }
         }
 
         .add-button {
-          margin-top: -16px; // Align with form fields
+          margin-top: 4px;
+          height: 56px; // Match height of form fields
         }
       }
     }
@@ -103,8 +133,23 @@
       }
 
       .mat-column-valor {
-        min-width: 120px;
+        min-width: 150px;
         text-align: right;
+
+        .unit-conversion {
+          margin-left: 8px;
+          font-size: 12px;
+          color: rgba(0, 0, 0, 0.6);
+          display: inline-flex;
+          align-items: center;
+          
+          .conversion-icon {
+            font-size: 16px;
+            height: 16px;
+            width: 16px;
+            margin-left: 4px;
+          }
+        }
       }
 
       .mat-column-subtotal {
@@ -139,6 +184,30 @@
       font-weight: 700;
     }
   }
+
+  // Form fields
+  .converted-value-field {
+    background-color: rgba(0, 0, 0, 0.02);
+    border-radius: 4px;
+    padding: 0 8px;
+    margin-top: 8px;
+
+    ::ng-deep {
+      .mat-mdc-form-field-subscript-wrapper {
+        padding: 0 8px;
+      }
+
+      .mat-mdc-form-field-hint {
+        font-size: 12px;
+        font-family: monospace;
+      }
+    }
+
+    input {
+      color: rgba(0, 0, 0, 0.87);
+      font-weight: 500;
+    }
+  }
 }
 
 // Dark theme adjustments
@@ -156,6 +225,20 @@
 
     .total-container {
       background-color: rgba(255, 255, 255, 0.07);
+    }
+
+    .detalles-table {
+      .unit-conversion {
+        color: rgba(255, 255, 255, 0.6);
+      }
+    }
+
+    .converted-value-field {
+      background-color: rgba(255, 255, 255, 0.05);
+
+      input {
+        color: rgba(255, 255, 255, 0.87);
+      }
     }
   }
 }

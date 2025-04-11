@@ -20,6 +20,9 @@ export class CompraDetalle extends BaseModel {
   @Column({ default: true })
   activo!: boolean;
 
+  @Column({ nullable: true })
+  tipo_medida?: string;
+
   // Relationships - Use string reference to avoid circular dependency
   @ManyToOne('Compra', 'detalles', {
     createForeignKeyConstraints: false

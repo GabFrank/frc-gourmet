@@ -4586,7 +4586,7 @@ ipcMain.handle('deletePagoDetalle', async (_event: any, detalleId: number) => {
 // Get all provider products for a provider
 ipcMain.handle('getProveedorProductos', async (_event: any, proveedorId: number) => {
   try {
-    const proveedorProductoRepository = dbService.getRepository(ProveedorProducto);
+    const proveedorProductoRepository = dbService.getDataSource().getRepository(ProveedorProducto);
     const proveedorProductos = await proveedorProductoRepository.find({
       where: { proveedor: { id: proveedorId }, activo: true },
       relations: ['producto', 'ingrediente', 'compra']
@@ -4601,7 +4601,7 @@ ipcMain.handle('getProveedorProductos', async (_event: any, proveedorId: number)
 // Get a single provider product by ID
 ipcMain.handle('getProveedorProducto', async (_event: any, proveedorProductoId: number) => {
   try {
-    const proveedorProductoRepository = dbService.getRepository(ProveedorProducto);
+    const proveedorProductoRepository = dbService.getDataSource().getRepository(ProveedorProducto);
     const proveedorProducto = await proveedorProductoRepository.findOne({
       where: { id: proveedorProductoId },
       relations: ['producto', 'ingrediente', 'compra', 'proveedor']
@@ -4626,7 +4626,7 @@ ipcMain.handle('createProveedorProducto', async (_event: any, proveedorProductoD
       await setEntityUserTracking(proveedorProductoData, currentUser.id, false);
     }
 
-    const proveedorProductoRepository = dbService.getRepository(ProveedorProducto);
+    const proveedorProductoRepository = dbService.getDataSource().getRepository(ProveedorProducto);
     const proveedorProducto = proveedorProductoRepository.create(proveedorProductoData);
     const savedProveedorProducto = await proveedorProductoRepository.save(proveedorProducto);
 
@@ -4640,7 +4640,7 @@ ipcMain.handle('createProveedorProducto', async (_event: any, proveedorProductoD
 // Update an existing provider product
 ipcMain.handle('updateProveedorProducto', async (_event: any, proveedorProductoId: number, proveedorProductoData: any) => {
   try {
-    const proveedorProductoRepository = dbService.getRepository(ProveedorProducto);
+    const proveedorProductoRepository = dbService.getDataSource().getRepository(ProveedorProducto);
     const proveedorProducto = await proveedorProductoRepository.findOne({
       where: { id: proveedorProductoId }
     });
@@ -4670,7 +4670,7 @@ ipcMain.handle('updateProveedorProducto', async (_event: any, proveedorProductoI
 // Delete a provider product
 ipcMain.handle('deleteProveedorProducto', async (_event: any, proveedorProductoId: number) => {
   try {
-    const proveedorProductoRepository = dbService.getRepository(ProveedorProducto);
+    const proveedorProductoRepository = dbService.getDataSource().getRepository(ProveedorProducto);
     const proveedorProducto = await proveedorProductoRepository.findOne({
       where: { id: proveedorProductoId }
     });

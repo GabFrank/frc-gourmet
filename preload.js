@@ -582,6 +582,80 @@ contextBridge.exposeInMainWorld('api', {
     deleteProveedor: async (proveedorId) => {
         return await ipcRenderer.invoke('deleteProveedor', proveedorId);
     },
+    // Compra methods
+    getCompras: async () => {
+        return await ipcRenderer.invoke('getCompras');
+    },
+    getCompra: async (compraId) => {
+        return await ipcRenderer.invoke('getCompra', compraId);
+    },
+    createCompra: async (compraData) => {
+        return await ipcRenderer.invoke('createCompra', compraData);
+    },
+    updateCompra: async (compraId, compraData) => {
+        return await ipcRenderer.invoke('updateCompra', compraId, compraData);
+    },
+    deleteCompra: async (compraId) => {
+        return await ipcRenderer.invoke('deleteCompra', compraId);
+    },
+    // CompraDetalle methods
+    getCompraDetalles: async (compraId) => {
+        return await ipcRenderer.invoke('getCompraDetalles', compraId);
+    },
+    createCompraDetalle: async (detalleData) => {
+        return await ipcRenderer.invoke('createCompraDetalle', detalleData);
+    },
+    updateCompraDetalle: async (detalleId, detalleData) => {
+        return await ipcRenderer.invoke('updateCompraDetalle', detalleId, detalleData);
+    },
+    deleteCompraDetalle: async (detalleId) => {
+        return await ipcRenderer.invoke('deleteCompraDetalle', detalleId);
+    },
+    // Pago methods
+    getPagos: async () => {
+        return await ipcRenderer.invoke('getPagos');
+    },
+    getPago: async (pagoId) => {
+        return await ipcRenderer.invoke('getPago', pagoId);
+    },
+    createPago: async (pagoData) => {
+        return await ipcRenderer.invoke('createPago', pagoData);
+    },
+    updatePago: async (pagoId, pagoData) => {
+        return await ipcRenderer.invoke('updatePago', pagoId, pagoData);
+    },
+    deletePago: async (pagoId) => {
+        return await ipcRenderer.invoke('deletePago', pagoId);
+    },
+    // PagoDetalle methods
+    getPagoDetalles: async (pagoId) => {
+        return await ipcRenderer.invoke('getPagoDetalles', pagoId);
+    },
+    createPagoDetalle: async (detalleData) => {
+        return await ipcRenderer.invoke('createPagoDetalle', detalleData);
+    },
+    updatePagoDetalle: async (detalleId, detalleData) => {
+        return await ipcRenderer.invoke('updatePagoDetalle', detalleId, detalleData);
+    },
+    deletePagoDetalle: async (detalleId) => {
+        return await ipcRenderer.invoke('deletePagoDetalle', detalleId);
+    },
+    // ProveedorProducto methods
+    getProveedorProductos: async (proveedorId) => {
+        return await ipcRenderer.invoke('getProveedorProductos', proveedorId);
+    },
+    getProveedorProducto: async (proveedorProductoId) => {
+        return await ipcRenderer.invoke('getProveedorProducto', proveedorProductoId);
+    },
+    createProveedorProducto: async (proveedorProductoData) => {
+        return await ipcRenderer.invoke('createProveedorProducto', proveedorProductoData);
+    },
+    updateProveedorProducto: async (proveedorProductoId, proveedorProductoData) => {
+        return await ipcRenderer.invoke('updateProveedorProducto', proveedorProductoId, proveedorProductoData);
+    },
+    deleteProveedorProducto: async (proveedorProductoId) => {
+        return await ipcRenderer.invoke('deleteProveedorProducto', proveedorProductoId);
+    },
     // System information
     getSystemMacAddress: () => ipcRenderer.invoke('get-system-mac-address'),
 });
