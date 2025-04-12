@@ -37,6 +37,11 @@ import { Caja, CajaEstado } from './entities/financiero/caja.entity';
 import { CajaMoneda } from './entities/financiero/caja-moneda.entity';
 import { Proveedor } from './entities/compras/proveedor.entity';
 import { Compra } from './entities/compras/compra.entity';
+import { CompraDetalle } from './entities/compras/compra-detalle.entity';
+import { Pago } from './entities/compras/pago.entity';
+import { PagoDetalle } from './entities/compras/pago-detalle.entity';
+import { ProveedorProducto } from './entities/compras/proveedor-producto.entity';
+import { FormasPago } from './entities/compras/forma-pago.entity';
 
 export interface LoginResult {
   success: boolean;
@@ -263,6 +268,38 @@ interface ElectronAPI {
   createCompra: (compraData: Partial<Compra>) => Promise<Compra>;
   updateCompra: (compraId: number, compraData: Partial<Compra>) => Promise<any>;
   deleteCompra: (compraId: number) => Promise<any>;
+  // Add CompraDetalle operations
+  getCompraDetalles: (compraId: number) => Promise<CompraDetalle[]>;
+  getCompraDetalle: (compraDetalleId: number) => Promise<CompraDetalle>;
+  createCompraDetalle: (compraDetalleData: Partial<CompraDetalle>) => Promise<CompraDetalle>;
+  updateCompraDetalle: (compraDetalleId: number, compraDetalleData: Partial<CompraDetalle>) => Promise<any>;
+  deleteCompraDetalle: (compraDetalleId: number) => Promise<any>;
+  // Add Pago operations
+  getPagos: () => Promise<Pago[]>;
+  getPago: (pagoId: number) => Promise<Pago>;
+  getPagosByCompra: (compraId: number) => Promise<Pago[]>;
+  createPago: (pagoData: Partial<Pago>) => Promise<Pago>;
+  updatePago: (pagoId: number, pagoData: Partial<Pago>) => Promise<any>;
+  deletePago: (pagoId: number) => Promise<any>;
+  // Add PagoDetalle operations
+  getPagoDetalles: (pagoId: number) => Promise<PagoDetalle[]>;
+  getPagoDetalle: (pagoDetalleId: number) => Promise<PagoDetalle>;
+  createPagoDetalle: (pagoDetalleData: Partial<PagoDetalle>) => Promise<PagoDetalle>;
+  updatePagoDetalle: (pagoDetalleId: number, pagoDetalleData: Partial<PagoDetalle>) => Promise<any>;
+  deletePagoDetalle: (pagoDetalleId: number) => Promise<any>;
+  // Add ProveedorProducto operations
+  getProveedorProductos: () => Promise<ProveedorProducto[]>;
+  getProveedorProductosByProveedor: (proveedorId: number) => Promise<ProveedorProducto[]>;
+  getProveedorProducto: (proveedorProductoId: number) => Promise<ProveedorProducto>;
+  createProveedorProducto: (proveedorProductoData: Partial<ProveedorProducto>) => Promise<ProveedorProducto>;
+  updateProveedorProducto: (proveedorProductoId: number, proveedorProductoData: Partial<ProveedorProducto>) => Promise<any>;
+  deleteProveedorProducto: (proveedorProductoId: number) => Promise<any>;
+  // Add FormasPago operations
+  getFormasPago: () => Promise<FormasPago[]>;
+  getFormaPago: (formaPagoId: number) => Promise<FormasPago>;
+  createFormaPago: (formaPagoData: Partial<FormasPago>) => Promise<FormasPago>;
+  updateFormaPago: (formaPagoId: number, formaPagoData: Partial<FormasPago>) => Promise<any>;
+  deleteFormaPago: (formaPagoId: number) => Promise<any>;
 }
 
 /**
@@ -1128,5 +1165,118 @@ export class RepositoryService {
 
   deleteCompra(compraId: number): Observable<any> {
     return from(this.api.deleteCompra(compraId));
+  }
+
+  // CompraDetalle methods
+  getCompraDetalles(compraId: number): Observable<CompraDetalle[]> {
+    return from(this.api.getCompraDetalles(compraId));
+  }
+
+  getCompraDetalle(compraDetalleId: number): Observable<CompraDetalle> {
+    return from(this.api.getCompraDetalle(compraDetalleId));
+  }
+
+  createCompraDetalle(compraDetalleData: Partial<CompraDetalle>): Observable<CompraDetalle> {
+    return from(this.api.createCompraDetalle(compraDetalleData));
+  }
+
+  updateCompraDetalle(compraDetalleId: number, compraDetalleData: Partial<CompraDetalle>): Observable<any> {
+    return from(this.api.updateCompraDetalle(compraDetalleId, compraDetalleData));
+  }
+
+  deleteCompraDetalle(compraDetalleId: number): Observable<any> {
+    return from(this.api.deleteCompraDetalle(compraDetalleId));
+  }
+
+  // Pago methods
+  getPagos(): Observable<Pago[]> {
+    return from(this.api.getPagos());
+  }
+
+  getPago(pagoId: number): Observable<Pago> {
+    return from(this.api.getPago(pagoId));
+  }
+
+  getPagosByCompra(compraId: number): Observable<Pago[]> {
+    return from(this.api.getPagosByCompra(compraId));
+  }
+
+  createPago(pagoData: Partial<Pago>): Observable<Pago> {
+    return from(this.api.createPago(pagoData));
+  }
+
+  updatePago(pagoId: number, pagoData: Partial<Pago>): Observable<any> {
+    return from(this.api.updatePago(pagoId, pagoData));
+  }
+
+  deletePago(pagoId: number): Observable<any> {
+    return from(this.api.deletePago(pagoId));
+  }
+
+  // PagoDetalle methods
+  getPagoDetalles(pagoId: number): Observable<PagoDetalle[]> {
+    return from(this.api.getPagoDetalles(pagoId));
+  }
+
+  getPagoDetalle(pagoDetalleId: number): Observable<PagoDetalle> {
+    return from(this.api.getPagoDetalle(pagoDetalleId));
+  }
+
+  createPagoDetalle(pagoDetalleData: Partial<PagoDetalle>): Observable<PagoDetalle> {
+    return from(this.api.createPagoDetalle(pagoDetalleData));
+  }
+
+  updatePagoDetalle(pagoDetalleId: number, pagoDetalleData: Partial<PagoDetalle>): Observable<any> {
+    return from(this.api.updatePagoDetalle(pagoDetalleId, pagoDetalleData));
+  }
+
+  deletePagoDetalle(pagoDetalleId: number): Observable<any> {
+    return from(this.api.deletePagoDetalle(pagoDetalleId));
+  }
+
+  // ProveedorProducto methods
+  getProveedorProductos(): Observable<ProveedorProducto[]> {
+    return from(this.api.getProveedorProductos());
+  }
+
+  getProveedorProductosByProveedor(proveedorId: number): Observable<ProveedorProducto[]> {
+    return from(this.api.getProveedorProductosByProveedor(proveedorId));
+  }
+
+  getProveedorProducto(proveedorProductoId: number): Observable<ProveedorProducto> {
+    return from(this.api.getProveedorProducto(proveedorProductoId));
+  }
+
+  createProveedorProducto(proveedorProductoData: Partial<ProveedorProducto>): Observable<ProveedorProducto> {
+    return from(this.api.createProveedorProducto(proveedorProductoData));
+  }
+
+  updateProveedorProducto(proveedorProductoId: number, proveedorProductoData: Partial<ProveedorProducto>): Observable<any> {
+    return from(this.api.updateProveedorProducto(proveedorProductoId, proveedorProductoData));
+  }
+
+  deleteProveedorProducto(proveedorProductoId: number): Observable<any> {
+    return from(this.api.deleteProveedorProducto(proveedorProductoId));
+  }
+
+  // FormasPago methods
+  getFormasPago(): Observable<FormasPago[]> {
+    return from(this.api.getFormasPago());
+  }
+
+  getFormaPago(formaPagoId: number): Observable<FormasPago> {
+    return from(this.api.getFormaPago(formaPagoId));
+  }
+
+  createFormaPago(formaPagoData: Partial<FormasPago>): Observable<FormasPago> {
+    return from(this.api.createFormaPago(formaPagoData));
+  }
+
+  updateFormaPago(formaPagoId: number, formaPagoData: Partial<FormasPago>): Observable<any> {
+    return from(this.api.updateFormaPago(formaPagoId, formaPagoData));
+  }
+
+  deleteFormaPago(formaPagoId: number): Observable<any> {
+    return from(this.api.deleteFormaPago(formaPagoId));
   }
 }

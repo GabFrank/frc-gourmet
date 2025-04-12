@@ -382,15 +382,31 @@ interface Proveedor {
 // Compra interfaces
 type CompraEstado = 'ABIERTO' | 'PAGADO' | 'CANCELADO';
 
+// Adding FormasPago interface
+interface FormasPago {
+  id?: number;
+  nombre: string;
+  activo: boolean;
+  movimentaCaja: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// Updating Compra interface with new fields
 interface Compra {
   id?: number;
   estado: CompraEstado;
-  total: number;
   isRecepcionMercaderia: boolean;
   activo: boolean;
+  numeroNota?: string;
+  tipoBoleta?: 'LEGAL' | 'COMUN' | 'OTRO';
+  fechaCompra?: Date;
+  credito: boolean;
+  plazoDias?: number;
   proveedor?: Proveedor;
   pago?: Pago;
   moneda: Moneda;
+  formaPago?: FormasPago;
   detalles?: CompraDetalle[];
   createdAt?: Date;
   updatedAt?: Date;

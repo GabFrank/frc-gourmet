@@ -14,6 +14,8 @@ const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
 const moneda_entity_1 = require("../financiero/moneda.entity");
 const estado_enum_1 = require("./estado.enum");
+const tipo_boleta_enum_1 = require("./tipo-boleta.enum");
+const forma_pago_entity_1 = require("./forma-pago.entity");
 /**
  * Entity representing a purchase from suppliers
  */
@@ -28,10 +30,6 @@ __decorate([
     __metadata("design:type", String)
 ], Compra.prototype, "estado", void 0);
 __decorate([
-    (0, typeorm_1.Column)('decimal', { precision: 10, scale: 2 }),
-    __metadata("design:type", Number)
-], Compra.prototype, "total", void 0);
-__decorate([
     (0, typeorm_1.Column)({ default: false, name: 'is_recepcion_mercaderia' }),
     __metadata("design:type", Boolean)
 ], Compra.prototype, "isRecepcionMercaderia", void 0);
@@ -39,6 +37,31 @@ __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
 ], Compra.prototype, "activo", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, name: 'numero_nota', type: 'varchar', length: 100 }),
+    __metadata("design:type", String)
+], Compra.prototype, "numeroNota", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        nullable: true,
+        type: 'text',
+        enum: tipo_boleta_enum_1.TipoBoleta,
+        name: 'tipo_boleta'
+    }),
+    __metadata("design:type", String)
+], Compra.prototype, "tipoBoleta", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, name: 'fecha_compra', type: 'date' }),
+    __metadata("design:type", Date)
+], Compra.prototype, "fechaCompra", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ default: false }),
+    __metadata("design:type", Boolean)
+], Compra.prototype, "credito", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, name: 'plazo_dias', type: 'int' }),
+    __metadata("design:type", Number)
+], Compra.prototype, "plazoDias", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)('Proveedor', 'compras', {
         nullable: true,
@@ -60,6 +83,11 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'moneda_id' }),
     __metadata("design:type", moneda_entity_1.Moneda)
 ], Compra.prototype, "moneda", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => forma_pago_entity_1.FormasPago, { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'forma_pago_id' }),
+    __metadata("design:type", forma_pago_entity_1.FormasPago)
+], Compra.prototype, "formaPago", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)('CompraDetalle', 'compra'),
     __metadata("design:type", Array)

@@ -2,6 +2,8 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import { Moneda } from '../financiero/moneda.entity';
 import { CompraEstado } from './estado.enum';
+import { TipoBoleta } from './tipo-boleta.enum';
+import { FormasPago } from './forma-pago.entity';
 // Import type references to avoid circular dependencies
 import type { CompraDetalle } from './compra-detalle.entity';
 import type { Pago } from './pago.entity';
@@ -19,14 +21,31 @@ export class Compra extends BaseModel {
   })
   estado!: CompraEstado;
 
-  @Column('decimal', { precision: 10, scale: 2 })
-  total!: number;
-
   @Column({ default: false, name: 'is_recepcion_mercaderia' })
   isRecepcionMercaderia!: boolean;
 
   @Column({ default: true })
   activo!: boolean;
+
+  @Column({ nullable: true, name: 'numero_nota', type: 'varchar', length: 100 })
+  numeroNota?: string;
+
+  @Column({
+    nullable: true,
+    type: 'text',
+    enum: TipoBoleta,
+    name: 'tipo_boleta'
+  })
+  tipoBoleta?: TipoBoleta;
+
+  @Column({ nullable: true, name: 'fecha_compra', type: 'date' })
+  fechaCompra?: Date;
+
+  @Column({ default: false })
+  credito!: boolean;
+
+  @Column({ nullable: true, name: 'plazo_dias', type: 'int' })
+  plazoDias?: number;
 
   // Relationships - Use string references to avoid circular dependencies
   @ManyToOne('Proveedor', 'compras', {
@@ -46,6 +65,10 @@ export class Compra extends BaseModel {
   @ManyToOne(() => Moneda)
   @JoinColumn({ name: 'moneda_id' })
   moneda!: Moneda;
+
+  @ManyToOne(() => FormasPago, { nullable: true })
+  @JoinColumn({ name: 'forma_pago_id' })
+  formaPago?: FormasPago;
 
   @OneToMany('CompraDetalle', 'compra')
   detalles!: CompraDetalle[];

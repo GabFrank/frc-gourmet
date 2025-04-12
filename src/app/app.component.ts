@@ -7,6 +7,7 @@ import {
   OnDestroy,
   Renderer2,
   AfterViewInit,
+  HostListener,
 } from '@angular/core';
 import { Observable, Subscription, fromEvent } from 'rxjs';
 import { map, shareReplay, debounceTime, delay } from 'rxjs/operators';
@@ -80,10 +81,9 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   title = 'FRC Gourmet';
   isDarkTheme = false;
   useTabNavigation = true;
-  private autoCloseTimeout: any;
-  private sidenavHoverSubscription = new Subscription();
-  private mouseLeaveSubscription = new Subscription();
-  private closeDelayMs = 2000; // 2 seconds
+  isMenuExpanded = false;
+  // Track which menu section is expanded
+  expandedMenu: string | null = null;
   firsTime = true;
 
   // Authentication state
@@ -92,7 +92,6 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   lastLoginTime: Date | null = null;
 
   @ViewChild('drawer') sidenav!: MatSidenav;
-  @ViewChild('sidenavTrigger') sidenavTrigger!: ElementRef;
 
   isHandset$: Observable<boolean> = this.breakpointObserver
     .observe(Breakpoints.Handset)
@@ -180,9 +179,6 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       // Add a default home tab when the app starts
       // this.openProductosTab();
 
-      // Add event listener for mouse movement after view is initialized
-      setTimeout(() => this.setupSidenavHover(), 0);
-
       // Initialize sidenav listeners after view is initialized
       setTimeout(() => this.setupSidenavListeners(), 0);
 
@@ -192,21 +188,13 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngAfterViewInit(): void {
-      this.sidenav.open();
-      setTimeout(() => {
-        this.sidenav.close();
-      }, 3000);
+    // Initialize sidenav in collapsed state
+    this.isMenuExpanded = false;
+    this.expandedMenu = null;
   }
 
   ngOnDestroy() {
-    // Clean up subscriptions
-    this.sidenavHoverSubscription.unsubscribe();
-    this.mouseLeaveSubscription.unsubscribe();
-
-    // Clear any pending timeouts
-    if (this.autoCloseTimeout) {
-      clearTimeout(this.autoCloseTimeout);
-    }
+    // Clear any subscriptions from sidenav listeners if needed
   }
 
   // Start tracking session activity to keep the session alive
@@ -229,67 +217,56 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     // Router navigation is handled in the authService
   }
 
-  // Set up sidenav hover detection
-  private setupSidenavHover() {
-    // Create a trigger area for desktop devices
-    if (!this.sidenavTrigger) {
-      // Create a trigger div for the hover area
-      const triggerElement = this.renderer.createElement('div');
-      this.renderer.setAttribute(triggerElement, 'class', 'sidenav-trigger');
-      this.renderer.appendChild(document.body, triggerElement);
-      this.sidenavTrigger = { nativeElement: triggerElement };
-    }
-
-    // Subscribe to mouse hover events on the trigger area (left edge of screen)
-    this.ngZone.runOutsideAngular(() => {
-      this.sidenavHoverSubscription = fromEvent(
-        this.sidenavTrigger.nativeElement,
-        'mouseenter'
-      )
-        .pipe(debounceTime(100))
-        .subscribe(() => {
-          this.ngZone.run(() => {
-            // Clear any pending auto-close
-            if (this.autoCloseTimeout) {
-              clearTimeout(this.autoCloseTimeout);
-              this.autoCloseTimeout = null;
-            }
-
-            // Open the sidenav
-            if (this.sidenav && !this.sidenav.opened) {
-              this.sidenav.open();
-            }
-          });
-        });
-
-      // When mouse leaves the sidenav, start a timer to close it
-      if (this.sidenav) {
-        // Use querySelector to find the sidenav element without accessing private properties
-        setTimeout(() => {
-          const sidenavElement = document.querySelector('mat-sidenav');
-          if (sidenavElement) {
-            this.mouseLeaveSubscription = fromEvent(
-              sidenavElement,
-              'mouseleave'
-            ).subscribe(() => {
-              this.ngZone.run(() => {
-                // Clear any existing timeout
-                if (this.autoCloseTimeout) {
-                  clearTimeout(this.autoCloseTimeout);
-                }
-
-                // Set a new timeout to close the sidenav after delay
-                this.autoCloseTimeout = setTimeout(() => {
-                  if (this.sidenav && this.sidenav.opened) {
-                    this.sidenav.close();
-                  }
-                }, this.closeDelayMs);
-              });
-            });
-          }
-        }, 500); // Small delay to ensure sidenav is in the DOM
+  // Listen for clicks on the document
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent) {
+    // Only process when menu is expanded
+    if (this.isMenuExpanded && this.sidenav) {
+      const sidenavElement = document.querySelector('mat-sidenav');
+      const toggleButton = document.querySelector('button[aria-label="Toggle sidenav"]');
+      
+      if (sidenavElement && toggleButton) {
+        // Check if click was outside the sidenav and not on the toggle button
+        if (!sidenavElement.contains(event.target as Node) && 
+            !toggleButton.contains(event.target as Node)) {
+          this.isMenuExpanded = false;
+        }
       }
-    });
+    }
+  }
+
+  // Toggle sidenav expanded/collapsed state
+  toggleMenu(event?: MouseEvent): void {
+    if (event) {
+      event.stopPropagation(); // Prevent immediate closing when opening
+    }
+    this.isMenuExpanded = !this.isMenuExpanded;
+    
+    // When collapsing the menu, reset the expanded menu
+    if (!this.isMenuExpanded) {
+      this.expandedMenu = null;
+    }
+  }
+
+  // Expand menu when any item is clicked in collapsed mode
+  expandMenu(event?: MouseEvent, menuSection?: string): void {
+    if (event) {
+      event.stopPropagation(); // Prevent document click handler from firing
+    }
+    
+    if (!this.isMenuExpanded) {
+      this.isMenuExpanded = true;
+    }
+    
+    // Set the active menu section
+    if (menuSection) {
+      this.expandedMenu = menuSection;
+    }
+  }
+
+  // Check if a menu section is expanded
+  isMenuSectionExpanded(section: string): boolean {
+    return this.expandedMenu === section;
   }
 
   toggleTheme(): void {

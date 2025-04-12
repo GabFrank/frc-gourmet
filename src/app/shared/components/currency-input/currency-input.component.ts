@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, SimpleChanges, Optional, Self } from '@angular/core';
+import { Component, Input, OnChanges, SimpleChanges, Optional, Self, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ControlValueAccessor, NgControl, ReactiveFormsModule, FormControl } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -37,8 +37,7 @@ import { NgxCurrencyModule } from 'ngx-currency';
           [options]="currencyConfig"
           [formControl]="inputControl"
           [placeholder]="placeholder"
-          [required]="required"
-          [disabled]="disabled">
+          [required]="required">
         <mat-hint *ngIf="hint">{{ hint }}</mat-hint>
         <mat-error *ngIf="control && control.errors && control.touched">
           <ng-container *ngIf="control.errors['required']">
@@ -61,7 +60,7 @@ import { NgxCurrencyModule } from 'ngx-currency';
     }
   `]
 })
-export class CurrencyInputComponent implements ControlValueAccessor, OnChanges {
+export class CurrencyInputComponent implements ControlValueAccessor, OnChanges, OnInit {
   @Input() label = 'Valor';
   @Input() placeholder = 'Ingrese el valor';
   @Input() required = false;
@@ -93,10 +92,26 @@ export class CurrencyInputComponent implements ControlValueAccessor, OnChanges {
     });
   }
 
+  ngOnInit(): void {
+    // Set initial disabled state if provided
+    if (this.disabled) {
+      this.inputControl.disable();
+    }
+  }
+
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['moneda']) {
       // Update config when currency changes
       this.currencyConfig = this.currencyConfigService.getConfigForCurrency(this.moneda);
+    }
+
+    if (changes['disabled']) {
+      // Update disabled state when it changes
+      if (this.disabled) {
+        this.inputControl.disable();
+      } else {
+        this.inputControl.enable();
+      }
     }
   }
 

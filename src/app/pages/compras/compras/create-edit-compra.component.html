@@ -41,6 +41,27 @@
             </mat-form-field>
 
             <mat-form-field appearance="outline">
+              <mat-label>Tipo de Boleta</mat-label>
+              <mat-select formControlName="tipoBoleta">
+                <mat-option *ngFor="let tipo of tipoBoletaOptions" [value]="tipo">
+                  {{ tipo }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Fecha de Compra</mat-label>
+              <input matInput [matDatepicker]="fechaCompraPicker" formControlName="fechaCompra">
+              <mat-datepicker-toggle matSuffix [for]="fechaCompraPicker"></mat-datepicker-toggle>
+              <mat-datepicker #fechaCompraPicker></mat-datepicker>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Número de Nota</mat-label>
+              <input type="text" matInput formControlName="numeroNota">
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
               <mat-label>Estado</mat-label>
               <input matInput [value]="estadoLabel" readonly>
               <!-- Hidden select to maintain the form control -->
@@ -74,13 +95,42 @@
               </button>
             </div>
           </div>
+
+          <div class="form-row credit-options">
+            <div class="checkbox-container">
+              <mat-checkbox formControlName="credito" color="primary">
+                A Crédito
+              </mat-checkbox>
+            </div>
+
+            <mat-form-field appearance="outline" *ngIf="compraForm.get('credito')?.value">
+              <mat-label>Plazo (días)</mat-label>
+              <input type="number" matInput formControlName="plazoDias" min="1">
+              <mat-error *ngIf="compraForm.get('plazoDias')?.hasError('required')">
+                El plazo es requerido
+              </mat-error>
+              <mat-error *ngIf="compraForm.get('plazoDias')?.hasError('min')">
+                El plazo debe ser mayor a 0
+              </mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" *ngIf="compraForm.get('credito')?.value">
+              <mat-label>Forma de Pago</mat-label>
+              <input type="text" matInput formControlName="formaPago" [matAutocomplete]="autoFormaPago">
+              <mat-autocomplete #autoFormaPago="matAutocomplete" [displayWith]="displayFormaPago">
+                <mat-option *ngFor="let formaPago of filteredFormasPago | async" [value]="formaPago.id">
+                  {{ formaPago.nombre }}
+                </mat-option>
+              </mat-autocomplete>
+            </mat-form-field>
+          </div>
         </div>
 
         <mat-divider></mat-divider>
 
-        <div class="section-container" [class.disabled-section]="!canEditDetalles()">
+        <div class="section-container" [class.disabled-section]="!canEditDetalles">
           <h3 class="section-title">Detalles de la Compra</h3>
-          <div *ngIf="!canEditDetalles()" class="disabled-message">
+          <div *ngIf="!canEditDetalles" class="disabled-message">
             Los detalles de la compra solo pueden ser editados cuando la compra existe y su estado es ABIERTO.
           </div>
 
@@ -102,16 +152,16 @@
                 </mat-form-field>
 
                 <!-- Show tipo_medida for ingredientes -->
-                <mat-form-field appearance="outline" class="tipo-medida-field" *ngIf="detalleForm.get('item')?.value?.tipo === 'ingrediente'">
+                <mat-form-field appearance="outline" class="tipo-medida-field" *ngIf="isIngredienteSelected">
                   <mat-label>Unidad Base</mat-label>
-                  <input matInput [value]="detalleForm.get('item')?.value?.tipo_medida" readonly>
+                  <input matInput [value]="selectedItemTypoMedida" readonly>
                 </mat-form-field>
 
                 <!-- Show unit selector for ingredientes -->
-                <mat-form-field appearance="outline" class="unit-selector-field" *ngIf="detalleForm.get('item')?.value?.tipo === 'ingrediente' && availableConversions.length > 0">
+                <mat-form-field appearance="outline" class="unit-selector-field" *ngIf="isIngredienteSelected && availableConversions.length > 0">
                   <mat-label>Unidad</mat-label>
-                  <mat-select [formControl]="detalleForm.get('selectedUnit')" required>
-                    <mat-option *ngFor="let unit of getCompatibleUnits(detalleForm.get('item')?.value?.tipo_medida)" [value]="unit">
+                  <mat-select [formControl]="selectedUnitControl" required>
+                    <mat-option *ngFor="let unit of compatibleUnits" [value]="unit">
                       {{ unit }}
                     </mat-option>
                   </mat-select>
@@ -119,7 +169,7 @@
                 </mat-form-field>
 
                 <!-- Show presentacion selector for productos -->
-                <mat-form-field appearance="outline" class="presentacion-field" *ngIf="detalleForm.get('item')?.value?.tipo === 'producto'">
+                <mat-form-field appearance="outline" class="presentacion-field" *ngIf="isProductoSelected">
                   <mat-label>Presentación</mat-label>
                   <input type="text" matInput formControlName="presentacion" [matAutocomplete]="autoPresentacion">
                   <mat-autocomplete #autoPresentacion="matAutocomplete" [displayWith]="displayPresentacion">
@@ -131,9 +181,9 @@
 
                 <mat-form-field appearance="outline">
                   <mat-label>Cantidad</mat-label>
-                  <input type="number" matInput formControlName="cantidad" min="0.01" step="0.01">
-                  <mat-hint *ngIf="detalleForm.get('item')?.value?.tipo === 'ingrediente'">
-                    En {{ detalleForm.get('selectedUnit')?.value || detalleForm.get('item')?.value?.tipo_medida }}
+                  <input type="text" matInput formControlName="cantidad" pattern="^\d*[.,]?\d+$" (keydown)="onDecimalKeydown($event)">
+                  <mat-hint *ngIf="isIngredienteSelected">
+                    En {{ selectedUnitValue }}
                   </mat-hint>
                   <mat-error *ngIf="detalleForm.get('cantidad')?.hasError('required')">
                     La cantidad es requerida
@@ -141,27 +191,27 @@
                   <mat-error *ngIf="detalleForm.get('cantidad')?.hasError('min')">
                     La cantidad debe ser mayor a 0
                   </mat-error>
+                  <mat-error *ngIf="detalleForm.get('cantidad')?.hasError('pattern')">
+                    Ingrese un número válido
+                  </mat-error>
                 </mat-form-field>
 
                 <!-- Replace valor field with CurrencyInputComponent -->
                 <app-currency-input
                   formControlName="valor"
                   label="Valor Unitario"
-                  [moneda]="compraForm.get('moneda')?.value ? getMonedaById(compraForm.get('moneda')?.value) : null"
+                  [moneda]="currentMoneda"
                   [required]="true"
                   [min]="0.01"
-                  [hint]="detalleForm.get('item')?.value?.tipo === 'ingrediente' && detalleForm.get('selectedUnit')?.value ? 'Por ' + detalleForm.get('selectedUnit')?.value.toLowerCase() : ''">
+                  [hint]="valorUnitHint">
                 </app-currency-input>
-
-                <!-- Remove Valor convertido field -->
 
                 <!-- Replace total field with CurrencyInputComponent -->
                 <app-currency-input
                   [formControl]="totalControl"
                   label="Total Final"
-                  [moneda]="compraForm.get('moneda')?.value ? getMonedaById(compraForm.get('moneda')?.value) : null"
-                  [disabled]="true"
-                  [hint]="detalleForm.get('item')?.value?.tipo === 'ingrediente' && detalleForm.get('selectedUnit')?.value ? detalleForm.get('cantidad')?.value + ' × ' + detalleForm.get('valor')?.value : ''">
+                  [moneda]="currentMoneda"
+                  [hint]="totalHint">
                 </app-currency-input>
 
                 <button mat-raised-button color="primary" type="submit" class="add-button">
@@ -198,7 +248,7 @@
               <ng-container matColumnDef="valor">
                 <th mat-header-cell *matHeaderCellDef>Valor Unitario</th>
                 <td mat-cell *matCellDef="let row">
-                  {{ row.control.value.valor | number:'1.2-2' }}
+                  {{ row.control.value.valor | number:'1.0-2' }}
                   <span class="unit-conversion" *ngIf="row.control.value.unidadMedida" [matTooltip]="row.control.value.unidadMedida">
                     {{ row.control.value.tipo_medida }}
                     <mat-icon class="conversion-icon">swap_horiz</mat-icon>
@@ -210,7 +260,7 @@
               <ng-container matColumnDef="subtotal">
                 <th mat-header-cell *matHeaderCellDef>Subtotal</th>
                 <td mat-cell *matCellDef="let row">
-                  {{ row.computedValues.subtotal | number:'1.2-2' }}
+                  {{ row.computedValues.subtotal | number:'1.0-2' }}
                 </td>
               </ng-container>
 
@@ -238,7 +288,7 @@
             <!-- Update total container to use currency formatting -->
             <div class="total-container">
               <span class="total-label">Total:</span>
-              <span class="total-value">{{ compraForm.get('total')?.value | number:'1.2-2' }}</span>
+              <span class="total-value">{{ compraTotal | number:'1.0-2' }}</span>
             </div>
           </div>
         </div>

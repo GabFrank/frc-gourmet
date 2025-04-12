@@ -1,6 +1,6 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, Input, OnInit, ViewChild, Inject, Optional } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, FormArray, Validators, ReactiveFormsModule, FormControl } from '@angular/forms';
+import { FormBuilder, FormGroup, FormArray, Validators, ReactiveFormsModule, FormControl, AbstractControl } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -10,14 +10,16 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatSelectModule } from '@angular/material/select';
-import { MatTableModule } from '@angular/material/table';
+import { MatTableModule, MatTableDataSource } from '@angular/material/table';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDividerModule } from '@angular/material/divider';
-import { MatDialogModule, MatDialog } from '@angular/material/dialog';
+import { MatDialogModule, MatDialog, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { MatAutocompleteModule } from '@angular/material/autocomplete';
-import { TabsService } from '../../../services/tabs.service';
+import { MatAutocompleteModule, MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule } from '@angular/material/core';
+import { TabsService } from '../../../services/tabs/tabs.service';
 import { RepositoryService } from '../../../database/repository.service';
 import { Compra, CompraDetalle, CompraEstado } from '../../../database/entities';
 import { Proveedor } from '../../../database/entities';
@@ -25,10 +27,22 @@ import { Moneda } from '../../../database/entities';
 import { Producto } from '../../../database/entities';
 import { Ingrediente } from '../../../database/entities';
 import { Presentacion } from '../../../database/entities';
+import { FormasPago } from '../../../models/compras/formas-pago.model';
+import { TipoBoleta } from '../../../models/compras/enums/tipo-boleta.enum';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
-import { Observable, firstValueFrom, map, startWith, of } from 'rxjs';
+import { Observable, firstValueFrom, map, startWith, of, debounceTime, switchMap, Subject, Subscription } from 'rxjs';
 import { UnitConversionService, UnitConversion } from '../../../services/unit-conversion.service';
 import { CurrencyInputComponent } from '../../../shared/components/currency-input/currency-input.component';
+import { CompraService } from '../../../services/compras/compra.service';
+import { ProveedorService } from '../../../services/proveedores/proveedor.service';
+import { MonedaService } from '../../../services/monedas/moneda.service';
+import { ProveedorProductoService } from '../../../services/proveedores/proveedor-producto.service';
+import { SearchItemService } from '../../../services/search/search-item.service';
+import { ErrorService } from '../../../services/error/error.service';
+import { FormasPagoService } from '../../../services/compras/formas-pago.service';
+import { MatPaginator } from '@angular/material/paginator';
+import { MatSort } from '@angular/material/sort';
+import { FormasPago as FormasPagoEntity } from '../../../database/entities/compras/forma-pago.entity';
 
 // Add interface for combined search results
 interface SearchItem {
@@ -62,6 +76,8 @@ interface SearchItem {
     MatTabsModule,
     MatTooltipModule,
     MatAutocompleteModule,
+    MatDatepickerModule,
+    MatNativeDateModule,
     ConfirmationDialogComponent,
     CurrencyInputComponent
   ],
@@ -84,6 +100,7 @@ export class CreateEditCompraComponent implements OnInit {
   productos: Producto[] = [];
   ingredientes: Ingrediente[] = [];
   presentaciones: Presentacion[] = [];
+  formasPago: FormasPago[] = [];
 
   // Filter for autocomplete
   filteredItems: Observable<SearchItem[]>;
@@ -92,6 +109,7 @@ export class CreateEditCompraComponent implements OnInit {
   // Add these properties for autocomplete
   filteredProveedores: Observable<Proveedor[]>;
   filteredMonedas: Observable<Moneda[]>;
+  filteredFormasPago: Observable<FormasPago[]>;
 
   // Table columns
   displayedColumns: string[] = ['item', 'tipo', 'cantidad', 'valor', 'subtotal', 'acciones'];
@@ -103,6 +121,9 @@ export class CreateEditCompraComponent implements OnInit {
     { value: CompraEstado.FINALIZADO, label: 'Finalizado' },
     { value: CompraEstado.CANCELADO, label: 'Cancelado' }
   ];
+
+  // TipoBoleta options
+  tipoBoletaOptions = Object.values(TipoBoleta);
 
   // Tracking selection type (producto, ingrediente, presentacion)
   selectedDetalleType: 'producto' | 'ingrediente' | null = null;
@@ -125,6 +146,77 @@ export class CreateEditCompraComponent implements OnInit {
   convertedValue = 0;
   baseValue = 0;
   convertedQuantity = 0;
+  
+  // Add properties for two-way binding
+  isUpdatingTotal = false;
+  isUpdatingValor = false;
+
+  // Computed properties for template use
+  get compatibleUnits(): string[] {
+    const baseUnit = this.detalleForm.get('item')?.value?.tipo_medida;
+    if (!baseUnit) return [];
+    
+    const conversions = this.availableConversions.filter(conv => conv.from === baseUnit);
+    return [baseUnit, ...conversions.map(conv => conv.to)];
+  }
+
+  get canEditDetalles(): boolean {
+    // When creating a new compra, allow editing
+    if (!this.isEditing) {
+      return true;
+    }
+
+    // If editing, only allow if estado is ABIERTO
+    const estado = this.compraForm.get('estado')?.value;
+    return estado === CompraEstado.ABIERTO;
+  }
+
+  get currentMoneda(): Moneda | null {
+    const monedaId = this.compraForm.get('moneda')?.value;
+    return monedaId ? this.getMonedaById(monedaId) : null;
+  }
+
+  get isIngredienteSelected(): boolean {
+    return this.detalleForm.get('item')?.value?.tipo === 'ingrediente';
+  }
+
+  get isProductoSelected(): boolean {
+    return this.detalleForm.get('item')?.value?.tipo === 'producto';
+  }
+
+  get selectedItemTypoMedida(): string {
+    return this.detalleForm.get('item')?.value?.tipo_medida || '';
+  }
+
+  get selectedUnitValue(): string {
+    return this.detalleForm.get('selectedUnit')?.value || this.selectedItemTypoMedida;
+  }
+
+  get cantidadValue(): string | number {
+    return this.detalleForm.get('cantidad')?.value || 0;
+  }
+
+  get valorValue(): string | number {
+    return this.detalleForm.get('valor')?.value || 0;
+  }
+
+  get valorUnitHint(): string {
+    if (this.isIngredienteSelected && this.selectedUnitValue) {
+      return 'Por ' + this.selectedUnitValue.toLowerCase();
+    }
+    return '';
+  }
+
+  get totalHint(): string {
+    if (this.isIngredienteSelected && this.selectedUnitValue) {
+      return this.cantidadValue + ' × ' + this.valorValue;
+    }
+    return '';
+  }
+
+  get compraTotal(): number {
+    return this.compraForm.get('total')?.value || 0;
+  }
 
   // Computed property for estado label
   get estadoLabel(): string {
@@ -133,46 +225,53 @@ export class CreateEditCompraComponent implements OnInit {
     return option ? option.label : '';
   }
 
-  // Add map for detalle values to avoid function calls in template
-  private detalleValuesMap = new Map<string, {
-    itemName: string;
-    subtotal: number;
-  }>();
-
-  // Update the detalles getter to compute values
-  get detallesWithComputedValues() {
-    return this.detalles.controls.map(control => {
-      const value = control.value;
-      const key = `${value.tipo}-${value[value.tipo === 'producto' ? 'producto' : 'ingrediente']}-${value.cantidad}-${value.valor}`;
-      
-      if (!this.detalleValuesMap.has(key)) {
-        this.detalleValuesMap.set(key, {
-          itemName: this.computeItemName(value),
-          subtotal: value.cantidad * value.valor
-        });
-      }
-      
-      return {
-        control,
-        computedValues: this.detalleValuesMap.get(key)!
-      };
-    });
+  // Get the FormArray for detalles
+  get detalles(): FormArray {
+    return this.compraForm.get('detalles') as FormArray;
   }
 
-  // Private method to compute item name
-  private computeItemName(detalle: any): string {
-    if (detalle.tipo === 'producto') {
-      const producto = this.getProductoById(detalle.producto);
-      return producto ? producto.nombre : '';
-    } else {
-      const ingrediente = this.getIngredienteById(detalle.ingrediente);
-      return ingrediente ? ingrediente.descripcion : '';
+  // Get items of the appropriate type for each detalle - simplified
+  getItemName(detalle: any): string {
+    if (detalle.item) {
+      return detalle.item.nombre;
     }
+    return '';
   }
 
-  // Clear the cache when detalles change
-  private clearDetalleValuesCache(): void {
-    this.detalleValuesMap.clear();
+  // Get the item type for display
+  getItemType(detalle: any): string {
+    if (detalle.tipo === 'producto') {
+      return 'Producto';
+    } else if (detalle.tipo === 'ingrediente') {
+      return 'Ingrediente';
+    }
+    return '';
+  }
+
+  // Calculate subtotal directly - no need for caching
+  getSubtotal(detalle: any): number {
+    return detalle.cantidad * detalle.valor;
+  }
+
+  // Format currency amount
+  formatCurrency(amount: number): string {
+    const moneda = this.compraForm.get('moneda')?.value;
+    if (!moneda) return amount.toString();
+    
+    const currencySymbol = this.monedas.find(m => m.id === moneda)?.simbolo || '';
+    return `${currencySymbol} ${amount.toFixed(2)}`;
+  }
+
+  // Recalculate the total based on detalles - simplified
+  recalculateTotal(): void {
+    let total = 0;
+
+    for (let i = 0; i < this.detalles.length; i++) {
+      const detalle = this.detalles.at(i).value;
+      total += this.getSubtotal(detalle);
+    }
+
+    this.compraForm.get('total')?.setValue(total);
   }
 
   constructor(
@@ -181,111 +280,118 @@ export class CreateEditCompraComponent implements OnInit {
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
     private tabsService: TabsService,
-    private unitConversionService: UnitConversionService
+    private unitConversionService: UnitConversionService,
+    private compraService: CompraService,
+    private proveedorService: ProveedorService,
+    private monedaService: MonedaService,
+    private proveedorProductoService: ProveedorProductoService,
+    private searchItemService: SearchItemService,
+    private dialogRef: MatDialogRef<CreateEditCompraComponent>,
+    private errorService: ErrorService,
+    private formasPagoService: FormasPagoService,
+    @Optional() @Inject(MAT_DIALOG_DATA) public data: any,
+    @Optional() public dialogRef: MatDialogRef<CreateEditCompraComponent>
   ) {
-    // Initialize forms
-    this.compraForm = this.fb.group({
-      proveedor: [null, Validators.required],
-      moneda: [null, Validators.required],
-      estado: [CompraEstado.ABIERTO, Validators.required],
-      isRecepcionMercaderia: [false],
-      total: [0],
-      activo: [true],
-      detalles: this.fb.array([])
-    });
-
     this.detalleForm = this.fb.group({
-      item: [null, Validators.required],
-      presentacion: [null],
-      cantidad: [1, [Validators.required, Validators.min(0.01)]],
-      valor: [0, [Validators.required, Validators.min(0)]],
-      selectedUnit: [null],
-      convertedValue: [{ value: 0, disabled: true }],
-      convertedQuantity: [{ value: 0, disabled: true }],
-      total: [{ value: 0, disabled: true }]
+      detalleId: [''],
+      presentacionId: ['', Validators.required],
+      presentacion: ['', Validators.required],
+      itemId: ['', Validators.required],
+      item: ['', Validators.required],
+      cantidad: ['', [Validators.required, Validators.min(0.01)]],
+      costo: ['', [Validators.required, Validators.min(0.01)]],
+      valorTotal: ['', [Validators.required, Validators.min(0.01)]],
+      codigoBarras: [''],
+      cantidadConvertida: [{ value: '', disabled: true }],
+      unidadDestino: [''],
+      codigoDescripcion: [''],
+      manejaInventario: [false]
     });
 
-    // Initialize detallesActionsEnabled based on default estado (ABIERTO)
-    this.detallesActionsEnabled = true;
+    this.compraForm = this.fb.group({
+      id: [null],
+      proveedorId: [null, Validators.required],
+      proveedor: [null, Validators.required],
+      monedaId: [null, Validators.required],
+      moneda: [null, Validators.required],
+      numeroNota: [''],
+      tipoBoleta: [TipoBoleta.LEGAL],
+      fechaCompra: [new Date(), Validators.required],
+      credito: [false],
+      plazoDias: [{value: 0, disabled: true}, [Validators.min(1), Validators.max(365)]],
+      formaPagoId: [null],
+      formaPago: [null],
+      fecha: [new Date(), Validators.required],
+      total: [0],
+      estado: ['PENDIENTE'],
+      compraDetalles: this.fb.array([])
+    });
 
-    // Setup autocomplete filter for combined items
-    this.filteredItems = this.detalleForm.get('item')!.valueChanges.pipe(
-      startWith(''),
-      map(value => this._filterItems(value || ''))
-    );
-
-    // Subscribe to item changes to handle unit conversions
-    this.detalleForm.get('item')?.valueChanges.subscribe((selectedItem: SearchItem | null) => {
-      if (selectedItem) {
-        if (selectedItem.tipo === 'producto') {
-          this.detalleForm.get('presentacion')?.enable();
-          this.detalleForm.get('selectedUnit')?.disable();
-          this.detalleForm.get('selectedUnit')?.setValue(null);
-          this.availableConversions = [];
-          // Load presentaciones for the selected producto
-          this.loadPresentacionesForProducto(selectedItem.id);
-        } else {
-          this.detalleForm.get('presentacion')?.disable();
-          this.detalleForm.get('presentacion')?.setValue(null);
-          this.detalleForm.get('selectedUnit')?.enable();
-          // Load available conversions for the ingredient's unit type
-          this.availableConversions = this.unitConversionService.getAvailableConversions(selectedItem.tipo_medida || '');
-          // Set default unit to ingredient's base unit
-          this.detalleForm.get('selectedUnit')?.setValue(selectedItem.tipo_medida);
-        }
+    // Setup value change subscriptions
+    this.compraForm.get('credito')?.valueChanges.subscribe(value => {
+      if (value) {
+        this.compraForm.get('plazoDias')?.enable();
       } else {
-        this.detalleForm.get('presentacion')?.disable();
-        this.detalleForm.get('selectedUnit')?.disable();
-        this.availableConversions = [];
+        this.compraForm.get('plazoDias')?.disable();
+        this.compraForm.get('plazoDias')?.setValue(0);
       }
     });
 
-    // Subscribe to quantity changes to update conversions and total
-    this.detalleForm.get('cantidad')?.valueChanges.subscribe(() => {
-      this.updateConvertedValues();
-      this.updateTotal();
-    });
-
-    // Subscribe to value changes to update conversions and total
-    this.detalleForm.get('valor')?.valueChanges.subscribe(() => {
-      this.updateConvertedValues();
-      this.updateTotal();
-    });
-
-    // Subscribe to unit changes to update conversions
-    this.detalleForm.get('selectedUnit')?.valueChanges.subscribe(() => {
-      this.updateConvertedValues();
-    });
-
-    // Setup autocomplete filters for proveedores and monedas
+    // Setup autocomplete filters
     this.filteredProveedores = this.compraForm.get('proveedor')!.valueChanges.pipe(
       startWith(''),
-      map(value => this._filterProveedores(value || ''))
+      debounceTime(300),
+      switchMap(value => this._filterProveedores(value))
     );
 
     this.filteredMonedas = this.compraForm.get('moneda')!.valueChanges.pipe(
       startWith(''),
-      map(value => this._filterMonedas(value || ''))
+      debounceTime(300),
+      switchMap(value => this._filterMonedas(value))
     );
 
-    // Setup autocomplete filter for presentaciones
     this.filteredPresentaciones = this.detalleForm.get('presentacion')!.valueChanges.pipe(
       startWith(''),
-      map(value => this._filterPresentaciones(value || ''))
+      debounceTime(300),
+      switchMap(value => this._filterPresentaciones(value))
     );
+
+    this.filteredItems = this.detalleForm.get('item')!.valueChanges.pipe(
+      startWith(''),
+      debounceTime(300),
+      switchMap(value => this._filterItems(value))
+    );
+
+    this.filteredFormasPago = this.compraForm.get('formaPago')!.valueChanges.pipe(
+      startWith(''),
+      debounceTime(300),
+      map(value => this._filterFormasPago(value))
+    );
+
+    // If editing, load existing data
+    if (this.isEditing) {
+      this.loadCompra();
+    }
+
+    // Initialize table data source
+    this.dataSource = new MatTableDataSource<any>([]);
+
+    // Check if we're editing an existing compra
+    if (data && data.compra) {
+      this.isEditing = true;
+      this.compra = data.compra;
+    }
   }
 
   async ngOnInit(): Promise<void> {
     // Load lookup data
     await this.loadProveedores();
     await this.loadMonedas();
-    await this.loadProductos();
-    await this.loadIngredientes();
-    await this.loadPresentaciones();
-
-    // Combine productos and ingredientes into searchItems
-    this.updateSearchItems();
-
+    await this.loadFormasPago();
+    
+    // Initialize searchItems as an empty array
+    this.searchItems = [];
+    
     // Check if we're editing an existing compra
     if (this.data && this.data.compra) {
       this.compra = this.data.compra;
@@ -300,6 +406,78 @@ export class CreateEditCompraComponent implements OnInit {
     this.compraForm.get('estado')?.valueChanges.subscribe(() => {
       this.updateDetalleFormState();
     });
+
+    // Setup the search-as-you-type functionality for items
+    this.setupItemSearchObservable();
+  }
+
+  // Setup reactive search for productos and ingredientes
+  private setupItemSearchObservable(): void {
+    this.filteredItems = this.detalleForm.get('item')!.valueChanges.pipe(
+      startWith(''),
+      debounceTime(300), // Wait 300ms after user stops typing
+      switchMap(value => this.searchItemsAsync(value))
+    );
+  }
+
+  // Search for productos and ingredientes based on input
+  private async searchItemsAsync(value: string | SearchItem): Promise<SearchItem[]> {
+    // If it's already a selected item, just return it in an array
+    if (value && typeof value !== 'string') {
+      return [value];
+    }
+
+    const searchText = typeof value === 'string' ? value : '';
+    
+    // If search text is empty or too short, return empty array
+    if (!searchText || searchText.length < 2) {
+      return [];
+    }
+
+    try {
+      // Search for productos - using filter for simpler implementation
+      // In a real application, we would use an API endpoint for server-side search
+      const productoQuery = searchText.toLowerCase();
+      const productos = await firstValueFrom(
+        this.repositoryService.getProductos().pipe(
+          map(prods => prods.filter(p => 
+            p.nombre.toLowerCase().includes(productoQuery)
+          ).slice(0, 10)) // Limit to 10 results
+        )
+      );
+      
+      // Search for ingredientes
+      const ingredienteQuery = searchText.toLowerCase();
+      const ingredientes = await firstValueFrom(
+        this.repositoryService.getIngredientes().pipe(
+          map(ings => ings.filter(i => 
+            i.descripcion.toLowerCase().includes(ingredienteQuery)
+          ).slice(0, 10)) // Limit to 10 results
+        )
+      );
+
+      // Combine results
+      const results: SearchItem[] = [
+        ...productos.map(p => ({
+          id: p.id,
+          nombre: p.nombre,
+          tipo: 'producto' as const,
+          original: p
+        })),
+        ...ingredientes.map(i => ({
+          id: i.id,
+          nombre: i.descripcion,
+          tipo: 'ingrediente' as const,
+          original: i,
+          tipo_medida: i.tipoMedida
+        }))
+      ];
+
+      return results;
+    } catch (error) {
+      console.error('Error searching items:', error);
+      return [];
+    }
   }
 
   // Load reference data
@@ -321,42 +499,20 @@ export class CreateEditCompraComponent implements OnInit {
     }
   }
 
-  async loadProductos(): Promise<void> {
+  // We no longer load all productos and ingredientes at start
+  // Instead, we load them when user selects a specific item
+  async loadPresentacionesForProducto(productoId: number): Promise<void> {
     try {
-      this.productos = await firstValueFrom(this.repositoryService.getProductos());
-      this.updateSearchItems();
-    } catch (error: any) {
-      console.error('Error loading productos:', error);
-      this.showError('Error al cargar productos: ' + error.message);
-    }
-  }
-
-  async loadIngredientes(): Promise<void> {
-    try {
-      this.ingredientes = await firstValueFrom(this.repositoryService.getIngredientes());
-      this.updateSearchItems();
-    } catch (error: any) {
-      console.error('Error loading ingredientes:', error);
-      this.showError('Error al cargar ingredientes: ' + error.message);
-    }
-  }
-
-  async loadPresentaciones(): Promise<void> {
-    try {
-      // TODO: Replace with actual API call
-      // Use 'as unknown as Presentacion' to safely cast mock data
-      this.presentaciones = [
-        { id: 1, nombre: 'Presentación 1', activo: true } as unknown as Presentacion,
-        { id: 2, nombre: 'Presentación 2', activo: true } as unknown as Presentacion,
-        { id: 3, nombre: 'Presentación 3', activo: true } as unknown as Presentacion
-      ];
+      this.presentaciones = await firstValueFrom(
+        this.repositoryService.getPresentacionesByProducto(productoId)
+      );
     } catch (error: any) {
       console.error('Error loading presentaciones:', error);
       this.showError('Error al cargar presentaciones: ' + error.message);
     }
   }
 
-  // Load existing compra details for editing
+  // Load existing compra details for editing - simplified
   async loadCompraDetails(): Promise<void> {
     if (!this.compra) return;
 
@@ -369,21 +525,44 @@ export class CreateEditCompraComponent implements OnInit {
         moneda: this.compra.moneda?.id,
         estado: this.compra.estado,
         isRecepcionMercaderia: this.compra.isRecepcionMercaderia,
-        total: this.compra.total,
         activo: this.compra.activo
       });
 
-      // Load detalles if available
-      if (this.compra.detalles && this.compra.detalles.length > 0) {
-        // Clear existing detalles
-        this.detalles.clear();
+      // Fetch detalles from the database in one call
+      const detalles = await firstValueFrom(
+        this.repositoryService.getCompraDetalles(this.compra.id)
+      );
 
-        // Add each detalle to the form array
-        for (const detalle of this.compra.detalles) {
-          this.detalles.push(this.createDetalleFormGroup(detalle));
+      // Clear existing detalles
+      this.detalles.clear();
+
+      // Add each detalle to the form array with a simplified approach
+      if (detalles && detalles.length > 0) {
+        for (const detalle of detalles) {
+          // Create a simple form group for each detalle
+          const detalleForm = this.fb.group({
+            id: [detalle.id],
+            cantidad: [detalle.cantidad, [Validators.required, Validators.min(0)]],
+            valor: [detalle.valor, [Validators.required, Validators.min(0)]],
+            tipo: [detalle.producto ? 'producto' : 'ingrediente'],
+            producto: [detalle.producto?.id || null],
+            ingrediente: [detalle.ingrediente?.id || null],
+            presentacion: [detalle.presentacion?.id || null],
+            tipo_medida: [detalle.tipo_medida || null],
+            // Create a simple item object with just the needed properties
+            item: [{
+              id: detalle.producto?.id || detalle.ingrediente?.id,
+              nombre: detalle.producto?.nombre || detalle.ingrediente?.descripcion,
+              tipo: detalle.producto ? 'producto' : 'ingrediente',
+              tipo_medida: detalle.tipo_medida
+            }]
+          });
+
+          this.detalles.push(detalleForm);
         }
       }
 
+      // Calculate the total
       this.recalculateTotal();
 
       // Update form state based on editability
@@ -417,7 +596,6 @@ export class CreateEditCompraComponent implements OnInit {
         moneda: formData.moneda,
         estado: formData.estado,
         isRecepcionMercaderia: formData.isRecepcionMercaderia,
-        total: formData.total,
         activo: formData.activo
       };
 
@@ -535,98 +713,6 @@ export class CreateEditCompraComponent implements OnInit {
       unidadMedida: [data.unidadMedida || null],
       selectedUnit: new FormControl<string>(data.selectedUnit || '')
     });
-  }
-
-  // Get the subtotal for a detalle
-  getDetalleSubtotal(detalle: any): number {
-    return detalle.cantidad * detalle.valor;
-  }
-
-  // Add a new detalle to the compra
-  addDetalle(): void {
-    if (this.detalleForm.invalid) {
-      this.markFormGroupTouched(this.detalleForm);
-      return;
-    }
-
-    const formValue = this.detalleForm.value;
-    const selectedItem = formValue.item as SearchItem;
-
-    if (!selectedItem) {
-      this.showError('Por favor seleccione un producto o ingrediente');
-      return;
-    }
-
-    let valor = formValue.valor;
-    let cantidad = formValue.cantidad;
-    let unidadMedida = selectedItem.tipo_medida;
-    let tipo_medida = selectedItem.tipo_medida;
-
-    // For ingredients, use the converted values and show the conversion in a tooltip
-    if (selectedItem.tipo === 'ingrediente') {
-      valor = this.baseValue; // This is already converted to the base unit
-      cantidad = this.convertedQuantity; // Use the converted quantity
-      const selectedUnit = this.detalleForm.get('selectedUnit')?.value;
-      if (selectedUnit !== selectedItem.tipo_medida) {
-        unidadMedida = `${selectedItem.tipo_medida} (${formValue.cantidad} ${selectedUnit} = ${this.convertedQuantity.toFixed(2)} ${selectedItem.tipo_medida})`;
-        tipo_medida = selectedUnit; // Store the selected unit type
-      }
-    }
-
-    const detalleGroup = this.createDetalleFormGroup({
-      tipo: selectedItem.tipo,
-      [selectedItem.tipo === 'producto' ? 'producto' : 'ingrediente']: selectedItem.id,
-      presentacion: formValue.presentacion?.id,
-      cantidad: cantidad,
-      valor: valor,
-      unidadMedida: unidadMedida,
-      tipo_medida: tipo_medida
-    });
-
-    this.detalles.push(detalleGroup);
-    this.recalculateTotal();
-    this.resetAndFocusDetalleForm();
-    this.clearDetalleValuesCache();
-  }
-
-  // Remove a detalle from the compra
-  removeDetalle(index: number): void {
-    // First check if detalle actions are enabled
-    if (!this.detallesActionsEnabled) {
-      return;
-    }
-
-    this.detalles.removeAt(index);
-    this.recalculateTotal();
-    this.clearDetalleValuesCache();
-  }
-
-  // Recalculate the total based on detalles
-  recalculateTotal(): void {
-    let total = 0;
-
-    for (let i = 0; i < this.detalles.length; i++) {
-      const detalle = this.detalles.at(i).value;
-      total += detalle.cantidad * detalle.valor;
-    }
-
-    this.compraForm.get('total')?.setValue(total);
-  }
-
-  // Get the FormArray for detalles
-  get detalles(): FormArray {
-    return this.compraForm.get('detalles') as FormArray;
-  }
-
-  // Get items of the appropriate type for each detalle
-  getItemName(detalle: any): string {
-    if (detalle.tipo === 'producto') {
-      const producto = this.getProductoById(detalle.producto);
-      return producto ? producto.nombre : '';
-    } else {
-      const ingrediente = this.getIngredienteById(detalle.ingrediente);
-      return ingrediente ? ingrediente.descripcion : '';
-    }
   }
 
   // Filter functions for autocomplete
@@ -752,18 +838,6 @@ export class CreateEditCompraComponent implements OnInit {
   }
 
   // Determine if detalle de compra form can be edited
-  canEditDetalles(): boolean {
-    // When creating a new compra, allow editing
-    if (!this.isEditing) {
-      return true;
-    }
-
-    // If editing, only allow if estado is ABIERTO
-    const estado = this.compraForm.get('estado')?.value;
-    return estado === CompraEstado.ABIERTO;
-  }
-
-  // Get the label for a estado value from estadoOptions
   getEstadoLabel(estado: string): string {
     const option = this.estadoOptions.find(opt => opt.value === estado);
     return option ? option.label : '';
@@ -771,7 +845,7 @@ export class CreateEditCompraComponent implements OnInit {
 
   // Update the enabled/disabled state of detalle form controls
   updateDetalleFormState(): void {
-    const canEdit = this.canEditDetalles();
+    const canEdit = this.canEditDetalles;
 
     if (canEdit) {
       this.enableDetalleForm();
@@ -817,32 +891,6 @@ export class CreateEditCompraComponent implements OnInit {
     ];
   }
 
-  // Add method to load presentaciones for a producto
-  private async loadPresentacionesForProducto(productoId: number): Promise<void> {
-    try {
-      // TODO: Replace with actual API call when available
-      this.presentaciones = [
-        { 
-          id: 1, 
-          descripcion: 'Presentación 1', 
-          cantidad: 10,
-          unidadMedida: 'unidades',
-          activo: true 
-        } as unknown as Presentacion,
-        { 
-          id: 2, 
-          descripcion: 'Presentación 2', 
-          cantidad: 20,
-          unidadMedida: 'unidades',
-          activo: true 
-        } as unknown as Presentacion
-      ];
-    } catch (error) {
-      console.error('Error loading presentaciones:', error);
-      this.showError('Error al cargar presentaciones');
-    }
-  }
-
   // Add filter method for presentaciones
   private _filterPresentaciones(value: string | Presentacion): Presentacion[] {
     const filterValue = typeof value === 'string' ? value.toLowerCase() : '';
@@ -866,8 +914,8 @@ export class CreateEditCompraComponent implements OnInit {
 
     const baseUnit = selectedItem.tipo_medida;
     const selectedUnit = this.detalleForm.get('selectedUnit')?.value;
-    const valor = this.detalleForm.get('valor')?.value || 0;
-    const cantidad = this.detalleForm.get('cantidad')?.value || 0;
+    const valor = this.parseNumber(this.detalleForm.get('valor')?.value);
+    const cantidad = this.parseNumber(this.detalleForm.get('cantidad')?.value);
 
     if (baseUnit && selectedUnit) {
       // Convert price from selected unit to base unit
@@ -889,18 +937,60 @@ export class CreateEditCompraComponent implements OnInit {
       return 0;
     }
 
-    const cantidad = this.detalleForm.get('cantidad')?.value || 0;
-    const valor = this.detalleForm.get('valor')?.value || 0;
+    const cantidad = this.parseNumber(this.detalleForm.get('cantidad')?.value);
+    const valor = this.parseNumber(this.detalleForm.get('valor')?.value);
 
     return cantidad * valor;
   }
 
-  // Add method to update total
+  // Helper function to safely parse number from string input
+  private parseNumber(value: any): number {
+    if (typeof value === 'number') return value;
+    if (!value) return 0;
+    
+    // Replace comma with dot for decimal parsing
+    return parseFloat(value.toString().replace(',', '.')) || 0;
+  }
+
+  // Update method to handle bidirectional conversion
   private updateTotal(): void {
-    const cantidad = this.detalleForm.get('cantidad')?.value || 0;
-    const valor = this.detalleForm.get('valor')?.value || 0;
+    // Skip if we're already updating valor
+    if (this.isUpdatingValor) return;
+    
+    const cantidad = this.parseNumber(this.detalleForm.get('cantidad')?.value);
+    const valor = this.parseNumber(this.detalleForm.get('valor')?.value);
     const total = cantidad * valor;
-    this.detalleForm.get('total')?.setValue(total, { emitEvent: false });
+    
+    // Only update if the calculated total is different from current total
+    const currentTotal = this.parseNumber(this.detalleForm.get('total')?.value);
+    if (Math.abs(currentTotal - total) > 0.001) {
+      this.isUpdatingTotal = true;
+      this.detalleForm.get('total')?.setValue(total, { emitEvent: false });
+      this.isUpdatingTotal = false;
+    }
+  }
+
+  // Method to update valor when total changes
+  updateValorFromTotal(): void {
+    // Skip if we're already updating total
+    if (this.isUpdatingTotal) return;
+    
+    const cantidad = this.parseNumber(this.detalleForm.get('cantidad')?.value);
+    const total = this.parseNumber(this.detalleForm.get('total')?.value);
+    
+    if (cantidad > 0) {
+      const valor = total / cantidad;
+      
+      // Only update if the calculated valor is different from current valor
+      const currentValor = this.parseNumber(this.detalleForm.get('valor')?.value);
+      if (Math.abs(currentValor - valor) > 0.001) {
+        this.isUpdatingValor = true;
+        this.detalleForm.get('valor')?.setValue(valor, { emitEvent: false });
+        // Also update converted values
+        this.updateConvertedValues();
+        this.isUpdatingValor = false;
+      }
+    }
   }
 
   // Add getter for total form control
@@ -908,10 +998,255 @@ export class CreateEditCompraComponent implements OnInit {
     return this.detalleForm.get('total') as FormControl;
   }
 
-  getCompatibleUnits(baseUnit: string): string[] {
-    if (!baseUnit) return [];
+  // Add getter for selectedUnit form control
+  get selectedUnitControl(): FormControl {
+    return this.detalleForm.get('selectedUnit') as FormControl;
+  }
+
+  // Handle comma-to-dot conversion for decimal inputs
+  onDecimalKeydown(event: KeyboardEvent): void {
+    if (event.key === ',') {
+      event.preventDefault();
+      
+      // Get the current input element
+      const input = event.target as HTMLInputElement;
+      const currentValue = input.value;
+      const selectionStart = input.selectionStart || 0;
+      
+      // Insert a dot instead of comma at the cursor position
+      const newValue = currentValue.substring(0, selectionStart) + '.' + currentValue.substring(selectionStart);
+      
+      // We need to update the form control directly
+      const controlName = input.getAttribute('formControlName');
+      if (controlName && this.detalleForm.contains(controlName)) {
+        this.detalleForm.get(controlName)?.setValue(newValue);
+        
+        // Set cursor position after the dot
+        setTimeout(() => {
+          input.setSelectionRange(selectionStart + 1, selectionStart + 1);
+        });
+      }
+    }
+  }
+
+  // Custom validator for cantidad to check minimum value
+  validateMinimumCantidad(control: FormControl): {[key: string]: any} | null {
+    const value = parseFloat(control.value?.toString().replace(',', '.'));
+    if (isNaN(value) || value < 0.01) {
+      return { 'min': true };
+    }
+    return null;
+  }
+
+  // Add a new detalle to the compra - simplified
+  async addDetalle(): Promise<void> {
+    if (this.detalleForm.invalid) {
+      this.markFormGroupTouched(this.detalleForm);
+      this.showError('Por favor complete todos los campos del detalle correctamente.');
+      return;
+    }
+
+    try {
+      // Get values from the form
+      const formValues = this.detalleForm.value;
+      const selectedItem = formValues.item;
+      
+      if (!selectedItem) {
+        this.showError('Debe seleccionar un producto o ingrediente.');
+        return;
+      }
+
+      // Create detalle object based on the type (producto or ingrediente)
+      const detalleData: Partial<CompraDetalle> = {
+        cantidad: parseFloat(formValues.cantidad.toString().replace(',', '.')),
+        valor: parseFloat(formValues.valor.toString().replace(',', '.')),
+        activo: true
+      };
+
+      // Set the appropriate relationship based on the selectedItem type
+      if (selectedItem.tipo === 'producto') {
+        detalleData.producto = { id: selectedItem.id } as Producto;
+        
+        // If a presentacion was selected, add it
+        if (formValues.presentacion) {
+          detalleData.presentacion = { id: formValues.presentacion.id } as Presentacion;
+        }
+      } else if (selectedItem.tipo === 'ingrediente') {
+        detalleData.ingrediente = { id: selectedItem.id } as Ingrediente;
+        // Save the tipo_medida for future reference
+        detalleData.tipo_medida = selectedItem.tipo_medida;
+      }
+
+      // If we have a compra ID, associate this detalle with the compra
+      if (this.compra?.id) {
+        detalleData.compra = { id: this.compra.id } as Compra;
+
+        // Save to database
+        const savedDetalle = await firstValueFrom(
+          this.repositoryService.createCompraDetalle(detalleData)
+        );
+
+        // Create a simplified form group with just the needed data
+        const detalleForm = this.fb.group({
+          id: [savedDetalle.id],
+          cantidad: [savedDetalle.cantidad, [Validators.required, Validators.min(0)]],
+          valor: [savedDetalle.valor, [Validators.required, Validators.min(0)]],
+          tipo: [selectedItem.tipo],
+          producto: [selectedItem.tipo === 'producto' ? selectedItem.id : null],
+          ingrediente: [selectedItem.tipo === 'ingrediente' ? selectedItem.id : null],
+          presentacion: [formValues.presentacion?.id || null],
+          tipo_medida: [selectedItem.tipo_medida || null],
+          item: [selectedItem]
+        });
+
+        // Add to the form array
+        this.detalles.push(detalleForm);
+
+        this.showSuccess('Detalle agregado correctamente');
+      } else {
+        throw new Error('Compra no encontrada');
+      }
+
+      // Recalculate total and clear the form for new entry
+      this.recalculateTotal();
+      this.resetAndFocusDetalleForm();
+
+    } catch (error: any) {
+      console.error('Error adding detalle:', error);
+      this.showError('Error al agregar detalle: ' + error.message);
+    }
+  }
+
+  // Remove a detalle from the compra - simplified
+  async removeDetalle(index: number): Promise<void> {
+    // First check if detalle actions are enabled
+    if (!this.detallesActionsEnabled) {
+      return;
+    }
+
+    try {
+      const detalle = this.detalles.at(index).value;
+      
+      // If the detalle has an ID, it's already saved in the database
+      if (detalle.id && this.compra?.id) {
+        // Show confirmation dialog
+        const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+          data: {
+            title: 'Eliminar detalle',
+            message: '¿Está seguro que desea eliminar este detalle de la compra?',
+            confirmText: 'Eliminar',
+            cancelText: 'Cancelar'
+          }
+        });
+
+        const result = await firstValueFrom(dialogRef.afterClosed());
+        if (!result) {
+          return;
+        }
+
+        // Delete from database
+        await firstValueFrom(
+          this.repositoryService.deleteCompraDetalle(detalle.id)
+        );
+        
+        this.showSuccess('Detalle eliminado correctamente');
+      }
+
+      // Remove from form array
+      this.detalles.removeAt(index);
+      this.recalculateTotal();
+      
+    } catch (error: any) {
+      console.error('Error removing detalle:', error);
+      this.showError('Error al eliminar detalle: ' + error.message);
+    }
+  }
+
+  // Add this getter to your component class
+  get detallesWithComputedValues(): Array<{control: AbstractControl, computedValues: any}> {
+    if (!this.detalles) {
+      return [];
+    }
     
-    const conversions = this.availableConversions.filter(conv => conv.from === baseUnit);
-    return [baseUnit, ...conversions.map(conv => conv.to)];
+    return this.detalles.controls.map(control => {
+      const value = control.value;
+      const itemName = value.item?.nombre || 'Sin nombre';
+      const subtotal = value.cantidad * value.valor;
+      
+      return {
+        control: control,
+        computedValues: {
+          itemName: itemName,
+          subtotal: subtotal
+        }
+      };
+    });
+  }
+
+  // Filter methods for formasPago
+  private _filterFormasPago(value: string | FormasPago): FormasPago[] {
+    const filterValue = typeof value === 'string' ? value.toUpperCase() : '';
+    return this.formasPago.filter(formaPago => 
+      formaPago.nombre.toUpperCase().includes(filterValue)
+    );
+  }
+
+  // Load FormasPago
+  async loadFormasPago(): Promise<void> {
+    try {
+      this.formasPago = await firstValueFrom(this.repositoryService.getFormasPago());
+    } catch (error: any) {
+      console.error('Error loading formas de pago:', error);
+      this.showError('Error al cargar formas de pago: ' + error.message);
+    }
+  }
+
+  // Display method for FormasPago
+  displayFormaPago = (formaPagoId: number): string => {
+    if (!formaPagoId) return '';
+    const formaPago = this.getFormaPagoById(formaPagoId);
+    return formaPago ? formaPago.nombre : '';
+  }
+
+  // Helper to get FormasPago by ID
+  getFormaPagoById(id: number): FormasPago | null {
+    return this.formasPago.find(f => f.id === id) || null;
+  }
+
+  // Load existing compra data when editing
+  loadCompra() {
+    if (this.compra) {
+      this.compraForm.patchValue({
+        id: this.compra.id,
+        proveedorId: this.compra.proveedor?.id,
+        proveedor: this.compra.proveedor,
+        monedaId: this.compra.moneda?.id,
+        moneda: this.compra.moneda,
+        fecha: this.compra.fecha,
+        total: this.compra.total,
+        estado: this.compra.estado,
+        compraDetalles: this.compra.compraDetalles,
+        numeroNota: this.compra.numeroNota,
+        tipoBoleta: this.compra.tipoBoleta,
+        fechaCompra: this.compra.fechaCompra,
+        credito: this.compra.credito,
+        plazoDias: this.compra.plazoDias,
+        formaPagoId: this.compra.formaPago?.id,
+        formaPago: this.compra.formaPago
+      });
+      
+      if (this.compra.credito) {
+        this.compraForm.get('plazoDias')?.enable();
+      }
+      
+      // Load compra details into the table
+      this.dataSource.data = [...this.compra.compraDetalles];
+      this.calculateTotal();
+    }
+  }
+
+  // Helper method to select FormaPago
+  displayFormaPago(formaPago: FormasPago): string {
+    return formaPago && formaPago.nombre ? formaPago.nombre : '';
   }
 }

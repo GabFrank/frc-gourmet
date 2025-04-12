@@ -2,17 +2,17 @@
 <ng-container *ngIf="isAuthenticated; else loginRouter">
   <mat-sidenav-container class="sidenav-container">
     <!-- Side navigation -->
-    <mat-sidenav #drawer class="sidenav" fixedInViewport
+    <mat-sidenav #drawer class="sidenav" [class.expanded]="isMenuExpanded" [class.collapsed]="!isMenuExpanded" fixedInViewport
         [attr.role]="(isHandset$ | async) ? 'dialog' : 'navigation'"
         [mode]="(isHandset$ | async) ? 'over' : 'side'"
-        [opened]="(isHandset$ | async) === false">
+        [opened]="true">
       <!-- User profile header instead of app name -->
       <div class="user-profile-header">
         <div class="user-avatar">
           <!-- Default avatar until we implement image upload -->
           <mat-icon class="avatar-icon">account_circle</mat-icon>
         </div>
-        <div class="user-info">
+        <div class="user-info" *ngIf="isMenuExpanded">
           <div class="user-name">{{ currentUser?.persona?.nombre || 'Usuario' }}</div>
           <div class="user-last-login" *ngIf="lastLoginTime">
             Último acceso: {{ lastLoginTime | date:'dd/MM/yyyy HH:mm' }}
@@ -21,111 +21,130 @@
       </div>
 
       <mat-nav-list>
-        <a mat-list-item (click)="openHomeTab(); drawer.close()" routerLinkActive="active">
-          <mat-icon matListItemIcon>dashboard</mat-icon>
-          <span matListItemTitle>Dashboard</span>
+        <!-- Dashboard item - Simple list item with proper alignment -->
+        <a mat-list-item (click)="openHomeTab(); expandMenu($event)" class="nav-list-item">
+          <div class="menu-item-content" [ngClass]="{'centered': !isMenuExpanded}">
+            <mat-icon class="nav-icon">dashboard</mat-icon>
+            <span class="nav-title" *ngIf="isMenuExpanded">Dashboard</span>
+          </div>
         </a>
 
         <!-- Recursos Humanos Menu -->
-        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel">
-          <mat-expansion-panel-header class="nav-panel-header">
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel" 
+                            [expanded]="isMenuSectionExpanded('rrhh')" 
+                            [hideToggle]="!isMenuExpanded">
+          <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'rrhh')">
             <mat-panel-title>
-              <mat-icon class="nav-icon">people</mat-icon>
-              <span class="nav-title">Recursos Humanos</span>
+              <div class="menu-item-content" [ngClass]="{'centered': !isMenuExpanded}">
+                <mat-icon class="nav-icon">people</mat-icon>
+                <span class="nav-title" *ngIf="isMenuExpanded">Recursos Humanos</span>
+              </div>
             </mat-panel-title>
           </mat-expansion-panel-header>
           <div class="submenu-container">
-            <a mat-list-item (click)="openRrhhDashTab(); drawer.close()">
+            <a mat-list-item (click)="openRrhhDashTab(); expandMenu($event, 'rrhh')">
               <mat-icon matListItemIcon>dashboard</mat-icon>
-              <span matListItemTitle>RRHHDash</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">RRHHDash</span>
             </a>
-            <a mat-list-item (click)="openPersonasTab(); drawer.close()">
+            <a mat-list-item (click)="openPersonasTab(); expandMenu($event, 'rrhh')">
               <mat-icon matListItemIcon>person</mat-icon>
-              <span matListItemTitle>Personas</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">Personas</span>
             </a>
-            <a mat-list-item (click)="openUsuariosTab(); drawer.close()">
+            <a mat-list-item (click)="openUsuariosTab(); expandMenu($event, 'rrhh')">
               <mat-icon matListItemIcon>account_circle</mat-icon>
-              <span matListItemTitle>Usuarios</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">Usuarios</span>
             </a>
-            <a mat-list-item (click)="openClientesTab(); drawer.close()">
+            <a mat-list-item (click)="openClientesTab(); expandMenu($event, 'rrhh')">
               <mat-icon matListItemIcon>business</mat-icon>
-              <span matListItemTitle>Clientes</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">Clientes</span>
             </a>
           </div>
         </mat-expansion-panel>
 
         <!-- Productos Menu -->
-        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel">
-          <mat-expansion-panel-header class="nav-panel-header">
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel" 
+                            [expanded]="isMenuSectionExpanded('productos')" 
+                            [hideToggle]="!isMenuExpanded">
+          <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'productos')">
             <mat-panel-title>
-              <mat-icon class="nav-icon">inventory_2</mat-icon>
-              <span class="nav-title">Productos</span>
+              <div class="menu-item-content" [ngClass]="{'centered': !isMenuExpanded}">
+                <mat-icon class="nav-icon">inventory_2</mat-icon>
+                <span class="nav-title" *ngIf="isMenuExpanded">Productos</span>
+              </div>
             </mat-panel-title>
           </mat-expansion-panel-header>
           <div class="submenu-container">
-            <a mat-list-item (click)="openCategoriasTab(); drawer.close()">
+            <a mat-list-item (click)="openCategoriasTab(); expandMenu($event, 'productos')">
               <mat-icon matListItemIcon>category</mat-icon>
-              <span matListItemTitle>Categorías</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">Categorías</span>
             </a>
-            <a mat-list-item (click)="openProductosTab(); drawer.close()">
+            <a mat-list-item (click)="openProductosTab(); expandMenu($event, 'productos')">
               <mat-icon matListItemIcon>restaurant</mat-icon>
-              <span matListItemTitle>Productos</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">Productos</span>
             </a>
-            <a mat-list-item (click)="openRecetasTab(); drawer.close()">
+            <a mat-list-item (click)="openRecetasTab(); expandMenu($event, 'productos')">
               <mat-icon matListItemIcon>menu_book</mat-icon>
-              <span matListItemTitle>Recetas</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">Recetas</span>
             </a>
-            <a mat-list-item (click)="openIngredientesTab(); drawer.close()">
+            <a mat-list-item (click)="openIngredientesTab(); expandMenu($event, 'productos')">
               <mat-icon matListItemIcon>egg</mat-icon>
-              <span matListItemTitle>Ingredientes</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">Ingredientes</span>
             </a>
           </div>
         </mat-expansion-panel>
 
         <!-- Compras Menu -->
-        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel">
-          <mat-expansion-panel-header class="nav-panel-header">
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel" 
+                            [expanded]="isMenuSectionExpanded('compras')" 
+                            [hideToggle]="!isMenuExpanded">
+          <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'compras')">
             <mat-panel-title>
-              <mat-icon class="nav-icon">shopping_cart</mat-icon>
-              <span class="nav-title">Compras</span>
+              <div class="menu-item-content" [ngClass]="{'centered': !isMenuExpanded}">
+                <mat-icon class="nav-icon">shopping_cart</mat-icon>
+                <span class="nav-title" *ngIf="isMenuExpanded">Compras</span>
+              </div>
             </mat-panel-title>
           </mat-expansion-panel-header>
           <div class="submenu-container">
-            <a mat-list-item (click)="openComprasDashTab(); drawer.close()">
+            <a mat-list-item (click)="openComprasDashTab(); expandMenu($event, 'compras')">
               <mat-icon matListItemIcon>dashboard</mat-icon>
-              <span matListItemTitle>Dashboard</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">Dashboard</span>
             </a>
-            <a mat-list-item (click)="openComprasTab(); drawer.close()">
+            <a mat-list-item (click)="openComprasTab(); expandMenu($event, 'compras')">
               <mat-icon matListItemIcon>shopping_cart</mat-icon>
-              <span matListItemTitle>Compras</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">Compras</span>
             </a>
           </div>
         </mat-expansion-panel>
 
         <!-- Financiero Menu -->
-        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel">
-          <mat-expansion-panel-header class="nav-panel-header">
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel" 
+                            [expanded]="isMenuSectionExpanded('financiero')" 
+                            [hideToggle]="!isMenuExpanded">
+          <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'financiero')">
             <mat-panel-title>
-              <mat-icon class="nav-icon">account_balance</mat-icon>
-              <span class="nav-title">Financiero</span>
+              <div class="menu-item-content" [ngClass]="{'centered': !isMenuExpanded}">
+                <mat-icon class="nav-icon">attach_money</mat-icon>
+                <span class="nav-title" *ngIf="isMenuExpanded">Financiero</span>
+              </div>
             </mat-panel-title>
           </mat-expansion-panel-header>
           <div class="submenu-container">
-            <a mat-list-item (click)="openFinancieroDashTab(); drawer.close()">
+            <a mat-list-item (click)="openFinancieroDashTab(); expandMenu($event, 'financiero')">
               <mat-icon matListItemIcon>dashboard</mat-icon>
-              <span matListItemTitle>Dashboard</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">Dashboard</span>
             </a>
-            <a mat-list-item (click)="openCajasTab(); drawer.close()">
+            <a mat-list-item (click)="openCajasTab(); expandMenu($event, 'financiero')">
               <mat-icon matListItemIcon>point_of_sale</mat-icon>
-              <span matListItemTitle>Cajas</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">Cajas</span>
             </a>
-            <a mat-list-item (click)="openMonedasTab(); drawer.close()">
+            <a mat-list-item (click)="openMonedasTab(); expandMenu($event, 'financiero')">
               <mat-icon matListItemIcon>monetization_on</mat-icon>
-              <span matListItemTitle>Monedas</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">Monedas</span>
             </a>
-            <a mat-list-item (click)="openTipoPrecioTab(); drawer.close()">
+            <a mat-list-item (click)="openTipoPrecioTab(); expandMenu($event, 'financiero')">
               <mat-icon matListItemIcon>sell</mat-icon>
-              <span matListItemTitle>Tipos de Precio</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">Tipos de Precio</span>
             </a>
           </div>
         </mat-expansion-panel>
@@ -133,21 +152,21 @@
         <mat-divider></mat-divider>
 
         <!-- Settings Menu - Convert to expansion panel -->
-        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel">
-          <mat-expansion-panel-header class="nav-panel-header">
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel" [expanded]="isMenuSectionExpanded('config')" [hideToggle]="!isMenuExpanded">
+          <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'config')">
             <mat-panel-title>
               <mat-icon class="nav-icon">settings</mat-icon>
-              <span class="nav-title">Configuración</span>
+              <span class="nav-title" *ngIf="isMenuExpanded">Configuración</span>
             </mat-panel-title>
           </mat-expansion-panel-header>
           <div class="submenu-container">
-            <a mat-list-item (click)="openPrinterSettings(); drawer.close()">
+            <a mat-list-item (click)="openPrinterSettings(); expandMenu($event, 'config')">
               <mat-icon matListItemIcon>print</mat-icon>
-              <span matListItemTitle>Impresoras</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">Impresoras</span>
             </a>
-            <a mat-list-item (click)="openDispositivosTab(); drawer.close()">
+            <a mat-list-item (click)="openDispositivosTab(); expandMenu($event, 'config')">
               <mat-icon matListItemIcon>devices</mat-icon>
-              <span matListItemTitle>Dispositivos y puntos de venta</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">Dispositivos y puntos de venta</span>
             </a>
           </div>
         </mat-expansion-panel>
@@ -162,9 +181,9 @@
           type="button"
           aria-label="Toggle sidenav"
           mat-icon-button
-          (click)="drawer.toggle()"
-          *ngIf="!drawer.opened || (isHandset$ | async)">
-          <mat-icon aria-label="Side nav toggle icon">menu</mat-icon>
+          (click)="toggleMenu($event)"
+          matTooltip="{{isMenuExpanded ? 'Colapsar menú' : 'Expandir menú'}}">
+          <mat-icon aria-label="Side nav toggle icon">{{isMenuExpanded ? 'menu_open' : 'menu'}}</mat-icon>
         </button>
         <span>FRC Gourmet</span>
         <span class="toolbar-spacer"></span>

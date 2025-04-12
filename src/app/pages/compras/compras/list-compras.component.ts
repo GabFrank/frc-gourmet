@@ -30,7 +30,6 @@ interface CompraViewModel {
   id: number;
   estado: CompraEstado;
   isRecepcionMercaderia: boolean;
-  total: number;
   activo: boolean;
   createdAt: Date;
   proveedor?: Proveedor;
@@ -318,7 +317,6 @@ export class ListComprasComponent implements OnInit {
       id: compra.id,
       estado: compra.estado,
       isRecepcionMercaderia: compra.isRecepcionMercaderia,
-      total: compra.total,
       activo: compra.activo,
       createdAt: compra.createdAt,
       proveedor: compra.proveedor,

@@ -7,9 +7,91 @@
   height: 100%;
 }
 
+// Dashboard specific styling to match panel headers
+.nav-list-item {
+  height: 48px !important;
+  padding: 0 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  
+  .nav-icon {
+    margin-right: 16px;
+    transition: margin 0.3s ease;
+  }
+  
+  .nav-title {
+    font-size: 14px;
+    transition: opacity 0.3s ease;
+  }
+}
+
+// Collapsed state for the Dashboard menu item
+.collapsed .nav-list-item {
+  justify-content: center !important;
+  padding: 0 !important;
+  
+  .nav-icon {
+    margin: 0 auto !important;
+  }
+}
+
 .sidenav {
-  width: 250px;
+  /* Default state is collapsed */
+  width: 60px;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  transition: width 0.3s ease;
+  overflow-x: hidden;
+  
+  &.expanded {
+    width: 250px;
+    
+    // Normal icon size in expanded state
+    mat-icon {
+      font-size: 24px;
+      height: 24px;
+      width: 24px;
+      line-height: 24px;
+    }
+  }
+  
+  &.collapsed {
+    width: 60px;
+    
+    // Larger icons in collapsed state
+    mat-icon {
+      font-size: 28px;
+      height: 28px;
+      width: 28px;
+      line-height: 28px;
+    }
+    
+    // Ensure panels have no background or shadow
+    .mat-expansion-panel {
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+    
+    .mat-expansion-panel-body {
+      padding: 0;
+    }
+    
+    .user-profile-header {
+      align-items: center;
+      padding: 24px 0;
+      
+      .user-avatar {
+        margin-bottom: 0;
+      }
+    }
+    
+    .nav-icon {
+      margin-right: 0;
+    }
+    
+    .submenu-container {
+      display: none;
+    }
+  }
 }
 
 // User profile in sidebar styles
@@ -19,17 +101,19 @@
   flex-direction: column;
   align-items: center;
   border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  transition: padding 0.3s ease;
 
   .user-avatar {
     margin-bottom: 12px;
     display: flex;
     justify-content: center;
+    transition: margin-bottom 0.3s ease;
 
     .avatar-icon {
-      font-size: 60px;
-      height: 60px;
-      width: 60px;
-      line-height: 60px;
+      font-size: 36px;
+      height: 36px;
+      width: 36px;
+      line-height: 36px;
       color: #5f6368;
     }
   }
@@ -37,6 +121,7 @@
   .user-info {
     text-align: center;
     width: 100%;
+    transition: opacity 0.3s ease;
 
     .user-name {
       font-weight: 500;
@@ -57,6 +142,8 @@
 
 // Navigation menu styling
 .nav-expansion-panel {
+  transition: background-color 0.3s ease;
+  
   .nav-panel-header {
     height: 48px;
     padding: 0 16px;
@@ -69,10 +156,12 @@
 
   .nav-icon {
     margin-right: 16px;
+    transition: margin 0.3s ease;
   }
 
   .nav-title {
     font-size: 14px;
+    transition: opacity 0.3s ease;
   }
 }
 
@@ -85,6 +174,7 @@
 
     .mat-icon {
       margin-right: 16px;
+      transition: margin 0.3s ease;
     }
   }
 }
@@ -157,6 +247,7 @@
   flex-direction: column;
   height: calc(100% - 64px);
   overflow: hidden;
+  transition: margin-left 0.3s ease;
 }
 
 .active {
@@ -171,6 +262,54 @@
   button {
     width: 100%;
   }
+}
+
+// Make all mat-list items centered in collapsed mode
+.collapsed {
+  // Make all mat-list-item have centered icons
+  mat-nav-list a[mat-list-item] {
+    display: flex;
+    justify-content: center;
+    padding: 0 !important;
+    
+    mat-icon {
+      margin: 0 !important;
+    }
+  }
+  
+  // Center expansion panel headers
+  .mat-expansion-panel-header {
+    padding: 0 !important;
+    justify-content: center;
+    height: 48px !important;
+  }
+  
+  .mat-expansion-panel-header-title {
+    justify-content: center;
+    margin-right: 0 !important;
+  }
+  
+  // Ensure all panel headers have same alignment and size
+  mat-expansion-panel {
+    margin: 0 !important;
+    
+    .nav-icon {
+      margin: 0 auto !important;
+    }
+    
+    mat-panel-title {
+      display: flex;
+      justify-content: center;
+    }
+  }
+}
+
+// Consistent sizing for all navigation icons
+.nav-icon {
+  font-size: inherit;
+  height: inherit;
+  width: inherit;
+  line-height: inherit;
 }
 
 @media (max-width: 599px) {
@@ -188,28 +327,23 @@
       line-height: 18px;
     }
   }
+  
+  // On mobile, allow sidenav to be fully shown
+  .sidenav.expanded {
+    width: 280px;
+  }
 }
 
+// Remove the hover trigger for mouse
 .sidenav-trigger {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 20px;
-  height: 100%;
-  z-index: 999;
-  background-color: transparent;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
-}
-
-.sidenav-trigger:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+  display: none;
 }
 
 mat-sidenav-content {
   display: flex;
   flex-direction: column;
   height: 100%;
+  transition: margin-left 0.3s ease;
 }
 
 app-tab-container {
@@ -223,4 +357,25 @@ app-tab-container {
 button[mat-icon-button] .mat-badge-content {
   top: -6px;
   right: -6px;
+}
+
+.menu-item-content {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  
+  .nav-icon {
+    margin-right: 16px;
+  }
+}
+
+.collapsed {
+  .menu-item-content {
+    justify-content: center;
+    
+    .nav-icon {
+      margin-right: 0;
+    }
+  }
 }

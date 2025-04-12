@@ -33,6 +33,10 @@ __decorate([
     __metadata("design:type", Boolean)
 ], CompraDetalle.prototype, "activo", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], CompraDetalle.prototype, "tipo_medida", void 0);
+__decorate([
     (0, typeorm_1.ManyToOne)('Compra', 'detalles', {
         createForeignKeyConstraints: false
     }),

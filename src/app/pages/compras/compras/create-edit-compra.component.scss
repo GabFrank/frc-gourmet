@@ -53,6 +53,17 @@
       margin-right: 24px;
       min-height: 54px; // Match height of form fields
     }
+    
+    &.credit-options {
+      background-color: rgba(0, 0, 0, 0.02);
+      padding: 16px;
+      border-radius: 4px;
+      margin-top: 24px;
+      
+      .checkbox-container {
+        min-width: 150px;
+      }
+    }
   }
 
   // Detalle form
@@ -221,6 +232,12 @@
 
     .detalle-form-container {
       background-color: rgba(255, 255, 255, 0.05);
+    }
+    
+    .form-row {
+      &.credit-options {
+        background-color: rgba(255, 255, 255, 0.05);
+      }
     }
 
     .total-container {
