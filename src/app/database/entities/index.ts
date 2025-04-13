@@ -47,12 +47,14 @@ export { CajaMoneda } from './financiero/caja-moneda.entity';
 
 // Export compras-related entities and enums
 export { CompraEstado, PagoEstado } from './compras/estado.enum';
+export { TipoBoleta } from './compras/tipo-boleta.enum';
 export { Proveedor } from './compras/proveedor.entity';
 export { Pago } from './compras/pago.entity';
 export { PagoDetalle } from './compras/pago-detalle.entity';
 export { Compra } from './compras/compra.entity';
 export { CompraDetalle } from './compras/compra-detalle.entity';
 export { ProveedorProducto } from './compras/proveedor-producto.entity';
+export { FormasPago } from './compras/forma-pago.entity';
 export {
   IPago,
   IPagoDetalle,

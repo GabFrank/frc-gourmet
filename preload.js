@@ -658,5 +658,21 @@ contextBridge.exposeInMainWorld('api', {
     },
     // System information
     getSystemMacAddress: () => ipcRenderer.invoke('get-system-mac-address'),
+    // FormasPago methods
+    getFormasPago: async () => {
+        return await ipcRenderer.invoke('getFormasPago');
+    },
+    getFormaPago: async (formaPagoId) => {
+        return await ipcRenderer.invoke('getFormaPago', formaPagoId);
+    },
+    createFormaPago: async (formaPagoData) => {
+        return await ipcRenderer.invoke('createFormaPago', formaPagoData);
+    },
+    updateFormaPago: async (formaPagoId, formaPagoData) => {
+        return await ipcRenderer.invoke('updateFormaPago', formaPagoId, formaPagoData);
+    },
+    deleteFormaPago: async (formaPagoId) => {
+        return await ipcRenderer.invoke('deleteFormaPago', formaPagoId);
+    },
 });
 //# sourceMappingURL=preload.js.map

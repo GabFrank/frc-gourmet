@@ -14,4 +14,10 @@ export class FormasPago extends BaseModel {
 
   @Column({ name: 'movimenta_caja', default: false })
   movimentaCaja!: boolean;
-} 
+
+  @Column({ default: false })
+  principal!: boolean;
+
+  @Column({ default: 0 })
+  orden!: number;
+}

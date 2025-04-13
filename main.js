@@ -54,6 +54,7 @@ const compra_detalle_entity_1 = require("./src/app/database/entities/compras/com
 const pago_entity_1 = require("./src/app/database/entities/compras/pago.entity");
 const pago_detalle_entity_1 = require("./src/app/database/entities/compras/pago-detalle.entity");
 const proveedor_producto_entity_1 = require("./src/app/database/entities/compras/proveedor-producto.entity");
+const forma_pago_entity_1 = require("./src/app/database/entities/compras/forma-pago.entity");
 let win;
 let dbService;
 // JWT Secret for token generation
@@ -4125,15 +4126,15 @@ ipcMain.handle('deletePagoDetalle', async (_event, detalleId) => {
 // Get all provider products for a provider
 ipcMain.handle('getProveedorProductos', async (_event, proveedorId) => {
     try {
-        const proveedorProductoRepository = dbService.getDataSource().getRepository(proveedor_producto_entity_1.ProveedorProducto);
-        const proveedorProductos = await proveedorProductoRepository.find({
+        const AppDataSource = dbService.getDataSource();
+        const proveedorProductoRepository = AppDataSource.getRepository(proveedor_producto_entity_1.ProveedorProducto);
+        return await proveedorProductoRepository.find({
             where: { proveedor: { id: proveedorId }, activo: true },
             relations: ['producto', 'ingrediente', 'compra']
         });
-        return proveedorProductos;
     }
     catch (error) {
-        console.error('Error fetching proveedor productos:', error);
+        console.error(`Error getting proveedor productos for proveedor ${proveedorId}:`, error);
         throw error;
     }
 });
@@ -4220,4 +4221,63 @@ ipcMain.handle('deleteProveedorProducto', async (_event, proveedorProductoId) =>
 });
 // ============== COMPRA APIS ==============
 // ... existing code ...
+// FormasPago handlers
+ipcMain.handle('getFormasPago', async () => {
+    try {
+        const AppDataSource = dbService.getDataSource();
+        const formasPagoRepository = AppDataSource.getRepository(forma_pago_entity_1.FormasPago);
+        return await formasPagoRepository.find({ where: { activo: true } });
+    }
+    catch (error) {
+        console.error('Error getting formas de pago:', error);
+        throw error;
+    }
+});
+ipcMain.handle('getFormaPago', async (_event, formaPagoId) => {
+    try {
+        const AppDataSource = dbService.getDataSource();
+        const formasPagoRepository = AppDataSource.getRepository(forma_pago_entity_1.FormasPago);
+        return await formasPagoRepository.findOne({ where: { id: formaPagoId } });
+    }
+    catch (error) {
+        console.error(`Error getting forma de pago ${formaPagoId}:`, error);
+        throw error;
+    }
+});
+ipcMain.handle('createFormaPago', async (_event, formaPagoData) => {
+    try {
+        const AppDataSource = dbService.getDataSource();
+        const formasPagoRepository = AppDataSource.getRepository(forma_pago_entity_1.FormasPago);
+        const newFormaPago = formasPagoRepository.create(formaPagoData);
+        return await formasPagoRepository.save(newFormaPago);
+    }
+    catch (error) {
+        console.error('Error creating forma de pago:', error);
+        throw error;
+    }
+});
+ipcMain.handle('updateFormaPago', async (_event, formaPagoId, formaPagoData) => {
+    try {
+        const AppDataSource = dbService.getDataSource();
+        const formasPagoRepository = AppDataSource.getRepository(forma_pago_entity_1.FormasPago);
+        await formasPagoRepository.update(formaPagoId, formaPagoData);
+        return await formasPagoRepository.findOne({ where: { id: formaPagoId } });
+    }
+    catch (error) {
+        console.error(`Error updating forma de pago ${formaPagoId}:`, error);
+        throw error;
+    }
+});
+ipcMain.handle('deleteFormaPago', async (_event, formaPagoId) => {
+    try {
+        const AppDataSource = dbService.getDataSource();
+        const formasPagoRepository = AppDataSource.getRepository(forma_pago_entity_1.FormasPago);
+        const result = await formasPagoRepository.update(formaPagoId, { activo: false });
+        return result.affected > 0;
+    }
+    catch (error) {
+        console.error(`Error deleting forma de pago ${formaPagoId}:`, error);
+        throw error;
+    }
+});
 //# sourceMappingURL=main.js.map

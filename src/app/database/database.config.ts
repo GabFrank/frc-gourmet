@@ -47,6 +47,7 @@ import { PagoDetalle } from './entities/compras/pago-detalle.entity';
 import { Compra } from './entities/compras/compra.entity';
 import { CompraDetalle } from './entities/compras/compra-detalle.entity';
 import { ProveedorProducto } from './entities/compras/proveedor-producto.entity';
+import { FormasPago } from './entities/compras/forma-pago.entity';
 
 // Import new migration
 import { AddColumnsToConteo1624098765432 } from './migrations/1624098765432-AddColumnsToConteo';
@@ -105,7 +106,8 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       PagoDetalle,
       Compra,
       CompraDetalle,
-      ProveedorProducto
+      ProveedorProducto,
+      FormasPago
     ],
     synchronize: true, // Automatically creates tables in development
     logging: process.env['NODE_ENV'] === 'development',

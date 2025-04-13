@@ -13,6 +13,7 @@
         <div class="section-container">
           <h3 class="section-title">Datos de la Compra</h3>
 
+          <!-- FIRST ROW: proveedor, forma de pago, moneda, estado -->
           <div class="form-row">
             <mat-form-field appearance="outline">
               <mat-label>Proveedor</mat-label>
@@ -25,6 +26,16 @@
               <mat-error *ngIf="compraForm.get('proveedor')?.hasError('required')">
                 El proveedor es requerido
               </mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Forma de Pago</mat-label>
+              <input type="text" matInput formControlName="formaPago" [matAutocomplete]="autoFormaPago">
+              <mat-autocomplete #autoFormaPago="matAutocomplete" [displayWith]="displayFormaPago">
+                <mat-option *ngFor="let formaPago of filteredFormasPago | async" [value]="formaPago.id">
+                  {{ formaPago.nombre }}
+                </mat-option>
+              </mat-autocomplete>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
@@ -41,27 +52,6 @@
             </mat-form-field>
 
             <mat-form-field appearance="outline">
-              <mat-label>Tipo de Boleta</mat-label>
-              <mat-select formControlName="tipoBoleta">
-                <mat-option *ngFor="let tipo of tipoBoletaOptions" [value]="tipo">
-                  {{ tipo }}
-                </mat-option>
-              </mat-select>
-            </mat-form-field>
-
-            <mat-form-field appearance="outline">
-              <mat-label>Fecha de Compra</mat-label>
-              <input matInput [matDatepicker]="fechaCompraPicker" formControlName="fechaCompra">
-              <mat-datepicker-toggle matSuffix [for]="fechaCompraPicker"></mat-datepicker-toggle>
-              <mat-datepicker #fechaCompraPicker></mat-datepicker>
-            </mat-form-field>
-
-            <mat-form-field appearance="outline">
-              <mat-label>Número de Nota</mat-label>
-              <input type="text" matInput formControlName="numeroNota">
-            </mat-form-field>
-
-            <mat-form-field appearance="outline">
               <mat-label>Estado</mat-label>
               <input matInput [value]="estadoLabel" readonly>
               <!-- Hidden select to maintain the form control -->
@@ -73,30 +63,32 @@
             </mat-form-field>
           </div>
 
+          <!-- SECOND ROW: fecha compra, tipo boleta, numero boleta -->
           <div class="form-row">
-            <div class="checkbox-container">
-              <mat-checkbox formControlName="isRecepcionMercaderia" color="primary">
-                Mercadería Recibida
-              </mat-checkbox>
-            </div>
+            <mat-form-field appearance="outline">
+              <mat-label>Fecha de Compra</mat-label>
+              <input matInput [matDatepicker]="fechaCompraPicker" formControlName="fechaCompra">
+              <mat-datepicker-toggle matSuffix [for]="fechaCompraPicker"></mat-datepicker-toggle>
+              <mat-datepicker #fechaCompraPicker></mat-datepicker>
+            </mat-form-field>
 
-            <div class="checkbox-container">
-              <mat-checkbox formControlName="activo" color="primary">
-                Activo
-              </mat-checkbox>
-            </div>
+            <mat-form-field appearance="outline">
+              <mat-label>Tipo de Boleta</mat-label>
+              <mat-select formControlName="tipoBoleta">
+                <mat-option *ngFor="let tipo of tipoBoletaOptions" [value]="tipo">
+                  {{ tipo }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
 
-            <div class="actions-container">
-              <button mat-button type="button" (click)="cancel()">
-                Cancelar
-              </button>
-              <button mat-raised-button color="primary" (click)="saveCompra()" [disabled]="compraForm.invalid || isLoading">
-                {{ isEditing ? 'Actualizar' : 'Guardar' }}
-              </button>
-            </div>
+            <mat-form-field appearance="outline">
+              <mat-label>Número de Nota</mat-label>
+              <input type="text" matInput formControlName="numeroNota">
+            </mat-form-field>
           </div>
 
-          <div class="form-row credit-options">
+          <!-- THIRD ROW: credito, activo, mercaderia recibida, plazo dias (if credito is true) -->
+          <div class="form-row">
             <div class="checkbox-container">
               <mat-checkbox formControlName="credito" color="primary">
                 A Crédito
@@ -114,15 +106,26 @@
               </mat-error>
             </mat-form-field>
 
-            <mat-form-field appearance="outline" *ngIf="compraForm.get('credito')?.value">
-              <mat-label>Forma de Pago</mat-label>
-              <input type="text" matInput formControlName="formaPago" [matAutocomplete]="autoFormaPago">
-              <mat-autocomplete #autoFormaPago="matAutocomplete" [displayWith]="displayFormaPago">
-                <mat-option *ngFor="let formaPago of filteredFormasPago | async" [value]="formaPago.id">
-                  {{ formaPago.nombre }}
-                </mat-option>
-              </mat-autocomplete>
-            </mat-form-field>
+            <div class="checkbox-container">
+              <mat-checkbox formControlName="activo" color="primary">
+                Activo
+              </mat-checkbox>
+            </div>
+
+            <div class="checkbox-container">
+              <mat-checkbox formControlName="isRecepcionMercaderia" color="primary">
+                Mercadería Recibida
+              </mat-checkbox>
+            </div>
+
+            <div class="actions-container">
+              <button mat-button type="button" (click)="cancel()">
+                Cancelar
+              </button>
+              <button mat-raised-button color="primary" (click)="saveCompra()" [disabled]="compraForm.invalid || isLoading">
+                {{ isEditing ? 'Actualizar' : 'Guardar' }}
+              </button>
+            </div>
           </div>
         </div>
 

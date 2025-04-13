@@ -53,6 +53,7 @@ import { CompraDetalle } from './src/app/database/entities/compras/compra-detall
 import { Pago } from './src/app/database/entities/compras/pago.entity';
 import { PagoDetalle } from './src/app/database/entities/compras/pago-detalle.entity';
 import { ProveedorProducto } from './src/app/database/entities/compras/proveedor-producto.entity';
+import { FormasPago } from './src/app/database/entities/compras/forma-pago.entity';
 
 
 let win: any;
@@ -4586,14 +4587,15 @@ ipcMain.handle('deletePagoDetalle', async (_event: any, detalleId: number) => {
 // Get all provider products for a provider
 ipcMain.handle('getProveedorProductos', async (_event: any, proveedorId: number) => {
   try {
-    const proveedorProductoRepository = dbService.getDataSource().getRepository(ProveedorProducto);
-    const proveedorProductos = await proveedorProductoRepository.find({
+    const AppDataSource = dbService.getDataSource();
+    const proveedorProductoRepository = AppDataSource.getRepository(ProveedorProducto);
+
+    return await proveedorProductoRepository.find({
       where: { proveedor: { id: proveedorId }, activo: true },
       relations: ['producto', 'ingrediente', 'compra']
     });
-    return proveedorProductos;
   } catch (error) {
-    console.error('Error fetching proveedor productos:', error);
+    console.error(`Error getting proveedor productos for proveedor ${proveedorId}:`, error);
     throw error;
   }
 });
@@ -4692,3 +4694,62 @@ ipcMain.handle('deleteProveedorProducto', async (_event: any, proveedorProductoI
 
 // ============== COMPRA APIS ==============
 // ... existing code ...
+
+// FormasPago handlers
+ipcMain.handle('getFormasPago', async () => {
+  try {
+    const AppDataSource = dbService.getDataSource();
+    const formasPagoRepository = AppDataSource.getRepository(FormasPago);
+    return await formasPagoRepository.find({ where: { activo: true } });
+  } catch (error) {
+    console.error('Error getting formas de pago:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('getFormaPago', async (_event: any, formaPagoId: number) => {
+  try {
+    const AppDataSource = dbService.getDataSource();
+    const formasPagoRepository = AppDataSource.getRepository(FormasPago);
+    return await formasPagoRepository.findOne({ where: { id: formaPagoId } });
+  } catch (error) {
+    console.error(`Error getting forma de pago ${formaPagoId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('createFormaPago', async (_event: any, formaPagoData: any) => {
+  try {
+    const AppDataSource = dbService.getDataSource();
+    const formasPagoRepository = AppDataSource.getRepository(FormasPago);
+    const newFormaPago = formasPagoRepository.create(formaPagoData);
+    return await formasPagoRepository.save(newFormaPago);
+  } catch (error) {
+    console.error('Error creating forma de pago:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('updateFormaPago', async (_event: any, formaPagoId: number, formaPagoData: any) => {
+  try {
+    const AppDataSource = dbService.getDataSource();
+    const formasPagoRepository = AppDataSource.getRepository(FormasPago);
+    await formasPagoRepository.update(formaPagoId, formaPagoData);
+    return await formasPagoRepository.findOne({ where: { id: formaPagoId } });
+  } catch (error) {
+    console.error(`Error updating forma de pago ${formaPagoId}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('deleteFormaPago', async (_event: any, formaPagoId: number) => {
+  try {
+    const AppDataSource = dbService.getDataSource();
+    const formasPagoRepository = AppDataSource.getRepository(FormasPago);
+    const result = await formasPagoRepository.update(formaPagoId, { activo: false });
+    return result.affected > 0;
+  } catch (error) {
+    console.error(`Error deleting forma de pago ${formaPagoId}:`, error);
+    throw error;
+  }
+});

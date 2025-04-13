@@ -19,7 +19,6 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatAutocompleteModule, MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
-import { TabsService } from '../../../services/tabs/tabs.service';
 import { RepositoryService } from '../../../database/repository.service';
 import { Compra, CompraDetalle, CompraEstado } from '../../../database/entities';
 import { Proveedor } from '../../../database/entities';
@@ -27,22 +26,15 @@ import { Moneda } from '../../../database/entities';
 import { Producto } from '../../../database/entities';
 import { Ingrediente } from '../../../database/entities';
 import { Presentacion } from '../../../database/entities';
-import { FormasPago } from '../../../models/compras/formas-pago.model';
-import { TipoBoleta } from '../../../models/compras/enums/tipo-boleta.enum';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
-import { Observable, firstValueFrom, map, startWith, of, debounceTime, switchMap, Subject, Subscription } from 'rxjs';
+import { Observable, firstValueFrom, map, startWith, of, debounceTime, switchMap, Subject, Subscription, from } from 'rxjs';
 import { UnitConversionService, UnitConversion } from '../../../services/unit-conversion.service';
 import { CurrencyInputComponent } from '../../../shared/components/currency-input/currency-input.component';
-import { CompraService } from '../../../services/compras/compra.service';
-import { ProveedorService } from '../../../services/proveedores/proveedor.service';
-import { MonedaService } from '../../../services/monedas/moneda.service';
-import { ProveedorProductoService } from '../../../services/proveedores/proveedor-producto.service';
-import { SearchItemService } from '../../../services/search/search-item.service';
-import { ErrorService } from '../../../services/error/error.service';
-import { FormasPagoService } from '../../../services/compras/formas-pago.service';
 import { MatPaginator } from '@angular/material/paginator';
 import { MatSort } from '@angular/material/sort';
-import { FormasPago as FormasPagoEntity } from '../../../database/entities/compras/forma-pago.entity';
+import { FormasPago, FormasPago as FormasPagoEntity } from '../../../database/entities/compras/forma-pago.entity';
+import { TabsService } from 'src/app/services/tabs.service';
+import { TipoBoleta } from 'src/app/database/entities/compras/tipo-boleta.enum';
 
 // Add interface for combined search results
 interface SearchItem {
@@ -86,6 +78,9 @@ interface SearchItem {
 })
 export class CreateEditCompraComponent implements OnInit {
   @Input() data: any;
+
+  //datasource for table
+  dataSource: MatTableDataSource<any> = new MatTableDataSource<any>([]);
 
   // Forms
   compraForm: FormGroup;
@@ -146,7 +141,7 @@ export class CreateEditCompraComponent implements OnInit {
   convertedValue = 0;
   baseValue = 0;
   convertedQuantity = 0;
-  
+
   // Add properties for two-way binding
   isUpdatingTotal = false;
   isUpdatingValor = false;
@@ -155,7 +150,7 @@ export class CreateEditCompraComponent implements OnInit {
   get compatibleUnits(): string[] {
     const baseUnit = this.detalleForm.get('item')?.value?.tipo_medida;
     if (!baseUnit) return [];
-    
+
     const conversions = this.availableConversions.filter(conv => conv.from === baseUnit);
     return [baseUnit, ...conversions.map(conv => conv.to)];
   }
@@ -257,7 +252,7 @@ export class CreateEditCompraComponent implements OnInit {
   formatCurrency(amount: number): string {
     const moneda = this.compraForm.get('moneda')?.value;
     if (!moneda) return amount.toString();
-    
+
     const currencySymbol = this.monedas.find(m => m.id === moneda)?.simbolo || '';
     return `${currencySymbol} ${amount.toFixed(2)}`;
   }
@@ -280,17 +275,7 @@ export class CreateEditCompraComponent implements OnInit {
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
     private tabsService: TabsService,
-    private unitConversionService: UnitConversionService,
-    private compraService: CompraService,
-    private proveedorService: ProveedorService,
-    private monedaService: MonedaService,
-    private proveedorProductoService: ProveedorProductoService,
-    private searchItemService: SearchItemService,
-    private dialogRef: MatDialogRef<CreateEditCompraComponent>,
-    private errorService: ErrorService,
-    private formasPagoService: FormasPagoService,
-    @Optional() @Inject(MAT_DIALOG_DATA) public data: any,
-    @Optional() public dialogRef: MatDialogRef<CreateEditCompraComponent>
+    private unitConversionService: UnitConversionService
   ) {
     this.detalleForm = this.fb.group({
       detalleId: [''],
@@ -300,12 +285,15 @@ export class CreateEditCompraComponent implements OnInit {
       item: ['', Validators.required],
       cantidad: ['', [Validators.required, Validators.min(0.01)]],
       costo: ['', [Validators.required, Validators.min(0.01)]],
+      valor: ['', [Validators.required, Validators.min(0.01)]],
       valorTotal: ['', [Validators.required, Validators.min(0.01)]],
+      total: [0, [Validators.min(0)]],
       codigoBarras: [''],
       cantidadConvertida: [{ value: '', disabled: true }],
       unidadDestino: [''],
       codigoDescripcion: [''],
-      manejaInventario: [false]
+      manejaInventario: [false],
+      selectedUnit: ['']
     });
 
     this.compraForm = this.fb.group({
@@ -324,6 +312,8 @@ export class CreateEditCompraComponent implements OnInit {
       fecha: [new Date(), Validators.required],
       total: [0],
       estado: ['PENDIENTE'],
+      isRecepcionMercaderia: [false],
+      activo: [true],
       compraDetalles: this.fb.array([])
     });
 
@@ -341,25 +331,32 @@ export class CreateEditCompraComponent implements OnInit {
     this.filteredProveedores = this.compraForm.get('proveedor')!.valueChanges.pipe(
       startWith(''),
       debounceTime(300),
-      switchMap(value => this._filterProveedores(value))
+      map(value => this._filterProveedores(value))
     );
 
     this.filteredMonedas = this.compraForm.get('moneda')!.valueChanges.pipe(
       startWith(''),
       debounceTime(300),
-      switchMap(value => this._filterMonedas(value))
+      map(value => this._filterMonedas(value))
     );
 
     this.filteredPresentaciones = this.detalleForm.get('presentacion')!.valueChanges.pipe(
       startWith(''),
       debounceTime(300),
-      switchMap(value => this._filterPresentaciones(value))
+      map(value => this._filterPresentaciones(value))
     );
 
     this.filteredItems = this.detalleForm.get('item')!.valueChanges.pipe(
       startWith(''),
       debounceTime(300),
-      switchMap(value => this._filterItems(value))
+      switchMap(value => {
+        try {
+          return this.searchItemsAsync(value);
+        } catch (error) {
+          console.error('Error in search items:', error);
+          return of([]);
+        }
+      })
     );
 
     this.filteredFormasPago = this.compraForm.get('formaPago')!.valueChanges.pipe(
@@ -377,38 +374,50 @@ export class CreateEditCompraComponent implements OnInit {
     this.dataSource = new MatTableDataSource<any>([]);
 
     // Check if we're editing an existing compra
-    if (data && data.compra) {
+    if (this.data && this.data.compra) {
       this.isEditing = true;
-      this.compra = data.compra;
+      this.compra = this.data.compra;
     }
   }
 
   async ngOnInit(): Promise<void> {
-    // Load lookup data
-    await this.loadProveedores();
-    await this.loadMonedas();
-    await this.loadFormasPago();
-    
-    // Initialize searchItems as an empty array
-    this.searchItems = [];
-    
-    // Check if we're editing an existing compra
-    if (this.data && this.data.compra) {
-      this.compra = this.data.compra;
-      this.isEditing = true;
-      await this.loadCompraDetails();
-    }
+    try {
+      // Load lookup data
+      await this.loadProveedores();
+      await this.loadMonedas();
 
-    // Set initial state of detalle form controls based on editability
-    this.updateDetalleFormState();
+      try {
+        await this.loadFormasPago();
+      } catch (error) {
+        console.warn('Failed to load formas de pago, continuing without it:', error);
+        // Initialize with empty array instead of failing
+        this.formasPago = [];
+      }
 
-    // Subscribe to estado changes to update form state
-    this.compraForm.get('estado')?.valueChanges.subscribe(() => {
+      // Initialize searchItems as an empty array
+      this.searchItems = [];
+
+      // Check if we're editing an existing compra
+      if (this.data && this.data.compra) {
+        this.compra = this.data.compra;
+        this.isEditing = true;
+        await this.loadCompraDetails();
+      }
+
+      // Set initial state of detalle form controls based on editability
       this.updateDetalleFormState();
-    });
 
-    // Setup the search-as-you-type functionality for items
-    this.setupItemSearchObservable();
+      // Subscribe to estado changes to update form state
+      this.compraForm.get('estado')?.valueChanges.subscribe(() => {
+        this.updateDetalleFormState();
+      });
+
+      // Setup the search-as-you-type functionality for items
+      this.setupItemSearchObservable();
+    } catch (error) {
+      console.error('Error initializing component:', error);
+      this.showError('Error al cargar los datos iniciales. Intente nuevamente más tarde.');
+    }
   }
 
   // Setup reactive search for productos and ingredientes
@@ -416,7 +425,14 @@ export class CreateEditCompraComponent implements OnInit {
     this.filteredItems = this.detalleForm.get('item')!.valueChanges.pipe(
       startWith(''),
       debounceTime(300), // Wait 300ms after user stops typing
-      switchMap(value => this.searchItemsAsync(value))
+      switchMap(value => {
+        try {
+          return this.searchItemsAsync(value);
+        } catch (error) {
+          console.error('Error in search items:', error);
+          return of([]);
+        }
+      })
     );
   }
 
@@ -428,7 +444,7 @@ export class CreateEditCompraComponent implements OnInit {
     }
 
     const searchText = typeof value === 'string' ? value : '';
-    
+
     // If search text is empty or too short, return empty array
     if (!searchText || searchText.length < 2) {
       return [];
@@ -440,17 +456,17 @@ export class CreateEditCompraComponent implements OnInit {
       const productoQuery = searchText.toLowerCase();
       const productos = await firstValueFrom(
         this.repositoryService.getProductos().pipe(
-          map(prods => prods.filter(p => 
+          map(prods => prods.filter(p =>
             p.nombre.toLowerCase().includes(productoQuery)
           ).slice(0, 10)) // Limit to 10 results
         )
       );
-      
+
       // Search for ingredientes
       const ingredienteQuery = searchText.toLowerCase();
       const ingredientes = await firstValueFrom(
         this.repositoryService.getIngredientes().pipe(
-          map(ings => ings.filter(i => 
+          map(ings => ings.filter(i =>
             i.descripcion.toLowerCase().includes(ingredienteQuery)
           ).slice(0, 10)) // Limit to 10 results
         )
@@ -483,19 +499,43 @@ export class CreateEditCompraComponent implements OnInit {
   // Load reference data
   async loadProveedores(): Promise<void> {
     try {
-      this.proveedores = await firstValueFrom(this.repositoryService.getProveedores());
+      if (typeof this.repositoryService.getProveedores === 'function') {
+        this.proveedores = await firstValueFrom(this.repositoryService.getProveedores());
+      } else {
+        console.warn('getProveedores method not available in repository service');
+        this.proveedores = [];
+        throw new Error('Method not implemented: getProveedores');
+      }
     } catch (error: any) {
       console.error('Error loading proveedores:', error);
-      this.showError('Error al cargar proveedores: ' + error.message);
+      // Initialize with empty array instead of failing
+      this.proveedores = [];
+      // Only show error message if it's not a database initialization error
+      if (!error.message?.includes('Database not initialized')) {
+        this.showError('Error al cargar proveedores: ' + error.message);
+      }
+      throw error;
     }
   }
 
   async loadMonedas(): Promise<void> {
     try {
-      this.monedas = await firstValueFrom(this.repositoryService.getMonedas());
+      if (typeof this.repositoryService.getMonedas === 'function') {
+        this.monedas = await firstValueFrom(this.repositoryService.getMonedas());
+      } else {
+        console.warn('getMonedas method not available in repository service');
+        this.monedas = [];
+        throw new Error('Method not implemented: getMonedas');
+      }
     } catch (error: any) {
       console.error('Error loading monedas:', error);
-      this.showError('Error al cargar monedas: ' + error.message);
+      // Initialize with empty array instead of failing
+      this.monedas = [];
+      // Only show error message if it's not a database initialization error
+      if (!error.message?.includes('Database not initialized')) {
+        this.showError('Error al cargar monedas: ' + error.message);
+      }
+      throw error;
     }
   }
 
@@ -894,7 +934,7 @@ export class CreateEditCompraComponent implements OnInit {
   // Add filter method for presentaciones
   private _filterPresentaciones(value: string | Presentacion): Presentacion[] {
     const filterValue = typeof value === 'string' ? value.toLowerCase() : '';
-    return this.presentaciones.filter(p => 
+    return this.presentaciones.filter(p =>
       p?.descripcion?.toLowerCase().includes(filterValue)
     );
   }
@@ -947,7 +987,7 @@ export class CreateEditCompraComponent implements OnInit {
   private parseNumber(value: any): number {
     if (typeof value === 'number') return value;
     if (!value) return 0;
-    
+
     // Replace comma with dot for decimal parsing
     return parseFloat(value.toString().replace(',', '.')) || 0;
   }
@@ -956,11 +996,11 @@ export class CreateEditCompraComponent implements OnInit {
   private updateTotal(): void {
     // Skip if we're already updating valor
     if (this.isUpdatingValor) return;
-    
+
     const cantidad = this.parseNumber(this.detalleForm.get('cantidad')?.value);
     const valor = this.parseNumber(this.detalleForm.get('valor')?.value);
     const total = cantidad * valor;
-    
+
     // Only update if the calculated total is different from current total
     const currentTotal = this.parseNumber(this.detalleForm.get('total')?.value);
     if (Math.abs(currentTotal - total) > 0.001) {
@@ -974,13 +1014,13 @@ export class CreateEditCompraComponent implements OnInit {
   updateValorFromTotal(): void {
     // Skip if we're already updating total
     if (this.isUpdatingTotal) return;
-    
+
     const cantidad = this.parseNumber(this.detalleForm.get('cantidad')?.value);
     const total = this.parseNumber(this.detalleForm.get('total')?.value);
-    
+
     if (cantidad > 0) {
       const valor = total / cantidad;
-      
+
       // Only update if the calculated valor is different from current valor
       const currentValor = this.parseNumber(this.detalleForm.get('valor')?.value);
       if (Math.abs(currentValor - valor) > 0.001) {
@@ -995,7 +1035,7 @@ export class CreateEditCompraComponent implements OnInit {
 
   // Add getter for total form control
   get totalControl(): FormControl {
-    return this.detalleForm.get('total') as FormControl;
+    return this.detalleForm.get('valorTotal') as FormControl;
   }
 
   // Add getter for selectedUnit form control
@@ -1007,20 +1047,20 @@ export class CreateEditCompraComponent implements OnInit {
   onDecimalKeydown(event: KeyboardEvent): void {
     if (event.key === ',') {
       event.preventDefault();
-      
+
       // Get the current input element
       const input = event.target as HTMLInputElement;
       const currentValue = input.value;
       const selectionStart = input.selectionStart || 0;
-      
+
       // Insert a dot instead of comma at the cursor position
       const newValue = currentValue.substring(0, selectionStart) + '.' + currentValue.substring(selectionStart);
-      
+
       // We need to update the form control directly
       const controlName = input.getAttribute('formControlName');
       if (controlName && this.detalleForm.contains(controlName)) {
         this.detalleForm.get(controlName)?.setValue(newValue);
-        
+
         // Set cursor position after the dot
         setTimeout(() => {
           input.setSelectionRange(selectionStart + 1, selectionStart + 1);
@@ -1050,7 +1090,7 @@ export class CreateEditCompraComponent implements OnInit {
       // Get values from the form
       const formValues = this.detalleForm.value;
       const selectedItem = formValues.item;
-      
+
       if (!selectedItem) {
         this.showError('Debe seleccionar un producto o ingrediente.');
         return;
@@ -1066,7 +1106,7 @@ export class CreateEditCompraComponent implements OnInit {
       // Set the appropriate relationship based on the selectedItem type
       if (selectedItem.tipo === 'producto') {
         detalleData.producto = { id: selectedItem.id } as Producto;
-        
+
         // If a presentacion was selected, add it
         if (formValues.presentacion) {
           detalleData.presentacion = { id: formValues.presentacion.id } as Presentacion;
@@ -1126,7 +1166,7 @@ export class CreateEditCompraComponent implements OnInit {
 
     try {
       const detalle = this.detalles.at(index).value;
-      
+
       // If the detalle has an ID, it's already saved in the database
       if (detalle.id && this.compra?.id) {
         // Show confirmation dialog
@@ -1148,14 +1188,14 @@ export class CreateEditCompraComponent implements OnInit {
         await firstValueFrom(
           this.repositoryService.deleteCompraDetalle(detalle.id)
         );
-        
+
         this.showSuccess('Detalle eliminado correctamente');
       }
 
       // Remove from form array
       this.detalles.removeAt(index);
       this.recalculateTotal();
-      
+
     } catch (error: any) {
       console.error('Error removing detalle:', error);
       this.showError('Error al eliminar detalle: ' + error.message);
@@ -1167,12 +1207,12 @@ export class CreateEditCompraComponent implements OnInit {
     if (!this.detalles) {
       return [];
     }
-    
+
     return this.detalles.controls.map(control => {
       const value = control.value;
       const itemName = value.item?.nombre || 'Sin nombre';
       const subtotal = value.cantidad * value.valor;
-      
+
       return {
         control: control,
         computedValues: {
@@ -1186,7 +1226,7 @@ export class CreateEditCompraComponent implements OnInit {
   // Filter methods for formasPago
   private _filterFormasPago(value: string | FormasPago): FormasPago[] {
     const filterValue = typeof value === 'string' ? value.toUpperCase() : '';
-    return this.formasPago.filter(formaPago => 
+    return this.formasPago.filter(formaPago =>
       formaPago.nombre.toUpperCase().includes(filterValue)
     );
   }
@@ -1194,18 +1234,20 @@ export class CreateEditCompraComponent implements OnInit {
   // Load FormasPago
   async loadFormasPago(): Promise<void> {
     try {
-      this.formasPago = await firstValueFrom(this.repositoryService.getFormasPago());
+      // Check if the method exists before calling it
+      if (typeof this.repositoryService.getFormasPago === 'function') {
+        this.formasPago = await firstValueFrom(this.repositoryService.getFormasPago());
+      } else {
+        console.warn('getFormasPago method not available in repository service');
+        this.formasPago = [];
+        throw new Error('Method not implemented: getFormasPago');
+      }
     } catch (error: any) {
       console.error('Error loading formas de pago:', error);
-      this.showError('Error al cargar formas de pago: ' + error.message);
+      // Don't show the error to the user, just initialize with empty array
+      this.formasPago = [];
+      throw error; // Re-throw to be caught by the try/catch in ngOnInit
     }
-  }
-
-  // Display method for FormasPago
-  displayFormaPago = (formaPagoId: number): string => {
-    if (!formaPagoId) return '';
-    const formaPago = this.getFormaPagoById(formaPagoId);
-    return formaPago ? formaPago.nombre : '';
   }
 
   // Helper to get FormasPago by ID
@@ -1222,10 +1264,8 @@ export class CreateEditCompraComponent implements OnInit {
         proveedor: this.compra.proveedor,
         monedaId: this.compra.moneda?.id,
         moneda: this.compra.moneda,
-        fecha: this.compra.fecha,
-        total: this.compra.total,
+        fecha: this.compra.fechaCompra,
         estado: this.compra.estado,
-        compraDetalles: this.compra.compraDetalles,
         numeroNota: this.compra.numeroNota,
         tipoBoleta: this.compra.tipoBoleta,
         fechaCompra: this.compra.fechaCompra,
@@ -1234,14 +1274,10 @@ export class CreateEditCompraComponent implements OnInit {
         formaPagoId: this.compra.formaPago?.id,
         formaPago: this.compra.formaPago
       });
-      
+
       if (this.compra.credito) {
         this.compraForm.get('plazoDias')?.enable();
       }
-      
-      // Load compra details into the table
-      this.dataSource.data = [...this.compra.compraDetalles];
-      this.calculateTotal();
     }
   }
 

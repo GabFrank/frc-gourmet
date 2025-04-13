@@ -15,6 +15,7 @@ import { ListCajasComponent } from '../cajas/list-cajas.component';
 import { TipoPrecioComponent } from '../tipo-precio/tipo-precio.component';
 import { ListDispositivosComponent } from '../dispositivos/list-dispositivos.component';
 import { ListMonedasComponent } from '../monedas/list-monedas/list-monedas.component';
+import { CreateEditFormaPagoComponent } from '../formas-pago/create-edit-forma-pago.component';
 
 @Component({
   selector: 'app-financiero-dashboard',
@@ -69,6 +70,13 @@ export class FinancieroDashboardComponent implements OnInit {
       icon: 'devices',
       route: 'dispositivos',
       color: '#9c27b0'
+    },
+    {
+      title: 'Formas de Pago',
+      description: 'Administrar métodos de pago',
+      icon: 'payments',
+      route: 'formas-pago',
+      color: '#e91e63'
     }
   ];
 
@@ -99,6 +107,9 @@ export class FinancieroDashboardComponent implements OnInit {
       case 'dispositivos':
         this.tabsService.openTab('Dispositivos y Puntos de Venta', ListDispositivosComponent);
         break;
+      case 'formas-pago':
+        this.openFormasPagoDialog();
+        break;
       default:
         break;
     }
@@ -113,6 +124,21 @@ export class FinancieroDashboardComponent implements OnInit {
     dialogRef.afterClosed().subscribe(result => {
       if (result && result.success) {
         this.snackBar.open('Configuración de monedas guardada correctamente', 'Cerrar', {
+          duration: 3000
+        });
+      }
+    });
+  }
+
+  openFormasPagoDialog(): void {
+    const dialogRef = this.dialog.open(CreateEditFormaPagoComponent, {
+      width: '800px',
+      disableClose: false
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.success) {
+        this.snackBar.open('Configuración de formas de pago guardada correctamente', 'Cerrar', {
           duration: 3000
         });
       }

@@ -29,6 +29,14 @@ __decorate([
     (0, typeorm_1.Column)({ name: 'movimenta_caja', default: false }),
     __metadata("design:type", Boolean)
 ], FormasPago.prototype, "movimentaCaja", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ default: false }),
+    __metadata("design:type", Boolean)
+], FormasPago.prototype, "principal", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ default: 0 }),
+    __metadata("design:type", Number)
+], FormasPago.prototype, "orden", void 0);
 FormasPago = __decorate([
     (0, typeorm_1.Entity)('formas_pago')
 ], FormasPago);
