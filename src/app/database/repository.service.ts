@@ -1146,6 +1146,21 @@ export class RepositoryService {
     return from(this.api.deleteProveedor(proveedorId));
   }
 
+  // New method to search providers by text
+  searchProveedoresByText(searchText: string): Observable<Proveedor[]> {
+    // Since we don't have a dedicated API endpoint, we'll use the getProveedores method
+    // and filter the results on the client side
+    return this.getProveedores().pipe(
+      map(proveedores => {
+        const query = searchText.toLowerCase();
+        return proveedores.filter(p =>
+          p.nombre.toLowerCase().includes(query) ||
+          (p.ruc && p.ruc.toLowerCase().includes(query))
+        ).slice(0, 10); // Limit to 10 results
+      })
+    );
+  }
+
   // Compra methods
   getCompras(): Observable<Compra[]> {
     return from(this.api.getCompras());
@@ -1278,5 +1293,16 @@ export class RepositoryService {
 
   deleteFormaPago(formaPagoId: number): Observable<any> {
     return from(this.api.deleteFormaPago(formaPagoId));
+  }
+
+  // Method to update the order of multiple FormasPago entries at once
+  updateFormasPagoOrder(updates: { id: number, orden: number }[]): Observable<any> {
+    // This is a temporary solution - ideally create a batch update endpoint in the API
+    // For now, we'll chain all the update operations using Promise.all
+    const updatePromises = updates.map(update =>
+      this.api.updateFormaPago(update.id, { orden: update.orden })
+    );
+
+    return from(Promise.all(updatePromises));
   }
 }

@@ -1,10 +1,10 @@
 .sidenav-container {
   position: absolute;
-  top: 0;
+  top: 64px; /* Height of the toolbar */
   bottom: 0;
   left: 0;
   right: 0;
-  height: 100%;
+  height: calc(100% - 64px);
 }
 
 // Dashboard specific styling to match panel headers
@@ -13,12 +13,22 @@
   padding: 0 16px !important;
   display: flex !important;
   align-items: center !important;
-  
+
+  .menu-item-content {
+    display: flex;
+    align-items: center;
+    width: 100%;
+
+    &.centered {
+      justify-content: center;
+    }
+  }
+
   .nav-icon {
     margin-right: 16px;
     transition: margin 0.3s ease;
   }
-  
+
   .nav-title {
     font-size: 14px;
     transition: opacity 0.3s ease;
@@ -29,67 +39,86 @@
 .collapsed .nav-list-item {
   justify-content: center !important;
   padding: 0 !important;
-  
+
   .nav-icon {
     margin: 0 auto !important;
   }
 }
 
 .sidenav {
-  /* Default state is collapsed */
+  /* Default width when collapsed */
   width: 60px;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
   transition: width 0.3s ease;
   overflow-x: hidden;
-  
+
   &.expanded {
     width: 250px;
-    
-    // Normal icon size in expanded state
-    mat-icon {
+
+    .nav-icon {
       font-size: 24px;
       height: 24px;
       width: 24px;
-      line-height: 24px;
     }
   }
-  
+
   &.collapsed {
     width: 60px;
-    
-    // Larger icons in collapsed state
-    mat-icon {
-      font-size: 28px;
-      height: 28px;
-      width: 28px;
-      line-height: 28px;
+
+    .nav-icon {
+      font-size: 24px;
+      height: 24px;
+      width: 24px;
+      margin: 0 auto;
     }
-    
-    // Ensure panels have no background or shadow
-    .mat-expansion-panel {
-      background: transparent !important;
-      box-shadow: none !important;
-    }
-    
+
     .mat-expansion-panel-body {
       padding: 0;
     }
-    
+
     .user-profile-header {
       align-items: center;
-      padding: 24px 0;
-      
+      padding: 16px 0;
+      justify-content: center;
+
       .user-avatar {
         margin-bottom: 0;
       }
     }
-    
+
+    .nav-expansion-panel {
+      .mat-expansion-panel-header {
+        padding: 0;
+        justify-content: center;
+      }
+
+      .menu-item-content {
+        justify-content: center;
+      }
+
+      .nav-icon {
+        margin-right: 0;
+      }
+    }
+
+    // Center all icons in collapsed mode
+    .menu-item-content {
+      justify-content: center;
+    }
+
     .nav-icon {
       margin-right: 0;
     }
-    
+
+    // Hide submenu when collapsed
     .submenu-container {
       display: none;
+    }
+
+    // Center single menu items
+    .nav-list-item {
+      padding: 0 !important;
+      justify-content: center;
     }
   }
 }
@@ -143,16 +172,23 @@
 // Navigation menu styling
 .nav-expansion-panel {
   transition: background-color 0.3s ease;
-  
+
   .nav-panel-header {
     height: 48px;
     padding: 0 16px;
+    transition: padding 0.3s ease;
   }
 
   .mat-expansion-panel-header-title {
     display: flex;
     align-items: center;
   }
+}
+
+.menu-item-content {
+  display: flex;
+  align-items: center;
+  width: 100%;
 
   .nav-icon {
     margin-right: 16px;
@@ -162,6 +198,14 @@
   .nav-title {
     font-size: 14px;
     transition: opacity 0.3s ease;
+  }
+
+  &.centered {
+    justify-content: center;
+
+    .nav-icon {
+      margin-right: 0;
+    }
   }
 }
 
@@ -174,7 +218,6 @@
 
     .mat-icon {
       margin-right: 16px;
-      transition: margin 0.3s ease;
     }
   }
 }
@@ -188,8 +231,9 @@
 .app-toolbar {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 10;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  height: 64px;
 
   // Make the menu button more visible
   button[mat-icon-button]:first-child {
@@ -243,11 +287,10 @@
 }
 
 .main-content {
+  height: 100%;
+  overflow: auto;
   display: flex;
   flex-direction: column;
-  height: calc(100% - 64px);
-  overflow: hidden;
-  transition: margin-left 0.3s ease;
 }
 
 .active {
@@ -271,32 +314,32 @@
     display: flex;
     justify-content: center;
     padding: 0 !important;
-    
+
     mat-icon {
       margin: 0 !important;
     }
   }
-  
+
   // Center expansion panel headers
   .mat-expansion-panel-header {
     padding: 0 !important;
     justify-content: center;
     height: 48px !important;
   }
-  
+
   .mat-expansion-panel-header-title {
     justify-content: center;
     margin-right: 0 !important;
   }
-  
+
   // Ensure all panel headers have same alignment and size
   mat-expansion-panel {
     margin: 0 !important;
-    
+
     .nav-icon {
       margin: 0 auto !important;
     }
-    
+
     mat-panel-title {
       display: flex;
       justify-content: center;
@@ -313,8 +356,13 @@
 }
 
 @media (max-width: 599px) {
-  .main-content {
-    min-height: calc(100vh - 56px);
+  .app-toolbar {
+    height: 56px;
+  }
+
+  .sidenav-container {
+    top: 56px; /* Height of toolbar on mobile */
+    height: calc(100% - 56px);
   }
 
   .theme-toggle {
@@ -327,7 +375,7 @@
       line-height: 18px;
     }
   }
-  
+
   // On mobile, allow sidenav to be fully shown
   .sidenav.expanded {
     width: 280px;
@@ -348,34 +396,15 @@ mat-sidenav-content {
 
 app-tab-container {
   display: flex;
-  flex: 1;
-  min-height: 0;
+  flex: 1 1 auto;
+  min-height: 0; /* Important for Firefox */
   overflow: hidden;
+  height: 100%;
+  width: 100%;
 }
 
 // Override for notification badge to ensure proper placement
 button[mat-icon-button] .mat-badge-content {
   top: -6px;
   right: -6px;
-}
-
-.menu-item-content {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  height: 100%;
-  
-  .nav-icon {
-    margin-right: 16px;
-  }
-}
-
-.collapsed {
-  .menu-item-content {
-    justify-content: center;
-    
-    .nav-icon {
-      margin-right: 0;
-    }
-  }
 }

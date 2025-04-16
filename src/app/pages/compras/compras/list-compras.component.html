@@ -72,28 +72,34 @@
     </div>
 
     <mat-card class="table-scroll-container">
-      <table mat-table [dataSource]="compras" matSort (matSortChange)="onSort($event)" class="mat-elevation-z8">
+      <table mat-table [dataSource]="compras" class="mat-elevation-z8">
         <!-- ID Column -->
         <ng-container matColumnDef="id">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header>ID</th>
+          <th mat-header-cell *matHeaderCellDef>ID</th>
           <td mat-cell *matCellDef="let compra">{{ compra.id }}</td>
+        </ng-container>
+
+        <!-- Proveedor Column (text field - left aligned) -->
+        <ng-container matColumnDef="proveedor">
+          <th mat-header-cell *matHeaderCellDef class="text-left">Proveedor</th>
+          <td mat-cell *matCellDef="let compra" class="text-left">{{ compra.displayValues.proveedorNombre || 'Sin proveedor' }}</td>
         </ng-container>
 
         <!-- Fecha Column -->
         <ng-container matColumnDef="fecha">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header>Fecha</th>
+          <th mat-header-cell *matHeaderCellDef>Fecha</th>
           <td mat-cell *matCellDef="let compra">{{ compra.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
         </ng-container>
 
-        <!-- Proveedor Column -->
-        <ng-container matColumnDef="proveedor">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header>Proveedor</th>
-          <td mat-cell *matCellDef="let compra">{{ compra.displayValues.proveedorNombre || 'Sin proveedor' }}</td>
+        <!-- NumeroNota Column (text field - left aligned) -->
+        <ng-container matColumnDef="numeroNota">
+          <th mat-header-cell *matHeaderCellDef>Número</th>
+          <td mat-cell *matCellDef="let compra">{{ compra.numeroNota }}</td>
         </ng-container>
 
         <!-- Estado Column -->
         <ng-container matColumnDef="estado">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header>Estado</th>
+          <th mat-header-cell *matHeaderCellDef>Estado</th>
           <td mat-cell *matCellDef="let compra">
             <span class="status-badge"
               [ngClass]="{
@@ -106,26 +112,32 @@
           </td>
         </ng-container>
 
-        <!-- Total Column -->
-        <ng-container matColumnDef="total">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header>Total</th>
-          <td mat-cell *matCellDef="let compra">{{ compra.total | number:'1.0-2' }}</td>
+        <!-- Moneda Column (text field - left aligned) -->
+        <ng-container matColumnDef="moneda">
+          <th mat-header-cell *matHeaderCellDef>Moneda</th>
+          <td mat-cell *matCellDef="let compra" >{{ compra.displayValues.monedaNombre }}</td>
         </ng-container>
 
-        <!-- Moneda Column -->
-        <ng-container matColumnDef="moneda">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header>Moneda</th>
-          <td mat-cell *matCellDef="let compra">{{ compra.displayValues.monedaNombre }}</td>
+        <!-- FormaPago Column (text field - left aligned) -->
+        <ng-container matColumnDef="formaPago">
+          <th mat-header-cell *matHeaderCellDef>Forma de Pago</th>
+          <td mat-cell *matCellDef="let compra" >{{ compra.displayValues.formaPagoNombre }}</td>
         </ng-container>
 
         <!-- Recepción Column -->
         <ng-container matColumnDef="recepcion">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header>Recepción</th>
+          <th mat-header-cell *matHeaderCellDef>Recepción</th>
           <td mat-cell *matCellDef="let compra">
             <mat-icon [ngClass]="{'text-success': compra.isRecepcionMercaderia, 'text-danger': !compra.isRecepcionMercaderia}">
               {{ compra.isRecepcionMercaderia ? 'check_circle' : 'highlight_off' }}
             </mat-icon>
           </td>
+        </ng-container>
+
+        <!-- Total Column -->
+        <ng-container matColumnDef="total">
+          <th mat-header-cell *matHeaderCellDef class="text-center">Total</th>
+          <td mat-cell *matCellDef="let compra" class="text-center">{{ compra.total | number:'1.0-2' }}</td>
         </ng-container>
 
         <!-- Actions Column -->

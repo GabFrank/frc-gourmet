@@ -35,6 +35,8 @@ import { MatSort } from '@angular/material/sort';
 import { FormasPago, FormasPago as FormasPagoEntity } from '../../../database/entities/compras/forma-pago.entity';
 import { TabsService } from 'src/app/services/tabs.service';
 import { TipoBoleta } from 'src/app/database/entities/compras/tipo-boleta.enum';
+import { CurrencyConfigService } from '../../../shared/services/currency-config.service';
+import { PaymentOptionsDialogComponent, PaymentResult, PaymentOptionsData } from '../../../shared/components/payment-options-dialog/payment-options-dialog.component';
 
 // Add interface for combined search results
 interface SearchItem {
@@ -71,7 +73,8 @@ interface SearchItem {
     MatDatepickerModule,
     MatNativeDateModule,
     ConfirmationDialogComponent,
-    CurrencyInputComponent
+    CurrencyInputComponent,
+    PaymentOptionsDialogComponent
   ],
   templateUrl: './create-edit-compra.component.html',
   styleUrls: ['./create-edit-compra.component.scss']
@@ -146,6 +149,12 @@ export class CreateEditCompraComponent implements OnInit {
   isUpdatingTotal = false;
   isUpdatingValor = false;
 
+  // Add a property to track previous state
+  previousEstado: CompraEstado = CompraEstado.ABIERTO;
+
+  // Add property for editing state
+  isEditingEnabled = false;
+
   // Computed properties for template use
   get compatibleUnits(): string[] {
     const baseUnit = this.detalleForm.get('item')?.value?.tipo_medida;
@@ -167,7 +176,14 @@ export class CreateEditCompraComponent implements OnInit {
   }
 
   get currentMoneda(): Moneda | null {
-    const monedaId = this.compraForm.get('moneda')?.value;
+    const monedaValue = this.compraForm.get('moneda')?.value;
+    // If monedaValue is an object with an id property, it's already a Moneda object
+    if (monedaValue && typeof monedaValue === 'object' && 'id' in monedaValue) {
+      return monedaValue as Moneda;
+    }
+    // Otherwise, look it up by ID
+    const monedaId = typeof monedaValue === 'number' ? monedaValue :
+                    (monedaValue ? Number(monedaValue) : null);
     return monedaId ? this.getMonedaById(monedaId) : null;
   }
 
@@ -210,7 +226,9 @@ export class CreateEditCompraComponent implements OnInit {
   }
 
   get compraTotal(): number {
-    return this.compraForm.get('total')?.value || 0;
+    return this.detalles.controls.reduce((total, control) => {
+      return total + this.getSubtotal(control.value);
+    }, 0);
   }
 
   // Computed property for estado label
@@ -248,15 +266,6 @@ export class CreateEditCompraComponent implements OnInit {
     return detalle.cantidad * detalle.valor;
   }
 
-  // Format currency amount
-  formatCurrency(amount: number): string {
-    const moneda = this.compraForm.get('moneda')?.value;
-    if (!moneda) return amount.toString();
-
-    const currencySymbol = this.monedas.find(m => m.id === moneda)?.simbolo || '';
-    return `${currencySymbol} ${amount.toFixed(2)}`;
-  }
-
   // Recalculate the total based on detalles - simplified
   recalculateTotal(): void {
     let total = 0;
@@ -275,63 +284,89 @@ export class CreateEditCompraComponent implements OnInit {
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
     private tabsService: TabsService,
-    private unitConversionService: UnitConversionService
+    private unitConversionService: UnitConversionService,
+    private currencyConfigService: CurrencyConfigService
   ) {
+    // Initialize the main compra form with all necessary controls
+    this.compraForm = this.fb.group({
+      // Required fields from entity
+      estado: [CompraEstado.ABIERTO], // Default to ABIERTO
+      isRecepcionMercaderia: [false],
+      activo: [true], // Default to true
+      moneda: [null, Validators.required],
+
+      // Optional fields from entity
+      proveedor: [null, Validators.required], // Made required in UI
+      formaPago: [null],
+      numeroNota: [null],
+      tipoBoleta: [null],
+      fechaCompra: [new Date()], // Default to current date
+      credito: [false],
+      plazoDias: [{ value: null, disabled: true }],
+
+      // Additional fields needed for form functionality
+      detalles: this.fb.array([]), // Required for table display
+      total: [0], // Required for total calculation display
+      id: [null] // Required for edit mode identification
+    });
+
+    // Watch credito changes to enable/disable plazoDias
+    this.compraForm.get('credito')?.valueChanges.subscribe(isCredito => {
+      const plazoDiasControl = this.compraForm.get('plazoDias');
+      if (isCredito) {
+        plazoDiasControl?.enable();
+        plazoDiasControl?.setValidators([Validators.required, Validators.min(1)]);
+      } else {
+        plazoDiasControl?.disable();
+        plazoDiasControl?.clearValidators();
+      }
+      plazoDiasControl?.updateValueAndValidity();
+    });
+
     this.detalleForm = this.fb.group({
-      detalleId: [''],
-      presentacionId: ['', Validators.required],
-      presentacion: ['', Validators.required],
-      itemId: ['', Validators.required],
       item: ['', Validators.required],
       cantidad: ['', [Validators.required, Validators.min(0.01)]],
-      costo: ['', [Validators.required, Validators.min(0.01)]],
       valor: ['', [Validators.required, Validators.min(0.01)]],
       valorTotal: ['', [Validators.required, Validators.min(0.01)]],
-      total: [0, [Validators.min(0)]],
-      codigoBarras: [''],
-      cantidadConvertida: [{ value: '', disabled: true }],
-      unidadDestino: [''],
-      codigoDescripcion: [''],
-      manejaInventario: [false],
+      presentacion: [''],
+      tipo_medida: [''],
       selectedUnit: ['']
     });
 
-    this.compraForm = this.fb.group({
-      id: [null],
-      proveedorId: [null, Validators.required],
-      proveedor: [null, Validators.required],
-      monedaId: [null, Validators.required],
-      moneda: [null, Validators.required],
-      numeroNota: [''],
-      tipoBoleta: [TipoBoleta.LEGAL],
-      fechaCompra: [new Date(), Validators.required],
-      credito: [false],
-      plazoDias: [{value: 0, disabled: true}, [Validators.min(1), Validators.max(365)]],
-      formaPagoId: [null],
-      formaPago: [null],
-      fecha: [new Date(), Validators.required],
-      total: [0],
-      estado: ['PENDIENTE'],
-      isRecepcionMercaderia: [false],
-      activo: [true],
-      compraDetalles: this.fb.array([])
-    });
-
-    // Setup value change subscriptions
-    this.compraForm.get('credito')?.valueChanges.subscribe(value => {
-      if (value) {
-        this.compraForm.get('plazoDias')?.enable();
-      } else {
-        this.compraForm.get('plazoDias')?.disable();
-        this.compraForm.get('plazoDias')?.setValue(0);
+    // Setup bidirectional calculation between valor (unit price) and valorTotal (final total)
+    // When user types in valor field, valorTotal will be calculated automatically (valor * cantidad)
+    // When user types in valorTotal field, valor will be calculated automatically (valorTotal / cantidad)
+    this.detalleForm.get('valor')?.valueChanges.subscribe(value => {
+      if (!this.isUpdatingValor) {
+        this.updateTotal();
       }
     });
 
-    // Setup autocomplete filters
+    this.detalleForm.get('valorTotal')?.valueChanges.subscribe(value => {
+      if (!this.isUpdatingTotal) {
+        this.updateValorFromTotal();
+      }
+    });
+
+    // Also update the total when cantidad changes
+    this.detalleForm.get('cantidad')?.valueChanges.subscribe(value => {
+      if (!this.isUpdatingValor && !this.isUpdatingTotal) {
+        this.updateTotal();
+      }
+    });
+
+    // Set up observables for autocomplete filtering
     this.filteredProveedores = this.compraForm.get('proveedor')!.valueChanges.pipe(
       startWith(''),
       debounceTime(300),
-      map(value => this._filterProveedores(value))
+      switchMap(value => {
+        try {
+          return this.searchProveedoresAsync(value);
+        } catch (error) {
+          console.error('Error searching proveedores:', error);
+          return of([]);
+        }
+      })
     );
 
     this.filteredMonedas = this.compraForm.get('moneda')!.valueChanges.pipe(
@@ -399,9 +434,18 @@ export class CreateEditCompraComponent implements OnInit {
 
       // Check if we're editing an existing compra
       if (this.data && this.data.compra) {
+        console.log('data', this.data);
         this.compra = this.data.compra;
         this.isEditing = true;
         await this.loadCompraDetails();
+
+        // Store the current estado as previous in case we need to revert
+        this.previousEstado = this.compra?.estado || CompraEstado.ABIERTO;
+
+        // If the compra is in FINALIZADO state, disable the form
+        if (this.compra?.estado === CompraEstado.FINALIZADO) {
+          this.disableForm();
+        }
       }
 
       // Set initial state of detalle form controls based on editability
@@ -414,6 +458,25 @@ export class CreateEditCompraComponent implements OnInit {
 
       // Setup the search-as-you-type functionality for items
       this.setupItemSearchObservable();
+
+      // Subscribe to moneda changes to update currency-related values
+      this.compraForm.get('moneda')?.valueChanges.subscribe(moneda => {
+        // Trigger currency formatting update by updating valor and valorTotal with their current values
+        const currentValor = this.detalleForm.get('valor')?.value;
+        const currentTotal = this.detalleForm.get('valorTotal')?.value;
+
+        if (currentValor) {
+          setTimeout(() => {
+            this.detalleForm.get('valor')?.setValue(currentValor);
+          });
+        }
+
+        if (currentTotal) {
+          setTimeout(() => {
+            this.detalleForm.get('valorTotal')?.setValue(currentTotal);
+          });
+        }
+      });
     } catch (error) {
       console.error('Error initializing component:', error);
       this.showError('Error al cargar los datos iniciales. Intente nuevamente más tarde.');
@@ -559,12 +622,23 @@ export class CreateEditCompraComponent implements OnInit {
     try {
       this.isLoading = true;
 
+      // Store the current estado before loading new data
+      if (this.compra.estado) {
+        this.previousEstado = this.compra.estado;
+      }
+
       // Set main form values
       this.compraForm.patchValue({
         proveedor: this.compra.proveedor?.id,
         moneda: this.compra.moneda?.id,
         estado: this.compra.estado,
         isRecepcionMercaderia: this.compra.isRecepcionMercaderia,
+        formaPago: this.compra.formaPago?.id,
+        plazoDias: this.compra.plazoDias,
+        credito: this.compra.credito,
+        numeroNota: this.compra.numeroNota,
+        tipoBoleta: this.compra.tipoBoleta,
+        fechaCompra: this.compra.fechaCompra,
         activo: this.compra.activo
       });
 
@@ -635,6 +709,12 @@ export class CreateEditCompraComponent implements OnInit {
         proveedor: formData.proveedor,
         moneda: formData.moneda,
         estado: formData.estado,
+        formaPago: formData.formaPago,
+        plazoDias: formData.formaPago?.id === 2 ? formData.plazoDias : null,
+        credito: formData.formaPago?.id === 2 ? true : false,
+        numeroNota: formData.numeroNota,
+        tipoBoleta: formData.tipoBoleta,
+        fechaCompra: formData.fechaCompra,
         isRecepcionMercaderia: formData.isRecepcionMercaderia,
         activo: formData.activo
       };
@@ -689,6 +769,10 @@ export class CreateEditCompraComponent implements OnInit {
               detalles: detallesData as any // Cast to any to avoid TypeScript issues
             })
           );
+
+          // Update the form with the saved estado
+          this.compraForm.get('estado')?.setValue(savedCompra.estado);
+
           this.showSuccess('Compra creada correctamente');
         } catch (error) {
           console.error('Error creating compra:', error);
@@ -699,6 +783,10 @@ export class CreateEditCompraComponent implements OnInit {
             detalles: detallesData as CompraDetalle[],
             createdAt: new Date()
           } as Compra;
+
+          // Update the form with the mock estado
+          this.compraForm.get('estado')?.setValue(CompraEstado.ABIERTO);
+
           this.showSuccess('Compra creada correctamente (modo simulación)');
         }
 
@@ -713,6 +801,11 @@ export class CreateEditCompraComponent implements OnInit {
       // Focus on the detalle form to start adding details
       this.resetAndFocusDetalleForm();
 
+      // After successful save, if we were in editing mode, disable it
+      if (this.isEditingEnabled) {
+        this.isEditingEnabled = false;
+      }
+
     } catch (error: any) {
       console.error('Error saving compra:', error);
       this.showError('Error al guardar la compra: ' + error.message);
@@ -723,17 +816,20 @@ export class CreateEditCompraComponent implements OnInit {
 
   // Helper method to reset and focus the detalle form
   private resetAndFocusDetalleForm(): void {
+    // Reset the form with initial values
     this.detalleForm.reset({
       item: null,
       presentacion: null,
       cantidad: 1,
-      valor: 0
+      valor: '',
+      valorTotal: '',
+      total: 0
     });
 
     // Focus on the first field of the detalle form
     setTimeout(() => {
       try {
-        const firstInput = document.querySelector('.detalle-form-container input');
+        const firstInput = document.querySelector('.detalle-form-container .search-field input');
         if (firstInput instanceof HTMLElement) {
           firstInput.focus();
         }
@@ -813,7 +909,6 @@ export class CreateEditCompraComponent implements OnInit {
 
   // Used by the tab service
   setData(data: any): void {
-    console.log('Setting data for Create/Edit Compra component:', data);
     this.data = data;
 
     if (data?.compra) {
@@ -841,7 +936,12 @@ export class CreateEditCompraComponent implements OnInit {
     );
   }
 
-  private _filterMonedas(value: string | number): Moneda[] {
+  private _filterMonedas(value: string | number | Moneda): Moneda[] {
+    if (value && typeof value === 'object') {
+      // If it's an object with an ID, return that object
+      return [value];
+    }
+
     if (typeof value === 'number') {
       // If we have an ID, find the moneda with that ID
       return this.monedas.filter(m => m.id === value);
@@ -856,16 +956,30 @@ export class CreateEditCompraComponent implements OnInit {
   }
 
   // Display methods for autocomplete
-  displayProveedor = (proveedorId: number): string => {
-    if (!proveedorId) return '';
-    const proveedor = this.getProveedorById(proveedorId);
-    return proveedor ? proveedor.nombre : '';
+  displayProveedor = (proveedorIdOrObject: number | Proveedor): string => {
+    if (!proveedorIdOrObject) return '';
+
+    // If it's a number ID, look up the proveedor object
+    if (typeof proveedorIdOrObject === 'number') {
+      const proveedor = this.getProveedorById(proveedorIdOrObject);
+      return proveedor ? proveedor.nombre : '';
+    }
+
+    // If it's already a proveedor object, just use its name
+    return proveedorIdOrObject.nombre || '';
   }
 
-  displayMoneda = (monedaId: number): string => {
-    if (!monedaId) return '';
-    const moneda = this.getMonedaById(monedaId);
-    return moneda ? `${moneda.denominacion} (${moneda.simbolo})` : '';
+  displayMoneda = (monedaIdOrObject: number | Moneda): string => {
+    if (!monedaIdOrObject) return '';
+
+    // If it's a number ID, look up the moneda object
+    if (typeof monedaIdOrObject === 'number') {
+      const moneda = this.getMonedaById(monedaIdOrObject);
+      return moneda ? `${moneda.denominacion} (${moneda.simbolo})` : '';
+    }
+
+    // If it's already a moneda object, just use it
+    return monedaIdOrObject.denominacion ? `${monedaIdOrObject.denominacion} (${monedaIdOrObject.simbolo})` : '';
   }
 
   // Getter methods for IDs
@@ -983,30 +1097,56 @@ export class CreateEditCompraComponent implements OnInit {
     return cantidad * valor;
   }
 
-  // Helper function to safely parse number from string input
+  // Enhance parseNumber to handle currency symbols and formatting
   private parseNumber(value: any): number {
     if (typeof value === 'number') return value;
     if (!value) return 0;
 
+    // Handle both comma and dot decimal separators
+    let stringValue = value.toString();
+
+    // Remove currency symbols and spaces - only keep digits, dots, commas, and minus sign
+    stringValue = stringValue.replace(/[^0-9.,-]/g, '');
+
     // Replace comma with dot for decimal parsing
-    return parseFloat(value.toString().replace(',', '.')) || 0;
+    const normalizedValue = stringValue.replace(',', '.');
+    return parseFloat(normalizedValue) || 0;
   }
 
-  // Update method to handle bidirectional conversion
+  // Update method to handle bidirectional calculation with proper precision
   private updateTotal(): void {
     // Skip if we're already updating valor
     if (this.isUpdatingValor) return;
 
     const cantidad = this.parseNumber(this.detalleForm.get('cantidad')?.value);
     const valor = this.parseNumber(this.detalleForm.get('valor')?.value);
-    const total = cantidad * valor;
 
-    // Only update if the calculated total is different from current total
-    const currentTotal = this.parseNumber(this.detalleForm.get('total')?.value);
-    if (Math.abs(currentTotal - total) > 0.001) {
-      this.isUpdatingTotal = true;
-      this.detalleForm.get('total')?.setValue(total, { emitEvent: false });
-      this.isUpdatingTotal = false;
+    if (cantidad > 0 && valor > 0) {
+      let total;
+
+      // Handle PYG specifically (no decimals)
+      if (this.currentMoneda?.denominacion?.toUpperCase() === 'PYG' ||
+          this.currentMoneda?.denominacion?.toUpperCase() === 'GUARANI') {
+        // For PYG, round to whole number
+        total = Math.round(cantidad * valor);
+      } else {
+        // For other currencies, use 2 decimal places
+        total = this.roundToDecimalPlaces(cantidad * valor, 2);
+      }
+
+      // Only update if the calculated total is different enough from current total
+      const currentTotal = this.parseNumber(this.detalleForm.get('valorTotal')?.value);
+
+      // Use a larger tolerance for PYG
+      const tolerance = (this.currentMoneda?.denominacion?.toUpperCase() === 'PYG' ||
+                        this.currentMoneda?.denominacion?.toUpperCase() === 'GUARANI') ? 1 : 0.001;
+
+      if (Math.abs(currentTotal - total) > tolerance) {
+        this.isUpdatingTotal = true;
+        this.detalleForm.get('valorTotal')?.setValue(total, { emitEvent: false });
+        this.detalleForm.get('total')?.setValue(total, { emitEvent: false });
+        this.isUpdatingTotal = false;
+      }
     }
   }
 
@@ -1016,14 +1156,29 @@ export class CreateEditCompraComponent implements OnInit {
     if (this.isUpdatingTotal) return;
 
     const cantidad = this.parseNumber(this.detalleForm.get('cantidad')?.value);
-    const total = this.parseNumber(this.detalleForm.get('total')?.value);
+    const total = this.parseNumber(this.detalleForm.get('valorTotal')?.value);
 
-    if (cantidad > 0) {
-      const valor = total / cantidad;
+    if (cantidad > 0 && total > 0) {
+      let valor;
 
-      // Only update if the calculated valor is different from current valor
+      // Handle PYG specifically (no decimals)
+      if (this.currentMoneda?.denominacion?.toUpperCase() === 'PYG' ||
+          this.currentMoneda?.denominacion?.toUpperCase() === 'GUARANI') {
+        // For PYG, calculate to ensure total is preserved exactly
+        valor = total / cantidad;
+      } else {
+        // For other currencies, use 4 decimal places for precision
+        valor = this.roundToDecimalPlaces(total / cantidad, 4);
+      }
+
+      // Only update if the calculated valor is different enough from current valor
       const currentValor = this.parseNumber(this.detalleForm.get('valor')?.value);
-      if (Math.abs(currentValor - valor) > 0.001) {
+
+      // Use appropriate tolerance based on currency
+      const tolerance = (this.currentMoneda?.denominacion?.toUpperCase() === 'PYG' ||
+                        this.currentMoneda?.denominacion?.toUpperCase() === 'GUARANI') ? 1 : 0.0001;
+
+      if (Math.abs(currentValor - valor) > tolerance) {
         this.isUpdatingValor = true;
         this.detalleForm.get('valor')?.setValue(valor, { emitEvent: false });
         // Also update converted values
@@ -1031,6 +1186,18 @@ export class CreateEditCompraComponent implements OnInit {
         this.isUpdatingValor = false;
       }
     }
+  }
+
+  // Helper method to round to specific decimal places
+  private roundToDecimalPlaces(value: number, decimalPlaces: number): number {
+    // Special case for PYG - no decimal places
+    if (this.currentMoneda?.denominacion?.toUpperCase() === 'PYG' ||
+        this.currentMoneda?.denominacion?.toUpperCase() === 'GUARANI') {
+      return Math.round(value);
+    }
+
+    const factor = Math.pow(10, decimalPlaces);
+    return Math.round(value * factor) / factor;
   }
 
   // Add getter for total form control
@@ -1081,6 +1248,9 @@ export class CreateEditCompraComponent implements OnInit {
   // Add a new detalle to the compra - simplified
   async addDetalle(): Promise<void> {
     if (this.detalleForm.invalid) {
+      //print only the invalid field names
+      const invalidFields = Object.keys(this.detalleForm.controls).filter(key => this.detalleForm.get(key)?.invalid);
+      console.log('invalid fields', invalidFields);
       this.markFormGroupTouched(this.detalleForm);
       this.showError('Por favor complete todos los campos del detalle correctamente.');
       return;
@@ -1098,8 +1268,8 @@ export class CreateEditCompraComponent implements OnInit {
 
       // Create detalle object based on the type (producto or ingrediente)
       const detalleData: Partial<CompraDetalle> = {
-        cantidad: parseFloat(formValues.cantidad.toString().replace(',', '.')),
-        valor: parseFloat(formValues.valor.toString().replace(',', '.')),
+        cantidad: this.parseNumber(formValues.cantidad),
+        valor: this.parseNumber(formValues.valor),
         activo: true
       };
 
@@ -1225,6 +1395,11 @@ export class CreateEditCompraComponent implements OnInit {
 
   // Filter methods for formasPago
   private _filterFormasPago(value: string | FormasPago): FormasPago[] {
+    if (value && typeof value !== 'string') {
+      // If it's an object with an ID, return that object
+      return [value];
+    }
+
     const filterValue = typeof value === 'string' ? value.toUpperCase() : '';
     return this.formasPago.filter(formaPago =>
       formaPago.nombre.toUpperCase().includes(filterValue)
@@ -1258,12 +1433,13 @@ export class CreateEditCompraComponent implements OnInit {
   // Load existing compra data when editing
   loadCompra() {
     if (this.compra) {
+      console.log('compra', this.compra);
       this.compraForm.patchValue({
         id: this.compra.id,
         proveedorId: this.compra.proveedor?.id,
-        proveedor: this.compra.proveedor,
+        proveedor: this.compra.proveedor?.id,
         monedaId: this.compra.moneda?.id,
-        moneda: this.compra.moneda,
+        moneda: this.compra.moneda?.id,
         fecha: this.compra.fechaCompra,
         estado: this.compra.estado,
         numeroNota: this.compra.numeroNota,
@@ -1272,7 +1448,7 @@ export class CreateEditCompraComponent implements OnInit {
         credito: this.compra.credito,
         plazoDias: this.compra.plazoDias,
         formaPagoId: this.compra.formaPago?.id,
-        formaPago: this.compra.formaPago
+        formaPago: this.compra.formaPago // Set the full object, not just the ID
       });
 
       if (this.compra.credito) {
@@ -1282,7 +1458,177 @@ export class CreateEditCompraComponent implements OnInit {
   }
 
   // Helper method to select FormaPago
-  displayFormaPago(formaPago: FormasPago): string {
-    return formaPago && formaPago.nombre ? formaPago.nombre : '';
+  displayFormaPago = (formaPagoIdOrObject: number | FormasPago): string => {
+    if (!formaPagoIdOrObject) return '';
+
+    // If it's a number ID, look up the formaPago object
+    if (typeof formaPagoIdOrObject === 'number') {
+      const formaPago = this.getFormaPagoById(formaPagoIdOrObject);
+      return formaPago ? formaPago.nombre : '';
+    }
+
+    // If it's already a formaPago object, just use its name
+    return formaPagoIdOrObject.nombre || '';
+  };
+
+  // Now add the searchProveedoresAsync method
+  private async searchProveedoresAsync(value: string | number): Promise<Proveedor[]> {
+    if (value === null || value === undefined) {
+      return [];
+    }
+
+    // If value is a number (ID), retrieve the single provider
+    if (typeof value === 'number') {
+      try {
+        const proveedor = await firstValueFrom(this.repositoryService.getProveedor(value));
+        return [proveedor];
+      } catch (error) {
+        console.error('Error fetching provider by ID:', error);
+        return [];
+      }
+    }
+
+    // If value is a string (search term), search providers by text
+    if (typeof value === 'string' && value.trim() !== '') {
+      try {
+        return await firstValueFrom(this.repositoryService.searchProveedoresByText(value.trim()));
+      } catch (error) {
+        console.error('Error searching providers:', error);
+        return [];
+      }
+    }
+
+    // Empty search or empty string, return empty array
+    return [];
+  }
+
+  // Add a new method to finalize the compra
+  async finalizeCompra(): Promise<void> {
+    // Only allow finalizing if the compra is in ABIERTO or ACTIVO state
+    const currentEstado = this.compraForm.get('estado')?.value;
+    if (currentEstado !== CompraEstado.ABIERTO && currentEstado !== CompraEstado.ACTIVO) {
+      this.showError('Solo se pueden finalizar compras en estado ABIERTO o ACTIVO.');
+      return;
+    }
+
+    // Check if the compra has detalles
+    if (this.detalles.length === 0) {
+      this.showError('No se puede finalizar una compra sin detalles.');
+      return;
+    }
+
+    // First save the compra if there are unsaved changes
+    if (this.compraForm.dirty) {
+      try {
+        await this.saveCompra();
+      } catch (error) {
+        return; // Stop if saving fails
+      }
+    }
+
+    // Open the payment options dialog
+    const dialogData: PaymentOptionsData = {
+      title: 'Finalizar Compra',
+      message: '¿Desea proceder al pago ahora o registrarlo para pagar más tarde?',
+      payNowText: 'Pagar Ahora',
+      payLaterText: 'Pagar Después',
+      cancelText: 'Cancelar',
+      compraId: this.compra?.id || 0,
+      total: this.compraTotal
+    };
+
+    const dialogRef = this.dialog.open(PaymentOptionsDialogComponent, {
+      width: '400px',
+      data: dialogData
+    });
+
+    const result = await firstValueFrom(dialogRef.afterClosed());
+
+    // Handle dialog result
+    if (result === PaymentResult.PAY_NOW) {
+      // Mark the compra as FINALIZADO
+      this.compraForm.get('estado')?.setValue(CompraEstado.FINALIZADO);
+      await this.saveCompra();
+
+      // Disable the form since the compra is now FINALIZADO
+      this.disableForm();
+
+      // Navigate to payment screen
+      this.tabsService.openTab(
+        `Pago de Compra #${this.compra?.id}`,
+        // Replace with your actual payment component
+        // For now, we'll just show a message since we don't have the actual component
+        ConfirmationDialogComponent,
+        {
+          title: 'Pago de Compra',
+          message: `Se ha iniciado el pago para la compra #${this.compra?.id} por ${this.compraTotal}`
+        },
+        `pago-compra-${this.compra?.id}`,
+        true
+      );
+
+      // Close this tab
+      this.cancel();
+    } else if (result === PaymentResult.PAY_LATER) {
+      // Just mark the compra as ACTIVO
+      this.compraForm.get('estado')?.setValue(CompraEstado.FINALIZADO);
+      await this.saveCompra();
+
+      this.showSuccess('La compra ha sido marcada como pendiente de pago.');
+    }
+    // If CANCEL, do nothing
+  }
+
+  // Add a method to disable the entire form except estado
+  disableForm(): void {
+    // Disable all form controls except estado
+    Object.keys(this.compraForm.controls).forEach(key => {
+      if (key !== 'estado') {
+        this.compraForm.get(key)?.disable();
+      }
+    });
+
+    // Make sure detalles are also disabled
+    this.detallesActionsEnabled = false;
+  }
+
+  // Add a method to enable the form for editing
+  enableForm(): void {
+    // Enable all form controls
+    Object.keys(this.compraForm.controls).forEach(key => {
+      this.compraForm.get(key)?.enable();
+    });
+
+    // Update form state based on the new estado value
+    this.updateDetalleFormState();
+  }
+
+  // Update modifyCompra method
+  modifyCompra(): void {
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Modificar Compra Finalizada',
+        message: 'Modificar una compra finalizada cambiará su estado. ¿Está seguro que desea continuar?',
+        confirmText: 'Sí, Modificar',
+        cancelText: 'Cancelar'
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        // Change estado back to previous state or ACTIVO
+        this.compraForm.get('estado')?.setValue(this.previousEstado !== CompraEstado.FINALIZADO ?
+          this.previousEstado : CompraEstado.ABIERTO);
+
+        // Enable editing mode
+        this.isEditingEnabled = true;
+
+        // Enable the form
+        this.enableForm();
+
+        // Show feedback
+        this.showSuccess('La compra puede ser modificada ahora.');
+      }
+    });
   }
 }

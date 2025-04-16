@@ -1,11 +1,57 @@
 <!-- Only show application content when authenticated -->
 <ng-container *ngIf="isAuthenticated; else loginRouter">
+  <!-- App header - moved outside of sidenav container -->
+  <mat-toolbar color="primary" class="app-toolbar">
+    <button
+      type="button"
+      aria-label="Toggle sidenav"
+      mat-icon-button
+      (click)="toggleMenu($event)"
+      matTooltip="{{isMenuExpanded ? 'Colapsar menú' : 'Expandir menú'}}">
+      <mat-icon aria-label="Side nav toggle icon">{{isMenuExpanded ? 'menu_open' : 'menu'}}</mat-icon>
+    </button>
+    <span>FRC Gourmet</span>
+    <span class="toolbar-spacer"></span>
+
+    <!-- Theme toggle -->
+    <div class="theme-toggle">
+      <mat-icon>light_mode</mat-icon>
+      <mat-slide-toggle
+        [checked]="isDarkTheme"
+        (change)="toggleTheme()"
+        color="primary"
+        matTooltip="Toggle theme">
+      </mat-slide-toggle>
+      <mat-icon>dark_mode</mat-icon>
+    </div>
+
+    <!-- Toolbar actions -->
+    <button mat-icon-button>
+      <mat-icon matBadge="5" matBadgeColor="warn">notifications</mat-icon>
+    </button>
+    <button mat-icon-button [matMenuTriggerFor]="userMenu">
+      <mat-icon>account_circle</mat-icon>
+    </button>
+    <mat-menu #userMenu="matMenu">
+      <button mat-menu-item>
+        <mat-icon>account_circle</mat-icon>
+        <span>Mi Perfil</span>
+      </button>
+      <mat-divider></mat-divider>
+      <button mat-menu-item (click)="logout()">
+        <mat-icon>exit_to_app</mat-icon>
+        <span>Cerrar Sesión </span>
+      </button>
+    </mat-menu>
+  </mat-toolbar>
+
+  <!-- Sidenav container - now below the header -->
   <mat-sidenav-container class="sidenav-container">
     <!-- Side navigation -->
-    <mat-sidenav #drawer class="sidenav" [class.expanded]="isMenuExpanded" [class.collapsed]="!isMenuExpanded" fixedInViewport
+    <mat-sidenav #drawer class="sidenav" [class.expanded]="isMenuExpanded" [class.collapsed]="!isMenuExpanded"
         [attr.role]="(isHandset$ | async) ? 'dialog' : 'navigation'"
         [mode]="(isHandset$ | async) ? 'over' : 'side'"
-        [opened]="true">
+        [opened]="(isHandset$ | async) === false">
       <!-- User profile header instead of app name -->
       <div class="user-profile-header">
         <div class="user-avatar">
@@ -30,8 +76,8 @@
         </a>
 
         <!-- Recursos Humanos Menu -->
-        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel" 
-                            [expanded]="isMenuSectionExpanded('rrhh')" 
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel"
+                            [expanded]="isMenuSectionExpanded('rrhh')"
                             [hideToggle]="!isMenuExpanded">
           <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'rrhh')">
             <mat-panel-title>
@@ -62,8 +108,8 @@
         </mat-expansion-panel>
 
         <!-- Productos Menu -->
-        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel" 
-                            [expanded]="isMenuSectionExpanded('productos')" 
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel"
+                            [expanded]="isMenuSectionExpanded('productos')"
                             [hideToggle]="!isMenuExpanded">
           <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'productos')">
             <mat-panel-title>
@@ -94,8 +140,8 @@
         </mat-expansion-panel>
 
         <!-- Compras Menu -->
-        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel" 
-                            [expanded]="isMenuSectionExpanded('compras')" 
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel"
+                            [expanded]="isMenuSectionExpanded('compras')"
                             [hideToggle]="!isMenuExpanded">
           <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'compras')">
             <mat-panel-title>
@@ -118,8 +164,8 @@
         </mat-expansion-panel>
 
         <!-- Financiero Menu -->
-        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel" 
-                            [expanded]="isMenuSectionExpanded('financiero')" 
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel"
+                            [expanded]="isMenuSectionExpanded('financiero')"
                             [hideToggle]="!isMenuExpanded">
           <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'financiero')">
             <mat-panel-title>
@@ -155,8 +201,10 @@
         <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel" [expanded]="isMenuSectionExpanded('config')" [hideToggle]="!isMenuExpanded">
           <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'config')">
             <mat-panel-title>
-              <mat-icon class="nav-icon">settings</mat-icon>
-              <span class="nav-title" *ngIf="isMenuExpanded">Configuración</span>
+              <div class="menu-item-content" [ngClass]="{'centered': !isMenuExpanded}">
+                <mat-icon class="nav-icon">settings</mat-icon>
+                <span class="nav-title" *ngIf="isMenuExpanded">Configuración</span>
+              </div>
             </mat-panel-title>
           </mat-expansion-panel-header>
           <div class="submenu-container">
@@ -176,53 +224,9 @@
 
     <!-- Main content -->
     <mat-sidenav-content>
-      <mat-toolbar color="primary" class="app-toolbar">
-        <button
-          type="button"
-          aria-label="Toggle sidenav"
-          mat-icon-button
-          (click)="toggleMenu($event)"
-          matTooltip="{{isMenuExpanded ? 'Colapsar menú' : 'Expandir menú'}}">
-          <mat-icon aria-label="Side nav toggle icon">{{isMenuExpanded ? 'menu_open' : 'menu'}}</mat-icon>
-        </button>
-        <span>FRC Gourmet</span>
-        <span class="toolbar-spacer"></span>
-
-        <!-- Theme toggle -->
-        <div class="theme-toggle">
-          <mat-icon>light_mode</mat-icon>
-          <mat-slide-toggle
-            [checked]="isDarkTheme"
-            (change)="toggleTheme()"
-            color="primary"
-            matTooltip="Toggle theme">
-          </mat-slide-toggle>
-          <mat-icon>dark_mode</mat-icon>
-        </div>
-
-        <!-- Toolbar actions -->
-        <button mat-icon-button>
-          <mat-icon matBadge="5" matBadgeColor="warn">notifications</mat-icon>
-        </button>
-        <button mat-icon-button [matMenuTriggerFor]="userMenu">
-          <mat-icon>account_circle</mat-icon>
-        </button>
-        <mat-menu #userMenu="matMenu">
-          <button mat-menu-item>
-            <mat-icon>account_circle</mat-icon>
-            <span>Mi Perfil</span>
-          </button>
-          <mat-divider></mat-divider>
-          <button mat-menu-item (click)="logout()">
-            <mat-icon>exit_to_app</mat-icon>
-            <span>Cerrar Sesión </span>
-          </button>
-        </mat-menu>
-      </mat-toolbar>
-
       <!-- Page content -->
-      <div class="main-content" style="height: 100% !important;">
-        <app-tab-container style="height: 100% !important;"></app-tab-container>
+      <div class="main-content">
+        <app-tab-container></app-tab-container>
       </div>
     </mat-sidenav-content>
   </mat-sidenav-container>

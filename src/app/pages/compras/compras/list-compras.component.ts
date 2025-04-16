@@ -24,6 +24,7 @@ import { Moneda } from '../../../database/entities/financiero/moneda.entity';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { TabsService } from '../../../services/tabs.service';
 import { CreateEditCompraComponent } from './create-edit-compra.component';
+import { FormasPago } from '../../../database/entities/compras/forma-pago.entity';
 
 // Extend the compra type with display values for the view
 interface CompraViewModel {
@@ -34,10 +35,18 @@ interface CompraViewModel {
   createdAt: Date;
   proveedor?: Proveedor;
   moneda?: Moneda;
+  formaPago?: FormasPago;
+  numeroNota?: string;
+  tipoBoleta?: string;
+  fechaCompra?: Date;
+  credito?: boolean;
+  plazoDias?: number;
+  total: number;
   displayValues: {
     estadoLabel: string;
     proveedorNombre?: string;
     monedaNombre?: string;
+    formaPagoNombre?: string;
   };
 }
 
@@ -75,7 +84,7 @@ export class ListComprasComponent implements OnInit {
   monedas: Moneda[] = [];
 
   // Table columns
-  displayedColumns: string[] = ['id', 'fecha', 'proveedor', 'estado', 'total', 'moneda', 'recepcion', 'acciones'];
+  displayedColumns: string[] = ['id', 'proveedor', 'fecha', 'numeroNota', 'estado', 'moneda', 'formaPago', 'recepcion', 'total', 'acciones'];
 
   // Loading state
   isLoading = false;
@@ -251,11 +260,10 @@ export class ListComprasComponent implements OnInit {
     this.loadCompras();
   }
 
-  // Handle sort change
+  // Handle sort change - simplified since sorting is removed from UI
   onSort(sort: Sort): void {
-    // Implement sorting logic
-    console.log('Sort changed:', sort);
-    this.loadCompras();
+    // Method kept for compatibility but no longer used
+    console.log('Sort functionality removed as per project guidelines');
   }
 
   // Open tab to create new compra
@@ -291,17 +299,30 @@ export class ListComprasComponent implements OnInit {
       }
     });
 
-    dialogRef.afterClosed().subscribe(result => {
+    dialogRef.afterClosed().subscribe(async result => {
       if (result) {
         this.isLoading = true;
 
-        // Mock implementation - replace with actual API call when available
-        setTimeout(() => {
+        try {
+          // Call the repository service to delete the compra
+          await firstValueFrom(this.repositoryService.deleteCompra(compra.id));
+
           this.snackBar.open('Compra eliminada correctamente', 'Cerrar', {
-            duration: 3000
+            duration: 3000,
+            panelClass: ['success-snackbar']
           });
+
+          // Reload the compras list
           this.loadCompras();
-        }, 500);
+        } catch (error: any) {
+          console.error('Error al eliminar compra:', error);
+          this.snackBar.open('Error al eliminar compra: ' + error.message, 'Cerrar', {
+            duration: 5000,
+            panelClass: ['error-snackbar']
+          });
+        } finally {
+          this.isLoading = false;
+        }
       }
     });
   }
@@ -321,10 +342,18 @@ export class ListComprasComponent implements OnInit {
       createdAt: compra.createdAt,
       proveedor: compra.proveedor,
       moneda: compra.moneda,
+      formaPago: compra.formaPago,
+      numeroNota: compra.numeroNota,
+      tipoBoleta: compra.tipoBoleta,
+      fechaCompra: compra.fechaCompra,
+      credito: compra.credito,
+      plazoDias: compra.plazoDias,
+      total: (compra as any).total || 0, // Access total property safely
       displayValues: {
         estadoLabel: this.getEstadoLabel(compra.estado),
         proveedorNombre: compra.proveedor?.nombre,
-        monedaNombre: compra.moneda?.denominacion
+        monedaNombre: compra.moneda?.denominacion,
+        formaPagoNombre: compra.formaPago?.nombre
       }
     };
   }

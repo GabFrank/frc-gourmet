@@ -81,36 +81,77 @@
     table {
       width: 100%;
 
-      .mat-column-id {
-        width: 60px;
+      // Center align table cells by default
+      th, td {
         text-align: center;
+        padding: 0 8px;
       }
 
+      // Left align specific text content
+      .text-left {
+        text-align: left;
+      }
+
+      // ID column - small numeric field
+      .mat-column-id {
+        width: 50px;
+        min-width: 50px;
+      }
+
+      // Proveedor column - text field that needs more space
+      .mat-column-proveedor {
+        width: 150px;
+        min-width: 150px;
+        max-width: 200px;
+      }
+
+      // Fecha column - fixed width date field
       .mat-column-fecha {
         width: 160px;
+        min-width: 160px;
       }
 
-      .mat-column-recepcion {
+      // NumeroNota column - medium text field
+      .mat-column-numeroNota {
         width: 100px;
-        text-align: center;
+        min-width: 80px;
       }
 
+      // Estado column - badge field
       .mat-column-estado {
-        width: 130px;
-      }
-
-      .mat-column-total {
         width: 100px;
-        text-align: right;
+        min-width: 100px;
       }
 
+      // Moneda column - short text field
       .mat-column-moneda {
         width: 100px;
+        min-width: 80px;
       }
 
+      // FormaPago column - medium text field
+      .mat-column-formaPago {
+        width: 120px;
+        min-width: 120px;
+      }
+
+      // Recepcion column - icon only, small
+      .mat-column-recepcion {
+        width: 80px;
+        min-width: 80px;
+      }
+
+      // Total column - numeric field, right aligned
+      .mat-column-total {
+        width: 100px;
+        min-width: 100px;
+        text-align: center;
+      }
+
+      // Actions column - icon only, small
       .mat-column-acciones {
         width: 60px;
-        text-align: center;
+        min-width: 60px;
       }
     }
   }

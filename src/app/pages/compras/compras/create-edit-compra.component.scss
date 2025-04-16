@@ -21,15 +21,15 @@
 
   // Form card
   .form-card {
-    margin-bottom: 16px;
+    margin-bottom: 12px;
   }
 
   // Section container
   .section-container {
-    margin: 16px 0;
+    margin: 10px 0;
 
     .section-title {
-      margin-bottom: 16px;
+      margin-bottom: 10px;
       color: rgba(0, 0, 0, 0.7);
       font-weight: 500;
       font-size: 16px;
@@ -40,8 +40,8 @@
   .form-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 16px;
-    margin-bottom: 16px;
+    gap: 12px;
+    margin-bottom: 0px; //remove margin bottom
 
     mat-form-field {
       flex: 1 1 200px;
@@ -51,81 +51,184 @@
       display: flex;
       align-items: center;
       margin-right: 24px;
-      min-height: 54px; // Match height of form fields
+      min-height: 48px;
     }
-    
+
     &.credit-options {
       background-color: rgba(0, 0, 0, 0.02);
-      padding: 16px;
+      padding: 12px;
       border-radius: 4px;
-      margin-top: 24px;
-      
+      margin-top: 16px;
+
       .checkbox-container {
         min-width: 150px;
       }
     }
   }
 
+  // Compress form fields vertically
+  ::ng-deep {
+    .mat-mdc-form-field {
+      .mat-mdc-text-field-wrapper {
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+
+      .mat-mdc-form-field-subscript-wrapper {
+        height: auto;
+        min-height: 1.5em;
+      }
+    }
+  }
+
   // Detalle form
   .detalle-form-container {
-    margin-bottom: 24px;
-    padding: 16px;
+    margin-bottom: 16px;
+    padding: 12px;
     background-color: rgba(0, 0, 0, 0.02);
     border-radius: 4px;
 
     .detalle-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+
       .detalle-form-row {
         display: flex;
-        gap: 16px;
+        gap: 12px;
         align-items: flex-start;
+        margin-bottom: 0;
 
-        .search-field {
-          flex: 2;
-          min-width: 250px;
+        &.item-selection-row {
+          .search-field {
+            flex: 3;
+            min-width: 300px;
+          }
+
+          .presentacion-field {
+            flex: 2;
+            min-width: 200px;
+          }
         }
 
-        .tipo-medida-field {
-          flex: 1;
-          min-width: 120px;
+        &.quantity-pricing-row {
+          flex-wrap: wrap;
+
+          .tipo-medida-field {
+            flex: 1;
+            min-width: 120px;
+            max-width: 150px;
+          }
+
+          .unit-selector-field {
+            flex: 1;
+            min-width: 120px;
+            max-width: 150px;
+          }
+
+          .cantidad-field {
+            flex: 1;
+            min-width: 120px;
+            max-width: 180px;
+          }
+
+          .currency-input {
+            flex: 1;
+            min-width: 150px;
+          }
+
+          .add-button {
+            align-self: center;
+            height: 48px;
+            margin-bottom: 35px;
+            min-width: 120px;
+          }
         }
 
-        .unit-selector-field {
-          flex: 1;
-          min-width: 150px;
-        }
-
-        .presentacion-field {
-          flex: 1.5;
-          min-width: 200px;
-        }
-
+        // Common styles for form fields
         mat-form-field {
-          flex: 1;
-          min-width: 120px;
-
           &.converted-value-field {
             background-color: rgba(0, 0, 0, 0.02);
             border-radius: 4px;
-            
+
             ::ng-deep .mat-mdc-form-field-subscript-wrapper {
               padding: 0 8px;
             }
           }
         }
+      }
+    }
+  }
 
-        .add-button {
-          margin-top: 4px;
-          height: 56px; // Match height of form fields
+  // Media queries for better responsiveness
+  @media screen and (max-width: 992px) {
+    .detalle-form-container {
+      .detalle-form {
+        .detalle-form-row {
+          &.quantity-pricing-row {
+            .tipo-medida-field,
+            .unit-selector-field,
+            .cantidad-field,
+            .currency-input {
+              min-width: 140px;
+              flex: 1 1 40%;
+            }
+
+            .add-button {
+              margin-top: 8px;
+              width: 100%;
+            }
+          }
         }
       }
     }
   }
 
-  // Table container
+  @media screen and (max-width: 768px) {
+    .detalle-form-container {
+      .detalle-form {
+        .detalle-form-row {
+          flex-direction: column;
+
+          &.item-selection-row,
+          &.quantity-pricing-row {
+            .search-field,
+            .presentacion-field,
+            .tipo-medida-field,
+            .unit-selector-field,
+            .cantidad-field,
+            .currency-input {
+              width: 100%;
+              min-width: 100%;
+              max-width: 100%;
+            }
+          }
+
+          .add-button {
+            width: 100%;
+            margin-top: 16px;
+          }
+        }
+      }
+    }
+  }
+
+  // Table container - Fixed height with scrolling
   .table-container {
-    margin-bottom: 16px;
-    max-height: 300px;
-    overflow: auto;
+    margin-top: 16px;
+    margin-bottom: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 4px;
+    height: 400px;
+    display: flex;
+    flex-direction: column;
+    background-color: rgba(0, 0, 0, 0.233);
+
+    .table-scroll-wrapper {
+      flex: 1;
+      overflow: auto;
+      position: relative;
+    }
 
     .detalles-table {
       width: 100%;
@@ -153,7 +256,7 @@
           color: rgba(0, 0, 0, 0.6);
           display: inline-flex;
           align-items: center;
-          
+
           .conversion-icon {
             font-size: 16px;
             height: 16px;
@@ -180,10 +283,11 @@
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    margin-top: 24px;
-    padding: 8px 16px;
+    margin-top: 12px;
+    padding: 10px 16px;
     background-color: rgba(0, 0, 0, 0.05);
     border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 
     .total-label {
       font-weight: 500;
@@ -233,7 +337,7 @@
     .detalle-form-container {
       background-color: rgba(255, 255, 255, 0.05);
     }
-    
+
     .form-row {
       &.credit-options {
         background-color: rgba(255, 255, 255, 0.05);
@@ -262,7 +366,7 @@
 
 .disabled-section {
   position: relative;
-  opacity: 0.7;
+  opacity: 0.85;
   pointer-events: none;
 
   &::before {
@@ -274,17 +378,19 @@
     bottom: 0;
     background-color: rgba(0, 0, 0, 0.03);
     z-index: 1;
+    border-radius: 4px;
   }
 }
 
 .disabled-message {
-  background-color: #fff3e0;
-  color: #e65100;
+  background-color: #e3f2fd;
+  color: #0d47a1;
   padding: 8px 16px;
   border-radius: 4px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   font-size: 14px;
-  border-left: 4px solid #ff9800;
+  border-left: 4px solid #2196f3;
+  font-weight: 500;
 }
 
 .actions-container {
@@ -292,4 +398,18 @@
   justify-content: flex-end;
   margin-left: auto;
   gap: 8px;
+  padding: 16px 0;
+  margin-top: 8px;
+
+  button {
+    min-width: 100px;
+
+    &[color="accent"] {
+      margin-left: 8px;
+    }
+
+    mat-icon {
+      margin-right: 4px;
+    }
+  }
 }

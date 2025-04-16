@@ -83,7 +83,6 @@ export class CurrencyConfigService {
 
     // Add currency symbol as prefix
     config.prefix = moneda.simbolo ? `${moneda.simbolo} ` : '';
-    console.log('config', config);
     return config;
   }
 
@@ -116,7 +115,6 @@ export class CurrencyConfigService {
    * Others: Use default formatting
    */
   formatCurrencyByMoneda(value: number, moneda: Moneda | null): string {
-    console.log('formatCurrencyByMoneda', value, moneda);
     if (value === null || value === undefined) {
       return '';
     }

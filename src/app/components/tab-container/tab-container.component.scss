@@ -17,15 +17,21 @@
 }
 
 .tab-content-container {
-  flex-grow: 1;
+  flex: 1 1 auto;
   overflow: hidden;
   position: relative;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .tab-content {
-  overflow: hidden;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  overflow: auto;
   display: flex;
   flex-direction: column;
 }
@@ -128,14 +134,14 @@
 }
 
 .dynamic-component-container {
-  flex-grow: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   position: absolute;
-  top: 5px; /* Adjust this to match your tab header height */
+  top: 0;
+  right: 0;
   bottom: 0;
   left: 0;
-  right: 0;
   overflow: auto;
 }
 
@@ -171,15 +177,16 @@
 }
 
 .dynamic-content {
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   overflow: auto;
-  padding: 5px;
+  min-height: 0;
 }
 
-/* This will ensure any content inside gets full height */
+/* This will ensure any content inside gets full height but doesn't overflow */
 ::ng-deep .dynamic-content > * {
-  flex: 1;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }

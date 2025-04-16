@@ -13,6 +13,8 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatCardModule } from '@angular/material/card';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatMenuModule } from '@angular/material/menu';
+import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { firstValueFrom } from 'rxjs';
 
 import { RepositoryService } from '../../../database/repository.service';
@@ -36,7 +38,9 @@ import { FormasPago } from '../../../database/entities';
     MatDividerModule,
     MatTooltipModule,
     MatCardModule,
-    MatProgressSpinnerModule
+    MatProgressSpinnerModule,
+    MatMenuModule,
+    DragDropModule
   ],
   template: `
     <div class="formas-pago-dialog-container">
@@ -103,7 +107,19 @@ import { FormasPago } from '../../../database/entities';
         <!-- Table of existing payment methods -->
         <div class="table-container">
           <h3>Formas de Pago Existentes</h3>
-          <table mat-table [dataSource]="dataSource" class="formas-pago-table">
+          <p class="drag-instruction">Arrastre las filas para ordenar las formas de pago</p>
+
+          <table mat-table [dataSource]="dataSource" class="formas-pago-table" cdkDropList
+            (cdkDropListDropped)="dropTable($event)">
+
+            <!-- Drag Handle Column -->
+            <ng-container matColumnDef="dragHandle">
+              <th mat-header-cell *matHeaderCellDef></th>
+              <td mat-cell *matCellDef="let formaPago" cdkDragHandle class="drag-cell">
+                <mat-icon class="drag-icon">drag_indicator</mat-icon>
+              </td>
+            </ng-container>
+
             <!-- Nombre Column -->
             <ng-container matColumnDef="nombre">
               <th mat-header-cell *matHeaderCellDef>Nombre</th>
@@ -141,17 +157,27 @@ import { FormasPago } from '../../../database/entities';
             <ng-container matColumnDef="acciones">
               <th mat-header-cell *matHeaderCellDef>Acciones</th>
               <td mat-cell *matCellDef="let formaPago">
-                <button mat-icon-button color="primary" matTooltip="Editar" (click)="editFormaPago(formaPago)">
-                  <mat-icon>edit</mat-icon>
+                <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+                  <mat-icon>more_vert</mat-icon>
                 </button>
-                <button mat-icon-button color="warn" matTooltip="Eliminar" (click)="deleteFormaPago(formaPago)">
-                  <mat-icon>delete</mat-icon>
-                </button>
+                <mat-menu #menu="matMenu">
+                  <button mat-menu-item (click)="editFormaPago(formaPago)">
+                    <mat-icon>edit</mat-icon>
+                    <span>Editar</span>
+                  </button>
+                  <button mat-menu-item (click)="deleteFormaPago(formaPago)">
+                    <mat-icon>delete</mat-icon>
+                    <span>Eliminar</span>
+                  </button>
+                </mat-menu>
               </td>
             </ng-container>
 
             <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-            <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns;" cdkDrag
+                [cdkDragData]="row"
+                class="table-row">
+            </tr>
 
             <!-- Row shown when there is no matching data. -->
             <tr class="mat-row" *matNoDataRow>
@@ -165,6 +191,9 @@ import { FormasPago } from '../../../database/entities';
 
       <mat-dialog-actions align="end">
         <button mat-button mat-dialog-close>Cerrar</button>
+        <button mat-raised-button color="primary" (click)="saveOrder()" [disabled]="!orderChanged">
+          Guardar Orden
+        </button>
       </mat-dialog-actions>
     </div>
   `,
@@ -231,11 +260,54 @@ import { FormasPago } from '../../../database/entities';
       text-align: center;
       font-style: italic;
     }
+
+    .cdk-drag-preview {
+      box-sizing: border-box;
+      border-radius: 4px;
+      box-shadow: 0 5px 5px -3px rgba(0, 0, 0, 0.2),
+                  0 8px 10px 1px rgba(0, 0, 0, 0.14),
+                  0 3px 14px 2px rgba(0, 0, 0, 0.12);
+      background-color: white;
+      display: table;
+    }
+
+    .cdk-drag-placeholder {
+      opacity: 0;
+    }
+
+    .cdk-drag-animating {
+      transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+    }
+
+    .table-row:last-child {
+      border: none;
+    }
+
+    .formas-pago-table.cdk-drop-list-dragging .table-row:not(.cdk-drag-placeholder) {
+      transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+    }
+
+    .drag-cell {
+      width: 40px;
+      cursor: move;
+    }
+
+    .drag-icon {
+      color: #888;
+    }
+
+    .drag-instruction {
+      color: #666;
+      font-style: italic;
+      margin-bottom: 12px;
+    }
   `]
 })
 export class CreateEditFormaPagoComponent implements OnInit {
-  displayedColumns: string[] = ['nombre', 'movimentaCaja', 'principal', 'activo', 'acciones'];
+  displayedColumns: string[] = ['dragHandle', 'nombre', 'movimentaCaja', 'principal', 'activo', 'acciones'];
   dataSource = new MatTableDataSource<FormasPago>([]);
+  originalOrder: FormasPago[] = [];
+  orderChanged = false;
 
   formaPagoForm: FormGroup;
   selectedFormaPago: FormasPago | null = null;
@@ -262,7 +334,8 @@ export class CreateEditFormaPagoComponent implements OnInit {
       nombre: [formaPago?.nombre || '', Validators.required],
       movimentaCaja: [formaPago?.movimentaCaja || false],
       principal: [formaPago?.principal || false],
-      activo: [formaPago?.activo !== undefined ? formaPago.activo : true]
+      activo: [formaPago?.activo !== undefined ? formaPago.activo : true],
+      orden: [formaPago?.orden || 0]
     });
   }
 
@@ -270,7 +343,14 @@ export class CreateEditFormaPagoComponent implements OnInit {
     try {
       this.isLoading = true;
       const formasPago = await firstValueFrom(this.repositoryService.getFormasPago());
+
+      // Sort by orden field
+      formasPago.sort((a, b) => a.orden - b.orden);
+
       this.dataSource.data = formasPago;
+      // Store original order for comparison
+      this.originalOrder = [...formasPago];
+      this.orderChanged = false;
     } catch (error) {
       console.error('Error loading formas de pago:', error);
       this.showError('Error al cargar las formas de pago');
@@ -298,6 +378,8 @@ export class CreateEditFormaPagoComponent implements OnInit {
 
     try {
       this.isSaving = true;
+      //set nombre to uppercase
+      this.formaPagoForm.get('nombre')?.setValue(this.formaPagoForm.get('nombre')?.value.toUpperCase());
       const formaPagoData = this.formaPagoForm.value;
 
       // If we're setting this as principal, we may need to update other forms
@@ -309,6 +391,12 @@ export class CreateEditFormaPagoComponent implements OnInit {
         );
         this.showSuccess('Forma de pago actualizada correctamente');
       } else {
+        // Set the orden for new items to be at the end
+        if (this.dataSource.data.length > 0) {
+          const maxOrden = Math.max(...this.dataSource.data.map(item => item.orden));
+          formaPagoData.orden = maxOrden + 1;
+        }
+
         await firstValueFrom(
           this.repositoryService.createFormaPago(formaPagoData)
         );
@@ -340,6 +428,54 @@ export class CreateEditFormaPagoComponent implements OnInit {
     } catch (error) {
       console.error('Error deleting forma de pago:', error);
       this.showError('Error al eliminar la forma de pago');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  dropTable(event: CdkDragDrop<FormasPago[]>): void {
+    const currentData = [...this.dataSource.data];
+    moveItemInArray(currentData, event.previousIndex, event.currentIndex);
+
+    // Update orden values based on new position
+    currentData.forEach((item, index) => {
+      item.orden = index;
+    });
+
+    this.dataSource.data = currentData;
+
+    // Check if order has changed
+    this.orderChanged = !this.arraysEqual(currentData, this.originalOrder);
+  }
+
+  // Helper to compare arrays
+  private arraysEqual(arr1: FormasPago[], arr2: FormasPago[]): boolean {
+    if (arr1.length !== arr2.length) return false;
+
+    return arr1.every((item, index) => item.id === arr2[index].id);
+  }
+
+  async saveOrder(): Promise<void> {
+    try {
+      this.isLoading = true;
+
+      // Create an array of updates with ID and new orden
+      const updates = this.dataSource.data.map(item => ({
+        id: item.id,
+        orden: item.orden
+      }));
+
+      // Call a batch update endpoint to update all orders at once
+      await firstValueFrom(
+        this.repositoryService.updateFormasPagoOrder(updates)
+      );
+
+      this.showSuccess('Orden de formas de pago actualizado correctamente');
+      this.orderChanged = false;
+      this.originalOrder = [...this.dataSource.data];
+    } catch (error) {
+      console.error('Error saving order:', error);
+      this.showError('Error al guardar el orden de las formas de pago');
     } finally {
       this.isLoading = false;
     }

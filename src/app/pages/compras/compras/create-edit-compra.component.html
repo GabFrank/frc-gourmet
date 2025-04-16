@@ -1,4 +1,4 @@
-<div class="create-edit-compra-container">
+<div class="create-edit-compra-container" style="overflow-y: auto;">
   <div class="loading-shade" *ngIf="isLoading">
     <mat-spinner></mat-spinner>
   </div>
@@ -9,9 +9,14 @@
     </mat-card-header>
 
     <mat-card-content>
-      <form [formGroup]="compraForm">
+      <form [formGroup]="compraForm" [class.disabled-section]="compraForm.get('estado')?.value === 'FINALIZADO'">
         <div class="section-container">
           <h3 class="section-title">Datos de la Compra</h3>
+
+          <!-- Show message when form is disabled due to FINALIZADO state -->
+          <div *ngIf="compraForm.get('estado')?.value === 'FINALIZADO'" class="disabled-message">
+            Esta compra está finalizada. Para modificarla, utilice el botón "Modificar compra".
+          </div>
 
           <!-- FIRST ROW: proveedor, forma de pago, moneda, estado -->
           <div class="form-row">
@@ -19,7 +24,7 @@
               <mat-label>Proveedor</mat-label>
               <input type="text" matInput formControlName="proveedor" [matAutocomplete]="autoProveedor">
               <mat-autocomplete #autoProveedor="matAutocomplete" [displayWith]="displayProveedor">
-                <mat-option *ngFor="let proveedor of filteredProveedores | async" [value]="proveedor.id">
+                <mat-option *ngFor="let proveedor of filteredProveedores | async" [value]="proveedor">
                   {{ proveedor.nombre }} {{ proveedor.ruc ? '- RUC: ' + proveedor.ruc : '' }}
                 </mat-option>
               </mat-autocomplete>
@@ -32,7 +37,7 @@
               <mat-label>Forma de Pago</mat-label>
               <input type="text" matInput formControlName="formaPago" [matAutocomplete]="autoFormaPago">
               <mat-autocomplete #autoFormaPago="matAutocomplete" [displayWith]="displayFormaPago">
-                <mat-option *ngFor="let formaPago of filteredFormasPago | async" [value]="formaPago.id">
+                <mat-option *ngFor="let formaPago of filteredFormasPago | async" [value]="formaPago">
                   {{ formaPago.nombre }}
                 </mat-option>
               </mat-autocomplete>
@@ -42,7 +47,7 @@
               <mat-label>Moneda</mat-label>
               <input type="text" matInput formControlName="moneda" [matAutocomplete]="autoMoneda">
               <mat-autocomplete #autoMoneda="matAutocomplete" [displayWith]="displayMoneda">
-                <mat-option *ngFor="let moneda of filteredMonedas | async" [value]="moneda.id">
+                <mat-option *ngFor="let moneda of filteredMonedas | async" [value]="moneda">
                   {{ moneda.denominacion }} ({{ moneda.simbolo }})
                 </mat-option>
               </mat-autocomplete>
@@ -117,115 +122,154 @@
                 Mercadería Recibida
               </mat-checkbox>
             </div>
-
-            <div class="actions-container">
-              <button mat-button type="button" (click)="cancel()">
-                Cancelar
-              </button>
-              <button mat-raised-button color="primary" (click)="saveCompra()" [disabled]="compraForm.invalid || isLoading">
-                {{ isEditing ? 'Actualizar' : 'Guardar' }}
-              </button>
-            </div>
           </div>
         </div>
+      </form>
 
-        <mat-divider></mat-divider>
+      <!-- Move actions container outside the form -->
+      <div class="actions-container">
+        <button mat-button type="button" (click)="cancel()">
+          Cancelar
+        </button>
 
-        <div class="section-container" [class.disabled-section]="!canEditDetalles">
-          <h3 class="section-title">Detalles de la Compra</h3>
-          <div *ngIf="!canEditDetalles" class="disabled-message">
-            Los detalles de la compra solo pueden ser editados cuando la compra existe y su estado es ABIERTO.
-          </div>
+        <!-- Show "Modificar compra" button when compra is finalized and not in editing mode -->
+        <button
+          *ngIf="compraForm.get('estado')?.value === 'FINALIZADO' && !isEditingEnabled"
+          mat-raised-button
+          color="primary"
+          type="button"
+          (click)="modifyCompra()">
+          <mat-icon>edit</mat-icon>
+          Modificar compra
+        </button>
 
-          <!-- Form to add new detalles -->
-          <div class="detalle-form-container">
-            <form [formGroup]="detalleForm" (ngSubmit)="addDetalle()" class="detalle-form">
-              <div class="detalle-form-row">
-                <mat-form-field appearance="outline" class="search-field">
-                  <mat-label>Buscar Producto o Ingrediente</mat-label>
-                  <input type="text" matInput formControlName="item" [matAutocomplete]="autoItem">
-                  <mat-autocomplete #autoItem="matAutocomplete" [displayWith]="displayItem">
-                    <mat-option *ngFor="let item of filteredItems | async" [value]="item">
-                      {{ item.nombre }} ({{ item.tipo === 'producto' ? 'Producto' : 'Ingrediente' }})
-                    </mat-option>
-                  </mat-autocomplete>
-                  <mat-error *ngIf="detalleForm.get('item')?.hasError('required')">
-                    Debe seleccionar un producto o ingrediente
-                  </mat-error>
-                </mat-form-field>
+        <!-- Show regular "Actualizar/Guardar" button when not finalized or in editing mode -->
+        <button
+          *ngIf="compraForm.get('estado')?.value !== 'FINALIZADO' || isEditingEnabled"
+          mat-raised-button
+          color="primary"
+          (click)="saveCompra()"
+          [disabled]="compraForm.invalid || isLoading">
+          {{ isEditing ? 'Actualizar' : 'Guardar' }}
+        </button>
 
-                <!-- Show tipo_medida for ingredientes -->
-                <mat-form-field appearance="outline" class="tipo-medida-field" *ngIf="isIngredienteSelected">
-                  <mat-label>Unidad Base</mat-label>
-                  <input matInput [value]="selectedItemTypoMedida" readonly>
-                </mat-form-field>
+        <button
+          *ngIf="compraForm.get('estado')?.value !== 'FINALIZADO' && !isEditingEnabled && compraForm.get('estado')?.value !== 'CANCELADO'"
+          mat-raised-button
+          color="accent"
+          type="button"
+          (click)="finalizeCompra()"
+          [disabled]="isLoading || compraForm.invalid">
+          <mat-icon>done_all</mat-icon>
+          Finalizar
+        </button>
+      </div>
 
-                <!-- Show unit selector for ingredientes -->
-                <mat-form-field appearance="outline" class="unit-selector-field" *ngIf="isIngredienteSelected && availableConversions.length > 0">
-                  <mat-label>Unidad</mat-label>
-                  <mat-select [formControl]="selectedUnitControl" required>
-                    <mat-option *ngFor="let unit of compatibleUnits" [value]="unit">
-                      {{ unit }}
-                    </mat-option>
-                  </mat-select>
-                  <mat-hint>Unidad de medida para la conversión</mat-hint>
-                </mat-form-field>
+      <mat-divider></mat-divider>
 
-                <!-- Show presentacion selector for productos -->
-                <mat-form-field appearance="outline" class="presentacion-field" *ngIf="isProductoSelected">
-                  <mat-label>Presentación</mat-label>
-                  <input type="text" matInput formControlName="presentacion" [matAutocomplete]="autoPresentacion">
-                  <mat-autocomplete #autoPresentacion="matAutocomplete" [displayWith]="displayPresentacion">
-                    <mat-option *ngFor="let presentacion of filteredPresentaciones | async" [value]="presentacion">
-                      {{ presentacion.descripcion }} ({{ presentacion.cantidad }})
-                    </mat-option>
-                  </mat-autocomplete>
-                </mat-form-field>
+      <div class="section-container" [class.disabled-section]="!canEditDetalles">
+        <h3 class="section-title">Detalles de la Compra</h3>
+        <div *ngIf="!canEditDetalles" class="disabled-message">
+          Los detalles de la compra solo pueden ser editados cuando la compra existe y su estado es ABIERTO.
+        </div>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Cantidad</mat-label>
-                  <input type="text" matInput formControlName="cantidad" pattern="^\d*[.,]?\d+$" (keydown)="onDecimalKeydown($event)">
-                  <mat-hint *ngIf="isIngredienteSelected">
-                    En {{ selectedUnitValue }}
-                  </mat-hint>
-                  <mat-error *ngIf="detalleForm.get('cantidad')?.hasError('required')">
-                    La cantidad es requerida
-                  </mat-error>
-                  <mat-error *ngIf="detalleForm.get('cantidad')?.hasError('min')">
-                    La cantidad debe ser mayor a 0
-                  </mat-error>
-                  <mat-error *ngIf="detalleForm.get('cantidad')?.hasError('pattern')">
-                    Ingrese un número válido
-                  </mat-error>
-                </mat-form-field>
+        <!-- Form to add new detalles -->
+        <div class="detalle-form-container">
+          <form [formGroup]="detalleForm" (ngSubmit)="addDetalle()" class="detalle-form">
+            <!-- Item selection row -->
+            <div class="detalle-form-row item-selection-row">
+              <mat-form-field appearance="outline" class="search-field">
+                <mat-label>Buscar Producto o Ingrediente</mat-label>
+                <input type="text" matInput formControlName="item" [matAutocomplete]="autoItem">
+                <mat-autocomplete #autoItem="matAutocomplete" [displayWith]="displayItem">
+                  <mat-option *ngFor="let item of filteredItems | async" [value]="item">
+                    {{ item.nombre }} ({{ item.tipo === 'producto' ? 'Producto' : 'Ingrediente' }})
+                  </mat-option>
+                </mat-autocomplete>
+                <mat-error *ngIf="detalleForm.get('item')?.hasError('required')">
+                  Debe seleccionar un producto o ingrediente
+                </mat-error>
+              </mat-form-field>
 
-                <!-- Replace valor field with CurrencyInputComponent -->
-                <app-currency-input
-                  formControlName="valor"
-                  label="Valor Unitario"
-                  [moneda]="currentMoneda"
-                  [required]="true"
-                  [min]="0.01"
-                  [hint]="valorUnitHint">
-                </app-currency-input>
+              <!-- Show presentacion selector for productos -->
+              <mat-form-field appearance="outline" class="presentacion-field" *ngIf="isProductoSelected">
+                <mat-label>Presentación</mat-label>
+                <input type="text" matInput formControlName="presentacion" [matAutocomplete]="autoPresentacion">
+                <mat-autocomplete #autoPresentacion="matAutocomplete" [displayWith]="displayPresentacion">
+                  <mat-option *ngFor="let presentacion of filteredPresentaciones | async" [value]="presentacion">
+                    {{ presentacion.descripcion }} ({{ presentacion.cantidad }})
+                  </mat-option>
+                </mat-autocomplete>
+              </mat-form-field>
+            </div>
 
-                <!-- Replace total field with CurrencyInputComponent -->
-                <app-currency-input
-                  [formControl]="totalControl"
-                  label="Total Final"
-                  [moneda]="currentMoneda"
-                  [hint]="totalHint">
-                </app-currency-input>
+            <!-- Quantity and pricing row -->
+            <div class="detalle-form-row quantity-pricing-row">
+              <!-- Show tipo_medida for ingredientes -->
+              <mat-form-field appearance="outline" class="tipo-medida-field" *ngIf="isIngredienteSelected">
+                <mat-label>Unidad Base</mat-label>
+                <input matInput [value]="selectedItemTypoMedida" readonly>
+              </mat-form-field>
 
-                <button mat-raised-button color="primary" type="submit" class="add-button">
-                  <mat-icon>add</mat-icon> Agregar
-                </button>
-              </div>
-            </form>
-          </div>
+              <!-- Show unit selector for ingredientes -->
+              <mat-form-field appearance="outline" class="unit-selector-field" *ngIf="isIngredienteSelected && availableConversions.length > 0">
+                <mat-label>Unidad</mat-label>
+                <mat-select [formControl]="selectedUnitControl" required>
+                  <mat-option *ngFor="let unit of compatibleUnits" [value]="unit">
+                    {{ unit }}
+                  </mat-option>
+                </mat-select>
+                <mat-hint>Unidad de medida para la conversión</mat-hint>
+              </mat-form-field>
 
-          <!-- Table for detalles -->
-          <div class="table-container">
+              <mat-form-field appearance="outline" class="cantidad-field">
+                <mat-label>Cantidad</mat-label>
+                <input type="text" matInput formControlName="cantidad" pattern="^\d*[.,]?\d+$" (keydown)="onDecimalKeydown($event)">
+                <mat-hint *ngIf="isIngredienteSelected">
+                  En {{ selectedUnitValue }}
+                </mat-hint>
+                <mat-error *ngIf="detalleForm.get('cantidad')?.hasError('required')">
+                  La cantidad es requerida
+                </mat-error>
+                <mat-error *ngIf="detalleForm.get('cantidad')?.hasError('min')">
+                  La cantidad debe ser mayor a 0
+                </mat-error>
+                <mat-error *ngIf="detalleForm.get('cantidad')?.hasError('pattern')">
+                  Ingrese un número válido
+                </mat-error>
+              </mat-form-field>
+
+              <!-- Replace valor field with CurrencyInputComponent -->
+              <app-currency-input
+                formControlName="valor"
+                label="Valor Unitario"
+                [moneda]="currentMoneda"
+                [required]="true"
+                [min]="0.01"
+                [hint]="valorUnitHint"
+                class="currency-input">
+              </app-currency-input>
+
+              <!-- Replace total field with CurrencyInputComponent -->
+              <app-currency-input
+                [formControl]="totalControl"
+                label="Total Final"
+                [moneda]="currentMoneda"
+                [min]="0.01"
+                [hint]="totalHint"
+                class="currency-input">
+              </app-currency-input>
+
+              <button mat-raised-button color="primary" type="submit" class="add-button">
+                <mat-icon>add</mat-icon> Agregar
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Table for detalles -->
+        <div class="table-container">
+          <div class="table-scroll-wrapper">
             <table mat-table [dataSource]="detallesWithComputedValues" class="detalles-table">
               <!-- Item Column -->
               <ng-container matColumnDef="item">
@@ -251,7 +295,7 @@
               <ng-container matColumnDef="valor">
                 <th mat-header-cell *matHeaderCellDef>Valor Unitario</th>
                 <td mat-cell *matCellDef="let row">
-                  {{ row.control.value.valor | number:'1.0-2' }}
+                  {{ row.control.value.valor | currency:currentMoneda?.simbolo:'symbol':'1.0-2' }}
                   <span class="unit-conversion" *ngIf="row.control.value.unidadMedida" [matTooltip]="row.control.value.unidadMedida">
                     {{ row.control.value.tipo_medida }}
                     <mat-icon class="conversion-icon">swap_horiz</mat-icon>
@@ -263,7 +307,7 @@
               <ng-container matColumnDef="subtotal">
                 <th mat-header-cell *matHeaderCellDef>Subtotal</th>
                 <td mat-cell *matCellDef="let row">
-                  {{ row.computedValues.subtotal | number:'1.0-2' }}
+                  {{ row.computedValues.subtotal | currency:currentMoneda?.simbolo:'symbol':'1.0-2' }}
                 </td>
               </ng-container>
 
@@ -277,7 +321,7 @@
                 </td>
               </ng-container>
 
-              <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+              <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
               <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
 
               <!-- No data row -->
@@ -287,15 +331,15 @@
                 </td>
               </tr>
             </table>
+          </div>
 
-            <!-- Update total container to use currency formatting -->
-            <div class="total-container">
-              <span class="total-label">Total:</span>
-              <span class="total-value">{{ compraTotal | number:'1.0-2' }}</span>
-            </div>
+          <!-- Update total container to use proper currency formatting -->
+          <div class="total-container">
+            <span class="total-label">Total:</span>
+            <span class="total-value">{{ compraTotal | currency:currentMoneda?.simbolo:'symbol':'1.0-2' }}</span>
           </div>
         </div>
-      </form>
+      </div>
     </mat-card-content>
   </mat-card>
 </div>

@@ -6,6 +6,16 @@ import { Tab } from '../../services/tabs.service';
 @Component({
   selector: 'app-tab-content',
   template: '<ng-template tabContentContainer></ng-template>',
+  styles: [`
+    :host {
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 auto;
+      overflow: auto;
+      height: 100%;
+      width: 100%;
+    }
+  `],
   standalone: true,
   imports: [CommonModule, ContentContainerDirective]
 })

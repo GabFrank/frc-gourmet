@@ -194,7 +194,11 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngOnDestroy() {
-    // Clear any subscriptions from sidenav listeners if needed
+    // Clean up any subscriptions to prevent memory leaks
+    if (this.authService) {
+      // Make sure to unsubscribe from any observables
+      // This is just a placeholder - add actual subscription cleanup if needed
+    }
   }
 
   // Start tracking session activity to keep the session alive
@@ -212,7 +216,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   async logout(): Promise<void> {
     // Close all tabs first
     this.tabsService.removeAllTabs();
-    
+
     await this.authService.logout();
     // Router navigation is handled in the authService
   }
@@ -224,10 +228,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.isMenuExpanded && this.sidenav) {
       const sidenavElement = document.querySelector('mat-sidenav');
       const toggleButton = document.querySelector('button[aria-label="Toggle sidenav"]');
-      
+
       if (sidenavElement && toggleButton) {
         // Check if click was outside the sidenav and not on the toggle button
-        if (!sidenavElement.contains(event.target as Node) && 
+        if (!sidenavElement.contains(event.target as Node) &&
             !toggleButton.contains(event.target as Node)) {
           this.isMenuExpanded = false;
         }
@@ -241,7 +245,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       event.stopPropagation(); // Prevent immediate closing when opening
     }
     this.isMenuExpanded = !this.isMenuExpanded;
-    
+
     // When collapsing the menu, reset the expanded menu
     if (!this.isMenuExpanded) {
       this.expandedMenu = null;
@@ -253,13 +257,19 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     if (event) {
       event.stopPropagation(); // Prevent document click handler from firing
     }
-    
+
+    // If menu is collapsed, expand it first
     if (!this.isMenuExpanded) {
       this.isMenuExpanded = true;
     }
-    
+
     // Set the active menu section
     if (menuSection) {
+      // If clicking the same section that's already expanded, don't change it
+      // This prevents the menu from closing when clicking the header again
+      if (this.expandedMenu === menuSection && this.isMenuExpanded) {
+        return;
+      }
       this.expandedMenu = menuSection;
     }
   }

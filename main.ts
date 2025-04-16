@@ -4207,8 +4207,22 @@ ipcMain.handle('getCompras', async () => {
   const dataSource = dbService.getDataSource();
   const compraRepository = dataSource.getRepository(Compra);
   try {
-    return await compraRepository.find({
-      relations: ['proveedor', 'moneda', 'detalles', 'detalles.producto', 'detalles.ingrediente', 'detalles.presentacion']
+    const compras = await compraRepository.find({
+      relations: ['proveedor', 'moneda', 'detalles', 'formaPago', 'detalles.producto', 'detalles.ingrediente', 'detalles.presentacion']
+    });
+
+    // Calculate total for each compra
+    return compras.map(compra => {
+      // Calculate total from detalles
+      const total = compra.detalles.reduce((sum, detalle) => {
+        return sum + (detalle.cantidad * detalle.valor);
+      }, 0);
+
+      // Add total to the compra object
+      return {
+        ...compra,
+        total
+      };
     });
   } catch (error) {
     console.error('Error getting compras:', error);
@@ -4227,7 +4241,17 @@ ipcMain.handle('getCompra', async (_event: any, compraId: number) => {
     if (!compra) {
       throw new Error(`Compra with id ${compraId} not found`);
     }
-    return compra;
+
+    // Calculate total from detalles
+    const total = compra.detalles.reduce((sum, detalle) => {
+      return sum + (detalle.cantidad * detalle.valor);
+    }, 0);
+
+    // Add total to the compra object
+    return {
+      ...compra,
+      total
+    };
   } catch (error) {
     console.error('Error getting compra:', error);
     throw error;
