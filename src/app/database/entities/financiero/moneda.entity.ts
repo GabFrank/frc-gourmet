@@ -13,6 +13,15 @@ export class Moneda extends BaseModel {
   @Column()
   simbolo!: string;
 
+  @Column({ nullable: true })
+  flagIcon!: string;
+
+  @Column({ nullable: true })
+  countryCode!: string;
+
+  @Column({ nullable: true, type: 'text' })
+  flagIconBase64!: string;
+
   @Column({ default: true })
   activo!: boolean;
 
@@ -21,4 +30,4 @@ export class Moneda extends BaseModel {
 
   @OneToMany(() => PrecioVenta, precioVenta => precioVenta.moneda)
   preciosVenta!: PrecioVenta[];
-} 
+}

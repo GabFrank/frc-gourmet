@@ -30,7 +30,7 @@ import { NgxCurrencyModule } from 'ngx-currency';
   template: `
     <div class="currency-input-container">
       <mat-form-field appearance="outline" class="currency-field">
-        <mat-label>{{ label }}</mat-label>
+        <mat-label *ngIf="!disableFloating">{{ label }}</mat-label>
         <input
           matInput
           currencyMask
@@ -68,6 +68,7 @@ export class CurrencyInputComponent implements ControlValueAccessor, OnChanges, 
   @Input() min = 0.01;
   @Input() hint = '';
   @Input() moneda: Moneda | null = null;
+  @Input() disableFloating = false;
 
   // Form control to manage the input
   inputControl = new FormControl<number | null>(null);

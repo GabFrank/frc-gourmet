@@ -1,6 +1,7 @@
 import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import { Moneda } from '../financiero/moneda.entity';
+import { FormasPago } from './forma-pago.entity';
 // Import type reference to avoid circular dependency
 import type { Pago } from './pago.entity';
 
@@ -11,6 +12,9 @@ import type { Pago } from './pago.entity';
 export class PagoDetalle extends BaseModel {
   @Column('decimal', { precision: 10, scale: 2 })
   valor!: number;
+
+  @Column({ type: 'varchar', length: 255 })
+  descripcion!: string;
 
   @Column({ default: true })
   activo!: boolean;
@@ -25,4 +29,8 @@ export class PagoDetalle extends BaseModel {
   @ManyToOne(() => Moneda)
   @JoinColumn({ name: 'moneda_id' })
   moneda!: Moneda;
+
+  @ManyToOne(() => FormasPago)
+  @JoinColumn({ name: 'forma_pago_id' })
+  formaPago!: FormasPago;
 }

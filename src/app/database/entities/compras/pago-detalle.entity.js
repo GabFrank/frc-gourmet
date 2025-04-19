@@ -13,6 +13,7 @@ exports.PagoDetalle = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
 const moneda_entity_1 = require("../financiero/moneda.entity");
+const forma_pago_entity_1 = require("./forma-pago.entity");
 /**
  * Entity representing payment details for supplier payments
  */
@@ -22,6 +23,10 @@ __decorate([
     (0, typeorm_1.Column)('decimal', { precision: 10, scale: 2 }),
     __metadata("design:type", Number)
 ], PagoDetalle.prototype, "valor", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 255 }),
+    __metadata("design:type", String)
+], PagoDetalle.prototype, "descripcion", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
@@ -38,6 +43,11 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'moneda_id' }),
     __metadata("design:type", moneda_entity_1.Moneda)
 ], PagoDetalle.prototype, "moneda", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => forma_pago_entity_1.FormasPago),
+    (0, typeorm_1.JoinColumn)({ name: 'forma_pago_id' }),
+    __metadata("design:type", forma_pago_entity_1.FormasPago)
+], PagoDetalle.prototype, "formaPago", void 0);
 PagoDetalle = __decorate([
     (0, typeorm_1.Entity)('pagos_detalles')
 ], PagoDetalle);

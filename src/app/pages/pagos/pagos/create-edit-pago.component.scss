@@ -1,0 +1,204 @@
+.container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+
+  p {
+    margin-top: 16px;
+    color: #666;
+  }
+}
+
+.form-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+
+  mat-form-field {
+    flex: 1;
+    min-width: 150px;
+  }
+
+  .checkbox-container {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    min-height: 48px;
+    margin-top: 4px;
+  }
+}
+
+mat-card-header {
+  margin-bottom: 16px;
+}
+
+mat-card-actions {
+  padding: 16px;
+  display: flex;
+  gap: 8px;
+}
+
+// Payment details styles
+.detalles-section {
+  margin-top: 20px;
+  border-top: 1px solid #e0e0e0;
+  padding-top: 20px;
+}
+
+.section-title {
+  margin-bottom: 16px;
+  color: #3f51b5;
+  font-weight: 500;
+}
+
+.detalle-form-container {
+  margin-bottom: 20px;
+  padding: 16px;
+  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.detalle-form {
+  width: 100%;
+}
+
+.detalle-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.descripcion-field {
+  flex: 3;
+  min-width: 250px;
+}
+
+.valor-field {
+  flex: 1;
+  min-width: 150px;
+}
+
+.moneda-field {
+  flex: 1;
+  min-width: 150px;
+}
+
+.forma-pago-field {
+  flex: 2;
+  min-width: 200px;
+}
+
+.add-button {
+  margin-top: 8px;
+  height: 50px;
+}
+
+.table-container {
+  max-height: 300px;
+  overflow: auto;
+  margin-bottom: 20px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+}
+
+.detalles-table {
+  width: 100%;
+}
+
+.total-container {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 16px;
+  background-color: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+  font-size: 18px;
+}
+
+.total-label {
+  font-weight: 500;
+  margin-right: 16px;
+}
+
+.total-value {
+  font-weight: 700;
+  color: #3f51b5;
+}
+
+// Custom styling for mat-select options
+::ng-deep {
+  .mat-mdc-option {
+    .mat-option-text {
+      display: flex;
+      flex-direction: column;
+
+      .option-primary {
+        font-weight: 500;
+      }
+
+      .option-secondary {
+        font-size: 12px;
+        color: rgba(0, 0, 0, 0.6);
+      }
+    }
+  }
+
+  .mdc-text-field--outlined {
+    .mdc-notched-outline__leading,
+    .mdc-notched-outline__notch,
+    .mdc-notched-outline__trailing {
+      border-color: rgba(0, 0, 0, 0.12);
+    }
+  }
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  .form-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+
+    mat-form-field {
+      width: 100%;
+    }
+
+    .checkbox-container {
+      margin: 8px 0;
+    }
+  }
+
+  .detalle-form-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .descripcion-field,
+  .valor-field,
+  .moneda-field {
+    flex: 1;
+    width: 100%;
+    min-width: 100%;
+  }
+
+  .add-button {
+    width: 100%;
+  }
+}

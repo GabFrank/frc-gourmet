@@ -132,9 +132,9 @@
           Cancelar
         </button>
 
-        <!-- Show "Modificar compra" button when compra is finalized and not in editing mode -->
+        <!-- Show "Modificar compra" button when form is disabled -->
         <button
-          *ngIf="compraForm.get('estado')?.value === 'FINALIZADO' && !isEditingEnabled"
+          *ngIf="showModificarButton"
           mat-raised-button
           color="primary"
           type="button"
@@ -143,18 +143,19 @@
           Modificar compra
         </button>
 
-        <!-- Show regular "Actualizar/Guardar" button when not finalized or in editing mode -->
+        <!-- Show regular "Actualizar/Guardar" button when form is not disabled -->
         <button
-          *ngIf="compraForm.get('estado')?.value !== 'FINALIZADO' || isEditingEnabled"
+          *ngIf="showSaveButton"
           mat-raised-button
           color="primary"
           (click)="saveCompra()"
           [disabled]="compraForm.invalid || isLoading">
-          {{ isEditing ? 'Actualizar' : 'Guardar' }}
+          {{ saveButtonText }}
         </button>
 
+        <!-- Show Finalizar button when compra exists with detalles, not in edit mode, and not FINALIZADO or CANCELADO -->
         <button
-          *ngIf="compraForm.get('estado')?.value !== 'FINALIZADO' && !isEditingEnabled && compraForm.get('estado')?.value !== 'CANCELADO'"
+          *ngIf="showFinalizarButton"
           mat-raised-button
           color="accent"
           type="button"
@@ -162,6 +163,17 @@
           [disabled]="isLoading || compraForm.invalid">
           <mat-icon>done_all</mat-icon>
           Finalizar
+        </button>
+
+        <!-- Show Pagar button when compra is FINALIZADO -->
+        <button
+          *ngIf="showPagarButton"
+          mat-raised-button
+          color="warn"
+          type="button"
+          (click)="pagarCompra()">
+          <mat-icon>payment</mat-icon>
+          Pagar
         </button>
       </div>
 

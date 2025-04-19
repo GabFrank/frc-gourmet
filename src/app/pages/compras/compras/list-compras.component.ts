@@ -282,7 +282,7 @@ export class ListComprasComponent implements OnInit {
     this.tabsService.openTab(
       `Editar Compra #${compra.id}`,
       CreateEditCompraComponent,
-      { compra: compra }, // Pass the compra to edit
+      { compraId: compra.id }, // Only pass the ID
       `editar-compra-${compra.id}`, // Unique ID for the tab
       true // Closable
     );

@@ -37,6 +37,8 @@ import { TabsService } from 'src/app/services/tabs.service';
 import { TipoBoleta } from 'src/app/database/entities/compras/tipo-boleta.enum';
 import { CurrencyConfigService } from '../../../shared/services/currency-config.service';
 import { PaymentOptionsDialogComponent, PaymentResult, PaymentOptionsData } from '../../../shared/components/payment-options-dialog/payment-options-dialog.component';
+import { CreateEditPagoComponent } from '../../pagos/pagos/create-edit-pago.component';
+import { PagoDialogComponent, PagoDialogData } from '../../../shared/components/pago-dialog/pago-dialog.component';
 
 // Add interface for combined search results
 interface SearchItem {
@@ -74,7 +76,8 @@ interface SearchItem {
     MatNativeDateModule,
     ConfirmationDialogComponent,
     CurrencyInputComponent,
-    PaymentOptionsDialogComponent
+    PaymentOptionsDialogComponent,
+    PagoDialogComponent
   ],
   templateUrl: './create-edit-compra.component.html',
   styleUrls: ['./create-edit-compra.component.scss']
@@ -91,6 +94,7 @@ export class CreateEditCompraComponent implements OnInit {
 
   // Data
   compra?: Compra;
+  compraId?: number;
   isEditing = false;
   isLoading = false;
   proveedores: Proveedor[] = [];
@@ -154,6 +158,12 @@ export class CreateEditCompraComponent implements OnInit {
 
   // Add property for editing state
   isEditingEnabled = false;
+
+  // Add new property to track if form should be disabled
+  isFormDisabled = false;
+
+  // Add property for tracking the form state
+  isNewCompra = true;
 
   // Computed properties for template use
   get compatibleUnits(): string[] {
@@ -433,19 +443,18 @@ export class CreateEditCompraComponent implements OnInit {
       this.searchItems = [];
 
       // Check if we're editing an existing compra
-      if (this.data && this.data.compra) {
-        console.log('data', this.data);
-        this.compra = this.data.compra;
-        this.isEditing = true;
-        await this.loadCompraDetails();
-
-        // Store the current estado as previous in case we need to revert
-        this.previousEstado = this.compra?.estado || CompraEstado.ABIERTO;
-
-        // If the compra is in FINALIZADO state, disable the form
-        if (this.compra?.estado === CompraEstado.FINALIZADO) {
-          this.disableForm();
+      if (this.data && this.data.compraId) {
+        this.compraId = this.data.compraId;
+        this.isNewCompra = false;
+        if (this.compraId !== undefined) {
+          await this.loadCompraById(this.compraId);
         }
+      } else {
+        // New compra - enable form editing
+        this.isNewCompra = true;
+        this.isFormDisabled = false;
+        this.isEditingEnabled = true;
+        this.enableForm();
       }
 
       // Set initial state of detalle form controls based on editability
@@ -679,6 +688,10 @@ export class CreateEditCompraComponent implements OnInit {
       // Calculate the total
       this.recalculateTotal();
 
+      // Disable the form when loading an existing compra
+      this.isFormDisabled = true;
+      this.disableForm();
+
       // Update form state based on editability
       this.updateDetalleFormState();
 
@@ -743,20 +756,30 @@ export class CreateEditCompraComponent implements OnInit {
               detalles: detallesData as any // Cast to any to avoid TypeScript issues
             })
           );
+
+          // Update the local compra object
+          this.compra = savedCompra;
+
+          // After successful update:
+          this.isEditingEnabled = false; // Reset editing mode
+          this.isFormDisabled = true; // Disable the form
+          this.disableForm(); // Apply form disable
+
+          // Force an update cycle to make sure showFinalizarButton is recalculated
+          setTimeout(() => {
+            // Update the estado property to ensure getters are re-evaluated
+            const currentEstado = this.compraForm.get('estado')?.value;
+            if (currentEstado) {
+              this.compraForm.get('estado')?.setValue(currentEstado, { emitEvent: true });
+            }
+          }, 0);
+
           this.showSuccess('Compra actualizada correctamente');
         } catch (error) {
           console.error('Error updating compra:', error);
-          // Fall back to mock implementation if the API call fails
-          savedCompra = {
-            ...this.compra,
-            ...compraData,
-            detalles: detallesData as CompraDetalle[]
-          } as Compra;
-          this.showSuccess('Compra actualizada correctamente (modo simulación)');
+          this.showError('Error al actualizar la compra');
+          return;
         }
-
-        // Update the local compra object
-        this.compra = savedCompra;
       } else {
         // For new compras, always set estado to ABIERTO
         compraData.estado = CompraEstado.ABIERTO;
@@ -773,26 +796,29 @@ export class CreateEditCompraComponent implements OnInit {
           // Update the form with the saved estado
           this.compraForm.get('estado')?.setValue(savedCompra.estado);
 
+          // Update component state for new compra
+          this.compra = savedCompra;
+          this.compraId = savedCompra.id;
+          this.isEditing = true;
+          this.isNewCompra = false;
+          this.isFormDisabled = true; // Disable the form after creating
+          this.disableForm(); // Apply form disable
+
+          // Force an update cycle to ensure button visibility is updated
+          setTimeout(() => {
+            // This triggers change detection to recalculate getters
+            const currentEstado = this.compraForm.get('estado')?.value;
+            if (currentEstado) {
+              this.compraForm.get('estado')?.setValue(currentEstado, { emitEvent: true });
+            }
+          }, 0);
+
           this.showSuccess('Compra creada correctamente');
         } catch (error) {
           console.error('Error creating compra:', error);
-          // Fall back to mock implementation if the API call fails
-          savedCompra = {
-            id: Math.floor(Math.random() * 1000), // Mock ID
-            ...compraData,
-            detalles: detallesData as CompraDetalle[],
-            createdAt: new Date()
-          } as Compra;
-
-          // Update the form with the mock estado
-          this.compraForm.get('estado')?.setValue(CompraEstado.ABIERTO);
-
-          this.showSuccess('Compra creada correctamente (modo simulación)');
+          this.showError('Error al crear la compra');
+          return;
         }
-
-        // Set as current compra and enable editing
-        this.compra = savedCompra;
-        this.isEditing = true;
       }
 
       // Update form state based on the new estado value
@@ -800,11 +826,6 @@ export class CreateEditCompraComponent implements OnInit {
 
       // Focus on the detalle form to start adding details
       this.resetAndFocusDetalleForm();
-
-      // After successful save, if we were in editing mode, disable it
-      if (this.isEditingEnabled) {
-        this.isEditingEnabled = false;
-      }
 
     } catch (error: any) {
       console.error('Error saving compra:', error);
@@ -909,15 +930,14 @@ export class CreateEditCompraComponent implements OnInit {
 
   // Used by the tab service
   setData(data: any): void {
+    console.log('Setting data for Create/Edit Compra component:', data);
     this.data = data;
 
-    if (data?.compra) {
-      this.compra = data.compra;
-      this.isEditing = true;
-      this.loadCompraDetails().then(() => {
-        // Update form state after loading the compra details
-        this.updateDetalleFormState();
-      });
+    if (data?.compraId) {
+      this.compraId = data.compraId;
+      if (this.compraId !== undefined) {
+        this.loadCompraById(this.compraId);
+      }
     }
   }
 
@@ -1502,7 +1522,7 @@ export class CreateEditCompraComponent implements OnInit {
     return [];
   }
 
-  // Add a new method to finalize the compra
+  // Update the method to finalize the compra
   async finalizeCompra(): Promise<void> {
     // Only allow finalizing if the compra is in ABIERTO or ACTIVO state
     const currentEstado = this.compraForm.get('estado')?.value;
@@ -1553,43 +1573,43 @@ export class CreateEditCompraComponent implements OnInit {
       // Disable the form since the compra is now FINALIZADO
       this.disableForm();
 
-      // Navigate to payment screen
+      // Navigate to payment screen using the CreateEditPagoComponent
+      if (this.compra && this.compra.id) {
       this.tabsService.openTab(
-        `Pago de Compra #${this.compra?.id}`,
-        // Replace with your actual payment component
-        // For now, we'll just show a message since we don't have the actual component
-        ConfirmationDialogComponent,
-        {
-          title: 'Pago de Compra',
-          message: `Se ha iniciado el pago para la compra #${this.compra?.id} por ${this.compraTotal}`
-        },
-        `pago-compra-${this.compra?.id}`,
+          `Pago de Compra #${this.compra.id}`,
+          CreateEditPagoComponent,
+          {
+            compraId: this.compra.id // Pass the compraId to the payment component
+          },
+          `pago-compra-${this.compra.id}`,
         true
       );
 
       // Close this tab
       this.cancel();
+      }
     } else if (result === PaymentResult.PAY_LATER) {
-      // Just mark the compra as ACTIVO
+      // Mark the compra as FINALIZADO
       this.compraForm.get('estado')?.setValue(CompraEstado.FINALIZADO);
       await this.saveCompra();
 
-      this.showSuccess('La compra ha sido marcada como pendiente de pago.');
+      this.showSuccess('La compra ha sido finalizada y marcada como pendiente de pago.');
+    } else {
+      // If canceled, don't change the state
+      this.showSuccess('Operación cancelada. La compra no ha sido finalizada.');
     }
-    // If CANCEL, do nothing
   }
 
   // Add a method to disable the entire form except estado
   disableForm(): void {
-    // Disable all form controls except estado
+    // Disable all form controls
     Object.keys(this.compraForm.controls).forEach(key => {
-      if (key !== 'estado') {
         this.compraForm.get(key)?.disable();
-      }
     });
 
     // Make sure detalles are also disabled
     this.detallesActionsEnabled = false;
+    this.isFormDisabled = true;
   }
 
   // Add a method to enable the form for editing
@@ -1601,10 +1621,13 @@ export class CreateEditCompraComponent implements OnInit {
 
     // Update form state based on the new estado value
     this.updateDetalleFormState();
+    this.isFormDisabled = false;
   }
 
   // Update modifyCompra method
   modifyCompra(): void {
+    // If compra is in FINALIZADO state, show confirmation dialog
+    if (this.compraForm.get('estado')?.value === CompraEstado.FINALIZADO) {
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       data: {
         title: 'Modificar Compra Finalizada',
@@ -1616,9 +1639,23 @@ export class CreateEditCompraComponent implements OnInit {
 
     dialogRef.afterClosed().subscribe(result => {
       if (result) {
-        // Change estado back to previous state or ACTIVO
-        this.compraForm.get('estado')?.setValue(this.previousEstado !== CompraEstado.FINALIZADO ?
-          this.previousEstado : CompraEstado.ABIERTO);
+          this.enableCompraEditing();
+        }
+      });
+    } else {
+      // For other states, just enable editing without confirmation
+      this.enableCompraEditing();
+    }
+  }
+
+  // New method to enable compra editing
+  private enableCompraEditing(): void {
+    // Change estado back to previous state or ACTIVO if needed
+    if (this.compraForm.get('estado')?.value === CompraEstado.FINALIZADO) {
+      this.compraForm.get('estado')?.setValue(
+        this.previousEstado !== CompraEstado.FINALIZADO ? this.previousEstado : CompraEstado.ABIERTO
+      );
+    }
 
         // Enable editing mode
         this.isEditingEnabled = true;
@@ -1629,6 +1666,149 @@ export class CreateEditCompraComponent implements OnInit {
         // Show feedback
         this.showSuccess('La compra puede ser modificada ahora.');
       }
+
+  // Add getter for showing modificar button
+  get showModificarButton(): boolean {
+    return this.isEditing && this.isFormDisabled;
+  }
+
+  // Add new method to load compra by ID
+  private async loadCompraById(id: number): Promise<void> {
+    try {
+      this.isLoading = true;
+      // Load the compra from the repository
+      this.compra = await firstValueFrom(this.repositoryService.getCompra(id));
+
+      if (this.compra) {
+        this.isEditing = true;
+        this.isNewCompra = false;
+        await this.loadCompraDetails();
+
+        // Set the form state based on compra status
+        this.isFormDisabled = true;
+        this.isEditingEnabled = false;
+        this.disableForm();
+      } else {
+        this.showError('No se encontró la compra especificada.');
+      }
+    } catch (error: any) {
+      console.error('Error loading compra:', error);
+      this.showError('Error al cargar la compra: ' + error.message);
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  // Update getter for finalizar button visibility to hide when estado is FINALIZADO
+  get showFinalizarButton(): boolean {
+    const estado = this.compraForm.get('estado')?.value;
+    return Boolean(this.compra) &&
+           !this.isEditingEnabled &&
+           estado !== CompraEstado.CANCELADO &&
+           estado !== CompraEstado.FINALIZADO &&
+           this.detalles.length > 0;
+  }
+
+  // Add getter for pagar button visibility
+  get showPagarButton(): boolean {
+    const estado = this.compraForm.get('estado')?.value;
+    return Boolean(this.compra) &&
+           !this.isEditingEnabled &&
+           estado === CompraEstado.FINALIZADO;
+  }
+
+  // Add method to handle payment navigation
+  pagarCompra(): void {
+    if (!this.compra || !this.compra.id) {
+      this.showError('No se puede registrar un pago para esta compra.');
+      return;
+    }
+
+    // Load monedas and formas de pago if not already loaded
+    Promise.all([
+      this.loadMonedasIfNeeded(),
+      this.loadFormasPagoIfNeeded()
+    ]).then(() => {
+      const dialogData: PagoDialogData = {
+        total: this.compraTotal,
+        principalMonedaId: this.compra!.moneda!.id,
+        compraIds: [this.compra!.id],
+        monedas: this.monedas,
+        formasPago: this.formasPago
+      };
+
+      const dialogRef = this.dialog.open(PagoDialogComponent, {
+        width: '95%',
+        height: '95%',
+        data: dialogData,
+        disableClose: true,
+        panelClass: ['pago-dialog-panel', 'dark-theme'],
+        autoFocus: false
+      });
+
+      dialogRef.afterClosed().subscribe(result => {
+        if (result && result.detalles && result.detalles.length > 0) {
+          // Handle successful payment
+          this.showSuccess('Pago registrado correctamente');
+
+          // Refresh the compra status if needed
+          this.loadCompraById(this.compra!.id);
+        }
+      });
+    }).catch(error => {
+      console.error('Error preparing payment dialog:', error);
+      this.showError('Error al preparar el diálogo de pago: ' + error.message);
     });
+  }
+
+  // Helper method to get total by moneda
+  private getMonedaTotal(monedaName: string): number {
+    const moneda = this.monedas.find(m =>
+      m.denominacion.toUpperCase() === monedaName.toUpperCase() ||
+      m.simbolo.toUpperCase() === monedaName.toUpperCase()
+    );
+
+    if (!moneda) return 0;
+
+    // For this example, we're just returning the same total for the default currency
+    // In a real app, you would convert the total based on exchange rates
+    if (moneda.denominacion.toUpperCase() === 'GUARANI') {
+      return this.compraTotal;
+    }
+
+    // Simple exchange rate example (should be replaced with actual rates)
+    if (moneda.denominacion.toUpperCase() === 'REAL') {
+      return this.compraTotal / 1200; // Example exchange rate
+    }
+
+    if (moneda.denominacion.toUpperCase() === 'DOLAR') {
+      return this.compraTotal / 7200; // Example exchange rate
+    }
+
+    return 0;
+  }
+
+  // Helper method to load monedas if not already loaded
+  private async loadMonedasIfNeeded(): Promise<void> {
+    if (this.monedas.length === 0) {
+      await this.loadMonedas();
+    }
+  }
+
+  // Helper method to load formas de pago if not already loaded
+  private async loadFormasPagoIfNeeded(): Promise<void> {
+    if (this.formasPago.length === 0) {
+      await this.loadFormasPago();
+    }
+  }
+
+  // Add getter for save button visibility
+  get showSaveButton(): boolean {
+    return !this.isFormDisabled;
+  }
+
+  // Add getter for save button text
+  get saveButtonText(): string {
+    return this.isEditing ? 'Actualizar' : 'Guardar';
   }
 }

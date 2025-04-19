@@ -364,33 +364,31 @@
   }
 }
 
+// Add styles for disabled form state
 .disabled-section {
   position: relative;
-  opacity: 0.85;
+  opacity: 0.8;
   pointer-events: none;
 
-  &::before {
+  &::after {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.03);
-    z-index: 1;
-    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.05);
+    pointer-events: none;
   }
 }
 
 .disabled-message {
-  background-color: #e3f2fd;
-  color: #0d47a1;
-  padding: 8px 16px;
+  margin: 10px 0;
+  padding: 10px;
+  background-color: rgba(0, 0, 0, 0.05);
   border-radius: 4px;
-  margin-bottom: 12px;
-  font-size: 14px;
-  border-left: 4px solid #2196f3;
-  font-weight: 500;
+  color: rgba(0, 0, 0, 0.6);
+  font-style: italic;
 }
 
 .actions-container {

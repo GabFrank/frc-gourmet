@@ -30,6 +30,30 @@
           </mat-error>
         </mat-form-field>
 
+        <!-- Country Code -->
+        <div class="country-code-container">
+          <mat-form-field appearance="outline" class="country-code-field">
+            <mat-label>Código de País (ISO)</mat-label>
+            <input matInput formControlName="countryCode" placeholder="Ej: US" maxlength="2">
+            <mat-hint>Código ISO de 2 letras (US, BR, FR, etc.)</mat-hint>
+            <mat-error *ngIf="monedaForm.get('countryCode')?.hasError('pattern') && monedaForm.get('countryCode')?.touched">
+              Debe ser un código ISO de 2 letras
+            </mat-error>
+          </mat-form-field>
+
+          <div class="flag-preview" *ngIf="previewFlagUrl">
+            <img [src]="previewFlagUrl" alt="Flag preview" class="flag-image" />
+          </div>
+
+          <div class="loading-flag" *ngIf="loadingFlag">
+            <mat-spinner diameter="30"></mat-spinner>
+          </div>
+        </div>
+
+        <!-- Hidden Flag Icon fields -->
+        <input type="hidden" formControlName="flagIcon">
+        <input type="hidden" formControlName="flagIconBase64">
+
         <!-- Toggle options -->
         <div class="toggle-container">
           <mat-slide-toggle formControlName="principal" color="primary">
@@ -49,17 +73,17 @@
     </mat-card-content>
 
     <mat-card-actions align="end">
-      <button 
-        mat-button 
-        (click)="cancel()" 
+      <button
+        mat-button
+        (click)="cancel()"
         [disabled]="isLoading">
         {{ isEditing ? 'Cancelar' : 'Limpiar' }}
       </button>
-      
-      <button 
-        mat-raised-button 
-        color="primary" 
-        (click)="onSubmit()" 
+
+      <button
+        mat-raised-button
+        color="primary"
+        (click)="onSubmit()"
         [disabled]="monedaForm.invalid && submitted || isLoading">
         <mat-icon>save</mat-icon>
         {{ isEditing ? 'Actualizar' : 'Guardar' }}

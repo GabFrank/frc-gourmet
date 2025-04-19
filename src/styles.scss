@@ -1582,3 +1582,29 @@ input.mat-input-element {
 .center {
   text-align: center;
 }
+
+// Add these styles anywhere in the global styles.scss file
+.pago-dialog-panel {
+  .mat-mdc-dialog-surface {
+    max-height: none !important;
+    overflow: visible !important;
+    background-color: #333639 !important;
+  }
+
+  .mat-mdc-dialog-container {
+    overflow: visible !important;
+    background-color: #333639 !important;
+  }
+
+  .cdk-overlay-pane {
+    max-height: 92vh !important;
+  }
+
+  .mat-mdc-dialog-content {
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    background-color: #333639 !important;
+  }
+}

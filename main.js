@@ -3812,7 +3812,7 @@ ipcMain.handle('getCompra', async (_event, compraId) => {
     try {
         const compra = await compraRepository.findOne({
             where: { id: compraId },
-            relations: ['proveedor', 'moneda', 'detalles', 'detalles.producto', 'detalles.ingrediente', 'detalles.presentacion']
+            relations: ['proveedor', 'moneda', 'formaPago', 'detalles', 'detalles.producto', 'detalles.ingrediente', 'detalles.presentacion']
         });
         if (!compra) {
             throw new Error(`Compra with id ${compraId} not found`);

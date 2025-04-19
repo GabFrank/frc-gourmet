@@ -27,6 +27,18 @@ __decorate([
     __metadata("design:type", String)
 ], Moneda.prototype, "simbolo", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Moneda.prototype, "flagIcon", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Moneda.prototype, "countryCode", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, type: 'text' }),
+    __metadata("design:type", String)
+], Moneda.prototype, "flagIconBase64", void 0);
+__decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
 ], Moneda.prototype, "activo", void 0);

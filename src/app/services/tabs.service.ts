@@ -8,6 +8,7 @@ import { ListCajasComponent } from '../pages/financiero/cajas/list-cajas.compone
 import { ListMonedasComponent } from '../pages/financiero/monedas/list-monedas/list-monedas.component';
 import { ListProductosComponent } from '../pages/productos/productos/list-productos.component';
 import { ListComprasComponent } from '../pages/compras/compras/list-compras.component';
+import { CreateEditCompraComponent } from '../pages/compras/compras/create-edit-compra.component';
 
 export interface Tab {
   id: string;
@@ -37,7 +38,9 @@ export class TabsService {
     //load list ingredientes tab using addTab method
     // this.addTab('Lista de productos', ListProductosComponent);
     //open list compras
-    this.addTab('Lista de compras', ListComprasComponent)
+    // this.addTab('Lista de compras', ListComprasComponent)
+    //open create edit compra with compra id 8
+    this.openTabWithData('Editar Compra', CreateEditCompraComponent, { compraId: 8 });
   }
 
   /**
