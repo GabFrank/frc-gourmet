@@ -64,6 +64,19 @@
         min-width: 150px;
       }
     }
+
+    .estado-field {
+      flex: 0 0 150px; // Adjust width as needed
+    }
+
+    .pago-estado-field {
+      flex: 0 0 150px; // Adjust width as needed
+      
+      input[readonly] {
+        cursor: default; // Indicate it's not editable
+        opacity: 0.7;
+      }
+    }
   }
 
   // Compress form fields vertically

@@ -9,11 +9,21 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PagoDetalle = void 0;
+exports.PagoDetalle = exports.TipoDetalle = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
 const moneda_entity_1 = require("../financiero/moneda.entity");
 const forma_pago_entity_1 = require("./forma-pago.entity");
+/**
+ * Enum for payment detail types
+ */
+var TipoDetalle;
+(function (TipoDetalle) {
+    TipoDetalle["PAGO"] = "PAGO";
+    TipoDetalle["VUELTO"] = "VUELTO";
+    TipoDetalle["DESCUENTO"] = "DESCUENTO";
+    TipoDetalle["AUMENTO"] = "AUMENTO"; // Additional amount paid
+})(TipoDetalle = exports.TipoDetalle || (exports.TipoDetalle = {}));
 /**
  * Entity representing payment details for supplier payments
  */
@@ -31,6 +41,14 @@ __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
 ], PagoDetalle.prototype, "activo", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        type: 'text',
+        enum: TipoDetalle,
+        default: TipoDetalle.PAGO
+    }),
+    __metadata("design:type", String)
+], PagoDetalle.prototype, "tipo", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)('Pago', 'detalles', {
         createForeignKeyConstraints: false

@@ -9,7 +9,7 @@ export class CurrencyConfigService {
   // Default configuration
   private defaultConfig: CurrencyMaskConfig = {
     align: 'right',
-    allowNegative: false,
+    allowNegative: true,
     allowZero: true,
     decimal: '.',
     precision: 2,
@@ -28,33 +28,37 @@ export class CurrencyConfigService {
       precision: 0,
       thousands: '.',
       decimal: ',',
-      min: 1
+      allowNegative: true
     },
     'GUARANI': {
       precision: 0,
       thousands: '.',
       decimal: ',',
-      min: 1
+      allowNegative: true
     },
     'USD': {
       precision: 2,
       thousands: ',',
-      decimal: '.'
+      decimal: '.',
+      allowNegative: true
     },
     'DOLAR': {
       precision: 2,
       thousands: ',',
-      decimal: '.'
+      decimal: '.',
+      allowNegative: true
     },
     'BRL': {
       precision: 2,
       thousands: '.',
-      decimal: ','
+      decimal: ',',
+      allowNegative: true
     },
     'REAL': {
       precision: 2,
       thousands: '.',
-      decimal: ','
+      decimal: ',',
+      allowNegative: true
     }
   };
 
@@ -79,6 +83,14 @@ export class CurrencyConfigService {
     // Apply currency-specific settings
     if (this.currencyConfigs[currencyCode]) {
       Object.assign(config, this.currencyConfigs[currencyCode]);
+    }
+
+    // Always ensure allowNegative is set to true to support "Vuelto" (change)
+    config.allowNegative = true;
+    
+    // Remove any positive min constraints to allow negative values
+    if (config.min !== undefined && config.min > 0) {
+      config.min = undefined;
     }
 
     // Add currency symbol as prefix

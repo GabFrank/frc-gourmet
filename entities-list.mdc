@@ -1,0 +1,252 @@
+# Entity IPC Handler List in main.ts
+
+This document lists the IPC handlers identified in `main.ts`, grouped by their apparent entity or domain.
+
+## Printers
+- `get-printers`
+- `add-printer`
+- `update-printer`
+- `delete-printer`
+- `print-test-page`
+
+## Personas & Usuarios
+- **Persona:**
+    - `get-personas`
+    - `get-persona`
+    - `create-persona`
+    - `update-persona`
+    - `delete-persona`
+- **Usuario:**
+    - `get-usuarios`
+    - `get-usuario`
+    - `create-usuario`
+    - `update-usuario`
+    - `delete-usuario`
+    - `get-usuarios-paginated`
+- **Role:**
+    - `get-roles`
+    - `get-role`
+    - `create-role`
+    - `update-role`
+    - `delete-role`
+- **UsuarioRole:**
+    - `get-usuario-roles`
+    - `assign-role-to-usuario`
+    - `remove-role-from-usuario`
+- **TipoCliente:**
+    - `get-tipo-clientes`
+    - `get-tipo-cliente`
+    - `create-tipo-cliente`
+    - `update-tipo-cliente`
+    - `delete-tipo-cliente`
+- **Cliente:**
+    - `get-clientes`
+    - `get-cliente`
+    - `create-cliente`
+    - `update-cliente`
+    - `delete-cliente`
+
+## Authentication (Auth)
+- `login`
+- `logout`
+- `updateSessionActivity`
+- `getLoginSessions`
+- `getCurrentUser`
+- `setCurrentUser`
+
+## Image Handling
+- **Profile Images:**
+    - `save-profile-image`
+    - `delete-profile-image`
+- **Product Images:**
+    - `getProductImages`
+    - `createProductImage`
+    - `updateProductImage`
+    - `deleteProductImage`
+    - `saveProductoImage`
+    - `deleteProductoImage`
+
+## Productos
+- **Categoria:**
+    - `getCategorias`
+    - `getCategoria`
+    - `createCategoria`
+    - `updateCategoria`
+    - `deleteCategoria`
+- **Subcategoria:**
+    - `getSubcategorias`
+    - `getSubcategoria`
+    - `getSubcategoriasByCategoria`
+    - `createSubcategoria`
+    - `updateSubcategoria`
+    - `deleteSubcategoria`
+- **Producto:**
+    - `getProductos`
+    - `getProducto`
+    - `getProductosBySubcategoria`
+    - `createProducto`
+    - `updateProducto`
+    - `deleteProducto`
+- **Presentacion:**
+    - `getPresentacionesByProducto`
+    - `createPresentacion`
+    - `updatePresentacion`
+    - `deletePresentacion`
+- **Codigo:**
+    - `getCodigosByPresentacion`
+    - `createCodigo`
+    - `updateCodigo`
+    - `deleteCodigo`
+- **Sabor:**
+    - `getSabores`
+    - `getSabor`
+    - `createSabor`
+    - `updateSabor`
+    - `deleteSabor`
+- **PresentacionSabor:**
+    - `getPresentacionSaboresByPresentacion`
+    - `getPresentacionSabor`
+    - `createPresentacionSabor`
+    - `updatePresentacionSabor`
+    - `deletePresentacionSabor`
+- **Receta:**
+    - `getRecetas`
+    - `getReceta`
+    - `createReceta`
+    - `updateReceta`
+    - `deleteReceta`
+- **RecetaItem:**
+    - `getRecetaItems`
+    - `getRecetaItem`
+    - `createRecetaItem`
+    - `updateRecetaItem`
+    - `deleteRecetaItem`
+- **Ingrediente:**
+    - `getIngredientes`
+    - `getIngrediente`
+    - `createIngrediente`
+    - `updateIngrediente`
+    - `deleteIngrediente`
+    - `searchIngredientesByDescripcion`
+- **RecetaVariacion:**
+    - `getRecetaVariaciones`
+    - `getRecetaVariacion`
+    - `createRecetaVariacion`
+    - `updateRecetaVariacion`
+    - `deleteRecetaVariacion`
+- **RecetaVariacionItem:**
+    - `getRecetaVariacionItems`
+    - `getRecetaVariacionItem`
+    - `createRecetaVariacionItem`
+    - `updateRecetaVariacionItem`
+    - `deleteRecetaVariacionItem`
+
+## Financiero
+- **Moneda:**
+    - `getMonedas`
+    - `getMoneda`
+    - `createMoneda`
+    - `updateMoneda`
+    - `deleteMoneda`
+- **TipoPrecio:**
+    - `getTipoPrecios`
+    - `getTipoPrecio`
+    - `createTipoPrecio`
+    - `updateTipoPrecio`
+    - `deleteTipoPrecio`
+- **PrecioVenta:**
+    - `getPreciosVentaByPresentacion`
+    - `getPreciosVentaByPresentacionSabor`
+    - `createPrecioVenta`
+    - `updatePrecioVenta`
+    - `deletePrecioVenta`
+- **MonedaBillete:**
+    - `get-monedas-billetes`
+    - `get-moneda-billete`
+    - `create-moneda-billete`
+    - `update-moneda-billete`
+    - `delete-moneda-billete`
+- **Conteo:**
+    - `get-conteos`
+    - `get-conteo`
+    - `create-conteo`
+    - `update-conteo`
+    - `delete-conteo`
+- **ConteoDetalle:**
+    - `get-conteo-detalles`
+    - `get-conteo-detalle`
+    - `create-conteo-detalle`
+    - `update-conteo-detalle`
+    - `delete-conteo-detalle`
+- **Dispositivo:**
+    - `get-dispositivos`
+    - `get-dispositivo`
+    - `create-dispositivo`
+    - `update-dispositivo`
+    - `delete-dispositivo`
+- **Caja:**
+    - `get-cajas`
+    - `get-caja`
+    - `get-caja-by-dispositivo`
+    - `create-caja`
+    - `update-caja`
+    - `delete-caja`
+- **CajaMoneda:**
+    - `get-cajas-monedas`
+    - `get-caja-moneda`
+    - `create-caja-moneda`
+    - `update-caja-moneda`
+    - `delete-caja-moneda`
+    - `save-cajas-monedas`
+- **MonedaCambio:**
+    - `get-monedas-cambio`
+    - `get-monedas-cambio-by-moneda-origen`
+    - `get-moneda-cambio`
+    - `create-moneda-cambio`
+    - `update-moneda-cambio`
+    - `delete-moneda-cambio`
+
+## Compras
+- **Proveedor:**
+    - `getProveedores`
+    - `getProveedor`
+    - `createProveedor`
+    - `updateProveedor`
+    - `deleteProveedor`
+- **Compra:**
+    - `getCompras`
+    - `getCompra`
+    - `createCompra`
+    - `updateCompra`
+    - `deleteCompra`
+- **CompraDetalle:**
+    - `getCompraDetalles`
+    - `createCompraDetalle`
+    - `updateCompraDetalle`
+    - `deleteCompraDetalle`
+- **Pago:**
+    - `getPagos`
+    - `getPago`
+    - `createPago`
+    - `updatePago`
+    - `deletePago`
+- **PagoDetalle:**
+    - `getPagoDetalles`
+    - `createPagoDetalle`
+    - `updatePagoDetalle`
+    - `deletePagoDetalle`
+- **ProveedorProducto:**
+    - `getProveedorProductos`
+    - `getProveedorProducto`
+    - `createProveedorProducto`
+    - `updateProveedorProducto`
+    - `deleteProveedorProducto`
+- **FormasPago:**
+    - `getFormasPago`
+    - `getFormaPago`
+    - `createFormaPago`
+    - `updateFormaPago`
+    - `deleteFormaPago`
+
+## System Info
+- `get-system-mac-address` 

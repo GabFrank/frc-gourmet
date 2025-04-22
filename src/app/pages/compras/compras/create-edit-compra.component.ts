@@ -103,6 +103,7 @@ export class CreateEditCompraComponent implements OnInit {
   ingredientes: Ingrediente[] = [];
   presentaciones: Presentacion[] = [];
   formasPago: FormasPago[] = [];
+  pagoEstadoLabel = 'N/A'; // Add property to hold the pago estado label
 
   // Filter for autocomplete
   filteredItems: Observable<SearchItem[]>;
@@ -317,7 +318,8 @@ export class CreateEditCompraComponent implements OnInit {
       // Additional fields needed for form functionality
       detalles: this.fb.array([]), // Required for table display
       total: [0], // Required for total calculation display
-      id: [null] // Required for edit mode identification
+      id: [null], // Required for edit mode identification
+      pagoEstado: [{ value: 'N/A', disabled: true }] // Add new read-only field for Pago status
     });
 
     // Watch credito changes to enable/disable plazoDias
@@ -636,19 +638,23 @@ export class CreateEditCompraComponent implements OnInit {
         this.previousEstado = this.compra.estado;
       }
 
+      // Determine Pago Estado Label
+      this.pagoEstadoLabel = this.compra.pago ? this.compra.pago.estado : 'Pendiente';
+
       // Set main form values
       this.compraForm.patchValue({
         proveedor: this.compra.proveedor?.id,
         moneda: this.compra.moneda?.id,
         estado: this.compra.estado,
         isRecepcionMercaderia: this.compra.isRecepcionMercaderia,
-        formaPago: this.compra.formaPago?.id,
+        formaPago: this.compra.formaPago,
         plazoDias: this.compra.plazoDias,
         credito: this.compra.credito,
         numeroNota: this.compra.numeroNota,
         tipoBoleta: this.compra.tipoBoleta,
         fechaCompra: this.compra.fechaCompra,
-        activo: this.compra.activo
+        activo: this.compra.activo,
+        pagoEstado: this.pagoEstadoLabel
       });
 
       // Fetch detalles from the database in one call

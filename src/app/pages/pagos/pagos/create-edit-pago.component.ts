@@ -288,7 +288,7 @@ export class CreateEditPagoComponent implements OnInit {
       // Find the caja object
       let cajaObj = null;
       if (this.pago.cajaId) {
-        cajaObj = this.cajas.find(c => c.id === this.pago?.cajaId);
+        cajaObj = this.cajas?.find(c => c.id === this.pago?.cajaId);
       }
 
       // Update form with pago data

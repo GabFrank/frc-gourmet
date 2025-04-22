@@ -56,15 +56,19 @@
               </mat-error>
             </mat-form-field>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Estado</mat-label>
-              <input matInput [value]="estadoLabel" readonly>
-              <!-- Hidden select to maintain the form control -->
-              <select formControlName="estado" hidden>
-                <option *ngFor="let option of estadoOptions" [value]="option.value">
-                  {{ option.label }}
-                </option>
-              </select>
+            <mat-form-field appearance="outline" class="form-field estado-field">
+              <mat-label>Estado Compra</mat-label>
+              <mat-select formControlName="estado">
+                <mat-option *ngFor="let estado of estadoOptions" [value]="estado.value">
+                  {{ estado.label }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <!-- Pago Estado Field (Read Only) -->
+            <mat-form-field appearance="outline" class="form-field pago-estado-field">
+              <mat-label>Estado Pago</mat-label>
+              <input matInput formControlName="pagoEstado" readonly>
             </mat-form-field>
           </div>
 

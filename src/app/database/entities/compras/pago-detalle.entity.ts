@@ -6,6 +6,16 @@ import { FormasPago } from './forma-pago.entity';
 import type { Pago } from './pago.entity';
 
 /**
+ * Enum for payment detail types
+ */
+export enum TipoDetalle {
+  PAGO = 'PAGO',            // Regular payment
+  VUELTO = 'VUELTO',        // Change given back
+  DESCUENTO = 'DESCUENTO',  // Discount applied 
+  AUMENTO = 'AUMENTO'       // Additional amount paid
+}
+
+/**
  * Entity representing payment details for supplier payments
  */
 @Entity('pagos_detalles')
@@ -18,6 +28,13 @@ export class PagoDetalle extends BaseModel {
 
   @Column({ default: true })
   activo!: boolean;
+
+  @Column({
+    type: 'text',
+    enum: TipoDetalle,
+    default: TipoDetalle.PAGO
+  })
+  tipo!: TipoDetalle;
 
   // Relationships
   @ManyToOne('Pago', 'detalles', {

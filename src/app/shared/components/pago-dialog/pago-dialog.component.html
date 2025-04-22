@@ -1,4 +1,15 @@
 <div class="pago-dialog-container">
+   <!-- Pago Info Header -->
+   <div class="pago-info-header" *ngIf="pagoCreated">
+    <span>ID Pago: <strong>{{ pagoCreated.id }}</strong></span>
+    <span *ngIf="data.compraIds && data.compraIds.length > 0">
+      | Compra(s): <strong>{{ data.compraIds.join(', ') }}</strong>
+    </span>
+    <span>| Estado: <strong>{{ pagoCreated.estado }}</strong></span>
+    <span *ngIf="pagoCreated.createdAt">| Creado: <strong>{{ pagoCreated.createdAt | date:'dd/MM/yyyy HH:mm' }}</strong></span>
+    <!-- Add user info if available -->
+    <!-- <span *ngIf="pagoCreated.usuarioCreacion">| Por: <strong>{{ pagoCreated.usuarioCreacion.username || pagoCreated.usuarioCreacion.id }}</strong></span> -->
+  </div>
   <h2 mat-dialog-title>Total</h2>
 
   <!-- Loading Indicator for Currency Configuration -->
@@ -93,7 +104,35 @@
         <!-- Tipo Column -->
         <ng-container matColumnDef="tipo">
           <th mat-header-cell *matHeaderCellDef>Tipo</th>
-          <td mat-cell *matCellDef="let detalle">-</td>
+          <td mat-cell *matCellDef="let detalle" 
+              [ngClass]="{
+                'pago-type': detalle.tipo === 'PAGO',
+                'vuelto-type': detalle.tipo === 'VUELTO',
+                'descuento-type': detalle.tipo === 'DESCUENTO',
+                'aumento-type': detalle.tipo === 'AUMENTO'
+              }">
+            {{ getPaymentType(detalle.valor, detalle.tipo) }}
+          </td>
+        </ng-container>
+
+        <!-- Menu Column (3 dots) -->
+        <ng-container matColumnDef="menu">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let detalle">
+            <button mat-icon-button aria-label="Options" [matMenuTriggerFor]="menu" [disabled]="isFinalizado">
+              <mat-icon style="color: black !important;">more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="editDetalle(detalle)" [disabled]="isFinalizado">
+                <mat-icon>edit</mat-icon>
+                <span>Editar</span>
+              </button>
+              <button mat-menu-item (click)="deleteDetalle(detalle)" [disabled]="isFinalizado">
+                <mat-icon>delete</mat-icon>
+                <span>Eliminar</span>
+              </button>
+            </mat-menu>
+          </td>
         </ng-container>
 
         <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
@@ -102,7 +141,7 @@
     </div>
 
     <!-- Right Side: Options -->
-    <div class="payment-options">
+    <div class="payment-options" [class.disabled-section]="isFinalizado">
       <!-- Currency Selection -->
       <div class="options-section">
         <h3>Monedas</h3>
@@ -110,10 +149,11 @@
           <button
             mat-raised-button
             [class.active]="selectedMoneda?.id === moneda.id"
+            [class.negative-balance]="(currencyBalances.get(moneda.id!) ?? 0) < 0"
             (click)="onMonedaSelect(moneda)"
             *ngFor="let moneda of filteredMonedas"
             [color]="selectedMoneda?.id === moneda.id ? 'primary' : ''"
-            [disabled]="(currencyTotals.get(moneda.id!) ?? 0) <= 0"
+            [disabled]="isFinalizado || (currencyBalances.get(moneda.id!) ?? 0) === 0"
           >
             <!-- Currency Flag in Button -->
             <span class="button-with-flag">
@@ -159,6 +199,7 @@
             (click)="onFormaPagoSelect(formaPago)"
             *ngFor="let formaPago of data.formasPago"
             [color]="selectedFormaPago?.id === formaPago.id ? 'primary' : ''"
+            [disabled]="isFinalizado"
           >
             {{ formaPago.nombre }} (F{{ formaPago.id + 3 }})
           </button>
@@ -168,8 +209,8 @@
   </div>
 
   <!-- Payment Detail Form -->
-  <div class="payment-detail-form">
-    <form [formGroup]="detalleForm" (submit)="addDetalle()" (keydown)="onKeyDown($event)">
+  <div class="payment-detail-form" [class.disabled-section]="isFinalizado">
+    <form [formGroup]="detalleForm" (submit)="addDetalle($event)">
       <!-- Main row for primary form fields -->
       <div class="form-row">
         <!-- Moneda Select -->
@@ -214,16 +255,19 @@
         <!-- Valor Input -->
         <div class="form-field">
           <span class="field-label">Valor</span>
-          <app-currency-input
-            #valorInput
-            formControlName="valor"
-            [moneda]="selectedMoneda"
-            [required]="true"
-            [min]="0.01"
-            [disableFloating]="true"
-            (keydown.enter)="addDetalle()"
-            class="no-subscript-space">
-          </app-currency-input>
+          <div class="valor-input-container" style="display: flex; align-items: center;">
+            <app-currency-input
+              #valorInput
+              formControlName="valor"
+              [moneda]="selectedMoneda"
+              [required]="true"
+              [min]="null"
+              [disableFloating]="true"
+              [hint]="paymentTypeHint"
+              class="no-subscript-space" 
+              style="flex: 1;">
+            </app-currency-input>
+          </div>
         </div>
 
         <!-- Description Toggle -->
@@ -235,13 +279,13 @@
 
         <!-- Adicionar Button -->
         <div class="form-field button-field" style="margin-bottom: 10px;">
-          <button
+          <button 
             mat-raised-button
             color="primary"
             type="submit"
-            [disabled]="!detalleForm.valid"
+            [disabled]="!detalleForm.valid || isSaving || isFinalizado"
           >
-            Adicionar
+            {{ editingDetalleId ? 'Actualizar' : 'Adicionar' }}
           </button>
         </div>
       </div>
@@ -313,30 +357,42 @@
 
   <!-- Action Buttons -->
   <div class="action-buttons">
-    <button mat-raised-button (click)="onCancel()">Cancelar</button>
-    <button mat-raised-button (click)="onFinalize()">
+    <button mat-raised-button (click)="onCancel()" [disabled]="isSaving">Cancelar</button>
+    
+    <!-- Finalizar Button: Show only if not finalized -->
+    <button mat-raised-button *ngIf="!isFinalizado" (click)="onFinalize()" [disabled]="isSaving || !pagoCreated">
       <span>Finalizar</span>
       <span class="shortcut">F10</span>
     </button>
-    <button mat-raised-button>
+
+    <!-- Modificar Pago Button: Show only if finalized -->
+    <button mat-raised-button *ngIf="isFinalizado" (click)="onModifyPago()" [disabled]="isSaving">
+      <span>Modificar Pago</span>
+      <span class="shortcut">F10</span> <!-- Or a different shortcut? -->
+    </button>
+
+    <button mat-raised-button *ngIf="false"> <!-- Hidden -->
       <span>Ticket</span>
     </button>
-    <button mat-raised-button>
+    <button mat-raised-button *ngIf="false"> <!-- Hidden -->
       <span>Parcial</span>
     </button>
-    <button mat-raised-button>
+    
+    <!-- Aumento/Descuento: Disable if finalized -->
+    <button mat-raised-button color="primary" (click)="openAumentoDialog()" [disabled]="isFinalizado || isSaving">
       <span>Aumento</span>
       <span class="shortcut">F8</span>
     </button>
-    <button mat-raised-button color="warn">
+    <button mat-raised-button color="warn" (click)="openDescuentoDialog()" [disabled]="isFinalizado || isSaving">
       <span>Descuento</span>
       <span class="shortcut">F9</span>
     </button>
-    <button mat-raised-button color="primary">
+
+    <button mat-raised-button color="primary" *ngIf="false"> <!-- Hidden -->
       <span>Factura</span>
       <span class="shortcut">F12</span>
     </button>
-    <button mat-raised-button>
+    <button mat-raised-button *ngIf="false"> <!-- Hidden -->
       <span>Presup.</span>
     </button>
   </div>

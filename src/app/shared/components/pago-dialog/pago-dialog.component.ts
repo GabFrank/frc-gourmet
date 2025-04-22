@@ -1,6 +1,6 @@
 import { Component, Inject, OnInit, AfterViewInit, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
+import { FormBuilder, FormGroup, Validators, ReactiveFormsModule, FormControl } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTableModule } from '@angular/material/table';
@@ -12,16 +12,23 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatMenuModule } from '@angular/material/menu';
 
 // Import the models
 import { Moneda } from '../../../database/entities/financiero/moneda.entity';
 import { FormasPago } from '../../../database/entities/compras/forma-pago.entity';
-import { PagoDetalle } from '../../../database/entities/compras/pago-detalle.entity';
+import { PagoDetalle, TipoDetalle } from '../../../database/entities/compras/pago-detalle.entity';
 import { RepositoryService } from '../../../database/repository.service';
 import { firstValueFrom } from 'rxjs';
 import { CajaMoneda } from '../../../database/entities/financiero/caja-moneda.entity';
 import { MonedaCambio } from '../../../database/entities/financiero/moneda-cambio.entity';
 import { CurrencyInputComponent } from '../currency-input/currency-input.component';
+import { Pago } from '../../../database/entities/compras/pago.entity';
+import { PagoEstado } from '../../../database/entities/compras/estado.enum';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatDialog } from '@angular/material/dialog';
+import { MatDialogConfig } from '@angular/material/dialog';
+import { AjusteDialogComponent } from './ajuste-dialog.component';
 
 export interface PagoDialogData {
   // Principal currency total
@@ -31,6 +38,7 @@ export interface PagoDialogData {
   compraIds: number[];
   monedas: Moneda[];
   formasPago: FormasPago[];
+  pagoId?: number; // Optional pago ID if we're editing an existing pago
 }
 
 interface MonedaWithTotal {
@@ -54,7 +62,10 @@ interface MonedaWithTotal {
     MatDividerModule,
     MatProgressSpinnerModule,
     MatCheckboxModule,
-    CurrencyInputComponent
+    CurrencyInputComponent,
+    MatMenuModule,
+    MatTooltipModule,
+    AjusteDialogComponent
   ],
   templateUrl: './pago-dialog.component.html',
   styleUrls: ['./pago-dialog.component.scss']
@@ -64,7 +75,7 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
   detalles: PagoDetalle[] = [];
 
   // Display columns for the table
-  displayedColumns: string[] = ['#', 'moneda', 'formaPago', 'valor', 'tipo'];
+  displayedColumns: string[] = ['#', 'moneda', 'formaPago', 'valor', 'tipo', 'menu'];
 
   // Principal currency
   principalMoneda: Moneda | null = null;
@@ -79,18 +90,33 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
   selectedMoneda: Moneda | null = null;
   selectedFormaPago: FormasPago | null = null;
 
-  // Offline status
-  isOffline = false;
-
-  // Filtered and sorted currencies
+  // Filtered and sorted currencies (Moved declaration here)
   filteredMonedas: Moneda[] = [];
 
-  // Loading states
+  // State tracking
+  isOffline = false;
   loadingConfig = false;
   loadingExchangeRates = false;
+  isSaving = false;
+  isFinalizado = false; // New state for finalized payment
 
   // Exchange rates for conversions
   exchangeRates: MonedaCambio[] = [];
+
+  // Add new properties for tracking the created pago
+  pagoCreated: Pago | null = null;
+
+  // Add a new property to track if we should load existing payment details
+  existingPagoId: number | null = null;
+
+  // Add a new property to track the ID of the detail being edited
+  editingDetalleId: number | null = null;
+
+  // Payment type hint
+  paymentTypeHint = 'Pago';
+
+  // Add current detail type tracking
+  currentDetalleType: TipoDetalle = TipoDetalle.PAGO;
 
   @ViewChild('valorInput') valorInput!: CurrencyInputComponent;
   private focusSet = false;
@@ -100,7 +126,8 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
     @Inject(MAT_DIALOG_DATA) public data: PagoDialogData,
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private dialog: MatDialog
   ) {
     // Set the dialog to resize correctly
     this.dialogRef.updateSize('95%', 'auto');
@@ -146,14 +173,24 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
   }
 
   onMonedaSelect(moneda: Moneda): void {
-    console.log('Currency selected from button:', moneda);
-    this.selectedMoneda = moneda;
-    // Update the form value
-    this.detalleForm.get('moneda')?.setValue(moneda);
+    if (moneda) {
+      this.selectedMoneda = moneda;
+      this.detalleForm.patchValue({
+        moneda: moneda
+      });
+
+      // Update the valor field with the current saldo, whether positive or negative
+      const currentSaldo = this.saldos.get(moneda.id!);
+      if (currentSaldo !== undefined && currentSaldo !== null) {
+        this.detalleForm.get('valor')?.setValue(currentSaldo);
+        // Update payment type hint based on the saldo value
+        this.paymentTypeHint = currentSaldo >= 0 ? 'Pago' : 'Vuelto';
+        this.focusValorInput();
+      }
+    }
   }
 
   onFormaPagoSelect(formaPago: FormasPago): void {
-    console.log('Payment method selected from button:', formaPago);
     this.selectedFormaPago = formaPago;
     // Update the form value
     this.detalleForm.get('formaPago')?.setValue(formaPago);
@@ -164,7 +201,6 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
     // Listen for changes in the moneda form control
     this.detalleForm.get('moneda')?.valueChanges.subscribe(value => {
       if (value) {
-        console.log('Currency changed in form:', value);
         this.selectedMoneda = value;
 
         // When currency changes, update the valor field with the current saldo
@@ -180,7 +216,6 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
     // Listen for changes in the formaPago form control
     this.detalleForm.get('formaPago')?.valueChanges.subscribe(value => {
       if (value) {
-        console.log('Payment method changed in form:', value);
         this.selectedFormaPago = value;
       }
     });
@@ -193,11 +228,83 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
     // Setup form listeners for bidirectional binding with buttons
     this.setupFormListeners();
 
+    // Check if we have a direct pagoId in the data
+    if (this.data.pagoId) {
+      console.log(`Direct pagoId provided: ${this.data.pagoId}`);
+      this.existingPagoId = this.data.pagoId;
+      this.loadPagoById(this.data.pagoId);
+    } else {
+      // Check if we need to load existing payment details from compraIds
+      this.checkForExistingPayments();
+    }
+
     // Then load and filter monedas
     this.loadAndFilterMonedas().then(() => {
       // After loading is complete, update the form values
       this.updateFormInitialValues();
     });
+  }
+
+  /**
+   * Check if there are existing payments for the provided compraIds
+   * and load them if found
+   */
+  async checkForExistingPayments(): Promise<void> {
+    if (!this.data.compraIds || this.data.compraIds.length === 0) {
+      return;
+    }
+
+    try {
+      // For each compraId, check if it has an associated pago
+      for (const compraId of this.data.compraIds) {
+        const compra = await firstValueFrom(this.repositoryService.getCompra(compraId));
+
+        if (compra && compra.pago && compra.pago.id) {
+          this.existingPagoId = compra.pago.id;
+          this.pagoCreated = compra.pago;
+          this.isFinalizado = this.pagoCreated.estado === PagoEstado.PAGADO;
+          this.updateFormState(); // Update form state based on finalized status
+          await this.loadPagoDetalles(compra.pago.id);
+          break; // We only need to find one pago
+        } else {
+          console.log(`No existing pago found for compra ${compraId}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking for existing payments:', error);
+      this.snackBar.open('Error al verificar pagos existentes', 'Cerrar', { duration: 3000 });
+    }
+  }
+
+  /**
+   * Load existing payment details for a pago
+   */
+  async loadPagoDetalles(pagoId: number): Promise<void> {
+    try {
+
+      // First, try to get the full pago with its details
+      const pago = await firstValueFrom(this.repositoryService.getPago(pagoId));
+
+      // Then get the details specifically
+      const detalles = await firstValueFrom(this.repositoryService.getPagoDetalles(pagoId));
+
+      if (detalles && detalles.length > 0) {
+        this.detalles = detalles;
+
+        // Wait for exchange rates to be loaded before updating saldos
+        if (this.exchangeRates.length > 0) {
+          this.updateSaldos();
+        } else {
+          // If exchange rates aren't loaded yet, we'll update saldos after they're loaded
+          console.log('Exchange rates not loaded yet, will update saldos later');
+        }
+      } else {
+        console.log('No payment details found');
+      }
+    } catch (error) {
+      console.error('Error loading payment details:', error);
+      this.snackBar.open('Error al cargar los detalles de pago', 'Cerrar', { duration: 3000 });
+    }
   }
 
   /**
@@ -282,13 +389,20 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
    */
   updateFormInitialValues(): void {
     if (this.detalleForm) {
-      console.log('Updating form with selectedMoneda:', this.selectedMoneda);
-      console.log('Updating form with selectedFormaPago:', this.selectedFormaPago);
-
       this.detalleForm.patchValue({
         moneda: this.selectedMoneda,
         formaPago: this.selectedFormaPago
       });
+      
+      // Also set the valor field based on the current saldo
+      if (this.selectedMoneda?.id) {
+        const currentSaldo = this.saldos.get(this.selectedMoneda.id);
+        if (currentSaldo !== undefined && currentSaldo !== null) {
+          this.detalleForm.get('valor')?.setValue(currentSaldo);
+          // Update payment type hint based on the saldo value
+          this.paymentTypeHint = currentSaldo >= 0 ? 'Pago' : 'Vuelto';
+        }
+      }
     }
   }
 
@@ -314,6 +428,11 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
       // For each currency, calculate the total based on exchange rates
       this.calculateCurrencyTotals();
 
+      // If we have loaded payment details, update saldos now that exchange rates are loaded
+      if (this.detalles.length > 0) {
+        this.updateSaldos();
+      }
+
     } catch (error) {
       console.error('Error loading exchange rates:', error);
       this.snackBar.open('Error al cargar los tipos de cambio', 'Cerrar', { duration: 3000 });
@@ -327,6 +446,7 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
    */
   calculateCurrencyTotals(): void {
     if (!this.principalMoneda) return;
+
 
     // Clear previous calculations
     this.monedasWithTotals = [];
@@ -357,16 +477,17 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
           total: total
         });
 
-        // Update saldos for this currency
+        // Initialize saldos for this currency
         this.saldos.set(moneda.id!, total);
       } else {
+        console.warn(`No exchange rate found from ${this.principalMoneda?.denominacion} to ${moneda.denominacion}`);
         // No exchange rate found, set total to 0
         this.monedasWithTotals.push({
           moneda: moneda,
           total: 0
         });
 
-        // Update saldos for this currency
+        // Initialize saldos for this currency
         this.saldos.set(moneda.id!, 0);
       }
     });
@@ -391,7 +512,7 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
     this.detalleForm = this.fb.group({
       moneda: [this.selectedMoneda, Validators.required],
       formaPago: [this.selectedFormaPago, Validators.required],
-      valor: [null, [Validators.required, Validators.min(0.01)]],
+      valor: [null, [Validators.required, this.nonZeroValidator]],
       mostrarDescripcion: [false],
       descripcion: ['']
     });
@@ -406,6 +527,25 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
       }
       descControl?.updateValueAndValidity();
     });
+
+    // Update payment type hint when valor changes
+    this.detalleForm.get('valor')?.valueChanges.subscribe(value => {
+      if (value !== null && value !== undefined) {
+        this.paymentTypeHint = value >= 0 ? 'Pago' : 'Vuelto';
+      }
+    });
+  }
+
+  /**
+   * Custom validator to ensure the value is not zero (can be positive or negative)
+   */
+  nonZeroValidator(control: FormControl): {[key: string]: any} | null {
+    const value = control.value;
+    if (value === null || value === undefined) return null;
+    
+    // Using a small epsilon to avoid floating-point precision issues
+    const epsilon = 0.000001;
+    return Math.abs(value) > epsilon ? null : { 'nonZero': { value } };
   }
 
   /**
@@ -445,18 +585,119 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
    * Update balances after adding/removing payment details
    */
   updateSaldos(): void {
-    // Reset saldos to initial totals
-    this.monedasWithTotals.forEach(mwt => {
-      this.saldos.set(mwt.moneda.id!, mwt.total);
-    });
+    if (!this.principalMoneda || !this.principalMoneda.id) {
+      console.error('No principal currency defined for balance calculation');
+      return;
+    }
 
-    // Subtract paid amounts for each currency
+    // Calculate net payments/discounts and total increases separately
+    let netPaymentsAndDiscountsInPrincipal = 0;
+    let totalAumentosInPrincipal = 0;
+
+    // For each payment detail, convert to principal currency and add to the correct total
     this.detalles.forEach(detalle => {
-      if (detalle.moneda && detalle.moneda.id) {
-        const currentSaldo = this.saldos.get(detalle.moneda.id) || 0;
-        this.saldos.set(detalle.moneda.id, currentSaldo - (detalle.valor || 0));
+      if (!detalle.moneda || !detalle.moneda.id || detalle.valor === undefined) return;
+
+      let valueInPrincipal: number;
+
+      // Convert detail value to principal currency
+      if (detalle.moneda.id === this.principalMoneda!.id) {
+        valueInPrincipal = detalle.valor;
+      } else {
+        const exchangeRate = this.exchangeRates.find(rate =>
+          rate.monedaDestino.id === detalle.moneda.id &&
+          rate.monedaOrigen.id === this.principalMoneda!.id
+        );
+
+        if (exchangeRate) {
+          valueInPrincipal = detalle.valor * exchangeRate.compraLocal;
+        } else {
+          this.snackBar.open('No se encontró el tipo de cambio para la moneda ' + detalle.moneda.denominacion, 'Cerrar', { duration: 3000 });
+          return; // Skip this detail if conversion fails
+        }
+      }
+
+      // Add to the appropriate total based on TipoDetalle
+      switch (detalle.tipo) {
+        case TipoDetalle.PAGO:
+        case TipoDetalle.DESCUENTO:
+          netPaymentsAndDiscountsInPrincipal += valueInPrincipal; // Pago/Descuento contribute positively
+          break;
+        case TipoDetalle.VUELTO:
+          netPaymentsAndDiscountsInPrincipal += valueInPrincipal; // Vuelto is stored negative, so adding it subtracts
+          break;
+        case TipoDetalle.AUMENTO:
+          totalAumentosInPrincipal += valueInPrincipal; // Aumento increases the target
+          break;
+        default:
+          // Handle potential unknown types or fallback (e.g., treat as PAGO if value is positive)
+          if (valueInPrincipal >= 0) {
+            netPaymentsAndDiscountsInPrincipal += valueInPrincipal;
+          } else {
+            netPaymentsAndDiscountsInPrincipal += valueInPrincipal; // Treat negative unknown as Vuelto
+          }
+          break;
       }
     });
+
+    // Calculate the effective total to be covered
+    const effectiveTotalInPrincipal = this.data.total + totalAumentosInPrincipal;
+
+    // Calculate remaining balance in principal currency
+    const remainingInPrincipal = effectiveTotalInPrincipal - netPaymentsAndDiscountsInPrincipal;
+    console.log(`Original Total: ${this.data.total}, Aumentos: ${totalAumentosInPrincipal}, Paid/Discount/Vuelto: ${netPaymentsAndDiscountsInPrincipal}`);
+    console.log(`Effective Total: ${effectiveTotalInPrincipal}, Remaining in principal currency: ${remainingInPrincipal} ${this.principalMoneda.denominacion}`);
+
+    // Update saldo for principal currency
+    this.saldos.set(this.principalMoneda.id, remainingInPrincipal);
+
+    // Now update saldos for all other currencies based on the remaining principal amount
+    this.filteredMonedas.forEach(moneda => {
+      if (moneda.id === this.principalMoneda!.id) return; // Skip principal, already updated
+
+      // Find exchange rate from principal to this currency
+      const exchangeRate = this.exchangeRates.find(rate =>
+        rate.monedaOrigen.id === this.principalMoneda!.id &&
+        rate.monedaDestino.id === moneda.id
+      );
+
+      if (exchangeRate) {
+        // Convert remaining principal amount to this currency
+        const remainingInCurrency = remainingInPrincipal / exchangeRate.compraLocal;
+        this.saldos.set(moneda.id!, remainingInCurrency);
+      } else {
+        // Try reverse rate
+        const reverseRate = this.exchangeRates.find(rate =>
+          rate.monedaOrigen.id === moneda.id &&
+          rate.monedaDestino.id === this.principalMoneda!.id
+        );
+
+        if (reverseRate) {
+          // Convert using reverse rate
+          const remainingInCurrency = remainingInPrincipal * reverseRate.compraLocal;
+          this.saldos.set(moneda.id!, remainingInCurrency);
+        } else {
+          console.warn(`No exchange rate found from ${this.principalMoneda!.denominacion} to ${moneda.denominacion}`);
+          this.saldos.set(moneda.id!, 0);
+        }
+      }
+    });
+
+    console.log('Updated saldos:', Object.fromEntries(this.saldos));
+
+    // Update the valor input with the current saldo if we have a selected currency
+    if (this.selectedMoneda?.id) {
+      const currentSaldo = this.saldos.get(this.selectedMoneda.id);
+      if (currentSaldo !== undefined && currentSaldo !== null) {
+        // Use setTimeout to ensure this runs after Angular's change detection
+        setTimeout(() => {
+          this.detalleForm.get('valor')?.setValue(currentSaldo);
+          // Update the payment type hint based on the saldo value
+          this.paymentTypeHint = currentSaldo >= 0 ? 'Pago' : 'Vuelto';
+          this.focusValorInput();
+        }, 0);
+      }
+    }
   }
 
   /**
@@ -470,45 +711,227 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
     }
   }
 
-  addDetalle(): void {
+  /**
+   * Create a new Pago if one doesn't exist yet
+   */
+  async createPagoIfNeeded(): Promise<Pago> {
+    if (this.pagoCreated) {
+      return this.pagoCreated;
+    }
+
+    this.isSaving = true;
+    try {
+      // Create a new Pago
+      const pagoData: Partial<Pago> = {
+        estado: PagoEstado.ABIERTO,
+        activo: true,
+        // If we have a caja, we would associate it here
+      };
+
+      const pago = await firstValueFrom(this.repositoryService.createPago(pagoData));
+
+      // If we have compraIds, associate them with this pago
+      if (this.data.compraIds && this.data.compraIds.length > 0) {
+        for (const compraId of this.data.compraIds) {
+          await firstValueFrom(this.repositoryService.updateCompra(compraId, { pago }));
+        }
+      }
+
+      this.pagoCreated = pago;
+      return pago;
+    } catch (error) {
+      console.error('Error creating pago:', error);
+      this.snackBar.open('Error al crear el pago', 'Cerrar', { duration: 3000 });
+      throw error;
+    } finally {
+      this.isSaving = false;
+    }
+  }
+
+  /**
+   * Save a payment detail to the database
+   */
+  async savePagoDetalle(detalle: PagoDetalle): Promise<PagoDetalle> {
+    try {
+      // Ensure we have a pago
+      const pago = await this.createPagoIfNeeded();
+
+      // Create the detalle with the pago reference
+      const detalleData: Partial<PagoDetalle> = {
+        valor: detalle.valor,
+        descripcion: detalle.descripcion || '',
+        moneda: detalle.moneda,
+        formaPago: detalle.formaPago,
+        pago: pago,
+        activo: true,
+        tipo: detalle.tipo || TipoDetalle.PAGO
+      };
+
+      // Log the data being sent to the database
+
+      const savedDetalle = await firstValueFrom(this.repositoryService.createPagoDetalle(detalleData));
+
+      return savedDetalle;
+    } catch (error) {
+      console.error('Error saving pago detalle:', error);
+      this.snackBar.open('Error al guardar el detalle de pago', 'Cerrar', { duration: 3000 });
+      throw error;
+    }
+  }
+
+  /**
+   * Creates a new payment detail or updates an existing one
+   */
+  async addDetalle(event?: Event): Promise<void> {
+    // Prevent default form submission if event is provided
+    if (event) {
+      event.preventDefault();
+    }
+
     if (this.detalleForm.valid) {
       const formValues = this.detalleForm.value;
 
-      // Create a new payment detail
-      const detalle: Partial<PagoDetalle> = {
-        valor: formValues.valor,
-        descripcion: formValues.mostrarDescripcion ? formValues.descripcion : '',
-        moneda: formValues.moneda,
-        formaPago: formValues.formaPago,
-      };
+      this.isSaving = true;
+      try {
+        // If we're editing an existing detail, mark it as inactive first
+        if (this.editingDetalleId) {
+          await firstValueFrom(this.repositoryService.updatePagoDetalle(this.editingDetalleId, { activo: false }));
+        }
 
-      this.detalles.push(detalle as PagoDetalle);
-      this.updateSaldos();
+        // Determine the type based on the value
+        const detalleTipo = formValues.valor >= 0 ? TipoDetalle.PAGO : TipoDetalle.VUELTO;
+        
+        // Create a new payment detail
+        const detalle: Partial<PagoDetalle> = {
+          valor: formValues.valor,
+          descripcion: formValues.mostrarDescripcion ? formValues.descripcion : '',
+          moneda: formValues.moneda,
+          formaPago: formValues.formaPago,
+          tipo: detalleTipo
+        };
 
-      // Update selected values from form
-      this.selectedMoneda = formValues.moneda;
-      this.selectedFormaPago = formValues.formaPago;
+        // Save to database
+        const savedDetalle = await this.savePagoDetalle(detalle as PagoDetalle);
 
-      // Reset only valor and descripcion, keep selected moneda and formaPago
-      this.detalleForm.patchValue({
-        valor: null,
-        descripcion: '',
-        mostrarDescripcion: false
+        // Add to local array with the ID from the database
+        this.detalles = [...this.detalles, savedDetalle];
+
+        // Update balances
+        this.updateSaldos();
+
+        // Update selected values from form
+        this.selectedMoneda = formValues.moneda;
+        this.selectedFormaPago = formValues.formaPago;
+
+        // Reset editing state
+        this.editingDetalleId = null;
+
+        // Reset only valor and descripcion, keep selected moneda and formaPago
+        this.detalleForm.patchValue({
+          valor: null,
+          descripcion: '',
+          mostrarDescripcion: false
+        });
+
+        // Update the valor with current saldo after reset
+        if (this.selectedMoneda?.id) {
+          const saldo = this.saldos.get(this.selectedMoneda.id);
+          if (saldo !== undefined && saldo !== null) {
+            setTimeout(() => {
+              this.detalleForm.get('valor')?.setValue(saldo);
+              
+              // Update payment type hint based on the saldo value
+              this.paymentTypeHint = saldo >= 0 ? 'Pago' : 'Vuelto';
+
+              // Set focus back to valor input
+              this.focusValorInput();
+            }, 0);
+          }
+        }
+      } catch (error) {
+        console.error('Error adding payment detail:', error);
+        this.snackBar.open('Error al agregar el detalle de pago', 'Cerrar', { duration: 3000 });
+      } finally {
+        this.isSaving = false;
+      }
+    } else {
+      // Form is invalid, show validation errors
+      Object.keys(this.detalleForm.controls).forEach(key => {
+        const control = this.detalleForm.get(key);
+        if (control?.invalid) {
+          control.markAsTouched();
+        }
       });
 
-      // Update the valor with current saldo after reset
-      if (this.selectedMoneda?.id) {
-        const saldo = this.saldos.get(this.selectedMoneda.id);
-        if (saldo && saldo > 0) {
-          setTimeout(() => {
-            this.detalleForm.get('valor')?.setValue(saldo);
+      this.snackBar.open('Por favor complete todos los campos requeridos', 'Cerrar', { duration: 3000 });
+    }
+  }
 
-            // Set focus back to valor input
-            this.focusValorInput();
-          }, 0);
-        }
+  /**
+   * Get the payment type based on the value and type
+   */
+  getPaymentType(value: number, tipo?: TipoDetalle): string {
+    if (tipo) {
+      switch (tipo) {
+        case TipoDetalle.PAGO:
+          return 'Pago';
+        case TipoDetalle.VUELTO:
+          return 'Vuelto';
+        case TipoDetalle.DESCUENTO:
+          return 'Descuento';
+        case TipoDetalle.AUMENTO:
+          return 'Aumento';
+        default:
+          return value >= 0 ? 'Pago' : 'Vuelto';
       }
     }
+    
+    // Fallback to the old logic if tipo is not provided
+    return value >= 0 ? 'Pago' : 'Vuelto';
+  }
+
+  /**
+   * Allows entry of negative values for "Vuelto" (change)
+   * This is used when we need to give change back to the customer
+   */
+  allowNegativeValues(): void {
+    // Get current valor
+    const valorControl = this.detalleForm.get('valor');
+    const currentValor = valorControl?.value;
+    
+    if (currentValor === null || currentValor === undefined) {
+      // If no value, get the current saldo for the selected currency
+      if (this.selectedMoneda?.id) {
+        const saldo = this.saldos.get(this.selectedMoneda.id);
+        if (saldo) {
+          // Default to a negative value (for Vuelto) if the user hasn't entered anything yet
+          const newValue = -Math.abs(saldo);
+          valorControl?.setValue(newValue);
+          this.paymentTypeHint = 'Vuelto';
+          
+          this.snackBar.open(
+            `Cambiado a ${this.paymentTypeHint}`, 
+            'Cerrar', 
+            { duration: 2000 }
+          );
+        }
+      }
+      return;
+    }
+    
+    // If the value is already negative, make it positive, otherwise make it negative
+    const newValue = currentValor > 0 ? -Math.abs(currentValor) : Math.abs(currentValor);
+    valorControl?.setValue(newValue);
+    
+    // Update the payment type hint
+    this.paymentTypeHint = newValue >= 0 ? 'Pago' : 'Vuelto';
+    
+    // Show a snackbar to indicate the change
+    this.snackBar.open(
+      `Cambiado a ${this.paymentTypeHint}`, 
+      'Cerrar', 
+      { duration: 2000 }
+    );
   }
 
   onCancel(): void {
@@ -516,10 +939,79 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
   }
 
   onFinalize(): void {
-    // Return the payment details to the caller
-    this.dialogRef.close({
-      detalles: this.detalles
-    });
+    if (this.pagoCreated) {
+      // Check if saldo is effectively zero before finalizing
+      const epsilon = 0.001; // Small tolerance for floating point comparisons
+      const saldoPrincipal = this.saldos.get(this.principalMoneda!.id!) || 0;
+
+      if (Math.abs(saldoPrincipal) > epsilon) {
+        this.snackBar.open('El saldo debe ser cero para finalizar el pago.', 'Cerrar', { duration: 3000 });
+        return;
+      }
+
+      this.isSaving = true;
+      firstValueFrom(this.repositoryService.updatePago(this.pagoCreated.id!, { estado: PagoEstado.PAGADO }))
+        .then(updatedPago => {
+          this.pagoCreated = updatedPago; // Update local state
+          this.isFinalizado = true;
+          this.updateFormState();
+          this.snackBar.open('Pago finalizado correctamente', 'Cerrar', { duration: 3000 });
+          // Optionally close the dialog after finalizing
+          this.dialogRef.close({
+            pago: this.pagoCreated,
+            detalles: this.detalles,
+            finalizado: true
+          });
+        })
+        .catch(error => {
+          console.error('Error finalizing pago:', error);
+          this.snackBar.open('Error al finalizar el pago', 'Cerrar', { duration: 3000 });
+        })
+        .finally(() => {
+          this.isSaving = false;
+        });
+    } else {
+      // No pago was created (no details were added)
+      this.snackBar.open('No hay detalles de pago para finalizar.', 'Cerrar', { duration: 3000 });
+      // Or simply close without action if appropriate
+      // this.dialogRef.close(); 
+    }
+  }
+
+  /**
+   * Enables the form and reverts the pago state to ABIERTO
+   */
+  async onModifyPago(): Promise<void> {
+    if (!this.pagoCreated || !this.isFinalizado) {
+      return; // Should not happen if button visibility is correct
+    }
+
+    this.isSaving = true;
+    try {
+      const updatedPago = await firstValueFrom(this.repositoryService.updatePago(this.pagoCreated.id!, { estado: PagoEstado.ABIERTO }));
+      this.pagoCreated = updatedPago; // Update local state
+      this.isFinalizado = false;
+      this.updateFormState(); // Re-enable form
+      this.snackBar.open('Pago habilitado para modificación', 'Cerrar', { duration: 3000 });
+    } catch (error) {
+      console.error('Error modifying pago state:', error);
+      this.snackBar.open('Error al modificar el estado del pago', 'Cerrar', { duration: 3000 });
+    } finally {
+      this.isSaving = false;
+    }
+  }
+
+  /**
+   * Enables or disables the form based on the isFinalizado state
+   */
+  updateFormState(): void {
+    if (this.isFinalizado) {
+      this.detalleForm.disable();
+    } else {
+      this.detalleForm.enable();
+    }
+    // Optionally, re-apply conditional validation if needed after enable/disable
+    // Example: this.detalleForm.get('descripcion')?.updateValueAndValidity();
   }
 
   // Subscribe to currency total changes to update disabled state
@@ -581,6 +1073,213 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
       }
     } catch (error) {
       console.error('Error focusing valor input:', error);
+    }
+  }
+
+  // Add a method to load a pago by ID
+  async loadPagoById(pagoId: number): Promise<void> {
+    try {
+      const pago = await firstValueFrom(this.repositoryService.getPago(pagoId));
+
+      if (pago) {
+        this.pagoCreated = pago;
+        this.isFinalizado = this.pagoCreated.estado === PagoEstado.PAGADO;
+        this.updateFormState(); // Update form state based on finalized status
+        await this.loadPagoDetalles(pagoId);
+      }
+    } catch (error) {
+      this.snackBar.open('Error al cargar el pago', 'Cerrar', { duration: 3000 });
+    }
+  }
+
+  /**
+   * Edit an existing payment detail
+   */
+  editDetalle(detalle: PagoDetalle): void {
+    console.log('isFinalizado', this.isFinalizado);
+    
+    // Prevent editing if the payment is finalized
+    if (this.isFinalizado) {
+      this.snackBar.open('No se puede editar un detalle de un pago finalizado.', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    // Find the matching moneda and forma pago from our lists to ensure reference equality
+    const moneda = this.filteredMonedas.find(m => m.id === detalle.moneda?.id);
+    const formaPago = this.data.formasPago.find(f => f.id === detalle.formaPago?.id);
+
+    if (!moneda || !formaPago) {
+      this.snackBar.open('Error al cargar los datos para editar', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    // Store the ID of the detail being edited to handle it properly when saving
+    this.editingDetalleId = detalle.id;
+
+    // Update selected values for quick buttons first
+    this.selectedMoneda = moneda;
+    this.selectedFormaPago = formaPago;
+
+    // Then set form values
+    this.detalleForm.patchValue({
+      moneda: moneda,
+      formaPago: formaPago,
+      valor: detalle.valor,
+      mostrarDescripcion: detalle.descripcion ? true : false,
+      descripcion: detalle.descripcion || ''
+    });
+
+    // Remove the item from the detalles array
+    // Note: We don't update saldos here since it will be updated when the new detail is saved
+    this.detalles = this.detalles.filter(d => d.id !== detalle.id);
+
+    // Focus on the valor input after a small delay
+    setTimeout(() => {
+      this.focusValorInput();
+    }, 100);
+  }
+
+  /**
+   * Delete a payment detail
+   */
+  async deleteDetalle(detalle: PagoDetalle): Promise<void> {
+    // Prevent deleting if the payment is finalized
+    if (this.isFinalizado) {
+      this.snackBar.open('No se puede eliminar un detalle de un pago finalizado.', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    if (!detalle.id) {
+      console.warn('Cannot delete a payment detail without an ID');
+      return;
+    }
+
+    try {
+      // Mark as inactive in the database
+      await firstValueFrom(this.repositoryService.updatePagoDetalle(detalle.id, { activo: false }));
+
+      // Remove from the local array
+      this.detalles = this.detalles.filter(d => d.id !== detalle.id);
+
+      // Update saldos
+      this.updateSaldos();
+
+      this.snackBar.open('Detalle de pago eliminado', 'Cerrar', { duration: 3000 });
+    } catch (error) {
+      console.error('Error deleting payment detail:', error);
+      this.snackBar.open('Error al eliminar el detalle de pago', 'Cerrar', { duration: 3000 });
+    }
+  }
+
+  /**
+   * Opens a dialog for applying a discount (descuento)
+   * This is used when there's a small amount left and we want to round down
+   */
+  openDescuentoDialog(): void {
+    if (!this.principalMoneda) {
+      this.snackBar.open('No se ha definido una moneda principal', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    // Get current remaining amount
+    const remainingAmount = this.saldos.get(this.principalMoneda.id!) || 0;
+    
+    // Only allow discount if there's a positive amount remaining
+    if (remainingAmount <= 0) {
+      this.snackBar.open('No hay saldo pendiente para aplicar un descuento', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    // Open Material dialog for user input
+    const dialogRef = this.dialog.open(AjusteDialogComponent, {
+      width: '400px',
+      data: {
+        tipo: 'DESCUENTO',
+        saldoPendiente: remainingAmount,
+        moneda: this.principalMoneda,
+        suggested: remainingAmount
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        // User confirmed with valid input
+        this.createAjusteDetalle(result.valor, TipoDetalle.DESCUENTO, result.descripcion);
+      }
+    });
+  }
+
+  /**
+   * Opens a dialog for applying an increase (aumento)
+   * This is used when the customer pays more than required and we want to record it
+   */
+  openAumentoDialog(): void {
+    if (!this.principalMoneda) {
+      this.snackBar.open('No se ha definido una moneda principal', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    // Get current remaining amount
+    const remainingAmount = this.saldos.get(this.principalMoneda.id!) || 0;
+    
+    // Open Material dialog for user input
+    const dialogRef = this.dialog.open(AjusteDialogComponent, {
+      width: '400px',
+      data: {
+        tipo: 'AUMENTO',
+        saldoPendiente: remainingAmount,
+        moneda: this.principalMoneda,
+        suggested: Math.abs(remainingAmount)
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        // User confirmed with valid input
+        this.createAjusteDetalle(result.valor, TipoDetalle.AUMENTO, result.descripcion);
+      }
+    });
+  }
+
+  /**
+   * Creates an adjustment detail (either DESCUENTO or AUMENTO)
+   */
+  async createAjusteDetalle(amount: number, tipo: TipoDetalle, descripcion: string): Promise<void> {
+    if (!this.principalMoneda || !this.selectedFormaPago) {
+      this.snackBar.open('Faltan datos requeridos para registrar el ajuste', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    // Both discounts and increases effectively increase the "paid" amount relative to the original total.
+    // Therefore, the value stored should be positive for both.
+    const valorAjuste = Math.abs(amount); // Store absolute value
+
+    this.isSaving = true;
+    try {
+      // Create a new detail for the adjustment
+      const detalle: Partial<PagoDetalle> = {
+        valor: valorAjuste, // Use the positive absolute value
+        descripcion: descripcion,
+        moneda: this.principalMoneda,
+        formaPago: this.selectedFormaPago, // Consider if a default/special formaPago is needed for adjustments
+        tipo: tipo
+      };
+
+      // Save to database
+      const savedDetalle = await this.savePagoDetalle(detalle as PagoDetalle);
+
+      // Add to local array with the ID from the database
+      this.detalles = [...this.detalles, savedDetalle];
+
+      // Update balances
+      this.updateSaldos();
+
+      this.snackBar.open(`${tipo === TipoDetalle.DESCUENTO ? 'Descuento' : 'Aumento'} registrado exitosamente`, 'Cerrar', { duration: 3000 });
+    } catch (error) {
+      console.error(`Error adding ${tipo.toLowerCase()}:`, error);
+      this.snackBar.open(`Error al registrar el ${tipo.toLowerCase()}`, 'Cerrar', { duration: 3000 });
+    } finally {
+      this.isSaving = false;
     }
   }
 }
