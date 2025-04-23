@@ -75,8 +75,7 @@ __decorate([
     (0, typeorm_1.Column)({
         type: 'varchar',
         name: 'tipo_referencia',
-        enum: TipoReferencia,
-        default: TipoReferencia.AJUSTE
+        enum: TipoReferencia
     }),
     __metadata("design:type", String)
 ], MovimientoStock.prototype, "tipoReferencia", void 0);

@@ -136,6 +136,10 @@
               <mat-icon matListItemIcon>egg</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Ingredientes</span>
             </a>
+            <a mat-list-item (click)="openMovimientosStockTab(); expandMenu($event, 'productos')">
+              <mat-icon matListItemIcon>inventory</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Movimientos de Stock</span>
+            </a>
           </div>
         </mat-expansion-panel>
 

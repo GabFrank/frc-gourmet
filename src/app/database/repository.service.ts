@@ -27,6 +27,7 @@ import { Ingrediente } from './entities/productos/ingrediente.entity';
 import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
 import { RecetaVariacion } from './entities/productos/receta-variacion.entity';
 import { RecetaVariacionItem } from './entities/productos/receta-variacion-item.entity';
+import { MovimientoStock, TipoReferencia } from './entities/productos/movimiento-stock.entity';
 // Import new financial entities
 import { MonedaBillete } from './entities/financiero/moneda-billete.entity';
 import { MonedaCambio } from './entities/financiero/moneda-cambio.entity';
@@ -300,6 +301,17 @@ interface ElectronAPI {
   createFormaPago: (formaPagoData: Partial<FormasPago>) => Promise<FormasPago>;
   updateFormaPago: (formaPagoId: number, formaPagoData: Partial<FormasPago>) => Promise<any>;
   deleteFormaPago: (formaPagoId: number) => Promise<any>;
+  // MovimientoStock methods
+  getMovimientosStock: () => Promise<MovimientoStock[]>;
+  getMovimientoStock: (movimientoStockId: number) => Promise<MovimientoStock>;
+  getMovimientosStockByProducto: (productoId: number) => Promise<MovimientoStock[]>;
+  getMovimientosStockByIngrediente: (ingredienteId: number) => Promise<MovimientoStock[]>;
+  getMovimientosStockByTipoReferencia: (tipoReferencia: TipoReferencia) => Promise<MovimientoStock[]>;
+  getCurrentStockByProducto: (productoId: number) => Promise<MovimientoStock>;
+  getCurrentStockByIngrediente: (ingredienteId: number) => Promise<MovimientoStock>;
+  createMovimientoStock: (movimientoStockData: any) => Promise<MovimientoStock>;
+  updateMovimientoStock: (movimientoStockId: number, movimientoStockData: any) => Promise<any>;
+  deleteMovimientoStock: (movimientoStockId: number) => Promise<any>;
 }
 
 /**
@@ -1304,5 +1316,46 @@ export class RepositoryService {
     );
 
     return from(Promise.all(updatePromises));
+  }
+
+  // MovimientoStock methods
+  getMovimientosStock(): Observable<MovimientoStock[]> {
+    return from(this.api.getMovimientosStock());
+  }
+
+  getMovimientoStock(movimientoStockId: number): Observable<MovimientoStock> {
+    return from(this.api.getMovimientoStock(movimientoStockId));
+  }
+
+  getMovimientosStockByProducto(productoId: number): Observable<MovimientoStock[]> {
+    return from(this.api.getMovimientosStockByProducto(productoId));
+  }
+
+  getMovimientosStockByIngrediente(ingredienteId: number): Observable<MovimientoStock[]> {
+    return from(this.api.getMovimientosStockByIngrediente(ingredienteId));
+  }
+
+  getMovimientosStockByTipoReferencia(tipoReferencia: TipoReferencia): Observable<MovimientoStock[]> {
+    return from(this.api.getMovimientosStockByTipoReferencia(tipoReferencia));
+  }
+
+  getCurrentStockByProducto(productoId: number): Observable<MovimientoStock> {
+    return from(this.api.getCurrentStockByProducto(productoId));
+  }
+
+  getCurrentStockByIngrediente(ingredienteId: number): Observable<MovimientoStock> {
+    return from(this.api.getCurrentStockByIngrediente(ingredienteId));
+  }
+
+  createMovimientoStock(movimientoStockData: Partial<MovimientoStock>): Observable<MovimientoStock> {
+    return from(this.api.createMovimientoStock(movimientoStockData));
+  }
+
+  updateMovimientoStock(movimientoStockId: number, movimientoStockData: Partial<MovimientoStock>): Observable<any> {
+    return from(this.api.updateMovimientoStock(movimientoStockId, movimientoStockData));
+  }
+
+  deleteMovimientoStock(movimientoStockId: number): Observable<any> {
+    return from(this.api.deleteMovimientoStock(movimientoStockId));
   }
 }

@@ -674,5 +674,39 @@ contextBridge.exposeInMainWorld('api', {
     deleteFormaPago: async (formaPagoId) => {
         return await ipcRenderer.invoke('deleteFormaPago', formaPagoId);
     },
+    updateFormasPagoOrder: async (updates) => {
+        return await ipcRenderer.invoke('updateFormasPagoOrder', updates);
+    },
+    // MovimientoStock methods
+    getMovimientosStock: async () => {
+        return await ipcRenderer.invoke('getMovimientosStock');
+    },
+    getMovimientoStock: async (movimientoStockId) => {
+        return await ipcRenderer.invoke('getMovimientoStock', movimientoStockId);
+    },
+    getMovimientosStockByProducto: async (productoId) => {
+        return await ipcRenderer.invoke('getMovimientosStockByProducto', productoId);
+    },
+    getMovimientosStockByIngrediente: async (ingredienteId) => {
+        return await ipcRenderer.invoke('getMovimientosStockByIngrediente', ingredienteId);
+    },
+    getMovimientosStockByTipoReferencia: async (tipoReferencia) => {
+        return await ipcRenderer.invoke('getMovimientosStockByTipoReferencia', tipoReferencia);
+    },
+    getCurrentStockByProducto: async (productoId) => {
+        return await ipcRenderer.invoke('getCurrentStockByProducto', productoId);
+    },
+    getCurrentStockByIngrediente: async (ingredienteId) => {
+        return await ipcRenderer.invoke('getCurrentStockByIngrediente', ingredienteId);
+    },
+    createMovimientoStock: async (movimientoStockData) => {
+        return await ipcRenderer.invoke('createMovimientoStock', movimientoStockData);
+    },
+    updateMovimientoStock: async (movimientoStockId, movimientoStockData) => {
+        return await ipcRenderer.invoke('updateMovimientoStock', movimientoStockId, movimientoStockData);
+    },
+    deleteMovimientoStock: async (movimientoStockId) => {
+        return await ipcRenderer.invoke('deleteMovimientoStock', movimientoStockId);
+    },
 });
 //# sourceMappingURL=preload.js.map

@@ -1,0 +1,173 @@
+<div class="container">
+  <mat-card class="full-width">
+    <mat-card-header>
+      <mat-card-title>Movimientos de Stock</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <!-- Filters Form -->
+      <form [formGroup]="filterForm" (ngSubmit)="buscar()">
+        <div class="filters-container">
+          <div class="filters-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Producto ID</mat-label>
+              <input matInput formControlName="productoId" type="number">
+            </mat-form-field>
+            
+            <mat-form-field appearance="outline">
+              <mat-label>Ingrediente ID</mat-label>
+              <input matInput formControlName="ingredienteId" type="number">
+            </mat-form-field>
+            
+            <mat-form-field appearance="outline">
+              <mat-label>Tipo de Referencia</mat-label>
+              <mat-select formControlName="tipoReferencia">
+                <mat-option value="">Todos</mat-option>
+                <mat-option *ngFor="let tipo of tipoReferencias" [value]="tipo">
+                  {{ getTipoReferenciaLabel(tipo) }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+          
+          <div class="filters-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Desde</mat-label>
+              <input matInput formControlName="desde" type="date">
+            </mat-form-field>
+            
+            <mat-form-field appearance="outline">
+              <mat-label>Hasta</mat-label>
+              <input matInput formControlName="hasta" type="date">
+            </mat-form-field>
+            
+            <mat-form-field appearance="outline">
+              <mat-label>Estado</mat-label>
+              <mat-select formControlName="activo">
+                <mat-option value="">Todos</mat-option>
+                <mat-option value="true">Activo</mat-option>
+                <mat-option value="false">Inactivo</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+          
+          <div class="filters-actions">
+            <button mat-raised-button color="primary" type="submit">
+              <mat-icon>search</mat-icon> Buscar
+            </button>
+            <button mat-button type="button" (click)="clearFilters()">
+              <mat-icon>clear</mat-icon> Limpiar
+            </button>
+            <button mat-raised-button color="accent" type="button" (click)="addMovimientoStock()">
+              <mat-icon>add</mat-icon> Nuevo Movimiento
+            </button>
+          </div>
+        </div>
+      </form>
+      
+      <!-- Results Table -->
+      <div class="mat-elevation-z2 table-container">
+        <div *ngIf="isLoading" class="loading-shade">
+          <mat-spinner></mat-spinner>
+        </div>
+        
+        <table mat-table [dataSource]="movimientos.slice(currentPage * pageSize, (currentPage + 1) * pageSize)" 
+              matSort (matSortChange)="onSort($event)" class="full-width">
+          
+          <!-- ID Column -->
+          <ng-container matColumnDef="id">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header> ID </th>
+            <td mat-cell *matCellDef="let movimiento"> {{movimiento.id}} </td>
+          </ng-container>
+          
+          <!-- Producto/Ingrediente Column -->
+          <ng-container matColumnDef="productoIngrediente">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header> Producto/Ingrediente </th>
+            <td mat-cell *matCellDef="let movimiento"> 
+              {{getProductoOrIngredienteName(movimiento)}}
+            </td>
+          </ng-container>
+          
+          <!-- Tipo Medida Column -->
+          <ng-container matColumnDef="tipoMedida">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header> Tipo Medida </th>
+            <td mat-cell *matCellDef="let movimiento"> {{movimiento.tipoMedida}} </td>
+          </ng-container>
+          
+          <!-- Cantidad Actual Column -->
+          <ng-container matColumnDef="cantidadActual">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header> Cantidad </th>
+            <td mat-cell *matCellDef="let movimiento"> {{movimiento.cantidadActual | number:'1.0-2'}} </td>
+          </ng-container>
+          
+          <!-- Tipo Referencia Column -->
+          <ng-container matColumnDef="tipoReferencia">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header> Tipo Referencia </th>
+            <td mat-cell *matCellDef="let movimiento"> 
+              {{movimiento.displayValues.tipoReferenciaLabel}} 
+            </td>
+          </ng-container>
+          
+          <!-- Referencia Column -->
+          <ng-container matColumnDef="referencia">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header> Ref. ID </th>
+            <td mat-cell *matCellDef="let movimiento"> {{movimiento.referencia || '-'}} </td>
+          </ng-container>
+          
+          <!-- Fecha Creación Column -->
+          <ng-container matColumnDef="fechaCreacion">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header> Fecha </th>
+            <td mat-cell *matCellDef="let movimiento"> {{movimiento.displayValues.fechaCreacion}} </td>
+          </ng-container>
+          
+          <!-- Estado Column -->
+          <ng-container matColumnDef="activo">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header> Estado </th>
+            <td mat-cell *matCellDef="let movimiento">
+              <span [ngClass]="movimiento.activo ? 'active-badge' : 'inactive-badge'">
+                {{movimiento.activo ? 'Activo' : 'Inactivo'}}
+              </span>
+            </td>
+          </ng-container>
+          
+          <!-- Actions Column -->
+          <ng-container matColumnDef="acciones">
+            <th mat-header-cell *matHeaderCellDef> Acciones </th>
+            <td mat-cell *matCellDef="let movimiento">
+              <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+                <mat-icon>more_vert</mat-icon>
+              </button>
+              <mat-menu #menu="matMenu">
+                <button mat-menu-item (click)="editMovimientoStock(movimiento)">
+                  <mat-icon>edit</mat-icon>
+                  <span>Editar</span>
+                </button>
+                <button mat-menu-item (click)="deleteMovimientoStock(movimiento.id)" *ngIf="movimiento.activo">
+                  <mat-icon>delete</mat-icon>
+                  <span>Desactivar</span>
+                </button>
+              </mat-menu>
+            </td>
+          </ng-container>
+          
+          <!-- Header and Row Definitions -->
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+          
+          <!-- No Data Row -->
+          <tr class="mat-row" *matNoDataRow>
+            <td class="mat-cell no-data-cell" [attr.colspan]="displayedColumns.length">
+              No se encontraron movimientos de stock con los filtros actuales.
+            </td>
+          </tr>
+        </table>
+        
+        <!-- Paginator -->
+        <mat-paginator [length]="totalMovimientos"
+                      [pageSize]="pageSize"
+                      [pageSizeOptions]="pageSizeOptions"
+                      (page)="onPageChange($event)">
+        </mat-paginator>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div> 

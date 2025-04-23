@@ -460,6 +460,24 @@ interface ProveedorProducto {
   updatedAt?: Date;
 }
 
+// MovimientoStock interfaces
+type TipoReferencia = 'VENTA' | 'COMPRA' | 'AJUSTE' | 'TRANSFERENCIA' | 'DESCARTE';
+
+interface MovimientoStock {
+  id?: number;
+  productoId?: number;
+  producto?: Producto;
+  ingredienteId?: number;
+  ingrediente?: Ingrediente;
+  tipoMedida: string;
+  cantidadActual: number;
+  referencia?: number;
+  tipoReferencia: TipoReferencia;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('api', {
@@ -1207,5 +1225,40 @@ contextBridge.exposeInMainWorld('api', {
   },
   deleteFormaPago: async (formaPagoId: number): Promise<boolean> => {
     return await ipcRenderer.invoke('deleteFormaPago', formaPagoId);
+  },
+  updateFormasPagoOrder: async (updates: { id: number, orden: number }[]) => {
+    return await ipcRenderer.invoke('updateFormasPagoOrder', updates);
+  },
+
+  // MovimientoStock methods
+  getMovimientosStock: async (): Promise<MovimientoStock[]> => {
+    return await ipcRenderer.invoke('getMovimientosStock');
+  },
+  getMovimientoStock: async (movimientoStockId: number): Promise<MovimientoStock> => {
+    return await ipcRenderer.invoke('getMovimientoStock', movimientoStockId);
+  },
+  getMovimientosStockByProducto: async (productoId: number): Promise<MovimientoStock[]> => {
+    return await ipcRenderer.invoke('getMovimientosStockByProducto', productoId);
+  },
+  getMovimientosStockByIngrediente: async (ingredienteId: number): Promise<MovimientoStock[]> => {
+    return await ipcRenderer.invoke('getMovimientosStockByIngrediente', ingredienteId);
+  },
+  getMovimientosStockByTipoReferencia: async (tipoReferencia: TipoReferencia): Promise<MovimientoStock[]> => {
+    return await ipcRenderer.invoke('getMovimientosStockByTipoReferencia', tipoReferencia);
+  },
+  getCurrentStockByProducto: async (productoId: number): Promise<MovimientoStock> => {
+    return await ipcRenderer.invoke('getCurrentStockByProducto', productoId);
+  },
+  getCurrentStockByIngrediente: async (ingredienteId: number): Promise<MovimientoStock> => {
+    return await ipcRenderer.invoke('getCurrentStockByIngrediente', ingredienteId);
+  },
+  createMovimientoStock: async (movimientoStockData: Partial<MovimientoStock>): Promise<MovimientoStock> => {
+    return await ipcRenderer.invoke('createMovimientoStock', movimientoStockData);
+  },
+  updateMovimientoStock: async (movimientoStockId: number, movimientoStockData: Partial<MovimientoStock>): Promise<MovimientoStock> => {
+    return await ipcRenderer.invoke('updateMovimientoStock', movimientoStockId, movimientoStockData);
+  },
+  deleteMovimientoStock: async (movimientoStockId: number): Promise<{ success: boolean, deactivated: boolean }> => {
+    return await ipcRenderer.invoke('deleteMovimientoStock', movimientoStockId);
   },
 });

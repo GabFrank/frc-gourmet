@@ -52,6 +52,7 @@ import { FinancieroDashboardComponent } from './pages/financiero/dashboard/finan
 import { TipoPrecioComponent } from './pages/financiero/tipo-precio/tipo-precio.component';
 import { ComprasDashboardComponent } from './pages/compras/dashboard/compras-dashboard.component';
 import { ListComprasComponent } from './pages/compras/compras/list-compras.component';
+import { ListMovimientosStockComponent } from './pages/productos/movimientos/list-movimientos-stock.component';
 
 @Component({
   selector: 'app-root',
@@ -438,6 +439,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       'compras-tab',
       true
     );
+  }
+
+  openMovimientosStockTab() {
+    this.tabsService.addTab('Movimientos de Stock', ListMovimientosStockComponent);
   }
 
   private applyTheme() {

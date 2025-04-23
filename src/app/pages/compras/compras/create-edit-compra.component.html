@@ -188,6 +188,12 @@
         <div *ngIf="!canEditDetalles" class="disabled-message">
           Los detalles de la compra solo pueden ser editados cuando la compra existe y su estado es ABIERTO.
         </div>
+        
+        <!-- Debug info - can be removed in production -->
+        <div class="debug-info" style="font-size: 12px; margin-bottom: 10px; color: #888; border: 1px dashed #ccc; padding: 5px;" *ngIf="compraForm.get('estado')?.value === 'ABIERTO' && !detallesActionsEnabled">
+          <p>Estado: {{ compraForm.get('estado')?.value }} | ¿Acciones habilitadas?: {{ detallesActionsEnabled ? 'Sí' : 'No' }} | 
+             ¿canEditDetalles?: {{ canEditDetalles ? 'Sí' : 'No' }} | ¿isEditingEnabled?: {{ isEditingEnabled ? 'Sí' : 'No' }}</p>
+        </div>
 
         <!-- Form to add new detalles -->
         <div class="detalle-form-container">
@@ -301,6 +307,12 @@
                 </td>
               </ng-container>
 
+              <!-- Tipo Medida Column -->
+              <ng-container matColumnDef="tipoMedida">
+                <th mat-header-cell *matHeaderCellDef>Tipo de Medida</th>
+                <td mat-cell *matCellDef="let row">{{ row.control.value.tipo_medida }}</td>
+              </ng-container>
+
               <!-- Cantidad Column -->
               <ng-container matColumnDef="cantidad">
                 <th mat-header-cell *matHeaderCellDef>Cantidad</th>
@@ -331,9 +343,19 @@
               <ng-container matColumnDef="acciones">
                 <th mat-header-cell *matHeaderCellDef>Acciones</th>
                 <td mat-cell *matCellDef="let row; let i = index">
-                  <button mat-icon-button color="warn" (click)="removeDetalle(i)" matTooltip="Eliminar" [disabled]="!detallesActionsEnabled">
-                    <mat-icon>delete</mat-icon>
+                  <button mat-icon-button [matMenuTriggerFor]="menu" [disabled]="!detallesActionsEnabled">
+                    <mat-icon>more_vert</mat-icon>
                   </button>
+                  <mat-menu #menu="matMenu">
+                    <button mat-menu-item (click)="editDetalle(i)" [disabled]="!detallesActionsEnabled">
+                      <mat-icon color="primary">edit</mat-icon>
+                      <span>Editar</span>
+                    </button>
+                    <button mat-menu-item (click)="removeDetalle(i)" [disabled]="!detallesActionsEnabled">
+                      <mat-icon color="warn">delete</mat-icon>
+                      <span>Eliminar</span>
+                    </button>
+                  </mat-menu>
                 </td>
               </ng-container>
 

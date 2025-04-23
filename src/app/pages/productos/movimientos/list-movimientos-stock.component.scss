@@ -1,0 +1,89 @@
+.container {
+  padding: 16px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.filters-container {
+  padding: 16px 0;
+}
+
+.filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+  
+  mat-form-field {
+    flex: 1;
+    min-width: 200px;
+  }
+}
+
+.filters-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  justify-content: flex-end;
+}
+
+.table-container {
+  position: relative;
+  min-height: 300px;
+  overflow: auto;
+}
+
+.loading-shade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.15);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.no-data-cell {
+  padding: 16px;
+  text-align: center;
+  font-style: italic;
+  color: rgba(0, 0, 0, 0.54);
+}
+
+.active-badge {
+  background-color: #a5d6a7;
+  color: #1b5e20;
+  padding: 4px 8px;
+  border-radius: 16px;
+  font-size: 12px;
+}
+
+.inactive-badge {
+  background-color: #ef9a9a;
+  color: #b71c1c;
+  padding: 4px 8px;
+  border-radius: 16px;
+  font-size: 12px;
+}
+
+/* Ensure table header is sticky */
+th.mat-header-cell {
+  font-weight: bold;
+  background-color: #fafafa;
+}
+
+/* Center align most content as per standards */
+th.mat-header-cell, td.mat-cell {
+  text-align: center;
+}
+
+/* Left align text columns */
+th.mat-header-cell:nth-child(2), 
+td.mat-cell:nth-child(2) {
+  text-align: left;
+} 

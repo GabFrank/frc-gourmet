@@ -58,8 +58,7 @@ export class MovimientoStock extends BaseModel {
   @Column({
     type: 'varchar',
     name: 'tipo_referencia',
-    enum: TipoReferencia,
-    default: TipoReferencia.AJUSTE
+    enum: TipoReferencia
   })
   tipoReferencia!: TipoReferencia;
 

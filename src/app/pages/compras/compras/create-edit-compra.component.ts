@@ -16,6 +16,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatDialogModule, MatDialog, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatAutocompleteModule, MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
@@ -26,6 +27,7 @@ import { Moneda } from '../../../database/entities';
 import { Producto } from '../../../database/entities';
 import { Ingrediente } from '../../../database/entities';
 import { Presentacion } from '../../../database/entities';
+import { MovimientoStock, TipoReferencia } from '../../../database/entities/productos/movimiento-stock.entity';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { Observable, firstValueFrom, map, startWith, of, debounceTime, switchMap, Subject, Subscription, from } from 'rxjs';
 import { UnitConversionService, UnitConversion } from '../../../services/unit-conversion.service';
@@ -71,6 +73,7 @@ interface SearchItem {
     MatDialogModule,
     MatTabsModule,
     MatTooltipModule,
+    MatMenuModule,
     MatAutocompleteModule,
     MatDatepickerModule,
     MatNativeDateModule,
@@ -115,7 +118,7 @@ export class CreateEditCompraComponent implements OnInit {
   filteredFormasPago: Observable<FormasPago[]>;
 
   // Table columns
-  displayedColumns: string[] = ['item', 'tipo', 'cantidad', 'valor', 'subtotal', 'acciones'];
+  displayedColumns: string[] = ['item', 'tipo', 'tipoMedida', 'cantidad', 'valor', 'subtotal', 'acciones'];
 
   // Estado options
   estadoOptions = [
@@ -176,14 +179,25 @@ export class CreateEditCompraComponent implements OnInit {
   }
 
   get canEditDetalles(): boolean {
-    // When creating a new compra, allow editing
+    // When creating a new compra, always allow editing
     if (!this.isEditing) {
       return true;
     }
 
-    // If editing, only allow if estado is ABIERTO
+    // If estado is ABIERTO and editing is enabled, allow detalle editing
     const estado = this.compraForm.get('estado')?.value;
-    return estado === CompraEstado.ABIERTO;
+    if (estado === CompraEstado.ABIERTO) {
+      if (this.isEditingEnabled) {
+        return true;
+      }
+      // Even if not in editing mode, if actions are explicitly enabled, allow editing
+      if (this.detallesActionsEnabled) {
+        return true;
+      }
+    }
+    
+    // By default, don't allow editing
+    return false;
   }
 
   get currentMoneda(): Moneda | null {
@@ -342,7 +356,10 @@ export class CreateEditCompraComponent implements OnInit {
       valorTotal: ['', [Validators.required, Validators.min(0.01)]],
       presentacion: [''],
       tipo_medida: [''],
-      selectedUnit: ['']
+      selectedUnit: [''],
+      // Add fields for tracking edit state
+      editingId: [null],
+      editingIndex: [null]
     });
 
     // Setup bidirectional calculation between valor (unit price) and valorTotal (final total)
@@ -364,6 +381,20 @@ export class CreateEditCompraComponent implements OnInit {
     this.detalleForm.get('cantidad')?.valueChanges.subscribe(value => {
       if (!this.isUpdatingValor && !this.isUpdatingTotal) {
         this.updateTotal();
+      }
+    });
+
+    // Add event listener for selectedUnit changes to handle conversions
+    this.detalleForm.get('selectedUnit')?.valueChanges.subscribe(newUnit => {
+      this.handleUnitChange(newUnit);
+    });
+
+    // Add event listener for item selection to set default units
+    this.detalleForm.get('item')?.valueChanges.subscribe(item => {
+      if (item && item.tipo_medida) {
+        // When an item is selected, set both the tipo_medida and selectedUnit
+        this.detalleForm.get('tipo_medida')?.setValue(item.tipo_medida);
+        this.detalleForm.get('selectedUnit')?.setValue(item.tipo_medida);
       }
     });
 
@@ -668,22 +699,37 @@ export class CreateEditCompraComponent implements OnInit {
       // Add each detalle to the form array with a simplified approach
       if (detalles && detalles.length > 0) {
         for (const detalle of detalles) {
+          // Get item details for proper unit handling
+          let itemName = '';
+          let itemType = '';
+          let tipoMedida = detalle.tipo_medida || '';
+          
+          if (detalle.producto) {
+            itemName = detalle.producto.nombre;
+            itemType = 'producto';
+          } else if (detalle.ingrediente) {
+            itemName = detalle.ingrediente.descripcion;
+            itemType = 'ingrediente';
+            tipoMedida = detalle.tipo_medida || detalle.ingrediente.tipoMedida || 'UNIDAD';
+          }
+
           // Create a simple form group for each detalle
           const detalleForm = this.fb.group({
             id: [detalle.id],
             cantidad: [detalle.cantidad, [Validators.required, Validators.min(0)]],
             valor: [detalle.valor, [Validators.required, Validators.min(0)]],
-            tipo: [detalle.producto ? 'producto' : 'ingrediente'],
+            tipo: [itemType],
             producto: [detalle.producto?.id || null],
             ingrediente: [detalle.ingrediente?.id || null],
             presentacion: [detalle.presentacion?.id || null],
-            tipo_medida: [detalle.tipo_medida || null],
+            tipo_medida: [tipoMedida],
+            selectedUnit: [tipoMedida], // Set the selected unit to the stored unit
             // Create a simple item object with just the needed properties
             item: [{
               id: detalle.producto?.id || detalle.ingrediente?.id,
-              nombre: detalle.producto?.nombre || detalle.ingrediente?.descripcion,
-              tipo: detalle.producto ? 'producto' : 'ingrediente',
-              tipo_medida: detalle.tipo_medida
+              nombre: itemName,
+              tipo: itemType,
+              tipo_medida: tipoMedida
             }]
           });
 
@@ -723,6 +769,10 @@ export class CreateEditCompraComponent implements OnInit {
       // Prepare compra data
       const formData = this.compraForm.value;
 
+      // Check if the compra is being canceled
+      const isCanceling = this.compra?.estado !== CompraEstado.CANCELADO && 
+                         formData.estado === CompraEstado.CANCELADO;
+
       // Create compra DTO
       const compraData: Partial<Compra> = {
         proveedor: formData.proveedor,
@@ -755,6 +805,13 @@ export class CreateEditCompraComponent implements OnInit {
 
       if (this.isEditing && this.compra) {
         try {
+          // When updating, always keep estado as ABIERTO unless explicitly set to something else
+          // This ensures detalles remain editable after saving
+          if (this.isEditingEnabled && compraData.estado !== CompraEstado.CANCELADO && 
+              compraData.estado !== CompraEstado.FINALIZADO) {
+            compraData.estado = CompraEstado.ABIERTO;
+          }
+          
           // Use the actual repository service to update the compra
           savedCompra = await firstValueFrom(
             this.repositoryService.updateCompra(this.compra.id, {
@@ -765,6 +822,11 @@ export class CreateEditCompraComponent implements OnInit {
 
           // Update the local compra object
           this.compra = savedCompra;
+
+          // If the compra was canceled, invalidate stock movements
+          if (isCanceling) {
+            await this.invalidateStockMovements();
+          }
 
           // After successful update:
           this.isEditingEnabled = false; // Reset editing mode
@@ -827,8 +889,19 @@ export class CreateEditCompraComponent implements OnInit {
         }
       }
 
+      // If the compra is FINALIZADO, update stock movements
+      if (formData.estado === CompraEstado.FINALIZADO) {
+        await this.handleStockMovements();
+      }
+
       // Update form state based on the new estado value
       this.updateDetalleFormState();
+      
+      // If the estado is ABIERTO, make sure detalle actions are enabled
+      if (formData.estado === CompraEstado.ABIERTO) {
+        this.detallesActionsEnabled = true;
+        this.enableDetalleForm();
+      }
 
       // Focus on the detalle form to start adding details
       this.resetAndFocusDetalleForm();
@@ -841,6 +914,134 @@ export class CreateEditCompraComponent implements OnInit {
     }
   }
 
+  // Add a new method to validate stock movements
+  private async verifyStockMovements(): Promise<boolean> {
+    if (!this.compra || !this.compra.id) {
+      return false;
+    }
+
+    try {
+      // Get all compra detalles
+      const detalles = await firstValueFrom(
+        this.repositoryService.getCompraDetalles(this.compra.id)
+      );
+
+      // Get all stock movements for this compra's type
+      const allMovements = await firstValueFrom(
+        this.repositoryService.getMovimientosStockByTipoReferencia(TipoReferencia.COMPRA)
+      );
+
+      // Check if each detalle has a corresponding stock movement
+      let allValid = true;
+      for (const detalle of detalles) {
+        const movement = allMovements.find(m => m.referencia === detalle.id);
+        
+        if (!movement) {
+          console.error(`No stock movement found for compra detalle ${detalle.id}`);
+          allValid = false;
+        } else if (movement.cantidadActual !== detalle.cantidad) {
+          console.warn(`Stock movement for compra detalle ${detalle.id} has inconsistent quantity: ` +
+            `movement=${movement.cantidadActual}, detalle=${detalle.cantidad}`);
+        }
+      }
+
+      return allValid;
+    } catch (error) {
+      console.error('Error verifying stock movements:', error);
+      return false;
+    }
+  }
+
+  // Add a new method to handle stock movements
+  async handleStockMovements(): Promise<void> {
+    try {
+      if (!this.compra || !this.compra.id) {
+        console.error('Cannot handle stock movements: compra is not defined');
+        return;
+      }
+
+      // Get all compra detalles from the database
+      const detalles = await firstValueFrom(
+        this.repositoryService.getCompraDetalles(this.compra.id)
+      );
+
+      if (!detalles || detalles.length === 0) {
+        console.warn('No detalles found for compra', this.compra.id);
+        return;
+      }
+
+      // Process each detalle
+      for (const detalle of detalles) {
+        // Check if there's already a stock movement for this detalle
+        // Use the correct repository method 
+        const existingMovements = await firstValueFrom(
+          this.repositoryService.getMovimientosStockByTipoReferencia(TipoReferencia.COMPRA)
+            .pipe(
+              map(movements => movements.filter(movement => movement.referencia === detalle.id))
+            )
+        );
+
+        if (existingMovements && existingMovements.length > 0) {
+          // Update existing movement
+          const movement = existingMovements[0];
+          
+          // Update the cantidad actual - should already be in the base unit from addDetalle
+          movement.cantidadActual = detalle.cantidad;
+          
+          // Save the updated movement
+          await firstValueFrom(
+            this.repositoryService.updateMovimientoStock(movement.id, movement)
+          );
+        } else {
+          // Create new movement
+          const movimiento: Partial<MovimientoStock> = {
+            tipoReferencia: TipoReferencia.COMPRA,
+            referencia: detalle.id,
+            cantidadActual: detalle.cantidad, // Quantity is already in base unit
+            activo: true
+          };
+
+          // Set the appropriate relationship and tipoMedida based on detalle type
+          if (detalle.producto) {
+            movimiento.productoId = detalle.producto.id;
+            movimiento.producto = detalle.producto;
+            
+            // Use the correct tipo_medida from the detalle
+            if (!detalle.tipo_medida) {
+              throw new Error('Tipo de medida no encontrado para el producto ' + detalle.producto.nombre);
+            }
+            movimiento.tipoMedida = detalle.tipo_medida;
+          } else if (detalle.ingrediente) {
+            movimiento.ingredienteId = detalle.ingrediente.id;
+            movimiento.ingrediente = detalle.ingrediente;
+            
+            // Always use the base unit tipo_medida for the ingredient
+            if (!detalle.tipo_medida) {
+              throw new Error('Tipo de medida no encontrado para el ingrediente ' + detalle.ingrediente.descripcion);
+            }
+            movimiento.tipoMedida = detalle.tipo_medida;
+          }
+
+          // Create the movement in the database
+          await firstValueFrom(
+            this.repositoryService.createMovimientoStock(movimiento)
+          );
+        }
+      }
+
+      // Verify all stock movements were created properly
+      const verified = await this.verifyStockMovements();
+      if (verified) {
+        console.log('Stock movements processed and verified successfully for compra', this.compra.id);
+      } else {
+        console.warn('Stock movements processed but verification failed for compra', this.compra.id);
+      }
+    } catch (error) {
+      console.error('Error handling stock movements:', error);
+      this.showError('Error al procesar movimientos de stock: ' + (error as Error).message);
+    }
+  }
+
   // Helper method to reset and focus the detalle form
   private resetAndFocusDetalleForm(): void {
     // Reset the form with initial values
@@ -850,7 +1051,10 @@ export class CreateEditCompraComponent implements OnInit {
       cantidad: 1,
       valor: '',
       valorTotal: '',
-      total: 0
+      total: 0,
+      // Clear editing state
+      editingId: null,
+      editingIndex: null
     });
 
     // Focus on the first field of the detalle form
@@ -1286,18 +1490,42 @@ export class CreateEditCompraComponent implements OnInit {
       // Get values from the form
       const formValues = this.detalleForm.value;
       const selectedItem = formValues.item;
+      const isEditing = formValues.editingId != null;
 
       if (!selectedItem) {
         this.showError('Debe seleccionar un producto o ingrediente.');
         return;
       }
 
+      // Get the base unit and selected unit
+      const baseUnit = selectedItem.tipo_medida;
+      const selectedUnit = formValues.selectedUnit || baseUnit;
+      
+      // Parse the quantity from the form
+      let cantidad = this.parseNumber(formValues.cantidad);
+      
+      // If user selected a different unit than the base unit, convert the quantity
+      if (baseUnit && selectedUnit && baseUnit !== selectedUnit) {
+        try {
+          console.log(`Converting ${cantidad} ${selectedUnit} to ${baseUnit}`);
+          cantidad = this.unitConversionService.convert(cantidad, selectedUnit, baseUnit);
+          console.log(`Converted quantity: ${cantidad} ${baseUnit}`);
+        } catch (error) {
+          console.error('Error converting units:', error);
+          this.showError(`Error al convertir unidades: ${selectedUnit} a ${baseUnit}`);
+          return;
+        }
+      }
+
       // Create detalle object based on the type (producto or ingrediente)
       const detalleData: Partial<CompraDetalle> = {
-        cantidad: this.parseNumber(formValues.cantidad),
+        cantidad: cantidad, // Use the converted quantity
         valor: this.parseNumber(formValues.valor),
         activo: true
       };
+
+      // Store the original tipo_medida selected by the user for reference
+      detalleData.tipo_medida = baseUnit;
 
       // Set the appropriate relationship based on the selectedItem type
       if (selectedItem.tipo === 'producto') {
@@ -1310,35 +1538,74 @@ export class CreateEditCompraComponent implements OnInit {
       } else if (selectedItem.tipo === 'ingrediente') {
         detalleData.ingrediente = { id: selectedItem.id } as Ingrediente;
         // Save the tipo_medida for future reference
-        detalleData.tipo_medida = selectedItem.tipo_medida;
+        detalleData.tipo_medida = baseUnit;
       }
 
       // If we have a compra ID, associate this detalle with the compra
       if (this.compra?.id) {
         detalleData.compra = { id: this.compra.id } as Compra;
 
-        // Save to database
-        const savedDetalle = await firstValueFrom(
-          this.repositoryService.createCompraDetalle(detalleData)
-        );
+        // If editing an existing detalle, update it instead of creating a new one
+        if (isEditing) {
+          // Add the ID of the existing detalle
+          detalleData.id = formValues.editingId;
+          
+          try {
+            // Update the detalle in the database - using the function we know exists
+            await firstValueFrom(
+              this.repositoryService.updateCompra(this.compra.id, {
+                detalles: [detalleData] as any
+              })
+            );
+            
+            // After updating, create a form group with the updated values
+            const detalleForm = this.fb.group({
+              id: [formValues.editingId],
+              cantidad: [cantidad, [Validators.required, Validators.min(0)]],
+              valor: [detalleData.valor, [Validators.required, Validators.min(0)]],
+              tipo: [selectedItem.tipo],
+              producto: [selectedItem.tipo === 'producto' ? selectedItem.id : null],
+              ingrediente: [selectedItem.tipo === 'ingrediente' ? selectedItem.id : null],
+              presentacion: [formValues.presentacion?.id || null],
+              tipo_medida: [baseUnit],
+              selectedUnit: [selectedUnit], // Store the user's selected unit
+              item: [selectedItem]
+            });
 
-        // Create a simplified form group with just the needed data
-        const detalleForm = this.fb.group({
-          id: [savedDetalle.id],
-          cantidad: [savedDetalle.cantidad, [Validators.required, Validators.min(0)]],
-          valor: [savedDetalle.valor, [Validators.required, Validators.min(0)]],
-          tipo: [selectedItem.tipo],
-          producto: [selectedItem.tipo === 'producto' ? selectedItem.id : null],
-          ingrediente: [selectedItem.tipo === 'ingrediente' ? selectedItem.id : null],
-          presentacion: [formValues.presentacion?.id || null],
-          tipo_medida: [selectedItem.tipo_medida || null],
-          item: [selectedItem]
-        });
+            // Add back to the form array
+            this.detalles.insert(formValues.editingIndex, detalleForm);
+            
+            this.showSuccess('Detalle actualizado correctamente');
+          } catch (error) {
+            console.error('Error updating detalle:', error);
+            this.showError('Error al actualizar detalle: ' + (error as Error).message);
+            throw error;
+          }
+        } else {
+          // Create a new detalle
+          const savedDetalle = await firstValueFrom(
+            this.repositoryService.createCompraDetalle(detalleData)
+          );
 
-        // Add to the form array
-        this.detalles.push(detalleForm);
+          // Create a simplified form group with just the needed data
+          const detalleForm = this.fb.group({
+            id: [savedDetalle.id],
+            cantidad: [savedDetalle.cantidad, [Validators.required, Validators.min(0)]],
+            valor: [savedDetalle.valor, [Validators.required, Validators.min(0)]],
+            tipo: [selectedItem.tipo],
+            producto: [selectedItem.tipo === 'producto' ? selectedItem.id : null],
+            ingrediente: [selectedItem.tipo === 'ingrediente' ? selectedItem.id : null],
+            presentacion: [formValues.presentacion?.id || null],
+            tipo_medida: [baseUnit],
+            selectedUnit: [selectedUnit], // Store the user's selected unit
+            item: [selectedItem]
+          });
 
-        this.showSuccess('Detalle agregado correctamente');
+          // Add to the form array
+          this.detalles.push(detalleForm);
+
+          this.showSuccess('Detalle agregado correctamente');
+        }
       } else {
         throw new Error('Compra no encontrada');
       }
@@ -1357,6 +1624,13 @@ export class CreateEditCompraComponent implements OnInit {
   async removeDetalle(index: number): Promise<void> {
     // First check if detalle actions are enabled
     if (!this.detallesActionsEnabled) {
+      console.log('Cannot remove detalle: detallesActionsEnabled is false');
+      console.log('Current state:', {
+        estado: this.compraForm.get('estado')?.value,
+        isEditingEnabled: this.isEditingEnabled,
+        canEditDetalles: this.canEditDetalles,
+        isFormDisabled: this.isFormDisabled
+      });
       return;
     }
 
@@ -1379,6 +1653,11 @@ export class CreateEditCompraComponent implements OnInit {
         if (!result) {
           return;
         }
+
+        // Log the unit information for debugging
+        console.log('Removing detalle with tipo_medida:', detalle.tipo_medida, 
+                    'selectedUnit:', detalle.selectedUnit, 
+                    'cantidad:', detalle.cantidad);
 
         // Delete from database
         await firstValueFrom(
@@ -1576,6 +1855,9 @@ export class CreateEditCompraComponent implements OnInit {
       this.compraForm.get('estado')?.setValue(CompraEstado.FINALIZADO);
       await this.saveCompra();
 
+      // Process stock movements
+      await this.handleStockMovements();
+
       // Disable the form since the compra is now FINALIZADO
       this.disableForm();
 
@@ -1598,6 +1880,9 @@ export class CreateEditCompraComponent implements OnInit {
       // Mark the compra as FINALIZADO
       this.compraForm.get('estado')?.setValue(CompraEstado.FINALIZADO);
       await this.saveCompra();
+
+      // Process stock movements
+      await this.handleStockMovements();
 
       this.showSuccess('La compra ha sido finalizada y marcada como pendiente de pago.');
     } else {
@@ -1627,6 +1912,13 @@ export class CreateEditCompraComponent implements OnInit {
 
     // Update form state based on the new estado value
     this.updateDetalleFormState();
+    
+    // If estado is ABIERTO, explicitly enable detalle form and actions
+    if (this.compraForm.get('estado')?.value === CompraEstado.ABIERTO) {
+      this.detallesActionsEnabled = true;
+      this.enableDetalleForm();
+    }
+    
     this.isFormDisabled = false;
   }
 
@@ -1634,17 +1926,17 @@ export class CreateEditCompraComponent implements OnInit {
   modifyCompra(): void {
     // If compra is in FINALIZADO state, show confirmation dialog
     if (this.compraForm.get('estado')?.value === CompraEstado.FINALIZADO) {
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: 'Modificar Compra Finalizada',
-        message: 'Modificar una compra finalizada cambiará su estado. ¿Está seguro que desea continuar?',
-        confirmText: 'Sí, Modificar',
-        cancelText: 'Cancelar'
-      }
-    });
+      const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+        data: {
+          title: 'Modificar Compra Finalizada',
+          message: 'Modificar una compra finalizada cambiará su estado y podría afectar los movimientos de stock. ¿Está seguro que desea continuar?',
+          confirmText: 'Sí, Modificar',
+          cancelText: 'Cancelar'
+        }
+      });
 
-    dialogRef.afterClosed().subscribe(result => {
-      if (result) {
+      dialogRef.afterClosed().subscribe(result => {
+        if (result) {
           this.enableCompraEditing();
         }
       });
@@ -1656,22 +1948,37 @@ export class CreateEditCompraComponent implements OnInit {
 
   // New method to enable compra editing
   private enableCompraEditing(): void {
-    // Change estado back to previous state or ACTIVO if needed
-    if (this.compraForm.get('estado')?.value === CompraEstado.FINALIZADO) {
-      this.compraForm.get('estado')?.setValue(
-        this.previousEstado !== CompraEstado.FINALIZADO ? this.previousEstado : CompraEstado.ABIERTO
-      );
-    }
+    // Store the previous estado value before changing it
+    const currentEstado = this.compraForm.get('estado')?.value;
+    this.previousEstado = currentEstado;
 
-        // Enable editing mode
-        this.isEditingEnabled = true;
+    // Change estado to ABIERTO to allow editing detalles
+    this.compraForm.get('estado')?.setValue(CompraEstado.ABIERTO, { emitEvent: true });
 
-        // Enable the form
-        this.enableForm();
+    // Enable editing mode
+    this.isEditingEnabled = true;
 
-        // Show feedback
-        this.showSuccess('La compra puede ser modificada ahora.');
-      }
+    // Enable the form
+    this.enableForm();
+    
+    // Explicitly enable detalle actions and form
+    this.detallesActionsEnabled = true;
+    this.enableDetalleForm();
+    
+    // Force update the detalle form state based on the new estado
+    this.updateDetalleFormState();
+    
+    // Use setTimeout to force change detection cycle
+    setTimeout(() => {
+      console.log('Estado after enabling editing:', 
+          this.compraForm.get('estado')?.value,
+          'detallesActionsEnabled:', this.detallesActionsEnabled,
+          'canEditDetalles:', this.canEditDetalles);
+    }, 0);
+
+    // Show feedback
+    this.showSuccess('La compra puede ser modificada ahora.');
+  }
 
   // Add getter for showing modificar button
   get showModificarButton(): boolean {
@@ -1816,5 +2123,190 @@ export class CreateEditCompraComponent implements OnInit {
   // Add getter for save button text
   get saveButtonText(): string {
     return this.isEditing ? 'Actualizar' : 'Guardar';
+  }
+
+  // Add this method to invalidate stock movements when a purchase is canceled
+  async invalidateStockMovements(): Promise<void> {
+    try {
+      if (!this.compra || !this.compra.id) {
+        return;
+      }
+
+      // Get all compra detalles
+      const detalles = await firstValueFrom(
+        this.repositoryService.getCompraDetalles(this.compra.id)
+      );
+
+      // For each detalle, find and invalidate related stock movements
+      for (const detalle of detalles) {
+        // Find stock movements for this detalle
+        const movements = await firstValueFrom(
+          this.repositoryService.getMovimientosStockByTipoReferencia(TipoReferencia.COMPRA)
+            .pipe(
+              map(movements => movements.filter(m => m.referencia === detalle.id))
+            )
+        );
+
+        // Update each movement to set it as inactive
+        for (const movement of movements) {
+          movement.activo = false;
+          await firstValueFrom(
+            this.repositoryService.updateMovimientoStock(movement.id, movement)
+          );
+        }
+      }
+
+      console.log('Stock movements invalidated for canceled compra', this.compra.id);
+    } catch (error) {
+      console.error('Error invalidating stock movements:', error);
+      this.showError('Error al invalidar movimientos de stock: ' + (error as Error).message);
+    }
+  }
+
+  // Handle unit changes and convert quantity between units
+  private handleUnitChange(newUnit: string): void {
+    const selectedItem = this.detalleForm.get('item')?.value as SearchItem;
+    if (!selectedItem || !selectedItem.tipo_medida) {
+      return; // Nothing to do if no item selected or no base unit
+    }
+
+    const baseUnit = selectedItem.tipo_medida;
+    const previousUnit = this.selectedUnit || baseUnit;
+    this.selectedUnit = newUnit || baseUnit;
+
+    // Skip if no change or no cantidad
+    if (previousUnit === this.selectedUnit || !this.detalleForm.get('cantidad')?.value) {
+      return;
+    }
+
+    try {
+      // Get current cantidad in the old unit
+      const currentCantidad = this.parseNumber(this.detalleForm.get('cantidad')?.value);
+      
+      // If converting from previous unit to new unit
+      if (previousUnit !== baseUnit && this.selectedUnit === baseUnit) {
+        // First convert from previous unit to base unit
+        const cantidadInBaseUnit = this.unitConversionService.convert(currentCantidad, previousUnit, baseUnit);
+        this.detalleForm.get('cantidad')?.setValue(cantidadInBaseUnit);
+        
+      } else if (previousUnit === baseUnit && this.selectedUnit !== baseUnit) {
+        // Converting from base unit to new unit
+        const cantidadInNewUnit = this.unitConversionService.convert(currentCantidad, previousUnit, this.selectedUnit);
+        this.detalleForm.get('cantidad')?.setValue(cantidadInNewUnit);
+        
+      } else if (previousUnit !== baseUnit && this.selectedUnit !== baseUnit) {
+        // Converting between two non-base units (e.g., kg to lb)
+        // First convert to base unit, then to the new unit
+        const cantidadInBaseUnit = this.unitConversionService.convert(currentCantidad, previousUnit, baseUnit);
+        const cantidadInNewUnit = this.unitConversionService.convert(cantidadInBaseUnit, baseUnit, this.selectedUnit);
+        this.detalleForm.get('cantidad')?.setValue(cantidadInNewUnit);
+      }
+      
+      // Update calculated values
+      this.updateTotal();
+      
+    } catch (error) {
+      console.error('Error converting between units:', error);
+      this.showError(`Error al convertir entre unidades: ${previousUnit} a ${this.selectedUnit}`);
+      
+      // Revert to previous unit on error
+      this.detalleForm.get('selectedUnit')?.setValue(previousUnit, { emitEvent: false });
+    }
+  }
+
+  // Add a new getter to display conversion information
+  get conversionInfo(): string {
+    const selectedItem = this.detalleForm.get('item')?.value as SearchItem;
+    if (!selectedItem || !selectedItem.tipo_medida) {
+      return '';
+    }
+    
+    const baseUnit = selectedItem.tipo_medida;
+    const selectedUnit = this.detalleForm.get('selectedUnit')?.value || baseUnit;
+    
+    // Only show conversion info if units are different
+    if (baseUnit === selectedUnit) {
+      return '';
+    }
+    
+    // Get the current cantidad
+    const cantidad = this.parseNumber(this.detalleForm.get('cantidad')?.value || 0);
+    if (cantidad <= 0) {
+      return '';
+    }
+    
+    try {
+      // Convert to base unit for display
+      const cantidadBase = this.unitConversionService.convert(cantidad, selectedUnit, baseUnit);
+      
+      // Format the output with 4 decimal places
+      return `${cantidad.toFixed(4)} ${selectedUnit} = ${cantidadBase.toFixed(4)} ${baseUnit}`;
+    } catch (error) {
+      return `Conversión no disponible`;
+    }
+  }
+
+  // Edit a detalle in the compra
+  editDetalle(index: number): void {
+    // First check if detalle actions are enabled
+    if (!this.detallesActionsEnabled) {
+      console.log('Cannot edit detalle: detallesActionsEnabled is false');
+      console.log('Current state:', {
+        estado: this.compraForm.get('estado')?.value,
+        isEditingEnabled: this.isEditingEnabled,
+        canEditDetalles: this.canEditDetalles,
+        isFormDisabled: this.isFormDisabled
+      });
+      return;
+    }
+
+    try {
+      const detalle = this.detalles.at(index).value;
+      
+      // Flag to indicate we're editing (we'll use this when adding the detalle back)
+      const editingIndex = index;
+      
+      // Get the original item for reference
+      const itemData = detalle.item;
+      
+      // Load item details for proper unit display
+      const selectedUnit = detalle.selectedUnit || detalle.tipo_medida;
+      
+      // Populate the detalle form with the existing values
+      this.detalleForm.patchValue({
+        item: itemData,
+        cantidad: detalle.cantidad,
+        valor: detalle.valor,
+        valorTotal: detalle.cantidad * detalle.valor,
+        tipo_medida: detalle.tipo_medida,
+        selectedUnit: selectedUnit,
+        presentacion: detalle.presentacion
+      });
+      
+      // Remove the detalle from the array (we'll add it back when saved)
+      this.detalles.removeAt(index);
+      
+      // Store the index and ID for later reference when saving
+      this.detalleForm.patchValue({
+        editingIndex: editingIndex,
+        editingId: detalle.id
+      });
+      
+      // Focus on the cantidad field
+      setTimeout(() => {
+        try {
+          const cantidadInput = document.querySelector('.detalle-form-container [formcontrolname="cantidad"]');
+          if (cantidadInput instanceof HTMLElement) {
+            cantidadInput.focus();
+          }
+        } catch (error) {
+          console.error('Error focusing on cantidad field:', error);
+        }
+      }, 100);
+      
+    } catch (error: any) {
+      console.error('Error editing detalle:', error);
+      this.showError('Error al editar detalle: ' + error.message);
+    }
   }
 }

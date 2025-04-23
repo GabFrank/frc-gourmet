@@ -70,6 +70,7 @@ const compra_entity_1 = require("./entities/compras/compra.entity");
 const compra_detalle_entity_1 = require("./entities/compras/compra-detalle.entity");
 const proveedor_producto_entity_1 = require("./entities/compras/proveedor-producto.entity");
 const forma_pago_entity_1 = require("./entities/compras/forma-pago.entity");
+const movimiento_stock_entity_1 = require("./entities/productos/movimiento-stock.entity");
 // Import new migration
 const _1624098765432_AddColumnsToConteo_1 = require("./migrations/1624098765432-AddColumnsToConteo");
 /**
@@ -127,7 +128,8 @@ function getDataSourceOptions(userDataPath) {
             compra_entity_1.Compra,
             compra_detalle_entity_1.CompraDetalle,
             proveedor_producto_entity_1.ProveedorProducto,
-            forma_pago_entity_1.FormasPago
+            forma_pago_entity_1.FormasPago,
+            movimiento_stock_entity_1.MovimientoStock
         ],
         synchronize: true,
         logging: process.env['NODE_ENV'] === 'development',

@@ -1,0 +1,101 @@
+<div class="container">
+  <div class="loading-overlay" *ngIf="isLoading">
+    <mat-spinner></mat-spinner>
+  </div>
+  <mat-card>
+    <mat-card-header>
+      <mat-card-title>{{isEditMode ? 'Editar' : 'Nuevo'}} Movimiento de Stock</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <form [formGroup]="form" (ngSubmit)="onSubmit()">
+        <div class="form-row">
+          <mat-form-field appearance="outline">
+            <mat-label>Producto</mat-label>
+            <mat-select formControlName="productoId" (selectionChange)="onProductoChange()">
+              <mat-option>Ninguno</mat-option>
+              <mat-option *ngFor="let producto of productosOptions" [value]="producto.id">
+                {{producto.nombre}}
+              </mat-option>
+            </mat-select>
+            <mat-hint>Seleccione un producto o un ingrediente, no ambos</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Ingrediente</mat-label>
+            <mat-select formControlName="ingredienteId" (selectionChange)="onIngredienteChange()">
+              <mat-option>Ninguno</mat-option>
+              <mat-option *ngFor="let ingrediente of ingredientesOptions" [value]="ingrediente.id">
+                {{ingrediente.descripcion}}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div *ngIf="form.errors && form.errors['requireProductoOrIngrediente']" class="error-message">
+          Debe seleccionar un producto o un ingrediente.
+        </div>
+        
+        <div *ngIf="form.errors && form.errors['bothProductoAndIngrediente']" class="error-message">
+          No puede seleccionar un producto y un ingrediente al mismo tiempo.
+        </div>
+
+        <div class="form-row">
+          <mat-form-field appearance="outline">
+            <mat-label>Tipo de Medida</mat-label>
+            <mat-select formControlName="tipoMedida">
+              <mat-option *ngFor="let tipo of tipoMedidas" [value]="tipo">
+                {{tipo}}
+              </mat-option>
+            </mat-select>
+            <mat-error *ngIf="form.get('tipoMedida')?.hasError('required')">
+              Tipo de medida es requerido
+            </mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Cantidad</mat-label>
+            <input matInput type="number" step="0.01" formControlName="cantidadActual">
+            <mat-error *ngIf="form.get('cantidadActual')?.hasError('required')">
+              Cantidad es requerida
+            </mat-error>
+            <mat-error *ngIf="form.get('cantidadActual')?.hasError('min')">
+              La cantidad debe ser mayor o igual a cero
+            </mat-error>
+          </mat-form-field>
+        </div>
+
+        <div class="form-row">
+          <mat-form-field appearance="outline">
+            <mat-label>Tipo de Referencia</mat-label>
+            <mat-select formControlName="tipoReferencia">
+              <mat-option *ngFor="let tipo of tipoReferencias" [value]="tipo">
+                {{tipo}}
+              </mat-option>
+            </mat-select>
+            <mat-error *ngIf="form.get('tipoReferencia')?.hasError('required')">
+              Tipo de referencia es requerido
+            </mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>ID de Referencia</mat-label>
+            <input matInput type="number" formControlName="referencia">
+            <mat-hint>ID de venta, compra u otro documento relacionado</mat-hint>
+          </mat-form-field>
+        </div>
+
+        <div class="form-row" *ngIf="isEditMode">
+          <mat-slide-toggle formControlName="activo" color="primary">
+            {{form.get('activo')?.value ? 'Activo' : 'Inactivo'}}
+          </mat-slide-toggle>
+        </div>
+      </form>
+    </mat-card-content>
+    <mat-card-actions align="end">
+      <button mat-button type="button" (click)="cancel()">Cancelar</button>
+      <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="form.invalid || isLoading">
+        {{isEditMode ? 'Actualizar' : 'Guardar'}}
+      </button>
+    </mat-card-actions>
+  </mat-card>
+</div> 
