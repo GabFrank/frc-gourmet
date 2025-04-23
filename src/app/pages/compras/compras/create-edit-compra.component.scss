@@ -239,8 +239,10 @@
 
     .table-scroll-wrapper {
       flex: 1;
-      overflow: auto;
-      position: relative;
+      flex: 1;
+  overflow-x: auto; // allow horizontal scrolling only if needed
+  overflow-y: visible; // allow menu to show outside
+  position: relative;
     }
 
     .detalles-table {
