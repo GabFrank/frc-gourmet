@@ -27,6 +27,7 @@ import { PagosService, Pago, PagoDetalle } from '../../../core/services/pagos.se
 import { ComprasService } from '../../../core/services/compras.service';
 import { MetodoPago } from '../../../core/enums/metodo-pago.enum';
 import { PagoEstado } from '../../../database/entities/compras/estado.enum';
+import { ListCajaDialogComponent } from '../../../pages/financiero/cajas/list-caja-dialog/list-caja-dialog.component';
 
 @Component({
   selector: 'app-create-edit-pago',
@@ -49,7 +50,8 @@ import { PagoEstado } from '../../../database/entities/compras/estado.enum';
     MatTableModule,
     MatCheckboxModule,
     ConfirmationDialogComponent,
-    CurrencyInputComponent
+    CurrencyInputComponent,
+    ListCajaDialogComponent
   ],
   templateUrl: './create-edit-pago.component.html',
   styleUrls: ['./create-edit-pago.component.scss']
@@ -135,6 +137,7 @@ export class CreateEditPagoComponent implements OnInit {
 
       // Check if we're editing an existing pago or creating a new one for a compra
       if (this.data) {
+        console.log('this.data', this.data);
         if (this.data.pagoId) {
           // Editing existing pago
           this.pagoId = this.data.pagoId;
@@ -148,6 +151,12 @@ export class CreateEditPagoComponent implements OnInit {
           });
           await this.loadCompra(this.compraId);
           this.initFormForCompra();
+          
+          // Check if we need to select a caja
+          console.log('this.pagoForm.get("caja")?.value', this.pagoForm.get('caja')?.value);
+          if (!this.pagoForm.get('caja')?.value) {
+            await this.openCajaSelectionDialog();
+          }
         }
       }
     } catch (error: any) {
@@ -442,6 +451,15 @@ export class CreateEditPagoComponent implements OnInit {
       return;
     }
 
+    // Check if caja is selected, if not open dialog to select one
+    if (!this.pagoForm.get('caja')?.value) {
+      const cajaSelected = await this.openCajaSelectionDialog();
+      if (!cajaSelected) {
+        this.showError('Debe seleccionar una caja para continuar.');
+        return;
+      }
+    }
+
     try {
       this.isLoading = true;
 
@@ -653,5 +671,31 @@ export class CreateEditPagoComponent implements OnInit {
   displayFormaPago(formaPago: FormasPago | null): string {
     if (!formaPago) return '';
     return formaPago.nombre;
+  }
+
+  /**
+   * Opens a dialog to select a caja when none is selected
+   * @returns A promise that resolves to true if a caja was selected, false otherwise
+   */
+  async openCajaSelectionDialog(): Promise<boolean> {
+    const dialogRef = this.dialog.open(ListCajaDialogComponent, {
+      width: '800px',
+      disableClose: true
+    });
+
+    try {
+      const result = await firstValueFrom(dialogRef.afterClosed());
+      if (result) {
+        // Update the form with the selected caja
+        this.pagoForm.patchValue({
+          caja: result
+        });
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error selecting caja:', error);
+      return false;
+    }
   }
 }

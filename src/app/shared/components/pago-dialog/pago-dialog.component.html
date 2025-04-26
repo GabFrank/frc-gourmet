@@ -6,10 +6,24 @@
       | Compra(s): <strong>{{ data.compraIds.join(', ') }}</strong>
     </span>
     <span>| Estado: <strong>{{ pagoCreated.estado }}</strong></span>
+    <span *ngIf="selectedCaja">| Caja: <strong>#{{ selectedCaja.id }} - {{ selectedCaja.dispositivo?.nombre || 'Sin dispositivo' }}</strong></span>
     <span *ngIf="pagoCreated.createdAt">| Creado: <strong>{{ pagoCreated.createdAt | date:'dd/MM/yyyy HH:mm' }}</strong></span>
     <!-- Add user info if available -->
     <!-- <span *ngIf="pagoCreated.usuarioCreacion">| Por: <strong>{{ pagoCreated.usuarioCreacion.username || pagoCreated.usuarioCreacion.id }}</strong></span> -->
   </div>
+  
+  <!-- Caja selection button if no caja is selected -->
+  <div class="caja-selection" *ngIf="!selectedCaja && !pagoCreated">
+    <button mat-raised-button color="accent" (click)="selectCaja()">
+      <mat-icon>point_of_sale</mat-icon> Seleccionar Caja
+    </button>
+  </div>
+  
+  <!-- Display selected caja if not showing payment info header -->
+  <div class="selected-caja-info" *ngIf="selectedCaja && !pagoCreated">
+    <span>Caja seleccionada: <strong>#{{ selectedCaja.id }} - {{ selectedCaja.dispositivo?.nombre || 'Sin dispositivo' }}</strong></span>
+  </div>
+  
   <h2 mat-dialog-title>Total</h2>
 
   <!-- Loading Indicator for Currency Configuration -->

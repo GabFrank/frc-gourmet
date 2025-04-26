@@ -45,7 +45,7 @@
 
             <mat-form-field appearance="outline">
               <mat-label>Moneda</mat-label>
-              <input type="text" matInput formControlName="moneda" [matAutocomplete]="autoMoneda">
+              <input type="text" matInput formControlName="moneda" [matAutocomplete]="autoMoneda" (focus)="compraForm.get('moneda')?.setValue(compraForm.get('moneda')?.value || '')">
               <mat-autocomplete #autoMoneda="matAutocomplete" [displayWith]="displayMoneda">
                 <mat-option *ngFor="let moneda of filteredMonedas | async" [value]="moneda">
                   {{ moneda.denominacion }} ({{ moneda.simbolo }})
@@ -55,10 +55,11 @@
                 La moneda es requerida
               </mat-error>
             </mat-form-field>
-
+            
+            <!-- set as readonly -->
             <mat-form-field appearance="outline" class="form-field estado-field">
               <mat-label>Estado Compra</mat-label>
-              <mat-select formControlName="estado">
+              <mat-select formControlName="estado" readonly>
                 <mat-option *ngFor="let estado of estadoOptions" [value]="estado.value">
                   {{ estado.label }}
                 </mat-option>
@@ -187,12 +188,6 @@
         <h3 class="section-title">Detalles de la Compra</h3>
         <div *ngIf="!canEditDetalles" class="disabled-message">
           Los detalles de la compra solo pueden ser editados cuando la compra existe y su estado es ABIERTO.
-        </div>
-        
-        <!-- Debug info - can be removed in production -->
-        <div class="debug-info" style="font-size: 12px; margin-bottom: 10px; color: #888; border: 1px dashed #ccc; padding: 5px;" *ngIf="compraForm.get('estado')?.value === 'ABIERTO' && !detallesActionsEnabled">
-          <p>Estado: {{ compraForm.get('estado')?.value }} | ¿Acciones habilitadas?: {{ detallesActionsEnabled ? 'Sí' : 'No' }} | 
-             ¿canEditDetalles?: {{ canEditDetalles ? 'Sí' : 'No' }} | ¿isEditingEnabled?: {{ isEditingEnabled ? 'Sí' : 'No' }}</p>
         </div>
 
         <!-- Form to add new detalles -->

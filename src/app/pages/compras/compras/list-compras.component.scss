@@ -189,4 +189,63 @@
   .text-danger {
     color: #b71c1c;
   }
+
+  .estado-container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+  }
+
+  // Compra estado badges
+  .abierto {
+    background-color: #ffeeba;
+    color: #856404;
+  }
+
+  .activo {
+    background-color: #d4edda;
+    color: #155724;
+  }
+
+  .finalizado {
+    background-color: #c3e6cb;
+    color: #155724;
+  }
+
+  .cancelado {
+    background-color: #f8d7da;
+    color: #721c24;
+  }
+
+  // Pago estado badges
+  .pago-abierto {
+    background-color: #cce5ff;
+    color: #004085;
+  }
+
+  .pago-pago_parcial {
+    background-color: #fff3cd;
+    color: #856404;
+  }
+
+  .pago-pagado {
+    background-color: #d1e7dd;
+    color: #0f5132;
+  }
+
+  .pago-cancelado {
+    background-color: #f8d7da;
+    color: #721c24;
+  }
 }

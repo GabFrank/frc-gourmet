@@ -73,29 +73,41 @@ export class CurrencyConfigService {
    * Get currency configuration for a specific currency
    */
   getConfigForCurrency(moneda: Moneda | null): CurrencyMaskConfig {
-    if (!moneda) {
-      return this.defaultConfig;
+    try {
+      if (!moneda) {
+        return { ...this.defaultConfig };
+      }
+
+      // Create a deep copy of the default config to prevent reference issues
+      const config: CurrencyMaskConfig = JSON.parse(JSON.stringify(this.defaultConfig));
+
+      // Check if the moneda has valid properties
+      const currencyCode = moneda.denominacion?.toUpperCase() || '';
+      
+      // Apply currency-specific settings if available
+      if (currencyCode && this.currencyConfigs[currencyCode]) {
+        Object.assign(config, this.currencyConfigs[currencyCode]);
+      }
+
+      // Always ensure allowNegative is set to true to support "Vuelto" (change)
+      config.allowNegative = true;
+      
+      // Remove any positive min constraints to allow negative values
+      if (config.min !== undefined && config.min > 0) {
+        config.min = undefined;
+      }
+
+      // Add currency symbol as prefix
+      if (moneda.simbolo) {
+        config.prefix = `${moneda.simbolo} `;
+      }
+      
+      return config;
+    } catch (error) {
+      console.error('Error in getConfigForCurrency:', error);
+      // Return default config as fallback
+      return { ...this.defaultConfig };
     }
-
-    const currencyCode = moneda.simbolo;
-    const config = { ...this.defaultConfig };
-
-    // Apply currency-specific settings
-    if (this.currencyConfigs[currencyCode]) {
-      Object.assign(config, this.currencyConfigs[currencyCode]);
-    }
-
-    // Always ensure allowNegative is set to true to support "Vuelto" (change)
-    config.allowNegative = true;
-    
-    // Remove any positive min constraints to allow negative values
-    if (config.min !== undefined && config.min > 0) {
-      config.min = undefined;
-    }
-
-    // Add currency symbol as prefix
-    config.prefix = moneda.simbolo ? `${moneda.simbolo} ` : '';
-    return config;
   }
 
   /**

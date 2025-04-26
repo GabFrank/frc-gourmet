@@ -76,6 +76,38 @@ export class CreateEditMonedaCambioDialogComponent implements OnInit {
       });
       this.form.get('monedaOrigen')?.disable();
     }
+
+    // Add a listener for moneda changes to prevent circular dependencies
+    this.form.get('monedaOrigen')?.valueChanges.subscribe(moneda => {
+      // When moneda changes, we need to temporarily set the currency values to null
+      // to avoid potential recursion in ngx-currency
+      if (moneda) {
+        const currentValues = {
+          compraOficial: this.form.get('compraOficial')?.value,
+          ventaOficial: this.form.get('ventaOficial')?.value,
+          compraLocal: this.form.get('compraLocal')?.value,
+          ventaLocal: this.form.get('ventaLocal')?.value
+        };
+
+        // First set to null to break any potential circular references
+        this.form.patchValue({
+          compraOficial: null,
+          ventaOficial: null,
+          compraLocal: null,
+          ventaLocal: null
+        }, { emitEvent: false });
+
+        // After a small delay, restore the values safely
+        setTimeout(() => {
+          this.form.patchValue({
+            compraOficial: currentValues.compraOficial,
+            ventaOficial: currentValues.ventaOficial,
+            compraLocal: currentValues.compraLocal,
+            ventaLocal: currentValues.ventaLocal
+          }, { emitEvent: false });
+        }, 10);
+      }
+    });
   }
 
   private loadMonedas(): void {
@@ -97,15 +129,24 @@ export class CreateEditMonedaCambioDialogComponent implements OnInit {
 
   private populateForm(): void {
     const cambio = this.data.monedaCambio!;
+    
+    // First set the non-currency values
     this.form.patchValue({
       monedaOrigen: cambio.monedaOrigen,
       monedaDestino: cambio.monedaDestino,
-      compraOficial: cambio.compraOficial,
-      ventaOficial: cambio.ventaOficial,
-      compraLocal: cambio.compraLocal,
-      ventaLocal: cambio.ventaLocal,
       activo: cambio.activo
     });
+
+    // Wait for Angular change detection cycle to update moneda selection
+    setTimeout(() => {
+      // Then safely set the currency values
+      this.form.patchValue({
+        compraOficial: cambio.compraOficial,
+        ventaOficial: cambio.ventaOficial,
+        compraLocal: cambio.compraLocal,
+        ventaLocal: cambio.ventaLocal
+      });
+    }, 100);
   }
 
   onSubmit(): void {

@@ -1,0 +1,125 @@
+:host {
+  display: block;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.filter-field {
+  flex: 1;
+  margin-right: 16px;
+}
+
+.new-caja-form {
+  background-color: rgba(0, 0, 0, 0.03);
+  border-radius: 4px;
+  padding: 16px;
+  margin-bottom: 16px;
+  
+  h3 {
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 16px;
+    color: #333;
+  }
+  
+  .form-content {
+    display: flex;
+    align-items: flex-start;
+    
+    mat-form-field {
+      flex: 1;
+      margin-right: 16px;
+    }
+    
+    button {
+      margin-top: 4px;
+    }
+  }
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  margin: 24px 0;
+}
+
+.table-container {
+  max-height: 400px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+
+table {
+  width: 100%;
+}
+
+.mat-column-acciones {
+  width: 80px;
+  text-align: center;
+}
+
+.selectable-row {
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+  }
+}
+
+.empty-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  color: rgba(0, 0, 0, 0.54);
+  font-style: italic;
+}
+
+mat-dialog-content {
+  min-width: 600px;
+  max-width: 800px;
+}
+
+@media (max-width: 768px) {
+  mat-dialog-content {
+    min-width: 320px;
+  }
+  
+  .table-container {
+    max-height: 300px;
+  }
+  
+  .dialog-actions {
+    flex-direction: column;
+    
+    .filter-field {
+      width: 100%;
+      margin-right: 0;
+      margin-bottom: 12px;
+    }
+    
+    button {
+      width: 100%;
+    }
+  }
+  
+  .new-caja-form .form-content {
+    flex-direction: column;
+    
+    mat-form-field {
+      width: 100%;
+      margin-right: 0;
+      margin-bottom: 12px;
+    }
+    
+    button {
+      width: 100%;
+    }
+  }
+} 

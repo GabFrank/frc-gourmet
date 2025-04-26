@@ -18,7 +18,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { Observable, firstValueFrom } from 'rxjs';
 import { RepositoryService } from '../../../database/repository.service';
 import { Compra } from '../../../database/entities/compras/compra.entity';
-import { CompraEstado } from '../../../database/entities/compras/estado.enum';
+import { CompraEstado, PagoEstado } from '../../../database/entities/compras/estado.enum';
 import { Proveedor } from '../../../database/entities/compras/proveedor.entity';
 import { Moneda } from '../../../database/entities/financiero/moneda.entity';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
@@ -42,8 +42,10 @@ interface CompraViewModel {
   credito?: boolean;
   plazoDias?: number;
   total: number;
+  pagoEstado?: PagoEstado;
   displayValues: {
     estadoLabel: string;
+    pagoEstadoLabel?: string;
     proveedorNombre?: string;
     monedaNombre?: string;
     formaPagoNombre?: string;
@@ -104,6 +106,14 @@ export class ListComprasComponent implements OnInit {
     { value: CompraEstado.ACTIVO, label: 'Activo' },
     { value: CompraEstado.FINALIZADO, label: 'Finalizado' },
     { value: CompraEstado.CANCELADO, label: 'Cancelado' }
+  ];
+
+  // Pago Estado options
+  pagoEstadoOptions = [
+    { value: PagoEstado.ABIERTO, label: 'Pendiente' },
+    { value: PagoEstado.PAGO_PARCIAL, label: 'Pago Parcial' },
+    { value: PagoEstado.PAGADO, label: 'Pagado' },
+    { value: PagoEstado.CANCELADO, label: 'Cancelado' }
   ];
 
   constructor(
@@ -332,8 +342,32 @@ export class ListComprasComponent implements OnInit {
     return this.estadoOptions.find(option => option.value === estado)?.label || estado;
   }
 
+  // Helper to display pago estado label
+  getPagoEstadoLabel(estado?: PagoEstado): string {
+    if (!estado) return 'Pendiente';
+    return this.pagoEstadoOptions.find(option => option.value === estado)?.label || estado;
+  }
+
+  // Calculate total from compra detalles
+  private calculateTotal(compra: Compra): number {
+    if (!compra.detalles || compra.detalles.length === 0) {
+      return (compra as any).total || 0; // Fallback to total property if exists
+    }
+    
+    // Sum up the total of all detalles (cantidad * valor)
+    return compra.detalles.reduce((sum, detalle) => {
+      return sum + (detalle.cantidad * detalle.valor);
+    }, 0);
+  }
+
   // Convert Compra to ViewModel with display values
   private convertToViewModel(compra: Compra): CompraViewModel {
+    // Get pago estado from compra.pago if available
+    const pagoEstado = compra.pago?.estado || PagoEstado.ABIERTO;
+    
+    // Calculate total from detalles
+    const total = this.calculateTotal(compra);
+    
     return {
       id: compra.id,
       estado: compra.estado,
@@ -348,9 +382,11 @@ export class ListComprasComponent implements OnInit {
       fechaCompra: compra.fechaCompra,
       credito: compra.credito,
       plazoDias: compra.plazoDias,
-      total: (compra as any).total || 0, // Access total property safely
+      total: total,
+      pagoEstado: pagoEstado,
       displayValues: {
         estadoLabel: this.getEstadoLabel(compra.estado),
+        pagoEstadoLabel: this.getPagoEstadoLabel(pagoEstado),
         proveedorNombre: compra.proveedor?.nombre,
         monedaNombre: compra.moneda?.denominacion,
         formaPagoNombre: compra.formaPago?.nombre

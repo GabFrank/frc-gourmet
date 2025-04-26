@@ -1,0 +1,92 @@
+<h2 mat-dialog-title>Seleccionar Caja</h2>
+
+<div mat-dialog-content>
+  <!-- Filter -->
+  <div class="dialog-actions">
+    <mat-form-field appearance="outline" class="filter-field">
+      <mat-label>Filtrar por Cajero</mat-label>
+      <input matInput [formControl]="cajeroFilterControl" placeholder="Nombre del cajero">
+      <button *ngIf="cajeroFilterControl.value" matSuffix mat-icon-button aria-label="Clear" 
+              (click)="cajeroFilterControl.setValue('')">
+        <mat-icon>close</mat-icon>
+      </button>
+    </mat-form-field>
+    
+    <!-- New Caja Button -->
+    <button mat-raised-button color="primary" (click)="toggleNewCajaForm()">
+      <mat-icon>add</mat-icon> {{ showNewCajaForm ? 'Cancelar' : 'Nueva Caja' }}
+    </button>
+  </div>
+
+  <!-- New Caja Form -->
+  <div class="new-caja-form" *ngIf="showNewCajaForm">
+    <h3>Crear Nueva Caja</h3>
+    <div class="form-content">
+      <mat-form-field appearance="outline">
+        <mat-label>Seleccionar Dispositivo</mat-label>
+        <mat-select [(ngModel)]="selectedDispositivoId">
+          <mat-option *ngFor="let dispositivo of dispositivos" [value]="dispositivo.id">
+            {{ dispositivo.nombre }} - {{ dispositivo.usuario?.nombre || 'Sin usuario' }}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+      
+      <button mat-raised-button color="accent" [disabled]="isCreatingCaja || !selectedDispositivoId" (click)="createNewCaja()">
+        <mat-icon>save</mat-icon> Crear Caja
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading indicator -->
+  <div class="loading-container" *ngIf="isLoading">
+    <mat-spinner diameter="50"></mat-spinner>
+  </div>
+
+  <!-- Table -->
+  <div class="table-container" *ngIf="!isLoading">
+    <table mat-table [dataSource]="filteredData" matSort class="mat-elevation-z4">
+      
+      <!-- Nombre Cajero Column -->
+      <ng-container matColumnDef="nombreCajero">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Cajero</th>
+        <td mat-cell *matCellDef="let caja">{{ getNombreCajero(caja) }}</td>
+      </ng-container>
+
+      <!-- Dispositivo Column -->
+      <ng-container matColumnDef="dispositivo">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Dispositivo</th>
+        <td mat-cell *matCellDef="let caja">{{ getNombreDispositivo(caja) }}</td>
+      </ng-container>
+
+      <!-- Fecha Apertura Column -->
+      <ng-container matColumnDef="fechaApertura">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Fecha Apertura</th>
+        <td mat-cell *matCellDef="let caja">{{ caja.fechaApertura | date:'dd/MM/yyyy HH:mm' }}</td>
+      </ng-container>
+
+      <!-- Actions Column -->
+      <ng-container matColumnDef="acciones">
+        <th mat-header-cell *matHeaderCellDef>Acciones</th>
+        <td mat-cell *matCellDef="let caja">
+          <button mat-icon-button color="primary" (click)="selectCaja(caja)" 
+                  aria-label="Seleccionar caja" title="Seleccionar">
+            <mat-icon>done</mat-icon>
+          </button>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;" 
+          class="selectable-row" (click)="selectCaja(row)"></tr>
+    </table>
+
+    <!-- Empty state message -->
+    <div *ngIf="filteredData.length === 0" class="empty-state">
+      No se encontraron cajas abiertas disponibles.
+    </div>
+  </div>
+</div>
+
+<div mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()">Cancelar</button>
+</div> 

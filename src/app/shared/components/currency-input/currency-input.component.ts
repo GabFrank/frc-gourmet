@@ -126,16 +126,31 @@ export class CurrencyInputComponent implements ControlValueAccessor, OnChanges, 
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['moneda']) {
-      // Update config when currency changes
-      this.currencyConfig = this.currencyConfigService.getConfigForCurrency(this.moneda);
-      
-      // Ensure negative values are allowed regardless of currency
-      this.currencyConfig.allowNegative = true;
-      
-      // Remove min constraint from currency config to allow negative values
-      if (this.currencyConfig.min !== undefined && this.currencyConfig.min > 0) {
-        this.currencyConfig.min = undefined;
+    // Only update the currency config if the moneda actually changed
+    if (changes['moneda'] && !this.areMonedaEqual(changes['moneda'].previousValue, changes['moneda'].currentValue)) {
+      try {
+        // Cache previous value to avoid writing during recursion
+        const currentValue = this.inputControl.value;
+        
+        // Update config when currency changes
+        this.currencyConfig = this.currencyConfigService.getConfigForCurrency(this.moneda);
+        
+        // Ensure negative values are allowed regardless of currency
+        this.currencyConfig.allowNegative = true;
+        
+        // Remove min constraint from currency config to allow negative values
+        if (this.currencyConfig.min !== undefined && this.currencyConfig.min > 0) {
+          this.currencyConfig.min = undefined;
+        }
+        
+        // Avoid immediate value rewriting that could cause recursion
+        setTimeout(() => {
+          if (currentValue !== null && currentValue !== undefined) {
+            this.writeValue(currentValue);
+          }
+        }, 0);
+      } catch (error) {
+        console.error('Error updating currency config:', error);
       }
     }
 
@@ -154,15 +169,43 @@ export class CurrencyInputComponent implements ControlValueAccessor, OnChanges, 
     }
   }
 
+  // Helper method to compare Moneda objects
+  private areMonedaEqual(moneda1: any, moneda2: any): boolean {
+    if (moneda1 === moneda2) return true;
+    if (!moneda1 || !moneda2) return false;
+    
+    // Compare by ID if available
+    if (moneda1.id !== undefined && moneda2.id !== undefined) {
+      return moneda1.id === moneda2.id;
+    }
+    
+    // Fallback to symbol + denomination comparison
+    return moneda1.simbolo === moneda2.simbolo && 
+           moneda1.denominacion === moneda2.denominacion;
+  }
+
   // ControlValueAccessor implementation
   writeValue(value: number): void {
-    // For PYG currency, always round to whole number
-    if (this.moneda?.denominacion?.toUpperCase() === 'PYG' ||
-        this.moneda?.denominacion?.toUpperCase() === 'GUARANI') {
-      value = Math.round(value || 0);
-    }
+    try {
+      // Prevent writing null or undefined when input is focused to avoid recursion
+      if (value === null || value === undefined) {
+        this.inputControl.setValue(value, { emitEvent: false });
+        return;
+      }
+      
+      // For PYG currency, always round to whole number
+      if (this.moneda?.denominacion?.toUpperCase() === 'PYG' ||
+          this.moneda?.denominacion?.toUpperCase() === 'GUARANI') {
+        value = Math.round(value || 0);
+      }
 
-    this.inputControl.setValue(value, { emitEvent: false });
+      // Only update if the value actually changed to avoid unnecessary re-renders
+      if (this.inputControl.value !== value) {
+        this.inputControl.setValue(value, { emitEvent: false });
+      }
+    } catch (error) {
+      console.error('Error in writeValue:', error);
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-empty-function

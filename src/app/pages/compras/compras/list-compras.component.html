@@ -99,16 +99,12 @@
 
         <!-- Estado Column -->
         <ng-container matColumnDef="estado">
-          <th mat-header-cell *matHeaderCellDef>Estado</th>
+          <th mat-header-cell *matHeaderCellDef>Compra / Pago</th>
           <td mat-cell *matCellDef="let compra">
-            <span class="status-badge"
-              [ngClass]="{
-                'active': compra.estado === 'ACTIVO' || compra.estado === 'FINALIZADO',
-                'inactive': compra.estado === 'CANCELADO',
-                'warning': compra.estado === 'ABIERTO'
-              }">
-              {{ compra.displayValues.estadoLabel }}
-            </span>
+            <div class="estado-container">
+              <span class="badge {{compra.estado.toLowerCase()}}">{{compra.displayValues.estadoLabel}}</span>
+              <span class="badge pago-{{compra.pagoEstado?.toLowerCase()}}">{{compra.displayValues.pagoEstadoLabel}}</span>
+            </div>
           </td>
         </ng-container>
 

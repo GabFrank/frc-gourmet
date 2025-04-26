@@ -316,7 +316,7 @@ export class CreateEditCompraComponent implements OnInit {
     this.compraForm = this.fb.group({
       // Required fields from entity
       estado: [CompraEstado.ABIERTO], // Default to ABIERTO
-      isRecepcionMercaderia: [false],
+      isRecepcionMercaderia: [true], // Default to true - user must explicitly uncheck if merchandise not received
       activo: [true], // Default to true
       moneda: [null, Validators.required],
 
@@ -929,6 +929,12 @@ export class CreateEditCompraComponent implements OnInit {
       return false;
     }
 
+    // Skip verification if merchandise hasn't been received
+    if (!this.compra.isRecepcionMercaderia) {
+      console.log('Merchandise not received for compra', this.compra.id, 'skipping stock movement verification');
+      return true; // Return true because this is the expected state (no stock movements for non-received merchandise)
+    }
+
     try {
       // Get all compra detalles
       const detalles = await firstValueFrom(
@@ -948,10 +954,9 @@ export class CreateEditCompraComponent implements OnInit {
         if (!movement) {
           console.error(`No stock movement found for compra detalle ${detalle.id}`);
           allValid = false;
-        } else if (movement.cantidadActual !== detalle.cantidad) {
-          console.warn(`Stock movement for compra detalle ${detalle.id} has inconsistent quantity: ` +
-            `movement=${movement.cantidadActual}, detalle=${detalle.cantidad}`);
-        }
+        } 
+        // We won't check quantity consistency here because the base units might be different
+        // and it would require re-converting all quantities
       }
 
       return allValid;
@@ -961,11 +966,52 @@ export class CreateEditCompraComponent implements OnInit {
     }
   }
 
+  // Helper method to get the base unit for a product or ingredient
+  private async getBaseUnitForItem(item: 'producto' | 'ingrediente', id: number): Promise<string> {
+    if (item === 'producto') {
+      // For products, the default base unit is UNIDAD
+      // If your system has a different way to store product measurement units,
+      // you should fetch it from there
+      return 'UNIDAD';
+    } else if (item === 'ingrediente') {
+      // First check if we have the ingredient in memory
+      let ingrediente = this.getIngredienteById(id);
+      
+      // If not in memory, try to fetch it from the repository
+      if (!ingrediente) {
+        try {
+          ingrediente = await firstValueFrom(
+            this.repositoryService.getIngrediente(id)
+          );
+        } catch (error) {
+          console.error(`Error fetching ingrediente with ID ${id}:`, error);
+        }
+      }
+      
+      // If we have the ingredient and it has a tipoMedida, return it
+      if (ingrediente && ingrediente.tipoMedida) {
+        return ingrediente.tipoMedida;
+      }
+      
+      // Default if not found
+      return 'UNIDAD';
+    }
+    
+    // Default for unknown types
+    return 'UNIDAD';
+  }
+
   // Add a new method to handle stock movements
   async handleStockMovements(): Promise<void> {
     try {
       if (!this.compra || !this.compra.id) {
         console.error('Cannot handle stock movements: compra is not defined');
+        return;
+      }
+
+      // Check if merchandise has been received, if not, don't create stock movements
+      if (!this.compra.isRecepcionMercaderia) {
+        console.log('Merchandise not received for compra', this.compra.id, 'skipping stock movement creation');
         return;
       }
 
@@ -990,30 +1036,36 @@ export class CreateEditCompraComponent implements OnInit {
             )
         );
 
-        // Get base unit and amount for stock movements
-        let baseUnit: string;
-        let cantidadBase: number = detalle.cantidad;
-        
-        // Determine the base unit for the item
+        // Determine item type and get base unit for stock
+        let itemType: 'producto' | 'ingrediente';
+        let itemId: number;
+
         if (detalle.producto) {
-          // Products may store their unit type in a different property or not have it at all
-          // Try to access a potential tipo_medida property or use a default
-          baseUnit = detalle.tipo_medida || 'UNIDAD';
+          itemType = 'producto';
+          itemId = detalle.producto.id;
         } else if (detalle.ingrediente) {
-          baseUnit = detalle.ingrediente.tipoMedida || 'UNIDAD';
+          itemType = 'ingrediente';
+          itemId = detalle.ingrediente.id;
         } else {
           console.warn('Detalle has neither product nor ingredient', detalle.id);
           continue;
         }
+
+        // Get the base unit for this item type
+        const baseUnit = await this.getBaseUnitForItem(itemType, itemId);
+        let cantidadBase: number = detalle.cantidad;
         
-        // If tipo_medida is different from base unit, convert the quantity
-        const tipoMedida = detalle.tipo_medida;
-        if (tipoMedida && tipoMedida !== baseUnit) {
+        // Get the purchase detalle unit (which might be different from the base unit)
+        const detalleUnit = detalle.tipo_medida;
+        
+        // Only convert if detalle has a specific unit AND it's different from the base unit
+        if (detalleUnit && detalleUnit !== baseUnit) {
           try {
-            cantidadBase = this.unitConversionService.convert(detalle.cantidad, tipoMedida, baseUnit);
-            console.log(`Converted ${detalle.cantidad} ${tipoMedida} to ${cantidadBase} ${baseUnit}`);
+            // Convert the purchase quantity to the base unit quantity
+            cantidadBase = this.unitConversionService.convert(detalle.cantidad, detalleUnit, baseUnit);
+            console.log(`Converted ${detalle.cantidad} ${detalleUnit} to ${cantidadBase} ${baseUnit} for ${itemType} ID: ${itemId}`);
           } catch (error) {
-            console.error(`Error converting units for stock movement: ${tipoMedida} to ${baseUnit}`, error);
+            console.error(`Error converting units for stock movement: ${detalleUnit} to ${baseUnit}`, error);
             // Continue with unconverted amount if conversion fails
           }
         }
@@ -1025,38 +1077,40 @@ export class CreateEditCompraComponent implements OnInit {
           // Update the cantidad actual - using the base unit quantity for stock
           movement.cantidadActual = cantidadBase;
           
+          // Always use the base unit for tipoMedida
+          movement.tipoMedida = baseUnit;
+          
           // Save the updated movement
           await firstValueFrom(
             this.repositoryService.updateMovimientoStock(movement.id, movement)
           );
+          
+          console.log(`Updated stock movement for ${itemType} ID: ${itemId} - Quantity: ${cantidadBase} ${baseUnit}`);
         } else {
           // Create new movement
           const movimiento: Partial<MovimientoStock> = {
             tipoReferencia: TipoReferencia.COMPRA,
             referencia: detalle.id,
             cantidadActual: cantidadBase, // Use the base unit quantity for stock
+            tipoMedida: baseUnit, // Always use the base unit for tipoMedida
             activo: true
           };
 
-          // Set the appropriate relationship and tipoMedida based on detalle type
-          if (detalle.producto) {
-            movimiento.productoId = detalle.producto.id;
+          // Set the appropriate relationship based on detalle type
+          if (itemType === 'producto') {
+            movimiento.productoId = itemId;
             movimiento.producto = detalle.producto;
-            
-            // Use the base unit for stock
-            movimiento.tipoMedida = baseUnit;
-          } else if (detalle.ingrediente) {
-            movimiento.ingredienteId = detalle.ingrediente.id;
+          } else {
+            movimiento.ingredienteId = itemId;
             movimiento.ingrediente = detalle.ingrediente;
-            
-            // Use the base unit for stock
-            movimiento.tipoMedida = baseUnit;
           }
 
           // Create the movement in the database
           await firstValueFrom(
             this.repositoryService.createMovimientoStock(movimiento)
           );
+          
+          console.log(`Created stock movement for ${itemType} ID: ${itemId} - Quantity: ${cantidadBase} ${baseUnit}`);
         }
       }
 
@@ -1198,6 +1252,10 @@ export class CreateEditCompraComponent implements OnInit {
   }
 
   private _filterMonedas(value: string | number | Moneda): Moneda[] {
+    if (!value) {
+      return this.monedas;
+    }
+    
     if (value && typeof value === 'object') {
       // If it's an object with an ID, return that object
       return [value];

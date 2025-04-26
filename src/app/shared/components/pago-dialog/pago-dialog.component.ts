@@ -29,6 +29,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog } from '@angular/material/dialog';
 import { MatDialogConfig } from '@angular/material/dialog';
 import { AjusteDialogComponent } from './ajuste-dialog.component';
+import { ListCajaDialogComponent } from '../../../pages/financiero/cajas/list-caja-dialog/list-caja-dialog.component';
+import { Caja, CajaEstado } from '../../../database/entities/financiero/caja.entity';
 
 export interface PagoDialogData {
   // Principal currency total
@@ -65,7 +67,8 @@ interface MonedaWithTotal {
     CurrencyInputComponent,
     MatMenuModule,
     MatTooltipModule,
-    AjusteDialogComponent
+    AjusteDialogComponent,
+    ListCajaDialogComponent
   ],
   templateUrl: './pago-dialog.component.html',
   styleUrls: ['./pago-dialog.component.scss']
@@ -120,6 +123,9 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
 
   @ViewChild('valorInput') valorInput!: CurrencyInputComponent;
   private focusSet = false;
+
+  // Add property to store selected caja
+  selectedCaja: Caja | null = null;
 
   constructor(
     public dialogRef: MatDialogRef<PagoDialogComponent>,
@@ -719,13 +725,19 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
       return this.pagoCreated;
     }
 
+    // Check if we have a selected caja before creating a pago
+    if (!this.selectedCaja) {
+      await this.selectCaja();
+    }
+
     this.isSaving = true;
     try {
       // Create a new Pago
       const pagoData: Partial<Pago> = {
         estado: PagoEstado.ABIERTO,
         activo: true,
-        // If we have a caja, we would associate it here
+        // Associate with selected caja if available
+        ...(this.selectedCaja ? { caja: this.selectedCaja } : {})
       };
 
       const pago = await firstValueFrom(this.repositoryService.createPago(pagoData));
@@ -745,6 +757,62 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
       throw error;
     } finally {
       this.isSaving = false;
+    }
+  }
+
+  /**
+   * Select a caja for the pago
+   * Opens a dialog to select an existing caja
+   * @returns A promise that resolves when a caja is selected
+   */
+  async selectCaja(): Promise<void> {
+    try {
+      // Open the list caja dialog directly
+      const dialogRef = this.dialog.open(ListCajaDialogComponent, {
+        width: '800px',
+        disableClose: true
+      });
+      
+      const result = await firstValueFrom(dialogRef.afterClosed());
+      
+      if (!result || result.action === 'cancel') {
+        this.snackBar.open('No se seleccionó ninguna caja', 'Cerrar', { duration: 3000 });
+        throw new Error('Caja selection cancelled');
+      }
+      
+      if (result.action === 'select' && result.caja) {
+        // User selected an existing caja
+        this.selectedCaja = result.caja;
+      } else if (result.action === 'create' && result.dispositivoId) {
+        // User wants to create a new caja
+        try {
+          // Call the service or API to create a new caja
+          // This implementation will depend on your API/service design
+          // For example:
+          const dispositivoId = result.dispositivoId;
+          const newCaja = await firstValueFrom(this.repositoryService.createCaja({ 
+            dispositivo: { id: dispositivoId },
+            fechaApertura: new Date(),
+            estado: CajaEstado.ABIERTO,
+            activo: true
+          }));
+          
+          if (newCaja) {
+            this.selectedCaja = newCaja;
+            this.snackBar.open('Caja creada correctamente', 'Cerrar', { duration: 3000 });
+          } else {
+            throw new Error('Failed to create caja');
+          }
+        } catch (error) {
+          console.error('Error creating caja:', error);
+          this.snackBar.open('Error al crear la caja', 'Cerrar', { duration: 3000 });
+          throw error;
+        }
+      }
+    } catch (error) {
+      console.error('Error selecting caja:', error);
+      this.snackBar.open('Error al seleccionar la caja', 'Cerrar', { duration: 3000 });
+      throw error;
     }
   }
 
@@ -1086,6 +1154,11 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
         this.isFinalizado = this.pagoCreated.estado === PagoEstado.PAGADO;
         this.updateFormState(); // Update form state based on finalized status
         await this.loadPagoDetalles(pagoId);
+        
+        // Load caja information if available
+        if (pago.caja && pago.caja.id) {
+          this.selectedCaja = pago.caja;
+        }
       }
     } catch (error) {
       this.snackBar.open('Error al cargar el pago', 'Cerrar', { duration: 3000 });

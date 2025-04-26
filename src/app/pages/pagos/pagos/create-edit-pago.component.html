@@ -55,7 +55,7 @@
         <!-- Second row for optional fields -->
         <div class="form-row">
           <!-- Caja -->
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline" class="caja-field">
             <mat-label>Caja</mat-label>
             <mat-select formControlName="caja" required>
               <mat-option *ngFor="let caja of cajas" [value]="caja">
@@ -65,6 +65,10 @@
                 </div>
               </mat-option>
             </mat-select>
+            <button matSuffix mat-icon-button type="button" aria-label="Buscar" (click)="openCajaSelectionDialog()" 
+                   matTooltip="Buscar caja" class="search-button">
+              <mat-icon>search</mat-icon>
+            </button>
             <mat-error *ngIf="pagoForm.get('caja')?.hasError('required')">
               La caja es requerida
             </mat-error>

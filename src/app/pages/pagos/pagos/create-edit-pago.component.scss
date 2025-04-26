@@ -42,6 +42,14 @@
     min-height: 48px;
     margin-top: 4px;
   }
+  
+  .caja-field {
+    position: relative;
+    
+    .search-button {
+      margin-right: 4px;
+    }
+  }
 }
 
 mat-card-header {

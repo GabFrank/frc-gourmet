@@ -38,9 +38,9 @@ export class TabsService {
     //load list ingredientes tab using addTab method
     // this.addTab('Lista de productos', ListProductosComponent);
     //open list compras
-    // this.addTab('Lista de compras', ListComprasComponent)
+    this.addTab('Lista de compras', ListComprasComponent)
     //open create edit compra with compra id 8
-    this.openTabWithData('Editar Compra', CreateEditCompraComponent, { compraId: 8 });
+    // this.openTabWithData('Editar Compra', CreateEditCompraComponent, { compraId: 8 });
   }
 
   /**
