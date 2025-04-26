@@ -702,15 +702,24 @@ export class CreateEditCompraComponent implements OnInit {
           // Get item details for proper unit handling
           let itemName = '';
           let itemType = '';
+          
+          // Use the stored tipo_medida directly from the detalle
           let tipoMedida = detalle.tipo_medida || '';
           
           if (detalle.producto) {
             itemName = detalle.producto.nombre;
             itemType = 'producto';
+            // If tipo_medida is empty, try to infer it
+            if (!tipoMedida) {
+              tipoMedida = 'UNIDAD'; // Default for products
+            }
           } else if (detalle.ingrediente) {
             itemName = detalle.ingrediente.descripcion;
             itemType = 'ingrediente';
-            tipoMedida = detalle.tipo_medida || detalle.ingrediente.tipoMedida || 'UNIDAD';
+            // If tipo_medida is empty, use the ingredient's tipo_medida
+            if (!tipoMedida) {
+              tipoMedida = detalle.ingrediente.tipoMedida || 'UNIDAD';
+            }
           }
 
           // Create a simple form group for each detalle
@@ -723,7 +732,7 @@ export class CreateEditCompraComponent implements OnInit {
             ingrediente: [detalle.ingrediente?.id || null],
             presentacion: [detalle.presentacion?.id || null],
             tipo_medida: [tipoMedida],
-            selectedUnit: [tipoMedida], // Set the selected unit to the stored unit
+            selectedUnit: [tipoMedida], // Use tipo_medida value for selectedUnit
             // Create a simple item object with just the needed properties
             item: [{
               id: detalle.producto?.id || detalle.ingrediente?.id,
@@ -981,12 +990,40 @@ export class CreateEditCompraComponent implements OnInit {
             )
         );
 
+        // Get base unit and amount for stock movements
+        let baseUnit: string;
+        let cantidadBase: number = detalle.cantidad;
+        
+        // Determine the base unit for the item
+        if (detalle.producto) {
+          // Products may store their unit type in a different property or not have it at all
+          // Try to access a potential tipo_medida property or use a default
+          baseUnit = detalle.tipo_medida || 'UNIDAD';
+        } else if (detalle.ingrediente) {
+          baseUnit = detalle.ingrediente.tipoMedida || 'UNIDAD';
+        } else {
+          console.warn('Detalle has neither product nor ingredient', detalle.id);
+          continue;
+        }
+        
+        // If tipo_medida is different from base unit, convert the quantity
+        const tipoMedida = detalle.tipo_medida;
+        if (tipoMedida && tipoMedida !== baseUnit) {
+          try {
+            cantidadBase = this.unitConversionService.convert(detalle.cantidad, tipoMedida, baseUnit);
+            console.log(`Converted ${detalle.cantidad} ${tipoMedida} to ${cantidadBase} ${baseUnit}`);
+          } catch (error) {
+            console.error(`Error converting units for stock movement: ${tipoMedida} to ${baseUnit}`, error);
+            // Continue with unconverted amount if conversion fails
+          }
+        }
+
         if (existingMovements && existingMovements.length > 0) {
           // Update existing movement
           const movement = existingMovements[0];
           
-          // Update the cantidad actual - should already be in the base unit from addDetalle
-          movement.cantidadActual = detalle.cantidad;
+          // Update the cantidad actual - using the base unit quantity for stock
+          movement.cantidadActual = cantidadBase;
           
           // Save the updated movement
           await firstValueFrom(
@@ -997,7 +1034,7 @@ export class CreateEditCompraComponent implements OnInit {
           const movimiento: Partial<MovimientoStock> = {
             tipoReferencia: TipoReferencia.COMPRA,
             referencia: detalle.id,
-            cantidadActual: detalle.cantidad, // Quantity is already in base unit
+            cantidadActual: cantidadBase, // Use the base unit quantity for stock
             activo: true
           };
 
@@ -1006,20 +1043,14 @@ export class CreateEditCompraComponent implements OnInit {
             movimiento.productoId = detalle.producto.id;
             movimiento.producto = detalle.producto;
             
-            // Use the correct tipo_medida from the detalle
-            if (!detalle.tipo_medida) {
-              throw new Error('Tipo de medida no encontrado para el producto ' + detalle.producto.nombre);
-            }
-            movimiento.tipoMedida = detalle.tipo_medida;
+            // Use the base unit for stock
+            movimiento.tipoMedida = baseUnit;
           } else if (detalle.ingrediente) {
             movimiento.ingredienteId = detalle.ingrediente.id;
             movimiento.ingrediente = detalle.ingrediente;
             
-            // Always use the base unit tipo_medida for the ingredient
-            if (!detalle.tipo_medida) {
-              throw new Error('Tipo de medida no encontrado para el ingrediente ' + detalle.ingrediente.descripcion);
-            }
-            movimiento.tipoMedida = detalle.tipo_medida;
+            // Use the base unit for stock
+            movimiento.tipoMedida = baseUnit;
           }
 
           // Create the movement in the database
@@ -1501,15 +1532,19 @@ export class CreateEditCompraComponent implements OnInit {
       const baseUnit = selectedItem.tipo_medida;
       const selectedUnit = formValues.selectedUnit || baseUnit;
       
-      // Parse the quantity from the form
-      let cantidad = this.parseNumber(formValues.cantidad);
+      // Parse the quantity from the form - use the input cantidad directly
+      const cantidad = this.parseNumber(formValues.cantidad);
       
-      // If user selected a different unit than the base unit, convert the quantity
+      // Store the raw cantidad input value (without conversion)
+      let cantidadBase = cantidad;
+      
+      // If user selected a different unit than the base unit, STILL convert the quantity
+      // for stock movements but store original unit in tipo_medida
       if (baseUnit && selectedUnit && baseUnit !== selectedUnit) {
         try {
-          console.log(`Converting ${cantidad} ${selectedUnit} to ${baseUnit}`);
-          cantidad = this.unitConversionService.convert(cantidad, selectedUnit, baseUnit);
-          console.log(`Converted quantity: ${cantidad} ${baseUnit}`);
+          console.log(`Converting ${cantidad} ${selectedUnit} to ${baseUnit} for stock movements`);
+          cantidadBase = this.unitConversionService.convert(cantidad, selectedUnit, baseUnit);
+          console.log(`Converted quantity for stock: ${cantidadBase} ${baseUnit}`);
         } catch (error) {
           console.error('Error converting units:', error);
           this.showError(`Error al convertir unidades: ${selectedUnit} a ${baseUnit}`);
@@ -1519,13 +1554,13 @@ export class CreateEditCompraComponent implements OnInit {
 
       // Create detalle object based on the type (producto or ingrediente)
       const detalleData: Partial<CompraDetalle> = {
-        cantidad: cantidad, // Use the converted quantity
+        cantidad: cantidad, // Use the original input quantity without conversion
         valor: this.parseNumber(formValues.valor),
         activo: true
       };
 
-      // Store the original tipo_medida selected by the user for reference
-      detalleData.tipo_medida = baseUnit;
+      // Store the selected unit chosen by the user
+      detalleData.tipo_medida = selectedUnit;
 
       // Set the appropriate relationship based on the selectedItem type
       if (selectedItem.tipo === 'producto') {
@@ -1537,8 +1572,6 @@ export class CreateEditCompraComponent implements OnInit {
         }
       } else if (selectedItem.tipo === 'ingrediente') {
         detalleData.ingrediente = { id: selectedItem.id } as Ingrediente;
-        // Save the tipo_medida for future reference
-        detalleData.tipo_medida = baseUnit;
       }
 
       // If we have a compra ID, associate this detalle with the compra
@@ -1567,8 +1600,8 @@ export class CreateEditCompraComponent implements OnInit {
               producto: [selectedItem.tipo === 'producto' ? selectedItem.id : null],
               ingrediente: [selectedItem.tipo === 'ingrediente' ? selectedItem.id : null],
               presentacion: [formValues.presentacion?.id || null],
-              tipo_medida: [baseUnit],
-              selectedUnit: [selectedUnit], // Store the user's selected unit
+              tipo_medida: [selectedUnit], // Store the selected unit
+              selectedUnit: [selectedUnit], // Also store in selectedUnit field
               item: [selectedItem]
             });
 
@@ -1596,8 +1629,8 @@ export class CreateEditCompraComponent implements OnInit {
             producto: [selectedItem.tipo === 'producto' ? selectedItem.id : null],
             ingrediente: [selectedItem.tipo === 'ingrediente' ? selectedItem.id : null],
             presentacion: [formValues.presentacion?.id || null],
-            tipo_medida: [baseUnit],
-            selectedUnit: [selectedUnit], // Store the user's selected unit
+            tipo_medida: [selectedUnit], // Store the selected unit
+            selectedUnit: [selectedUnit], // Also store in selectedUnit field
             item: [selectedItem]
           });
 
