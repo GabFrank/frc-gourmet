@@ -693,6 +693,9 @@ contextBridge.exposeInMainWorld('api', {
     getMovimientosStockByTipoReferencia: async (tipoReferencia) => {
         return await ipcRenderer.invoke('getMovimientosStockByTipoReferencia', tipoReferencia);
     },
+    getMovimientosStockByReferenciaAndTipo: async (referencia, tipoReferencia) => {
+        return await ipcRenderer.invoke('getMovimientosStockByReferenciaAndTipo', referencia, tipoReferencia);
+    },
     getCurrentStockByProducto: async (productoId) => {
         return await ipcRenderer.invoke('getCurrentStockByProducto', productoId);
     },

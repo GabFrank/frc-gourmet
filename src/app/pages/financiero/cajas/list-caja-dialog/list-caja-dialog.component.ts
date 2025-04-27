@@ -14,9 +14,11 @@ import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { MatIconModule } from '@angular/material/icon';
 import { firstValueFrom } from 'rxjs';
 import { MatSelectModule } from '@angular/material/select';
+import { MatDialog } from '@angular/material/dialog';
 
 import { RepositoryService } from '../../../../database/repository.service';
 import { Caja, CajaEstado } from '../../../../database/entities/financiero/caja.entity';
+import { CreateCajaDialogComponent } from '../create-caja-dialog/create-caja-dialog.component';
 
 @Component({
   selector: 'app-list-caja-dialog',
@@ -60,7 +62,8 @@ export class ListCajaDialogComponent implements OnInit {
   constructor(
     private repositoryService: RepositoryService,
     private dialogRef: MatDialogRef<ListCajaDialogComponent>,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private dialog: MatDialog
   ) {}
 
   ngOnInit(): void {
@@ -141,7 +144,15 @@ export class ListCajaDialogComponent implements OnInit {
   }
   
   toggleNewCajaForm(): void {
-    this.showNewCajaForm = !this.showNewCajaForm;
+    const dialogRef = this.dialog.open(CreateCajaDialogComponent, {
+      width: '500px'
+    });
+    
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.success) {
+        this.loadCajas();
+      }
+    });
   }
   
   async createNewCaja(): Promise<void> {
@@ -174,15 +185,5 @@ export class ListCajaDialogComponent implements OnInit {
     this.snackBar.open(message, 'Cerrar', {
       duration: 3000
     });
-  }
-  
-  // Display the name of the cashier
-  getNombreCajero(caja: Caja): string {
-    return caja.dispositivo?.usuario?.nombre || 'Sin asignar';
-  }
-  
-  // Display the name of the device
-  getNombreDispositivo(caja: Caja): string {
-    return caja.dispositivo?.nombre || 'Sin dispositivo';
   }
 } 

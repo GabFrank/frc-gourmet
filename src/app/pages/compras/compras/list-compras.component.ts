@@ -25,6 +25,7 @@ import { ConfirmationDialogComponent } from '../../../shared/components/confirma
 import { TabsService } from '../../../services/tabs.service';
 import { CreateEditCompraComponent } from './create-edit-compra.component';
 import { FormasPago } from '../../../database/entities/compras/forma-pago.entity';
+import { TipoReferencia } from '../../../database/entities/productos/movimiento-stock.entity';
 
 // Extend the compra type with display values for the view
 interface CompraViewModel {
@@ -299,42 +300,102 @@ export class ListComprasComponent implements OnInit {
   }
 
   // Delete (deactivate) compra
-  deleteCompra(compra: CompraViewModel): void {
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: 'Confirmar eliminación',
-        message: `¿Está seguro que desea eliminar la compra #${compra.id}?`,
-        confirmText: 'Eliminar',
-        cancelText: 'Cancelar'
+  async deleteCompra(compra: CompraViewModel): Promise<void> {
+    try {
+      this.isLoading = true;
+      
+      // Check if there are related MovimientoStock records
+      const movimientosStock = await firstValueFrom(
+        this.repositoryService.getMovimientosStockByReferenciaAndTipo(compra.id, TipoReferencia.COMPRA)
+      );
+      
+      const hasMovimientosStock = movimientosStock && movimientosStock.length > 0;
+      
+      // Build the warning message
+      let warningMessage = `¿Está seguro que desea eliminar la compra #${compra.id}?\n\n`;
+      warningMessage += 'Esta acción eliminará también los detalles de la compra';
+      
+      if (hasMovimientosStock) {
+        warningMessage += ' y los movimientos de stock asociados a esta compra. Esto puede afectar el inventario actual.';
+      } else {
+        warningMessage += '.';
       }
-    });
-
-    dialogRef.afterClosed().subscribe(async result => {
-      if (result) {
-        this.isLoading = true;
-
-        try {
-          // Call the repository service to delete the compra
-          await firstValueFrom(this.repositoryService.deleteCompra(compra.id));
-
-          this.snackBar.open('Compra eliminada correctamente', 'Cerrar', {
-            duration: 3000,
-            panelClass: ['success-snackbar']
-          });
-
-          // Reload the compras list
-          this.loadCompras();
-        } catch (error: any) {
-          console.error('Error al eliminar compra:', error);
-          this.snackBar.open('Error al eliminar compra: ' + error.message, 'Cerrar', {
-            duration: 5000,
-            panelClass: ['error-snackbar']
-          });
-        } finally {
-          this.isLoading = false;
+      
+      this.isLoading = false;
+      
+      const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+        data: {
+          title: 'Confirmar eliminación',
+          message: warningMessage,
+          confirmText: 'Eliminar',
+          cancelText: 'Cancelar'
         }
-      }
-    });
+      });
+
+      dialogRef.afterClosed().subscribe(async result => {
+        if (result) {
+          this.isLoading = true;
+
+          try {
+            // Call the repository service to delete the compra
+            await firstValueFrom(this.repositoryService.deleteCompra(compra.id));
+
+            this.snackBar.open('Compra eliminada correctamente', 'Cerrar', {
+              duration: 3000,
+              panelClass: ['success-snackbar']
+            });
+
+            // Reload the compras list
+            this.loadCompras();
+          } catch (error: any) {
+            console.error('Error al eliminar compra:', error);
+            this.snackBar.open('Error al eliminar compra: ' + error.message, 'Cerrar', {
+              duration: 5000,
+              panelClass: ['error-snackbar']
+            });
+          } finally {
+            this.isLoading = false;
+          }
+        }
+      });
+    } catch (error: any) {
+      console.error('Error checking for related records:', error);
+      this.isLoading = false;
+      
+      // Fallback to original dialog if there was an error checking for related records
+      const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+        data: {
+          title: 'Confirmar eliminación',
+          message: `¿Está seguro que desea eliminar la compra #${compra.id}? Esta acción eliminará también los detalles de la compra.`,
+          confirmText: 'Eliminar',
+          cancelText: 'Cancelar'
+        }
+      });
+      
+      // Rest of the deletion process as before
+      dialogRef.afterClosed().subscribe(async result => {
+        if (result) {
+          this.isLoading = true;
+
+          try {
+            await firstValueFrom(this.repositoryService.deleteCompra(compra.id));
+            this.snackBar.open('Compra eliminada correctamente', 'Cerrar', {
+              duration: 3000,
+              panelClass: ['success-snackbar']
+            });
+            this.loadCompras();
+          } catch (error: any) {
+            console.error('Error al eliminar compra:', error);
+            this.snackBar.open('Error al eliminar compra: ' + error.message, 'Cerrar', {
+              duration: 5000,
+              panelClass: ['error-snackbar']
+            });
+          } finally {
+            this.isLoading = false;
+          }
+        }
+      });
+    }
   }
 
   // Helper to display estado label

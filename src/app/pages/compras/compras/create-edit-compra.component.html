@@ -59,11 +59,7 @@
             <!-- set as readonly -->
             <mat-form-field appearance="outline" class="form-field estado-field">
               <mat-label>Estado Compra</mat-label>
-              <mat-select formControlName="estado" readonly>
-                <mat-option *ngFor="let estado of estadoOptions" [value]="estado.value">
-                  {{ estado.label }}
-                </mat-option>
-              </mat-select>
+              <input matInput formControlName="estado" readonly>
             </mat-form-field>
 
             <!-- Pago Estado Field (Read Only) -->

@@ -312,6 +312,7 @@ interface ElectronAPI {
   createMovimientoStock: (movimientoStockData: any) => Promise<MovimientoStock>;
   updateMovimientoStock: (movimientoStockId: number, movimientoStockData: any) => Promise<any>;
   deleteMovimientoStock: (movimientoStockId: number) => Promise<any>;
+  getMovimientosStockByReferenciaAndTipo: (referencia: number, tipoReferencia: TipoReferencia) => Promise<MovimientoStock[]>;
 }
 
 /**
@@ -1357,5 +1358,9 @@ export class RepositoryService {
 
   deleteMovimientoStock(movimientoStockId: number): Observable<any> {
     return from(this.api.deleteMovimientoStock(movimientoStockId));
+  }
+
+  getMovimientosStockByReferenciaAndTipo(referencia: number, tipoReferencia: TipoReferencia): Observable<MovimientoStock[]> {
+    return from(this.api.getMovimientosStockByReferenciaAndTipo(referencia, tipoReferencia));
   }
 }
