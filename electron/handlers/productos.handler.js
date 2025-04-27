@@ -889,6 +889,24 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             throw error;
         }
     });
+    electron_1.ipcMain.handle('getMovimientosStockByReferenciaAndTipo', async (_event, referencia, tipoReferencia) => {
+        try {
+            const repo = dataSource.getRepository(movimiento_stock_entity_1.MovimientoStock);
+            return await repo.find({
+                where: {
+                    referencia,
+                    tipoReferencia,
+                    activo: true
+                },
+                relations: ['producto', 'ingrediente'],
+                order: { createdAt: 'DESC' }
+            });
+        }
+        catch (error) {
+            console.error(`Error getting movimientos stock for referencia ${referencia} and tipo ${tipoReferencia}:`, error);
+            throw error;
+        }
+    });
     electron_1.ipcMain.handle('getCurrentStockByProducto', async (_event, productoId) => {
         try {
             const repo = dataSource.getRepository(movimiento_stock_entity_1.MovimientoStock);

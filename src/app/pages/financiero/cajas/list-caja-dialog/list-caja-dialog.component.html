@@ -49,7 +49,7 @@
       <!-- Nombre Cajero Column -->
       <ng-container matColumnDef="nombreCajero">
         <th mat-header-cell *matHeaderCellDef mat-sort-header>Cajero</th>
-        <td mat-cell *matCellDef="let caja">{{ caja.dispositivo?.usuario?.nombre || 'Sin asignar' }}</td>
+        <td mat-cell *matCellDef="let caja">{{ caja.createdBy?.persona?.nombre || 'Sin asignar' }}</td>
       </ng-container>
 
       <!-- Dispositivo Column -->

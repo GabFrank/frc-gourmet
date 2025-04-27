@@ -211,7 +211,7 @@
             mat-raised-button
             [class.active]="selectedFormaPago?.id === formaPago.id"
             (click)="onFormaPagoSelect(formaPago)"
-            *ngFor="let formaPago of data.formasPago"
+            *ngFor="let formaPago of formasPago"
             [color]="selectedFormaPago?.id === formaPago.id ? 'primary' : ''"
             [disabled]="isFinalizado"
           >
@@ -253,7 +253,7 @@
           <mat-form-field appearance="outline" class="no-subscript-space">
             <mat-select formControlName="formaPago" required>
               <mat-option
-                *ngFor="let formaPago of data.formasPago"
+                *ngFor="let formaPago of formasPago"
                 [value]="formaPago"
               >
                 {{ formaPago.nombre }}

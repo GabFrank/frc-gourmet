@@ -35,11 +35,7 @@ import { Caja, CajaEstado } from '../../../database/entities/financiero/caja.ent
 export interface PagoDialogData {
   // Principal currency total
   total: number;
-  // Principal currency ID
-  principalMonedaId: number;
   compraIds: number[];
-  monedas: Moneda[];
-  formasPago: FormasPago[];
   pagoId?: number; // Optional pago ID if we're editing an existing pago
 }
 
@@ -80,8 +76,13 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
   // Display columns for the table
   displayedColumns: string[] = ['#', 'moneda', 'formaPago', 'valor', 'tipo', 'menu'];
 
-  // Principal currency
+  // Principal currency - now loaded from database
   principalMoneda: Moneda | null = null;
+  principalMonedaId: number | null = null;
+
+  // All available monedas from database
+  monedas: Moneda[] = [];
+  formasPago: FormasPago[] = [];
 
   // Monedas with calculated totals
   monedasWithTotals: MonedaWithTotal[] = [];
@@ -156,26 +157,6 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
     window.addEventListener('offline', () => {
       this.isOffline = true;
     });
-
-    // Initialize filtered monedas with the provided ones
-    this.filteredMonedas = [...this.data.monedas];
-
-    // Find principal moneda
-    this.principalMoneda = this.data.monedas.find(m => m.id === this.data.principalMonedaId) || null;
-
-    // Initialize saldos with principal moneda total
-    if (this.principalMoneda) {
-      this.saldos.set(this.principalMoneda.id!, this.data.total);
-    }
-
-    // Set initial default values for selections
-    if (this.filteredMonedas.length > 0) {
-      this.selectedMoneda = this.filteredMonedas[0];
-    }
-
-    if (this.data.formasPago.length > 0) {
-      this.selectedFormaPago = this.data.formasPago[0];
-    }
   }
 
   onMonedaSelect(moneda: Moneda): void {
@@ -227,9 +208,12 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
     });
   }
 
-  ngOnInit(): void {
-    // Initialize form first with initial selected values
+  async ngOnInit(): Promise<void> {
+    // Initialize form first
     this.initForm();
+
+    // Load monedas and formas pago from database
+    await this.loadInitialData();
 
     // Setup form listeners for bidirectional binding with buttons
     this.setupFormListeners();
@@ -249,6 +233,57 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
       // After loading is complete, update the form values
       this.updateFormInitialValues();
     });
+  }
+
+  /**
+   * Load initial data from database (monedas, formas pago, principal moneda)
+   */
+  async loadInitialData(): Promise<void> {
+    try {
+      // Load monedas
+      this.monedas = await firstValueFrom(this.repositoryService.getMonedas());
+      
+      // Load formas pago
+      this.formasPago = await firstValueFrom(this.repositoryService.getFormasPago());
+      
+      // Sort formas pago by orden if available
+      this.formasPago.sort((a, b) => {
+        return (a.orden || 0) - (b.orden || 0);
+      });
+
+      // Find principal moneda (assuming it's marked in the database with a flag or specific ID)
+      // This implementation might vary depending on how your principal currency is defined
+      const principalMonedas = this.monedas.filter(m => m.principal === true);
+      
+      if (principalMonedas.length > 0) {
+        this.principalMoneda = principalMonedas[0];
+        this.principalMonedaId = this.principalMoneda.id || null;
+        
+        // Initialize saldos with principal moneda total
+        if (this.principalMoneda && this.principalMonedaId) {
+          this.saldos.set(this.principalMonedaId, this.data.total);
+        }
+      } else {
+        // Fallback if no principal currency is marked
+        console.warn('No principal currency found in database');
+        this.snackBar.open('No se encontró una moneda principal en la base de datos', 'Cerrar', { duration: 3000 });
+      }
+
+      // Initialize filtered monedas with all monedas
+      this.filteredMonedas = [...this.monedas];
+
+      // Set initial default values for selections
+      if (this.filteredMonedas.length > 0) {
+        this.selectedMoneda = this.filteredMonedas[0];
+      }
+
+      if (this.formasPago.length > 0) {
+        this.selectedFormaPago = this.formasPago[0];
+      }
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+      this.snackBar.open('Error al cargar datos iniciales', 'Cerrar', { duration: 3000 });
+    }
   }
 
   /**
@@ -332,7 +367,7 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
       });
 
       // Filter monedas based on active status in caja-moneda config
-      this.filteredMonedas = this.data.monedas.filter(moneda => {
+      this.filteredMonedas = this.monedas.filter(moneda => {
         const config = configMap.get(moneda.id!);
         return config ? config.activo : false;
       });
@@ -362,8 +397,8 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
       }
 
       // Also select the first forma pago as default
-      if (this.data.formasPago.length > 0) {
-        this.selectedFormaPago = this.data.formasPago[0];
+      if (this.formasPago.length > 0) {
+        this.selectedFormaPago = this.formasPago[0];
       }
 
       // Update form with selected values
@@ -380,7 +415,7 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
       this.snackBar.open('Error al cargar la configuración de monedas', 'Cerrar', { duration: 3000 });
 
       // If error, use all monedas as fallback
-      this.filteredMonedas = [...this.data.monedas];
+      this.filteredMonedas = [...this.monedas];
       this.ensureFlagsAvailableOffline();
 
       // Still try to load exchange rates
@@ -452,7 +487,6 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
    */
   calculateCurrencyTotals(): void {
     if (!this.principalMoneda) return;
-
 
     // Clear previous calculations
     this.monedasWithTotals = [];
@@ -1179,7 +1213,7 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
 
     // Find the matching moneda and forma pago from our lists to ensure reference equality
     const moneda = this.filteredMonedas.find(m => m.id === detalle.moneda?.id);
-    const formaPago = this.data.formasPago.find(f => f.id === detalle.formaPago?.id);
+    const formaPago = this.formasPago.find(f => f.id === detalle.formaPago?.id);
 
     if (!moneda || !formaPago) {
       this.snackBar.open('Error al cargar los datos para editar', 'Cerrar', { duration: 3000 });

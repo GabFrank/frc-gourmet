@@ -2135,10 +2135,7 @@ export class CreateEditCompraComponent implements OnInit {
     ]).then(() => {
       const dialogData: PagoDialogData = {
         total: this.compraTotal,
-        principalMonedaId: this.compra!.moneda!.id,
-        compraIds: [this.compra!.id],
-        monedas: this.monedas,
-        formasPago: this.formasPago
+        compraIds: [this.compra!.id]
       };
 
       const dialogRef = this.dialog.open(PagoDialogComponent, {
