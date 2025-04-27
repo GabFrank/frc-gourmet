@@ -63,3 +63,9 @@ export {
   IProveedor,
   IProveedorProducto
 } from './compras/entity-types';
+
+// Export ventas-related entities and enums
+export { PrecioDelivery } from './ventas/precio-delivery.entity';
+export { Delivery, DeliveryEstado } from './ventas/delivery.entity';
+export { Venta, VentaEstado } from './ventas/venta.entity';
+export { VentaItem } from './ventas/venta-item.entity';

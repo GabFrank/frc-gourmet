@@ -478,6 +478,64 @@ interface MovimientoStock {
   updatedAt?: Date;
 }
 
+// Add interfaces for ventas entities
+type DeliveryEstado = 'ABIERTO' | 'PARA_ENTREGA' | 'EN_CAMINO' | 'ENTREGADO' | 'CANCELADO';
+
+interface PrecioDelivery {
+  id?: number;
+  descripcion: string;
+  valor: number;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface Delivery {
+  id?: number;
+  precioDelivery: PrecioDelivery;
+  telefono?: string;
+  direccion?: string;
+  cliente: Cliente;
+  estado: DeliveryEstado;
+  fechaAbierto: Date;
+  fechaParaEntrega?: Date;
+  fechaEnCamino?: Date;
+  fechaEntregado?: Date;
+  entregadoPor?: Usuario;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+type VentaEstado = 'ABIERTA' | 'CONCLUIDA' | 'CANCELADA';
+
+interface Venta {
+  id?: number;
+  cliente: Cliente;
+  estado: VentaEstado;
+  formaPago: FormasPago;
+  caja: Caja;
+  pago?: Pago;
+  delivery?: Delivery;
+  items?: VentaItem[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface VentaItem {
+  id?: number;
+  venta: Venta;
+  tipoMedida: 'UNIDAD' | 'PAQUETE' | 'GRAMO' | 'LITRO';
+  precioCostoTotal: number;
+  precioVentaTotal: number;
+  precioVentaPresentacion: PrecioVenta;
+  producto: Producto;
+  presentacion: Presentacion;
+  cantidad: number;
+  descuento: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('api', {
@@ -1263,5 +1321,79 @@ contextBridge.exposeInMainWorld('api', {
   },
   deleteMovimientoStock: async (movimientoStockId: number): Promise<{ success: boolean, deactivated: boolean }> => {
     return await ipcRenderer.invoke('deleteMovimientoStock', movimientoStockId);
+  },
+
+  // PrecioDelivery methods
+  getPreciosDelivery: async (): Promise<PrecioDelivery[]> => {
+    return await ipcRenderer.invoke('getPreciosDelivery');
+  },
+  getPrecioDelivery: async (precioDeliveryId: number): Promise<PrecioDelivery> => {
+    return await ipcRenderer.invoke('getPrecioDelivery', precioDeliveryId);
+  },
+  createPrecioDelivery: async (precioDeliveryData: Partial<PrecioDelivery>): Promise<PrecioDelivery> => {
+    return await ipcRenderer.invoke('createPrecioDelivery', precioDeliveryData);
+  },
+  updatePrecioDelivery: async (precioDeliveryId: number, precioDeliveryData: Partial<PrecioDelivery>): Promise<any> => {
+    return await ipcRenderer.invoke('updatePrecioDelivery', precioDeliveryId, precioDeliveryData);
+  },
+  deletePrecioDelivery: async (precioDeliveryId: number): Promise<any> => {
+    return await ipcRenderer.invoke('deletePrecioDelivery', precioDeliveryId);
+  },
+
+  // Delivery methods
+  getDeliveries: async (): Promise<Delivery[]> => {
+    return await ipcRenderer.invoke('getDeliveries');
+  },
+  getDeliveriesByEstado: async (estado: DeliveryEstado): Promise<Delivery[]> => {
+    return await ipcRenderer.invoke('getDeliveriesByEstado', estado);
+  },
+  getDelivery: async (deliveryId: number): Promise<Delivery> => {
+    return await ipcRenderer.invoke('getDelivery', deliveryId);
+  },
+  createDelivery: async (deliveryData: Partial<Delivery>): Promise<Delivery> => {
+    return await ipcRenderer.invoke('createDelivery', deliveryData);
+  },
+  updateDelivery: async (deliveryId: number, deliveryData: Partial<Delivery>): Promise<any> => {
+    return await ipcRenderer.invoke('updateDelivery', deliveryId, deliveryData);
+  },
+  deleteDelivery: async (deliveryId: number): Promise<any> => {
+    return await ipcRenderer.invoke('deleteDelivery', deliveryId);
+  },
+
+  // Venta methods
+  getVentas: async (): Promise<Venta[]> => {
+    return await ipcRenderer.invoke('getVentas');
+  },
+  getVentasByEstado: async (estado: VentaEstado): Promise<Venta[]> => {
+    return await ipcRenderer.invoke('getVentasByEstado', estado);
+  },
+  getVenta: async (ventaId: number): Promise<Venta> => {
+    return await ipcRenderer.invoke('getVenta', ventaId);
+  },
+  createVenta: async (ventaData: Partial<Venta>): Promise<Venta> => {
+    return await ipcRenderer.invoke('createVenta', ventaData);
+  },
+  updateVenta: async (ventaId: number, ventaData: Partial<Venta>): Promise<any> => {
+    return await ipcRenderer.invoke('updateVenta', ventaId, ventaData);
+  },
+  deleteVenta: async (ventaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('deleteVenta', ventaId);
+  },
+
+  // VentaItem methods
+  getVentaItems: async (ventaId: number): Promise<VentaItem[]> => {
+    return await ipcRenderer.invoke('getVentaItems', ventaId);
+  },
+  getVentaItem: async (ventaItemId: number): Promise<VentaItem> => {
+    return await ipcRenderer.invoke('getVentaItem', ventaItemId);
+  },
+  createVentaItem: async (ventaItemData: Partial<VentaItem>): Promise<VentaItem> => {
+    return await ipcRenderer.invoke('createVentaItem', ventaItemData);
+  },
+  updateVentaItem: async (ventaItemId: number, ventaItemData: Partial<VentaItem>): Promise<any> => {
+    return await ipcRenderer.invoke('updateVentaItem', ventaItemId, ventaItemData);
+  },
+  deleteVentaItem: async (ventaItemId: number): Promise<any> => {
+    return await ipcRenderer.invoke('deleteVentaItem', ventaItemId);
   },
 });

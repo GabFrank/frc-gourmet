@@ -43,6 +43,10 @@ import { Pago } from './entities/compras/pago.entity';
 import { PagoDetalle } from './entities/compras/pago-detalle.entity';
 import { ProveedorProducto } from './entities/compras/proveedor-producto.entity';
 import { FormasPago } from './entities/compras/forma-pago.entity';
+import { PrecioDelivery } from './entities/ventas/precio-delivery.entity';
+import { Delivery, DeliveryEstado } from './entities/ventas/delivery.entity';
+import { Venta, VentaEstado } from './entities/ventas/venta.entity';
+import { VentaItem } from './entities/ventas/venta-item.entity';
 
 export interface LoginResult {
   success: boolean;
@@ -313,6 +317,32 @@ interface ElectronAPI {
   updateMovimientoStock: (movimientoStockId: number, movimientoStockData: any) => Promise<any>;
   deleteMovimientoStock: (movimientoStockId: number) => Promise<any>;
   getMovimientosStockByReferenciaAndTipo: (referencia: number, tipoReferencia: TipoReferencia) => Promise<MovimientoStock[]>;
+  // PrecioDelivery operations
+  getPreciosDelivery: () => Promise<PrecioDelivery[]>;
+  getPrecioDelivery: (precioDeliveryId: number) => Promise<PrecioDelivery>;
+  createPrecioDelivery: (precioDeliveryData: Partial<PrecioDelivery>) => Promise<PrecioDelivery>;
+  updatePrecioDelivery: (precioDeliveryId: number, precioDeliveryData: Partial<PrecioDelivery>) => Promise<any>;
+  deletePrecioDelivery: (precioDeliveryId: number) => Promise<any>;
+  // Delivery operations
+  getDeliveries: () => Promise<Delivery[]>;
+  getDeliveriesByEstado: (estado: DeliveryEstado) => Promise<Delivery[]>;
+  getDelivery: (deliveryId: number) => Promise<Delivery>;
+  createDelivery: (deliveryData: Partial<Delivery>) => Promise<Delivery>;
+  updateDelivery: (deliveryId: number, deliveryData: Partial<Delivery>) => Promise<any>;
+  deleteDelivery: (deliveryId: number) => Promise<any>;
+  // Venta operations
+  getVentas: () => Promise<Venta[]>;
+  getVentasByEstado: (estado: VentaEstado) => Promise<Venta[]>;
+  getVenta: (ventaId: number) => Promise<Venta>;
+  createVenta: (ventaData: Partial<Venta>) => Promise<Venta>;
+  updateVenta: (ventaId: number, ventaData: Partial<Venta>) => Promise<any>;
+  deleteVenta: (ventaId: number) => Promise<any>;
+  // VentaItem operations
+  getVentaItems: (ventaId: number) => Promise<VentaItem[]>;
+  getVentaItem: (ventaItemId: number) => Promise<VentaItem>;
+  createVentaItem: (ventaItemData: Partial<VentaItem>) => Promise<VentaItem>;
+  updateVentaItem: (ventaItemId: number, ventaItemData: Partial<VentaItem>) => Promise<any>;
+  deleteVentaItem: (ventaItemId: number) => Promise<any>;
 }
 
 /**
@@ -1362,5 +1392,97 @@ export class RepositoryService {
 
   getMovimientosStockByReferenciaAndTipo(referencia: number, tipoReferencia: TipoReferencia): Observable<MovimientoStock[]> {
     return from(this.api.getMovimientosStockByReferenciaAndTipo(referencia, tipoReferencia));
+  }
+
+  // PrecioDelivery methods
+  getPreciosDelivery(): Observable<PrecioDelivery[]> {
+    return from(this.api.getPreciosDelivery());
+  }
+
+  getPrecioDelivery(precioDeliveryId: number): Observable<PrecioDelivery> {
+    return from(this.api.getPrecioDelivery(precioDeliveryId));
+  }
+
+  createPrecioDelivery(precioDeliveryData: Partial<PrecioDelivery>): Observable<PrecioDelivery> {
+    return from(this.api.createPrecioDelivery(precioDeliveryData));
+  }
+
+  updatePrecioDelivery(precioDeliveryId: number, precioDeliveryData: Partial<PrecioDelivery>): Observable<any> {
+    return from(this.api.updatePrecioDelivery(precioDeliveryId, precioDeliveryData));
+  }
+
+  deletePrecioDelivery(precioDeliveryId: number): Observable<any> {
+    return from(this.api.deletePrecioDelivery(precioDeliveryId));
+  }
+
+  // Delivery methods
+  getDeliveries(): Observable<Delivery[]> {
+    return from(this.api.getDeliveries());
+  }
+
+  getDeliveriesByEstado(estado: DeliveryEstado): Observable<Delivery[]> {
+    return from(this.api.getDeliveriesByEstado(estado));
+  }
+
+  getDelivery(deliveryId: number): Observable<Delivery> {
+    return from(this.api.getDelivery(deliveryId));
+  }
+
+  createDelivery(deliveryData: Partial<Delivery>): Observable<Delivery> {
+    return from(this.api.createDelivery(deliveryData));
+  }
+
+  updateDelivery(deliveryId: number, deliveryData: Partial<Delivery>): Observable<any> {
+    return from(this.api.updateDelivery(deliveryId, deliveryData));
+  }
+
+  deleteDelivery(deliveryId: number): Observable<any> {
+    return from(this.api.deleteDelivery(deliveryId));
+  }
+
+  // Venta methods
+  getVentas(): Observable<Venta[]> {
+    return from(this.api.getVentas());
+  }
+
+  getVentasByEstado(estado: VentaEstado): Observable<Venta[]> {
+    return from(this.api.getVentasByEstado(estado));
+  }
+
+  getVenta(ventaId: number): Observable<Venta> {
+    return from(this.api.getVenta(ventaId));
+  }
+
+  createVenta(ventaData: Partial<Venta>): Observable<Venta> {
+    return from(this.api.createVenta(ventaData));
+  }
+
+  updateVenta(ventaId: number, ventaData: Partial<Venta>): Observable<any> {
+    return from(this.api.updateVenta(ventaId, ventaData));
+  }
+
+  deleteVenta(ventaId: number): Observable<any> {
+    return from(this.api.deleteVenta(ventaId));
+  }
+
+  // VentaItem methods
+  getVentaItems(ventaId: number): Observable<VentaItem[]> {
+    return from(this.api.getVentaItems(ventaId));
+  }
+
+  getVentaItem(ventaItemId: number): Observable<VentaItem> {
+    return from(this.api.getVentaItem(ventaItemId));
+  }
+
+  createVentaItem(ventaItemData: Partial<VentaItem>): Observable<VentaItem> {
+    return from(this.api.createVentaItem(ventaItemData));
+  }
+
+  updateVentaItem(ventaItemId: number, ventaItemData: Partial<VentaItem>): Observable<any> {
+    return from(this.api.updateVentaItem(ventaItemId, ventaItemData));
+  }
+
+  deleteVentaItem(ventaItemId: number): Observable<any> {
+    return from(this.api.deleteVentaItem(ventaItemId));
   }
 }

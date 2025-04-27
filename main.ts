@@ -29,6 +29,7 @@ import { registerProductosHandlers } from './electron/handlers/productos.handler
 import { registerFinancieroHandlers } from './electron/handlers/financiero.handler';
 import { registerComprasHandlers } from './electron/handlers/compras.handler';
 import { registerSystemHandlers } from './electron/handlers/system.handler';
+import { registerVentasHandlers } from './electron/handlers/ventas.handler';
 
 let win: any;
 let dbService: DatabaseService;
@@ -67,6 +68,7 @@ function initializeDatabase() {
       registerFinancieroHandlers(dataSource, getCurrentUser);
       registerComprasHandlers(dataSource, getCurrentUser);
       registerSystemHandlers(); // system handler doesn't need dataSource or user
+      registerVentasHandlers(dataSource, getCurrentUser); // Register ventas handlers
     })
     .catch((error) => {
       console.error('Failed to initialize database:', error);
