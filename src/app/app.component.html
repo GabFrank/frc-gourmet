@@ -75,6 +75,27 @@
           </div>
         </a>
 
+        <!-- Ventas Menu   -->
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel"
+                            [expanded]="isMenuSectionExpanded('ventas')"
+                            [hideToggle]="!isMenuExpanded">
+          <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'ventas')">
+            <mat-panel-title>
+              <div class="menu-item-content" [ngClass]="{'centered': !isMenuExpanded}">
+                <mat-icon class="nav-icon">shopping_cart</mat-icon>
+                <span class="nav-title" *ngIf="isMenuExpanded">Ventas</span>
+              </div>
+            </mat-panel-title>
+          </mat-expansion-panel-header>
+          <!-- open venta dashboard instead of pdv -->
+          <div class="submenu-container">
+            <a mat-list-item (click)="openVentasDashTab(); expandMenu($event, 'ventas')">
+              <mat-icon matListItemIcon>dashboard</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Dashboard</span>
+            </a>
+          </div>
+        </mat-expansion-panel>
+
         <!-- Recursos Humanos Menu -->
         <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel"
                             [expanded]="isMenuSectionExpanded('rrhh')"

@@ -42,6 +42,7 @@ const productos_handler_1 = require("./electron/handlers/productos.handler");
 const financiero_handler_1 = require("./electron/handlers/financiero.handler");
 const compras_handler_1 = require("./electron/handlers/compras.handler");
 const system_handler_1 = require("./electron/handlers/system.handler");
+const ventas_handler_1 = require("./electron/handlers/ventas.handler");
 let win;
 let dbService;
 // Remove JWT constants as they are moved
@@ -73,6 +74,7 @@ function initializeDatabase() {
         (0, financiero_handler_1.registerFinancieroHandlers)(dataSource, getCurrentUser);
         (0, compras_handler_1.registerComprasHandlers)(dataSource, getCurrentUser);
         (0, system_handler_1.registerSystemHandlers)(); // system handler doesn't need dataSource or user
+        (0, ventas_handler_1.registerVentasHandlers)(dataSource, getCurrentUser); // Register ventas handlers
     })
         .catch((error) => {
         console.error('Failed to initialize database:', error);

@@ -73,6 +73,15 @@ const forma_pago_entity_1 = require("./entities/compras/forma-pago.entity");
 const movimiento_stock_entity_1 = require("./entities/productos/movimiento-stock.entity");
 // Import new migration
 const _1624098765432_AddColumnsToConteo_1 = require("./migrations/1624098765432-AddColumnsToConteo");
+// Import new PDV entities
+const precio_delivery_entity_1 = require("./entities/ventas/precio-delivery.entity");
+const delivery_entity_1 = require("./entities/ventas/delivery.entity");
+const venta_entity_1 = require("./entities/ventas/venta.entity");
+const venta_item_entity_1 = require("./entities/ventas/venta-item.entity");
+const pdv_grupo_categoria_entity_1 = require("./entities/ventas/pdv-grupo-categoria.entity");
+const pdv_categoria_entity_1 = require("./entities/ventas/pdv-categoria.entity");
+const pdv_categoria_item_entity_1 = require("./entities/ventas/pdv-categoria-item.entity");
+const pdv_item_producto_entity_1 = require("./entities/ventas/pdv-item-producto.entity");
 /**
  * Get the configuration for TypeORM
  * @param userDataPath Path to store the database file
@@ -129,7 +138,17 @@ function getDataSourceOptions(userDataPath) {
             compra_detalle_entity_1.CompraDetalle,
             proveedor_producto_entity_1.ProveedorProducto,
             forma_pago_entity_1.FormasPago,
-            movimiento_stock_entity_1.MovimientoStock
+            movimiento_stock_entity_1.MovimientoStock,
+            // Ventas entities
+            precio_delivery_entity_1.PrecioDelivery,
+            delivery_entity_1.Delivery,
+            venta_entity_1.Venta,
+            venta_item_entity_1.VentaItem,
+            // PDV entities
+            pdv_grupo_categoria_entity_1.PdvGrupoCategoria,
+            pdv_categoria_entity_1.PdvCategoria,
+            pdv_categoria_item_entity_1.PdvCategoriaItem,
+            pdv_item_producto_entity_1.PdvItemProducto
         ],
         synchronize: true,
         logging: process.env['NODE_ENV'] === 'development',

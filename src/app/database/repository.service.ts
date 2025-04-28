@@ -47,6 +47,10 @@ import { PrecioDelivery } from './entities/ventas/precio-delivery.entity';
 import { Delivery, DeliveryEstado } from './entities/ventas/delivery.entity';
 import { Venta, VentaEstado } from './entities/ventas/venta.entity';
 import { VentaItem } from './entities/ventas/venta-item.entity';
+import { PdvGrupoCategoria } from './entities/ventas/pdv-grupo-categoria.entity';
+import { PdvCategoria } from './entities/ventas/pdv-categoria.entity';
+import { PdvCategoriaItem } from './entities/ventas/pdv-categoria-item.entity';
+import { PdvItemProducto } from './entities/ventas/pdv-item-producto.entity';
 
 export interface LoginResult {
   success: boolean;
@@ -343,6 +347,33 @@ interface ElectronAPI {
   createVentaItem: (ventaItemData: Partial<VentaItem>) => Promise<VentaItem>;
   updateVentaItem: (ventaItemId: number, ventaItemData: Partial<VentaItem>) => Promise<any>;
   deleteVentaItem: (ventaItemId: number) => Promise<any>;
+  // PDV Grupo Categoria
+  getPdvGrupoCategorias: () => Promise<PdvGrupoCategoria[]>;
+  getPdvGrupoCategoria: (id: number) => Promise<PdvGrupoCategoria>;
+  createPdvGrupoCategoria: (data: Partial<PdvGrupoCategoria>) => Promise<PdvGrupoCategoria>;
+  updatePdvGrupoCategoria: (id: number, data: Partial<PdvGrupoCategoria>) => Promise<PdvGrupoCategoria>;
+  deletePdvGrupoCategoria: (id: number) => Promise<PdvGrupoCategoria>;
+  // PDV Categoria
+  getPdvCategorias: () => Promise<PdvCategoria[]>;
+  getPdvCategoriasByGrupo: (grupoId: number) => Promise<PdvCategoria[]>;
+  getPdvCategoria: (id: number) => Promise<PdvCategoria>;
+  createPdvCategoria: (data: Partial<PdvCategoria>) => Promise<PdvCategoria>;
+  updatePdvCategoria: (id: number, data: Partial<PdvCategoria>) => Promise<PdvCategoria>;
+  deletePdvCategoria: (id: number) => Promise<PdvCategoria>;
+  // PDV Categoria Item
+  getPdvCategoriaItems: () => Promise<PdvCategoriaItem[]>;
+  getPdvCategoriaItemsByCategoria: (categoriaId: number) => Promise<PdvCategoriaItem[]>;
+  getPdvCategoriaItem: (id: number) => Promise<PdvCategoriaItem>;
+  createPdvCategoriaItem: (data: Partial<PdvCategoriaItem>) => Promise<PdvCategoriaItem>;
+  updatePdvCategoriaItem: (id: number, data: Partial<PdvCategoriaItem>) => Promise<PdvCategoriaItem>;
+  deletePdvCategoriaItem: (id: number) => Promise<PdvCategoriaItem>;
+  // PDV Item Producto
+  getPdvItemProductos: () => Promise<PdvItemProducto[]>;
+  getPdvItemProductosByItem: (itemId: number) => Promise<PdvItemProducto[]>;
+  getPdvItemProducto: (id: number) => Promise<PdvItemProducto>;
+  createPdvItemProducto: (data: Partial<PdvItemProducto>) => Promise<PdvItemProducto>;
+  updatePdvItemProducto: (id: number, data: Partial<PdvItemProducto>) => Promise<PdvItemProducto>;
+  deletePdvItemProducto: (id: number) => Promise<PdvItemProducto>;
 }
 
 /**
@@ -1484,5 +1515,101 @@ export class RepositoryService {
 
   deleteVentaItem(ventaItemId: number): Observable<any> {
     return from(this.api.deleteVentaItem(ventaItemId));
+  }
+
+  // PDV Grupo Categoria
+  getPdvGrupoCategorias(): Observable<PdvGrupoCategoria[]> {
+    return from(this.api.getPdvGrupoCategorias());
+  }
+
+  getPdvGrupoCategoria(id: number): Observable<PdvGrupoCategoria> {
+    return from(this.api.getPdvGrupoCategoria(id));
+  }
+
+  createPdvGrupoCategoria(data: Partial<PdvGrupoCategoria>): Observable<PdvGrupoCategoria> {
+    return from(this.api.createPdvGrupoCategoria(data));
+  }
+
+  updatePdvGrupoCategoria(id: number, data: Partial<PdvGrupoCategoria>): Observable<PdvGrupoCategoria> {
+    return from(this.api.updatePdvGrupoCategoria(id, data));
+  }
+
+  deletePdvGrupoCategoria(id: number): Observable<PdvGrupoCategoria> {
+    return from(this.api.deletePdvGrupoCategoria(id));
+  }
+
+  // PDV Categoria
+  getPdvCategorias(): Observable<PdvCategoria[]> {
+    return from(this.api.getPdvCategorias());
+  }
+
+  getPdvCategoriasByGrupo(grupoId: number): Observable<PdvCategoria[]> {
+    return from(this.api.getPdvCategoriasByGrupo(grupoId));
+  }
+
+  getPdvCategoria(id: number): Observable<PdvCategoria> {
+    return from(this.api.getPdvCategoria(id));
+  }
+
+  createPdvCategoria(data: Partial<PdvCategoria>): Observable<PdvCategoria> {
+    return from(this.api.createPdvCategoria(data));
+  }
+
+  updatePdvCategoria(id: number, data: Partial<PdvCategoria>): Observable<PdvCategoria> {
+    return from(this.api.updatePdvCategoria(id, data));
+  }
+
+  deletePdvCategoria(id: number): Observable<PdvCategoria> {
+    return from(this.api.deletePdvCategoria(id));
+  }
+
+  // PDV Categoria Item
+  getPdvCategoriaItems(): Observable<PdvCategoriaItem[]> {
+    return from(this.api.getPdvCategoriaItems());
+  }
+
+  getPdvCategoriaItemsByCategoria(categoriaId: number): Observable<PdvCategoriaItem[]> {
+    return from(this.api.getPdvCategoriaItemsByCategoria(categoriaId));
+  }
+
+  getPdvCategoriaItem(id: number): Observable<PdvCategoriaItem> {
+    return from(this.api.getPdvCategoriaItem(id));
+  }
+
+  createPdvCategoriaItem(data: Partial<PdvCategoriaItem>): Observable<PdvCategoriaItem> {
+    return from(this.api.createPdvCategoriaItem(data));
+  }
+
+  updatePdvCategoriaItem(id: number, data: Partial<PdvCategoriaItem>): Observable<PdvCategoriaItem> {
+    return from(this.api.updatePdvCategoriaItem(id, data));
+  }
+
+  deletePdvCategoriaItem(id: number): Observable<PdvCategoriaItem> {
+    return from(this.api.deletePdvCategoriaItem(id));
+  }
+
+  // PDV Item Producto
+  getPdvItemProductos(): Observable<PdvItemProducto[]> {
+    return from(this.api.getPdvItemProductos());
+  }
+
+  getPdvItemProductosByItem(itemId: number): Observable<PdvItemProducto[]> {
+    return from(this.api.getPdvItemProductosByItem(itemId));
+  }
+
+  getPdvItemProducto(id: number): Observable<PdvItemProducto> {
+    return from(this.api.getPdvItemProducto(id));
+  }
+
+  createPdvItemProducto(data: Partial<PdvItemProducto>): Observable<PdvItemProducto> {
+    return from(this.api.createPdvItemProducto(data));
+  }
+
+  updatePdvItemProducto(id: number, data: Partial<PdvItemProducto>): Observable<PdvItemProducto> {
+    return from(this.api.updatePdvItemProducto(id, data));
+  }
+
+  deletePdvItemProducto(id: number): Observable<PdvItemProducto> {
+    return from(this.api.deletePdvItemProducto(id));
   }
 }

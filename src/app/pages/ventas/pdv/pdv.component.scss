@@ -1,0 +1,359 @@
+.pdv-container {
+  display: flex;
+  height: calc(100vh - 104px);
+  width: 100%;
+  background-color: #1e1e1e;
+  color: white;
+}
+
+.left-panel {
+  width: 50%;
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #444;
+}
+
+.right-panel {
+  width: 50%;
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Total and Saldo sections styling */
+.total-section, .saldo-section {
+  background-color: #2a2a2a;
+  border-radius: 5px;
+  margin-bottom: 15px;
+  padding: 10px;
+  text-align: center;
+
+  h2 {
+    margin: 5px 0;
+    padding: 5px 0;
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: #fff;
+  }
+}
+
+/* Currency totals styling to match pago-dialog */
+.currency-totals {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 20px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+
+  .currency-item {
+    display: flex;
+    align-items: center;
+
+    .currency-flag {
+      width: 30px;
+      height: 20px;
+      margin-right: 10px;
+      object-fit: contain;
+      border-radius: 2px;
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .currency-value {
+      font-size: 18px;
+      font-weight: bold;
+      color: white;
+    }
+  }
+}
+
+/* Currency row styling adjusted to match pago-dialog */
+.currency-rows {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin-top: 10px;
+
+  .currency-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    height: 40px;
+
+    .currency-left {
+      display: flex;
+      align-items: center;
+
+      .flag-icon {
+        width: 24px;
+        height: 16px;
+        margin-right: 8px;
+        border-radius: 2px;
+        object-fit: cover;
+      }
+
+      .currency-code {
+        font-size: 14px;
+        font-weight: 500;
+        color: rgba(0, 0, 0, 0.7);
+      }
+    }
+
+    .currency-right {
+      display: flex;
+      align-items: center;
+      
+      .currency-value {
+        font-size: 16px;
+        font-weight: 600;
+        margin-right: 4px;
+        color: #000;
+      }
+
+      .currency-denomination {
+        font-size: 14px;
+        color: rgba(0, 0, 0, 0.6);
+      }
+    }
+  }
+}
+
+/* Loading currencies */
+.loading-currencies {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  
+  .spinner-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  
+    mat-spinner {
+      margin-right: 10px;
+    }
+    
+    span {
+      font-size: 0.9rem;
+      color: #ccc;
+    }
+  }
+}
+
+/* Sale table */
+.sale-table {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: 15px;
+  background-color: #2a2a2a;
+  border-radius: 5px;
+  
+  table {
+    width: 100%;
+  }
+
+  .mat-column-productoNombre {
+    flex: 3;
+  }
+  
+  .mat-column-cantidad, .mat-column-precio, .mat-column-total {
+    flex: 1;
+    text-align: right;
+  }
+  
+  .mat-column-actions {
+    width: 40px;
+    text-align: center;
+  }
+}
+
+/* Search section */
+.search-section {
+  display: flex;
+  margin-bottom: 15px;
+  
+  .search-field {
+    flex: 1;
+  }
+  
+  .search-button {
+    margin-left: 10px;
+    background-color: #b71c1c;
+    color: white;
+  }
+}
+
+/* Action buttons */
+.action-buttons {
+  display: flex;
+  justify-content: space-between;
+  
+  .action-button {
+    flex: 1;
+    margin: 0 5px;
+    background-color: #b71c1c;
+    color: white;
+    height: 40px !important;
+    
+    &:first-child {
+      margin-left: 0;
+    }
+    
+    &:last-child {
+      margin-right: 0;
+    }
+    
+    .mat-icon {
+      margin-right: 5px;
+    }
+  }
+}
+
+/* Categories */
+.categories {
+  display: flex;
+  margin-bottom: 15px;
+  
+  .category-button {
+    margin-right: 10px;
+    background-color: #b71c1c;
+    color: white;
+  }
+}
+
+/* Products grid */
+.products-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+  
+  .product-item {
+    background-color: #2a2a2a;
+    border-radius: 5px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    
+    &:hover {
+      background-color: #444;
+    }
+    
+    .product-image {
+      width: 100%;
+      aspect-ratio: 1/1;
+      background-color: #1e1e1e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 3px;
+      margin-bottom: 5px;
+      overflow: hidden;
+      
+      img {
+        max-width: 100%;
+        max-height: 100%;
+      }
+    }
+    
+    .product-name {
+      font-size: 0.9rem;
+      text-align: center;
+    }
+  }
+}
+
+/* Tables grid */
+.tables-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 2fr);
+  gap: 10px;
+  margin-bottom: 20px;
+  flex: 1;
+  overflow-y: auto;
+  
+  .table-button {
+    height: 60px;
+    font-size: 1.2rem;
+    height: 40px !important;
+    
+    &.table-active {
+      background-color: #f0ad4e;
+      color: black;
+    }
+    
+    &.table-inactive {
+      background-color: #5cb85c;
+      color: white;
+    }
+  }
+}
+
+/* Bottom buttons */
+.bottom-buttons {
+  display: flex;
+  justify-content: space-between;
+  
+  .bottom-button {
+    flex: 1;
+    margin: 0 5px;
+    background-color: #b71c1c;
+    color: white;
+    height: 40px !important;
+    &:first-child {
+      margin-left: 0;
+    }
+    
+    &:last-child {
+      margin-right: 0;
+    }
+    
+    .mat-icon {
+      margin-left: 5px;
+    }
+  }
+}
+
+// Responsive adjustments for smaller screens
+@media (max-width: 1200px) {
+  .products-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  .tables-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .pdv-container {
+    flex-direction: column;
+  }
+  
+  .left-panel, .right-panel {
+    width: 100%;
+  }
+  
+  .left-panel {
+    border-right: none;
+    border-bottom: 1px solid #444;
+  }
+  
+  .products-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .tables-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

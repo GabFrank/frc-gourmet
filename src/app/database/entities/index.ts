@@ -69,3 +69,7 @@ export { PrecioDelivery } from './ventas/precio-delivery.entity';
 export { Delivery, DeliveryEstado } from './ventas/delivery.entity';
 export { Venta, VentaEstado } from './ventas/venta.entity';
 export { VentaItem } from './ventas/venta-item.entity';
+export { PdvGrupoCategoria } from './ventas/pdv-grupo-categoria.entity';
+export { PdvCategoria } from './ventas/pdv-categoria.entity';
+export { PdvCategoriaItem } from './ventas/pdv-categoria-item.entity';
+export { PdvItemProducto } from './ventas/pdv-item-producto.entity';

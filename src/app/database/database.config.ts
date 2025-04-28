@@ -53,6 +53,16 @@ import { MovimientoStock } from './entities/productos/movimiento-stock.entity';
 // Import new migration
 import { AddColumnsToConteo1624098765432 } from './migrations/1624098765432-AddColumnsToConteo';
 
+// Import new PDV entities
+import { PrecioDelivery } from './entities/ventas/precio-delivery.entity';
+import { Delivery } from './entities/ventas/delivery.entity';
+import { Venta } from './entities/ventas/venta.entity';
+import { VentaItem } from './entities/ventas/venta-item.entity';
+import { PdvGrupoCategoria } from './entities/ventas/pdv-grupo-categoria.entity';
+import { PdvCategoria } from './entities/ventas/pdv-categoria.entity';
+import { PdvCategoriaItem } from './entities/ventas/pdv-categoria-item.entity';
+import { PdvItemProducto } from './entities/ventas/pdv-item-producto.entity';
+
 /**
  * Get the configuration for TypeORM
  * @param userDataPath Path to store the database file
@@ -109,7 +119,17 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       CompraDetalle,
       ProveedorProducto,
       FormasPago,
-      MovimientoStock
+      MovimientoStock,
+      // Ventas entities
+      PrecioDelivery,
+      Delivery,
+      Venta,
+      VentaItem,
+      // PDV entities
+      PdvGrupoCategoria,
+      PdvCategoria,
+      PdvCategoriaItem,
+      PdvItemProducto
     ],
     synchronize: true, // Automatically creates tables in development
     logging: process.env['NODE_ENV'] === 'development',

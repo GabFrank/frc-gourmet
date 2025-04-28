@@ -711,5 +711,75 @@ contextBridge.exposeInMainWorld('api', {
     deleteMovimientoStock: async (movimientoStockId) => {
         return await ipcRenderer.invoke('deleteMovimientoStock', movimientoStockId);
     },
+    // PrecioDelivery methods
+    getPreciosDelivery: async () => {
+        return await ipcRenderer.invoke('getPreciosDelivery');
+    },
+    getPrecioDelivery: async (precioDeliveryId) => {
+        return await ipcRenderer.invoke('getPrecioDelivery', precioDeliveryId);
+    },
+    createPrecioDelivery: async (precioDeliveryData) => {
+        return await ipcRenderer.invoke('createPrecioDelivery', precioDeliveryData);
+    },
+    updatePrecioDelivery: async (precioDeliveryId, precioDeliveryData) => {
+        return await ipcRenderer.invoke('updatePrecioDelivery', precioDeliveryId, precioDeliveryData);
+    },
+    deletePrecioDelivery: async (precioDeliveryId) => {
+        return await ipcRenderer.invoke('deletePrecioDelivery', precioDeliveryId);
+    },
+    // Delivery methods
+    getDeliveries: async () => {
+        return await ipcRenderer.invoke('getDeliveries');
+    },
+    getDeliveriesByEstado: async (estado) => {
+        return await ipcRenderer.invoke('getDeliveriesByEstado', estado);
+    },
+    getDelivery: async (deliveryId) => {
+        return await ipcRenderer.invoke('getDelivery', deliveryId);
+    },
+    createDelivery: async (deliveryData) => {
+        return await ipcRenderer.invoke('createDelivery', deliveryData);
+    },
+    updateDelivery: async (deliveryId, deliveryData) => {
+        return await ipcRenderer.invoke('updateDelivery', deliveryId, deliveryData);
+    },
+    deleteDelivery: async (deliveryId) => {
+        return await ipcRenderer.invoke('deleteDelivery', deliveryId);
+    },
+    // Venta methods
+    getVentas: async () => {
+        return await ipcRenderer.invoke('getVentas');
+    },
+    getVentasByEstado: async (estado) => {
+        return await ipcRenderer.invoke('getVentasByEstado', estado);
+    },
+    getVenta: async (ventaId) => {
+        return await ipcRenderer.invoke('getVenta', ventaId);
+    },
+    createVenta: async (ventaData) => {
+        return await ipcRenderer.invoke('createVenta', ventaData);
+    },
+    updateVenta: async (ventaId, ventaData) => {
+        return await ipcRenderer.invoke('updateVenta', ventaId, ventaData);
+    },
+    deleteVenta: async (ventaId) => {
+        return await ipcRenderer.invoke('deleteVenta', ventaId);
+    },
+    // VentaItem methods
+    getVentaItems: async (ventaId) => {
+        return await ipcRenderer.invoke('getVentaItems', ventaId);
+    },
+    getVentaItem: async (ventaItemId) => {
+        return await ipcRenderer.invoke('getVentaItem', ventaItemId);
+    },
+    createVentaItem: async (ventaItemData) => {
+        return await ipcRenderer.invoke('createVentaItem', ventaItemData);
+    },
+    updateVentaItem: async (ventaItemId, ventaItemData) => {
+        return await ipcRenderer.invoke('updateVentaItem', ventaItemId, ventaItemData);
+    },
+    deleteVentaItem: async (ventaItemId) => {
+        return await ipcRenderer.invoke('deleteVentaItem', ventaItemId);
+    },
 });
 //# sourceMappingURL=preload.js.map

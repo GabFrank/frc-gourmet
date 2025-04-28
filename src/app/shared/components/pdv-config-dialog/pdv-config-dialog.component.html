@@ -1,0 +1,397 @@
+<div class="pdv-config-dialog">
+  <h2 mat-dialog-title>Configuración de PDV</h2>
+  
+  <div mat-dialog-content>
+    <!-- Loading spinner -->
+    <div *ngIf="isLoading" class="loading-container">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Cargando datos...</p>
+    </div>
+
+    <!-- Main content -->
+    <div *ngIf="!isLoading" class="dialog-content">
+      <mat-tab-group animationDuration="200ms">
+        <!-- Grupos de Categorías -->
+        <mat-tab label="Grupos">
+          <div class="tab-content">
+            <div class="form-container">
+              <h3>{{ selectedGrupo ? 'Editar' : 'Nuevo' }} Grupo de Categoría</h3>
+              <form [formGroup]="grupoForm" (ngSubmit)="saveGrupo()" class="entity-form">
+                <input type="hidden" formControlName="id">
+                
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Nombre</mat-label>
+                  <input matInput formControlName="nombre" placeholder="Nombre del grupo" required>
+                  <mat-error *ngIf="grupoForm.get('nombre')?.hasError('required')">
+                    El nombre es obligatorio
+                  </mat-error>
+                </mat-form-field>
+                
+                <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
+                
+                <div class="form-actions">
+                  <button mat-button type="button" (click)="resetGrupoForm()">Cancelar</button>
+                  <button mat-raised-button color="primary" type="submit" [disabled]="grupoForm.invalid || isSubmitting">
+                    {{ isSubmitting ? 'Guardando...' : 'Guardar' }}
+                  </button>
+                </div>
+              </form>
+            </div>
+            
+            <div class="table-container">
+              <h3>Grupos de Categorías</h3>
+              <table mat-table [dataSource]="gruposCategorias" class="mat-elevation-z2 full-width">
+                <!-- ID Column -->
+                <ng-container matColumnDef="id">
+                  <th mat-header-cell *matHeaderCellDef>ID</th>
+                  <td mat-cell *matCellDef="let grupo">{{ grupo.id }}</td>
+                </ng-container>
+
+                <!-- Nombre Column -->
+                <ng-container matColumnDef="nombre">
+                  <th mat-header-cell *matHeaderCellDef>Nombre</th>
+                  <td mat-cell *matCellDef="let grupo">{{ grupo.nombre }}</td>
+                </ng-container>
+
+                <!-- Activo Column -->
+                <ng-container matColumnDef="activo">
+                  <th mat-header-cell *matHeaderCellDef>Activo</th>
+                  <td mat-cell *matCellDef="let grupo">
+                    <mat-icon [ngClass]="{'active-icon': grupo.activo, 'inactive-icon': !grupo.activo}">
+                      {{ grupo.activo ? 'check_circle' : 'cancel' }}
+                    </mat-icon>
+                  </td>
+                </ng-container>
+
+                <!-- Actions Column -->
+                <ng-container matColumnDef="actions">
+                  <th mat-header-cell *matHeaderCellDef>Acciones</th>
+                  <td mat-cell *matCellDef="let grupo">
+                    <button mat-icon-button color="primary" (click)="editGrupo(grupo)" matTooltip="Editar">
+                      <mat-icon>edit</mat-icon>
+                    </button>
+                    <button mat-icon-button color="warn" (click)="deleteGrupo(grupo.id)" matTooltip="Eliminar">
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </td>
+                </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="gruposColumns"></tr>
+                <tr mat-row *matRowDef="let row; columns: gruposColumns;"></tr>
+              </table>
+            </div>
+          </div>
+        </mat-tab>
+        
+        <!-- Categorías -->
+        <mat-tab label="Categorías">
+          <div class="tab-content">
+            <div class="form-container">
+              <h3>{{ selectedCategoria ? 'Editar' : 'Nueva' }} Categoría</h3>
+              <form [formGroup]="categoriaForm" (ngSubmit)="saveCategoria()" class="entity-form">
+                <input type="hidden" formControlName="id">
+                
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Nombre</mat-label>
+                  <input matInput formControlName="nombre" placeholder="Nombre de la categoría" required>
+                  <mat-error *ngIf="categoriaForm.get('nombre')?.hasError('required')">
+                    El nombre es obligatorio
+                  </mat-error>
+                </mat-form-field>
+                
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Grupo de Categoría</mat-label>
+                  <mat-select formControlName="grupoCategoriId" required (selectionChange)="onGrupoSelected($event)">
+                    <mat-option *ngFor="let grupo of gruposCategorias" [value]="grupo.id">
+                      {{ grupo.nombre }}
+                    </mat-option>
+                  </mat-select>
+                  <mat-error *ngIf="categoriaForm.get('grupoCategoriId')?.hasError('required')">
+                    El grupo es obligatorio
+                  </mat-error>
+                </mat-form-field>
+                
+                <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
+                
+                <div class="form-actions">
+                  <button mat-button type="button" (click)="resetCategoriaForm()">Cancelar</button>
+                  <button mat-raised-button color="primary" type="submit" [disabled]="categoriaForm.invalid || isSubmitting">
+                    {{ isSubmitting ? 'Guardando...' : 'Guardar' }}
+                  </button>
+                </div>
+              </form>
+            </div>
+            
+            <div class="table-container">
+              <h3>Categorías</h3>
+              <button mat-raised-button color="primary" class="load-all-button" (click)="loadCategorias()">
+                Cargar todas las categorías
+              </button>
+              
+              <table mat-table [dataSource]="categorias" class="mat-elevation-z2 full-width">
+                <!-- ID Column -->
+                <ng-container matColumnDef="id">
+                  <th mat-header-cell *matHeaderCellDef>ID</th>
+                  <td mat-cell *matCellDef="let categoria">{{ categoria.id }}</td>
+                </ng-container>
+
+                <!-- Nombre Column -->
+                <ng-container matColumnDef="nombre">
+                  <th mat-header-cell *matHeaderCellDef>Nombre</th>
+                  <td mat-cell *matCellDef="let categoria">{{ categoria.nombre }}</td>
+                </ng-container>
+
+                <!-- Grupo Column -->
+                <ng-container matColumnDef="grupoCategoria">
+                  <th mat-header-cell *matHeaderCellDef>Grupo</th>
+                  <td mat-cell *matCellDef="let categoria">{{ getGrupoNombre(categoria.grupoCategoriId) }}</td>
+                </ng-container>
+
+                <!-- Activo Column -->
+                <ng-container matColumnDef="activo">
+                  <th mat-header-cell *matHeaderCellDef>Activo</th>
+                  <td mat-cell *matCellDef="let categoria">
+                    <mat-icon [ngClass]="{'active-icon': categoria.activo, 'inactive-icon': !categoria.activo}">
+                      {{ categoria.activo ? 'check_circle' : 'cancel' }}
+                    </mat-icon>
+                  </td>
+                </ng-container>
+
+                <!-- Actions Column -->
+                <ng-container matColumnDef="actions">
+                  <th mat-header-cell *matHeaderCellDef>Acciones</th>
+                  <td mat-cell *matCellDef="let categoria">
+                    <button mat-icon-button color="primary" (click)="editCategoria(categoria)" matTooltip="Editar">
+                      <mat-icon>edit</mat-icon>
+                    </button>
+                    <button mat-icon-button color="warn" (click)="deleteCategoria(categoria.id)" matTooltip="Eliminar">
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </td>
+                </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="categoriasColumns"></tr>
+                <tr mat-row *matRowDef="let row; columns: categoriasColumns;"></tr>
+              </table>
+            </div>
+          </div>
+        </mat-tab>
+        
+        <!-- Items -->
+        <mat-tab label="Items">
+          <div class="tab-content">
+            <div class="form-container">
+              <h3>{{ selectedItem ? 'Editar' : 'Nuevo' }} Item</h3>
+              <form [formGroup]="itemForm" (ngSubmit)="saveItem()" class="entity-form">
+                <input type="hidden" formControlName="id">
+                
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Nombre</mat-label>
+                  <input matInput formControlName="nombre" placeholder="Nombre del item" required>
+                  <mat-error *ngIf="itemForm.get('nombre')?.hasError('required')">
+                    El nombre es obligatorio
+                  </mat-error>
+                </mat-form-field>
+                
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Categoría</mat-label>
+                  <mat-select formControlName="categoriaId" required (selectionChange)="onCategoriaSelected($event)">
+                    <mat-option *ngFor="let categoria of categorias" [value]="categoria.id">
+                      {{ categoria.nombre }}
+                    </mat-option>
+                  </mat-select>
+                  <mat-error *ngIf="itemForm.get('categoriaId')?.hasError('required')">
+                    La categoría es obligatoria
+                  </mat-error>
+                </mat-form-field>
+                
+                <div class="image-upload-container">
+                  <label>Imagen:</label>
+                  <div class="image-preview" *ngIf="imageBase64">
+                    <img [src]="imageBase64" alt="Imagen del item">
+                  </div>
+                  <input type="file" (change)="onImageSelected($event)" accept="image/*">
+                </div>
+                
+                <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
+                
+                <div class="form-actions">
+                  <button mat-button type="button" (click)="resetItemForm()">Cancelar</button>
+                  <button mat-raised-button color="primary" type="submit" [disabled]="itemForm.invalid || isSubmitting">
+                    {{ isSubmitting ? 'Guardando...' : 'Guardar' }}
+                  </button>
+                </div>
+              </form>
+            </div>
+            
+            <div class="table-container">
+              <h3>Items</h3>
+              <button mat-raised-button color="primary" class="load-all-button" (click)="loadItems()">
+                Cargar todos los items
+              </button>
+              
+              <table mat-table [dataSource]="items" class="mat-elevation-z2 full-width">
+                <!-- ID Column -->
+                <ng-container matColumnDef="id">
+                  <th mat-header-cell *matHeaderCellDef>ID</th>
+                  <td mat-cell *matCellDef="let item">{{ item.id }}</td>
+                </ng-container>
+
+                <!-- Nombre Column -->
+                <ng-container matColumnDef="nombre">
+                  <th mat-header-cell *matHeaderCellDef>Nombre</th>
+                  <td mat-cell *matCellDef="let item">{{ item.nombre }}</td>
+                </ng-container>
+
+                <!-- Categoria Column -->
+                <ng-container matColumnDef="categoria">
+                  <th mat-header-cell *matHeaderCellDef>Categoría</th>
+                  <td mat-cell *matCellDef="let item">{{ getCategoriaNombre(item.categoriaId) }}</td>
+                </ng-container>
+
+                <!-- Activo Column -->
+                <ng-container matColumnDef="activo">
+                  <th mat-header-cell *matHeaderCellDef>Activo</th>
+                  <td mat-cell *matCellDef="let item">
+                    <mat-icon [ngClass]="{'active-icon': item.activo, 'inactive-icon': !item.activo}">
+                      {{ item.activo ? 'check_circle' : 'cancel' }}
+                    </mat-icon>
+                  </td>
+                </ng-container>
+
+                <!-- Actions Column -->
+                <ng-container matColumnDef="actions">
+                  <th mat-header-cell *matHeaderCellDef>Acciones</th>
+                  <td mat-cell *matCellDef="let item">
+                    <button mat-icon-button color="primary" (click)="editItem(item)" matTooltip="Editar">
+                      <mat-icon>edit</mat-icon>
+                    </button>
+                    <button mat-icon-button color="warn" (click)="deleteItem(item.id)" matTooltip="Eliminar">
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </td>
+                </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="itemsColumns"></tr>
+                <tr mat-row *matRowDef="let row; columns: itemsColumns;"></tr>
+              </table>
+            </div>
+          </div>
+        </mat-tab>
+        
+        <!-- Productos -->
+        <mat-tab label="Productos">
+          <div class="tab-content">
+            <div class="form-container">
+              <h3>{{ selectedItemProducto ? 'Editar' : 'Asignar' }} Producto</h3>
+              <form [formGroup]="productoForm" (ngSubmit)="saveItemProducto()" class="entity-form">
+                <input type="hidden" formControlName="id">
+                
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Item</mat-label>
+                  <mat-select formControlName="categoriaItemId" required (selectionChange)="onItemSelected($event)">
+                    <mat-option *ngFor="let item of items" [value]="item.id">
+                      {{ item.nombre }}
+                    </mat-option>
+                  </mat-select>
+                  <mat-error *ngIf="productoForm.get('categoriaItemId')?.hasError('required')">
+                    El item es obligatorio
+                  </mat-error>
+                </mat-form-field>
+                
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Producto</mat-label>
+                  <mat-select formControlName="productoId" required>
+                    <mat-option *ngFor="let producto of productos" [value]="producto.id">
+                      {{ producto.nombre }}
+                    </mat-option>
+                  </mat-select>
+                  <mat-error *ngIf="productoForm.get('productoId')?.hasError('required')">
+                    El producto es obligatorio
+                  </mat-error>
+                </mat-form-field>
+                
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Nombre Alternativo</mat-label>
+                  <input matInput formControlName="nombre_alternativo" placeholder="Nombre alternativo del producto">
+                </mat-form-field>
+                
+                <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
+                
+                <div class="form-actions">
+                  <button mat-button type="button" (click)="resetProductoForm()">Cancelar</button>
+                  <button mat-raised-button color="primary" type="submit" [disabled]="productoForm.invalid || isSubmitting">
+                    {{ isSubmitting ? 'Guardando...' : 'Guardar' }}
+                  </button>
+                </div>
+              </form>
+            </div>
+            
+            <div class="table-container">
+              <h3>Productos Asignados</h3>
+              <button mat-raised-button color="primary" class="load-all-button" (click)="loadItemProductos()">
+                Cargar todos los productos
+              </button>
+              
+              <table mat-table [dataSource]="itemProductos" class="mat-elevation-z2 full-width">
+                <!-- ID Column -->
+                <ng-container matColumnDef="id">
+                  <th mat-header-cell *matHeaderCellDef>ID</th>
+                  <td mat-cell *matCellDef="let itemProducto">{{ itemProducto.id }}</td>
+                </ng-container>
+
+                <!-- Item Column -->
+                <ng-container matColumnDef="item">
+                  <th mat-header-cell *matHeaderCellDef>Item</th>
+                  <td mat-cell *matCellDef="let itemProducto">{{ getItemNombre(itemProducto.categoriaItemId) }}</td>
+                </ng-container>
+
+                <!-- Producto Column -->
+                <ng-container matColumnDef="producto">
+                  <th mat-header-cell *matHeaderCellDef>Producto</th>
+                  <td mat-cell *matCellDef="let itemProducto">{{ getProductoNombre(itemProducto.productoId) }}</td>
+                </ng-container>
+
+                <!-- Nombre Alternativo Column -->
+                <ng-container matColumnDef="nombreAlternativo">
+                  <th mat-header-cell *matHeaderCellDef>Nombre Alt.</th>
+                  <td mat-cell *matCellDef="let itemProducto">{{ itemProducto.nombre_alternativo || '-' }}</td>
+                </ng-container>
+
+                <!-- Activo Column -->
+                <ng-container matColumnDef="activo">
+                  <th mat-header-cell *matHeaderCellDef>Activo</th>
+                  <td mat-cell *matCellDef="let itemProducto">
+                    <mat-icon [ngClass]="{'active-icon': itemProducto.activo, 'inactive-icon': !itemProducto.activo}">
+                      {{ itemProducto.activo ? 'check_circle' : 'cancel' }}
+                    </mat-icon>
+                  </td>
+                </ng-container>
+
+                <!-- Actions Column -->
+                <ng-container matColumnDef="actions">
+                  <th mat-header-cell *matHeaderCellDef>Acciones</th>
+                  <td mat-cell *matCellDef="let itemProducto">
+                    <button mat-icon-button color="primary" (click)="editItemProducto(itemProducto)" matTooltip="Editar">
+                      <mat-icon>edit</mat-icon>
+                    </button>
+                    <button mat-icon-button color="warn" (click)="deleteItemProducto(itemProducto.id)" matTooltip="Eliminar">
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </td>
+                </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="productosColumns"></tr>
+                <tr mat-row *matRowDef="let row; columns: productosColumns;"></tr>
+              </table>
+            </div>
+          </div>
+        </mat-tab>
+      </mat-tab-group>
+    </div>
+  </div>
+  
+  <div mat-dialog-actions align="end">
+    <button mat-button (click)="close()">Cerrar</button>
+  </div>
+</div> 

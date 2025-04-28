@@ -1,0 +1,73 @@
+<div class="dashboard-container">
+  <h1 class="dashboard-title">Dashboard de Ventas</h1>
+
+  <div class="stats-container">
+    <mat-card class="stats-card">
+      <mat-card-content>
+        <div class="stat-value">{{ totalSalesCount }}</div>
+        <div class="stat-label">Ventas Totales</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stats-card">
+      <mat-card-content>
+        <div class="stat-value">{{ deliveryCount }}</div>
+        <div class="stat-label">Deliveries Totales</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stats-card">
+      <mat-card-content>
+        <div class="stat-value">{{ pendingDeliveries }}</div>
+        <div class="stat-label">Deliveries Pendientes</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stats-card">
+      <mat-card-content>
+        <div class="stat-value">{{ todaysSalesCount }}</div>
+        <div class="stat-label">Ventas de Hoy</div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <div class="actions-container">
+    <mat-card class="action-card">
+      <mat-card-content>
+        <button mat-raised-button color="primary" (click)="openPdv()">
+          <mat-icon>point_of_sale</mat-icon>
+          <span>Abrir Punto de Venta</span>
+        </button>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="action-card">
+      <mat-card-content>
+        <button mat-raised-button color="accent" (click)="openSalesList()">
+          <mat-icon>receipt_long</mat-icon>
+          <span>Listado de Ventas</span>
+        </button>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="action-card">
+      <mat-card-content>
+        <button mat-raised-button color="warn" (click)="openDeliveryList()">
+          <mat-icon>delivery_dining</mat-icon>
+          <span>Administrar Deliveries</span>
+        </button>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- open pdv config dialog  -->
+    <mat-card class="action-card">
+      <mat-card-content>
+        <button mat-raised-button color="primary" (click)="openPdvConfigDialog()">
+          <mat-icon>settings</mat-icon>
+          <span>Configurar Punto de Venta</span>
+        </button>
+      </mat-card-content>
+    </mat-card>
+    
+  </div>
+</div> 
