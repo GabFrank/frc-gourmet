@@ -1,5 +1,6 @@
 import { DataSource } from 'typeorm';
 import { createDataSource } from './database.config';
+import { PdvConfig } from './entities/ventas/pdv-config.entity';
 
 /**
  * Service to manage database operations with TypeORM

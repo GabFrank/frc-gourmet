@@ -73,3 +73,7 @@ export { PdvGrupoCategoria } from './ventas/pdv-grupo-categoria.entity';
 export { PdvCategoria } from './ventas/pdv-categoria.entity';
 export { PdvCategoriaItem } from './ventas/pdv-categoria-item.entity';
 export { PdvItemProducto } from './ventas/pdv-item-producto.entity';
+export { PdvMesa } from './ventas/pdv-mesa.entity';
+export { Reserva } from './ventas/reserva.entity';
+export { Comanda } from './ventas/comanda.entity';
+export { Sector } from './ventas/sector.entity';

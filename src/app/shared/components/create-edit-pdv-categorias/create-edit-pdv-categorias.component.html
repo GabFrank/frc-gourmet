@@ -1,0 +1,156 @@
+<div class="create-edit-container">
+  <h2 mat-dialog-title>{{title}}</h2>
+  
+  <div mat-dialog-content>
+    <!-- Loading spinner -->
+    <div *ngIf="loading" class="loading-container">
+      <mat-spinner diameter="30"></mat-spinner>
+      <p>Cargando datos...</p>
+    </div>
+    
+    <div class="form-content" *ngIf="!loading">
+      <!-- Grupo Form -->
+      <form *ngIf="data.type === 'grupo'" [formGroup]="grupoForm" class="entity-form">
+        <input type="hidden" formControlName="id">
+        
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Nombre del Grupo</mat-label>
+          <input matInput formControlName="nombre" placeholder="Ej: Bebidas" required>
+          <mat-icon matSuffix>folder</mat-icon>
+          <mat-error *ngIf="grupoForm.get('nombre')?.hasError('required')">
+            El nombre es obligatorio
+          </mat-error>
+        </mat-form-field>
+        
+        <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
+      </form>
+      
+      <!-- Categoria Form -->
+      <form *ngIf="data.type === 'categoria'" [formGroup]="categoriaForm" class="entity-form">
+        <input type="hidden" formControlName="id">
+        
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Nombre de la Categoría</mat-label>
+          <input matInput formControlName="nombre" placeholder="Ej: Cafés" required>
+          <mat-icon matSuffix>category</mat-icon>
+          <mat-error *ngIf="categoriaForm.get('nombre')?.hasError('required')">
+            El nombre es obligatorio
+          </mat-error>
+        </mat-form-field>
+        
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Grupo</mat-label>
+          <mat-select formControlName="grupoCategoriId" required>
+            <mat-option *ngFor="let grupo of gruposCategorias" [value]="grupo.id">
+              {{grupo.nombre}}
+            </mat-option>
+          </mat-select>
+          <mat-icon matSuffix>folder</mat-icon>
+          <mat-error *ngIf="categoriaForm.get('grupoCategoriId')?.hasError('required')">
+            El grupo es obligatorio
+          </mat-error>
+        </mat-form-field>
+        
+        <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
+      </form>
+      
+      <!-- Item Form -->
+      <form *ngIf="data.type === 'item'" [formGroup]="itemForm" class="entity-form">
+        <input type="hidden" formControlName="id">
+        
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Nombre del Item</mat-label>
+          <input matInput formControlName="nombre" placeholder="Ej: Espresso" required>
+          <mat-icon matSuffix>grid_view</mat-icon>
+          <mat-error *ngIf="itemForm.get('nombre')?.hasError('required')">
+            El nombre es obligatorio
+          </mat-error>
+        </mat-form-field>
+        
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Categoría</mat-label>
+          <mat-select formControlName="categoriaId" required>
+            <mat-option *ngFor="let categoria of categorias" [value]="categoria.id">
+              {{categoria.nombre}}
+            </mat-option>
+          </mat-select>
+          <mat-icon matSuffix>category</mat-icon>
+          <mat-error *ngIf="itemForm.get('categoriaId')?.hasError('required')">
+            La categoría es obligatoria
+          </mat-error>
+        </mat-form-field>
+        
+        <div class="image-container">
+          <label class="image-label">Imagen (opcional):</label>
+          
+          <div class="image-preview-container" *ngIf="imagePreview">
+            <div class="image-preview">
+              <img [src]="imagePreview" alt="Vista previa de la imagen">
+              <button mat-mini-fab color="warn" class="remove-image" (click)="clearImage()">
+                <mat-icon>close</mat-icon>
+              </button>
+            </div>
+          </div>
+          
+          <div class="image-upload">
+            <button type="button" mat-stroked-button color="primary" (click)="fileInput.click()">
+              <mat-icon>photo_camera</mat-icon>
+              Seleccionar imagen
+            </button>
+            <input hidden type="file" #fileInput (change)="onImageSelected($event)" accept="image/*">
+          </div>
+        </div>
+        
+        <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
+      </form>
+      
+      <!-- Producto Form -->
+      <form *ngIf="data.type === 'producto'" [formGroup]="productoForm" class="entity-form">
+        <input type="hidden" formControlName="id">
+        
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Item</mat-label>
+          <mat-select formControlName="categoriaItemId" required>
+            <mat-option *ngFor="let item of items" [value]="item.id">
+              {{item.nombre}}
+            </mat-option>
+          </mat-select>
+          <mat-icon matSuffix>grid_view</mat-icon>
+          <mat-error *ngIf="productoForm.get('categoriaItemId')?.hasError('required')">
+            El item es obligatorio
+          </mat-error>
+        </mat-form-field>
+        
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Producto</mat-label>
+          <mat-select formControlName="productoId" required>
+            <mat-option *ngFor="let producto of productos" [value]="producto.id">
+              {{producto.nombre}}
+            </mat-option>
+          </mat-select>
+          <mat-icon matSuffix>inventory_2</mat-icon>
+          <mat-error *ngIf="productoForm.get('productoId')?.hasError('required')">
+            El producto es obligatorio
+          </mat-error>
+        </mat-form-field>
+        
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Nombre alternativo (opcional)</mat-label>
+          <input matInput formControlName="nombre_alternativo" placeholder="Ej: Café especial">
+          <mat-icon matSuffix>edit</mat-icon>
+          <mat-hint>Si se deja vacío, se usará el nombre original del producto</mat-hint>
+        </mat-form-field>
+        
+        <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
+      </form>
+    </div>
+  </div>
+  
+  <div mat-dialog-actions align="end">
+    <button mat-button (click)="cancel()" [disabled]="submitting">Cancelar</button>
+    <button mat-raised-button color="primary" (click)="save()" [disabled]="activeForm?.invalid || submitting">
+      <mat-spinner *ngIf="submitting" diameter="20" class="button-spinner"></mat-spinner>
+      <span *ngIf="!submitting">{{actionText}}</span>
+    </button>
+  </div>
+</div> 

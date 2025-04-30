@@ -13,7 +13,6 @@ exports.PdvCategoriaItem = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
 const pdv_categoria_entity_1 = require("./pdv-categoria.entity");
-const pdv_item_producto_entity_1 = require("./pdv-item-producto.entity");
 let PdvCategoriaItem = class PdvCategoriaItem extends base_entity_1.BaseModel {
 };
 __decorate([
@@ -38,7 +37,7 @@ __decorate([
     __metadata("design:type", pdv_categoria_entity_1.PdvCategoria)
 ], PdvCategoriaItem.prototype, "categoria", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => pdv_item_producto_entity_1.PdvItemProducto, (itemProducto) => itemProducto.categoriaItem),
+    (0, typeorm_1.OneToMany)('PdvItemProducto', 'categoriaItem'),
     __metadata("design:type", Array)
 ], PdvCategoriaItem.prototype, "productos", void 0);
 PdvCategoriaItem = __decorate([

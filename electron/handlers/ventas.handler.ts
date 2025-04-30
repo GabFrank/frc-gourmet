@@ -10,6 +10,13 @@ import { PdvCategoriaItem } from '../../src/app/database/entities/ventas/pdv-cat
 import { PdvItemProducto } from '../../src/app/database/entities/ventas/pdv-item-producto.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
+import { Not, IsNull } from 'typeorm';
+import { DeepPartial } from 'typeorm';
+import { Reserva } from '../../src/app/database/entities/ventas/reserva.entity';
+import { PdvMesa } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
+import { Comanda } from '../../src/app/database/entities/ventas/comanda.entity';
+import { Sector } from '../../src/app/database/entities/ventas/sector.entity';
 
 export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   const currentUser = getCurrentUser(); // Get user for tracking
@@ -693,6 +700,467 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       return await repo.remove(entity);
     } catch (error) {
       console.error(`Error deleting PDV Item Producto ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  // PDV Config handlers
+  ipcMain.handle('getPdvConfig', async (_event: any) => {
+    try {
+      const repository = dataSource.getRepository(PdvConfig);
+      
+      let config = await repository.findOne({
+        where: { id: Not(IsNull()) },
+        relations: ['pdvGrupoCategoria']
+      });
+      
+      // If no config exists, create a default one
+      if (!config) {
+        const newConfig = repository.create({
+          cantidad_mesas: 0,
+          activo: true
+        } as DeepPartial<PdvConfig>);
+        
+        config = await repository.save(newConfig);
+      }
+      
+      return config;
+    } catch (error) {
+      console.error('Error fetching PDV config:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('createPdvConfig', async (_event: any, data: Partial<PdvConfig>) => {
+    try {
+      const repository = dataSource.getRepository(PdvConfig);
+      
+      // Make sure there is only one active config
+      const existingConfig = await repository.findOne({
+        where: { id: Not(IsNull()) }
+      });
+      
+      if (existingConfig) {
+        throw new Error('Ya existe una configuración activa. Utilice updatePdvConfig en su lugar.');
+      }
+      
+      // Ensure activo is set to true for new config
+      const configData = { ...data, activo: true } as DeepPartial<PdvConfig>;
+      const newConfig = repository.create(configData);
+      return await repository.save(newConfig);
+    } catch (error) {
+      console.error('Error creating PDV config:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('updatePdvConfig', async (_event: any, id: number, data: Partial<PdvConfig>) => {
+    try {
+      const repository = dataSource.getRepository(PdvConfig);
+      
+      // Find the config to update
+      const config = await repository.findOne({
+        where: { id }
+      });
+      
+      if (!config) {
+        throw new Error(`Config ID ${id} not found`);
+      }
+      
+      // Apply updates
+      repository.merge(config, data as DeepPartial<PdvConfig>);
+      return await repository.save(config);
+    } catch (error) {
+      console.error(`Error updating PDV config ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  // --- Reserva Handlers ---
+  ipcMain.handle('getReservas', async () => {
+    try {
+      const repo = dataSource.getRepository(Reserva);
+      return await repo.find({
+        relations: ['cliente', 'cliente.persona'],
+        order: { fecha_hora_reserva: 'DESC' }
+      });
+    } catch (error) {
+      console.error('Error getting reservas:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('getReservasActivas', async () => {
+    try {
+      const repo = dataSource.getRepository(Reserva);
+      return await repo.find({
+        where: { activo: true },
+        relations: ['cliente', 'cliente.persona'],
+        order: { fecha_hora_reserva: 'ASC' }
+      });
+    } catch (error) {
+      console.error('Error getting reservas activas:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('getReserva', async (_event: any, id: number) => {
+    try {
+      const repo = dataSource.getRepository(Reserva);
+      return await repo.findOne({
+        where: { id },
+        relations: ['cliente', 'cliente.persona']
+      });
+    } catch (error) {
+      console.error(`Error getting reserva ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('createReserva', async (_event: any, data: any) => {
+    try {
+      const repo = dataSource.getRepository(Reserva);
+      const entity = repo.create(data);
+      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error('Error creating reserva:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('updateReserva', async (_event: any, id: number, data: any) => {
+    try {
+      const repo = dataSource.getRepository(Reserva);
+      const entity = await repo.findOneBy({ id });
+      if (!entity) throw new Error(`Reserva ID ${id} not found`);
+      repo.merge(entity, data);
+      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error(`Error updating reserva ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('deleteReserva', async (_event: any, id: number) => {
+    try {
+      const repo = dataSource.getRepository(Reserva);
+      const entity = await repo.findOneBy({ id });
+      if (!entity) throw new Error(`Reserva ID ${id} not found`);
+      
+      // Check for dependencies on PdvMesa
+      const mesaRepo = dataSource.getRepository(PdvMesa);
+      const mesasCount = await mesaRepo.count({
+        where: { reserva: { id } }
+      });
+      
+      if (mesasCount > 0) {
+        throw new Error(`No se puede eliminar la reserva porque está asociada a ${mesasCount} mesas.`);
+      }
+      
+      return await repo.remove(entity);
+    } catch (error) {
+      console.error(`Error deleting reserva ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  // --- PdvMesa Handlers ---
+  ipcMain.handle('getPdvMesas', async () => {
+    try {
+      const repo = dataSource.getRepository(PdvMesa);
+      return await repo.find({
+        relations: ['reserva', 'sector'],
+        order: { numero: 'ASC' }
+      });
+    } catch (error) {
+      console.error('Error getting PDV Mesas:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('getPdvMesasActivas', async () => {
+    try {
+      const repo = dataSource.getRepository(PdvMesa);
+      return await repo.find({
+        where: { activo: true },
+        relations: ['reserva', 'sector'],
+        order: { numero: 'ASC' }
+      });
+    } catch (error) {
+      console.error('Error getting PDV Mesas activas:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('getPdvMesasDisponibles', async () => {
+    try {
+      const repo = dataSource.getRepository(PdvMesa);
+      return await repo.find({
+        where: { activo: true, reservado: false },
+        relations: ['reserva', 'sector'],
+        order: { numero: 'ASC' }
+      });
+    } catch (error) {
+      console.error('Error getting PDV Mesas disponibles:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('getPdvMesasBySector', async (_event: any, sectorId: number) => {
+    try {
+      const repo = dataSource.getRepository(PdvMesa);
+      return await repo.find({
+        where: { sector: { id: sectorId } },
+        relations: ['reserva', 'sector'],
+        order: { numero: 'ASC' }
+      });
+    } catch (error) {
+      console.error(`Error getting PDV Mesas for Sector ID ${sectorId}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('getPdvMesa', async (_event: any, id: number) => {
+    try {
+      const repo = dataSource.getRepository(PdvMesa);
+      return await repo.findOne({
+        where: { id },
+        relations: ['reserva', 'reserva.cliente', 'reserva.cliente.persona', 'sector']
+      });
+    } catch (error) {
+      console.error(`Error getting PDV Mesa ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('createPdvMesa', async (_event: any, data: any) => {
+    try {
+      const repo = dataSource.getRepository(PdvMesa);
+      const entity = repo.create(data);
+      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error('Error creating PDV Mesa:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('updatePdvMesa', async (_event: any, id: number, data: any) => {
+    try {
+      const repo = dataSource.getRepository(PdvMesa);
+      const entity = await repo.findOneBy({ id });
+      if (!entity) throw new Error(`PDV Mesa ID ${id} not found`);
+      repo.merge(entity, data);
+      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error(`Error updating PDV Mesa ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('deletePdvMesa', async (_event: any, id: number) => {
+    try {
+      const repo = dataSource.getRepository(PdvMesa);
+      const entity = await repo.findOneBy({ id });
+      if (!entity) throw new Error(`PDV Mesa ID ${id} not found`);
+      
+      // Check for dependencies on Comandas
+      const comandaRepo = dataSource.getRepository(Comanda);
+      const comandasCount = await comandaRepo.count({
+        where: { pdv_mesa: { id } }
+      });
+      
+      if (comandasCount > 0) {
+        throw new Error(`No se puede eliminar la mesa porque está asociada a ${comandasCount} comandas.`);
+      }
+      
+      return await repo.remove(entity);
+    } catch (error) {
+      console.error(`Error deleting PDV Mesa ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  // --- Comanda Handlers ---
+  ipcMain.handle('getComandas', async () => {
+    try {
+      const repo = dataSource.getRepository(Comanda);
+      return await repo.find({
+        relations: ['pdv_mesa'],
+        order: { createdAt: 'DESC' }
+      });
+    } catch (error) {
+      console.error('Error getting Comandas:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('getComandasActivas', async () => {
+    try {
+      const repo = dataSource.getRepository(Comanda);
+      return await repo.find({
+        where: { activo: true },
+        relations: ['pdv_mesa'],
+        order: { createdAt: 'DESC' }
+      });
+    } catch (error) {
+      console.error('Error getting Comandas activas:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('getComandasByMesa', async (_event: any, mesaId: number) => {
+    try {
+      const repo = dataSource.getRepository(Comanda);
+      return await repo.find({
+        where: { pdv_mesa: { id: mesaId } },
+        relations: ['pdv_mesa'],
+        order: { createdAt: 'DESC' }
+      });
+    } catch (error) {
+      console.error(`Error getting Comandas for Mesa ID ${mesaId}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('getComanda', async (_event: any, id: number) => {
+    try {
+      const repo = dataSource.getRepository(Comanda);
+      return await repo.findOne({
+        where: { id },
+        relations: ['pdv_mesa']
+      });
+    } catch (error) {
+      console.error(`Error getting Comanda ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('createComanda', async (_event: any, data: any) => {
+    try {
+      const repo = dataSource.getRepository(Comanda);
+      const entity = repo.create(data);
+      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error('Error creating Comanda:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('updateComanda', async (_event: any, id: number, data: any) => {
+    try {
+      const repo = dataSource.getRepository(Comanda);
+      const entity = await repo.findOneBy({ id });
+      if (!entity) throw new Error(`Comanda ID ${id} not found`);
+      repo.merge(entity, data);
+      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error(`Error updating Comanda ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('deleteComanda', async (_event: any, id: number) => {
+    try {
+      const repo = dataSource.getRepository(Comanda);
+      const entity = await repo.findOneBy({ id });
+      if (!entity) throw new Error(`Comanda ID ${id} not found`);
+      return await repo.remove(entity);
+    } catch (error) {
+      console.error(`Error deleting Comanda ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  // --- Sector Handlers ---
+  ipcMain.handle('getSectores', async () => {
+    try {
+      const repo = dataSource.getRepository(Sector);
+      return await repo.find({
+        order: { nombre: 'ASC' }
+      });
+    } catch (error) {
+      console.error('Error getting Sectores:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('getSectoresActivos', async () => {
+    try {
+      const repo = dataSource.getRepository(Sector);
+      return await repo.find({
+        where: { activo: true },
+        order: { nombre: 'ASC' }
+      });
+    } catch (error) {
+      console.error('Error getting Sectores activos:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('getSector', async (_event: any, id: number) => {
+    try {
+      const repo = dataSource.getRepository(Sector);
+      return await repo.findOne({
+        where: { id },
+        relations: ['mesas']
+      });
+    } catch (error) {
+      console.error(`Error getting Sector ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('createSector', async (_event: any, data: any) => {
+    try {
+      const repo = dataSource.getRepository(Sector);
+      const entity = repo.create(data);
+      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error('Error creating Sector:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('updateSector', async (_event: any, id: number, data: any) => {
+    try {
+      const repo = dataSource.getRepository(Sector);
+      const entity = await repo.findOneBy({ id });
+      if (!entity) throw new Error(`Sector ID ${id} not found`);
+      repo.merge(entity, data);
+      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error(`Error updating Sector ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('deleteSector', async (_event: any, id: number) => {
+    try {
+      const repo = dataSource.getRepository(Sector);
+      const entity = await repo.findOneBy({ id });
+      if (!entity) throw new Error(`Sector ID ${id} not found`);
+      
+      // Check for dependencies on PdvMesa
+      const mesaRepo = dataSource.getRepository(PdvMesa);
+      const mesasCount = await mesaRepo.count({
+        where: { sector: { id } }
+      });
+      
+      if (mesasCount > 0) {
+        throw new Error(`No se puede eliminar el sector porque tiene ${mesasCount} mesas asociadas.`);
+      }
+      
+      return await repo.remove(entity);
+    } catch (error) {
+      console.error(`Error deleting Sector ID ${id}:`, error);
       throw error;
     }
   });

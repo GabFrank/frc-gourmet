@@ -62,6 +62,12 @@ import { PdvGrupoCategoria } from './entities/ventas/pdv-grupo-categoria.entity'
 import { PdvCategoria } from './entities/ventas/pdv-categoria.entity';
 import { PdvCategoriaItem } from './entities/ventas/pdv-categoria-item.entity';
 import { PdvItemProducto } from './entities/ventas/pdv-item-producto.entity';
+import { PdvConfig } from './entities/ventas/pdv-config.entity';
+// Import new entities for Mesas, Reservas, and Comandas
+import { PdvMesa } from './entities/ventas/pdv-mesa.entity';
+import { Reserva } from './entities/ventas/reserva.entity';
+import { Comanda } from './entities/ventas/comanda.entity';
+import { Sector } from './entities/ventas/sector.entity';
 
 /**
  * Get the configuration for TypeORM
@@ -129,7 +135,13 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       PdvGrupoCategoria,
       PdvCategoria,
       PdvCategoriaItem,
-      PdvItemProducto
+      PdvItemProducto,
+      PdvConfig,
+      // Mesa, Reserva, and Comanda entities
+      PdvMesa,
+      Reserva,
+      Comanda,
+      Sector
     ],
     synchronize: true, // Automatically creates tables in development
     logging: process.env['NODE_ENV'] === 'development',

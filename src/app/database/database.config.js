@@ -82,6 +82,12 @@ const pdv_grupo_categoria_entity_1 = require("./entities/ventas/pdv-grupo-catego
 const pdv_categoria_entity_1 = require("./entities/ventas/pdv-categoria.entity");
 const pdv_categoria_item_entity_1 = require("./entities/ventas/pdv-categoria-item.entity");
 const pdv_item_producto_entity_1 = require("./entities/ventas/pdv-item-producto.entity");
+const pdv_config_entity_1 = require("./entities/ventas/pdv-config.entity");
+// Import new entities for Mesas, Reservas, and Comandas
+const pdv_mesa_entity_1 = require("./entities/ventas/pdv-mesa.entity");
+const reserva_entity_1 = require("./entities/ventas/reserva.entity");
+const comanda_entity_1 = require("./entities/ventas/comanda.entity");
+const sector_entity_1 = require("./entities/ventas/sector.entity");
 /**
  * Get the configuration for TypeORM
  * @param userDataPath Path to store the database file
@@ -148,7 +154,13 @@ function getDataSourceOptions(userDataPath) {
             pdv_grupo_categoria_entity_1.PdvGrupoCategoria,
             pdv_categoria_entity_1.PdvCategoria,
             pdv_categoria_item_entity_1.PdvCategoriaItem,
-            pdv_item_producto_entity_1.PdvItemProducto
+            pdv_item_producto_entity_1.PdvItemProducto,
+            pdv_config_entity_1.PdvConfig,
+            // Mesa, Reserva, and Comanda entities
+            pdv_mesa_entity_1.PdvMesa,
+            reserva_entity_1.Reserva,
+            comanda_entity_1.Comanda,
+            sector_entity_1.Sector
         ],
         synchronize: true,
         logging: process.env['NODE_ENV'] === 'development',

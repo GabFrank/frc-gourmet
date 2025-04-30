@@ -9,27 +9,29 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PdvGrupoCategoria = void 0;
+exports.Sector = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
-let PdvGrupoCategoria = class PdvGrupoCategoria extends base_entity_1.BaseModel {
+const pdv_mesa_entity_1 = require("./pdv-mesa.entity");
+/**
+ * Entity representing a sector (area of tables)
+ */
+let Sector = class Sector extends base_entity_1.BaseModel {
 };
 __decorate([
-    (0, typeorm_1.Column)({ nullable: false }),
+    (0, typeorm_1.Column)(),
     __metadata("design:type", String)
-], PdvGrupoCategoria.prototype, "nombre", void 0);
+], Sector.prototype, "nombre", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
-], PdvGrupoCategoria.prototype, "activo", void 0);
+], Sector.prototype, "activo", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => pdv_categoria_entity_1.PdvCategoria, (categoria) => categoria.grupoCategoria),
+    (0, typeorm_1.OneToMany)(() => pdv_mesa_entity_1.PdvMesa, mesa => mesa.sector),
     __metadata("design:type", Array)
-], PdvGrupoCategoria.prototype, "categorias", void 0);
-PdvGrupoCategoria = __decorate([
-    (0, typeorm_1.Entity)('pdv_grupo_categoria')
-], PdvGrupoCategoria);
-exports.PdvGrupoCategoria = PdvGrupoCategoria;
-// Import after the class declaration to avoid circular dependencies
-const pdv_categoria_entity_1 = require("./pdv-categoria.entity");
-//# sourceMappingURL=pdv-grupo-categoria.entity.js.map
+], Sector.prototype, "mesas", void 0);
+Sector = __decorate([
+    (0, typeorm_1.Entity)('sectores')
+], Sector);
+exports.Sector = Sector;
+//# sourceMappingURL=sector.entity.js.map

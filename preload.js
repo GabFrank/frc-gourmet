@@ -1,785 +1,938 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 // Preload script that will be executed before rendering the application
-const { contextBridge, ipcRenderer } = require('electron');
+const electron_1 = require("electron");
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
-contextBridge.exposeInMainWorld('api', {
+electron_1.contextBridge.exposeInMainWorld('api', {
     // Database operations
     getCategories: async () => {
-        return await ipcRenderer.invoke('get-categories');
+        return await electron_1.ipcRenderer.invoke('get-categories');
     },
     getProducts: async () => {
-        return await ipcRenderer.invoke('get-products');
+        return await electron_1.ipcRenderer.invoke('get-products');
     },
     getProductsByCategory: async (categoryId) => {
-        return await ipcRenderer.invoke('get-products-by-category', categoryId);
+        return await electron_1.ipcRenderer.invoke('get-products-by-category', categoryId);
     },
     createProduct: async (productData) => {
-        return await ipcRenderer.invoke('create-product', productData);
+        return await electron_1.ipcRenderer.invoke('create-product', productData);
     },
     updateProduct: async (productId, productData) => {
-        return await ipcRenderer.invoke('update-product', productId, productData);
+        return await electron_1.ipcRenderer.invoke('update-product', productId, productData);
     },
     createOrder: async (orderData) => {
-        return await ipcRenderer.invoke('create-order', orderData);
+        return await electron_1.ipcRenderer.invoke('create-order', orderData);
     },
     getOrders: async () => {
-        return await ipcRenderer.invoke('get-orders');
+        return await electron_1.ipcRenderer.invoke('get-orders');
     },
     getOrderDetails: async (orderId) => {
-        return await ipcRenderer.invoke('get-order-details', orderId);
+        return await electron_1.ipcRenderer.invoke('get-order-details', orderId);
     },
     updateOrderStatus: async (orderId, status) => {
-        return await ipcRenderer.invoke('update-order-status', orderId, status);
+        return await electron_1.ipcRenderer.invoke('update-order-status', orderId, status);
     },
     // Persona operations
     getPersonas: async () => {
-        return await ipcRenderer.invoke('get-personas');
+        return await electron_1.ipcRenderer.invoke('get-personas');
     },
     getPersona: async (personaId) => {
-        return await ipcRenderer.invoke('get-persona', personaId);
+        return await electron_1.ipcRenderer.invoke('get-persona', personaId);
     },
     createPersona: async (personaData, currentUserId) => {
-        return await ipcRenderer.invoke('create-persona', personaData, currentUserId);
+        return await electron_1.ipcRenderer.invoke('create-persona', personaData, currentUserId);
     },
     updatePersona: async (personaId, personaData, currentUserId) => {
-        return await ipcRenderer.invoke('update-persona', personaId, personaData, currentUserId);
+        return await electron_1.ipcRenderer.invoke('update-persona', personaId, personaData, currentUserId);
     },
     deletePersona: async (personaId, currentUserId) => {
-        return await ipcRenderer.invoke('delete-persona', personaId, currentUserId);
+        return await electron_1.ipcRenderer.invoke('delete-persona', personaId, currentUserId);
     },
     // Auth operations
     login: async (loginData) => {
-        return await ipcRenderer.invoke('login', loginData);
+        return await electron_1.ipcRenderer.invoke('login', loginData);
     },
     logout: async (sessionId) => {
-        return await ipcRenderer.invoke('logout', sessionId);
+        return await electron_1.ipcRenderer.invoke('logout', sessionId);
     },
     updateSessionActivity: async (sessionId) => {
-        return await ipcRenderer.invoke('updateSessionActivity', sessionId);
+        return await electron_1.ipcRenderer.invoke('updateSessionActivity', sessionId);
     },
     getLoginSessions: async (usuarioId) => {
-        return await ipcRenderer.invoke('getLoginSessions', usuarioId);
+        return await electron_1.ipcRenderer.invoke('getLoginSessions', usuarioId);
     },
     getCurrentUser: async () => {
-        return await ipcRenderer.invoke('getCurrentUser');
+        return await electron_1.ipcRenderer.invoke('getCurrentUser');
     },
     setCurrentUser: async (usuario) => {
-        return await ipcRenderer.invoke('setCurrentUser', usuario);
+        return await electron_1.ipcRenderer.invoke('setCurrentUser', usuario);
     },
     // Printer operations
     getPrinters: async () => {
-        return await ipcRenderer.invoke('get-printers');
+        return await electron_1.ipcRenderer.invoke('get-printers');
     },
     addPrinter: async (printer) => {
-        return await ipcRenderer.invoke('add-printer', printer);
+        return await electron_1.ipcRenderer.invoke('add-printer', printer);
     },
     updatePrinter: async (printerId, printer) => {
-        return await ipcRenderer.invoke('update-printer', printerId, printer);
+        return await electron_1.ipcRenderer.invoke('update-printer', printerId, printer);
     },
     deletePrinter: async (printerId) => {
-        return await ipcRenderer.invoke('delete-printer', printerId);
+        return await electron_1.ipcRenderer.invoke('delete-printer', printerId);
     },
     printReceipt: async (orderId, printerId) => {
-        return await ipcRenderer.invoke('print-receipt', orderId, printerId);
+        return await electron_1.ipcRenderer.invoke('print-receipt', orderId, printerId);
     },
     printTestPage: async (printerId) => {
-        return await ipcRenderer.invoke('print-test-page', printerId);
+        return await electron_1.ipcRenderer.invoke('print-test-page', printerId);
     },
     // Usuario operations
     getUsuarios: async () => {
-        return await ipcRenderer.invoke('get-usuarios');
+        return await electron_1.ipcRenderer.invoke('get-usuarios');
     },
     getUsuario: async (usuarioId) => {
-        return await ipcRenderer.invoke('get-usuario', usuarioId);
+        return await electron_1.ipcRenderer.invoke('get-usuario', usuarioId);
     },
     createUsuario: async (usuarioData) => {
-        return await ipcRenderer.invoke('create-usuario', usuarioData);
+        return await electron_1.ipcRenderer.invoke('create-usuario', usuarioData);
     },
     updateUsuario: async (usuarioId, usuarioData) => {
-        return await ipcRenderer.invoke('update-usuario', usuarioId, usuarioData);
+        return await electron_1.ipcRenderer.invoke('update-usuario', usuarioId, usuarioData);
     },
     deleteUsuario: async (usuarioId) => {
-        return await ipcRenderer.invoke('delete-usuario', usuarioId);
+        return await electron_1.ipcRenderer.invoke('delete-usuario', usuarioId);
     },
     getUsuariosPaginated: async (page, pageSize, filters) => {
         console.log('Preload.ts sending filters:', JSON.stringify(filters));
-        return await ipcRenderer.invoke('get-usuarios-paginated', page, pageSize, filters);
+        return await electron_1.ipcRenderer.invoke('get-usuarios-paginated', page, pageSize, filters);
     },
     // Role operations
     getRoles: async () => {
-        return await ipcRenderer.invoke('get-roles');
+        return await electron_1.ipcRenderer.invoke('get-roles');
     },
     getRole: async (roleId) => {
-        return await ipcRenderer.invoke('get-role', roleId);
+        return await electron_1.ipcRenderer.invoke('get-role', roleId);
     },
     createRole: async (roleData) => {
-        return await ipcRenderer.invoke('create-role', roleData);
+        return await electron_1.ipcRenderer.invoke('create-role', roleData);
     },
     updateRole: async (roleId, roleData) => {
-        return await ipcRenderer.invoke('update-role', roleId, roleData);
+        return await electron_1.ipcRenderer.invoke('update-role', roleId, roleData);
     },
     deleteRole: async (roleId) => {
-        return await ipcRenderer.invoke('delete-role', roleId);
+        return await electron_1.ipcRenderer.invoke('delete-role', roleId);
     },
     // UsuarioRole operations
     getUsuarioRoles: async (usuarioId) => {
-        return await ipcRenderer.invoke('get-usuario-roles', usuarioId);
+        return await electron_1.ipcRenderer.invoke('get-usuario-roles', usuarioId);
     },
     assignRoleToUsuario: async (usuarioId, roleId) => {
-        return await ipcRenderer.invoke('assign-role-to-usuario', usuarioId, roleId);
+        return await electron_1.ipcRenderer.invoke('assign-role-to-usuario', usuarioId, roleId);
     },
     removeRoleFromUsuario: async (usuarioRoleId) => {
-        return await ipcRenderer.invoke('remove-role-from-usuario', usuarioRoleId);
+        return await electron_1.ipcRenderer.invoke('remove-role-from-usuario', usuarioRoleId);
     },
     // TipoCliente operations
     getTipoClientes: async () => {
-        return await ipcRenderer.invoke('get-tipo-clientes');
+        return await electron_1.ipcRenderer.invoke('get-tipo-clientes');
     },
     getTipoCliente: async (tipoClienteId) => {
-        return await ipcRenderer.invoke('get-tipo-cliente', tipoClienteId);
+        return await electron_1.ipcRenderer.invoke('get-tipo-cliente', tipoClienteId);
     },
     createTipoCliente: async (tipoClienteData) => {
-        return await ipcRenderer.invoke('create-tipo-cliente', tipoClienteData);
+        return await electron_1.ipcRenderer.invoke('create-tipo-cliente', tipoClienteData);
     },
     updateTipoCliente: async (tipoClienteId, tipoClienteData) => {
-        return await ipcRenderer.invoke('update-tipo-cliente', tipoClienteId, tipoClienteData);
+        return await electron_1.ipcRenderer.invoke('update-tipo-cliente', tipoClienteId, tipoClienteData);
     },
     deleteTipoCliente: async (tipoClienteId) => {
-        return await ipcRenderer.invoke('delete-tipo-cliente', tipoClienteId);
+        return await electron_1.ipcRenderer.invoke('delete-tipo-cliente', tipoClienteId);
     },
     // Cliente operations
     getClientes: async () => {
-        return await ipcRenderer.invoke('get-clientes');
+        return await electron_1.ipcRenderer.invoke('get-clientes');
     },
     getCliente: async (clienteId) => {
-        return await ipcRenderer.invoke('get-cliente', clienteId);
+        return await electron_1.ipcRenderer.invoke('get-cliente', clienteId);
     },
     createCliente: async (clienteData) => {
-        return await ipcRenderer.invoke('create-cliente', clienteData);
+        return await electron_1.ipcRenderer.invoke('create-cliente', clienteData);
     },
     updateCliente: async (clienteId, clienteData) => {
-        return await ipcRenderer.invoke('update-cliente', clienteId, clienteData);
+        return await electron_1.ipcRenderer.invoke('update-cliente', clienteId, clienteData);
     },
     deleteCliente: async (clienteId) => {
-        return await ipcRenderer.invoke('delete-cliente', clienteId);
+        return await electron_1.ipcRenderer.invoke('delete-cliente', clienteId);
     },
     // Profile image operations
     saveProfileImage: async (base64Data, fileName) => {
-        return await ipcRenderer.invoke('save-profile-image', { base64Data, fileName });
+        return await electron_1.ipcRenderer.invoke('save-profile-image', { base64Data, fileName });
     },
     deleteProfileImage: async (imageUrl) => {
-        return await ipcRenderer.invoke('delete-profile-image', imageUrl);
+        return await electron_1.ipcRenderer.invoke('delete-profile-image', imageUrl);
     },
     // Utility functions
     on: (channel, callback) => {
         // Deliberately strip event as it includes `sender`
-        ipcRenderer.on(channel, (_event, data) => callback(data));
+        electron_1.ipcRenderer.on(channel, (_event, data) => callback(data));
     },
     // Categoria operations
     getCategorias: async () => {
-        return await ipcRenderer.invoke('getCategorias');
+        return await electron_1.ipcRenderer.invoke('getCategorias');
     },
     getCategoria: async (categoriaId) => {
-        return await ipcRenderer.invoke('getCategoria', categoriaId);
+        return await electron_1.ipcRenderer.invoke('getCategoria', categoriaId);
     },
     createCategoria: async (categoriaData) => {
-        return await ipcRenderer.invoke('createCategoria', categoriaData);
+        return await electron_1.ipcRenderer.invoke('createCategoria', categoriaData);
     },
     updateCategoria: async (categoriaId, categoriaData) => {
-        return await ipcRenderer.invoke('updateCategoria', categoriaId, categoriaData);
+        return await electron_1.ipcRenderer.invoke('updateCategoria', categoriaId, categoriaData);
     },
     deleteCategoria: async (categoriaId) => {
-        return await ipcRenderer.invoke('deleteCategoria', categoriaId);
+        return await electron_1.ipcRenderer.invoke('deleteCategoria', categoriaId);
     },
     // Subcategoria operations
     getSubcategorias: async () => {
-        return await ipcRenderer.invoke('getSubcategorias');
+        return await electron_1.ipcRenderer.invoke('getSubcategorias');
     },
     getSubcategoria: async (subcategoriaId) => {
-        return await ipcRenderer.invoke('getSubcategoria', subcategoriaId);
+        return await electron_1.ipcRenderer.invoke('getSubcategoria', subcategoriaId);
     },
     getSubcategoriasByCategoria: async (categoriaId) => {
-        return await ipcRenderer.invoke('getSubcategoriasByCategoria', categoriaId);
+        return await electron_1.ipcRenderer.invoke('getSubcategoriasByCategoria', categoriaId);
     },
     createSubcategoria: async (subcategoriaData) => {
-        return await ipcRenderer.invoke('createSubcategoria', subcategoriaData);
+        return await electron_1.ipcRenderer.invoke('createSubcategoria', subcategoriaData);
     },
     updateSubcategoria: async (subcategoriaId, subcategoriaData) => {
-        return await ipcRenderer.invoke('updateSubcategoria', subcategoriaId, subcategoriaData);
+        return await electron_1.ipcRenderer.invoke('updateSubcategoria', subcategoriaId, subcategoriaData);
     },
     deleteSubcategoria: async (subcategoriaId) => {
-        return await ipcRenderer.invoke('deleteSubcategoria', subcategoriaId);
+        return await electron_1.ipcRenderer.invoke('deleteSubcategoria', subcategoriaId);
     },
     // Producto operations
     getProductos: async () => {
-        return await ipcRenderer.invoke('getProductos');
+        return await electron_1.ipcRenderer.invoke('getProductos');
     },
     getProducto: async (productoId) => {
-        return await ipcRenderer.invoke('getProducto', productoId);
+        return await electron_1.ipcRenderer.invoke('getProducto', productoId);
     },
     getProductosBySubcategoria: async (subcategoriaId) => {
-        return await ipcRenderer.invoke('getProductosBySubcategoria', subcategoriaId);
+        return await electron_1.ipcRenderer.invoke('getProductosBySubcategoria', subcategoriaId);
     },
     createProducto: async (productoData) => {
-        return await ipcRenderer.invoke('createProducto', productoData);
+        return await electron_1.ipcRenderer.invoke('createProducto', productoData);
     },
     updateProducto: async (productoId, productoData) => {
-        return await ipcRenderer.invoke('updateProducto', productoId, productoData);
+        return await electron_1.ipcRenderer.invoke('updateProducto', productoId, productoData);
     },
     deleteProducto: async (productoId) => {
-        return await ipcRenderer.invoke('deleteProducto', productoId);
+        return await electron_1.ipcRenderer.invoke('deleteProducto', productoId);
     },
     saveProductoImage: async (base64Data, fileName) => {
-        return await ipcRenderer.invoke('saveProductoImage', { base64Data, fileName });
+        return await electron_1.ipcRenderer.invoke('saveProductoImage', { base64Data, fileName });
     },
     deleteProductoImage: async (imageUrl) => {
-        return await ipcRenderer.invoke('deleteProductoImage', imageUrl);
+        return await electron_1.ipcRenderer.invoke('deleteProductoImage', imageUrl);
     },
     // Product Image methods
     getProductImages: async (productoId) => {
-        return await ipcRenderer.invoke('getProductImages', productoId);
+        return await electron_1.ipcRenderer.invoke('getProductImages', productoId);
     },
     createProductImage: async (imageData) => {
-        return await ipcRenderer.invoke('createProductImage', imageData);
+        return await electron_1.ipcRenderer.invoke('createProductImage', imageData);
     },
     updateProductImage: async (imageId, imageData) => {
-        return await ipcRenderer.invoke('updateProductImage', imageId, imageData);
+        return await electron_1.ipcRenderer.invoke('updateProductImage', imageId, imageData);
     },
     deleteProductImage: async (imageId) => {
-        return await ipcRenderer.invoke('deleteProductImage', imageId);
+        return await electron_1.ipcRenderer.invoke('deleteProductImage', imageId);
     },
     // Presentacion methods
     getPresentaciones: async () => {
-        return await ipcRenderer.invoke('getPresentaciones');
+        return await electron_1.ipcRenderer.invoke('getPresentaciones');
     },
     getPresentacion: async (presentacionId) => {
-        return await ipcRenderer.invoke('getPresentacion', presentacionId);
+        return await electron_1.ipcRenderer.invoke('getPresentacion', presentacionId);
     },
     getPresentacionesByProducto: async (productoId) => {
-        return await ipcRenderer.invoke('getPresentacionesByProducto', productoId);
+        return await electron_1.ipcRenderer.invoke('getPresentacionesByProducto', productoId);
     },
     createPresentacion: async (presentacionData) => {
-        return await ipcRenderer.invoke('createPresentacion', presentacionData);
+        return await electron_1.ipcRenderer.invoke('createPresentacion', presentacionData);
     },
     updatePresentacion: async (presentacionId, presentacionData) => {
-        return await ipcRenderer.invoke('updatePresentacion', presentacionId, presentacionData);
+        return await electron_1.ipcRenderer.invoke('updatePresentacion', presentacionId, presentacionData);
     },
     deletePresentacion: async (presentacionId) => {
-        return await ipcRenderer.invoke('deletePresentacion', presentacionId);
+        return await electron_1.ipcRenderer.invoke('deletePresentacion', presentacionId);
     },
     // Codigo methods
     getCodigos: async () => {
-        return await ipcRenderer.invoke('getCodigos');
+        return await electron_1.ipcRenderer.invoke('getCodigos');
     },
     getCodigo: async (codigoId) => {
-        return await ipcRenderer.invoke('getCodigo', codigoId);
+        return await electron_1.ipcRenderer.invoke('getCodigo', codigoId);
     },
     getCodigosByPresentacion: async (presentacionId) => {
-        return await ipcRenderer.invoke('getCodigosByPresentacion', presentacionId);
+        return await electron_1.ipcRenderer.invoke('getCodigosByPresentacion', presentacionId);
     },
     createCodigo: async (codigoData) => {
-        return await ipcRenderer.invoke('createCodigo', codigoData);
+        return await electron_1.ipcRenderer.invoke('createCodigo', codigoData);
     },
     updateCodigo: async (codigoId, codigoData) => {
-        return await ipcRenderer.invoke('updateCodigo', codigoId, codigoData);
+        return await electron_1.ipcRenderer.invoke('updateCodigo', codigoId, codigoData);
     },
     deleteCodigo: async (codigoId) => {
-        return await ipcRenderer.invoke('deleteCodigo', codigoId);
+        return await electron_1.ipcRenderer.invoke('deleteCodigo', codigoId);
     },
     // Moneda methods
     getMonedas: async () => {
-        return await ipcRenderer.invoke('getMonedas');
+        return await electron_1.ipcRenderer.invoke('getMonedas');
     },
     getMoneda: async (monedaId) => {
-        return await ipcRenderer.invoke('getMoneda', monedaId);
+        return await electron_1.ipcRenderer.invoke('getMoneda', monedaId);
     },
     createMoneda: async (monedaData) => {
-        return await ipcRenderer.invoke('createMoneda', monedaData);
+        return await electron_1.ipcRenderer.invoke('createMoneda', monedaData);
     },
     updateMoneda: async (monedaId, monedaData) => {
-        return await ipcRenderer.invoke('updateMoneda', monedaId, monedaData);
+        return await electron_1.ipcRenderer.invoke('updateMoneda', monedaId, monedaData);
     },
     deleteMoneda: async (monedaId) => {
-        return await ipcRenderer.invoke('deleteMoneda', monedaId);
+        return await electron_1.ipcRenderer.invoke('deleteMoneda', monedaId);
     },
     // TipoPrecio methods
     getTipoPrecios: async () => {
-        return await ipcRenderer.invoke('getTipoPrecios');
+        return await electron_1.ipcRenderer.invoke('getTipoPrecios');
     },
     getTipoPrecio: async (tipoPrecioId) => {
-        return await ipcRenderer.invoke('getTipoPrecio', tipoPrecioId);
+        return await electron_1.ipcRenderer.invoke('getTipoPrecio', tipoPrecioId);
     },
     createTipoPrecio: async (tipoPrecioData) => {
-        return await ipcRenderer.invoke('createTipoPrecio', tipoPrecioData);
+        return await electron_1.ipcRenderer.invoke('createTipoPrecio', tipoPrecioData);
     },
     updateTipoPrecio: async (tipoPrecioId, tipoPrecioData) => {
-        return await ipcRenderer.invoke('updateTipoPrecio', tipoPrecioId, tipoPrecioData);
+        return await electron_1.ipcRenderer.invoke('updateTipoPrecio', tipoPrecioId, tipoPrecioData);
     },
     deleteTipoPrecio: async (tipoPrecioId) => {
-        return await ipcRenderer.invoke('deleteTipoPrecio', tipoPrecioId);
+        return await electron_1.ipcRenderer.invoke('deleteTipoPrecio', tipoPrecioId);
     },
     // PrecioVenta methods
     getPreciosVenta: async () => {
-        return await ipcRenderer.invoke('getPreciosVenta');
+        return await electron_1.ipcRenderer.invoke('getPreciosVenta');
     },
     getPrecioVenta: async (precioVentaId) => {
-        return await ipcRenderer.invoke('getPrecioVenta', precioVentaId);
+        return await electron_1.ipcRenderer.invoke('getPrecioVenta', precioVentaId);
     },
     getPreciosVentaByPresentacion: async (presentacionId) => {
-        return await ipcRenderer.invoke('getPreciosVentaByPresentacion', presentacionId);
+        return await electron_1.ipcRenderer.invoke('getPreciosVentaByPresentacion', presentacionId);
     },
     getPreciosVentaByPresentacionSabor: async (presentacionSaborId) => {
-        return await ipcRenderer.invoke('getPreciosVentaByPresentacionSabor', presentacionSaborId);
+        return await electron_1.ipcRenderer.invoke('getPreciosVentaByPresentacionSabor', presentacionSaborId);
     },
     createPrecioVenta: async (precioVentaData) => {
-        return await ipcRenderer.invoke('createPrecioVenta', precioVentaData);
+        return await electron_1.ipcRenderer.invoke('createPrecioVenta', precioVentaData);
     },
     updatePrecioVenta: async (precioVentaId, precioVentaData) => {
-        return await ipcRenderer.invoke('updatePrecioVenta', precioVentaId, precioVentaData);
+        return await electron_1.ipcRenderer.invoke('updatePrecioVenta', precioVentaId, precioVentaData);
     },
     deletePrecioVenta: async (precioVentaId) => {
-        return await ipcRenderer.invoke('deletePrecioVenta', precioVentaId);
+        return await electron_1.ipcRenderer.invoke('deletePrecioVenta', precioVentaId);
     },
     // Sabor methods
     getSabores: async () => {
-        return await ipcRenderer.invoke('getSabores');
+        return await electron_1.ipcRenderer.invoke('getSabores');
     },
     getSabor: async (saborId) => {
-        return await ipcRenderer.invoke('getSabor', saborId);
+        return await electron_1.ipcRenderer.invoke('getSabor', saborId);
     },
     createSabor: async (saborData) => {
-        return await ipcRenderer.invoke('createSabor', saborData);
+        return await electron_1.ipcRenderer.invoke('createSabor', saborData);
     },
     updateSabor: async (saborId, saborData) => {
-        return await ipcRenderer.invoke('updateSabor', saborId, saborData);
+        return await electron_1.ipcRenderer.invoke('updateSabor', saborId, saborData);
     },
     deleteSabor: async (saborId) => {
-        return await ipcRenderer.invoke('deleteSabor', saborId);
+        return await electron_1.ipcRenderer.invoke('deleteSabor', saborId);
     },
     // PresentacionSabor methods
     getPresentacionSaboresByPresentacion: async (presentacionId) => {
-        return await ipcRenderer.invoke('getPresentacionSaboresByPresentacion', presentacionId);
+        return await electron_1.ipcRenderer.invoke('getPresentacionSaboresByPresentacion', presentacionId);
     },
     getPresentacionSabor: async (presentacionSaborId) => {
-        return await ipcRenderer.invoke('getPresentacionSabor', presentacionSaborId);
+        return await electron_1.ipcRenderer.invoke('getPresentacionSabor', presentacionSaborId);
     },
     createPresentacionSabor: async (presentacionSaborData) => {
-        return await ipcRenderer.invoke('createPresentacionSabor', presentacionSaborData);
+        return await electron_1.ipcRenderer.invoke('createPresentacionSabor', presentacionSaborData);
     },
     updatePresentacionSabor: async (presentacionSaborId, presentacionSaborData) => {
-        return await ipcRenderer.invoke('updatePresentacionSabor', presentacionSaborId, presentacionSaborData);
+        return await electron_1.ipcRenderer.invoke('updatePresentacionSabor', presentacionSaborId, presentacionSaborData);
     },
     deletePresentacionSabor: async (presentacionSaborId) => {
-        return await ipcRenderer.invoke('deletePresentacionSabor', presentacionSaborId);
+        return await electron_1.ipcRenderer.invoke('deletePresentacionSabor', presentacionSaborId);
     },
     // Receta methods
     getRecetas: async () => {
-        return await ipcRenderer.invoke('getRecetas');
+        return await electron_1.ipcRenderer.invoke('getRecetas');
     },
     getReceta: async (recetaId) => {
-        return await ipcRenderer.invoke('getReceta', recetaId);
+        return await electron_1.ipcRenderer.invoke('getReceta', recetaId);
     },
     createReceta: async (recetaData) => {
-        return await ipcRenderer.invoke('createReceta', recetaData);
+        return await electron_1.ipcRenderer.invoke('createReceta', recetaData);
     },
     updateReceta: async (recetaId, recetaData) => {
-        return await ipcRenderer.invoke('updateReceta', recetaId, recetaData);
+        return await electron_1.ipcRenderer.invoke('updateReceta', recetaId, recetaData);
     },
     deleteReceta: async (recetaId) => {
-        return await ipcRenderer.invoke('deleteReceta', recetaId);
+        return await electron_1.ipcRenderer.invoke('deleteReceta', recetaId);
     },
     // RecetaItem methods
     getRecetaItems: async (recetaId) => {
-        return await ipcRenderer.invoke('getRecetaItems', recetaId);
+        return await electron_1.ipcRenderer.invoke('getRecetaItems', recetaId);
     },
     getRecetaItem: async (recetaItemId) => {
-        return await ipcRenderer.invoke('getRecetaItem', recetaItemId);
+        return await electron_1.ipcRenderer.invoke('getRecetaItem', recetaItemId);
     },
     createRecetaItem: async (recetaItemData) => {
-        return await ipcRenderer.invoke('createRecetaItem', recetaItemData);
+        return await electron_1.ipcRenderer.invoke('createRecetaItem', recetaItemData);
     },
     updateRecetaItem: async (recetaItemId, recetaItemData) => {
-        return await ipcRenderer.invoke('updateRecetaItem', recetaItemId, recetaItemData);
+        return await electron_1.ipcRenderer.invoke('updateRecetaItem', recetaItemId, recetaItemData);
     },
     deleteRecetaItem: async (recetaItemId) => {
-        return await ipcRenderer.invoke('deleteRecetaItem', recetaItemId);
+        return await electron_1.ipcRenderer.invoke('deleteRecetaItem', recetaItemId);
     },
     // Ingrediente methods
     getIngredientes: async () => {
-        return await ipcRenderer.invoke('getIngredientes');
+        return await electron_1.ipcRenderer.invoke('getIngredientes');
     },
     getIngrediente: async (ingredienteId) => {
-        return await ipcRenderer.invoke('getIngrediente', ingredienteId);
+        return await electron_1.ipcRenderer.invoke('getIngrediente', ingredienteId);
     },
     createIngrediente: async (ingredienteData) => {
-        return await ipcRenderer.invoke('createIngrediente', ingredienteData);
+        return await electron_1.ipcRenderer.invoke('createIngrediente', ingredienteData);
     },
     updateIngrediente: async (ingredienteId, ingredienteData) => {
-        return await ipcRenderer.invoke('updateIngrediente', ingredienteId, ingredienteData);
+        return await electron_1.ipcRenderer.invoke('updateIngrediente', ingredienteId, ingredienteData);
     },
     deleteIngrediente: async (ingredienteId) => {
-        return await ipcRenderer.invoke('deleteIngrediente', ingredienteId);
+        return await electron_1.ipcRenderer.invoke('deleteIngrediente', ingredienteId);
     },
     searchIngredientesByDescripcion: async (searchText) => {
-        return await ipcRenderer.invoke('searchIngredientesByDescripcion', searchText);
+        return await electron_1.ipcRenderer.invoke('searchIngredientesByDescripcion', searchText);
     },
     // RecetaVariacion methods
     getRecetaVariaciones: async (recetaId) => {
-        return await ipcRenderer.invoke('getRecetaVariaciones', recetaId);
+        return await electron_1.ipcRenderer.invoke('getRecetaVariaciones', recetaId);
     },
     getRecetaVariacion: async (variacionId) => {
-        return await ipcRenderer.invoke('getRecetaVariacion', variacionId);
+        return await electron_1.ipcRenderer.invoke('getRecetaVariacion', variacionId);
     },
     createRecetaVariacion: async (variacionData) => {
-        return await ipcRenderer.invoke('createRecetaVariacion', variacionData);
+        return await electron_1.ipcRenderer.invoke('createRecetaVariacion', variacionData);
     },
     updateRecetaVariacion: async (variacionId, variacionData) => {
-        return await ipcRenderer.invoke('updateRecetaVariacion', variacionId, variacionData);
+        return await electron_1.ipcRenderer.invoke('updateRecetaVariacion', variacionId, variacionData);
     },
     deleteRecetaVariacion: async (variacionId) => {
-        return await ipcRenderer.invoke('deleteRecetaVariacion', variacionId);
+        return await electron_1.ipcRenderer.invoke('deleteRecetaVariacion', variacionId);
     },
     // RecetaVariacionItem methods
     getRecetaVariacionItems: async (variacionId) => {
-        return await ipcRenderer.invoke('getRecetaVariacionItems', variacionId);
+        return await electron_1.ipcRenderer.invoke('getRecetaVariacionItems', variacionId);
     },
     getRecetaVariacionItem: async (variacionItemId) => {
-        return await ipcRenderer.invoke('getRecetaVariacionItem', variacionItemId);
+        return await electron_1.ipcRenderer.invoke('getRecetaVariacionItem', variacionItemId);
     },
     createRecetaVariacionItem: async (variacionItemData) => {
-        return await ipcRenderer.invoke('createRecetaVariacionItem', variacionItemData);
+        return await electron_1.ipcRenderer.invoke('createRecetaVariacionItem', variacionItemData);
     },
     updateRecetaVariacionItem: async (variacionItemId, variacionItemData) => {
-        return await ipcRenderer.invoke('updateRecetaVariacionItem', variacionItemId, variacionItemData);
+        return await electron_1.ipcRenderer.invoke('updateRecetaVariacionItem', variacionItemId, variacionItemData);
     },
     deleteRecetaVariacionItem: async (variacionItemId) => {
-        return await ipcRenderer.invoke('deleteRecetaVariacionItem', variacionItemId);
+        return await electron_1.ipcRenderer.invoke('deleteRecetaVariacionItem', variacionItemId);
     },
     // MonedaBillete methods
     getMonedasBilletes: async () => {
-        return await ipcRenderer.invoke('get-monedas-billetes');
+        return await electron_1.ipcRenderer.invoke('get-monedas-billetes');
     },
     getMonedaBillete: async (monedaBilleteId) => {
-        return await ipcRenderer.invoke('get-moneda-billete', monedaBilleteId);
+        return await electron_1.ipcRenderer.invoke('get-moneda-billete', monedaBilleteId);
     },
     createMonedaBillete: async (monedaBilleteData) => {
-        return await ipcRenderer.invoke('create-moneda-billete', monedaBilleteData);
+        return await electron_1.ipcRenderer.invoke('create-moneda-billete', monedaBilleteData);
     },
     updateMonedaBillete: async (monedaBilleteId, monedaBilleteData) => {
-        return await ipcRenderer.invoke('update-moneda-billete', monedaBilleteId, monedaBilleteData);
+        return await electron_1.ipcRenderer.invoke('update-moneda-billete', monedaBilleteId, monedaBilleteData);
     },
     deleteMonedaBillete: async (monedaBilleteId) => {
-        return await ipcRenderer.invoke('delete-moneda-billete', monedaBilleteId);
+        return await electron_1.ipcRenderer.invoke('delete-moneda-billete', monedaBilleteId);
     },
     // Conteo methods
     getConteos: async () => {
-        return await ipcRenderer.invoke('get-conteos');
+        return await electron_1.ipcRenderer.invoke('get-conteos');
     },
     getConteo: async (conteoId) => {
-        return await ipcRenderer.invoke('get-conteo', conteoId);
+        return await electron_1.ipcRenderer.invoke('get-conteo', conteoId);
     },
     createConteo: async (conteoData) => {
-        return await ipcRenderer.invoke('create-conteo', conteoData);
+        return await electron_1.ipcRenderer.invoke('create-conteo', conteoData);
     },
     updateConteo: async (conteoId, conteoData) => {
-        return await ipcRenderer.invoke('update-conteo', conteoId, conteoData);
+        return await electron_1.ipcRenderer.invoke('update-conteo', conteoId, conteoData);
     },
     deleteConteo: async (conteoId) => {
-        return await ipcRenderer.invoke('delete-conteo', conteoId);
+        return await electron_1.ipcRenderer.invoke('delete-conteo', conteoId);
     },
     // ConteoDetalle methods
     getConteoDetalles: async (conteoId) => {
-        return await ipcRenderer.invoke('get-conteo-detalles', conteoId);
+        return await electron_1.ipcRenderer.invoke('get-conteo-detalles', conteoId);
     },
     getConteoDetalle: async (conteoDetalleId) => {
-        return await ipcRenderer.invoke('get-conteo-detalle', conteoDetalleId);
+        return await electron_1.ipcRenderer.invoke('get-conteo-detalle', conteoDetalleId);
     },
     createConteoDetalle: async (conteoDetalleData) => {
-        return await ipcRenderer.invoke('create-conteo-detalle', conteoDetalleData);
+        return await electron_1.ipcRenderer.invoke('create-conteo-detalle', conteoDetalleData);
     },
     updateConteoDetalle: async (conteoDetalleId, conteoDetalleData) => {
-        return await ipcRenderer.invoke('update-conteo-detalle', conteoDetalleId, conteoDetalleData);
+        return await electron_1.ipcRenderer.invoke('update-conteo-detalle', conteoDetalleId, conteoDetalleData);
     },
     deleteConteoDetalle: async (conteoDetalleId) => {
-        return await ipcRenderer.invoke('delete-conteo-detalle', conteoDetalleId);
+        return await electron_1.ipcRenderer.invoke('delete-conteo-detalle', conteoDetalleId);
     },
     // Dispositivo methods
     getDispositivos: async () => {
-        return await ipcRenderer.invoke('get-dispositivos');
+        return await electron_1.ipcRenderer.invoke('get-dispositivos');
     },
     getDispositivo: async (dispositivoId) => {
-        return await ipcRenderer.invoke('get-dispositivo', dispositivoId);
+        return await electron_1.ipcRenderer.invoke('get-dispositivo', dispositivoId);
     },
     createDispositivo: async (dispositivoData) => {
-        return await ipcRenderer.invoke('create-dispositivo', dispositivoData);
+        return await electron_1.ipcRenderer.invoke('create-dispositivo', dispositivoData);
     },
     updateDispositivo: async (dispositivoId, dispositivoData) => {
-        return await ipcRenderer.invoke('update-dispositivo', dispositivoId, dispositivoData);
+        return await electron_1.ipcRenderer.invoke('update-dispositivo', dispositivoId, dispositivoData);
     },
     deleteDispositivo: async (dispositivoId) => {
-        return await ipcRenderer.invoke('delete-dispositivo', dispositivoId);
+        return await electron_1.ipcRenderer.invoke('delete-dispositivo', dispositivoId);
     },
     // Caja methods
     getCajas: async () => {
-        return await ipcRenderer.invoke('get-cajas');
+        return await electron_1.ipcRenderer.invoke('get-cajas');
     },
     getCaja: async (cajaId) => {
-        return await ipcRenderer.invoke('get-caja', cajaId);
+        return await electron_1.ipcRenderer.invoke('get-caja', cajaId);
     },
     getCajaByDispositivo: async (dispositivoId) => {
-        return await ipcRenderer.invoke('get-caja-by-dispositivo', dispositivoId);
+        return await electron_1.ipcRenderer.invoke('get-caja-by-dispositivo', dispositivoId);
     },
     createCaja: async (cajaData) => {
-        return await ipcRenderer.invoke('create-caja', cajaData);
+        return await electron_1.ipcRenderer.invoke('create-caja', cajaData);
     },
     updateCaja: async (cajaId, cajaData) => {
-        return await ipcRenderer.invoke('update-caja', cajaId, cajaData);
+        return await electron_1.ipcRenderer.invoke('update-caja', cajaId, cajaData);
     },
     deleteCaja: async (cajaId) => {
-        return await ipcRenderer.invoke('delete-caja', cajaId);
+        return await electron_1.ipcRenderer.invoke('delete-caja', cajaId);
     },
     // CajaMoneda methods
-    getCajasMonedas: () => ipcRenderer.invoke('get-cajas-monedas'),
-    getCajaMoneda: (cajaMonedaId) => ipcRenderer.invoke('get-caja-moneda', cajaMonedaId),
-    createCajaMoneda: (cajaMonedaData) => ipcRenderer.invoke('create-caja-moneda', cajaMonedaData),
-    updateCajaMoneda: (cajaMonedaId, cajaMonedaData) => ipcRenderer.invoke('update-caja-moneda', cajaMonedaId, cajaMonedaData),
-    deleteCajaMoneda: (cajaMonedaId) => ipcRenderer.invoke('delete-caja-moneda', cajaMonedaId),
-    saveCajasMonedas: (updates) => ipcRenderer.invoke('save-cajas-monedas', updates),
+    getCajasMonedas: () => electron_1.ipcRenderer.invoke('get-cajas-monedas'),
+    getCajaMoneda: (cajaMonedaId) => electron_1.ipcRenderer.invoke('get-caja-moneda', cajaMonedaId),
+    createCajaMoneda: (cajaMonedaData) => electron_1.ipcRenderer.invoke('create-caja-moneda', cajaMonedaData),
+    updateCajaMoneda: (cajaMonedaId, cajaMonedaData) => electron_1.ipcRenderer.invoke('update-caja-moneda', cajaMonedaId, cajaMonedaData),
+    deleteCajaMoneda: (cajaMonedaId) => electron_1.ipcRenderer.invoke('delete-caja-moneda', cajaMonedaId),
+    saveCajasMonedas: (updates) => electron_1.ipcRenderer.invoke('save-cajas-monedas', updates),
     // MonedaCambio methods
     getMonedasCambio: async () => {
-        return await ipcRenderer.invoke('get-monedas-cambio');
+        return await electron_1.ipcRenderer.invoke('get-monedas-cambio');
     },
     getMonedasCambioByMonedaOrigen: async (monedaOrigenId) => {
-        return await ipcRenderer.invoke('get-monedas-cambio-by-moneda-origen', monedaOrigenId);
+        return await electron_1.ipcRenderer.invoke('get-monedas-cambio-by-moneda-origen', monedaOrigenId);
     },
     getMonedaCambio: async (monedaCambioId) => {
-        return await ipcRenderer.invoke('get-moneda-cambio', monedaCambioId);
+        return await electron_1.ipcRenderer.invoke('get-moneda-cambio', monedaCambioId);
     },
     createMonedaCambio: async (monedaCambioData) => {
-        return await ipcRenderer.invoke('create-moneda-cambio', monedaCambioData);
+        return await electron_1.ipcRenderer.invoke('create-moneda-cambio', monedaCambioData);
     },
     updateMonedaCambio: async (monedaCambioId, monedaCambioData) => {
-        return await ipcRenderer.invoke('update-moneda-cambio', monedaCambioId, monedaCambioData);
+        return await electron_1.ipcRenderer.invoke('update-moneda-cambio', monedaCambioId, monedaCambioData);
     },
     deleteMonedaCambio: async (monedaCambioId) => {
-        return await ipcRenderer.invoke('delete-moneda-cambio', monedaCambioId);
+        return await electron_1.ipcRenderer.invoke('delete-moneda-cambio', monedaCambioId);
     },
     // Proveedor methods
     getProveedores: async () => {
-        return await ipcRenderer.invoke('getProveedores');
+        return await electron_1.ipcRenderer.invoke('getProveedores');
     },
     getProveedor: async (proveedorId) => {
-        return await ipcRenderer.invoke('getProveedor', proveedorId);
+        return await electron_1.ipcRenderer.invoke('getProveedor', proveedorId);
     },
     createProveedor: async (proveedorData) => {
-        return await ipcRenderer.invoke('createProveedor', proveedorData);
+        return await electron_1.ipcRenderer.invoke('createProveedor', proveedorData);
     },
     updateProveedor: async (proveedorId, proveedorData) => {
-        return await ipcRenderer.invoke('updateProveedor', proveedorId, proveedorData);
+        return await electron_1.ipcRenderer.invoke('updateProveedor', proveedorId, proveedorData);
     },
     deleteProveedor: async (proveedorId) => {
-        return await ipcRenderer.invoke('deleteProveedor', proveedorId);
+        return await electron_1.ipcRenderer.invoke('deleteProveedor', proveedorId);
     },
     // Compra methods
     getCompras: async () => {
-        return await ipcRenderer.invoke('getCompras');
+        return await electron_1.ipcRenderer.invoke('getCompras');
     },
     getCompra: async (compraId) => {
-        return await ipcRenderer.invoke('getCompra', compraId);
+        return await electron_1.ipcRenderer.invoke('getCompra', compraId);
     },
     createCompra: async (compraData) => {
-        return await ipcRenderer.invoke('createCompra', compraData);
+        return await electron_1.ipcRenderer.invoke('createCompra', compraData);
     },
     updateCompra: async (compraId, compraData) => {
-        return await ipcRenderer.invoke('updateCompra', compraId, compraData);
+        return await electron_1.ipcRenderer.invoke('updateCompra', compraId, compraData);
     },
     deleteCompra: async (compraId) => {
-        return await ipcRenderer.invoke('deleteCompra', compraId);
+        return await electron_1.ipcRenderer.invoke('deleteCompra', compraId);
     },
     // CompraDetalle methods
     getCompraDetalles: async (compraId) => {
-        return await ipcRenderer.invoke('getCompraDetalles', compraId);
+        return await electron_1.ipcRenderer.invoke('getCompraDetalles', compraId);
     },
     createCompraDetalle: async (detalleData) => {
-        return await ipcRenderer.invoke('createCompraDetalle', detalleData);
+        return await electron_1.ipcRenderer.invoke('createCompraDetalle', detalleData);
     },
     updateCompraDetalle: async (detalleId, detalleData) => {
-        return await ipcRenderer.invoke('updateCompraDetalle', detalleId, detalleData);
+        return await electron_1.ipcRenderer.invoke('updateCompraDetalle', detalleId, detalleData);
     },
     deleteCompraDetalle: async (detalleId) => {
-        return await ipcRenderer.invoke('deleteCompraDetalle', detalleId);
+        return await electron_1.ipcRenderer.invoke('deleteCompraDetalle', detalleId);
     },
     // Pago methods
     getPagos: async () => {
-        return await ipcRenderer.invoke('getPagos');
+        return await electron_1.ipcRenderer.invoke('getPagos');
     },
     getPago: async (pagoId) => {
-        return await ipcRenderer.invoke('getPago', pagoId);
+        return await electron_1.ipcRenderer.invoke('getPago', pagoId);
     },
     createPago: async (pagoData) => {
-        return await ipcRenderer.invoke('createPago', pagoData);
+        return await electron_1.ipcRenderer.invoke('createPago', pagoData);
     },
     updatePago: async (pagoId, pagoData) => {
-        return await ipcRenderer.invoke('updatePago', pagoId, pagoData);
+        return await electron_1.ipcRenderer.invoke('updatePago', pagoId, pagoData);
     },
     deletePago: async (pagoId) => {
-        return await ipcRenderer.invoke('deletePago', pagoId);
+        return await electron_1.ipcRenderer.invoke('deletePago', pagoId);
     },
     // PagoDetalle methods
     getPagoDetalles: async (pagoId) => {
-        return await ipcRenderer.invoke('getPagoDetalles', pagoId);
+        return await electron_1.ipcRenderer.invoke('getPagoDetalles', pagoId);
     },
     createPagoDetalle: async (detalleData) => {
-        return await ipcRenderer.invoke('createPagoDetalle', detalleData);
+        return await electron_1.ipcRenderer.invoke('createPagoDetalle', detalleData);
     },
     updatePagoDetalle: async (detalleId, detalleData) => {
-        return await ipcRenderer.invoke('updatePagoDetalle', detalleId, detalleData);
+        return await electron_1.ipcRenderer.invoke('updatePagoDetalle', detalleId, detalleData);
     },
     deletePagoDetalle: async (detalleId) => {
-        return await ipcRenderer.invoke('deletePagoDetalle', detalleId);
+        return await electron_1.ipcRenderer.invoke('deletePagoDetalle', detalleId);
     },
     // ProveedorProducto methods
     getProveedorProductos: async (proveedorId) => {
-        return await ipcRenderer.invoke('getProveedorProductos', proveedorId);
+        return await electron_1.ipcRenderer.invoke('getProveedorProductos', proveedorId);
     },
     getProveedorProducto: async (proveedorProductoId) => {
-        return await ipcRenderer.invoke('getProveedorProducto', proveedorProductoId);
+        return await electron_1.ipcRenderer.invoke('getProveedorProducto', proveedorProductoId);
     },
     createProveedorProducto: async (proveedorProductoData) => {
-        return await ipcRenderer.invoke('createProveedorProducto', proveedorProductoData);
+        return await electron_1.ipcRenderer.invoke('createProveedorProducto', proveedorProductoData);
     },
     updateProveedorProducto: async (proveedorProductoId, proveedorProductoData) => {
-        return await ipcRenderer.invoke('updateProveedorProducto', proveedorProductoId, proveedorProductoData);
+        return await electron_1.ipcRenderer.invoke('updateProveedorProducto', proveedorProductoId, proveedorProductoData);
     },
     deleteProveedorProducto: async (proveedorProductoId) => {
-        return await ipcRenderer.invoke('deleteProveedorProducto', proveedorProductoId);
+        return await electron_1.ipcRenderer.invoke('deleteProveedorProducto', proveedorProductoId);
     },
     // System information
-    getSystemMacAddress: () => ipcRenderer.invoke('get-system-mac-address'),
+    getSystemMacAddress: () => electron_1.ipcRenderer.invoke('get-system-mac-address'),
     // FormasPago methods
     getFormasPago: async () => {
-        return await ipcRenderer.invoke('getFormasPago');
+        return await electron_1.ipcRenderer.invoke('getFormasPago');
     },
     getFormaPago: async (formaPagoId) => {
-        return await ipcRenderer.invoke('getFormaPago', formaPagoId);
+        return await electron_1.ipcRenderer.invoke('getFormaPago', formaPagoId);
     },
     createFormaPago: async (formaPagoData) => {
-        return await ipcRenderer.invoke('createFormaPago', formaPagoData);
+        return await electron_1.ipcRenderer.invoke('createFormaPago', formaPagoData);
     },
     updateFormaPago: async (formaPagoId, formaPagoData) => {
-        return await ipcRenderer.invoke('updateFormaPago', formaPagoId, formaPagoData);
+        return await electron_1.ipcRenderer.invoke('updateFormaPago', formaPagoId, formaPagoData);
     },
     deleteFormaPago: async (formaPagoId) => {
-        return await ipcRenderer.invoke('deleteFormaPago', formaPagoId);
+        return await electron_1.ipcRenderer.invoke('deleteFormaPago', formaPagoId);
     },
     updateFormasPagoOrder: async (updates) => {
-        return await ipcRenderer.invoke('updateFormasPagoOrder', updates);
+        return await electron_1.ipcRenderer.invoke('updateFormasPagoOrder', updates);
     },
     // MovimientoStock methods
     getMovimientosStock: async () => {
-        return await ipcRenderer.invoke('getMovimientosStock');
+        return await electron_1.ipcRenderer.invoke('getMovimientosStock');
     },
     getMovimientoStock: async (movimientoStockId) => {
-        return await ipcRenderer.invoke('getMovimientoStock', movimientoStockId);
+        return await electron_1.ipcRenderer.invoke('getMovimientoStock', movimientoStockId);
     },
     getMovimientosStockByProducto: async (productoId) => {
-        return await ipcRenderer.invoke('getMovimientosStockByProducto', productoId);
+        return await electron_1.ipcRenderer.invoke('getMovimientosStockByProducto', productoId);
     },
     getMovimientosStockByIngrediente: async (ingredienteId) => {
-        return await ipcRenderer.invoke('getMovimientosStockByIngrediente', ingredienteId);
+        return await electron_1.ipcRenderer.invoke('getMovimientosStockByIngrediente', ingredienteId);
     },
     getMovimientosStockByTipoReferencia: async (tipoReferencia) => {
-        return await ipcRenderer.invoke('getMovimientosStockByTipoReferencia', tipoReferencia);
+        return await electron_1.ipcRenderer.invoke('getMovimientosStockByTipoReferencia', tipoReferencia);
     },
     getMovimientosStockByReferenciaAndTipo: async (referencia, tipoReferencia) => {
-        return await ipcRenderer.invoke('getMovimientosStockByReferenciaAndTipo', referencia, tipoReferencia);
+        return await electron_1.ipcRenderer.invoke('getMovimientosStockByReferenciaAndTipo', referencia, tipoReferencia);
     },
     getCurrentStockByProducto: async (productoId) => {
-        return await ipcRenderer.invoke('getCurrentStockByProducto', productoId);
+        return await electron_1.ipcRenderer.invoke('getCurrentStockByProducto', productoId);
     },
     getCurrentStockByIngrediente: async (ingredienteId) => {
-        return await ipcRenderer.invoke('getCurrentStockByIngrediente', ingredienteId);
+        return await electron_1.ipcRenderer.invoke('getCurrentStockByIngrediente', ingredienteId);
     },
     createMovimientoStock: async (movimientoStockData) => {
-        return await ipcRenderer.invoke('createMovimientoStock', movimientoStockData);
+        return await electron_1.ipcRenderer.invoke('createMovimientoStock', movimientoStockData);
     },
     updateMovimientoStock: async (movimientoStockId, movimientoStockData) => {
-        return await ipcRenderer.invoke('updateMovimientoStock', movimientoStockId, movimientoStockData);
+        return await electron_1.ipcRenderer.invoke('updateMovimientoStock', movimientoStockId, movimientoStockData);
     },
     deleteMovimientoStock: async (movimientoStockId) => {
-        return await ipcRenderer.invoke('deleteMovimientoStock', movimientoStockId);
+        return await electron_1.ipcRenderer.invoke('deleteMovimientoStock', movimientoStockId);
     },
     // PrecioDelivery methods
     getPreciosDelivery: async () => {
-        return await ipcRenderer.invoke('getPreciosDelivery');
+        return await electron_1.ipcRenderer.invoke('getPreciosDelivery');
     },
     getPrecioDelivery: async (precioDeliveryId) => {
-        return await ipcRenderer.invoke('getPrecioDelivery', precioDeliveryId);
+        return await electron_1.ipcRenderer.invoke('getPrecioDelivery', precioDeliveryId);
     },
     createPrecioDelivery: async (precioDeliveryData) => {
-        return await ipcRenderer.invoke('createPrecioDelivery', precioDeliveryData);
+        return await electron_1.ipcRenderer.invoke('createPrecioDelivery', precioDeliveryData);
     },
     updatePrecioDelivery: async (precioDeliveryId, precioDeliveryData) => {
-        return await ipcRenderer.invoke('updatePrecioDelivery', precioDeliveryId, precioDeliveryData);
+        return await electron_1.ipcRenderer.invoke('updatePrecioDelivery', precioDeliveryId, precioDeliveryData);
     },
     deletePrecioDelivery: async (precioDeliveryId) => {
-        return await ipcRenderer.invoke('deletePrecioDelivery', precioDeliveryId);
+        return await electron_1.ipcRenderer.invoke('deletePrecioDelivery', precioDeliveryId);
     },
     // Delivery methods
     getDeliveries: async () => {
-        return await ipcRenderer.invoke('getDeliveries');
+        return await electron_1.ipcRenderer.invoke('getDeliveries');
     },
     getDeliveriesByEstado: async (estado) => {
-        return await ipcRenderer.invoke('getDeliveriesByEstado', estado);
+        return await electron_1.ipcRenderer.invoke('getDeliveriesByEstado', estado);
     },
     getDelivery: async (deliveryId) => {
-        return await ipcRenderer.invoke('getDelivery', deliveryId);
+        return await electron_1.ipcRenderer.invoke('getDelivery', deliveryId);
     },
     createDelivery: async (deliveryData) => {
-        return await ipcRenderer.invoke('createDelivery', deliveryData);
+        return await electron_1.ipcRenderer.invoke('createDelivery', deliveryData);
     },
     updateDelivery: async (deliveryId, deliveryData) => {
-        return await ipcRenderer.invoke('updateDelivery', deliveryId, deliveryData);
+        return await electron_1.ipcRenderer.invoke('updateDelivery', deliveryId, deliveryData);
     },
     deleteDelivery: async (deliveryId) => {
-        return await ipcRenderer.invoke('deleteDelivery', deliveryId);
+        return await electron_1.ipcRenderer.invoke('deleteDelivery', deliveryId);
     },
     // Venta methods
     getVentas: async () => {
-        return await ipcRenderer.invoke('getVentas');
+        return await electron_1.ipcRenderer.invoke('getVentas');
     },
     getVentasByEstado: async (estado) => {
-        return await ipcRenderer.invoke('getVentasByEstado', estado);
+        return await electron_1.ipcRenderer.invoke('getVentasByEstado', estado);
     },
     getVenta: async (ventaId) => {
-        return await ipcRenderer.invoke('getVenta', ventaId);
+        return await electron_1.ipcRenderer.invoke('getVenta', ventaId);
     },
     createVenta: async (ventaData) => {
-        return await ipcRenderer.invoke('createVenta', ventaData);
+        return await electron_1.ipcRenderer.invoke('createVenta', ventaData);
     },
     updateVenta: async (ventaId, ventaData) => {
-        return await ipcRenderer.invoke('updateVenta', ventaId, ventaData);
+        return await electron_1.ipcRenderer.invoke('updateVenta', ventaId, ventaData);
     },
     deleteVenta: async (ventaId) => {
-        return await ipcRenderer.invoke('deleteVenta', ventaId);
+        return await electron_1.ipcRenderer.invoke('deleteVenta', ventaId);
     },
     // VentaItem methods
     getVentaItems: async (ventaId) => {
-        return await ipcRenderer.invoke('getVentaItems', ventaId);
+        return await electron_1.ipcRenderer.invoke('getVentaItems', ventaId);
     },
     getVentaItem: async (ventaItemId) => {
-        return await ipcRenderer.invoke('getVentaItem', ventaItemId);
+        return await electron_1.ipcRenderer.invoke('getVentaItem', ventaItemId);
     },
     createVentaItem: async (ventaItemData) => {
-        return await ipcRenderer.invoke('createVentaItem', ventaItemData);
+        return await electron_1.ipcRenderer.invoke('createVentaItem', ventaItemData);
     },
     updateVentaItem: async (ventaItemId, ventaItemData) => {
-        return await ipcRenderer.invoke('updateVentaItem', ventaItemId, ventaItemData);
+        return await electron_1.ipcRenderer.invoke('updateVentaItem', ventaItemId, ventaItemData);
     },
     deleteVentaItem: async (ventaItemId) => {
-        return await ipcRenderer.invoke('deleteVentaItem', ventaItemId);
+        return await electron_1.ipcRenderer.invoke('deleteVentaItem', ventaItemId);
     },
+    // PdvGrupoCategoria methods
+    getPdvGrupoCategorias: async () => {
+        return await electron_1.ipcRenderer.invoke('getPdvGrupoCategorias');
+    },
+    getPdvGrupoCategoria: async (grupoCategoriaId) => {
+        return await electron_1.ipcRenderer.invoke('getPdvGrupoCategoria', grupoCategoriaId);
+    },
+    createPdvGrupoCategoria: async (grupoCategoriaData) => {
+        return await electron_1.ipcRenderer.invoke('createPdvGrupoCategoria', grupoCategoriaData);
+    },
+    updatePdvGrupoCategoria: async (grupoCategoriaId, grupoCategoriaData) => {
+        return await electron_1.ipcRenderer.invoke('updatePdvGrupoCategoria', grupoCategoriaId, grupoCategoriaData);
+    },
+    deletePdvGrupoCategoria: async (grupoCategoriaId) => {
+        return await electron_1.ipcRenderer.invoke('deletePdvGrupoCategoria', grupoCategoriaId);
+    },
+    // PdvCategoria methods
+    getPdvCategorias: async () => {
+        return await electron_1.ipcRenderer.invoke('getPdvCategorias');
+    },
+    getPdvCategoria: async (categoriaId) => {
+        return await electron_1.ipcRenderer.invoke('getPdvCategoria', categoriaId);
+    },
+    createPdvCategoria: async (categoriaData) => {
+        return await electron_1.ipcRenderer.invoke('createPdvCategoria', categoriaData);
+    },
+    updatePdvCategoria: async (categoriaId, categoriaData) => {
+        return await electron_1.ipcRenderer.invoke('updatePdvCategoria', categoriaId, categoriaData);
+    },
+    deletePdvCategoria: async (categoriaId) => {
+        return await electron_1.ipcRenderer.invoke('deletePdvCategoria', categoriaId);
+    },
+    // PdvCategoriaItem methods
+    getPdvCategoriaItems: async (categoriaId) => {
+        return await electron_1.ipcRenderer.invoke('getPdvCategoriaItems', categoriaId);
+    },
+    getPdvCategoriaItem: async (categoriaItemId) => {
+        return await electron_1.ipcRenderer.invoke('getPdvCategoriaItem', categoriaItemId);
+    },
+    createPdvCategoriaItem: async (categoriaItemData) => {
+        return await electron_1.ipcRenderer.invoke('createPdvCategoriaItem', categoriaItemData);
+    },
+    updatePdvCategoriaItem: async (categoriaItemId, categoriaItemData) => {
+        return await electron_1.ipcRenderer.invoke('updatePdvCategoriaItem', categoriaItemId, categoriaItemData);
+    },
+    deletePdvCategoriaItem: async (categoriaItemId) => {
+        return await electron_1.ipcRenderer.invoke('deletePdvCategoriaItem', categoriaItemId);
+    },
+    //PdvItemProducto methods
+    getPdvItemProductos: async (itemProductoId) => {
+        return await electron_1.ipcRenderer.invoke('getPdvItemProductos', itemProductoId);
+    },
+    getPdvItemProducto: async (itemProductoId) => {
+        return await electron_1.ipcRenderer.invoke('getPdvItemProducto', itemProductoId);
+    },
+    createPdvItemProducto: async (itemProductoData) => {
+        return await electron_1.ipcRenderer.invoke('createPdvItemProducto', itemProductoData);
+    },
+    updatePdvItemProducto: async (itemProductoId, itemProductoData) => {
+        return await electron_1.ipcRenderer.invoke('updatePdvItemProducto', itemProductoId, itemProductoData);
+    },
+    deletePdvItemProducto: async (itemProductoId) => {
+        return await electron_1.ipcRenderer.invoke('deletePdvItemProducto', itemProductoId);
+    },
+    // PDV Config methods
+    getPdvConfig: () => electron_1.ipcRenderer.invoke('getPdvConfig'),
+    createPdvConfig: (data) => electron_1.ipcRenderer.invoke('createPdvConfig', data),
+    updatePdvConfig: (id, data) => electron_1.ipcRenderer.invoke('updatePdvConfig', id, data),
+    // Reserva methods
+    getReservas: async () => {
+        return await electron_1.ipcRenderer.invoke('getReservas');
+    },
+    getReservasActivas: async () => {
+        return await electron_1.ipcRenderer.invoke('getReservasActivas');
+    },
+    getReserva: async (id) => {
+        return await electron_1.ipcRenderer.invoke('getReserva', id);
+    },
+    createReserva: async (data) => {
+        return await electron_1.ipcRenderer.invoke('createReserva', data);
+    },
+    updateReserva: async (id, data) => {
+        return await electron_1.ipcRenderer.invoke('updateReserva', id, data);
+    },
+    deleteReserva: async (id) => {
+        return await electron_1.ipcRenderer.invoke('deleteReserva', id);
+    },
+    // PdvMesa methods
+    getPdvMesas: async () => {
+        return await electron_1.ipcRenderer.invoke('getPdvMesas');
+    },
+    getPdvMesasActivas: async () => {
+        return await electron_1.ipcRenderer.invoke('getPdvMesasActivas');
+    },
+    getPdvMesasDisponibles: async () => {
+        return await electron_1.ipcRenderer.invoke('getPdvMesasDisponibles');
+    },
+    getPdvMesasBySector: async (sectorId) => {
+        return await electron_1.ipcRenderer.invoke('getPdvMesasBySector', sectorId);
+    },
+    getPdvMesa: async (id) => {
+        return await electron_1.ipcRenderer.invoke('getPdvMesa', id);
+    },
+    createPdvMesa: async (data) => {
+        return await electron_1.ipcRenderer.invoke('createPdvMesa', data);
+    },
+    updatePdvMesa: async (id, data) => {
+        return await electron_1.ipcRenderer.invoke('updatePdvMesa', id, data);
+    },
+    deletePdvMesa: async (id) => {
+        return await electron_1.ipcRenderer.invoke('deletePdvMesa', id);
+    },
+    // Sector methods
+    getSectores: async () => {
+        return await electron_1.ipcRenderer.invoke('getSectores');
+    },
+    getSectoresActivos: async () => {
+        return await electron_1.ipcRenderer.invoke('getSectoresActivos');
+    },
+    getSector: async (id) => {
+        return await electron_1.ipcRenderer.invoke('getSector', id);
+    },
+    createSector: async (data) => {
+        return await electron_1.ipcRenderer.invoke('createSector', data);
+    },
+    updateSector: async (id, data) => {
+        return await electron_1.ipcRenderer.invoke('updateSector', id, data);
+    },
+    deleteSector: async (id) => {
+        return await electron_1.ipcRenderer.invoke('deleteSector', id);
+    },
+    // Comanda methods
+    getComandas: async () => {
+        return await electron_1.ipcRenderer.invoke('getComandas');
+    },
+    getComandasActivas: async () => {
+        return await electron_1.ipcRenderer.invoke('getComandasActivas');
+    },
+    getComandasByMesa: async (mesaId) => {
+        return await electron_1.ipcRenderer.invoke('getComandasByMesa', mesaId);
+    },
+    getComanda: async (id) => {
+        return await electron_1.ipcRenderer.invoke('getComanda', id);
+    },
+    createComanda: async (data) => {
+        return await electron_1.ipcRenderer.invoke('createComanda', data);
+    },
+    updateComanda: async (id, data) => {
+        return await electron_1.ipcRenderer.invoke('updateComanda', id, data);
+    },
+    deleteComanda: async (id) => {
+        return await electron_1.ipcRenderer.invoke('deleteComanda', id);
+    }
 });
 //# sourceMappingURL=preload.js.map

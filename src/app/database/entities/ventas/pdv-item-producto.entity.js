@@ -12,7 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PdvItemProducto = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
-const pdv_categoria_item_entity_1 = require("./pdv-categoria-item.entity");
 const producto_entity_1 = require("../productos/producto.entity");
 let PdvItemProducto = class PdvItemProducto extends base_entity_1.BaseModel {
 };
@@ -33,9 +32,9 @@ __decorate([
     __metadata("design:type", Number)
 ], PdvItemProducto.prototype, "productoId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => pdv_categoria_item_entity_1.PdvCategoriaItem, (categoriaItem) => categoriaItem.productos, { nullable: true }),
+    (0, typeorm_1.ManyToOne)('PdvCategoriaItem', 'productos', { nullable: true }),
     (0, typeorm_1.JoinColumn)({ name: 'categoriaItemId' }),
-    __metadata("design:type", pdv_categoria_item_entity_1.PdvCategoriaItem)
+    __metadata("design:type", Object)
 ], PdvItemProducto.prototype, "categoriaItem", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => producto_entity_1.Producto, { nullable: false }),

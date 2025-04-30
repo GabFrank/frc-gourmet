@@ -12,8 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PdvCategoria = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
-const pdv_grupo_categoria_entity_1 = require("./pdv-grupo-categoria.entity");
-const pdv_categoria_item_entity_1 = require("./pdv-categoria-item.entity");
 let PdvCategoria = class PdvCategoria extends base_entity_1.BaseModel {
 };
 __decorate([
@@ -29,12 +27,12 @@ __decorate([
     __metadata("design:type", Number)
 ], PdvCategoria.prototype, "grupoCategoriId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => pdv_grupo_categoria_entity_1.PdvGrupoCategoria, (grupoCategoria) => grupoCategoria.categorias, { nullable: true }),
+    (0, typeorm_1.ManyToOne)('PdvGrupoCategoria', 'categorias'),
     (0, typeorm_1.JoinColumn)({ name: 'grupoCategoriId' }),
-    __metadata("design:type", pdv_grupo_categoria_entity_1.PdvGrupoCategoria)
+    __metadata("design:type", Function)
 ], PdvCategoria.prototype, "grupoCategoria", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => pdv_categoria_item_entity_1.PdvCategoriaItem, (item) => item.categoria),
+    (0, typeorm_1.OneToMany)('PdvCategoriaItem', 'categoria'),
     __metadata("design:type", Array)
 ], PdvCategoria.prototype, "items", void 0);
 PdvCategoria = __decorate([

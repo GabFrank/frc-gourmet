@@ -51,6 +51,10 @@ import { PdvGrupoCategoria } from './entities/ventas/pdv-grupo-categoria.entity'
 import { PdvCategoria } from './entities/ventas/pdv-categoria.entity';
 import { PdvCategoriaItem } from './entities/ventas/pdv-categoria-item.entity';
 import { PdvItemProducto } from './entities/ventas/pdv-item-producto.entity';
+import { PdvConfig } from './entities/ventas/pdv-config.entity';
+import { PdvMesa } from './entities/ventas/pdv-mesa.entity';
+import { Sector } from './entities/ventas/sector.entity';
+import { Reserva } from './entities/ventas/reserva.entity';
 
 export interface LoginResult {
   success: boolean;
@@ -374,6 +378,31 @@ interface ElectronAPI {
   createPdvItemProducto: (data: Partial<PdvItemProducto>) => Promise<PdvItemProducto>;
   updatePdvItemProducto: (id: number, data: Partial<PdvItemProducto>) => Promise<PdvItemProducto>;
   deletePdvItemProducto: (id: number) => Promise<PdvItemProducto>;
+  // PDV Config
+  getPdvConfig: () => Promise<PdvConfig>;
+  createPdvConfig: (data: Partial<PdvConfig>) => Promise<PdvConfig>;
+  updatePdvConfig: (id: number, data: Partial<PdvConfig>) => Promise<PdvConfig>;
+  
+  // PdvMesa methods
+  getPdvMesas: () => Promise<PdvMesa[]>;
+  getPdvMesasActivas: () => Promise<PdvMesa[]>;
+  getPdvMesasDisponibles: () => Promise<PdvMesa[]>;
+  getPdvMesasBySector: (sectorId: number) => Promise<PdvMesa[]>;
+  getPdvMesa: (id: number) => Promise<PdvMesa>;
+  createPdvMesa: (data: Partial<PdvMesa>) => Promise<PdvMesa>;
+  updatePdvMesa: (id: number, data: Partial<PdvMesa>) => Promise<PdvMesa>;
+  deletePdvMesa: (id: number) => Promise<boolean>;
+  
+  // Sector methods
+  getSectores: () => Promise<Sector[]>;
+  getSectoresActivos: () => Promise<Sector[]>;
+  getSector: (id: number) => Promise<Sector>;
+  createSector: (data: Partial<Sector>) => Promise<Sector>;
+  updateSector: (id: number, data: Partial<Sector>) => Promise<Sector>;
+  deleteSector: (id: number) => Promise<boolean>;
+  
+  // Reserva methods
+  // ... existing methods ...
 }
 
 /**
@@ -1611,5 +1640,76 @@ export class RepositoryService {
 
   deletePdvItemProducto(id: number): Observable<PdvItemProducto> {
     return from(this.api.deletePdvItemProducto(id));
+  }
+
+  // PDV Config
+  getPdvConfig(): Observable<PdvConfig> {
+    return from(this.api.getPdvConfig());
+  }
+
+  createPdvConfig(data: Partial<PdvConfig>): Observable<PdvConfig> {
+    return from(this.api.createPdvConfig(data));
+  }
+
+  updatePdvConfig(id: number, data: Partial<PdvConfig>): Observable<PdvConfig> {
+    return from(this.api.updatePdvConfig(id, data));
+  }
+  
+  // PdvMesa methods
+  getPdvMesas(): Observable<PdvMesa[]> {
+    return from(this.api.getPdvMesas());
+  }
+  
+  getPdvMesasActivas(): Observable<PdvMesa[]> {
+    return from(this.api.getPdvMesasActivas());
+  }
+  
+  getPdvMesasDisponibles(): Observable<PdvMesa[]> {
+    return from(this.api.getPdvMesasDisponibles());
+  }
+  
+  getPdvMesasBySector(sectorId: number): Observable<PdvMesa[]> {
+    return from(this.api.getPdvMesasBySector(sectorId));
+  }
+  
+  getPdvMesa(id: number): Observable<PdvMesa> {
+    return from(this.api.getPdvMesa(id));
+  }
+  
+  createPdvMesa(data: Partial<PdvMesa>): Observable<PdvMesa> {
+    return from(this.api.createPdvMesa(data));
+  }
+  
+  updatePdvMesa(id: number, data: Partial<PdvMesa>): Observable<PdvMesa> {
+    return from(this.api.updatePdvMesa(id, data));
+  }
+  
+  deletePdvMesa(id: number): Observable<boolean> {
+    return from(this.api.deletePdvMesa(id));
+  }
+  
+  // Sector methods
+  getSectores(): Observable<Sector[]> {
+    return from(this.api.getSectores());
+  }
+  
+  getSectoresActivos(): Observable<Sector[]> {
+    return from(this.api.getSectoresActivos());
+  }
+  
+  getSector(id: number): Observable<Sector> {
+    return from(this.api.getSector(id));
+  }
+  
+  createSector(data: Partial<Sector>): Observable<Sector> {
+    return from(this.api.createSector(data));
+  }
+  
+  updateSector(id: number, data: Partial<Sector>): Observable<Sector> {
+    return from(this.api.updateSector(id, data));
+  }
+  
+  deleteSector(id: number): Observable<boolean> {
+    return from(this.api.deleteSector(id));
   }
 }

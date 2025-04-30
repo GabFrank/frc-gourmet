@@ -8,6 +8,8 @@ import { TabsService } from '../../../services/tabs.service';
 import { PdvComponent } from '../pdv/pdv.component';
 import { PdvConfigDialogComponent } from 'src/app/shared/components/pdv-config-dialog/pdv-config-dialog.component';
 import { MatDialog } from '@angular/material/dialog';
+import { PdvMesaDialogComponent } from 'src/app/shared/components/pdv-mesa-dialog/pdv-mesa-dialog.component';
+
 @Component({
   selector: 'app-ventas-dashboard',
   templateUrl: './ventas-dashboard.component.html',
@@ -67,4 +69,24 @@ export class VentasDashboardComponent implements OnInit {
       width: '600px'
     });
   }
+
+  openPdvMesasDialog(): void {
+    // its a dialog not a tab
+    this.dialog.open(PdvMesaDialogComponent, {
+      width: '80%',
+      height: '80%'
+    });
+  }
+
+  // openPdvCategoriasList(): void {
+  //   // open list pdv categorias as a tab
+  //   this.tabsService.openTab('Gestionar Categorías', ListPdvCategoriasComponent);
+  // }
+
+  // openCreatePdvCategoriaDialog(): void {
+  //   // its a dialog not a tab
+  //   this.dialog.open(CreateEditPdvCategoriasComponent, {
+  //     width: '600px'
+  //   });
+  // }
 } 

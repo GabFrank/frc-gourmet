@@ -1,5 +1,5 @@
 // Preload script that will be executed before rendering the application
-const { contextBridge, ipcRenderer } = require('electron');
+import { contextBridge, ipcRenderer } from 'electron';
 import { ProductoImage } from './src/app/database/entities/productos/producto-image.entity';
 
 // Define types for our API
@@ -532,6 +532,97 @@ interface VentaItem {
   presentacion: Presentacion;
   cantidad: number;
   descuento: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// iterface for PdvGrupoCategoria
+interface PdvGrupoCategoria {
+  id?: number;
+  nombre: string;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// iterface for PdvCategoria
+interface PdvCategoria {
+  id?: number;
+  nombre: string;
+  activo: boolean;
+  grupoCategoria: PdvGrupoCategoria;
+}
+
+// iterface for PdvCategoriaItem
+interface PdvCategoriaItem {
+  id?: number;
+  nombre: string;
+  activo: boolean;
+  categoria: PdvCategoria;
+}
+
+// iterface for PdvItemProducto
+interface PdvItemProducto {
+  id?: number;
+  nombre_alternativo: string;
+  activo: boolean;
+  categoriaItem: PdvCategoriaItem;
+}
+
+// Add after other PDV interfaces (around line 565)
+interface PdvConfig {
+  id?: number;
+  cantidad_mesas: number;
+  pdvGrupoCategoria?: PdvGrupoCategoria;
+  pdvGrupoCategoriaId?: number;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// New Reserva interface
+interface Reserva {
+  id?: number;
+  cliente?: Cliente;
+  nombre_cliente: string;
+  numero_cliente: string;
+  fecha_hora_reserva: Date;
+  cantidad_personas: number;
+  motivo?: string;
+  observacion?: string;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// New PdvMesa interface
+interface PdvMesa {
+  id?: number;
+  numero: number;
+  cantidad_personas?: number;
+  activo: boolean;
+  reservado: boolean;
+  reserva?: Reserva;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// New Comanda interface
+interface Comanda {
+  id?: number;
+  codigo: string;
+  pdv_mesa: PdvMesa;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// New Sector interface
+interface Sector {
+  id?: number;
+  nombre: string;
+  activo: boolean;
+  mesas?: PdvMesa[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -1396,4 +1487,166 @@ contextBridge.exposeInMainWorld('api', {
   deleteVentaItem: async (ventaItemId: number): Promise<any> => {
     return await ipcRenderer.invoke('deleteVentaItem', ventaItemId);
   },
+
+  // PdvGrupoCategoria methods
+  getPdvGrupoCategorias: async (): Promise<PdvGrupoCategoria[]> => {
+    return await ipcRenderer.invoke('getPdvGrupoCategorias');
+  },
+  getPdvGrupoCategoria: async (grupoCategoriaId: number): Promise<PdvGrupoCategoria> => {
+    return await ipcRenderer.invoke('getPdvGrupoCategoria', grupoCategoriaId);
+  },
+  createPdvGrupoCategoria: async (grupoCategoriaData: Partial<PdvGrupoCategoria>): Promise<PdvGrupoCategoria> => {
+    return await ipcRenderer.invoke('createPdvGrupoCategoria', grupoCategoriaData);
+  },
+  updatePdvGrupoCategoria: async (grupoCategoriaId: number, grupoCategoriaData: Partial<PdvGrupoCategoria>): Promise<any> => {
+    return await ipcRenderer.invoke('updatePdvGrupoCategoria', grupoCategoriaId, grupoCategoriaData);
+  },
+  deletePdvGrupoCategoria: async (grupoCategoriaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('deletePdvGrupoCategoria', grupoCategoriaId);
+  },
+
+  // PdvCategoria methods
+  getPdvCategorias: async (): Promise<PdvCategoria[]> => {
+    return await ipcRenderer.invoke('getPdvCategorias');
+  },
+  getPdvCategoria: async (categoriaId: number): Promise<PdvCategoria> => {
+    return await ipcRenderer.invoke('getPdvCategoria', categoriaId);
+  },
+  createPdvCategoria: async (categoriaData: Partial<PdvCategoria>): Promise<PdvCategoria> => {
+    return await ipcRenderer.invoke('createPdvCategoria', categoriaData);
+  },
+  updatePdvCategoria: async (categoriaId: number, categoriaData: Partial<PdvCategoria>): Promise<any> => {
+    return await ipcRenderer.invoke('updatePdvCategoria', categoriaId, categoriaData);
+  },
+  deletePdvCategoria: async (categoriaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('deletePdvCategoria', categoriaId);
+  },
+
+  // PdvCategoriaItem methods
+  getPdvCategoriaItems: async (categoriaId: number): Promise<PdvCategoriaItem[]> => {
+    return await ipcRenderer.invoke('getPdvCategoriaItems', categoriaId);
+  },
+  getPdvCategoriaItem: async (categoriaItemId: number): Promise<PdvCategoriaItem> => {
+    return await ipcRenderer.invoke('getPdvCategoriaItem', categoriaItemId);
+  },
+  createPdvCategoriaItem: async (categoriaItemData: Partial<PdvCategoriaItem>): Promise<PdvCategoriaItem> => {
+    return await ipcRenderer.invoke('createPdvCategoriaItem', categoriaItemData);
+  },
+  updatePdvCategoriaItem: async (categoriaItemId: number, categoriaItemData: Partial<PdvCategoriaItem>): Promise<any> => {
+    return await ipcRenderer.invoke('updatePdvCategoriaItem', categoriaItemId, categoriaItemData);
+  },
+  deletePdvCategoriaItem: async (categoriaItemId: number): Promise<any> => {
+    return await ipcRenderer.invoke('deletePdvCategoriaItem', categoriaItemId);
+  },
+
+  //PdvItemProducto methods
+  getPdvItemProductos: async (itemProductoId: number): Promise<PdvItemProducto[]> => {
+    return await ipcRenderer.invoke('getPdvItemProductos', itemProductoId);
+  },
+  getPdvItemProducto: async (itemProductoId: number): Promise<PdvItemProducto> => {
+    return await ipcRenderer.invoke('getPdvItemProducto', itemProductoId);
+  },
+  createPdvItemProducto: async (itemProductoData: Partial<PdvItemProducto>): Promise<PdvItemProducto> => {
+    return await ipcRenderer.invoke('createPdvItemProducto', itemProductoData);
+  },
+  updatePdvItemProducto: async (itemProductoId: number, itemProductoData: Partial<PdvItemProducto>): Promise<any> => {
+    return await ipcRenderer.invoke('updatePdvItemProducto', itemProductoId, itemProductoData);
+  },  
+  deletePdvItemProducto: async (itemProductoId: number): Promise<any> => {
+    return await ipcRenderer.invoke('deletePdvItemProducto', itemProductoId);
+  },
+
+  // PDV Config methods
+  getPdvConfig: () => ipcRenderer.invoke('getPdvConfig'),
+  createPdvConfig: (data: Partial<PdvConfig>) => ipcRenderer.invoke('createPdvConfig', data),
+  updatePdvConfig: (id: number, data: Partial<PdvConfig>) => ipcRenderer.invoke('updatePdvConfig', id, data),
+
+  // Reserva methods
+  getReservas: async (): Promise<Reserva[]> => {
+    return await ipcRenderer.invoke('getReservas');
+  },
+  getReservasActivas: async (): Promise<Reserva[]> => {
+    return await ipcRenderer.invoke('getReservasActivas');
+  },
+  getReserva: async (id: number): Promise<Reserva> => {
+    return await ipcRenderer.invoke('getReserva', id);
+  },
+  createReserva: async (data: Partial<Reserva>): Promise<Reserva> => {
+    return await ipcRenderer.invoke('createReserva', data);
+  },
+  updateReserva: async (id: number, data: Partial<Reserva>): Promise<Reserva> => {
+    return await ipcRenderer.invoke('updateReserva', id, data);
+  },
+  deleteReserva: async (id: number): Promise<boolean> => {
+    return await ipcRenderer.invoke('deleteReserva', id);
+  },
+
+  // PdvMesa methods
+  getPdvMesas: async (): Promise<PdvMesa[]> => {
+    return await ipcRenderer.invoke('getPdvMesas');
+  },
+  getPdvMesasActivas: async (): Promise<PdvMesa[]> => {
+    return await ipcRenderer.invoke('getPdvMesasActivas');
+  },
+  getPdvMesasDisponibles: async (): Promise<PdvMesa[]> => {
+    return await ipcRenderer.invoke('getPdvMesasDisponibles');
+  },
+  getPdvMesasBySector: async (sectorId: number): Promise<PdvMesa[]> => {
+    return await ipcRenderer.invoke('getPdvMesasBySector', sectorId);
+  },
+  getPdvMesa: async (id: number): Promise<PdvMesa> => {
+    return await ipcRenderer.invoke('getPdvMesa', id);
+  },
+  createPdvMesa: async (data: Partial<PdvMesa>): Promise<PdvMesa> => {
+    return await ipcRenderer.invoke('createPdvMesa', data);
+  },
+  updatePdvMesa: async (id: number, data: Partial<PdvMesa>): Promise<PdvMesa> => {
+    return await ipcRenderer.invoke('updatePdvMesa', id, data);
+  },
+  deletePdvMesa: async (id: number): Promise<boolean> => {
+    return await ipcRenderer.invoke('deletePdvMesa', id);
+  },
+
+  // Sector methods
+  getSectores: async (): Promise<Sector[]> => {
+    return await ipcRenderer.invoke('getSectores');
+  },
+  getSectoresActivos: async (): Promise<Sector[]> => {
+    return await ipcRenderer.invoke('getSectoresActivos');
+  },
+  getSector: async (id: number): Promise<Sector> => {
+    return await ipcRenderer.invoke('getSector', id);
+  },
+  createSector: async (data: Partial<Sector>): Promise<Sector> => {
+    return await ipcRenderer.invoke('createSector', data);
+  },
+  updateSector: async (id: number, data: Partial<Sector>): Promise<Sector> => {
+    return await ipcRenderer.invoke('updateSector', id, data);
+  },
+  deleteSector: async (id: number): Promise<boolean> => {
+    return await ipcRenderer.invoke('deleteSector', id);
+  },
+
+  // Comanda methods
+  getComandas: async (): Promise<Comanda[]> => {
+    return await ipcRenderer.invoke('getComandas');
+  },
+  getComandasActivas: async (): Promise<Comanda[]> => {
+    return await ipcRenderer.invoke('getComandasActivas');
+  },
+  getComandasByMesa: async (mesaId: number): Promise<Comanda[]> => {
+    return await ipcRenderer.invoke('getComandasByMesa', mesaId);
+  },
+  getComanda: async (id: number): Promise<Comanda> => {
+    return await ipcRenderer.invoke('getComanda', id);
+  },
+  createComanda: async (data: Partial<Comanda>): Promise<Comanda> => {
+    return await ipcRenderer.invoke('createComanda', data);
+  },
+  updateComanda: async (id: number, data: Partial<Comanda>): Promise<Comanda> => {
+    return await ipcRenderer.invoke('updateComanda', id, data);
+  },
+  deleteComanda: async (id: number): Promise<boolean> => {
+    return await ipcRenderer.invoke('deleteComanda', id);
+  }
 });

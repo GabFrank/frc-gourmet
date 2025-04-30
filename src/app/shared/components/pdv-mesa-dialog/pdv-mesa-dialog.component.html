@@ -1,0 +1,200 @@
+<h2 mat-dialog-title>Gestión de Mesas</h2>
+
+<mat-dialog-content class="mat-typography">
+  <div class="container">
+    <!-- Filters Section -->
+    <div class="filters-section">
+      <h3>Filtros</h3>
+      <form [formGroup]="filterForm" class="filter-form">
+        <div class="filter-row">
+          <mat-form-field appearance="outline">
+            <mat-label>Número de Mesa</mat-label>
+            <input matInput formControlName="numero" type="number" min="1">
+          </mat-form-field>
+          
+          <mat-form-field appearance="outline">
+            <mat-label>Sector</mat-label>
+            <mat-select formControlName="sector_id">
+              <mat-option value="">Todos</mat-option>
+              <mat-option *ngFor="let sector of sectors" [value]="sector.id">
+                {{ sector.nombre }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+          
+          <mat-form-field appearance="outline">
+            <mat-label>Estado</mat-label>
+            <mat-select formControlName="activo">
+              <mat-option value="">Todos</mat-option>
+              <mat-option value="true">Activo</mat-option>
+              <mat-option value="false">Inactivo</mat-option>
+            </mat-select>
+          </mat-form-field>
+          
+          <mat-form-field appearance="outline">
+            <mat-label>Reserva</mat-label>
+            <mat-select formControlName="reservado">
+              <mat-option value="">Todos</mat-option>
+              <mat-option value="true">Reservado</mat-option>
+              <mat-option value="false">Disponible</mat-option>
+            </mat-select>
+          </mat-form-field>
+          
+          <button mat-raised-button color="primary" (click)="loadMesas()" class="filter-button">
+            <mat-icon>search</mat-icon> Buscar
+          </button>
+        </div>
+      </form>
+    </div>
+    
+    <!-- Action Buttons Section -->
+    <div class="actions-section">
+      <div class="button-row">
+        <button mat-raised-button color="primary" (click)="openCreateMesaDialog()">
+          <mat-icon>add</mat-icon> Nueva Mesa
+        </button>
+        
+        <button mat-raised-button color="accent" (click)="openBatchMesaDialog()">
+          <mat-icon>group_add</mat-icon> Creación Masiva
+        </button>
+        
+        <button mat-raised-button color="warn" (click)="openSectorDialog()">
+          <mat-icon>category</mat-icon> Nuevo Sector
+        </button>
+        
+        <button mat-raised-button (click)="loadMesas()">
+          <mat-icon>refresh</mat-icon> Actualizar
+        </button>
+      </div>
+    </div>
+    
+    <!-- Tables List Section -->
+    <div class="list-section">
+      <h3>Lista de Mesas</h3>
+      
+      <div *ngIf="loading" class="loading-container">
+        <mat-spinner diameter="40"></mat-spinner>
+        <p>Cargando mesas...</p>
+      </div>
+      
+      <div *ngIf="!loading && filteredMesas.length === 0" class="empty-state">
+        <mat-icon>table_restaurant</mat-icon>
+        <p>No se encontraron mesas con los filtros seleccionados</p>
+      </div>
+      
+      <table mat-table [dataSource]="filteredMesas" class="mat-elevation-z2" *ngIf="!loading && filteredMesas.length > 0">
+        <!-- Number Column -->
+        <ng-container matColumnDef="numero">
+          <th mat-header-cell *matHeaderCellDef>Número</th>
+          <td mat-cell *matCellDef="let mesa">{{ mesa.numero }}</td>
+        </ng-container>
+        
+        <!-- Capacity Column -->
+        <ng-container matColumnDef="capacidad">
+          <th mat-header-cell *matHeaderCellDef>Capacidad</th>
+          <td mat-cell *matCellDef="let mesa">{{ mesa.cantidad_personas }} personas</td>
+        </ng-container>
+        
+        <!-- Sector Column -->
+        <ng-container matColumnDef="sector">
+          <th mat-header-cell *matHeaderCellDef>Sector</th>
+          <td mat-cell *matCellDef="let mesa">
+            {{ mesa.sector?.nombre || 'Sin sector' }}
+          </td>
+        </ng-container>
+        
+        <!-- Status Column -->
+        <ng-container matColumnDef="activo">
+          <th mat-header-cell *matHeaderCellDef>Estado</th>
+          <td mat-cell *matCellDef="let mesa">
+            <span class="status-badge" [ngClass]="{'active': mesa.activo, 'inactive': !mesa.activo}">
+              {{ mesa.activo ? 'Activo' : 'Inactivo' }}
+            </span>
+          </td>
+        </ng-container>
+        
+        <!-- Reserved Column -->
+        <ng-container matColumnDef="reservado">
+          <th mat-header-cell *matHeaderCellDef>Reserva</th>
+          <td mat-cell *matCellDef="let mesa">
+            <span class="status-badge" [ngClass]="{'reserved': mesa.reservado, 'available': !mesa.reservado}">
+              {{ mesa.reservado ? 'Reservado' : 'Disponible' }}
+            </span>
+          </td>
+        </ng-container>
+        
+        <!-- Reservation Info Column -->
+        <ng-container matColumnDef="reserva">
+          <th mat-header-cell *matHeaderCellDef>Información de Reserva</th>
+          <td mat-cell *matCellDef="let mesa">
+            <span *ngIf="mesa.reservado && mesa.reserva">
+              {{ mesa.reserva.nombre_cliente }} - {{ mesa.reserva.fecha_hora_reserva | date:'short' }}
+            </span>
+            <span *ngIf="!mesa.reservado || !mesa.reserva">
+              -
+            </span>
+          </td>
+        </ng-container>
+        
+        <!-- Actions Column -->
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef>Acciones</th>
+          <td mat-cell *matCellDef="let mesa">
+            <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Mesa opciones">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="openEditMesaDialog(mesa)">
+                <mat-icon>edit</mat-icon>
+                <span>Editar</span>
+              </button>
+              <button mat-menu-item (click)="toggleActive(mesa)">
+                <mat-icon>{{ mesa.activo ? 'toggle_off' : 'toggle_on' }}</mat-icon>
+                <span>{{ mesa.activo ? 'Desactivar' : 'Activar' }}</span>
+              </button>
+              <button mat-menu-item (click)="toggleReserved(mesa)">
+                <mat-icon>{{ mesa.reservado ? 'event_available' : 'event_busy' }}</mat-icon>
+                <span>{{ mesa.reservado ? 'Liberar' : 'Reservar' }}</span>
+              </button>
+              <button mat-menu-item (click)="deleteMesa(mesa.id)">
+                <mat-icon>delete</mat-icon>
+                <span>Eliminar</span>
+              </button>
+            </mat-menu>
+          </td>
+        </ng-container>
+        
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+      </table>
+    </div>
+    
+    <!-- Sector Management Section -->
+    <div class="sector-section" *ngIf="sectors.length > 0">
+      <h3>Gestión de Sectores</h3>
+      
+      <div class="sector-cards">
+        <div class="sector-card" *ngFor="let sector of sectors">
+          <div class="sector-info">
+            <h4>{{ sector.nombre }}</h4>
+            <span class="status-badge" [ngClass]="{'active': sector.activo, 'inactive': !sector.activo}">
+              {{ sector.activo ? 'Activo' : 'Inactivo' }}
+            </span>
+          </div>
+          <div class="sector-actions">
+            <button mat-icon-button color="primary" (click)="openSectorDialog(sector)" matTooltip="Editar sector">
+              <mat-icon>edit</mat-icon>
+            </button>
+            <button mat-icon-button color="warn" (click)="deleteSector(sector.id)" matTooltip="Eliminar sector">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="close()">Cerrar</button>
+</mat-dialog-actions> 
