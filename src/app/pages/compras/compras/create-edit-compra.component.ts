@@ -28,6 +28,8 @@ import { Producto } from '../../../database/entities';
 import { Ingrediente } from '../../../database/entities';
 import { Presentacion } from '../../../database/entities';
 import { MovimientoStock, TipoReferencia } from '../../../database/entities/productos/movimiento-stock.entity';
+import { Categoria } from '../../../database/entities/productos/categoria.entity';
+import { Subcategoria } from '../../../database/entities/productos/subcategoria.entity';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { Observable, firstValueFrom, map, startWith, of, debounceTime, switchMap, Subject, Subscription, from } from 'rxjs';
 import { UnitConversionService, UnitConversion } from '../../../services/unit-conversion.service';
@@ -168,6 +170,13 @@ export class CreateEditCompraComponent implements OnInit {
 
   // Add property for tracking the form state
   isNewCompra = true;
+
+  // Add new properties for categoria and subcategoria
+  categorias: Categoria[] = [];
+  subcategorias: Subcategoria[] = [];
+  filteredCategorias: Observable<Categoria[]>;
+  filteredSubcategorias: Observable<Subcategoria[]>;
+  selectedCategoriaId: number | null = null;
 
   // Computed properties for template use
   get compatibleUnits(): string[] {
@@ -333,7 +342,9 @@ export class CreateEditCompraComponent implements OnInit {
       detalles: this.fb.array([]), // Required for table display
       total: [0], // Required for total calculation display
       id: [null], // Required for edit mode identification
-      pagoEstado: [{ value: 'N/A', disabled: true }] // Add new read-only field for Pago status
+      pagoEstado: [{ value: 'N/A', disabled: true }], // Add new read-only field for Pago status
+      categoria: [null],
+      subcategoria: [{ value: null, disabled: true }],
     });
 
     // Watch credito changes to enable/disable plazoDias
@@ -456,6 +467,33 @@ export class CreateEditCompraComponent implements OnInit {
       this.isEditing = true;
       this.compra = this.data.compra;
     }
+
+    // Set up observables for categoria and subcategoria autocomplete filtering
+    this.filteredCategorias = this.compraForm.get('categoria')!.valueChanges.pipe(
+      startWith(''),
+      debounceTime(300),
+      map(value => this._filterCategorias(value))
+    );
+
+    this.filteredSubcategorias = this.compraForm.get('subcategoria')!.valueChanges.pipe(
+      startWith(''),
+      debounceTime(300),
+      map(value => this._filterSubcategorias(value))
+    );
+
+    // Subscribe to categoria changes to load subcategorias
+    this.compraForm.get('categoria')!.valueChanges.subscribe(categoria => {
+      if (categoria && (typeof categoria === 'object')) {
+        this.selectedCategoriaId = categoria.id;
+        this.loadSubcategoriasByCategoria(categoria.id);
+        this.compraForm.get('subcategoria')?.enable();
+      } else {
+        this.selectedCategoriaId = null;
+        this.subcategorias = [];
+        this.compraForm.get('subcategoria')?.disable();
+        this.compraForm.get('subcategoria')?.setValue(null);
+      }
+    });
   }
 
   async ngOnInit(): Promise<void> {
@@ -519,6 +557,9 @@ export class CreateEditCompraComponent implements OnInit {
           });
         }
       });
+
+      // Load categorias
+      await this.loadCategorias();
     } catch (error) {
       console.error('Error initializing component:', error);
       this.showError('Error al cargar los datos iniciales. Intente nuevamente más tarde.');
@@ -2396,5 +2437,102 @@ export class CreateEditCompraComponent implements OnInit {
       console.error('Error editing detalle:', error);
       this.showError('Error al editar detalle: ' + error.message);
     }
+  }
+
+  // Add new methods for categoria and subcategoria handling
+  async loadCategorias(): Promise<void> {
+    try {
+      if (typeof this.repositoryService.getCategorias === 'function') {
+        this.categorias = await firstValueFrom(this.repositoryService.getCategorias());
+      } else {
+        console.warn('getCategorias method not available in repository service');
+        this.categorias = [];
+        throw new Error('Method not implemented: getCategorias');
+      }
+    } catch (error: any) {
+      console.error('Error loading categorias:', error);
+      // Initialize with empty array instead of failing
+      this.categorias = [];
+      // Only show error message if it's not a database initialization error
+      if (!error.message?.includes('Database not initialized')) {
+        this.showError('Error al cargar categorías: ' + error.message);
+      }
+      throw error;
+    }
+  }
+
+  async loadSubcategoriasByCategoria(categoriaId: number): Promise<void> {
+    try {
+      if (typeof this.repositoryService.getSubcategoriasByCategoria === 'function') {
+        this.subcategorias = await firstValueFrom(this.repositoryService.getSubcategoriasByCategoria(categoriaId));
+      } else {
+        console.warn('getSubcategoriasByCategoria method not available in repository service');
+        this.subcategorias = [];
+        throw new Error('Method not implemented: getSubcategoriasByCategoria');
+      }
+    } catch (error: any) {
+      console.error('Error loading subcategorias:', error);
+      // Initialize with empty array instead of failing
+      this.subcategorias = [];
+      // Only show error message if it's not a database initialization error
+      if (!error.message?.includes('Database not initialized')) {
+        this.showError('Error al cargar subcategorías: ' + error.message);
+      }
+    }
+  }
+
+  // Filter methods for categorias and subcategorias
+  private _filterCategorias(value: string | Categoria): Categoria[] {
+    if (!value) {
+      return this.categorias;
+    }
+    
+    if (value && typeof value === 'object') {
+      // If it's an object with an ID, return that object
+      return [value];
+    }
+
+    // Filter by nombre
+    const filterValue = typeof value === 'string' ? value.toLowerCase() : '';
+    return this.categorias.filter(c => 
+      c.nombre.toLowerCase().includes(filterValue)
+    );
+  }
+
+  private _filterSubcategorias(value: string | Subcategoria): Subcategoria[] {
+    if (!value) {
+      return this.subcategorias;
+    }
+    
+    if (value && typeof value === 'object') {
+      // If it's an object with an ID, return that object
+      return [value];
+    }
+
+    // Filter by nombre
+    const filterValue = typeof value === 'string' ? value.toLowerCase() : '';
+    return this.subcategorias.filter(s => 
+      s.nombre.toLowerCase().includes(filterValue) && 
+      (this.selectedCategoriaId === null || s.categoriaId === this.selectedCategoriaId)
+    );
+  }
+
+  // Display methods for categorias and subcategorias
+  displayCategoria = (categoria: Categoria | null): string => {
+    return categoria ? categoria.nombre : '';
+  }
+
+  displaySubcategoria = (subcategoria: Subcategoria | null): string => {
+    return subcategoria ? subcategoria.nombre : '';
+  }
+
+  // Helper to get Categoria by ID
+  getCategoriaById(id: number): Categoria | null {
+    return this.categorias.find(c => c.id === id) || null;
+  }
+
+  // Helper to get Subcategoria by ID
+  getSubcategoriaById(id: number): Subcategoria | null {
+    return this.subcategorias.find(s => s.id === id) || null;
   }
 }

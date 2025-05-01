@@ -11,8 +11,9 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatGridListModule } from '@angular/material/grid-list';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatDialog } from '@angular/material/dialog';
-import { FormControl } from '@angular/forms';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { FormControl, FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { Observable, of, firstValueFrom } from 'rxjs';
 import { debounceTime, distinctUntilChanged, map, startWith, switchMap } from 'rxjs/operators';
 
@@ -23,6 +24,8 @@ import { VentaItem } from '../../../database/entities/ventas/venta-item.entity';
 import { PrecioVenta } from '../../../database/entities/productos/precio-venta.entity';
 import { Moneda } from '../../../database/entities/financiero/moneda.entity';
 import { MonedaCambio } from '../../../database/entities/financiero/moneda-cambio.entity';
+import { PdvMesa } from '../../../database/entities/ventas/pdv-mesa.entity';
+import { ProductoSearchDialogComponent } from '../../../shared/components/producto-search-dialog/producto-search-dialog.component';
 
 interface TableItem {
   id?: number;
@@ -55,7 +58,7 @@ interface CurrencyDisplay {
   standalone: true,
   imports: [
     CommonModule,
-    FormsModule,
+    ReactiveFormsModule,
     MatButtonModule,
     MatCardModule,
     MatDividerModule,
@@ -65,7 +68,9 @@ interface CurrencyDisplay {
     MatFormFieldModule,
     MatBadgeModule,
     MatGridListModule,
-    MatProgressSpinnerModule
+    MatProgressSpinnerModule,
+    MatTooltipModule,
+    MatDialogModule
   ]
 })
 export class PdvComponent implements OnInit {
@@ -73,8 +78,8 @@ export class PdvComponent implements OnInit {
   ventaItems: TableItem[] = [];
   displayedColumns: string[] = ['productoNombre', 'cantidad', 'precio', 'total', 'actions'];
   
-  // Search
-  searchTerm = '';
+  // Search form
+  searchForm: FormGroup;
   
   // Currency management
   monedas: Moneda[] = [];
@@ -90,8 +95,15 @@ export class PdvComponent implements OnInit {
   // Product demo data for grid
   productos: Producto[] = [];
   
-  // Table numbers
-  tableNumbers: number[] = [];
+  // Tables (mesas)
+  mesas: PdvMesa[] = [];
+  loadingMesas = false;
+  
+  // Sector filter for tables
+  selectedSectorId: number | null = null;
+  
+  // Pre-generated table numbers for template
+  preGeneratedTableNumbers: number[] = [];
   
   // Loading states
   loadingExchangeRates = false;
@@ -102,9 +114,25 @@ export class PdvComponent implements OnInit {
     return this.loadingExchangeRates || this.loadingConfig;
   }
   
-  constructor(private repositoryService: RepositoryService) { }
+  // Search constants
+  readonly SEARCH_DIALOG_WIDTH = '800px';
+  readonly SEARCH_DIALOG_HEIGHT = '600px';
+  
+  constructor(
+    private repositoryService: RepositoryService,
+    private dialog: MatDialog,
+    private fb: FormBuilder
+  ) {
+    // Initialize form
+    this.searchForm = this.fb.group({
+      searchTerm: ['']
+    });
+  }
 
   ngOnInit(): void {
+    // Pre-generate table numbers (for compatibility with existing template)
+    this.preGeneratedTableNumbers = Array(30).fill(0).map((_, i) => i + 1);
+    
     // Initialize demo data
     this.loadInitialData();
   }
@@ -136,6 +164,9 @@ export class PdvComponent implements OnInit {
       // Load exchange rates
       await this.loadExchangeRates();
       
+      // Load tables (mesas)
+      await this.loadMesas();
+      
       // Initialize demo data
       this.initDemoData();
       
@@ -145,6 +176,80 @@ export class PdvComponent implements OnInit {
     } catch (error) {
       console.error('Error loading initial data:', error);
     }
+  }
+  
+  /**
+   * Load tables (mesas) from the database
+   */
+  async loadMesas(): Promise<void> {
+    this.loadingMesas = true;
+    try {
+      // Get all active tables
+      this.mesas = await firstValueFrom(this.repositoryService.getPdvMesas());
+      
+      // Filter for active tables
+      this.mesas = this.mesas.filter(mesa => mesa.activo);
+      
+      // Sort tables by number
+      this.mesas.sort((a, b) => a.numero - b.numero);
+      
+      console.log(`Loaded ${this.mesas.length} tables`);
+    } catch (error) {
+      console.error('Error loading tables:', error);
+      // Initialize empty array on error
+      this.mesas = [];
+    } finally {
+      this.loadingMesas = false;
+    }
+  }
+  
+  /**
+   * Load tables by sector
+   */
+  async loadMesasBySector(sectorId: number): Promise<void> {
+    this.loadingMesas = true;
+    try {
+      this.selectedSectorId = sectorId;
+      // Get tables by sector
+      this.mesas = await firstValueFrom(this.repositoryService.getPdvMesasBySector(sectorId));
+      
+      // Filter for active tables
+      this.mesas = this.mesas.filter(mesa => mesa.activo);
+      
+      // Sort tables by number
+      this.mesas.sort((a, b) => a.numero - b.numero);
+      
+      console.log(`Loaded ${this.mesas.length} tables for sector ${sectorId}`);
+    } catch (error) {
+      console.error(`Error loading tables for sector ${sectorId}:`, error);
+      // Initialize empty array on error
+      this.mesas = [];
+    } finally {
+      this.loadingMesas = false;
+    }
+  }
+  
+  /**
+   * Reset sector filter and load all tables
+   */
+  async resetMesasFilter(): Promise<void> {
+    this.selectedSectorId = null;
+    await this.loadMesas();
+  }
+  
+  // Get all mesas (for template)
+  get availableMesas(): PdvMesa[] {
+    return this.mesas.filter(mesa => !mesa.reservado);
+  }
+  
+  // Get reserved mesas (for template)
+  get reservedMesas(): PdvMesa[] {
+    return this.mesas.filter(mesa => mesa.reservado);
+  }
+  
+  // Get table numbers (from loaded mesas)
+  get tableNumbers(): number[] {
+    return this.mesas.map(mesa => mesa.numero);
   }
   
   /**
@@ -319,11 +424,6 @@ export class PdvComponent implements OnInit {
     }
   }
   
-  // Generate table numbers for the grid
-  generateTableNumbers(count: number): number[] {
-    return Array(count).fill(0).map((_, i) => i + 1);
-  }
-  
   // Add product to cart
   addProduct(producto: Producto): void {
     const existingItem = this.ventaItems.find(item => item.productoId === producto.id);
@@ -347,10 +447,40 @@ export class PdvComponent implements OnInit {
     this.calculateTotals();
   }
   
-  // Search products
+  // Search products using dialog
+  openProductSearchDialog(): void {
+    const searchTerm = this.searchForm.get('searchTerm')?.value?.trim() || '';
+    
+    const dialogRef = this.dialog.open(ProductoSearchDialogComponent, {
+      width: this.SEARCH_DIALOG_WIDTH,
+      height: this.SEARCH_DIALOG_HEIGHT,
+      data: { searchTerm }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        this.addProduct(result);
+        // Clear search term after adding product
+        this.searchForm.get('searchTerm')?.setValue('');
+      }
+    });
+  }
+  
+  // Handle search from input
+  onSearchKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      this.openProductSearchDialog();
+    }
+  }
+  
+  // Search products (called from template)
   searchProducts(): void {
-    // Implement search functionality
-    console.log('Searching for:', this.searchTerm);
+    this.openProductSearchDialog();
+  }
+  
+  // Getter for accessing search term (for template)
+  get searchTerm(): string {
+    return this.searchForm.get('searchTerm')?.value || '';
   }
   
   /**

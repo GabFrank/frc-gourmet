@@ -1,0 +1,83 @@
+.producto-search-dialog {
+  min-width: 600px;
+  max-width: 900px;
+}
+
+h2 {
+  margin-top: 0;
+  margin-bottom: 16px;
+  color: #333;
+}
+
+.search-container {
+  margin-bottom: 20px;
+  
+  .search-field {
+    width: 100%;
+  }
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 30px;
+}
+
+.no-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 30px;
+  color: #666;
+  
+  mat-icon {
+    font-size: 48px;
+    height: 48px;
+    width: 48px;
+    margin-bottom: 16px;
+  }
+  
+  p {
+    font-size: 16px;
+  }
+}
+
+table {
+  width: 100%;
+  
+  th {
+    font-weight: bold;
+    text-align: center;
+  }
+  
+  .mat-column-codigo {
+    width: 25%;
+  }
+  
+  .mat-column-nombre {
+    width: 50%;
+  }
+  
+  .mat-column-precio {
+    width: 15%;
+  }
+  
+  .mat-column-actions {
+    width: 10%;
+  }
+}
+
+.clickable-row {
+  cursor: pointer;
+  transition: background 0.2s;
+  
+  &:hover {
+    background: rgba(0, 0, 0, 0.04);
+  }
+}
+
+mat-dialog-actions {
+  padding-top: 16px;
+  padding-bottom: 8px;
+} 

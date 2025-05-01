@@ -122,12 +122,16 @@
 
         <!-- Search products section -->
         <div class="search-section">
-            <mat-form-field appearance="outline" class="search-field">
-                <input matInput placeholder="Buscar productos" [(ngModel)]="searchTerm">
-            </mat-form-field>
-            <button mat-icon-button color="primary" class="search-button" (click)="searchProducts()">
-                <mat-icon>search</mat-icon>
-            </button>
+            <form [formGroup]="searchForm">
+                <mat-form-field appearance="outline" class="search-field">
+                    <input matInput placeholder="BUSCAR PRODUCTOS" 
+                           formControlName="searchTerm"
+                           (keydown)="onSearchKeyDown($event)">
+                </mat-form-field>
+                <button mat-icon-button color="primary" class="search-button" (click)="searchProducts()">
+                    <mat-icon>search</mat-icon>
+                </button>
+            </form>
         </div>
 
         <!-- Bottom buttons -->
@@ -167,10 +171,36 @@
 
         <!-- Table number buttons -->
         <div class="tables-grid">
-            <button mat-raised-button *ngFor="let i of generateTableNumbers(30)" [class.table-active]="i <= 2"
-                [class.table-inactive]="i > 10" class="table-button">
-                {{i}}
-            </button>
+            <!-- Show loading spinner while mesas are loading -->
+            <div *ngIf="loadingMesas" class="loading-mesas">
+                <mat-spinner diameter="40"></mat-spinner>
+                <span>Cargando mesas...</span>
+            </div>
+            
+            <!-- Use actual mesa data when available -->
+            <ng-container *ngIf="!loadingMesas">
+                <!-- If we have mesas data, show real mesas -->
+                <ng-container *ngIf="mesas.length > 0">
+                    <button mat-raised-button *ngFor="let mesa of mesas" 
+                        [class.table-active]="!mesa.reservado"
+                        [class.table-inactive]="mesa.reservado" 
+                        [matTooltip]="mesa.reservado ? 'Mesa reservada' : 'Mesa disponible'"
+                        class="table-button">
+                        {{mesa.numero}}
+                        <mat-icon *ngIf="mesa.reservado" class="reserved-icon">event_busy</mat-icon>
+                    </button>
+                </ng-container>
+                
+                <!-- Fallback to pre-generated numbers if no mesas are available -->
+                <ng-container *ngIf="mesas.length === 0">
+                    <button mat-raised-button *ngFor="let i of preGeneratedTableNumbers" 
+                        [class.table-active]="i <= 2"
+                        [class.table-inactive]="i > 10" 
+                        class="table-button">
+                        {{i}}
+                    </button>
+                </ng-container>
+            </ng-container>
         </div>
 
         <!-- Bottom action buttons -->

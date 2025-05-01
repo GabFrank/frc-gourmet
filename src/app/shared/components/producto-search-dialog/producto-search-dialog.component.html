@@ -1,0 +1,71 @@
+<div class="producto-search-dialog">
+  <h2 mat-dialog-title>BUSCAR PRODUCTOS</h2>
+  
+  <div mat-dialog-content>
+    <!-- Search input - using Reactive Forms -->
+    <div class="search-container">
+      <form [formGroup]="searchForm">
+        <mat-form-field appearance="outline" class="search-field">
+          <mat-label>BUSCAR POR CÓDIGO O NOMBRE</mat-label>
+          <input matInput 
+                 formControlName="searchTerm"
+                 (keydown)="onSearchKeyDown($event)"
+                 placeholder="INGRESE CÓDIGO O NOMBRE DEL PRODUCTO">
+          <button mat-icon-button matSuffix (click)="performSearch()">
+            <mat-icon>search</mat-icon>
+          </button>
+        </mat-form-field>
+      </form>
+    </div>
+    
+    <!-- Loading indicator -->
+    <div class="loading-container" *ngIf="isLoading">
+      <mat-spinner diameter="40"></mat-spinner>
+    </div>
+    
+    <!-- No results message -->
+    <div class="no-results" *ngIf="hasSearched && !isLoading && searchResults.length === 0">
+      <mat-icon>search_off</mat-icon>
+      <p>NO SE ENCONTRARON RESULTADOS PARA "{{searchTerm}}"</p>
+    </div>
+    
+    <!-- Results table -->
+    <table mat-table [dataSource]="searchResults" *ngIf="!isLoading && searchResults.length > 0" class="mat-elevation-z2">
+      
+      <!-- Code Column -->
+      <ng-container matColumnDef="codigo">
+        <th mat-header-cell *matHeaderCellDef>CÓDIGO</th>
+        <td mat-cell *matCellDef="let producto" style="text-align: left;">{{producto.codigo || 'N/A'}}</td>
+      </ng-container>
+      
+      <!-- Name Column -->
+      <ng-container matColumnDef="nombre">
+        <th mat-header-cell *matHeaderCellDef>PRODUCTO</th>
+        <td mat-cell *matCellDef="let producto" style="text-align: left;">{{producto.nombre}}</td>
+      </ng-container>
+      
+      <!-- Price Column -->
+      <ng-container matColumnDef="precio">
+        <th mat-header-cell *matHeaderCellDef>PRECIO</th>
+        <td mat-cell *matCellDef="let producto" style="text-align: center;">{{producto.precio || 0 | number:'1.0-2'}}</td>
+      </ng-container>
+      
+      <!-- Actions Column -->
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let producto" style="text-align: center;">
+          <button mat-icon-button color="primary" (click)="selectProduct(producto)">
+            <mat-icon>add_shopping_cart</mat-icon>
+          </button>
+        </td>
+      </ng-container>
+      
+      <tr mat-header-row *matHeaderRowDef="DISPLAY_COLUMNS"></tr>
+      <tr mat-row *matRowDef="let row; columns: DISPLAY_COLUMNS;" class="clickable-row" (click)="selectProduct(row)"></tr>
+    </table>
+  </div>
+  
+  <div mat-dialog-actions align="end">
+    <button mat-button (click)="cancel()">CANCELAR</button>
+  </div>
+</div> 

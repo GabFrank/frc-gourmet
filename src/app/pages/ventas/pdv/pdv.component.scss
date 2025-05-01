@@ -276,26 +276,56 @@
 /* Tables grid */
 .tables-grid {
   display: grid;
-  grid-template-columns: repeat(6, 2fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 10px;
   margin-bottom: 20px;
   flex: 1;
   overflow-y: auto;
+}
+
+.table-button {
+  width: 60px;
+  height: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  position: relative;
+}
+
+.table-active {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.table-inactive {
+  background-color: #F44336;
+  color: white;
+}
+
+.reserved-icon {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+}
+
+.loading-mesas {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
   
-  .table-button {
-    height: 60px;
-    font-size: 1.2rem;
-    height: 40px !important;
-    
-    &.table-active {
-      background-color: #f0ad4e;
-      color: black;
-    }
-    
-    &.table-inactive {
-      background-color: #5cb85c;
-      color: white;
-    }
+  span {
+    margin-top: 10px;
+    font-size: 14px;
+    color: rgba(0, 0, 0, 0.54);
   }
 }
 

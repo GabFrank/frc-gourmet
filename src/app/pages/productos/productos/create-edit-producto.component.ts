@@ -345,6 +345,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       this.subcategorias = await firstValueFrom(this.repositoryService.getSubcategoriasByCategoria(categoriaId));
       // Sort subcategorias by nombre
       this.subcategorias.sort((a, b) => a.nombre.localeCompare(b.nombre));
+      console.log('subcategorias', this.subcategorias);
     } catch (error) {
       console.error('Error loading subcategorias:', error);
     }
@@ -565,6 +566,13 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       if (recetaId) {
         // Recipe details are now loaded in loadRecipeVariations
         // which is called when a recipe is selected from the autocomplete
+      }
+    });
+
+    // add listener for categoriaId changes to load subcategorias
+    this.productoForm.get('categoriaId')?.valueChanges.subscribe(categoriaId => {
+      if (categoriaId) {
+        this.loadSubcategoriasByCategoria(categoriaId);
       }
     });
   }
