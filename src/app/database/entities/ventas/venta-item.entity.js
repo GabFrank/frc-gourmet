@@ -8,17 +8,25 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var VentaItem_1;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.VentaItem = void 0;
+exports.VentaItem = exports.EstadoVentaItem = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
 const precio_venta_entity_1 = require("../productos/precio-venta.entity");
 const producto_entity_1 = require("../productos/producto.entity");
 const presentacion_entity_1 = require("../productos/presentacion.entity");
+const usuario_entity_1 = require("../personas/usuario.entity");
+var EstadoVentaItem;
+(function (EstadoVentaItem) {
+    EstadoVentaItem["ACTIVO"] = "ACTIVO";
+    EstadoVentaItem["MODIFICADO"] = "MODIFICADO";
+    EstadoVentaItem["CANCELADO"] = "CANCELADO";
+})(EstadoVentaItem = exports.EstadoVentaItem || (exports.EstadoVentaItem = {}));
 /**
  * Entity representing a sale item
  */
-let VentaItem = class VentaItem extends base_entity_1.BaseModel {
+let VentaItem = VentaItem_1 = class VentaItem extends base_entity_1.BaseModel {
 };
 __decorate([
     (0, typeorm_1.ManyToOne)('Venta', 'items'),
@@ -80,7 +88,43 @@ __decorate([
     }),
     __metadata("design:type", Number)
 ], VentaItem.prototype, "descuento", void 0);
-VentaItem = __decorate([
+__decorate([
+    (0, typeorm_1.Column)({
+        type: 'varchar',
+        name: 'estado',
+        enum: EstadoVentaItem,
+        default: EstadoVentaItem.ACTIVO
+    }),
+    __metadata("design:type", String)
+], VentaItem.prototype, "estado", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => usuario_entity_1.Usuario, { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'cancelado_por_id' }),
+    __metadata("design:type", usuario_entity_1.Usuario)
+], VentaItem.prototype, "canceladoPor", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'hora_cancelado', nullable: true }),
+    __metadata("design:type", Date)
+], VentaItem.prototype, "horaCancelado", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'modificado', default: false }),
+    __metadata("design:type", Boolean)
+], VentaItem.prototype, "modificado", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => usuario_entity_1.Usuario, { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'modificado_por_id' }),
+    __metadata("design:type", usuario_entity_1.Usuario)
+], VentaItem.prototype, "modificadoPor", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'hora_modificacion', nullable: true }),
+    __metadata("design:type", Date)
+], VentaItem.prototype, "horaModificacion", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => VentaItem_1, { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'nueva_version_venta_item_id' }),
+    __metadata("design:type", VentaItem)
+], VentaItem.prototype, "nuevaVersionVentaItem", void 0);
+VentaItem = VentaItem_1 = __decorate([
     (0, typeorm_1.Entity)('venta_items')
 ], VentaItem);
 exports.VentaItem = VentaItem;

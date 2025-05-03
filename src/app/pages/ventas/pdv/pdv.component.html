@@ -1,327 +1,613 @@
 <div class="pdv-container">
-    <!-- Left side panel -->
-    <div class="left-panel">
-        
-        <!-- Total section -->
-        <div class="total-section">
-            <h2>Total</h2>
-            <!-- Loading Indicator for Currency Configuration -->
-            <div class="loading-currencies" *ngIf="loadingCurrencies">
-                <div class="spinner-container">
-                    <mat-spinner diameter="30"></mat-spinner>
-                    <span>Cargando monedas...</span>
-                </div>
-            </div>
+  <!-- Left side panel -->
+  <div class="left-panel">
+    <!-- Total section -->
+    <div class="total-section">
+      <h2>Total</h2>
+      <!-- Loading Indicator for Currency Configuration -->
+      <div class="loading-currencies" *ngIf="loadingCurrencies">
+        <div class="spinner-container">
+          <mat-spinner diameter="30"></mat-spinner>
+          <span>Cargando monedas...</span>
+        </div>
+      </div>
 
-            <!-- Currency Totals -->
-            <div class="currency-totals" *ngIf="!loadingConfig && !loadingExchangeRates">
-                <div class="currency-item" *ngFor="let moneda of filteredMonedas">
-                    <!-- Dynamic flag loading with fallback to base64 data -->
-                    <img *ngIf="moneda.flagIconBase64" [src]="moneda.flagIconBase64" [alt]="moneda.denominacion"
-                        class="currency-flag" />
-                    <img *ngIf="!moneda.flagIconBase64 && moneda.flagIcon" [src]="moneda.flagIcon"
-                        [alt]="moneda.denominacion" class="currency-flag" />
-                    <img *ngIf="!moneda.flagIconBase64 && !moneda.flagIcon && moneda.countryCode" [src]="
+      <!-- Currency Totals -->
+      <div
+        class="currency-totals"
+        *ngIf="!loadingConfig && !loadingExchangeRates"
+      >
+        <div class="currency-item" *ngFor="let moneda of filteredMonedas">
+          <!-- Dynamic flag loading with fallback to base64 data -->
+          <img
+            *ngIf="moneda.flagIconBase64"
+            [src]="moneda.flagIconBase64"
+            [alt]="moneda.denominacion"
+            class="currency-flag"
+          />
+          <img
+            *ngIf="!moneda.flagIconBase64 && moneda.flagIcon"
+            [src]="moneda.flagIcon"
+            [alt]="moneda.denominacion"
+            class="currency-flag"
+          />
+          <img
+            *ngIf="
+              !moneda.flagIconBase64 && !moneda.flagIcon && moneda.countryCode
+            "
+            [src]="
               'https://flagcdn.com/w320/' +
               moneda.countryCode.toLowerCase() +
               '.png'
-            " [alt]="moneda.denominacion" class="currency-flag" />
-                    <img *ngIf="
+            "
+            [alt]="moneda.denominacion"
+            class="currency-flag"
+          />
+          <img
+            *ngIf="
               !moneda.flagIconBase64 && !moneda.flagIcon && !moneda.countryCode
-            " src="assets/images/currency-placeholder.png" [alt]="moneda.denominacion" class="currency-flag" />
+            "
+            src="assets/images/currency-placeholder.png"
+            [alt]="moneda.denominacion"
+            class="currency-flag"
+          />
 
-                    <!-- Currency value calculated from exchange rates -->
-                    <span class="currency-value">{{
-                        currencyTotals.get(moneda.id!) ?? 0
-                        | number : "1.0-2"
-                        }}</span>
-                </div>
-            </div>
-            <h2>Saldo</h2>
-            <!-- Loading Indicator for Currency Configuration -->
-            <div class="loading-currencies" *ngIf="loadingCurrencies">
-                <div class="spinner-container">
-                    <mat-spinner diameter="30"></mat-spinner>
-                    <span>Cargando monedas...</span>
-                </div>
-            </div>
-
-            <!-- Currency Balances -->
-            <div class="currency-totals">
-                <div class="currency-item" *ngFor="let moneda of filteredMonedas">
-                    <!-- Dynamic flag loading with fallback to base64 data -->
-                    <img *ngIf="moneda.flagIconBase64" [src]="moneda.flagIconBase64" [alt]="moneda.denominacion"
-                        class="currency-flag" />
-                    <img *ngIf="!moneda.flagIconBase64 && moneda.flagIcon" [src]="moneda.flagIcon"
-                        [alt]="moneda.denominacion" class="currency-flag" />
-                    <img *ngIf="
-                      !moneda.flagIconBase64 && !moneda.flagIcon && moneda.countryCode
-                    " [src]="
-                      'https://flagcdn.com/w320/' +
-                      moneda.countryCode.toLowerCase() +
-                      '.png'
-                    " [alt]="moneda.denominacion" class="currency-flag" />
-                    <img *ngIf="
-                      !moneda.flagIconBase64 && !moneda.flagIcon && !moneda.countryCode
-                    " src="assets/images/currency-placeholder.png" [alt]="moneda.denominacion" class="currency-flag" />
-
-                    <!-- Balance value calculated from Map -->
-                    <span class="currency-value">{{
-                        currencyBalances.get(moneda.id!) ?? 0
-                        | number : "1.0-2"
-                        }}</span>
-                </div>
-            </div>
+          <!-- Currency value calculated from exchange rates -->
+          <span class="currency-value">{{
+            currencyTotals.get(moneda.id!) ?? 0 | number : "1.0-2"
+          }}</span>
         </div>
-
-        <!-- Selected Mesa information -->
-        <mat-card *ngIf="hasMesaSelected" class="mesa-data-card">
-            <mat-card-content>
-                <div class="mesa-info-row">
-                    <div class="mesa-info-item">
-                        <mat-icon>table_restaurant</mat-icon>
-                        <div class="mesa-info-content">
-                            <span class="info-label">Mesa seleccionada</span>
-                            <span class="info-value">{{selectedMesa?.numero}}</span>
-                        </div>
-                    </div>
-                    <!-- Show regular info when not editing client name -->
-                    <ng-container *ngIf="!isEditingClienteName">
-                        <div class="mesa-info-item">
-                            <mat-icon>people</mat-icon>
-                            <div class="mesa-info-content">
-                                <span class="info-label">Capacidad</span>
-                                <span class="info-value">{{selectedMesa?.cantidad_personas || 'N/A'}}</span>
-                            </div>
-                        </div>
-                        <div class="mesa-info-item">
-                            <mat-icon>place</mat-icon>
-                            <div class="mesa-info-content">
-                                <span class="info-label">Sector</span>
-                                <span class="info-value">{{selectedMesa?.sector?.nombre || 'Sin asignar'}}</span>
-                            </div>
-                        </div>
-                        <div class="mesa-info-item">
-                            <mat-icon>check_circle</mat-icon>
-                            <div class="mesa-info-content">
-                                <span class="info-label">Estado</span>
-                                <span class="info-value" [ngClass]="mesaStatusClass">
-                                    {{mesaStatusText}}
-                                </span>
-                            </div>
-                        </div>
-                        <!-- Client name info -->
-                        <div class="mesa-info-item">
-                            <mat-icon>person</mat-icon>
-                            <div class="mesa-info-content">
-                                <span class="info-label">Nombre Cliente</span>
-                                <ng-container *ngIf="hasClienteName; else noClientName">
-                                    <div class="cliente-name-container">
-                                        <span class="info-value">{{clienteName}}</span>
-                                        <button mat-icon-button color="primary" (click)="startEditingClienteName()" matTooltip="Editar nombre">
-                                            <mat-icon>edit</mat-icon>
-                                        </button>
-                                    </div>
-                                </ng-container>
-                                <ng-template #noClientName>
-                                    <button mat-stroked-button color="primary" (click)="startEditingClienteName()">
-                                        <mat-icon>add</mat-icon> Adicionar nombre
-                                    </button>
-                                </ng-template>
-                            </div>
-                        </div>
-                    </ng-container>
-                    
-                    <!-- Show client name input when editing -->
-                    <ng-container *ngIf="isEditingClienteName">
-                        <div class="mesa-info-item" style="flex-grow: 1;">
-                            <form [formGroup]="clienteNameForm" class="cliente-name-form" style="width: 100%; display: flex;">
-                                <mat-form-field appearance="outline" style="flex-grow: 1;">
-                                    <mat-label>Nombre del cliente</mat-label>
-                                    <input matInput formControlName="nombre" (keydown)="onClienteNameKeyDown($event)" placeholder="Ingrese el nombre del cliente">
-                                </mat-form-field>
-                                <button mat-icon-button color="primary" (click)="saveClienteName()" matTooltip="Guardar">
-                                    <mat-icon>save</mat-icon>
-                                </button>
-                                <button mat-icon-button color="warn" (click)="cancelEditingClienteName()" matTooltip="Cancelar">
-                                    <mat-icon>cancel</mat-icon>
-                                </button>
-                            </form>
-                        </div>
-                    </ng-container>
-                </div>
-            </mat-card-content>
-        </mat-card>
-
-        <!-- Sale items table -->
-        <div class="sale-table" style="flex: 5;">
-            <table mat-table [dataSource]="ventaItems" class="mat-elevation-z2">
-                <!-- Product Column -->
-                <ng-container matColumnDef="productoNombre">
-                    <th mat-header-cell *matHeaderCellDef>Producto</th>
-                    <td mat-cell *matCellDef="let item">{{item.productoNombre}}</td>
-                </ng-container>
-
-                <!-- Quantity Column -->
-                <ng-container matColumnDef="cantidad">
-                    <th mat-header-cell *matHeaderCellDef>Cant.</th>
-                    <td mat-cell *matCellDef="let item">{{item.cantidad}}</td>
-                </ng-container>
-
-                <!-- Price Column -->
-                <ng-container matColumnDef="precio">
-                    <th mat-header-cell *matHeaderCellDef>Precio</th>
-                    <td mat-cell *matCellDef="let item">{{item.precio | number:'1.2-2'}}</td>
-                </ng-container>
-
-                <!-- Total Column -->
-                <ng-container matColumnDef="total">
-                    <th mat-header-cell *matHeaderCellDef>Total</th>
-                    <td mat-cell *matCellDef="let item">{{item.total | number:'1.2-2'}}</td>
-                </ng-container>
-
-                <!-- Actions Column -->
-                <ng-container matColumnDef="actions">
-                    <th mat-header-cell *matHeaderCellDef></th>
-                    <td mat-cell *matCellDef="let item">
-                        <button mat-icon-button color="warn" (click)="removeItem(item)">
-                            <mat-icon>delete</mat-icon>
-                        </button>
-                    </td>
-                </ng-container>
-
-                <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-                <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
-            </table>
+      </div>
+      <h2>Saldo</h2>
+      <!-- Loading Indicator for Currency Configuration -->
+      <div class="loading-currencies" *ngIf="loadingCurrencies">
+        <div class="spinner-container">
+          <mat-spinner diameter="30"></mat-spinner>
+          <span>Cargando monedas...</span>
         </div>
+      </div>
 
-        <!-- Search products section set form group as flex-direction: column; gap: 5px; and cantidad input must take 10%, search 80% and button 10%-->
-        <div class="search-section" style="height: 50px;">
-            <form [formGroup]="searchForm" style="width: 100%; display: flex; gap: 5px; flex-direction: row;">
-                <!-- add a cantidad input, width must be 50px -->
-                <mat-form-field appearance="outline" class="search-field" style="flex: 1;">
-                    <input matInput formControlName="cantidad" type="number" min="0.01">
-                </mat-form-field>
-                <mat-form-field appearance="outline" class="search-field" style="flex: 8;">
-                    <input matInput placeholder="BUSCAR PRODUCTOS" formControlName="searchTerm"
-                        (keydown)="onSearchKeyDown($event)">
-                </mat-form-field>
-                <button mat-icon-button color="primary" class="search-button" (click)="searchProducts()">
-                    <mat-icon>search</mat-icon>
-                </button>
-            </form>
-        </div>
+      <!-- Currency Balances -->
+      <div class="currency-totals">
+        <div class="currency-item" *ngFor="let moneda of filteredMonedas">
+          <!-- Dynamic flag loading with fallback to base64 data -->
+          <img
+            *ngIf="moneda.flagIconBase64"
+            [src]="moneda.flagIconBase64"
+            [alt]="moneda.denominacion"
+            class="currency-flag"
+          />
+          <img
+            *ngIf="!moneda.flagIconBase64 && moneda.flagIcon"
+            [src]="moneda.flagIcon"
+            [alt]="moneda.denominacion"
+            class="currency-flag"
+          />
+          <img
+            *ngIf="
+              !moneda.flagIconBase64 && !moneda.flagIcon && moneda.countryCode
+            "
+            [src]="
+              'https://flagcdn.com/w320/' +
+              moneda.countryCode.toLowerCase() +
+              '.png'
+            "
+            [alt]="moneda.denominacion"
+            class="currency-flag"
+          />
+          <img
+            *ngIf="
+              !moneda.flagIconBase64 && !moneda.flagIcon && !moneda.countryCode
+            "
+            src="assets/images/currency-placeholder.png"
+            [alt]="moneda.denominacion"
+            class="currency-flag"
+          />
 
-        <!-- Bottom buttons -->
-        <div class="action-buttons">
-            <button mat-raised-button color="primary" class="action-button">
-                <mat-icon>add_shopping_cart</mat-icon>
-                <span>Button</span>
-            </button>
-            <button mat-raised-button color="primary" class="action-button">
-                <mat-icon>payment</mat-icon>
-                <span>Button</span>
-            </button>
-            <button mat-raised-button color="primary" class="action-button">
-                <mat-icon>receipt</mat-icon>
-                <span>Button</span>
-            </button>
+          <!-- Balance value calculated from Map -->
+          <span class="currency-value">{{
+            currencyBalances.get(moneda.id!) ?? 0 | number : "1.0-2"
+          }}</span>
         </div>
+      </div>
     </div>
 
-    <!-- Right side panel -->
-    <div class="right-panel" style="display: flex; flex-direction: column; gap: 10px;">
-        <!-- display selected caja data, caja id, fecha apertura, estado -->
-        <mat-card class="caja-data-card">
-            <mat-card-content>
-                <div class="caja-info-row">
-                    <div class="caja-info-item">
-                        <mat-icon>point_of_sale</mat-icon>
-                        <div class="caja-info-content">
-                            <span class="info-label">Id de caja</span>
-                            <span class="info-value">{{caja?.id}}</span>
-                        </div>
-                    </div>
-                    <div class="caja-info-item">
-                        <mat-icon>event</mat-icon>
-                        <div class="caja-info-content">
-                            <span class="info-label">Fecha de apertura</span>
-                            <span class="info-value">{{caja?.fechaApertura | date:'dd/MM/yyyy HH:mm'}}</span>
-                        </div>
-                    </div>
-                    <div class="caja-info-item">
-                        <mat-icon>schedule</mat-icon>
-                        <div class="caja-info-content">
-                            <span class="info-label">Tiempo abierto</span>
-                            <span class="info-value">{{timeOpen}}</span>
-                        </div>
-                    </div>
-                    <div class="caja-info-item">
-                        <mat-icon>trending_up</mat-icon>
-                        <div class="caja-info-content">
-                            <span class="info-label">Estado</span>
-                            <span class="info-value" [ngClass]="{'status-active': caja?.estado === 'ABIERTO', 'status-inactive': caja?.estado !== 'ABIERTO'}">
-                                {{caja?.estado}}
-                            </span>
-                        </div>
-                    </div>
+    <!-- Selected Mesa information -->
+    <mat-card *ngIf="hasMesaSelected" class="mesa-data-card">
+      <mat-card-content>
+        <div class="mesa-info-row">
+          <div class="mesa-info-item">
+            <mat-icon>table_restaurant</mat-icon>
+            <div class="mesa-info-content">
+              <span class="info-label">Mesa seleccionada</span>
+              <span class="info-value">{{ selectedMesa?.numero }}</span>
+            </div>
+          </div>
+          <!-- Show regular info when not editing client name -->
+          <ng-container *ngIf="!isEditingClienteName">
+            <div class="mesa-info-item">
+              <mat-icon>people</mat-icon>
+              <div class="mesa-info-content">
+                <span class="info-label">Capacidad</span>
+                <span class="info-value">{{
+                  selectedMesa?.cantidad_personas || "N/A"
+                }}</span>
+              </div>
+            </div>
+            <div class="mesa-info-item">
+              <mat-icon>place</mat-icon>
+              <div class="mesa-info-content">
+                <span class="info-label">Sector</span>
+                <span class="info-value">{{
+                  selectedMesa?.sector?.nombre || "Sin asignar"
+                }}</span>
+              </div>
+            </div>
+            <div class="mesa-info-item">
+              <mat-icon>check_circle</mat-icon>
+              <div class="mesa-info-content">
+                <span class="info-label">Estado</span>
+                <span class="info-value" [ngClass]="mesaStatusClass">
+                  {{ mesaStatusText }}
+                </span>
+              </div>
+            </div>
+            <!-- Client name info -->
+            <div class="mesa-info-item">
+              <mat-icon>person</mat-icon>
+              <div class="mesa-info-content">
+                <span class="info-label">Nombre Cliente</span>
+                <ng-container *ngIf="hasClienteName; else noClientName">
+                  <div class="cliente-name-container">
+                    <span class="info-value">{{ clienteName }}</span>
+                    <button
+                      mat-icon-button
+                      color="primary"
+                      (click)="startEditingClienteName()"
+                      matTooltip="Editar nombre"
+                    >
+                      <mat-icon>edit</mat-icon>
+                    </button>
+                  </div>
+                </ng-container>
+                <ng-template #noClientName>
+                  <button
+                    mat-stroked-button
+                    color="primary"
+                    (click)="startEditingClienteName()"
+                  >
+                    <mat-icon>add</mat-icon> Adicionar nombre
+                  </button>
+                </ng-template>
+              </div>
+            </div>
+          </ng-container>
+
+          <!-- Show client name input when editing -->
+          <ng-container *ngIf="isEditingClienteName">
+            <div class="mesa-info-item" style="flex-grow: 1">
+              <form
+                [formGroup]="clienteNameForm"
+                class="cliente-name-form"
+                style="width: 100%; display: flex"
+              >
+                <mat-form-field appearance="outline" style="flex-grow: 1">
+                  <mat-label>Nombre del cliente</mat-label>
+                  <input
+                    matInput
+                    formControlName="nombre"
+                    (keydown)="onClienteNameKeyDown($event)"
+                    placeholder="Ingrese el nombre del cliente"
+                  />
+                </mat-form-field>
+                <button
+                  mat-icon-button
+                  color="primary"
+                  (click)="saveClienteName()"
+                  matTooltip="Guardar"
+                >
+                  <mat-icon>save</mat-icon>
+                </button>
+                <button
+                  mat-icon-button
+                  color="warn"
+                  (click)="cancelEditingClienteName()"
+                  matTooltip="Cancelar"
+                >
+                  <mat-icon>cancel</mat-icon>
+                </button>
+              </form>
+            </div>
+          </ng-container>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Sale items table -->
+    <div class="sale-table" style="flex: 5">
+      <table
+        mat-table
+        [dataSource]="ventaItemsDataSource"
+        multiTemplateDataRows
+        class="mat-elevation-z2"
+      >
+        <!-- Product Column -->
+        <ng-container matColumnDef="productoNombre">
+          <th mat-header-cell *matHeaderCellDef style="width: 40%">Producto</th>
+          <td mat-cell *matCellDef="let item">{{ item.producto.nombre }}</td>
+        </ng-container>
+
+        <!-- Quantity Column -->
+        <ng-container matColumnDef="cantidad">
+          <th
+            mat-header-cell
+            *matHeaderCellDef
+            class="center"
+            style="width: 18%"
+          >
+            Presentacion / Cant.
+          </th>
+          <td mat-cell *matCellDef="let item" class="center" style="width: 18%">
+            ({{ item.presentacion.cantidad }}) / {{ item.cantidad }}
+          </td>
+        </ng-container>
+
+        <!-- Price Column -->
+        <ng-container matColumnDef="precio">
+          <th
+            mat-header-cell
+            *matHeaderCellDef
+            style="width: 18%"
+            class="center"
+          >
+            Precio
+          </th>
+          <td mat-cell *matCellDef="let item" style="width: 18%" class="center">
+            {{ item.precioVentaTotal / item.cantidad | number : "1.2-2" }}
+          </td>
+        </ng-container>
+
+        <!-- Total Column -->
+        <ng-container matColumnDef="total">
+          <th
+            mat-header-cell
+            *matHeaderCellDef
+            style="width: 18%"
+            class="center"
+          >
+            Total
+          </th>
+          <td mat-cell *matCellDef="let item" style="width: 18%" class="center">
+            {{ item.precioVentaTotal | number : "1.2-2" }}
+          </td>
+        </ng-container>
+
+        <!-- Actions Column -->
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef style="width: 6%"></th>
+          <td mat-cell *matCellDef="let item" style="width: 6%">
+            <!-- replace the button with a matMenuButton -->
+            <mat-menu #menu="matMenu">
+              <!-- add edit button -->
+              <button mat-menu-item (click)="editItem(item)">
+                <mat-icon>edit</mat-icon>
+                Editar
+              </button>
+              <!-- add cancelar button -->
+              <button mat-menu-item (click)="cancelItem(item)">
+                <mat-icon>cancel</mat-icon>
+                Cancelar
+              </button>
+            </mat-menu>
+            <button mat-icon-button [matMenuTriggerFor]="menu">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+
+        <!-- Expand/Collapse Column -->
+        <ng-container matColumnDef="expand">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let item">
+            <button
+              mat-icon-button
+              (click)="
+                expandedElement = expandedElement === item ? null : item;
+                $event.stopPropagation()
+              "
+            >
+              <mat-icon>{{
+                expandedElement === item ? "expand_less" : "expand_more"
+              }}</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+
+        <!-- Expanded Content Column -->
+        <ng-container matColumnDef="expandedDetail">
+          <td
+            mat-cell
+            *matCellDef="let item"
+            [attr.colspan]="columnsToDisplayWithExpand.length"
+          >
+            <div
+              class="example-element-detail"
+              [@detailExpand]="
+                item === expandedElement ? 'expanded' : 'collapsed'
+              "
+              [style.display]="expandedElement === item ? 'block' : 'none'"
+            >
+              <div class="expanded-detail-container">
+                <div class="expanded-detail-row">
+                  <span class="detail-label">Creado por:</span>
+                  <span class="detail-value">{{
+                    item.createdBy?.persona?.nombre || "N/A"
+                  }}</span>
                 </div>
-            </mat-card-content>
-        </mat-card>
-        <!-- Categories -->
-        <div class="categories" style="flex: 1;">
-            <button mat-raised-button color="primary" class="category-button">Categoria 2</button>
-            <button mat-raised-button color="primary" class="category-button">Categoria 3</button>
+                <div class="expanded-detail-row">
+                  <span class="detail-label">Estado:</span>
+                  <span
+                    class="detail-value"
+                    [ngClass]="{
+                      'estado-activo': item.estado === 'ACTIVO',
+                      'estado-modificado': item.estado === 'MODIFICADO',
+                      'estado-cancelado': item.estado === 'CANCELADO'
+                    }"
+                    >{{ item.estado | titlecase }}</span
+                  >
+                </div>
+
+                <!-- Show cancelado information when aplicable -->
+                <ng-container *ngIf="item.estado === 'CANCELADO'">
+                  <div class="expanded-detail-row">
+                    <span class="detail-label">Cancelado por:</span>
+                    <span class="detail-value">{{
+                      item.canceladoPor?.persona?.nombre || "N/A"
+                    }}</span>
+                  </div>
+                  <div class="expanded-detail-row">
+                    <span class="detail-label">Hora de cancelación:</span>
+                    <span class="detail-value">{{
+                      (item.horaCancelado | date : "dd/MM/yyyy HH:mm:ss") ||
+                        "N/A"
+                    }}</span>
+                  </div>
+                </ng-container>
+
+                <!-- Show modificado information when aplicable -->
+                <ng-container *ngIf="item.estado === 'MODIFICADO'">
+                  <div class="expanded-detail-row">
+                    <span class="detail-label">Modificado por:</span>
+                    <span class="detail-value">{{
+                      item.modificadoPor?.persona?.nombre || "N/A"
+                    }}</span>
+                  </div>
+                  <div class="expanded-detail-row">
+                    <span class="detail-label">Hora de modificación:</span>
+                    <span class="detail-value">{{
+                      (item.horaModificacion | date : "dd/MM/yyyy HH:mm:ss") ||
+                        "N/A"
+                    }}</span>
+                  </div>
+                </ng-container>
+              </div>
+            </div>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="columnsToDisplayWithExpand"></tr>
+        <tr
+          mat-row
+          *matRowDef="let row; columns: columnsToDisplayWithExpand"
+          class="example-element-row"
+          [class.example-expanded-row]="expandedElement === row"
+          (click)="expandedElement = expandedElement === row ? null : row"
+        ></tr>
+        <tr
+          mat-row
+          *matRowDef="let row; columns: ['expandedDetail']"
+          class="example-detail-row"
+          [style.display]="expandedElement === row ? 'table-row' : 'none'"
+        ></tr>
+      </table>
+    </div>
+
+    <!-- Search products section set form group as flex-direction: column; gap: 5px; and cantidad input must take 10%, search 80% and button 10%-->
+    <div class="search-section" style="height: 50px">
+      <form
+        [formGroup]="searchForm"
+        style="width: 100%; display: flex; gap: 5px; flex-direction: row"
+      >
+        <!-- add a cantidad input, width must be 50px -->
+        <mat-form-field
+          appearance="outline"
+          class="search-field"
+          style="flex: 1"
+        >
+          <input matInput formControlName="cantidad" type="number" min="0.01" />
+        </mat-form-field>
+        <mat-form-field
+          appearance="outline"
+          class="search-field"
+          style="flex: 8"
+        >
+          <input
+            matInput
+            placeholder="BUSCAR PRODUCTOS"
+            formControlName="searchTerm"
+            (keydown)="onSearchKeyDown($event)"
+          />
+        </mat-form-field>
+        <button
+          mat-icon-button
+          color="primary"
+          class="search-button"
+          (click)="searchProducts()"
+        >
+          <mat-icon>search</mat-icon>
+        </button>
+      </form>
+    </div>
+
+    <!-- Bottom buttons -->
+    <div class="action-buttons">
+      <button mat-raised-button color="primary" class="action-button">
+        <mat-icon>add_shopping_cart</mat-icon>
+        <span>Button</span>
+      </button>
+      <button mat-raised-button color="primary" class="action-button">
+        <mat-icon>payment</mat-icon>
+        <span>Button</span>
+      </button>
+      <button mat-raised-button color="primary" class="action-button">
+        <mat-icon>receipt</mat-icon>
+        <span>Button</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Right side panel -->
+  <div
+    class="right-panel"
+    style="display: flex; flex-direction: column; gap: 10px"
+  >
+    <!-- display selected caja data, caja id, fecha apertura, estado -->
+    <mat-card class="caja-data-card">
+      <mat-card-content>
+        <div class="caja-info-row">
+          <div class="caja-info-item">
+            <mat-icon>point_of_sale</mat-icon>
+            <div class="caja-info-content">
+              <span class="info-label">Id de caja</span>
+              <span class="info-value">{{ caja?.id }}</span>
+            </div>
+          </div>
+          <div class="caja-info-item">
+            <mat-icon>event</mat-icon>
+            <div class="caja-info-content">
+              <span class="info-label">Fecha de apertura</span>
+              <span class="info-value">{{
+                caja?.fechaApertura | date : "dd/MM/yyyy HH:mm"
+              }}</span>
+            </div>
+          </div>
+          <div class="caja-info-item">
+            <mat-icon>schedule</mat-icon>
+            <div class="caja-info-content">
+              <span class="info-label">Tiempo abierto</span>
+              <span class="info-value">{{ timeOpen }}</span>
+            </div>
+          </div>
+          <div class="caja-info-item">
+            <mat-icon>trending_up</mat-icon>
+            <div class="caja-info-content">
+              <span class="info-label">Estado</span>
+              <span
+                class="info-value"
+                [ngClass]="{
+                  'status-active': caja?.estado === 'ABIERTO',
+                  'status-inactive': caja?.estado !== 'ABIERTO'
+                }"
+              >
+                {{ caja?.estado }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+    <!-- Categories -->
+    <mat-card class="categories-card" style="flex: 4">
+      <mat-card-content>
+        <div class="categories">
+          <button mat-raised-button color="primary" class="category-button">
+            Categoria 2
+          </button>
         </div>
 
         <!-- Products grid -->
-        <div class="products-grid" style="flex: 4;">
-            <div class="product-item" *ngFor="let producto of productos">
-                <div class="product-image">
-                    <img src="assets/product-placeholder.png" alt="Product">
-                </div>
-                <div class="product-name">{{producto.nombre}}</div>
+        <div class="products-grid">
+          <div class="product-item" *ngFor="let producto of productos">
+            <div class="product-image">
+              <img src="assets/product-placeholder.png" alt="Product" />
             </div>
+            <div class="product-name">{{ producto.nombre }}</div>
+          </div>
         </div>
+      </mat-card-content>
+    </mat-card>
 
-        <!-- Table number buttons -->
-        <div class="tables-grid" style="flex: 4;">
-            <!-- Show loading spinner while mesas are loading -->
-            <div *ngIf="loadingMesas" class="loading-mesas">
-                <mat-spinner diameter="40"></mat-spinner>
-                <span>Cargando mesas...</span>
-            </div>
-
-            <!-- Use actual mesa data when available -->
-            <ng-container *ngIf="!loadingMesas">
-                <!-- If we have mesas data, show real mesas -->
-                <ng-container *ngIf="mesas.length > 0">
-                    <button mat-raised-button *ngFor="let mesa of mesas" (click)="selectMesa(mesa)"
-                        [class.table-active]="!mesa.reservado" 
-                        [class.table-inactive]="mesa.reservado"
-                        [class.table-selected]="selectedMesa?.id === mesa.id"
-                        [matTooltip]="mesa.reservado ? 'Mesa reservada' : 'Mesa disponible'" class="table-button">
-                        {{mesa.numero}}
-                        <mat-icon *ngIf="mesa.reservado" class="reserved-icon">event_busy</mat-icon>
-                    </button>
-                </ng-container>
-            </ng-container>
-        </div>
-
-        <!-- Bottom action buttons -->
+    <!-- Table number buttons -->
+    <mat-card class="tables-card" style="flex: 5">
+      <mat-card-content style="display: flex; flex-direction: column; gap: 10px">
         <div class="bottom-buttons">
-            <button mat-raised-button color="primary" class="bottom-button">
-                <span>Button</span>
-                <mat-icon>arrow_forward</mat-icon>
-            </button>
-            <button mat-raised-button color="primary" class="bottom-button">
-                <span>Button</span>
-                <mat-icon>arrow_forward</mat-icon>
-            </button>
-            <button mat-raised-button color="primary" class="bottom-button">
-                <span>Button</span>
-                <mat-icon>arrow_forward</mat-icon>
-            </button>
+          <button mat-raised-button color="primary" class="bottom-button">
+            <span>Button</span>
+            <mat-icon>arrow_forward</mat-icon>
+          </button>
+          <button mat-raised-button color="primary" class="bottom-button">
+            <span>Button</span>
+            <mat-icon>arrow_forward</mat-icon>
+          </button>
+          <button mat-raised-button color="primary" class="bottom-button">
+            <span>Button</span>
+            <mat-icon>arrow_forward</mat-icon>
+          </button>
         </div>
+        <div class="tables-grid">
+          <!-- Show loading spinner while mesas are loading -->
+          <div *ngIf="loadingMesas" class="loading-mesas">
+            <mat-spinner diameter="40"></mat-spinner>
+            <span>Cargando mesas...</span>
+          </div>
+
+          <!-- Use actual mesa data when available -->
+          <ng-container *ngIf="!loadingMesas">
+            <!-- If we have mesas data, show real mesas -->
+            <ng-container *ngIf="mesas.length > 0">
+              <button
+                mat-raised-button
+                style="height: 60px !important; width: 60px !important"
+                *ngFor="let mesa of mesas"
+                (click)="selectMesa(mesa)"
+                [class.table-active]="mesa.estado === 'DISPONIBLE'"
+                [class.table-inactive]="mesa.estado !== 'DISPONIBLE'"
+                [class.table-reserved]="mesa.reservado"
+                [class.table-selected]="selectedMesa?.id === mesa.id"
+                [matTooltip]="
+                  mesa.reservado
+                    ? 'Mesa reservada'
+                    : mesa.estado === 'DISPONIBLE'
+                    ? 'Mesa disponible'
+                    : 'Mesa ocupada'
+                "
+                class="table-button"
+              >
+                {{ mesa.numero }}
+                <mat-icon *ngIf="mesa.reservado" class="reserved-icon"
+                  >event_busy</mat-icon
+                >
+              </button>
+            </ng-container>
+          </ng-container>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Bottom action buttons -->
+    <div class="bottom-buttons">
+      <button mat-raised-button color="primary" class="bottom-button">
+        <span>Button</span>
+        <mat-icon>arrow_forward</mat-icon>
+      </button>
+      <button mat-raised-button color="primary" class="bottom-button">
+        <span>Button</span>
+        <mat-icon>arrow_forward</mat-icon>
+      </button>
+      <button mat-raised-button color="primary" class="bottom-button">
+        <span>Button</span>
+        <mat-icon>arrow_forward</mat-icon>
+      </button>
     </div>
+  </div>
 </div>

@@ -408,3 +408,45 @@ button[mat-icon-button] .mat-badge-content {
   top: -6px;
   right: -6px;
 }
+
+// Logout button at the bottom of sidebar
+.logout-footer {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+  background-color: rgba(0, 0, 0, 0.02);
+  
+  .logout-button {
+    width: 100%;
+    text-align: left;
+    
+    .logout-icon-expanded {
+      color: #f44336 !important;
+      font-size: 18px !important;
+      height: 18px !important;
+      width: 18px !important;
+      line-height: 18px !important;
+    }
+
+    .logout-icon-collapsed {
+      color: #f44336 !important;
+      font-size: 25px !important;
+      height: 25px !important;
+      width: 25px !important;
+      line-height: 25px !important;
+    }
+  }
+}
+
+// For collapsed state
+.collapsed .logout-footer .logout-button {
+  justify-content: center;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}

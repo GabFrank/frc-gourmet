@@ -44,7 +44,7 @@ export class TabsService {
     //open create edit compra with compra id 8
     // this.openTabWithData('Editar Compra', CreateEditCompraComponent, { compraId: 8 });
     //open pdv
-    this.addTab('PDV', PdvComponent);
+    this.addTab('PDV', PdvComponent, null, 'pdv');
   }
 
   /**

@@ -15,10 +15,9 @@ import { RecetaVariacionItem } from '../../src/app/database/entities/productos/r
 import { MovimientoStock, TipoReferencia } from '../../src/app/database/entities/productos/movimiento-stock.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { PrecioVenta } from '../../src/app/database/entities/productos/precio-venta.entity';
 
 export function registerProductosHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
-  const currentUser = getCurrentUser(); // Get user for tracking
-
   // --- Categoria Handlers ---
   ipcMain.handle('getCategorias', async () => {
     try {
@@ -44,6 +43,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     try {
       const repo = dataSource.getRepository(Categoria);
       const entity = repo.create(data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
       return await repo.save(entity);
     } catch (error) {
@@ -58,6 +58,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Categoria ID ${id} not found`);
       repo.merge(entity, data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
       return await repo.save(entity);
     } catch (error) {
@@ -120,6 +121,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     try {
       const repo = dataSource.getRepository(Subcategoria);
       const entity = repo.create(data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
       return await repo.save(entity);
     } catch (error) {
@@ -134,6 +136,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Subcategoria ID ${id} not found`);
       repo.merge(entity, data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
       return await repo.save(entity);
     } catch (error) {
@@ -196,6 +199,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     try {
       const repo = dataSource.getRepository(Producto);
       const entity = repo.create(data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
       return await repo.save(entity);
     } catch (error) {
@@ -210,6 +214,10 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Producto ID ${id} not found`);
       repo.merge(entity, data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
+      console.log('currentUser', currentUser);
+      // if currentuser is null throw error
+      if (!currentUser) throw new Error('No current user found');
       await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
       return await repo.save(entity);
     } catch (error) {
@@ -227,6 +235,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
       // Attempt soft delete first by setting activo = false
       entity.activo = false;
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
       await repo.save(entity);
       console.log(`Producto ID ${id} marked as inactive.`);
@@ -266,6 +275,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     try {
       const repo = dataSource.getRepository(Presentacion);
       const entity = repo.create(data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
       return await repo.save(entity);
     } catch (error) {
@@ -280,6 +290,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Presentacion ID ${id} not found`);
       repo.merge(entity, data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
       return await repo.save(entity);
     } catch (error) {
@@ -304,6 +315,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
            throw new Error(`Cannot delete presentation with existing prices.`);
        }
        */
+      const currentUser = getCurrentUser(); // Get current user at time of call
       return await repo.remove(entity);
     } catch (error) {
       console.error(`Error deleting presentacion ID ${id}:`, error);
@@ -337,6 +349,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     try {
       const repo = dataSource.getRepository(Codigo);
       const entity = repo.create(data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
       return await repo.save(entity);
     } catch (error) {
@@ -351,6 +364,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Codigo ID ${id} not found`);
       repo.merge(entity, data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
       return await repo.save(entity);
     } catch (error) {
@@ -365,6 +379,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const repo = dataSource.getRepository(Codigo);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Codigo ID ${id} not found`);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       return await repo.remove(entity);
     } catch (error) {
       console.error(`Error deleting codigo ID ${id}:`, error);
@@ -397,6 +412,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     try {
       const repo = dataSource.getRepository(Sabor);
       const entity = repo.create(data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
       return await repo.save(entity);
     } catch (error) {
@@ -411,6 +427,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Sabor ID ${id} not found`);
       repo.merge(entity, data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
       return await repo.save(entity);
     } catch (error) {
@@ -426,6 +443,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Sabor ID ${id} not found`);
        // Add dependency checks (PresentacionSabor)
+      const currentUser = getCurrentUser(); // Get current user at time of call
       return await repo.remove(entity);
     } catch (error) {
       console.error(`Error deleting sabor ID ${id}:`, error);
@@ -458,6 +476,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     try {
       const repo = dataSource.getRepository(PresentacionSabor);
       const entity = repo.create(data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
       return await repo.save(entity);
     } catch (error) {
@@ -472,6 +491,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PresentacionSabor ID ${id} not found`);
       repo.merge(entity, data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
       return await repo.save(entity);
     } catch (error) {
@@ -487,6 +507,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PresentacionSabor ID ${id} not found`);
        // Add dependency checks (e.g., PrecioVenta specific to sabor)
+      const currentUser = getCurrentUser(); // Get current user at time of call
       return await repo.remove(entity);
     } catch (error) {
       console.error(`Error deleting presentacion sabor ID ${id}:`, error);
@@ -519,6 +540,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     try {
       const repo = dataSource.getRepository(Receta);
       const entity = repo.create(data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
       return await repo.save(entity);
     } catch (error) {
@@ -533,6 +555,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Receta ID ${id} not found`);
       repo.merge(entity, data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
       return await repo.save(entity);
     } catch (error) {
@@ -548,6 +571,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Receta ID ${id} not found`);
        // Add dependency checks (RecetaItem, PresentacionSabor, RecetaVariacion)
+      const currentUser = getCurrentUser(); // Get current user at time of call
       return await repo.remove(entity);
     } catch (error) {
       console.error(`Error deleting receta ID ${id}:`, error);
@@ -581,6 +605,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const repo = dataSource.getRepository(RecetaItem);
       const entity = repo.create(data);
       // No user tracking on items usually, but can be added if needed
+      const currentUser = getCurrentUser(); // Get current user at time of call
+      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating receta item:', error);
@@ -595,6 +621,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       if (!entity) throw new Error(`RecetaItem ID ${id} not found`);
       repo.merge(entity, data);
       // No user tracking on items usually
+      const currentUser = getCurrentUser(); // Get current user at time of call
+      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
       return await repo.save(entity);
     } catch (error) {
       console.error(`Error updating receta item ID ${id}:`, error);
@@ -608,6 +636,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const repo = dataSource.getRepository(RecetaItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`RecetaItem ID ${id} not found`);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       return await repo.remove(entity);
     } catch (error) {
       console.error(`Error deleting receta item ID ${id}:`, error);
@@ -640,6 +669,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     try {
       const repo = dataSource.getRepository(Ingrediente);
       const entity = repo.create(data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
       return await repo.save(entity);
     } catch (error) {
@@ -654,6 +684,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Ingrediente ID ${id} not found`);
       repo.merge(entity, data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
       return await repo.save(entity);
     } catch (error) {
@@ -669,6 +700,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Ingrediente ID ${id} not found`);
        // Add dependency checks (RecetaItem, RecetaVariacionItem, CompraDetalle etc.)
+      const currentUser = getCurrentUser(); // Get current user at time of call
       return await repo.remove(entity);
     } catch (error) {
       console.error(`Error deleting ingrediente ID ${id}:`, error);
@@ -718,6 +750,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     try {
       const repo = dataSource.getRepository(RecetaVariacion);
       const entity = repo.create(data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
       return await repo.save(entity);
     } catch (error) {
@@ -732,6 +765,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`RecetaVariacion ID ${id} not found`);
       repo.merge(entity, data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
       return await repo.save(entity);
     } catch (error) {
@@ -747,6 +781,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`RecetaVariacion ID ${id} not found`);
       // Add dependency checks (RecetaVariacionItem, PresentacionSabor)
+      const currentUser = getCurrentUser(); // Get current user at time of call
       return await repo.remove(entity);
     } catch (error) {
       console.error(`Error deleting recipe variation ID ${id}:`, error);
@@ -780,6 +815,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const repo = dataSource.getRepository(RecetaVariacionItem);
       const entity = repo.create(data);
       // No user tracking on items usually
+      const currentUser = getCurrentUser(); // Get current user at time of call
+      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating recipe variation item:', error);
@@ -794,6 +831,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       if (!entity) throw new Error(`RecetaVariacionItem ID ${id} not found`);
       repo.merge(entity, data);
       // No user tracking on items usually
+      const currentUser = getCurrentUser(); // Get current user at time of call
+      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
       return await repo.save(entity);
     } catch (error) {
       console.error(`Error updating recipe variation item ID ${id}:`, error);
@@ -807,6 +846,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const repo = dataSource.getRepository(RecetaVariacionItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`RecetaVariacionItem ID ${id} not found`);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       return await repo.remove(entity);
     } catch (error) {
       console.error(`Error deleting recipe variation item ID ${id}:`, error);
@@ -934,6 +974,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     try {
       const repo = dataSource.getRepository(MovimientoStock);
       const entity = repo.create(data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
       return await repo.save(entity);
     } catch (error) {
@@ -948,6 +989,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`MovimientoStock ID ${id} not found`);
       repo.merge(entity, data);
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
       return await repo.save(entity);
     } catch (error) {
@@ -964,6 +1006,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       
       // Attempt soft delete by setting activo = false
       entity.activo = false;
+      const currentUser = getCurrentUser(); // Get current user at time of call
       await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
       await repo.save(entity);
       console.log(`MovimientoStock ID ${id} marked as inactive.`);
@@ -974,5 +1017,91 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       throw error;
     }
   });
+
+  // --- PrecioVenta Handlers ---
+  ipcMain.handle('getPreciosVenta', async (_event: any, active: boolean) => {
+    try {
+      const repo = dataSource.getRepository(PrecioVenta);
+      return await repo.find({ where: { activo: active } });
+    } catch (error) {
+      console.error('Error getting precios venta:', error);
+      throw error;
+    }
+  }); 
+
+  ipcMain.handle('getPrecioVenta', async (_event: any, id: number, active: boolean) => {
+    try {
+      const repo = dataSource.getRepository(PrecioVenta);
+      return await repo.findOne({ where: { id, activo: active } });
+    } catch (error) {
+      console.error('Error getting precio venta:', error);
+      throw error;
+    }   
+  });
+
+  ipcMain.handle('getPreciosVentaByPresentacion', async (_event: any, presentacionId: number, active: boolean) => {
+    try {
+      const repo = dataSource.getRepository(PrecioVenta);
+      return await repo.find({ where: { presentacionId, activo: active } });
+    } catch (error) {
+      console.error('Error getting precios venta por presentacion:', error);
+      throw error;
+    }
+  });
+  
+  ipcMain.handle('getPreciosVentaByPresentacionSabor', async (_event: any, presentacionSaborId: number, active: boolean) => {
+    try {
+      const repo = dataSource.getRepository(PrecioVenta);
+      return await repo.find({ where: { presentacionSaborId, activo: active } });
+    } catch (error) {
+      console.error('Error getting precios venta por presentacion sabor:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('createPrecioVenta', async (_event: any, data: any) => {
+    try {
+      const repo = dataSource.getRepository(PrecioVenta);
+      const entity = repo.create(data);
+      // No user tracking needed usually for prices
+      const currentUser = getCurrentUser(); // Get current user at time of call
+      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error('Error creating precio venta:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('updatePrecioVenta', async (_event: any, id: number, data: any) => {
+    try {
+      const repo = dataSource.getRepository(PrecioVenta);
+      const entity = await repo.findOneBy({ id });
+      if (!entity) throw new Error(`PrecioVenta ID ${id} not found`);
+      repo.merge(entity, data);
+      // No user tracking needed usually
+      const currentUser = getCurrentUser(); // Get current user at time of call
+      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error(`Error updating precio venta ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('deletePrecioVenta', async (_event: any, id: number) => {
+    // Note: Hard delete.
+    try {
+      const repo = dataSource.getRepository(PrecioVenta);
+      const entity = await repo.findOneBy({ id });
+      if (!entity) throw new Error(`PrecioVenta ID ${id} not found`);
+      const currentUser = getCurrentUser(); // Get current user at time of call
+      return await repo.remove(entity);
+    } catch (error) {
+      console.error(`Error deleting precio venta ID ${id}:`, error);
+      throw error;
+    }
+  });
+  
 
 } 

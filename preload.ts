@@ -1,6 +1,7 @@
 // Preload script that will be executed before rendering the application
 import { contextBridge, ipcRenderer } from 'electron';
 import { ProductoImage } from './src/app/database/entities/productos/producto-image.entity';
+import { EstadoVentaItem } from './src/app/database/entities/ventas/venta-item.entity';
 
 // Define types for our API
 interface Category {
@@ -535,6 +536,13 @@ interface VentaItem {
   descuento: number;
   createdAt?: Date;
   updatedAt?: Date;
+  estado: EstadoVentaItem;
+  canceladoPor?: Usuario;
+  horaCancelado?: Date;
+  modificado?: boolean;
+  modificadoPor?: Usuario;
+  horaModificacion?: Date;
+  nuevaVersionVentaItem?: VentaItem;
 }
 
 // iterface for PdvGrupoCategoria
@@ -988,20 +996,20 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // PrecioVenta methods
-  getPreciosVenta: async (): Promise<PrecioVenta[]> => {
-    return await ipcRenderer.invoke('getPreciosVenta');
+  getPreciosVenta: async (active: boolean): Promise<PrecioVenta[]> => {
+    return await ipcRenderer.invoke('getPreciosVenta', active);
   },
 
-  getPrecioVenta: async (precioVentaId: number): Promise<PrecioVenta> => {
-    return await ipcRenderer.invoke('getPrecioVenta', precioVentaId);
+  getPrecioVenta: async (precioVentaId: number, active: boolean): Promise<PrecioVenta> => {
+    return await ipcRenderer.invoke('getPrecioVenta', precioVentaId, active);
   },
 
-  getPreciosVentaByPresentacion: async (presentacionId: number): Promise<PrecioVenta[]> => {
-    return await ipcRenderer.invoke('getPreciosVentaByPresentacion', presentacionId);
+  getPreciosVentaByPresentacion: async (presentacionId: number, active: boolean): Promise<PrecioVenta[]> => {
+    return await ipcRenderer.invoke('getPreciosVentaByPresentacion', presentacionId, active);
   },
 
-  getPreciosVentaByPresentacionSabor: async (presentacionSaborId: number): Promise<PrecioVenta[]> => {
-    return await ipcRenderer.invoke('getPreciosVentaByPresentacionSabor', presentacionSaborId);
+  getPreciosVentaByPresentacionSabor: async (presentacionSaborId: number, active: boolean): Promise<PrecioVenta[]> => {
+    return await ipcRenderer.invoke('getPreciosVentaByPresentacionSabor', presentacionSaborId, active);
   },
 
   createPrecioVenta: async (precioVentaData: Partial<PrecioVenta>): Promise<PrecioVenta> => {

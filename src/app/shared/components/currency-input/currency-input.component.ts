@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, SimpleChanges, Optional, Self, OnInit, ViewChild, ElementRef } from '@angular/core';
+import { Component, Input, OnChanges, SimpleChanges, Optional, Self, OnInit, ViewChild, ElementRef, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ControlValueAccessor, NgControl, ReactiveFormsModule, FormControl } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -39,7 +39,9 @@ import { NgxCurrencyModule } from 'ngx-currency';
           [formControl]="inputControl"
           [placeholder]="placeholder"
           [required]="required"
-          (focus)="onInputFocus()">
+          (focus)="onInputFocus()"
+          (keydown)="onKeyPress($event)"
+          (keydown.enter)="onEnterKeyPress()">
         <mat-hint *ngIf="hint">{{ hint }}</mat-hint>
         <mat-error *ngIf="control && control.errors && control.touched">
           <ng-container *ngIf="control.errors['required']">
@@ -75,6 +77,12 @@ export class CurrencyInputComponent implements ControlValueAccessor, OnChanges, 
   @Input() moneda: Moneda | null = null;
   @Input() disableFloating = false;
   @Input() selectOnFocus = true;
+
+  // we need to handle key press event
+  @Output() keyPress = new EventEmitter<KeyboardEvent>();
+
+  // we need to handle enter key press event
+  @Output() enterKeyPress = new EventEmitter<void>(); 
 
   @ViewChild('inputElement') inputElement!: ElementRef;
 
@@ -116,6 +124,14 @@ export class CurrencyInputComponent implements ControlValueAccessor, OnChanges, 
         this.inputElement.nativeElement.select();
       });
     }
+  }
+
+  onKeyPress(event: KeyboardEvent): void {
+    this.keyPress.emit(event);
+  }
+
+  onEnterKeyPress(): void {
+    this.enterKeyPress.emit();
   }
 
   ngOnInit(): void {

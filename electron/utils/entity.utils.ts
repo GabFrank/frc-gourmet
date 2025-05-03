@@ -13,25 +13,24 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 export async function setEntityUserTracking(dataSource: DataSource, entity: any, usuarioId: number | undefined, isUpdate: boolean) {
   if (!usuarioId) {
     console.warn('setEntityUserTracking called without usuarioId for entity:', entity.constructor.name);
-    return; // No user ID provided, cannot track
-  }
+    // Proceed without setting tracking, but don't exit early
+  } else {
+    try {
+      const usuarioRepository = dataSource.getRepository(Usuario);
+      // Use findOneBy for potentially better performance when querying by ID
+      const usuario = await usuarioRepository.findOneBy({ id: usuarioId });
 
-  try {
-    const usuarioRepository = dataSource.getRepository(Usuario);
-    // Use findOneBy for potentially better performance when querying by ID
-    const usuario = await usuarioRepository.findOneBy({ id: usuarioId });
-
-    if (usuario) {
-      if (!isUpdate) {
-        entity.createdBy = usuario; // Set createdBy only on creation
+      if (usuario) {
+        if (!isUpdate) {
+          entity.createdBy = usuario; // Set createdBy only on creation
+        }
+        entity.updatedBy = usuario; // Set updatedBy on both create and update
+      } else {
+        console.warn(`setEntityUserTracking: Usuario with ID ${usuarioId} not found for entity:`, entity.constructor.name);
       }
-      entity.updatedBy = usuario; // Set updatedBy on both create and update
-    } else {
-      console.warn(`setEntityUserTracking: Usuario with ID ${usuarioId} not found for entity:`, entity.constructor.name);
+    } catch (error) {
+      console.error(`Error setting user tracking (${isUpdate ? 'update' : 'create'}) for entity ${entity.constructor.name}:`, error);
+      // Log the error and continue
     }
-  } catch (error) {
-    console.error(`Error setting user tracking (${isUpdate ? 'update' : 'create'}) for entity ${entity.constructor.name}:`, error);
-    // Decide if you want to throw the error or allow the operation to continue without tracking
-    // For now, log the error and continue
   }
 } 

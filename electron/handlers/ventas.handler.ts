@@ -14,12 +14,13 @@ import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.ent
 import { Not, IsNull } from 'typeorm';
 import { DeepPartial } from 'typeorm';
 import { Reserva } from '../../src/app/database/entities/ventas/reserva.entity';
-import { PdvMesa } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
+import { PdvMesa, PdvMesaEstado } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { Comanda } from '../../src/app/database/entities/ventas/comanda.entity';
 import { Sector } from '../../src/app/database/entities/ventas/sector.entity';
 
 export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
-  const currentUser = getCurrentUser(); // Get user for tracking
+  // Remove this line - get the current user in each handler instead
+  // const currentUser = getCurrentUser(); // Get user for tracking
 
   // --- PrecioDelivery Handlers ---
   ipcMain.handle('getPreciosDelivery', async () => {
@@ -46,7 +47,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       const repo = dataSource.getRepository(PrecioDelivery);
       const entity = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating precio delivery:', error);
@@ -60,7 +61,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Precio Delivery ID ${id} not found`);
       repo.merge(entity, data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       return await repo.save(entity);
     } catch (error) {
       console.error(`Error updating precio delivery ID ${id}:`, error);
@@ -136,7 +137,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       const repo = dataSource.getRepository(Delivery);
       const entity = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating delivery:', error);
@@ -150,7 +151,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Delivery ID ${id} not found`);
       repo.merge(entity, data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       return await repo.save(entity);
     } catch (error) {
       console.error(`Error updating delivery ID ${id}:`, error);
@@ -247,7 +248,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       const repo = dataSource.getRepository(Venta);
       const entity = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating venta:', error);
@@ -261,7 +262,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta ID ${id} not found`);
       repo.merge(entity, data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       return await repo.save(entity);
     } catch (error) {
       console.error(`Error updating venta ID ${id}:`, error);
@@ -302,7 +303,12 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           'producto', 
           'presentacion', 
           'precioVentaPresentacion',
-          'precioVentaPresentacion.moneda'
+          'precioVentaPresentacion.moneda',
+          'canceladoPor',
+          'modificadoPor',
+          'nuevaVersionVentaItem',
+          'createdBy',
+          'createdBy.persona'
         ],
         order: { createdAt: 'ASC' }
       });
@@ -322,7 +328,12 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           'producto', 
           'presentacion', 
           'precioVentaPresentacion',
-          'precioVentaPresentacion.moneda'
+          'precioVentaPresentacion.moneda',
+          'canceladoPor',
+          'modificadoPor',
+          'nuevaVersionVentaItem',
+          'createdBy', 
+          'createdBy.persona'
         ]
       });
     } catch (error) {
@@ -335,7 +346,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       const repo = dataSource.getRepository(VentaItem);
       const entity = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating venta item:', error);
@@ -349,7 +360,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
       repo.merge(entity, data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       return await repo.save(entity);
     } catch (error) {
       console.error(`Error updating venta item ID ${id}:`, error);
@@ -402,7 +413,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       const repo = dataSource.getRepository(PdvGrupoCategoria);
       const entity = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating PDV Grupo Categoria:', error);
@@ -416,7 +427,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PDV Grupo Categoria ID ${id} not found`);
       repo.merge(entity, data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       return await repo.save(entity);
     } catch (error) {
       console.error(`Error updating PDV Grupo Categoria ID ${id}:`, error);
@@ -492,7 +503,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       const repo = dataSource.getRepository(PdvCategoria);
       const entity = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating PDV Categoria:', error);
@@ -506,7 +517,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PDV Categoria ID ${id} not found`);
       repo.merge(entity, data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       return await repo.save(entity);
     } catch (error) {
       console.error(`Error updating PDV Categoria ID ${id}:`, error);
@@ -582,7 +593,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       const repo = dataSource.getRepository(PdvCategoriaItem);
       const entity = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating PDV Categoria Item:', error);
@@ -596,7 +607,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PDV Categoria Item ID ${id} not found`);
       repo.merge(entity, data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       return await repo.save(entity);
     } catch (error) {
       console.error(`Error updating PDV Categoria Item ID ${id}:`, error);
@@ -672,7 +683,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       const repo = dataSource.getRepository(PdvItemProducto);
       const entity = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating PDV Item Producto:', error);
@@ -686,7 +697,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PDV Item Producto ID ${id} not found`);
       repo.merge(entity, data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       return await repo.save(entity);
     } catch (error) {
       console.error(`Error updating PDV Item Producto ID ${id}:`, error);
@@ -823,7 +834,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       const repo = dataSource.getRepository(Reserva);
       const entity = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating reserva:', error);
@@ -837,7 +848,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Reserva ID ${id} not found`);
       repo.merge(entity, data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       return await repo.save(entity);
     } catch (error) {
       console.error(`Error updating reserva ID ${id}:`, error);
@@ -873,7 +884,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       const repo = dataSource.getRepository(PdvMesa);
       return await repo.find({
-        relations: ['reserva', 'sector'],
+        relations: ['reserva', 'sector', 'venta'],
         order: { numero: 'ASC' }
       });
     } catch (error) {
@@ -887,7 +898,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(PdvMesa);
       return await repo.find({
         where: { activo: true },
-        relations: ['reserva', 'sector'],
+        relations: ['reserva', 'sector', 'venta'],
         order: { numero: 'ASC' }
       });
     } catch (error) {
@@ -900,8 +911,8 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       const repo = dataSource.getRepository(PdvMesa);
       return await repo.find({
-        where: { activo: true, reservado: false },
-        relations: ['reserva', 'sector'],
+        where: { activo: true, reservado: false, estado: PdvMesaEstado.DISPONIBLE },
+        relations: ['reserva', 'sector', 'venta'],
         order: { numero: 'ASC' }
       });
     } catch (error) {
@@ -915,7 +926,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(PdvMesa);
       return await repo.find({
         where: { sector: { id: sectorId } },
-        relations: ['reserva', 'sector'],
+        relations: ['reserva', 'sector', 'venta'],
         order: { numero: 'ASC' }
       });
     } catch (error) {
@@ -929,7 +940,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(PdvMesa);
       return await repo.findOne({
         where: { id },
-        relations: ['reserva', 'reserva.cliente', 'reserva.cliente.persona', 'sector']
+        relations: ['reserva', 'reserva.cliente', 'reserva.cliente.persona', 'sector', 'venta']
       });
     } catch (error) {
       console.error(`Error getting PDV Mesa ID ${id}:`, error);
@@ -941,7 +952,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       const repo = dataSource.getRepository(PdvMesa);
       const entity = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating PDV Mesa:', error);
@@ -955,7 +966,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PDV Mesa ID ${id} not found`);
       repo.merge(entity, data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       return await repo.save(entity);
     } catch (error) {
       console.error(`Error updating PDV Mesa ID ${id}:`, error);
@@ -1045,7 +1056,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       const repo = dataSource.getRepository(Comanda);
       const entity = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating Comanda:', error);
@@ -1059,7 +1070,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Comanda ID ${id} not found`);
       repo.merge(entity, data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       return await repo.save(entity);
     } catch (error) {
       console.error(`Error updating Comanda ID ${id}:`, error);
@@ -1122,7 +1133,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       const repo = dataSource.getRepository(Sector);
       const entity = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating Sector:', error);
@@ -1136,7 +1147,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Sector ID ${id} not found`);
       repo.merge(entity, data);
-      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       return await repo.save(entity);
     } catch (error) {
       console.error(`Error updating Sector ID ${id}:`, error);

@@ -245,6 +245,16 @@
         </mat-expansion-panel>
 
       </mat-nav-list>
+
+      <!-- Logout button at footer -->
+      <div class="logout-footer">
+        <mat-divider></mat-divider>
+        <button mat-button class="logout-button" (click)="logout()">
+          <mat-icon *ngIf="isMenuExpanded" class="logout-icon-expanded">exit_to_app</mat-icon>
+          <mat-icon *ngIf="!isMenuExpanded" class="logout-icon-collapsed">exit_to_app</mat-icon>
+          <span *ngIf="isMenuExpanded">Salir</span>
+        </button>
+      </div>
     </mat-sidenav>
 
     <!-- Main content -->

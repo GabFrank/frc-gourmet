@@ -174,10 +174,10 @@ interface ElectronAPI {
   deleteTipoPrecio: (tipoPrecioId: number) => Promise<boolean>;
   // PrecioVenta methods
   getPreciosVenta: () => Promise<PrecioVenta[]>;
-  getPrecioVenta: (precioVentaId: number) => Promise<PrecioVenta>;
-  getPreciosVentaByPresentacion: (presentacionId: number) => Promise<PrecioVenta[]>;
-  getPreciosVentaByPresentacionSabor: (presentacionSaborId: number) => Promise<PrecioVenta[]>;
-  getPreciosVentaByTipoPrecio: (tipoPrecioId: number) => Promise<PrecioVenta[]>;
+  getPrecioVenta: (precioVentaId: number, active: boolean) => Promise<PrecioVenta>;
+  getPreciosVentaByPresentacion: (presentacionId: number, active: boolean) => Promise<PrecioVenta[]>;
+  getPreciosVentaByPresentacionSabor: (presentacionSaborId: number, active: boolean) => Promise<PrecioVenta[]>;
+  getPreciosVentaByTipoPrecio: (tipoPrecioId: number, active: boolean) => Promise<PrecioVenta[]>;
   createPrecioVenta: (precioVentaData: any) => Promise<PrecioVenta>;
   updatePrecioVenta: (precioVentaId: number, precioVentaData: any) => Promise<any>;
   deletePrecioVenta: (precioVentaId: number) => Promise<any>;
@@ -420,15 +420,22 @@ export class RepositoryService {
     // Use type assertion to cast window.api to our interface
     this.api = (window as any).api as ElectronAPI;
 
-    // Check for stored user on init
+    // Check for stored user on init and set up periodic refresh
     this.loadCurrentUser();
+    
+    // Set up a periodic refresh to ensure current user state stays in sync
+    setInterval(() => this.loadCurrentUser(), 60000); // Refresh every minute
   }
 
-  // Method to load the current user from localStorage
+  // Method to load the current user from main process
   private async loadCurrentUser(): Promise<void> {
     try {
       const usuario = await this.api.getCurrentUser();
-      this.currentUserSubject.next(usuario);
+      if (usuario) {
+        this.currentUserSubject.next(usuario);
+      } else if (this.currentUserSubject.value) {
+        this.currentUserSubject.next(null);
+      }
     } catch (error) {
       console.error('Error loading current user:', error);
       this.currentUserSubject.next(null);
@@ -485,7 +492,6 @@ export class RepositoryService {
   }
 
   createUsuario(usuarioData: Partial<Usuario>): Observable<Usuario> {
-    console.log(usuarioData);
     return from(this.api.createUsuario(usuarioData));
   }
 
@@ -604,11 +610,25 @@ export class RepositoryService {
 
   // Auth methods
   login(loginData: {nickname: string, password: string, deviceInfo: DeviceInfo}): Observable<LoginResult> {
-    return from(this.api.login(loginData));
+    return from(this.api.login(loginData)).pipe(
+      map(result => {
+        if (result.success && result.usuario) {
+          this.currentUserSubject.next(result.usuario);
+        }
+        return result;
+      })
+    );
   }
 
   logout(sessionId: number): Observable<boolean> {
-    return from(this.api.logout(sessionId));
+    return from(this.api.logout(sessionId)).pipe(
+      map(result => {
+        if (result) {
+          this.currentUserSubject.next(null);
+        }
+        return result;
+      })
+    );
   }
 
   updateSessionActivity(sessionId: number): Observable<boolean> {
@@ -753,15 +773,11 @@ export class RepositoryService {
   }
 
   saveProductoImage(base64Data: string, fileName: string): Observable<{ imageUrl: string }> {
-    console.log(`Saving product image with filename: ${fileName}`);
     return from(this.api.saveProductoImage(base64Data, fileName)
       .then(result => {
-        console.log('Image saved successfully:', result);
-
         // Ensure the URL uses the app:// protocol for correct loading in renderer
         if (result.imageUrl && !result.imageUrl.startsWith('app://')) {
           result.imageUrl = `app://${result.imageUrl.replace(/\\/g, '/')}`;
-          console.log('Adjusted image URL:', result.imageUrl);
         }
 
         return result;
@@ -891,20 +907,20 @@ export class RepositoryService {
     return from(this.api.getPreciosVenta());
   }
 
-  getPrecioVenta(precioVentaId: number): Observable<PrecioVenta> {
-    return from(this.api.getPrecioVenta(precioVentaId));
+  getPrecioVenta(precioVentaId: number, active = true): Observable<PrecioVenta> {
+    return from(this.api.getPrecioVenta(precioVentaId, active));
   }
 
-  getPreciosVentaByPresentacion(presentacionId: number): Observable<PrecioVenta[]> {
-    return from(this.api.getPreciosVentaByPresentacion(presentacionId));
+  getPreciosVentaByPresentacion(presentacionId: number, active = true): Observable<PrecioVenta[]> {
+    return from(this.api.getPreciosVentaByPresentacion(presentacionId, active));
   }
 
-  getPreciosVentaByPresentacionSabor(presentacionSaborId: number): Observable<PrecioVenta[]> {
-    return from(this.api.getPreciosVentaByPresentacionSabor(presentacionSaborId));
+  getPreciosVentaByPresentacionSabor(presentacionSaborId: number, active = true): Observable<PrecioVenta[]> {
+    return from(this.api.getPreciosVentaByPresentacionSabor(presentacionSaborId, active));
   }
 
-  getPreciosVentaByTipoPrecio(tipoPrecioId: number): Observable<PrecioVenta[]> {
-    return from(this.api.getPreciosVentaByTipoPrecio(tipoPrecioId));
+  getPreciosVentaByTipoPrecio(tipoPrecioId: number, active = true): Observable<PrecioVenta[]> {
+    return from(this.api.getPreciosVentaByTipoPrecio(tipoPrecioId, active));
   }
 
   createPrecioVenta(precioVentaData: Partial<PrecioVenta>): Observable<PrecioVenta> {

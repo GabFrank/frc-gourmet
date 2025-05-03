@@ -11,7 +11,8 @@ const proveedor_producto_entity_1 = require("../../src/app/database/entities/com
 const forma_pago_entity_1 = require("../../src/app/database/entities/compras/forma-pago.entity");
 const entity_utils_1 = require("../utils/entity.utils");
 function registerComprasHandlers(dataSource, getCurrentUser) {
-    const currentUser = getCurrentUser(); // Get user for tracking
+    // Remove this line - get the current user in each handler instead
+    // const currentUser = getCurrentUser(); // Get user for tracking
     // --- Proveedor Handlers ---
     electron_1.ipcMain.handle('getProveedores', async () => {
         try {
@@ -43,7 +44,7 @@ function registerComprasHandlers(dataSource, getCurrentUser) {
         try {
             const proveedorRepository = dataSource.getRepository(proveedor_entity_1.Proveedor);
             const entity = proveedorRepository.create(data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, false);
             // Fix: Cast the result of save via unknown as suggested by linter
             const savedEntity = await proveedorRepository.save(entity);
             // Check if savedEntity and its id exist before using it
@@ -66,7 +67,7 @@ function registerComprasHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Proveedor ID ${id} not found`);
             proveedorRepository.merge(entity, data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, true);
             await proveedorRepository.save(entity);
             // Fetch again with relations to return complete data
             return await proveedorRepository.findOne({ where: { id: id }, relations: ['persona'] });
@@ -132,7 +133,7 @@ function registerComprasHandlers(dataSource, getCurrentUser) {
             const compraRepository = dataSource.getRepository(compra_entity_1.Compra);
             const { detalles, ...compraOnly } = data; // Separate details
             const entity = compraRepository.create(compraOnly);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, false);
             return await compraRepository.save(entity);
             // Details should be saved separately after the Compra is created
         }
@@ -149,7 +150,7 @@ function registerComprasHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Compra ID ${id} not found`);
             compraRepository.merge(entity, compraOnly);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, true);
             return await compraRepository.save(entity);
             // Details update should be handled separately
         }
@@ -266,7 +267,7 @@ function registerComprasHandlers(dataSource, getCurrentUser) {
         try {
             const pagoRepository = dataSource.getRepository(pago_entity_1.Pago);
             const entity = pagoRepository.create(data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, false);
             return await pagoRepository.save(entity);
             // Details and Compra associations should be handled separately
         }
@@ -282,7 +283,7 @@ function registerComprasHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Pago ID ${id} not found`);
             pagoRepository.merge(entity, data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, true);
             return await pagoRepository.save(entity);
             // Details and Compra associations update should be handled separately
         }
@@ -400,7 +401,7 @@ function registerComprasHandlers(dataSource, getCurrentUser) {
         try {
             const proveedorProductoRepository = dataSource.getRepository(proveedor_producto_entity_1.ProveedorProducto);
             const entity = proveedorProductoRepository.create(data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, false);
             return await proveedorProductoRepository.save(entity);
         }
         catch (error) {
@@ -415,7 +416,7 @@ function registerComprasHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`ProveedorProducto ID ${id} not found`);
             proveedorProductoRepository.merge(entity, data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, true);
             return await proveedorProductoRepository.save(entity);
         }
         catch (error) {
@@ -431,7 +432,7 @@ function registerComprasHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`ProveedorProducto ID ${id} not found`);
             entity.activo = false;
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true); // Track soft delete
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, true); // Track soft delete
             await proveedorProductoRepository.save(entity);
             return { success: true, affected: 1 };
         }
@@ -467,7 +468,7 @@ function registerComprasHandlers(dataSource, getCurrentUser) {
         try {
             const formasPagoRepository = dataSource.getRepository(forma_pago_entity_1.FormasPago);
             const entity = formasPagoRepository.create(data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, false);
             return await formasPagoRepository.save(entity);
         }
         catch (error) {
@@ -482,7 +483,7 @@ function registerComprasHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`FormaPago ID ${id} not found`);
             formasPagoRepository.merge(entity, data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, true);
             return await formasPagoRepository.save(entity);
         }
         catch (error) {
@@ -498,7 +499,7 @@ function registerComprasHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`FormaPago ID ${id} not found`);
             entity.activo = false;
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true); // Track soft delete
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, true); // Track soft delete
             await formasPagoRepository.save(entity);
             return { success: true, affected: 1 };
         }

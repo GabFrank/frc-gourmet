@@ -5,7 +5,6 @@ const electron_1 = require("electron");
 const typeorm_1 = require("typeorm");
 const moneda_entity_1 = require("../../src/app/database/entities/financiero/moneda.entity");
 const tipo_precio_entity_1 = require("../../src/app/database/entities/financiero/tipo-precio.entity");
-const precio_venta_entity_1 = require("../../src/app/database/entities/productos/precio-venta.entity");
 const moneda_billete_entity_1 = require("../../src/app/database/entities/financiero/moneda-billete.entity");
 const conteo_entity_1 = require("../../src/app/database/entities/financiero/conteo.entity");
 const conteo_detalle_entity_1 = require("../../src/app/database/entities/financiero/conteo-detalle.entity");
@@ -15,7 +14,8 @@ const caja_moneda_entity_1 = require("../../src/app/database/entities/financiero
 const moneda_cambio_entity_1 = require("../../src/app/database/entities/financiero/moneda-cambio.entity");
 const entity_utils_1 = require("../utils/entity.utils");
 function registerFinancieroHandlers(dataSource, getCurrentUser) {
-    const currentUser = getCurrentUser(); // Get user for tracking
+    // Remove this line - get the current user in each handler instead
+    // const currentUser = getCurrentUser(); // Get user for tracking
     // --- Moneda Handlers ---
     electron_1.ipcMain.handle('getMonedas', async () => {
         try {
@@ -44,7 +44,7 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
                 await repo.update({ principal: true }, { principal: false });
             }
             const entity = repo.create(data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, false);
             return await repo.save(entity);
         }
         catch (error) {
@@ -62,7 +62,7 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Moneda ID ${id} not found`);
             repo.merge(entity, data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, true);
             return await repo.save(entity);
         }
         catch (error) {
@@ -113,7 +113,7 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(tipo_precio_entity_1.TipoPrecio);
             const entity = repo.create(data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, false);
             return await repo.save(entity);
         }
         catch (error) {
@@ -128,7 +128,7 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`TipoPrecio ID ${id} not found`);
             repo.merge(entity, data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, true);
             return await repo.save(entity);
         }
         catch (error) {
@@ -148,68 +148,6 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
         }
         catch (error) {
             console.error(`Error deleting tipo de precio ID ${id}:`, error);
-            throw error;
-        }
-    });
-    // --- PrecioVenta Handlers ---
-    electron_1.ipcMain.handle('getPreciosVentaByPresentacion', async (_event, presentacionId) => {
-        try {
-            const repo = dataSource.getRepository(precio_venta_entity_1.PrecioVenta);
-            return await repo.find({ where: { presentacionId }, relations: ['moneda'], order: { principal: 'DESC', valor: 'ASC' } });
-        }
-        catch (error) {
-            console.error('Error getting precios venta by presentacion:', error);
-            throw error;
-        }
-    });
-    electron_1.ipcMain.handle('getPreciosVentaByPresentacionSabor', async (_event, presentacionSaborId) => {
-        try {
-            const repo = dataSource.getRepository(precio_venta_entity_1.PrecioVenta);
-            return await repo.find({ where: { presentacionSaborId }, relations: ['moneda'], order: { principal: 'DESC', valor: 'ASC' } });
-        }
-        catch (error) {
-            console.error('Error getting precios venta by presentacion sabor:', error);
-            throw error;
-        }
-    });
-    electron_1.ipcMain.handle('createPrecioVenta', async (_event, data) => {
-        try {
-            const repo = dataSource.getRepository(precio_venta_entity_1.PrecioVenta);
-            const entity = repo.create(data);
-            // No user tracking needed usually for prices
-            return await repo.save(entity);
-        }
-        catch (error) {
-            console.error('Error creating precio venta:', error);
-            throw error;
-        }
-    });
-    electron_1.ipcMain.handle('updatePrecioVenta', async (_event, id, data) => {
-        try {
-            const repo = dataSource.getRepository(precio_venta_entity_1.PrecioVenta);
-            const entity = await repo.findOneBy({ id });
-            if (!entity)
-                throw new Error(`PrecioVenta ID ${id} not found`);
-            repo.merge(entity, data);
-            // No user tracking needed usually
-            return await repo.save(entity);
-        }
-        catch (error) {
-            console.error(`Error updating precio venta ID ${id}:`, error);
-            throw error;
-        }
-    });
-    electron_1.ipcMain.handle('deletePrecioVenta', async (_event, id) => {
-        // Note: Hard delete.
-        try {
-            const repo = dataSource.getRepository(precio_venta_entity_1.PrecioVenta);
-            const entity = await repo.findOneBy({ id });
-            if (!entity)
-                throw new Error(`PrecioVenta ID ${id} not found`);
-            return await repo.remove(entity);
-        }
-        catch (error) {
-            console.error(`Error deleting precio venta ID ${id}:`, error);
             throw error;
         }
     });
@@ -238,7 +176,7 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(moneda_billete_entity_1.MonedaBillete);
             const entity = repo.create(data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, false);
             return await repo.save(entity);
         }
         catch (error) {
@@ -253,7 +191,7 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`MonedaBillete ID ${id} not found`);
             repo.merge(entity, data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, true);
             return await repo.save(entity);
         }
         catch (error) {
@@ -302,7 +240,7 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(conteo_entity_1.Conteo);
             const entity = repo.create(data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, false);
             return await repo.save(entity);
         }
         catch (error) {
@@ -317,7 +255,7 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Conteo ID ${id} not found`);
             repo.merge(entity, data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, true);
             return await repo.save(entity);
         }
         catch (error) {
@@ -432,7 +370,7 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
             const repo = dataSource.getRepository(dispositivo_entity_1.Dispositivo);
             // Add validation for unique name/MAC here if needed
             const entity = repo.create(data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, false);
             return await repo.save(entity);
         }
         catch (error) {
@@ -448,7 +386,7 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Dispositivo ID ${id} not found`);
             repo.merge(entity, data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, true);
             return await repo.save(entity);
         }
         catch (error) {
@@ -516,7 +454,7 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(caja_entity_1.Caja);
             const entity = repo.create(data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, false);
             return await repo.save(entity);
         }
         catch (error) {
@@ -531,7 +469,7 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Caja ID ${id} not found`);
             repo.merge(entity, data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, true);
             return await repo.save(entity);
         }
         catch (error) {
@@ -701,7 +639,7 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(moneda_cambio_entity_1.MonedaCambio);
             const entity = repo.create(data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, false);
             return await repo.save(entity);
         }
         catch (error) {
@@ -716,7 +654,7 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`MonedaCambio ID ${id} not found`);
             repo.merge(entity, data);
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, getCurrentUser()?.id, true);
             return await repo.save(entity);
         }
         catch (error) {

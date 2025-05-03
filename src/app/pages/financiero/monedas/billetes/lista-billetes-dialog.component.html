@@ -24,7 +24,8 @@
           placeholder="Ej: 100, 50, 20, etc."
           [required]="true"
           [moneda]="moneda"
-          [(ngModel)]="newBilleteValor">
+          [(ngModel)]="newBilleteValor"
+          (enterKeyPress)="addBillete()">
         </app-currency-input>
 
         <button style="margin-bottom: 30px;" mat-raised-button color="primary" (click)="addBillete()" [disabled]="saving || !newBilleteValor">

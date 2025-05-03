@@ -321,17 +321,17 @@ electron_1.contextBridge.exposeInMainWorld('api', {
         return await electron_1.ipcRenderer.invoke('deleteTipoPrecio', tipoPrecioId);
     },
     // PrecioVenta methods
-    getPreciosVenta: async () => {
-        return await electron_1.ipcRenderer.invoke('getPreciosVenta');
+    getPreciosVenta: async (active) => {
+        return await electron_1.ipcRenderer.invoke('getPreciosVenta', active);
     },
-    getPrecioVenta: async (precioVentaId) => {
-        return await electron_1.ipcRenderer.invoke('getPrecioVenta', precioVentaId);
+    getPrecioVenta: async (precioVentaId, active) => {
+        return await electron_1.ipcRenderer.invoke('getPrecioVenta', precioVentaId, active);
     },
-    getPreciosVentaByPresentacion: async (presentacionId) => {
-        return await electron_1.ipcRenderer.invoke('getPreciosVentaByPresentacion', presentacionId);
+    getPreciosVentaByPresentacion: async (presentacionId, active) => {
+        return await electron_1.ipcRenderer.invoke('getPreciosVentaByPresentacion', presentacionId, active);
     },
-    getPreciosVentaByPresentacionSabor: async (presentacionSaborId) => {
-        return await electron_1.ipcRenderer.invoke('getPreciosVentaByPresentacionSabor', presentacionSaborId);
+    getPreciosVentaByPresentacionSabor: async (presentacionSaborId, active) => {
+        return await electron_1.ipcRenderer.invoke('getPreciosVentaByPresentacionSabor', presentacionSaborId, active);
     },
     createPrecioVenta: async (precioVentaData) => {
         return await electron_1.ipcRenderer.invoke('createPrecioVenta', precioVentaData);

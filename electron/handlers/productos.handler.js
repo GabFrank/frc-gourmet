@@ -16,8 +16,8 @@ const receta_variacion_entity_1 = require("../../src/app/database/entities/produ
 const receta_variacion_item_entity_1 = require("../../src/app/database/entities/productos/receta-variacion-item.entity");
 const movimiento_stock_entity_1 = require("../../src/app/database/entities/productos/movimiento-stock.entity");
 const entity_utils_1 = require("../utils/entity.utils");
+const precio_venta_entity_1 = require("../../src/app/database/entities/productos/precio-venta.entity");
 function registerProductosHandlers(dataSource, getCurrentUser) {
-    const currentUser = getCurrentUser(); // Get user for tracking
     // --- Categoria Handlers ---
     electron_1.ipcMain.handle('getCategorias', async () => {
         try {
@@ -43,6 +43,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(categoria_entity_1.Categoria);
             const entity = repo.create(data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
             return await repo.save(entity);
         }
@@ -58,6 +59,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Categoria ID ${id} not found`);
             repo.merge(entity, data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
             return await repo.save(entity);
         }
@@ -121,6 +123,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(subcategoria_entity_1.Subcategoria);
             const entity = repo.create(data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
             return await repo.save(entity);
         }
@@ -136,6 +139,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Subcategoria ID ${id} not found`);
             repo.merge(entity, data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
             return await repo.save(entity);
         }
@@ -199,6 +203,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(producto_entity_1.Producto);
             const entity = repo.create(data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
             return await repo.save(entity);
         }
@@ -214,6 +219,11 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Producto ID ${id} not found`);
             repo.merge(entity, data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
+            console.log('currentUser', currentUser);
+            // if currentuser is null throw error
+            if (!currentUser)
+                throw new Error('No current user found');
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
             return await repo.save(entity);
         }
@@ -231,6 +241,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
                 throw new Error(`Producto ID ${id} not found`);
             // Attempt soft delete first by setting activo = false
             entity.activo = false;
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
             await repo.save(entity);
             console.log(`Producto ID ${id} marked as inactive.`);
@@ -266,6 +277,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(presentacion_entity_1.Presentacion);
             const entity = repo.create(data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
             return await repo.save(entity);
         }
@@ -281,6 +293,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Presentacion ID ${id} not found`);
             repo.merge(entity, data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
             return await repo.save(entity);
         }
@@ -306,6 +319,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
                 throw new Error(`Cannot delete presentation with existing prices.`);
             }
             */
+            const currentUser = getCurrentUser(); // Get current user at time of call
             return await repo.remove(entity);
         }
         catch (error) {
@@ -339,6 +353,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(codigo_entity_1.Codigo);
             const entity = repo.create(data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
             return await repo.save(entity);
         }
@@ -354,6 +369,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Codigo ID ${id} not found`);
             repo.merge(entity, data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
             return await repo.save(entity);
         }
@@ -369,6 +385,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             const entity = await repo.findOneBy({ id });
             if (!entity)
                 throw new Error(`Codigo ID ${id} not found`);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             return await repo.remove(entity);
         }
         catch (error) {
@@ -401,6 +418,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(sabor_entity_1.Sabor);
             const entity = repo.create(data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
             return await repo.save(entity);
         }
@@ -416,6 +434,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Sabor ID ${id} not found`);
             repo.merge(entity, data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
             return await repo.save(entity);
         }
@@ -432,6 +451,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Sabor ID ${id} not found`);
             // Add dependency checks (PresentacionSabor)
+            const currentUser = getCurrentUser(); // Get current user at time of call
             return await repo.remove(entity);
         }
         catch (error) {
@@ -464,6 +484,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(presentacion_sabor_entity_1.PresentacionSabor);
             const entity = repo.create(data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
             return await repo.save(entity);
         }
@@ -479,6 +500,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`PresentacionSabor ID ${id} not found`);
             repo.merge(entity, data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
             return await repo.save(entity);
         }
@@ -495,6 +517,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`PresentacionSabor ID ${id} not found`);
             // Add dependency checks (e.g., PrecioVenta specific to sabor)
+            const currentUser = getCurrentUser(); // Get current user at time of call
             return await repo.remove(entity);
         }
         catch (error) {
@@ -527,6 +550,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(receta_entity_1.Receta);
             const entity = repo.create(data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
             return await repo.save(entity);
         }
@@ -542,6 +566,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Receta ID ${id} not found`);
             repo.merge(entity, data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
             return await repo.save(entity);
         }
@@ -558,6 +583,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Receta ID ${id} not found`);
             // Add dependency checks (RecetaItem, PresentacionSabor, RecetaVariacion)
+            const currentUser = getCurrentUser(); // Get current user at time of call
             return await repo.remove(entity);
         }
         catch (error) {
@@ -591,6 +617,8 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             const repo = dataSource.getRepository(receta_item_entity_1.RecetaItem);
             const entity = repo.create(data);
             // No user tracking on items usually, but can be added if needed
+            const currentUser = getCurrentUser(); // Get current user at time of call
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
             return await repo.save(entity);
         }
         catch (error) {
@@ -606,6 +634,8 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
                 throw new Error(`RecetaItem ID ${id} not found`);
             repo.merge(entity, data);
             // No user tracking on items usually
+            const currentUser = getCurrentUser(); // Get current user at time of call
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
             return await repo.save(entity);
         }
         catch (error) {
@@ -620,6 +650,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             const entity = await repo.findOneBy({ id });
             if (!entity)
                 throw new Error(`RecetaItem ID ${id} not found`);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             return await repo.remove(entity);
         }
         catch (error) {
@@ -652,6 +683,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(ingrediente_entity_1.Ingrediente);
             const entity = repo.create(data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
             return await repo.save(entity);
         }
@@ -667,6 +699,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Ingrediente ID ${id} not found`);
             repo.merge(entity, data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
             return await repo.save(entity);
         }
@@ -683,6 +716,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`Ingrediente ID ${id} not found`);
             // Add dependency checks (RecetaItem, RecetaVariacionItem, CompraDetalle etc.)
+            const currentUser = getCurrentUser(); // Get current user at time of call
             return await repo.remove(entity);
         }
         catch (error) {
@@ -732,6 +766,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(receta_variacion_entity_1.RecetaVariacion);
             const entity = repo.create(data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
             return await repo.save(entity);
         }
@@ -747,6 +782,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`RecetaVariacion ID ${id} not found`);
             repo.merge(entity, data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
             return await repo.save(entity);
         }
@@ -763,6 +799,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`RecetaVariacion ID ${id} not found`);
             // Add dependency checks (RecetaVariacionItem, PresentacionSabor)
+            const currentUser = getCurrentUser(); // Get current user at time of call
             return await repo.remove(entity);
         }
         catch (error) {
@@ -796,6 +833,8 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             const repo = dataSource.getRepository(receta_variacion_item_entity_1.RecetaVariacionItem);
             const entity = repo.create(data);
             // No user tracking on items usually
+            const currentUser = getCurrentUser(); // Get current user at time of call
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
             return await repo.save(entity);
         }
         catch (error) {
@@ -811,6 +850,8 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
                 throw new Error(`RecetaVariacionItem ID ${id} not found`);
             repo.merge(entity, data);
             // No user tracking on items usually
+            const currentUser = getCurrentUser(); // Get current user at time of call
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
             return await repo.save(entity);
         }
         catch (error) {
@@ -825,6 +866,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             const entity = await repo.findOneBy({ id });
             if (!entity)
                 throw new Error(`RecetaVariacionItem ID ${id} not found`);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             return await repo.remove(entity);
         }
         catch (error) {
@@ -952,6 +994,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(movimiento_stock_entity_1.MovimientoStock);
             const entity = repo.create(data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
             return await repo.save(entity);
         }
@@ -967,6 +1010,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             if (!entity)
                 throw new Error(`MovimientoStock ID ${id} not found`);
             repo.merge(entity, data);
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
             return await repo.save(entity);
         }
@@ -983,6 +1027,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
                 throw new Error(`MovimientoStock ID ${id} not found`);
             // Attempt soft delete by setting activo = false
             entity.activo = false;
+            const currentUser = getCurrentUser(); // Get current user at time of call
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
             await repo.save(entity);
             console.log(`MovimientoStock ID ${id} marked as inactive.`);
@@ -990,6 +1035,93 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         }
         catch (error) {
             console.error(`Error deactivating movimiento stock ID ${id}:`, error);
+            throw error;
+        }
+    });
+    // --- PrecioVenta Handlers ---
+    electron_1.ipcMain.handle('getPreciosVenta', async (_event, active) => {
+        try {
+            const repo = dataSource.getRepository(precio_venta_entity_1.PrecioVenta);
+            return await repo.find({ where: { activo: active } });
+        }
+        catch (error) {
+            console.error('Error getting precios venta:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('getPrecioVenta', async (_event, id, active) => {
+        try {
+            const repo = dataSource.getRepository(precio_venta_entity_1.PrecioVenta);
+            return await repo.findOne({ where: { id, activo: active } });
+        }
+        catch (error) {
+            console.error('Error getting precio venta:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('getPreciosVentaByPresentacion', async (_event, presentacionId, active) => {
+        try {
+            const repo = dataSource.getRepository(precio_venta_entity_1.PrecioVenta);
+            return await repo.find({ where: { presentacionId, activo: active } });
+        }
+        catch (error) {
+            console.error('Error getting precios venta por presentacion:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('getPreciosVentaByPresentacionSabor', async (_event, presentacionSaborId, active) => {
+        try {
+            const repo = dataSource.getRepository(precio_venta_entity_1.PrecioVenta);
+            return await repo.find({ where: { presentacionSaborId, activo: active } });
+        }
+        catch (error) {
+            console.error('Error getting precios venta por presentacion sabor:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('createPrecioVenta', async (_event, data) => {
+        try {
+            const repo = dataSource.getRepository(precio_venta_entity_1.PrecioVenta);
+            const entity = repo.create(data);
+            // No user tracking needed usually for prices
+            const currentUser = getCurrentUser(); // Get current user at time of call
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            return await repo.save(entity);
+        }
+        catch (error) {
+            console.error('Error creating precio venta:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('updatePrecioVenta', async (_event, id, data) => {
+        try {
+            const repo = dataSource.getRepository(precio_venta_entity_1.PrecioVenta);
+            const entity = await repo.findOneBy({ id });
+            if (!entity)
+                throw new Error(`PrecioVenta ID ${id} not found`);
+            repo.merge(entity, data);
+            // No user tracking needed usually
+            const currentUser = getCurrentUser(); // Get current user at time of call
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            return await repo.save(entity);
+        }
+        catch (error) {
+            console.error(`Error updating precio venta ID ${id}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('deletePrecioVenta', async (_event, id) => {
+        // Note: Hard delete.
+        try {
+            const repo = dataSource.getRepository(precio_venta_entity_1.PrecioVenta);
+            const entity = await repo.findOneBy({ id });
+            if (!entity)
+                throw new Error(`PrecioVenta ID ${id} not found`);
+            const currentUser = getCurrentUser(); // Get current user at time of call
+            return await repo.remove(entity);
+        }
+        catch (error) {
+            console.error(`Error deleting precio venta ID ${id}:`, error);
             throw error;
         }
     });

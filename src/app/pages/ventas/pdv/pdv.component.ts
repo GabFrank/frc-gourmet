@@ -14,13 +14,14 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { FormControl, FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
-import { Observable, of, firstValueFrom } from 'rxjs';
+import { Observable, of, firstValueFrom, async } from 'rxjs';
 import { debounceTime, distinctUntilChanged, map, startWith, switchMap } from 'rxjs/operators';
+import { animate, state, style, transition, trigger } from '@angular/animations';
 
 import { RepositoryService } from '../../../database/repository.service';
 import { CajaMoneda } from '../../../database/entities/financiero/caja-moneda.entity';
 import { Producto } from '../../../database/entities/productos/producto.entity';
-import { VentaItem } from '../../../database/entities/ventas/venta-item.entity';
+import { VentaItem, EstadoVentaItem } from '../../../database/entities/ventas/venta-item.entity';
 import { PrecioVenta } from '../../../database/entities/productos/precio-venta.entity';
 import { Moneda } from '../../../database/entities/financiero/moneda.entity';
 import { MonedaCambio } from '../../../database/entities/financiero/moneda-cambio.entity';
@@ -33,6 +34,9 @@ import { Caja } from 'src/app/database/entities/financiero/caja.entity';
 import { CreateCajaDialogComponent } from '../../financiero/cajas/create-caja-dialog/create-caja-dialog.component';
 import { TabsService } from 'src/app/services/tabs.service';
 import { MesaSelectionDialogComponent } from '../../../shared/components/mesa-selection-dialog/mesa-selection-dialog.component';
+import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatTableDataSource } from '@angular/material/table';
 
 interface MonedaWithTotal {
   moneda: Moneda;
@@ -66,13 +70,23 @@ interface CurrencyDisplay {
     MatGridListModule,
     MatProgressSpinnerModule,
     MatTooltipModule,
-    MatDialogModule
-  ]
+    MatDialogModule,
+    MatMenuModule
+  ],
+  animations: [
+    trigger('detailExpand', [
+      state('collapsed', style({ height: '0px', minHeight: '0', overflow: 'hidden', visibility: 'hidden' })),
+      state('expanded', style({ height: '*', visibility: 'visible' })),
+      transition('expanded <=> collapsed', animate('225ms cubic-bezier(0.4, 0.0, 0.2, 1)')),
+    ]),
+  ],
 })
 export class PdvComponent implements OnInit {
   // Table data
-  ventaItems: VentaItem[] = [];
+  ventaItemsDataSource = new MatTableDataSource<VentaItem>([]);
   displayedColumns: string[] = ['productoNombre', 'cantidad', 'precio', 'total', 'actions'];
+  expandedElement: VentaItem | null = null;
+  columnsToDisplayWithExpand = [...this.displayedColumns, 'expand'];
 
   // Search form
   searchForm: FormGroup;
@@ -150,20 +164,12 @@ export class PdvComponent implements OnInit {
       } else {
         // show dialog warning that there is no caja abierta, ask if they want to open a new caja, if yes open create caja dialog
         // fist show a dialog with a warning message  
-        const dialogRef = this.dialog.open(MatDialog, {
-          width: '400px',
+        // change this by confirmation dialog
+        const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+          disableClose: true,
           data: {
+            title: 'Caja abierta no encontrada',
             message: 'No hay una caja abierta, ¿desea abrir una nueva?',
-            buttons: [
-              {
-                text: 'Cancelar',
-                role: 'cancel'
-              },
-              {
-                text: 'Abrir nueva caja',
-                role: 'confirm'
-              }
-            ]
           }
         });
         dialogRef.afterClosed().subscribe(result => {
@@ -182,6 +188,9 @@ export class PdvComponent implements OnInit {
                 this.tabsService.removeTabById('pdv');
               }
             });
+          } else {
+            // close tab
+            this.tabsService.removeTabById('pdv');
           }
         });
       }
@@ -385,8 +394,8 @@ export class PdvComponent implements OnInit {
   calculateTotals(): void {
     if (!this.principalMoneda) return;
 
-    // Calculate grand total in principal currency
-    const totalInPrincipal = this.ventaItems.reduce((sum, item) => sum + item.precioVentaTotal, 0);
+    // Calculate grand total in principal currency if estado is ACTIVO only
+    const totalInPrincipal = this.ventaItemsDataSource.data.filter(item => item.estado === EstadoVentaItem.ACTIVO).reduce((sum, item) => sum + item.precioVentaTotal, 0);
 
     // Clear previous calculations
     this.monedasWithTotals = [];
@@ -448,9 +457,28 @@ export class PdvComponent implements OnInit {
     //perform delete from database, if success then remove from ventaItems
     this.repositoryService.deleteVentaItem(item.id!).subscribe((success) => {
       if (success) {
-        this.ventaItems = this.ventaItems.filter(i => i.id !== item.id);
-        this.ventaItems = [...this.ventaItems];
-        // Recalculate totals after removing item
+        this.ventaItemsDataSource.data = this.ventaItemsDataSource.data.filter(i => i.id !== item.id);
+        this.calculateTotals();
+      }
+    });
+  }
+
+  // Edit item from cart
+  editItem(item: VentaItem): void {
+    // open dialog to edit item
+    // this.dialog.open(VentaItemEditDialogComponent, {
+    //   data: item
+    // });
+  }
+
+  // Cancel item from cart
+  cancelItem(item: VentaItem): void {
+    // update item with estado = CANCELADO, cancelado_por = current user, cancelado_fecha = current date,
+    item.estado = EstadoVentaItem.CANCELADO;
+    item.canceladoPor = this.authService.currentUser;
+    item.horaCancelado = new Date();
+    this.repositoryService.updateVentaItem(item.id!, item).subscribe((success) => {
+      if (success) {
         this.calculateTotals();
       }
     });
@@ -474,18 +502,18 @@ export class PdvComponent implements OnInit {
       // Get the venta first
       const venta = await this.getVenta();
       
-      const existingItem = this.ventaItems.find(item => item.presentacion.id === presentacion.id);
+      const existingItem = this.ventaItemsDataSource.data.find(item => item.presentacion.id === presentacion.id);
       let ventaItem: VentaItem;
       
       if (existingItem) {
         existingItem.cantidad += 1;
         existingItem.precioVentaTotal = existingItem.cantidad * existingItem.precioVentaTotal;
-        this.ventaItems = [...this.ventaItems];
+        this.ventaItemsDataSource.data = [...this.ventaItemsDataSource.data];
         console.log(existingItem);
         ventaItem = existingItem;
       } else {
-        // Find the precio venta or use a default one
-        const precioVentaToUse = precioVenta || presentacion.preciosVenta.find(p => p.principal);
+        // use precioVenta or get preciosVenta from database where principal is true and presentacion.id is the same as precioVenta.presentacionId
+        const precioVentaToUse = precioVenta || await firstValueFrom(this.repositoryService.getPrecioVenta(presentacion.id!, true));
         
         if (!precioVentaToUse) {
           throw new Error('No se encontró un precio de venta válido');
@@ -505,8 +533,8 @@ export class PdvComponent implements OnInit {
         // Save the new item
         try {
           const savedItem = await firstValueFrom(this.repositoryService.createVentaItem(newVentaItem));
-          this.ventaItems.push(savedItem);
-          this.ventaItems = [...this.ventaItems];
+          this.ventaItemsDataSource.data.push(savedItem);
+          this.ventaItemsDataSource.data = [...this.ventaItemsDataSource.data];
           ventaItem = savedItem;
         } catch (error) {
           console.error('Error al guardar el item de venta:', error);
@@ -639,6 +667,37 @@ export class PdvComponent implements OnInit {
     } else {
       this.clienteNameForm.get('nombre')?.setValue('');
     }
+
+    // Load venta items if mesa has a venta
+    this.loadVentaItems(mesa);
+  }
+
+  /**
+   * Load venta items for a selected mesa
+   */
+  async loadVentaItems(mesa: PdvMesa): Promise<void> {
+    // Reset ventaItems
+    this.ventaItemsDataSource.data = [];
+    
+    if (mesa.venta && mesa.venta.id) {
+      try {
+        // Load venta items for this venta
+        const items = await firstValueFrom(this.repositoryService.getVentaItems(mesa.venta.id));
+        this.ventaItemsDataSource.data = items;
+        console.log(this.ventaItemsDataSource.data);
+        // Calculate totals based on loaded items
+        this.calculateTotals();
+      } catch (error) {
+        console.error('Error loading venta items:', error);
+        // Reset items and totals on error
+        this.ventaItemsDataSource.data = [];
+        this.calculateTotals();
+      }
+    } else {
+      // If there is no venta, clear the table
+      this.ventaItemsDataSource.data = [];
+      this.calculateTotals();
+    }
   }
 
   /**
@@ -735,26 +794,12 @@ export class PdvComponent implements OnInit {
       let currencyCode = '';
       let denominationCode = '';
 
-      switch (moneda.countryCode) {
-        case 'PY':
-          currencyCode = 'PY';
-          denominationCode = 'PYG';
-          break;
-        case 'US':
-          currencyCode = 'US';
-          denominationCode = 'USD';
-          break;
-        case 'GB':
-          currencyCode = 'GB';
-          denominationCode = 'UE'; // Based on screenshot
-          break;
-        case 'BR':
-          currencyCode = 'BR';
-          denominationCode = 'BRL';
-          break;
-        default:
-          currencyCode = moneda.countryCode || '';
-          denominationCode = moneda.denominacion || '';
+      if(moneda.countryCode) {
+        currencyCode = moneda.countryCode;
+      }
+
+      if(moneda.denominacion) {
+        denominationCode = moneda.denominacion;
       }
 
       return {
@@ -774,29 +819,16 @@ export class PdvComponent implements OnInit {
   get currencyBalancesToDisplay(): CurrencyDisplay[] {
     return this.monedasWithTotals.map(({ moneda }) => {
       // Map country codes to expected currency codes in screenshot
+      //  we already have currencyCode and denominationCode in moneda entity, currencyCode: moneda.countryCode, denominationCode: moneda.denominacion
       let currencyCode = '';
       let denominationCode = '';
 
-      switch (moneda.countryCode) {
-        case 'PY':
-          currencyCode = 'PY';
-          denominationCode = 'PYG';
-          break;
-        case 'US':
-          currencyCode = 'US';
-          denominationCode = 'USD';
-          break;
-        case 'GB':
-          currencyCode = 'GB';
-          denominationCode = 'UE'; // Based on screenshot
-          break;
-        case 'BR':
-          currencyCode = 'BR';
-          denominationCode = 'BRL';
-          break;
-        default:
-          currencyCode = moneda.countryCode || '';
-          denominationCode = moneda.denominacion || '';
+      if(moneda.countryCode) {
+        currencyCode = moneda.countryCode;
+      }
+
+      if(moneda.denominacion) {
+        denominationCode = moneda.denominacion;
       }
 
       return {
@@ -857,7 +889,7 @@ export class PdvComponent implements OnInit {
    */
   get mesaStatusText(): string {
     if (!this.selectedMesa) return '';
-    return this.selectedMesa.reservado ? 'Reservada' : 'Disponible';
+    return this.selectedMesa.reservado ? 'Reservada' : this.selectedMesa.estado === PdvMesaEstado.DISPONIBLE ? 'Disponible' : 'Ocupada';
   }
   
   /**
@@ -866,7 +898,7 @@ export class PdvComponent implements OnInit {
    */
   get mesaStatusClass(): string {
     if (!this.selectedMesa) return '';
-    return this.selectedMesa.reservado ? 'status-inactive' : 'status-active';
+    return this.selectedMesa.reservado ? 'status-reserved' : this.selectedMesa.estado === PdvMesaEstado.DISPONIBLE ? 'status-available' : 'status-occupied';
   }
 
   /**
@@ -881,5 +913,26 @@ export class PdvComponent implements OnInit {
    */
   get hasClienteName(): boolean {
     return !!this.clienteName;
+  }
+
+  /**
+   * Get the formatted estado display
+   */
+  getEstadoDisplay(estado: EstadoVentaItem): string {
+    return estado;
+  }
+
+  /**
+   * Check if an item has been canceled
+   */
+  isCancelado(item: VentaItem): boolean {
+    return item.estado === EstadoVentaItem.CANCELADO;
+  }
+
+  /**
+   * Check if an item has been modified
+   */
+  isModificado(item: VentaItem): boolean {
+    return item.estado === EstadoVentaItem.MODIFICADO || item.modificado;
   }
 } 

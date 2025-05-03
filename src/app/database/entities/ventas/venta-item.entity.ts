@@ -4,6 +4,13 @@ import type { Venta } from './venta.entity';
 import { PrecioVenta } from '../productos/precio-venta.entity';
 import { Producto } from '../productos/producto.entity';
 import { Presentacion, TipoMedida } from '../productos/presentacion.entity';
+import { Usuario } from '../personas/usuario.entity';
+
+export enum EstadoVentaItem {
+  ACTIVO = 'ACTIVO',
+  MODIFICADO = 'MODIFICADO',
+  CANCELADO = 'CANCELADO'
+}
 
 /**
  * Entity representing a sale item
@@ -60,4 +67,33 @@ export class VentaItem extends BaseModel {
     default: 0 
   })
   descuento!: number;
+
+  @Column({
+    type: 'varchar',
+    name: 'estado',
+    enum: EstadoVentaItem,
+    default: EstadoVentaItem.ACTIVO
+  })
+  estado!: EstadoVentaItem;
+
+  @ManyToOne(() => Usuario, { nullable: true })
+  @JoinColumn({ name: 'cancelado_por_id' })
+  canceladoPor: Usuario | null = null;
+
+  @Column({ name: 'hora_cancelado', nullable: true })
+  horaCancelado!: Date;
+
+  @Column({ name: 'modificado', default: false })
+  modificado!: boolean;
+
+  @ManyToOne(() => Usuario, { nullable: true })
+  @JoinColumn({ name: 'modificado_por_id' })
+  modificadoPor: Usuario | null = null;
+
+  @Column({ name: 'hora_modificacion', nullable: true })
+  horaModificacion!: Date;
+
+  @ManyToOne(() => VentaItem, { nullable: true })
+  @JoinColumn({ name: 'nueva_version_venta_item_id' })
+  nuevaVersionVentaItem!: VentaItem;
 } 
