@@ -5,7 +5,7 @@
     <div class="total-section">
       <h2>Total</h2>
       <!-- Loading Indicator for Currency Configuration -->
-      <div class="loading-currencies" *ngIf="loadingCurrencies">
+      <div class="loading-currencies" *ngIf="loadingConfig || loadingExchangeRates">
         <div class="spinner-container">
           <mat-spinner diameter="30"></mat-spinner>
           <span>Cargando monedas...</span>
@@ -17,50 +17,50 @@
         class="currency-totals"
         *ngIf="!loadingConfig && !loadingExchangeRates"
       >
-        <div class="currency-item" *ngFor="let moneda of filteredMonedas">
+        <div class="currency-item" *ngFor="let monedaWithTotal of monedasWithTotals">
           <!-- Dynamic flag loading with fallback to base64 data -->
           <img
-            *ngIf="moneda.flagIconBase64"
-            [src]="moneda.flagIconBase64"
-            [alt]="moneda.denominacion"
+            *ngIf="monedaWithTotal.moneda.flagIconBase64"
+            [src]="monedaWithTotal.moneda.flagIconBase64"
+            [alt]="monedaWithTotal.moneda.denominacion"
             class="currency-flag"
           />
           <img
-            *ngIf="!moneda.flagIconBase64 && moneda.flagIcon"
-            [src]="moneda.flagIcon"
-            [alt]="moneda.denominacion"
+            *ngIf="!monedaWithTotal.moneda.flagIconBase64 && monedaWithTotal.moneda.flagIcon"
+            [src]="monedaWithTotal.moneda.flagIcon"
+            [alt]="monedaWithTotal.moneda.denominacion"
             class="currency-flag"
           />
           <img
             *ngIf="
-              !moneda.flagIconBase64 && !moneda.flagIcon && moneda.countryCode
+              !monedaWithTotal.moneda.flagIconBase64 && !monedaWithTotal.moneda.flagIcon && monedaWithTotal.moneda.countryCode
             "
             [src]="
               'https://flagcdn.com/w320/' +
-              moneda.countryCode.toLowerCase() +
+              monedaWithTotal.moneda.countryCode.toLowerCase() +
               '.png'
             "
-            [alt]="moneda.denominacion"
+            [alt]="monedaWithTotal.moneda.denominacion"
             class="currency-flag"
           />
           <img
             *ngIf="
-              !moneda.flagIconBase64 && !moneda.flagIcon && !moneda.countryCode
+              !monedaWithTotal.moneda.flagIconBase64 && !monedaWithTotal.moneda.flagIcon && !monedaWithTotal.moneda.countryCode
             "
             src="assets/images/currency-placeholder.png"
-            [alt]="moneda.denominacion"
+            [alt]="monedaWithTotal.moneda.denominacion"
             class="currency-flag"
           />
 
           <!-- Currency value calculated from exchange rates -->
           <span class="currency-value">{{
-            currencyTotals.get(moneda.id!) ?? 0 | number : "1.0-2"
+            monedaWithTotal.total | number : "1.0-2"
           }}</span>
         </div>
       </div>
       <h2>Saldo</h2>
       <!-- Loading Indicator for Currency Configuration -->
-      <div class="loading-currencies" *ngIf="loadingCurrencies">
+      <div class="loading-currencies" *ngIf="loadingConfig || loadingExchangeRates">
         <div class="spinner-container">
           <mat-spinner diameter="30"></mat-spinner>
           <span>Cargando monedas...</span>
@@ -106,14 +106,14 @@
 
           <!-- Balance value calculated from Map -->
           <span class="currency-value">{{
-            currencyBalances.get(moneda.id!) ?? 0 | number : "1.0-2"
+            saldos.get(moneda.id!) ?? 0 | number : "1.0-2"
           }}</span>
         </div>
       </div>
     </div>
 
     <!-- Selected Mesa information -->
-    <mat-card *ngIf="hasMesaSelected" class="mesa-data-card">
+    <mat-card *ngIf="selectedMesa" class="mesa-data-card">
       <mat-card-content>
         <div class="mesa-info-row">
           <div class="mesa-info-item">
@@ -147,8 +147,8 @@
               <mat-icon>check_circle</mat-icon>
               <div class="mesa-info-content">
                 <span class="info-label">Estado</span>
-                <span class="info-value" [ngClass]="mesaStatusClass">
-                  {{ mesaStatusText }}
+                <span class="info-value" [ngClass]="selectedMesa?.reservado ? 'status-reserved' : selectedMesa?.estado === 'DISPONIBLE' ? 'status-available' : 'status-occupied'">
+                  {{selectedMesa?.reservado ? 'Reservada' : selectedMesa?.estado === 'DISPONIBLE' ? 'Disponible' : 'Ocupada' }}
                 </span>
               </div>
             </div>
@@ -157,9 +157,9 @@
               <mat-icon>person</mat-icon>
               <div class="mesa-info-content">
                 <span class="info-label">Nombre Cliente</span>
-                <ng-container *ngIf="hasClienteName; else noClientName">
+                <ng-container *ngIf="selectedMesa?.venta?.nombreCliente; else noClientName">
                   <div class="cliente-name-container">
-                    <span class="info-value">{{ clienteName }}</span>
+                    <span class="info-value">{{ selectedMesa?.venta?.nombreCliente }}</span>
                     <button
                       mat-icon-button
                       color="primary"
@@ -495,7 +495,7 @@
             <mat-icon>schedule</mat-icon>
             <div class="caja-info-content">
               <span class="info-label">Tiempo abierto</span>
-              <span class="info-value">{{ timeOpen }}</span>
+              <span class="info-value">{{ tiempoAbierto }}</span>
             </div>
           </div>
           <div class="caja-info-item">
@@ -518,16 +518,36 @@
     </mat-card>
     <!-- Categories -->
     <mat-card class="categories-card" style="flex: 4">
-      <mat-card-content>
-        <div class="categories">
-          <button mat-raised-button color="primary" class="category-button">
-            Categoria 2
-          </button>
-        </div>
+      <mat-card-content
+        *ngIf="pdvGrupoCategorias.length > 0"
+      >
+        <ng-container *ngFor="let grupoCategoria of pdvGrupoCategorias">
+          <div class="categories">
+            <button mat-raised-button color="primary" class="category-button">
+              {{ grupoCategoria.nombre }}
+            </button>
+          </div>
 
-        <!-- Products grid -->
+          <!-- Products grid -->
+          <div class="products-grid">
+            <div
+              class="product-item"
+              *ngFor="let categoria of grupoCategoria.categorias"
+            >
+              <div class="product-image">
+                <img src="assets/product-placeholder.png" alt="Product" />
+              </div>
+              <div class="product-name">{{ categoria.nombre }}</div>
+            </div>
+          </div>
+        </ng-container>
+      </mat-card-content>
+      <mat-card-content *ngIf="pdvGrupoCategorias.length === 0 && productos.length > 0">
         <div class="products-grid">
-          <div class="product-item" *ngFor="let producto of productos">
+          <div
+            class="product-item"
+            *ngFor="let producto of productos"
+          >
             <div class="product-image">
               <img src="assets/product-placeholder.png" alt="Product" />
             </div>
@@ -539,7 +559,9 @@
 
     <!-- Table number buttons -->
     <mat-card class="tables-card" style="flex: 5">
-      <mat-card-content style="display: flex; flex-direction: column; gap: 10px">
+      <mat-card-content
+        style="display: flex; flex-direction: column; gap: 10px"
+      >
         <div class="bottom-buttons">
           <button mat-raised-button color="primary" class="bottom-button">
             <span>Button</span>

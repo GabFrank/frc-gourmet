@@ -33,7 +33,7 @@ export class Venta extends BaseModel {
   estado!: VentaEstado;
 
   @Column({ type: 'varchar', nullable: true })
-  nombre_cliente?: string;
+  nombreCliente?: string;
 
   @ManyToOne(() => FormasPago)
   @JoinColumn({ name: 'forma_pago_id' })

@@ -129,7 +129,8 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   subcategorias: Subcategoria[] = [];
   recetas: Receta[] = [];
   filteredRecetas!: Observable<RecetaViewModel[]>;
-
+  // search for main image when load the product
+  mainImageUrl: string = '';
   // For image handling
   selectedImageFile: File | null = null;
   productImages: ProductImageModel[] = [];
@@ -325,6 +326,9 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     if (data.subcategoriaId) {
       this.productoForm.get('subcategoriaId')?.setValue(data.subcategoriaId);
     }
+
+    // load the main image
+    this.loadMainImage();
   }
 
   async loadCategorias(): Promise<void> {
@@ -636,6 +640,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       });
 
       this.cdr.detectChanges(); // Ensure UI updates
+      this.loadMainImage();
     } catch (error) {
       console.error('Error loading product images:', error);
       this.snackBar.open('Error al cargar las imágenes del producto', 'Cerrar', { duration: 3000 });
@@ -948,21 +953,21 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       if (this.isEditing && this.producto?.id) {
         // Update existing product
         const updatedProductData = {
-        nombre: formValues.nombre,
+          nombre: formValues.nombre,
           nombreAlternativo: formValues.nombreAlternativo,
           categoriaId: formValues.categoriaId,
-        subcategoriaId: formValues.subcategoriaId,
-        iva: formValues.iva,
-        isPesable: formValues.isPesable,
-        isCombo: formValues.isCombo,
-        isCompuesto: formValues.isCompuesto,
-        isIngrediente: formValues.isIngrediente,
-        isPromocion: formValues.isPromocion,
-        isVendible: formValues.isVendible,
-        hasStock: formValues.hasStock,
+          subcategoriaId: formValues.subcategoriaId,
+          iva: formValues.iva,
+          isPesable: formValues.isPesable,
+          isCombo: formValues.isCombo,
+          isCompuesto: formValues.isCompuesto,
+          isIngrediente: formValues.isIngrediente,
+          isPromocion: formValues.isPromocion,
+          isVendible: formValues.isVendible,
+          hasStock: formValues.hasStock,
           hasVencimiento: formValues.hasVencimiento,
-        hasVariaciones: formValues.hasVariaciones,
-        alertarVencimientoDias: formValues.hasVencimiento ? formValues.alertarVencimientoDias : null,
+          hasVariaciones: formValues.hasVariaciones,
+          alertarVencimientoDias: formValues.hasVencimiento ? formValues.alertarVencimientoDias : null,
           recetaId: formValues.isCompuesto ? formValues.recetaId : null,
           observacion: formValues.observacion,
           activo: formValues.activo
@@ -976,6 +981,46 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
         // If there was a change from hasVariaciones=true to false, we need to create a default presentacion
         if (!updatedProductData.hasVariaciones && this.producto.hasVariaciones) {
           await this.createDefaultPresentacion(savedProducto.id, formValues);
+        } 
+        // If the product already had no variations, update the principal presentacion with the form values
+        else if (!updatedProductData.hasVariaciones && !this.producto.hasVariaciones && this.producto.presentaciones?.length) {
+          // Find the principal presentacion
+          const principalPresentacion = this.producto.presentaciones.find(p => p.principal);
+          
+          if (principalPresentacion) {
+            // Update the presentacion with the form values
+            await firstValueFrom(
+              this.repositoryService.updatePresentacion(principalPresentacion.id, {
+                descripcion: formValues.defaultPresentacionDesc || null,
+                tipoMedida: formValues.defaultPresentacionTipoMedida,
+                cantidad: formValues.defaultPresentacionCantidad,
+                principal: true,
+                activo: true
+              })
+            );
+            
+            // If presentacion has codigos, update the first one, otherwise create a new one
+            if (principalPresentacion.codigos?.length && formValues.defaultPresentacionCodigo) {
+              const codigo = principalPresentacion.codigos[0];
+              await firstValueFrom(
+                this.repositoryService.updateCodigo(codigo.id, {
+                  codigo: formValues.defaultPresentacionCodigo,
+                  tipoCodigo: formValues.defaultPresentacionTipoCodigo,
+                  activo: true
+                })
+              );
+            } else if (formValues.defaultPresentacionCodigo) {
+              // Create a new codigo if none exists but one was provided in the form
+              await firstValueFrom(
+                this.repositoryService.createCodigo({
+                  presentacionId: principalPresentacion.id,
+                  codigo: formValues.defaultPresentacionCodigo,
+                  tipoCodigo: formValues.defaultPresentacionTipoCodigo,
+                  activo: true
+                })
+              );
+            }
+          }
         }
 
         this.producto = { ...this.producto, ...savedProducto };
@@ -1037,7 +1082,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
           }
         }
 
-      this.isEditing = true;
+        this.isEditing = true;
         this.producto = savedProducto;
         this.isLoading = false;
         this.snackBar.open('Producto creado exitosamente', 'Cerrar', { duration: 3000 });
@@ -1623,9 +1668,11 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
    * Returns the URL of the main product image for display in the preview
    * Falls back to default image if no main image exists
    */
-  getMainImageUrl(): string {
+  // transform this on a getter
+  loadMainImage(): void {
+    console.log('productImages');
     const mainImage = this.productImages.find(img => img.isMain && !img.toDelete);
-    return mainImage ? mainImage.imageUrl : this.defaultNoImagePath;
+    this.mainImageUrl = mainImage ? mainImage.imageUrl : this.defaultNoImagePath;
   }
 
   /**

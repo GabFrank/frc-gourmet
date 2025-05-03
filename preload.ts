@@ -511,6 +511,7 @@ type VentaEstado = 'ABIERTA' | 'CONCLUIDA' | 'CANCELADA';
 
 interface Venta {
   id?: number;
+  nombreCliente?: string;
   cliente: Cliente;
   estado: VentaEstado;
   formaPago: FormasPago;
