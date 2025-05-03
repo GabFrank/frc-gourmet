@@ -251,6 +251,7 @@ interface ElectronAPI {
   // Caja methods
   getCajas: () => Promise<Caja[]>;
   getCaja: (cajaId: number) => Promise<Caja>;
+  getCajaAbiertaByUsuario: (usuarioId: number) => Promise<Caja>;
   createCaja: (cajaData: Partial<Caja>) => Promise<Caja>;
   updateCaja: (cajaId: number, cajaData: Partial<Caja>) => Promise<any>;
   deleteCaja: (cajaId: number) => Promise<any>;
@@ -1158,6 +1159,10 @@ export class RepositoryService {
     return from(this.api.getCajas());
   }
 
+  getCajaAbiertaByUsuario(usuarioId: number): Observable<Caja> {
+    return from(this.api.getCajaAbiertaByUsuario(usuarioId));
+  }
+
   getCaja(cajaId: number): Observable<Caja> {
     return from(this.api.getCaja(cajaId));
   }
@@ -1542,7 +1547,7 @@ export class RepositoryService {
     return from(this.api.updateVentaItem(ventaItemId, ventaItemData));
   }
 
-  deleteVentaItem(ventaItemId: number): Observable<any> {
+  deleteVentaItem(ventaItemId: number): Observable<boolean> {
     return from(this.api.deleteVentaItem(ventaItemId));
   }
 

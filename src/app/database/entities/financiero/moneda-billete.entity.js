@@ -12,16 +12,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MonedaBillete = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
-const moneda_entity_1 = require("./moneda.entity");
 /**
  * Entity representing a specific denomination of currency (bill or coin)
  */
 let MonedaBillete = class MonedaBillete extends base_entity_1.BaseModel {
 };
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => moneda_entity_1.Moneda, { nullable: false }),
+    (0, typeorm_1.ManyToOne)('Moneda'),
     (0, typeorm_1.JoinColumn)({ name: 'moneda_id' }),
-    __metadata("design:type", moneda_entity_1.Moneda)
+    __metadata("design:type", Function)
 ], MonedaBillete.prototype, "moneda", void 0);
 __decorate([
     (0, typeorm_1.Column)('decimal', { precision: 12, scale: 2 }),

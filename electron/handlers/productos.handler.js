@@ -324,6 +324,17 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             throw error;
         }
     });
+    // alsos return presentacion.producto
+    electron_1.ipcMain.handle('getCodigos', async () => {
+        try {
+            const repo = dataSource.getRepository(codigo_entity_1.Codigo);
+            return await repo.find({ order: { principal: 'DESC', codigo: 'ASC' }, relations: ['presentacion', 'presentacion.producto'] });
+        }
+        catch (error) {
+            console.error('Error getting codigos:', error);
+            throw error;
+        }
+    });
     electron_1.ipcMain.handle('createCodigo', async (_event, data) => {
         try {
             const repo = dataSource.getRepository(codigo_entity_1.Codigo);

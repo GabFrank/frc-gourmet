@@ -1,6 +1,7 @@
 <div class="pdv-container">
     <!-- Left side panel -->
     <div class="left-panel">
+        
         <!-- Total section -->
         <div class="total-section">
             <h2>Total</h2>
@@ -73,13 +74,87 @@
             </div>
         </div>
 
-        <!-- Saldo section -->
-        <!-- <div class="saldo-section">
-            
-        </div> -->
+        <!-- Selected Mesa information -->
+        <mat-card *ngIf="hasMesaSelected" class="mesa-data-card">
+            <mat-card-content>
+                <div class="mesa-info-row">
+                    <div class="mesa-info-item">
+                        <mat-icon>table_restaurant</mat-icon>
+                        <div class="mesa-info-content">
+                            <span class="info-label">Mesa seleccionada</span>
+                            <span class="info-value">{{selectedMesa?.numero}}</span>
+                        </div>
+                    </div>
+                    <!-- Show regular info when not editing client name -->
+                    <ng-container *ngIf="!isEditingClienteName">
+                        <div class="mesa-info-item">
+                            <mat-icon>people</mat-icon>
+                            <div class="mesa-info-content">
+                                <span class="info-label">Capacidad</span>
+                                <span class="info-value">{{selectedMesa?.cantidad_personas || 'N/A'}}</span>
+                            </div>
+                        </div>
+                        <div class="mesa-info-item">
+                            <mat-icon>place</mat-icon>
+                            <div class="mesa-info-content">
+                                <span class="info-label">Sector</span>
+                                <span class="info-value">{{selectedMesa?.sector?.nombre || 'Sin asignar'}}</span>
+                            </div>
+                        </div>
+                        <div class="mesa-info-item">
+                            <mat-icon>check_circle</mat-icon>
+                            <div class="mesa-info-content">
+                                <span class="info-label">Estado</span>
+                                <span class="info-value" [ngClass]="mesaStatusClass">
+                                    {{mesaStatusText}}
+                                </span>
+                            </div>
+                        </div>
+                        <!-- Client name info -->
+                        <div class="mesa-info-item">
+                            <mat-icon>person</mat-icon>
+                            <div class="mesa-info-content">
+                                <span class="info-label">Nombre Cliente</span>
+                                <ng-container *ngIf="hasClienteName; else noClientName">
+                                    <div class="cliente-name-container">
+                                        <span class="info-value">{{clienteName}}</span>
+                                        <button mat-icon-button color="primary" (click)="startEditingClienteName()" matTooltip="Editar nombre">
+                                            <mat-icon>edit</mat-icon>
+                                        </button>
+                                    </div>
+                                </ng-container>
+                                <ng-template #noClientName>
+                                    <button mat-stroked-button color="primary" (click)="startEditingClienteName()">
+                                        <mat-icon>add</mat-icon> Adicionar nombre
+                                    </button>
+                                </ng-template>
+                            </div>
+                        </div>
+                    </ng-container>
+                    
+                    <!-- Show client name input when editing -->
+                    <ng-container *ngIf="isEditingClienteName">
+                        <div class="mesa-info-item" style="flex-grow: 1;">
+                            <form [formGroup]="clienteNameForm" class="cliente-name-form" style="width: 100%; display: flex;">
+                                <mat-form-field appearance="outline" style="flex-grow: 1;">
+                                    <mat-label>Nombre del cliente</mat-label>
+                                    <input matInput formControlName="nombre" (keydown)="onClienteNameKeyDown($event)" placeholder="Ingrese el nombre del cliente">
+                                </mat-form-field>
+                                <button mat-icon-button color="primary" (click)="saveClienteName()" matTooltip="Guardar">
+                                    <mat-icon>save</mat-icon>
+                                </button>
+                                <button mat-icon-button color="warn" (click)="cancelEditingClienteName()" matTooltip="Cancelar">
+                                    <mat-icon>cancel</mat-icon>
+                                </button>
+                            </form>
+                        </div>
+                    </ng-container>
+                </div>
+            </mat-card-content>
+        </mat-card>
 
         <!-- Sale items table -->
-        <div class="sale-table">
+        <div class="sale-table" style="flex: 5;">
             <table mat-table [dataSource]="ventaItems" class="mat-elevation-z2">
                 <!-- Product Column -->
                 <ng-container matColumnDef="productoNombre">
@@ -120,13 +195,16 @@
             </table>
         </div>
 
-        <!-- Search products section -->
-        <div class="search-section">
-            <form [formGroup]="searchForm">
-                <mat-form-field appearance="outline" class="search-field">
-                    <input matInput placeholder="BUSCAR PRODUCTOS" 
-                           formControlName="searchTerm"
-                           (keydown)="onSearchKeyDown($event)">
+        <!-- Search products section set form group as flex-direction: column; gap: 5px; and cantidad input must take 10%, search 80% and button 10%-->
+        <div class="search-section" style="height: 50px;">
+            <form [formGroup]="searchForm" style="width: 100%; display: flex; gap: 5px; flex-direction: row;">
+                <!-- add a cantidad input, width must be 50px -->
+                <mat-form-field appearance="outline" class="search-field" style="flex: 1;">
+                    <input matInput formControlName="cantidad" type="number" min="0.01">
+                </mat-form-field>
+                <mat-form-field appearance="outline" class="search-field" style="flex: 8;">
+                    <input matInput placeholder="BUSCAR PRODUCTOS" formControlName="searchTerm"
+                        (keydown)="onSearchKeyDown($event)">
                 </mat-form-field>
                 <button mat-icon-button color="primary" class="search-button" (click)="searchProducts()">
                     <mat-icon>search</mat-icon>
@@ -152,16 +230,53 @@
     </div>
 
     <!-- Right side panel -->
-    <div class="right-panel">
+    <div class="right-panel" style="display: flex; flex-direction: column; gap: 10px;">
+        <!-- display selected caja data, caja id, fecha apertura, estado -->
+        <mat-card class="caja-data-card">
+            <mat-card-content>
+                <div class="caja-info-row">
+                    <div class="caja-info-item">
+                        <mat-icon>point_of_sale</mat-icon>
+                        <div class="caja-info-content">
+                            <span class="info-label">Id de caja</span>
+                            <span class="info-value">{{caja?.id}}</span>
+                        </div>
+                    </div>
+                    <div class="caja-info-item">
+                        <mat-icon>event</mat-icon>
+                        <div class="caja-info-content">
+                            <span class="info-label">Fecha de apertura</span>
+                            <span class="info-value">{{caja?.fechaApertura | date:'dd/MM/yyyy HH:mm'}}</span>
+                        </div>
+                    </div>
+                    <div class="caja-info-item">
+                        <mat-icon>schedule</mat-icon>
+                        <div class="caja-info-content">
+                            <span class="info-label">Tiempo abierto</span>
+                            <span class="info-value">{{timeOpen}}</span>
+                        </div>
+                    </div>
+                    <div class="caja-info-item">
+                        <mat-icon>trending_up</mat-icon>
+                        <div class="caja-info-content">
+                            <span class="info-label">Estado</span>
+                            <span class="info-value" [ngClass]="{'status-active': caja?.estado === 'ABIERTO', 'status-inactive': caja?.estado !== 'ABIERTO'}">
+                                {{caja?.estado}}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </mat-card-content>
+        </mat-card>
         <!-- Categories -->
-        <div class="categories">
+        <div class="categories" style="flex: 1;">
             <button mat-raised-button color="primary" class="category-button">Categoria 2</button>
             <button mat-raised-button color="primary" class="category-button">Categoria 3</button>
         </div>
 
         <!-- Products grid -->
-        <div class="products-grid">
-            <div class="product-item" *ngFor="let producto of productos" (click)="addProduct(producto)">
+        <div class="products-grid" style="flex: 4;">
+            <div class="product-item" *ngFor="let producto of productos">
                 <div class="product-image">
                     <img src="assets/product-placeholder.png" alt="Product">
                 </div>
@@ -170,34 +285,24 @@
         </div>
 
         <!-- Table number buttons -->
-        <div class="tables-grid">
+        <div class="tables-grid" style="flex: 4;">
             <!-- Show loading spinner while mesas are loading -->
             <div *ngIf="loadingMesas" class="loading-mesas">
                 <mat-spinner diameter="40"></mat-spinner>
                 <span>Cargando mesas...</span>
             </div>
-            
+
             <!-- Use actual mesa data when available -->
             <ng-container *ngIf="!loadingMesas">
                 <!-- If we have mesas data, show real mesas -->
                 <ng-container *ngIf="mesas.length > 0">
-                    <button mat-raised-button *ngFor="let mesa of mesas" 
-                        [class.table-active]="!mesa.reservado"
-                        [class.table-inactive]="mesa.reservado" 
-                        [matTooltip]="mesa.reservado ? 'Mesa reservada' : 'Mesa disponible'"
-                        class="table-button">
+                    <button mat-raised-button *ngFor="let mesa of mesas" (click)="selectMesa(mesa)"
+                        [class.table-active]="!mesa.reservado" 
+                        [class.table-inactive]="mesa.reservado"
+                        [class.table-selected]="selectedMesa?.id === mesa.id"
+                        [matTooltip]="mesa.reservado ? 'Mesa reservada' : 'Mesa disponible'" class="table-button">
                         {{mesa.numero}}
                         <mat-icon *ngIf="mesa.reservado" class="reserved-icon">event_busy</mat-icon>
-                    </button>
-                </ng-container>
-                
-                <!-- Fallback to pre-generated numbers if no mesas are available -->
-                <ng-container *ngIf="mesas.length === 0">
-                    <button mat-raised-button *ngFor="let i of preGeneratedTableNumbers" 
-                        [class.table-active]="i <= 2"
-                        [class.table-inactive]="i > 10" 
-                        class="table-button">
-                        {{i}}
                     </button>
                 </ng-container>
             </ng-container>

@@ -57,7 +57,7 @@ __decorate([
     __metadata("design:type", Function)
 ], PagoDetalle.prototype, "pago", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => moneda_entity_1.Moneda),
+    (0, typeorm_1.ManyToOne)('Moneda'),
     (0, typeorm_1.JoinColumn)({ name: 'moneda_id' }),
     __metadata("design:type", moneda_entity_1.Moneda)
 ], PagoDetalle.prototype, "moneda", void 0);

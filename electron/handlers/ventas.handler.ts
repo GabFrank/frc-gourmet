@@ -358,14 +358,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   });
 
   ipcMain.handle('deleteVentaItem', async (_event: any, id: number) => {
+    // return a boolean if success or not
     try {
       const repo = dataSource.getRepository(VentaItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
-      return await repo.remove(entity);
+      await repo.remove(entity);
+      return true;
     } catch (error) {
       console.error(`Error deleting venta item ID ${id}:`, error);
-      throw error;
+      return false;
     }
   });
 

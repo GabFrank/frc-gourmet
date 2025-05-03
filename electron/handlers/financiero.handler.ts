@@ -7,7 +7,7 @@ import { MonedaBillete } from '../../src/app/database/entities/financiero/moneda
 import { Conteo } from '../../src/app/database/entities/financiero/conteo.entity';
 import { ConteoDetalle } from '../../src/app/database/entities/financiero/conteo-detalle.entity';
 import { Dispositivo } from '../../src/app/database/entities/financiero/dispositivo.entity';
-import { Caja } from '../../src/app/database/entities/financiero/caja.entity';
+import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { CajaMoneda } from '../../src/app/database/entities/financiero/caja-moneda.entity';
 import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
@@ -535,6 +535,17 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
       return await repo.remove(entity);
     } catch (error) {
       console.error(`Error deleting caja ${id}:`, error);
+      throw error;
+    }
+  });
+
+  // get-caja-abierta-por-usuario
+  ipcMain.handle('get-caja-abierta-by-usuario', async (_event: IpcMainInvokeEvent, usuarioId: number) => {
+    try {
+      const repo = dataSource.getRepository(Caja);
+      return await repo.findOne({ where: { createdBy: { id: usuarioId }, estado: CajaEstado.ABIERTO } });
+    } catch (error) {
+      console.error('Error getting caja abierta por usuario:', error);
       throw error;
     }
   });

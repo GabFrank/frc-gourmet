@@ -45,6 +45,10 @@ __decorate([
     __metadata("design:type", String)
 ], Venta.prototype, "estado", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', nullable: true }),
+    __metadata("design:type", String)
+], Venta.prototype, "nombre_cliente", void 0);
+__decorate([
     (0, typeorm_1.ManyToOne)(() => forma_pago_entity_1.FormasPago),
     (0, typeorm_1.JoinColumn)({ name: 'forma_pago_id' }),
     __metadata("design:type", forma_pago_entity_1.FormasPago)
@@ -64,6 +68,11 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'delivery_id' }),
     __metadata("design:type", delivery_entity_1.Delivery)
 ], Venta.prototype, "delivery", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)('PdvMesa', { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'mesa_id' }),
+    __metadata("design:type", Function)
+], Venta.prototype, "mesa", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)('VentaItem', 'venta'),
     __metadata("design:type", Array)

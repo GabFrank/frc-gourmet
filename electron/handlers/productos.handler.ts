@@ -322,6 +322,17 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     }
   });
 
+  // alsos return presentacion.producto
+  ipcMain.handle('getCodigos', async () => {
+    try {
+      const repo = dataSource.getRepository(Codigo);
+      return await repo.find({ order: { principal: 'DESC', codigo: 'ASC' }, relations: ['presentacion', 'presentacion.producto'] });
+    } catch (error) {
+      console.error('Error getting codigos:', error);
+      throw error;
+    }
+  });
+
   ipcMain.handle('createCodigo', async (_event: any, data: any) => {
     try {
       const repo = dataSource.getRepository(Codigo);

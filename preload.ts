@@ -519,6 +519,7 @@ interface Venta {
   items?: VentaItem[];
   createdAt?: Date;
   updatedAt?: Date;
+  mesa?: PdvMesa;
 }
 
 interface VentaItem {
@@ -605,6 +606,7 @@ interface PdvMesa {
   reserva?: Reserva;
   createdAt?: Date;
   updatedAt?: Date;
+  venta?: Venta;
 }
 
 // New Comanda interface
@@ -1230,6 +1232,9 @@ contextBridge.exposeInMainWorld('api', {
   },
   deleteCaja: async (cajaId: number) => {
     return await ipcRenderer.invoke('delete-caja', cajaId);
+  },
+  getCajaAbiertaByUsuario: async () => {
+    return await ipcRenderer.invoke('get-caja-abierta-by-usuario');
   },
 
   // CajaMoneda methods

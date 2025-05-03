@@ -12,7 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Moneda = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
-const precio_venta_entity_1 = require("../productos/precio-venta.entity");
 /**
  * Entity representing a currency
  */
@@ -47,7 +46,7 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Moneda.prototype, "principal", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => precio_venta_entity_1.PrecioVenta, precioVenta => precioVenta.moneda),
+    (0, typeorm_1.OneToMany)('PrecioVenta', 'moneda'),
     __metadata("design:type", Array)
 ], Moneda.prototype, "preciosVenta", void 0);
 Moneda = __decorate([

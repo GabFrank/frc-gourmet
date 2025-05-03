@@ -1,7 +1,16 @@
-import { Column, Entity, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import { Column, Entity, ManyToOne, JoinColumn, OneToMany, OneToOne } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import { Reserva } from './reserva.entity';
 import { Sector } from './sector.entity';
+import type { Venta } from './venta.entity';
+
+/**
+ * Enum for table states
+ */
+export enum PdvMesaEstado {
+  DISPONIBLE = 'DISPONIBLE',
+  OCUPADO = 'OCUPADO'
+}
 
 /**
  * Entity representing a point of sale table
@@ -20,6 +29,13 @@ export class PdvMesa extends BaseModel {
   @Column({ default: false })
   reservado!: boolean;
 
+  @Column({
+    type: 'varchar',
+    enum: PdvMesaEstado,
+    default: PdvMesaEstado.DISPONIBLE
+  })
+  estado!: PdvMesaEstado;
+
   @ManyToOne(() => Reserva, { nullable: true })
   @JoinColumn({ name: 'reserva_id' })
   reserva?: Reserva;
@@ -27,4 +43,7 @@ export class PdvMesa extends BaseModel {
   @ManyToOne(() => Sector, sector => sector.mesas, { nullable: true })
   @JoinColumn({ name: 'sector_id' })
   sector?: Sector;
+  
+  @OneToOne('Venta', 'mesa', { nullable: true })
+  venta?: Venta;
 } 

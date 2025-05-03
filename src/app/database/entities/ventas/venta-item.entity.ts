@@ -1,6 +1,6 @@
 import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseModel } from '../base.entity';
-import { Venta } from './venta.entity';
+import type { Venta } from './venta.entity';
 import { PrecioVenta } from '../productos/precio-venta.entity';
 import { Producto } from '../productos/producto.entity';
 import { Presentacion, TipoMedida } from '../productos/presentacion.entity';
@@ -10,7 +10,7 @@ import { Presentacion, TipoMedida } from '../productos/presentacion.entity';
  */
 @Entity('venta_items')
 export class VentaItem extends BaseModel {
-  @ManyToOne(() => Venta, venta => venta.items)
+  @ManyToOne('Venta', 'items')
   @JoinColumn({ name: 'venta_id' })
   venta!: Venta;
 

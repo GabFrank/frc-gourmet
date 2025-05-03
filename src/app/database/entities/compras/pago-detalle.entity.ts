@@ -43,7 +43,7 @@ export class PagoDetalle extends BaseModel {
   @JoinColumn({ name: 'pago_id' })
   pago!: Pago; // Use type import for type checking
 
-  @ManyToOne(() => Moneda)
+  @ManyToOne('Moneda')
   @JoinColumn({ name: 'moneda_id' })
   moneda!: Moneda;
 

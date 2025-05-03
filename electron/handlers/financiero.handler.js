@@ -554,6 +554,17 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
             throw error;
         }
     });
+    // get-caja-abierta-por-usuario
+    electron_1.ipcMain.handle('get-caja-abierta-by-usuario', async (_event, usuarioId) => {
+        try {
+            const repo = dataSource.getRepository(caja_entity_1.Caja);
+            return await repo.findOne({ where: { createdBy: { id: usuarioId }, estado: caja_entity_1.CajaEstado.ABIERTO } });
+        }
+        catch (error) {
+            console.error('Error getting caja abierta por usuario:', error);
+            throw error;
+        }
+    });
     // --- CajaMoneda Handlers ---
     electron_1.ipcMain.handle('get-cajas-monedas', async () => {
         try {

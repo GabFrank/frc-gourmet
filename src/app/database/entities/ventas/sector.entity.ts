@@ -1,6 +1,6 @@
 import { Column, Entity, OneToMany } from 'typeorm';
 import { BaseModel } from '../base.entity';
-import { PdvMesa } from './pdv-mesa.entity';
+import type { PdvMesa } from './pdv-mesa.entity';
 
 /**
  * Entity representing a sector (area of tables)
@@ -13,6 +13,6 @@ export class Sector extends BaseModel {
   @Column({ default: true })
   activo!: boolean;
 
-  @OneToMany(() => PdvMesa, mesa => mesa.sector)
+  @OneToMany('PdvMesa', 'sector')
   mesas?: PdvMesa[];
 } 

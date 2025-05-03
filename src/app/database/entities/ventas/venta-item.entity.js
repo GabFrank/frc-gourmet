@@ -12,7 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.VentaItem = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
-const venta_entity_1 = require("./venta.entity");
 const precio_venta_entity_1 = require("../productos/precio-venta.entity");
 const producto_entity_1 = require("../productos/producto.entity");
 const presentacion_entity_1 = require("../productos/presentacion.entity");
@@ -22,9 +21,9 @@ const presentacion_entity_1 = require("../productos/presentacion.entity");
 let VentaItem = class VentaItem extends base_entity_1.BaseModel {
 };
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => venta_entity_1.Venta, venta => venta.items),
+    (0, typeorm_1.ManyToOne)('Venta', 'items'),
     (0, typeorm_1.JoinColumn)({ name: 'venta_id' }),
-    __metadata("design:type", venta_entity_1.Venta)
+    __metadata("design:type", Function)
 ], VentaItem.prototype, "venta", void 0);
 __decorate([
     (0, typeorm_1.Column)({

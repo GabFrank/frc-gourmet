@@ -354,16 +354,18 @@ function registerVentasHandlers(dataSource, getCurrentUser) {
         }
     });
     electron_1.ipcMain.handle('deleteVentaItem', async (_event, id) => {
+        // return a boolean if success or not
         try {
             const repo = dataSource.getRepository(venta_item_entity_1.VentaItem);
             const entity = await repo.findOneBy({ id });
             if (!entity)
                 throw new Error(`Venta Item ID ${id} not found`);
-            return await repo.remove(entity);
+            await repo.remove(entity);
+            return true;
         }
         catch (error) {
             console.error(`Error deleting venta item ID ${id}:`, error);
-            throw error;
+            return false;
         }
     });
     // --- PdvGrupoCategoria Handlers ---

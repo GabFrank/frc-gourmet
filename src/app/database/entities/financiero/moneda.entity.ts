@@ -1,6 +1,6 @@
 import { Column, Entity, OneToMany } from 'typeorm';
 import { BaseModel } from '../base.entity';
-import { PrecioVenta } from '../productos/precio-venta.entity';
+import type { PrecioVenta } from '../productos/precio-venta.entity';
 
 /**
  * Entity representing a currency
@@ -28,6 +28,6 @@ export class Moneda extends BaseModel {
   @Column({ default: false })
   principal!: boolean;
 
-  @OneToMany(() => PrecioVenta, precioVenta => precioVenta.moneda)
+  @OneToMany('PrecioVenta', 'moneda')
   preciosVenta!: PrecioVenta[];
 }

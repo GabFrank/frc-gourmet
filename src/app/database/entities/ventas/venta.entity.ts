@@ -5,6 +5,7 @@ import { FormasPago } from '../compras/forma-pago.entity';
 import { Caja } from '../financiero/caja.entity';
 import { Pago } from '../compras/pago.entity';
 import { Delivery } from './delivery.entity';
+import type { PdvMesa } from './pdv-mesa.entity';
 
 /**
  * Enum for sale states
@@ -31,6 +32,9 @@ export class Venta extends BaseModel {
   })
   estado!: VentaEstado;
 
+  @Column({ type: 'varchar', nullable: true })
+  nombre_cliente?: string;
+
   @ManyToOne(() => FormasPago)
   @JoinColumn({ name: 'forma_pago_id' })
   formaPago!: FormasPago;
@@ -47,6 +51,11 @@ export class Venta extends BaseModel {
   @JoinColumn({ name: 'delivery_id' })
   delivery?: Delivery;
 
+  @ManyToOne('PdvMesa', { nullable: true })
+  @JoinColumn({ name: 'mesa_id' })
+  mesa?: PdvMesa;
+
   @OneToMany('VentaItem', 'venta')
   items!: any[];
+
 } 

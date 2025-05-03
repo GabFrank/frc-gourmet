@@ -12,7 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Sector = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
-const pdv_mesa_entity_1 = require("./pdv-mesa.entity");
 /**
  * Entity representing a sector (area of tables)
  */
@@ -27,7 +26,7 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Sector.prototype, "activo", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => pdv_mesa_entity_1.PdvMesa, mesa => mesa.sector),
+    (0, typeorm_1.OneToMany)('PdvMesa', 'sector'),
     __metadata("design:type", Array)
 ], Sector.prototype, "mesas", void 0);
 Sector = __decorate([

@@ -13,9 +13,11 @@ import { Producto } from '../../../database/entities/productos/producto.entity';
 import { Codigo, TipoCodigo } from '../../../database/entities/productos/codigo.entity';
 import { firstValueFrom } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { Presentacion } from 'src/app/database/entities/productos/presentacion.entity';
 
 export interface ProductoSearchDialogData {
   searchTerm: string;
+  cantidad: number;
 }
 
 @Component({
@@ -48,6 +50,8 @@ export class ProductoSearchDialogComponent implements OnInit {
   
   // Results
   searchResults: Producto[] = [];
+  selectedProduct: Producto | null = null;
+  selectedPresentacion: Presentacion | null = null;
   
   constructor(
     private dialogRef: MatDialogRef<ProductoSearchDialogComponent>,
@@ -133,34 +137,15 @@ export class ProductoSearchDialogComponent implements OnInit {
       }
       
       // Get products for each matching presentacion
-      const products: Producto[] = [];
-      for (const code of matchingCodes) {
-        try {
-          const presentacion = await firstValueFrom(
-            this.repositoryService.getPresentacion(code.presentacionId)
-          );
-          
-          if (presentacion && presentacion.productoId) {
-            const producto = await firstValueFrom(
-              this.repositoryService.getProducto(presentacion.productoId)
-            );
-            
-            if (producto && producto.activo) {
-              // Only add unique products
-              if (!products.some(p => p.id === producto.id)) {
-                // Add code info to the product for display
-                (producto as any).codigo = code.codigo;
-                (producto as any).tipoCodigo = code.tipoCodigo;
-                (producto as any).presentacionId = presentacion.id;
-                products.push(producto);
-              }
-            }
-          }
-        } catch (error) {
-          console.error('Error getting product for code:', error);
-        }
-      }
+      // codigo alredy has presentacion.produto so we can use it directly
+      const products: Producto[] = matchingCodes.map(codigo => codigo.presentacion.producto);
       
+      //if producto.activo is true then close dialog and return product and presentacion
+      if (products.some(producto => producto.activo)) {
+        this.selectedProduct = products[0];
+        this.selectedPresentacion = matchingCodes[0].presentacion;
+        this.dialogRef.close({ product: this.selectedProduct, presentacion: this.selectedPresentacion, cantidad: this.data.cantidad });
+      }
       return products;
     } catch (error) {
       console.error('Error searching by code:', error);
@@ -192,7 +177,8 @@ export class ProductoSearchDialogComponent implements OnInit {
   }
   
   selectProduct(product: Producto): void {
-    this.dialogRef.close(product);
+    this.selectedProduct = product;
+    this.dialogRef.close({ product: product, presentacion: this.selectedPresentacion, cantidad: this.data.cantidad });
   }
   
   cancel(): void {

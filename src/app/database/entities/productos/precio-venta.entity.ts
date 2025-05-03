@@ -35,7 +35,7 @@ export class PrecioVenta extends BaseModel {
   @Column({ name: 'moneda_id' })
   monedaId!: number;
 
-  @ManyToOne(() => Moneda, moneda => moneda.preciosVenta)
+  @ManyToOne('Moneda')
   @JoinColumn({ name: 'moneda_id' })
   moneda!: Moneda;
 

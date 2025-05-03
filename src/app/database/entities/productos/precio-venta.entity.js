@@ -51,7 +51,7 @@ __decorate([
     __metadata("design:type", Number)
 ], PrecioVenta.prototype, "monedaId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => moneda_entity_1.Moneda, moneda => moneda.preciosVenta),
+    (0, typeorm_1.ManyToOne)('Moneda'),
     (0, typeorm_1.JoinColumn)({ name: 'moneda_id' }),
     __metadata("design:type", moneda_entity_1.Moneda)
 ], PrecioVenta.prototype, "moneda", void 0);

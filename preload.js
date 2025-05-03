@@ -540,6 +540,9 @@ electron_1.contextBridge.exposeInMainWorld('api', {
     deleteCaja: async (cajaId) => {
         return await electron_1.ipcRenderer.invoke('delete-caja', cajaId);
     },
+    getCajaAbiertaByUsuario: async () => {
+        return await electron_1.ipcRenderer.invoke('get-caja-abierta-by-usuario');
+    },
     // CajaMoneda methods
     getCajasMonedas: () => electron_1.ipcRenderer.invoke('get-cajas-monedas'),
     getCajaMoneda: (cajaMonedaId) => electron_1.ipcRenderer.invoke('get-caja-moneda', cajaMonedaId),
