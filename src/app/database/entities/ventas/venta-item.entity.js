@@ -27,6 +27,11 @@ var EstadoVentaItem;
  * Entity representing a sale item
  */
 let VentaItem = VentaItem_1 = class VentaItem extends base_entity_1.BaseModel {
+    constructor() {
+        super(...arguments);
+        this.canceladoPor = null;
+        this.modificadoPor = null;
+    }
 };
 __decorate([
     (0, typeorm_1.ManyToOne)('Venta', 'items'),
