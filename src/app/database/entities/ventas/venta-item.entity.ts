@@ -30,20 +30,20 @@ export class VentaItem extends BaseModel {
   tipoMedida!: TipoMedida;
 
   @Column({ 
-    name: 'precio_costo_total', 
+    name: 'precio_costo_unitario', 
     type: 'decimal', 
     precision: 10, 
     scale: 2 
   })
-  precioCostoTotal!: number;
+  precioCostoUnitario!: number;
 
   @Column({ 
-    name: 'precio_venta_total', 
+    name: 'precio_venta_unitario', 
     type: 'decimal', 
     precision: 10, 
     scale: 2 
   })
-  precioVentaTotal!: number;
+  precioVentaUnitario!: number;
 
   @ManyToOne(() => PrecioVenta)
   @JoinColumn({ name: 'precio_venta_presentacion_id' })
@@ -62,11 +62,12 @@ export class VentaItem extends BaseModel {
 
   @Column({ 
     type: 'decimal', 
+    name: 'descuento_unitario',
     precision: 10, 
     scale: 2, 
     default: 0 
   })
-  descuento!: number;
+  descuentoUnitario!: number;
 
   @Column({
     type: 'varchar',

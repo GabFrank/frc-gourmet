@@ -1,28 +1,33 @@
-<h2 mat-dialog-title>{{ data.title }}</h2>
-
-<mat-dialog-content>
-  <p>{{ data.message }}</p>
-  
-  <div class="mesas-container">
-    <mat-grid-list cols="4" rowHeight="80px" gutterSize="10px">
-      <mat-grid-tile *ngFor="let mesa of data.mesas" (click)="selectMesa(mesa)" class="mesa-tile">
-        <mat-card class="mesa-card">
-          <div class="mesa-content">
-            <div class="mesa-number">{{ mesa.numero }}</div>
-            <div class="mesa-capacity" *ngIf="mesa.cantidad_personas">
-              <mat-icon>people</mat-icon> {{ mesa.cantidad_personas }}
-            </div>
-          </div>
-        </mat-card>
-      </mat-grid-tile>
-    </mat-grid-list>
+<div style="height: 100%; width: 100%; display: flex; flex-direction: column;">
+  <div style="flex: 1">
+    <h2 mat-dialog-title>{{ data.title }}</h2>
   </div>
-  
-  <div *ngIf="data.mesas.length === 0" class="no-mesas">
-    No hay mesas disponibles
-  </div>
-</mat-dialog-content>
 
-<mat-dialog-actions align="end">
-  <button mat-button (click)="cancel()">Cancelar</button>
-</mat-dialog-actions> 
+  <mat-dialog-content style="flex: 8; overflow-y: auto;">
+    <p>{{ data.message }}</p>
+
+    <!-- convert this grit list on a flex row wrap of buttons  -->
+    <div class="tables-grid">
+      <button mat-raised-button style="height: 60px !important; width: 60px !important" *ngFor="let mesa of data.mesas"
+        (click)="selectMesa(mesa)" [class.status-available]="mesa.estado === 'DISPONIBLE'"
+        [class.status-occupied]="mesa.estado !== 'DISPONIBLE'" [class.status-reserved]="mesa.reservado" [matTooltip]="
+                  mesa.reservado
+                    ? 'Mesa reservada'
+                    : mesa.estado === 'DISPONIBLE'
+                    ? 'Mesa disponible'
+                    : 'Mesa ocupada'
+                " class="table-button">
+        {{ mesa.numero }}
+        <mat-icon *ngIf="mesa.reservado" class="reserved-icon">event_busy</mat-icon>
+      </button>
+    </div>
+
+    <div *ngIf="data.mesas.length === 0" class="no-mesas">
+      No hay mesas disponibles
+    </div>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end" style="flex: 1;">
+    <button mat-button (click)="cancel()">Cancelar</button>
+  </mat-dialog-actions>
+</div>

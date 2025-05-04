@@ -49,22 +49,22 @@ __decorate([
 ], VentaItem.prototype, "tipoMedida", void 0);
 __decorate([
     (0, typeorm_1.Column)({
-        name: 'precio_costo_total',
+        name: 'precio_costo_unitario',
         type: 'decimal',
         precision: 10,
         scale: 2
     }),
     __metadata("design:type", Number)
-], VentaItem.prototype, "precioCostoTotal", void 0);
+], VentaItem.prototype, "precioCostoUnitario", void 0);
 __decorate([
     (0, typeorm_1.Column)({
-        name: 'precio_venta_total',
+        name: 'precio_venta_unitario',
         type: 'decimal',
         precision: 10,
         scale: 2
     }),
     __metadata("design:type", Number)
-], VentaItem.prototype, "precioVentaTotal", void 0);
+], VentaItem.prototype, "precioVentaUnitario", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => precio_venta_entity_1.PrecioVenta),
     (0, typeorm_1.JoinColumn)({ name: 'precio_venta_presentacion_id' }),
@@ -87,12 +87,13 @@ __decorate([
 __decorate([
     (0, typeorm_1.Column)({
         type: 'decimal',
+        name: 'descuento_unitario',
         precision: 10,
         scale: 2,
         default: 0
     }),
     __metadata("design:type", Number)
-], VentaItem.prototype, "descuento", void 0);
+], VentaItem.prototype, "descuentoUnitario", void 0);
 __decorate([
     (0, typeorm_1.Column)({
         type: 'varchar',

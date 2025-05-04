@@ -1,4 +1,51 @@
----
+# Project Guidelines
+
+## Core Principles
+1. **KISS (Keep It Simple, Stupid)**: Write simple, straightforward code. Avoid complexity unless absolutely necessary.
+
+## Angular Template Performance
+2. **NO DIRECT FUNCTION CALLS IN TEMPLATES**: Never do `{{ calculateValue() }}` or `[prop]="service.format()"`. Instead:
+   - Store pre-computed values in component properties
+   - Update properties when inputs change
+   - Use pipes for transformations
+   - Use getters only for trivial operations
+
+## Form Management
+3. **ALWAYS USE REACTIVE FORMS**: Never use ngModel or template-driven forms. Always use Reactive Forms:
+   - Create FormGroup and FormControl instances in the component
+   - Use formControlName in templates
+   - Implement form validation in the component, not in the template
+   - Use valueChanges observables for dynamic form behavior
+
+## Coding Standards
+4. **UPPERCASE STRINGS**: Store string values in UPPERCASE for consistency.
+5. **EDIT TS FILES ONLY**: Never modify JS files directly; they are auto-generated from TS.
+6. **NUMBER FORMATTING**: Always use `| number:'1.0-2'` format for numeric pipes.
+
+## Component Architecture
+7. **REUSE MODULES**: Don't create new modules unnecessarily. Add components to existing modules.
+8. **COMPONENT FILES**: Always create separate .ts, .html, and .scss files for components.
+9. **CONSISTENT NAMING**:
+   - List components: `list-entity`
+   - Create/Edit components: `create-edit-entity`
+   - Dialogs: Add `-dialog` suffix
+
+## UI/UX Guidelines
+10. **FILTER IMPLEMENTATION**: Don't add live filtering unless requested. Use explicit filter buttons.
+11. **THEME COMPATIBILITY**: Don't hardcode colors. Use theme variables for dark/light mode support.
+12. **TABLE LAYOUT**:
+    - Center-align most content
+    - Left-align text fields
+    - Don't add sorting (`mat-sort-header`) unless specifically requested
+
+## Application Features
+13. **CONFIRMATION DIALOGS**: Always use `@confirmation-dialog.component.ts` for all confirmations.
+14. **TYPEORM SYNC**: Remember `synchronize: true` is for development only, not production.
+
+## Remember
+- These rules ensure application consistency and performance
+- Default to these guidelines unless specifically instructed otherwise
+- Follow this rules as our lives depends on it 
 description: 
 globs: 
 ---

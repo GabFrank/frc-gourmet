@@ -1,6 +1,5 @@
 .producto-search-dialog {
-  min-width: 600px;
-  max-width: 900px;
+
 }
 
 h2 {
@@ -10,8 +9,6 @@ h2 {
 }
 
 .search-container {
-  margin-bottom: 20px;
-  
   .search-field {
     width: 100%;
   }
@@ -81,3 +78,7 @@ mat-dialog-actions {
   padding-top: 16px;
   padding-bottom: 8px;
 } 
+
+.cantidad-field {
+  width: 100px;
+}

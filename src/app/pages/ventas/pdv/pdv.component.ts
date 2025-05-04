@@ -87,7 +87,7 @@ export class PdvComponent implements OnInit {
   ventaItemsDataSource = new MatTableDataSource<VentaItem>([]);
   displayedColumns: string[] = ['productoNombre', 'cantidad', 'precio', 'total', 'actions'];
   expandedElement: VentaItem | null = null;
-  columnsToDisplayWithExpand = [...this.displayedColumns, 'expand'];
+  columnsToDisplayWithExpand = [...this.displayedColumns];
 
   // Search form
   searchForm: FormGroup;
@@ -132,7 +132,7 @@ export class PdvComponent implements OnInit {
   pdvGrupoCategorias: PdvGrupoCategoria[] = [];
 
   // tiempo abierto
-  tiempoAbierto: string = '0h 0m';
+  tiempoAbierto = '0h 0m';
 
   // Getter to combine loading states for currency display
   // get loadingCurrencies(): boolean {
@@ -410,7 +410,7 @@ export class PdvComponent implements OnInit {
     if (!this.principalMoneda) return;
 
     // Calculate grand total in principal currency if estado is ACTIVO only
-    const totalInPrincipal = this.ventaItemsDataSource.data.filter(item => item.estado === EstadoVentaItem.ACTIVO).reduce((sum, item) => sum + item.precioVentaTotal, 0);
+    const totalInPrincipal = this.ventaItemsDataSource.data.filter(item => item.estado === EstadoVentaItem.ACTIVO).reduce((sum, item) => sum + (item.precioVentaUnitario - item.descuentoUnitario) * item.cantidad, 0);
 
     // Clear previous calculations
     this.monedasWithTotals = [];
@@ -521,8 +521,8 @@ export class PdvComponent implements OnInit {
       let ventaItem: VentaItem;
 
       if (existingItem) {
-        existingItem.cantidad += 1;
-        existingItem.precioVentaTotal = existingItem.cantidad * existingItem.precioVentaTotal;
+        existingItem.cantidad += cantidad;
+        existingItem.precioVentaUnitario = existingItem.cantidad * (existingItem.precioVentaUnitario - existingItem.descuentoUnitario);
         this.ventaItemsDataSource.data = [...this.ventaItemsDataSource.data];
         console.log(existingItem);
         ventaItem = existingItem;
@@ -538,8 +538,8 @@ export class PdvComponent implements OnInit {
         const newVentaItem = new VentaItem();
         newVentaItem.presentacion = presentacion;
         newVentaItem.cantidad = cantidad;
-        newVentaItem.precioVentaTotal = precioVentaToUse.valor;
-        newVentaItem.precioCostoTotal = this.findPrecioCosto(presentacion);
+        newVentaItem.precioVentaUnitario = precioVentaToUse.valor;
+        newVentaItem.precioCostoUnitario = this.findPrecioCosto(producto);
         newVentaItem.venta = venta;
         newVentaItem.tipoMedida = presentacion.tipoMedida;
         newVentaItem.precioVentaPresentacion = precioVentaToUse;
@@ -575,17 +575,18 @@ export class PdvComponent implements OnInit {
 
     // Open the dialog
     const dialogRef = this.dialog.open(MesaSelectionDialogComponent, {
-      width: '80%',
-      maxWidth: '800px',
+      width: '60%',
+      height: '60%',
       data: dialogData,
       disableClose: true
     });
 
     // Handle the result
-    const selectedMesa = await firstValueFrom(dialogRef.afterClosed());
-    if (selectedMesa) {
-      this.selectedMesa = selectedMesa;
-    }
+    dialogRef.afterClosed().subscribe(selectedMesa => {
+      if (selectedMesa) {
+        this.selectedMesa = selectedMesa;
+      }
+    });
   }
 
   // return a promise, if mesa is not null, get venta from mesa, if null create a new venta
@@ -630,13 +631,14 @@ export class PdvComponent implements OnInit {
     );
   }
 
-  findPrecioCosto(presentacion: Presentacion): number {
-    // return presentacion.preciosCosto.find(p => p.principal)?.valor || 0;
+  findPrecioCosto(producto: Producto): number {
+    // 
     return 0;
   }
 
   findPrecioPrincipal(presentacion: Presentacion): number {
-    return presentacion.preciosVenta.find(p => p.principal)?.valor || 0;
+    // return presentacion.preciosVenta.find(p => p.principal)?.valor || 0;
+    return 0;
   }
 
   // Search products using dialog
@@ -644,8 +646,8 @@ export class PdvComponent implements OnInit {
     const searchTerm = this.searchForm.get('searchTerm')?.value?.trim() || '';
 
     const dialogRef = this.dialog.open(ProductoSearchDialogComponent, {
-      width: this.SEARCH_DIALOG_WIDTH,
-      height: this.SEARCH_DIALOG_HEIGHT,
+      width: '70%',
+      height: '80%',
       data: { searchTerm, cantidad: this.searchForm.get('cantidad')?.value }
     });
 

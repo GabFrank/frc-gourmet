@@ -1,71 +1,97 @@
-<div class="producto-search-dialog">
+<div class="producto-search-dialog" style="display: flex; flex-direction: column; height: 100%;">
   <h2 mat-dialog-title>BUSCAR PRODUCTOS</h2>
-  
-  <div mat-dialog-content>
+
+  <div mat-dialog-content style="flex: 8; display: flex; flex-direction: column;">
     <!-- Search input - using Reactive Forms -->
     <div class="search-container">
       <form [formGroup]="searchForm">
         <mat-form-field appearance="outline" class="search-field">
           <mat-label>BUSCAR POR CÓDIGO O NOMBRE</mat-label>
-          <input matInput 
-                 formControlName="searchTerm"
-                 (keydown)="onSearchKeyDown($event)"
-                 placeholder="INGRESE CÓDIGO O NOMBRE DEL PRODUCTO">
+          <input matInput formControlName="searchTerm" (keydown)="onSearchKeyDown($event)"
+            placeholder="INGRESE CÓDIGO O NOMBRE DEL PRODUCTO">
           <button mat-icon-button matSuffix (click)="performSearch()">
             <mat-icon>search</mat-icon>
           </button>
         </mat-form-field>
       </form>
     </div>
-    
-    <!-- Loading indicator -->
-    <div class="loading-container" *ngIf="isLoading">
-      <mat-spinner diameter="40"></mat-spinner>
+
+    <div class="search-results-container" style="flex: 8; overflow-y: auto;">
+      <!-- Loading indicator -->
+      <div class="loading-container" *ngIf="isLoading">
+        <mat-spinner diameter="40"></mat-spinner>
+      </div>
+
+      <!-- No results message -->
+      <div class="no-results" *ngIf="hasSearched && !isLoading && searchResults.length === 0">
+        <mat-icon>search_off</mat-icon>
+        <p>NO SE ENCONTRARON RESULTADOS PARA "{{searchTerm}}"</p>
+      </div>
+
+      <!-- Results table -->
+      <table mat-table [dataSource]="searchResults" *ngIf="!isLoading && searchResults.length > 0"
+        class="mat-elevation-z2">
+
+        <!-- Code Column -->
+        <ng-container matColumnDef="codigo">
+          <th mat-header-cell *matHeaderCellDef>CÓDIGO</th>
+          <td mat-cell *matCellDef="let producto" style="text-align: left;">{{producto.codigo || 'N/A'}}</td>
+        </ng-container>
+
+        <!-- Name Column -->
+        <ng-container matColumnDef="nombre">
+          <th mat-header-cell *matHeaderCellDef class="left">PRODUCTO</th>
+          <td mat-cell *matCellDef="let producto" style="text-align: left;">{{producto.nombre}}</td>
+        </ng-container>
+
+        <!-- Price Column -->
+        <ng-container matColumnDef="precio">
+          <th mat-header-cell *matHeaderCellDef>PRECIO</th>
+          <td mat-cell *matCellDef="let producto" style="text-align: center;">{{producto.precio || 0 | number:'1.0-2'}}
+          </td>
+        </ng-container>
+
+        <!-- Actions Column -->
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let producto" style="text-align: center;">
+            <button mat-icon-button color="primary" (click)="selectProduct(producto)">
+              <mat-icon>add_shopping_cart</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="DISPLAY_COLUMNS"></tr>
+        <tr mat-row *matRowDef="let row; columns: DISPLAY_COLUMNS;" class="clickable-row" (click)="selectProduct(row)">
+        </tr>
+      </table>
     </div>
-    
-    <!-- No results message -->
-    <div class="no-results" *ngIf="hasSearched && !isLoading && searchResults.length === 0">
-      <mat-icon>search_off</mat-icon>
-      <p>NO SE ENCONTRARON RESULTADOS PARA "{{searchTerm}}"</p>
+    <!-- create a div flex direction row, inside two divs, firt is an mat form field cantidad, second is a row of number buttons 1,2,3,4,5,6,7,8,9,0, backspace and enter -->
+    <div style="display: flex; flex-direction: row; gap: 10px;">
+      <div style="flex: 1;">
+        <mat-form-field appearance="outline" class="cantidad-field">
+          <mat-label>CANTIDAD</mat-label>
+          <!-- add formControl without from group -->
+          <input matInput [formControl]="cantidadFormControl" style="text-align: center;"/>
+        </mat-form-field>
+      </div>
+      <div style="display: flex; flex-direction: row; flex: 9; gap: 5px;">
+        <button style="width: 50px;" mat-raised-button color="primary" (click)="onCantidadPress(1)">1</button>
+        <button style="width: 50px;" mat-raised-button color="primary" (click)="onCantidadPress(2)">2</button>
+        <button style="width: 50px;" mat-raised-button color="primary" (click)="onCantidadPress(3)">3</button>
+        <button style="width: 50px;" mat-raised-button color="primary" (click)="onCantidadPress(4)">4</button>
+        <button style="width: 50px;" mat-raised-button color="primary" (click)="onCantidadPress(5)">5</button>
+        <button style="width: 50px;" mat-raised-button color="primary" (click)="onCantidadPress(6)">6</button>
+        <button style="width: 50px;" mat-raised-button color="primary" (click)="onCantidadPress(7)">7</button>
+        <button style="width: 50px;" mat-raised-button color="primary" (click)="onCantidadPress(8)">8</button>
+        <button style="width: 50px;" mat-raised-button color="primary" (click)="onCantidadPress(9)">9</button>
+        <button style="width: 50px;" mat-raised-button color="primary" (click)="onCantidadPress(0)">0</button>
+        <button style="width: 50px;" mat-icon-button color="primary" (click)="onClearPress()"><mat-icon>close</mat-icon></button>
+      </div>
     </div>
-    
-    <!-- Results table -->
-    <table mat-table [dataSource]="searchResults" *ngIf="!isLoading && searchResults.length > 0" class="mat-elevation-z2">
-      
-      <!-- Code Column -->
-      <ng-container matColumnDef="codigo">
-        <th mat-header-cell *matHeaderCellDef>CÓDIGO</th>
-        <td mat-cell *matCellDef="let producto" style="text-align: left;">{{producto.codigo || 'N/A'}}</td>
-      </ng-container>
-      
-      <!-- Name Column -->
-      <ng-container matColumnDef="nombre">
-        <th mat-header-cell *matHeaderCellDef>PRODUCTO</th>
-        <td mat-cell *matCellDef="let producto" style="text-align: left;">{{producto.nombre}}</td>
-      </ng-container>
-      
-      <!-- Price Column -->
-      <ng-container matColumnDef="precio">
-        <th mat-header-cell *matHeaderCellDef>PRECIO</th>
-        <td mat-cell *matCellDef="let producto" style="text-align: center;">{{producto.precio || 0 | number:'1.0-2'}}</td>
-      </ng-container>
-      
-      <!-- Actions Column -->
-      <ng-container matColumnDef="actions">
-        <th mat-header-cell *matHeaderCellDef></th>
-        <td mat-cell *matCellDef="let producto" style="text-align: center;">
-          <button mat-icon-button color="primary" (click)="selectProduct(producto)">
-            <mat-icon>add_shopping_cart</mat-icon>
-          </button>
-        </td>
-      </ng-container>
-      
-      <tr mat-header-row *matHeaderRowDef="DISPLAY_COLUMNS"></tr>
-      <tr mat-row *matRowDef="let row; columns: DISPLAY_COLUMNS;" class="clickable-row" (click)="selectProduct(row)"></tr>
-    </table>
   </div>
-  
+
   <div mat-dialog-actions align="end">
     <button mat-button (click)="cancel()">CANCELAR</button>
   </div>
-</div> 
+</div>

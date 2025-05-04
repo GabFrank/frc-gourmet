@@ -1,5 +1,7 @@
 .mesas-container {
-  margin: 20px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .mesa-tile {
@@ -29,7 +31,7 @@
 .mesa-number {
   font-size: 24px;
   font-weight: bold;
-  color: #333;
+  color: white;
 }
 
 .mesa-capacity {
@@ -37,7 +39,7 @@
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  color: #666;
+  color: #d6d6d6;
   margin-top: 4px;
   
   mat-icon {
@@ -54,3 +56,39 @@
   font-size: 18px;
   color: #999;
 } 
+
+// Status classes
+.status-available {
+  background-color: #4caf50 !important;
+}
+
+.status-occupied {
+  background-color: #f4ab36 !important;
+}
+
+.status-reserved {
+  background-color: #07a4ff !important;
+}
+
+.tables-grid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  // grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.table-button {
+  width: 60px;
+  height: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  position: relative;
+}

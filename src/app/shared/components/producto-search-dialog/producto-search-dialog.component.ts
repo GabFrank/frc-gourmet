@@ -39,10 +39,13 @@ export interface ProductoSearchDialogData {
 })
 export class ProductoSearchDialogComponent implements OnInit {
   // Constants
-  readonly DISPLAY_COLUMNS: string[] = ['codigo', 'nombre', 'precio', 'actions'];
+  readonly DISPLAY_COLUMNS: string[] = ['nombre', 'precio', 'actions'];
   
   // Search form
   searchForm: FormGroup;
+
+  // cantidad form control
+  cantidadFormControl= new FormControl(1);
   
   // Loading state
   isLoading = false;
@@ -52,6 +55,9 @@ export class ProductoSearchDialogComponent implements OnInit {
   searchResults: Producto[] = [];
   selectedProduct: Producto | null = null;
   selectedPresentacion: Presentacion | null = null;
+
+  // replace cantidad
+  willReplace = true;
   
   constructor(
     private dialogRef: MatDialogRef<ProductoSearchDialogComponent>,
@@ -68,6 +74,9 @@ export class ProductoSearchDialogComponent implements OnInit {
   ngOnInit(): void {
     // Set initial search term if provided
     if (this.data && this.data.searchTerm) {
+      if (this.data.cantidad) {
+        this.cantidadFormControl.setValue(this.data.cantidad);
+      }
       this.searchForm.get('searchTerm')?.setValue(this.data.searchTerm);
       this.performSearch();
     }
@@ -183,5 +192,21 @@ export class ProductoSearchDialogComponent implements OnInit {
   
   cancel(): void {
     this.dialogRef.close(null);
+  }
+
+  onCantidadPress(digit: number): void {
+    // this will workas a calculator
+    if (this.willReplace) {
+      this.cantidadFormControl.setValue(digit);
+      this.willReplace = false;
+    } else {
+      // we need to sum the digit to the current value and replace the current value
+      this.cantidadFormControl.setValue((this.cantidadFormControl.value || 0) + digit);
+    }
+  }
+
+  onClearPress(): void {
+    this.cantidadFormControl.setValue(0);
+    this.willReplace = true;
   }
 } 

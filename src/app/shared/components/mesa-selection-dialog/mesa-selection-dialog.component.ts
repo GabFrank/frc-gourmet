@@ -7,6 +7,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatGridListModule } from '@angular/material/grid-list';
 import { MatIconModule } from '@angular/material/icon';
 import { PdvMesa } from '../../../database/entities/ventas/pdv-mesa.entity';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 export interface MesaSelectionDialogData {
   mesas: PdvMesa[];
@@ -24,7 +25,8 @@ export interface MesaSelectionDialogData {
     MatCardModule,
     MatDividerModule,
     MatGridListModule,
-    MatIconModule
+    MatIconModule,
+    MatTooltipModule
   ],
   templateUrl: './mesa-selection-dialog.component.html',
   styleUrls: ['./mesa-selection-dialog.component.scss']

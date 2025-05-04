@@ -528,13 +528,13 @@ interface VentaItem {
   id?: number;
   venta: Venta;
   tipoMedida: 'UNIDAD' | 'PAQUETE' | 'GRAMO' | 'LITRO';
-  precioCostoTotal: number;
-  precioVentaTotal: number;
+  precioCostoUnitario: number;
+  precioVentaUnitario: number;
   precioVentaPresentacion: PrecioVenta;
   producto: Producto;
   presentacion: Presentacion;
   cantidad: number;
-  descuento: number;
+  descuentoUnitario: number;
   createdAt?: Date;
   updatedAt?: Date;
   estado: EstadoVentaItem;
