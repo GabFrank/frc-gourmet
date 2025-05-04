@@ -37,6 +37,7 @@ import { MesaSelectionDialogComponent } from '../../../shared/components/mesa-se
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTableDataSource } from '@angular/material/table';
+import { PdvGrupoCategoria } from 'src/app/database/entities/ventas/pdv-grupo-categoria.entity';
 
 interface MonedaWithTotal {
   moneda: Moneda;
@@ -97,7 +98,7 @@ export class PdvComponent implements OnInit {
   saldos: Map<number, number> = new Map<number, number>();
   exchangeRates: MonedaCambio[] = [];
   filteredMonedas: Moneda[] = [];
-
+  currencyTotalsMap: Map<number, number> = new Map<number, number>();
   // Principal currency
   principalMoneda: Moneda | null = null;
   principalMonedaId: number | null = null;
@@ -127,14 +128,21 @@ export class PdvComponent implements OnInit {
   // Caja
   caja: Caja | null = null;
 
+  //  grupo de categorias
+  pdvGrupoCategorias: PdvGrupoCategoria[] = [];
+
+  // tiempo abierto
+  tiempoAbierto: string = '0h 0m';
+
   // Getter to combine loading states for currency display
-  get loadingCurrencies(): boolean {
-    return this.loadingExchangeRates || this.loadingConfig;
-  }
+  // get loadingCurrencies(): boolean {
+  //   return this.loadingExchangeRates || this.loadingConfig;
+  // }
 
   // Search constants
   readonly SEARCH_DIALOG_WIDTH = '800px';
   readonly SEARCH_DIALOG_HEIGHT = '600px';
+
 
   constructor(
     private repositoryService: RepositoryService,
@@ -204,6 +212,13 @@ export class PdvComponent implements OnInit {
         (searchTermInput as HTMLInputElement).focus();
       }
     }, 100);
+
+    // set interval to update tiempoAbierto each 60 seconds
+    setInterval(() => {
+      this.tiempoAbierto = this.timeOpen();
+    }, 60000);
+
+
   }
 
   /**
@@ -491,20 +506,20 @@ export class PdvComponent implements OnInit {
       if (!this.selectedMesa) {
         // No mesa selected, show dialog to select one
         await this.showMesaSelectionDialog();
-        
+
         // If still no mesa selected after dialog, return without adding product
         if (!this.selectedMesa) {
           console.log('No se seleccionó ninguna mesa');
           return;
         }
       }
-      
+
       // Get the venta first
       const venta = await this.getVenta();
-      
+
       const existingItem = this.ventaItemsDataSource.data.find(item => item.presentacion.id === presentacion.id);
       let ventaItem: VentaItem;
-      
+
       if (existingItem) {
         existingItem.cantidad += 1;
         existingItem.precioVentaTotal = existingItem.cantidad * existingItem.precioVentaTotal;
@@ -514,11 +529,11 @@ export class PdvComponent implements OnInit {
       } else {
         // use precioVenta or get preciosVenta from database where principal is true and presentacion.id is the same as precioVenta.presentacionId
         const precioVentaToUse = precioVenta || await firstValueFrom(this.repositoryService.getPrecioVenta(presentacion.id!, true));
-        
+
         if (!precioVentaToUse) {
           throw new Error('No se encontró un precio de venta válido');
         }
-        
+
         // Create a new VentaItem (only use properties that exist on the VentaItem type)
         const newVentaItem = new VentaItem();
         newVentaItem.presentacion = presentacion;
@@ -529,7 +544,7 @@ export class PdvComponent implements OnInit {
         newVentaItem.tipoMedida = presentacion.tipoMedida;
         newVentaItem.precioVentaPresentacion = precioVentaToUse;
         newVentaItem.producto = producto;
-      
+
         // Save the new item
         try {
           const savedItem = await firstValueFrom(this.repositoryService.createVentaItem(newVentaItem));
@@ -645,9 +660,21 @@ export class PdvComponent implements OnInit {
 
   // Handle search from input
   onSearchKeyDown(event: KeyboardEvent): void {
-    if (event.key === 'Enter') {
-      this.openProductSearchDialog();
-    }
+    console.log(event.key);
+    if (event.key === '*') {
+      const textBeforeAsterisk = (event.target as HTMLInputElement).value.split('*')[0];
+      if (!isNaN(Number(textBeforeAsterisk))) {
+        setTimeout(() => {
+          this.searchForm.patchValue({
+            cantidad: Number(textBeforeAsterisk),
+            searchTerm: ''
+          });
+        }, 100);
+      }
+    } else
+      if (event.key === 'Enter') {
+        this.openProductSearchDialog();
+      }
   }
 
   // Search products (called from template)
@@ -657,13 +684,13 @@ export class PdvComponent implements OnInit {
 
   selectMesa(mesa: PdvMesa): void {
     this.selectedMesa = mesa;
-    
+
     // Reset cliente name form when selecting a new mesa
     this.isEditingClienteName = false;
-    
+
     // Reset the nombre in the form if the mesa has a venta with a nombre_cliente
-    if (mesa.venta && mesa.venta.nombre_cliente) {
-      this.clienteNameForm.get('nombre')?.setValue(mesa.venta.nombre_cliente);
+    if (mesa.venta && mesa.venta.nombreCliente) {
+      this.clienteNameForm.get('nombre')?.setValue(mesa.venta.nombreCliente);
     } else {
       this.clienteNameForm.get('nombre')?.setValue('');
     }
@@ -678,7 +705,7 @@ export class PdvComponent implements OnInit {
   async loadVentaItems(mesa: PdvMesa): Promise<void> {
     // Reset ventaItems
     this.ventaItemsDataSource.data = [];
-    
+
     if (mesa.venta && mesa.venta.id) {
       try {
         // Load venta items for this venta
@@ -705,14 +732,14 @@ export class PdvComponent implements OnInit {
    */
   startEditingClienteName(): void {
     this.isEditingClienteName = true;
-    
+
     // Set initial value if available
-    if (this.selectedMesa?.venta?.nombre_cliente) {
-      this.clienteNameForm.get('nombre')?.setValue(this.selectedMesa.venta.nombre_cliente);
+    if (this.selectedMesa?.venta?.nombreCliente) {
+      this.clienteNameForm.get('nombre')?.setValue(this.selectedMesa.venta.nombreCliente);
     } else {
       this.clienteNameForm.get('nombre')?.setValue('');
     }
-    
+
     // Focus on the input field
     setTimeout(() => {
       const inputElement = document.querySelector('input[formControlName="nombre"]');
@@ -727,33 +754,33 @@ export class PdvComponent implements OnInit {
    */
   async saveClienteName(): Promise<void> {
     if (!this.selectedMesa) return;
-    
+
     const nombreCliente = this.clienteNameForm.get('nombre')?.value;
-    
+
     try {
       let venta = this.selectedMesa.venta;
-      
+
       if (!venta) {
         // Create a new venta if none exists
         venta = await this.getVenta();
       }
-      
-      // Update the nombre_cliente
-      venta.nombre_cliente = nombreCliente;
-      
+
+      // Update the nombreCliente
+      venta.nombreCliente = nombreCliente;
+
       // Update the venta in the database
       const updatedVenta = await firstValueFrom(this.repositoryService.updateVenta(venta.id!, venta));
-      
+
       // Update the local reference
       if (this.selectedMesa) {
         this.selectedMesa.venta = updatedVenta;
-        
+
         // Update mesa estado to OCUPADO
         if (this.selectedMesa.estado !== PdvMesaEstado.OCUPADO) {
           this.updateMesaEstado(this.selectedMesa, PdvMesaEstado.OCUPADO);
         }
       }
-      
+
       // Exit editing mode
       this.isEditingClienteName = false;
     } catch (error) {
@@ -779,160 +806,27 @@ export class PdvComponent implements OnInit {
     }
   }
 
-  // Getter for accessing search term (for template)
-  get searchTerm(): string {
-    return this.searchForm.get('searchTerm')?.value || '';
-  }
-
-  /**
-   * Get formatted currencies with their totals for display,
-   * matching the layout in the screenshot
-   */
-  get currenciesToDisplay(): CurrencyDisplay[] {
-    return this.monedasWithTotals.map(({ moneda, total }) => {
-      // Map country codes to expected currency codes in screenshot
-      let currencyCode = '';
-      let denominationCode = '';
-
-      if(moneda.countryCode) {
-        currencyCode = moneda.countryCode;
-      }
-
-      if(moneda.denominacion) {
-        denominationCode = moneda.denominacion;
-      }
-
-      return {
-        code: currencyCode,
-        symbol: moneda.simbolo || '',
-        denominationCode: denominationCode,
-        total: total,
-        flag: moneda.countryCode?.toLowerCase() || ''
-      };
-    });
-  }
-
-  /**
-   * Get formatted currencies with their balances for display,
-   * matching the layout in the screenshot
-   */
-  get currencyBalancesToDisplay(): CurrencyDisplay[] {
-    return this.monedasWithTotals.map(({ moneda }) => {
-      // Map country codes to expected currency codes in screenshot
-      //  we already have currencyCode and denominationCode in moneda entity, currencyCode: moneda.countryCode, denominationCode: moneda.denominacion
-      let currencyCode = '';
-      let denominationCode = '';
-
-      if(moneda.countryCode) {
-        currencyCode = moneda.countryCode;
-      }
-
-      if(moneda.denominacion) {
-        denominationCode = moneda.denominacion;
-      }
-
-      return {
-        code: currencyCode,
-        symbol: moneda.simbolo || '',
-        denominationCode: denominationCode,
-        total: this.saldos.get(moneda.id!) || 0,
-        flag: moneda.countryCode?.toLowerCase() || ''
-      };
-    });
-  }
-
-  get currencyTotals(): Map<number, number> {
-    const totalsMap = new Map<number, number>();
-    this.monedasWithTotals.forEach(mwt => {
-      totalsMap.set(mwt.moneda.id!, mwt.total);
-    });
-    return totalsMap;
-  }
-
-  get currencyBalances(): Map<number, number> {
-    return this.saldos;
-  }
-
   /**
    * Calculates the time the caja has been open and returns a formatted string (hours and minutes)
    * @returns String with formatted time e.g. "2h 45m"
    */
-  get timeOpen(): string {
+  timeOpen(): string {
     if (!this.caja?.fechaApertura) {
       return '0h 0m';
     }
 
     const fechaApertura = new Date(this.caja.fechaApertura);
     const now = new Date();
-    
+
     // Calculate the difference in milliseconds
     const diffMs = now.getTime() - fechaApertura.getTime();
-    
+
     // Convert to hours and minutes
     const hours = Math.floor(diffMs / (1000 * 60 * 60));
     const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    
+
     return `${hours}h ${minutes}m`;
   }
 
-  /**
-   * Get information about the selected mesa for display in the template
-   * @returns Boolean indicating if a mesa is selected
-   */
-  get hasMesaSelected(): boolean {
-    return this.selectedMesa !== null;
-  }
-  
-  /**
-   * Get status text for the selected mesa
-   * @returns Status text based on mesa's reservation status
-   */
-  get mesaStatusText(): string {
-    if (!this.selectedMesa) return '';
-    return this.selectedMesa.reservado ? 'Reservada' : this.selectedMesa.estado === PdvMesaEstado.DISPONIBLE ? 'Disponible' : 'Ocupada';
-  }
-  
-  /**
-   * Get CSS class for mesa status
-   * @returns CSS class for styling the mesa status
-   */
-  get mesaStatusClass(): string {
-    if (!this.selectedMesa) return '';
-    return this.selectedMesa.reservado ? 'status-reserved' : this.selectedMesa.estado === PdvMesaEstado.DISPONIBLE ? 'status-available' : 'status-occupied';
-  }
 
-  /**
-   * Get cliente name from the selected mesa's venta
-   */
-  get clienteName(): string | undefined {
-    return this.selectedMesa?.venta?.nombre_cliente;
-  }
-
-  /**
-   * Check if the selected mesa has a cliente name
-   */
-  get hasClienteName(): boolean {
-    return !!this.clienteName;
-  }
-
-  /**
-   * Get the formatted estado display
-   */
-  getEstadoDisplay(estado: EstadoVentaItem): string {
-    return estado;
-  }
-
-  /**
-   * Check if an item has been canceled
-   */
-  isCancelado(item: VentaItem): boolean {
-    return item.estado === EstadoVentaItem.CANCELADO;
-  }
-
-  /**
-   * Check if an item has been modified
-   */
-  isModificado(item: VentaItem): boolean {
-    return item.estado === EstadoVentaItem.MODIFICADO || item.modificado;
-  }
 } 

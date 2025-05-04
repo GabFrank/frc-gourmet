@@ -17,7 +17,7 @@
                   <!-- Image Preview Section -->
                   <div class="image-preview-section">
                     <div class="main-image-preview">
-                      <img [src]="getMainImageUrl()" alt="Imagen del producto">
+                      <img [src]="mainImageUrl" alt="Imagen del producto">
                       <button mat-mini-fab color="primary" class="upload-image-button" (click)="openFileSelector(true)" matTooltip="Añadir imagen">
                         <mat-icon>add_a_photo</mat-icon>
                       </button>
@@ -367,7 +367,7 @@
                 <div class="images-section" #imagesSection>
                   <h3 class="section-title">Imágenes del Producto</h3>
                   <div class="images-gallery-container">
-                    <!-- Banner to show when images are pending deletion -->
+                    <!-- Banner to show when images are pending deletion, replace hasPendingImageDeletions with a -->
                     <div *ngIf="hasPendingImageDeletions()" class="pending-deletion-banner">
                       <mat-icon color="warn">warning</mat-icon>
                       <span>Hay imágenes pendientes de eliminación que se borrarán al guardar</span>
