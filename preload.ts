@@ -638,6 +638,75 @@ interface Sector {
   updatedAt?: Date;
 }
 
+// Add interfaces for new entities
+interface Observacion {
+  id?: number;
+  nombre: string;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface ObservacionProducto {
+  id?: number;
+  productoId: number;
+  producto?: Producto;
+  observacionId: number;
+  observacion?: Observacion;
+  obligatorio: boolean;
+  cantidadDefault?: number;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface ObservacionProductoVentaItem {
+  id?: number;
+  observacionProductoId: number;
+  observacionProducto?: ObservacionProducto;
+  ventaItemId: number;
+  ventaItem?: VentaItem;
+  cantidad: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface Adicional {
+  id?: number;
+  nombre: string;
+  ingredienteId?: number;
+  ingrediente?: Ingrediente;
+  recetaId?: number;
+  receta?: Receta;
+  precioVentaUnitario: number;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface ProductoAdicional {
+  id?: number;
+  productoId: number;
+  producto?: Producto;
+  adicionalId: number;
+  adicional?: Adicional;
+  cantidadDefault?: number;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface ProductoAdicionalVentaItem {
+  id?: number;
+  productoAdicionalId: number;
+  productoAdicional?: ProductoAdicional;
+  ventaItemId: number;
+  ventaItem?: VentaItem;
+  cantidad: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('api', {
@@ -886,6 +955,12 @@ contextBridge.exposeInMainWorld('api', {
   deleteProductoImage: async (imageUrl: string): Promise<{ success: boolean }> => {
     return await ipcRenderer.invoke('deleteProductoImage', imageUrl);
   },
+  searchProductosByCode: async (code: string): Promise<{ product: Producto, presentacion: Presentacion } | null> => {
+    return await ipcRenderer.invoke('searchProductosByCode', code || '');
+  },
+  searchProductos: async (params: { searchTerm: string, page: number, pageSize: number, exactMatch?: boolean }): Promise<{ items: Producto[], total: number }> => {
+    return await ipcRenderer.invoke('searchProductos', params);
+  },
 
   // Product Image methods
   getProductImages: async (productoId: number): Promise<ProductoImage[]> => {
@@ -973,6 +1048,10 @@ contextBridge.exposeInMainWorld('api', {
 
   deleteMoneda: async (monedaId: number): Promise<boolean> => {
     return await ipcRenderer.invoke('deleteMoneda', monedaId);
+  },
+
+  getMonedaPrincipal: async (): Promise<Moneda> => {
+    return await ipcRenderer.invoke('getMonedaPrincipal');
   },
 
   // TipoPrecio methods
@@ -1082,6 +1161,9 @@ contextBridge.exposeInMainWorld('api', {
   },
   deleteReceta: async (recetaId: number) => {
     return await ipcRenderer.invoke('deleteReceta', recetaId);
+  },
+  searchRecetasByNombre: async (searchText: string) => {
+    return await ipcRenderer.invoke('searchRecetasByNombre', searchText);
   },
 
   // RecetaItem methods
@@ -1662,5 +1744,39 @@ contextBridge.exposeInMainWorld('api', {
   },
   deleteComanda: async (id: number): Promise<boolean> => {
     return await ipcRenderer.invoke('deleteComanda', id);
-  }
+  },
+
+  // Adicional methods
+  getAdicionales: async (): Promise<Adicional[]> => {
+    return await ipcRenderer.invoke('getAdicionales');
+  },
+  getAdicionalesFiltered: async (filters: {
+    nombre?: string;
+    ingredienteId?: number; 
+    recetaId?: number;
+    activo?: boolean;
+    pageIndex?: number;
+    pageSize?: number;
+  }): Promise<{items: Adicional[], total: number}> => {
+    return await ipcRenderer.invoke('getAdicionalesFiltered', filters);
+  },
+  getAdicional: async (id: number): Promise<Adicional> => {
+    return await ipcRenderer.invoke('getAdicional', id);
+  },
+
+  // New search methods
+  searchIngredientes: async (query: string) => {
+    return await ipcRenderer.invoke('searchIngredientes', query);
+  },
+  searchRecetas: async (query: string) => {
+    return await ipcRenderer.invoke('searchRecetas', query);
+  },
+
+  createAdicional: async (data: Partial<Adicional>): Promise<Adicional> => {
+    return await ipcRenderer.invoke('createAdicional', data);
+  },
+  updateAdicional: async (id: number, data: Partial<Adicional>): Promise<Adicional> => {
+    return await ipcRenderer.invoke('updateAdicional', id, data);
+  },
+  
 });

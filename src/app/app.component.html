@@ -141,6 +141,10 @@
             </mat-panel-title>
           </mat-expansion-panel-header>
           <div class="submenu-container">
+            <a mat-list-item (click)="openProductoDashboardTab(); expandMenu($event, 'productos')">
+              <mat-icon matListItemIcon>dashboard</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Dashboard</span>
+            </a>
             <a mat-list-item (click)="openCategoriasTab(); expandMenu($event, 'productos')">
               <mat-icon matListItemIcon>category</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Categorías</span>

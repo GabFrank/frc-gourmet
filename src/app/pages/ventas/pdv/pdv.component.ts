@@ -501,6 +501,8 @@ export class PdvComponent implements OnInit {
 
   // Add product to cart
   async addProduct(producto: Producto, presentacion: Presentacion, cantidad: number, precioVenta?: PrecioVenta): Promise<void> {
+    console.log('Adding new producto');
+
     try {
       // Check if mesa is selected
       if (!this.selectedMesa) {
@@ -520,41 +522,45 @@ export class PdvComponent implements OnInit {
       const existingItem = this.ventaItemsDataSource.data.find(item => item.presentacion.id === presentacion.id);
       let ventaItem: VentaItem;
 
-      if (existingItem) {
-        existingItem.cantidad += cantidad;
-        existingItem.precioVentaUnitario = existingItem.cantidad * (existingItem.precioVentaUnitario - existingItem.descuentoUnitario);
-        this.ventaItemsDataSource.data = [...this.ventaItemsDataSource.data];
-        console.log(existingItem);
-        ventaItem = existingItem;
-      } else {
-        // use precioVenta or get preciosVenta from database where principal is true and presentacion.id is the same as precioVenta.presentacionId
-        const precioVentaToUse = precioVenta || await firstValueFrom(this.repositoryService.getPrecioVenta(presentacion.id!, true));
+      // if (existingItem) {
+      //   existingItem.cantidad += cantidad;
+      //   existingItem.precioVentaUnitario = existingItem.cantidad * (existingItem.precioVentaUnitario - existingItem.descuentoUnitario);
+      //   // log updating item, and the list
+      //   console.log('updating item', existingItem, this.ventaItemsDataSource.data);
+      //   this.ventaItemsDataSource.data = [...this.ventaItemsDataSource.data];
+      //   ventaItem = existingItem;
+      // } else {
+      // use precioVenta or get preciosVenta from database where principal is true and presentacion.id is the same as precioVenta.presentacionId
+      const precioVentaToUse = precioVenta;
 
-        if (!precioVentaToUse) {
-          throw new Error('No se encontró un precio de venta válido');
-        }
-
-        // Create a new VentaItem (only use properties that exist on the VentaItem type)
-        const newVentaItem = new VentaItem();
-        newVentaItem.presentacion = presentacion;
-        newVentaItem.cantidad = cantidad;
-        newVentaItem.precioVentaUnitario = precioVentaToUse.valor;
-        newVentaItem.precioCostoUnitario = this.findPrecioCosto(producto);
-        newVentaItem.venta = venta;
-        newVentaItem.tipoMedida = presentacion.tipoMedida;
-        newVentaItem.precioVentaPresentacion = precioVentaToUse;
-        newVentaItem.producto = producto;
-
-        // Save the new item
-        try {
-          const savedItem = await firstValueFrom(this.repositoryService.createVentaItem(newVentaItem));
-          this.ventaItemsDataSource.data.push(savedItem);
-          this.ventaItemsDataSource.data = [...this.ventaItemsDataSource.data];
-          ventaItem = savedItem;
-        } catch (error) {
-          console.error('Error al guardar el item de venta:', error);
-        }
+      if (!precioVentaToUse) {
+        throw new Error('No se encontró un precio de venta válido');
       }
+
+      // Create a new VentaItem (only use properties that exist on the VentaItem type)
+      const newVentaItem = new VentaItem();
+      newVentaItem.presentacion = presentacion;
+      newVentaItem.cantidad = cantidad;
+      newVentaItem.precioVentaUnitario = precioVentaToUse.valor;
+      newVentaItem.precioCostoUnitario = this.findPrecioCosto(producto);
+      newVentaItem.venta = venta;
+      newVentaItem.tipoMedida = presentacion.tipoMedida;
+      newVentaItem.precioVentaPresentacion = precioVentaToUse;
+      newVentaItem.producto = producto;
+
+      // Save the new item
+      try {
+        const savedItem = await firstValueFrom(this.repositoryService.createVentaItem(newVentaItem));
+        const auxList = this.ventaItemsDataSource.data;
+        auxList.push(savedItem);
+        // log adding new item, and the list
+        console.log('adding new item', savedItem, auxList);
+        this.ventaItemsDataSource.data = auxList;
+        ventaItem = savedItem;
+      } catch (error) {
+        console.error('Error al guardar el item de venta:', error);
+      }
+      // }
 
       // Recalculate totals after adding item
       this.calculateTotals();
@@ -643,6 +649,7 @@ export class PdvComponent implements OnInit {
 
   // Search products using dialog
   openProductSearchDialog(): void {
+    console.log('opening product search dialog');
     const searchTerm = this.searchForm.get('searchTerm')?.value?.trim() || '';
 
     const dialogRef = this.dialog.open(ProductoSearchDialogComponent, {
@@ -653,7 +660,7 @@ export class PdvComponent implements OnInit {
 
     dialogRef.afterClosed().subscribe(result => {
       if (result) {
-        this.addProduct(result.product, result.presentacion, result.cantidad);
+        this.addProduct(result.producto, result.presentacion, result.cantidad, result.precioVenta);
         // Clear search term after adding product
         this.searchForm.get('searchTerm')?.setValue('');
       }
@@ -673,10 +680,10 @@ export class PdvComponent implements OnInit {
           });
         }, 100);
       }
-    } else
-      if (event.key === 'Enter') {
-        this.openProductSearchDialog();
-      }
+    } else if (event.key === 'Enter') {
+      event.preventDefault(); // Prevent form submission
+      this.openProductSearchDialog();
+    }
   }
 
   // Search products (called from template)

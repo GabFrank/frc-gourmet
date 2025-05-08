@@ -1,0 +1,161 @@
+<div class="dashboard-container">
+  <h1 class="dashboard-title">Dashboard de Productos</h1>
+  
+  <!-- Statistics overview -->
+  <div class="stats-container">
+    <mat-card class="stats-card">
+      <mat-card-header>
+        <mat-card-title>Estadísticas de Productos</mat-card-title>
+      </mat-card-header>
+      <mat-card-content class="stats-content">
+        <div class="stat-item">
+          <mat-icon>shopping_cart</mat-icon>
+          <div class="stat-info">
+            <span class="stat-value">{{totalProductos}}</span>
+            <span class="stat-label">Productos</span>
+          </div>
+        </div>
+        <div class="stat-item">
+          <mat-icon>category</mat-icon>
+          <div class="stat-info">
+            <span class="stat-value">{{totalCategorias}}</span>
+            <span class="stat-label">Categorías</span>
+          </div>
+        </div>
+        <div class="stat-item">
+          <mat-icon>receipt</mat-icon>
+          <div class="stat-info">
+            <span class="stat-value">{{totalRecetas}}</span>
+            <span class="stat-label">Recetas</span>
+          </div>
+        </div>
+        <div class="stat-item">
+          <mat-icon>egg</mat-icon>
+          <div class="stat-info">
+            <span class="stat-value">{{totalIngredientes}}</span>
+            <span class="stat-label">Ingredientes</span>
+          </div>
+        </div>
+        <div class="stat-item">
+          <mat-icon>add_circle</mat-icon>
+          <div class="stat-info">
+            <span class="stat-value">{{totalAdicionales}}</span>
+            <span class="stat-label">Adicionales</span>
+          </div>
+        </div>
+        <div class="stat-item">
+          <mat-icon>local_shipping</mat-icon>
+          <div class="stat-info">
+            <span class="stat-value">{{totalMovimientos}}</span>
+            <span class="stat-label">Movimientos</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+  
+  <!-- Quick access cards -->
+  <div class="cards-grid">
+    <!-- Productos -->
+    <mat-card class="action-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>shopping_cart</mat-icon>
+        <mat-card-title>Productos</mat-card-title>
+        <mat-card-subtitle>Gestión de productos</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <p>Administre el catálogo de productos, precios y stock.</p>
+      </mat-card-content>
+      <mat-card-actions>
+        <button mat-raised-button color="primary" (click)="openProductosTab()">
+          <mat-icon>visibility</mat-icon> Ver Productos
+        </button>
+      </mat-card-actions>
+    </mat-card>
+
+    <!-- Categorías -->
+    <mat-card class="action-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>category</mat-icon>
+        <mat-card-title>Categorías</mat-card-title>
+        <mat-card-subtitle>Organización de productos</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <p>Administre las categorías para la clasificación de productos.</p>
+      </mat-card-content>
+      <mat-card-actions>
+        <button mat-raised-button color="primary" (click)="openCategoriasTab()">
+          <mat-icon>visibility</mat-icon> Ver Categorías
+        </button>
+      </mat-card-actions>
+    </mat-card>
+
+    <!-- Recetas -->
+    <mat-card class="action-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>receipt</mat-icon>
+        <mat-card-title>Recetas</mat-card-title>
+        <mat-card-subtitle>Fórmulas de preparación</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <p>Gestione las recetas para la elaboración de productos.</p>
+      </mat-card-content>
+      <mat-card-actions>
+        <button mat-raised-button color="primary" (click)="openRecetasTab()">
+          <mat-icon>visibility</mat-icon> Ver Recetas
+        </button>
+      </mat-card-actions>
+    </mat-card>
+
+    <!-- Ingredientes -->
+    <mat-card class="action-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>egg</mat-icon>
+        <mat-card-title>Ingredientes</mat-card-title>
+        <mat-card-subtitle>Componentes de recetas</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <p>Administre los ingredientes utilizados en la elaboración de productos.</p>
+      </mat-card-content>
+      <mat-card-actions>
+        <button mat-raised-button color="primary" (click)="openIngredientesTab()">
+          <mat-icon>visibility</mat-icon> Ver Ingredientes
+        </button>
+      </mat-card-actions>
+    </mat-card>
+
+    <!-- Adicionales Card -->
+    <mat-card class="action-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>add_circle</mat-icon>
+        <mat-card-title>Adicionales</mat-card-title>
+        <mat-card-subtitle>Extras y complementos</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <p>Administre los adicionales que pueden añadirse a los productos.</p>
+      </mat-card-content>
+      <mat-card-actions>
+        <button mat-raised-button color="primary" (click)="openAdicionalesDialog()">
+          <mat-icon>visibility</mat-icon> Ver Adicionales
+        </button>
+      </mat-card-actions>
+    </mat-card>
+
+    <!-- Movimientos de Stock -->
+    <mat-card class="action-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>local_shipping</mat-icon>
+        <mat-card-title>Movimientos de Stock</mat-card-title>
+        <mat-card-subtitle>Control de inventario</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <p>Visualice y gestione los movimientos de stock de productos e ingredientes.</p>
+      </mat-card-content>
+      <mat-card-actions>
+        <button mat-raised-button color="primary" (click)="openMovimientosTab()">
+          <mat-icon>visibility</mat-icon> Ver Movimientos
+        </button>
+      </mat-card-actions>
+    </mat-card>
+  </div>
+</div> 

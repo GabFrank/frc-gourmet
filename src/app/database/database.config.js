@@ -54,6 +54,13 @@ const receta_variacion_item_entity_1 = require("./entities/productos/receta-vari
 const combo_entity_1 = require("./entities/productos/combo.entity");
 const combo_item_entity_1 = require("./entities/productos/combo-item.entity");
 const intercambio_ingrediente_entity_1 = require("./entities/productos/intercambio-ingrediente.entity");
+// Import the new entities
+const observacion_entity_1 = require("./entities/productos/observacion.entity");
+const observacion_producto_entity_1 = require("./entities/productos/observacion-producto.entity");
+const observacion_producto_venta_item_entity_1 = require("./entities/productos/observacion-producto-venta-item.entity");
+const adicional_entity_1 = require("./entities/productos/adicional.entity");
+const producto_adicional_entity_1 = require("./entities/productos/producto-adicional.entity");
+const producto_adicional_venta_item_entity_1 = require("./entities/productos/producto-adicional-venta-item.entity");
 // Import new financial entities
 const moneda_billete_entity_1 = require("./entities/financiero/moneda-billete.entity");
 const dispositivo_entity_1 = require("./entities/financiero/dispositivo.entity");
@@ -128,6 +135,13 @@ function getDataSourceOptions(userDataPath) {
             combo_entity_1.Combo,
             combo_item_entity_1.ComboItem,
             intercambio_ingrediente_entity_1.IntercambioIngrediente,
+            // New observation and additional entities
+            observacion_entity_1.Observacion,
+            observacion_producto_entity_1.ObservacionProducto,
+            observacion_producto_venta_item_entity_1.ObservacionProductoVentaItem,
+            adicional_entity_1.Adicional,
+            producto_adicional_entity_1.ProductoAdicional,
+            producto_adicional_venta_item_entity_1.ProductoAdicionalVentaItem,
             // New financial entities
             moneda_billete_entity_1.MonedaBillete,
             dispositivo_entity_1.Dispositivo,

@@ -1,0 +1,220 @@
+.dialog-content {
+  height: 500px;
+  min-width: 800px;
+  max-width: 1200px;
+  overflow: hidden;
+  position: relative; /* For loading overlay positioning */
+}
+
+/* Loading overlay styles */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+}
+
+:host-context(.dark-theme) .loading-overlay {
+  background-color: rgba(0, 0, 0, 0.7);
+}
+
+// Filter section styles
+.filter-container {
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+
+.filter-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  
+  mat-form-field {
+    flex: 1;
+    min-width: 200px;
+  }
+}
+
+.filter-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  justify-content: flex-end;
+}
+
+// Table styles
+.table-container {
+  margin-top: 24px;
+  
+  table {
+    width: 100%;
+    
+    th.mat-header-cell, td.mat-cell {
+      padding: 0 16px;
+    }
+    
+    th.mat-header-cell {
+      font-weight: bold;
+      text-align: center;
+    }
+    
+    td.mat-cell {
+      text-align: center;
+    }
+    
+    // Left align text fields
+    td.mat-column-nombre {
+      text-align: left;
+    }
+  }
+  
+  .active-icon {
+    color: green;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  
+  .inactive-icon {
+    color: red;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  
+  mat-paginator {
+    margin-top: 16px;
+  }
+}
+
+// Form styles
+.form-container {
+  padding: 24px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+  
+  mat-form-field {
+    flex: 1;
+    min-width: 200px;
+  }
+  
+  .full-width {
+    flex-basis: 100%;
+  }
+  
+  .checkbox-container {
+    display: flex;
+    align-items: center;
+    margin-left: 16px;
+    
+    mat-checkbox {
+      margin-top: 16px;
+    }
+  }
+}
+
+.form-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: 24px;
+  align-items: center;
+}
+
+// Mobile responsive adjustments
+@media screen and (max-width: 768px) {
+  .dialog-content {
+    min-width: unset;
+  }
+  
+  .filter-row, .form-row {
+    flex-direction: column;
+    
+    mat-form-field {
+      width: 100%;
+    }
+  }
+  
+  .table-container {
+    overflow-x: auto;
+  }
+}
+
+// Dark theme adjustments
+:host-context(.dark-theme) {
+  .active-icon {
+    color: #4caf50;
+  }
+  
+  .inactive-icon {
+    color: #f44336;
+  }
+}
+
+.full-width {
+  width: 100%;
+}
+
+.search-spinner {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+}
+
+.form-row {
+  margin-bottom: 16px;
+}
+
+/* Add these styles if not already present */
+.mat-dialog-content {
+  max-height: 80vh;
+  overflow-x: hidden;
+}
+
+.mat-tab-group {
+  min-height: 400px;
+}
+
+.filter-section {
+  padding: 16px;
+  margin-bottom: 16px;
+  border-radius: 4px;
+  background-color: #f5f5f5;
+}
+
+.actions-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.table-container {
+  overflow: auto;
+  max-height: 400px;
+}
+
+/* Status indicator */
+.status-active {
+  color: green;
+}
+
+.status-inactive {
+  color: red;
+} 

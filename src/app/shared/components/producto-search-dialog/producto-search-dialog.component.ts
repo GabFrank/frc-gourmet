@@ -8,12 +8,14 @@ import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatTableModule } from '@angular/material/table';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { RepositoryService } from '../../../database/repository.service';
 import { Producto } from '../../../database/entities/productos/producto.entity';
 import { Codigo, TipoCodigo } from '../../../database/entities/productos/codigo.entity';
 import { firstValueFrom } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { Presentacion } from 'src/app/database/entities/productos/presentacion.entity';
+import { PrecioVenta } from 'src/app/database/entities/productos/precio-venta.entity';
 
 export interface ProductoSearchDialogData {
   searchTerm: string;
@@ -34,7 +36,8 @@ export interface ProductoSearchDialogData {
     MatInputModule,
     MatFormFieldModule,
     MatTableModule,
-    MatProgressSpinnerModule
+    MatProgressSpinnerModule,
+    MatPaginatorModule
   ]
 })
 export class ProductoSearchDialogComponent implements OnInit {
@@ -45,7 +48,7 @@ export class ProductoSearchDialogComponent implements OnInit {
   searchForm: FormGroup;
 
   // cantidad form control
-  cantidadFormControl= new FormControl(1);
+  cantidadFormControl = new FormControl(1);
   
   // Loading state
   isLoading = false;
@@ -58,6 +61,12 @@ export class ProductoSearchDialogComponent implements OnInit {
 
   // replace cantidad
   willReplace = true;
+  
+  // Pagination
+  totalItems = 0;
+  pageSize = 10;
+  pageIndex = 0;
+  pageSizeOptions: number[] = [5, 10, 25, 50];
   
   constructor(
     private dialogRef: MatDialogRef<ProductoSearchDialogComponent>,
@@ -86,6 +95,7 @@ export class ProductoSearchDialogComponent implements OnInit {
       debounceTime(300),
       distinctUntilChanged()
     ).subscribe(() => {
+      this.pageIndex = 0; // Reset to first page on new search
       this.performSearch();
     });
   }
@@ -96,88 +106,65 @@ export class ProductoSearchDialogComponent implements OnInit {
     }
   }
   
-  // Perform the search without being called directly from the template
-  performSearch(): void {
-    const searchTerm = this.searchForm.get('searchTerm')?.value?.trim() || '';
+  // Handle page events
+  onPageChange(event: PageEvent): void {
+    this.pageIndex = event.pageIndex;
+    this.pageSize = event.pageSize;
+    this.performSearch();
+  }
+  
+  // Perform the search
+  async performSearch(): Promise<void> {
+    // Get search term and ensure it's a string
+    const rawSearchTerm = this.searchForm.get('searchTerm')?.value;
+    const searchTerm = (typeof rawSearchTerm === 'string') ? rawSearchTerm.trim() : '';
     
     if (!searchTerm) {
       this.searchResults = [];
+      this.totalItems = 0;
       this.hasSearched = true;
       return;
     }
     
     this.isLoading = true;
     this.hasSearched = true;
-    
-    // First search by code (exact match)
-    this.searchByCode(searchTerm)
-      .then(codeResults => {
-        if (codeResults.length > 0) {
-          this.searchResults = codeResults;
-          this.isLoading = false;
-          return null; // Explicitly return null to fix the error
-        } else {
-          // If no results from code search, search by product name
-          return this.searchByProductName(searchTerm);
-        }
-      })
-      .then(nameResults => {
-        if (nameResults && nameResults.length > 0) {
-          this.searchResults = nameResults;
-        }
-        this.isLoading = false;
-      })
-      .catch(error => {
-        console.error('Error searching products:', error);
-        this.isLoading = false;
-      });
-  }
-  
-  private async searchByCode(searchTerm: string): Promise<Producto[]> {
+
     try {
-      // Get all codes matching the search term
-      const allCodes = await firstValueFrom(this.repositoryService.getCodigos());
-      const matchingCodes = allCodes.filter(
-        code => code.codigo.toUpperCase() === searchTerm.toUpperCase() && code.activo
+      // First try to find by exact code match
+      const exactCodeResult = await firstValueFrom(
+        this.repositoryService.searchProductosByCode(searchTerm)
       );
-      
-      if (matchingCodes.length === 0) {
-        return [];
+
+      if (exactCodeResult) {
+        // extract the principalPrecio from the presentacion
+        const principalPrecio = (exactCodeResult.presentacion as any)?.principalPrecio;
+        this.dialogRef.close({
+          producto: exactCodeResult.product,
+          presentacion: exactCodeResult.presentacion,
+          cantidad: this.cantidadFormControl.value,
+          precioVenta: principalPrecio
+        });
+        return;
       }
-      
-      // Get products for each matching presentacion
-      // codigo alredy has presentacion.produto so we can use it directly
-      const products: Producto[] = matchingCodes.map(codigo => codigo.presentacion.producto);
-      
-      //if producto.activo is true then close dialog and return product and presentacion
-      if (products.some(producto => producto.activo)) {
-        this.selectedProduct = products[0];
-        this.selectedPresentacion = matchingCodes[0].presentacion;
-        this.dialogRef.close({ product: this.selectedProduct, presentacion: this.selectedPresentacion, cantidad: this.data.cantidad });
-      }
-      return products;
-    } catch (error) {
-      console.error('Error searching by code:', error);
-      return [];
-    }
-  }
-  
-  private async searchByProductName(searchTerm: string): Promise<Producto[]> {
-    try {
-      const allProducts = await firstValueFrom(this.repositoryService.getProductos());
-      
-      // Filter active products that contain the search term in the name
-      return allProducts.filter(
-        product => 
-          product.activo && 
-          (
-            (product.nombre && product.nombre.toUpperCase().includes(searchTerm.toUpperCase())) ||
-            (product.nombreAlternativo && product.nombreAlternativo.toUpperCase().includes(searchTerm.toUpperCase()))
-          )
+
+      // Otherwise, do a regular search
+      const searchResults = await firstValueFrom(
+        this.repositoryService.searchProductos({
+          searchTerm: searchTerm,
+          page: this.pageIndex + 1, // Convert to 1-based for backend
+          pageSize: this.pageSize,
+          exactMatch: false
+        })
       );
+      console.log(searchResults);
+      this.searchResults = searchResults.items;
+      this.totalItems = searchResults.total;
     } catch (error) {
-      console.error('Error searching by product name:', error);
-      return [];
+      console.error('Error searching products:', error);
+      this.searchResults = [];
+      this.totalItems = 0;
+    } finally {
+      this.isLoading = false;
     }
   }
   
@@ -185,9 +172,14 @@ export class ProductoSearchDialogComponent implements OnInit {
     return this.searchForm.get('searchTerm')?.value || '';
   }
   
-  selectProduct(product: Producto): void {
-    this.selectedProduct = product;
-    this.dialogRef.close({ product: product, presentacion: this.selectedPresentacion, cantidad: this.data.cantidad });
+  selectProduct(producto: Producto, presentacion: Presentacion, precioVenta?: PrecioVenta): void {
+    console.log(producto, presentacion, precioVenta);
+    this.dialogRef.close({
+      producto,
+      presentacion,
+      cantidad: this.cantidadFormControl.value,
+      precioVenta
+    });
   }
   
   cancel(): void {
@@ -195,7 +187,7 @@ export class ProductoSearchDialogComponent implements OnInit {
   }
 
   onCantidadPress(digit: number): void {
-    // this will workas a calculator
+    // this will work as a calculator
     if (this.willReplace) {
       this.cantidadFormControl.setValue(digit);
       this.willReplace = false;

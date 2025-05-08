@@ -237,6 +237,12 @@ electron_1.contextBridge.exposeInMainWorld('api', {
     deleteProductoImage: async (imageUrl) => {
         return await electron_1.ipcRenderer.invoke('deleteProductoImage', imageUrl);
     },
+    searchProductosByCode: async (code) => {
+        return await electron_1.ipcRenderer.invoke('searchProductosByCode', code || '');
+    },
+    searchProductos: async (params) => {
+        return await electron_1.ipcRenderer.invoke('searchProductos', params);
+    },
     // Product Image methods
     getProductImages: async (productoId) => {
         return await electron_1.ipcRenderer.invoke('getProductImages', productoId);
@@ -303,6 +309,9 @@ electron_1.contextBridge.exposeInMainWorld('api', {
     },
     deleteMoneda: async (monedaId) => {
         return await electron_1.ipcRenderer.invoke('deleteMoneda', monedaId);
+    },
+    getMonedaPrincipal: async () => {
+        return await electron_1.ipcRenderer.invoke('getMonedaPrincipal');
     },
     // TipoPrecio methods
     getTipoPrecios: async () => {
@@ -389,6 +398,9 @@ electron_1.contextBridge.exposeInMainWorld('api', {
     },
     deleteReceta: async (recetaId) => {
         return await electron_1.ipcRenderer.invoke('deleteReceta', recetaId);
+    },
+    searchRecetasByNombre: async (searchText) => {
+        return await electron_1.ipcRenderer.invoke('searchRecetasByNombre', searchText);
     },
     // RecetaItem methods
     getRecetaItems: async (recetaId) => {
@@ -936,6 +948,29 @@ electron_1.contextBridge.exposeInMainWorld('api', {
     },
     deleteComanda: async (id) => {
         return await electron_1.ipcRenderer.invoke('deleteComanda', id);
-    }
+    },
+    // Adicional methods
+    getAdicionales: async () => {
+        return await electron_1.ipcRenderer.invoke('getAdicionales');
+    },
+    getAdicionalesFiltered: async (filters) => {
+        return await electron_1.ipcRenderer.invoke('getAdicionalesFiltered', filters);
+    },
+    getAdicional: async (id) => {
+        return await electron_1.ipcRenderer.invoke('getAdicional', id);
+    },
+    // New search methods
+    searchIngredientes: async (query) => {
+        return await electron_1.ipcRenderer.invoke('searchIngredientes', query);
+    },
+    searchRecetas: async (query) => {
+        return await electron_1.ipcRenderer.invoke('searchRecetas', query);
+    },
+    createAdicional: async (data) => {
+        return await electron_1.ipcRenderer.invoke('createAdicional', data);
+    },
+    updateAdicional: async (id, data) => {
+        return await electron_1.ipcRenderer.invoke('updateAdicional', id, data);
+    },
 });
 //# sourceMappingURL=preload.js.map

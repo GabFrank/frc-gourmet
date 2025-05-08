@@ -54,6 +54,7 @@ import { ComprasDashboardComponent } from './pages/compras/dashboard/compras-das
 import { ListComprasComponent } from './pages/compras/compras/list-compras.component';
 import { ListMovimientosStockComponent } from './pages/productos/movimientos/list-movimientos-stock.component';
 import { VentasDashboardComponent } from './pages/ventas/dashboard/ventas-dashboard.component';
+import { ProductoDashboardComponent } from './pages/productos/dashboard/producto-dashboard.component';
 
 @Component({
   selector: 'app-root',
@@ -452,6 +453,16 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       VentasDashboardComponent,
       { source: 'navigation' },
       'ventas-dashboard-tab',
+      true
+    );
+  }
+
+  openProductoDashboardTab() {
+    this.tabsService.openTab(
+      'Dashboard de Productos',
+      ProductoDashboardComponent,
+      { source: 'navigation' },
+      'producto-dashboard-tab',
       true
     );
   }

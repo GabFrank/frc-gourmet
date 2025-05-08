@@ -28,6 +28,13 @@ import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
 import { RecetaVariacion } from './entities/productos/receta-variacion.entity';
 import { RecetaVariacionItem } from './entities/productos/receta-variacion-item.entity';
 import { MovimientoStock, TipoReferencia } from './entities/productos/movimiento-stock.entity';
+// Import our new entities
+import { Observacion } from './entities/productos/observacion.entity';
+import { ObservacionProducto } from './entities/productos/observacion-producto.entity';
+import { ObservacionProductoVentaItem } from './entities/productos/observacion-producto-venta-item.entity';
+import { Adicional } from './entities/productos/adicional.entity';
+import { ProductoAdicional } from './entities/productos/producto-adicional.entity';
+import { ProductoAdicionalVentaItem } from './entities/productos/producto-adicional-venta-item.entity';
 // Import new financial entities
 import { MonedaBillete } from './entities/financiero/moneda-billete.entity';
 import { MonedaCambio } from './entities/financiero/moneda-cambio.entity';
@@ -163,6 +170,7 @@ interface ElectronAPI {
   // Moneda methods
   getMonedas: () => Promise<Moneda[]>;
   getMoneda: (monedaId: number) => Promise<Moneda>;
+  getMonedaPrincipal: () => Promise<Moneda>;
   createMoneda: (monedaData: any) => Promise<Moneda>;
   updateMoneda: (monedaId: number, monedaData: any) => Promise<any>;
   deleteMoneda: (monedaId: number) => Promise<any>;
@@ -212,12 +220,15 @@ interface ElectronAPI {
   updateIngrediente: (ingredienteId: number, ingredienteData: any) => Promise<any>;
   deleteIngrediente: (ingredienteId: number) => Promise<any>;
   searchIngredientesByDescripcion: (searchText: string) => Promise<Ingrediente[]>;
+
   // RecetaVariacion methods
   getRecetaVariaciones: (recetaId: number) => Promise<RecetaVariacion[]>;
   getRecetaVariacion: (variacionId: number) => Promise<RecetaVariacion>;
   createRecetaVariacion: (variacionData: Partial<RecetaVariacion>) => Promise<RecetaVariacion>;
   updateRecetaVariacion: (variacionId: number, variacionData: Partial<RecetaVariacion>) => Promise<any>;
   deleteRecetaVariacion: (variacionId: number) => Promise<any>;
+  searchRecetasByNombre: (searchText: string) => Promise<Receta[]>;
+
   // RecetaVariacionItem methods
   getRecetaVariacionItems: (variacionId: number) => Promise<RecetaVariacionItem[]>;
   getRecetaVariacionItem: (variacionItemId: number) => Promise<RecetaVariacionItem>;
@@ -404,6 +415,64 @@ interface ElectronAPI {
   
   // Reserva methods
   // ... existing methods ...
+  
+  // Producto search operations
+  searchProductos: (params: { searchTerm: string, page: number, pageSize: number, exactMatch?: boolean }) => 
+    Promise<{ items: Producto[], total: number, exactMatch?: boolean }>;
+  searchProductosByCode: (code: string) => Promise<{ product: Producto, presentacion: Presentacion } | null>;
+  
+  // Observacion methods
+  getObservaciones: () => Promise<Observacion[]>;
+  getObservacion: (id: number) => Promise<Observacion>;
+  createObservacion: (data: Partial<Observacion>) => Promise<Observacion>;
+  updateObservacion: (id: number, data: Partial<Observacion>) => Promise<Observacion>;
+  deleteObservacion: (id: number) => Promise<boolean>;
+  
+  // ObservacionProducto methods
+  getObservacionesProductos: () => Promise<ObservacionProducto[]>;
+  getObservacionesProductosByProducto: (productoId: number) => Promise<ObservacionProducto[]>;
+  getObservacionProducto: (id: number) => Promise<ObservacionProducto>;
+  createObservacionProducto: (data: Partial<ObservacionProducto>) => Promise<ObservacionProducto>;
+  updateObservacionProducto: (id: number, data: Partial<ObservacionProducto>) => Promise<ObservacionProducto>;
+  deleteObservacionProducto: (id: number) => Promise<boolean>;
+  
+  // ObservacionProductoVentaItem methods
+  getObservacionesProductosVentasItems: (ventaItemId: number) => Promise<ObservacionProductoVentaItem[]>;
+  getObservacionProductoVentaItem: (id: number) => Promise<ObservacionProductoVentaItem>;
+  createObservacionProductoVentaItem: (data: Partial<ObservacionProductoVentaItem>) => Promise<ObservacionProductoVentaItem>;
+  updateObservacionProductoVentaItem: (id: number, data: Partial<ObservacionProductoVentaItem>) => Promise<ObservacionProductoVentaItem>;
+  deleteObservacionProductoVentaItem: (id: number) => Promise<boolean>;
+  
+  // Adicional methods
+  getAdicionales: () => Promise<Adicional[]>;
+  getAdicional: (id: number) => Promise<Adicional>;
+  getAdicionalesFiltered: (filters: {
+    nombre?: string;
+    ingredienteId?: number;
+    recetaId?: number;
+    activo?: boolean;
+    pageIndex?: number;
+    pageSize?: number;
+  }) => Promise<{items: Adicional[], total: number}>;
+  createAdicional: (data: Partial<Adicional>) => Promise<Adicional>;
+  updateAdicional: (id: number, data: Partial<Adicional>) => Promise<any>;
+  deleteAdicional: (id: number) => Promise<boolean>;
+  
+  // ProductoAdicional methods
+  getProductosAdicionales: () => Promise<ProductoAdicional[]>;
+  getProductosAdicionalesByProducto: (productoId: number) => Promise<ProductoAdicional[]>;
+  getProductoAdicional: (id: number) => Promise<ProductoAdicional>;
+  createProductoAdicional: (data: Partial<ProductoAdicional>) => Promise<ProductoAdicional>;
+  updateProductoAdicional: (id: number, data: Partial<ProductoAdicional>) => Promise<ProductoAdicional>;
+  deleteProductoAdicional: (id: number) => Promise<boolean>;
+  
+  // ProductoAdicionalVentaItem methods
+  getProductosAdicionalesVentasItems: (ventaItemId: number) => Promise<ProductoAdicionalVentaItem[]>;
+  getProductoAdicionalVentaItem: (id: number) => Promise<ProductoAdicionalVentaItem>;
+  createProductoAdicionalVentaItem: (data: Partial<ProductoAdicionalVentaItem>) => Promise<ProductoAdicionalVentaItem>;
+  updateProductoAdicionalVentaItem: (id: number, data: Partial<ProductoAdicionalVentaItem>) => Promise<ProductoAdicionalVentaItem>;
+  deleteProductoAdicionalVentaItem: (id: number) => Promise<boolean>;
+  
 }
 
 /**
@@ -867,6 +936,10 @@ export class RepositoryService {
 
   getMoneda(monedaId: number): Observable<Moneda> {
     return from(this.api.getMoneda(monedaId));
+  }
+
+  getMonedaPrincipal(): Observable<Moneda> {
+    return from(this.api.getMonedaPrincipal());
   }
 
   createMoneda(monedaData: Partial<Moneda>): Observable<Moneda> {
@@ -1732,5 +1805,183 @@ export class RepositoryService {
   
   deleteSector(id: number): Observable<boolean> {
     return from(this.api.deleteSector(id));
+  }
+  
+  // Between the existing producto methods, add these new search methods
+  
+  searchProductos(params: { searchTerm: string, page: number, pageSize: number, exactMatch?: boolean }): 
+    Observable<{ items: Producto[], total: number, exactMatch?: boolean }> {
+    return from(this.api.searchProductos(params));
+  }
+  
+  searchProductosByCode(code: string): Observable<{ product: Producto, presentacion: Presentacion } | null> {
+    return from(this.api.searchProductosByCode(code));
+  }
+  
+  // Observacion methods
+  getObservaciones(): Observable<Observacion[]> {
+    return from(this.api.getObservaciones());
+  }
+
+  getObservacion(id: number): Observable<Observacion> {
+    return from(this.api.getObservacion(id));
+  }
+
+  createObservacion(data: Partial<Observacion>): Observable<Observacion> {
+    return from(this.api.createObservacion(data));
+  }
+
+  updateObservacion(id: number, data: Partial<Observacion>): Observable<Observacion> {
+    return from(this.api.updateObservacion(id, data));
+  }
+
+  deleteObservacion(id: number): Observable<boolean> {
+    return from(this.api.deleteObservacion(id));
+  }
+
+  // ObservacionProducto methods
+  getObservacionesProductos(): Observable<ObservacionProducto[]> {
+    return from(this.api.getObservacionesProductos());
+  }
+
+  getObservacionesProductosByProducto(productoId: number): Observable<ObservacionProducto[]> {
+    return from(this.api.getObservacionesProductosByProducto(productoId));
+  }
+
+  getObservacionProducto(id: number): Observable<ObservacionProducto> {
+    return from(this.api.getObservacionProducto(id));
+  }
+
+  createObservacionProducto(data: Partial<ObservacionProducto>): Observable<ObservacionProducto> {
+    return from(this.api.createObservacionProducto(data));
+  }
+
+  updateObservacionProducto(id: number, data: Partial<ObservacionProducto>): Observable<ObservacionProducto> {
+    return from(this.api.updateObservacionProducto(id, data));
+  }
+
+  deleteObservacionProducto(id: number): Observable<boolean> {
+    return from(this.api.deleteObservacionProducto(id));
+  }
+
+  // ObservacionProductoVentaItem methods
+  getObservacionesProductosVentasItems(ventaItemId: number): Observable<ObservacionProductoVentaItem[]> {
+    return from(this.api.getObservacionesProductosVentasItems(ventaItemId));
+  }
+
+  getObservacionProductoVentaItem(id: number): Observable<ObservacionProductoVentaItem> {
+    return from(this.api.getObservacionProductoVentaItem(id));
+  }
+
+  createObservacionProductoVentaItem(data: Partial<ObservacionProductoVentaItem>): Observable<ObservacionProductoVentaItem> {
+    return from(this.api.createObservacionProductoVentaItem(data));
+  }
+
+  updateObservacionProductoVentaItem(id: number, data: Partial<ObservacionProductoVentaItem>): Observable<ObservacionProductoVentaItem> {
+    return from(this.api.updateObservacionProductoVentaItem(id, data));
+  }
+
+  deleteObservacionProductoVentaItem(id: number): Observable<boolean> {
+    return from(this.api.deleteObservacionProductoVentaItem(id));
+  }
+
+  // Adicional methods
+  getAdicionales(): Observable<Adicional[]> {
+    return from(this.api.getAdicionales());
+  }
+
+  getAdicional(id: number): Observable<Adicional> {
+    return from(this.api.getAdicional(id));
+  }
+
+  getAdicionalesFiltered(filters: {
+    nombre?: string;
+    ingredienteId?: number;
+    recetaId?: number;
+    activo?: boolean;
+    pageIndex?: number;
+    pageSize?: number;
+  }): Observable<{items: Adicional[], total: number}> {
+    return from(this.api.getAdicionalesFiltered(filters));
+  }
+
+  createAdicional(data: Partial<Adicional>): Observable<Adicional> {
+    return from(this.api.createAdicional(data));
+  }
+
+  updateAdicional(id: number, data: Partial<Adicional>): Observable<any> {
+    return from(this.api.updateAdicional(id, data));
+  }
+
+  deleteAdicional(id: number): Observable<boolean> {
+    return from(this.api.deleteAdicional(id));
+  }
+
+  // ProductoAdicional methods
+  getProductosAdicionales(): Observable<ProductoAdicional[]> {
+    return from(this.api.getProductosAdicionales());
+  }
+
+  getProductosAdicionalesByProducto(productoId: number): Observable<ProductoAdicional[]> {
+    return from(this.api.getProductosAdicionalesByProducto(productoId));
+  }
+
+  getProductoAdicional(id: number): Observable<ProductoAdicional> {
+    return from(this.api.getProductoAdicional(id));
+  }
+
+  createProductoAdicional(data: Partial<ProductoAdicional>): Observable<ProductoAdicional> {
+    return from(this.api.createProductoAdicional(data));
+  }
+
+  updateProductoAdicional(id: number, data: Partial<ProductoAdicional>): Observable<ProductoAdicional> {
+    return from(this.api.updateProductoAdicional(id, data));
+  }
+
+  deleteProductoAdicional(id: number): Observable<boolean> {
+    return from(this.api.deleteProductoAdicional(id));
+  }
+
+  // ProductoAdicionalVentaItem methods
+  getProductosAdicionalesVentasItems(ventaItemId: number): Observable<ProductoAdicionalVentaItem[]> {
+    return from(this.api.getProductosAdicionalesVentasItems(ventaItemId));
+  }
+
+  getProductoAdicionalVentaItem(id: number): Observable<ProductoAdicionalVentaItem> {
+    return from(this.api.getProductoAdicionalVentaItem(id));
+  }
+
+  createProductoAdicionalVentaItem(data: Partial<ProductoAdicionalVentaItem>): Observable<ProductoAdicionalVentaItem> {
+    return from(this.api.createProductoAdicionalVentaItem(data));
+  }
+
+  updateProductoAdicionalVentaItem(id: number, data: Partial<ProductoAdicionalVentaItem>): Observable<ProductoAdicionalVentaItem> {
+    return from(this.api.updateProductoAdicionalVentaItem(id, data));
+  }
+
+  deleteProductoAdicionalVentaItem(id: number): Observable<boolean> {
+    return from(this.api.deleteProductoAdicionalVentaItem(id));
+  }
+
+  /**
+   * Search ingredientes by name
+   * @param query The search string
+   * @returns Observable with filtered list of ingredientes
+   */
+  searchIngredientes(query: string): Observable<Ingrediente[]> {
+    // Assuming api is an instance of ElectronService or similar
+    // that handles the database operations
+    return from(this.api.searchIngredientesByDescripcion(query));
+  }
+
+  /**
+   * Search recetas by name
+   * @param query The search string
+   * @returns Observable with filtered list of recetas
+   */
+  searchRecetas(query: string): Observable<Receta[]> {
+    // Assuming api is an instance of ElectronService or similar
+    // that handles the database operations
+    return from(this.api.searchRecetasByNombre(query));
   }
 }

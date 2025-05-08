@@ -30,6 +30,13 @@ import { RecetaVariacionItem } from './entities/productos/receta-variacion-item.
 import { Combo } from './entities/productos/combo.entity';
 import { ComboItem } from './entities/productos/combo-item.entity';
 import { IntercambioIngrediente } from './entities/productos/intercambio-ingrediente.entity';
+// Import the new entities
+import { Observacion } from './entities/productos/observacion.entity';
+import { ObservacionProducto } from './entities/productos/observacion-producto.entity';
+import { ObservacionProductoVentaItem } from './entities/productos/observacion-producto-venta-item.entity';
+import { Adicional } from './entities/productos/adicional.entity';
+import { ProductoAdicional } from './entities/productos/producto-adicional.entity';
+import { ProductoAdicionalVentaItem } from './entities/productos/producto-adicional-venta-item.entity';
 
 // Import new financial entities
 import { MonedaBillete } from './entities/financiero/moneda-billete.entity';
@@ -109,6 +116,13 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       Combo,
       ComboItem,
       IntercambioIngrediente,
+      // New observation and additional entities
+      Observacion,
+      ObservacionProducto,
+      ObservacionProductoVentaItem,
+      Adicional,
+      ProductoAdicional,
+      ProductoAdicionalVentaItem,
       // New financial entities
       MonedaBillete,
       Dispositivo,

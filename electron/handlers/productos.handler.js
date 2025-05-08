@@ -17,7 +17,45 @@ const receta_variacion_item_entity_1 = require("../../src/app/database/entities/
 const movimiento_stock_entity_1 = require("../../src/app/database/entities/productos/movimiento-stock.entity");
 const entity_utils_1 = require("../utils/entity.utils");
 const precio_venta_entity_1 = require("../../src/app/database/entities/productos/precio-venta.entity");
+const observacion_entity_1 = require("../../src/app/database/entities/productos/observacion.entity");
+const observacion_producto_entity_1 = require("../../src/app/database/entities/productos/observacion-producto.entity");
+const observacion_producto_venta_item_entity_1 = require("../../src/app/database/entities/productos/observacion-producto-venta-item.entity");
+const adicional_entity_1 = require("../../src/app/database/entities/productos/adicional.entity");
+const producto_adicional_entity_1 = require("../../src/app/database/entities/productos/producto-adicional.entity");
+const producto_adicional_venta_item_entity_1 = require("../../src/app/database/entities/productos/producto-adicional-venta-item.entity");
 function registerProductosHandlers(dataSource, getCurrentUser) {
+    // Helper function to enrich products with principal presentation and price information
+    async function enrichProductWithPrincipalData(producto) {
+        // Find principal presentation
+        const presentacionRepo = dataSource.getRepository(presentacion_entity_1.Presentacion);
+        const principalPresentacion = await presentacionRepo.findOne({
+            where: { productoId: producto.id, principal: true, activo: true }
+        });
+        if (principalPresentacion) {
+            // Add principal presentation to producto
+            producto.principalPresentacion = principalPresentacion;
+            // Find principal price for this presentation
+            const precioVentaRepo = dataSource.getRepository(precio_venta_entity_1.PrecioVenta);
+            const principalPrecio = await precioVentaRepo.findOne({
+                where: { presentacionId: principalPresentacion.id, principal: true, activo: true },
+                relations: ['moneda']
+            });
+            if (principalPrecio) {
+                // Add principal price to producto
+                producto.principalPrecio = principalPrecio;
+            }
+        }
+    }
+    async function enrichPresentacionWithPrincipalData(presentacion) {
+        const precioVentaRepo = dataSource.getRepository(precio_venta_entity_1.PrecioVenta);
+        const principalPrecio = await precioVentaRepo.findOne({
+            where: { presentacionId: presentacion.id, principal: true, activo: true },
+            relations: ['moneda']
+        });
+        if (principalPrecio) {
+            presentacion.principalPrecio = principalPrecio;
+        }
+    }
     // --- Categoria Handlers ---
     electron_1.ipcMain.handle('getCategorias', async () => {
         try {
@@ -172,7 +210,12 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
     electron_1.ipcMain.handle('getProductos', async () => {
         try {
             const repo = dataSource.getRepository(producto_entity_1.Producto);
-            return await repo.find({ relations: ['subcategoria', 'subcategoria.categoria'], order: { nombre: 'ASC' } });
+            const productos = await repo.find({ relations: ['subcategoria', 'subcategoria.categoria'], order: { nombre: 'ASC' } });
+            // Enrich each product with principal data
+            for (const producto of productos) {
+                await enrichProductWithPrincipalData(producto);
+            }
+            return productos;
         }
         catch (error) {
             console.error('Error getting productos:', error);
@@ -182,7 +225,11 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
     electron_1.ipcMain.handle('getProducto', async (_event, id) => {
         try {
             const repo = dataSource.getRepository(producto_entity_1.Producto);
-            return await repo.findOne({ where: { id }, relations: ['subcategoria', 'subcategoria.categoria'] });
+            const producto = await repo.findOne({ where: { id }, relations: ['subcategoria', 'subcategoria.categoria'] });
+            if (producto) {
+                await enrichProductWithPrincipalData(producto);
+            }
+            return producto;
         }
         catch (error) {
             console.error(`Error getting producto ID ${id}:`, error);
@@ -192,7 +239,12 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
     electron_1.ipcMain.handle('getProductosBySubcategoria', async (_event, subcategoriaId) => {
         try {
             const repo = dataSource.getRepository(producto_entity_1.Producto);
-            return await repo.find({ where: { subcategoriaId }, order: { nombre: 'ASC' } });
+            const productos = await repo.find({ where: { subcategoriaId }, order: { nombre: 'ASC' } });
+            // Enrich each product with principal data
+            for (const producto of productos) {
+                await enrichProductWithPrincipalData(producto);
+            }
+            return productos;
         }
         catch (error) {
             console.error(`Error getting productos for subcategoria ID ${subcategoriaId}:`, error);
@@ -741,6 +793,40 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             throw error;
         }
     });
+    // Search ingredientes directly from database
+    electron_1.ipcMain.handle('searchIngredientes', async (_event, query) => {
+        try {
+            const ingredienteRepo = dataSource.getRepository(ingrediente_entity_1.Ingrediente);
+            const ingredients = await ingredienteRepo.createQueryBuilder('ingrediente')
+                .where('LOWER(ingrediente.descripcion) LIKE LOWER(:query)', { query: `%${query}%` })
+                .andWhere('ingrediente.activo = :activo', { activo: true })
+                .orderBy('ingrediente.descripcion', 'ASC')
+                .take(50)
+                .getMany();
+            return ingredients;
+        }
+        catch (error) {
+            console.error('Error searching ingredientes:', error);
+            return [];
+        }
+    });
+    // Search recetas directly from database
+    electron_1.ipcMain.handle('searchRecetas', async (_event, query) => {
+        try {
+            const recetaRepo = dataSource.getRepository(receta_entity_1.Receta);
+            const recetas = await recetaRepo.createQueryBuilder('receta')
+                .where('LOWER(receta.nombre) LIKE LOWER(:query)', { query: `%${query}%` })
+                .andWhere('receta.activo = :activo', { activo: true })
+                .orderBy('receta.nombre', 'ASC')
+                .take(50)
+                .getMany();
+            return recetas;
+        }
+        catch (error) {
+            console.error('Error searching recetas:', error);
+            return [];
+        }
+    });
     // --- RecetaVariacion Handlers ---
     electron_1.ipcMain.handle('getRecetaVariaciones', async (_event, recetaId) => {
         try {
@@ -1122,6 +1208,627 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         }
         catch (error) {
             console.error(`Error deleting precio venta ID ${id}:`, error);
+            throw error;
+        }
+    });
+    // --- Search Handlers ---
+    electron_1.ipcMain.handle('searchProductos', async (_event, params) => {
+        try {
+            // Add more detailed logging to help debug issues
+            console.log('searchProductos called with params:', JSON.stringify(params));
+            if (!params || typeof params !== 'object') {
+                console.error('Invalid params received:', params);
+                return { items: [], total: 0 };
+            }
+            // Ensure params object exists and has default values
+            const page = Number(params.page || 1);
+            const pageSize = Number(params.pageSize || 10);
+            const exactMatch = Boolean(params.exactMatch || false);
+            // Ensure searchTerm is a string and log what type we received
+            console.log('searchTerm type:', typeof params.searchTerm);
+            const searchTerm = typeof params.searchTerm === 'string' ? params.searchTerm : String(params.searchTerm || '');
+            const skip = (page - 1) * pageSize;
+            // Only uppercase if it's a non-empty string
+            const searchTermUpper = searchTerm ? searchTerm.toUpperCase() : '';
+            console.log('Using searchTerm:', searchTerm, 'Uppercase:', searchTermUpper);
+            if (!searchTerm || searchTerm.trim() === '') {
+                console.log('Empty search term, returning empty results');
+                return { items: [], total: 0 };
+            }
+            // First try to find an exact match by código if exactMatch is true
+            if (exactMatch) {
+                const codigoRepo = dataSource.getRepository(codigo_entity_1.Codigo);
+                const matchingCodigos = await codigoRepo.find({
+                    where: {
+                        codigo: searchTermUpper,
+                        activo: true
+                    },
+                    relations: ['presentacion', 'presentacion.producto']
+                });
+                if (matchingCodigos.length > 0) {
+                    // Map to a unique list of products from the codes
+                    const productos = matchingCodigos
+                        .map(codigo => codigo.presentacion.producto)
+                        .filter((producto, index, self) => producto.activo &&
+                        index === self.findIndex(p => p.id === producto.id));
+                    // Get total count
+                    const total = productos.length;
+                    // Apply pagination manually since we're working with in-memory results
+                    const paginatedProductos = productos.slice(skip, skip + pageSize);
+                    // Enrich each product with principal data
+                    for (const producto of paginatedProductos) {
+                        await enrichProductWithPrincipalData(producto);
+                    }
+                    return {
+                        items: paginatedProductos,
+                        total,
+                        exactMatch: true
+                    };
+                }
+            }
+            // If no exact codigo match or exactMatch is false, search by name
+            const productoRepo = dataSource.getRepository(producto_entity_1.Producto);
+            // Create query builder for more flexible querying
+            const queryBuilder = productoRepo.createQueryBuilder('producto')
+                .leftJoinAndSelect('producto.subcategoria', 'subcategoria')
+                .leftJoinAndSelect('subcategoria.categoria', 'categoria')
+                .where('producto.activo = :activo', { activo: true })
+                .andWhere('(UPPER(producto.nombre) LIKE :searchTerm OR UPPER(producto.nombreAlternativo) LIKE :searchTerm)', { searchTerm: `%${searchTermUpper}%` })
+                .orderBy('producto.nombre', 'ASC');
+            // Get total count for pagination
+            const total = await queryBuilder.getCount();
+            // Apply pagination
+            const productos = await queryBuilder
+                .skip(skip)
+                .take(pageSize)
+                .getMany();
+            // Enrich each product with principal data
+            for (const producto of productos) {
+                await enrichProductWithPrincipalData(producto);
+            }
+            return {
+                items: productos,
+                total,
+                exactMatch: false
+            };
+        }
+        catch (error) {
+            console.error('Error searching productos:', error);
+            throw error;
+        }
+    });
+    // Also add a handler to search by codigo only (for barcode scanning)
+    electron_1.ipcMain.handle('searchProductosByCode', async (_event, code) => {
+        try {
+            // Log what we received to help debug
+            if (code === undefined || code === null) {
+                console.warn('searchProductosByCode received null/undefined code');
+                return null;
+            }
+            // Ensure code is a string
+            const searchCode = typeof code === 'string' ? code : String(code || '');
+            if (!searchCode || searchCode.trim() === '') {
+                return null;
+            }
+            const codigoRepo = dataSource.getRepository(codigo_entity_1.Codigo);
+            const matchingCodigo = await codigoRepo.findOne({
+                where: {
+                    codigo: searchCode.toUpperCase(),
+                    activo: true
+                },
+                relations: ['presentacion', 'presentacion.producto']
+            });
+            if (matchingCodigo && matchingCodigo.presentacion.producto.activo) {
+                const producto = matchingCodigo.presentacion.producto;
+                await enrichPresentacionWithPrincipalData(matchingCodigo.presentacion);
+                // await enrichProductWithPrincipalData(producto);
+                return {
+                    product: producto,
+                    presentacion: matchingCodigo.presentacion
+                };
+            }
+            return null;
+        }
+        catch (error) {
+            console.error('Error searching producto by code:', error);
+            throw error;
+        }
+    });
+    // --- Observacion Handlers ---
+    electron_1.ipcMain.handle('getObservaciones', async () => {
+        try {
+            const repo = dataSource.getRepository(observacion_entity_1.Observacion);
+            return await repo.find({ order: { nombre: 'ASC' } });
+        }
+        catch (error) {
+            console.error('Error getting observaciones:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('getObservacion', async (_event, id) => {
+        try {
+            const repo = dataSource.getRepository(observacion_entity_1.Observacion);
+            return await repo.findOneBy({ id });
+        }
+        catch (error) {
+            console.error(`Error getting observacion ID ${id}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('createObservacion', async (_event, data) => {
+        try {
+            const repo = dataSource.getRepository(observacion_entity_1.Observacion);
+            const entity = repo.create(data);
+            const currentUser = getCurrentUser();
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            return await repo.save(entity);
+        }
+        catch (error) {
+            console.error('Error creating observacion:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('updateObservacion', async (_event, id, data) => {
+        try {
+            const repo = dataSource.getRepository(observacion_entity_1.Observacion);
+            const entity = await repo.findOneBy({ id });
+            if (!entity)
+                throw new Error(`Observacion ID ${id} not found`);
+            repo.merge(entity, data);
+            const currentUser = getCurrentUser();
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            return await repo.save(entity);
+        }
+        catch (error) {
+            console.error(`Error updating observacion ID ${id}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('deleteObservacion', async (_event, id) => {
+        try {
+            const repo = dataSource.getRepository(observacion_entity_1.Observacion);
+            const entity = await repo.findOneBy({ id });
+            if (!entity)
+                throw new Error(`Observacion ID ${id} not found`);
+            // Check dependencies (ObservacionProducto) before deleting
+            const obsProductoRepo = dataSource.getRepository(observacion_producto_entity_1.ObservacionProducto);
+            const obsProductoCount = await obsProductoRepo.count({ where: { observacionId: id } });
+            if (obsProductoCount > 0) {
+                throw new Error(`No se puede eliminar la observación porque tiene ${obsProductoCount} productos asociados.`);
+            }
+            return await repo.remove(entity);
+        }
+        catch (error) {
+            console.error(`Error deleting observacion ID ${id}:`, error);
+            throw error;
+        }
+    });
+    // --- ObservacionProducto Handlers ---
+    electron_1.ipcMain.handle('getObservacionesProductos', async () => {
+        try {
+            const repo = dataSource.getRepository(observacion_producto_entity_1.ObservacionProducto);
+            return await repo.find({
+                relations: ['producto', 'observacion'],
+                order: { productoId: 'ASC' }
+            });
+        }
+        catch (error) {
+            console.error('Error getting observaciones productos:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('getObservacionesProductosByProducto', async (_event, productoId) => {
+        try {
+            const repo = dataSource.getRepository(observacion_producto_entity_1.ObservacionProducto);
+            return await repo.find({
+                where: { productoId },
+                relations: ['observacion'],
+                order: { observacionId: 'ASC' }
+            });
+        }
+        catch (error) {
+            console.error(`Error getting observaciones for producto ID ${productoId}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('getObservacionProducto', async (_event, id) => {
+        try {
+            const repo = dataSource.getRepository(observacion_producto_entity_1.ObservacionProducto);
+            return await repo.findOne({
+                where: { id },
+                relations: ['producto', 'observacion']
+            });
+        }
+        catch (error) {
+            console.error(`Error getting observacion producto ID ${id}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('createObservacionProducto', async (_event, data) => {
+        try {
+            const repo = dataSource.getRepository(observacion_producto_entity_1.ObservacionProducto);
+            const entity = repo.create(data);
+            const currentUser = getCurrentUser();
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            return await repo.save(entity);
+        }
+        catch (error) {
+            console.error('Error creating observacion producto:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('updateObservacionProducto', async (_event, id, data) => {
+        try {
+            const repo = dataSource.getRepository(observacion_producto_entity_1.ObservacionProducto);
+            const entity = await repo.findOneBy({ id });
+            if (!entity)
+                throw new Error(`ObservacionProducto ID ${id} not found`);
+            repo.merge(entity, data);
+            const currentUser = getCurrentUser();
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            return await repo.save(entity);
+        }
+        catch (error) {
+            console.error(`Error updating observacion producto ID ${id}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('deleteObservacionProducto', async (_event, id) => {
+        try {
+            const repo = dataSource.getRepository(observacion_producto_entity_1.ObservacionProducto);
+            const entity = await repo.findOneBy({ id });
+            if (!entity)
+                throw new Error(`ObservacionProducto ID ${id} not found`);
+            // Check dependencies (ObservacionProductoVentaItem) before deleting
+            const obsProductoVentaItemRepo = dataSource.getRepository(observacion_producto_venta_item_entity_1.ObservacionProductoVentaItem);
+            const obsProductoVentaItemCount = await obsProductoVentaItemRepo.count({ where: { observacionProductoId: id } });
+            if (obsProductoVentaItemCount > 0) {
+                throw new Error(`No se puede eliminar la observación de producto porque tiene ${obsProductoVentaItemCount} items de venta asociados.`);
+            }
+            return await repo.remove(entity);
+        }
+        catch (error) {
+            console.error(`Error deleting observacion producto ID ${id}:`, error);
+            throw error;
+        }
+    });
+    // --- ObservacionProductoVentaItem Handlers ---
+    electron_1.ipcMain.handle('getObservacionesProductosVentasItems', async (_event, ventaItemId) => {
+        try {
+            const repo = dataSource.getRepository(observacion_producto_venta_item_entity_1.ObservacionProductoVentaItem);
+            return await repo.find({
+                where: { ventaItemId },
+                relations: ['observacionProducto', 'observacionProducto.observacion'],
+                order: { id: 'ASC' }
+            });
+        }
+        catch (error) {
+            console.error(`Error getting observaciones for venta item ID ${ventaItemId}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('getObservacionProductoVentaItem', async (_event, id) => {
+        try {
+            const repo = dataSource.getRepository(observacion_producto_venta_item_entity_1.ObservacionProductoVentaItem);
+            return await repo.findOne({
+                where: { id },
+                relations: ['observacionProducto', 'ventaItem', 'observacionProducto.observacion']
+            });
+        }
+        catch (error) {
+            console.error(`Error getting observacion producto venta item ID ${id}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('createObservacionProductoVentaItem', async (_event, data) => {
+        try {
+            const repo = dataSource.getRepository(observacion_producto_venta_item_entity_1.ObservacionProductoVentaItem);
+            const entity = repo.create(data);
+            const currentUser = getCurrentUser();
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            return await repo.save(entity);
+        }
+        catch (error) {
+            console.error('Error creating observacion producto venta item:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('updateObservacionProductoVentaItem', async (_event, id, data) => {
+        try {
+            const repo = dataSource.getRepository(observacion_producto_venta_item_entity_1.ObservacionProductoVentaItem);
+            const entity = await repo.findOneBy({ id });
+            if (!entity)
+                throw new Error(`ObservacionProductoVentaItem ID ${id} not found`);
+            repo.merge(entity, data);
+            const currentUser = getCurrentUser();
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            return await repo.save(entity);
+        }
+        catch (error) {
+            console.error(`Error updating observacion producto venta item ID ${id}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('deleteObservacionProductoVentaItem', async (_event, id) => {
+        try {
+            const repo = dataSource.getRepository(observacion_producto_venta_item_entity_1.ObservacionProductoVentaItem);
+            const entity = await repo.findOneBy({ id });
+            if (!entity)
+                throw new Error(`ObservacionProductoVentaItem ID ${id} not found`);
+            return await repo.remove(entity);
+        }
+        catch (error) {
+            console.error(`Error deleting observacion producto venta item ID ${id}:`, error);
+            throw error;
+        }
+    });
+    // --- Adicional Handlers ---
+    electron_1.ipcMain.handle('getAdicionales', async () => {
+        try {
+            const repo = dataSource.getRepository(adicional_entity_1.Adicional);
+            return await repo.find({
+                relations: ['ingrediente', 'receta'],
+                order: { nombre: 'ASC' }
+            });
+        }
+        catch (error) {
+            console.error('Error getting adicionales:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('getAdicionalesFiltered', async (_event, filters) => {
+        try {
+            const repo = dataSource.getRepository(adicional_entity_1.Adicional);
+            const queryBuilder = repo.createQueryBuilder('adicional')
+                .leftJoinAndSelect('adicional.ingrediente', 'ingrediente')
+                .leftJoinAndSelect('adicional.receta', 'receta')
+                .orderBy('adicional.nombre', 'ASC');
+            // Apply filters
+            if (filters.nombre) {
+                queryBuilder.andWhere('adicional.nombre LIKE :nombre', { nombre: `%${filters.nombre}%` });
+            }
+            if (filters.ingredienteId !== undefined && filters.ingredienteId !== null) {
+                queryBuilder.andWhere('adicional.ingredienteId = :ingredienteId', { ingredienteId: filters.ingredienteId });
+            }
+            if (filters.recetaId !== undefined && filters.recetaId !== null) {
+                queryBuilder.andWhere('adicional.recetaId = :recetaId', { recetaId: filters.recetaId });
+            }
+            if (filters.activo !== undefined && filters.activo !== null) {
+                queryBuilder.andWhere('adicional.activo = :activo', { activo: filters.activo });
+            }
+            // Get total count for pagination
+            const total = await queryBuilder.getCount();
+            // Apply pagination
+            if (filters.pageIndex !== undefined && filters.pageSize !== undefined) {
+                const skip = filters.pageIndex * filters.pageSize;
+                queryBuilder.skip(skip).take(filters.pageSize);
+            }
+            // Execute the query
+            const items = await queryBuilder.getMany();
+            return { items, total };
+        }
+        catch (error) {
+            console.error('Error getting filtered adicionales:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('getAdicional', async (_event, id) => {
+        try {
+            const repo = dataSource.getRepository(adicional_entity_1.Adicional);
+            return await repo.findOne({
+                where: { id },
+                relations: ['ingrediente', 'receta']
+            });
+        }
+        catch (error) {
+            console.error(`Error getting adicional ID ${id}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('createAdicional', async (_event, data) => {
+        try {
+            const repo = dataSource.getRepository(adicional_entity_1.Adicional);
+            const entity = repo.create(data);
+            const currentUser = getCurrentUser();
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            return await repo.save(entity);
+        }
+        catch (error) {
+            console.error('Error creating adicional:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('updateAdicional', async (_event, id, data) => {
+        try {
+            const repo = dataSource.getRepository(adicional_entity_1.Adicional);
+            const entity = await repo.findOneBy({ id });
+            if (!entity)
+                throw new Error(`Adicional ID ${id} not found`);
+            repo.merge(entity, data);
+            const currentUser = getCurrentUser();
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            return await repo.save(entity);
+        }
+        catch (error) {
+            console.error(`Error updating adicional ID ${id}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('deleteAdicional', async (_event, id) => {
+        try {
+            const repo = dataSource.getRepository(adicional_entity_1.Adicional);
+            const entity = await repo.findOneBy({ id });
+            if (!entity)
+                throw new Error(`Adicional ID ${id} not found`);
+            // Check dependencies (ProductoAdicional) before deleting
+            const productoAdicionalRepo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
+            const productoAdicionalCount = await productoAdicionalRepo.count({ where: { adicionalId: id } });
+            if (productoAdicionalCount > 0) {
+                throw new Error(`No se puede eliminar el adicional porque tiene ${productoAdicionalCount} productos asociados.`);
+            }
+            return await repo.remove(entity);
+        }
+        catch (error) {
+            console.error(`Error deleting adicional ID ${id}:`, error);
+            throw error;
+        }
+    });
+    // --- ProductoAdicional Handlers ---
+    electron_1.ipcMain.handle('getProductosAdicionales', async () => {
+        try {
+            const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
+            return await repo.find({
+                relations: ['producto', 'adicional'],
+                order: { productoId: 'ASC' }
+            });
+        }
+        catch (error) {
+            console.error('Error getting productos adicionales:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('getProductosAdicionalesByProducto', async (_event, productoId) => {
+        try {
+            const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
+            return await repo.find({
+                where: { productoId },
+                relations: ['adicional'],
+                order: { adicionalId: 'ASC' }
+            });
+        }
+        catch (error) {
+            console.error(`Error getting adicionales for producto ID ${productoId}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('getProductoAdicional', async (_event, id) => {
+        try {
+            const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
+            return await repo.findOne({
+                where: { id },
+                relations: ['producto', 'adicional']
+            });
+        }
+        catch (error) {
+            console.error(`Error getting producto adicional ID ${id}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('createProductoAdicional', async (_event, data) => {
+        try {
+            const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
+            const entity = repo.create(data);
+            const currentUser = getCurrentUser();
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            return await repo.save(entity);
+        }
+        catch (error) {
+            console.error('Error creating producto adicional:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('updateProductoAdicional', async (_event, id, data) => {
+        try {
+            const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
+            const entity = await repo.findOneBy({ id });
+            if (!entity)
+                throw new Error(`ProductoAdicional ID ${id} not found`);
+            repo.merge(entity, data);
+            const currentUser = getCurrentUser();
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            return await repo.save(entity);
+        }
+        catch (error) {
+            console.error(`Error updating producto adicional ID ${id}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('deleteProductoAdicional', async (_event, id) => {
+        try {
+            const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
+            const entity = await repo.findOneBy({ id });
+            if (!entity)
+                throw new Error(`ProductoAdicional ID ${id} not found`);
+            // Check dependencies (ProductoAdicionalVentaItem) before deleting
+            const productoAdicionalVentaItemRepo = dataSource.getRepository(producto_adicional_venta_item_entity_1.ProductoAdicionalVentaItem);
+            const productoAdicionalVentaItemCount = await productoAdicionalVentaItemRepo.count({ where: { productoAdicionalId: id } });
+            if (productoAdicionalVentaItemCount > 0) {
+                throw new Error(`No se puede eliminar el adicional de producto porque tiene ${productoAdicionalVentaItemCount} items de venta asociados.`);
+            }
+            return await repo.remove(entity);
+        }
+        catch (error) {
+            console.error(`Error deleting producto adicional ID ${id}:`, error);
+            throw error;
+        }
+    });
+    // --- ProductoAdicionalVentaItem Handlers ---
+    electron_1.ipcMain.handle('getProductosAdicionalesVentasItems', async (_event, ventaItemId) => {
+        try {
+            const repo = dataSource.getRepository(producto_adicional_venta_item_entity_1.ProductoAdicionalVentaItem);
+            return await repo.find({
+                where: { ventaItemId },
+                relations: ['productoAdicional', 'productoAdicional.adicional'],
+                order: { id: 'ASC' }
+            });
+        }
+        catch (error) {
+            console.error(`Error getting adicionales for venta item ID ${ventaItemId}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('getProductoAdicionalVentaItem', async (_event, id) => {
+        try {
+            const repo = dataSource.getRepository(producto_adicional_venta_item_entity_1.ProductoAdicionalVentaItem);
+            return await repo.findOne({
+                where: { id },
+                relations: ['productoAdicional', 'ventaItem', 'productoAdicional.adicional']
+            });
+        }
+        catch (error) {
+            console.error(`Error getting producto adicional venta item ID ${id}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('createProductoAdicionalVentaItem', async (_event, data) => {
+        try {
+            const repo = dataSource.getRepository(producto_adicional_venta_item_entity_1.ProductoAdicionalVentaItem);
+            const entity = repo.create(data);
+            const currentUser = getCurrentUser();
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            return await repo.save(entity);
+        }
+        catch (error) {
+            console.error('Error creating producto adicional venta item:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('updateProductoAdicionalVentaItem', async (_event, id, data) => {
+        try {
+            const repo = dataSource.getRepository(producto_adicional_venta_item_entity_1.ProductoAdicionalVentaItem);
+            const entity = await repo.findOneBy({ id });
+            if (!entity)
+                throw new Error(`ProductoAdicionalVentaItem ID ${id} not found`);
+            repo.merge(entity, data);
+            const currentUser = getCurrentUser();
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            return await repo.save(entity);
+        }
+        catch (error) {
+            console.error(`Error updating producto adicional venta item ID ${id}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('deleteProductoAdicionalVentaItem', async (_event, id) => {
+        try {
+            const repo = dataSource.getRepository(producto_adicional_venta_item_entity_1.ProductoAdicionalVentaItem);
+            const entity = await repo.findOneBy({ id });
+            if (!entity)
+                throw new Error(`ProductoAdicionalVentaItem ID ${id} not found`);
+            return await repo.remove(entity);
+        }
+        catch (error) {
+            console.error(`Error deleting producto adicional venta item ID ${id}:`, error);
             throw error;
         }
     });

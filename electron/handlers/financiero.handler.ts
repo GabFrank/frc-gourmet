@@ -38,6 +38,16 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
     }
   });
 
+  ipcMain.handle('getMonedaPrincipal', async () => {
+    try {
+      const repo = dataSource.getRepository(Moneda);
+      return await repo.findOneBy({ principal: true });
+    } catch (error) {
+      console.error('Error getting moneda principal:', error);
+      throw error;
+    }
+  });
+
   ipcMain.handle('createMoneda', async (_event: any, data: any) => {
     try {
       const repo = dataSource.getRepository(Moneda);

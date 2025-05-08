@@ -37,6 +37,16 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
             throw error;
         }
     });
+    electron_1.ipcMain.handle('getMonedaPrincipal', async () => {
+        try {
+            const repo = dataSource.getRepository(moneda_entity_1.Moneda);
+            return await repo.findOneBy({ principal: true });
+        }
+        catch (error) {
+            console.error('Error getting moneda principal:', error);
+            throw error;
+        }
+    });
     electron_1.ipcMain.handle('createMoneda', async (_event, data) => {
         try {
             const repo = dataSource.getRepository(moneda_entity_1.Moneda);

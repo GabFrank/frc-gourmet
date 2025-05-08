@@ -5,6 +5,8 @@ import type { ProductoImage } from './producto-image.entity';
 import type { Presentacion } from './presentacion.entity';
 import type { Receta } from './receta.entity';
 import type { IntercambioIngrediente } from './intercambio-ingrediente.entity';
+import type { ObservacionProducto } from './observacion-producto.entity';
+import type { ProductoAdicional } from './producto-adicional.entity';
 
 /**
  * Entity representing a product
@@ -81,4 +83,10 @@ export class Producto extends BaseModel {
 
   @OneToMany('IntercambioIngrediente', 'producto')
   intercambioIngredientes!: IntercambioIngrediente[];
+  
+  @OneToMany('ObservacionProducto', 'producto')
+  observacionesProductos!: ObservacionProducto[];
+  
+  @OneToMany('ProductoAdicional', 'producto')
+  productosAdicionales!: ProductoAdicional[];
 }

@@ -34,6 +34,12 @@ export { Receta } from './productos/receta.entity';
 export { Combo } from './productos/combo.entity';
 export { ComboItem } from './productos/combo-item.entity';
 export { IntercambioIngrediente } from './productos/intercambio-ingrediente.entity';
+export { Observacion } from './productos/observacion.entity';
+export { ObservacionProducto } from './productos/observacion-producto.entity';
+export { ObservacionProductoVentaItem } from './productos/observacion-producto-venta-item.entity';
+export { Adicional } from './productos/adicional.entity';
+export { ProductoAdicional } from './productos/producto-adicional.entity';
+export { ProductoAdicionalVentaItem } from './productos/producto-adicional-venta-item.entity';
 
 // Export financiero-related entities and enums
 export { Moneda } from './financiero/moneda.entity';

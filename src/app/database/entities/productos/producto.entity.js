@@ -111,6 +111,14 @@ __decorate([
     (0, typeorm_1.OneToMany)('IntercambioIngrediente', 'producto'),
     __metadata("design:type", Array)
 ], Producto.prototype, "intercambioIngredientes", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)('ObservacionProducto', 'producto'),
+    __metadata("design:type", Array)
+], Producto.prototype, "observacionesProductos", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)('ProductoAdicional', 'producto'),
+    __metadata("design:type", Array)
+], Producto.prototype, "productosAdicionales", void 0);
 Producto = __decorate([
     (0, typeorm_1.Entity)('productos')
 ], Producto);
