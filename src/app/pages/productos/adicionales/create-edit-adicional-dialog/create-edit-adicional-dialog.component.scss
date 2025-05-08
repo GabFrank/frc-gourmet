@@ -121,20 +121,20 @@
   
   .checkbox-container {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     margin-left: 16px;
     
     mat-checkbox {
-      margin-top: 16px;
+      margin-top: 0px;
     }
   }
 }
 
 .form-actions {
   display: flex;
-  gap: 16px;
-  margin-top: 24px;
-  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
 }
 
 // Mobile responsive adjustments
@@ -169,6 +169,7 @@
 
 .full-width {
   width: 100%;
+  margin-bottom: 16px;
 }
 
 .search-spinner {
@@ -218,3 +219,28 @@
 .status-inactive {
   color: red;
 } 
+
+.currency-input {
+  width: 50%;
+}
+
+.container {
+  padding: 20px;
+}
+
+.loading-indicator {
+  display: flex;
+  justify-content: center;
+  margin: 30px 0;
+}
+
+.tipo-selector {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.loading-option {
+  display: flex;
+  align-items: center;
+}

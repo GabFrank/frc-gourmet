@@ -1778,5 +1778,8 @@ contextBridge.exposeInMainWorld('api', {
   updateAdicional: async (id: number, data: Partial<Adicional>): Promise<Adicional> => {
     return await ipcRenderer.invoke('updateAdicional', id, data);
   },
-  
+
+  deleteAdicional: async (id: number): Promise<boolean> => {
+    return await ipcRenderer.invoke('deleteAdicional', id);
+  },
 });

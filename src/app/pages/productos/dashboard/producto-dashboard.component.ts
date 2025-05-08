@@ -13,7 +13,7 @@ import { ListRecetasComponent } from '../recetas/list-recetas.component';
 import { ListIngredientesComponent } from '../ingredientes/list-ingredientes.component';
 import { ListMovimientosStockComponent } from '../movimientos/list-movimientos-stock.component';
 import { MatDialog } from '@angular/material/dialog';
-import { CreateEditAdicionalDialogComponent } from '../adicionales/create-edit-adicional-dialog/create-edit-adicional-dialog.component';
+import { ListAdicionalesDialogComponent } from '../adicionales/list-adicionales-dialog/list-adicionales-dialog.component';
 import { MatDialogModule } from '@angular/material/dialog';
 
 @Component({
@@ -114,11 +114,11 @@ export class ProductoDashboardComponent implements OnInit {
   }
   
   openAdicionalesDialog(): void {
-    const dialogRef = this.dialog.open(CreateEditAdicionalDialogComponent, {
+    const dialogRef = this.dialog.open(ListAdicionalesDialogComponent, {
       width: '90%',
       maxWidth: '1200px',
-      disableClose: false,
-      data: {}
+      height: '70%',
+      disableClose: false
     });
 
     dialogRef.afterClosed().subscribe(result => {

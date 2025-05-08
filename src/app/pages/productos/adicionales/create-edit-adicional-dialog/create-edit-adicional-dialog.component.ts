@@ -1,8 +1,7 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, Inject, Optional } from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators, FormControl } from '@angular/forms';
-import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { RepositoryService } from '../../../../database/repository.service';
 import { Adicional } from '../../../../database/entities/productos/adicional.entity';
 import { Ingrediente } from '../../../../database/entities/productos/ingrediente.entity';
@@ -16,21 +15,11 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
-import { MatTableModule } from '@angular/material/table';
 import { MatCardModule } from '@angular/material/card';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { Moneda } from 'src/app/database/entities/financiero/moneda.entity';
 import { CurrencyInputComponent } from 'src/app/shared/components/currency-input/currency-input.component';
-
-interface FilterParams {
-  nombre?: string;
-  ingredienteId?: number;
-  recetaId?: number;
-  activo?: boolean;
-  pageIndex: number;
-  pageSize: number;
-}
 
 @Component({
   standalone: true,
@@ -38,7 +27,6 @@ interface FilterParams {
     CommonModule,
     ReactiveFormsModule,
     MatDialogModule,
-    MatPaginatorModule,
     MatButtonModule,
     MatCheckboxModule,
     MatFormFieldModule,
@@ -46,7 +34,6 @@ interface FilterParams {
     MatInputModule,
     MatProgressSpinnerModule,
     MatSelectModule,
-    MatTableModule,
     MatCardModule,
     MatTabsModule,
     MatAutocompleteModule,
@@ -59,7 +46,6 @@ interface FilterParams {
 export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
   // Forms
   adicionalForm: FormGroup;
-  filterForm: FormGroup;
   
   // Autocomplete search controls
   ingredienteSearchCtrl = new FormControl('');
@@ -67,18 +53,11 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
   
   // Filtered options for autocomplete
   filteredIngredientes: Observable<Ingrediente[]>;
-  filteredRecetas: Observable<Receta[]>;
+  // filteredRecetas: Observable<Receta[]>;
 
   // Data
-  adicionales: Adicional[] = [];
   ingredientes: Ingrediente[] = [];
   recetas: Receta[] = [];
-  totalItems = 0;
-
-  // Pagination
-  pageSize = 10;
-  pageIndex = 0;
-  pageSizeOptions = [5, 10, 25, 50];
 
   // moneda principal
   monedaPrincipal: Moneda = new Moneda();
@@ -86,8 +65,6 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
   // igrediente or receta formcontrols, only one can be true at a time
   isIngrediente = new FormControl(true);
   isReceta = new FormControl(false);
-  // Table
-  displayedColumns: string[] = ['nombre', 'ingrediente', 'receta', 'precioVentaUnitario', 'activo', 'actions'];
   
   // State
   isEditMode = false;
@@ -100,7 +77,8 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
     private fb: FormBuilder,
     private dialogRef: MatDialogRef<CreateEditAdicionalDialogComponent>,
     private repository: RepositoryService,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    @Optional() @Inject(MAT_DIALOG_DATA) public data: { adicionalId?: number }
   ) {
     this.adicionalForm = this.fb.group({
       id: [null],
@@ -109,13 +87,6 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
       recetaId: [null],
       precioVentaUnitario: [0, [Validators.required, Validators.min(0)]],
       activo: [true]
-    });
-
-    this.filterForm = this.fb.group({
-      nombreFilter: [''],
-      ingredienteFilter: [null],
-      recetaFilter: [null],
-      activoFilter: [null]
     });
     
     // Initialize the autocomplete observables
@@ -133,38 +104,36 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
       tap(() => this.isSearchingIngredientes = false)
     );
     
-    this.filteredRecetas = this.recetaSearchCtrl.valueChanges.pipe(
-      startWith(''),
-      debounceTime(300),
-      tap(() => this.isSearchingRecetas = true),
-      switchMap(value => {
-        if (typeof value === 'string') {
-          return this.searchRecetas(value);
-        } else {
-          return of(this.recetas);
-        }
-      }),
-      tap(() => this.isSearchingRecetas = false)
-    );
+    // this.filteredRecetas = this.recetaSearchCtrl.valueChanges.pipe(
+    //   startWith(''),
+    //   debounceTime(300),
+    //   tap(() => this.isSearchingRecetas = true),
+    //   switchMap(value => {
+    //     if (typeof value === 'string') {
+    //       return this.searchRecetas(value);
+    //     } else {
+    //       return of(this.recetas);
+    //     }
+    //   }),
+    //   tap(() => this.isSearchingRecetas = false)
+    // );
 
-    this.subscriptions.add(this.isIngrediente.valueChanges.subscribe(value => {
-      if (value) {
-        this.isReceta.setValue(false);
-      }
-    }));
+    // this.subscriptions.add(this.isIngrediente.valueChanges.subscribe(value => {
+    //   if (value) {
+    //     this.isReceta.setValue(false);
+    //   }
+    // }));
 
-    this.subscriptions.add(this.isReceta.valueChanges.subscribe(value => {
-      if (value) {
-        this.isIngrediente.setValue(false);
-      }
-    }));
+    // this.subscriptions.add(this.isReceta.valueChanges.subscribe(value => {
+    //   if (value) {
+    //     this.isIngrediente.setValue(false);
+    //   }
+    // }));
     
     this.loadMonedaPrincipal();
   }
 
-  ngOnInit(): void {
-    this.loadData();
-    
+  ngOnInit(): void {    
     // Update selected ingrediente/receta display when form values change
     this.adicionalForm.get('ingredienteId')?.valueChanges.subscribe(id => {
       if (id) {
@@ -175,14 +144,10 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
       }
     });
     
-    this.adicionalForm.get('recetaId')?.valueChanges.subscribe(id => {
-      if (id) {
-        const receta = this.recetas.find(r => r.id === id);
-        if (receta) {
-          this.recetaSearchCtrl.setValue(receta.nombre, { emitEvent: false });
-        }
-      }
-    });
+    // Check if we're in edit mode
+    if (this.data && this.data.adicionalId) {
+      this.loadAdicional(this.data.adicionalId);
+    }
   }
 
   loadMonedaPrincipal(): void {
@@ -195,103 +160,11 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
     this.subscriptions.unsubscribe();
   }
 
-  loadData(): void {
-    this.isLoading = true;
-    
-    // Load ingredientes and recetas for dropdowns
-    const loadSubcription = forkJoin({
-      ingredientes: this.repository.getIngredientes(),
-      recetas: this.repository.getRecetas()
-    }).subscribe({
-      next: (result: any) => {
-        this.ingredientes = result.ingredientes;
-        this.recetas = result.recetas;
-        this.loadAdicionales();
-      },
-      error: (error: any) => {
-        this.isLoading = false;
-        this.showError('Error al cargar datos de referencia');
-        console.error('Error loading reference data:', error);
-      }
-    });
-    
-    this.subscriptions.add(loadSubcription);
-  }
-
-  loadAdicionales(): void {
-    this.isLoading = true;
-    
-    // Create filter object from the filter form
-    const filters: FilterParams = {
-      pageIndex: this.pageIndex,
-      pageSize: this.pageSize
-    };
-    
-    // Add filter values if they exist
-    const nombreFilter = this.filterForm.get('nombreFilter')?.value;
-    if (nombreFilter) {
-      filters.nombre = nombreFilter;
-    }
-    
-    const ingredienteFilter = this.filterForm.get('ingredienteFilter')?.value;
-    if (ingredienteFilter !== null) {
-      filters.ingredienteId = ingredienteFilter;
-    }
-    
-    const recetaFilter = this.filterForm.get('recetaFilter')?.value;
-    if (recetaFilter !== null) {
-      filters.recetaId = recetaFilter;
-    }
-    
-    const activoFilter = this.filterForm.get('activoFilter')?.value;
-    if (activoFilter !== null) {
-      filters.activo = activoFilter;
-    }
-    
-    // Get filtered adicionales from repository
-    const subscription = this.repository.getAdicionalesFiltered(filters).subscribe({
-      next: (result: any) => {
-        this.adicionales = result.items;
-        this.totalItems = result.total;
-        this.isLoading = false;
-      },
-      error: (error: any) => {
-        this.isLoading = false;
-        this.showError('Error al cargar adicionales');
-        console.error('Error loading adicionales:', error);
-      }
-    });
-    
-    this.subscriptions.add(subscription);
-  }
-
-  applyFilter(): void {
-    this.pageIndex = 0; // Reset to first page when filtering
-    this.loadAdicionales();
-  }
-
-  resetFilters(): void {
-    this.filterForm.reset({
-      nombreFilter: '',
-      ingredienteFilter: null,
-      recetaFilter: null,
-      activoFilter: null
-    });
-    this.pageIndex = 0;
-    this.loadAdicionales();
-  }
-
-  onPageChange(event: PageEvent): void {
-    this.pageSize = event.pageSize;
-    this.pageIndex = event.pageIndex;
-    this.loadAdicionales();
-  }
-
-  editAdicional(adicional: Adicional): void {
+  loadAdicional(id: number): void {
     this.isLoading = true;
     
     // Get full details of the adicional for editing
-    const subscription = this.repository.getAdicional(adicional.id).subscribe({
+    const subscription = this.repository.getAdicional(id).subscribe({
       next: (result: Adicional) => {
         this.isEditMode = true;
         this.adicionalForm.patchValue({
@@ -302,6 +175,16 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
           precioVentaUnitario: result.precioVentaUnitario,
           activo: result.activo
         });
+        
+        // Set the correct radio button
+        if (result.ingredienteId) {
+          this.isIngrediente.setValue(true);
+          this.isReceta.setValue(false);
+        } else if (result.recetaId) {
+          this.isIngrediente.setValue(false);
+          this.isReceta.setValue(true);
+        }
+        
         this.isLoading = false;
       },
       error: (error: any) => {
@@ -320,6 +203,8 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
     }
     
     this.isLoading = true;
+    // set nombre to uppercase
+    this.adicionalForm.get('nombre')?.setValue(this.adicionalForm.get('nombre')?.value.toUpperCase());
     const adicional = this.adicionalForm.value as Adicional;
     
     const saveOperation = this.isEditMode
@@ -329,8 +214,7 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
     const subscription = saveOperation.subscribe({
       next: () => {
         this.showSuccess(this.isEditMode ? 'Adicional actualizado correctamente' : 'Adicional creado correctamente');
-        this.resetForm();
-        this.loadAdicionales();
+        this.dialogRef.close(true);
       },
       error: (error: any) => {
         this.isLoading = false;
@@ -340,18 +224,6 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
     });
     
     this.subscriptions.add(subscription);
-  }
-
-  resetForm(): void {
-    this.isEditMode = false;
-    this.adicionalForm.reset({
-      id: null,
-      nombre: '',
-      ingredienteId: null,
-      recetaId: null,
-      precioVentaUnitario: 0,
-      activo: true
-    });
   }
 
   closeDialog(): void {
@@ -375,10 +247,12 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
   // Search functions for the autocomplete
   searchIngredientes(query: string): Observable<Ingrediente[]> {
     if (!query || query.trim() === '') {
+      console.info('No query, returning all ingredientes');
       return of(this.ingredientes);
     }
     
     // Use the existing searchIngredientesByDescripcion method
+    console.info('Searching ingredientes by description', query);
     return this.repository.searchIngredientesByDescripcion(query);
   }
   

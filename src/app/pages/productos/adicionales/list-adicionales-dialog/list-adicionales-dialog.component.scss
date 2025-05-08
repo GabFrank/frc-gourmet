@@ -1,0 +1,48 @@
+
+.filter-section {
+  margin-bottom: 20px;
+  
+  .filter-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    
+    mat-form-field {
+      width: calc(25% - 12px);
+      min-width: 200px;
+    }
+  }
+  
+  .filter-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 10px;
+  }
+}
+
+.loading-indicator {
+  display: flex;
+  justify-content: center;
+  margin: 30px 0;
+}
+
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  
+  table {
+    width: 100%;
+  }
+  
+  .no-data-message {
+    text-align: center;
+    padding: 20px;
+    font-style: italic;
+    color: #888;
+  }
+}
+
+mat-paginator {
+  margin-top: 16px;
+} 

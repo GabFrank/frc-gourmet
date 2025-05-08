@@ -959,6 +959,9 @@ electron_1.contextBridge.exposeInMainWorld('api', {
     getAdicional: async (id) => {
         return await electron_1.ipcRenderer.invoke('getAdicional', id);
     },
+    deleteAdicional: async (id) => {
+        return await electron_1.ipcRenderer.invoke('deleteAdicional', id);
+    },
     // New search methods
     searchIngredientes: async (query) => {
         return await electron_1.ipcRenderer.invoke('searchIngredientes', query);

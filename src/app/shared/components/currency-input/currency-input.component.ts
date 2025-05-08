@@ -29,7 +29,7 @@ import { NgxCurrencyModule } from 'ngx-currency';
   ],
   template: `
     <div class="currency-input-container">
-      <mat-form-field appearance="outline" class="currency-field">
+      <mat-form-field appearance="outline" class="currency-field" subscriptSizing="dynamic">
         <mat-label *ngIf="!disableFloating">{{ label }}</mat-label>
         <input
           #inputElement

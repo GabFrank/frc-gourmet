@@ -1,222 +1,125 @@
-<h2 mat-dialog-title>{{ isEditMode ? 'Editar Adicional' : 'Crear Adicional' }}</h2>
-<mat-dialog-content class="mat-typography dialog-content">
-  <!-- Loading spinner overlay -->
-  <div *ngIf="isLoading" class="loading-overlay">
+<mat-card
+  style="height: 100%; display: flex; flex-direction: column; gap: 10px"
+>
+  <h4>{{ isEditMode ? "Editar" : "Crear" }} Adicional</h4>
+
+  <div class="loading-indicator" *ngIf="isLoading">
     <mat-spinner diameter="50"></mat-spinner>
   </div>
 
-  <mat-tab-group>
-    <!-- Tab for the list and filtering -->
-    <mat-tab label="Lista de Adicionales">
-      <div class="filter-container">
-        <mat-card>
-          <mat-card-header>
-            <mat-card-title>Filtros</mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <form [formGroup]="filterForm" class="filter-form">
-              <div class="filter-row">
-                <mat-form-field appearance="outline">
-                  <mat-label>Nombre</mat-label>
-                  <input matInput formControlName="nombreFilter" placeholder="Buscar por nombre">
-                  <button *ngIf="filterForm.get('nombreFilter')?.value" matSuffix mat-icon-button aria-label="Clear"
-                    (click)="filterForm.get('nombreFilter')?.setValue(''); applyFilter()">
-                    <mat-icon>close</mat-icon>
-                  </button>
-                </mat-form-field>
+  <form
+    [formGroup]="adicionalForm"
+    (ngSubmit)="saveAdicional()"
+    *ngIf="!isLoading"
+  >
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Nombre</mat-label>
+      <input
+        matInput
+        formControlName="nombre"
+        placeholder="Nombre del adicional"
+      />
+      <mat-error *ngIf="adicionalForm.get('nombre')?.hasError('required')">
+        Nombre es requerido
+      </mat-error>
+    </mat-form-field>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Ingrediente</mat-label>
-                  <mat-select formControlName="ingredienteFilter">
-                    <mat-option [value]="null">Todos</mat-option>
-                    <mat-option *ngFor="let ingrediente of ingredientes" [value]="ingrediente.id">
-                      {{ ingrediente.descripcion }}
-                    </mat-option>
-                  </mat-select>
-                </mat-form-field>
-
-                <mat-form-field appearance="outline">
-                  <mat-label>Receta</mat-label>
-                  <mat-select formControlName="recetaFilter">
-                    <mat-option [value]="null">Todas</mat-option>
-                    <mat-option *ngFor="let receta of recetas" [value]="receta.id">
-                      {{ receta.nombre }}
-                    </mat-option>
-                  </mat-select>
-                </mat-form-field>
-
-                <mat-form-field appearance="outline">
-                  <mat-label>Estado</mat-label>
-                  <mat-select formControlName="activoFilter">
-                    <mat-option [value]="null">Todos</mat-option>
-                    <mat-option [value]="true">Activo</mat-option>
-                    <mat-option [value]="false">Inactivo</mat-option>
-                  </mat-select>
-                </mat-form-field>
-              </div>
-
-              <div class="filter-actions">
-                <button mat-raised-button color="primary" (click)="applyFilter()">
-                  <mat-icon>search</mat-icon> Filtrar
-                </button>
-                <button mat-button (click)="resetFilters()">
-                  <mat-icon>clear</mat-icon> Limpiar Filtros
-                </button>
-              </div>
-            </form>
-          </mat-card-content>
-        </mat-card>
+    <div class="tipo-selector" *ngIf="false">
+      <div>
+        <mat-checkbox [formControl]="isIngrediente">Ingrediente</mat-checkbox>
       </div>
-
-      <!-- Table of adicionales -->
-      <div class="table-container">
-        <table mat-table [dataSource]="adicionales" class="mat-elevation-z8">
-          <!-- Nombre Column -->
-          <ng-container matColumnDef="nombre">
-            <th mat-header-cell *matHeaderCellDef>Nombre</th>
-            <td mat-cell *matCellDef="let adicional">{{ adicional.nombre }}</td>
-          </ng-container>
-
-          <!-- Ingrediente Column -->
-          <ng-container matColumnDef="ingrediente">
-            <th mat-header-cell *matHeaderCellDef>Ingrediente</th>
-            <td mat-cell *matCellDef="let adicional">
-              {{ adicional.ingrediente?.descripcion || 'Ninguno' }}
-            </td>
-          </ng-container>
-
-          <!-- Receta Column -->
-          <ng-container matColumnDef="receta">
-            <th mat-header-cell *matHeaderCellDef>Receta</th>
-            <td mat-cell *matCellDef="let adicional">
-              {{ adicional.receta?.nombre || 'N/A' }}
-            </td>
-          </ng-container>
-
-          <!-- Precio Venta Unitario Column -->
-          <ng-container matColumnDef="precioVentaUnitario">
-            <th mat-header-cell *matHeaderCellDef>Precio Unitario</th>
-            <td mat-cell *matCellDef="let adicional">{{ adicional.precioVentaUnitario | number:'1.0-2' }}</td>
-          </ng-container>
-
-          <!-- Activo Column -->
-          <ng-container matColumnDef="activo">
-            <th mat-header-cell *matHeaderCellDef>Estado</th>
-            <td mat-cell *matCellDef="let adicional">
-              <mat-icon [ngClass]="{'active-icon': adicional.activo, 'inactive-icon': !adicional.activo}">
-                {{ adicional.activo ? 'check_circle' : 'cancel' }}
-              </mat-icon>
-              {{ adicional.activo ? 'Activo' : 'Inactivo' }}
-            </td>
-          </ng-container>
-
-          <!-- Actions Column -->
-          <ng-container matColumnDef="actions">
-            <th mat-header-cell *matHeaderCellDef>Acciones</th>
-            <td mat-cell *matCellDef="let adicional">
-              <button mat-icon-button color="primary" (click)="editAdicional(adicional)" matTooltip="Editar">
-                <mat-icon>edit</mat-icon>
-              </button>
-            </td>
-          </ng-container>
-
-          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
-
-          <!-- Row shown when there is no data -->
-          <tr class="mat-row" *matNoDataRow>
-            <td class="mat-cell" colspan="6">No se encontraron resultados</td>
-          </tr>
-        </table>
-
-        <mat-paginator [length]="totalItems" [pageSize]="pageSize" [pageSizeOptions]="pageSizeOptions"
-          [pageIndex]="pageIndex" (page)="onPageChange($event)">
-        </mat-paginator>
+      <div>
+        <mat-checkbox [formControl]="isReceta">Receta</mat-checkbox>
       </div>
-    </mat-tab>
+    </div>
 
-    <!-- Tab for creating/editing adicionales -->
-    <mat-tab label="{{ isEditMode ? 'Editar Adicional' : 'Crear Adicional' }}">
-      <div class="form-container">
-        <form [formGroup]="adicionalForm" (ngSubmit)="saveAdicional()">
-          <div class="form-row">
-            <mat-form-field appearance="outline" class="full-width">
-              <mat-label>Nombre</mat-label>
-              <input matInput formControlName="nombre" placeholder="Nombre del adicional">
-              <mat-error *ngIf="adicionalForm.get('nombre')?.hasError('required')">
-                El nombre es obligatorio
-              </mat-error>
-            </mat-form-field>
-          </div>
+    <div *ngIf="isIngrediente.value">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Ingrediente</mat-label>
+        <input
+          type="text"
+          matInput
+          [formControl]="ingredienteSearchCtrl"
+          [matAutocomplete]="ingredienteAuto"
+          placeholder="Buscar ingrediente"
+        />
+        <mat-autocomplete
+          #ingredienteAuto="matAutocomplete"
+          [displayWith]="displayIngrediente"
+          (optionSelected)="selectIngrediente($event)"
+        >
+          <mat-option *ngIf="isSearchingIngredientes" class="loading-option">
+            <mat-spinner diameter="20"></mat-spinner>&nbsp;Buscando...
+          </mat-option>
+          <ng-container *ngIf="!isSearchingIngredientes">
+            <mat-option
+              *ngFor="let ingrediente of filteredIngredientes | async"
+              [value]="ingrediente"
+            >
+              {{ ingrediente.descripcion }}
+            </mat-option>
+          </ng-container>
+        </mat-autocomplete>
+      </mat-form-field>
+    </div>
 
-          <!-- checkbox for ingrediente or receta -->
-          <div class="form-row">
-            <mat-checkbox [formControl]="isIngrediente">Ingrediente</mat-checkbox>
-            <mat-checkbox [formControl]="isReceta">Receta</mat-checkbox>
-          </div>
+    <!-- <div *ngIf="isReceta.value && false">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Receta</mat-label>
+        <input
+          type="text"
+          matInput
+          [formControl]="recetaSearchCtrl"
+          [matAutocomplete]="recetaAuto"
+          placeholder="Buscar receta"
+        />
+        <mat-autocomplete
+          #recetaAuto="matAutocomplete"
+          [displayWith]="displayReceta"
+          (optionSelected)="selectReceta($event)"
+        >
+          <mat-option *ngIf="isSearchingRecetas" class="loading-option">
+            <mat-spinner diameter="20"></mat-spinner>&nbsp;Buscando...
+          </mat-option>
+          <ng-container *ngIf="!isSearchingRecetas">
+            <mat-option
+              *ngFor="let receta of filteredRecetas | async"
+              [value]="receta"
+            >
+              {{ receta.nombre }}
+            </mat-option>
+          </ng-container>
+        </mat-autocomplete>
+      </mat-form-field>
+    </div> -->
 
-          <div class="form-row" *ngIf="isIngrediente.value">
-            <mat-form-field appearance="outline" class="full-width">
-              <mat-label>Ingrediente</mat-label>
-              <input type="text" matInput [formControl]="ingredienteSearchCtrl" [matAutocomplete]="autoIngrediente"
-                placeholder="Buscar ingrediente...">
-              <mat-spinner *ngIf="isSearchingIngredientes" diameter="20" class="search-spinner"></mat-spinner>
-              <mat-autocomplete #autoIngrediente="matAutocomplete" [displayWith]="displayIngrediente.bind(this)"
-                (optionSelected)="selectIngrediente($event)">
-                <mat-option *ngFor="let ingrediente of filteredIngredientes | async" [value]="ingrediente">
-                  {{ingrediente.descripcion}}
-                </mat-option>
-                <mat-option *ngIf="(filteredIngredientes | async)?.length === 0" [disabled]="true">
-                  No se encontraron ingredientes
-                </mat-option>
-              </mat-autocomplete>
-            </mat-form-field>
-          </div>
+    <div
+      style="display: flex; flex-direction: row; gap: 10px; align-items: center"
+    >
+      <app-currency-input
+        class="full-width"
+        [moneda]="monedaPrincipal"
+        formControlName="precioVentaUnitario"
+        label="Precio de Venta"
+        [required]="true"
+        [min]="0"
+        style="margin-bottom: 0px; width: 50%;"
+      >
+      </app-currency-input>
 
-          <div class="form-row" *ngIf="isReceta.value">
-            <mat-form-field appearance="outline" class="full-width">
-              <mat-label>Receta</mat-label>
-              <input type="text" matInput [formControl]="recetaSearchCtrl" [matAutocomplete]="autoReceta"
-                placeholder="Buscar receta...">
-              <mat-spinner *ngIf="isSearchingRecetas" diameter="20" class="search-spinner"></mat-spinner>
-              <mat-autocomplete #autoReceta="matAutocomplete" [displayWith]="displayReceta.bind(this)"
-                (optionSelected)="selectReceta($event)">
-                <mat-option *ngFor="let receta of filteredRecetas | async" [value]="receta">
-                  {{receta.nombre}}
-                </mat-option>
-                <mat-option *ngIf="(filteredRecetas | async)?.length === 0" [disabled]="true">
-                  No se encontraron recetas
-                </mat-option>
-              </mat-autocomplete>
-            </mat-form-field>
-          </div>
+      <mat-checkbox formControlName="activo">Activo</mat-checkbox>
+    </div>
 
-          <div class="form-row">
-            <app-currency-input formControlName="precioVentaUnitario" label="Precio Venta Unitario"
-              [moneda]="monedaPrincipal" [required]="true" [min]="0" hint="Precio de venta unitario del adicional"
-              class="currency-input">
-            </app-currency-input>
-
-            <div class="checkbox-container">
-              <mat-checkbox formControlName="activo">Activo</mat-checkbox>
-            </div>
-          </div>
-
-          <div class="form-actions">
-            <button type="button" mat-button (click)="resetForm()">
-              Cancelar
-            </button>
-            <button type="submit" mat-raised-button color="primary" [disabled]="adicionalForm.invalid || isLoading">
-              <mat-icon>save</mat-icon>
-              {{ isEditMode ? 'Actualizar' : 'Guardar' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </mat-tab>
-  </mat-tab-group>
-</mat-dialog-content>
-
-<mat-dialog-actions align="end">
-  <button mat-button (click)="closeDialog()">Cerrar</button>
-</mat-dialog-actions>
+    <div class="form-actions">
+      <button mat-button type="button" (click)="closeDialog()">Cancelar</button>
+      <button
+        mat-raised-button
+        color="primary"
+        type="submit"
+        [disabled]="adicionalForm.invalid"
+      >
+        {{ isEditMode ? "Actualizar" : "Crear" }}
+      </button>
+    </div>
+  </form>
+</mat-card>
