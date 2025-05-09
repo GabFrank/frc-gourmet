@@ -44,8 +44,10 @@ export class TabsService {
     // this.addTab('Lista de compras', ListComprasComponent)
     //open create edit compra with compra id 8
     // this.openTabWithData('Editar Compra', CreateEditCompraComponent, { compraId: 8 });
-    //open productos dashboard
-    this.addTab('Productos Dashboard', ProductoDashboardComponent, null, 'productos-dashboard');
+    //open productos create edit producto
+    // this.addTab('Productos Dashboard', ProductoDashboardComponent, null, 'productos-dashboard');
+    // open producto with id 1
+    this.addTab('Producto', CreateEditProductoComponent, { productoId: 1 });
   }
 
   /**

@@ -101,6 +101,10 @@ __decorate([
     (0, typeorm_1.OneToMany)('ComboItem', 'presentacion'),
     __metadata("design:type", Array)
 ], Presentacion.prototype, "comboItems", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)('ProductoAdicional', 'presentacion'),
+    __metadata("design:type", Array)
+], Presentacion.prototype, "productosAdicionales", void 0);
 Presentacion = __decorate([
     (0, typeorm_1.Entity)('producto_presentaciones')
 ], Presentacion);

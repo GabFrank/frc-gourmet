@@ -6,7 +6,7 @@ import { RepositoryService } from '../../../../database/repository.service';
 import { Adicional } from '../../../../database/entities/productos/adicional.entity';
 import { Ingrediente } from '../../../../database/entities/productos/ingrediente.entity';
 import { Receta } from '../../../../database/entities/productos/receta.entity';
-import { Subscription, forkJoin, Observable, of, debounceTime, switchMap, tap, startWith } from 'rxjs';
+import { Subscription, forkJoin, Observable, of, debounceTime, switchMap, tap, startWith, catchError } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -89,19 +89,33 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
       activo: [true]
     });
     
-    // Initialize the autocomplete observables
+    // Very simple implementation to prevent initial search
     this.filteredIngredientes = this.ingredienteSearchCtrl.valueChanges.pipe(
-      startWith(''),
       debounceTime(300),
-      tap(() => this.isSearchingIngredientes = true),
       switchMap(value => {
-        if (typeof value === 'string') {
-          return this.searchIngredientes(value);
+        // Start loading
+        this.isSearchingIngredientes = true;
+        
+        if (typeof value === 'string' && value.length >= 2) {
+          // Perform search only if there's text input with at least 2 chars
+          return this.repository.searchIngredientesByDescripcion(value)
+            .pipe(
+              tap(() => {
+                // Stop loading when data arrives
+                this.isSearchingIngredientes = false;
+              }),
+              catchError(() => {
+                // Stop loading on error and return empty array
+                this.isSearchingIngredientes = false;
+                return of([]);
+              })
+            );
         } else {
-          return of(this.ingredientes);
+          // No search needed, return empty and stop loading
+          this.isSearchingIngredientes = false;
+          return of([]);
         }
-      }),
-      tap(() => this.isSearchingIngredientes = false)
+      })
     );
     
     // this.filteredRecetas = this.recetaSearchCtrl.valueChanges.pipe(
@@ -180,10 +194,12 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
         if (result.ingredienteId) {
           this.isIngrediente.setValue(true);
           this.isReceta.setValue(false);
-        } else if (result.recetaId) {
-          this.isIngrediente.setValue(false);
-          this.isReceta.setValue(true);
-        }
+
+          //search for the ingrediente in database
+          this.repository.getIngrediente(result.ingredienteId).subscribe(ingrediente => {
+            this.ingredienteSearchCtrl.setValue(ingrediente.descripcion, { emitEvent: false });
+          });
+        } 
         
         this.isLoading = false;
       },
@@ -245,17 +261,6 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
   }
 
   // Search functions for the autocomplete
-  searchIngredientes(query: string): Observable<Ingrediente[]> {
-    if (!query || query.trim() === '') {
-      console.info('No query, returning all ingredientes');
-      return of(this.ingredientes);
-    }
-    
-    // Use the existing searchIngredientesByDescripcion method
-    console.info('Searching ingredientes by description', query);
-    return this.repository.searchIngredientesByDescripcion(query);
-  }
-  
   searchRecetas(query: string): Observable<Receta[]> {
     if (!query || query.trim() === '') {
       return of(this.recetas);

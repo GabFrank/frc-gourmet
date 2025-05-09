@@ -43,22 +43,32 @@
           [matAutocomplete]="ingredienteAuto"
           placeholder="Buscar ingrediente"
         />
+        <mat-hint>Ingrese al menos 2 caracteres para buscar</mat-hint>
         <mat-autocomplete
           #ingredienteAuto="matAutocomplete"
           [displayWith]="displayIngrediente"
           (optionSelected)="selectIngrediente($event)"
         >
-          <mat-option *ngIf="isSearchingIngredientes" class="loading-option">
-            <mat-spinner diameter="20"></mat-spinner>&nbsp;Buscando...
+          <!-- Simple loading state -->
+          <mat-option *ngIf="isSearchingIngredientes" disabled>
+            <mat-spinner diameter="20"></mat-spinner> Buscando...
           </mat-option>
-          <ng-container *ngIf="!isSearchingIngredientes">
-            <mat-option
-              *ngFor="let ingrediente of filteredIngredientes | async"
-              [value]="ingrediente"
-            >
-              {{ ingrediente.descripcion }}
-            </mat-option>
-          </ng-container>
+          
+          <!-- Results -->
+          <mat-option 
+            *ngFor="let ingrediente of filteredIngredientes | async" 
+            [value]="ingrediente"
+          >
+            {{ ingrediente.descripcion }}
+          </mat-option>
+          
+          <!-- Empty state: only shown when search performed and no results -->
+          <mat-option 
+            *ngIf="!isSearchingIngredientes && (filteredIngredientes | async)?.length === 0 && ingredienteSearchCtrl.value" 
+            disabled
+          >
+            No hay resultados
+          </mat-option>
         </mat-autocomplete>
       </mat-form-field>
     </div>

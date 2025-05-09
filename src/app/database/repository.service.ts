@@ -461,6 +461,7 @@ interface ElectronAPI {
   // ProductoAdicional methods
   getProductosAdicionales: () => Promise<ProductoAdicional[]>;
   getProductosAdicionalesByProducto: (productoId: number) => Promise<ProductoAdicional[]>;
+  getProductosAdicionalesByPresentacion: (presentacionId: number) => Promise<ProductoAdicional[]>;
   getProductoAdicional: (id: number) => Promise<ProductoAdicional>;
   createProductoAdicional: (data: Partial<ProductoAdicional>) => Promise<ProductoAdicional>;
   updateProductoAdicional: (id: number, data: Partial<ProductoAdicional>) => Promise<ProductoAdicional>;
@@ -1924,6 +1925,10 @@ export class RepositoryService {
 
   getProductosAdicionalesByProducto(productoId: number): Observable<ProductoAdicional[]> {
     return from(this.api.getProductosAdicionalesByProducto(productoId));
+  }
+
+  getProductosAdicionalesByPresentacion(presentacionId: number): Observable<ProductoAdicional[]> {
+    return from(this.api.getProductosAdicionalesByPresentacion(presentacionId));
   }
 
   getProductoAdicional(id: number): Observable<ProductoAdicional> {

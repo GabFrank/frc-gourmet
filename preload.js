@@ -959,8 +959,27 @@ electron_1.contextBridge.exposeInMainWorld('api', {
     getAdicional: async (id) => {
         return await electron_1.ipcRenderer.invoke('getAdicional', id);
     },
-    deleteAdicional: async (id) => {
-        return await electron_1.ipcRenderer.invoke('deleteAdicional', id);
+    // ProductoAdicional methods
+    getProductoAdicionales: async (productoId) => {
+        return await electron_1.ipcRenderer.invoke('getProductoAdicionales', productoId);
+    },
+    getProductoAdicional: async (id) => {
+        return await electron_1.ipcRenderer.invoke('getProductoAdicional', id);
+    },
+    createProductoAdicional: async (data) => {
+        return await electron_1.ipcRenderer.invoke('createProductoAdicional', data);
+    },
+    updateProductoAdicional: async (id, data) => {
+        return await electron_1.ipcRenderer.invoke('updateProductoAdicional', id, data);
+    },
+    getProductosAdicionalesByProducto: async (productoId) => {
+        return await electron_1.ipcRenderer.invoke('getProductosAdicionalesByProducto', productoId);
+    },
+    getProductosAdicionalesByPresentacion: async (presentacionId) => {
+        return await electron_1.ipcRenderer.invoke('getProductosAdicionalesByPresentacion', presentacionId);
+    },
+    deleteProductoAdicional: async (id) => {
+        return await electron_1.ipcRenderer.invoke('deleteProductoAdicional', id);
     },
     // New search methods
     searchIngredientes: async (query) => {
@@ -974,6 +993,9 @@ electron_1.contextBridge.exposeInMainWorld('api', {
     },
     updateAdicional: async (id, data) => {
         return await electron_1.ipcRenderer.invoke('updateAdicional', id, data);
+    },
+    deleteAdicional: async (id) => {
+        return await electron_1.ipcRenderer.invoke('deleteAdicional', id);
     },
 });
 //# sourceMappingURL=preload.js.map

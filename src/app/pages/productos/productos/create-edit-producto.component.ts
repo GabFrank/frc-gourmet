@@ -41,6 +41,9 @@ import { trigger, state, style, transition, animate } from '@angular/animations'
 import { PresentacionSabor } from '../../../database/entities/productos/presentacion-sabor.entity';
 import { Moneda } from '../../../database/entities/financiero/moneda.entity';
 import { RecetaVariacion } from '../../../database/entities/productos/receta-variacion.entity';
+import { ProductoAdicional } from '../../../database/entities/productos/producto-adicional.entity';
+import { Adicional } from '../../../database/entities/productos/adicional.entity';
+import { CreateEditAdicionalDialogComponent } from '../adicionales/create-edit-adicional-dialog/create-edit-adicional-dialog.component';
 
 // renamed to avoid conflict with the imported type
 interface ProductImageModel {
@@ -130,7 +133,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   recetas: Receta[] = [];
   filteredRecetas!: Observable<RecetaViewModel[]>;
   // search for main image when load the product
-  mainImageUrl: string = '';
+  mainImageUrl = '';
   // For image handling
   selectedImageFile: File | null = null;
   productImages: ProductImageModel[] = [];
@@ -193,6 +196,20 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     'activo',
     'acciones'
   ];
+
+  // Columns for the adicionales table
+  adicionalesDisplayedColumns: string[] = [
+    'nombre',
+    'ingrediente',
+    'cantidad',
+    'precioVentaUnitario',
+    'activo',
+    'acciones'
+  ];
+
+  // Track producto adicionales for each presentacion
+  presentacionAdicionales: { [presentacionId: number]: ProductoAdicional[] } = {};
+  loadingAdicionales = false;
 
   /**
    * Load sabor data asynchronously
@@ -1314,6 +1331,11 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
           } catch (error) {
             console.error(`Error loading codigos for presentacion ${presentacion.id}:`, error);
           }
+
+          // Also load adicionales for each presentacion
+          if (presentacion.id) {
+            this.loadPresentacionAdicionales(presentacion.id);
+          }
         }
 
         // If the product doesn't have variations, get the principal presentation for precios
@@ -2286,5 +2308,164 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     } else {
       return '#c62828'; // Red - high CMV
     }
+  }
+
+  /**
+   * Load adicionales for a specific presentacion
+   */
+  async loadPresentacionAdicionales(presentacionId: number): Promise<void> {
+    if (this.presentacionAdicionales[presentacionId]?.length > 0) {
+      // Already loaded
+      return;
+    }
+
+    this.loadingAdicionales = true;
+    try {
+      const adicionales = await firstValueFrom(this.repositoryService.getProductosAdicionalesByPresentacion(presentacionId));
+      this.presentacionAdicionales[presentacionId] = adicionales;
+
+      // Load adicional details for each producto adicional
+      for (const adicional of this.presentacionAdicionales[presentacionId]) {
+        if (!adicional.adicional && adicional.adicionalId) {
+          try {
+            adicional.adicional = await firstValueFrom(this.repositoryService.getAdicional(adicional.adicionalId));
+          } catch (error) {
+            console.error(`Error loading adicional details for ID ${adicional.adicionalId}:`, error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading presentacion adicionales:', error);
+      this.snackBar.open('Error al cargar los adicionales de la presentación', 'Cerrar', { duration: 3000 });
+    } finally {
+      this.loadingAdicionales = false;
+    }
+  }
+
+  /**
+   * Open dialog to add a new adicional for a presentacion
+   */
+  addPresentacionAdicional(presentacion: Presentacion): void {
+    if (!this.producto?.id || !presentacion.id) {
+      this.snackBar.open('Debe guardar el producto primero', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    const dialogRef = this.dialog.open(CreateEditAdicionalDialogComponent, {
+      width: '800px',
+      disableClose: false,
+      data: {} // No specific data to send
+    });
+
+    dialogRef.afterClosed().subscribe(async (result) => {
+      if (result) {
+        try {
+          // Create the relationship between presentacion and adicional
+          const adicionalId = result.id || result; // Get the ID from result object or directly
+          
+          await firstValueFrom(this.repositoryService.createProductoAdicional({
+            presentacionId: presentacion.id,
+            adicionalId: adicionalId,
+            productoId: this.producto!.id,
+            cantidadDefault: 1,
+            activo: true
+          }));
+
+          this.snackBar.open('Adicional agregado exitosamente', 'Cerrar', { duration: 3000 });
+          
+          // Reload adicionales for this presentacion
+          this.presentacionAdicionales[presentacion.id] = [];
+          this.loadPresentacionAdicionales(presentacion.id);
+        } catch (error) {
+          console.error('Error adding adicional to presentacion:', error);
+          this.snackBar.open('Error al agregar el adicional', 'Cerrar', { duration: 3000 });
+        }
+      }
+    });
+  }
+
+  /**
+   * Edit a producto adicional
+   */
+  editProductoAdicional(productoAdicional: ProductoAdicional): void {
+    if (!productoAdicional.id) {
+      this.snackBar.open('El adicional no tiene ID', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    // This implementation just edits the default cantidad for now
+    // A more complete implementation would let you edit the relationship properties
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      width: '400px',
+      data: {
+        title: 'Editar cantidad por defecto',
+        message: `Ingrese la cantidad por defecto para ${productoAdicional.adicional?.nombre || 'el adicional'}`,
+        inputType: 'number',
+        inputValue: productoAdicional.cantidadDefault || 1,
+        confirmText: 'Guardar',
+        cancelText: 'Cancelar'
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(async (result) => {
+      if (result !== undefined) {
+        try {
+          await firstValueFrom(this.repositoryService.updateProductoAdicional(productoAdicional.id, {
+            cantidadDefault: +result
+          }));
+
+          this.snackBar.open('Adicional actualizado exitosamente', 'Cerrar', { duration: 3000 });
+          
+          // Reload adicionales for this presentacion
+          this.presentacionAdicionales[productoAdicional.presentacionId] = [];
+          this.loadPresentacionAdicionales(productoAdicional.presentacionId);
+        } catch (error) {
+          console.error('Error updating producto adicional:', error);
+          this.snackBar.open('Error al actualizar el adicional', 'Cerrar', { duration: 3000 });
+        }
+      }
+    });
+  }
+
+  /**
+   * Delete a producto adicional
+   */
+  async deleteProductoAdicional(productoAdicional: ProductoAdicional): Promise<void> {
+    if (!productoAdicional.id) {
+      return;
+    }
+
+    // Confirm deletion
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      width: '400px',
+      data: {
+        title: 'Confirmar Eliminación',
+        message: `¿Está seguro de eliminar este adicional?`
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(async (result) => {
+      if (result) {
+        try {
+          await firstValueFrom(this.repositoryService.deleteProductoAdicional(productoAdicional.id));
+          this.snackBar.open('Adicional eliminado exitosamente', 'Cerrar', { duration: 3000 });
+
+          // Reload adicionales for this presentacion
+          this.presentacionAdicionales[productoAdicional.presentacionId] = [];
+          this.loadPresentacionAdicionales(productoAdicional.presentacionId);
+        } catch (error) {
+          console.error('Error deleting producto adicional:', error);
+          this.snackBar.open('Error al eliminar el adicional', 'Cerrar', { duration: 3000 });
+        }
+      }
+    });
+  }
+
+  /**
+   * Helper function to get ingrediente descripcion
+   */
+  getIngredienteDescripcion(ingredienteId?: number): string {
+    if (!ingredienteId) return 'N/A';
+    return 'Ingrediente';  // Placeholder - in real implementation you would look up the ingredient
   }
 }

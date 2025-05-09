@@ -4,11 +4,14 @@
 1. **KISS (Keep It Simple, Stupid)**: Write simple, straightforward code. Avoid complexity unless absolutely necessary.
 
 ## Angular Template Performance
-2. **NO DIRECT FUNCTION CALLS IN TEMPLATES**: Never do `{{ calculateValue() }}` or `[prop]="service.format()"`. Instead:
-   - Store pre-computed values in component properties
-   - Update properties when inputs change
-   - Use pipes for transformations
-   - Use getters only for trivial operations
+2. **NO DIRECT FUNCTION CALLS OR GETTERS IN TEMPLATES**: Both function calls `{{ calculateValue() }}` and getters execute on every change detection cycle, causing performance issues. Instead:
+   - Store pre-computed values in component properties that are calculated only when needed
+   - Update these properties when input data changes using lifecycle hooks (ngOnInit, ngOnChanges)
+   - Use pipes for simple transformations
+   - AVOID: `{{ calculateValue() }}` or `[prop]="service.format()"`
+   - AVOID: `get personaNombre() { return persona.nombre; }`
+   - USE: `{{ persona.nombre }}` for direct property access
+   - USE: `{{ totalAmount }}` where totalAmount is a class property calculated only when relevant data changes
 
 ## Form Management
 3. **ALWAYS USE REACTIVE FORMS**: Never use ngModel or template-driven forms. Always use Reactive Forms:

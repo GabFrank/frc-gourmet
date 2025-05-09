@@ -6,6 +6,7 @@ import type { Codigo } from './codigo.entity';
 import type { PrecioVenta } from './precio-venta.entity';
 import type { PresentacionSabor } from './presentacion-sabor.entity';
 import type { ComboItem } from './combo-item.entity';
+import { ProductoAdicional } from './producto-adicional.entity';
 
 /**
  * Tipo de medida para la presentación de un producto
@@ -82,4 +83,7 @@ export class Presentacion extends BaseModel {
 
   @OneToMany('ComboItem', 'presentacion')
   comboItems!: ComboItem[];
+
+  @OneToMany('ProductoAdicional', 'presentacion')
+  productosAdicionales!: ProductoAdicional[];
 }

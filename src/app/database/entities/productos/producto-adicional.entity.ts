@@ -2,6 +2,7 @@ import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import type { Producto } from './producto.entity';
 import type { Adicional } from './adicional.entity';
+import { Presentacion } from './presentacion.entity';
 
 /**
  * Entity representing a relationship between product and additional item
@@ -14,6 +15,14 @@ export class ProductoAdicional extends BaseModel {
   @ManyToOne('Producto', 'productosAdicionales')
   @JoinColumn({ name: 'producto_id' })
   producto!: Producto;
+
+  // add presentacion relation
+  @Column({ name: 'presentacion_id' })
+  presentacionId!: number;
+
+  @ManyToOne('Presentacion', 'productoAdicionales')
+  @JoinColumn({ name: 'presentacion_id' })
+  presentacion!: Presentacion;
 
   @Column({ name: 'adicional_id' })
   adicionalId!: number;

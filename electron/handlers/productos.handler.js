@@ -777,9 +777,11 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         }
     });
     electron_1.ipcMain.handle('searchIngredientesByDescripcion', async (_event, searchText) => {
+        console.info('Searching ingredientes by description', searchText);
         try {
             const repo = dataSource.getRepository(ingrediente_entity_1.Ingrediente);
             if (!searchText || searchText.trim() === '') {
+                console.info('No search text, returning all ingredientes');
                 return await repo.find({ order: { descripcion: 'ASC' }, take: 10 });
             }
             return await repo.createQueryBuilder('ingrediente')
@@ -1692,7 +1694,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
             return await repo.find({
                 where: { productoId },
-                relations: ['adicional'],
+                relations: ['adicional', 'presentacion'],
                 order: { adicionalId: 'ASC' }
             });
         }
@@ -1701,12 +1703,26 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             throw error;
         }
     });
+    // get by presentacion id
+    electron_1.ipcMain.handle('getProductosAdicionalesByPresentacion', async (_event, presentacionId) => {
+        try {
+            const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
+            return await repo.find({
+                where: { presentacionId },
+                relations: ['producto', 'adicional', 'presentacion']
+            });
+        }
+        catch (error) {
+            console.error(`Error getting producto adicionales by presentacion ID ${presentacionId}:`, error);
+            throw error;
+        }
+    });
     electron_1.ipcMain.handle('getProductoAdicional', async (_event, id) => {
         try {
             const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
             return await repo.findOne({
                 where: { id },
-                relations: ['producto', 'adicional']
+                relations: ['producto', 'adicional', 'presentacion']
             });
         }
         catch (error) {

@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductoAdicional = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
+const presentacion_entity_1 = require("./presentacion.entity");
 /**
  * Entity representing a relationship between product and additional item
  */
@@ -26,6 +27,15 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'producto_id' }),
     __metadata("design:type", Function)
 ], ProductoAdicional.prototype, "producto", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'presentacion_id' }),
+    __metadata("design:type", Number)
+], ProductoAdicional.prototype, "presentacionId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)('Presentacion', 'productoAdicionales'),
+    (0, typeorm_1.JoinColumn)({ name: 'presentacion_id' }),
+    __metadata("design:type", presentacion_entity_1.Presentacion)
+], ProductoAdicional.prototype, "presentacion", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'adicional_id' }),
     __metadata("design:type", Number)

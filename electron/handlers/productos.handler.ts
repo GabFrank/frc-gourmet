@@ -771,9 +771,11 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('searchIngredientesByDescripcion', async (_event: IpcMainInvokeEvent, searchText: string) => {
+    console.info('Searching ingredientes by description', searchText);
     try {
       const repo = dataSource.getRepository(Ingrediente);
       if (!searchText || searchText.trim() === '') {
+        console.info('No search text, returning all ingredientes');
         return await repo.find({ order: { descripcion: 'ASC' }, take: 10 });
       }
       return await repo.createQueryBuilder('ingrediente')
@@ -1728,11 +1730,25 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const repo = dataSource.getRepository(ProductoAdicional);
       return await repo.find({ 
         where: { productoId },
-        relations: ['adicional'],
+        relations: ['adicional', 'presentacion'],
         order: { adicionalId: 'ASC' } 
       });
     } catch (error) {
       console.error(`Error getting adicionales for producto ID ${productoId}:`, error);
+      throw error;
+    }
+  });
+
+  // get by presentacion id
+  ipcMain.handle('getProductosAdicionalesByPresentacion', async (_event: any, presentacionId: number) => {
+    try {
+      const repo = dataSource.getRepository(ProductoAdicional);
+      return await repo.find({ 
+        where: { presentacionId },
+        relations: ['producto', 'adicional', 'presentacion'] 
+      });
+    } catch (error) {
+      console.error(`Error getting producto adicionales by presentacion ID ${presentacionId}:`, error);
       throw error;
     }
   });
@@ -1742,7 +1758,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const repo = dataSource.getRepository(ProductoAdicional);
       return await repo.findOne({ 
         where: { id },
-        relations: ['producto', 'adicional'] 
+        relations: ['producto', 'adicional', 'presentacion'] 
       });
     } catch (error) {
       console.error(`Error getting producto adicional ID ${id}:`, error);

@@ -688,6 +688,8 @@ interface ProductoAdicional {
   id?: number;
   productoId: number;
   producto?: Producto;
+  presentacionId: number;
+  presentacion?: Presentacion;
   adicionalId: number;
   adicional?: Adicional;
   cantidadDefault?: number;
@@ -1762,6 +1764,35 @@ contextBridge.exposeInMainWorld('api', {
   },
   getAdicional: async (id: number): Promise<Adicional> => {
     return await ipcRenderer.invoke('getAdicional', id);
+  },
+
+  // ProductoAdicional methods
+  getProductoAdicionales: async (productoId: number): Promise<ProductoAdicional[]> => {
+    return await ipcRenderer.invoke('getProductoAdicionales', productoId);
+  },
+
+  getProductoAdicional: async (id: number): Promise<ProductoAdicional> => {
+    return await ipcRenderer.invoke('getProductoAdicional', id);
+  },
+
+  createProductoAdicional: async (data: Partial<ProductoAdicional>): Promise<ProductoAdicional> => {
+    return await ipcRenderer.invoke('createProductoAdicional', data);
+  },
+
+  updateProductoAdicional: async (id: number, data: Partial<ProductoAdicional>): Promise<ProductoAdicional> => {
+    return await ipcRenderer.invoke('updateProductoAdicional', id, data);
+  },
+
+  getProductosAdicionalesByProducto: async (productoId: number): Promise<ProductoAdicional[]> => {
+    return await ipcRenderer.invoke('getProductosAdicionalesByProducto', productoId);
+  },
+
+  getProductosAdicionalesByPresentacion: async (presentacionId: number): Promise<ProductoAdicional[]> => {
+    return await ipcRenderer.invoke('getProductosAdicionalesByPresentacion', presentacionId);
+  },
+
+  deleteProductoAdicional: async (id: number): Promise<boolean> => {
+    return await ipcRenderer.invoke('deleteProductoAdicional', id);
   },
 
   // New search methods
