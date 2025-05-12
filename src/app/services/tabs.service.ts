@@ -12,6 +12,7 @@ import { CreateEditCompraComponent } from '../pages/compras/compras/create-edit-
 import { PdvComponent } from '../pages/ventas/pdv/pdv.component';
 import { VentasDashboardComponent } from '../pages/ventas/dashboard/ventas-dashboard.component';
 import { ProductoDashboardComponent } from '../pages/productos/dashboard/producto-dashboard.component';
+import { CreateEditProductoV2Component } from '../pages/productos/productos/create-edit-producto-v2.component';
 
 export interface Tab {
   id: string;
@@ -46,8 +47,8 @@ export class TabsService {
     // this.openTabWithData('Editar Compra', CreateEditCompraComponent, { compraId: 8 });
     //open productos create edit producto
     // this.addTab('Productos Dashboard', ProductoDashboardComponent, null, 'productos-dashboard');
-    // open producto with id 1
-    this.addTab('Producto', CreateEditProductoComponent, { productoId: 1 });
+    // open producto v2 with id 1
+    this.addTab('Producto V2', CreateEditProductoV2Component, { productoId: 2 });
   }
 
   /**

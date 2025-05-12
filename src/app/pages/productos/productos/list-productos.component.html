@@ -62,10 +62,27 @@
             Limpiar
           </button>
           <span class="spacer"></span>
-          <button mat-raised-button color="accent" (click)="addProducto()">
-            <mat-icon>add</mat-icon>
-            Nuevo Producto
-          </button>
+          <div class="action-buttons">
+            <!-- <button
+              mat-raised-button
+              color="primary"
+              (click)="createNuevoProducto()"
+              matTooltip="Crear nuevo producto"
+            >
+              <mat-icon>add</mat-icon>
+              Nuevo Producto
+            </button> -->
+            
+            <button
+              mat-raised-button
+              color="accent"
+              (click)="createNuevoProductoV2()"
+              matTooltip="Crear nuevo producto (Versión 2)"
+            >
+              <mat-icon>add</mat-icon>
+              Nuevo Producto V2
+            </button>
+          </div>
         </div>
       </form>
     </mat-card-content>
@@ -173,6 +190,10 @@
               <button mat-menu-item (click)="editProducto(producto)">
                 <mat-icon>edit</mat-icon>
                 <span>Editar</span>
+              </button>
+              <button mat-menu-item (click)="editProductoV2(producto)">
+                <mat-icon>edit</mat-icon>
+                <span>Editar (V2)</span>
               </button>
               <button mat-menu-item (click)="deleteProducto(producto.id!)">
                 <mat-icon>delete</mat-icon>
