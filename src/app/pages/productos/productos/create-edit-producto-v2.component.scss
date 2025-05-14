@@ -391,3 +391,13 @@
     }
   }
 } 
+
+.presentaciones-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.presentaciones-card {
+  background-color: #353535;
+}

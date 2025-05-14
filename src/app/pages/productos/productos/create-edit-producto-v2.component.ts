@@ -11,7 +11,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatDividerModule } from '@angular/material/divider';
-import { MatTabsModule } from '@angular/material/tabs';
+import { MatTabGroup, MatTabsModule } from '@angular/material/tabs';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog, MatDialogConfig, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
@@ -145,7 +145,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
   preciosDisplayedColumns: string[] = ['moneda', 'valor', 'cmv', 'tipoPrecio', 'principal', 'activo', 'acciones'];
   defaultPresentacionPrecios: PrecioVenta[] = [];
   defaultPresentacionId?: number;
-  
+
   // Properties for the codigos table
   codigosDisplayedColumns: string[] = ['codigo', 'tipoCodigo', 'principal', 'activo', 'acciones'];
   presentacionCodigos: { [presentacionId: number]: Codigo[] } = {};
@@ -180,6 +180,10 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
   presentacionAdicionales: { [presentacionId: number]: ProductoAdicional[] } = {};
   loadingAdicionales = false;
 
+  // Track presentacion sabor for each presentacion
+  presentacionSabor: { [presentacionId: number]: PresentacionSaborViewModel[] } = {};
+  loadingPresentacionSabor = false; 
+
   /**
    * Load sabor data asynchronously
    */
@@ -189,9 +193,12 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
   selectedRecetaModel: RecetaViewModel | null = null;
   filteredVariaciones: Observable<RecetaVariacion[]> = of([]);
   variaciones: RecetaVariacion[] = [];
-  
+
   // Track the selected presentacion tab
   selectedPresentacionIndex = 0;
+
+  // Track the tab group
+  @ViewChild('tabGroup') tabGroup!: MatTabGroup;
 
   constructor(
     private fb: FormBuilder,
@@ -239,30 +246,30 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
     this.loadCategorias();
     this.loadRecetas();
     this.loadMonedas();
-    
+
     // Setup form listeners
     this.setupFormControlListeners();
-    
+
     // Initialize form data from input if available
     if (this.data) {
       this.setData(this.data);
     }
-    
+
     // Setup autocomplete for recetas
     this.setupRecetaAutocomplete();
   }
-  
+
   ngAfterViewInit(): void {
     // Any post-render setup can go here
     this.cdr.detectChanges();
   }
-  
+
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['data'] && changes['data'].currentValue) {
       this.setData(changes['data'].currentValue);
     }
   }
-  
+
   private setupRecetaAutocomplete(): void {
     this.filteredRecetas = this.productoForm.get('recetaSearch')!.valueChanges.pipe(
       startWith(''),
@@ -277,14 +284,14 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       })
     );
   }
-  
+
   displayRecetaFn(receta: RecetaViewModel | string): string {
     if (receta && typeof receta === 'object') {
       return receta.displayText;
     }
     return '';
   }
-  
+
   onRecetaSelected(event: any): void {
     this.selectedRecetaModel = event.option.value;
     if (this.selectedRecetaModel) {
@@ -292,7 +299,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       this.loadRecipeVariations(this.selectedRecetaModel.id);
     }
   }
-  
+
   clearRecetaSelection(): void {
     this.selectedRecetaModel = null;
     this.variaciones = [];
@@ -302,12 +309,13 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
     this.productoForm.get('recetaId')!.setValue(null);
     this.productoForm.get('variacionId')!.setValue(null);
   }
-  
+
   async loadPresentacionCodigos(presentacionId: number): Promise<void> {
     this.loadingCodigos = true;
     try {
-      const codigos = await firstValueFrom(this.repositoryService.getCodigosByPresentacion(presentacionId)); 
+      const codigos = await firstValueFrom(this.repositoryService.getCodigosByPresentacion(presentacionId));
       this.presentacionCodigos[presentacionId] = codigos;
+      console.log('presentacionCodigos', this.presentacionCodigos[presentacionId]);
     } catch (error) {
       console.error('Error loading codigos:', error);
       this.snackBar.open('Error al cargar los códigos', 'Cerrar', { duration: 3000 });
@@ -316,25 +324,23 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       this.cdr.detectChanges();
     }
   }
-  
+
   addPresentacionCodigo(presentacion: Presentacion): void {
     const dialogConfig = new MatDialogConfig();
     dialogConfig.width = '600px';
     dialogConfig.data = {
-      presentacionId: presentacion.id,
+      presentacion: presentacion,
       productoId: this.producto!.id,
       productoNombre: this.producto!.nombre
     };
-    
+
     const dialogRef = this.dialog.open(CreateEditCodigoComponent, dialogConfig);
-    
+
     dialogRef.afterClosed().subscribe(result => {
-      if (result) {
-        this.loadPresentacionCodigos(presentacion.id!);
-      }
+      this.loadPresentacionCodigos(presentacion.id!);
     });
   }
-  
+
   editPresentacionCodigo(codigo: Codigo): void {
     const dialogConfig = new MatDialogConfig();
     dialogConfig.width = '600px';
@@ -343,16 +349,16 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       productoId: this.producto!.id,
       productoNombre: this.producto!.nombre
     };
-    
+
     const dialogRef = this.dialog.open(CreateEditCodigoComponent, dialogConfig);
-    
+
     dialogRef.afterClosed().subscribe(result => {
       if (result) {
         this.loadPresentacionCodigos(codigo.presentacionId);
       }
     });
   }
-  
+
   async deletePresentacionCodigo(codigo: Codigo): Promise<void> {
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       width: '350px',
@@ -363,7 +369,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
         cancelText: 'Cancelar'
       }
     });
-    
+
     dialogRef.afterClosed().subscribe(async result => {
       if (result) {
         try {
@@ -377,25 +383,25 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       }
     });
   }
-  
+
   onTabChange(index: number): void {
     this.selectedPresentacionIndex = index;
-    
+
     if (this.producto && this.producto.presentaciones && this.producto.presentaciones[index]) {
       const presentacion: PresentacionViewModel = this.producto.presentaciones[index];
-      
+
       // Load data for the selected presentacion tab
       if (presentacion.id) {
         this.loadDefaultPresentacionPrecios(presentacion.id);
         this.loadPresentacionCodigos(presentacion.id);
-        
+
         if (presentacion.recetaId) {
           this.loadRecipeDetails(presentacion.recetaId);
         }
       }
     }
   }
-  
+
   async loadCategorias(): Promise<void> {
     this.isLoading = true;
     try {
@@ -437,7 +443,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       .map(receta => this.transformReceta(receta));
     return of(filteredRecetas);
   }
-  
+
   private transformReceta(receta: Receta): RecetaViewModel {
     const cantidadText = receta.cantidad ? `(${receta.cantidad} ${receta.tipoMedida})` : '';
     return {
@@ -545,18 +551,26 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       const recetaIdControl = this.productoForm.get('recetaId');
       const recetaSearchControl = this.productoForm.get('recetaSearch');
       const variacionIdControl = this.productoForm.get('variacionId');
-      if (recetaIdControl && recetaSearchControl && variacionIdControl) {
-        if (isCompuesto && !hasVariaciones) {
-          recetaIdControl.enable();
-          recetaSearchControl.enable();
-        } else {
-          recetaIdControl.disable();
-          recetaIdControl.setValue(null);
-          recetaSearchControl.disable();
-          recetaSearchControl.setValue(null);
-          variacionIdControl.disable();
-        }
+      if(isCompuesto){
+        console.log('isCompuesto', isCompuesto);
+        recetaIdControl?.enable();
+        recetaSearchControl?.enable();
+      } else {
+        recetaIdControl?.disable();
+        recetaSearchControl?.disable();
       }
+      // if (recetaIdControl && recetaSearchControl && variacionIdControl) {
+      //   if (isCompuesto && !hasVariaciones) {
+      //     recetaIdControl.enable();
+      //     recetaSearchControl.enable();
+      //   } else {
+      //     recetaIdControl.disable();
+      //     recetaIdControl.setValue(null);
+      //     recetaSearchControl.disable();
+      //     recetaSearchControl.setValue(null);
+      //     variacionIdControl.disable();
+      //   }
+      // }
     });
 
     this.productoForm.get('hasVariaciones')?.valueChanges.subscribe(hasVariaciones => {
@@ -579,7 +593,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
         this.updateHasVariacionesState(hasVariaciones);
       }
     });
-    
+
     this.productoForm.get('categoriaId')?.valueChanges.subscribe(categoriaId => {
       if (categoriaId) {
         this.loadSubcategoriasByCategoria(categoriaId);
@@ -591,29 +605,36 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
     const recetaIdControl = this.productoForm.get('recetaId');
     const recetaSearchControl = this.productoForm.get('recetaSearch');
     const variacionIdControl = this.productoForm.get('variacionId');
-    if (recetaIdControl && recetaSearchControl && variacionIdControl) {
-      if (hasVariaciones) {
-        recetaIdControl.disable();
-        recetaIdControl.setValue(null);
-        recetaSearchControl.disable();
-        recetaSearchControl.setValue(null);
-        variacionIdControl.disable();
-        variacionIdControl.setValue(null);
-      } else {
-        const isCompuesto = this.productoForm.get('isCompuesto')?.value;
-        if (isCompuesto) {
-          recetaIdControl.enable();
-          recetaSearchControl.enable();
-        }
-      }
+    if(this.productoForm.get('isCompuesto')?.value){
+      recetaIdControl?.enable();
+      recetaSearchControl?.enable();
+    } else {
+      recetaIdControl?.disable();
+      recetaSearchControl?.disable();
     }
+    // if (recetaIdControl && recetaSearchControl && variacionIdControl) {
+    //   if (hasVariaciones) {
+    //     recetaIdControl.disable();
+    //     recetaIdControl.setValue(null);
+    //     recetaSearchControl.disable();
+    //     recetaSearchControl.setValue(null);
+    //     variacionIdControl.disable();
+    //     variacionIdControl.setValue(null);
+    //   } else {
+    //     const isCompuesto = this.productoForm.get('isCompuesto')?.value;
+    //     if (isCompuesto) {
+    //       recetaIdControl.enable();
+    //       recetaSearchControl.enable();
+    //     }
+    //   }
+    // }
     if (hasVariaciones) {
       this.defaultPresentacionPrecios = [];
     } else if (this.producto?.id && this.producto.presentaciones && this.producto.presentaciones.length > 0) {
       this.loadDefaultPresentacionPrecios(this.producto.presentaciones[0].id!);
     }
   }
-  
+
   setData(data: any): void {
     if (!data) {
       return;
@@ -701,7 +722,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
               }
             }
           });
-           this.setupFormControlsBasedOnLoadedData();
+          this.setupFormControlsBasedOnLoadedData();
         } else {
           this.snackBar.open('No se encontró el producto', 'Cerrar', { duration: 3000 });
         }
@@ -714,7 +735,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       }
     });
   }
-  
+
   private setupFormControlsBasedOnLoadedData(): void {
     const hasVencimiento = this.productoForm.get('hasVencimiento')?.value;
     const alertarVencimientoDiasControl = this.productoForm.get('alertarVencimientoDias');
@@ -730,16 +751,23 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
     const recetaIdControl = this.productoForm.get('recetaId');
     const recetaSearchControl = this.productoForm.get('recetaSearch');
     const variacionIdControl = this.productoForm.get('variacionId');
-    if (recetaIdControl && recetaSearchControl && variacionIdControl) {
-      if (isCompuesto && !hasVariaciones) {
-        recetaIdControl.enable();
-        recetaSearchControl.enable();
-      } else {
-        recetaIdControl.disable();
-        recetaSearchControl.disable();
-        variacionIdControl.disable();
-      }
+    if(isCompuesto){
+      recetaIdControl?.enable();
+      recetaSearchControl?.enable();
+    } else {
+      recetaIdControl?.disable();
+      recetaSearchControl?.disable();
     }
+    // if (recetaIdControl && recetaSearchControl && variacionIdControl) {
+    //   if (isCompuesto && !hasVariaciones) {
+    //     recetaIdControl.enable();
+    //     recetaSearchControl.enable();
+    //   } else {
+    //     recetaIdControl.disable();
+    //     recetaSearchControl.disable();
+    //     variacionIdControl.disable();
+    //   }
+    // }
   }
 
   async loadProductImages(): Promise<void> {
@@ -766,7 +794,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       this.snackBar.open('Error al cargar las imágenes del producto', 'Cerrar', { duration: 3000 });
     }
   }
-  
+
   private getImagePath(imageUrl: string): string {
     if (!imageUrl) return this.defaultNoImagePath;
     if (imageUrl.startsWith('app://')) {
@@ -774,7 +802,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
     }
     return imageUrl;
   }
-  
+
   loadMainImage(): void {
     const mainImage = this.productImages.find(img => img.isMain && !img.toDelete);
     this.mainImageUrl = mainImage ? mainImage.imageUrl : this.defaultNoImagePath;
@@ -799,13 +827,13 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
               console.error(`Error loading codigos for presentacion ${presentacion.id}:`, error);
             }
             this.loadPresentacionAdicionales(presentacion.id);
-             // Load precios if this is the selected tab or if hasVariaciones is false
+            // Load precios if this is the selected tab or if hasVariaciones is false
             if (!this.producto.hasVariaciones || (this.producto.presentaciones[this.selectedPresentacionIndex] && presentacion.id === this.producto.presentaciones[this.selectedPresentacionIndex].id)) {
-                this.loadDefaultPresentacionPrecios(presentacion.id);
+              this.loadDefaultPresentacionPrecios(presentacion.id);
             }
-             // Load codigos if this is the selected tab
+            // Load codigos if this is the selected tab
             if (this.producto.presentaciones[this.selectedPresentacionIndex] && presentacion.id === this.producto.presentaciones[this.selectedPresentacionIndex].id) {
-                this.loadPresentacionCodigos(presentacion.id);
+              this.loadPresentacionCodigos(presentacion.id);
             }
           }
         }
@@ -822,9 +850,9 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
           this.defaultPresentacionId = undefined;
           this.defaultPresentacionPrecios = [];
         }
-         // Ensure the first tab's data is loaded if hasVariaciones
+        // Ensure the first tab's data is loaded if hasVariaciones
         if (this.producto.hasVariaciones && this.producto.presentaciones.length > 0 && this.producto.presentaciones[0].id) {
-            this.onTabChange(0); 
+          this.onTabChange(0);
         }
       }
     } catch (error) {
@@ -861,7 +889,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       this.loadingAdicionales = false;
     }
   }
-  
+
   async loadDefaultPresentacionPrecios(presentacionId: number): Promise<void> {
     try {
       const precios = await firstValueFrom(this.repositoryService.getPreciosVentaByPresentacion(presentacionId));
@@ -876,7 +904,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
         }
       }
       this.defaultPresentacionPrecios = precios;
-       this.cdr.detectChanges();
+      this.cdr.detectChanges();
     } catch (error) {
       console.error('Error loading precios for default presentacion:', error);
       this.snackBar.open('Error al cargar los precios', 'Cerrar', { duration: 3000 });
@@ -978,7 +1006,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       }
     }
   }
-  
+
   scrollToImagesSection(): void {
     if (this.imagesSection && this.imagesSection.nativeElement) {
       this.imagesSection.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1111,7 +1139,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       formValues.nombre = formValues.nombre?.toUpperCase();
       formValues.nombreAlternativo = formValues.nombreAlternativo?.toUpperCase();
       formValues.observacion = formValues.observacion?.toUpperCase();
-      
+
       const productData = {
         nombre: formValues.nombre,
         nombreAlternativo: formValues.nombreAlternativo,
@@ -1140,11 +1168,11 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
         );
         // Handle default presentacion if hasVariaciones was turned off
         if (!productData.hasVariaciones && this.producto.hasVariaciones) {
-            await this.createOrUpdateDefaultPresentacion(savedProducto.id!, formValues, true);
-        } 
+          await this.createOrUpdateDefaultPresentacion(savedProducto.id!, formValues, true);
+        }
         // If hasVariaciones is false, update the existing default presentacion
         else if (!productData.hasVariaciones && this.producto.presentaciones?.length) {
-             await this.createOrUpdateDefaultPresentacion(savedProducto.id!, formValues, false);
+          await this.createOrUpdateDefaultPresentacion(savedProducto.id!, formValues, false);
         }
         // If hasVariaciones is true, presentacion updates are handled within tabs
         this.producto = { ...this.producto, ...savedProducto };
@@ -1153,27 +1181,27 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
         // Create new product
         const savedProducto = await firstValueFrom(this.repositoryService.createProducto(productData));
         this.producto = savedProducto; // Assign the created product to this.producto
-         // If the product doesn't have variations, create/update a default presentacion
+        // If the product doesn't have variations, create/update a default presentacion
         if (!savedProducto.hasVariaciones) {
-            await this.createOrUpdateDefaultPresentacion(savedProducto.id!, formValues, true); // Create new
+          await this.createOrUpdateDefaultPresentacion(savedProducto.id!, formValues, true); // Create new
         }
         // Update image relationships
         if (this.productImages.length > 0) {
-            const imageUpdatePromises = this.productImages
+          const imageUpdatePromises = this.productImages
             .filter(img => !img.toDelete && img.id) // This needs to be re-evaluated, new images won't have ID yet
             .map(img =>
-                firstValueFrom(this.repositoryService.updateProductImage(img.id!, { // This will fail for new images
+              firstValueFrom(this.repositoryService.updateProductImage(img.id!, { // This will fail for new images
                 productoId: savedProducto.id
-                }))
+              }))
             );
-            // Simpler: re-upload all non-deleted images associating with the new product ID
-            // This part needs careful review to ensure images are correctly associated after product creation
+          // Simpler: re-upload all non-deleted images associating with the new product ID
+          // This part needs careful review to ensure images are correctly associated after product creation
         }
 
         this.isEditing = true; // Set to true as the product now exists
         this.snackBar.open('Producto creado exitosamente', 'Cerrar', { duration: 3000 });
       }
-      
+
       // Common refresh logic
       if (this.producto?.id) {
         await this.loadProductImages(); // Refresh images
@@ -1188,49 +1216,49 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       this.submitted = false;
     }
   }
-  
+
   private async createOrUpdateDefaultPresentacion(productoId: number, formValues: any, isNewPresentacion: boolean): Promise<void> {
     const presentacionData = {
-        productoId: productoId,
-        // descripcion: formValues.defaultPresentacionDesc || null, // Not in V2 form
-        tipoMedida: formValues.defaultPresentacionTipoMedida,
-        cantidad: formValues.defaultPresentacionCantidad,
-        principal: true,
-        activo: true,
-        // recetaId and variacionId for default presentacion if isCompuesto and !hasVariaciones
-        recetaId: (!formValues.hasVariaciones && formValues.isCompuesto) ? formValues.recetaId : null,
-        variacionId: (!formValues.hasVariaciones && formValues.isCompuesto && formValues.variacionId) ? formValues.variacionId : null,
+      productoId: productoId,
+      // descripcion: formValues.defaultPresentacionDesc || null, // Not in V2 form
+      tipoMedida: formValues.defaultPresentacionTipoMedida,
+      cantidad: formValues.defaultPresentacionCantidad,
+      principal: true,
+      activo: true,
+      // recetaId and variacionId for default presentacion if isCompuesto and !hasVariaciones
+      recetaId: (!formValues.hasVariaciones && formValues.isCompuesto) ? formValues.recetaId : null,
+      variacionId: (!formValues.hasVariaciones && formValues.isCompuesto && formValues.variacionId) ? formValues.variacionId : null,
     };
 
     let presentacion: Presentacion;
 
     if (isNewPresentacion || !this.producto?.presentaciones?.find(p => p.principal)) {
-        presentacion = await firstValueFrom(this.repositoryService.createPresentacion(presentacionData));
+      presentacion = await firstValueFrom(this.repositoryService.createPresentacion(presentacionData));
     } else {
-        const principalPresentacion = this.producto!.presentaciones!.find(p => p.principal);
-        presentacion = await firstValueFrom(this.repositoryService.updatePresentacion(principalPresentacion!.id!, presentacionData));
+      const principalPresentacion = this.producto!.presentaciones!.find(p => p.principal);
+      presentacion = await firstValueFrom(this.repositoryService.updatePresentacion(principalPresentacion!.id!, presentacionData));
     }
-    
+
     this.defaultPresentacionId = presentacion.id;
 
     // Handle Codigo for the default presentacion
     if (formValues.defaultPresentacionCodigo) {
-        const codigoData = {
-            presentacionId: presentacion.id!,
-            codigo: formValues.defaultPresentacionCodigo,
-            tipoCodigo: formValues.defaultPresentacionTipoCodigo,
-            activo: true,
-            principal: true // Assuming the default codigo is principal
-        };
-        // Check if a codigo already exists for this presentacion to update, otherwise create
-        const existingCodigo = presentacion.codigos?.find(c => c.principal); // Or some other logic to find the one to update
-        if (existingCodigo) {
-            await firstValueFrom(this.repositoryService.updateCodigo(existingCodigo.id!, codigoData));
-        } else {
-            await firstValueFrom(this.repositoryService.createCodigo(codigoData));
-        }
+      const codigoData = {
+        presentacionId: presentacion.id!,
+        codigo: formValues.defaultPresentacionCodigo,
+        tipoCodigo: formValues.defaultPresentacionTipoCodigo,
+        activo: true,
+        principal: true // Assuming the default codigo is principal
+      };
+      // Check if a codigo already exists for this presentacion to update, otherwise create
+      const existingCodigo = presentacion.codigos?.find(c => c.principal); // Or some other logic to find the one to update
+      if (existingCodigo) {
+        await firstValueFrom(this.repositoryService.updateCodigo(existingCodigo.id!, codigoData));
+      } else {
+        await firstValueFrom(this.repositoryService.createCodigo(codigoData));
+      }
     }
-     // Refresh precios for this presentacion
+    // Refresh precios for this presentacion
     await this.loadDefaultPresentacionPrecios(presentacion.id!);
   }
 
@@ -1244,7 +1272,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       } else if (image.isNew && image.file) { // Upload new
         uploadPromises.push(this.uploadAndAssociateImage(image.file, image.isMain, i));
       } else if (image.id && !image.isNew) { // Update existing (isMain, orden)
-         uploadPromises.push(
+        uploadPromises.push(
           firstValueFrom(this.repositoryService.updateProductImage(image.id, {
             isMain: image.isMain,
             orden: i
@@ -1254,17 +1282,17 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       }
     }
     await Promise.all(uploadPromises);
-     // After uploads/updates, reload images from server to get fresh URLs and IDs
+    // After uploads/updates, reload images from server to get fresh URLs and IDs
     if (this.producto?.id) {
-        await this.loadProductImages();
+      await this.loadProductImages();
     }
   }
 
   private async uploadAndAssociateImage(file: File, isMain: boolean, orden: number): Promise<void> {
     if (!this.producto?.id) {
-        console.warn("Cannot associate image without product ID. Product must be saved first.");
-        // Or, store file and associate after product creation in onSubmit
-        return; 
+      console.warn("Cannot associate image without product ID. Product must be saved first.");
+      // Or, store file and associate after product creation in onSubmit
+      return;
     }
     try {
       const ext = file.name.split('.').pop() || 'jpg';
@@ -1298,7 +1326,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       throw error;
     }
   }
-  
+
   private markFormGroupTouched(formGroup: FormGroup): void {
     Object.values(formGroup.controls).forEach(control => {
       control.markAsTouched();
@@ -1308,24 +1336,19 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
     });
   }
 
-  addDefaultPresentacionPrecio(): void {
-    if (!this.producto?.id || !this.defaultPresentacionId) {
+  addPrecio(selectedPresentacion: Presentacion): void {
+    if (!this.producto?.id || !selectedPresentacion.id) {
       this.snackBar.open('Debe guardar el producto y la presentación primero', 'Cerrar', { duration: 3000 });
-      return;
-    }
-    const presentacion = this.producto.presentaciones?.find(p => p.id === this.defaultPresentacionId);
-    if (!presentacion) {
-      this.snackBar.open('No se encontró la presentación principal', 'Cerrar', { duration: 3000 });
       return;
     }
     const dialogRef = this.dialog.open(CreateEditPrecioVentaComponent, {
       width: '800px',
       disableClose: true,
-      data: { presentacion: presentacion, recipeCost: this.recipeTotalCost, suggestedPrice: this.recipeSuggestedPrice }
+      data: { presentacion: selectedPresentacion, recipeCost: this.recipeTotalCost, suggestedPrice: this.recipeSuggestedPrice }
     });
     dialogRef.afterClosed().subscribe(result => {
       if (result) {
-        this.loadDefaultPresentacionPrecios(this.defaultPresentacionId!);
+        this.loadDefaultPresentacionPrecios(selectedPresentacion.id!);
       }
     });
   }
@@ -1336,7 +1359,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       return;
     }
     const presentacion = this.producto.presentaciones?.find(p => p.id === this.defaultPresentacionId);
-     if (!presentacion) {
+    if (!presentacion) {
       this.snackBar.open('No se encontró la presentación principal', 'Cerrar', { duration: 3000 });
       return;
     }
@@ -1376,7 +1399,7 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       }
     });
   }
-  
+
   getCMVColor(cmvPercentage: number): string {
     if (cmvPercentage <= 35) { // Assuming 35% is a good target
       return '#4caf50';  // Good - green
@@ -1386,5 +1409,45 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
     return '#f44336';  // Danger - red (higher than 45%)
   }
 
-  // Add any other methods you need (many will be reused from the original component)
+  async addPresentacion(): Promise<void> {
+    if (!this.producto?.id) {
+      this.snackBar.open('Debe guardar el producto primero', 'Cerrar', { duration: 3000 });
+      return;
+    }
+    // Create a new presentacion, with a default descripcion Presentacion {{index + 1}}
+    const presentacion = {
+      productoId: this.producto.id,
+      descripcion: `Presentacion ${this.producto.presentaciones?.length + 1}`,
+      principal: false,
+      activo: true
+    }
+    // Create the presentacion
+    const newPresentacion = await firstValueFrom(this.repositoryService.createPresentacion(presentacion));
+    // Refresh the presentaciones
+    await this.loadProductoPresentaciones(this.producto.id);
+    // Select the new presentacion
+    this.selectedPresentacionIndex = this.producto.presentaciones?.length - 1;
+
+    // open tab for the new presentacion
+    this.tabGroup.selectedIndex = this.selectedPresentacionIndex;
+  }
+
+  async addRecetaToPresentacion(selectedPresentacion: Presentacion, selectedReceta: Receta, selectedVariacion: RecetaVariacion): Promise<void> {
+    // here we need to vinculate a receta and variacion to the presentacion using presentacion sabor
+    // do not open dialog, just create the presentacion sabor
+    const presentacionSabor = {
+      presentacionId: selectedPresentacion.id,
+      recetaId: selectedReceta.id,
+      variacionId: selectedVariacion.id
+    }
+    // create the presentacion sabor
+    const newPresentacionSabor = await firstValueFrom(this.repositoryService.createPresentacionSabor(presentacionSabor));
+    // refresh the presentacion sabor
+    await this.loadPresentacionSabor(selectedPresentacion.id);
+  }
+
+  async loadPresentacionSabor(presentacionId: number): Promise<void> {
+    const presentacionSabor = await firstValueFrom(this.repositoryService.getPresentacionSabor(presentacionId));
+    this.presentacionSabores[presentacionId] = presentacionSabor;
+  }
 } 

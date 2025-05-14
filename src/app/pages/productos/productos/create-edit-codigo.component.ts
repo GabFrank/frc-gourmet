@@ -89,6 +89,9 @@ interface DialogData {
           </form>
         </mat-card-content>
         <mat-card-actions align="end">
+          <button mat-button (click)="closeDialog()">
+            Salir
+          </button>
           <button mat-button *ngIf="isEditing" (click)="cancelEdit()" [disabled]="isLoading">
             Cancelar
           </button>
@@ -118,7 +121,7 @@ interface DialogData {
           <!-- Tipo Codigo Column -->
           <ng-container matColumnDef="tipoCodigo">
             <th mat-header-cell *matHeaderCellDef>Tipo</th>
-            <td mat-cell *matCellDef="let item">{{ getTipoCodigoLabel(item.tipoCodigo) }}</td>
+            <td mat-cell *matCellDef="let item">{{ item.tipoCodigo }}</td>
           </ng-container>
 
           <!-- Principal Column -->
@@ -471,5 +474,9 @@ export class CreateEditCodigoComponent implements OnInit, OnChanges {
       principal: false,
       activo: true
     });
+  }
+
+  closeDialog(): void {
+    this.dialogRef?.close();
   }
 } 
