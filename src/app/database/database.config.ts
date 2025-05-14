@@ -37,6 +37,7 @@ import { ObservacionProductoVentaItem } from './entities/productos/observacion-p
 import { Adicional } from './entities/productos/adicional.entity';
 import { ProductoAdicional } from './entities/productos/producto-adicional.entity';
 import { ProductoAdicionalVentaItem } from './entities/productos/producto-adicional-venta-item.entity';
+import { CostoPorProducto } from './entities/productos/costo-por-producto.entity';
 
 // Import new financial entities
 import { MonedaBillete } from './entities/financiero/moneda-billete.entity';
@@ -123,6 +124,7 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       Adicional,
       ProductoAdicional,
       ProductoAdicionalVentaItem,
+      CostoPorProducto,
       // New financial entities
       MonedaBillete,
       Dispositivo,

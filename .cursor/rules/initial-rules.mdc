@@ -1,6 +1,7 @@
 ---
 description: read this rules before begin the work
 globs: 
+alwaysApply: false
 ---
 # Project Guidelines
 
@@ -12,7 +13,7 @@ globs:
    - Store pre-computed values in component properties
    - Update properties when inputs change
    - Use pipes for transformations
-   - Use getters only for trivial operations
+   - Do not use getters, avoid any kind of function that can cause performance issue
 
 ## Coding Standards
 3. **UPPERCASE STRINGS**: Store string values in UPPERCASE for consistency.
@@ -34,10 +35,19 @@ globs:
     - Center-align most content
     - Left-align text fields
     - Don't add sorting (`mat-sort-header`) unless specifically requested
+12. Never use hardcored colors for backgroud, we have dark and light theme
 
 ## Application Features
 12. **CONFIRMATION DIALOGS**: Always use `@confirmation-dialog.component.ts` for all confirmations.
 13. **TYPEORM SYNC**: Remember `synchronize: true` is for development only, not production.
+
+## Backend
+14. Always use [repository.service.ts](mdc:src/app/database/repository.service.ts) for getting data from database
+
+## Creating new entity
+15. See [presentacion.entity.js](mdc:src/app/database/entities/productos/presentacion.entity.js) to take as example
+16. add methods on [repository.service.ts](mdc:src/app/database/repository.service.ts) [preload.ts](mdc:preload.ts) and the corresponding .handler.ts file, in this case for presentacion is [productos.handler.ts](mdc:electron/handlers/productos.handler.ts), import the new entity on [database.config.ts](mdc:src/app/database/database.config.ts) 
+17. Always look for existing code example to take as example
 
 ## Remember
 - These rules ensure application consistency and performance

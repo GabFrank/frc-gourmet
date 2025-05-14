@@ -22,6 +22,7 @@ import { ObservacionProductoVentaItem } from '../../src/app/database/entities/pr
 import { Adicional } from '../../src/app/database/entities/productos/adicional.entity';
 import { ProductoAdicional } from '../../src/app/database/entities/productos/producto-adicional.entity';
 import { ProductoAdicionalVentaItem } from '../../src/app/database/entities/productos/producto-adicional-venta-item.entity';
+import { CostoPorProducto } from '../../src/app/database/entities/productos/costo-por-producto.entity';
 
 export function registerProductosHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Helper function to enrich products with principal presentation and price information
@@ -362,23 +363,56 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('deletePresentacion', async (_event: any, id: number) => {
-    // Note: Hard delete. Consider soft delete.
     try {
-      const repo = dataSource.getRepository(Presentacion);
-      const entity = await repo.findOneBy({ id });
+      // Get repositories
+      const presentacionRepo = dataSource.getRepository(Presentacion);
+      const precioVentaRepo = dataSource.getRepository(PrecioVenta);
+      const codigoRepo = dataSource.getRepository(Codigo);
+      const presentacionSaborRepo = dataSource.getRepository(PresentacionSabor);
+      const productoAdicionalRepo = dataSource.getRepository(ProductoAdicional);
+
+      // Find the presentacion
+      const entity = await presentacionRepo.findOneBy({ id });
       if (!entity) throw new Error(`Presentacion ID ${id} not found`);
-       // Add checks for dependencies (e.g., PrecioVenta, Codigo, PresentacionSabor)
-       // If dependencies exist, either prevent deletion or handle cascade/soft delete.
-       // Example check (adapt as needed):
-       /*
-       const precioVentaRepo = dataSource.getRepository(PrecioVenta);
-       const preciosCount = await precioVentaRepo.count({ where: { presentacionId: id } });
-       if (preciosCount > 0) {
-           throw new Error(`Cannot delete presentation with existing prices.`);
-       }
-       */
-      const currentUser = getCurrentUser(); // Get current user at time of call
-      return await repo.remove(entity);
+
+      // Start a transaction to ensure atomicity
+      await dataSource.transaction(async transactionalEntityManager => {
+        console.log(`Starting cascade deletion for Presentacion ID ${id}`);
+        
+        // 1. Delete all related PrecioVenta records
+        const preciosVenta = await precioVentaRepo.find({ where: { presentacionId: id } });
+        if (preciosVenta.length > 0) {
+          console.log(`Deleting ${preciosVenta.length} related PrecioVenta records`);
+          await transactionalEntityManager.remove(preciosVenta);
+        }
+        
+        // 2. Delete all related Codigo records
+        const codigos = await codigoRepo.find({ where: { presentacionId: id } });
+        if (codigos.length > 0) {
+          console.log(`Deleting ${codigos.length} related Codigo records`);
+          await transactionalEntityManager.remove(codigos);
+        }
+        
+        // 3. Delete all related PresentacionSabor records
+        const presentacionSabores = await presentacionSaborRepo.find({ where: { presentacionId: id } });
+        if (presentacionSabores.length > 0) {
+          console.log(`Deleting ${presentacionSabores.length} related PresentacionSabor records`);
+          await transactionalEntityManager.remove(presentacionSabores);
+        }
+        
+        // 4. Delete all related ProductoAdicional records
+        const productosAdicionales = await productoAdicionalRepo.find({ where: { presentacionId: id } });
+        if (productosAdicionales.length > 0) {
+          console.log(`Deleting ${productosAdicionales.length} related ProductoAdicional records`);
+          await transactionalEntityManager.remove(productosAdicionales);
+        }
+        
+        // 5. Finally delete the Presentacion
+        console.log(`Deleting Presentacion ID ${id}`);
+        await transactionalEntityManager.remove(entity);
+      });
+
+      return { success: true, message: `Presentación eliminada correctamente junto con ${entity.id ? 1 : 0} registros relacionados` };
     } catch (error) {
       console.error(`Error deleting presentacion ID ${id}:`, error);
       throw error;
@@ -1142,7 +1176,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   ipcMain.handle('getPreciosVentaByPresentacion', async (_event: any, presentacionId: number, active: boolean) => {
     try {
       const repo = dataSource.getRepository(PrecioVenta);
-      return await repo.find({ where: { presentacionId, activo: active } });
+      return await repo.find({ where: { presentacionId, activo: active }, relations: ['moneda', 'tipoPrecio'] });
     } catch (error) {
       console.error('Error getting precios venta por presentacion:', error);
       throw error;
@@ -1878,6 +1912,91 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       return await repo.remove(entity);
     } catch (error) {
       console.error(`Error deleting producto adicional venta item ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  // --- CostoPorProducto Handlers ---
+  ipcMain.handle('getCostosPorProducto', async () => {
+    try {
+      const repo = dataSource.getRepository(CostoPorProducto);
+      return await repo.find({ 
+        relations: ['producto', 'moneda'],
+        order: { 
+          productoId: 'ASC',
+          createdAt: 'DESC'
+        }
+      });
+    } catch (error) {
+      console.error('Error getting costos por producto:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('getCostosPorProductoByProducto', async (_event: any, productoId: number) => {
+    try {
+      const repo = dataSource.getRepository(CostoPorProducto);
+      return await repo.find({ 
+        where: { productoId },
+        relations: ['moneda'],
+        order: { createdAt: 'DESC' }
+      });
+    } catch (error) {
+      console.error(`Error getting costos por producto for producto ID ${productoId}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('getCostoPorProducto', async (_event: any, id: number) => {
+    try {
+      const repo = dataSource.getRepository(CostoPorProducto);
+      return await repo.findOne({ 
+        where: { id },
+        relations: ['producto', 'moneda']
+      });
+    } catch (error) {
+      console.error(`Error getting costo por producto ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('createCostoPorProducto', async (_event: any, data: any) => {
+    try {
+      const repo = dataSource.getRepository(CostoPorProducto);
+      const entity = repo.create(data);
+      const currentUser = getCurrentUser();
+      await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error('Error creating costo por producto:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('updateCostoPorProducto', async (_event: any, id: number, data: any) => {
+    try {
+      const repo = dataSource.getRepository(CostoPorProducto);
+      const entity = await repo.findOneBy({ id });
+      if (!entity) throw new Error(`Costo por producto ID ${id} not found`);
+      repo.merge(entity, data);
+      const currentUser = getCurrentUser();
+      await setEntityUserTracking(dataSource, entity, currentUser?.id, true);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error(`Error updating costo por producto ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('deleteCostoPorProducto', async (_event: any, id: number) => {
+    try {
+      const repo = dataSource.getRepository(CostoPorProducto);
+      const entity = await repo.findOneBy({ id });
+      if (!entity) throw new Error(`Costo por producto ID ${id} not found`);
+      await repo.remove(entity);
+      return true;
+    } catch (error) {
+      console.error(`Error deleting costo por producto ID ${id}:`, error);
       throw error;
     }
   });

@@ -355,24 +355,49 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         }
     });
     electron_1.ipcMain.handle('deletePresentacion', async (_event, id) => {
-        // Note: Hard delete. Consider soft delete.
         try {
-            const repo = dataSource.getRepository(presentacion_entity_1.Presentacion);
-            const entity = await repo.findOneBy({ id });
+            // Get repositories
+            const presentacionRepo = dataSource.getRepository(presentacion_entity_1.Presentacion);
+            const precioVentaRepo = dataSource.getRepository(precio_venta_entity_1.PrecioVenta);
+            const codigoRepo = dataSource.getRepository(codigo_entity_1.Codigo);
+            const presentacionSaborRepo = dataSource.getRepository(presentacion_sabor_entity_1.PresentacionSabor);
+            const productoAdicionalRepo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
+            // Find the presentacion
+            const entity = await presentacionRepo.findOneBy({ id });
             if (!entity)
                 throw new Error(`Presentacion ID ${id} not found`);
-            // Add checks for dependencies (e.g., PrecioVenta, Codigo, PresentacionSabor)
-            // If dependencies exist, either prevent deletion or handle cascade/soft delete.
-            // Example check (adapt as needed):
-            /*
-            const precioVentaRepo = dataSource.getRepository(PrecioVenta);
-            const preciosCount = await precioVentaRepo.count({ where: { presentacionId: id } });
-            if (preciosCount > 0) {
-                throw new Error(`Cannot delete presentation with existing prices.`);
-            }
-            */
-            const currentUser = getCurrentUser(); // Get current user at time of call
-            return await repo.remove(entity);
+            // Start a transaction to ensure atomicity
+            await dataSource.transaction(async (transactionalEntityManager) => {
+                console.log(`Starting cascade deletion for Presentacion ID ${id}`);
+                // 1. Delete all related PrecioVenta records
+                const preciosVenta = await precioVentaRepo.find({ where: { presentacionId: id } });
+                if (preciosVenta.length > 0) {
+                    console.log(`Deleting ${preciosVenta.length} related PrecioVenta records`);
+                    await transactionalEntityManager.remove(preciosVenta);
+                }
+                // 2. Delete all related Codigo records
+                const codigos = await codigoRepo.find({ where: { presentacionId: id } });
+                if (codigos.length > 0) {
+                    console.log(`Deleting ${codigos.length} related Codigo records`);
+                    await transactionalEntityManager.remove(codigos);
+                }
+                // 3. Delete all related PresentacionSabor records
+                const presentacionSabores = await presentacionSaborRepo.find({ where: { presentacionId: id } });
+                if (presentacionSabores.length > 0) {
+                    console.log(`Deleting ${presentacionSabores.length} related PresentacionSabor records`);
+                    await transactionalEntityManager.remove(presentacionSabores);
+                }
+                // 4. Delete all related ProductoAdicional records
+                const productosAdicionales = await productoAdicionalRepo.find({ where: { presentacionId: id } });
+                if (productosAdicionales.length > 0) {
+                    console.log(`Deleting ${productosAdicionales.length} related ProductoAdicional records`);
+                    await transactionalEntityManager.remove(productosAdicionales);
+                }
+                // 5. Finally delete the Presentacion
+                console.log(`Deleting Presentacion ID ${id}`);
+                await transactionalEntityManager.remove(entity);
+            });
+            return { success: true, message: `Presentación eliminada correctamente junto con ${entity.id ? 1 : 0} registros relacionados` };
         }
         catch (error) {
             console.error(`Error deleting presentacion ID ${id}:`, error);
@@ -1150,7 +1175,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
     electron_1.ipcMain.handle('getPreciosVentaByPresentacion', async (_event, presentacionId, active) => {
         try {
             const repo = dataSource.getRepository(precio_venta_entity_1.PrecioVenta);
-            return await repo.find({ where: { presentacionId, activo: active } });
+            return await repo.find({ where: { presentacionId, activo: active }, relations: ['moneda', 'tipoPrecio'] });
         }
         catch (error) {
             console.error('Error getting precios venta por presentacion:', error);

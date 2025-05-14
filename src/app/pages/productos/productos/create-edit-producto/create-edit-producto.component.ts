@@ -25,6 +25,7 @@ import { TabsService } from '../../../../services/tabs.service';
 import { ImageViewerComponent } from '../../../../components/image-viewer/image-viewer.component';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ConfirmationDialogComponent } from '../../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { SimplePresentationSectionComponent } from '../../simple-presencation-section/simple-presencation-section.component';
 
 // Interface for product image model
 interface ProductImageModel {
@@ -58,7 +59,8 @@ interface ProductImageModel {
     MatDialogModule,
     ReactiveFormsModule,
     FormsModule,
-    ConfirmationDialogComponent
+    ConfirmationDialogComponent,
+    SimplePresentationSectionComponent
   ],
   templateUrl: './create-edit-producto.component.html',
   styleUrls: ['./create-edit-producto.component.scss'],

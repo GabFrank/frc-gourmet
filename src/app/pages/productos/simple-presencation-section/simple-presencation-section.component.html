@@ -1,0 +1,290 @@
+<!-- Header section -->
+<div class="section-header">
+  <h3 class="section-title">Presentaciones</h3>
+  <button
+    mat-raised-button
+    color="primary"
+    class="add-button"
+    (click)="createNewPresentacion()"
+  >
+    <mat-icon>add</mat-icon> Nueva Presentación
+  </button>
+</div>
+
+<!-- Content section with tabs or empty state -->
+<div class="section-content">
+  <!-- Show this when no presentations exist -->
+  <div class="empty-state" *ngIf="presentaciones.length === 0">
+    <p>No hay presentaciones para este producto.</p>
+    <button mat-raised-button color="primary" (click)="createNewPresentacion()">
+      Crear Nueva Presentación
+    </button>
+  </div>
+
+  <!-- Presentation tabs when they exist -->
+  <div *ngIf="presentaciones.length > 0" class="tabs-container">
+    <mat-tab-group
+      [(selectedIndex)]="selectedTabIndex"
+      animationDuration="300ms"
+    >
+      <mat-tab *ngFor="let presentacion of presentaciones; let i = index">
+        <ng-template mat-tab-label>
+          <!-- Tab label with presentation description or default text -->
+          {{ presentacion.descripcion || "Presentación " + (i + 1) }}
+          <span
+            *ngIf="unsavedChanges.get(presentacion.id)"
+            class="unsaved-indicator"
+            >*</span
+          >
+        </ng-template>
+
+        <!-- Tab content with form -->
+        <div class="tab-content">
+          <form
+            [formGroup]="presentacionForms.get(presentacion.id)!"
+            class="presentacion-form"
+          >
+            <div class="form-row">
+              <!-- Description field -->
+              <mat-form-field appearance="outline" style="width: 50%;">
+                <mat-label>Descripción</mat-label>
+                <input
+                  matInput
+                  formControlName="descripcion"
+                  placeholder="Descripción de la presentación"
+                />
+              </mat-form-field>
+
+              <!-- Measurement type and quantity -->
+              <mat-form-field appearance="outline" style="width: 25%;">
+                <mat-label>Tipo de Medida</mat-label>
+                <mat-select formControlName="tipoMedida">
+                  <mat-option
+                    *ngFor="let tipo of tipoMedidaOptions"
+                    [value]="tipo"
+                  >
+                    {{ tipo }}
+                  </mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" style="width: 25%;">
+                <mat-label>Cantidad</mat-label>
+                <input
+                  matInput
+                  type="number"
+                  formControlName="cantidad"
+                  min="0.01"
+                  step="0.01"
+                />
+                <mat-error
+                  *ngIf="
+                    presentacionForms
+                      .get(presentacion.id)!
+                      .get('cantidad')
+                      ?.hasError('required')
+                  "
+                >
+                  La cantidad es requerida
+                </mat-error>
+                <mat-error
+                  *ngIf="
+                    presentacionForms
+                      .get(presentacion.id)!
+                      .get('cantidad')
+                      ?.hasError('min')
+                  "
+                >
+                  Debe ser mayor a 0
+                </mat-error>
+              </mat-form-field>
+            </div>
+
+            <!-- Flags section -->
+            <div class="form-row checkbox-row">
+              <mat-checkbox formControlName="activo">Activo</mat-checkbox>
+              <mat-checkbox formControlName="principal">Principal</mat-checkbox>
+              <mat-checkbox formControlName="isSabores"
+                >Tiene Sabores</mat-checkbox
+              >
+            </div>
+
+            <!-- Calculation method (only visible if isSabores is checked) -->
+            <mat-form-field
+              appearance="outline"
+              class="full-width"
+              *ngIf="
+                presentacionForms.get(presentacion.id)!.get('isSabores')!.value
+              "
+            >
+              <mat-label>Método de Cálculo</mat-label>
+              <mat-select formControlName="metodoCalculo">
+                <mat-option
+                  *ngFor="let metodo of metodoCalculoOptions"
+                  [value]="metodo"
+                >
+                  {{ metodo }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <!-- Form buttons -->
+            <div class="form-actions">
+              <!-- it looks good now, dont change it -->
+              <div class="form-actions-buttons-left">
+                <!-- disable button if isNewTab is true -->
+                <button
+                  mat-button
+                  color="warn"
+                  (click)="deletePresentacion(i)"
+                  [disabled]="isNewTab.get(presentacion.id)"
+                >
+                  <mat-icon>delete</mat-icon>
+                  Eliminar
+                </button>
+              </div>
+              <div class="form-actions-buttons-right">
+                <button
+                  mat-button
+                  (click)="cancelEdit(i)"
+                  [disabled]="!unsavedChanges.get(presentacion.id)"
+                >
+                  Cancelar
+                </button>
+                <button
+                  mat-raised-button
+                  color="primary"
+                  (click)="savePresentacion(i)"
+                  [disabled]="
+                    !unsavedChanges.get(presentacion.id) ||
+                    !presentacionForms.get(presentacion.id)!.valid
+                  "
+                >
+                  {{ isNewTab.get(presentacion.id) ? "Guardar" : "Modificar" }}
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <!-- Prices Section -->
+          <div class="section prices-section">
+            <div class="section-header">
+              <h4>Precios de Venta</h4>
+              <button mat-button color="primary" (click)="openPrecioDialog(presentacion)">
+                <mat-icon>add</mat-icon> Agregar Precio
+              </button>
+            </div>
+            
+            <div class="section-content">
+              <div class="empty-state" *ngIf="!preciosByPresentacion.get(presentacion.id)?.length">
+                <p>No hay precios configurados para esta presentación.</p>
+              </div>
+              
+              <table class="data-table" *ngIf="preciosByPresentacion.get(presentacion.id)?.length">
+                <thead>
+                  <tr>
+                    <th class="center-cell">Moneda</th>
+                    <th class="center-cell">Valor</th>
+                    <th class="center-cell">Tipo Precio</th>
+                    <th class="center-cell">Principal</th>
+                    <th class="center-cell">Activo</th>
+                    <th class="center-cell">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let precio of preciosByPresentacion.get(presentacion.id)">
+                    <td class="center-cell">{{ precio.moneda?.denominacion }}</td>
+                    <td class="center-cell">{{ precio.valor | number:'1.0-2' }}</td>
+                    <td class="center-cell">{{ precio.tipoPrecio?.descripcion || 'Sin tipo' }}</td>
+                    <td class="center-cell">
+                      <mat-icon *ngIf="precio.principal" color="primary">check_circle</mat-icon>
+                      <mat-icon *ngIf="!precio.principal" color="disabled">radio_button_unchecked</mat-icon>
+                    </td>
+                    <td class="center-cell">
+                      <span class="status-badge" [ngClass]="precio.activo ? 'active' : 'inactive'">
+                        {{ precio.activo ? 'Activo' : 'Inactivo' }}
+                      </span>
+                    </td>
+                    <td class="action-cell">
+                      <button mat-icon-button [matMenuTriggerFor]="precioMenu">
+                        <mat-icon>more_vert</mat-icon>
+                      </button>
+                      <mat-menu #precioMenu="matMenu">
+                        <button mat-menu-item (click)="openPrecioDialog(presentacion, precio)">
+                          <mat-icon>edit</mat-icon>
+                          <span>Editar</span>
+                        </button>
+                        <button mat-menu-item (click)="deletePrecio(precio, presentacion.id)">
+                          <mat-icon>delete</mat-icon>
+                          <span>Eliminar</span>
+                        </button>
+                      </mat-menu>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          
+          <!-- Codes Section -->
+          <div class="section codes-section">
+            <div class="section-header">
+              <h4>Códigos</h4>
+              <button mat-button color="primary" (click)="openCodigoDialog(presentacion)">
+                <mat-icon>add</mat-icon> Agregar Código
+              </button>
+            </div>
+            
+            <div class="section-content">
+              <div class="empty-state" *ngIf="!codigosByPresentacion.get(presentacion.id)?.length">
+                <p>No hay códigos configurados para esta presentación.</p>
+              </div>
+              
+              <table class="data-table" *ngIf="codigosByPresentacion.get(presentacion.id)?.length">
+                <thead>
+                  <tr>
+                    <th class="center-cell">Código</th>
+                    <th class="center-cell">Tipo</th>
+                    <th class="center-cell">Principal</th>
+                    <th class="center-cell">Activo</th>
+                    <th class="center-cell">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let codigo of codigosByPresentacion.get(presentacion.id)">
+                    <td class="center-cell">{{ codigo.codigo }}</td>
+                    <td class="center-cell">{{ codigo.tipoCodigo }}</td>
+                    <td class="center-cell">
+                      <mat-icon *ngIf="codigo.principal" color="primary">check_circle</mat-icon>
+                      <mat-icon *ngIf="!codigo.principal" color="disabled">radio_button_unchecked</mat-icon>
+                    </td>
+                    <td class="center-cell">
+                      <span class="status-badge" [ngClass]="codigo.activo ? 'active' : 'inactive'">
+                        {{ codigo.activo ? 'Activo' : 'Inactivo' }}
+                      </span>
+                    </td>
+                    <td class="action-cell">
+                      <button mat-icon-button [matMenuTriggerFor]="codigoMenu">
+                        <mat-icon>more_vert</mat-icon>
+                      </button>
+                      <mat-menu #codigoMenu="matMenu">
+                        <button mat-menu-item (click)="openCodigoDialog(presentacion, codigo)">
+                          <mat-icon>edit</mat-icon>
+                          <span>Editar</span>
+                        </button>
+                        <button mat-menu-item (click)="deleteCodigo(codigo, presentacion.id)">
+                          <mat-icon>delete</mat-icon>
+                          <span>Eliminar</span>
+                        </button>
+                      </mat-menu>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </mat-tab>
+    </mat-tab-group>
+  </div>
+</div>
