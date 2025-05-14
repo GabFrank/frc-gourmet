@@ -573,26 +573,26 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
       // }
     });
 
-    this.productoForm.get('hasVariaciones')?.valueChanges.subscribe(hasVariaciones => {
-      if (this.isEditing && this.producto?.id && !hasVariaciones && this.producto.presentaciones && this.producto.presentaciones.length > 1) {
-        const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-          width: '450px',
-          data: {
-            title: 'Confirmar cambio',
-            message: 'Este producto tiene múltiples presentaciones. Al desactivar "Posee variaciones", solo se mantendrá la presentación principal. ¿Desea continuar?'
-          }
-        });
-        dialogRef.afterClosed().subscribe(result => {
-          if (!result) {
-            this.productoForm.get('hasVariaciones')?.setValue(true, { emitEvent: false });
-            return;
-          }
-          this.updateHasVariacionesState(hasVariaciones);
-        });
-      } else {
-        this.updateHasVariacionesState(hasVariaciones);
-      }
-    });
+    // this.productoForm.get('hasVariaciones')?.valueChanges.subscribe(hasVariaciones => {
+    //   if (this.isEditing && this.producto?.id && !hasVariaciones && this.producto.presentaciones && this.producto.presentaciones.length > 1) {
+    //     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+    //       width: '450px',
+    //       data: {
+    //         title: 'Confirmar cambio',
+    //         message: 'Este producto tiene múltiples presentaciones. Al desactivar "Posee variaciones", solo se mantendrá la presentación principal. ¿Desea continuar?'
+    //       }
+    //     });
+    //     dialogRef.afterClosed().subscribe(result => {
+    //       if (!result) {
+    //         this.productoForm.get('hasVariaciones')?.setValue(true, { emitEvent: false });
+    //         return;
+    //       }
+    //       this.updateHasVariacionesState(hasVariaciones);
+    //     });
+    //   } else {
+    //     this.updateHasVariacionesState(hasVariaciones);
+    //   }
+    // });
 
     this.productoForm.get('categoriaId')?.valueChanges.subscribe(categoriaId => {
       if (categoriaId) {
@@ -1432,9 +1432,15 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
     this.tabGroup.selectedIndex = this.selectedPresentacionIndex;
   }
 
-  async addRecetaToPresentacion(selectedPresentacion: Presentacion, selectedReceta: Receta, selectedVariacion: RecetaVariacion): Promise<void> {
+  async addRecetaToPresentacion(selectedPresentacion: Presentacion, selectedReceta?: Receta | RecetaViewModel | null, selectedVariacion?: RecetaVariacion): Promise<void> {
     // here we need to vinculate a receta and variacion to the presentacion using presentacion sabor
     // do not open dialog, just create the presentacion sabor
+
+    if (!selectedReceta || !selectedVariacion) {
+      this.snackBar.open('Debe seleccionar una receta y una variacion', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
     const presentacionSabor = {
       presentacionId: selectedPresentacion.id,
       recetaId: selectedReceta.id,
@@ -1448,6 +1454,6 @@ export class CreateEditProductoV2Component implements OnInit, OnChanges, AfterVi
 
   async loadPresentacionSabor(presentacionId: number): Promise<void> {
     const presentacionSabor = await firstValueFrom(this.repositoryService.getPresentacionSabor(presentacionId));
-    this.presentacionSabores[presentacionId] = presentacionSabor;
+    // this.presentacionSabores[presentacionId] = presentacionSabor;
   }
 } 
