@@ -15,9 +15,9 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatCardModule } from '@angular/material/card';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
-import { RepositoryService } from '../../../database/repository.service';
-import { Codigo, TipoCodigo } from '../../../database/entities/productos/codigo.entity';
-import { Presentacion } from '../../../database/entities/productos/presentacion.entity';
+import { RepositoryService } from '../../../../database/repository.service';
+import { Codigo, TipoCodigo } from '../../../../database/entities/productos/codigo.entity';
+import { Presentacion } from '../../../../database/entities/productos/presentacion.entity';
 import { firstValueFrom } from 'rxjs';
 
 interface DialogData {

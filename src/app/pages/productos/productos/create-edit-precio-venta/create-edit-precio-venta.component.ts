@@ -32,15 +32,15 @@ import {
   MAT_DIALOG_DATA,
   MatDialogModule,
 } from '@angular/material/dialog';
-import { RepositoryService } from '../../../database/repository.service';
-import { PrecioVenta } from '../../../database/entities/productos/precio-venta.entity';
-import { Presentacion } from '../../../database/entities/productos/presentacion.entity';
-import { PresentacionSabor } from '../../../database/entities/productos/presentacion-sabor.entity';
-import { Moneda } from '../../../database/entities/financiero/moneda.entity';
-import { TipoPrecio } from '../../../database/entities/financiero/tipo-precio.entity';
+import { RepositoryService } from '../../../../database/repository.service';
+import { PrecioVenta } from '../../../../database/entities/productos/precio-venta.entity';
+import { Presentacion } from '../../../../database/entities/productos/presentacion.entity';
+import { PresentacionSabor } from '../../../../database/entities/productos/presentacion-sabor.entity';
+import { Moneda } from '../../../../database/entities/financiero/moneda.entity';
 import { firstValueFrom } from 'rxjs';
-import { CurrencyInputComponent } from '../../../shared/components/currency-input/currency-input.component';
-import { CurrencyConfigService } from '../../../shared/services/currency-config.service';
+import { CurrencyInputComponent } from '../../../../shared/components/currency-input/currency-input.component';
+import { CurrencyConfigService } from '../../../../shared/services/currency-config.service';
+import { TipoPrecio } from 'src/app/database/entities/financiero/tipo-precio.entity';
 
 interface DialogData {
   presentacion?: Presentacion;

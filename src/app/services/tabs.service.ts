@@ -1,18 +1,7 @@
 import { Injectable, Type, EventEmitter } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
-import { CreateEditProductoComponent } from '../pages/productos/productos/create-edit-producto.component';
-import { ListRecetasComponent } from '../pages/productos/recetas/list-recetas.component';
-import { ListIngredientesComponent } from '../pages/productos/ingredientes/list-ingredientes.component';
-import { ListCajasComponent } from '../pages/financiero/cajas/list-cajas.component';
-import { ListMonedasComponent } from '../pages/financiero/monedas/list-monedas/list-monedas.component';
-import { ListProductosComponent } from '../pages/productos/productos/list-productos.component';
-import { ListComprasComponent } from '../pages/compras/compras/list-compras.component';
-import { CreateEditCompraComponent } from '../pages/compras/compras/create-edit-compra.component';
-import { PdvComponent } from '../pages/ventas/pdv/pdv.component';
-import { VentasDashboardComponent } from '../pages/ventas/dashboard/ventas-dashboard.component';
-import { ProductoDashboardComponent } from '../pages/productos/dashboard/producto-dashboard.component';
-import { CreateEditProductoV2Component } from '../pages/productos/productos/create-edit-producto-v2.component';
+import { CreateEditProductoComponent } from '../pages/productos/productos/create-edit-producto/create-edit-producto.component';
 
 export interface Tab {
   id: string;
@@ -48,7 +37,7 @@ export class TabsService {
     //open productos create edit producto
     // this.addTab('Productos Dashboard', ProductoDashboardComponent, null, 'productos-dashboard');
     // open producto v2 with id 1
-    this.addTab('Producto V2', CreateEditProductoV2Component, { productoId: 2 });
+    this.addTab('Producto V2', CreateEditProductoComponent, { productoId: 5 });
   }
 
   /**

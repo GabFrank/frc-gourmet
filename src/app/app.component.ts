@@ -42,7 +42,6 @@ import { LoginSession } from './database/entities/auth/login-session.entity';
 import { firstValueFrom } from 'rxjs';
 import { ListPersonasComponent } from './pages/personas/personas/list-personas.component';
 import { ListCategoriasComponent } from './pages/productos/categorias/list-categorias/list-categorias.component';
-import { ListProductosComponent } from './pages/productos/productos/list-productos.component';
 import { ListMonedasComponent } from './pages/financiero/monedas/list-monedas/list-monedas.component';
 import { ListRecetasComponent } from './pages/productos/recetas/list-recetas.component';
 import { ListIngredientesComponent } from './pages/productos/ingredientes/list-ingredientes.component';
@@ -55,6 +54,7 @@ import { ListComprasComponent } from './pages/compras/compras/list-compras.compo
 import { ListMovimientosStockComponent } from './pages/productos/movimientos/list-movimientos-stock.component';
 import { VentasDashboardComponent } from './pages/ventas/dashboard/ventas-dashboard.component';
 import { ProductoDashboardComponent } from './pages/productos/dashboard/producto-dashboard.component';
+import { ListProductosComponent } from './pages/productos/productos/list-productos/list-productos.component';
 
 @Component({
   selector: 'app-root',

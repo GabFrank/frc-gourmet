@@ -17,15 +17,14 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { RepositoryService } from '../../../database/repository.service';
-import { Producto } from '../../../database/entities/productos/producto.entity';
-import { Subcategoria } from '../../../database/entities/productos/subcategoria.entity';
-import { Categoria } from '../../../database/entities/productos/categoria.entity';
-import { CreateEditProductoComponent } from './create-edit-producto.component';
-import { CreateEditProductoV2Component } from './create-edit-producto-v2.component';
-import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { RepositoryService } from '../../../../database/repository.service';
+import { Producto } from '../../../../database/entities/productos/producto.entity';
+import { Subcategoria } from '../../../../database/entities/productos/subcategoria.entity';
+import { Categoria } from '../../../../database/entities/productos/categoria.entity';
+import { ConfirmationDialogComponent } from '../../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { firstValueFrom } from 'rxjs';
-import { TabsService } from '../../../services/tabs.service';
+import { TabsService } from '../../../../services/tabs.service';
+import { CreateEditProductoComponent } from '../create-edit-producto/create-edit-producto.component';
 
 @Component({
   selector: 'app-list-productos',
@@ -49,8 +48,7 @@ import { TabsService } from '../../../services/tabs.service';
     ReactiveFormsModule,
     MatSnackBarModule,
     MatDialogModule,
-    ConfirmationDialogComponent,
-    CreateEditProductoV2Component
+    ConfirmationDialogComponent
   ],
   templateUrl: './list-productos.component.html',
   styleUrls: ['./list-productos.component.scss']
@@ -372,25 +370,4 @@ export class ListProductosComponent implements OnInit {
     return `${categoria} > ${subcategoria}`;
   }
 
-  // Add a new method to open the v2 component
-  createNuevoProductoV2(): void {
-    this.tabsService.openTab(
-      'Nuevo Producto V2',
-      CreateEditProductoV2Component,
-      {},
-      'nuevo-producto-v2-tab',
-      true
-    );
-  }
-
-  // Add a new method to edit with v2 component
-  editProductoV2(producto: Producto): void {
-    this.tabsService.openTab(
-      `Editar Producto V2: ${producto.nombre}`,
-      CreateEditProductoV2Component,
-      { producto },
-      `editar-producto-v2-${producto.id}-tab`,
-      true
-    );
-  }
 }

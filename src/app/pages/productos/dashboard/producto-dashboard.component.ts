@@ -8,7 +8,7 @@ import { MatGridListModule } from '@angular/material/grid-list';
 import { RouterModule } from '@angular/router';
 import { TabsService } from '../../../services/tabs.service';
 import { ListCategoriasComponent } from '../categorias/list-categorias/list-categorias.component';
-import { ListProductosComponent } from '../productos/list-productos.component';
+import { ListProductosComponent } from '../productos/list-productos/list-productos.component';
 import { ListRecetasComponent } from '../recetas/list-recetas.component';
 import { ListIngredientesComponent } from '../ingredientes/list-ingredientes.component';
 import { ListMovimientosStockComponent } from '../movimientos/list-movimientos-stock.component';

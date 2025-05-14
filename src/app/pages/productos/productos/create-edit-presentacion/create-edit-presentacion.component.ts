@@ -16,14 +16,14 @@ import { MatCardModule } from '@angular/material/card';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatMenuModule } from '@angular/material/menu';
-import { RepositoryService } from '../../../database/repository.service';
-import { Presentacion, TipoMedida } from '../../../database/entities/productos/presentacion.entity';
-import { Producto } from '../../../database/entities/productos/producto.entity';
-import { PrecioVenta } from '../../../database/entities/productos/precio-venta.entity';
-import { Codigo } from '../../../database/entities/productos/codigo.entity';
+import { RepositoryService } from '../../../../database/repository.service';
+import { Presentacion, TipoMedida } from '../../../../database/entities/productos/presentacion.entity';
+import { Producto } from '../../../../database/entities/productos/producto.entity';
+import { PrecioVenta } from '../../../../database/entities/productos/precio-venta.entity';
+import { Codigo } from '../../../../database/entities/productos/codigo.entity';
 import { firstValueFrom } from 'rxjs';
-import { CreateEditCodigoComponent } from './create-edit-codigo.component';
-import { CreateEditPrecioVentaComponent } from './create-edit-precio-venta.component';
+import { CreateEditCodigoComponent } from '../create-edit-codigo/create-edit-codigo.component';
+import { CreateEditPrecioVentaComponent } from '../create-edit-precio-venta/create-edit-precio-venta.component';
 
 @Component({
   selector: 'app-create-edit-presentacion',
