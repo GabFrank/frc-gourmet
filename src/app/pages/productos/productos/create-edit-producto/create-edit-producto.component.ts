@@ -202,23 +202,6 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     }
   }
 
-  openObservacionDialog(observacionProducto?: ObservacionProducto): void {
-    if (!this.producto) {
-      this.snackBar.open('Primero debe guardar el producto', 'Cerrar', { duration: 3000 });
-      return;
-    }
-
-    // if observacionProducto is not null, it means we need to edit it opening observacion producto dialog, if 
-    // is null, we need to open observacion dialog, select the observacion, in the dialog result there is the observacion, then open observacion producto dialog
-    if (observacionProducto) {
-      // open create edit observacion producto dialog
-      this.openCreateEditObservacionProductoDialog(observacionProducto);
-    } else {
-      // open create edit observacion dialog
-      this.openCreateEditObservacionDialog();
-    }
-  }
-
   openCreateEditObservacionProductoDialog(observacionProducto?: ObservacionProducto, observacion?: Observacion): void {
     const dialogConfig = new MatDialogConfig();
     dialogConfig.width = '50%';
@@ -231,21 +214,11 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     };
 
     const dialogRef = this.dialog.open(CreateEditObservacionProductoDialogComponent, dialogConfig);
-  }
-
-  openCreateEditObservacionDialog(): void {
-    const dialogConfig = new MatDialogConfig();
-    dialogConfig.width = '50%';
-    dialogConfig.disableClose = true;
-    dialogConfig.data = {
-      producto: this.producto
-    };
-
-    const dialogRef = this.dialog.open(CreateEditObservacionDialogComponent, dialogConfig);
 
     dialogRef.afterClosed().subscribe(result => {
       if (result) {
-        this.openCreateEditObservacionProductoDialog(result);
+        // reload observaciones producto
+        this.loadObservacionesProducto();
       }
     });
   }

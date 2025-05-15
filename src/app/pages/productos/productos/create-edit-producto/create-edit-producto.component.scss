@@ -211,14 +211,76 @@
 
 .observacion-producto-card {
   padding: 20px;
-  height: 300px;
+  margin-bottom: 20px;
 }
 
 .observacion-producto-section-header {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
 }
 
 .observacion-producto-section-content {
   margin-top: 20px;
+  overflow-x: auto;
+}
+
+// Data table styling
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  
+  th {
+    text-align: left;
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.05);
+    border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+    font-size: small;
+    font-weight: 500;
+  }
+  
+  td {
+    padding: 10px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    vertical-align: middle;
+    font-size: small;
+  }
+
+  .center-cell {
+    text-align: center !important;
+  }
+  
+  .action-cell {
+    text-align: right;
+    width: 50px;
+  }
+
+  .success-icon {
+    color: #4caf50;
+  }
+
+  .error-icon {
+    color: #f44336;
+  }
+}
+
+// Status badge styling
+.status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 16px;
+  text-align: center;
+  font-size: small;
+  
+  &.active {
+    background-color: rgba(76, 175, 80, 0.2);
+    color: #2e7d32;
+  }
+  
+  &.inactive {
+    background-color: rgba(244, 67, 54, 0.2);
+    color: #c62828;
+  }
 }

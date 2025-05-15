@@ -434,7 +434,7 @@ interface ElectronAPI {
   getObservacionesProductos: () => Promise<ObservacionProducto[]>;
   getObservacionesProductosByProducto: (productoId: number) => Promise<ObservacionProducto[]>;
   getObservacionProducto: (id: number) => Promise<ObservacionProducto>;
-  createObservacionProducto: (data: Partial<ObservacionProducto>) => Promise<ObservacionProducto>;
+  createObservacionProducto: (data: Partial<ObservacionProducto>) => Promise<{ success: boolean, data?: ObservacionProducto, error?: string, message?: string }>;
   updateObservacionProducto: (id: number, data: Partial<ObservacionProducto>) => Promise<ObservacionProducto>;
   deleteObservacionProducto: (id: number) => Promise<boolean>;
   
@@ -1876,7 +1876,7 @@ export class RepositoryService {
     return from(this.api.getObservacionProducto(id));
   }
 
-  createObservacionProducto(data: Partial<ObservacionProducto>): Observable<ObservacionProducto> {
+  createObservacionProducto(data: Partial<ObservacionProducto>): Observable<{ success: boolean, data?: ObservacionProducto, error?: string, message?: string }> {
     return from(this.api.createObservacionProducto(data));
   }
 

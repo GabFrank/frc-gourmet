@@ -6,7 +6,7 @@
   <!-- Header -->
   <h2 mat-dialog-title>{{ isEditing ? 'Editar' : 'Agregar' }} Observación a Producto</h2>
   <div *ngIf="producto" style="margin-bottom: 16px;">
-    <strong>Producto:</strong> {{ producto.nombre }}
+    <span>Producto: {{ producto.nombre }}</span>
   </div>
 
   <!-- Form Section -->
@@ -14,20 +14,22 @@
     <form [formGroup]="observacionProductoForm" class="form-container">
       <!-- Observación -->
       <div class="form-row">
+        <!-- replace this mat select with a readonly input -->
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Observación</mat-label>
-          <mat-select formControlName="observacionId" required (selectionChange)="onObservacionSelectionChange($event.value)">
-            <mat-option *ngFor="let obs of observaciones" [value]="obs.id">
-              {{ obs.nombre }}
-            </mat-option>
-          </mat-select>
+          <input matInput [value]="selectedObservacion?.nombre" readonly>
           <mat-error *ngIf="observacionProductoForm.get('observacionId')?.hasError('required')">
             La observación es requerida
           </mat-error>
-          <button mat-icon-button matSuffix (click)="openObservacionDialog()" type="button" matTooltip="Crear nueva observación">
-            <mat-icon>add_circle</mat-icon>
-          </button>
         </mat-form-field>
+        <!-- move add circle button out of the mat-form-field on right side -->
+        <button mat-icon-button matSuffix (click)="openObservacionDialog()" type="button" matTooltip="Crear nueva observación">
+          <mat-icon>search</mat-icon>
+        </button>
+        <!-- add a clear button to the input -->
+        <button mat-icon-button matSuffix (click)="clearObservacion()" type="button" matTooltip="Limpiar observación">
+          <mat-icon>close</mat-icon>
+        </button>
       </div>
 
       <!-- Cantidad Default -->

@@ -219,7 +219,7 @@
       <div class="section observaciones-section">
         <div class="observacion-producto-section-header">
           <h4>Observaciones</h4>
-          <button mat-button color="primary" (click)="openObservacionDialog()">
+          <button mat-button color="primary" (click)="openCreateEditObservacionProductoDialog()">
             <mat-icon>add</mat-icon> Nueva Observación
           </button>
         </div>
@@ -232,7 +232,7 @@
           <table class="data-table" *ngIf="observacionesProducto?.length">
             <thead>
               <tr>
-                <th class="center-cell">Observación</th>
+                <th>Observación</th>
                 <th class="center-cell">Obligatorio</th>
                 <th class="center-cell">Cantidad Default</th>
                 <th class="center-cell">Activo</th>
@@ -241,7 +241,7 @@
             </thead>
             <tbody>
               <tr *ngFor="let observacionProducto of observacionesProducto">
-                <td class="center-cell">{{ observacionProducto.observacion?.nombre }}</td>
+                <td>{{ observacionProducto.observacion?.nombre }}</td>
                 <td class="center-cell">
                   <mat-icon *ngIf="observacionProducto.obligatorio" class="success-icon">check_circle</mat-icon>
                   <mat-icon *ngIf="!observacionProducto.obligatorio" class="error-icon">radio_button_unchecked</mat-icon>
@@ -257,7 +257,7 @@
                     <mat-icon>more_vert</mat-icon>
                   </button>
                   <mat-menu #observacionMenu="matMenu">
-                    <button mat-menu-item (click)="openObservacionDialog(observacionProducto)">
+                    <button mat-menu-item (click)="openCreateEditObservacionProductoDialog(observacionProducto)">
                       <mat-icon>edit</mat-icon>
                       <span>Editar</span>
                     </button>

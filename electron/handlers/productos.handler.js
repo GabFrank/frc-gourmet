@@ -1558,14 +1558,37 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
     electron_1.ipcMain.handle('createObservacionProducto', async (_event, data) => {
         try {
             const repo = dataSource.getRepository(observacion_producto_entity_1.ObservacionProducto);
+            // Check if an observation with the same productoId and observacionId already exists
+            const existingObservacionProducto = await repo.findOne({
+                where: {
+                    productoId: data.productoId,
+                    observacionId: data.observacionId
+                }
+            });
+            if (existingObservacionProducto) {
+                // Return a specific error to be handled by the client
+                return {
+                    success: false,
+                    error: 'duplicate',
+                    message: 'Ya existe una observación asociada a este producto con el mismo nombre. No se permiten observaciones duplicadas.'
+                };
+            }
             const entity = repo.create(data);
             const currentUser = getCurrentUser();
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
-            return await repo.save(entity);
+            const savedEntity = await repo.save(entity);
+            return {
+                success: true,
+                data: savedEntity
+            };
         }
         catch (error) {
             console.error('Error creating observacion producto:', error);
-            throw error;
+            return {
+                success: false,
+                error: 'unknown',
+                message: error.message || 'Error al crear la observación para este producto'
+            };
         }
     });
     electron_1.ipcMain.handle('updateObservacionProducto', async (_event, id, data) => {

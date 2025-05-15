@@ -1903,7 +1903,7 @@ contextBridge.exposeInMainWorld('api', {
   getObservacionProducto: async (id: number): Promise<ObservacionProducto> => {
     return await ipcRenderer.invoke('getObservacionProducto', id);
   },
-  createObservacionProducto: async (data: Partial<ObservacionProducto>): Promise<ObservacionProducto> => {
+  createObservacionProducto: async (data: Partial<ObservacionProducto>): Promise<any> => {
     return await ipcRenderer.invoke('createObservacionProducto', data);
   },
 

@@ -5,6 +5,7 @@ import {
   FormGroup,
   Validators,
   ReactiveFormsModule,
+  FormControl,
 } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -28,7 +29,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { CreateEditObservacionDialogComponent } from '../create-edit-observacion-dialog/create-edit-observacion-dialog.component';
 
 export interface ObservacionProductoDialogData {
-  productoId: number;
+  producto: Producto;
   observacionProducto?: ObservacionProducto;
   observacion?: Observacion;
 }
@@ -125,6 +126,7 @@ export interface ObservacionProductoDialogData {
 })
 export class CreateEditObservacionProductoDialogComponent implements OnInit {
   observacionProductoForm: FormGroup;
+  observacionNombreControl = new FormControl('');
   isLoading = false;
   isEditing = false;
   observaciones: Observacion[] = [];
@@ -142,7 +144,8 @@ export class CreateEditObservacionProductoDialogComponent implements OnInit {
     this.observacionProductoForm = this.fb.group({
       observacionId: ['', Validators.required],
       obligatorio: [false],
-      cantidadDefault: [null],
+      cantidadDefault: [1],
+      productoId: [this.data.producto.id, Validators.required],
       activo: [true]
     });
 
@@ -151,7 +154,7 @@ export class CreateEditObservacionProductoDialogComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadData();
-    
+
     if (this.isEditing && this.data.observacionProducto) {
       this.patchFormWithData(this.data.observacionProducto);
     }
@@ -160,33 +163,19 @@ export class CreateEditObservacionProductoDialogComponent implements OnInit {
   async loadData(): Promise<void> {
     this.isLoading = true;
     try {
-      // Load all active observaciones
-      this.observaciones = await firstValueFrom(
-        this.repositoryService.getObservaciones()
-      );
-
-      // if data.observacion is not null, preselect it
-      if (this.data.observacion) {
-        this.selectedObservacion = this.observaciones.find(
-          obs => obs.id === this.data?.observacion?.id
-        ) || null;
-      }
-
-      // Filter only active observaciones
-      this.observaciones = this.observaciones.filter(obs => obs.activo);
-      
-      // Load producto information
-      if (this.data.productoId) {
-        this.producto = await firstValueFrom(
-          this.repositoryService.getProducto(this.data.productoId)
-        );
-      }
-      
       // If we are in edit mode, preselect the observacion
       if (this.isEditing && this.data.observacionProducto) {
-        this.selectedObservacion = this.observaciones.find(
-          obs => obs.id === this.data.observacionProducto?.observacionId
-        ) || null;
+        this.selectedObservacion = this.data.observacionProducto.observacion;
+        this.producto = this.data.producto;
+      } else {
+        // Load producto information
+        if (this.data.producto) {
+          this.producto = this.data.producto;
+        }
+        // load observacion from data.observacion
+        if (this.data.observacion) {
+          this.selectedObservacion = this.data.observacion;
+        }
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -216,21 +205,25 @@ export class CreateEditObservacionProductoDialogComponent implements OnInit {
     if (result && typeof result === 'object' && 'id' in result) {
       // Refresh observaciones list
       await this.loadData();
-      
+
       // Select the newly created observacion
       this.observacionProductoForm.patchValue({
         observacionId: result.id
       });
-      
+
       this.selectedObservacion = result as Observacion;
+      this.observacionNombreControl.setValue(this.selectedObservacion?.nombre);
     }
   }
 
   async save(): Promise<void> {
-    if (this.observacionProductoForm.invalid) return;
+    if (this.isLoading || this.observacionProductoForm.invalid) {
+      return;
+    }
+
+    const formValue = this.observacionProductoForm.getRawValue();
 
     this.isLoading = true;
-    const formValue = this.observacionProductoForm.value;
 
     try {
       if (this.isEditing && this.data.observacionProducto) {
@@ -240,33 +233,46 @@ export class CreateEditObservacionProductoDialogComponent implements OnInit {
             this.data.observacionProducto.id,
             {
               ...formValue,
-              productoId: this.data.productoId
+              productoId: this.data.producto.id
             }
           )
         );
 
-        this.snackBar.open('Observación de producto actualizada exitosamente', 'Cerrar', { 
-          duration: 3000 
+        this.snackBar.open('Observación de producto actualizada exitosamente', 'Cerrar', {
+          duration: 3000
         });
       } else {
         // Create new observacionProducto
-        await firstValueFrom(
+        const response = await firstValueFrom(
           this.repositoryService.createObservacionProducto({
             ...formValue,
-            productoId: this.data.productoId
+            productoId: this.data.producto.id
           })
         );
 
-        this.snackBar.open('Observación de producto creada exitosamente', 'Cerrar', { 
-          duration: 3000 
+        // Check if operation was successful
+        if (!response.success) {
+          // Handle duplicate entries
+          if (response.error === 'duplicate') {
+            this.snackBar.open(response.message || 'Esta observación ya existe para este producto.', 'Cerrar', {
+              duration: 5000
+            });
+            return;
+          } else {
+            throw new Error(response.message || 'Error desconocido al guardar la observación de producto');
+          }
+        }
+
+        this.snackBar.open('Observación de producto creada exitosamente', 'Cerrar', {
+          duration: 3000
         });
       }
 
       this.dialogRef.close(true);
     } catch (error) {
       console.error('Error saving observacion producto:', error);
-      this.snackBar.open('Error al guardar la observación de producto', 'Cerrar', { 
-        duration: 3000 
+      this.snackBar.open('Error al guardar la observación de producto', 'Cerrar', {
+        duration: 3000
       });
     } finally {
       this.isLoading = false;
@@ -275,6 +281,11 @@ export class CreateEditObservacionProductoDialogComponent implements OnInit {
 
   onObservacionSelectionChange(observacionId: number): void {
     this.selectedObservacion = this.observaciones.find(o => o.id === observacionId) || null;
+  }
+
+  clearObservacion(): void {
+    this.observacionNombreControl.setValue('');
+    this.selectedObservacion = null;
   }
 
   cancel(): void {
