@@ -19,9 +19,12 @@ import { RepositoryService } from '../../../../database/repository.service';
 import { Codigo, TipoCodigo } from '../../../../database/entities/productos/codigo.entity';
 import { Presentacion } from '../../../../database/entities/productos/presentacion.entity';
 import { firstValueFrom } from 'rxjs';
+import { MatMenuModule } from '@angular/material/menu';
 
 interface DialogData {
   presentacion: Presentacion;
+  codigo?: Codigo;
+  editMode?: boolean;
 }
 
 @Component({
@@ -43,7 +46,8 @@ interface DialogData {
     MatTooltipModule,
     MatCardModule,
     MatSnackBarModule,
-    MatDialogModule
+    MatDialogModule,
+    MatMenuModule
   ],
   template: `
     <div class="codigos-container">
@@ -54,7 +58,7 @@ interface DialogData {
       <!-- Form Section -->
       <mat-card class="form-card">
         <mat-card-header>
-          <mat-card-title>{{ isEditing ? 'Editar' : 'Nuevo' }} Código</mat-card-title>
+          <mat-card-title style="width: 100%; text-align: center;">{{ isEditing ? 'Editar' : 'Nuevo' }} Código</mat-card-title>
         </mat-card-header>
         <mat-card-content>
           <form [formGroup]="codigoForm" class="form-container">
@@ -102,8 +106,8 @@ interface DialogData {
       </mat-card>
 
       <!-- List Section -->
-      <div class="list-section">
-        <h3>Códigos de la Presentación</h3>
+      <div class="list-section" style="min-height: 300px;">
+        <h4>Lista de Códigos</h4>
         
         <div *ngIf="codigos.length === 0" class="empty-list">
           <mat-icon>qr_code</mat-icon>
@@ -147,17 +151,19 @@ interface DialogData {
           <ng-container matColumnDef="acciones">
             <th mat-header-cell *matHeaderCellDef>Acciones</th>
             <td mat-cell *matCellDef="let item">
+              <!-- add mat menu -->
+              <mat-menu #menu="matMenu">
+                <button mat-menu-item (click)="editCodigo(item)">Editar</button>
+                <button mat-menu-item (click)="deleteCodigo(item)">Eliminar</button>
+              </mat-menu>
               <button mat-icon-button color="primary" (click)="editCodigo(item)" matTooltip="Editar">
                 <mat-icon>edit</mat-icon>
-              </button>
-              <button mat-icon-button color="warn" (click)="deleteCodigo(item)" matTooltip="Eliminar">
-                <mat-icon>delete</mat-icon>
               </button>
             </td>
           </ng-container>
 
           <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns; let i = index;" [ngClass]="{'current-codigo': row.id === currentCodigoId}"></tr>
         </table>
       </div>
     </div>
@@ -245,7 +251,7 @@ interface DialogData {
     }
 
     .list-section {
-      margin-top: 16px;
+      margin: 20px;
     }
 
     .list-section h3 {
@@ -271,6 +277,11 @@ interface DialogData {
     .status-badge.inactive {
       background-color: #ffebee;
       color: #c62828;
+    }
+
+    // highlight the current codigo
+    .current-codigo {
+      background-color:rgba(16, 107, 24, 0.53);
     }
 
     /* Dark theme styles */
@@ -305,14 +316,14 @@ interface DialogData {
 })
 export class CreateEditCodigoComponent implements OnInit, OnChanges {
   @Input() presentacion?: Presentacion;
-  
+
   codigoForm: FormGroup;
   codigos: Codigo[] = [];
   isLoading = false;
   isEditing = false;
   currentCodigoId?: number;
   displayedColumns: string[] = ['codigo', 'tipoCodigo', 'principal', 'activo', 'acciones'];
-  
+
   tiposCodigo = [
     { value: TipoCodigo.MANUAL, label: 'Manual' },
     { value: TipoCodigo.BARRA, label: 'Código de Barras' },
@@ -326,10 +337,6 @@ export class CreateEditCodigoComponent implements OnInit, OnChanges {
     @Optional() private dialogRef?: MatDialogRef<CreateEditCodigoComponent>,
     @Optional() @Inject(MAT_DIALOG_DATA) private dialogData?: DialogData
   ) {
-    // Initialize with dialog data if available
-    if (this.dialogData?.presentacion) {
-      this.presentacion = this.dialogData.presentacion;
-    }
 
     this.codigoForm = this.fb.group({
       codigo: ['', Validators.required],
@@ -337,6 +344,25 @@ export class CreateEditCodigoComponent implements OnInit, OnChanges {
       principal: [false],
       activo: [true]
     });
+
+    // Initialize with dialog data if available
+    if (this.dialogData?.presentacion) {
+      this.presentacion = this.dialogData.presentacion;
+    }
+
+    if (this.dialogData?.codigo) {
+      this.currentCodigoId = this.dialogData.codigo.id;
+      this.codigoForm.patchValue({
+        codigo: this.dialogData.codigo.codigo,
+        tipoCodigo: this.dialogData.codigo.tipoCodigo,
+        principal: this.dialogData.codigo.principal,
+        activo: this.dialogData.codigo.activo
+      });
+    }
+
+    if (this.dialogData?.editMode) {
+      this.isEditing = true;
+    }
   }
 
   ngOnInit(): void {
@@ -353,7 +379,7 @@ export class CreateEditCodigoComponent implements OnInit, OnChanges {
 
   async loadCodigos(): Promise<void> {
     if (!this.presentacion?.id) return;
-    
+
     this.isLoading = true;
     try {
       this.codigos = await firstValueFrom(this.repositoryService.getCodigosByPresentacion(this.presentacion.id));
@@ -372,16 +398,16 @@ export class CreateEditCodigoComponent implements OnInit, OnChanges {
 
   async saveCodigo(): Promise<void> {
     if (this.codigoForm.invalid) return;
-    
+
     this.isLoading = true;
     const formValue = this.codigoForm.value;
-    
+
     try {
       // Convert string fields to uppercase
       if (formValue.codigo) {
         formValue.codigo = formValue.codigo.toUpperCase();
       }
-      
+
       // If it's marked as principal, make sure to unmark others
       if (formValue.principal) {
         for (const cod of this.codigos) {
@@ -393,7 +419,7 @@ export class CreateEditCodigoComponent implements OnInit, OnChanges {
         // If this is the first codigo, make it principal by default
         formValue.principal = true;
       }
-      
+
       if (this.isEditing && this.currentCodigoId) {
         // Update existing codigo
         const result = await firstValueFrom(
@@ -401,7 +427,7 @@ export class CreateEditCodigoComponent implements OnInit, OnChanges {
             ...formValue
           })
         );
-        
+
         this.snackBar.open('Código actualizado exitosamente', 'Cerrar', { duration: 3000 });
       } else {
         // Create new codigo
@@ -411,13 +437,13 @@ export class CreateEditCodigoComponent implements OnInit, OnChanges {
             presentacionId: this.presentacion!.id
           })
         );
-        
+
         this.snackBar.open('Código creado exitosamente', 'Cerrar', { duration: 3000 });
       }
-      
+
       // Reload codigos
       this.loadCodigos();
-      
+
       // Reset form and editing state
       this.resetForm();
     } catch (error) {
@@ -431,7 +457,7 @@ export class CreateEditCodigoComponent implements OnInit, OnChanges {
   editCodigo(codigo: Codigo): void {
     this.isEditing = true;
     this.currentCodigoId = codigo.id;
-    
+
     this.codigoForm.patchValue({
       codigo: codigo.codigo,
       tipoCodigo: codigo.tipoCodigo,
@@ -444,13 +470,13 @@ export class CreateEditCodigoComponent implements OnInit, OnChanges {
     if (!confirm(`¿Está seguro que desea eliminar el código "${codigo.codigo}"?`)) {
       return;
     }
-    
+
     this.isLoading = true;
     try {
       await firstValueFrom(this.repositoryService.deleteCodigo(codigo.id));
-      
+
       this.snackBar.open('Código eliminado exitosamente', 'Cerrar', { duration: 3000 });
-      
+
       // Reload codigos
       this.loadCodigos();
     } catch (error) {

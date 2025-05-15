@@ -4,9 +4,9 @@
   </div>
 
   <!-- Form Section -->
-  <mat-card class="form-card">
-    <mat-card-header>
-      <mat-card-title>{{ isEditing ? 'Editar' : 'Nuevo' }} {{ contextTitle }}</mat-card-title>
+  <mat-card class="form-card" style="width: 100% !important;">
+    <mat-card-header style="width: 100% !important;">
+      <mat-card-title style="width: 100% !important; text-align: center;">{{ isEditing ? 'Editar' : 'Nuevo' }} {{ contextTitle }}</mat-card-title>
     </mat-card-header>
     <mat-card-content>
       <form [formGroup]="precioForm" class="form-container">
@@ -68,7 +68,7 @@
   </mat-card>
 
   <!-- List Section -->
-  <div class="list-section">
+  <div class="list-section" style="min-height: 300px;">
     <h4 class="list-title">Lista de precios</h4>
 
     <div *ngIf="precios.length === 0" class="empty-list">
@@ -148,7 +148,7 @@
         </ng-container>
 
         <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
-        <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns; let i = index;" [ngClass]="{'current-precio': row.id === currentPrecioId}"></tr>
       </table>
     </div>
   </div>

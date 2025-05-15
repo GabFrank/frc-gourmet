@@ -1608,3 +1608,11 @@ input.mat-input-element {
     background-color: #333639 !important;
   }
 }
+
+.mat-mdc-card-header-text {
+  width: 100% !important;
+
+  .center {
+    text-align: center !important;
+  }
+}

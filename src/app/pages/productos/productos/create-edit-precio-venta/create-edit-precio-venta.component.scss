@@ -3,8 +3,6 @@
   flex-direction: column;
   gap: 12px;
   position: relative;
-  min-width: 750px;
-  max-width: 800px;
   margin: 0 auto;
 }
 
@@ -35,7 +33,7 @@
 
 .form-row {
   display: flex;
-  align-items: center;
+  align-items: start;
   flex-wrap: nowrap;
   gap: 8px;
   width: 100%;
@@ -241,5 +239,9 @@ table {
 
   .suggested-price-hint {
     color: #81c784;
+  }
+
+  .current-precio {
+    background-color:rgba(16, 107, 24, 0.53);
   }
 }

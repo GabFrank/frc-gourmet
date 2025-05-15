@@ -209,4 +209,9 @@
       </form>
     </div>
   </mat-card>
+  <mat-card *ngIf="producto" style="margin-top: 20px;">
+    <div class="tab-content">
+      <app-simple-presencation-section [productoId]="producto.id"></app-simple-presencation-section>
+    </div>
+  </mat-card>
 </div>

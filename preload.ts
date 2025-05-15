@@ -2,6 +2,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { ProductoImage } from './src/app/database/entities/productos/producto-image.entity';
 import { EstadoVentaItem } from './src/app/database/entities/ventas/venta-item.entity';
+import { OrigenCosto } from './src/app/database/entities/productos/costo-por-producto.entity';
 
 // Define types for our API
 interface Category {
@@ -705,6 +706,31 @@ interface ProductoAdicionalVentaItem {
   ventaItemId: number;
   ventaItem?: VentaItem;
   cantidad: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// ProductoAdicionalVentaItem interface
+interface ProductoAdicionalVentaItem {
+  id?: number;
+  productoAdicionalId: number;
+  productoAdicional?: ProductoAdicional;
+  ventaItemId: number;
+  ventaItem?: VentaItem;
+  cantidad: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// CostoPorProducto interface
+interface CostoPorProducto {
+  id?: number;
+  productoId: number;
+  producto?: Producto;
+  origenCosto: OrigenCosto;
+  monedaId: number;
+  moneda?: Moneda;
+  valor: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -1813,4 +1839,12 @@ contextBridge.exposeInMainWorld('api', {
   deleteAdicional: async (id: number): Promise<boolean> => {
     return await ipcRenderer.invoke('deleteAdicional', id);
   },
+
+  // CostoPorProducto methods
+  getCostosPorProducto: () => ipcRenderer.invoke('getCostosPorProducto'),
+  getCostosPorProductoByProducto: (productoId: number) => ipcRenderer.invoke('getCostosPorProductoByProducto', productoId),
+  getCostoPorProducto: (id: number) => ipcRenderer.invoke('getCostoPorProducto', id),
+  createCostoPorProducto: (data: any) => ipcRenderer.invoke('createCostoPorProducto', data),
+  updateCostoPorProducto: (id: number, data: any) => ipcRenderer.invoke('updateCostoPorProducto', id, data),
+  deleteCostoPorProducto: (id: number) => ipcRenderer.invoke('deleteCostoPorProducto', id),
 });

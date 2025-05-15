@@ -35,6 +35,7 @@ import { ObservacionProductoVentaItem } from './entities/productos/observacion-p
 import { Adicional } from './entities/productos/adicional.entity';
 import { ProductoAdicional } from './entities/productos/producto-adicional.entity';
 import { ProductoAdicionalVentaItem } from './entities/productos/producto-adicional-venta-item.entity';
+import { CostoPorProducto } from './entities/productos/costo-por-producto.entity';
 // Import new financial entities
 import { MonedaBillete } from './entities/financiero/moneda-billete.entity';
 import { MonedaCambio } from './entities/financiero/moneda-cambio.entity';
@@ -474,6 +475,13 @@ interface ElectronAPI {
   updateProductoAdicionalVentaItem: (id: number, data: Partial<ProductoAdicionalVentaItem>) => Promise<ProductoAdicionalVentaItem>;
   deleteProductoAdicionalVentaItem: (id: number) => Promise<boolean>;
   
+  // CostoPorProducto methods
+  getCostosPorProducto: () => Promise<CostoPorProducto[]>;
+  getCostosPorProductoByProducto: (productoId: number) => Promise<CostoPorProducto[]>;
+  getCostoPorProducto: (id: number) => Promise<CostoPorProducto>;
+  createCostoPorProducto: (data: Partial<CostoPorProducto>) => Promise<CostoPorProducto>;
+  updateCostoPorProducto: (id: number, data: Partial<CostoPorProducto>) => Promise<CostoPorProducto>;
+  deleteCostoPorProducto: (id: number) => Promise<boolean>;
 }
 
 /**
@@ -901,6 +909,16 @@ export class RepositoryService {
     return from(this.api.updatePresentacion(presentacionId, presentacionData));
   }
 
+  /**
+   * Delete a presentation - this should be updated in the backend 
+   * to handle cascade deletion of related entities:
+   * - PreciosVenta
+   * - Codigos
+   * - PresentacionSabores
+   * - ProductoAdicionales
+   * 
+   * Backend implementation should delete all child records first, then delete the presentation
+   */
   deletePresentacion(presentacionId: number): Observable<any> {
     return from(this.api.deletePresentacion(presentacionId));
   }
@@ -1988,5 +2006,30 @@ export class RepositoryService {
     // Assuming api is an instance of ElectronService or similar
     // that handles the database operations
     return from(this.api.searchRecetasByNombre(query));
+  }
+
+  // CostoPorProducto methods
+  getCostosPorProducto(): Observable<CostoPorProducto[]> {
+    return from(this.api.getCostosPorProducto());
+  }
+  
+  getCostosPorProductoByProducto(productoId: number): Observable<CostoPorProducto[]> {
+    return from(this.api.getCostosPorProductoByProducto(productoId));
+  }
+  
+  getCostoPorProducto(id: number): Observable<CostoPorProducto> {
+    return from(this.api.getCostoPorProducto(id));
+  }
+  
+  createCostoPorProducto(data: Partial<CostoPorProducto>): Observable<CostoPorProducto> {
+    return from(this.api.createCostoPorProducto(data));
+  }
+  
+  updateCostoPorProducto(id: number, data: Partial<CostoPorProducto>): Observable<CostoPorProducto> {
+    return from(this.api.updateCostoPorProducto(id, data));
+  }
+  
+  deleteCostoPorProducto(id: number): Observable<boolean> {
+    return from(this.api.deleteCostoPorProducto(id));
   }
 }

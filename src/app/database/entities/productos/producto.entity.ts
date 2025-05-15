@@ -7,6 +7,7 @@ import type { Receta } from './receta.entity';
 import type { IntercambioIngrediente } from './intercambio-ingrediente.entity';
 import type { ObservacionProducto } from './observacion-producto.entity';
 import type { ProductoAdicional } from './producto-adicional.entity';
+import type { CostoPorProducto } from './costo-por-producto.entity';
 
 /**
  * Entity representing a product
@@ -89,4 +90,7 @@ export class Producto extends BaseModel {
   
   @OneToMany('ProductoAdicional', 'producto')
   productosAdicionales!: ProductoAdicional[];
+
+  @OneToMany('CostoPorProducto', 'producto')
+  costos!: CostoPorProducto[];
 }
