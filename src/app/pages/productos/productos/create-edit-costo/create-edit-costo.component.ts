@@ -38,9 +38,10 @@ import { Moneda } from '../../../../database/entities/financiero/moneda.entity';
 import { firstValueFrom } from 'rxjs';
 import { CurrencyInputComponent } from '../../../../shared/components/currency-input/currency-input.component';
 import { CurrencyConfigService } from '../../../../shared/services/currency-config.service';
+import { Producto } from '../../../../database/entities/productos/producto.entity';
 
 interface DialogData {
-  productoId: number;
+  producto: Producto;
   costo?: CostoPorProducto;
   editMode?: boolean;
 }
@@ -118,8 +119,8 @@ export class CreateEditCostoComponent implements OnInit, OnChanges {
     public currencyConfigService: CurrencyConfigService
   ) {
     if (this.dialogData) {
-      if (this.dialogData.productoId) {
-        this.productoId = this.dialogData.productoId;
+      if (this.dialogData.producto) {
+        this.productoId = this.dialogData.producto?.id;
       }
 
       if (this.dialogData.editMode && this.dialogData.costo) {

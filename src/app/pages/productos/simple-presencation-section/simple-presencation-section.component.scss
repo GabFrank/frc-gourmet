@@ -179,3 +179,11 @@
   }
 }
 
+.currency-flag {
+  width: 15px;
+  height: 15px;
+  margin-right: 5px;
+  object-fit: contain;
+  border-radius: 1px;
+  background-color: rgba(255, 255, 255, 0.1);
+}

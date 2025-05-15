@@ -214,4 +214,64 @@
       <app-simple-presencation-section [producto]="producto"></app-simple-presencation-section>
     </div>
   </mat-card>
+  <mat-card class="observacion-producto-card" *ngIf="producto" style="margin-top: 20px;">
+    <div class="tab-content">
+      <div class="section observaciones-section">
+        <div class="observacion-producto-section-header">
+          <h4>Observaciones</h4>
+          <button mat-button color="primary" (click)="openObservacionDialog()">
+            <mat-icon>add</mat-icon> Nueva Observación
+          </button>
+        </div>
+
+        <div class="observacion-producto-section-content">
+          <div class="empty-state" *ngIf="!observacionesProducto?.length" style="text-align: center;">
+            <p>No hay observaciones configuradas para este producto.</p>
+          </div>
+
+          <table class="data-table" *ngIf="observacionesProducto?.length">
+            <thead>
+              <tr>
+                <th class="center-cell">Observación</th>
+                <th class="center-cell">Obligatorio</th>
+                <th class="center-cell">Cantidad Default</th>
+                <th class="center-cell">Activo</th>
+                <th class="center-cell">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let observacionProducto of observacionesProducto">
+                <td class="center-cell">{{ observacionProducto.observacion?.nombre }}</td>
+                <td class="center-cell">
+                  <mat-icon *ngIf="observacionProducto.obligatorio" class="success-icon">check_circle</mat-icon>
+                  <mat-icon *ngIf="!observacionProducto.obligatorio" class="error-icon">radio_button_unchecked</mat-icon>
+                </td>
+                <td class="center-cell">{{ observacionProducto.cantidadDefault || '-' }}</td>
+                <td class="center-cell">
+                  <span class="status-badge" [ngClass]="observacionProducto.activo ? 'active' : 'inactive'">
+                    {{ observacionProducto.activo ? "Activo" : "Inactivo" }}
+                  </span>
+                </td>
+                <td class="action-cell">
+                  <button mat-icon-button [matMenuTriggerFor]="observacionMenu">
+                    <mat-icon>more_vert</mat-icon>
+                  </button>
+                  <mat-menu #observacionMenu="matMenu">
+                    <button mat-menu-item (click)="openObservacionDialog(observacionProducto)">
+                      <mat-icon>edit</mat-icon>
+                      <span>Editar</span>
+                    </button>
+                    <button mat-menu-item (click)="deleteObservacionProducto(observacionProducto)">
+                      <mat-icon>delete</mat-icon>
+                      <span>Eliminar</span>
+                    </button>
+                  </mat-menu>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </mat-card>
 </div>

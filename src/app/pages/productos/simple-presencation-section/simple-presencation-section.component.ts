@@ -21,10 +21,13 @@ import { CreateEditPrecioVentaComponent } from '../productos/create-edit-precio-
 import { CreateEditCodigoComponent } from '../productos/create-edit-codigo/create-edit-codigo.component';
 import { CreateEditCostoComponent } from '../productos/create-edit-costo/create-edit-costo.component';
 import { Producto } from 'src/app/database/entities/productos/producto.entity';
+import { Moneda } from 'src/app/database/entities/financiero/moneda.entity';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 @Component({
   selector: 'app-simple-presencation-section',
   standalone: true,
+  preserveWhitespaces: true,
   imports: [
     CommonModule,
     MatTabsModule,
@@ -39,7 +42,8 @@ import { Producto } from 'src/app/database/entities/productos/producto.entity';
     MatMenuModule,
     CreateEditPrecioVentaComponent,
     CreateEditCodigoComponent,
-    CreateEditCostoComponent
+    CreateEditCostoComponent,
+    MatTooltipModule
   ],
   templateUrl: './simple-presencation-section.component.html',
   styleUrls: ['./simple-presencation-section.component.scss']
@@ -55,9 +59,13 @@ export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
   preciosByPresentacion: Map<number, PrecioVenta[]> = new Map();
   codigosByPresentacion: Map<number, Codigo[]> = new Map();
   costosPorProducto: CostoPorProducto[] = [];
+  costoPrincipal: CostoPorProducto | null = null;
 
   // precio costo
   precioCosto: CostoPorProducto | null = null;
+
+  // moneda principal
+  monedaPrincipal: Moneda | null = null;
 
   // Tab selection with getter/setter for proper handling
   private _selectedTabIndex = 0;
@@ -105,6 +113,7 @@ export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
     if (this.producto) {
       this.loadPresentaciones();
       this.loadCostosPorProducto();
+      this.loadMonedaPrincipal();
     }
   }
 
@@ -141,6 +150,16 @@ export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Loads the principal currency
+   */
+  loadMonedaPrincipal(): void {
+    this.repositoryService.getMonedaPrincipal()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((moneda) => {
+        this.monedaPrincipal = moneda;
+      });
+  }
   /**
    * Creates a form for a presentation
    */
@@ -386,6 +405,7 @@ export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (precios) => {
           this.preciosByPresentacion.set(presentacionId, precios);
+          console.log(this.preciosByPresentacion);
           this.cdr.detectChanges();
         },
         error: (error) => {
@@ -513,6 +533,7 @@ export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
         .subscribe({
           next: (costos) => {
             this.costosPorProducto = costos;
+            this.costoPrincipal = costos.find(costo => costo.principal) || null;
             this.cdr.detectChanges();
           },
           error: (error) => {

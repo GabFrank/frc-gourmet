@@ -735,6 +735,29 @@ interface CostoPorProducto {
   updatedAt?: Date;
 }
 
+// Observacion interface
+interface Observacion {
+  id?: number;
+  nombre: string;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// ObservacionProducto interface
+interface ObservacionProducto {
+  id?: number;
+  productoId: number;
+  producto?: Producto;
+  observacionId: number;  
+  observacion?: Observacion;
+  obligatorio: boolean;
+  cantidadDefault?: number;
+  activo: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('api', {
@@ -1847,4 +1870,49 @@ contextBridge.exposeInMainWorld('api', {
   createCostoPorProducto: (data: any) => ipcRenderer.invoke('createCostoPorProducto', data),
   updateCostoPorProducto: (id: number, data: any) => ipcRenderer.invoke('updateCostoPorProducto', id, data),
   deleteCostoPorProducto: (id: number) => ipcRenderer.invoke('deleteCostoPorProducto', id),
+
+  // Observacion methods
+  getObservaciones: async (): Promise<Observacion[]> => {
+    return await ipcRenderer.invoke('getObservaciones');
+  },
+  getObservacion: async (id: number): Promise<Observacion> => {
+    return await ipcRenderer.invoke('getObservacion', id);
+  },
+  createObservacion: async (data: Partial<Observacion>): Promise<Observacion> => {
+    return await ipcRenderer.invoke('createObservacion', data);
+  },
+  updateObservacion: async (id: number, data: Partial<Observacion>): Promise<Observacion> => {
+    return await ipcRenderer.invoke('updateObservacion', id, data);
+  },
+  deleteObservacion: async (id: number): Promise<boolean> => {
+    return await ipcRenderer.invoke('deleteObservacion', id);
+  },
+  searchObservaciones: async (searchTerm: string, page: number, pageSize: number): Promise<Observacion[]> => {
+    return await ipcRenderer.invoke('searchObservaciones', searchTerm, page, pageSize);
+  },
+
+  // ObservacionProducto methods
+  getObservacionesProducto: async (productoId: number): Promise<ObservacionProducto[]> => {
+    return await ipcRenderer.invoke('getObservacionesProducto', productoId);
+  },
+
+  getObservacionesProductosByProducto: async (productoId: number): Promise<ObservacionProducto[]> => {
+    return await ipcRenderer.invoke('getObservacionesProductosByProducto', productoId);
+  },
+
+  getObservacionProducto: async (id: number): Promise<ObservacionProducto> => {
+    return await ipcRenderer.invoke('getObservacionProducto', id);
+  },
+  createObservacionProducto: async (data: Partial<ObservacionProducto>): Promise<ObservacionProducto> => {
+    return await ipcRenderer.invoke('createObservacionProducto', data);
+  },
+
+  updateObservacionProducto: async (id: number, data: Partial<ObservacionProducto>): Promise<ObservacionProducto> => {
+    return await ipcRenderer.invoke('updateObservacionProducto', id, data);
+  },
+
+  deleteObservacionProducto: async (id: number): Promise<boolean> => {
+    return await ipcRenderer.invoke('deleteObservacionProducto', id);
+  },
+  
 });

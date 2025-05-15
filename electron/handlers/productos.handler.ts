@@ -1,5 +1,5 @@
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
-import { DataSource, Not } from 'typeorm';
+import { DataSource, Like, Not } from 'typeorm';
 import { Categoria } from '../../src/app/database/entities/productos/categoria.entity';
 import { Subcategoria } from '../../src/app/database/entities/productos/subcategoria.entity';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
@@ -1201,13 +1201,13 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
             // Find the exchange rate from this moneda to the principal moneda
             const cambio = monedasCambio.find(
               c => c.monedaOrigen && c.monedaDestino && 
-                   c.monedaOrigen.id === precioVenta.monedaId && 
-                   c.monedaDestino.id === monedaPrincipal.id
+                   c.monedaDestino.id === precioVenta.monedaId && 
+                   c.monedaOrigen.id === monedaPrincipal.id
             );
             
-            if (cambio && cambio.compraLocal) {
-              // Use compraLocal to calculate the equivalent in principal currency
-              precioVenta.valorMonedaPrincipal = precioVenta.valor * cambio.compraLocal;
+            if (cambio && cambio.compraOficial) {
+              // Use compraOficial to calculate the equivalent in principal currency
+              precioVenta.valorMonedaPrincipal = precioVenta.valor * cambio.compraOficial;
             }
           }
         }
@@ -1249,13 +1249,13 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
             // Find the exchange rate from this moneda to the principal moneda
             const cambio = monedasCambio.find(
               c => c.monedaOrigen && c.monedaDestino && 
-                   c.monedaOrigen.id === precioVenta.monedaId && 
-                   c.monedaDestino.id === monedaPrincipal.id
+                   c.monedaDestino.id === precioVenta.monedaId && 
+                   c.monedaOrigen.id === monedaPrincipal.id
             );
             
-            if (cambio && cambio.compraLocal) {
-              // Use compraLocal to calculate the equivalent in principal currency
-              precioVenta.valorMonedaPrincipal = precioVenta.valor * cambio.compraLocal;
+            if (cambio && cambio.compraOficial) {
+              // Use compraOficial to calculate the equivalent in principal currency
+              precioVenta.valorMonedaPrincipal = precioVenta.valor * cambio.compraOficial;
             }
           }
         }
@@ -1533,6 +1533,25 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       return await repo.remove(entity);
     } catch (error) {
       console.error(`Error deleting observacion ID ${id}:`, error);
+      throw error;
+    }
+  });
+
+  // search observaciones by nombre, add pagination
+  ipcMain.handle('searchObservaciones', async (_event: any, searchTerm: string, page: number, pageSize: number) => {
+    try {
+      const repo = dataSource.getRepository(Observacion);
+      const skip = (page - 1) * pageSize;
+      // improve the search query using like and wildcard, order by nombre
+      const observaciones = await repo.find({ 
+        where: { nombre: Like(`%${searchTerm}%`) },
+        order: { nombre: 'ASC' },
+        skip,
+        take: pageSize
+      });
+      return observaciones;
+    } catch (error) {
+      console.error('Error searching observaciones:', error);
       throw error;
     }
   });
@@ -2024,13 +2043,13 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
             // Find the exchange rate from this moneda to the principal moneda
             const cambio = monedasCambio.find(
               c => c.monedaOrigen && c.monedaDestino && 
-                   c.monedaOrigen.id === costo.monedaId && 
-                   c.monedaDestino.id === monedaPrincipal.id
+                   c.monedaDestino.id === costo.monedaId && 
+                   c.monedaOrigen.id === monedaPrincipal.id
             );
             
-            if (cambio && cambio.compraLocal) {
-              // Use compraLocal to calculate the equivalent in principal currency
-              costo.valorMonedaPrincipal = costo.valor * cambio.compraLocal;
+            if (cambio && cambio.compraOficial) {
+              // Use compraOficial to calculate the equivalent in principal currency
+              costo.valorMonedaPrincipal = costo.valor * cambio.compraOficial;
             }
           }
         }
@@ -2073,13 +2092,13 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
             // Find the exchange rate from this moneda to the principal moneda
             const cambio = monedasCambio.find(
               c => c.monedaOrigen && c.monedaDestino && 
-                   c.monedaOrigen.id === costo.monedaId && 
-                   c.monedaDestino.id === monedaPrincipal.id
+                   c.monedaDestino.id === costo.monedaId && 
+                   c.monedaOrigen.id === monedaPrincipal.id
             );
             
-            if (cambio && cambio.compraLocal) {
-              // Use compraLocal to calculate the equivalent in principal currency
-              costo.valorMonedaPrincipal = costo.valor * cambio.compraLocal;
+            if (cambio && cambio.compraOficial) {
+              // Use compraOficial to calculate the equivalent in principal currency
+              costo.valorMonedaPrincipal = costo.valor * cambio.compraOficial;
             }
           }
         }
@@ -2120,13 +2139,13 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
             // Find the exchange rate from this moneda to the principal moneda
             const cambio = monedasCambio.find(
               c => c.monedaOrigen && c.monedaDestino && 
-                   c.monedaOrigen.id === costo.monedaId && 
-                   c.monedaDestino.id === monedaPrincipal.id
+                   c.monedaDestino.id === costo.monedaId && 
+                   c.monedaOrigen.id === monedaPrincipal.id
             );
             
-            if (cambio && cambio.compraLocal) {
-              // Use compraLocal to calculate the equivalent in principal currency
-              costo.valorMonedaPrincipal = costo.valor * cambio.compraLocal;
+            if (cambio && cambio.compraOficial) {
+              // Use compraOficial to calculate the equivalent in principal currency
+              costo.valorMonedaPrincipal = costo.valor * cambio.compraOficial;
             }
           }
         }

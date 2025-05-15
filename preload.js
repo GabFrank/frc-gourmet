@@ -1004,5 +1004,43 @@ electron_1.contextBridge.exposeInMainWorld('api', {
     createCostoPorProducto: (data) => electron_1.ipcRenderer.invoke('createCostoPorProducto', data),
     updateCostoPorProducto: (id, data) => electron_1.ipcRenderer.invoke('updateCostoPorProducto', id, data),
     deleteCostoPorProducto: (id) => electron_1.ipcRenderer.invoke('deleteCostoPorProducto', id),
+    // Observacion methods
+    getObservaciones: async () => {
+        return await electron_1.ipcRenderer.invoke('getObservaciones');
+    },
+    getObservacion: async (id) => {
+        return await electron_1.ipcRenderer.invoke('getObservacion', id);
+    },
+    createObservacion: async (data) => {
+        return await electron_1.ipcRenderer.invoke('createObservacion', data);
+    },
+    updateObservacion: async (id, data) => {
+        return await electron_1.ipcRenderer.invoke('updateObservacion', id, data);
+    },
+    deleteObservacion: async (id) => {
+        return await electron_1.ipcRenderer.invoke('deleteObservacion', id);
+    },
+    searchObservaciones: async (searchTerm, page, pageSize) => {
+        return await electron_1.ipcRenderer.invoke('searchObservaciones', searchTerm, page, pageSize);
+    },
+    // ObservacionProducto methods
+    getObservacionesProducto: async (productoId) => {
+        return await electron_1.ipcRenderer.invoke('getObservacionesProducto', productoId);
+    },
+    getObservacionesProductosByProducto: async (productoId) => {
+        return await electron_1.ipcRenderer.invoke('getObservacionesProductosByProducto', productoId);
+    },
+    getObservacionProducto: async (id) => {
+        return await electron_1.ipcRenderer.invoke('getObservacionProducto', id);
+    },
+    createObservacionProducto: async (data) => {
+        return await electron_1.ipcRenderer.invoke('createObservacionProducto', data);
+    },
+    updateObservacionProducto: async (id, data) => {
+        return await electron_1.ipcRenderer.invoke('updateObservacionProducto', id, data);
+    },
+    deleteObservacionProducto: async (id) => {
+        return await electron_1.ipcRenderer.invoke('deleteObservacionProducto', id);
+    },
 });
 //# sourceMappingURL=preload.js.map

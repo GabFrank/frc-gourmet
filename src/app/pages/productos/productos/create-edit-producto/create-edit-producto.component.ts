@@ -15,17 +15,20 @@ import { MatCardModule } from '@angular/material/card';
 import { MatDialog, MatDialogConfig, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatMenuModule } from '@angular/material/menu';
 import { RepositoryService } from '../../../../database/repository.service';
 import { Producto } from '../../../../database/entities/productos/producto.entity';
 import { ProductoImage } from '../../../../database/entities/productos/producto-image.entity';
 import { Subcategoria } from '../../../../database/entities/productos/subcategoria.entity';
 import { Categoria } from '../../../../database/entities/productos/categoria.entity';
+import { ObservacionProducto } from '../../../../database/entities/productos/observacion-producto.entity';
 import { firstValueFrom } from 'rxjs';
 import { TabsService } from '../../../../services/tabs.service';
 import { ImageViewerComponent } from '../../../../components/image-viewer/image-viewer.component';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ConfirmationDialogComponent } from '../../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { SimplePresentationSectionComponent } from '../../simple-presencation-section/simple-presencation-section.component';
+import { CreateEditObservacionDialogComponent } from '../create-edit-observacion-dialog/create-edit-observacion-dialog.component';
 
 // Interface for product image model
 interface ProductImageModel {
@@ -57,6 +60,7 @@ interface ProductImageModel {
     MatSnackBarModule,
     MatTooltipModule,
     MatDialogModule,
+    MatMenuModule,
     ReactiveFormsModule,
     FormsModule,
     ConfirmationDialogComponent,
@@ -76,6 +80,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   isUploading = false;
   categorias: Categoria[] = [];
   subcategorias: Subcategoria[] = [];
+  observacionesProducto: ObservacionProducto[] = [];
   
   // For image handling
   mainImageUrl = '';
@@ -167,6 +172,88 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     }
   }
 
+  async loadObservacionesProducto(): Promise<void> {
+    if (!this.producto || !this.producto.id) {
+      return;
+    }
+    
+    try {
+      const observacionesProducto = await firstValueFrom(
+        this.repositoryService.getObservacionesProductosByProducto(this.producto.id)
+      );
+      
+      // Load associated observacion details
+      for (const op of observacionesProducto) {
+        try {
+          op.observacion = await firstValueFrom(
+            this.repositoryService.getObservacion(op.observacionId)
+          );
+        } catch (error) {
+          console.error(`Error loading observacion ${op.observacionId}:`, error);
+        }
+      }
+      
+      this.observacionesProducto = observacionesProducto;
+    } catch (error) {
+      console.error('Error loading observaciones producto:', error);
+      this.snackBar.open('Error al cargar las observaciones', 'Cerrar', { duration: 3000 });
+    }
+  }
+
+  openObservacionDialog(observacionProducto?: ObservacionProducto): void {
+    if (!this.producto) {
+      this.snackBar.open('Primero debe guardar el producto', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    const dialogConfig = new MatDialogConfig();
+    dialogConfig.width = '50%';
+    dialogConfig.disableClose = true;
+    dialogConfig.data = {
+      producto: this.producto,
+      observacionProducto: observacionProducto,
+      editMode: !!observacionProducto
+    };
+
+    const dialogRef = this.dialog.open(CreateEditObservacionDialogComponent, dialogConfig);
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.success) {
+        this.loadObservacionesProducto();
+      }
+    });
+  }
+
+  async deleteObservacionProducto(observacionProducto: ObservacionProducto): Promise<void> {
+    if (!observacionProducto || !observacionProducto.id) {
+      return;
+    }
+
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      width: '400px',
+      data: {
+        title: 'Confirmar Eliminación',
+        message: `¿Está seguro que desea eliminar esta observación?`
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(async (result) => {
+      if (!result) return;
+      
+      try {
+        await firstValueFrom(
+          this.repositoryService.deleteObservacionProducto(observacionProducto.id!)
+        );
+        
+        this.snackBar.open('Observación eliminada exitosamente', 'Cerrar', { duration: 3000 });
+        this.loadObservacionesProducto();
+      } catch (error) {
+        console.error('Error deleting observacion producto:', error);
+        this.snackBar.open('Error al eliminar la observación', 'Cerrar', { duration: 3000 });
+      }
+    });
+  }
+
   private setupFormControlListeners(): void {
     this.productoForm.get('hasVencimiento')?.valueChanges.subscribe(hasVencimiento => {
       const alertarVencimientoDiasControl = this.productoForm.get('alertarVencimientoDias');
@@ -244,6 +331,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
           });
           this.loadSubcategoriasByCategoria(producto.subcategoria.categoria.id);
           this.loadProductImages();
+          this.loadObservacionesProducto();
           this.setupFormControlsBasedOnLoadedData();
         } else {
           this.snackBar.open('No se encontró el producto', 'Cerrar', { duration: 3000 });

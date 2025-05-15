@@ -428,6 +428,7 @@ interface ElectronAPI {
   createObservacion: (data: Partial<Observacion>) => Promise<Observacion>;
   updateObservacion: (id: number, data: Partial<Observacion>) => Promise<Observacion>;
   deleteObservacion: (id: number) => Promise<boolean>;
+  searchObservaciones: (searchTerm: string, page: number, pageSize: number) => Promise<Observacion[]>;
   
   // ObservacionProducto methods
   getObservacionesProductos: () => Promise<ObservacionProducto[]>;
@@ -1856,6 +1857,10 @@ export class RepositoryService {
 
   deleteObservacion(id: number): Observable<boolean> {
     return from(this.api.deleteObservacion(id));
+  }
+
+  searchObservaciones(searchTerm: string, page: number, pageSize: number): Observable<Observacion[]> {
+    return from(this.api.searchObservaciones(searchTerm, page, pageSize));
   }
 
   // ObservacionProducto methods
