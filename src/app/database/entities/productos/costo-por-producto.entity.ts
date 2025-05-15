@@ -40,4 +40,13 @@ export class CostoPorProducto extends BaseModel {
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   valor!: number;
+  
+  @Column({ type: 'boolean', default: true })
+  principal!: boolean;
+  
+  /**
+   * Calculated field for the value in the principal currency
+   * This is not stored in the database but calculated when needed
+   */
+  valorMonedaPrincipal?: number;
 } 

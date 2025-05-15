@@ -119,6 +119,10 @@ __decorate([
     (0, typeorm_1.OneToMany)('ProductoAdicional', 'producto'),
     __metadata("design:type", Array)
 ], Producto.prototype, "productosAdicionales", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)('CostoPorProducto', 'producto'),
+    __metadata("design:type", Array)
+], Producto.prototype, "costos", void 0);
 Producto = __decorate([
     (0, typeorm_1.Entity)('productos')
 ], Producto);

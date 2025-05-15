@@ -1,5 +1,5 @@
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
-import { DataSource } from 'typeorm';
+import { DataSource, Not } from 'typeorm';
 import { Categoria } from '../../src/app/database/entities/productos/categoria.entity';
 import { Subcategoria } from '../../src/app/database/entities/productos/subcategoria.entity';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
@@ -23,6 +23,8 @@ import { Adicional } from '../../src/app/database/entities/productos/adicional.e
 import { ProductoAdicional } from '../../src/app/database/entities/productos/producto-adicional.entity';
 import { ProductoAdicionalVentaItem } from '../../src/app/database/entities/productos/producto-adicional-venta-item.entity';
 import { CostoPorProducto } from '../../src/app/database/entities/productos/costo-por-producto.entity';
+import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
+import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 
 export function registerProductosHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Helper function to enrich products with principal presentation and price information
@@ -1176,7 +1178,42 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   ipcMain.handle('getPreciosVentaByPresentacion', async (_event: any, presentacionId: number, active: boolean) => {
     try {
       const repo = dataSource.getRepository(PrecioVenta);
-      return await repo.find({ where: { presentacionId, activo: active }, relations: ['moneda', 'tipoPrecio'] });
+      const preciosVenta = await repo.find({ where: { presentacionId, activo: active }, relations: ['moneda', 'tipoPrecio'] });
+      
+      // Get the principal moneda
+      const monedaRepo = dataSource.getRepository(Moneda);
+      const monedaPrincipal = await monedaRepo.findOneBy({ principal: true });
+      
+      if (monedaPrincipal) {
+        // Get all exchange rates
+        const monedaCambioRepo = dataSource.getRepository(MonedaCambio);
+        const monedasCambio = await monedaCambioRepo.find({ 
+          relations: ['monedaOrigen', 'monedaDestino'],
+          where: { activo: true } 
+        });
+        
+        // Calculate valorMonedaPrincipal for each PrecioVenta
+        for (const precioVenta of preciosVenta) {
+          if (precioVenta.monedaId === monedaPrincipal.id) {
+            // If the moneda is already the principal one, use the original value
+            precioVenta.valorMonedaPrincipal = precioVenta.valor;
+          } else {
+            // Find the exchange rate from this moneda to the principal moneda
+            const cambio = monedasCambio.find(
+              c => c.monedaOrigen && c.monedaDestino && 
+                   c.monedaOrigen.id === precioVenta.monedaId && 
+                   c.monedaDestino.id === monedaPrincipal.id
+            );
+            
+            if (cambio && cambio.compraLocal) {
+              // Use compraLocal to calculate the equivalent in principal currency
+              precioVenta.valorMonedaPrincipal = precioVenta.valor * cambio.compraLocal;
+            }
+          }
+        }
+      }
+      
+      return preciosVenta;
     } catch (error) {
       console.error('Error getting precios venta por presentacion:', error);
       throw error;
@@ -1186,7 +1223,45 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   ipcMain.handle('getPreciosVentaByPresentacionSabor', async (_event: any, presentacionSaborId: number, active: boolean) => {
     try {
       const repo = dataSource.getRepository(PrecioVenta);
-      return await repo.find({ where: { presentacionSaborId, activo: active } });
+      const preciosVenta = await repo.find({ 
+        where: { presentacionSaborId, activo: active },
+        relations: ['moneda', 'tipoPrecio'] 
+      });
+      
+      // Get the principal moneda
+      const monedaRepo = dataSource.getRepository(Moneda);
+      const monedaPrincipal = await monedaRepo.findOneBy({ principal: true });
+      
+      if (monedaPrincipal) {
+        // Get all exchange rates
+        const monedaCambioRepo = dataSource.getRepository(MonedaCambio);
+        const monedasCambio = await monedaCambioRepo.find({ 
+          relations: ['monedaOrigen', 'monedaDestino'],
+          where: { activo: true } 
+        });
+        
+        // Calculate valorMonedaPrincipal for each PrecioVenta
+        for (const precioVenta of preciosVenta) {
+          if (precioVenta.monedaId === monedaPrincipal.id) {
+            // If the moneda is already the principal one, use the original value
+            precioVenta.valorMonedaPrincipal = precioVenta.valor;
+          } else {
+            // Find the exchange rate from this moneda to the principal moneda
+            const cambio = monedasCambio.find(
+              c => c.monedaOrigen && c.monedaDestino && 
+                   c.monedaOrigen.id === precioVenta.monedaId && 
+                   c.monedaDestino.id === monedaPrincipal.id
+            );
+            
+            if (cambio && cambio.compraLocal) {
+              // Use compraLocal to calculate the equivalent in principal currency
+              precioVenta.valorMonedaPrincipal = precioVenta.valor * cambio.compraLocal;
+            }
+          }
+        }
+      }
+      
+      return preciosVenta;
     } catch (error) {
       console.error('Error getting precios venta por presentacion sabor:', error);
       throw error;
@@ -1920,13 +1995,48 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   ipcMain.handle('getCostosPorProducto', async () => {
     try {
       const repo = dataSource.getRepository(CostoPorProducto);
-      return await repo.find({ 
+      const costos = await repo.find({ 
         relations: ['producto', 'moneda'],
         order: { 
           productoId: 'ASC',
           createdAt: 'DESC'
         }
       });
+      
+      // Get the principal moneda
+      const monedaRepo = dataSource.getRepository(Moneda);
+      const monedaPrincipal = await monedaRepo.findOneBy({ principal: true });
+      
+      if (monedaPrincipal) {
+        // Get all exchange rates
+        const monedaCambioRepo = dataSource.getRepository(MonedaCambio);
+        const monedasCambio = await monedaCambioRepo.find({ 
+          relations: ['monedaOrigen', 'monedaDestino'],
+          where: { activo: true } 
+        });
+        
+        // Calculate valorMonedaPrincipal for each CostoPorProducto
+        for (const costo of costos) {
+          if (costo.monedaId === monedaPrincipal.id) {
+            // If the moneda is already the principal one, use the original value
+            costo.valorMonedaPrincipal = costo.valor;
+          } else {
+            // Find the exchange rate from this moneda to the principal moneda
+            const cambio = monedasCambio.find(
+              c => c.monedaOrigen && c.monedaDestino && 
+                   c.monedaOrigen.id === costo.monedaId && 
+                   c.monedaDestino.id === monedaPrincipal.id
+            );
+            
+            if (cambio && cambio.compraLocal) {
+              // Use compraLocal to calculate the equivalent in principal currency
+              costo.valorMonedaPrincipal = costo.valor * cambio.compraLocal;
+            }
+          }
+        }
+      }
+      
+      return costos;
     } catch (error) {
       console.error('Error getting costos por producto:', error);
       throw error;
@@ -1936,11 +2046,46 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   ipcMain.handle('getCostosPorProductoByProducto', async (_event: any, productoId: number) => {
     try {
       const repo = dataSource.getRepository(CostoPorProducto);
-      return await repo.find({ 
+      const costos = await repo.find({ 
         where: { productoId },
         relations: ['moneda'],
         order: { createdAt: 'DESC' }
       });
+      
+      // Get the principal moneda
+      const monedaRepo = dataSource.getRepository(Moneda);
+      const monedaPrincipal = await monedaRepo.findOneBy({ principal: true });
+      
+      if (monedaPrincipal) {
+        // Get all exchange rates
+        const monedaCambioRepo = dataSource.getRepository(MonedaCambio);
+        const monedasCambio = await monedaCambioRepo.find({ 
+          relations: ['monedaOrigen', 'monedaDestino'],
+          where: { activo: true } 
+        });
+        
+        // Calculate valorMonedaPrincipal for each CostoPorProducto
+        for (const costo of costos) {
+          if (costo.monedaId === monedaPrincipal.id) {
+            // If the moneda is already the principal one, use the original value
+            costo.valorMonedaPrincipal = costo.valor;
+          } else {
+            // Find the exchange rate from this moneda to the principal moneda
+            const cambio = monedasCambio.find(
+              c => c.monedaOrigen && c.monedaDestino && 
+                   c.monedaOrigen.id === costo.monedaId && 
+                   c.monedaDestino.id === monedaPrincipal.id
+            );
+            
+            if (cambio && cambio.compraLocal) {
+              // Use compraLocal to calculate the equivalent in principal currency
+              costo.valorMonedaPrincipal = costo.valor * cambio.compraLocal;
+            }
+          }
+        }
+      }
+      
+      return costos;
     } catch (error) {
       console.error(`Error getting costos por producto for producto ID ${productoId}:`, error);
       throw error;
@@ -1950,10 +2095,44 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   ipcMain.handle('getCostoPorProducto', async (_event: any, id: number) => {
     try {
       const repo = dataSource.getRepository(CostoPorProducto);
-      return await repo.findOne({ 
+      const costo = await repo.findOne({ 
         where: { id },
         relations: ['producto', 'moneda']
       });
+      
+      if (costo) {
+        // Get the principal moneda
+        const monedaRepo = dataSource.getRepository(Moneda);
+        const monedaPrincipal = await monedaRepo.findOneBy({ principal: true });
+        
+        if (monedaPrincipal) {
+          if (costo.monedaId === monedaPrincipal.id) {
+            // If the moneda is already the principal one, use the original value
+            costo.valorMonedaPrincipal = costo.valor;
+          } else {
+            // Get exchange rates
+            const monedaCambioRepo = dataSource.getRepository(MonedaCambio);
+            const monedasCambio = await monedaCambioRepo.find({
+              where: { activo: true },
+              relations: ['monedaOrigen', 'monedaDestino']
+            });
+            
+            // Find the exchange rate from this moneda to the principal moneda
+            const cambio = monedasCambio.find(
+              c => c.monedaOrigen && c.monedaDestino && 
+                   c.monedaOrigen.id === costo.monedaId && 
+                   c.monedaDestino.id === monedaPrincipal.id
+            );
+            
+            if (cambio && cambio.compraLocal) {
+              // Use compraLocal to calculate the equivalent in principal currency
+              costo.valorMonedaPrincipal = costo.valor * cambio.compraLocal;
+            }
+          }
+        }
+      }
+      
+      return costo;
     } catch (error) {
       console.error(`Error getting costo por producto ID ${id}:`, error);
       throw error;
@@ -1963,6 +2142,19 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   ipcMain.handle('createCostoPorProducto', async (_event: any, data: any) => {
     try {
       const repo = dataSource.getRepository(CostoPorProducto);
+      
+      // If principal is true, update other costs to not be principal
+      if (data.principal === true) {
+        await repo.update(
+          { 
+            productoId: data.productoId, 
+            principal: true 
+          }, 
+          { principal: false }
+        );
+      }
+      
+      // Create the entity after potentially updating other costs
       const entity = repo.create(data);
       const currentUser = getCurrentUser();
       await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
@@ -1978,6 +2170,19 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const repo = dataSource.getRepository(CostoPorProducto);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Costo por producto ID ${id} not found`);
+      
+      // If setting to principal, update others first
+      if (data.principal === true) {
+        await repo.update(
+          { 
+            productoId: entity.productoId, 
+            principal: true,
+            id: Not(id)  // Exclude this entity by ID directly
+          }, 
+          { principal: false }
+        );
+      }
+      
       repo.merge(entity, data);
       const currentUser = getCurrentUser();
       await setEntityUserTracking(dataSource, entity, currentUser?.id, true);

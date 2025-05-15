@@ -481,7 +481,7 @@ interface ElectronAPI {
   getCostoPorProducto: (id: number) => Promise<CostoPorProducto>;
   createCostoPorProducto: (data: Partial<CostoPorProducto>) => Promise<CostoPorProducto>;
   updateCostoPorProducto: (id: number, data: Partial<CostoPorProducto>) => Promise<CostoPorProducto>;
-  deleteCostoPorProducto: (id: number) => Promise<boolean>;
+  deleteCostoPorProducto: (id: number) => Promise<CostoPorProducto>;
 }
 
 /**
@@ -1551,11 +1551,11 @@ export class RepositoryService {
     return from(this.api.getCurrentStockByIngrediente(ingredienteId));
   }
 
-  createMovimientoStock(movimientoStockData: Partial<MovimientoStock>): Observable<MovimientoStock> {
+  createMovimientoStock(movimientoStockData: any): Observable<MovimientoStock> {
     return from(this.api.createMovimientoStock(movimientoStockData));
   }
 
-  updateMovimientoStock(movimientoStockId: number, movimientoStockData: Partial<MovimientoStock>): Observable<any> {
+  updateMovimientoStock(movimientoStockId: number, movimientoStockData: any): Observable<any> {
     return from(this.api.updateMovimientoStock(movimientoStockId, movimientoStockData));
   }
 
@@ -2029,7 +2029,7 @@ export class RepositoryService {
     return from(this.api.updateCostoPorProducto(id, data));
   }
   
-  deleteCostoPorProducto(id: number): Observable<boolean> {
+  deleteCostoPorProducto(id: number): Observable<CostoPorProducto> {
     return from(this.api.deleteCostoPorProducto(id));
   }
 }

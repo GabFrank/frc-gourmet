@@ -14,10 +14,13 @@ import { Subject, takeUntil } from 'rxjs';
 import { Presentacion, TipoMedida, MetodoCalculo } from '../../../database/entities/productos/presentacion.entity';
 import { PrecioVenta } from '../../../database/entities/productos/precio-venta.entity';
 import { Codigo } from '../../../database/entities/productos/codigo.entity';
+import { CostoPorProducto, OrigenCosto } from '../../../database/entities/productos/costo-por-producto.entity';
 import { RepositoryService } from '../../../database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateEditPrecioVentaComponent } from '../productos/create-edit-precio-venta/create-edit-precio-venta.component';
 import { CreateEditCodigoComponent } from '../productos/create-edit-codigo/create-edit-codigo.component';
+import { CreateEditCostoComponent } from '../productos/create-edit-costo/create-edit-costo.component';
+import { Producto } from 'src/app/database/entities/productos/producto.entity';
 
 @Component({
   selector: 'app-simple-presencation-section',
@@ -35,14 +38,15 @@ import { CreateEditCodigoComponent } from '../productos/create-edit-codigo/creat
     ReactiveFormsModule,
     MatMenuModule,
     CreateEditPrecioVentaComponent,
-    CreateEditCodigoComponent
+    CreateEditCodigoComponent,
+    CreateEditCostoComponent
   ],
   templateUrl: './simple-presencation-section.component.html',
   styleUrls: ['./simple-presencation-section.component.scss']
 })
 export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
   // Input property to receive the product ID
-  @Input() productoId: number | null = null;
+  @Input() producto: Producto | null = null;
 
   // Presentacion data
   presentaciones: Presentacion[] = [];
@@ -50,7 +54,11 @@ export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
   // Precio & Codigo data
   preciosByPresentacion: Map<number, PrecioVenta[]> = new Map();
   codigosByPresentacion: Map<number, Codigo[]> = new Map();
-  
+  costosPorProducto: CostoPorProducto[] = [];
+
+  // precio costo
+  precioCosto: CostoPorProducto | null = null;
+
   // Tab selection with getter/setter for proper handling
   private _selectedTabIndex = 0;
   get selectedTabIndex(): number {
@@ -94,8 +102,9 @@ export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     // Load presentations if product ID is provided
-    if (this.productoId) {
+    if (this.producto) {
       this.loadPresentaciones();
+      this.loadCostosPorProducto();
     }
   }
 
@@ -109,9 +118,9 @@ export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
    * Loads presentations related to the current product ID
    */
   loadPresentaciones(): void {
-    if (this.productoId) {
+    if (this.producto) {
       // Use repository service to get presentations by product ID
-      this.repositoryService.getPresentacionesByProducto(this.productoId)
+      this.repositoryService.getPresentacionesByProducto(this.producto.id)
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (presentaciones) => {
@@ -164,12 +173,12 @@ export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
    * Creates a new presentation with default values
    */
   createNewPresentacion(): void {
-    if (!this.productoId) return;
+    if (!this.producto) return;
 
     // Create a new presentation instance with default values
     const newPresentacion = new Presentacion();
     newPresentacion.id = -Date.now(); // Temporary negative ID for new items
-    newPresentacion.productoId = this.productoId;
+    newPresentacion.productoId = this.producto.id;
     newPresentacion.tipoMedida = TipoMedida.UNIDAD;
     newPresentacion.cantidad = 1;
     newPresentacion.activo = true;
@@ -488,6 +497,74 @@ export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
             },
             error: (error) => {
               console.error(`Error deleting code ${codigo.id}:`, error);
+            }
+          });
+      }
+    });
+  }
+
+  /**
+   * Load costs for the current product
+   */
+  loadCostosPorProducto(): void {
+    if (this.producto) {
+      this.repositoryService.getCostosPorProductoByProducto(this.producto.id)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (costos) => {
+            this.costosPorProducto = costos;
+            this.cdr.detectChanges();
+          },
+          error: (error) => {
+            console.error(`Error loading costs for product ${this.producto?.id}:`, error);
+          }
+        });
+    }
+  }
+
+  /**
+   * Opens the dialog to create or edit a cost
+   */
+  openCostoDialog(costo?: CostoPorProducto): void {
+    if (!this.producto) return;
+    
+    const dialogRef = this.dialog.open(CreateEditCostoComponent, {
+      width: '50%',
+      data: {
+        producto: this.producto,
+        costo: costo,
+        editMode: !!costo
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result?.success) {
+        this.loadCostosPorProducto();
+      }
+    });
+  }
+
+  /**
+   * Deletes a cost
+   */
+  deleteCosto(costo: CostoPorProducto): void {
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Eliminar costo',
+        message: '¿Estás seguro de querer eliminar este costo?'
+      }
+    });
+    
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        this.repositoryService.deleteCostoPorProducto(costo.id)
+          .pipe(takeUntil(this.destroy$))
+          .subscribe({
+            next: () => {
+              this.loadCostosPorProducto();
+            },
+            error: (error) => {
+              console.error(`Error deleting cost ${costo.id}:`, error);
             }
           });
       }

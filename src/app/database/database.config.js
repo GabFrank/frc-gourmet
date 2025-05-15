@@ -61,6 +61,7 @@ const observacion_producto_venta_item_entity_1 = require("./entities/productos/o
 const adicional_entity_1 = require("./entities/productos/adicional.entity");
 const producto_adicional_entity_1 = require("./entities/productos/producto-adicional.entity");
 const producto_adicional_venta_item_entity_1 = require("./entities/productos/producto-adicional-venta-item.entity");
+const costo_por_producto_entity_1 = require("./entities/productos/costo-por-producto.entity");
 // Import new financial entities
 const moneda_billete_entity_1 = require("./entities/financiero/moneda-billete.entity");
 const dispositivo_entity_1 = require("./entities/financiero/dispositivo.entity");
@@ -142,6 +143,7 @@ function getDataSourceOptions(userDataPath) {
             adicional_entity_1.Adicional,
             producto_adicional_entity_1.ProductoAdicional,
             producto_adicional_venta_item_entity_1.ProductoAdicionalVentaItem,
+            costo_por_producto_entity_1.CostoPorProducto,
             // New financial entities
             moneda_billete_entity_1.MonedaBillete,
             dispositivo_entity_1.Dispositivo,

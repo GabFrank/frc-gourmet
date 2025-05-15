@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerProductosHandlers = void 0;
 const electron_1 = require("electron");
+const typeorm_1 = require("typeorm");
 const categoria_entity_1 = require("../../src/app/database/entities/productos/categoria.entity");
 const subcategoria_entity_1 = require("../../src/app/database/entities/productos/subcategoria.entity");
 const producto_entity_1 = require("../../src/app/database/entities/productos/producto.entity");
@@ -23,6 +24,7 @@ const observacion_producto_venta_item_entity_1 = require("../../src/app/database
 const adicional_entity_1 = require("../../src/app/database/entities/productos/adicional.entity");
 const producto_adicional_entity_1 = require("../../src/app/database/entities/productos/producto-adicional.entity");
 const producto_adicional_venta_item_entity_1 = require("../../src/app/database/entities/productos/producto-adicional-venta-item.entity");
+const costo_por_producto_entity_1 = require("../../src/app/database/entities/productos/costo-por-producto.entity");
 function registerProductosHandlers(dataSource, getCurrentUser) {
     // Helper function to enrich products with principal presentation and price information
     async function enrichProductWithPrincipalData(producto) {
@@ -1870,6 +1872,109 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         }
         catch (error) {
             console.error(`Error deleting producto adicional venta item ID ${id}:`, error);
+            throw error;
+        }
+    });
+    // --- CostoPorProducto Handlers ---
+    electron_1.ipcMain.handle('getCostosPorProducto', async () => {
+        try {
+            const repo = dataSource.getRepository(costo_por_producto_entity_1.CostoPorProducto);
+            return await repo.find({
+                relations: ['producto', 'moneda'],
+                order: {
+                    productoId: 'ASC',
+                    createdAt: 'DESC'
+                }
+            });
+        }
+        catch (error) {
+            console.error('Error getting costos por producto:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('getCostosPorProductoByProducto', async (_event, productoId) => {
+        try {
+            const repo = dataSource.getRepository(costo_por_producto_entity_1.CostoPorProducto);
+            return await repo.find({
+                where: { productoId },
+                relations: ['moneda'],
+                order: { createdAt: 'DESC' }
+            });
+        }
+        catch (error) {
+            console.error(`Error getting costos por producto for producto ID ${productoId}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('getCostoPorProducto', async (_event, id) => {
+        try {
+            const repo = dataSource.getRepository(costo_por_producto_entity_1.CostoPorProducto);
+            return await repo.findOne({
+                where: { id },
+                relations: ['producto', 'moneda']
+            });
+        }
+        catch (error) {
+            console.error(`Error getting costo por producto ID ${id}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('createCostoPorProducto', async (_event, data) => {
+        try {
+            const repo = dataSource.getRepository(costo_por_producto_entity_1.CostoPorProducto);
+            // If principal is true, update other costs to not be principal
+            if (data.principal === true) {
+                await repo.update({
+                    productoId: data.productoId,
+                    principal: true
+                }, { principal: false });
+            }
+            // Create the entity after potentially updating other costs
+            const entity = repo.create(data);
+            const currentUser = getCurrentUser();
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
+            return await repo.save(entity);
+        }
+        catch (error) {
+            console.error('Error creating costo por producto:', error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('updateCostoPorProducto', async (_event, id, data) => {
+        try {
+            const repo = dataSource.getRepository(costo_por_producto_entity_1.CostoPorProducto);
+            const entity = await repo.findOneBy({ id });
+            if (!entity)
+                throw new Error(`Costo por producto ID ${id} not found`);
+            // If setting to principal, update others first
+            if (data.principal === true) {
+                await repo.update({
+                    productoId: entity.productoId,
+                    principal: true,
+                    id: (0, typeorm_1.Not)(id) // Exclude this entity by ID directly
+                }, { principal: false });
+            }
+            repo.merge(entity, data);
+            const currentUser = getCurrentUser();
+            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
+            return await repo.save(entity);
+        }
+        catch (error) {
+            console.error(`Error updating costo por producto ID ${id}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('deleteCostoPorProducto', async (_event, id) => {
+        try {
+            const repo = dataSource.getRepository(costo_por_producto_entity_1.CostoPorProducto);
+            const entity = await repo.findOneBy({ id });
+            if (!entity)
+                throw new Error(`Costo por producto ID ${id} not found`);
+            await repo.remove(entity);
+            return true;
+        }
+        catch (error) {
+            console.error(`Error deleting costo por producto ID ${id}:`, error);
             throw error;
         }
     });
