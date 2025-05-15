@@ -1,0 +1,57 @@
+<div class="observacion-producto-container">
+  <div class="loading-shade" *ngIf="isLoading">
+    <mat-spinner diameter="50"></mat-spinner>
+  </div>
+
+  <!-- Header -->
+  <h2 mat-dialog-title>{{ isEditing ? 'Editar' : 'Agregar' }} Observación a Producto</h2>
+  <div *ngIf="producto" style="margin-bottom: 16px;">
+    <strong>Producto:</strong> {{ producto.nombre }}
+  </div>
+
+  <!-- Form Section -->
+  <mat-dialog-content>
+    <form [formGroup]="observacionProductoForm" class="form-container">
+      <!-- Observación -->
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Observación</mat-label>
+          <mat-select formControlName="observacionId" required (selectionChange)="onObservacionSelectionChange($event.value)">
+            <mat-option *ngFor="let obs of observaciones" [value]="obs.id">
+              {{ obs.nombre }}
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="observacionProductoForm.get('observacionId')?.hasError('required')">
+            La observación es requerida
+          </mat-error>
+          <button mat-icon-button matSuffix (click)="openObservacionDialog()" type="button" matTooltip="Crear nueva observación">
+            <mat-icon>add_circle</mat-icon>
+          </button>
+        </mat-form-field>
+      </div>
+
+      <!-- Cantidad Default -->
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Cantidad por defecto</mat-label>
+          <input matInput formControlName="cantidadDefault" type="number" min="0" placeholder="Opcional">
+          <mat-hint>Déjelo en blanco si no aplica</mat-hint>
+        </mat-form-field>
+      </div>
+
+      <!-- Checkboxes -->
+      <div class="form-row checkbox-row">
+        <mat-checkbox formControlName="obligatorio" color="primary">Obligatorio</mat-checkbox>
+        <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
+      </div>
+    </form>
+  </mat-dialog-content>
+
+  <!-- Actions -->
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="cancel()">Cancelar</button>
+    <button mat-raised-button color="primary" (click)="save()" [disabled]="observacionProductoForm.invalid || isLoading">
+      {{ isEditing ? 'Actualizar' : 'Guardar' }}
+    </button>
+  </mat-dialog-actions>
+</div>

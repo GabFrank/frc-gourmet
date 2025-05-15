@@ -28,7 +28,9 @@ import { ImageViewerComponent } from '../../../../components/image-viewer/image-
 import { ActivatedRoute, Router } from '@angular/router';
 import { ConfirmationDialogComponent } from '../../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { SimplePresentationSectionComponent } from '../../simple-presencation-section/simple-presencation-section.component';
+import { CreateEditObservacionProductoDialogComponent } from '../create-edit-observacion-producto-dialog/create-edit-observacion-producto-dialog.component';
 import { CreateEditObservacionDialogComponent } from '../create-edit-observacion-dialog/create-edit-observacion-dialog.component';
+import { Observacion } from 'src/app/database/entities/productos/observacion.entity';
 
 // Interface for product image model
 interface ProductImageModel {
@@ -81,7 +83,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   categorias: Categoria[] = [];
   subcategorias: Subcategoria[] = [];
   observacionesProducto: ObservacionProducto[] = [];
-  
+
   // For image handling
   mainImageUrl = '';
   selectedImageFile: File | null = null;
@@ -176,12 +178,12 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     if (!this.producto || !this.producto.id) {
       return;
     }
-    
+
     try {
       const observacionesProducto = await firstValueFrom(
         this.repositoryService.getObservacionesProductosByProducto(this.producto.id)
       );
-      
+
       // Load associated observacion details
       for (const op of observacionesProducto) {
         try {
@@ -192,7 +194,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
           console.error(`Error loading observacion ${op.observacionId}:`, error);
         }
       }
-      
+
       this.observacionesProducto = observacionesProducto;
     } catch (error) {
       console.error('Error loading observaciones producto:', error);
@@ -206,23 +208,49 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       return;
     }
 
+    // if observacionProducto is not null, it means we need to edit it opening observacion producto dialog, if 
+    // is null, we need to open observacion dialog, select the observacion, in the dialog result there is the observacion, then open observacion producto dialog
+    if (observacionProducto) {
+      // open create edit observacion producto dialog
+      this.openCreateEditObservacionProductoDialog(observacionProducto);
+    } else {
+      // open create edit observacion dialog
+      this.openCreateEditObservacionDialog();
+    }
+  }
+
+  openCreateEditObservacionProductoDialog(observacionProducto?: ObservacionProducto, observacion?: Observacion): void {
     const dialogConfig = new MatDialogConfig();
     dialogConfig.width = '50%';
     dialogConfig.disableClose = true;
     dialogConfig.data = {
       producto: this.producto,
+      observacion: observacion,
       observacionProducto: observacionProducto,
       editMode: !!observacionProducto
+    };
+
+    const dialogRef = this.dialog.open(CreateEditObservacionProductoDialogComponent, dialogConfig);
+  }
+
+  openCreateEditObservacionDialog(): void {
+    const dialogConfig = new MatDialogConfig();
+    dialogConfig.width = '50%';
+    dialogConfig.disableClose = true;
+    dialogConfig.data = {
+      producto: this.producto
     };
 
     const dialogRef = this.dialog.open(CreateEditObservacionDialogComponent, dialogConfig);
 
     dialogRef.afterClosed().subscribe(result => {
-      if (result && result.success) {
-        this.loadObservacionesProducto();
+      if (result) {
+        this.openCreateEditObservacionProductoDialog(result);
       }
     });
   }
+
+
 
   async deleteObservacionProducto(observacionProducto: ObservacionProducto): Promise<void> {
     if (!observacionProducto || !observacionProducto.id) {
@@ -239,12 +267,12 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
 
     dialogRef.afterClosed().subscribe(async (result) => {
       if (!result) return;
-      
+
       try {
         await firstValueFrom(
           this.repositoryService.deleteObservacionProducto(observacionProducto.id!)
         );
-        
+
         this.snackBar.open('Observación eliminada exitosamente', 'Cerrar', { duration: 3000 });
         this.loadObservacionesProducto();
       } catch (error) {
