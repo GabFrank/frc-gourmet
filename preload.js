@@ -997,5 +997,12 @@ electron_1.contextBridge.exposeInMainWorld('api', {
     deleteAdicional: async (id) => {
         return await electron_1.ipcRenderer.invoke('deleteAdicional', id);
     },
+    // CostoPorProducto methods
+    getCostosPorProducto: () => electron_1.ipcRenderer.invoke('getCostosPorProducto'),
+    getCostosPorProductoByProducto: (productoId) => electron_1.ipcRenderer.invoke('getCostosPorProductoByProducto', productoId),
+    getCostoPorProducto: (id) => electron_1.ipcRenderer.invoke('getCostoPorProducto', id),
+    createCostoPorProducto: (data) => electron_1.ipcRenderer.invoke('createCostoPorProducto', data),
+    updateCostoPorProducto: (id, data) => electron_1.ipcRenderer.invoke('updateCostoPorProducto', id, data),
+    deleteCostoPorProducto: (id) => electron_1.ipcRenderer.invoke('deleteCostoPorProducto', id),
 });
 //# sourceMappingURL=preload.js.map

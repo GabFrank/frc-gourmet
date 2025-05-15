@@ -10,10 +10,10 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { RepositoryService } from '../../../database/repository.service';
-import { Presentacion, TipoMedida } from '../../../database/entities/productos/presentacion.entity';
-import { Producto } from '../../../database/entities/productos/producto.entity';
 import { firstValueFrom } from 'rxjs';
+import { Producto } from 'src/app/database/entities/productos/producto.entity';
+import { Presentacion, TipoMedida } from 'src/app/database/entities/productos/presentacion.entity';
+import { RepositoryService } from 'src/app/database/repository.service';
 
 interface DialogData {
   producto: Producto;

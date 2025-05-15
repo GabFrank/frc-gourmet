@@ -7,7 +7,6 @@
 
   .section-title {
     margin: 0;
-    font-weight: 500;
     color: #333;
   }
 
@@ -36,7 +35,6 @@
   
   p {
     margin-bottom: 20px;
-    font-size: 16px;
     color: #666;
   }
 }
@@ -58,7 +56,6 @@
     .unsaved-indicator {
       color: #f44336;
       margin-left: 5px;
-      font-weight: bold;
     }
   }
 }
@@ -129,8 +126,6 @@
 
     h4 {
       margin: 0;
-      font-weight: 500;
-      font-size: 16px;
     }
   }
 }
@@ -145,14 +140,15 @@
     text-align: left;
     padding: 10px;
     background-color: rgba(0, 0, 0, 0.05);
-    font-weight: 500;
     border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+    font-size: small;
   }
   
   td {
     padding: 10px;
     border-bottom: 1px solid rgba(0, 0, 0, 0.05);
     vertical-align: middle;
+    font-size: small;
   }
 
   .center-cell {
@@ -170,8 +166,6 @@
   display: inline-block;
   padding: 4px 8px;
   border-radius: 16px;
-  font-size: 12px;
-  font-weight: 500;
   text-align: center;
   
   &.active {

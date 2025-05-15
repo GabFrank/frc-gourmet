@@ -1,0 +1,140 @@
+<div class="costos-container">
+  <div class="loading-shade" *ngIf="isLoading">
+    <mat-spinner diameter="50"></mat-spinner>
+  </div>
+
+  <!-- Form Section -->
+  <mat-card class="form-card" style="width: 100% !important;">
+    <mat-card-header style="width: 100% !important;">
+      <mat-card-title style="width: 100% !important; text-align: center;">{{ isEditing ? 'Editar' : 'Nuevo' }} Costo de Producto</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <form [formGroup]="costoForm" class="form-container">
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="field-moneda">
+            <mat-label>Moneda</mat-label>
+            <mat-select formControlName="monedaId" required (selectionChange)="onMonedaChange()">
+              <mat-option *ngFor="let moneda of monedas" [value]="moneda.id">
+                {{ moneda.simbolo }} - {{ moneda.denominacion }}
+              </mat-option>
+            </mat-select>
+            <mat-error *ngIf="costoForm.get('monedaId')?.hasError('required')">
+              La moneda es requerida
+            </mat-error>
+          </mat-form-field>
+
+          <div class="field-valor">
+            <app-currency-input
+              formControlName="valor"
+              [moneda]="selectedMoneda"
+              [required]="true"
+              [min]="0.01">
+            </app-currency-input>
+          </div>
+        </div>
+
+        <div class="form-row second-row">
+          <mat-form-field appearance="outline" class="field-origen">
+            <mat-label>Origen del Costo</mat-label>
+            <mat-select formControlName="origenCosto">
+              <mat-option *ngFor="let origen of origenCostoOptions" [value]="origen">
+                {{ origen }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <div class="field-principal">
+            <mat-checkbox formControlName="principal" color="primary">
+              Costo Principal
+            </mat-checkbox>
+          </div>
+        </div>
+      </form>
+    </mat-card-content>
+    <mat-card-actions align="end">
+      <button mat-button (click)="closeDialog()">
+        Salir
+      </button>
+      <button mat-button *ngIf="isEditing" (click)="cancelEdit()" [disabled]="isLoading">
+        Cancelar
+      </button>
+      <button mat-raised-button color="primary" (click)="saveCosto()" [disabled]="costoForm.invalid || isLoading">
+        {{ isEditing ? 'Actualizar' : 'Guardar' }}
+      </button>
+    </mat-card-actions>
+  </mat-card>
+
+  <!-- List Section -->
+  <div class="list-section" style="min-height: 300px;">
+    <h4 class="list-title">Lista de costos</h4>
+
+    <div *ngIf="costos.length === 0" class="empty-list">
+      <mat-icon>monetization_on</mat-icon>
+      <p>No hay costos configurados para este producto</p>
+      <p class="hint">Complete el formulario para agregar un costo</p>
+    </div>
+
+    <div class="table-container" *ngIf="costos.length > 0">
+      <table mat-table [dataSource]="costos" class="mat-elevation-z1">
+        <!-- Moneda Column -->
+        <ng-container matColumnDef="moneda">
+          <th mat-header-cell *matHeaderCellDef>Moneda</th>
+          <td mat-cell *matCellDef="let item">
+            {{ item.moneda?.simbolo }} - {{ item.moneda?.denominacion }}
+          </td>
+        </ng-container>
+
+        <!-- Valor Column -->
+        <ng-container matColumnDef="valor">
+          <th mat-header-cell *matHeaderCellDef>Valor</th>
+          <td mat-cell *matCellDef="let item">
+            {{ item.moneda?.simbolo }} {{ item.formattedValue }}
+          </td>
+        </ng-container>
+
+        <!-- Origen Column -->
+        <ng-container matColumnDef="origen">
+          <th mat-header-cell *matHeaderCellDef>Origen</th>
+          <td mat-cell *matCellDef="let item">
+            {{ item.origenCosto }}
+          </td>
+        </ng-container>
+
+        <!-- Principal Column -->
+        <ng-container matColumnDef="principal">
+          <th mat-header-cell *matHeaderCellDef>Principal</th>
+          <td mat-cell *matCellDef="let item" class="center-cell">
+            <mat-icon *ngIf="item.principal" color="primary">check_circle</mat-icon>
+            <mat-icon *ngIf="!item.principal" color="warn">cancel</mat-icon>
+          </td>
+        </ng-container>
+
+        <!-- Updated Date Column -->
+        <ng-container matColumnDef="fechaActualizacion">
+          <th mat-header-cell *matHeaderCellDef>Última Actualización</th>
+          <td mat-cell *matCellDef="let item">
+            {{ item.updatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </td>
+        </ng-container>
+
+        <!-- Actions Column -->
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef>Acciones</th>
+          <td mat-cell *matCellDef="let item" class="actions-cell">
+            <div class="action-buttons">
+              <button mat-icon-button color="primary" (click)="editCosto(item)" matTooltip="Editar">
+                <mat-icon>edit</mat-icon>
+              </button>
+              <button mat-icon-button color="warn" (click)="deleteCosto(item)" matTooltip="Eliminar">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </div>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns; let i = index;" [ngClass]="{'current-costo': row.id === currentCostoId}"></tr>
+      </table>
+    </div>
+  </div>
+</div> 

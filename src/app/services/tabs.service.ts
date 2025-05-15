@@ -37,7 +37,7 @@ export class TabsService {
     //open productos create edit producto
     // this.addTab('Productos Dashboard', ProductoDashboardComponent, null, 'productos-dashboard');
     // open producto v2 with id 1
-    this.addTab('Producto V2', CreateEditProductoComponent, { productoId: 6 });
+    this.addTab('Producto', CreateEditProductoComponent, { productoId: 3 });
   }
 
   /**

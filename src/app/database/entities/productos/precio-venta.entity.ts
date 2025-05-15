@@ -54,4 +54,10 @@ export class PrecioVenta extends BaseModel {
 
   @Column({ default: false })
   principal!: boolean;
+
+  /**
+   * Calculated field for the value in the principal currency
+   * This is not stored in the database but calculated when needed
+   */
+  valorMonedaPrincipal?: number;
 }
