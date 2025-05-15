@@ -1759,6 +1759,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             throw error;
         }
     });
+    // add error handling like in createObservacionProducto
     electron_1.ipcMain.handle('createAdicional', async (_event, data) => {
         try {
             const repo = dataSource.getRepository(adicional_entity_1.Adicional);
@@ -1862,17 +1863,30 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             throw error;
         }
     });
+    // add error handling like in createObservacionProducto
     electron_1.ipcMain.handle('createProductoAdicional', async (_event, data) => {
         try {
             const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
+            // check if already exists a producto adicional with the same productoId and adicionalId and presentacionId
+            const existing = await repo.findOne({ where: { productoId: data.productoId, adicionalId: data.adicionalId, presentacionId: data.presentacionId } });
+            if (existing) {
+                return {
+                    success: false,
+                    error: 'ProductoAdicional ya existe',
+                    message: 'Ya existe un producto adicional con el mismo producto, adicional y presentación.'
+                };
+            }
             const entity = repo.create(data);
             const currentUser = getCurrentUser();
             await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
             return await repo.save(entity);
         }
         catch (error) {
-            console.error('Error creating producto adicional:', error);
-            throw error;
+            return {
+                success: false,
+                error: 'unknown',
+                message: error || 'Error al crear el producto adicional.'
+            };
         }
     });
     electron_1.ipcMain.handle('updateProductoAdicional', async (_event, id, data) => {

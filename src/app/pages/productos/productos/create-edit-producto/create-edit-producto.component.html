@@ -241,7 +241,7 @@
             </thead>
             <tbody>
               <tr *ngFor="let observacionProducto of observacionesProducto">
-                <td>{{ observacionProducto.observacion?.nombre }}</td>
+                <td>{{ observacionProducto.observacion.nombre }}</td>
                 <td class="center-cell">
                   <mat-icon *ngIf="observacionProducto.obligatorio" class="success-icon">check_circle</mat-icon>
                   <mat-icon *ngIf="!observacionProducto.obligatorio" class="error-icon">radio_button_unchecked</mat-icon>
@@ -262,6 +262,63 @@
                       <span>Editar</span>
                     </button>
                     <button mat-menu-item (click)="deleteObservacionProducto(observacionProducto)">
+                      <mat-icon>delete</mat-icon>
+                      <span>Eliminar</span>
+                    </button>
+                  </mat-menu>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </mat-card>
+
+  <!-- Adicionales Section -->
+  <mat-card class="adicional-producto-card" *ngIf="producto" style="margin-top: 20px;">
+    <div class="tab-content">
+      <div class="section adicionales-section">
+        <div class="adicional-producto-section-header">
+          <h4>Adicionales</h4>
+          <button mat-button color="primary" (click)="openCreateEditProductoAdicionalDialog()">
+            <mat-icon>add</mat-icon> Nuevo Adicional
+          </button>
+        </div>
+
+        <div class="adicional-producto-section-content">
+          <div class="empty-state" *ngIf="!productosAdicionales?.length" style="text-align: center;">
+            <p>No hay adicionales configurados para este producto.</p>
+          </div>
+
+          <table class="data-table" *ngIf="productosAdicionales?.length">
+            <thead>
+              <tr>
+                <th>Adicional</th>
+                <th class="center-cell">Cantidad Default</th>
+                <th class="center-cell">Activo</th>
+                <th class="center-cell">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let productoAdicional of productosAdicionales">
+                <td>{{ productoAdicional.adicional.nombre }}</td>
+                <td class="center-cell">{{ productoAdicional.cantidadDefault || '-' }}</td>
+                <td class="center-cell">
+                  <span class="status-badge" [ngClass]="productoAdicional.activo ? 'active' : 'inactive'">
+                    {{ productoAdicional.activo ? "Activo" : "Inactivo" }}
+                  </span>
+                </td>
+                <td class="action-cell">
+                  <button mat-icon-button [matMenuTriggerFor]="adicionalMenu">
+                    <mat-icon>more_vert</mat-icon>
+                  </button>
+                  <mat-menu #adicionalMenu="matMenu">
+                    <button mat-menu-item (click)="openCreateEditProductoAdicionalDialog(productoAdicional)">
+                      <mat-icon>edit</mat-icon>
+                      <span>Editar</span>
+                    </button>
+                    <button mat-menu-item (click)="deleteProductoAdicional(productoAdicional)">
                       <mat-icon>delete</mat-icon>
                       <span>Eliminar</span>
                     </button>

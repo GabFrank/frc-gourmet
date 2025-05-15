@@ -1,0 +1,77 @@
+<div class="producto-adicional-container">
+  <!-- Loading overlay -->
+  <div class="loading-shade" *ngIf="isLoading">
+    <mat-spinner diameter="50"></mat-spinner>
+  </div>
+
+  <!-- Form card -->
+  <mat-card class="form-card">
+    <mat-card-header>
+      <mat-card-title>
+        {{ isEditing ? 'Editar' : 'Agregar' }} adicional al producto
+      </mat-card-title>
+    </mat-card-header>
+
+    <mat-card-content>
+      <form [formGroup]="productoAdicionalForm" class="form-container">
+        <!-- Adicional field -->
+        <div class="form-row">
+            <!-- replace mat select with a search input readonly with value of adicional.nombre -->
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Adicional</mat-label>
+            <input matInput type="text" [value]="selectedAdicional?.nombre" readonly>
+            <mat-error *ngIf="productoAdicionalForm.get('adicionalId')?.hasError('required')">
+              El adicional es requerido
+            </mat-error>
+          </mat-form-field>
+
+          <button mat-icon-button color="primary" type="button" (click)="openAdicionalDialog()" matTooltip="Crear nuevo adicional">
+            <mat-icon>search</mat-icon>
+          </button>
+          <!-- add clear button -->
+          <button mat-icon-button color="primary" type="button" (click)="clearAdicional()" matTooltip="Limpiar">
+            <mat-icon>clear</mat-icon>
+          </button>
+        </div>
+
+        <!-- Presentacion field -->
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Presentación</mat-label>
+            <mat-select formControlName="presentacionId">
+              <mat-option *ngFor="let presentacion of presentaciones" [value]="presentacion.id">
+                Descripción: {{ presentacion.descripcion }} - Cantidad: {{ presentacion.cantidad }}
+              </mat-option>
+            </mat-select>
+            <mat-error *ngIf="productoAdicionalForm.get('presentacionId')?.hasError('required')">
+              La presentación es requerida
+            </mat-error>
+          </mat-form-field>
+        </div>
+
+        <!-- Cantidad Default field -->
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Cantidad por defecto</mat-label>
+            <input matInput type="number" formControlName="cantidadDefault" min="0" />
+          </mat-form-field>
+        </div>
+
+        <!-- Activo toggle -->
+        <div class="form-row checkbox-row">
+          <mat-checkbox formControlName="activo" color="primary">
+            Activo
+          </mat-checkbox>
+        </div>
+      </form>
+    </mat-card-content>
+
+    <!-- Action buttons -->
+    <mat-card-actions class="action-buttons">
+      <button mat-button (click)="cancel()">Cancelar</button>
+      <button mat-raised-button color="primary" [disabled]="productoAdicionalForm.invalid || isLoading" (click)="save()">
+        {{ isEditing ? 'Actualizar' : 'Guardar' }}
+      </button>
+    </mat-card-actions>
+  </mat-card>
+</div> 

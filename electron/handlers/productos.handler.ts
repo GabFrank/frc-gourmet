@@ -1817,6 +1817,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     }
   });
 
+  // add error handling like in createObservacionProducto
   ipcMain.handle('createAdicional', async (_event: any, data: any) => {
     try {
       const repo = dataSource.getRepository(Adicional);
@@ -1920,16 +1921,29 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     }
   });
 
+  // add error handling like in createObservacionProducto
   ipcMain.handle('createProductoAdicional', async (_event: any, data: any) => {
     try {
       const repo = dataSource.getRepository(ProductoAdicional);
+      // check if already exists a producto adicional with the same productoId and adicionalId and presentacionId
+      const existing = await repo.findOne({ where: { productoId: data.productoId, adicionalId: data.adicionalId, presentacionId: data.presentacionId } });
+      if (existing) {
+        return {
+          success: false,
+          error: 'ProductoAdicional ya existe',
+          message: 'Ya existe un producto adicional con el mismo producto, adicional y presentación.'
+        };
+      }
       const entity = repo.create(data);
       const currentUser = getCurrentUser();
       await setEntityUserTracking(dataSource, entity, currentUser?.id, false);
       return await repo.save(entity);
     } catch (error) {
-      console.error('Error creating producto adicional:', error);
-      throw error;
+      return {
+        success: false,
+        error: 'unknown',
+        message: error || 'Error al crear el producto adicional.'
+      };
     }
   });
 

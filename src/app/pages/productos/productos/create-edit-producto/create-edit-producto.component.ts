@@ -22,6 +22,7 @@ import { ProductoImage } from '../../../../database/entities/productos/producto-
 import { Subcategoria } from '../../../../database/entities/productos/subcategoria.entity';
 import { Categoria } from '../../../../database/entities/productos/categoria.entity';
 import { ObservacionProducto } from '../../../../database/entities/productos/observacion-producto.entity';
+import { ProductoAdicional } from '../../../../database/entities/productos/producto-adicional.entity';
 import { firstValueFrom } from 'rxjs';
 import { TabsService } from '../../../../services/tabs.service';
 import { ImageViewerComponent } from '../../../../components/image-viewer/image-viewer.component';
@@ -30,6 +31,7 @@ import { ConfirmationDialogComponent } from '../../../../shared/components/confi
 import { SimplePresentationSectionComponent } from '../../simple-presencation-section/simple-presencation-section.component';
 import { CreateEditObservacionProductoDialogComponent } from '../create-edit-observacion-producto-dialog/create-edit-observacion-producto-dialog.component';
 import { CreateEditObservacionDialogComponent } from '../create-edit-observacion-dialog/create-edit-observacion-dialog.component';
+import { CreateEditProductoAdicionalDialogComponent } from '../create-edit-producto-adicional-dialog/create-edit-producto-adicional-dialog.component';
 import { Observacion } from 'src/app/database/entities/productos/observacion.entity';
 
 // Interface for product image model
@@ -83,6 +85,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   categorias: Categoria[] = [];
   subcategorias: Subcategoria[] = [];
   observacionesProducto: ObservacionProducto[] = [];
+  productosAdicionales: ProductoAdicional[] = [];
 
   // For image handling
   mainImageUrl = '';
@@ -202,6 +205,37 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     }
   }
 
+  async loadProductosAdicionales(): Promise<void> {
+    if (!this.producto || !this.producto.id) {
+      return;
+    }
+
+    try {
+      const productosAdicionales = await firstValueFrom(
+        this.repositoryService.getProductosAdicionalesByProducto(this.producto.id)
+      );
+
+      // Load associated adicional and presentacion details
+      for (const pa of productosAdicionales) {
+        try {
+          pa.adicional = await firstValueFrom(
+            this.repositoryService.getAdicional(pa.adicionalId)
+          );
+          pa.presentacion = await firstValueFrom(
+            this.repositoryService.getPresentacion(pa.presentacionId)
+          );
+        } catch (error) {
+          console.error(`Error loading adicional ${pa.adicionalId} or presentacion ${pa.presentacionId}:`, error);
+        }
+      }
+
+      this.productosAdicionales = productosAdicionales;
+    } catch (error) {
+      console.error('Error loading productos adicionales:', error);
+      this.snackBar.open('Error al cargar los adicionales', 'Cerrar', { duration: 3000 });
+    }
+  }
+
   openCreateEditObservacionProductoDialog(observacionProducto?: ObservacionProducto, observacion?: Observacion): void {
     const dialogConfig = new MatDialogConfig();
     dialogConfig.width = '50%';
@@ -223,7 +257,25 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
     });
   }
 
+  openCreateEditProductoAdicionalDialog(productoAdicional?: ProductoAdicional): void {
+    const dialogConfig = new MatDialogConfig();
+    dialogConfig.width = '50%';
+    dialogConfig.disableClose = true;
+    dialogConfig.data = {
+      producto: this.producto,
+      productoAdicional: productoAdicional,
+      editMode: !!productoAdicional
+    };
 
+    const dialogRef = this.dialog.open(CreateEditProductoAdicionalDialogComponent, dialogConfig);
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        // reload productos adicionales
+        this.loadProductosAdicionales();
+      }
+    });
+  }
 
   async deleteObservacionProducto(observacionProducto: ObservacionProducto): Promise<void> {
     if (!observacionProducto || !observacionProducto.id) {
@@ -251,6 +303,36 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
       } catch (error) {
         console.error('Error deleting observacion producto:', error);
         this.snackBar.open('Error al eliminar la observación', 'Cerrar', { duration: 3000 });
+      }
+    });
+  }
+
+  async deleteProductoAdicional(productoAdicional: ProductoAdicional): Promise<void> {
+    if (!productoAdicional || !productoAdicional.id) {
+      return;
+    }
+
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      width: '400px',
+      data: {
+        title: 'Confirmar Eliminación',
+        message: `¿Está seguro que desea eliminar este adicional?`
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(async (result) => {
+      if (!result) return;
+
+      try {
+        await firstValueFrom(
+          this.repositoryService.deleteProductoAdicional(productoAdicional.id!)
+        );
+
+        this.snackBar.open('Adicional eliminado exitosamente', 'Cerrar', { duration: 3000 });
+        this.loadProductosAdicionales();
+      } catch (error) {
+        console.error('Error deleting producto adicional:', error);
+        this.snackBar.open('Error al eliminar el adicional', 'Cerrar', { duration: 3000 });
       }
     });
   }
@@ -333,6 +415,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
           this.loadSubcategoriasByCategoria(producto.subcategoria.categoria.id);
           this.loadProductImages();
           this.loadObservacionesProducto();
+          this.loadProductosAdicionales();
           this.setupFormControlsBasedOnLoadedData();
         } else {
           this.snackBar.open('No se encontró el producto', 'Cerrar', { duration: 3000 });

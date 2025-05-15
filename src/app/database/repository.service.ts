@@ -465,7 +465,7 @@ interface ElectronAPI {
   getProductosAdicionalesByProducto: (productoId: number) => Promise<ProductoAdicional[]>;
   getProductosAdicionalesByPresentacion: (presentacionId: number) => Promise<ProductoAdicional[]>;
   getProductoAdicional: (id: number) => Promise<ProductoAdicional>;
-  createProductoAdicional: (data: Partial<ProductoAdicional>) => Promise<ProductoAdicional>;
+  createProductoAdicional: (data: Partial<ProductoAdicional>) => Promise<{ success: boolean, data?: ProductoAdicional, error?: string, message?: string }>;
   updateProductoAdicional: (id: number, data: Partial<ProductoAdicional>) => Promise<ProductoAdicional>;
   deleteProductoAdicional: (id: number) => Promise<boolean>;
   
@@ -1958,7 +1958,8 @@ export class RepositoryService {
     return from(this.api.getProductoAdicional(id));
   }
 
-  createProductoAdicional(data: Partial<ProductoAdicional>): Observable<ProductoAdicional> {
+  // add error handling like in createObservacionProducto 
+  createProductoAdicional(data: Partial<ProductoAdicional>): Observable<{ success: boolean, data?: ProductoAdicional, error?: string, message?: string }> {
     return from(this.api.createProductoAdicional(data));
   }
 
