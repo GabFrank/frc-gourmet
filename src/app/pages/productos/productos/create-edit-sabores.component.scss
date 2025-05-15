@@ -1,0 +1,150 @@
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+}
+
+.header-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 16px;
+
+  .subtitle {
+    margin: 0;
+  }
+
+  .button-group {
+    display: flex;
+    gap: 8px;
+  }
+}
+
+.add-sabor-form {
+  background-color: #f9f9f9;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+
+  .form-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+
+    h3 {
+      margin: 0;
+      color: rgba(0, 0, 0, 0.8);
+    }
+  }
+
+  .form-row {
+    margin-bottom: 16px;
+  }
+
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .full-width {
+    width: 100%;
+  }
+}
+
+.section-divider {
+  margin: 24px 0;
+}
+
+.sabores-table-container {
+  margin-top: 16px;
+  min-height: 200px;
+  position: relative;
+
+  table {
+    width: 100%;
+  }
+
+  .empty-list {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    color: rgba(0, 0, 0, 0.5);
+    text-align: center;
+    padding: 16px;
+
+    mat-icon {
+      font-size: 48px;
+      width: 48px;
+      height: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    p {
+      margin: 4px 0;
+    }
+
+    .hint {
+      font-size: 12px;
+      margin-top: 8px;
+    }
+  }
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+
+  &.active {
+    background-color: rgba(0, 150, 136, 0.1);
+    color: #00796b;
+  }
+
+  &.inactive {
+    background-color: rgba(158, 158, 158, 0.1);
+    color: #757575;
+  }
+}
+
+// Dark theme adjustments
+:host-context(.dark-theme) {
+  .loading-overlay {
+    background-color: rgba(0, 0, 0, 0.7);
+  }
+
+  .add-sabor-form {
+    background-color: #1a2737;
+  }
+
+  .empty-list {
+    background-color: #1a2737;
+  }
+
+  .active {
+    background-color: #1b5e20;
+    color: #e8f5e9;
+  }
+
+  .inactive {
+    background-color: #621818;
+    color: #ffebee;
+  }
+}
