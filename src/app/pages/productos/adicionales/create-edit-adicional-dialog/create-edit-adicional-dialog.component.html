@@ -104,7 +104,7 @@
     </div> -->
 
     <div
-      style="display: flex; flex-direction: row; gap: 10px; align-items: center"
+      style="display: flex; flex-direction: row; gap: 10px; align-items: flex-start"
     >
       <app-currency-input
         class="full-width"
@@ -117,6 +117,17 @@
       >
       </app-currency-input>
 
+      <mat-form-field appearance="outline" style="width: 50%;">
+        <mat-label>Moneda</mat-label>
+        <mat-select formControlName="monedaId">
+          <mat-option *ngFor="let moneda of monedas" [value]="moneda.id">
+            {{ moneda.simbolo }} - {{ moneda.denominacion }}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    <div>
       <mat-checkbox formControlName="activo">Activo</mat-checkbox>
     </div>
 

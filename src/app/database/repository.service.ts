@@ -452,6 +452,7 @@ interface ElectronAPI {
     nombre?: string;
     ingredienteId?: number;
     recetaId?: number;
+    monedaId?: number;
     activo?: boolean;
     pageIndex?: number;
     pageSize?: number;
@@ -1922,6 +1923,7 @@ export class RepositoryService {
     nombre?: string;
     ingredienteId?: number;
     recetaId?: number;
+    monedaId?: number;
     activo?: boolean;
     pageIndex?: number;
     pageSize?: number;

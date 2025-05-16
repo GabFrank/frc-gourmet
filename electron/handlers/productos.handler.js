@@ -1701,7 +1701,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         try {
             const repo = dataSource.getRepository(adicional_entity_1.Adicional);
             return await repo.find({
-                relations: ['ingrediente', 'receta'],
+                relations: ['ingrediente', 'receta', 'moneda'],
                 order: { nombre: 'ASC' }
             });
         }
@@ -1716,6 +1716,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             const queryBuilder = repo.createQueryBuilder('adicional')
                 .leftJoinAndSelect('adicional.ingrediente', 'ingrediente')
                 .leftJoinAndSelect('adicional.receta', 'receta')
+                .leftJoinAndSelect('adicional.moneda', 'moneda')
                 .orderBy('adicional.nombre', 'ASC');
             // Apply filters
             if (filters.nombre) {
@@ -1726,6 +1727,9 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             }
             if (filters.recetaId !== undefined && filters.recetaId !== null) {
                 queryBuilder.andWhere('adicional.recetaId = :recetaId', { recetaId: filters.recetaId });
+            }
+            if (filters.monedaId !== undefined && filters.monedaId !== null) {
+                queryBuilder.andWhere('adicional.monedaId = :monedaId', { monedaId: filters.monedaId });
             }
             if (filters.activo !== undefined && filters.activo !== null) {
                 queryBuilder.andWhere('adicional.activo = :activo', { activo: filters.activo });
@@ -1751,7 +1755,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             const repo = dataSource.getRepository(adicional_entity_1.Adicional);
             return await repo.findOne({
                 where: { id },
-                relations: ['ingrediente', 'receta']
+                relations: ['ingrediente', 'receta', 'moneda']
             });
         }
         catch (error) {

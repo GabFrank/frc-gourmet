@@ -2,6 +2,7 @@ import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import type { Ingrediente } from './ingrediente.entity';
 import type { Receta } from './receta.entity';
+import type { Moneda } from '../financiero/moneda.entity';
 
 /**
  * Entity representing an additional item for products
@@ -27,6 +28,13 @@ export class Adicional extends BaseModel {
 
   @Column({ name: 'precio_venta_unitario', type: 'decimal', precision: 10, scale: 2 })
   precioVentaUnitario!: number;
+
+  @Column({ name: 'moneda_id', nullable: true })
+  monedaId?: number;
+
+  @ManyToOne('Moneda', { nullable: true })
+  @JoinColumn({ name: 'moneda_id' })
+  moneda?: Moneda;
 
   @Column({ default: true })
   activo!: boolean;

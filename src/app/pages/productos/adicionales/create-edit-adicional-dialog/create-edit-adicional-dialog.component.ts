@@ -58,6 +58,7 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
   // Data
   ingredientes: Ingrediente[] = [];
   recetas: Receta[] = [];
+  monedas: Moneda[] = [];
 
   // moneda principal
   monedaPrincipal: Moneda = new Moneda();
@@ -85,6 +86,7 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
       nombre: ['', Validators.required],
       ingredienteId: [null],
       recetaId: [null],
+      monedaId: [null],
       precioVentaUnitario: [0, [Validators.required, Validators.min(0)]],
       activo: [true]
     });
@@ -144,6 +146,7 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
     //   }
     // }));
     
+    this.loadMonedas();
     this.loadMonedaPrincipal();
   }
 
@@ -161,12 +164,25 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
     // Check if we're in edit mode
     if (this.data && this.data.adicionalId) {
       this.loadAdicional(this.data.adicionalId);
+    } else {
+      // For new adicionales, set the moneda principal by default
+      this.adicionalForm.get('monedaId')?.setValue(this.monedaPrincipal.id);
     }
+  }
+
+  loadMonedas(): void {
+    this.repository.getMonedas().subscribe(monedas => {
+      this.monedas = monedas.filter(m => m.activo);
+    });
   }
 
   loadMonedaPrincipal(): void {
     this.repository.getMonedaPrincipal().subscribe(moneda => {
       this.monedaPrincipal = moneda;
+      // If creating a new adicional, set the default moneda
+      if (!this.isEditMode) {
+        this.adicionalForm.get('monedaId')?.setValue(moneda.id);
+      }
     });
   }
 
@@ -186,6 +202,7 @@ export class CreateEditAdicionalDialogComponent implements OnInit, OnDestroy {
           nombre: result.nombre,
           ingredienteId: result.ingredienteId,
           recetaId: result.recetaId,
+          monedaId: result.monedaId,
           precioVentaUnitario: result.precioVentaUnitario,
           activo: result.activo
         });

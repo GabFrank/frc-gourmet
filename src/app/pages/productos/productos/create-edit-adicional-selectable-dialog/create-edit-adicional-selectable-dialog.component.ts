@@ -28,6 +28,10 @@ import { firstValueFrom, Subject } from 'rxjs';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { Moneda } from 'src/app/database/entities/financiero/moneda.entity';
+
+// dialog data
+
 
 @Component({
   selector: 'app-create-edit-adicional-selectable-dialog',
@@ -234,6 +238,10 @@ export class CreateEditAdicionalSelectableDialogComponent implements OnInit {
   // Selection
   selectedAdicional: Adicional | null = null;
 
+  // Monedas
+  monedas: Moneda[] = [];
+  selectedMoneda: Moneda | null = null;
+
   constructor(
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
@@ -242,6 +250,7 @@ export class CreateEditAdicionalSelectableDialogComponent implements OnInit {
   ) {
     this.adicionalForm = this.fb.group({
       nombre: ['', Validators.required],
+      monedaId: [null, Validators.required],
       precioVentaUnitario: [0, [Validators.required, Validators.min(0)]],
       activo: [true]
     });
@@ -260,6 +269,11 @@ export class CreateEditAdicionalSelectableDialogComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadAdicionales();
+    this.loadMonedas();
+  }
+
+  async loadMonedas(): Promise<void> {
+    this.monedas = await firstValueFrom(this.repositoryService.getMonedas());
   }
   
   onSearchChange(event: any): void {

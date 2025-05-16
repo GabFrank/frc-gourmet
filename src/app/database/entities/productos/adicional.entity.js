@@ -44,6 +44,15 @@ __decorate([
     __metadata("design:type", Number)
 ], Adicional.prototype, "precioVentaUnitario", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'moneda_id', nullable: true }),
+    __metadata("design:type", Number)
+], Adicional.prototype, "monedaId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)('Moneda', { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'moneda_id' }),
+    __metadata("design:type", Function)
+], Adicional.prototype, "moneda", void 0);
+__decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
 ], Adicional.prototype, "activo", void 0);

@@ -1744,7 +1744,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     try {
       const repo = dataSource.getRepository(Adicional);
       return await repo.find({ 
-        relations: ['ingrediente', 'receta'],
+        relations: ['ingrediente', 'receta', 'moneda'],
         order: { nombre: 'ASC' } 
       });
     } catch (error) {
@@ -1757,6 +1757,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     nombre?: string;
     ingredienteId?: number;
     recetaId?: number;
+    monedaId?: number;
     activo?: boolean;
     pageIndex?: number;
     pageSize?: number;
@@ -1766,6 +1767,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const queryBuilder = repo.createQueryBuilder('adicional')
         .leftJoinAndSelect('adicional.ingrediente', 'ingrediente')
         .leftJoinAndSelect('adicional.receta', 'receta')
+        .leftJoinAndSelect('adicional.moneda', 'moneda')
         .orderBy('adicional.nombre', 'ASC');
       
       // Apply filters
@@ -1779,6 +1781,10 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       
       if (filters.recetaId !== undefined && filters.recetaId !== null) {
         queryBuilder.andWhere('adicional.recetaId = :recetaId', { recetaId: filters.recetaId });
+      }
+      
+      if (filters.monedaId !== undefined && filters.monedaId !== null) {
+        queryBuilder.andWhere('adicional.monedaId = :monedaId', { monedaId: filters.monedaId });
       }
       
       if (filters.activo !== undefined && filters.activo !== null) {
@@ -1809,7 +1815,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const repo = dataSource.getRepository(Adicional);
       return await repo.findOne({ 
         where: { id },
-        relations: ['ingrediente', 'receta'] 
+        relations: ['ingrediente', 'receta', 'moneda'] 
       });
     } catch (error) {
       console.error(`Error getting adicional ID ${id}:`, error);
