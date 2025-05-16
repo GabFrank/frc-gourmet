@@ -10,7 +10,7 @@ import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Subject, takeUntil } from 'rxjs';
+import { firstValueFrom, Subject, takeUntil } from 'rxjs';
 import { Presentacion, TipoMedida, MetodoCalculo } from '../../../database/entities/productos/presentacion.entity';
 import { PrecioVenta } from '../../../database/entities/productos/precio-venta.entity';
 import { Codigo } from '../../../database/entities/productos/codigo.entity';
@@ -59,7 +59,7 @@ export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
   preciosByPresentacion: Map<number, PrecioVenta[]> = new Map();
   codigosByPresentacion: Map<number, Codigo[]> = new Map();
   costosPorProducto: CostoPorProducto[] = [];
-  costoPrincipal: CostoPorProducto | null = null;
+  costoPrincipal: number | null = null;
 
   // precio costo
   precioCosto: CostoPorProducto | null = null;
@@ -526,20 +526,30 @@ export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
   /**
    * Load costs for the current product
    */
-  loadCostosPorProducto(): void {
+  async loadCostosPorProducto(): Promise<void> {
     if (this.producto) {
+      if(!this.producto.isCompuesto) {
       this.repositoryService.getCostosPorProductoByProducto(this.producto.id)
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (costos) => {
             this.costosPorProducto = costos;
-            this.costoPrincipal = costos.find(costo => costo.principal) || null;
+            this.costoPrincipal = costos.find(costo => costo.principal)?.valorMonedaPrincipal || null;
             this.cdr.detectChanges();
           },
           error: (error) => {
             console.error(`Error loading costs for product ${this.producto?.id}:`, error);
           }
         });
+      } else if(!this.producto.hasVariaciones) {
+        if(this.producto.recetaVariacion) {
+          this.costoPrincipal = await firstValueFrom(this.repositoryService.getRecetaVariacionCosto(this.producto.recetaVariacion.id));
+          this.cdr.detectChanges();
+        }
+      } else {
+        this.costoPrincipal = null;
+        this.cdr.detectChanges();
+      }
     }
   }
 

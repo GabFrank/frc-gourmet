@@ -29,6 +29,10 @@ export class Adicional extends BaseModel {
   @Column({ name: 'precio_venta_unitario', type: 'decimal', precision: 10, scale: 2 })
   precioVentaUnitario!: number;
 
+  // add cantidad_default
+  @Column({ name: 'cantidad_default', type: 'int', nullable: true })
+  cantidadDefault?: number;
+
   @Column({ name: 'moneda_id', nullable: true })
   monedaId?: number;
 

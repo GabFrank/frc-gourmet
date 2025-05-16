@@ -691,6 +691,7 @@ interface Adicional {
   recetaId?: number;
   receta?: Receta;
   precioVentaUnitario: number;
+  cantidadDefault?: number;
   activo: boolean;
   createdAt?: Date;
   updatedAt?: Date;

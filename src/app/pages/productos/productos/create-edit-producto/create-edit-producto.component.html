@@ -274,26 +274,36 @@
 
         <!-- Receta Details Section -->
         <div class="receta-details" *ngIf="selectedRecetaVariacion">
-          <div class="detail-row">
-            <span class="label">Costo:</span>
-            <span class="value">{{ monedaPrincipal?.simbolo }} {{ selectedRecetaVariacion.costo | number:'1.0-2' }}</span>
-            <!-- Cmv is 35% -->
-            <span class="label">Cmv:</span>
-            <span class="value">35%</span>
-            <!-- add precio sugerido, selectedRecetaVariacion.costo / 0.35 -->
-            <span class="label">Precio Sugerido:</span>
-            <span class="value">{{ monedaPrincipal?.simbolo }} {{ (selectedRecetaVariacion.costo / 0.35) | number:'1.0-2' }}</span>
-          </div>
-          <!-- action row -->
-          <div class="action-row" style="display: flex; gap: 10px; justify-content: flex-end;">
-            <button mat-raised-button color="warn" (click)="removeReceta()" [disabled]="!producto.recetaVariacion">
-              <mat-icon>remove</mat-icon>
-              Remover Receta
-            </button>
-            <button mat-raised-button color="primary" (click)="addReceta(selectedRecetaVariacion)" [disabled]="producto.recetaVariacion">
-              <mat-icon>add</mat-icon>
-              Añadir Receta
-            </button>
+          <div class="receta-details-card">
+            <div class="receta-details-header">
+              <h4>Detalles de Receta</h4>
+            </div>
+            <div class="receta-details-content">
+              <div class="details-metrics">
+                <div class="metric-item">
+                  <span class="metric-label">Costo:</span>
+                  <span class="metric-value">{{ monedaPrincipal?.simbolo }} {{ selectedRecetaVariacion.costo | number:'1.0-2' }}</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-label">Cmv:</span>
+                  <span class="metric-value">35%</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-label">Precio Sugerido:</span>
+                  <span class="metric-value">{{ monedaPrincipal?.simbolo }} {{ (selectedRecetaVariacion.costo / 0.35) | number:'1.0-2' }}</span>
+                </div>
+              </div>
+              <div class="action-buttons">
+                <button mat-raised-button color="warn" class="action-button" (click)="removeReceta()" [disabled]="!producto.recetaVariacion">
+                  <mat-icon>remove</mat-icon>
+                  Remover Receta
+                </button>
+                <button mat-raised-button color="primary" class="action-button" (click)="addReceta(selectedRecetaVariacion)" [disabled]="producto.recetaVariacion">
+                  <mat-icon>add</mat-icon>
+                  Añadir Receta
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

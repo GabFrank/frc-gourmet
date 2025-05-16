@@ -41,6 +41,7 @@ import { firstValueFrom } from 'rxjs';
 import { CurrencyInputComponent } from '../../../../shared/components/currency-input/currency-input.component';
 import { CurrencyConfigService } from '../../../../shared/services/currency-config.service';
 import { TipoPrecio } from 'src/app/database/entities/financiero/tipo-precio.entity';
+import { log } from 'console';
 
 interface DialogData {
   presentacion?: Presentacion;
@@ -156,7 +157,7 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
       }
 
       if (this.dialogData.suggestedPrice !== undefined) {
-        console.log(this.dialogData.suggestedPrice );
+        console.log(this.dialogData.suggestedPrice);
 
         this.suggestedPrice = this.dialogData.suggestedPrice;
       }
@@ -174,6 +175,7 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
   ngOnInit(): void {
     this.loadMonedas();
     this.loadTipoPrecios();
+    this.loadSuggestedPrice();
 
     // Load prices based on which entity type we have
     if (this.presentacion?.id) {
@@ -222,6 +224,34 @@ export class CreateEditPrecioVentaComponent implements OnInit, OnChanges {
     if (this.suggestedPrice > 0) {
       // this.updateFormattedSuggestedPrice();
       this.updateHintText();
+    }
+  }
+
+  async loadSuggestedPrice(): Promise<void> {
+    // first lets get producto from presentacion
+    console.log('loading suggested price');
+    if (this.presentacion?.productoId) {
+      console.log('loading producto');
+      const producto = await firstValueFrom(this.repositoryService.getProducto(this.presentacion.productoId));
+      // if producto.isCompuesto is true
+      if (producto.isCompuesto) {
+        console.log('producto is compuesto');
+        // if producto.hasVariaciones is false, load precio costo from producto.recetaVariacion.id
+        // else load precio costo from presentacionSabor.recetaVariacion.id
+        if (!producto.hasVariaciones && producto.recetaVariacion) {
+          console.log('loading receta variacion costo from producto', producto.recetaVariacion.id);
+          const costo = await firstValueFrom(this.repositoryService.getRecetaVariacionCosto(producto.recetaVariacion.id));
+          this.recipeCost = costo;
+          this.suggestedPrice = this.recipeCost / 0.35;
+          this.updateHintText();
+        } else if (this.presentacionSabor && this.presentacionSabor.variacionId) {
+          console.log('loading receta variacion costo from presentacion sabor', this.presentacionSabor.variacionId);
+          const costo = await firstValueFrom(this.repositoryService.getRecetaVariacionCosto(this.presentacionSabor.variacionId));
+          this.recipeCost = costo;
+          this.suggestedPrice = this.recipeCost / 0.35;
+          this.updateHintText();
+        }
+      }
     }
   }
 

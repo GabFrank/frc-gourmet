@@ -234,12 +234,12 @@
                       <!-- calculate cmv (costo / precio) * 100, add ng if to prevent null -->
                       <span
                         *ngIf="
-                          costoPrincipal?.valorMonedaPrincipal &&
+                          costoPrincipal &&
                           precio.valorMonedaPrincipal
                         "
                       >
                         {{
-                          (((costoPrincipal?.valorMonedaPrincipal || 0) *
+                          (((costoPrincipal || 0) *
                             presentacion.cantidad) /
                             (precio.valorMonedaPrincipal || 1)) *
                             100 | number : "1.0-2"
@@ -249,13 +249,13 @@
                       <!-- calculate lucro (precio - costo) / precio * 100 -->
                       <span
                         *ngIf="
-                          costoPrincipal?.valorMonedaPrincipal &&
+                          costoPrincipal &&
                           precio.valorMonedaPrincipal
                         "
                       >
                         {{
                           ((precio.valorMonedaPrincipal || 0) /
-                            ((costoPrincipal?.valorMonedaPrincipal || 1) *
+                            ((costoPrincipal || 1) *
                               presentacion.cantidad) -
                             1) *
                             100 | number : "1.0-2"
