@@ -346,6 +346,73 @@
   color: #c62828;
 }
 
+// Receta Section Styles
+.receta-section-card {
+  .receta-section-content {
+    padding: 16px;
+    
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      
+      h4 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 500;
+      }
+    }
+    
+    .receta-search-form {
+      .form-row {
+        margin-bottom: 16px;
+      }
+      
+      .full-width {
+        width: 100%;
+      }
+      
+      .receta-details {
+        background-color: rgba(0, 0, 0, 0.03);
+        border-radius: 4px;
+        padding: 16px;
+        margin-top: 16px;
+        
+        .detail-row {
+          display: flex;
+          margin-bottom: 8px;
+          
+          &:last-child {
+            margin-bottom: 0;
+          }
+          
+          .label {
+            font-weight: 500;
+            min-width: 120px;
+          }
+          
+          .value {
+            flex: 1;
+          }
+        }
+      }
+    }
+  }
+}
+
+// No results and searching styles for autocomplete
+::ng-deep .mat-mdc-option {
+  .searching-text, .no-results-text {
+    display: flex;
+    align-items: center;
+    
+    mat-spinner {
+      margin-right: 8px;
+    }
+  }
+}
+
 
 
 

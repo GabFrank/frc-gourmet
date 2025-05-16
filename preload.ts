@@ -177,6 +177,15 @@ interface Subcategoria {
   updatedAt?: Date;
 }
 
+interface RecetaVariacion {
+  id?: number;
+  nombre: string;
+  activo: boolean;
+  receta: Receta;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 interface Producto {
   id?: number;
   codigo: string;
@@ -190,6 +199,8 @@ interface Producto {
   activo: boolean;
   createdAt?: Date;
   updatedAt?: Date;
+  recetaVariacion?: RecetaVariacion;
+  
 }
 
 // Presentacion interface
@@ -1270,6 +1281,9 @@ contextBridge.exposeInMainWorld('api', {
   deleteRecetaVariacion: async (variacionId: number) => {
     return await ipcRenderer.invoke('deleteRecetaVariacion', variacionId);
   },
+  getRecetaVariacionCosto: async (variacionId: number) => {
+    return await ipcRenderer.invoke('getRecetaVariacionCosto', variacionId);
+  },
 
   // RecetaVariacionItem methods
   getRecetaVariacionItems: async (variacionId: number) => {
@@ -1405,6 +1419,9 @@ contextBridge.exposeInMainWorld('api', {
   },
   deleteMonedaCambio: async (monedaCambioId: number) => {
     return await ipcRenderer.invoke('delete-moneda-cambio', monedaCambioId);
+  },
+  getMonedaCambioByMonedaPrincipal: async () => {
+    return await ipcRenderer.invoke('get-moneda-cambio-by-moneda-principal');
   },
 
   // Proveedor methods

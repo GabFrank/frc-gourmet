@@ -686,6 +686,20 @@ function registerFinancieroHandlers(dataSource, getCurrentUser) {
             throw error;
         }
     });
+    electron_1.ipcMain.handle('get-moneda-cambio-by-moneda-principal', async (_event) => {
+        try {
+            const repoMonedaCambio = dataSource.getRepository(moneda_cambio_entity_1.MonedaCambio);
+            const repoMoneda = dataSource.getRepository(moneda_entity_1.Moneda);
+            const monedaPrincipal = await repoMoneda.findOneBy({ principal: true });
+            if (!monedaPrincipal)
+                throw new Error('Moneda principal not found');
+            return await repoMonedaCambio.findOne({ where: { monedaOrigen: { id: monedaPrincipal.id } } });
+        }
+        catch (error) {
+            console.error('Error getting moneda cambio por moneda principal:', error);
+            throw error;
+        }
+    });
 }
 exports.registerFinancieroHandlers = registerFinancieroHandlers;
 //# sourceMappingURL=financiero.handler.js.map

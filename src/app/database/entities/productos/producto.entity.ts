@@ -8,6 +8,7 @@ import type { IntercambioIngrediente } from './intercambio-ingrediente.entity';
 import type { ObservacionProducto } from './observacion-producto.entity';
 import type { ProductoAdicional } from './producto-adicional.entity';
 import type { CostoPorProducto } from './costo-por-producto.entity';
+import { RecetaVariacion } from './receta-variacion.entity';
 
 /**
  * Entity representing a product
@@ -69,12 +70,13 @@ export class Producto extends BaseModel {
   @JoinColumn({ name: 'subcategoria_id' })
   subcategoria!: Subcategoria;
 
-  @Column({ name: 'receta_id', nullable: true })
-  recetaId?: number;
+  // replace receta with recetaVariacion
+  @ManyToOne('RecetaVariacion', { nullable: true })
+  @JoinColumn({ name: 'receta_variacion_id' })
+  recetaVariacion?: RecetaVariacion;
 
-  @ManyToOne('Receta', { nullable: true })
-  @JoinColumn({ name: 'receta_id' })
-  receta?: Receta;
+  @Column({ name: 'receta_variacion_id', nullable: true })
+  recetaVariacionId?: number;
 
   @OneToMany('ProductoImage', 'producto')
   images!: ProductoImage[];

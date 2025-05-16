@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Producto = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
+const receta_variacion_entity_1 = require("./receta-variacion.entity");
 /**
  * Entity representing a product
  */
@@ -91,14 +92,14 @@ __decorate([
     __metadata("design:type", Function)
 ], Producto.prototype, "subcategoria", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'receta_id', nullable: true }),
-    __metadata("design:type", Number)
-], Producto.prototype, "recetaId", void 0);
+    (0, typeorm_1.ManyToOne)('RecetaVariacion', { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'receta_variacion_id' }),
+    __metadata("design:type", receta_variacion_entity_1.RecetaVariacion)
+], Producto.prototype, "recetaVariacion", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Receta', { nullable: true }),
-    (0, typeorm_1.JoinColumn)({ name: 'receta_id' }),
-    __metadata("design:type", Function)
-], Producto.prototype, "receta", void 0);
+    (0, typeorm_1.Column)({ name: 'receta_variacion_id', nullable: true }),
+    __metadata("design:type", Number)
+], Producto.prototype, "recetaVariacionId", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)('ProductoImage', 'producto'),
     __metadata("design:type", Array)

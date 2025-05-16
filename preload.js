@@ -453,6 +453,9 @@ electron_1.contextBridge.exposeInMainWorld('api', {
     deleteRecetaVariacion: async (variacionId) => {
         return await electron_1.ipcRenderer.invoke('deleteRecetaVariacion', variacionId);
     },
+    getRecetaVariacionCosto: async (variacionId) => {
+        return await electron_1.ipcRenderer.invoke('getRecetaVariacionCosto', variacionId);
+    },
     // RecetaVariacionItem methods
     getRecetaVariacionItems: async (variacionId) => {
         return await electron_1.ipcRenderer.invoke('getRecetaVariacionItems', variacionId);
@@ -580,6 +583,9 @@ electron_1.contextBridge.exposeInMainWorld('api', {
     },
     deleteMonedaCambio: async (monedaCambioId) => {
         return await electron_1.ipcRenderer.invoke('delete-moneda-cambio', monedaCambioId);
+    },
+    getMonedaCambioByMonedaPrincipal: async () => {
+        return await electron_1.ipcRenderer.invoke('get-moneda-cambio-by-moneda-principal');
     },
     // Proveedor methods
     getProveedores: async () => {

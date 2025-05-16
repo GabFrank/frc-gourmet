@@ -669,4 +669,18 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
     }
   });
 
+  ipcMain.handle('get-moneda-cambio-by-moneda-principal', async (_event: IpcMainInvokeEvent) => {
+    try {
+      const repoMonedaCambio = dataSource.getRepository(MonedaCambio);
+      const repoMoneda = dataSource.getRepository(Moneda);
+
+      const monedaPrincipal = await repoMoneda.findOneBy({ principal: true });
+      if (!monedaPrincipal) throw new Error('Moneda principal not found');
+      return await repoMonedaCambio.findOne({ where: { monedaOrigen: { id: monedaPrincipal.id } } });
+    } catch (error) {
+      console.error('Error getting moneda cambio por moneda principal:', error);  
+      throw error;
+    }
+  });
+
 } 

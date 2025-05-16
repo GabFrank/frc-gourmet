@@ -214,7 +214,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
     electron_1.ipcMain.handle('getProductos', async () => {
         try {
             const repo = dataSource.getRepository(producto_entity_1.Producto);
-            const productos = await repo.find({ relations: ['subcategoria', 'subcategoria.categoria'], order: { nombre: 'ASC' } });
+            const productos = await repo.find({ relations: ['subcategoria', 'subcategoria.categoria', 'recetaVariacion', 'recetaVariacion.receta'], order: { nombre: 'ASC' } });
             // Enrich each product with principal data
             for (const producto of productos) {
                 await enrichProductWithPrincipalData(producto);
@@ -229,7 +229,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
     electron_1.ipcMain.handle('getProducto', async (_event, id) => {
         try {
             const repo = dataSource.getRepository(producto_entity_1.Producto);
-            const producto = await repo.findOne({ where: { id }, relations: ['subcategoria', 'subcategoria.categoria'] });
+            const producto = await repo.findOne({ where: { id }, relations: ['subcategoria', 'subcategoria.categoria', 'recetaVariacion', 'recetaVariacion.receta'] });
             if (producto) {
                 await enrichProductWithPrincipalData(producto);
             }
@@ -842,7 +842,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         }
     });
     // Search recetas directly from database
-    electron_1.ipcMain.handle('searchRecetas', async (_event, query) => {
+    electron_1.ipcMain.handle('searchRecetasByNombre', async (_event, query) => {
         try {
             const recetaRepo = dataSource.getRepository(receta_entity_1.Receta);
             const recetas = await recetaRepo.createQueryBuilder('receta')
@@ -858,11 +858,53 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             return [];
         }
     });
+    async function getRecetaVariacionCosto(variacionId) {
+        // remove all console.log
+        try {
+            const repoRecetaVariacion = dataSource.getRepository(receta_variacion_entity_1.RecetaVariacion);
+            const repoRecetaVariacionItem = dataSource.getRepository(receta_variacion_item_entity_1.RecetaVariacionItem);
+            const repoMoneda = dataSource.getRepository(moneda_entity_1.Moneda);
+            const repoMonedaCambio = dataSource.getRepository(moneda_cambio_entity_1.MonedaCambio);
+            const variacion = await repoRecetaVariacion.findOneBy({ id: variacionId });
+            // to find costo, we need to find all receta variacionItems.ingrediente, and then get the costo from the ingrediente
+            const variacionItems = await repoRecetaVariacionItem.find({ where: { variacionId: variacionId }, relations: ['ingrediente'] });
+            const costo = variacionItems.reduce((acc, item) => acc + item.ingrediente.costo, 0);
+            // each ingrediente can has different moneda, so we need to get the costo in moneda principal using moneda cambio
+            // first get the moneda principal
+            const monedaPrincipal = await repoMoneda.findOneBy({ principal: true });
+            if (!monedaPrincipal)
+                throw new Error('Moneda principal not found');
+            // if monedaPrincipal is same as ingrediente.monedaId, sum the costo in a variable
+            let costoEnMonedaPrincipal = 0;
+            for (const item of variacionItems) {
+                if (item.ingrediente.monedaId === monedaPrincipal.id) {
+                    costoEnMonedaPrincipal += item.ingrediente.costo * item.cantidad;
+                }
+                else {
+                    // if monedaPrincipal is not same as ingrediente.monedaId, we need to convert the costo to the moneda principal using moneda cambio
+                    const monedaCambio = await repoMonedaCambio.findOne({ where: { monedaOrigen: { id: monedaPrincipal.id }, monedaDestino: { id: item.ingrediente.monedaId } } });
+                    if (!monedaCambio)
+                        throw new Error('Moneda cambio not found');
+                    costoEnMonedaPrincipal += item.ingrediente.costo * item.cantidad * monedaCambio.compraOficial;
+                }
+            }
+            return costoEnMonedaPrincipal;
+        }
+        catch (error) {
+            console.error(`Error getting receta variacion costo for ID ${variacionId}:`, error);
+            throw error;
+        }
+    }
     // --- RecetaVariacion Handlers ---
     electron_1.ipcMain.handle('getRecetaVariaciones', async (_event, recetaId) => {
         try {
             const repo = dataSource.getRepository(receta_variacion_entity_1.RecetaVariacion);
-            return await repo.find({ where: { recetaId }, order: { nombre: 'ASC' } });
+            const variaciones = await repo.find({ where: { recetaId }, relations: ['receta'], order: { nombre: 'ASC' } });
+            // before returning, lets find costo based on the recetavariacionitem.ingrediente.costo
+            for (const variacion of variaciones) {
+                variacion.costo = await getRecetaVariacionCosto(variacion.id);
+            }
+            return variaciones;
         }
         catch (error) {
             console.error(`Error getting variations for recipe ID ${recetaId}:`, error);
@@ -872,7 +914,11 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
     electron_1.ipcMain.handle('getRecetaVariacion', async (_event, id) => {
         try {
             const repo = dataSource.getRepository(receta_variacion_entity_1.RecetaVariacion);
-            return await repo.findOneBy({ id });
+            const variacion = await repo.findOne({ where: { id }, relations: ['receta'] });
+            if (!variacion)
+                throw new Error(`RecetaVariacion ID ${id} not found`);
+            variacion.costo = await getRecetaVariacionCosto(variacion.id);
+            return variacion;
         }
         catch (error) {
             console.error(`Error getting variation ID ${id}:`, error);
@@ -895,7 +941,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
     electron_1.ipcMain.handle('updateRecetaVariacion', async (_event, id, data) => {
         try {
             const repo = dataSource.getRepository(receta_variacion_entity_1.RecetaVariacion);
-            const entity = await repo.findOneBy({ id });
+            const entity = await repo.findOne({ where: { id }, relations: ['receta'] });
             if (!entity)
                 throw new Error(`RecetaVariacion ID ${id} not found`);
             repo.merge(entity, data);
@@ -921,6 +967,15 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         }
         catch (error) {
             console.error(`Error deleting recipe variation ID ${id}:`, error);
+            throw error;
+        }
+    });
+    electron_1.ipcMain.handle('getRecetaVariacionCosto', async (_event, variacionId) => {
+        try {
+            return await getRecetaVariacionCosto(variacionId);
+        }
+        catch (error) {
+            console.error(`Error getting recipe variation cost for ID ${variacionId}:`, error);
             throw error;
         }
     });

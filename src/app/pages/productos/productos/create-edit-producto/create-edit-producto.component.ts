@@ -1,6 +1,6 @@
 import { Component, Inject, OnInit, ViewChild, ElementRef, ChangeDetectorRef, Input, OnChanges, SimpleChanges, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators, FormsModule } from '@angular/forms';
+import { FormBuilder, FormGroup, ReactiveFormsModule, Validators, FormsModule, FormControl } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -16,6 +16,7 @@ import { MatDialog, MatDialogConfig, MatDialogModule } from '@angular/material/d
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { RepositoryService } from '../../../../database/repository.service';
 import { Producto } from '../../../../database/entities/productos/producto.entity';
 import { ProductoImage } from '../../../../database/entities/productos/producto-image.entity';
@@ -23,7 +24,9 @@ import { Subcategoria } from '../../../../database/entities/productos/subcategor
 import { Categoria } from '../../../../database/entities/productos/categoria.entity';
 import { ObservacionProducto } from '../../../../database/entities/productos/observacion-producto.entity';
 import { ProductoAdicional } from '../../../../database/entities/productos/producto-adicional.entity';
-import { firstValueFrom } from 'rxjs';
+import { Receta } from '../../../../database/entities/productos/receta.entity';
+import { RecetaVariacion } from '../../../../database/entities/productos/receta-variacion.entity';
+import { firstValueFrom, Observable, of, debounceTime, distinctUntilChanged, switchMap, map, catchError } from 'rxjs';
 import { TabsService } from '../../../../services/tabs.service';
 import { ImageViewerComponent } from '../../../../components/image-viewer/image-viewer.component';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -33,6 +36,7 @@ import { CreateEditObservacionProductoDialogComponent } from '../create-edit-obs
 import { CreateEditObservacionDialogComponent } from '../create-edit-observacion-dialog/create-edit-observacion-dialog.component';
 import { CreateEditProductoAdicionalDialogComponent } from '../create-edit-producto-adicional-dialog/create-edit-producto-adicional-dialog.component';
 import { Observacion } from 'src/app/database/entities/productos/observacion.entity';
+import { Moneda } from 'src/app/database/entities/financiero/moneda.entity';
 
 // Interface for product image model
 interface ProductImageModel {
@@ -65,6 +69,7 @@ interface ProductImageModel {
     MatTooltipModule,
     MatDialogModule,
     MatMenuModule,
+    MatAutocompleteModule,
     ReactiveFormsModule,
     FormsModule,
     ConfirmationDialogComponent,
@@ -97,6 +102,18 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
   producto?: Producto;
   defaultNoImagePath = '/assets/images/no-image.png';
   submitted = false;
+
+  // For receta search
+  recetaSearchCtrl = new FormControl('');
+  recetaVariacionCtrl = new FormControl(null);
+  isSearchingRecetas = false;
+  selectedReceta: Receta | null = null;
+  filteredRecetas: Observable<Receta[]> = of([]);
+  recetaVariaciones: RecetaVariacion[] = [];
+  selectedRecetaVariacion: RecetaVariacion | null = null;
+
+  // moneda principal
+  monedaPrincipal: Moneda | null = null;
 
   constructor(
     private fb: FormBuilder,
@@ -136,10 +153,16 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
 
     // Setup form listeners
     this.setupFormControlListeners();
+    
+    // Setup receta search autocomplete
+    this.setupRecetaSearch();
+
+    // load moneda principal
+    this.loadMonedaPrincipal();
 
     // Initialize form data from input if available
     if (this.data) {
-      this.setData(this.data);
+      this.loadProducto(this.data.id);
     }
   }
 
@@ -150,8 +173,12 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['data'] && changes['data'].currentValue) {
-      this.setData(changes['data'].currentValue);
+      this.loadProducto(changes['data'].currentValue.id);
     }
+  }
+
+  async loadMonedaPrincipal(): Promise<void> {
+    this.monedaPrincipal = await firstValueFrom(this.repositoryService.getMonedaPrincipal());
   }
 
   async loadCategorias(): Promise<void> {
@@ -356,6 +383,115 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
         this.loadSubcategoriasByCategoria(categoriaId);
       }
     });
+
+    // Listen for changes to isCompuesto to determine if we need to show receta section
+    this.productoForm.get('isCompuesto')?.valueChanges.subscribe(isCompuesto => {
+      if (isCompuesto) {
+        this.setupRecetaSearch();
+      } else {
+        this.clearRecetaSelection();
+      }
+    });
+
+    // Listen for receta variacion selection
+    this.recetaVariacionCtrl.valueChanges.subscribe((variacion: RecetaVariacion | null) => {
+      if (variacion) {
+        this.selectedRecetaVariacion = variacion;
+      } else {
+        this.selectedRecetaVariacion = null;
+      }
+    });
+  }
+
+  /**
+   * Sets up the receta search autocomplete functionality
+   */
+  private setupRecetaSearch(): void {
+    this.filteredRecetas = this.recetaSearchCtrl.valueChanges.pipe(
+      debounceTime(300),
+      distinctUntilChanged(),
+      switchMap(value => {
+        // If value is already an object (selected receta), don't search again
+        if (typeof value === 'object' && value !== null) {
+          return of([value as Receta]);
+        }
+        
+        // If value is empty or less than 2 characters, return empty array
+        const searchText = typeof value === 'string' ? value : '';
+        if (searchText.length < 2) {
+          return of([]);
+        }
+        
+        // Search for recetas
+        this.isSearchingRecetas = true;
+        return this.repositoryService.searchRecetas(searchText).pipe(
+          map(recetas => {
+            this.isSearchingRecetas = false;
+            return recetas;
+          }),
+          catchError(error => {
+            this.isSearchingRecetas = false;
+            console.error('Error searching recetas:', error);
+            return of([]);
+          })
+        );
+      })
+    );
+  }
+
+  /**
+   * Handles receta selection from autocomplete
+   */
+  onRecetaSelected(event: any): void {
+    const receta = event.option.value as Receta;
+    this.selectedReceta = receta;
+    
+    // Load receta variaciones
+    this.loadRecetaVariaciones(receta.id);
+  }
+
+  /**
+   * Loads variaciones for the selected receta
+   */
+  async loadRecetaVariaciones(recetaId: number): Promise<void> {
+    try {
+      this.recetaVariaciones = await firstValueFrom(this.repositoryService.getRecetaVariaciones(recetaId));
+      
+      // If there's only one variacion, select it automatically
+      if (this.recetaVariaciones.length === 1) {
+        this.recetaVariacionCtrl.setValue(this.recetaVariaciones[0] as any);
+      } else if (this.recetaVariaciones.length > 0) {
+        // If there are multiple, select the principal one if available
+        const principalVariacion = this.recetaVariaciones.find(v => v.principal);
+        if (principalVariacion) {
+          this.recetaVariacionCtrl.setValue(principalVariacion as any);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading receta variaciones:', error);
+      this.snackBar.open('Error al cargar las variaciones de receta', 'Cerrar', { duration: 3000 });
+    }
+  }
+
+  /**
+   * Displays the receta name in the autocomplete
+   */
+  displayReceta(receta: Receta): string {
+    return receta?.nombre || '';
+  }
+
+  /**
+   * Clears the selected receta and associated data
+   */
+  clearRecetaSelection(event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.recetaSearchCtrl.setValue('');
+    this.recetaVariacionCtrl.setValue(null);
+    this.selectedReceta = null;
+    this.selectedRecetaVariacion = null;
+    this.recetaVariaciones = [];
   }
 
   setData(data: any): void {
@@ -417,6 +553,26 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
           this.loadObservacionesProducto();
           this.loadProductosAdicionales();
           this.setupFormControlsBasedOnLoadedData();
+          // load receta and receta variaciones
+          if(producto.recetaVariacion) {
+            // Set the selectedRecetaVariacion
+            this.selectedRecetaVariacion = producto.recetaVariacion;
+            
+            // Set the form control value
+            this.recetaVariacionCtrl.setValue(producto.recetaVariacion as any);
+            
+            // If we have the receta information in the recetaVariacion
+            if(producto.recetaVariacion.receta) {
+              // Set the selectedReceta
+              this.selectedReceta = producto.recetaVariacion.receta;
+              
+              // Set the receta search control with the receta object
+              this.recetaSearchCtrl.setValue(producto.recetaVariacion.receta as any);
+              
+              // Load all variaciones for this receta
+              this.loadRecetaVariaciones(producto.recetaVariacion.receta.id);
+            }
+          }
         } else {
           this.snackBar.open('No se encontró el producto', 'Cerrar', { duration: 3000 });
         }
@@ -790,5 +946,20 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
         this.markFormGroupTouched(control);
       }
     });
+  }
+
+  addReceta(recetaVariacion: RecetaVariacion): void {
+    // add receta to producto and save on database
+    if(this.producto) {
+      this.producto.recetaVariacion = recetaVariacion;
+      this.repositoryService.updateProducto(this.producto.id!, this.producto);
+    }
+  }
+
+  removeReceta(): void {
+    if(this.producto) {
+      this.producto.recetaVariacion = undefined;
+      this.repositoryService.updateProducto(this.producto.id!, this.producto);
+    }
   }
 } 

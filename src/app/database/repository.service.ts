@@ -229,6 +229,7 @@ interface ElectronAPI {
   updateRecetaVariacion: (variacionId: number, variacionData: Partial<RecetaVariacion>) => Promise<any>;
   deleteRecetaVariacion: (variacionId: number) => Promise<any>;
   searchRecetasByNombre: (searchText: string) => Promise<Receta[]>;
+  getRecetaVariacionCosto: (variacionId: number) => Promise<number>;
 
   // RecetaVariacionItem methods
   getRecetaVariacionItems: (variacionId: number) => Promise<RecetaVariacionItem[]>;
@@ -282,6 +283,7 @@ interface ElectronAPI {
   createMonedaCambio: (monedaCambioData: Partial<MonedaCambio>) => Promise<MonedaCambio>;
   updateMonedaCambio: (monedaCambioId: number, monedaCambioData: Partial<MonedaCambio>) => Promise<any>;
   deleteMonedaCambio: (monedaCambioId: number) => Promise<any>;
+  getMonedaCambioByMonedaPrincipal: () => Promise<MonedaCambio>;
   // Proveedor methods
   getProveedores: () => Promise<Proveedor[]>;
   getProveedor: (proveedorId: number) => Promise<Proveedor>;
@@ -1159,6 +1161,10 @@ export class RepositoryService {
     return from(this.api.deleteRecetaVariacion(variacionId));
   }
 
+  getRecetaVariacionCosto(variacionId: number): Observable<number> {
+    return from(this.api.getRecetaVariacionCosto(variacionId));
+  }
+
   // RecetaVariacionItem methods
   getRecetaVariacionItems(variacionId: number): Observable<RecetaVariacionItem[]> {
     return from(this.api.getRecetaVariacionItems(variacionId));
@@ -1341,6 +1347,10 @@ export class RepositoryService {
 
   deleteMonedaCambio(monedaCambioId: number): Observable<any> {
     return from(this.api.deleteMonedaCambio(monedaCambioId));
+  }
+
+  getMonedaCambioByMonedaPrincipal(): Observable<MonedaCambio> {
+    return from(this.api.getMonedaCambioByMonedaPrincipal());
   }
 
   // Proveedor methods
