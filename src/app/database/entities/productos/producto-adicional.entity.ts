@@ -16,8 +16,8 @@ export class ProductoAdicional extends BaseModel {
   @JoinColumn({ name: 'producto_id' })
   producto!: Producto;
 
-  // add presentacion relation
-  @Column({ name: 'presentacion_id' })
+  // add presentacion relation, it can be optional or null
+  @Column({ name: 'presentacion_id', nullable: true })
   presentacionId!: number;
 
   @ManyToOne('Presentacion', 'productoAdicionales')

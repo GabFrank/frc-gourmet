@@ -78,7 +78,8 @@ export class CreateEditRecetaVariacionItemComponent implements OnInit {
     this.itemForm = this.fb.group({
       ingredienteId: [data.ingredienteId || '', Validators.required],
       ingredienteSearch: [''],
-      cantidad: [data.cantidad || 1, [Validators.required, Validators.min(0.01)]]
+      cantidad: [data.cantidad || 1, [Validators.required, Validators.min(0.01)]],
+      porcentajeAprovechamiento: [100, [Validators.required, Validators.min(0), Validators.max(100)]]
     });
 
     // Set up autocomplete filtering
@@ -209,9 +210,4 @@ export class CreateEditRecetaVariacionItemComponent implements OnInit {
     this.dialogRef.close();
   }
 
-  // Helper method to get ingredient name by ID
-  getIngredienteName(id: number): string {
-    const ingrediente = this.data.ingredientes.find(i => i.id === id);
-    return ingrediente ? ingrediente.descripcion : 'Desconocido';
-  }
 }

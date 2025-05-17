@@ -22,6 +22,10 @@ export class RecetaVariacionItem extends BaseModel {
   @JoinColumn({ name: 'ingrediente_id' })
   ingrediente!: Ingrediente;
 
+  // add porcentaje_aprovechamiento
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  porcentajeAprovechamiento!: number;
+
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   cantidad!: number;
 

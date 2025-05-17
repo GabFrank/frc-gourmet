@@ -28,7 +28,7 @@ __decorate([
     __metadata("design:type", Function)
 ], ProductoAdicional.prototype, "producto", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'presentacion_id' }),
+    (0, typeorm_1.Column)({ name: 'presentacion_id', nullable: true }),
     __metadata("design:type", Number)
 ], ProductoAdicional.prototype, "presentacionId", void 0);
 __decorate([

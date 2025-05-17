@@ -195,6 +195,14 @@
           <td mat-cell *matCellDef="let item">{{ item.nombre }}</td>
         </ng-container>
 
+        <!-- Cantidad Default Column -->
+        <ng-container matColumnDef="cantidadDefault">
+          <th mat-header-cell *matHeaderCellDef>Cantidad</th>
+          <td mat-cell *matCellDef="let item">
+            ({{ item.ingrediente.tipoMedida }}) {{ item.cantidadDefault | number : "1.0-2" }}
+          </td>
+        </ng-container>
+
         <!-- Precio Venta Unitario Column -->
         <ng-container matColumnDef="precioVentaUnitario">
           <th mat-header-cell *matHeaderCellDef>Precio Venta</th>

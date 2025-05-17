@@ -1424,6 +1424,9 @@ contextBridge.exposeInMainWorld('api', {
   getMonedaCambioByMonedaPrincipal: async () => {
     return await ipcRenderer.invoke('get-moneda-cambio-by-moneda-principal');
   },
+  getValorEnMonedaPrincipal: async (monedaId: number, valor: number) => {
+    return await ipcRenderer.invoke('get-valor-en-moneda-principal', monedaId, valor);
+  },
 
   // Proveedor methods
   getProveedores: async () => {

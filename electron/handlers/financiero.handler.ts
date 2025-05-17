@@ -683,4 +683,24 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
     }
   });
 
-} 
+  ipcMain.handle('get-valor-en-moneda-principal', async (_event: IpcMainInvokeEvent, monedaId: number, valor: number) => {
+    try {
+      const repoMonedaCambio = dataSource.getRepository(MonedaCambio);
+      const repoMoneda = dataSource.getRepository(Moneda);  
+      const moneda = await repoMoneda.findOneBy({ id: monedaId });
+      if (!moneda) throw new Error('Moneda not found');
+      const monedaPrincipal = await repoMoneda.findOneBy({ principal: true });
+      if (!monedaPrincipal) throw new Error('Moneda principal not found');
+      if(moneda.id === monedaPrincipal.id) {
+        return valor;
+      }
+      // moneda origen es la moneda principal
+      const monedaCambio = await repoMonedaCambio.findOne({ where: { monedaOrigen: { id: monedaPrincipal.id }, monedaDestino: { id: moneda.id } } });
+      if (!monedaCambio) throw new Error('MonedaCambio not found');
+      return valor * monedaCambio.compraOficial;
+    } catch (error) {
+      console.error('Error getting valor en moneda principal:', error);
+      throw error;
+    }
+  });
+}

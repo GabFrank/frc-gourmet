@@ -806,11 +806,9 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         }
     });
     electron_1.ipcMain.handle('searchIngredientesByDescripcion', async (_event, searchText) => {
-        console.info('Searching ingredientes by description', searchText);
         try {
             const repo = dataSource.getRepository(ingrediente_entity_1.Ingrediente);
             if (!searchText || searchText.trim() === '') {
-                console.info('No search text, returning all ingredientes');
                 return await repo.find({ order: { descripcion: 'ASC' }, take: 10 });
             }
             return await repo.createQueryBuilder('ingrediente')
@@ -961,8 +959,9 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             const entity = await repo.findOneBy({ id });
             if (!entity)
                 throw new Error(`RecetaVariacion ID ${id} not found`);
-            // Add dependency checks (RecetaVariacionItem, PresentacionSabor)
-            const currentUser = getCurrentUser(); // Get current user at time of call
+            // delete all receta variacion items
+            const repoRecetaVariacionItem = dataSource.getRepository(receta_variacion_item_entity_1.RecetaVariacionItem);
+            await repoRecetaVariacionItem.delete({ variacionId: id });
             return await repo.remove(entity);
         }
         catch (error) {
@@ -983,7 +982,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
     electron_1.ipcMain.handle('getRecetaVariacionItems', async (_event, variacionId) => {
         try {
             const repo = dataSource.getRepository(receta_variacion_item_entity_1.RecetaVariacionItem);
-            return await repo.find({ where: { variacionId }, relations: ['ingrediente'] });
+            return await repo.find({ where: { variacionId }, relations: ['ingrediente', 'ingrediente.moneda'] });
         }
         catch (error) {
             console.error(`Error getting items for recipe variation ID ${variacionId}:`, error);
@@ -993,7 +992,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
     electron_1.ipcMain.handle('getRecetaVariacionItem', async (_event, id) => {
         try {
             const repo = dataSource.getRepository(receta_variacion_item_entity_1.RecetaVariacionItem);
-            return await repo.findOne({ where: { id }, relations: ['ingrediente'] }); // Include relation
+            return await repo.findOne({ where: { id }, relations: ['ingrediente', 'ingrediente.moneda'] }); // Include relation
         }
         catch (error) {
             console.error(`Error getting recipe variation item ID ${id}:`, error);
@@ -1886,7 +1885,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
             return await repo.find({
                 where: { productoId },
-                relations: ['adicional', 'presentacion'],
+                relations: ['adicional', 'presentacion', 'adicional.ingrediente'],
                 order: { adicionalId: 'ASC' }
             });
         }
@@ -1901,7 +1900,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
             return await repo.find({
                 where: { presentacionId },
-                relations: ['producto', 'adicional', 'presentacion']
+                relations: ['producto', 'adicional', 'presentacion', 'adicional.ingrediente']
             });
         }
         catch (error) {
@@ -1914,7 +1913,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
             return await repo.findOne({
                 where: { id },
-                relations: ['producto', 'adicional', 'presentacion']
+                relations: ['producto', 'adicional', 'presentacion', 'adicional.ingrediente']
             });
         }
         catch (error) {

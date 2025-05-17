@@ -807,11 +807,9 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('searchIngredientesByDescripcion', async (_event: IpcMainInvokeEvent, searchText: string) => {
-    console.info('Searching ingredientes by description', searchText);
     try {
       const repo = dataSource.getRepository(Ingrediente);
       if (!searchText || searchText.trim() === '') {
-        console.info('No search text, returning all ingredientes');
         return await repo.find({ order: { descripcion: 'ASC' }, take: 10 });
       }
       return await repo.createQueryBuilder('ingrediente')
@@ -958,8 +956,9 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const repo = dataSource.getRepository(RecetaVariacion);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`RecetaVariacion ID ${id} not found`);
-      // Add dependency checks (RecetaVariacionItem, PresentacionSabor)
-      const currentUser = getCurrentUser(); // Get current user at time of call
+      // delete all receta variacion items
+      const repoRecetaVariacionItem = dataSource.getRepository(RecetaVariacionItem);
+      await repoRecetaVariacionItem.delete({ variacionId: id });
       return await repo.remove(entity);
     } catch (error) {
       console.error(`Error deleting recipe variation ID ${id}:`, error);
@@ -982,7 +981,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   ipcMain.handle('getRecetaVariacionItems', async (_event: any, variacionId: number) => {
     try {
       const repo = dataSource.getRepository(RecetaVariacionItem);
-      return await repo.find({ where: { variacionId }, relations: ['ingrediente'] });
+      return await repo.find({ where: { variacionId }, relations: ['ingrediente', 'ingrediente.moneda'] });
     } catch (error) {
       console.error(`Error getting items for recipe variation ID ${variacionId}:`, error);
       throw error;
@@ -992,7 +991,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   ipcMain.handle('getRecetaVariacionItem', async (_event: any, id: number) => {
     try {
       const repo = dataSource.getRepository(RecetaVariacionItem);
-      return await repo.findOne({ where: { id }, relations: ['ingrediente'] }); // Include relation
+      return await repo.findOne({ where: { id }, relations: ['ingrediente', 'ingrediente.moneda'] }); // Include relation
     } catch (error) {
       console.error(`Error getting recipe variation item ID ${id}:`, error);
       throw error;
@@ -1944,7 +1943,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const repo = dataSource.getRepository(ProductoAdicional);
       return await repo.find({ 
         where: { productoId },
-        relations: ['adicional', 'presentacion'],
+        relations: ['adicional', 'presentacion', 'adicional.ingrediente'],
         order: { adicionalId: 'ASC' } 
       });
     } catch (error) {
@@ -1959,7 +1958,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const repo = dataSource.getRepository(ProductoAdicional);
       return await repo.find({ 
         where: { presentacionId },
-        relations: ['producto', 'adicional', 'presentacion'] 
+        relations: ['producto', 'adicional', 'presentacion', 'adicional.ingrediente'] 
       });
     } catch (error) {
       console.error(`Error getting producto adicionales by presentacion ID ${presentacionId}:`, error);
@@ -1972,7 +1971,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const repo = dataSource.getRepository(ProductoAdicional);
       return await repo.findOne({ 
         where: { id },
-        relations: ['producto', 'adicional', 'presentacion'] 
+        relations: ['producto', 'adicional', 'presentacion', 'adicional.ingrediente'] 
       });
     } catch (error) {
       console.error(`Error getting producto adicional ID ${id}:`, error);

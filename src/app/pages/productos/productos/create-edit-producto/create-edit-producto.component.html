@@ -395,7 +395,9 @@
             <thead>
               <tr>
                 <th>Adicional</th>
-                <th class="center-cell">Cantidad Default</th>
+                <th class="center-cell">Ingrediente</th>
+                <th class="center-cell">Cantidad</th>
+                <th class="center-cell">Precio</th>
                 <th class="center-cell">Activo</th>
                 <th class="center-cell">Acciones</th>
               </tr>
@@ -403,7 +405,9 @@
             <tbody>
               <tr *ngFor="let productoAdicional of productosAdicionales">
                 <td>{{ productoAdicional.adicional.nombre }}</td>
+                <td class="center-cell">{{ productoAdicional.adicional.ingrediente?.descripcion || 'N/A' }}</td>
                 <td class="center-cell">{{ productoAdicional.cantidadDefault || '-' }}</td>
+                <td class="center-cell">{{ productoAdicional.precioVenta | number:'1.0-2' }}</td>
                 <td class="center-cell">
                   <span class="status-badge" [ngClass]="productoAdicional.activo ? 'active' : 'inactive'">
                     {{ productoAdicional.activo ? "Activo" : "Inactivo" }}

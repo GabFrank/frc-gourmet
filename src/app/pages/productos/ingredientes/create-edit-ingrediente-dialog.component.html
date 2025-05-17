@@ -65,13 +65,13 @@
         </mat-form-field>
       </div>
 
-      <!-- Variation Selection (only shown when a recipe with variations is selected) -->
-      <div class="form-row" *ngIf="showVariacionSelect">
+      <!-- Variation Selection (only shown when a recipe with variations is selected), we need to display the description of the variation on the input-->
+      <div class="form-row">
         <mat-form-field class="full-width" appearance="outline">
           <mat-label>Variación</mat-label>
-          <mat-select formControlName="variacionId">
-            <mat-option *ngFor="let variacion of recetaVariaciones.get(ingredienteForm.get('recetaId')?.value || 0) || []" [value]="variacion.id">
-              {{ variacionesDisplayValues[variacion.id] }}
+          <mat-select formControlName="variacionId" (selectionChange)="onVariacionSelected($event)">
+            <mat-option *ngFor="let variacion of recetaVariaciones" [value]="variacion.id">
+              {{ variacion.descripcion }}
             </mat-option>
           </mat-select>
           <mat-hint>

@@ -269,6 +269,7 @@ export class CreateEditAdicionalSelectableDialogComponent implements OnInit {
   currentAdicionalId?: number;
   displayedColumns: string[] = [
     'nombre',
+    'cantidadDefault',
     'precioVentaUnitario',
     'activo',
     'acciones',
@@ -577,9 +578,22 @@ export class CreateEditAdicionalSelectableDialogComponent implements OnInit {
     this.adicionalForm.patchValue({ ingredienteId: ingrediente.id });
     this.selectedIngrediente = ingrediente;
     if (ingrediente.variacionId) {
+      console.log('ingrediente.variacionId', ingrediente.variacionId);
       this.costoRecetaVariacion = await firstValueFrom(
         this.repositoryService.getRecetaVariacionCosto(ingrediente.variacionId)
       );
+      console.log('costoRecetaVariacion', this.costoRecetaVariacion);
+    } else {
+      if(ingrediente.monedaId) {
+        this.costoRecetaVariacion = await firstValueFrom(
+          this.repositoryService.getValorEnMonedaPrincipal(ingrediente.monedaId, ingrediente.costo)
+        );
+      } else {
+        // notification warning
+        this.snackBar.open('El ingrediente no tiene una moneda asignada', 'Cerrar', {
+          duration: 3000,
+        });
+      }
     }
   }
 }

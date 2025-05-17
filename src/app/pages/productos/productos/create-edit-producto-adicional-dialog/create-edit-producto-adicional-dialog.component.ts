@@ -19,19 +19,23 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatCardModule } from '@angular/material/card';
-import { MAT_DIALOG_DATA, MatDialog, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
+import {
+  MAT_DIALOG_DATA,
+  MatDialog,
+  MatDialogRef,
+  MatDialogModule,
+} from '@angular/material/dialog';
 import { RepositoryService } from '../../../../database/repository.service';
 import { ProductoAdicional } from '../../../../database/entities/productos/producto-adicional.entity';
 import { Adicional } from '../../../../database/entities/productos/adicional.entity';
 import { Producto } from '../../../../database/entities/productos/producto.entity';
 import { Presentacion } from '../../../../database/entities/productos/presentacion.entity';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subscription, takeUntil } from 'rxjs';
 import { MatMenuModule } from '@angular/material/menu';
 import { CreateEditAdicionalDialogComponent } from '../../adicionales/create-edit-adicional-dialog/create-edit-adicional-dialog.component';
 import { CreateEditAdicionalSelectableDialogComponent } from '../create-edit-adicional-selectable-dialog/create-edit-adicional-selectable-dialog.component';
 import { Moneda } from 'src/app/database/entities/financiero/moneda.entity';
 import { CurrencyInputComponent } from 'src/app/shared/components/currency-input';
-
 
 export interface ProductoAdicionalDialogData {
   producto: Producto;
@@ -62,61 +66,62 @@ export interface ProductoAdicionalDialogData {
     CurrencyInputComponent,
   ],
   templateUrl: './create-edit-producto-adicional-dialog.component.html',
-  styles: [`
-    .producto-adicional-container {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      position: relative;
-    }
+  styles: [
+    `
+      .producto-adicional-container {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        position: relative;
+      }
 
-    .loading-shade {
-      position: absolute;
-      top: 0;
-      left: 0;
-      bottom: 0;
-      right: 0;
-      background: rgba(0, 0, 0, 0.15);
-      z-index: 1000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+      .loading-shade {
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        right: 0;
+        background: rgba(0, 0, 0, 0.15);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
 
-    .form-card {
-      margin-bottom: 16px;
-    }
+      .form-card {
+        margin-bottom: 16px;
+      }
 
-    .form-container {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
+      .form-container {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
 
-    .form-row {
-      display: flex;
-      gap: 16px;
-      width: 100%;
-    }
+      .form-row {
+        display: flex;
+        gap: 16px;
+        width: 100%;
+      }
 
-    .full-width {
-      width: 100%;
-    }
+      .full-width {
+        width: 100%;
+      }
 
-    .checkbox-row {
-      display: flex;
-      gap: 24px;
-      margin-top: 8px;
-    }
+      .checkbox-row {
+        display: flex;
+        gap: 24px;
+        margin-top: 8px;
+      }
 
-    .action-buttons {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      margin-top: 16px;
-    }
+      .action-buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 16px;
+      }
 
-    .details-metrics {
+      .details-metrics {
         display: flex;
         flex-wrap: wrap;
         gap: 24px;
@@ -129,7 +134,6 @@ export interface ProductoAdicionalDialogData {
           padding: 12px 16px;
           border-radius: 6px;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-
 
           // on dark mode text color is white on light mode text color is black
           .metric-label {
@@ -144,19 +148,20 @@ export interface ProductoAdicionalDialogData {
         }
       }
 
-    /* Dark theme styles */
-    :host-context(.dark-theme) {
-      .status-badge.active {
-        background-color: #1b5e20;
-        color: #e8f5e9;
-      }
+      /* Dark theme styles */
+      :host-context(.dark-theme) {
+        .status-badge.active {
+          background-color: #1b5e20;
+          color: #e8f5e9;
+        }
 
-      .status-badge.inactive {
-        background-color: #b71c1c;
-        color: #ffebee;
+        .status-badge.inactive {
+          background-color: #b71c1c;
+          color: #ffebee;
+        }
       }
-    }
-  `]
+    `,
+  ],
 })
 export class CreateEditProductoAdicionalDialogComponent implements OnInit {
   productoAdicionalForm: FormGroup;
@@ -171,6 +176,9 @@ export class CreateEditProductoAdicionalDialogComponent implements OnInit {
   // moneda principal
   monedaPrincipal: Moneda | null = null;
 
+  // cantidad default listener
+  cantidadDefaultListener: Subscription | null = null;
+
   constructor(
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
@@ -180,15 +188,28 @@ export class CreateEditProductoAdicionalDialogComponent implements OnInit {
     @Inject(MAT_DIALOG_DATA) public data: ProductoAdicionalDialogData
   ) {
     this.productoAdicionalForm = this.fb.group({
-      adicionalId: ['', Validators.required],
-      presentacionId: ['', Validators.required],
+      adicionalId: [null, Validators.required],
+      presentacionId: [null],
       cantidadDefault: [1],
       productoId: [this.data.producto.id, Validators.required],
       activo: [true],
-      precioVenta: [0]
+      precioVenta: [0],
     });
 
     this.isEditing = !!data.productoAdicional;
+
+    this.productoAdicionalForm
+      .get('cantidadDefault')
+      ?.valueChanges.subscribe((cantidadDefault) => {
+        // get precioVenta from selected adicional
+        const precioVenta = this.selectedAdicional?.precioVentaUnitario;
+        // update precioVenta if precioVenta is defined
+        if (precioVenta) {
+          this.productoAdicionalForm
+            .get('precioVenta')
+            ?.setValue(precioVenta * cantidadDefault);
+        }
+      });
   }
 
   ngOnInit(): void {
@@ -200,19 +221,29 @@ export class CreateEditProductoAdicionalDialogComponent implements OnInit {
     }
   }
 
+  ngOnDestroy(): void {
+    this.cantidadDefaultListener?.unsubscribe();
+  }
+
   async loadMonedaPrincipal(): Promise<void> {
-    this.monedaPrincipal = await firstValueFrom(this.repositoryService.getMonedaPrincipal());
+    this.monedaPrincipal = await firstValueFrom(
+      this.repositoryService.getMonedaPrincipal()
+    );
   }
 
   async loadData(): Promise<void> {
     this.isLoading = true;
     try {
       // Load adicionales
-      this.adicionales = await firstValueFrom(this.repositoryService.getAdicionales());
+      this.adicionales = await firstValueFrom(
+        this.repositoryService.getAdicionales()
+      );
 
       // Load presentaciones for this product
       this.presentaciones = await firstValueFrom(
-        this.repositoryService.getPresentacionesByProducto(this.data.producto.id)
+        this.repositoryService.getPresentacionesByProducto(
+          this.data.producto.id
+        )
       );
 
       // If we are in edit mode, preselect the adicional
@@ -245,15 +276,18 @@ export class CreateEditProductoAdicionalDialogComponent implements OnInit {
       presentacionId: productoAdicional.presentacionId,
       cantidadDefault: productoAdicional.cantidadDefault,
       activo: productoAdicional.activo,
-      precioVenta: productoAdicional.precioVenta
+      precioVenta: productoAdicional.precioVenta,
     });
   }
 
   async openAdicionalDialog(): Promise<void> {
-    const dialogRef = this.dialog.open(CreateEditAdicionalSelectableDialogComponent, {
-      width: '60vw',
-      maxHeight: '90vh',
-    });
+    const dialogRef = this.dialog.open(
+      CreateEditAdicionalSelectableDialogComponent,
+      {
+        width: '60vw',
+        maxHeight: '90vh',
+      }
+    );
 
     const result = await firstValueFrom(dialogRef.afterClosed());
     if (result && typeof result === 'object' && 'id' in result) {
@@ -265,7 +299,7 @@ export class CreateEditProductoAdicionalDialogComponent implements OnInit {
       this.productoAdicionalForm.patchValue({
         adicionalId: result.id,
         precioVenta: result.precioVentaUnitario,
-        cantidadDefault: result.cantidadDefault
+        cantidadDefault: result.cantidadDefault,
       });
 
       this.selectedAdicional = result as Adicional;
@@ -280,6 +314,13 @@ export class CreateEditProductoAdicionalDialogComponent implements OnInit {
 
     const formValue = this.productoAdicionalForm.getRawValue();
 
+    // Convert empty presentacionId to null
+    if (formValue.presentacionId === "") {
+      formValue.presentacionId = null;
+    }
+
+    console.log('formValue', formValue);
+
     this.isLoading = true;
 
     try {
@@ -290,54 +331,80 @@ export class CreateEditProductoAdicionalDialogComponent implements OnInit {
             this.data.productoAdicional.id,
             {
               ...formValue,
-              productoId: this.data.producto.id
+              productoId: this.data.producto.id,
             }
           )
         );
 
-        this.snackBar.open('Adicional de producto actualizado exitosamente', 'Cerrar', {
-          duration: 3000
-        });
+        this.snackBar.open(
+          'Adicional de producto actualizado exitosamente',
+          'Cerrar',
+          {
+            duration: 3000,
+          }
+        );
       } else {
         // Create new productoAdicional
         const response = await firstValueFrom(
           this.repositoryService.createProductoAdicional({
             ...formValue,
-            productoId: this.data.producto.id
+            productoId: this.data.producto.id,
           })
         );
 
         // Check if operation was successful
-        if (response && typeof response === 'object' && 'success' in response && !response.success) {
+        if (
+          response &&
+          typeof response === 'object' &&
+          'success' in response &&
+          !response.success
+        ) {
           // Handle duplicate entries
           if (response.error === 'duplicate') {
-            this.snackBar.open(response.message || 'Este adicional ya existe para este producto.', 'Cerrar', {
-              duration: 5000
-            });
+            this.snackBar.open(
+              response.message ||
+                'Este adicional ya existe para este producto.',
+              'Cerrar',
+              {
+                duration: 5000,
+              }
+            );
             return;
           } else {
-            throw new Error(response.message || 'Error desconocido al guardar el adicional de producto');
+            throw new Error(
+              response.message ||
+                'Error desconocido al guardar el adicional de producto'
+            );
           }
         }
 
-        this.snackBar.open('Adicional de producto creado exitosamente', 'Cerrar', {
-          duration: 3000
-        });
+        this.snackBar.open(
+          'Adicional de producto creado exitosamente',
+          'Cerrar',
+          {
+            duration: 3000,
+          }
+        );
       }
 
       this.dialogRef.close(true);
     } catch (error) {
       console.error('Error saving producto adicional:', error);
-      this.snackBar.open('Error al guardar el adicional de producto', 'Cerrar', {
-        duration: 3000
-      });
+      this.snackBar.open(
+        'Error al guardar el adicional de producto',
+        'Cerrar',
+        {
+          duration: 3000,
+        }
+      );
     } finally {
       this.isLoading = false;
     }
   }
 
   onAdicionalSelectionChange(adicionalId: number): void {
-    this.selectedAdicional = this.adicionales.find(a => a.id === adicionalId) || null;
+    this.selectedAdicional =
+      this.adicionales.find((a) => a.id === adicionalId) || null;
   }
 
   clearAdicional(): void {
@@ -348,4 +415,4 @@ export class CreateEditProductoAdicionalDialogComponent implements OnInit {
   cancel(): void {
     this.dialogRef.close();
   }
-} 
+}

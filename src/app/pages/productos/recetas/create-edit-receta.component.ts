@@ -78,6 +78,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
   recetaId?: number;
   variaciones: RecetaVariacion[] = [];
   variacionItems: { [key: number]: RecetaVariacionItem[] } = {};
+  variacionCostos: { [key: number]: number } = {};
   ingredientes: Ingrediente[] = [];
   tipoMedidaOptions = Object.values(TipoMedida);
   monedas: Moneda[] = [];
@@ -176,51 +177,9 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
     );
   }
 
-  getDefaultMonedaSimbolo(): string {
-    return this.defaultMonedaSimbolo;
-  }
 
-  getIngredientName(ingredienteId: number): string {
-    const ingrediente = this.ingredientes.find(i => i.id === ingredienteId);
-    return ingrediente ? ingrediente.descripcion : 'Desconocido';
-  }
-
-  getIngredientTipoMedida(ingredienteId: number): string {
-    const ingrediente = this.ingredientes.find(i => i.id === ingredienteId);
-    return ingrediente ? ingrediente.tipoMedida : '';
-  }
-
-  getIngredientMonedaSimbolo(ingredienteId: number): string {
-    const ingrediente = this.ingredientes.find(i => i.id === ingredienteId);
-    return ingrediente?.moneda?.simbolo || this.defaultMonedaSimbolo;
-  }
-
-  getIngredientUnitCost(ingredienteId: number): number {
-    const ingrediente = this.ingredientes.find(i => i.id === ingredienteId);
-    return ingrediente ? ingrediente.costo || 0 : 0;
-  }
-
-  getIngredientTotalCost(item: RecetaVariacionItem): number {
-    const ingrediente = this.ingredientes.find(i => i.id === item.ingredienteId);
-    if (!ingrediente || !item.activo) return 0;
-    return (ingrediente.costo || 0) * item.cantidad;
-  }
-
-  calculateVariationTotalCost(variacionId: number): number {
-    const items = this.getVariationIngredients(variacionId);
-    let total = 0;
-
-    for (const item of items) {
-      if (item.activo) {
-        total += this.getIngredientTotalCost(item);
-      }
-    }
-
-    return total;
-  }
-
-  calculateSuggestedPrice(variacionId: number): number {
-    const totalCost = this.calculateVariationTotalCost(variacionId);
+  async calculateSuggestedPrice(variacionId: number): Promise<number> {
+    const totalCost = await firstValueFrom(this.repositoryService.getRecetaVariacionCosto(variacionId));
     // Calculate the suggested price as total cost / 0.35
     // This implies a markup where the cost represents 35% of the final price
     return totalCost / 0.35;
@@ -262,10 +221,6 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
           }
         })
     );
-  }
-
-  getVariationIngredients(variacionId: number): RecetaVariacionItem[] {
-    return this.variacionItems[variacionId] || [];
   }
 
   addVariation(): void {
@@ -427,7 +382,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
     this.openVariationDialog(variacion);
   }
 
-  addIngredientToVariation(variacion: RecetaVariacion): void {
+  async addIngredientToVariation(variacion: RecetaVariacion): Promise<void> {
     // Open the ingredient dialog
     const dialogRef = this.dialog.open(CreateEditRecetaVariacionItemComponent, {
       width: '400px',
@@ -451,7 +406,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
 
         this.repositoryService.createRecetaVariacionItem(newItem)
           .subscribe({
-            next: (createdItem) => {
+            next: async (createdItem) => {
               // Add to local collection
               if (!this.variacionItems[variacion.id]) {
                 this.variacionItems[variacion.id] = [];
@@ -459,8 +414,8 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
               this.variacionItems[variacion.id].push(createdItem);
 
               // Calculate the new total cost
-              const newTotalCost = this.calculateVariationTotalCost(variacion.id);
-
+              const newTotalCost: number = await firstValueFrom(this.repositoryService.getRecetaVariacionCosto(variacion.id));
+              this.variacionCostos[variacion.id] = newTotalCost;
               // Update the variation's cost in the database
               this.repositoryService.updateRecetaVariacion(variacion.id, {
                 costo: newTotalCost
@@ -624,7 +579,7 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
           ingredienteId: result.ingredienteId,
           cantidad: result.cantidad
         }).subscribe({
-          next: (updatedItem) => {
+          next: async (updatedItem) => {
             // Update local data
             const variacionItems = this.variacionItems[variacion.id];
             const index = variacionItems.findIndex(i => i.id === item.id);
@@ -633,7 +588,8 @@ export class CreateEditRecetaComponent implements OnInit, OnDestroy {
             }
 
             // Update variation cost
-            const newTotalCost = this.calculateVariationTotalCost(variacion.id);
+            const newTotalCost: number = await firstValueFrom(this.repositoryService.getRecetaVariacionCosto(variacion.id));
+            this.variacionCostos[variacion.id] = newTotalCost;
             this.repositoryService.updateRecetaVariacion(variacion.id, {
               costo: newTotalCost
             }).subscribe({

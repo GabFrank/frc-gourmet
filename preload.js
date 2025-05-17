@@ -587,6 +587,9 @@ electron_1.contextBridge.exposeInMainWorld('api', {
     getMonedaCambioByMonedaPrincipal: async () => {
         return await electron_1.ipcRenderer.invoke('get-moneda-cambio-by-moneda-principal');
     },
+    getValorEnMonedaPrincipal: async (monedaId, valor) => {
+        return await electron_1.ipcRenderer.invoke('get-valor-en-moneda-principal', monedaId, valor);
+    },
     // Proveedor methods
     getProveedores: async () => {
         return await electron_1.ipcRenderer.invoke('getProveedores');

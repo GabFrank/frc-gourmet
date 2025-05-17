@@ -284,6 +284,7 @@ interface ElectronAPI {
   updateMonedaCambio: (monedaCambioId: number, monedaCambioData: Partial<MonedaCambio>) => Promise<any>;
   deleteMonedaCambio: (monedaCambioId: number) => Promise<any>;
   getMonedaCambioByMonedaPrincipal: () => Promise<MonedaCambio>;
+  getValorEnMonedaPrincipal: (monedaId: number, valor: number) => Promise<number>;
   // Proveedor methods
   getProveedores: () => Promise<Proveedor[]>;
   getProveedor: (proveedorId: number) => Promise<Proveedor>;
@@ -1335,6 +1336,10 @@ export class RepositoryService {
 
   getMonedaCambio(monedaCambioId: number): Observable<MonedaCambio> {
     return from(this.api.getMonedaCambio(monedaCambioId));
+  }
+
+  getValorEnMonedaPrincipal(monedaId: number, valor: number): Observable<number> {
+    return from(this.api.getValorEnMonedaPrincipal(monedaId, valor));
   }
 
   createMonedaCambio(monedaCambioData: Partial<MonedaCambio>): Observable<MonedaCambio> {

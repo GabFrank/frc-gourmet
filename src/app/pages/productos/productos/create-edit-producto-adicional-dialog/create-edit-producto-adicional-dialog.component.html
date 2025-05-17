@@ -75,13 +75,13 @@
 
         <!-- Cantidad Default field -->
         <div class="form-row">
-          <mat-form-field appearance="outline" class="full-width">
+          <mat-form-field appearance="outline">
             <mat-label>Cantidad a descontar de stock</mat-label>
             <input matInput type="number" formControlName="cantidadDefault" min="0" />
           </mat-form-field>
 
           <!-- precio venta field, replace with currency input -->
-          <app-currency-input *ngIf="monedaPrincipal?.id" formControlName="precioVenta" label="Precio de venta unitario"
+          <app-currency-input formControlName="precioVenta" label="Precio de venta final"
             [moneda]="monedaPrincipal" [required]="true" [min]="0.01">
           </app-currency-input>
         </div>

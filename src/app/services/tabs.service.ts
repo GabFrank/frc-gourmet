@@ -2,6 +2,7 @@ import { Injectable, Type, EventEmitter } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateEditProductoComponent } from '../pages/productos/productos/create-edit-producto/create-edit-producto.component';
+import { ListRecetasComponent } from '../pages/productos/recetas/list-recetas.component';
 
 export interface Tab {
   id: string;
@@ -37,7 +38,9 @@ export class TabsService {
     //open productos create edit producto
     // this.addTab('Productos Dashboard', ProductoDashboardComponent, null, 'productos-dashboard');
     // open producto v2 with id 1
-    this.addTab('Producto', CreateEditProductoComponent, { productoId: 1 });
+    // this.addTab('Producto', CreateEditProductoComponent, { productoId: 2 });
+    // open list recetas
+    this.addTab('Listado de recetas', ListRecetasComponent);
   }
 
   /**
