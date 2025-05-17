@@ -286,7 +286,7 @@ export class CreateEditProductoComponent implements OnInit, OnChanges, AfterView
 
   openCreateEditProductoAdicionalDialog(productoAdicional?: ProductoAdicional): void {
     const dialogConfig = new MatDialogConfig();
-    dialogConfig.width = '50%';
+    dialogConfig.width = '60vw';
     dialogConfig.disableClose = true;
     dialogConfig.data = {
       producto: this.producto,

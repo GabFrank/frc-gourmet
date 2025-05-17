@@ -29,6 +29,8 @@ import { firstValueFrom } from 'rxjs';
 import { MatMenuModule } from '@angular/material/menu';
 import { CreateEditAdicionalDialogComponent } from '../../adicionales/create-edit-adicional-dialog/create-edit-adicional-dialog.component';
 import { CreateEditAdicionalSelectableDialogComponent } from '../create-edit-adicional-selectable-dialog/create-edit-adicional-selectable-dialog.component';
+import { Moneda } from 'src/app/database/entities/financiero/moneda.entity';
+import { CurrencyInputComponent } from 'src/app/shared/components/currency-input';
 
 
 export interface ProductoAdicionalDialogData {
@@ -57,6 +59,7 @@ export interface ProductoAdicionalDialogData {
     MatTooltipModule,
     MatCardModule,
     MatMenuModule,
+    CurrencyInputComponent,
   ],
   templateUrl: './create-edit-producto-adicional-dialog.component.html',
   styles: [`
@@ -113,6 +116,34 @@ export interface ProductoAdicionalDialogData {
       margin-top: 16px;
     }
 
+    .details-metrics {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+        margin-bottom: 20px;
+        font-size: smaller;
+
+        .metric-item {
+          flex: 1;
+          min-width: 150px;
+          padding: 12px 16px;
+          border-radius: 6px;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+
+
+          // on dark mode text color is white on light mode text color is black
+          .metric-label {
+            display: block;
+            margin-bottom: 6px;
+            color: #8d8d8d;
+          }
+
+          .metric-value {
+            display: block;
+          }
+        }
+      }
+
     /* Dark theme styles */
     :host-context(.dark-theme) {
       .status-badge.active {
@@ -137,6 +168,9 @@ export class CreateEditProductoAdicionalDialogComponent implements OnInit {
   producto: Producto | null = null;
   selectedAdicional: Adicional | null = null;
 
+  // moneda principal
+  monedaPrincipal: Moneda | null = null;
+
   constructor(
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
@@ -150,13 +184,15 @@ export class CreateEditProductoAdicionalDialogComponent implements OnInit {
       presentacionId: ['', Validators.required],
       cantidadDefault: [1],
       productoId: [this.data.producto.id, Validators.required],
-      activo: [true]
+      activo: [true],
+      precioVenta: [0]
     });
 
     this.isEditing = !!data.productoAdicional;
   }
 
   ngOnInit(): void {
+    this.loadMonedaPrincipal();
     this.loadData();
 
     if (this.isEditing && this.data.productoAdicional) {
@@ -164,12 +200,16 @@ export class CreateEditProductoAdicionalDialogComponent implements OnInit {
     }
   }
 
+  async loadMonedaPrincipal(): Promise<void> {
+    this.monedaPrincipal = await firstValueFrom(this.repositoryService.getMonedaPrincipal());
+  }
+
   async loadData(): Promise<void> {
     this.isLoading = true;
     try {
       // Load adicionales
       this.adicionales = await firstValueFrom(this.repositoryService.getAdicionales());
-      
+
       // Load presentaciones for this product
       this.presentaciones = await firstValueFrom(
         this.repositoryService.getPresentacionesByProducto(this.data.producto.id)
@@ -204,23 +244,28 @@ export class CreateEditProductoAdicionalDialogComponent implements OnInit {
       adicionalId: productoAdicional.adicionalId,
       presentacionId: productoAdicional.presentacionId,
       cantidadDefault: productoAdicional.cantidadDefault,
-      activo: productoAdicional.activo
+      activo: productoAdicional.activo,
+      precioVenta: productoAdicional.precioVenta
     });
   }
 
   async openAdicionalDialog(): Promise<void> {
     const dialogRef = this.dialog.open(CreateEditAdicionalSelectableDialogComponent, {
-      width: '50%',
+      width: '60vw',
+      maxHeight: '90vh',
     });
 
     const result = await firstValueFrom(dialogRef.afterClosed());
     if (result && typeof result === 'object' && 'id' in result) {
+      console.log('result', result);
       // Refresh adicionales list
       await this.loadData();
 
       // Select the newly created adicional
       this.productoAdicionalForm.patchValue({
-        adicionalId: result.id
+        adicionalId: result.id,
+        precioVenta: result.precioVentaUnitario,
+        cantidadDefault: result.cantidadDefault
       });
 
       this.selectedAdicional = result as Adicional;

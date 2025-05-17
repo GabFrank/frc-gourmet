@@ -50,6 +50,10 @@ __decorate([
     __metadata("design:type", Number)
 ], ProductoAdicional.prototype, "cantidadDefault", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'precio_venta', type: 'decimal', precision: 10, scale: 2, nullable: true }),
+    __metadata("design:type", Number)
+], ProductoAdicional.prototype, "precioVenta", void 0);
+__decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
 ], ProductoAdicional.prototype, "activo", void 0);

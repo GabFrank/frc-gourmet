@@ -194,8 +194,8 @@ import { MatAutocompleteModule } from '@angular/material/autocomplete';
       }
 
       .ingrediente-info {
-        font-size: 12px;
         color: rgb(136, 136, 136);
+        font-size: smaller;
       }
 
       .details-metrics {
@@ -203,6 +203,7 @@ import { MatAutocompleteModule } from '@angular/material/autocomplete';
         flex-wrap: wrap;
         gap: 24px;
         margin-bottom: 20px;
+        font-size: smaller;
 
         .metric-item {
           flex: 1;
@@ -211,18 +212,16 @@ import { MatAutocompleteModule } from '@angular/material/autocomplete';
           border-radius: 6px;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 
+
           // on dark mode text color is white on light mode text color is black
           .metric-label {
             display: block;
-            font-size: 14px;
             margin-bottom: 6px;
             color: #8d8d8d;
           }
 
           .metric-value {
             display: block;
-            font-size: 18px;
-            font-weight: 500;
           }
         }
       }
@@ -293,7 +292,7 @@ export class CreateEditAdicionalSelectableDialogComponent implements OnInit {
   ingredienteSearchCtrl = new FormControl('');
   recetaSearchCtrl = new FormControl('');
   selectedIngrediente: Ingrediente | null = null;
-  costoRecetaVariacion: number = 0;
+  costoRecetaVariacion = 0;
 
   // Filtered options for autocomplete
   filteredIngredientes: Observable<Ingrediente[]>;
@@ -310,10 +309,10 @@ export class CreateEditAdicionalSelectableDialogComponent implements OnInit {
   ) {
     this.adicionalForm = this.fb.group({
       nombre: ['', Validators.required],
-      monedaId: [null, Validators.required],
+      monedaId: [null],
       precioVentaUnitario: [0, [Validators.required, Validators.min(0)]],
       activo: [true],
-      ingredienteId: [null],
+      ingredienteId: [null, Validators.required],
       cantidadDefault: [1, [Validators.required, Validators.min(0.01)]],
     });
 
@@ -404,7 +403,14 @@ export class CreateEditAdicionalSelectableDialogComponent implements OnInit {
   }
 
   async saveAdicional(): Promise<void> {
-    if (this.adicionalForm.invalid) return;
+    if (this.adicionalForm.invalid){
+      //log all invalid fields, erros is null
+      console.log(this.adicionalForm);
+      this.snackBar.open('Debe completar todos los campos', 'Cerrar', {
+        duration: 3000,
+      });
+      return;
+    }
 
     this.isLoading = true;
     const formValue = this.adicionalForm.value;
@@ -454,7 +460,7 @@ export class CreateEditAdicionalSelectableDialogComponent implements OnInit {
     }
   }
 
-  editAdicional(adicional: Adicional): void {
+  async editAdicional(adicional: Adicional): Promise<void> {
     this.isEditing = true;
     this.currentAdicionalId = adicional.id;
 
@@ -462,7 +468,19 @@ export class CreateEditAdicionalSelectableDialogComponent implements OnInit {
       nombre: adicional.nombre,
       precioVentaUnitario: adicional.precioVentaUnitario,
       activo: adicional.activo,
+      ingredienteId: adicional.ingredienteId,
+      cantidadDefault: adicional.cantidadDefault,
     });
+    // select the ingrediente
+    if (adicional.ingrediente) {
+      this.selectedIngrediente = adicional.ingrediente;
+      this.ingredienteSearchCtrl.setValue(this.displayIngrediente(adicional.ingrediente));
+      if (adicional.ingrediente.variacionId) {
+        this.costoRecetaVariacion = await firstValueFrom(
+          this.repositoryService.getRecetaVariacionCosto(adicional.ingrediente.variacionId)
+        );
+      }
+    }
   }
 
   async deleteAdicional(adicional: Adicional): Promise<void> {

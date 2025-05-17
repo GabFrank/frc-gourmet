@@ -44,6 +44,10 @@ __decorate([
     __metadata("design:type", Number)
 ], Adicional.prototype, "precioVentaUnitario", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'cantidad_default', type: 'int', nullable: true }),
+    __metadata("design:type", Number)
+], Adicional.prototype, "cantidadDefault", void 0);
+__decorate([
     (0, typeorm_1.Column)({ name: 'moneda_id', nullable: true }),
     __metadata("design:type", Number)
 ], Adicional.prototype, "monedaId", void 0);

@@ -16,7 +16,7 @@
       <form [formGroup]="productoAdicionalForm" class="form-container">
         <!-- Adicional field -->
         <div class="form-row">
-            <!-- replace mat select with a search input readonly with value of adicional.nombre -->
+          <!-- replace mat select with a search input readonly with value of adicional.nombre -->
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Adicional</mat-label>
             <input matInput type="text" [value]="selectedAdicional?.nombre" readonly>
@@ -25,7 +25,8 @@
             </mat-error>
           </mat-form-field>
 
-          <button mat-icon-button color="primary" type="button" (click)="openAdicionalDialog()" matTooltip="Crear nuevo adicional">
+          <button mat-icon-button color="primary" type="button" (click)="openAdicionalDialog()"
+            matTooltip="Crear nuevo adicional">
             <mat-icon>search</mat-icon>
           </button>
           <!-- add clear button -->
@@ -34,6 +35,29 @@
           </button>
         </div>
 
+        <!-- display adicional detail info if selectedAdicional is not null -->
+        <div class="form-row" *ngIf="selectedAdicional && selectedAdicional.ingrediente">
+
+          <div class="details-metrics">
+            <div class="metric-item">
+              <span class="metric-label">Ingrediente:</span>
+              <span>{{ selectedAdicional.ingrediente.descripcion}}</span>
+            </div>
+          </div>
+
+          <div class="details-metrics">
+            <div class="metric-item">
+              <span class="metric-label">Cantidad por defecto:</span>
+              <span>{{ selectedAdicional.cantidadDefault | number:'1.0-2' }}</span>
+            </div>
+
+            <div class="metric-item">
+              <span class="metric-label">Precio de venta unitario:</span>
+              <span>{{ monedaPrincipal?.simbolo }} {{ (selectedAdicional.precioVentaUnitario) | number:'1.0-2'
+                }}</span>
+            </div>
+          </div>
+        </div>
         <!-- Presentacion field, we will not use this field -->
         <div class="form-row" *ngIf="false">
           <mat-form-field appearance="outline" class="full-width">
@@ -52,9 +76,14 @@
         <!-- Cantidad Default field -->
         <div class="form-row">
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Cantidad por defecto</mat-label>
+            <mat-label>Cantidad a descontar de stock</mat-label>
             <input matInput type="number" formControlName="cantidadDefault" min="0" />
           </mat-form-field>
+
+          <!-- precio venta field, replace with currency input -->
+          <app-currency-input *ngIf="monedaPrincipal?.id" formControlName="precioVenta" label="Precio de venta unitario"
+            [moneda]="monedaPrincipal" [required]="true" [min]="0.01">
+          </app-currency-input>
         </div>
 
         <!-- Activo toggle -->
@@ -69,9 +98,10 @@
     <!-- Action buttons -->
     <mat-card-actions class="action-buttons">
       <button mat-button (click)="cancel()">Cancelar</button>
-      <button mat-raised-button color="primary" [disabled]="productoAdicionalForm.invalid || isLoading" (click)="save()">
+      <button mat-raised-button color="primary" [disabled]="productoAdicionalForm.invalid || isLoading"
+        (click)="save()">
         {{ isEditing ? 'Actualizar' : 'Guardar' }}
       </button>
     </mat-card-actions>
   </mat-card>
-</div> 
+</div>

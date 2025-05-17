@@ -62,7 +62,7 @@
           <div class="details-metrics">
             <div class="metric-item">
               <span class="metric-label">Tipo de medida:</span>
-              <span class="metric-value">{{ selectedIngrediente?.tipoMedida }}</span>
+              <span>{{ selectedIngrediente?.tipoMedida }}</span>
             </div>
             <!-- <div class="metric-item">
               <span class="metric-label">Unidad de medida:</span>
@@ -70,7 +70,7 @@
             </div> -->
             <div class="metric-item">
               <span class="metric-label">Costo:</span>
-              <span class="metric-value">{{ monedaPrincipal?.simbolo }} {{ (costoRecetaVariacion) | number:'1.0-2' }}</span>
+              <span>{{ monedaPrincipal?.simbolo }} {{ (costoRecetaVariacion) | number:'1.0-2' }}</span>
             </div>
           </div>
         </div>
@@ -199,7 +199,7 @@
         <ng-container matColumnDef="precioVentaUnitario">
           <th mat-header-cell *matHeaderCellDef>Precio Venta</th>
           <td mat-cell *matCellDef="let item">
-            {{ item.precioVentaUnitario | number : "1.2-2" }}
+            {{ item.precioVentaUnitario | number : "1.0-2" }}
           </td>
         </ng-container>
 

@@ -34,6 +34,10 @@ export class ProductoAdicional extends BaseModel {
   @Column({ name: 'cantidad_default', type: 'int', nullable: true })
   cantidadDefault?: number;
 
+  // add precio_venta
+  @Column({ name: 'precio_venta', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  precioVenta?: number;
+
   @Column({ default: true })
   activo!: boolean;
 } 
