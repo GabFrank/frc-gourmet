@@ -11,7 +11,8 @@ export class RecetaVariacionItem extends BaseModel {
   @Column({ name: 'variacion_id' })
   variacionId!: number;
 
-  @ManyToOne('RecetaVariacion', 'items')
+  // add onDelete: 'CASCADE'
+  @ManyToOne('RecetaVariacion', 'items', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'variacion_id' })
   variacion!: RecetaVariacion;
 

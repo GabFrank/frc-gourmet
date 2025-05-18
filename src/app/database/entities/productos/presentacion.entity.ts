@@ -36,7 +36,8 @@ export class Presentacion extends BaseModel {
   @Column({ name: 'producto_id' })
   productoId!: number;
 
-  @ManyToOne('Producto', 'presentaciones')
+  // add onDelete: 'CASCADE'
+  @ManyToOne('Producto', 'presentaciones', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'producto_id' })
   producto!: Producto;
 

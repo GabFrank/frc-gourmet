@@ -17,7 +17,9 @@ export enum EstadoVentaItem {
  */
 @Entity('venta_items')
 export class VentaItem extends BaseModel {
-  @ManyToOne('Venta', 'items')
+
+  // add onDelete: 'CASCADE'
+  @ManyToOne('Venta', 'items', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'venta_id' })
   venta!: Venta;
 

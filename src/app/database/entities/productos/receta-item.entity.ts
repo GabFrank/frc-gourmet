@@ -18,7 +18,8 @@ export class RecetaItem extends BaseModel {
   @Column({ name: 'ingrediente_id' })
   ingredienteId!: number;
 
-  @ManyToOne('Ingrediente', 'recetaItems')
+  // add onDelete: 'CASCADE'
+  @ManyToOne('Ingrediente', 'recetaItems', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'ingrediente_id' })
   ingrediente!: Ingrediente;
 

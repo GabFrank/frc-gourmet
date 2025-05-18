@@ -35,6 +35,7 @@ export class Receta extends BaseModel {
   @OneToMany('RecetaItem', 'receta')
   items!: RecetaItem[];
 
+  // delete all receta variaciones when the receta is deleted
   @OneToMany('RecetaVariacion', 'receta')
   variaciones!: RecetaVariacion[];
 }

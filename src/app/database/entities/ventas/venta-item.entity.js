@@ -34,7 +34,7 @@ let VentaItem = VentaItem_1 = class VentaItem extends base_entity_1.BaseModel {
     }
 };
 __decorate([
-    (0, typeorm_1.ManyToOne)('Venta', 'items'),
+    (0, typeorm_1.ManyToOne)('Venta', 'items', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'venta_id' }),
     __metadata("design:type", Function)
 ], VentaItem.prototype, "venta", void 0);

@@ -668,8 +668,6 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const repo = dataSource.getRepository(Receta);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Receta ID ${id} not found`);
-       // Add dependency checks (RecetaItem, PresentacionSabor, RecetaVariacion)
-      const currentUser = getCurrentUser(); // Get current user at time of call
       return await repo.remove(entity);
     } catch (error) {
       console.error(`Error deleting receta ID ${id}:`, error);
@@ -956,9 +954,6 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const repo = dataSource.getRepository(RecetaVariacion);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`RecetaVariacion ID ${id} not found`);
-      // delete all receta variacion items
-      const repoRecetaVariacionItem = dataSource.getRepository(RecetaVariacionItem);
-      await repoRecetaVariacionItem.delete({ variacionId: id });
       return await repo.remove(entity);
     } catch (error) {
       console.error(`Error deleting recipe variation ID ${id}:`, error);

@@ -663,8 +663,6 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             const entity = await repo.findOneBy({ id });
             if (!entity)
                 throw new Error(`Receta ID ${id} not found`);
-            // Add dependency checks (RecetaItem, PresentacionSabor, RecetaVariacion)
-            const currentUser = getCurrentUser(); // Get current user at time of call
             return await repo.remove(entity);
         }
         catch (error) {
@@ -959,9 +957,6 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
             const entity = await repo.findOneBy({ id });
             if (!entity)
                 throw new Error(`RecetaVariacion ID ${id} not found`);
-            // delete all receta variacion items
-            const repoRecetaVariacionItem = dataSource.getRepository(receta_variacion_item_entity_1.RecetaVariacionItem);
-            await repoRecetaVariacionItem.delete({ variacionId: id });
             return await repo.remove(entity);
         }
         catch (error) {
