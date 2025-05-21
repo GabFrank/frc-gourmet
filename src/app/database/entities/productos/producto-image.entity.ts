@@ -20,7 +20,7 @@ export class ProductoImage extends BaseModel {
   @Column({ name: 'producto_id' })
   productoId!: number;
 
-  @ManyToOne('Producto', 'images')
+  @ManyToOne('Producto', 'images', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'producto_id' })
   producto!: Producto;
 }

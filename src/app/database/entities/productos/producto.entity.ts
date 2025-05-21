@@ -66,33 +66,33 @@ export class Producto extends BaseModel {
   @Column({ name: 'subcategoria_id' })
   subcategoriaId!: number;
 
-  @ManyToOne('Subcategoria', 'productos')
+  @ManyToOne('Subcategoria', 'productos', { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'subcategoria_id' })
   subcategoria!: Subcategoria;
 
   // replace receta with recetaVariacion
-  @ManyToOne('RecetaVariacion', { nullable: true })
+  @ManyToOne('RecetaVariacion', { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'receta_variacion_id' })
   recetaVariacion?: RecetaVariacion;
 
   @Column({ name: 'receta_variacion_id', nullable: true })
   recetaVariacionId?: number;
 
-  @OneToMany('ProductoImage', 'producto')
+  @OneToMany('ProductoImage', 'producto', { onDelete: 'CASCADE' })
   images!: ProductoImage[];
 
-  @OneToMany('Presentacion', 'producto')
+  @OneToMany('Presentacion', 'producto', { onDelete: 'CASCADE' })
   presentaciones!: Presentacion[];
 
-  @OneToMany('IntercambioIngrediente', 'producto')
+  @OneToMany('IntercambioIngrediente', 'producto', { onDelete: 'CASCADE' })
   intercambioIngredientes!: IntercambioIngrediente[];
   
-  @OneToMany('ObservacionProducto', 'producto')
+  @OneToMany('ObservacionProducto', 'producto', { onDelete: 'CASCADE' })
   observacionesProductos!: ObservacionProducto[];
   
-  @OneToMany('ProductoAdicional', 'producto')
+  @OneToMany('ProductoAdicional', 'producto', { onDelete: 'CASCADE' })
   productosAdicionales!: ProductoAdicional[];
 
-  @OneToMany('CostoPorProducto', 'producto')
+  @OneToMany('CostoPorProducto', 'producto', { onDelete: 'CASCADE' })
   costos!: CostoPorProducto[];
 }

@@ -59,7 +59,7 @@ __decorate([
     __metadata("design:type", Number)
 ], Ingrediente.prototype, "recetaId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Receta', { nullable: true }),
+    (0, typeorm_1.ManyToOne)('Receta', { nullable: true, onDelete: 'SET NULL' }),
     (0, typeorm_1.JoinColumn)({ name: 'receta_id' }),
     __metadata("design:type", Function)
 ], Ingrediente.prototype, "receta", void 0);
@@ -68,7 +68,7 @@ __decorate([
     __metadata("design:type", Number)
 ], Ingrediente.prototype, "variacionId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('RecetaVariacion', { nullable: true }),
+    (0, typeorm_1.ManyToOne)('RecetaVariacion', { nullable: true, onDelete: 'SET NULL' }),
     (0, typeorm_1.JoinColumn)({ name: 'variacion_id' }),
     __metadata("design:type", Function)
 ], Ingrediente.prototype, "variacion", void 0);
@@ -81,7 +81,7 @@ __decorate([
     __metadata("design:type", Number)
 ], Ingrediente.prototype, "monedaId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Moneda', { nullable: true }),
+    (0, typeorm_1.ManyToOne)('Moneda', { nullable: true, onDelete: 'SET NULL' }),
     (0, typeorm_1.JoinColumn)({ name: 'moneda_id' }),
     __metadata("design:type", Function)
 ], Ingrediente.prototype, "moneda", void 0);

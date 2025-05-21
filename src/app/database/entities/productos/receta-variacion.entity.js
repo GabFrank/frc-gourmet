@@ -47,7 +47,7 @@ __decorate([
     __metadata("design:type", Number)
 ], RecetaVariacion.prototype, "costo", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)('RecetaVariacionItem', 'variacion'),
+    (0, typeorm_1.OneToMany)('RecetaVariacionItem', 'variacion', { onDelete: 'CASCADE' }),
     __metadata("design:type", Array)
 ], RecetaVariacion.prototype, "items", void 0);
 RecetaVariacion = __decorate([

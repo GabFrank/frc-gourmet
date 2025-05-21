@@ -22,7 +22,7 @@ __decorate([
     __metadata("design:type", Number)
 ], ObservacionProducto.prototype, "productoId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Producto', 'observacionesProductos'),
+    (0, typeorm_1.ManyToOne)('Producto', 'observacionesProductos', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'producto_id' }),
     __metadata("design:type", Function)
 ], ObservacionProducto.prototype, "producto", void 0);
@@ -31,7 +31,7 @@ __decorate([
     __metadata("design:type", Number)
 ], ObservacionProducto.prototype, "observacionId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Observacion'),
+    (0, typeorm_1.ManyToOne)('Observacion', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'observacion_id' }),
     __metadata("design:type", Function)
 ], ObservacionProducto.prototype, "observacion", void 0);

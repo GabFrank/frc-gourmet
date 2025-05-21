@@ -19,7 +19,7 @@ export class RecetaVariacionItem extends BaseModel {
   @Column({ name: 'ingrediente_id' })
   ingredienteId!: number;
 
-  @ManyToOne('Ingrediente', 'variacionItems')
+  @ManyToOne('Ingrediente', 'variacionItems', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'ingrediente_id' })
   ingrediente!: Ingrediente;
 

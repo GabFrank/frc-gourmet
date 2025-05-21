@@ -14,32 +14,32 @@ export class PresentacionSabor extends BaseModel {
   @Column({ name: 'presentacion_id' })
   presentacionId!: number;
 
-  @ManyToOne('Presentacion', 'presentacionesSabores')
+  @ManyToOne('Presentacion', 'presentacionesSabores', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'presentacion_id' })
   presentacion!: Presentacion;
 
   @Column({ name: 'sabor_id' })
   saborId!: number;
 
-  @ManyToOne('Sabor', 'presentacionesSabores')
+  @ManyToOne('Sabor', 'presentacionesSabores', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'sabor_id' })
   sabor!: Sabor;
 
   @Column({ name: 'receta_id', nullable: true })
   recetaId?: number;
 
-  @ManyToOne('Receta', { nullable: true })
+  @ManyToOne('Receta', { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'receta_id' })
   receta?: Receta;
 
   @Column({ name: 'variacion_id', nullable: true })
   variacionId?: number;
 
-  @ManyToOne('RecetaVariacion', { nullable: true })
+  @ManyToOne('RecetaVariacion', { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'variacion_id' })
   variacion?: RecetaVariacion;
 
-  @OneToMany('PrecioVenta', 'presentacionSabor')
+  @OneToMany('PrecioVenta', 'presentacionSabor', { onDelete: 'CASCADE' })
   preciosVenta!: PrecioVenta[];
 
   @Column({ default: true })

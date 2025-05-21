@@ -657,7 +657,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         }
     });
     electron_1.ipcMain.handle('deleteReceta', async (_event, id) => {
-        // Note: Hard delete.
+        // Note: Hard delete. add detailed logging to specify constraint key error  
         try {
             const repo = dataSource.getRepository(receta_entity_1.Receta);
             const entity = await repo.findOneBy({ id });

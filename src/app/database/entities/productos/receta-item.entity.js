@@ -22,7 +22,7 @@ __decorate([
     __metadata("design:type", Number)
 ], RecetaItem.prototype, "recetaId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Receta', 'items'),
+    (0, typeorm_1.ManyToOne)('Receta', 'items', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'receta_id' }),
     __metadata("design:type", Function)
 ], RecetaItem.prototype, "receta", void 0);

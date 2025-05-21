@@ -663,7 +663,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('deleteReceta', async (_event: any, id: number) => {
-    // Note: Hard delete.
+    // Note: Hard delete. add detailed logging to specify constraint key error  
     try {
       const repo = dataSource.getRepository(Receta);
       const entity = await repo.findOneBy({ id });

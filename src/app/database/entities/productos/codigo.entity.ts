@@ -19,7 +19,7 @@ export class Codigo extends BaseModel {
   @Column({ name: 'presentacion_id' })
   presentacionId!: number;
 
-  @ManyToOne('Presentacion', 'codigos')
+  @ManyToOne('Presentacion', 'codigos', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'presentacion_id' })
   presentacion!: Presentacion;
 

@@ -35,7 +35,7 @@ __decorate([
     __metadata("design:type", Number)
 ], Adicional.prototype, "recetaId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Receta', { nullable: true }),
+    (0, typeorm_1.ManyToOne)('Receta', { nullable: true, onDelete: 'SET NULL' }),
     (0, typeorm_1.JoinColumn)({ name: 'receta_id' }),
     __metadata("design:type", Function)
 ], Adicional.prototype, "receta", void 0);

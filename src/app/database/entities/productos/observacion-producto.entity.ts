@@ -11,14 +11,14 @@ export class ObservacionProducto extends BaseModel {
   @Column({ name: 'producto_id' })
   productoId!: number;
 
-  @ManyToOne('Producto', 'observacionesProductos')
+  @ManyToOne('Producto', 'observacionesProductos', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'producto_id' })
   producto!: Producto;
 
   @Column({ name: 'observacion_id' })
   observacionId!: number;
 
-  @ManyToOne('Observacion')
+  @ManyToOne('Observacion', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'observacion_id' })
   observacion!: Observacion;
 

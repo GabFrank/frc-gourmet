@@ -32,7 +32,7 @@ __decorate([
     __metadata("design:type", Number)
 ], CostoPorProducto.prototype, "productoId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => producto_entity_1.Producto, producto => producto.costos),
+    (0, typeorm_1.ManyToOne)(() => producto_entity_1.Producto, producto => producto.costos, { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'producto_id' }),
     __metadata("design:type", producto_entity_1.Producto)
 ], CostoPorProducto.prototype, "producto", void 0);
@@ -50,7 +50,7 @@ __decorate([
     __metadata("design:type", Number)
 ], CostoPorProducto.prototype, "monedaId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => moneda_entity_1.Moneda),
+    (0, typeorm_1.ManyToOne)(() => moneda_entity_1.Moneda, { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'moneda_id' }),
     __metadata("design:type", moneda_entity_1.Moneda)
 ], CostoPorProducto.prototype, "moneda", void 0);

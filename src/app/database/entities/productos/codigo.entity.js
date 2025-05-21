@@ -31,7 +31,7 @@ __decorate([
     __metadata("design:type", Number)
 ], Codigo.prototype, "presentacionId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Presentacion', 'codigos'),
+    (0, typeorm_1.ManyToOne)('Presentacion', 'codigos', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'presentacion_id' }),
     __metadata("design:type", Function)
 ], Codigo.prototype, "presentacion", void 0);

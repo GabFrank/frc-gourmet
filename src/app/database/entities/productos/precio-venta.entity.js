@@ -24,7 +24,7 @@ __decorate([
     __metadata("design:type", Number)
 ], PrecioVenta.prototype, "presentacionId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Presentacion', 'preciosVenta', { nullable: true }),
+    (0, typeorm_1.ManyToOne)('Presentacion', 'preciosVenta', { nullable: true, onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'presentacion_id' }),
     __metadata("design:type", Function)
 ], PrecioVenta.prototype, "presentacion", void 0);
@@ -33,7 +33,7 @@ __decorate([
     __metadata("design:type", Number)
 ], PrecioVenta.prototype, "presentacionSaborId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('PresentacionSabor', 'preciosVenta', { nullable: true }),
+    (0, typeorm_1.ManyToOne)('PresentacionSabor', 'preciosVenta', { nullable: true, onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'presentacion_sabor_id' }),
     __metadata("design:type", Function)
 ], PrecioVenta.prototype, "presentacionSabor", void 0);
@@ -42,7 +42,7 @@ __decorate([
     __metadata("design:type", Number)
 ], PrecioVenta.prototype, "comboId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Combo', 'preciosVenta', { nullable: true }),
+    (0, typeorm_1.ManyToOne)('Combo', 'preciosVenta', { nullable: true, onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'combo_id' }),
     __metadata("design:type", Function)
 ], PrecioVenta.prototype, "combo", void 0);
@@ -51,7 +51,7 @@ __decorate([
     __metadata("design:type", Number)
 ], PrecioVenta.prototype, "monedaId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Moneda'),
+    (0, typeorm_1.ManyToOne)('Moneda', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'moneda_id' }),
     __metadata("design:type", moneda_entity_1.Moneda)
 ], PrecioVenta.prototype, "moneda", void 0);
@@ -60,7 +60,7 @@ __decorate([
     __metadata("design:type", Number)
 ], PrecioVenta.prototype, "tipoPrecioId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => tipo_precio_entity_1.TipoPrecio, { nullable: true }),
+    (0, typeorm_1.ManyToOne)(() => tipo_precio_entity_1.TipoPrecio, { nullable: true, onDelete: 'SET NULL' }),
     (0, typeorm_1.JoinColumn)({ name: 'tipo_precio_id' }),
     __metadata("design:type", tipo_precio_entity_1.TipoPrecio)
 ], PrecioVenta.prototype, "tipoPrecio", void 0);

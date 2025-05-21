@@ -22,7 +22,7 @@ __decorate([
     __metadata("design:type", Number)
 ], IntercambioIngrediente.prototype, "productoId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Producto', 'intercambioIngredientes'),
+    (0, typeorm_1.ManyToOne)('Producto', 'intercambioIngredientes', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'producto_id' }),
     __metadata("design:type", Function)
 ], IntercambioIngrediente.prototype, "producto", void 0);
@@ -31,7 +31,7 @@ __decorate([
     __metadata("design:type", Number)
 ], IntercambioIngrediente.prototype, "saborId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Sabor', 'intercambioIngredientes', { nullable: true }),
+    (0, typeorm_1.ManyToOne)('Sabor', 'intercambioIngredientes', { nullable: true, onDelete: 'SET NULL' }),
     (0, typeorm_1.JoinColumn)({ name: 'sabor_id' }),
     __metadata("design:type", Function)
 ], IntercambioIngrediente.prototype, "sabor", void 0);
@@ -40,7 +40,7 @@ __decorate([
     __metadata("design:type", Number)
 ], IntercambioIngrediente.prototype, "ingredienteOriginalId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Ingrediente', 'intercambiosOrigen'),
+    (0, typeorm_1.ManyToOne)('Ingrediente', 'intercambiosOrigen', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'ingrediente_original_id' }),
     __metadata("design:type", Function)
 ], IntercambioIngrediente.prototype, "ingredienteOriginal", void 0);
@@ -49,7 +49,7 @@ __decorate([
     __metadata("design:type", Number)
 ], IntercambioIngrediente.prototype, "ingredienteReemplazoId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Ingrediente', 'intercambiosReemplazo'),
+    (0, typeorm_1.ManyToOne)('Ingrediente', 'intercambiosReemplazo', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'ingrediente_reemplazo_id' }),
     __metadata("design:type", Function)
 ], IntercambioIngrediente.prototype, "ingredienteReemplazo", void 0);

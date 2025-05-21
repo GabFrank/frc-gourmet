@@ -32,10 +32,10 @@ export class Receta extends BaseModel {
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   cantidad!: number;
 
-  @OneToMany('RecetaItem', 'receta')
+  @OneToMany('RecetaItem', 'receta', { onDelete: 'CASCADE' })
   items!: RecetaItem[];
 
   // delete all receta variaciones when the receta is deleted
-  @OneToMany('RecetaVariacion', 'receta')
+  @OneToMany('RecetaVariacion', 'receta', { onDelete: 'CASCADE' })
   variaciones!: RecetaVariacion[];
 }

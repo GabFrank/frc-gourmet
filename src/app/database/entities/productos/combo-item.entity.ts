@@ -11,14 +11,14 @@ export class ComboItem extends BaseModel {
   @Column({ name: 'combo_id' })
   comboId!: number;
 
-  @ManyToOne('Combo', 'items')
+  @ManyToOne('Combo', 'items', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'combo_id' })
   combo!: Combo;
 
   @Column({ name: 'presentacion_id' })
   presentacionId!: number;
 
-  @ManyToOne('Presentacion', 'comboItems')
+  @ManyToOne('Presentacion', 'comboItems', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'presentacion_id' })
   presentacion!: Presentacion;
 

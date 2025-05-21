@@ -47,14 +47,14 @@ export class Ingrediente extends BaseModel {
   @Column({ name: 'receta_id', nullable: true })
   recetaId?: number;
 
-  @ManyToOne('Receta', { nullable: true })
+  @ManyToOne('Receta', { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'receta_id' })
   receta?: Receta;
 
   @Column({ name: 'variacion_id', nullable: true })
   variacionId?: number;
 
-  @ManyToOne('RecetaVariacion', { nullable: true })
+  @ManyToOne('RecetaVariacion', { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'variacion_id' })
   variacion?: RecetaVariacion;
 
@@ -64,7 +64,7 @@ export class Ingrediente extends BaseModel {
   @Column({ name: 'moneda_id', nullable: true })
   monedaId?: number;
 
-  @ManyToOne('Moneda', { nullable: true })
+  @ManyToOne('Moneda', { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'moneda_id' })
   moneda?: Moneda;
 

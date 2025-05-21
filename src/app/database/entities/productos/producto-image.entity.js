@@ -34,7 +34,7 @@ __decorate([
     __metadata("design:type", Number)
 ], ProductoImage.prototype, "productoId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Producto', 'images'),
+    (0, typeorm_1.ManyToOne)('Producto', 'images', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'producto_id' }),
     __metadata("design:type", Function)
 ], ProductoImage.prototype, "producto", void 0);

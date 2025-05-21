@@ -14,35 +14,35 @@ export class PrecioVenta extends BaseModel {
   @Column({ name: 'presentacion_id', nullable: true })
   presentacionId?: number;
 
-  @ManyToOne('Presentacion', 'preciosVenta', { nullable: true })
+  @ManyToOne('Presentacion', 'preciosVenta', { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'presentacion_id' })
   presentacion?: Presentacion;
 
   @Column({ name: 'presentacion_sabor_id', nullable: true })
   presentacionSaborId?: number;
 
-  @ManyToOne('PresentacionSabor', 'preciosVenta', { nullable: true })
+  @ManyToOne('PresentacionSabor', 'preciosVenta', { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'presentacion_sabor_id' })
   presentacionSabor?: PresentacionSabor;
 
   @Column({ name: 'combo_id', nullable: true })
   comboId?: number;
 
-  @ManyToOne('Combo', 'preciosVenta', { nullable: true })
+  @ManyToOne('Combo', 'preciosVenta', { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'combo_id' })
   combo?: Combo;
 
   @Column({ name: 'moneda_id' })
   monedaId!: number;
 
-  @ManyToOne('Moneda')
+  @ManyToOne('Moneda', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'moneda_id' })
   moneda!: Moneda;
 
   @Column({ name: 'tipo_precio_id', nullable: true })
   tipoPrecioId?: number;
 
-  @ManyToOne(() => TipoPrecio, { nullable: true })
+  @ManyToOne(() => TipoPrecio, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'tipo_precio_id' })
   tipoPrecio?: TipoPrecio;
 

@@ -22,7 +22,7 @@ __decorate([
     __metadata("design:type", Number)
 ], PresentacionSabor.prototype, "presentacionId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Presentacion', 'presentacionesSabores'),
+    (0, typeorm_1.ManyToOne)('Presentacion', 'presentacionesSabores', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'presentacion_id' }),
     __metadata("design:type", Function)
 ], PresentacionSabor.prototype, "presentacion", void 0);
@@ -31,7 +31,7 @@ __decorate([
     __metadata("design:type", Number)
 ], PresentacionSabor.prototype, "saborId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Sabor', 'presentacionesSabores'),
+    (0, typeorm_1.ManyToOne)('Sabor', 'presentacionesSabores', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'sabor_id' }),
     __metadata("design:type", Function)
 ], PresentacionSabor.prototype, "sabor", void 0);
@@ -40,7 +40,7 @@ __decorate([
     __metadata("design:type", Number)
 ], PresentacionSabor.prototype, "recetaId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Receta', { nullable: true }),
+    (0, typeorm_1.ManyToOne)('Receta', { nullable: true, onDelete: 'SET NULL' }),
     (0, typeorm_1.JoinColumn)({ name: 'receta_id' }),
     __metadata("design:type", Function)
 ], PresentacionSabor.prototype, "receta", void 0);
@@ -49,12 +49,12 @@ __decorate([
     __metadata("design:type", Number)
 ], PresentacionSabor.prototype, "variacionId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('RecetaVariacion', { nullable: true }),
+    (0, typeorm_1.ManyToOne)('RecetaVariacion', { nullable: true, onDelete: 'SET NULL' }),
     (0, typeorm_1.JoinColumn)({ name: 'variacion_id' }),
     __metadata("design:type", Function)
 ], PresentacionSabor.prototype, "variacion", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)('PrecioVenta', 'presentacionSabor'),
+    (0, typeorm_1.OneToMany)('PrecioVenta', 'presentacionSabor', { onDelete: 'CASCADE' }),
     __metadata("design:type", Array)
 ], PresentacionSabor.prototype, "preciosVenta", void 0);
 __decorate([

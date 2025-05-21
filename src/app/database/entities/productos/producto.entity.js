@@ -87,12 +87,12 @@ __decorate([
     __metadata("design:type", Number)
 ], Producto.prototype, "subcategoriaId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Subcategoria', 'productos'),
+    (0, typeorm_1.ManyToOne)('Subcategoria', 'productos', { onDelete: 'SET NULL' }),
     (0, typeorm_1.JoinColumn)({ name: 'subcategoria_id' }),
     __metadata("design:type", Function)
 ], Producto.prototype, "subcategoria", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('RecetaVariacion', { nullable: true }),
+    (0, typeorm_1.ManyToOne)('RecetaVariacion', { nullable: true, onDelete: 'SET NULL' }),
     (0, typeorm_1.JoinColumn)({ name: 'receta_variacion_id' }),
     __metadata("design:type", receta_variacion_entity_1.RecetaVariacion)
 ], Producto.prototype, "recetaVariacion", void 0);
@@ -101,27 +101,27 @@ __decorate([
     __metadata("design:type", Number)
 ], Producto.prototype, "recetaVariacionId", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)('ProductoImage', 'producto'),
+    (0, typeorm_1.OneToMany)('ProductoImage', 'producto', { onDelete: 'CASCADE' }),
     __metadata("design:type", Array)
 ], Producto.prototype, "images", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)('Presentacion', 'producto'),
+    (0, typeorm_1.OneToMany)('Presentacion', 'producto', { onDelete: 'CASCADE' }),
     __metadata("design:type", Array)
 ], Producto.prototype, "presentaciones", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)('IntercambioIngrediente', 'producto'),
+    (0, typeorm_1.OneToMany)('IntercambioIngrediente', 'producto', { onDelete: 'CASCADE' }),
     __metadata("design:type", Array)
 ], Producto.prototype, "intercambioIngredientes", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)('ObservacionProducto', 'producto'),
+    (0, typeorm_1.OneToMany)('ObservacionProducto', 'producto', { onDelete: 'CASCADE' }),
     __metadata("design:type", Array)
 ], Producto.prototype, "observacionesProductos", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)('ProductoAdicional', 'producto'),
+    (0, typeorm_1.OneToMany)('ProductoAdicional', 'producto', { onDelete: 'CASCADE' }),
     __metadata("design:type", Array)
 ], Producto.prototype, "productosAdicionales", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)('CostoPorProducto', 'producto'),
+    (0, typeorm_1.OneToMany)('CostoPorProducto', 'producto', { onDelete: 'CASCADE' }),
     __metadata("design:type", Array)
 ], Producto.prototype, "costos", void 0);
 Producto = __decorate([

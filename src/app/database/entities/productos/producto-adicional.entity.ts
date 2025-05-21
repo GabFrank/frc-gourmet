@@ -12,7 +12,7 @@ export class ProductoAdicional extends BaseModel {
   @Column({ name: 'producto_id' })
   productoId!: number;
 
-  @ManyToOne('Producto', 'productosAdicionales')
+  @ManyToOne('Producto', 'productosAdicionales', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'producto_id' })
   producto!: Producto;
 
@@ -20,14 +20,14 @@ export class ProductoAdicional extends BaseModel {
   @Column({ name: 'presentacion_id', nullable: true })
   presentacionId!: number;
 
-  @ManyToOne('Presentacion', 'productoAdicionales')
+  @ManyToOne('Presentacion', 'productoAdicionales', { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'presentacion_id' })
   presentacion!: Presentacion;
 
   @Column({ name: 'adicional_id' })
   adicionalId!: number;
 
-  @ManyToOne('Adicional')
+  @ManyToOne('Adicional', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'adicional_id' })
   adicional!: Adicional;
 

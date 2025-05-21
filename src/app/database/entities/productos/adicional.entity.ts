@@ -22,7 +22,7 @@ export class Adicional extends BaseModel {
   @Column({ name: 'receta_id', nullable: true })
   recetaId?: number;
 
-  @ManyToOne('Receta', { nullable: true })
+  @ManyToOne('Receta', { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'receta_id' })
   receta?: Receta;
 

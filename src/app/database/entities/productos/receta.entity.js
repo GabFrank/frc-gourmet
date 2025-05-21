@@ -48,11 +48,11 @@ __decorate([
     __metadata("design:type", Number)
 ], Receta.prototype, "cantidad", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)('RecetaItem', 'receta'),
+    (0, typeorm_1.OneToMany)('RecetaItem', 'receta', { onDelete: 'CASCADE' }),
     __metadata("design:type", Array)
 ], Receta.prototype, "items", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)('RecetaVariacion', 'receta'),
+    (0, typeorm_1.OneToMany)('RecetaVariacion', 'receta', { onDelete: 'CASCADE' }),
     __metadata("design:type", Array)
 ], Receta.prototype, "variaciones", void 0);
 Receta = __decorate([

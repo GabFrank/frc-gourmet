@@ -19,7 +19,7 @@ export class CostoPorProducto extends BaseModel {
   @Column({ name: 'producto_id' })
   productoId!: number;
 
-  @ManyToOne(() => Producto, producto => producto.costos)
+  @ManyToOne(() => Producto, producto => producto.costos, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'producto_id' })
   producto!: Producto;
 
@@ -34,7 +34,7 @@ export class CostoPorProducto extends BaseModel {
   @Column({ name: 'moneda_id' })
   monedaId!: number;
 
-  @ManyToOne(() => Moneda)
+  @ManyToOne(() => Moneda, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'moneda_id' })
   moneda!: Moneda;
 

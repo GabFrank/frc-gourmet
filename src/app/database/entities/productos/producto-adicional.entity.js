@@ -23,7 +23,7 @@ __decorate([
     __metadata("design:type", Number)
 ], ProductoAdicional.prototype, "productoId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Producto', 'productosAdicionales'),
+    (0, typeorm_1.ManyToOne)('Producto', 'productosAdicionales', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'producto_id' }),
     __metadata("design:type", Function)
 ], ProductoAdicional.prototype, "producto", void 0);
@@ -32,7 +32,7 @@ __decorate([
     __metadata("design:type", Number)
 ], ProductoAdicional.prototype, "presentacionId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Presentacion', 'productoAdicionales'),
+    (0, typeorm_1.ManyToOne)('Presentacion', 'productoAdicionales', { onDelete: 'CASCADE', nullable: true }),
     (0, typeorm_1.JoinColumn)({ name: 'presentacion_id' }),
     __metadata("design:type", presentacion_entity_1.Presentacion)
 ], ProductoAdicional.prototype, "presentacion", void 0);
@@ -41,7 +41,7 @@ __decorate([
     __metadata("design:type", Number)
 ], ProductoAdicional.prototype, "adicionalId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Adicional'),
+    (0, typeorm_1.ManyToOne)('Adicional', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'adicional_id' }),
     __metadata("design:type", Function)
 ], ProductoAdicional.prototype, "adicional", void 0);
