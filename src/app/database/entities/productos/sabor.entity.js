@@ -30,10 +30,6 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Sabor.prototype, "activo", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)('PresentacionSabor', 'sabor'),
-    __metadata("design:type", Array)
-], Sabor.prototype, "presentacionesSabores", void 0);
-__decorate([
     (0, typeorm_1.OneToMany)('IntercambioIngrediente', 'sabor'),
     __metadata("design:type", Array)
 ], Sabor.prototype, "intercambioIngredientes", void 0);

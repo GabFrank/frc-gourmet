@@ -214,7 +214,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
     electron_1.ipcMain.handle('getProductos', async () => {
         try {
             const repo = dataSource.getRepository(producto_entity_1.Producto);
-            const productos = await repo.find({ relations: ['subcategoria', 'subcategoria.categoria', 'recetaVariacion', 'recetaVariacion.receta'], order: { nombre: 'ASC' } });
+            const productos = await repo.find({ relations: ['subcategoria', 'subcategoria.categoria'], order: { nombre: 'ASC' } });
             // Enrich each product with principal data
             for (const producto of productos) {
                 await enrichProductWithPrincipalData(producto);
@@ -229,7 +229,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
     electron_1.ipcMain.handle('getProducto', async (_event, id) => {
         try {
             const repo = dataSource.getRepository(producto_entity_1.Producto);
-            const producto = await repo.findOne({ where: { id }, relations: ['subcategoria', 'subcategoria.categoria', 'recetaVariacion', 'recetaVariacion.receta'] });
+            const producto = await repo.findOne({ where: { id }, relations: ['subcategoria', 'subcategoria.categoria'] });
             if (producto) {
                 await enrichProductWithPrincipalData(producto);
             }
@@ -385,19 +385,7 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
                     console.log(`Deleting ${codigos.length} related Codigo records`);
                     await transactionalEntityManager.remove(codigos);
                 }
-                // 3. Delete all related PresentacionSabor records
-                const presentacionSabores = await presentacionSaborRepo.find({ where: { presentacionId: id } });
-                if (presentacionSabores.length > 0) {
-                    console.log(`Deleting ${presentacionSabores.length} related PresentacionSabor records`);
-                    await transactionalEntityManager.remove(presentacionSabores);
-                }
-                // 4. Delete all related ProductoAdicional records
-                const productosAdicionales = await productoAdicionalRepo.find({ where: { presentacionId: id } });
-                if (productosAdicionales.length > 0) {
-                    console.log(`Deleting ${productosAdicionales.length} related ProductoAdicional records`);
-                    await transactionalEntityManager.remove(productosAdicionales);
-                }
-                // 5. Finally delete the Presentacion
+                // 4. Finally delete the Presentacion
                 console.log(`Deleting Presentacion ID ${id}`);
                 await transactionalEntityManager.remove(entity);
             });
@@ -1858,122 +1846,6 @@ function registerProductosHandlers(dataSource, getCurrentUser) {
         }
         catch (error) {
             console.error(`Error deleting adicional ID ${id}:`, error);
-            throw error;
-        }
-    });
-    // --- ProductoAdicional Handlers ---
-    electron_1.ipcMain.handle('getProductosAdicionales', async () => {
-        try {
-            const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
-            return await repo.find({
-                relations: ['producto', 'adicional'],
-                order: { productoId: 'ASC' }
-            });
-        }
-        catch (error) {
-            console.error('Error getting productos adicionales:', error);
-            throw error;
-        }
-    });
-    electron_1.ipcMain.handle('getProductosAdicionalesByProducto', async (_event, productoId) => {
-        try {
-            const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
-            return await repo.find({
-                where: { productoId },
-                relations: ['adicional', 'presentacion', 'adicional.ingrediente'],
-                order: { adicionalId: 'ASC' }
-            });
-        }
-        catch (error) {
-            console.error(`Error getting adicionales for producto ID ${productoId}:`, error);
-            throw error;
-        }
-    });
-    // get by presentacion id
-    electron_1.ipcMain.handle('getProductosAdicionalesByPresentacion', async (_event, presentacionId) => {
-        try {
-            const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
-            return await repo.find({
-                where: { presentacionId },
-                relations: ['producto', 'adicional', 'presentacion', 'adicional.ingrediente']
-            });
-        }
-        catch (error) {
-            console.error(`Error getting producto adicionales by presentacion ID ${presentacionId}:`, error);
-            throw error;
-        }
-    });
-    electron_1.ipcMain.handle('getProductoAdicional', async (_event, id) => {
-        try {
-            const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
-            return await repo.findOne({
-                where: { id },
-                relations: ['producto', 'adicional', 'presentacion', 'adicional.ingrediente']
-            });
-        }
-        catch (error) {
-            console.error(`Error getting producto adicional ID ${id}:`, error);
-            throw error;
-        }
-    });
-    // add error handling like in createObservacionProducto
-    electron_1.ipcMain.handle('createProductoAdicional', async (_event, data) => {
-        try {
-            const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
-            // check if already exists a producto adicional with the same productoId and adicionalId and presentacionId
-            const existing = await repo.findOne({ where: { productoId: data.productoId, adicionalId: data.adicionalId, presentacionId: data.presentacionId } });
-            if (existing) {
-                return {
-                    success: false,
-                    error: 'ProductoAdicional ya existe',
-                    message: 'Ya existe un producto adicional con el mismo producto, adicional y presentación.'
-                };
-            }
-            const entity = repo.create(data);
-            const currentUser = getCurrentUser();
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, false);
-            return await repo.save(entity);
-        }
-        catch (error) {
-            return {
-                success: false,
-                error: 'unknown',
-                message: error || 'Error al crear el producto adicional.'
-            };
-        }
-    });
-    electron_1.ipcMain.handle('updateProductoAdicional', async (_event, id, data) => {
-        try {
-            const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
-            const entity = await repo.findOneBy({ id });
-            if (!entity)
-                throw new Error(`ProductoAdicional ID ${id} not found`);
-            repo.merge(entity, data);
-            const currentUser = getCurrentUser();
-            await (0, entity_utils_1.setEntityUserTracking)(dataSource, entity, currentUser?.id, true);
-            return await repo.save(entity);
-        }
-        catch (error) {
-            console.error(`Error updating producto adicional ID ${id}:`, error);
-            throw error;
-        }
-    });
-    electron_1.ipcMain.handle('deleteProductoAdicional', async (_event, id) => {
-        try {
-            const repo = dataSource.getRepository(producto_adicional_entity_1.ProductoAdicional);
-            const entity = await repo.findOneBy({ id });
-            if (!entity)
-                throw new Error(`ProductoAdicional ID ${id} not found`);
-            // Check dependencies (ProductoAdicionalVentaItem) before deleting
-            const productoAdicionalVentaItemRepo = dataSource.getRepository(producto_adicional_venta_item_entity_1.ProductoAdicionalVentaItem);
-            const productoAdicionalVentaItemCount = await productoAdicionalVentaItemRepo.count({ where: { productoAdicionalId: id } });
-            if (productoAdicionalVentaItemCount > 0) {
-                throw new Error(`No se puede eliminar el adicional de producto porque tiene ${productoAdicionalVentaItemCount} items de venta asociados.`);
-            }
-            return await repo.remove(entity);
-        }
-        catch (error) {
-            console.error(`Error deleting producto adicional ID ${id}:`, error);
             throw error;
         }
     });

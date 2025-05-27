@@ -31,7 +31,7 @@ __decorate([
     __metadata("design:type", Number)
 ], ComboItem.prototype, "presentacionId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Presentacion', 'comboItems', { onDelete: 'CASCADE' }),
+    (0, typeorm_1.ManyToOne)('Presentacion', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'presentacion_id' }),
     __metadata("design:type", Function)
 ], ComboItem.prototype, "presentacion", void 0);

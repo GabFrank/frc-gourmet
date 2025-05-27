@@ -476,11 +476,8 @@ export class CreateEditAdicionalSelectableDialogComponent implements OnInit {
     if (adicional.ingrediente) {
       this.selectedIngrediente = adicional.ingrediente;
       this.ingredienteSearchCtrl.setValue(this.displayIngrediente(adicional.ingrediente));
-      if (adicional.ingrediente.variacionId) {
-        this.costoRecetaVariacion = await firstValueFrom(
-          this.repositoryService.getRecetaVariacionCosto(adicional.ingrediente.variacionId)
-        );
-      }
+      // Removed recetaVariacion cost calculation as part of refactoring
+      this.costoRecetaVariacion = 0;
     }
   }
 
@@ -577,23 +574,16 @@ export class CreateEditAdicionalSelectableDialogComponent implements OnInit {
     const ingrediente = event.option.value as Ingrediente;
     this.adicionalForm.patchValue({ ingredienteId: ingrediente.id });
     this.selectedIngrediente = ingrediente;
-    if (ingrediente.variacionId) {
-      console.log('ingrediente.variacionId', ingrediente.variacionId);
+    // Removed recetaVariacion cost calculation as part of refactoring
+    if(ingrediente.monedaId) {
       this.costoRecetaVariacion = await firstValueFrom(
-        this.repositoryService.getRecetaVariacionCosto(ingrediente.variacionId)
+        this.repositoryService.getValorEnMonedaPrincipal(ingrediente.monedaId, ingrediente.costo)
       );
-      console.log('costoRecetaVariacion', this.costoRecetaVariacion);
     } else {
-      if(ingrediente.monedaId) {
-        this.costoRecetaVariacion = await firstValueFrom(
-          this.repositoryService.getValorEnMonedaPrincipal(ingrediente.monedaId, ingrediente.costo)
-        );
-      } else {
-        // notification warning
-        this.snackBar.open('El ingrediente no tiene una moneda asignada', 'Cerrar', {
-          duration: 3000,
-        });
-      }
+      // notification warning
+      this.snackBar.open('El ingrediente no tiene una moneda asignada', 'Cerrar', {
+        duration: 3000,
+      });
     }
   }
 }

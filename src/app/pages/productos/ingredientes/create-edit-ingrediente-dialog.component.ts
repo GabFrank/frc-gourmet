@@ -18,8 +18,6 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Receta } from '../../../database/entities/productos/receta.entity';
 import { RecetaItem } from '../../../database/entities/productos/receta-item.entity';
-import { RecetaVariacion } from '../../../database/entities/productos/receta-variacion.entity';
-import { RecetaVariacionItem } from '../../../database/entities/productos/receta-variacion-item.entity';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 
 interface DialogData {
@@ -68,8 +66,6 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
   tipoMedidaOptions = Object.values(TipoMedida);
   recetas: Receta[] = [];
   recetaItems: Map<number, RecetaItem[]> = new Map();
-  recetaVariaciones: RecetaVariacion[] = [];
-  recetaVariacionItems: Map<number, RecetaVariacionItem[]> = new Map();
   ingredientes: Map<number, Ingrediente> = new Map();
   monedas: Moneda[] = [];
   calculating = false;
@@ -82,7 +78,6 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
   // Pre-computed values for the template
   tipoMedidaDisplayValues: { [key: string]: string } = {};
   recetasDisplayValues: { [key: number]: string } = {};
-  variacionesDisplayValues: { [key: number]: string } = {};
   monedasDisplayValues: { [key: number]: string } = {};
   selectedMonedaSymbol = '$';
   showVariacionSelect = false;
@@ -101,7 +96,6 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
       monedaId: [null, Validators.required],
       recetaId: [null],
       recetaSearch: [''],
-      variacionId: [{value: null, disabled: false}],
       recetaCantidad: [{value: 0, disabled: true}, [Validators.min(0)]],
       activo: [true]
     });
@@ -148,15 +142,10 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
       this.updateSelectedMonedaSymbol();
     });
 
-    // Monitor changes to variacionId
-    this.ingredienteForm.get('variacionId')?.valueChanges.subscribe(value => {
-      this.handleVariacionChange(value);
-    });
-
     // Monitor changes to recetaCantidad
     this.ingredienteForm.get('recetaCantidad')?.valueChanges.subscribe(value => {
-      if (this.ingredienteForm.get('recetaId')?.value && this.ingredienteForm.get('variacionId')?.value) {
-        this.calculateCostFromVariation(this.ingredienteForm.get('variacionId')?.value, value);
+      if (this.ingredienteForm.get('recetaId')?.value) {
+        this.calculateCostFromReceta();
       }
     });
 
@@ -197,7 +186,6 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
     this.ingredienteForm.patchValue({
       recetaId: this.selectedReceta.id
     });
-    this.handleRecetaChange(this.selectedReceta.id);
   }
 
   // Clear receta selection
@@ -207,7 +195,6 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
       recetaId: null,
       recetaSearch: ''
     });
-    this.handleRecetaChange(null);
   }
 
   private initTipoMedidaDisplayValues(): void {
@@ -260,12 +247,6 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
           this.selectedReceta = this.transformReceta(receta);
           this.ingredienteForm.get('recetaSearch')?.setValue(this.selectedReceta);
         }
-
-        // If there's a variacionId in the form, select it
-        const variacionId = this.ingredienteForm.get('variacionId')?.value;
-        if (variacionId) {
-          this.handleVariacionChange(variacionId);
-        }
       }
 
       // Update the selected moneda symbol
@@ -308,7 +289,6 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
       costo: ingrediente.costo,
       monedaId: ingrediente.monedaId || null,
       recetaId: ingrediente.recetaId || null,
-      variacionId: ingrediente.variacionId || null,
       recetaCantidad: ingrediente.recetaCantidad || 0,
       activo: ingrediente.activo
     });
@@ -356,15 +336,12 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
   async handleRecetaChange(recetaId: number | null): Promise<void> {
     const costoControl = this.ingredienteForm.get('costo');
     const recetaCantidadControl = this.ingredienteForm.get('recetaCantidad');
-    const variacionIdControl = this.ingredienteForm.get('variacionId');
 
     if (!recetaId) {
-      // No recipe selected, enable cost field and disable cantidad and variacion
+      // No recipe selected, enable cost field and disable cantidad
       costoControl?.enable();
       recetaCantidadControl?.disable();
       recetaCantidadControl?.setValue(0);
-      variacionIdControl?.disable();
-      variacionIdControl?.setValue(null);
       this.showVariacionSelect = false;
       return;
     }
@@ -378,90 +355,24 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
       recetaCantidadControl?.setValue(1);
     }
 
-    // Load recipe variations from database
-    this.recetaVariaciones = await firstValueFrom(this.repositoryService.getRecetaVariaciones(recetaId));
+    // Load recipe items from database
+    const items = await firstValueFrom(this.repositoryService.getRecetaItems(recetaId));
+    this.recetaItems.set(recetaId, items);
 
-    if (this.recetaVariaciones.length > 0) {
-      this.ingredienteForm.get('variacionId')?.enable();
-      // 
-    } else {
-      // show notification
-      this.snackBar.open('No hay variaciones para esta receta', 'Cerrar', { duration: 3000 });
-    }
-   
-  }
-
-  async handleVariacionChange(variacionId: number | null): Promise<void> {
-    console.log('Variation changed to:', variacionId);
-    if (!variacionId) return;
-
-    // Load variation items if not already loaded
-    await this.loadVariacionItems(variacionId);
-
-    // Make sure we have the variation object loaded
-    const recetaId = this.ingredienteForm.get('recetaId')?.value;
-    if (recetaId) {
-      const variaciones = this.recetaVariaciones.filter(v => v.recetaId === recetaId);
-      const variacion = variaciones.find(v => v.id === variacionId);
-      console.log('Selected variation:', variacion);
-    }
-
-    // Calculate cost
-    this.calculateCostFromReceta();
-  }
-
-  async loadVariacionItems(variacionId: number): Promise<void> {
-    if (!this.recetaVariacionItems.has(variacionId)) {
-      try {
-        this.calculating = true;
-        const items = await firstValueFrom(this.repositoryService.getRecetaVariacionItems(variacionId));
-        this.recetaVariacionItems.set(variacionId, items);
-
-        // Load ingredients for each variation item
-        for (const item of items) {
-          if (!this.ingredientes.has(item.ingredienteId)) {
-            const ingrediente = await firstValueFrom(this.repositoryService.getIngrediente(item.ingredienteId));
-            this.ingredientes.set(item.ingredienteId, ingrediente);
-          }
-        }
-      } catch (error) {
-        console.error(`Error loading items for variation ${variacionId}:`, error);
-        this.snackBar.open('Error al cargar los ingredientes de la variación', 'Cerrar', { duration: 3000 });
-      } finally {
-        this.calculating = false;
-      }
-    }
-  }
-
-  async loadRecipeData(recetaId: number): Promise<void> {
-    if (!this.recetaItems.has(recetaId)) {
-      try {
-        this.calculating = true;
-        const items = await firstValueFrom(this.repositoryService.getRecetaItems(recetaId));
-        this.recetaItems.set(recetaId, items);
-
-        // Load ingredients for each recipe item
-        for (const item of items) {
-          if (!this.ingredientes.has(item.ingredienteId)) {
-            const ingrediente = await firstValueFrom(this.repositoryService.getIngrediente(item.ingredienteId));
-            this.ingredientes.set(item.ingredienteId, ingrediente);
-          }
-        }
-      } catch (error) {
-        console.error(`Error loading items for recipe ${recetaId}:`, error);
-        this.snackBar.open('Error al cargar los ingredientes de la receta', 'Cerrar', { duration: 3000 });
-      } finally {
-        this.calculating = false;
+    // Load ingredients for each recipe item
+    for (const item of this.recetaItems.get(recetaId) || []) {
+      if (!this.ingredientes.has(item.ingredienteId)) {
+        const ingrediente = await firstValueFrom(this.repositoryService.getIngrediente(item.ingredienteId));
+        this.ingredientes.set(item.ingredienteId, ingrediente);
       }
     }
   }
 
   calculateCostFromReceta(): void {
     const recetaId = this.ingredienteForm.get('recetaId')?.value;
-    const variacionId = this.ingredienteForm.get('variacionId')?.value;
     const cantidad = parseFloat(this.ingredienteForm.get('recetaCantidad')?.value) || 0;
 
-    console.log('Calculating cost from receta - recetaId:', recetaId, 'variacionId:', variacionId, 'cantidad:', cantidad);
+    console.log('Calculating cost from receta - recetaId:', recetaId, 'cantidad:', cantidad);
 
     if (!recetaId || cantidad <= 0) {
       console.log('No recipe selected or cantidad is 0 or below, setting cost to 0');
@@ -469,33 +380,9 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
       return;
     }
 
-    // Check if we're using a variacion or the base recipe
-    if (variacionId) {
-      this.calculateCostFromVariation(variacionId, cantidad);
-    } else {
-      this.calculateCostFromBaseRecipe(recetaId, cantidad);
-    }
-  }
-
-  async calculateCostFromVariation(variacionId: number, cantidad: number): Promise<void> {
-    // get the cost from repository service
-    const costo = await firstValueFrom(this.repositoryService.getRecetaVariacionCosto(variacionId));
-    console.log('costo', costo);
-  }
-
-  calculateCostFromBaseRecipe(recetaId: number, cantidad: number): void {
-    console.log('Calculating cost from base recipe:', recetaId, 'cantidad:', cantidad);
-
-    // Check if we have the recipe items loaded
-    const items = this.recetaItems.get(recetaId) || [];
-    if (items.length === 0) {
-      console.log('No recipe items found, skipping calculation');
-      return;
-    }
-
     // Calculate total cost of the recipe
     let recipeTotalCost = 0;
-    for (const item of items) {
+    for (const item of this.recetaItems.get(recetaId) || []) {
       if (item.activo) {
         const ingrediente = this.ingredientes.get(item.ingredienteId);
         if (ingrediente) {
@@ -557,7 +444,6 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
           costo: formValues.costo,
           monedaId: formValues.monedaId,
           recetaId: formValues.recetaId,
-          variacionId: formValues.variacionId,
           recetaCantidad: formValues.recetaId ? formValues.recetaCantidad : null,
           activo: formValues.activo
         }));
@@ -570,7 +456,6 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
           costo: formValues.costo,
           monedaId: formValues.monedaId,
           recetaId: formValues.recetaId,
-          variacionId: formValues.variacionId,
           recetaCantidad: formValues.recetaId ? formValues.recetaCantidad : null,
           activo: formValues.activo
         }));
@@ -631,11 +516,6 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
     this.selectedMonedaSymbol = selectedMoneda ? selectedMoneda.simbolo : '$';
   }
 
-  onVariacionSelected(event: any): void {
-    const variacionId = event.value;
-    console.log('Variation selected:', variacionId);
-  }
-
   // Keep these methods for backward compatibility, but they should no longer be called directly from the template
   getTipoMedidaText(tipo: TipoMedida): string {
     return this.tipoMedidaDisplayValues[tipo] || tipo;
@@ -651,9 +531,5 @@ export class CreateEditIngredienteDialogComponent implements OnInit {
 
   getRecetaLabel(receta: Receta): string {
     return this.recetasDisplayValues[receta.id] || receta.nombre;
-  }
-
-  getVariacionLabel(variacionId: number): string {
-    return this.variacionesDisplayValues[variacionId] || '';
   }
 }

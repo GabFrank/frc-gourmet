@@ -1,46 +1,34 @@
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import type { Presentacion } from './presentacion.entity';
 import type { Sabor } from './sabor.entity';
-import type { PrecioVenta } from './precio-venta.entity';
 import type { Receta } from './receta.entity';
-import type { RecetaVariacion } from './receta-variacion.entity';
 
 /**
- * Entity representing a product presentation with flavor
+ * Entity representing the relationship between a presentation and a flavor
  */
-@Entity('producto_presentaciones_sabores')
+@Entity('presentacion_sabores')
 export class PresentacionSabor extends BaseModel {
   @Column({ name: 'presentacion_id' })
   presentacionId!: number;
 
-  @ManyToOne('Presentacion', 'presentacionesSabores', { onDelete: 'CASCADE' })
+  @ManyToOne('Presentacion', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'presentacion_id' })
   presentacion!: Presentacion;
 
   @Column({ name: 'sabor_id' })
   saborId!: number;
 
-  @ManyToOne('Sabor', 'presentacionesSabores', { onDelete: 'CASCADE' })
+  @ManyToOne('Sabor', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'sabor_id' })
   sabor!: Sabor;
 
   @Column({ name: 'receta_id', nullable: true })
   recetaId?: number;
 
-  @ManyToOne('Receta', { nullable: true, onDelete: 'SET NULL' })
+  @ManyToOne('Receta', { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'receta_id' })
   receta?: Receta;
-
-  @Column({ name: 'variacion_id', nullable: true })
-  variacionId?: number;
-
-  @ManyToOne('RecetaVariacion', { nullable: true, onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'variacion_id' })
-  variacion?: RecetaVariacion;
-
-  @OneToMany('PrecioVenta', 'presentacionSabor', { onDelete: 'CASCADE' })
-  preciosVenta!: PrecioVenta[];
 
   @Column({ default: true })
   activo!: boolean;

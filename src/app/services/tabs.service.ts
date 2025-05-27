@@ -3,6 +3,7 @@ import { BehaviorSubject, Observable } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateEditProductoComponent } from '../pages/productos/productos/create-edit-producto/create-edit-producto.component';
 import { ListRecetasComponent } from '../pages/productos/recetas/list-recetas.component';
+import { ListProductosComponent } from '../pages/productos/productos/list-productos/list-productos.component';
 
 export interface Tab {
   id: string;
@@ -39,8 +40,8 @@ export class TabsService {
     // this.addTab('Productos Dashboard', ProductoDashboardComponent, null, 'productos-dashboard');
     // open producto v2 with id 1
     // this.addTab('Producto', CreateEditProductoComponent, { productoId: 2 });
-    // open list recetas
-    this.addTab('Listado de recetas', ListRecetasComponent);
+    // open list productos
+    this.addTab('Listado de productos', ListProductosComponent);
   }
 
   /**

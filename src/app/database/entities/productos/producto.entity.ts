@@ -6,9 +6,17 @@ import type { Presentacion } from './presentacion.entity';
 import type { Receta } from './receta.entity';
 import type { IntercambioIngrediente } from './intercambio-ingrediente.entity';
 import type { ObservacionProducto } from './observacion-producto.entity';
-import type { ProductoAdicional } from './producto-adicional.entity';
 import type { CostoPorProducto } from './costo-por-producto.entity';
-import { RecetaVariacion } from './receta-variacion.entity';
+
+/**
+ * Método de cálculo de precios para productos con sabores
+ */
+export enum MetodoCalculo {
+  PROMEDIO = 'PROMEDIO',
+  MAYOR_PRECIO = 'MAYOR_PRECIO',
+  MENOR_PRECIO = 'MENOR_PRECIO',
+  FIJO = 'FIJO'
+}
 
 /**
  * Entity representing a product
@@ -51,6 +59,15 @@ export class Producto extends BaseModel {
   @Column({ default: false, name: 'has_variaciones' })
   hasVariaciones!: boolean;
 
+  @Column({
+    type: 'varchar',
+    name: 'metodo_calculo',
+    enum: MetodoCalculo,
+    default: MetodoCalculo.PROMEDIO,
+    nullable: true
+  })
+  metodoCalculo?: MetodoCalculo;
+
   @Column({ nullable: true, type: 'text' })
   observacion?: string;
 
@@ -70,14 +87,6 @@ export class Producto extends BaseModel {
   @JoinColumn({ name: 'subcategoria_id' })
   subcategoria!: Subcategoria;
 
-  // replace receta with recetaVariacion
-  @ManyToOne('RecetaVariacion', { nullable: true, onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'receta_variacion_id' })
-  recetaVariacion?: RecetaVariacion;
-
-  @Column({ name: 'receta_variacion_id', nullable: true })
-  recetaVariacionId?: number;
-
   @OneToMany('ProductoImage', 'producto', { onDelete: 'CASCADE' })
   images!: ProductoImage[];
 
@@ -89,9 +98,6 @@ export class Producto extends BaseModel {
   
   @OneToMany('ObservacionProducto', 'producto', { onDelete: 'CASCADE' })
   observacionesProductos!: ObservacionProducto[];
-  
-  @OneToMany('ProductoAdicional', 'producto', { onDelete: 'CASCADE' })
-  productosAdicionales!: ProductoAdicional[];
 
   @OneToMany('CostoPorProducto', 'producto', { onDelete: 'CASCADE' })
   costos!: CostoPorProducto[];

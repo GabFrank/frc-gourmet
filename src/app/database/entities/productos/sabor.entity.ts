@@ -17,9 +17,6 @@ export class Sabor extends BaseModel {
   @Column({ default: true })
   activo!: boolean;
 
-  @OneToMany('PresentacionSabor', 'sabor')
-  presentacionesSabores!: PresentacionSabor[];
-
   @OneToMany('IntercambioIngrediente', 'sabor')
   intercambioIngredientes!: IntercambioIngrediente[];
 }

@@ -104,29 +104,7 @@
             <div class="form-row checkbox-row">
               <mat-checkbox formControlName="activo">Activo</mat-checkbox>
               <mat-checkbox formControlName="principal">Principal</mat-checkbox>
-              <mat-checkbox formControlName="isSabores"
-                >Tiene Sabores</mat-checkbox
-              >
             </div>
-
-            <!-- Calculation method (only visible if isSabores is checked) -->
-            <mat-form-field
-              appearance="outline"
-              class="full-width"
-              *ngIf="
-                presentacionForms.get(presentacion.id)!.get('isSabores')!.value
-              "
-            >
-              <mat-label>Método de Cálculo</mat-label>
-              <mat-select formControlName="metodoCalculo">
-                <mat-option
-                  *ngFor="let metodo of metodoCalculoOptions"
-                  [value]="metodo"
-                >
-                  {{ metodo }}
-                </mat-option>
-              </mat-select>
-            </mat-form-field>
 
             <!-- Form buttons -->
             <div class="form-actions">

@@ -4,9 +4,6 @@ import { BaseModel } from '../base.entity';
 import type { Producto } from './producto.entity';
 import type { Codigo } from './codigo.entity';
 import type { PrecioVenta } from './precio-venta.entity';
-import type { PresentacionSabor } from './presentacion-sabor.entity';
-import type { ComboItem } from './combo-item.entity';
-import { ProductoAdicional } from './producto-adicional.entity';
 
 /**
  * Tipo de medida para la presentación de un producto
@@ -16,16 +13,6 @@ export enum TipoMedida {
   PAQUETE = 'PAQUETE',
   GRAMO = 'GRAMO',
   LITRO = 'LITRO'
-}
-
-/**
- * Método de cálculo de precios para presentaciones con sabores
- */
-export enum MetodoCalculo {
-  PROMEDIO = 'PROMEDIO',
-  MAYOR_PRECIO = 'MAYOR_PRECIO',
-  MENOR_PRECIO = 'MENOR_PRECIO',
-  FIJO = 'FIJO'
 }
 
 /**
@@ -61,30 +48,9 @@ export class Presentacion extends BaseModel {
   @Column({ default: true })
   activo!: boolean;
 
-  @Column({ name: 'is_sabores', default: false })
-  isSabores!: boolean;
-
-  @Column({
-    type: 'varchar',
-    name: 'metodo_calculo',
-    enum: MetodoCalculo,
-    default: MetodoCalculo.PROMEDIO,
-    nullable: true
-  })
-  metodoCalculo?: MetodoCalculo;
-
   @OneToMany('Codigo', 'presentacion')
   codigos!: Codigo[];
 
   @OneToMany('PrecioVenta', 'presentacion')
   preciosVenta!: PrecioVenta[];
-
-  @OneToMany('PresentacionSabor', 'presentacion')
-  presentacionesSabores!: PresentacionSabor[];
-
-  @OneToMany('ComboItem', 'presentacion')
-  comboItems!: ComboItem[];
-
-  @OneToMany('ProductoAdicional', 'presentacion')
-  productosAdicionales!: ProductoAdicional[];
 }

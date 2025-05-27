@@ -18,7 +18,7 @@ export class ComboItem extends BaseModel {
   @Column({ name: 'presentacion_id' })
   presentacionId!: number;
 
-  @ManyToOne('Presentacion', 'comboItems', { onDelete: 'CASCADE' })
+  @ManyToOne('Presentacion', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'presentacion_id' })
   presentacion!: Presentacion;
 

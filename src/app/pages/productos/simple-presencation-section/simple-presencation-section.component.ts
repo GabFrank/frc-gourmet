@@ -11,7 +11,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom, Subject, takeUntil } from 'rxjs';
-import { Presentacion, TipoMedida, MetodoCalculo } from '../../../database/entities/productos/presentacion.entity';
+import { Presentacion, TipoMedida } from '../../../database/entities/productos/presentacion.entity';
 import { PrecioVenta } from '../../../database/entities/productos/precio-venta.entity';
 import { Codigo } from '../../../database/entities/productos/codigo.entity';
 import { CostoPorProducto, OrigenCosto } from '../../../database/entities/productos/costo-por-producto.entity';
@@ -96,7 +96,6 @@ export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
 
   // Constants for enum values
   readonly tipoMedidaOptions = Object.values(TipoMedida);
-  readonly metodoCalculoOptions = Object.values(MetodoCalculo);
 
   // Destroy subject for unsubscribing
   private destroy$ = new Subject<void>();
@@ -170,9 +169,7 @@ export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
       tipoMedida: [presentacion.tipoMedida || TipoMedida.UNIDAD, Validators.required],
       cantidad: [presentacion.cantidad || 1, [Validators.required, Validators.min(0.01)]],
       principal: [presentacion.principal || false],
-      activo: [presentacion.activo !== undefined ? presentacion.activo : true],
-      isSabores: [presentacion.isSabores || false],
-      metodoCalculo: [presentacion.metodoCalculo || null]
+      activo: [presentacion.activo !== undefined ? presentacion.activo : true]
     });
 
     // Add form to the map using presentation ID as key
@@ -332,9 +329,7 @@ export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
               tipoMedida: originalPresentacion.tipoMedida || TipoMedida.UNIDAD,
               cantidad: originalPresentacion.cantidad || 1,
               principal: originalPresentacion.principal || false,
-              activo: originalPresentacion.activo !== undefined ? originalPresentacion.activo : true,
-              isSabores: originalPresentacion.isSabores || false,
-              metodoCalculo: originalPresentacion.metodoCalculo || null
+              activo: originalPresentacion.activo !== undefined ? originalPresentacion.activo : true
             });
 
             this.unsavedChanges.set(presentacion.id, false);
@@ -542,10 +537,9 @@ export class SimplePresentationSectionComponent implements OnInit, OnDestroy {
           }
         });
       } else if(!this.producto.hasVariaciones) {
-        if(this.producto.recetaVariacion) {
-          this.costoPrincipal = await firstValueFrom(this.repositoryService.getRecetaVariacionCosto(this.producto.recetaVariacion.id));
-          this.cdr.detectChanges();
-        }
+        // For products without variations, we don't calculate cost from recetaVariacion anymore
+        this.costoPrincipal = null;
+        this.cdr.detectChanges();
       } else {
         this.costoPrincipal = null;
         this.cdr.detectChanges();

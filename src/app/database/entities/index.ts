@@ -19,7 +19,7 @@ export { Cliente } from './personas/cliente.entity';
 // Export producto-related entities and enums
 export { TipoMedida as PresentacionTipoMedida } from './productos/presentacion.entity';
 export { TipoMedida as IngredienteTipoMedida } from './productos/ingrediente.entity';
-export { MetodoCalculo } from './productos/presentacion.entity';
+export { MetodoCalculo } from './productos/producto.entity';
 export { Categoria } from './productos/categoria.entity';
 export { Subcategoria } from './productos/subcategoria.entity';
 export { Producto } from './productos/producto.entity';

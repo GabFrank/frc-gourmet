@@ -9,10 +9,19 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Producto = void 0;
+exports.Producto = exports.MetodoCalculo = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
-const receta_variacion_entity_1 = require("./receta-variacion.entity");
+/**
+ * Método de cálculo de precios para productos con sabores
+ */
+var MetodoCalculo;
+(function (MetodoCalculo) {
+    MetodoCalculo["PROMEDIO"] = "PROMEDIO";
+    MetodoCalculo["MAYOR_PRECIO"] = "MAYOR_PRECIO";
+    MetodoCalculo["MENOR_PRECIO"] = "MENOR_PRECIO";
+    MetodoCalculo["FIJO"] = "FIJO";
+})(MetodoCalculo = exports.MetodoCalculo || (exports.MetodoCalculo = {}));
 /**
  * Entity representing a product
  */
@@ -67,6 +76,16 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Producto.prototype, "hasVariaciones", void 0);
 __decorate([
+    (0, typeorm_1.Column)({
+        type: 'varchar',
+        name: 'metodo_calculo',
+        enum: MetodoCalculo,
+        default: MetodoCalculo.PROMEDIO,
+        nullable: true
+    }),
+    __metadata("design:type", String)
+], Producto.prototype, "metodoCalculo", void 0);
+__decorate([
     (0, typeorm_1.Column)({ nullable: true, type: 'text' }),
     __metadata("design:type", String)
 ], Producto.prototype, "observacion", void 0);
@@ -92,15 +111,6 @@ __decorate([
     __metadata("design:type", Function)
 ], Producto.prototype, "subcategoria", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('RecetaVariacion', { nullable: true, onDelete: 'SET NULL' }),
-    (0, typeorm_1.JoinColumn)({ name: 'receta_variacion_id' }),
-    __metadata("design:type", receta_variacion_entity_1.RecetaVariacion)
-], Producto.prototype, "recetaVariacion", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ name: 'receta_variacion_id', nullable: true }),
-    __metadata("design:type", Number)
-], Producto.prototype, "recetaVariacionId", void 0);
-__decorate([
     (0, typeorm_1.OneToMany)('ProductoImage', 'producto', { onDelete: 'CASCADE' }),
     __metadata("design:type", Array)
 ], Producto.prototype, "images", void 0);
@@ -116,10 +126,6 @@ __decorate([
     (0, typeorm_1.OneToMany)('ObservacionProducto', 'producto', { onDelete: 'CASCADE' }),
     __metadata("design:type", Array)
 ], Producto.prototype, "observacionesProductos", void 0);
-__decorate([
-    (0, typeorm_1.OneToMany)('ProductoAdicional', 'producto', { onDelete: 'CASCADE' }),
-    __metadata("design:type", Array)
-], Producto.prototype, "productosAdicionales", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)('CostoPorProducto', 'producto', { onDelete: 'CASCADE' }),
     __metadata("design:type", Array)

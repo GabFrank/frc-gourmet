@@ -13,7 +13,7 @@ exports.PresentacionSabor = void 0;
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../base.entity");
 /**
- * Entity representing a product presentation with flavor
+ * Entity representing the relationship between a presentation and a flavor
  */
 let PresentacionSabor = class PresentacionSabor extends base_entity_1.BaseModel {
 };
@@ -22,7 +22,7 @@ __decorate([
     __metadata("design:type", Number)
 ], PresentacionSabor.prototype, "presentacionId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Presentacion', 'presentacionesSabores', { onDelete: 'CASCADE' }),
+    (0, typeorm_1.ManyToOne)('Presentacion', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'presentacion_id' }),
     __metadata("design:type", Function)
 ], PresentacionSabor.prototype, "presentacion", void 0);
@@ -31,7 +31,7 @@ __decorate([
     __metadata("design:type", Number)
 ], PresentacionSabor.prototype, "saborId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Sabor', 'presentacionesSabores', { onDelete: 'CASCADE' }),
+    (0, typeorm_1.ManyToOne)('Sabor', { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'sabor_id' }),
     __metadata("design:type", Function)
 ], PresentacionSabor.prototype, "sabor", void 0);
@@ -40,29 +40,16 @@ __decorate([
     __metadata("design:type", Number)
 ], PresentacionSabor.prototype, "recetaId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)('Receta', { nullable: true, onDelete: 'SET NULL' }),
+    (0, typeorm_1.ManyToOne)('Receta', { onDelete: 'SET NULL' }),
     (0, typeorm_1.JoinColumn)({ name: 'receta_id' }),
     __metadata("design:type", Function)
 ], PresentacionSabor.prototype, "receta", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ name: 'variacion_id', nullable: true }),
-    __metadata("design:type", Number)
-], PresentacionSabor.prototype, "variacionId", void 0);
-__decorate([
-    (0, typeorm_1.ManyToOne)('RecetaVariacion', { nullable: true, onDelete: 'SET NULL' }),
-    (0, typeorm_1.JoinColumn)({ name: 'variacion_id' }),
-    __metadata("design:type", Function)
-], PresentacionSabor.prototype, "variacion", void 0);
-__decorate([
-    (0, typeorm_1.OneToMany)('PrecioVenta', 'presentacionSabor', { onDelete: 'CASCADE' }),
-    __metadata("design:type", Array)
-], PresentacionSabor.prototype, "preciosVenta", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
 ], PresentacionSabor.prototype, "activo", void 0);
 PresentacionSabor = __decorate([
-    (0, typeorm_1.Entity)('producto_presentaciones_sabores')
+    (0, typeorm_1.Entity)('presentacion_sabores')
 ], PresentacionSabor);
 exports.PresentacionSabor = PresentacionSabor;
 //# sourceMappingURL=presentacion-sabor.entity.js.map
