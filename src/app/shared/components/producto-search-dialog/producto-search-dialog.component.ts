@@ -10,12 +10,11 @@ import { MatTableModule } from '@angular/material/table';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { RepositoryService } from '../../../database/repository.service';
-import { Producto } from '../../../database/entities/productos/producto.entity';
-import { Codigo, TipoCodigo } from '../../../database/entities/productos/codigo.entity';
 import { firstValueFrom } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
-import { Presentacion } from 'src/app/database/entities/productos/presentacion.entity';
-import { PrecioVenta } from 'src/app/database/entities/productos/precio-venta.entity';
+import { ProductosRepository } from 'src/app/database/productos.repository';
+import { PrecioVenta } from 'productos.preload';
+import { Producto, Presentacion } from 'src/app/database/entities';
 
 export interface ProductoSearchDialogData {
   searchTerm: string;
@@ -71,7 +70,7 @@ export class ProductoSearchDialogComponent implements OnInit {
   constructor(
     private dialogRef: MatDialogRef<ProductoSearchDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: ProductoSearchDialogData,
-    private repositoryService: RepositoryService,
+    private repositoryService: ProductosRepository,
     private fb: FormBuilder
   ) {
     // Initialize form
@@ -149,12 +148,12 @@ export class ProductoSearchDialogComponent implements OnInit {
 
       // Otherwise, do a regular search
       const searchResults = await firstValueFrom(
-        this.repositoryService.searchProductos({
-          searchTerm: searchTerm,
-          page: this.pageIndex + 1, // Convert to 1-based for backend
-          pageSize: this.pageSize,
-          exactMatch: false
-        })
+        this.repositoryService.searchProductosBaseByDescripcion(
+          searchTerm,
+          this.pageIndex + 1, // Convert to 1-based for backend
+          this.pageSize,
+          false
+        )
       );
       console.log(searchResults);
       this.searchResults = searchResults.items;

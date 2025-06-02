@@ -1,3 +1,8 @@
+// ====================================================================
+// TODO: MIGRATION TO NEW PRODUCT ARCHITECTURE PENDING
+// This component uses legacy entities that need to be migrated
+// ====================================================================
+
 import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -10,14 +15,19 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { RepositoryService } from '../../../../database/repository.service';
-import { Categoria } from '../../../../database/entities/productos/categoria.entity';
+import { ProductosRepository } from '../../../../database/productos.repository';
+import { AuthService } from '../../../../services/auth.service';
+import { ConfirmationDialogComponent } from '../../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { firstValueFrom } from 'rxjs';
 
 interface DialogData {
   id?: number;
   defaultPosition?: number;
 }
+
+// TODO: Migrate to new product architecture
+// import { Categoria } from '../../../../database/entities/productos/categoria.entity';
+type Categoria = any;
 
 @Component({
   selector: 'app-create-edit-categoria',
@@ -48,7 +58,7 @@ export class CreateEditCategoriaComponent implements OnInit {
     private dialogRef: MatDialogRef<CreateEditCategoriaComponent>,
     @Inject(MAT_DIALOG_DATA) private data: DialogData,
     private fb: FormBuilder,
-    private repository: RepositoryService,
+    private repository: ProductosRepository,
     private snackBar: MatSnackBar
   ) {
     const initialPosition = data?.defaultPosition !== undefined ? data.defaultPosition : 0;

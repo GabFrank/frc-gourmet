@@ -8,12 +8,8 @@ import { MatGridListModule } from '@angular/material/grid-list';
 import { RouterModule } from '@angular/router';
 import { TabsService } from '../../../services/tabs.service';
 import { ListCategoriasComponent } from '../categorias/list-categorias/list-categorias.component';
-import { ListProductosComponent } from '../productos/list-productos/list-productos.component';
-import { ListRecetasComponent } from '../recetas/list-recetas.component';
-import { ListIngredientesComponent } from '../ingredientes/list-ingredientes.component';
 import { ListMovimientosStockComponent } from '../movimientos/list-movimientos-stock.component';
 import { MatDialog } from '@angular/material/dialog';
-import { ListAdicionalesDialogComponent } from '../adicionales/list-adicionales-dialog/list-adicionales-dialog.component';
 import { MatDialogModule } from '@angular/material/dialog';
 
 @Component({
@@ -74,33 +70,33 @@ export class ProductoDashboardComponent implements OnInit {
   }
 
   openProductosTab(): void {
-    this.tabsService.openTab(
-      'Productos',
-      ListProductosComponent,
-      { source: 'dashboard' },
-      'productos-tab',
-      true
-    );
+    // this.tabsService.openTab(
+    //   'Productos',
+    //   ListProductosComponent,
+    //   { source: 'dashboard' },
+    //   'productos-tab',
+    //   true
+    // );
   }
 
   openRecetasTab(): void {
-    this.tabsService.openTab(
-      'Recetas',
-      ListRecetasComponent,
-      { source: 'dashboard' },
-      'recetas-tab',
-      true
-    );
+    // this.tabsService.openTab(
+    //   'Recetas',
+    //   ListRecetasComponent,
+    //   { source: 'dashboard' },
+    //   'recetas-tab',
+    //   true
+    // );
   }
 
   openIngredientesTab(): void {
-    this.tabsService.openTab(
-      'Ingredientes',
-      ListIngredientesComponent,
-      { source: 'dashboard' },
-      'ingredientes-tab',
-      true
-    );
+    // this.tabsService.openTab(
+    //   'Ingredientes',
+    //   ListIngredientesComponent,
+    //   { source: 'dashboard' },
+    //   'ingredientes-tab',
+    //   true
+    // );
   }
 
   openMovimientosTab(): void {
@@ -114,18 +110,18 @@ export class ProductoDashboardComponent implements OnInit {
   }
   
   openAdicionalesDialog(): void {
-    const dialogRef = this.dialog.open(ListAdicionalesDialogComponent, {
-      width: '90%',
-      maxWidth: '1200px',
-      height: '70%',
-      disableClose: false
-    });
+    // const dialogRef = this.dialog.open(ListAdicionalesDialogComponent, {
+    //   width: '90%',
+    //   maxWidth: '1200px',
+    //   height: '70%',
+    //   disableClose: false
+    // });
 
-    dialogRef.afterClosed().subscribe(result => {
-      if (result) {
-        // Handle result if needed
-        console.log('Adicionales dialog closed with result:', result);
-      }
-    });
+    // dialogRef.afterClosed().subscribe(result => {
+    //   if (result) {
+    //     // Handle result if needed
+    //     console.log('Adicionales dialog closed with result:', result);
+    //   }
+    // });
   }
 } 

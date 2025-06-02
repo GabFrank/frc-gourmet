@@ -11,35 +11,58 @@ import { UsuarioRole } from './entities/personas/usuario-role.entity';
 import { TipoCliente } from './entities/personas/tipo-cliente.entity';
 import { Cliente } from './entities/personas/cliente.entity';
 import { LoginSession } from './entities/auth/login-session.entity';
-import { Categoria } from './entities/productos/categoria.entity';
-import { Subcategoria } from './entities/productos/subcategoria.entity';
-import { Producto } from './entities/productos/producto.entity';
-import { ProductoImage } from './entities/productos/producto-image.entity';
-import { Presentacion } from './entities/productos/presentacion.entity';
-import { Codigo } from './entities/productos/codigo.entity';
-import { PrecioVenta } from './entities/productos/precio-venta.entity';
-import { Moneda } from './entities/financiero/moneda.entity';
-import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
-import { Sabor } from './entities/productos/sabor.entity';
-import { PresentacionSabor } from './entities/productos/presentacion-sabor.entity';
-import { Ingrediente } from './entities/productos/ingrediente.entity';
-import { Receta } from './entities/productos/receta.entity';
-import { RecetaItem } from './entities/productos/receta-item.entity';
-import { RecetaVariacion } from './entities/productos/receta-variacion.entity';
-import { RecetaVariacionItem } from './entities/productos/receta-variacion-item.entity';
-import { Combo } from './entities/productos/combo.entity';
-import { ComboItem } from './entities/productos/combo-item.entity';
-import { IntercambioIngrediente } from './entities/productos/intercambio-ingrediente.entity';
-// Import the new entities
-import { Observacion } from './entities/productos/observacion.entity';
-import { ObservacionProducto } from './entities/productos/observacion-producto.entity';
-import { ObservacionProductoVentaItem } from './entities/productos/observacion-producto-venta-item.entity';
-import { Adicional } from './entities/productos/adicional.entity';
-import { ProductoAdicional } from './entities/productos/producto-adicional.entity';
-import { ProductoAdicionalVentaItem } from './entities/productos/producto-adicional-venta-item.entity';
-import { CostoPorProducto } from './entities/productos/costo-por-producto.entity';
+
+// OLD PRODUCT ENTITIES (commented temporarily until migration)
+// import { Categoria } from './entities/productos/categoria.entity';
+// import { Subcategoria } from './entities/productos/subcategoria.entity';
+// import { Producto } from './entities/productos/producto.entity';
+// import { ProductoImage } from './entities/productos/producto-image.entity';
+// import { Presentacion } from './entities/productos/presentacion.entity';
+// import { Codigo } from './entities/productos/codigo.entity';
+// import { Sabor } from './entities/productos/sabor.entity';
+// import { PresentacionSabor } from './entities/productos/presentacion-sabor.entity';
+// import { Receta } from './entities/productos/receta.entity';
+// import { RecetaItem } from './entities/productos/receta-item.entity';
+// import { RecetaVariacion } from './entities/productos/receta-variacion.entity';
+// import { RecetaVariacionItem } from './entities/productos/receta-variacion-item.entity';
+// import { IntercambioIngrediente } from './entities/productos/intercambio-ingrediente.entity';
+// import { MovimientoStock } from './entities/productos/movimiento-stock.entity';
+
+// NEW PRODUCT ARCHITECTURE
+// Core entities
+import { ProductoBase } from './entities/productos/core/producto-base.entity';
+import { UnidadMedida } from './entities/productos/core/unidad-medida.entity';
+import { Ingrediente } from './entities/productos/core/ingrediente.entity';
+
+// Variaciones
+import { ProductoVariacion } from './entities/productos/variaciones/producto-variacion.entity';
+
+// Recetas
+import { Receta } from './entities/productos/recetas/receta.entity';
+import { RecetaItem } from './entities/productos/recetas/receta-item.entity';
+
+// Comercial
+import { ProductoPresentacion } from './entities/productos/comercial/producto-presentacion.entity';
+import { PrecioVenta } from './entities/productos/comercial/precio-venta.entity';
+import { Combo } from './entities/productos/comercial/combo.entity';
+import { ComboItem } from './entities/productos/comercial/combo-item.entity';
+
+// Observaciones
+import { Observacion } from './entities/productos/observaciones/observacion.entity';
+
+// Legacy observation and additional entities (commented temporarily)
+// import { ObservacionProducto } from './entities/productos/observacion-producto.entity';
+// import { ObservacionProductoVentaItem } from './entities/productos/observacion-producto-venta-item.entity';
+// import { GrupoObservacion } from './entities/productos/grupo-observacion.entity';
+// import { GrupoObservacionDetalle } from './entities/productos/grupo-observacion-detalle.entity';
+// import { Adicional } from './entities/productos/adicional.entity';
+// import { ProductoAdicional } from './entities/productos/producto-adicional.entity';
+// import { ProductoAdicionalVentaItem } from './entities/productos/producto-adicional-venta-item.entity';
+// import { CostoPorProducto } from './entities/productos/costo-por-producto.entity';
 
 // Import new financial entities
+import { Moneda } from './entities/financiero/moneda.entity';
+import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
 import { MonedaBillete } from './entities/financiero/moneda-billete.entity';
 import { Dispositivo } from './entities/financiero/dispositivo.entity';
 import { Conteo } from './entities/financiero/conteo.entity';
@@ -56,7 +79,6 @@ import { Compra } from './entities/compras/compra.entity';
 import { CompraDetalle } from './entities/compras/compra-detalle.entity';
 import { ProveedorProducto } from './entities/compras/proveedor-producto.entity';
 import { FormasPago } from './entities/compras/forma-pago.entity';
-import { MovimientoStock } from './entities/productos/movimiento-stock.entity';
 
 // Import new migration
 import { AddColumnsToConteo1624098765432 } from './migrations/1624098765432-AddColumnsToConteo';
@@ -87,7 +109,7 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
     type: 'sqlite',
     database: path.join(userDataPath, 'frc-gourmet.db'),
     entities: [
-      // Entity classes
+      // Base entities
       Printer,
       Persona,
       Usuario,
@@ -96,36 +118,10 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       TipoCliente,
       Cliente,
       LoginSession,
-      Categoria,
-      Subcategoria,
-      Producto,
-      ProductoImage,
-      // Product entities
-      Presentacion,
-      Codigo,
-      PrecioVenta,
+      
+      // Financial entities
       Moneda,
       TipoPrecio,
-      // New entities
-      Sabor,
-      PresentacionSabor,
-      Ingrediente,
-      Receta,
-      RecetaItem,
-      RecetaVariacion,
-      RecetaVariacionItem,
-      Combo,
-      ComboItem,
-      IntercambioIngrediente,
-      // New observation and additional entities
-      Observacion,
-      ObservacionProducto,
-      ObservacionProductoVentaItem,
-      Adicional,
-      ProductoAdicional,
-      ProductoAdicionalVentaItem,
-      CostoPorProducto,
-      // New financial entities
       MonedaBillete,
       Dispositivo,
       Conteo,
@@ -133,6 +129,55 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       Caja,
       CajaMoneda,
       MonedaCambio,
+      
+      // OLD Product entities (commented temporarily until migration)
+      // Categoria,
+      // Subcategoria,
+      // Producto,
+      // ProductoImage,
+      // Presentacion,
+      // Codigo,
+      // Sabor,
+      // PresentacionSabor,
+      // Receta,
+      // RecetaItem,
+      // RecetaVariacion,
+      // RecetaVariacionItem,
+      // IntercambioIngrediente,
+      // MovimientoStock,
+      
+      // NEW Product Architecture
+      // Core
+      UnidadMedida,
+      ProductoBase,
+      Ingrediente,
+      
+      // Variaciones
+      ProductoVariacion,
+      
+      // Recetas
+      Receta,
+      RecetaItem,
+      
+      // Comercial
+      ProductoPresentacion,
+      PrecioVenta,
+      Combo,
+      ComboItem,
+      
+      // Observaciones
+      Observacion,
+      
+      // Legacy observation and additional entities (commented temporarily)
+      // ObservacionProducto,
+      // ObservacionProductoVentaItem,
+      // GrupoObservacion,
+      // GrupoObservacionDetalle,
+      // Adicional,
+      // ProductoAdicional,
+      // ProductoAdicionalVentaItem,
+      // CostoPorProducto,
+      
       // Compras entities
       Proveedor,
       Pago,
@@ -141,18 +186,20 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       CompraDetalle,
       ProveedorProducto,
       FormasPago,
-      MovimientoStock,
+      
       // Ventas entities
       PrecioDelivery,
       Delivery,
       Venta,
       VentaItem,
+      
       // PDV entities
       PdvGrupoCategoria,
       PdvCategoria,
       PdvCategoriaItem,
       PdvItemProducto,
       PdvConfig,
+      
       // Mesa, Reserva, and Comanda entities
       PdvMesa,
       Reserva,
