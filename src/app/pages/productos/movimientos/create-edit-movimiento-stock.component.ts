@@ -10,10 +10,46 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { RepositoryService } from '../../../database/repository.service';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MovimientoStock, TipoReferencia } from '../../../database/entities/productos/movimiento-stock.entity';
+// TODO: These entity files don't exist yet - commenting out until they are created
+// import { MovimientoStock, TipoReferencia } from '../../../database/entities/productos/movimiento-stock.entity';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
-import { TipoMedida } from '../../../database/entities/productos/ingrediente.entity';
+// TODO: This entity file doesn't exist yet - commenting out until it is created
+// import { TipoMedida } from '../../../database/entities/productos/ingrediente.entity';
+import { firstValueFrom } from 'rxjs';
+
+// Temporary type definitions until entities are implemented
+interface MovimientoStock {
+  id?: number;
+  productoId?: number;
+  ingredienteId?: number;
+  tipoReferencia?: TipoReferencia;
+  cantidadActual?: number;
+  tipoMedida?: string;
+  referencia?: number;
+  createdAt?: Date;
+  activo?: boolean;
+  producto?: { nombre: string };
+  ingrediente?: { descripcion: string };
+}
+
+enum TipoReferencia {
+  VENTA = 'VENTA',
+  COMPRA = 'COMPRA',
+  AJUSTE = 'AJUSTE',
+  TRANSFERENCIA = 'TRANSFERENCIA',
+  DESCARTE = 'DESCARTE'
+}
+
+enum TipoMedida {
+  KILOGRAMO = 'kg',
+  GRAMO = 'g',
+  LITRO = 'lt',
+  MILILITRO = 'ml',
+  UNIDAD = 'unidad',
+  METRO = 'm',
+  CENTIMETRO = 'cm'
+}
 
 @Component({
   selector: 'app-create-edit-movimiento-stock',
@@ -68,13 +104,15 @@ export class CreateEditMovimientoStockComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     this.isLoading = true;
     try {
-      // Load productos for dropdown
-      const productos = await this.repositoryService.getProductos().toPromise();
-      this.productosOptions = productos || [];
+      // TODO: Load productos for dropdown - method doesn't exist yet
+      // const productos = await this.repositoryService.getProductos().toPromise();
+      // this.productosOptions = productos || [];
+      this.productosOptions = []; // Temporary empty array
 
-      // Load ingredientes for dropdown
-      const ingredientes = await this.repositoryService.getIngredientes().toPromise();
-      this.ingredientesOptions = ingredientes || [];
+      // TODO: Load ingredientes for dropdown - method doesn't exist yet  
+      // const ingredientes = await this.repositoryService.getIngredientes().toPromise();
+      // this.ingredientesOptions = ingredientes || [];
+      this.ingredientesOptions = []; // Temporary empty array
 
       // Set form values in edit mode
       if (this.isEditMode && this.data.movimientoStock) {
@@ -141,6 +179,10 @@ export class CreateEditMovimientoStockComponent implements OnInit {
       let result;
 
       if (this.isEditMode && this.data.movimientoStock) {
+        if (!this.data.movimientoStock.id) {
+          this.snackBar.open('Error: ID del movimiento de stock no encontrado', 'Cerrar', { duration: 3000 });
+          return;
+        }
         result = await this.repositoryService.updateMovimientoStock(
           this.data.movimientoStock.id, 
           formData

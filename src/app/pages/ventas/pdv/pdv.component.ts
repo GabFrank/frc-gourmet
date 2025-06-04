@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -6,7 +6,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MatTableModule } from '@angular/material/table';
+import { MatTableModule, MatTableDataSource } from '@angular/material/table';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatGridListModule } from '@angular/material/grid-list';
@@ -17,17 +17,16 @@ import { FormControl, FormBuilder, FormGroup, ReactiveFormsModule } from '@angul
 import { Observable, of, firstValueFrom, async } from 'rxjs';
 import { debounceTime, distinctUntilChanged, map, startWith, switchMap } from 'rxjs/operators';
 import { animate, state, style, transition, trigger } from '@angular/animations';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatSelectModule } from '@angular/material/select';
 
 import { RepositoryService } from '../../../database/repository.service';
 import { CajaMoneda } from '../../../database/entities/financiero/caja-moneda.entity';
-import { Producto } from '../../../database/entities/productos/producto.entity';
 import { VentaItem, EstadoVentaItem } from '../../../database/entities/ventas/venta-item.entity';
-import { PrecioVenta } from '../../../database/entities/productos/precio-venta.entity';
 import { Moneda } from '../../../database/entities/financiero/moneda.entity';
 import { MonedaCambio } from '../../../database/entities/financiero/moneda-cambio.entity';
 import { PdvMesa, PdvMesaEstado } from '../../../database/entities/ventas/pdv-mesa.entity';
 import { ProductoSearchDialogComponent } from '../../../shared/components/producto-search-dialog/producto-search-dialog.component';
-import { Presentacion } from '../../../database/entities/productos/presentacion.entity';
 import { Venta, VentaEstado } from 'src/app/database/entities/ventas/venta.entity';
 import { AuthService } from 'src/app/services/auth.service';
 import { Caja } from 'src/app/database/entities/financiero/caja.entity';
@@ -36,8 +35,10 @@ import { TabsService } from 'src/app/services/tabs.service';
 import { MesaSelectionDialogComponent } from '../../../shared/components/mesa-selection-dialog/mesa-selection-dialog.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatTableDataSource } from '@angular/material/table';
 import { PdvGrupoCategoria } from 'src/app/database/entities/ventas/pdv-grupo-categoria.entity';
+import { ProductosRepository } from '../../../database/productos.repository';
+import { Producto, Presentacion } from '../../../database/entities';
+import { PrecioVenta } from '../../../database/entities/productos/comercial/precio-venta.entity';
 
 interface MonedaWithTotal {
   moneda: Moneda;
@@ -72,7 +73,9 @@ interface CurrencyDisplay {
     MatProgressSpinnerModule,
     MatTooltipModule,
     MatDialogModule,
-    MatMenuModule
+    MatMenuModule,
+    MatSnackBarModule,
+    MatSelectModule
   ],
   animations: [
     trigger('detailExpand', [
@@ -82,7 +85,7 @@ interface CurrencyDisplay {
     ]),
   ],
 })
-export class PdvComponent implements OnInit {
+export class PdvComponent implements OnInit, OnDestroy, AfterViewInit {
   // Table data
   ventaItemsDataSource = new MatTableDataSource<VentaItem>([]);
   displayedColumns: string[] = ['productoNombre', 'cantidad', 'precio', 'total', 'actions'];
@@ -134,22 +137,20 @@ export class PdvComponent implements OnInit {
   // tiempo abierto
   tiempoAbierto = '0h 0m';
 
-  // Getter to combine loading states for currency display
-  // get loadingCurrencies(): boolean {
-  //   return this.loadingExchangeRates || this.loadingConfig;
-  // }
-
   // Search constants
   readonly SEARCH_DIALOG_WIDTH = '800px';
   readonly SEARCH_DIALOG_HEIGHT = '600px';
 
+  private _searchTermInput!: ElementRef;
 
   constructor(
     private repositoryService: RepositoryService,
     private dialog: MatDialog,
     private fb: FormBuilder,
     private authService: AuthService,
-    private tabsService: TabsService
+    private tabsService: TabsService,
+    private productosRepository: ProductosRepository,
+    private snackBar: MatSnackBar
   ) {
     // Initialize form
     this.searchForm = this.fb.group({
@@ -166,7 +167,11 @@ export class PdvComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     // get caja abierta from current user
     if (this.authService.currentUser) {
-      this.caja = await firstValueFrom(this.repositoryService.getCajaAbiertaByUsuario(this.authService.currentUser.id));
+      // TODO: Implement getCajaAbiertaByUsuario in RepositoryService
+      // this.caja = await firstValueFrom(this.repositoryService.getCajaAbiertaByUsuario(this.authService.currentUser.id));
+      // For now, create a mock caja to continue with the demo
+      this.caja = { id: 1, fechaApertura: new Date() } as Caja;
+      
       if (this.caja) {
         this.loadInitialData();
       } else {
@@ -218,7 +223,6 @@ export class PdvComponent implements OnInit {
       this.tiempoAbierto = this.timeOpen();
     }, 60000);
 
-
   }
 
   /**
@@ -268,8 +272,10 @@ export class PdvComponent implements OnInit {
   async loadMesas(): Promise<void> {
     this.loadingMesas = true;
     try {
+      // TODO: Implement getPdvMesas in RepositoryService
       // Get all active tables
-      this.mesas = await firstValueFrom(this.repositoryService.getPdvMesas());
+      // this.mesas = await firstValueFrom(this.repositoryService.getPdvMesas());
+      this.mesas = []; // Temporary placeholder
 
       // Filter for active tables
       this.mesas = this.mesas.filter(mesa => mesa.activo);
@@ -294,8 +300,10 @@ export class PdvComponent implements OnInit {
     this.loadingMesas = true;
     try {
       this.selectedSectorId = sectorId;
+      // TODO: Implement getPdvMesasBySector in RepositoryService
       // Get tables by sector
-      this.mesas = await firstValueFrom(this.repositoryService.getPdvMesasBySector(sectorId));
+      // this.mesas = await firstValueFrom(this.repositoryService.getPdvMesasBySector(sectorId));
+      this.mesas = []; // Temporary placeholder
 
       // Filter for active tables
       this.mesas = this.mesas.filter(mesa => mesa.activo);
@@ -837,5 +845,25 @@ export class PdvComponent implements OnInit {
     return `${hours}h ${minutes}m`;
   }
 
+  ngOnDestroy(): void {
+    // Cleanup code if needed
+  }
 
+  @HostListener('window:keydown', ['$event'])
+  handleKeyDown(event: KeyboardEvent): void {
+    if (this._searchTermInput) {
+      this.onSearchKeyDown(event);
+    }
+  }
+
+  @ViewChild('searchTermInput', { static: false })
+  set searchTermInput(element: ElementRef) {
+    this._searchTermInput = element;
+  }
+
+  ngAfterViewInit(): void {
+    if (this._searchTermInput) {
+      this._searchTermInput.nativeElement.focus();
+    }
+  }
 } 

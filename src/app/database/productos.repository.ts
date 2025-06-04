@@ -65,7 +65,8 @@ interface ProductosElectronAPI {
   // page: this.pageIndex + 1, // Convert to 1-based for backend
   // pageSize: this.pageSize,
   // exactMatch: false
-  searchProductosBaseByDescripcion: (searchTerm: string, page: number, pageSize: number, exactMatch: boolean) => Promise<ProductoBase[]>;
+  searchProductosBaseByDescripcion: (searchTerm: string, page: number, pageSize: number, exactMatch: boolean) => Promise<{items: ProductoBase[], total: number}>;
+  searchProductosByCode: (codigo: string) => Promise<{product: Producto, presentacion: Presentacion} | null>;
   // Ingrediente (new) methods
   getIngredientesNuevo: () => Promise<Ingrediente[]>;
   getIngredienteNuevo: (id: number) => Promise<Ingrediente>;
@@ -289,8 +290,13 @@ export class ProductosRepository {
     return from(this.api.deleteProductoBase(id));
   }
 
-  searchProductosBaseByDescripcion(descripcion: string, page: number, pageSize: number, exactMatch: boolean): Observable<ProductoBase[]> {
+  searchProductosBaseByDescripcion(descripcion: string, page: number, pageSize: number, exactMatch: boolean): Observable<{items: ProductoBase[], total: number}> {
     return from(this.api.searchProductosBaseByDescripcion(descripcion, page, pageSize, exactMatch));
+  }
+
+  // search by code
+  searchProductosByCode(codigo: string): Observable<{product: Producto, presentacion: Presentacion} | null> {
+    return from(this.api.searchProductosByCode(codigo));
   }
 
   // Ingrediente (new) methods

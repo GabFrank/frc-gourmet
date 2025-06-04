@@ -284,7 +284,7 @@ export const productosAPI = {
   createProductoBase: (data: Partial<ProductoBase>): Promise<ProductoBase> => ipcRenderer.invoke('productos:createProductoBase', data),
   updateProductoBase: (id: number, data: Partial<ProductoBase>): Promise<ProductoBase> => ipcRenderer.invoke('productos:updateProductoBase', id, data),
   deleteProductoBase: (id: number): Promise<boolean> => ipcRenderer.invoke('productos:deleteProductoBase', id),
-  searchProductosBaseByDescripcion: (searchTerm: string, page: number, pageSize: number, exactMatch: boolean): Promise<ProductoBase[]> => ipcRenderer.invoke('productos:searchProductosBaseByDescripcion', searchTerm, page, pageSize, exactMatch),
+  searchProductosBaseByDescripcion: (searchTerm: string, page: number, pageSize: number, exactMatch: boolean): Promise<{items: ProductoBase[], total: number}> => ipcRenderer.invoke('productos:searchProductosBaseByDescripcion', searchTerm, page, pageSize, exactMatch),
 
   // Ingrediente (new) methods
   getIngredientesNuevo: (): Promise<Ingrediente[]> => ipcRenderer.invoke('productos:getIngredientesNuevo'),

@@ -136,6 +136,14 @@ interface ElectronAPI {
   updateMoneda: (monedaId: number, monedaData: any) => Promise<any>;
   deleteMoneda: (monedaId: number) => Promise<any>;
   
+  // MonedaBillete methods
+  getMonedasBilletes: () => Promise<MonedaBillete[]>;
+  getMonedaBillete: (billeteId: number) => Promise<MonedaBillete>;
+  getMonedasBilletesByMoneda: (monedaId: number) => Promise<MonedaBillete[]>;
+  createMonedaBillete: (billeteData: any) => Promise<MonedaBillete>;
+  updateMonedaBillete: (billeteId: number, billeteData: any) => Promise<MonedaBillete>;
+  deleteMonedaBillete: (billeteId: number) => Promise<boolean>;
+  
   // TipoPrecio methods
   getTipoPrecios: () => Promise<TipoPrecio[]>;
   getTipoPrecio: (tipoPrecioId: number) => Promise<TipoPrecio>;
@@ -150,7 +158,115 @@ interface ElectronAPI {
   updatePago: (pagoId: number, pagoData: any) => Promise<Pago>;
   deletePago: (pagoId: number) => Promise<boolean>;
   
-  // TODO: Add non-product methods here as needed
+  // PDV GrupoCategoria methods
+  getPdvGrupoCategorias: () => Promise<PdvGrupoCategoria[]>;
+  getPdvGrupoCategoria: (grupoId: number) => Promise<PdvGrupoCategoria>;
+  createPdvGrupoCategoria: (grupoData: any) => Promise<PdvGrupoCategoria>;
+  updatePdvGrupoCategoria: (grupoId: number, grupoData: any) => Promise<PdvGrupoCategoria>;
+  deletePdvGrupoCategoria: (grupoId: number) => Promise<boolean>;
+  
+  // PDV Categoria methods
+  getPdvCategorias: () => Promise<PdvCategoria[]>;
+  getPdvCategoria: (categoriaId: number) => Promise<PdvCategoria>;
+  getPdvCategoriasByGrupo: (grupoId: number) => Promise<PdvCategoria[]>;
+  createPdvCategoria: (categoriaData: any) => Promise<PdvCategoria>;
+  updatePdvCategoria: (categoriaId: number, categoriaData: any) => Promise<PdvCategoria>;
+  deletePdvCategoria: (categoriaId: number) => Promise<boolean>;
+  
+  // PDV CategoriaItem methods
+  getPdvCategoriaItems: () => Promise<PdvCategoriaItem[]>;
+  getPdvCategoriaItem: (itemId: number) => Promise<PdvCategoriaItem>;
+  getPdvCategoriaItemsByCategoria: (categoriaId: number) => Promise<PdvCategoriaItem[]>;
+  createPdvCategoriaItem: (itemData: any) => Promise<PdvCategoriaItem>;
+  updatePdvCategoriaItem: (itemId: number, itemData: any) => Promise<PdvCategoriaItem>;
+  deletePdvCategoriaItem: (itemId: number) => Promise<boolean>;
+  
+  // PDV ItemProducto methods
+  getPdvItemProductos: () => Promise<PdvItemProducto[]>;
+  getPdvItemProducto: (itemProductoId: number) => Promise<PdvItemProducto>;
+  getPdvItemProductosByItem: (itemId: number) => Promise<PdvItemProducto[]>;
+  createPdvItemProducto: (itemProductoData: any) => Promise<PdvItemProducto>;
+  updatePdvItemProducto: (itemProductoId: number, itemProductoData: any) => Promise<PdvItemProducto>;
+  deletePdvItemProducto: (itemProductoId: number) => Promise<boolean>;
+  
+  // PDV Mesa methods
+  getPdvMesas: () => Promise<PdvMesa[]>;
+  getPdvMesa: (mesaId: number) => Promise<PdvMesa>;
+  getPdvMesasBySector: (sectorId: number) => Promise<PdvMesa[]>;
+  createPdvMesa: (mesaData: any) => Promise<PdvMesa>;
+  updatePdvMesa: (mesaId: number, mesaData: any) => Promise<PdvMesa>;
+  deletePdvMesa: (mesaId: number) => Promise<boolean>;
+  
+  // Other missing methods for PDV functionality
+  getCajasMonedas: () => Promise<CajaMoneda[]>;
+  saveCajasMonedas: (cajasMonedas: CajaMoneda[]) => Promise<boolean>;
+  getMonedasCambio: () => Promise<MonedaCambio[]>;
+  getMonedasCambioByMonedaOrigen: (monedaOrigenId: number) => Promise<MonedaCambio[]>;
+  createMonedaCambio: (cambioData: any) => Promise<MonedaCambio>;
+  updateMonedaCambio: (cambioId: number, cambioData: any) => Promise<MonedaCambio>;
+  deleteMonedaCambio: (cambioId: number) => Promise<boolean>;
+  
+  // Dispositivo methods
+  getDispositivos: () => Promise<Dispositivo[]>;
+  getDispositivo: (dispositivoId: number) => Promise<Dispositivo>;
+  createDispositivo: (dispositivoData: any) => Promise<Dispositivo>;
+  updateDispositivo: (dispositivoId: number, dispositivoData: any) => Promise<Dispositivo>;
+  deleteDispositivo: (dispositivoId: number) => Promise<boolean>;
+  
+  // Caja methods
+  getCajas: () => Promise<Caja[]>;
+  getCaja: (cajaId: number) => Promise<Caja>;
+  getCajaAbiertaByUsuario: (usuarioId: number) => Promise<Caja | null>;
+  createCaja: (cajaData: any) => Promise<Caja>;
+  updateCaja: (cajaId: number, cajaData: any) => Promise<Caja>;
+  deleteCaja: (cajaId: number) => Promise<boolean>;
+  
+  // Venta methods
+  getVentas: () => Promise<Venta[]>;
+  getVenta: (ventaId: number) => Promise<Venta>;
+  createVenta: (ventaData: any) => Promise<Venta>;
+  updateVenta: (ventaId: number, ventaData: any) => Promise<Venta>;
+  deleteVenta: (ventaId: number) => Promise<boolean>;
+  
+  // VentaItem methods
+  getVentaItems: (ventaId: number) => Promise<VentaItem[]>;
+  getVentaItem: (ventaItemId: number) => Promise<VentaItem>;
+  createVentaItem: (ventaItemData: any) => Promise<VentaItem>;
+  updateVentaItem: (ventaItemId: number, ventaItemData: any) => Promise<VentaItem>;
+  deleteVentaItem: (ventaItemId: number) => Promise<boolean>;
+  
+  // Formas de Pago methods
+  getFormasPago: () => Promise<FormasPago[]>;
+  
+  // FormasPago CRUD methods
+  getFormaPago: (formaPagoId: number) => Promise<FormasPago>;
+  createFormaPago: (formaPagoData: any) => Promise<FormasPago>;
+  updateFormaPago: (formaPagoId: number, formaPagoData: any) => Promise<FormasPago>;
+  deleteFormaPago: (formaPagoId: number) => Promise<boolean>;
+  updateFormasPagoOrder: (updates: any[]) => Promise<boolean>;
+  
+  // Pago Detalle methods
+  getPagoDetalles: (pagoId: number) => Promise<PagoDetalle[]>;
+  createPagoDetalle: (detalleData: any) => Promise<PagoDetalle>;
+  updatePagoDetalle: (detalleId: number, detalleData: any) => Promise<PagoDetalle>;
+  deletePagoDetalle: (detalleId: number) => Promise<boolean>;
+  
+  // Compra methods
+  getCompras: () => Promise<Compra[]>;
+  getCompra: (compraId: number) => Promise<Compra>;
+  createCompra: (compraData: any) => Promise<Compra>;
+  updateCompra: (compraId: number, compraData: any) => Promise<Compra>;
+  deleteCompra: (compraId: number) => Promise<boolean>;
+
+  // MovimientoStock methods
+  getMovimientosStock: () => Promise<any[]>;
+  getMovimientoStock: (movimientoId: number) => Promise<any>;
+  getMovimientosStockByProducto: (productoId: number) => Promise<any[]>;
+  getMovimientosStockByIngrediente: (ingredienteId: number) => Promise<any[]>;
+  getMovimientosStockByTipoReferencia: (tipoReferencia: string) => Promise<any[]>;
+  createMovimientoStock: (movimientoData: any) => Promise<any>;
+  updateMovimientoStock: (movimientoId: number, movimientoData: any) => Promise<any>;
+  deleteMovimientoStock: (movimientoId: number) => Promise<boolean>;
 }
 
 /**
@@ -474,6 +590,31 @@ export class RepositoryService {
     return from(this.api.deleteMoneda(monedaId));
   }
 
+  // MonedaBillete methods
+  getMonedasBilletes(): Observable<MonedaBillete[]> {
+    return from(this.api.getMonedasBilletes());
+  }
+
+  getMonedaBillete(billeteId: number): Observable<MonedaBillete> {
+    return from(this.api.getMonedaBillete(billeteId));
+  }
+
+  getMonedasBilletesByMoneda(monedaId: number): Observable<MonedaBillete[]> {
+    return from(this.api.getMonedasBilletesByMoneda(monedaId));
+  }
+
+  createMonedaBillete(billeteData: Partial<MonedaBillete>): Observable<MonedaBillete> {
+    return from(this.api.createMonedaBillete(billeteData));
+  }
+
+  updateMonedaBillete(billeteId: number, billeteData: Partial<MonedaBillete>): Observable<MonedaBillete> {
+    return from(this.api.updateMonedaBillete(billeteId, billeteData));
+  }
+
+  deleteMonedaBillete(billeteId: number): Observable<boolean> {
+    return from(this.api.deleteMonedaBillete(billeteId));
+  }
+
   // TipoPrecio methods
   getTipoPrecios(): Observable<TipoPrecio[]> {
     return from(this.api.getTipoPrecios());
@@ -514,5 +655,340 @@ export class RepositoryService {
 
   deletePago(pagoId: number): Observable<boolean> {
     return from(this.api.deletePago(pagoId));
+  }
+
+  // PDV GrupoCategoria methods
+  getPdvGrupoCategorias(): Observable<PdvGrupoCategoria[]> {
+    return from(this.api.getPdvGrupoCategorias());
+  }
+
+  getPdvGrupoCategoria(grupoId: number): Observable<PdvGrupoCategoria> {
+    return from(this.api.getPdvGrupoCategoria(grupoId));
+  }
+
+  createPdvGrupoCategoria(grupoData: Partial<PdvGrupoCategoria>): Observable<PdvGrupoCategoria> {
+    return from(this.api.createPdvGrupoCategoria(grupoData));
+  }
+
+  updatePdvGrupoCategoria(grupoId: number, grupoData: Partial<PdvGrupoCategoria>): Observable<PdvGrupoCategoria> {
+    return from(this.api.updatePdvGrupoCategoria(grupoId, grupoData));
+  }
+
+  deletePdvGrupoCategoria(grupoId: number): Observable<boolean> {
+    return from(this.api.deletePdvGrupoCategoria(grupoId));
+  }
+
+  // PDV Categoria methods
+  getPdvCategorias(): Observable<PdvCategoria[]> {
+    return from(this.api.getPdvCategorias());
+  }
+
+  getPdvCategoria(categoriaId: number): Observable<PdvCategoria> {
+    return from(this.api.getPdvCategoria(categoriaId));
+  }
+
+  getPdvCategoriasByGrupo(grupoId: number): Observable<PdvCategoria[]> {
+    return from(this.api.getPdvCategoriasByGrupo(grupoId));
+  }
+
+  createPdvCategoria(categoriaData: Partial<PdvCategoria>): Observable<PdvCategoria> {
+    return from(this.api.createPdvCategoria(categoriaData));
+  }
+
+  updatePdvCategoria(categoriaId: number, categoriaData: Partial<PdvCategoria>): Observable<PdvCategoria> {
+    return from(this.api.updatePdvCategoria(categoriaId, categoriaData));
+  }
+
+  deletePdvCategoria(categoriaId: number): Observable<boolean> {
+    return from(this.api.deletePdvCategoria(categoriaId));
+  }
+
+  // PDV CategoriaItem methods
+  getPdvCategoriaItems(): Observable<PdvCategoriaItem[]> {
+    return from(this.api.getPdvCategoriaItems());
+  }
+
+  getPdvCategoriaItem(itemId: number): Observable<PdvCategoriaItem> {
+    return from(this.api.getPdvCategoriaItem(itemId));
+  }
+
+  getPdvCategoriaItemsByCategoria(categoriaId: number): Observable<PdvCategoriaItem[]> {
+    return from(this.api.getPdvCategoriaItemsByCategoria(categoriaId));
+  }
+
+  createPdvCategoriaItem(itemData: Partial<PdvCategoriaItem>): Observable<PdvCategoriaItem> {
+    return from(this.api.createPdvCategoriaItem(itemData));
+  }
+
+  updatePdvCategoriaItem(itemId: number, itemData: Partial<PdvCategoriaItem>): Observable<PdvCategoriaItem> {
+    return from(this.api.updatePdvCategoriaItem(itemId, itemData));
+  }
+
+  deletePdvCategoriaItem(itemId: number): Observable<boolean> {
+    return from(this.api.deletePdvCategoriaItem(itemId));
+  }
+
+  // PDV ItemProducto methods
+  getPdvItemProductos(): Observable<PdvItemProducto[]> {
+    return from(this.api.getPdvItemProductos());
+  }
+
+  getPdvItemProducto(itemProductoId: number): Observable<PdvItemProducto> {
+    return from(this.api.getPdvItemProducto(itemProductoId));
+  }
+
+  getPdvItemProductosByItem(itemId: number): Observable<PdvItemProducto[]> {
+    return from(this.api.getPdvItemProductosByItem(itemId));
+  }
+
+  createPdvItemProducto(itemProductoData: Partial<PdvItemProducto>): Observable<PdvItemProducto> {
+    return from(this.api.createPdvItemProducto(itemProductoData));
+  }
+
+  updatePdvItemProducto(itemProductoId: number, itemProductoData: Partial<PdvItemProducto>): Observable<PdvItemProducto> {
+    return from(this.api.updatePdvItemProducto(itemProductoId, itemProductoData));
+  }
+
+  deletePdvItemProducto(itemProductoId: number): Observable<boolean> {
+    return from(this.api.deletePdvItemProducto(itemProductoId));
+  }
+
+  // PDV Mesa methods
+  getPdvMesas(): Observable<PdvMesa[]> {
+    return from(this.api.getPdvMesas());
+  }
+
+  getPdvMesa(mesaId: number): Observable<PdvMesa> {
+    return from(this.api.getPdvMesa(mesaId));
+  }
+
+  getPdvMesasBySector(sectorId: number): Observable<PdvMesa[]> {
+    return from(this.api.getPdvMesasBySector(sectorId));
+  }
+
+  createPdvMesa(mesaData: Partial<PdvMesa>): Observable<PdvMesa> {
+    return from(this.api.createPdvMesa(mesaData));
+  }
+
+  updatePdvMesa(mesaId: number, mesaData: Partial<PdvMesa>): Observable<PdvMesa> {
+    return from(this.api.updatePdvMesa(mesaId, mesaData));
+  }
+
+  deletePdvMesa(mesaId: number): Observable<boolean> {
+    return from(this.api.deletePdvMesa(mesaId));
+  }
+
+  // Other missing methods for PDV functionality
+  getCajasMonedas(): Observable<CajaMoneda[]> {
+    return from(this.api.getCajasMonedas());
+  }
+
+  saveCajasMonedas(cajasMonedas: CajaMoneda[]): Observable<boolean> {
+    return from(this.api.saveCajasMonedas(cajasMonedas));
+  }
+
+  getMonedasCambio(): Observable<MonedaCambio[]> {
+    return from(this.api.getMonedasCambio());
+  }
+
+  getMonedasCambioByMonedaOrigen(monedaOrigenId: number): Observable<MonedaCambio[]> {
+    return from(this.api.getMonedasCambioByMonedaOrigen(monedaOrigenId));
+  }
+
+  createMonedaCambio(cambioData: Partial<MonedaCambio>): Observable<MonedaCambio> {
+    return from(this.api.createMonedaCambio(cambioData));
+  }
+
+  updateMonedaCambio(cambioId: number, cambioData: Partial<MonedaCambio>): Observable<MonedaCambio> {
+    return from(this.api.updateMonedaCambio(cambioId, cambioData));
+  }
+
+  deleteMonedaCambio(cambioId: number): Observable<boolean> {
+    return from(this.api.deleteMonedaCambio(cambioId));
+  }
+
+  // Dispositivo methods
+  getDispositivos(): Observable<Dispositivo[]> {
+    return from(this.api.getDispositivos());
+  }
+
+  getDispositivo(dispositivoId: number): Observable<Dispositivo> {
+    return from(this.api.getDispositivo(dispositivoId));
+  }
+
+  createDispositivo(dispositivoData: Partial<Dispositivo>): Observable<Dispositivo> {
+    return from(this.api.createDispositivo(dispositivoData));
+  }
+
+  updateDispositivo(dispositivoId: number, dispositivoData: Partial<Dispositivo>): Observable<Dispositivo> {
+    return from(this.api.updateDispositivo(dispositivoId, dispositivoData));
+  }
+
+  deleteDispositivo(dispositivoId: number): Observable<boolean> {
+    return from(this.api.deleteDispositivo(dispositivoId));
+  }
+
+  // Caja methods
+  getCajas(): Observable<Caja[]> {
+    return from(this.api.getCajas());
+  }
+
+  getCaja(cajaId: number): Observable<Caja> {
+    return from(this.api.getCaja(cajaId));
+  }
+
+  getCajaAbiertaByUsuario(usuarioId: number): Observable<Caja | null> {
+    return from(this.api.getCajaAbiertaByUsuario(usuarioId));
+  }
+
+  createCaja(cajaData: Partial<Caja>): Observable<Caja> {
+    return from(this.api.createCaja(cajaData));
+  }
+
+  updateCaja(cajaId: number, cajaData: Partial<Caja>): Observable<Caja> {
+    return from(this.api.updateCaja(cajaId, cajaData));
+  }
+
+  deleteCaja(cajaId: number): Observable<boolean> {
+    return from(this.api.deleteCaja(cajaId));
+  }
+
+  // Venta methods
+  getVentas(): Observable<Venta[]> {
+    return from(this.api.getVentas());
+  }
+
+  getVenta(ventaId: number): Observable<Venta> {
+    return from(this.api.getVenta(ventaId));
+  }
+
+  createVenta(ventaData: Partial<Venta>): Observable<Venta> {
+    return from(this.api.createVenta(ventaData));
+  }
+
+  updateVenta(ventaId: number, ventaData: Partial<Venta>): Observable<Venta> {
+    return from(this.api.updateVenta(ventaId, ventaData));
+  }
+
+  deleteVenta(ventaId: number): Observable<boolean> {
+    return from(this.api.deleteVenta(ventaId));
+  }
+
+  // VentaItem methods
+  getVentaItems(ventaId: number): Observable<VentaItem[]> {
+    return from(this.api.getVentaItems(ventaId));
+  }
+
+  getVentaItem(ventaItemId: number): Observable<VentaItem> {
+    return from(this.api.getVentaItem(ventaItemId));
+  }
+
+  createVentaItem(ventaItemData: Partial<VentaItem>): Observable<VentaItem> {
+    return from(this.api.createVentaItem(ventaItemData));
+  }
+
+  updateVentaItem(ventaItemId: number, ventaItemData: Partial<VentaItem>): Observable<VentaItem> {
+    return from(this.api.updateVentaItem(ventaItemId, ventaItemData));
+  }
+
+  deleteVentaItem(ventaItemId: number): Observable<boolean> {
+    return from(this.api.deleteVentaItem(ventaItemId));
+  }
+
+  // Formas de Pago methods
+  getFormasPago(): Observable<FormasPago[]> {
+    return from(this.api.getFormasPago());
+  }
+
+  // FormasPago CRUD methods
+  getFormaPago(formaPagoId: number): Observable<FormasPago> {
+    return from(this.api.getFormaPago(formaPagoId));
+  }
+
+  createFormaPago(formaPagoData: Partial<FormasPago>): Observable<FormasPago> {
+    return from(this.api.createFormaPago(formaPagoData));
+  }
+
+  updateFormaPago(formaPagoId: number, formaPagoData: Partial<FormasPago>): Observable<FormasPago> {
+    return from(this.api.updateFormaPago(formaPagoId, formaPagoData));
+  }
+
+  deleteFormaPago(formaPagoId: number): Observable<boolean> {
+    return from(this.api.deleteFormaPago(formaPagoId));
+  }
+
+  updateFormasPagoOrder(updates: any[]): Observable<boolean> {
+    return from(this.api.updateFormasPagoOrder(updates));
+  }
+
+  // Pago Detalle methods
+  getPagoDetalles(pagoId: number): Observable<PagoDetalle[]> {
+    return from(this.api.getPagoDetalles(pagoId));
+  }
+
+  createPagoDetalle(detalleData: Partial<PagoDetalle>): Observable<PagoDetalle> {
+    return from(this.api.createPagoDetalle(detalleData));
+  }
+
+  updatePagoDetalle(detalleId: number, detalleData: Partial<PagoDetalle>): Observable<PagoDetalle> {
+    return from(this.api.updatePagoDetalle(detalleId, detalleData));
+  }
+
+  deletePagoDetalle(detalleId: number): Observable<boolean> {
+    return from(this.api.deletePagoDetalle(detalleId));
+  }
+
+  // Compra methods
+  getCompras(): Observable<Compra[]> {
+    return from(this.api.getCompras());
+  }
+
+  getCompra(compraId: number): Observable<Compra> {
+    return from(this.api.getCompra(compraId));
+  }
+
+  createCompra(compraData: Partial<Compra>): Observable<Compra> {
+    return from(this.api.createCompra(compraData));
+  }
+
+  updateCompra(compraId: number, compraData: Partial<Compra>): Observable<Compra> {
+    return from(this.api.updateCompra(compraId, compraData));
+  }
+
+  deleteCompra(compraId: number): Observable<boolean> {
+    return from(this.api.deleteCompra(compraId));
+  }
+
+  // MovimientoStock methods
+  getMovimientosStock(): Observable<any[]> {
+    return from(this.api.getMovimientosStock());
+  }
+
+  getMovimientoStock(movimientoId: number): Observable<any> {
+    return from(this.api.getMovimientoStock(movimientoId));
+  }
+
+  getMovimientosStockByProducto(productoId: number): Observable<any[]> {
+    return from(this.api.getMovimientosStockByProducto(productoId));
+  }
+
+  getMovimientosStockByIngrediente(ingredienteId: number): Observable<any[]> {
+    return from(this.api.getMovimientosStockByIngrediente(ingredienteId));
+  }
+
+  getMovimientosStockByTipoReferencia(tipoReferencia: string): Observable<any[]> {
+    return from(this.api.getMovimientosStockByTipoReferencia(tipoReferencia));
+  }
+
+  createMovimientoStock(movimientoData: any): Observable<any> {
+    return from(this.api.createMovimientoStock(movimientoData));
+  }
+
+  updateMovimientoStock(movimientoId: number, movimientoData: any): Observable<any> {
+    return from(this.api.updateMovimientoStock(movimientoId, movimientoData));
+  }
+
+  deleteMovimientoStock(movimientoId: number): Observable<boolean> {
+    return from(this.api.deleteMovimientoStock(movimientoId));
   }
 } 

@@ -18,11 +18,12 @@ import { forkJoin } from 'rxjs';
 import { finalize } from 'rxjs/operators';
 
 import { RepositoryService } from '../../../database/repository.service';
+import { ProductosRepository } from '../../../database/productos.repository';
 import { PdvGrupoCategoria } from '../../../database/entities/ventas/pdv-grupo-categoria.entity';
 import { PdvCategoria } from '../../../database/entities/ventas/pdv-categoria.entity';
 import { PdvCategoriaItem } from '../../../database/entities/ventas/pdv-categoria-item.entity';
 import { PdvItemProducto } from '../../../database/entities/ventas/pdv-item-producto.entity';
-import { Producto } from '../../../database/entities/productos/producto.entity';
+import { Producto } from '../../../database/entities';
 
 export interface PdvConfigDialogData {
   activeTab?: number;
@@ -53,10 +54,10 @@ export interface PdvConfigDialogData {
 })
 export class PdvConfigDialogComponent implements OnInit {
   // Forms
-  grupoForm: FormGroup;
-  categoriaForm: FormGroup;
-  itemForm: FormGroup;
-  productoForm: FormGroup;
+  grupoForm!: FormGroup;
+  categoriaForm!: FormGroup;
+  itemForm!: FormGroup;
+  itemProductoForm!: FormGroup;
 
   // Data lists
   gruposCategorias: PdvGrupoCategoria[] = [];
@@ -72,8 +73,9 @@ export class PdvConfigDialogComponent implements OnInit {
   selectedItemProducto: PdvItemProducto | null = null;
 
   // Loading states
-  isLoading = true;
+  isLoading = false;
   isSubmitting = false;
+  isProcessing = false;
 
   // Table columns
   gruposColumns: string[] = ['id', 'nombre', 'activo', 'actions'];
@@ -107,39 +109,12 @@ export class PdvConfigDialogComponent implements OnInit {
   constructor(
     private dialogRef: MatDialogRef<PdvConfigDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: PdvConfigDialogData,
-    private formBuilder: FormBuilder,
     private repositoryService: RepositoryService,
+    private productosRepository: ProductosRepository,
+    private fb: FormBuilder,
     private snackBar: MatSnackBar
   ) {
-    // Initialize forms
-    this.grupoForm = this.formBuilder.group({
-      id: [null],
-      nombre: ['', Validators.required],
-      activo: [true]
-    });
-
-    this.categoriaForm = this.formBuilder.group({
-      id: [null],
-      nombre: ['', Validators.required],
-      grupoCategoriId: [null, Validators.required],
-      activo: [true]
-    });
-
-    this.itemForm = this.formBuilder.group({
-      id: [null],
-      nombre: ['', Validators.required],
-      categoriaId: [null, Validators.required],
-      activo: [true],
-      imagen: [null]
-    });
-
-    this.productoForm = this.formBuilder.group({
-      id: [null],
-      categoriaItemId: [null, Validators.required],
-      productoId: [null, Validators.required],
-      nombre_alternativo: [''],
-      activo: [true]
-    });
+    this.initForms();
 
     // Set active tab if provided
     if (data?.activeTab !== undefined) {
@@ -148,91 +123,115 @@ export class PdvConfigDialogComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
-    await this.loadInitialData();
+    await this.loadGruposCategorias();
+    await this.loadAllProductos();
   }
 
-  async loadInitialData(): Promise<void> {
-    try {
-      this.loading = true;
-      await Promise.all([
-        this.loadGruposCategorias(),
-        this.loadAllProductos()
-      ]);
+  initForms(): void {
+    this.grupoForm = this.fb.group({
+      id: [null],
+      nombre: ['', Validators.required],
+      descripcion: [''],
+      posicion: [0, [Validators.required, Validators.min(0)]],
+      activo: [true]
+    });
 
-      this.loading = false;
-    } catch (error) {
-      console.error('Error loading initial data:', error);
-      this.showSnackBar('Error cargando datos iniciales: ' + (error as Error).message);
-      this.loading = false;
-    }
+    this.categoriaForm = this.fb.group({
+      id: [null],
+      grupoCategoriId: [null, Validators.required],
+      nombre: ['', Validators.required],
+      descripcion: [''],
+      posicion: [0, [Validators.required, Validators.min(0)]],
+      activo: [true]
+    });
+
+    this.itemForm = this.fb.group({
+      id: [null],
+      categoriaId: [null, Validators.required],
+      nombre: ['', Validators.required],
+      descripcion: [''],
+      posicion: [0, [Validators.required, Validators.min(0)]],
+      activo: [true]
+    });
+
+    this.itemProductoForm = this.fb.group({
+      id: [null],
+      categoriaItemId: [null, Validators.required],
+      productoId: [null, Validators.required],
+      nombre_alternativo: [''],
+      activo: [true]
+    });
   }
 
   async loadGruposCategorias(): Promise<void> {
+    this.isLoading = true;
     try {
       const result = await firstValueFrom(this.repositoryService.getPdvGrupoCategorias());
-      this.gruposCategorias = result;
-      this.allGrupos = result;
+      this.gruposCategorias = result as PdvGrupoCategoria[];
+      this.allGrupos = result as PdvGrupoCategoria[];
     } catch (error) {
       console.error('Error loading grupos categorias:', error);
-      this.showSnackBar('Error cargando grupos de categorías: ' + (error as Error).message);
+      this.snackBar.open('Error al cargar grupos de categorías', 'Cerrar', { duration: 3000 });
+      // Set empty arrays on error
+      this.gruposCategorias = [];
+      this.allGrupos = [];
+    } finally {
+      this.isLoading = false;
     }
   }
 
   async loadCategorias(grupoId?: number): Promise<void> {
     try {
       if (grupoId) {
-        // If a grupoId is provided, filter categories by grupo
         const allCategorias = await firstValueFrom(this.repositoryService.getPdvCategorias());
-        this.categorias = allCategorias.filter(cat => cat.grupoCategoriId === grupoId);
+        this.categorias = (allCategorias as PdvCategoria[]).filter(cat => cat.grupoCategoriId === grupoId);
       } else {
-        // Otherwise load all categories
-        this.categorias = await firstValueFrom(this.repositoryService.getPdvCategorias());
+        this.categorias = await firstValueFrom(this.repositoryService.getPdvCategorias()) as PdvCategoria[];
       }
-      this.allCategorias = this.categorias;
     } catch (error) {
       console.error('Error loading categorias:', error);
-      this.showSnackBar('Error cargando categorías: ' + (error as Error).message);
+      this.snackBar.open('Error al cargar categorías', 'Cerrar', { duration: 3000 });
+      this.categorias = []; // Set empty array on error
     }
   }
 
   async loadItems(categoriaId?: number): Promise<void> {
     try {
       if (categoriaId) {
-        // If a categoriaId is provided, filter items by categoria
         const allItems = await firstValueFrom(this.repositoryService.getPdvCategoriaItems());
-        this.items = allItems.filter(item => item.categoriaId === categoriaId);
+        this.items = (allItems as PdvCategoriaItem[]).filter(item => item.categoriaId === categoriaId);
       } else {
-        // Otherwise load all items
-        this.items = await firstValueFrom(this.repositoryService.getPdvCategoriaItems());
+        this.items = await firstValueFrom(this.repositoryService.getPdvCategoriaItems()) as PdvCategoriaItem[];
       }
-      this.allItems = this.items;
     } catch (error) {
       console.error('Error loading items:', error);
-      this.showSnackBar('Error cargando items: ' + (error as Error).message);
+      this.snackBar.open('Error al cargar items', 'Cerrar', { duration: 3000 });
+      this.items = []; // Set empty array on error
     }
   }
 
   async loadItemProductos(itemId?: number): Promise<void> {
     try {
       if (itemId) {
-        // If an itemId is provided, filter item productos by item
-        this.itemProductos = await firstValueFrom(this.repositoryService.getPdvItemProductosByItem(itemId));
+        this.itemProductos = await firstValueFrom(this.repositoryService.getPdvItemProductosByItem(itemId)) as PdvItemProducto[];
       } else {
-        // Otherwise load all item productos
-        this.itemProductos = await firstValueFrom(this.repositoryService.getPdvItemProductos());
+        this.itemProductos = await firstValueFrom(this.repositoryService.getPdvItemProductos()) as PdvItemProducto[];
       }
     } catch (error) {
       console.error('Error loading item productos:', error);
-      this.showSnackBar('Error cargando asignaciones de productos: ' + (error as Error).message);
+      this.snackBar.open('Error al cargar productos de item', 'Cerrar', { duration: 3000 });
+      this.itemProductos = []; // Set empty array on error
     }
   }
 
   async loadAllProductos(): Promise<void> {
     try {
-      this.productos = await firstValueFrom(this.repositoryService.getProductos());
+      // Use ProductosRepository to get productos
+      this.productos = await firstValueFrom(this.productosRepository.getProductosBase());
     } catch (error) {
       console.error('Error loading productos:', error);
-      this.showSnackBar('Error cargando productos: ' + (error as Error).message);
+      this.snackBar.open('Error al cargar productos', 'Cerrar', { duration: 3000 });
+      this.productos = []; // Set empty array on error
     }
   }
 
@@ -247,7 +246,7 @@ export class PdvConfigDialogComponent implements OnInit {
     this.grupoForm.reset({ activo: true });
     this.categoriaForm.reset({ activo: true });
     this.itemForm.reset({ activo: true });
-    this.productoForm.reset({ activo: true, nombre_alternativo: '' });
+    this.itemProductoForm.reset({ activo: true });
     
     this.selectedGrupo = null;
     this.selectedCategoria = null;
@@ -484,7 +483,7 @@ export class PdvConfigDialogComponent implements OnInit {
   // Item Producto methods
   editItemProducto(itemProducto: PdvItemProducto): void {
     this.selectedItemProducto = itemProducto;
-    this.productoForm.patchValue({
+    this.itemProductoForm.patchValue({
       id: itemProducto.id,
       categoriaItemId: itemProducto.categoriaItemId,
       productoId: itemProducto.productoId,
@@ -494,14 +493,14 @@ export class PdvConfigDialogComponent implements OnInit {
   }
 
   async saveItemProducto(): Promise<void> {
-    if (this.productoForm.invalid) {
+    if (this.itemProductoForm.invalid) {
       this.showSnackBar('Por favor complete todos los campos requeridos');
       return;
     }
 
     try {
       this.isSubmitting = true;
-      const formData = this.productoForm.value;
+      const formData = this.itemProductoForm.value;
       
       if (formData.id) {
         // Update existing item producto
@@ -515,7 +514,7 @@ export class PdvConfigDialogComponent implements OnInit {
       
       // Refresh data and reset form
       await this.loadItemProductos();
-      this.resetProductoForm();
+      this.resetItemProductoForm();
     } catch (error) {
       console.error('Error saving item producto:', error);
       this.showSnackBar('Error guardando asignación: ' + (error as Error).message);
@@ -539,8 +538,8 @@ export class PdvConfigDialogComponent implements OnInit {
     }
   }
 
-  resetProductoForm(): void {
-    this.productoForm.reset({ activo: true });
+  resetItemProductoForm(): void {
+    this.itemProductoForm.reset({ activo: true });
     this.selectedItemProducto = null;
   }
 

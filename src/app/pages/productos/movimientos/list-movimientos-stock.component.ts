@@ -17,11 +17,34 @@ import { RouterModule } from '@angular/router';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { RepositoryService } from '../../../database/repository.service';
-import { MovimientoStock, TipoReferencia } from '../../../database/entities/productos/movimiento-stock.entity';
+// import { MovimientoStock, TipoReferencia } from '../../../database/entities/productos/movimiento-stock.entity';
 import { firstValueFrom } from 'rxjs';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { DecimalPipe } from '@angular/common';
 import { CreateEditMovimientoStockComponent } from './create-edit-movimiento-stock.component';
+
+// Temporary type definitions until entities are implemented
+interface MovimientoStock {
+  id?: number;
+  productoId?: number;
+  ingredienteId?: number;
+  tipoReferencia?: TipoReferencia;
+  cantidadActual?: number;
+  tipoMedida?: string;
+  referencia?: number;
+  createdAt?: Date;
+  activo?: boolean;
+  producto?: { nombre: string };
+  ingrediente?: { descripcion: string };
+}
+
+enum TipoReferencia {
+  VENTA = 'VENTA',
+  COMPRA = 'COMPRA',
+  AJUSTE = 'AJUSTE',
+  TRANSFERENCIA = 'TRANSFERENCIA',
+  DESCARTE = 'DESCARTE'
+}
 
 // Extended interface to include display values
 interface MovimientoStockViewModel extends Partial<MovimientoStock> {

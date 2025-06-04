@@ -12,9 +12,9 @@ import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { RepositoryService } from '../../../database/repository.service';
 import { firstValueFrom } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
-import { ProductosRepository } from 'src/app/database/productos.repository';
-import { PrecioVenta } from 'productos.preload';
-import { Producto, Presentacion } from 'src/app/database/entities';
+import { ProductosRepository } from '../../../database/productos.repository';
+import { PrecioVenta } from '../../../database/entities/productos/comercial/precio-venta.entity';
+import { Producto, Presentacion } from '../../../database/entities';
 
 export interface ProductoSearchDialogData {
   searchTerm: string;
@@ -70,7 +70,7 @@ export class ProductoSearchDialogComponent implements OnInit {
   constructor(
     private dialogRef: MatDialogRef<ProductoSearchDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: ProductoSearchDialogData,
-    private repositoryService: ProductosRepository,
+    private productosRepository: ProductosRepository,
     private fb: FormBuilder
   ) {
     // Initialize form
@@ -131,8 +131,8 @@ export class ProductoSearchDialogComponent implements OnInit {
     try {
       // First try to find by exact code match
       const exactCodeResult = await firstValueFrom(
-        this.repositoryService.searchProductosByCode(searchTerm)
-      );
+        this.productosRepository.searchProductosByCode(searchTerm)
+      ) as {product: Producto, presentacion: Presentacion} | null;
 
       if (exactCodeResult) {
         // extract the principalPrecio from the presentacion
@@ -148,13 +148,13 @@ export class ProductoSearchDialogComponent implements OnInit {
 
       // Otherwise, do a regular search
       const searchResults = await firstValueFrom(
-        this.repositoryService.searchProductosBaseByDescripcion(
+        this.productosRepository.searchProductosBaseByDescripcion(
           searchTerm,
           this.pageIndex + 1, // Convert to 1-based for backend
           this.pageSize,
           false
         )
-      );
+      ) as {items: Producto[], total: number};
       console.log(searchResults);
       this.searchResults = searchResults.items;
       this.totalItems = searchResults.total;

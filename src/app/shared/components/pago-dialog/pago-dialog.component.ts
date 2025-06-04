@@ -303,7 +303,7 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
         if (compra && compra.pago && compra.pago.id) {
           this.existingPagoId = compra.pago.id;
           this.pagoCreated = compra.pago;
-          this.isFinalizado = this.pagoCreated.estado === PagoEstado.PAGADO;
+          this.isFinalizado = this.pagoCreated?.estado === PagoEstado.PAGADO;
           this.updateFormState(); // Update form state based on finalized status
           await this.loadPagoDetalles(compra.pago.id);
           break; // We only need to find one pago
@@ -1052,7 +1052,14 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
       }
 
       this.isSaving = true;
-      firstValueFrom(this.repositoryService.updatePago(this.pagoCreated.id!, { estado: PagoEstado.PAGADO }))
+      
+      if (!this.pagoCreated?.id) {
+        this.snackBar.open('No se puede finalizar: pago no válido', 'Cerrar', { duration: 3000 });
+        this.isSaving = false;
+        return;
+      }
+      
+      firstValueFrom(this.repositoryService.updatePago(this.pagoCreated.id, { estado: PagoEstado.PAGADO }))
         .then(updatedPago => {
           this.pagoCreated = updatedPago; // Update local state
           this.isFinalizado = true;
@@ -1084,13 +1091,13 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
    * Enables the form and reverts the pago state to ABIERTO
    */
   async onModifyPago(): Promise<void> {
-    if (!this.pagoCreated || !this.isFinalizado) {
+    if (!this.pagoCreated?.id || !this.isFinalizado) {
       return; // Should not happen if button visibility is correct
     }
 
     this.isSaving = true;
     try {
-      const updatedPago = await firstValueFrom(this.repositoryService.updatePago(this.pagoCreated.id!, { estado: PagoEstado.ABIERTO }));
+      const updatedPago = await firstValueFrom(this.repositoryService.updatePago(this.pagoCreated.id, { estado: PagoEstado.ABIERTO }));
       this.pagoCreated = updatedPago; // Update local state
       this.isFinalizado = false;
       this.updateFormState(); // Re-enable form
@@ -1185,7 +1192,7 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
 
       if (pago) {
         this.pagoCreated = pago;
-        this.isFinalizado = this.pagoCreated.estado === PagoEstado.PAGADO;
+        this.isFinalizado = this.pagoCreated?.estado === PagoEstado.PAGADO;
         this.updateFormState(); // Update form state based on finalized status
         await this.loadPagoDetalles(pagoId);
         

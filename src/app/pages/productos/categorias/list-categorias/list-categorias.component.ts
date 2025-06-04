@@ -18,12 +18,28 @@ import { FormGroup, FormBuilder, Validators } from '@angular/forms';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { animate, state, style, transition, trigger } from '@angular/animations';
-import { RepositoryService } from '../../../../database/repository.service';
-import { Categoria } from '../../../../database/entities/productos/categoria.entity';
-import { Subcategoria } from '../../../../database/entities/productos/subcategoria.entity';
+import { ProductosRepository } from '../../../../database/productos.repository';
 import { CreateEditCategoriaComponent } from '../create-edit-categoria/create-edit-categoria.component';
 import { ConfirmationDialogComponent } from '../../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { firstValueFrom } from 'rxjs';
+
+// Define interfaces for the entities since the entity files might not exist yet
+interface Categoria {
+  id?: number;
+  nombre: string;
+  descripcion?: string;
+  posicion: number;
+  activo: boolean;
+}
+
+interface Subcategoria {
+  id?: number;
+  categoriaId: number;
+  nombre: string;
+  descripcion?: string;
+  posicion: number;
+  activo: boolean;
+}
 
 @Component({
   selector: 'app-list-categorias',
@@ -87,7 +103,7 @@ export class ListCategoriasComponent implements OnInit {
   editingSubcategoria: Subcategoria | null = null;
 
   constructor(
-    private repositoryService: RepositoryService,
+    private productosRepository: ProductosRepository,
     private fb: FormBuilder,
     private snackBar: MatSnackBar,
     private dialog: MatDialog
@@ -131,7 +147,7 @@ export class ListCategoriasComponent implements OnInit {
       });
 
       // Get data from repository service
-      const result = await firstValueFrom(this.repositoryService.getCategorias());
+      const result = await firstValueFrom(this.productosRepository.getCategorias());
       this.categorias = result;
 
       // Apply filters manually
@@ -162,7 +178,7 @@ export class ListCategoriasComponent implements OnInit {
       if (allSamePosition) {
         await this.normalizeCategoriaPositions();
         // Reload after normalization
-        const updatedResult = await firstValueFrom(this.repositoryService.getCategorias());
+        const updatedResult = await firstValueFrom(this.productosRepository.getCategorias());
         this.categorias = updatedResult.sort((a, b) => a.posicion - b.posicion);
       }
 
@@ -183,18 +199,19 @@ export class ListCategoriasComponent implements OnInit {
 
     this.isLoadingSubcategorias = true;
     try {
-      const result = await firstValueFrom(this.repositoryService.getSubcategoriasByCategoria(categoria.id));
+      const result = await firstValueFrom(this.productosRepository.getSubcategoriasByCategoria(categoria.id));
       this.subcategorias[categoria.id] = result.sort((a, b) => a.posicion - b.posicion);
 
       // Check if all subcategories have the same position (likely 0)
-      const allSamePosition = this.subcategorias[categoria.id].length > 1 &&
-        this.subcategorias[categoria.id].every(s => s.posicion === this.subcategorias[categoria.id][0].posicion);
+      const subcategoriasForCategoria = this.subcategorias[categoria.id];
+      const allSamePosition = subcategoriasForCategoria && subcategoriasForCategoria.length > 1 &&
+        subcategoriasForCategoria.every(s => s.posicion === subcategoriasForCategoria[0].posicion);
 
       // If all have same position, normalize them
       if (allSamePosition) {
         await this.normalizeSubcategoriaPositions(categoria.id);
         // Reload after normalization
-        const updatedResult = await firstValueFrom(this.repositoryService.getSubcategoriasByCategoria(categoria.id));
+        const updatedResult = await firstValueFrom(this.productosRepository.getSubcategoriasByCategoria(categoria.id));
         this.subcategorias[categoria.id] = updatedResult.sort((a, b) => a.posicion - b.posicion);
       }
     } catch (error) {
@@ -281,7 +298,7 @@ export class ListCategoriasComponent implements OnInit {
 
     dialogRef.afterClosed().subscribe(result => {
       if (result) {
-        firstValueFrom(this.repositoryService.deleteCategoria(id))
+        firstValueFrom(this.productosRepository.deleteCategoria(id))
           .then(result => {
             this.snackBar.open('Categoría eliminada correctamente', 'Cerrar', {
               duration: 3000
@@ -386,8 +403,8 @@ export class ListCategoriasComponent implements OnInit {
     this.isLoading = true;
     // Update both categories in the database
     Promise.all([
-      firstValueFrom(this.repositoryService.updateCategoria(categoria.id!, { posicion: categoria.posicion })),
-      firstValueFrom(this.repositoryService.updateCategoria(targetCategoria.id!, { posicion: targetCategoria.posicion }))
+      firstValueFrom(this.productosRepository.updateCategoria(categoria.id!, { posicion: categoria.posicion })),
+      firstValueFrom(this.productosRepository.updateCategoria(targetCategoria.id!, { posicion: targetCategoria.posicion }))
     ]).then(() => {
       this.snackBar.open('Orden actualizado correctamente', 'Cerrar', {
         duration: 2000
@@ -502,13 +519,13 @@ export class ListCategoriasComponent implements OnInit {
     try {
       if (this.editingSubcategoria) {
         // Update existing subcategoria
-        await firstValueFrom(this.repositoryService.updateSubcategoria(this.editingSubcategoria.id!, formData));
+        await firstValueFrom(this.productosRepository.updateSubcategoria(this.editingSubcategoria.id!, formData));
         this.snackBar.open('Subcategoría actualizada correctamente', 'Cerrar', {
           duration: 3000
         });
       } else {
         // Create new subcategoria
-        await firstValueFrom(this.repositoryService.createSubcategoria(formData));
+        await firstValueFrom(this.productosRepository.createSubcategoria(formData));
         this.snackBar.open('Subcategoría creada correctamente', 'Cerrar', {
           duration: 3000
         });
@@ -588,7 +605,12 @@ export class ListCategoriasComponent implements OnInit {
   }
 
   async deleteSubcategoria(subcategoria: Subcategoria) {
-    if (!subcategoria.id || !this.expandedCategoria) return;
+    if (!subcategoria.id) {
+      this.snackBar.open('Error: ID de subcategoría no válido', 'Cerrar', {
+        duration: 3000
+      });
+      return;
+    }
 
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       width: '350px',
@@ -599,10 +621,10 @@ export class ListCategoriasComponent implements OnInit {
     });
 
     dialogRef.afterClosed().subscribe(async result => {
-      if (result) {
+      if (result && subcategoria.id) {
         this.isLoadingSubcategorias = true;
         try {
-          await firstValueFrom(this.repositoryService.deleteSubcategoria(subcategoria.id));
+          await firstValueFrom(this.productosRepository.deleteSubcategoria(subcategoria.id));
           this.snackBar.open('Subcategoría eliminada correctamente', 'Cerrar', {
             duration: 3000
           });
@@ -690,8 +712,8 @@ export class ListCategoriasComponent implements OnInit {
       const targetId = typeof targetSubcategoria.id === 'string' ? parseInt(targetSubcategoria.id, 10) : targetSubcategoria.id;
 
       await Promise.all([
-        firstValueFrom(this.repositoryService.updateSubcategoria(subId, { posicion: subcategoria.posicion })),
-        firstValueFrom(this.repositoryService.updateSubcategoria(targetId, { posicion: targetSubcategoria.posicion }))
+        firstValueFrom(this.productosRepository.updateSubcategoria(subId, { posicion: subcategoria.posicion })),
+        firstValueFrom(this.productosRepository.updateSubcategoria(targetId, { posicion: targetSubcategoria.posicion }))
       ]);
 
       this.snackBar.open('Orden actualizado correctamente', 'Cerrar', {
@@ -743,7 +765,7 @@ export class ListCategoriasComponent implements OnInit {
       // Update each subcategoria with its new position
       const updatePromises = sortedSubcategorias.map((subcategoria, index) => {
         if (subcategoria.posicion !== index) {
-          return firstValueFrom(this.repositoryService.updateSubcategoria(
+          return firstValueFrom(this.productosRepository.updateSubcategoria(
             subcategoria.id!,
             { posicion: index }
           ));
@@ -778,7 +800,7 @@ export class ListCategoriasComponent implements OnInit {
       // Update each categoria with its new position
       const updatePromises = sortedCategorias.map((categoria, index) => {
         if (categoria.posicion !== index) {
-          return firstValueFrom(this.repositoryService.updateCategoria(
+          return firstValueFrom(this.productosRepository.updateCategoria(
             categoria.id!,
             { posicion: index }
           ));

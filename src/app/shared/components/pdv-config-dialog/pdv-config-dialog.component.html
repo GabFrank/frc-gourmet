@@ -284,7 +284,7 @@
           <div class="tab-content">
             <div class="form-container">
               <h3>{{ selectedItemProducto ? 'Editar' : 'Asignar' }} Producto</h3>
-              <form [formGroup]="productoForm" (ngSubmit)="saveItemProducto()" class="entity-form">
+              <form [formGroup]="itemProductoForm" (ngSubmit)="saveItemProducto()" class="entity-form">
                 <input type="hidden" formControlName="id">
                 
                 <mat-form-field appearance="outline" class="full-width">
@@ -294,7 +294,7 @@
                       {{ item.nombre }}
                     </mat-option>
                   </mat-select>
-                  <mat-error *ngIf="productoForm.get('categoriaItemId')?.hasError('required')">
+                  <mat-error *ngIf="itemProductoForm.get('categoriaItemId')?.hasError('required')">
                     El item es obligatorio
                   </mat-error>
                 </mat-form-field>
@@ -306,7 +306,7 @@
                       {{ producto.nombre }}
                     </mat-option>
                   </mat-select>
-                  <mat-error *ngIf="productoForm.get('productoId')?.hasError('required')">
+                  <mat-error *ngIf="itemProductoForm.get('productoId')?.hasError('required')">
                     El producto es obligatorio
                   </mat-error>
                 </mat-form-field>
@@ -319,8 +319,8 @@
                 <mat-checkbox formControlName="activo" color="primary">Activo</mat-checkbox>
                 
                 <div class="form-actions">
-                  <button mat-button type="button" (click)="resetProductoForm()">Cancelar</button>
-                  <button mat-raised-button color="primary" type="submit" [disabled]="productoForm.invalid || isSubmitting">
+                  <button mat-button type="button" (click)="resetItemProductoForm()">Cancelar</button>
+                  <button mat-raised-button color="primary" type="submit" [disabled]="itemProductoForm.invalid || isSubmitting">
                     {{ isSubmitting ? 'Guardando...' : 'Guardar' }}
                   </button>
                 </div>

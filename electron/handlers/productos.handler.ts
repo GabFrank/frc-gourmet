@@ -191,7 +191,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       query.orderBy('productoBase.nombre', 'ASC');
       query.skip((page - 1) * pageSize);
       query.take(pageSize);
-      return await query.getMany();
+      const [items, total] = await query.getManyAndCount();
+      return { items, total };
     } catch (error) {
       console.error(`Error searching productos base by descripcion:`, error);
       throw error;
