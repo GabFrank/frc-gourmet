@@ -1,0 +1,76 @@
+<div class="list-container">
+  <div class="header">
+    <h2>Chequeras</h2>
+    <button mat-raised-button color="primary" (click)="openCreateDialog()">
+      <mat-icon>add</mat-icon>
+      Nueva Chequera
+    </button>
+  </div>
+
+  <div *ngIf="loading" class="spinner-container">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+
+  <mat-card *ngIf="!loading">
+    <table mat-table [dataSource]="chequeras" class="full-width">
+      <ng-container matColumnDef="nombre">
+        <th mat-header-cell *matHeaderCellDef>Nombre</th>
+        <td mat-cell *matCellDef="let row">{{row.nombre}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="cuentaBancaria">
+        <th mat-header-cell *matHeaderCellDef>Cuenta Bancaria</th>
+        <td mat-cell *matCellDef="let row">
+          {{row.cuentaBancaria?.nombre}} - {{row.cuentaBancaria?.banco}} ({{row.cuentaBancaria?.moneda?.simbolo}})
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="rango">
+        <th mat-header-cell *matHeaderCellDef>Rango</th>
+        <td mat-cell *matCellDef="let row">{{row.numeroInicial}} - {{row.numeroFinal}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="siguienteNumero">
+        <th mat-header-cell *matHeaderCellDef>Siguiente</th>
+        <td mat-cell *matCellDef="let row">{{row.siguienteNumero}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="estado">
+        <th mat-header-cell *matHeaderCellDef>Estado</th>
+        <td mat-cell *matCellDef="let row">
+          <mat-chip [ngStyle]="{'background-color': estadoColor(row.estado), color: 'white'}">
+            {{row.estado}}
+          </mat-chip>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef>Acciones</th>
+        <td mat-cell *matCellDef="let row">
+          <button mat-icon-button [matMenuTriggerFor]="menu">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #menu="matMenu">
+            <button mat-menu-item (click)="verHistorico(row)">
+              <mat-icon>history</mat-icon><span>Historico de cheques</span>
+            </button>
+            <button mat-menu-item (click)="openEditDialog(row)">
+              <mat-icon>edit</mat-icon><span>Editar</span>
+            </button>
+            <button mat-menu-item (click)="eliminar(row)" *ngIf="row.estado !== 'ANULADA'">
+              <mat-icon>cancel</mat-icon><span>Anular</span>
+            </button>
+          </mat-menu>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+
+    <div *ngIf="chequeras.length === 0" class="empty-state">
+      <mat-icon>receipt_long</mat-icon>
+      <p>No hay chequeras registradas</p>
+    </div>
+  </mat-card>
+</div>

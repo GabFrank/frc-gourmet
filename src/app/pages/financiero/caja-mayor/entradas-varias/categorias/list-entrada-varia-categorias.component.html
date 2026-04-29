@@ -1,0 +1,88 @@
+<div class="list-container">
+  <div class="header">
+    <h2>Categorias de Entradas Varias</h2>
+    <button mat-raised-button color="primary" (click)="showCreateForm()">
+      <mat-icon>add</mat-icon>
+      Nueva Categoria
+    </button>
+  </div>
+
+  <mat-card *ngIf="showInlineForm" class="inline-form-card">
+    <form [formGroup]="inlineForm" class="inline-form">
+      <mat-form-field appearance="outline">
+        <mat-label>Nombre</mat-label>
+        <input matInput formControlName="nombre" placeholder="Nombre de la categoria">
+        <mat-error>El nombre es requerido</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Categoria Padre</mat-label>
+        <mat-select formControlName="padreId">
+          <mat-option [value]="null">Ninguna (raiz)</mat-option>
+          <mat-option *ngFor="let cat of categorias" [value]="cat.id">{{cat.nombre}}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <div class="inline-form-actions">
+        <button mat-raised-button color="primary" (click)="saveInlineForm()" [disabled]="inlineForm.invalid">
+          {{editingId ? 'Actualizar' : 'Crear'}}
+        </button>
+        <button mat-button (click)="cancelInlineForm()">Cancelar</button>
+      </div>
+    </form>
+  </mat-card>
+
+  <div *ngIf="loading" class="spinner-container">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+
+  <mat-card *ngIf="!loading">
+    <table mat-table [dataSource]="categorias" class="full-width">
+      <ng-container matColumnDef="nombre">
+        <th mat-header-cell *matHeaderCellDef>Nombre</th>
+        <td mat-cell *matCellDef="let row">{{row.nombre}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="padre">
+        <th mat-header-cell *matHeaderCellDef>Categoria Padre</th>
+        <td mat-cell *matCellDef="let row">{{row.padre?.nombre || '-'}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="activo">
+        <th mat-header-cell *matHeaderCellDef>Activo</th>
+        <td mat-cell *matCellDef="let row">
+          <mat-icon [ngStyle]="{'color': row.activo ? '#4caf50' : '#f44336'}">
+            {{row.activo ? 'check_circle' : 'cancel'}}
+          </mat-icon>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef>Acciones</th>
+        <td mat-cell *matCellDef="let row">
+          <button mat-icon-button [matMenuTriggerFor]="menu">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #menu="matMenu">
+            <button mat-menu-item (click)="editCategoria(row)">
+              <mat-icon>edit</mat-icon>
+              <span>Editar</span>
+            </button>
+            <button mat-menu-item (click)="desactivar(row)" *ngIf="row.activo">
+              <mat-icon>block</mat-icon>
+              <span>Desactivar</span>
+            </button>
+          </mat-menu>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+
+    <div *ngIf="categorias.length === 0" class="empty-state">
+      <mat-icon>category</mat-icon>
+      <p>No hay categorias registradas</p>
+    </div>
+  </mat-card>
+</div>

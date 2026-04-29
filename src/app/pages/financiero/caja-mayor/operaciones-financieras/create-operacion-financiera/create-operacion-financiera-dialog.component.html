@@ -1,0 +1,289 @@
+<h2 mat-dialog-title>Nueva Operacion Financiera</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="form">
+    <!-- Selector de tipo -->
+    <div class="tipo-selector">
+      <button type="button" mat-stroked-button
+              *ngFor="let t of tiposOperacion"
+              [class.tipo-selected]="form.get('tipoOperacion')?.value === t.value"
+              (click)="setTipo(t.value)">
+        <mat-icon>{{t.icon}}</mat-icon>
+        {{t.label}}
+      </button>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <!-- Datos generales -->
+    <div class="form-grid section">
+      <mat-form-field appearance="outline">
+        <mat-label>Categoria</mat-label>
+        <mat-select formControlName="operacionFinancieraCategoriaId">
+          <mat-option [value]="null">Sin categoria</mat-option>
+          <mat-option *ngFor="let cat of categorias" [value]="cat.id">{{cat.nombre}}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Fecha</mat-label>
+        <input matInput [matDatepicker]="picker" formControlName="fecha">
+        <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+        <mat-datepicker #picker></mat-datepicker>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="span-2">
+        <mat-label>Descripcion</mat-label>
+        <input matInput formControlName="descripcion" required>
+        <mat-error>La descripcion es requerida</mat-error>
+      </mat-form-field>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <!-- ===================== CAMBIO DIVISA ===================== -->
+    <ng-container *ngIf="tipoOperacion === 'CAMBIO_DIVISA'">
+      <h3>Origen (egreso)</h3>
+      <div class="form-grid section">
+        <mat-form-field appearance="outline">
+          <mat-label>Caja Mayor</mat-label>
+          <mat-select formControlName="cajaMayorOrigenId" required>
+            <mat-option *ngFor="let cm of cajasMayor" [value]="cm.id">{{cm.nombre}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Moneda Origen</mat-label>
+          <mat-select formControlName="monedaOrigenId" required>
+            <mat-option *ngFor="let m of monedas" [value]="m.id">{{m.simbolo}} - {{m.denominacion}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Forma Pago</mat-label>
+          <mat-select formControlName="formaPagoOrigenId" required>
+            <mat-option *ngFor="let fp of formasPago" [value]="fp.id">{{fp.nombre}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Monto Origen</mat-label>
+          <input matInput type="number" formControlName="montoOrigen" required>
+        </mat-form-field>
+      </div>
+
+      <h3>Destino (ingreso)</h3>
+      <div class="form-grid section">
+        <mat-form-field appearance="outline">
+          <mat-label>Cotizacion</mat-label>
+          <input matInput type="number" formControlName="cotizacion" required step="0.000001">
+          <mat-hint>Multiplicador: monto destino = origen × cotizacion</mat-hint>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Moneda Destino</mat-label>
+          <mat-select formControlName="monedaDestinoId" required>
+            <mat-option *ngFor="let m of monedas" [value]="m.id">{{m.simbolo}} - {{m.denominacion}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Forma Pago Destino</mat-label>
+          <mat-select formControlName="formaPagoDestinoId" required>
+            <mat-option *ngFor="let fp of formasPago" [value]="fp.id">{{fp.nombre}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Monto Destino</mat-label>
+          <input matInput type="number" formControlName="montoDestino" required>
+        </mat-form-field>
+      </div>
+    </ng-container>
+
+    <!-- ===================== DEPOSITO BANCARIO ===================== -->
+    <ng-container *ngIf="tipoOperacion === 'DEPOSITO_BANCARIO'">
+      <h3>Destino (cuenta bancaria)</h3>
+      <div class="form-grid section">
+        <mat-form-field appearance="outline" class="span-2">
+          <mat-label>Cuenta Bancaria Destino</mat-label>
+          <mat-select formControlName="cuentaBancariaDestinoId" required>
+            <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">
+              {{cb.nombre}} - {{cb.banco}} ({{cb.moneda?.simbolo}})
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      <h3>Origen (egreso de Caja Mayor)</h3>
+      <div class="form-grid section">
+        <mat-form-field appearance="outline">
+          <mat-label>Caja Mayor</mat-label>
+          <mat-select formControlName="cajaMayorOrigenId" required>
+            <mat-option *ngFor="let cm of cajasMayor" [value]="cm.id">{{cm.nombre}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Forma Pago</mat-label>
+          <mat-select formControlName="formaPagoOrigenId" required>
+            <mat-option *ngFor="let fp of formasPago" [value]="fp.id">{{fp.nombre}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      <div class="moneda-fija-info" *ngIf="monedaFijaDestino()">
+        <mat-icon>info</mat-icon>
+        Moneda: <strong>{{monedaFijaDestino().simbolo}} - {{monedaFijaDestino().denominacion}}</strong>
+        (heredada de la cuenta bancaria)
+      </div>
+
+      <div class="form-grid section">
+        <mat-form-field appearance="outline">
+          <mat-label>Monto Origen (sale de caja)</mat-label>
+          <input matInput type="number" formControlName="montoOrigen" required>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Monto Destino (entra al banco)</mat-label>
+          <input matInput type="number" formControlName="montoDestino" required>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="span-2">
+          <mat-label>Numero Comprobante</mat-label>
+          <input matInput formControlName="numeroComprobante">
+        </mat-form-field>
+      </div>
+    </ng-container>
+
+    <!-- ===================== RETIRO BANCARIO ===================== -->
+    <ng-container *ngIf="tipoOperacion === 'RETIRO_BANCARIO'">
+      <h3>Origen (cuenta bancaria)</h3>
+      <div class="form-grid section">
+        <mat-form-field appearance="outline" class="span-2">
+          <mat-label>Cuenta Bancaria Origen</mat-label>
+          <mat-select formControlName="cuentaBancariaOrigenId" required>
+            <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">
+              {{cb.nombre}} - {{cb.banco}} ({{cb.moneda?.simbolo}})
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      <div class="moneda-fija-info" *ngIf="monedaFijaOrigen()">
+        <mat-icon>info</mat-icon>
+        Moneda: <strong>{{monedaFijaOrigen().simbolo}} - {{monedaFijaOrigen().denominacion}}</strong>
+        (heredada de la cuenta bancaria)
+      </div>
+
+      <h3>Destino (ingreso a Caja Mayor)</h3>
+      <div class="form-grid section">
+        <mat-form-field appearance="outline">
+          <mat-label>Caja Mayor</mat-label>
+          <mat-select formControlName="cajaMayorDestinoId" required>
+            <mat-option *ngFor="let cm of cajasMayor" [value]="cm.id">{{cm.nombre}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Forma Pago</mat-label>
+          <mat-select formControlName="formaPagoDestinoId" required>
+            <mat-option *ngFor="let fp of formasPago" [value]="fp.id">{{fp.nombre}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Monto Origen (sale del banco)</mat-label>
+          <input matInput type="number" formControlName="montoOrigen" required>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Monto Destino (entra a caja)</mat-label>
+          <input matInput type="number" formControlName="montoDestino" required>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="span-2">
+          <mat-label>Numero Comprobante</mat-label>
+          <input matInput formControlName="numeroComprobante">
+        </mat-form-field>
+      </div>
+    </ng-container>
+
+    <!-- ===================== TRANSFERENCIA ENTRE CAJAS ===================== -->
+    <ng-container *ngIf="tipoOperacion === 'TRANSFERENCIA_ENTRE_CAJAS'">
+      <h3>Origen (egreso)</h3>
+      <div class="form-grid section">
+        <mat-form-field appearance="outline">
+          <mat-label>Caja Mayor Origen</mat-label>
+          <mat-select formControlName="cajaMayorOrigenId" required>
+            <mat-option *ngFor="let cm of cajasMayor" [value]="cm.id">{{cm.nombre}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Moneda</mat-label>
+          <mat-select formControlName="monedaOrigenId" required>
+            <mat-option *ngFor="let m of monedas" [value]="m.id">{{m.simbolo}} - {{m.denominacion}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Forma Pago</mat-label>
+          <mat-select formControlName="formaPagoOrigenId" required>
+            <mat-option *ngFor="let fp of formasPago" [value]="fp.id">{{fp.nombre}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Monto Origen</mat-label>
+          <input matInput type="number" formControlName="montoOrigen" required>
+        </mat-form-field>
+      </div>
+
+      <h3>Destino (ingreso)</h3>
+      <div class="form-grid section">
+        <mat-form-field appearance="outline">
+          <mat-label>Caja Mayor Destino</mat-label>
+          <mat-select formControlName="cajaMayorDestinoId" required>
+            <mat-option *ngFor="let cm of cajasMayor" [value]="cm.id">{{cm.nombre}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Moneda</mat-label>
+          <mat-select formControlName="monedaDestinoId" required>
+            <mat-option *ngFor="let m of monedas" [value]="m.id">{{m.simbolo}} - {{m.denominacion}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Forma Pago</mat-label>
+          <mat-select formControlName="formaPagoDestinoId" required>
+            <mat-option *ngFor="let fp of formasPago" [value]="fp.id">{{fp.nombre}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Monto Destino</mat-label>
+          <input matInput type="number" formControlName="montoDestino" required>
+        </mat-form-field>
+      </div>
+    </ng-container>
+
+    <mat-divider></mat-divider>
+
+    <!-- Diferencia opcional -->
+    <h3>Diferencia (opcional)</h3>
+    <div class="form-grid section">
+      <mat-form-field appearance="outline">
+        <mat-label>Monto diferencia</mat-label>
+        <input matInput type="number" formControlName="diferencia">
+        <mat-hint>Positivo = sobra; negativo = falta</mat-hint>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Imputar como</mat-label>
+        <mat-select formControlName="diferenciaDestinoTipo">
+          <mat-option *ngFor="let opt of diferenciaDestinoOpciones" [value]="opt.value">{{opt.label}}</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="span-2">
+        <mat-label>Observacion diferencia</mat-label>
+        <input matInput formControlName="diferenciaObservacion">
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Observacion general</mat-label>
+      <textarea matInput formControlName="observacion" rows="2"></textarea>
+    </mat-form-field>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()" [disabled]="saving">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="save()" [disabled]="saving || form.invalid">
+    <mat-spinner *ngIf="saving" diameter="20"></mat-spinner>
+    <span *ngIf="!saving">Registrar</span>
+  </button>
+</mat-dialog-actions>

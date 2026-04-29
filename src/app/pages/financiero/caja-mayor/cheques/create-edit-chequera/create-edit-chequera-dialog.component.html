@@ -1,0 +1,57 @@
+<h2 mat-dialog-title>{{isEditing ? 'Editar' : 'Nueva'}} Chequera</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="form" class="form-grid">
+    <mat-form-field appearance="outline" class="span-2">
+      <mat-label>Nombre</mat-label>
+      <input matInput formControlName="nombre" required>
+      <mat-error>El nombre es requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="span-2">
+      <mat-label>Cuenta Bancaria</mat-label>
+      <mat-select formControlName="cuentaBancariaId" required>
+        <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">
+          {{cb.nombre}} - {{cb.banco}} ({{cb.moneda?.simbolo}})
+        </mat-option>
+      </mat-select>
+      <mat-error>La cuenta bancaria es requerida</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Numero Inicial</mat-label>
+      <input matInput formControlName="numeroInicial" required>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Numero Final</mat-label>
+      <input matInput formControlName="numeroFinal" required>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Siguiente Numero</mat-label>
+      <input matInput formControlName="siguienteNumero">
+      <mat-hint>Si vacio, se usa Numero Inicial</mat-hint>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" *ngIf="isEditing">
+      <mat-label>Estado</mat-label>
+      <mat-select formControlName="estado">
+        <mat-option *ngFor="let e of estados" [value]="e">{{e}}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="span-2">
+      <mat-label>Observacion</mat-label>
+      <textarea matInput formControlName="observacion" rows="2"></textarea>
+    </mat-form-field>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()" [disabled]="saving">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="save()" [disabled]="saving || form.invalid">
+    <mat-spinner *ngIf="saving" diameter="20"></mat-spinner>
+    <span *ngIf="!saving">{{isEditing ? 'Actualizar' : 'Crear'}}</span>
+  </button>
+</mat-dialog-actions>

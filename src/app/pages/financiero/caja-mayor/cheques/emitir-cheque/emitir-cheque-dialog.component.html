@@ -1,0 +1,135 @@
+<h2 mat-dialog-title>Emitir Cheque</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="form" class="form-grid">
+    <mat-form-field appearance="outline" class="span-2">
+      <mat-label>Chequera</mat-label>
+      <mat-select formControlName="chequeraId" required>
+        <mat-option *ngFor="let c of chequeras" [value]="c.id">
+          {{c.nombre}} - {{c.cuentaBancaria?.banco}} (siguiente: {{c.siguienteNumero}})
+        </mat-option>
+      </mat-select>
+      <mat-error>La chequera es requerida</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Numero Cheque</mat-label>
+      <input matInput formControlName="numeroCheque">
+      <mat-hint>Si vacio, se usa el siguiente de la chequera</mat-hint>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Fecha Emision</mat-label>
+      <input matInput [matDatepicker]="picker1" formControlName="fechaEmision" required>
+      <mat-datepicker-toggle matSuffix [for]="picker1"></mat-datepicker-toggle>
+      <mat-datepicker #picker1></mat-datepicker>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Monto</mat-label>
+      <input matInput type="number" formControlName="monto" required>
+      <mat-error>El monto es requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Moneda</mat-label>
+      <mat-select formControlName="monedaId" required>
+        <mat-option *ngFor="let m of monedas" [value]="m.id">{{m.simbolo}} - {{m.denominacion}}</mat-option>
+      </mat-select>
+      <mat-error>La moneda es requerida</mat-error>
+    </mat-form-field>
+
+    <mat-divider class="span-2"></mat-divider>
+
+    <h3 class="span-2">Beneficiario</h3>
+
+    <mat-radio-group class="span-2 radio-row"
+                     [value]="form.get('beneficiarioModo')?.value"
+                     (change)="onModoChange($event.value)">
+      <mat-radio-button value="PROVEEDOR">Proveedor</mat-radio-button>
+      <mat-radio-button value="TEXTO">Texto libre</mat-radio-button>
+      <mat-radio-button value="AL_PORTADOR">Al portador (innominado)</mat-radio-button>
+    </mat-radio-group>
+
+    <mat-form-field appearance="outline" class="span-2"
+                    *ngIf="form.get('beneficiarioModo')?.value === 'PROVEEDOR'">
+      <mat-label>Buscar Proveedor</mat-label>
+      <input matInput [matAutocomplete]="autoProv" [formControl]="proveedorFilter">
+      <mat-autocomplete #autoProv="matAutocomplete"
+                        [displayWith]="displayProveedor"
+                        (optionSelected)="onProveedorSelected($event.option.value)">
+        <mat-option *ngFor="let p of proveedoresFiltrados" [value]="p">
+          {{p.persona?.razonSocial || p.persona?.nombre}}
+        </mat-option>
+      </mat-autocomplete>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="span-2"
+                    *ngIf="form.get('beneficiarioModo')?.value === 'TEXTO'">
+      <mat-label>Beneficiario</mat-label>
+      <input matInput formControlName="beneficiarioTexto">
+    </mat-form-field>
+
+    <div class="span-2 al-portador-info"
+         *ngIf="form.get('beneficiarioModo')?.value === 'AL_PORTADOR'">
+      <mat-icon>info</mat-icon>
+      Cheque al portador (innominado): cualquier persona que lo presente puede cobrarlo.
+    </div>
+
+    <mat-divider class="span-2"></mat-divider>
+
+    <div class="diferido-toggle span-2">
+      <mat-slide-toggle formControlName="esDiferido">Cheque diferido</mat-slide-toggle>
+    </div>
+
+    <mat-form-field appearance="outline" class="span-2" *ngIf="form.get('esDiferido')?.value">
+      <mat-label>Fecha de Pago</mat-label>
+      <input matInput [matDatepicker]="picker2" formControlName="fechaPago">
+      <mat-datepicker-toggle matSuffix [for]="picker2"></mat-datepicker-toggle>
+      <mat-datepicker #picker2></mat-datepicker>
+      <mat-hint>El saldo de la cuenta queda reservado hasta esta fecha</mat-hint>
+    </mat-form-field>
+
+    <mat-divider class="span-2"></mat-divider>
+
+    <div class="span-2 toggle-row">
+      <mat-slide-toggle formControlName="registrarEnCajaMayor">
+        Registrar como egreso en Caja Mayor
+      </mat-slide-toggle>
+      <small class="toggle-hint">
+        Activar si el cheque sustituye un pago que de otra forma habria salido en efectivo de la caja
+        (ej. pagas un proveedor con cheque en lugar de efectivo). Si esta desactivado, solo se registra
+        el descuento en la cuenta bancaria.
+      </small>
+    </div>
+
+    <ng-container *ngIf="form.get('registrarEnCajaMayor')?.value">
+      <mat-form-field appearance="outline">
+        <mat-label>Caja Mayor</mat-label>
+        <mat-select formControlName="cajaMayorId">
+          <mat-option *ngFor="let cm of cajasMayor" [value]="cm.id">{{cm.nombre}}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Forma Pago</mat-label>
+        <mat-select formControlName="formaPagoId">
+          <mat-option *ngFor="let fp of formasPago" [value]="fp.id">{{fp.nombre}}</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </ng-container>
+
+    <mat-form-field appearance="outline" class="span-2">
+      <mat-label>Observacion</mat-label>
+      <textarea matInput formControlName="observacion" rows="2"></textarea>
+    </mat-form-field>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()" [disabled]="saving">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="save()" [disabled]="saving || form.invalid">
+    <mat-spinner *ngIf="saving" diameter="20"></mat-spinner>
+    <span *ngIf="!saving">Emitir</span>
+  </button>
+</mat-dialog-actions>

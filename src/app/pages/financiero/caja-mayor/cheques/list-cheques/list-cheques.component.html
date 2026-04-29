@@ -1,0 +1,144 @@
+<div class="list-container">
+  <div class="header">
+    <h2>{{esDialog && chequeraNombre ? 'Historico de Cheques - ' + chequeraNombre : 'Cheques'}}</h2>
+    <div class="header-actions">
+      <button mat-raised-button color="primary" (click)="openEmitirDialog()" *ngIf="!esDialog">
+        <mat-icon>add</mat-icon>
+        Emitir Cheque
+      </button>
+      <button mat-icon-button (click)="cerrarDialog()" *ngIf="esDialog" matTooltip="Cerrar">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <mat-card class="filters-card">
+    <form [formGroup]="filterForm" class="filters-row">
+      <mat-form-field appearance="outline">
+        <mat-label>Estado</mat-label>
+        <mat-select formControlName="estado">
+          <mat-option [value]="null">Todos</mat-option>
+          <mat-option *ngFor="let e of estados" [value]="e">{{e}}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" *ngIf="!esDialog || !chequeraIdFijo">
+        <mat-label>Chequera</mat-label>
+        <mat-select formControlName="chequeraId">
+          <mat-option [value]="null">Todas</mat-option>
+          <mat-option *ngFor="let c of chequeras" [value]="c.id">{{c.nombre}}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Desde</mat-label>
+        <input matInput [matDatepicker]="picker1" formControlName="fechaDesde">
+        <mat-datepicker-toggle matSuffix [for]="picker1"></mat-datepicker-toggle>
+        <mat-datepicker #picker1></mat-datepicker>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Hasta</mat-label>
+        <input matInput [matDatepicker]="picker2" formControlName="fechaHasta">
+        <mat-datepicker-toggle matSuffix [for]="picker2"></mat-datepicker-toggle>
+        <mat-datepicker #picker2></mat-datepicker>
+      </mat-form-field>
+
+      <div class="filter-actions">
+        <button mat-stroked-button (click)="aplicarFiltros()">
+          <mat-icon>search</mat-icon>
+          Filtrar
+        </button>
+        <button mat-button (click)="limpiarFiltros()">
+          <mat-icon>clear</mat-icon>
+          Limpiar
+        </button>
+      </div>
+    </form>
+  </mat-card>
+
+  <div *ngIf="loading" class="spinner-container">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+
+  <mat-card *ngIf="!loading">
+    <table mat-table [dataSource]="cheques" class="full-width">
+      <ng-container matColumnDef="fechaEmision">
+        <th mat-header-cell *matHeaderCellDef>Emision</th>
+        <td mat-cell *matCellDef="let row">{{row.fechaEmision | date:'dd/MM/yy'}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="numeroCheque">
+        <th mat-header-cell *matHeaderCellDef>Numero</th>
+        <td mat-cell *matCellDef="let row">{{row.numeroCheque}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="chequera">
+        <th mat-header-cell *matHeaderCellDef>Chequera</th>
+        <td mat-cell *matCellDef="let row">{{row.chequera?.nombre}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="beneficiario">
+        <th mat-header-cell *matHeaderCellDef>Beneficiario</th>
+        <td mat-cell *matCellDef="let row">
+          {{row.proveedor?.persona?.razonSocial || row.proveedor?.persona?.nombre || row.beneficiario || 'AL PORTADOR'}}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="monto">
+        <th mat-header-cell *matHeaderCellDef class="text-right">Monto</th>
+        <td mat-cell *matCellDef="let row" class="text-right">
+          {{row.moneda?.simbolo}} {{row.monto | number:'1.0-2'}}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="fechaPago">
+        <th mat-header-cell *matHeaderCellDef>Fecha Pago</th>
+        <td mat-cell *matCellDef="let row">{{row.fechaPago ? (row.fechaPago | date:'dd/MM/yy') : '-'}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="estado">
+        <th mat-header-cell *matHeaderCellDef>Estado</th>
+        <td mat-cell *matCellDef="let row">
+          <mat-chip [ngStyle]="{'background-color': estadoColor(row.estado), color: 'white'}">
+            {{row.estado}}
+          </mat-chip>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef>Acciones</th>
+        <td mat-cell *matCellDef="let row">
+          <button mat-icon-button [matMenuTriggerFor]="menu"
+                  *ngIf="row.estado === 'EMITIDO' || row.estado === 'DIFERIDO'">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #menu="matMenu">
+            <button mat-menu-item (click)="cobrar(row)" *ngIf="row.estado === 'DIFERIDO'">
+              <mat-icon>paid</mat-icon><span>Cobrar</span>
+            </button>
+            <button mat-menu-item (click)="anular(row)">
+              <mat-icon>cancel</mat-icon><span>Anular</span>
+            </button>
+          </mat-menu>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+
+    <mat-paginator
+      [length]="total"
+      [pageSize]="pageSize"
+      [pageIndex]="page"
+      [pageSizeOptions]="pageSizeOptions"
+      (page)="onPageChange($event)">
+    </mat-paginator>
+
+    <div *ngIf="cheques.length === 0" class="empty-state">
+      <mat-icon>request_quote</mat-icon>
+      <p>No hay cheques registrados</p>
+    </div>
+  </mat-card>
+</div>

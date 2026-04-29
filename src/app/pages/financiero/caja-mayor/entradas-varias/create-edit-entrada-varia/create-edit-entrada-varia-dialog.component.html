@@ -1,0 +1,105 @@
+<h2 mat-dialog-title>Registrar Entrada Varia</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="form">
+    <h3>Destino del ingreso</h3>
+    <mat-radio-group class="radio-row" formControlName="destinoTipo">
+      <mat-radio-button value="CAJA_MAYOR">Caja Mayor (efectivo, etc.)</mat-radio-button>
+      <mat-radio-button value="CUENTA_BANCARIA">Cuenta Bancaria</mat-radio-button>
+    </mat-radio-group>
+
+    <mat-divider></mat-divider>
+
+    <div class="form-grid">
+      <mat-form-field appearance="outline" class="span-2">
+        <mat-label>Categoria</mat-label>
+        <mat-select formControlName="entradaVariaCategoriaId" required>
+          <mat-option *ngFor="let cat of categorias" [value]="cat.id">
+            {{cat.padre?.nombre ? cat.padre.nombre + ' / ' : ''}}{{cat.nombre}}
+          </mat-option>
+        </mat-select>
+        <mat-error>La categoria es requerida</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="span-2">
+        <mat-label>Descripcion</mat-label>
+        <input matInput formControlName="descripcion" required>
+        <mat-error>La descripcion es requerida</mat-error>
+      </mat-form-field>
+
+      <!-- Destino: Caja Mayor -->
+      <ng-container *ngIf="form.get('destinoTipo')?.value === 'CAJA_MAYOR'">
+        <mat-form-field appearance="outline" *ngIf="!cajaMayorFijo" class="span-2">
+          <mat-label>Caja Mayor</mat-label>
+          <mat-select formControlName="cajaMayorId" required>
+            <mat-option *ngFor="let cm of cajasMayor" [value]="cm.id">{{cm.nombre}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Moneda</mat-label>
+          <mat-select formControlName="monedaId" required>
+            <mat-option *ngFor="let m of monedas" [value]="m.id">{{m.simbolo}} - {{m.denominacion}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Forma de Pago</mat-label>
+          <mat-select formControlName="formaPagoId" required>
+            <mat-option *ngFor="let fp of formasPago" [value]="fp.id">{{fp.nombre}}</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </ng-container>
+
+      <!-- Destino: Cuenta Bancaria -->
+      <ng-container *ngIf="form.get('destinoTipo')?.value === 'CUENTA_BANCARIA'">
+        <mat-form-field appearance="outline" class="span-2">
+          <mat-label>Cuenta Bancaria</mat-label>
+          <mat-select formControlName="cuentaBancariaId" required>
+            <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">
+              {{cb.nombre}} - {{cb.banco}} ({{cb.moneda?.simbolo}})
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <div class="moneda-fija-info span-2" *ngIf="monedaFija()">
+          <mat-icon>info</mat-icon>
+          Moneda: <strong>{{monedaFija().simbolo}} - {{monedaFija().denominacion}}</strong>
+          (heredada de la cuenta bancaria)
+        </div>
+      </ng-container>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Monto</mat-label>
+        <input matInput type="number" formControlName="monto" required min="0.01">
+        <mat-error *ngIf="form.get('monto')?.hasError('required')">El monto es requerido</mat-error>
+        <mat-error *ngIf="form.get('monto')?.hasError('min')">Debe ser mayor a 0</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Fecha</mat-label>
+        <input matInput [matDatepicker]="picker" formControlName="fecha" required>
+        <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+        <mat-datepicker #picker></mat-datepicker>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Numero Comprobante</mat-label>
+        <input matInput formControlName="numeroComprobante">
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="span-2">
+        <mat-label>Observacion</mat-label>
+        <textarea matInput formControlName="observacion" rows="2"></textarea>
+      </mat-form-field>
+    </div>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()" [disabled]="saving">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="save()" [disabled]="saving || form.invalid">
+    <mat-spinner *ngIf="saving" diameter="20"></mat-spinner>
+    <span *ngIf="!saving">Registrar</span>
+  </button>
+</mat-dialog-actions>

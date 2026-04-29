@@ -1,0 +1,136 @@
+<div class="list-container">
+  <div class="header">
+    <h2>Entradas Varias</h2>
+    <button mat-raised-button color="primary" (click)="openCreateDialog()">
+      <mat-icon>add</mat-icon>
+      Nueva Entrada
+    </button>
+  </div>
+
+  <mat-card class="filters-card">
+    <form [formGroup]="filterForm" class="filters-row">
+      <mat-form-field appearance="outline">
+        <mat-label>Desde</mat-label>
+        <input matInput [matDatepicker]="picker1" formControlName="fechaDesde">
+        <mat-datepicker-toggle matSuffix [for]="picker1"></mat-datepicker-toggle>
+        <mat-datepicker #picker1></mat-datepicker>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Hasta</mat-label>
+        <input matInput [matDatepicker]="picker2" formControlName="fechaHasta">
+        <mat-datepicker-toggle matSuffix [for]="picker2"></mat-datepicker-toggle>
+        <mat-datepicker #picker2></mat-datepicker>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Categoria</mat-label>
+        <mat-select formControlName="entradaVariaCategoriaId">
+          <mat-option [value]="null">Todas</mat-option>
+          <mat-option *ngFor="let c of categorias" [value]="c.id">{{c.nombre}}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Estado</mat-label>
+        <mat-select formControlName="anulado">
+          <mat-option [value]="null">Todos</mat-option>
+          <mat-option [value]="false">Activos</mat-option>
+          <mat-option [value]="true">Anulados</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <div class="filter-actions">
+        <button mat-stroked-button (click)="aplicarFiltros()">
+          <mat-icon>search</mat-icon>
+          Filtrar
+        </button>
+        <button mat-button (click)="limpiarFiltros()">
+          <mat-icon>clear</mat-icon>
+          Limpiar
+        </button>
+      </div>
+    </form>
+  </mat-card>
+
+  <div *ngIf="loading" class="spinner-container">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+
+  <mat-card *ngIf="!loading">
+    <table mat-table [dataSource]="entradas" class="full-width">
+      <ng-container matColumnDef="fecha">
+        <th mat-header-cell *matHeaderCellDef>Fecha</th>
+        <td mat-cell *matCellDef="let row">{{row.fecha | date:'dd/MM/yy HH:mm'}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="descripcion">
+        <th mat-header-cell *matHeaderCellDef>Descripcion</th>
+        <td mat-cell *matCellDef="let row">{{row.descripcion}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="categoria">
+        <th mat-header-cell *matHeaderCellDef>Categoria</th>
+        <td mat-cell *matCellDef="let row">{{row.entradaVariaCategoria?.nombre}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="monto">
+        <th mat-header-cell *matHeaderCellDef class="text-right">Monto</th>
+        <td mat-cell *matCellDef="let row" class="text-right">{{row.monto | number:'1.0-2'}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="moneda">
+        <th mat-header-cell *matHeaderCellDef>Moneda</th>
+        <td mat-cell *matCellDef="let row">{{row.moneda?.simbolo}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="destino">
+        <th mat-header-cell *matHeaderCellDef>Destino</th>
+        <td mat-cell *matCellDef="let row">
+          <span *ngIf="row.cajaMayor">CM: {{row.cajaMayor?.nombre}} ({{row.formaPago?.nombre}})</span>
+          <span *ngIf="row.cuentaBancaria">CB: {{row.cuentaBancaria?.nombre}} - {{row.cuentaBancaria?.banco}}</span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="estado">
+        <th mat-header-cell *matHeaderCellDef>Estado</th>
+        <td mat-cell *matCellDef="let row">
+          <mat-chip [ngStyle]="{'background-color': row.anulado ? '#f44336' : '#4caf50', color: 'white'}">
+            {{row.anulado ? 'ANULADO' : 'ACTIVO'}}
+          </mat-chip>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef>Acciones</th>
+        <td mat-cell *matCellDef="let row">
+          <button mat-icon-button [matMenuTriggerFor]="menu" *ngIf="!row.anulado">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #menu="matMenu">
+            <button mat-menu-item (click)="anularEntrada(row)">
+              <mat-icon>cancel</mat-icon>
+              <span>Anular</span>
+            </button>
+          </mat-menu>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+
+    <mat-paginator
+      [length]="total"
+      [pageSize]="pageSize"
+      [pageIndex]="page"
+      [pageSizeOptions]="pageSizeOptions"
+      (page)="onPageChange($event)">
+    </mat-paginator>
+
+    <div *ngIf="entradas.length === 0" class="empty-state">
+      <mat-icon>trending_up</mat-icon>
+      <p>No hay entradas varias registradas</p>
+    </div>
+  </mat-card>
+</div>

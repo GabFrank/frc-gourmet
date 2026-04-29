@@ -1,0 +1,70 @@
+.list-container {
+  padding: 20px;
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+
+    h2 {
+      margin: 0;
+      font-weight: 300;
+    }
+  }
+
+  .inline-form-card {
+    margin-bottom: 20px;
+    padding: 16px;
+
+    .inline-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-end;
+
+      mat-form-field {
+        flex: 1;
+        min-width: 200px;
+      }
+
+      .inline-form-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 22px;
+      }
+    }
+  }
+
+  .spinner-container {
+    display: flex;
+    justify-content: center;
+    padding: 40px;
+  }
+
+  .full-width {
+    width: 100%;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px;
+    color: rgba(0,0,0,0.4);
+
+    mat-icon {
+      font-size: 48px;
+      width: 48px;
+      height: 48px;
+      margin-bottom: 10px;
+    }
+  }
+}
+
+:host-context(.dark-theme) {
+  .empty-state {
+    color: rgba(255,255,255,0.4);
+  }
+}

@@ -1,0 +1,58 @@
+<h2 mat-dialog-title>Crear acceso directo</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="form" class="form-container">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Dashboard donde aparecerá</mat-label>
+      <mat-select formControlName="dashboardKey">
+        <mat-option *ngFor="let d of data.dashboardsDisponibles" [value]="d.key">{{d.label}}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Título visible</mat-label>
+      <input matInput formControlName="titulo">
+    </mat-form-field>
+
+    <div class="picker-section">
+      <span class="picker-label">Icono</span>
+      <div class="icon-grid">
+        <button *ngFor="let i of iconosSugeridos"
+                mat-icon-button
+                type="button"
+                [class.selected]="form.value.icono === i"
+                (click)="seleccionarIcono(i)">
+          <mat-icon>{{i}}</mat-icon>
+        </button>
+      </div>
+    </div>
+
+    <div class="picker-section">
+      <span class="picker-label">Color</span>
+      <div class="color-grid">
+        <button *ngFor="let c of coloresSugeridos"
+                type="button"
+                class="color-swatch"
+                [class.selected]="form.value.color === c"
+                [style.background-color]="c"
+                (click)="seleccionarColor(c)">
+        </button>
+      </div>
+    </div>
+
+    <div class="preview" [ngStyle]="{'border-left': '4px solid ' + form.value.color}">
+      <div class="preview-icon" [ngStyle]="{'background-color': form.value.color}">
+        <mat-icon>{{form.value.icono}}</mat-icon>
+      </div>
+      <span class="preview-titulo">{{form.value.titulo || 'Título...'}}</span>
+    </div>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="onCancel()" [disabled]="saving">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="form.invalid || saving">
+    <mat-spinner *ngIf="saving" diameter="20"></mat-spinner>
+    <span *ngIf="!saving">Crear</span>
+  </button>
+</mat-dialog-actions>
