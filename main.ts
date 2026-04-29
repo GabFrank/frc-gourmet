@@ -51,6 +51,10 @@ import { registerEquiposComisionHandlers } from './electron/handlers/equipos-com
 import { registerCuentasPorCobrarHandlers } from './electron/handlers/cuentas-por-cobrar.handler';
 import { registerMovimientosClienteHandlers } from './electron/handlers/movimientos-cliente.handler';
 import { seedInitialData } from './electron/utils/seed-data';
+// RRHH Fase 8 - Dashboard, Notificaciones, Reportes
+import { registerNotificacionesRrhhHandlers, generarNotificacionesRrhh } from './electron/handlers/notificaciones-rrhh.handler';
+import { registerDashboardRrhhHandlers } from './electron/handlers/dashboard-rrhh.handler';
+import { registerReportesRrhhHandlers } from './electron/handlers/reportes-rrhh.handler';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
 // Unificado en recetas.handler: sabores y variaciones
 
@@ -112,6 +116,10 @@ function initializeDatabase() {
       registerEquiposComisionHandlers(dataSource, getCurrentUser); // RRHH Fase 6: Equipos de comision
       registerCuentasPorCobrarHandlers(dataSource, getCurrentUser); // Fase 7: CuentasPorCobrar
       registerMovimientosClienteHandlers(dataSource, getCurrentUser); // Fase 7: MovimientosCliente
+      // RRHH Fase 8
+      registerNotificacionesRrhhHandlers(dataSource, getCurrentUser); // Notificaciones RRHH
+      registerDashboardRrhhHandlers(dataSource, getCurrentUser); // Dashboard KPIs RRHH
+      registerReportesRrhhHandlers(dataSource, getCurrentUser); // Reportes + Exports RRHH
 
       // Startup migration: populate vendedor_id from created_by for historic ventas
       dataSource.query(`UPDATE ventas SET vendedor_id = created_by WHERE vendedor_id IS NULL AND created_by IS NOT NULL`)
@@ -125,6 +133,9 @@ function initializeDatabase() {
       seedPermissions(dataSource).catch((e) => console.error('Error seeding permissions:', e));
       seedConfiguracionRrhh(dataSource).catch((e) => console.error('Error seeding configuracion rrhh:', e));
       seedLiquidacionConceptos(dataSource).catch((e) => console.error('Error seeding liquidacion conceptos:', e));
+      // Generar notificaciones RRHH al startup y cada 24h
+      generarNotificacionesRrhh().catch((e) => console.error('Error generando notificaciones RRHH:', e));
+      setInterval(() => { generarNotificacionesRrhh().catch((e) => console.error('Error notif RRHH interval:', e)); }, 24 * 60 * 60 * 1000);
     })
     .catch((error) => {
       console.error('Failed to initialize database:', error);

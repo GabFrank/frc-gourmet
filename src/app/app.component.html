@@ -111,7 +111,15 @@
           <div class="submenu-container">
             <a mat-list-item (click)="openRrhhDashTab()">
               <mat-icon matListItemIcon>dashboard</mat-icon>
-              <span matListItemTitle *ngIf="isMenuExpanded">RRHHDash</span>
+              <span matListItemTitle *ngIf="isMenuExpanded">Dashboard RRHH</span>
+            </a>
+            <a mat-list-item (click)="openNotificacionesRrhhTab()">
+              <mat-icon matListItemIcon [matBadge]="notificacionesNoLeidas > 0 ? notificacionesNoLeidas : null" matBadgeColor="warn" matBadgeSize="small">notifications</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Notificaciones</span>
+            </a>
+            <a mat-list-item (click)="openReportesRrhhTab()">
+              <mat-icon matListItemIcon>assessment</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Reportes RRHH</span>
             </a>
             <a mat-list-item (click)="openPersonasTab()">
               <mat-icon matListItemIcon>person</mat-icon>

@@ -1,0 +1,72 @@
+.page-container {
+  padding: 16px;
+  max-width: 1200px;
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.titulo-seccion {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.config-card {
+  margin-bottom: 16px;
+}
+
+.filtros-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 0 8px 0;
+}
+
+.acciones-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 16px;
+  flex-wrap: wrap;
+}
+
+.previa-card {
+  margin-top: 16px;
+}
+
+.sin-datos {
+  padding: 24px;
+  text-align: center;
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.previa-lista {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.previa-item {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--mat-divider-color, rgba(0,0,0,0.12));
+  padding: 4px 0;
+  font-size: 0.8rem;
+}
+
+.previa-num {
+  opacity: 0.5;
+  min-width: 24px;
+}
+
+.previa-json {
+  margin: 0;
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

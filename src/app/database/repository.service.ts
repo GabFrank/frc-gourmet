@@ -894,6 +894,35 @@ interface ElectronAPI {
   // Movimientos Cliente (Fase 7)
   getMovimientosCliente: (clienteId: number, filtros?: any) => Promise<any>;
   getSaldoCliente: (clienteId: number) => Promise<any>;
+
+  // Notificaciones RRHH (Fase 8)
+  getNotificacionesRrhh: (filtros?: any) => Promise<any[]>;
+  marcarNotificacionLeida: (id: number) => Promise<any>;
+  marcarTodasNotificacionesLeidas: (usuarioId?: number) => Promise<any>;
+  generarNotificacionesRrhh: () => Promise<any>;
+  countNotificacionesNoLeidas: (usuarioId?: number) => Promise<any>;
+
+  // Dashboard RRHH (Fase 8)
+  getDashboardRrhhKpis: (periodo: string) => Promise<any>;
+
+  // Reportes RRHH (Fase 8)
+  getReporteLiquidacionesMesData: (periodo: string) => Promise<any>;
+  exportReporteLiquidacionesMesExcel: (periodo: string) => Promise<any>;
+  exportReporteLiquidacionesMesPdf: (periodo: string) => Promise<any>;
+  getReporteAsistenciaMesData: (periodo: string, funcionarioId?: number) => Promise<any>;
+  exportReporteAsistenciaMesExcel: (periodo: string, funcionarioId?: number) => Promise<any>;
+  getReporteValesMesData: (periodo: string) => Promise<any>;
+  exportReporteValesMesExcel: (periodo: string) => Promise<any>;
+  getReportePrestamosActivosData: () => Promise<any>;
+  exportReportePrestamosActivosExcel: () => Promise<any>;
+  getReporteComisionesMesData: (periodo: string) => Promise<any>;
+  exportReporteComisionesMesExcel: (periodo: string) => Promise<any>;
+  exportReciboLiquidacionPdf: (liquidacionId: number) => Promise<any>;
+  getReporteAguinaldoAnualData: (anio: number) => Promise<any>;
+  exportReporteAguinaldoAnualExcel: (anio: number) => Promise<any>;
+  exportReporteAguinaldoAnualPdf: (anio: number) => Promise<any>;
+  getReporteResumenIpsData: (periodo: string) => Promise<any>;
+  exportReporteResumenIpsExcel: (periodo: string) => Promise<any>;
 }
 
 
@@ -3453,6 +3482,81 @@ export class RepositoryService {
   }
   getSaldoCliente(clienteId: number): Observable<any> {
     return from(this.api.getSaldoCliente(clienteId));
+  }
+
+  // ===================== NOTIFICACIONES RRHH (Fase 8) =====================
+  getNotificacionesRrhh(filtros?: any): Observable<any[]> {
+    return from(this.api.getNotificacionesRrhh(filtros));
+  }
+  marcarNotificacionLeida(id: number): Observable<any> {
+    return from(this.api.marcarNotificacionLeida(id));
+  }
+  marcarTodasNotificacionesLeidas(usuarioId?: number): Observable<any> {
+    return from(this.api.marcarTodasNotificacionesLeidas(usuarioId));
+  }
+  generarNotificacionesRrhh(): Observable<any> {
+    return from(this.api.generarNotificacionesRrhh());
+  }
+  countNotificacionesNoLeidas(usuarioId?: number): Observable<any> {
+    return from(this.api.countNotificacionesNoLeidas(usuarioId));
+  }
+
+  // ===================== DASHBOARD RRHH (Fase 8) =====================
+  getDashboardRrhhKpis(periodo: string): Observable<any> {
+    return from(this.api.getDashboardRrhhKpis(periodo));
+  }
+
+  // ===================== REPORTES RRHH (Fase 8) =====================
+  getReporteLiquidacionesMesData(periodo: string): Observable<any> {
+    return from(this.api.getReporteLiquidacionesMesData(periodo));
+  }
+  exportReporteLiquidacionesMesExcel(periodo: string): Observable<any> {
+    return from(this.api.exportReporteLiquidacionesMesExcel(periodo));
+  }
+  exportReporteLiquidacionesMesPdf(periodo: string): Observable<any> {
+    return from(this.api.exportReporteLiquidacionesMesPdf(periodo));
+  }
+  getReporteAsistenciaMesData(periodo: string, funcionarioId?: number): Observable<any> {
+    return from(this.api.getReporteAsistenciaMesData(periodo, funcionarioId));
+  }
+  exportReporteAsistenciaMesExcel(periodo: string, funcionarioId?: number): Observable<any> {
+    return from(this.api.exportReporteAsistenciaMesExcel(periodo, funcionarioId));
+  }
+  getReporteValesMesData(periodo: string): Observable<any> {
+    return from(this.api.getReporteValesMesData(periodo));
+  }
+  exportReporteValesMesExcel(periodo: string): Observable<any> {
+    return from(this.api.exportReporteValesMesExcel(periodo));
+  }
+  getReportePrestamosActivosData(): Observable<any> {
+    return from(this.api.getReportePrestamosActivosData());
+  }
+  exportReportePrestamosActivosExcel(): Observable<any> {
+    return from(this.api.exportReportePrestamosActivosExcel());
+  }
+  getReporteComisionesMesData(periodo: string): Observable<any> {
+    return from(this.api.getReporteComisionesMesData(periodo));
+  }
+  exportReporteComisionesMesExcel(periodo: string): Observable<any> {
+    return from(this.api.exportReporteComisionesMesExcel(periodo));
+  }
+  exportReciboLiquidacionPdf(liquidacionId: number): Observable<any> {
+    return from(this.api.exportReciboLiquidacionPdf(liquidacionId));
+  }
+  getReporteAguinaldoAnualData(anio: number): Observable<any> {
+    return from(this.api.getReporteAguinaldoAnualData(anio));
+  }
+  exportReporteAguinaldoAnualExcel(anio: number): Observable<any> {
+    return from(this.api.exportReporteAguinaldoAnualExcel(anio));
+  }
+  exportReporteAguinaldoAnualPdf(anio: number): Observable<any> {
+    return from(this.api.exportReporteAguinaldoAnualPdf(anio));
+  }
+  getReporteResumenIpsData(periodo: string): Observable<any> {
+    return from(this.api.getReporteResumenIpsData(periodo));
+  }
+  exportReporteResumenIpsExcel(periodo: string): Observable<any> {
+    return from(this.api.exportReporteResumenIpsExcel(periodo));
   }
 
 }

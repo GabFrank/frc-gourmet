@@ -45,6 +45,8 @@
     "node-thermal-printer": "^4.4.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "7.8.1",
+    "exceljs": "^4.4.0",
+    "pdfmake": "^0.2.10",
     "sqlite3": "^5.1.6",
     "tslib": "^2.5.0",
     "typeorm": "^0.3.21",

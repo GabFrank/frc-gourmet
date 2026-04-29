@@ -1,0 +1,77 @@
+<div class="page-container">
+  <div class="header-row">
+    <h2 class="titulo-seccion">Reportes RRHH</h2>
+  </div>
+
+  <!-- Configuracion del reporte -->
+  <mat-card class="config-card">
+    <mat-card-header>
+      <mat-card-title>Configurar Reporte</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="filtros-row">
+        <mat-form-field appearance="outline">
+          <mat-label>Tipo de Reporte</mat-label>
+          <mat-select [(ngModel)]="tipoReporte">
+            <mat-option *ngFor="let t of tiposReporte" [value]="t.value">{{ t.label }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" *ngIf="needsPeriodo()">
+          <mat-label>Periodo</mat-label>
+          <mat-select [(ngModel)]="periodoSeleccionado">
+            <mat-option *ngFor="let p of periodosDisponibles" [value]="p">{{ p }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" *ngIf="needsAnio()">
+          <mat-label>Año</mat-label>
+          <mat-select [(ngModel)]="anioSeleccionado">
+            <mat-option *ngFor="let a of aniosDisponibles" [value]="a">{{ a }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" *ngIf="needsLiquidacionId()">
+          <mat-label>ID de Liquidacion</mat-label>
+          <input matInput type="number" [(ngModel)]="liquidacionIdSeleccionada" min="1">
+        </mat-form-field>
+      </div>
+
+      <mat-divider></mat-divider>
+
+      <div class="acciones-row">
+        <button mat-raised-button color="primary" (click)="verPrevia()" [disabled]="cargando || exportando">
+          <mat-icon>preview</mat-icon>
+          Ver Datos
+        </button>
+        <button mat-raised-button color="accent" (click)="exportarExcel()" [disabled]="cargando || exportando || !hasExcel()">
+          <mat-icon>table_chart</mat-icon>
+          Exportar Excel
+        </button>
+        <button mat-raised-button color="warn" (click)="exportarPdf()" [disabled]="cargando || exportando || !hasPdf()">
+          <mat-icon>picture_as_pdf</mat-icon>
+          Exportar PDF
+        </button>
+        <mat-spinner *ngIf="cargando || exportando" diameter="24"></mat-spinner>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Vista previa -->
+  <mat-card *ngIf="mostrarPrevia" class="previa-card">
+    <mat-card-header>
+      <mat-card-title>Vista Previa ({{ datosPrevia.length }} registros)</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div *ngIf="datosPrevia.length === 0" class="sin-datos">
+        No hay datos para los filtros seleccionados
+      </div>
+      <div *ngIf="datosPrevia.length > 0" class="previa-lista">
+        <div *ngFor="let item of datosPrevia; let i = index" class="previa-item">
+          <span class="previa-num">{{ i + 1 }}.</span>
+          <pre class="previa-json">{{ item | json }}</pre>
+        </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

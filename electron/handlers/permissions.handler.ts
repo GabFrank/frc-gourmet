@@ -49,6 +49,10 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'CPC_COBRAR', descripcion: 'Registrar cobros de cuotas de clientes', modulo: 'FINANCIERO' },
   { codigo: 'CPC_ANULAR', descripcion: 'Anular cobros de cuotas de clientes', modulo: 'FINANCIERO' },
   { codigo: 'CPC_CANCELAR', descripcion: 'Cancelar cuentas por cobrar', modulo: 'FINANCIERO' },
+  // RRHH Fase 8 - Dashboard, Notificaciones y Reportes
+  { codigo: 'RRHH_DASHBOARD_VER', descripcion: 'Ver dashboard de RRHH con KPIs', modulo: 'RRHH' },
+  { codigo: 'RRHH_REPORTE_GENERAR', descripcion: 'Generar y exportar reportes RRHH (PDF/Excel)', modulo: 'RRHH' },
+  { codigo: 'RRHH_NOTIFICACIONES_VER', descripcion: 'Ver notificaciones del modulo RRHH', modulo: 'RRHH' },
 ];
 
 export async function seedPermissions(dataSource: DataSource) {

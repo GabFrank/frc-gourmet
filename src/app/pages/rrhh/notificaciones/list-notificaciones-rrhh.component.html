@@ -1,0 +1,94 @@
+<div class="page-container">
+  <div class="header-row">
+    <h2 class="titulo-seccion">Notificaciones RRHH</h2>
+    <div class="header-actions">
+      <button mat-raised-button color="warn" (click)="marcarTodasLeidas()" [disabled]="cargando">
+        <mat-icon>done_all</mat-icon>
+        Marcar Todas Como Leidas
+      </button>
+      <button mat-icon-button (click)="cargar()" [disabled]="cargando" matTooltip="Actualizar">
+        <mat-icon>refresh</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <mat-card class="filtros-card">
+    <mat-card-content>
+      <div class="filtros-row">
+        <mat-form-field appearance="outline">
+          <mat-label>Tipo</mat-label>
+          <mat-select [(ngModel)]="tipoFiltro" (ngModelChange)="aplicarFiltros()">
+            <mat-option *ngFor="let t of tiposDisponibles" [value]="t.value">{{ t.label }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-checkbox [(ngModel)]="soloNoLeidas" (ngModelChange)="cargar()">Solo no leidas</mat-checkbox>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <div *ngIf="cargando" class="cargando-container">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+
+  <mat-card *ngIf="!cargando">
+    <mat-card-content>
+      <div class="count-info">{{ notificacionesFiltradas.length }} notificacion(es)</div>
+      <table mat-table [dataSource]="notificacionesFiltradas" class="tabla-notif">
+        <ng-container matColumnDef="prioridad">
+          <th mat-header-cell *matHeaderCellDef>PRIORIDAD</th>
+          <td mat-cell *matCellDef="let n">
+            <span class="chip-prioridad" [class]="getPrioridadColor(n.prioridad)">{{ n.prioridad }}</span>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="tipo">
+          <th mat-header-cell *matHeaderCellDef>TIPO</th>
+          <td mat-cell *matCellDef="let n">{{ getTipoLabel(n.tipo) }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="titulo">
+          <th mat-header-cell *matHeaderCellDef>TITULO</th>
+          <td mat-cell *matCellDef="let n" [class.no-leida]="!n.fechaLeida">{{ n.titulo }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="mensaje">
+          <th mat-header-cell *matHeaderCellDef>MENSAJE</th>
+          <td mat-cell *matCellDef="let n" class="col-mensaje">{{ n.mensaje }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="funcionario">
+          <th mat-header-cell *matHeaderCellDef>FUNCIONARIO</th>
+          <td mat-cell *matCellDef="let n">{{ getNombreFuncionario(n) }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="fecha">
+          <th mat-header-cell *matHeaderCellDef>FECHA</th>
+          <td mat-cell *matCellDef="let n">{{ n.fechaGenerada | date:'dd/MM/yyyy HH:mm' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef>ACCIONES</th>
+          <td mat-cell *matCellDef="let n">
+            <button mat-icon-button [matMenuTriggerFor]="menuAcciones" matTooltip="Acciones">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menuAcciones="matMenu">
+              <button mat-menu-item (click)="marcarLeida(n)" [disabled]="!!n.fechaLeida">
+                <mat-icon>done</mat-icon>
+                <span>Marcar como leida</span>
+              </button>
+            </mat-menu>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;" [class.row-leida]="!!row.fechaLeida"></tr>
+      </table>
+
+      <div *ngIf="notificacionesFiltradas.length === 0" class="sin-datos">
+        No hay notificaciones
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

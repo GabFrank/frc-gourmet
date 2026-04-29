@@ -48,6 +48,8 @@ import { EquipoComisionMiembro } from './entities/rrhh/equipo-comision-miembro.e
 import { EquipoComisionRegla } from './entities/rrhh/equipo-comision-regla.entity';
 import { LiquidacionComision } from './entities/rrhh/liquidacion-comision.entity';
 import { LiquidacionComisionItem } from './entities/rrhh/liquidacion-comision-item.entity';
+// RRHH Fase 8 - Notificaciones
+import { NotificacionRrhh } from './entities/rrhh/notificacion-rrhh.entity';
 
 import { Moneda } from './entities/financiero/moneda.entity';
 import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
@@ -225,6 +227,8 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       EquipoComisionRegla,
       LiquidacionComision,
       LiquidacionComisionItem,
+      // RRHH Fase 8 - Notificaciones
+      NotificacionRrhh,
       // Financiero entities
       Moneda,
       TipoPrecio,

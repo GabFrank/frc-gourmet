@@ -1,0 +1,97 @@
+.page-container {
+  padding: 16px;
+  max-width: 1400px;
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.titulo-seccion {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filtros-card {
+  margin-bottom: 16px;
+}
+
+.filtros-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.cargando-container {
+  display: flex;
+  justify-content: center;
+  padding: 40px;
+}
+
+.tabla-notif {
+  width: 100%;
+  font-size: 0.85rem;
+}
+
+.col-mensaje {
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.no-leida {
+  font-weight: 700;
+}
+
+.row-leida {
+  opacity: 0.6;
+}
+
+.chip-prioridad {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.chip-rojo {
+  background-color: rgba(244, 67, 54, 0.2);
+  color: #f44336;
+}
+
+.chip-amarillo {
+  background-color: rgba(255, 152, 0, 0.2);
+  color: #ff9800;
+}
+
+.chip-verde {
+  background-color: rgba(76, 175, 80, 0.2);
+  color: #4caf50;
+}
+
+.count-info {
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.sin-datos {
+  padding: 24px;
+  text-align: center;
+  opacity: 0.6;
+  font-style: italic;
+}

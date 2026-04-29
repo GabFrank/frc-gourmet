@@ -3075,4 +3075,79 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('get-saldo-cliente', clienteId);
   },
 
+  // === Notificaciones RRHH (Fase 8) ===
+  getNotificacionesRrhh: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-notificaciones-rrhh', filtros);
+  },
+  marcarNotificacionLeida: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('marcar-notificacion-leida', id);
+  },
+  marcarTodasNotificacionesLeidas: async (usuarioId?: number): Promise<any> => {
+    return await ipcRenderer.invoke('marcar-todas-notificaciones-leidas', usuarioId);
+  },
+  generarNotificacionesRrhh: async (): Promise<any> => {
+    return await ipcRenderer.invoke('generar-notificaciones-rrhh');
+  },
+  countNotificacionesNoLeidas: async (usuarioId?: number): Promise<any> => {
+    return await ipcRenderer.invoke('count-notificaciones-no-leidas', usuarioId);
+  },
+
+  // === Dashboard RRHH (Fase 8) ===
+  getDashboardRrhhKpis: async (periodo: string): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-rrhh-kpis', periodo);
+  },
+
+  // === Reportes RRHH (Fase 8) ===
+  getReporteLiquidacionesMesData: async (periodo: string): Promise<any> => {
+    return await ipcRenderer.invoke('get-reporte-liquidaciones-mes-data', periodo);
+  },
+  exportReporteLiquidacionesMesExcel: async (periodo: string): Promise<any> => {
+    return await ipcRenderer.invoke('export-reporte-liquidaciones-mes-excel', periodo);
+  },
+  exportReporteLiquidacionesMesPdf: async (periodo: string): Promise<any> => {
+    return await ipcRenderer.invoke('export-reporte-liquidaciones-mes-pdf', periodo);
+  },
+  getReporteAsistenciaMesData: async (periodo: string, funcionarioId?: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-reporte-asistencia-mes-data', periodo, funcionarioId);
+  },
+  exportReporteAsistenciaMesExcel: async (periodo: string, funcionarioId?: number): Promise<any> => {
+    return await ipcRenderer.invoke('export-reporte-asistencia-mes-excel', periodo, funcionarioId);
+  },
+  getReporteValesMesData: async (periodo: string): Promise<any> => {
+    return await ipcRenderer.invoke('get-reporte-vales-mes-data', periodo);
+  },
+  exportReporteValesMesExcel: async (periodo: string): Promise<any> => {
+    return await ipcRenderer.invoke('export-reporte-vales-mes-excel', periodo);
+  },
+  getReportePrestamosActivosData: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-reporte-prestamos-activos-data');
+  },
+  exportReportePrestamosActivosExcel: async (): Promise<any> => {
+    return await ipcRenderer.invoke('export-reporte-prestamos-activos-excel');
+  },
+  getReporteComisionesMesData: async (periodo: string): Promise<any> => {
+    return await ipcRenderer.invoke('get-reporte-comisiones-mes-data', periodo);
+  },
+  exportReporteComisionesMesExcel: async (periodo: string): Promise<any> => {
+    return await ipcRenderer.invoke('export-reporte-comisiones-mes-excel', periodo);
+  },
+  exportReciboLiquidacionPdf: async (liquidacionId: number): Promise<any> => {
+    return await ipcRenderer.invoke('export-recibo-liquidacion-pdf', liquidacionId);
+  },
+  getReporteAguinaldoAnualData: async (anio: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-reporte-aguinaldo-anual-data', anio);
+  },
+  exportReporteAguinaldoAnualExcel: async (anio: number): Promise<any> => {
+    return await ipcRenderer.invoke('export-reporte-aguinaldo-anual-excel', anio);
+  },
+  exportReporteAguinaldoAnualPdf: async (anio: number): Promise<any> => {
+    return await ipcRenderer.invoke('export-reporte-aguinaldo-anual-pdf', anio);
+  },
+  getReporteResumenIpsData: async (periodo: string): Promise<any> => {
+    return await ipcRenderer.invoke('get-reporte-resumen-ips-data', periodo);
+  },
+  exportReporteResumenIpsExcel: async (periodo: string): Promise<any> => {
+    return await ipcRenderer.invoke('export-reporte-resumen-ips-excel', periodo);
+  },
+
 });

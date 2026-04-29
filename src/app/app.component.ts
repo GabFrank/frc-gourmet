@@ -73,6 +73,11 @@ import { ListAguinaldosComponent } from './pages/rrhh/aguinaldos/list-aguinaldos
 import { ListReglasComisionComponent } from './pages/comisiones/reglas/list-reglas-comision/list-reglas-comision.component';
 import { ListEquiposComisionComponent } from './pages/comisiones/equipos/list-equipos-comision/list-equipos-comision.component';
 import { ListLiquidacionesComisionComponent } from './pages/comisiones/liquidaciones/list-liquidaciones-comision/list-liquidaciones-comision.component';
+// RRHH Fase 8 - Dashboard, Notificaciones, Reportes
+import { RrhhDashboardComponent } from './pages/rrhh/dashboard/rrhh-dashboard.component';
+import { ListNotificacionesRrhhComponent } from './pages/rrhh/notificaciones/list-notificaciones-rrhh.component';
+import { ReportesRrhhPageComponent } from './pages/rrhh/reportes/reportes-rrhh-page.component';
+import { RepositoryService } from './database/repository.service';
 
 @Component({
   selector: 'app-root',
@@ -112,6 +117,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   currentUser: Usuario | null = null;
   lastLoginTime: Date | null = null;
 
+  // Notificaciones RRHH badge
+  notificacionesNoLeidas = 0;
+  private notifInterval: any;
+
   @ViewChild('drawer') sidenav!: MatSidenav;
 
   isHandset$: Observable<boolean> = this.breakpointObserver
@@ -130,7 +139,8 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     private renderer: Renderer2,
     private authService: AuthService,
     private router: Router,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private repo: RepositoryService,
   ) {
     // Subscribe to authentication state changes
     this.authService.currentUser$.subscribe((user) => {
@@ -205,6 +215,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
 
       // Start session activity tracker
       this.startSessionActivityTracker();
+
+      // Cargar badge notificaciones RRHH
+      this.cargarNotificacionesNoLeidas();
+      this.notifInterval = setInterval(() => this.cargarNotificacionesNoLeidas(), 5 * 60 * 1000);
     }
   }
 
@@ -215,11 +229,18 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngOnDestroy() {
-    // Clean up any subscriptions to prevent memory leaks
-    if (this.authService) {
-      // Make sure to unsubscribe from any observables
-      // This is just a placeholder - add actual subscription cleanup if needed
+    if (this.notifInterval) {
+      clearInterval(this.notifInterval);
     }
+  }
+
+  cargarNotificacionesNoLeidas(): void {
+    this.repo.countNotificacionesNoLeidas().subscribe({
+      next: (result: any) => {
+        this.notificacionesNoLeidas = result?.count ?? 0;
+      },
+      error: () => { /* ignore */ },
+    });
   }
 
   // Start tracking session activity to keep the session alive
@@ -336,9 +357,31 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   openRrhhDashTab() {
     this.tabsService.openTab(
       'RRHH Dashboard',
-      RrhhDashComponent,
+      RrhhDashboardComponent,
       { source: 'navigation' },
       'rrhh-dash-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openNotificacionesRrhhTab() {
+    this.tabsService.openTab(
+      'Notificaciones RRHH',
+      ListNotificacionesRrhhComponent,
+      {},
+      'notificaciones-rrhh-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openReportesRrhhTab() {
+    this.tabsService.openTab(
+      'Reportes RRHH',
+      ReportesRrhhPageComponent,
+      {},
+      'reportes-rrhh-tab',
       true
     );
     this.closeMenu();

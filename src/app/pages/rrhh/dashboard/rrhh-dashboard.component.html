@@ -1,0 +1,157 @@
+<div class="dashboard-container">
+  <div class="header-row">
+    <h2 class="titulo-seccion">Dashboard RRHH</h2>
+    <div class="header-actions">
+      <mat-form-field appearance="outline" class="periodo-selector">
+        <mat-label>Periodo</mat-label>
+        <mat-select [(ngModel)]="periodoSeleccionado" (ngModelChange)="onPeriodoCambiado()">
+          <mat-option *ngFor="let p of periodosDisponibles" [value]="p">{{ p }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <button mat-icon-button (click)="cargarKpis()" [disabled]="cargando" matTooltip="Actualizar">
+        <mat-icon>refresh</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <div *ngIf="cargando" class="cargando-container">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-grid" *ngIf="!cargando">
+    <mat-card class="kpi-card">
+      <mat-card-content>
+        <div class="kpi-icon-row">
+          <mat-icon class="kpi-icon icon-verde">payments</mat-icon>
+        </div>
+        <div class="kpi-valor">{{ totalNominaMes | number:'1.0-2' }}</div>
+        <div class="kpi-label">Nomina del Mes</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="kpi-card">
+      <mat-card-content>
+        <div class="kpi-icon-row">
+          <mat-icon class="kpi-icon icon-celeste">people</mat-icon>
+        </div>
+        <div class="kpi-valor">{{ totalFuncionariosActivos }}</div>
+        <div class="kpi-label">Funcionarios Activos</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="kpi-card">
+      <mat-card-content>
+        <div class="kpi-icon-row">
+          <mat-icon class="kpi-icon" [class.icon-verde]="porcentajeAsistenciaMes >= 90"
+                    [class.icon-amarillo]="porcentajeAsistenciaMes >= 70 && porcentajeAsistenciaMes < 90"
+                    [class.icon-rojo]="porcentajeAsistenciaMes < 70">fact_check</mat-icon>
+        </div>
+        <div class="kpi-valor">{{ porcentajeAsistenciaMes | number:'1.0-2' }}%</div>
+        <div class="kpi-label">% Asistencia del Mes</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="kpi-card">
+      <mat-card-content>
+        <div class="kpi-icon-row">
+          <mat-icon class="kpi-icon" [class.icon-amarillo]="valesPendientes > 0" [class.icon-verde]="valesPendientes === 0">receipt_long</mat-icon>
+        </div>
+        <div class="kpi-valor">{{ valesPendientes }}</div>
+        <div class="kpi-label">Vales Pendientes</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="kpi-card">
+      <mat-card-content>
+        <div class="kpi-icon-row">
+          <mat-icon class="kpi-icon" [class.icon-naranja]="prestamosActivos > 0" [class.icon-verde]="prestamosActivos === 0">account_balance</mat-icon>
+        </div>
+        <div class="kpi-valor">{{ prestamosActivos }}</div>
+        <div class="kpi-label">Prestamos Activos</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="kpi-card" [class.kpi-card-alerta]="liquidacionesPendientesAprobacion > 0 || liquidacionesPendientesPago > 0">
+      <mat-card-content>
+        <div class="kpi-icon-row">
+          <mat-icon class="kpi-icon" [class.icon-rojo]="liquidacionesPendientesPago > 0"
+                    [class.icon-amarillo]="liquidacionesPendientesAprobacion > 0 && liquidacionesPendientesPago === 0"
+                    [class.icon-verde]="liquidacionesPendientesAprobacion === 0 && liquidacionesPendientesPago === 0">request_quote</mat-icon>
+        </div>
+        <div class="kpi-valor">{{ liquidacionesPendientesAprobacion }} / {{ liquidacionesPendientesPago }}</div>
+        <div class="kpi-label">Liq. Pendientes (Apr/Pago)</div>
+        <button mat-button color="primary" class="btn-accion-kpi" (click)="abrirLiquidaciones()">Ver liquidaciones</button>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Secciones secundarias -->
+  <div class="secciones-grid" *ngIf="!cargando">
+    <!-- Proximos cumpleanios -->
+    <mat-card class="seccion-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>cake</mat-icon>
+        <mat-card-title>Proximos Cumpleanos</mat-card-title>
+        <mat-card-subtitle>Proximos 30 dias</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div *ngIf="proximosCumpleanios.length === 0" class="sin-datos">Sin cumpleanos proximos</div>
+        <div class="lista-compacta" *ngFor="let c of proximosCumpleanios">
+          <mat-icon class="item-icon icon-amarillo">cake</mat-icon>
+          <div class="item-info">
+            <span class="item-nombre">{{ c.nombre }}</span>
+            <span class="item-detalle">{{ c.fechaCumpleanios }} ({{ c.diasRestantes }} dias)</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Vacaciones proximas -->
+    <mat-card class="seccion-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>beach_access</mat-icon>
+        <mat-card-title>Vacaciones Proximas</mat-card-title>
+        <mat-card-subtitle>Proximos 30 dias</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div *ngIf="vacacionesProximas.length === 0" class="sin-datos">Sin vacaciones proximas</div>
+        <div class="lista-compacta" *ngFor="let v of vacacionesProximas">
+          <mat-icon class="item-icon icon-celeste">beach_access</mat-icon>
+          <div class="item-info">
+            <span class="item-nombre">{{ v.nombre }}</span>
+            <span class="item-detalle">{{ v.fechaDesde }} - {{ v.fechaHasta }} ({{ v.diasUsados }} dias)</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Top 5 vendedores -->
+    <mat-card class="seccion-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>leaderboard</mat-icon>
+        <mat-card-title>Top 5 Vendedores</mat-card-title>
+        <mat-card-subtitle>{{ periodoSeleccionado }}</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div *ngIf="top5Vendedores.length === 0" class="sin-datos">Sin datos de ventas</div>
+        <table mat-table [dataSource]="top5Vendedores" *ngIf="top5Vendedores.length > 0" class="tabla-mini">
+          <ng-container matColumnDef="nombre">
+            <th mat-header-cell *matHeaderCellDef>VENDEDOR</th>
+            <td mat-cell *matCellDef="let v">{{ v.nombre }}</td>
+          </ng-container>
+          <ng-container matColumnDef="totalVendido">
+            <th mat-header-cell *matHeaderCellDef class="col-numero">TOTAL</th>
+            <td mat-cell *matCellDef="let v" class="col-numero">{{ v.totalVendido | number:'1.0-2' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="cantVentas">
+            <th mat-header-cell *matHeaderCellDef class="col-numero">VENTAS</th>
+            <td mat-cell *matCellDef="let v" class="col-numero">{{ v.cantVentas }}</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="columnsVendedores"></tr>
+          <tr mat-row *matRowDef="let row; columns: columnsVendedores;"></tr>
+        </table>
+      </mat-card-content>
+    </mat-card>
+  </div>
+</div>
