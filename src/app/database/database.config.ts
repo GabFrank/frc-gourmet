@@ -34,6 +34,10 @@ import { LiquidacionItem } from './entities/rrhh/liquidacion-item.entity';
 import { LiquidacionConcepto } from './entities/rrhh/liquidacion-concepto.entity';
 import { Bono } from './entities/rrhh/bono.entity';
 import { Aguinaldo } from './entities/rrhh/aguinaldo.entity';
+import { Vacacion } from './entities/rrhh/vacacion.entity';
+import { VacacionPeriodo } from './entities/rrhh/vacacion-periodo.entity';
+import { LiquidacionFinal } from './entities/rrhh/liquidacion-final.entity';
+import { LiquidacionFinalItem } from './entities/rrhh/liquidacion-final-item.entity';
 
 import { Moneda } from './entities/financiero/moneda.entity';
 import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
@@ -192,6 +196,10 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       LiquidacionConcepto,
       Bono,
       Aguinaldo,
+      Vacacion,
+      VacacionPeriodo,
+      LiquidacionFinal,
+      LiquidacionFinalItem,
       // Financiero entities
       Moneda,
       TipoPrecio,

@@ -44,6 +44,8 @@ import { registerFeriadosHandlers } from './electron/handlers/feriados.handler';
 import { registerHorasExtraHandlers } from './electron/handlers/horas-extra.handler';
 import { registerValesHandlers } from './electron/handlers/vales.handler';
 import { registerLiquidacionSueldoHandlers, seedLiquidacionConceptos } from './electron/handlers/liquidacion-sueldo.handler';
+import { registerVacacionesHandlers } from './electron/handlers/vacaciones.handler';
+import { registerLiquidacionFinalHandlers } from './electron/handlers/liquidacion-final.handler';
 import { seedInitialData } from './electron/utils/seed-data';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
 // Unificado en recetas.handler: sabores y variaciones
@@ -100,6 +102,8 @@ function initializeDatabase() {
       registerHorasExtraHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Horas extra
       registerValesHandlers(dataSource, getCurrentUser); // RRHH Fase 3: Vales + Adelantos
       registerLiquidacionSueldoHandlers(dataSource, getCurrentUser); // RRHH Fase 4: Liquidacion + Bonos + Aguinaldos
+      registerVacacionesHandlers(dataSource, getCurrentUser); // RRHH Fase 5: Vacaciones
+      registerLiquidacionFinalHandlers(dataSource, getCurrentUser); // RRHH Fase 5: Liquidacion final
 
       // Scheduler: procesa acreditaciones POS pendientes cada 5 min (en main process)
       startAcreditacionesScheduler(dataSource, 5);

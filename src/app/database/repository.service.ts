@@ -831,6 +831,21 @@ interface ElectronAPI {
   // RRHH - Aguinaldos
   getAguinaldos: (filtros?: any) => Promise<any[]>;
   calcularAguinaldosAnio: (anio: number) => Promise<any>;
+
+  // RRHH - Vacaciones
+  getVacaciones: (filtros?: any) => Promise<any[]>;
+  getVacacion: (id: number) => Promise<any>;
+  generarVacacionesFuncionario: (funcionarioId: number) => Promise<any>;
+  programarVacacionPeriodo: (payload: any) => Promise<any>;
+  marcarPeriodoGozado: (periodoId: number) => Promise<any>;
+  cancelarVacacionPeriodo: (periodoId: number) => Promise<any>;
+
+  // RRHH - Liquidacion final
+  getLiquidacionesFinal: (filtros?: any) => Promise<any[]>;
+  getLiquidacionFinal: (id: number) => Promise<any>;
+  generarLiquidacionFinal: (payload: any) => Promise<any>;
+  aprobarLiquidacionFinal: (id: number) => Promise<any>;
+  pagarLiquidacionFinal: (id: number, payload: any) => Promise<any>;
 }
 
 
@@ -3229,6 +3244,43 @@ export class RepositoryService {
   }
   calcularAguinaldosAnio(anio: number): Observable<any> {
     return from(this.api.calcularAguinaldosAnio(anio));
+  }
+
+  // ===================== RRHH: VACACIONES =====================
+  getVacaciones(filtros?: any): Observable<any[]> {
+    return from(this.api.getVacaciones(filtros));
+  }
+  getVacacion(id: number): Observable<any> {
+    return from(this.api.getVacacion(id));
+  }
+  generarVacacionesFuncionario(funcionarioId: number): Observable<any> {
+    return from(this.api.generarVacacionesFuncionario(funcionarioId));
+  }
+  programarVacacionPeriodo(payload: any): Observable<any> {
+    return from(this.api.programarVacacionPeriodo(payload));
+  }
+  marcarPeriodoGozado(periodoId: number): Observable<any> {
+    return from(this.api.marcarPeriodoGozado(periodoId));
+  }
+  cancelarVacacionPeriodo(periodoId: number): Observable<any> {
+    return from(this.api.cancelarVacacionPeriodo(periodoId));
+  }
+
+  // ===================== RRHH: LIQUIDACION FINAL =====================
+  getLiquidacionesFinal(filtros?: any): Observable<any[]> {
+    return from(this.api.getLiquidacionesFinal(filtros));
+  }
+  getLiquidacionFinal(id: number): Observable<any> {
+    return from(this.api.getLiquidacionFinal(id));
+  }
+  generarLiquidacionFinal(payload: any): Observable<any> {
+    return from(this.api.generarLiquidacionFinal(payload));
+  }
+  aprobarLiquidacionFinal(id: number): Observable<any> {
+    return from(this.api.aprobarLiquidacionFinal(id));
+  }
+  pagarLiquidacionFinal(id: number, payload: any): Observable<any> {
+    return from(this.api.pagarLiquidacionFinal(id, payload));
   }
 
 }

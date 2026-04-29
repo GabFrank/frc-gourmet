@@ -2904,4 +2904,45 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('calcular-aguinaldos-anio', anio);
   },
 
+  // =============================================
+  // RRHH - Vacaciones
+  // =============================================
+  getVacaciones: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-vacaciones', filtros);
+  },
+  getVacacion: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-vacacion', id);
+  },
+  generarVacacionesFuncionario: async (funcionarioId: number): Promise<any> => {
+    return await ipcRenderer.invoke('generar-vacaciones-funcionario', funcionarioId);
+  },
+  programarVacacionPeriodo: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('programar-vacacion-periodo', payload);
+  },
+  marcarPeriodoGozado: async (periodoId: number): Promise<any> => {
+    return await ipcRenderer.invoke('marcar-periodo-gozado', periodoId);
+  },
+  cancelarVacacionPeriodo: async (periodoId: number): Promise<any> => {
+    return await ipcRenderer.invoke('cancelar-vacacion-periodo', periodoId);
+  },
+
+  // =============================================
+  // RRHH - Liquidacion final
+  // =============================================
+  getLiquidacionesFinal: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-liquidaciones-final', filtros);
+  },
+  getLiquidacionFinal: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-liquidacion-final', id);
+  },
+  generarLiquidacionFinal: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('generar-liquidacion-final', payload);
+  },
+  aprobarLiquidacionFinal: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('aprobar-liquidacion-final', id);
+  },
+  pagarLiquidacionFinal: async (id: number, payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('pagar-liquidacion-final', id, payload);
+  },
+
 });
