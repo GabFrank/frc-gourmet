@@ -35,9 +35,12 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'RRHH_CONFIG_EDITAR', descripcion: 'Editar configuración RRHH (IPS, vacaciones, etc.)', modulo: 'RRHH' },
   // Comisiones
   { codigo: 'COMISION_REGLA_VER', descripcion: 'Ver reglas de comisión', modulo: 'COMISIONES' },
+  { codigo: 'COMISION_REGLA_GESTIONAR', descripcion: 'Crear/editar/eliminar reglas de comisión', modulo: 'COMISIONES' },
   { codigo: 'COMISION_REGLA_EDITAR', descripcion: 'Crear/editar reglas de comisión', modulo: 'COMISIONES' },
   { codigo: 'COMISION_LIQUIDACION_GENERAR', descripcion: 'Generar liquidaciones de comisión', modulo: 'COMISIONES' },
   { codigo: 'COMISION_LIQUIDACION_APROBAR', descripcion: 'Aprobar liquidaciones de comisión', modulo: 'COMISIONES' },
+  { codigo: 'COMISION_LIQUIDACION_ANULAR', descripcion: 'Anular liquidaciones de comisión', modulo: 'COMISIONES' },
+  { codigo: 'COMISION_EQUIPO_GESTIONAR', descripcion: 'Gestionar equipos de comisión', modulo: 'COMISIONES' },
   // Permisos sistema
   { codigo: 'SISTEMA_PERMISO_GESTIONAR', descripcion: 'Gestionar permisos y asignación a roles', modulo: 'SISTEMA' },
   { codigo: 'SISTEMA_ROL_GESTIONAR', descripcion: 'Gestionar roles del sistema', modulo: 'SISTEMA' },

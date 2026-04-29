@@ -1,0 +1,9 @@
+.form-basic { display: flex; flex-direction: column; gap: 8px; padding: 16px 0; }
+.full { width: 100%; }
+.save-btn { margin-top: 8px; }
+.tab-content { padding: 16px 0; }
+.add-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.flex1 { flex: 1; min-width: 180px; }
+.full-width { width: 100%; }
+.warn { color: var(--mat-warn-color, orange); font-weight: 500; }
+mat-dialog-content { min-width: 600px; }

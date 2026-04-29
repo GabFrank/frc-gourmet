@@ -1,0 +1,77 @@
+<div class="page">
+  <mat-card>
+    <mat-card-content>
+      <div class="header">
+        <div class="title"><mat-icon>receipt</mat-icon><h2>Liquidaciones de Comisión</h2></div>
+        <div class="actions">
+          <button mat-stroked-button (click)="abrirGenerarMes()"><mat-icon>calendar_month</mat-icon> Generar mes</button>
+          <button mat-flat-button color="primary" (click)="abrirGenerar()"><mat-icon>add</mat-icon> Generar</button>
+        </div>
+      </div>
+
+      <div class="filtros">
+        <mat-form-field appearance="outline">
+          <mat-label>Funcionario</mat-label>
+          <mat-select [(ngModel)]="filtroFuncionarioId">
+            <mat-option [value]="null">Todos</mat-option>
+            <mat-option *ngFor="let f of funcionarios" [value]="f.id">{{ f.persona?.nombre }} {{ f.persona?.apellido }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Período (YYYY-MM)</mat-label>
+          <input matInput [(ngModel)]="filtroPeriodo" placeholder="2026-04">
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Estado</mat-label>
+          <mat-select [(ngModel)]="filtroEstado">
+            <mat-option value="">Todos</mat-option>
+            <mat-option *ngFor="let e of estados" [value]="e">{{ e }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <button mat-flat-button (click)="aplicarFiltro()"><mat-icon>search</mat-icon> Buscar</button>
+        <button mat-button (click)="limpiarFiltro()"><mat-icon>clear</mat-icon></button>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="table-card">
+    <mat-card-content>
+      <div *ngIf="loading" class="spinner-container"><mat-spinner diameter="40"></mat-spinner></div>
+      <table mat-table [dataSource]="liquidaciones" *ngIf="!loading" class="full-width">
+        <ng-container matColumnDef="funcionario">
+          <th mat-header-cell *matHeaderCellDef>Funcionario</th>
+          <td mat-cell *matCellDef="let l">{{ l.funcionario?.persona?.nombre }} {{ l.funcionario?.persona?.apellido }}</td>
+        </ng-container>
+        <ng-container matColumnDef="periodo">
+          <th mat-header-cell *matHeaderCellDef>Período</th>
+          <td mat-cell *matCellDef="let l">{{ l.periodo }}</td>
+        </ng-container>
+        <ng-container matColumnDef="totalCalculado">
+          <th mat-header-cell *matHeaderCellDef>Total</th>
+          <td mat-cell *matCellDef="let l">{{ l.totalCalculado | number:'1.0-2' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="estado">
+          <th mat-header-cell *matHeaderCellDef>Estado</th>
+          <td mat-cell *matCellDef="let l">
+            <span [class]="getEstadoClass(l.estado)">{{ l.estado }}</span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef>Acciones</th>
+          <td mat-cell *matCellDef="let l">
+            <button mat-icon-button [matMenuTriggerFor]="menu"><mat-icon>more_vert</mat-icon></button>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="verDetalle(l)"><mat-icon>visibility</mat-icon> Ver detalle</button>
+              <button mat-menu-item (click)="aprobar(l)" *ngIf="l.estado === 'BORRADOR'"><mat-icon>check_circle</mat-icon> Aprobar</button>
+              <button mat-menu-item (click)="abrirAgregarItemManual(l)" *ngIf="l.estado === 'BORRADOR'"><mat-icon>add_circle</mat-icon> Agregar item manual</button>
+              <button mat-menu-item (click)="anular(l)" *ngIf="l.estado === 'BORRADOR' || l.estado === 'APROBADA'"><mat-icon>cancel</mat-icon> Anular</button>
+            </mat-menu>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+      </table>
+      <p *ngIf="!loading && liquidaciones.length === 0" class="empty-state">No hay liquidaciones de comisión.</p>
+    </mat-card-content>
+  </mat-card>
+</div>

@@ -121,4 +121,9 @@ export class VentaItem extends BaseModel {
 
   @OneToMany('VentaItemSabor', 'ventaItem')
   saboresVenta?: VentaItemSabor[];
+
+  // Vendedor explícito por ítem (para split de comisiones)
+  @ManyToOne(() => Usuario, { nullable: true })
+  @JoinColumn({ name: 'vendedor_id' })
+  vendedor?: Usuario;
 } 

@@ -85,4 +85,12 @@ export class Venta extends BaseModel {
   @ManyToOne('Venta', { nullable: true })
   @JoinColumn({ name: 'venta_padre_id' })
   ventaPadre?: any;
+
+  // Vendedor explícito (para comisiones; por defecto = createdBy)
+  @ManyToOne(() => Usuario, { nullable: true })
+  @JoinColumn({ name: 'vendedor_id' })
+  vendedor?: Usuario;
+
+  @Column({ name: 'total', type: 'decimal', precision: 18, scale: 2, nullable: true })
+  total?: number;
 } 

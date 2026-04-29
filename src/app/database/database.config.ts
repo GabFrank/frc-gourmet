@@ -38,6 +38,16 @@ import { Vacacion } from './entities/rrhh/vacacion.entity';
 import { VacacionPeriodo } from './entities/rrhh/vacacion-periodo.entity';
 import { LiquidacionFinal } from './entities/rrhh/liquidacion-final.entity';
 import { LiquidacionFinalItem } from './entities/rrhh/liquidacion-final-item.entity';
+// RRHH Fase 6 - Comisiones
+import { ReglaComision } from './entities/rrhh/regla-comision.entity';
+import { ReglaComisionProducto } from './entities/rrhh/regla-comision-producto.entity';
+import { ReglaComisionRequisito } from './entities/rrhh/regla-comision-requisito.entity';
+import { FuncionarioReglaComision } from './entities/rrhh/funcionario-regla-comision.entity';
+import { EquipoComision } from './entities/rrhh/equipo-comision.entity';
+import { EquipoComisionMiembro } from './entities/rrhh/equipo-comision-miembro.entity';
+import { EquipoComisionRegla } from './entities/rrhh/equipo-comision-regla.entity';
+import { LiquidacionComision } from './entities/rrhh/liquidacion-comision.entity';
+import { LiquidacionComisionItem } from './entities/rrhh/liquidacion-comision-item.entity';
 
 import { Moneda } from './entities/financiero/moneda.entity';
 import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
@@ -200,6 +210,16 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       VacacionPeriodo,
       LiquidacionFinal,
       LiquidacionFinalItem,
+      // RRHH Fase 6 - Comisiones
+      ReglaComision,
+      ReglaComisionProducto,
+      ReglaComisionRequisito,
+      FuncionarioReglaComision,
+      EquipoComision,
+      EquipoComisionMiembro,
+      EquipoComisionRegla,
+      LiquidacionComision,
+      LiquidacionComisionItem,
       // Financiero entities
       Moneda,
       TipoPrecio,

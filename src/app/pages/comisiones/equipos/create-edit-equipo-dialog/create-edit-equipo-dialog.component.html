@@ -1,0 +1,97 @@
+<h2 mat-dialog-title>{{ isEdit ? 'Editar equipo' : 'Nuevo equipo de comisión' }}</h2>
+<mat-dialog-content>
+  <mat-tab-group>
+    <mat-tab label="Datos básicos">
+      <form [formGroup]="form" class="form-basic">
+        <mat-form-field appearance="outline" class="full">
+          <mat-label>Nombre</mat-label>
+          <input matInput formControlName="nombre">
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="full">
+          <mat-label>Descripción</mat-label>
+          <textarea matInput formControlName="descripcion" rows="2"></textarea>
+        </mat-form-field>
+        <mat-slide-toggle formControlName="activo">Activo</mat-slide-toggle>
+        <div class="save-btn">
+          <button mat-flat-button color="primary" (click)="guardar()" [disabled]="loading">
+            {{ loading ? 'Guardando...' : 'Guardar datos' }}
+          </button>
+        </div>
+      </form>
+    </mat-tab>
+
+    <mat-tab label="Miembros (suma: {{ sumaPorcentajes | number:'1.0-2' }}%)">
+      <div class="tab-content">
+        <div class="add-row">
+          <mat-form-field appearance="outline" class="flex1">
+            <mat-label>Funcionario</mat-label>
+            <mat-select [(ngModel)]="newMiembroFuncionarioId">
+              <mat-option *ngFor="let f of funcionarios" [value]="f.id">
+                {{ f.persona?.nombre }} {{ f.persona?.apellido }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>% Reparto</mat-label>
+            <input matInput type="number" [(ngModel)]="newMiembroPorcentaje" min="0" max="100">
+          </mat-form-field>
+          <button mat-flat-button color="primary" (click)="agregarMiembro()"><mat-icon>add</mat-icon></button>
+        </div>
+        <p *ngIf="sumaPorcentajes > 100" class="warn">La suma de porcentajes supera el 100%</p>
+        <table mat-table [dataSource]="miembros" *ngIf="miembros.length" class="full-width">
+          <ng-container matColumnDef="funcionario">
+            <th mat-header-cell *matHeaderCellDef>Funcionario</th>
+            <td mat-cell *matCellDef="let m">{{ m.funcionario?.persona?.nombre }} {{ m.funcionario?.persona?.apellido }}</td>
+          </ng-container>
+          <ng-container matColumnDef="porcentaje">
+            <th mat-header-cell *matHeaderCellDef>% Reparto</th>
+            <td mat-cell *matCellDef="let m">{{ m.porcentajeReparto | number:'1.0-2' }}%</td>
+          </ng-container>
+          <ng-container matColumnDef="acciones">
+            <th mat-header-cell *matHeaderCellDef></th>
+            <td mat-cell *matCellDef="let m">
+              <button mat-icon-button (click)="eliminarMiembro(m)"><mat-icon>delete</mat-icon></button>
+            </td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="miembrosColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: miembrosColumns;"></tr>
+        </table>
+      </div>
+    </mat-tab>
+
+    <mat-tab label="Reglas">
+      <div class="tab-content">
+        <div class="add-row">
+          <mat-form-field appearance="outline" class="flex1">
+            <mat-label>Regla EQUIPO_PORCENTAJE</mat-label>
+            <mat-select [(ngModel)]="newReglaId">
+              <mat-option *ngFor="let r of reglasEquipo" [value]="r.id">{{ r.nombre }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <button mat-flat-button color="primary" (click)="agregarRegla()"><mat-icon>add</mat-icon></button>
+        </div>
+        <table mat-table [dataSource]="reglas" *ngIf="reglas.length" class="full-width">
+          <ng-container matColumnDef="regla">
+            <th mat-header-cell *matHeaderCellDef>Regla</th>
+            <td mat-cell *matCellDef="let r">{{ r.reglaComision?.nombre }}</td>
+          </ng-container>
+          <ng-container matColumnDef="fechaDesde">
+            <th mat-header-cell *matHeaderCellDef>Desde</th>
+            <td mat-cell *matCellDef="let r">{{ r.fechaDesde | date:'shortDate' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="acciones">
+            <th mat-header-cell *matHeaderCellDef></th>
+            <td mat-cell *matCellDef="let r">
+              <button mat-icon-button (click)="eliminarRegla(r)"><mat-icon>delete</mat-icon></button>
+            </td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="reglasColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: reglasColumns;"></tr>
+        </table>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancelar()">Cerrar</button>
+</mat-dialog-actions>

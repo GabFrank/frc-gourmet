@@ -1,0 +1,40 @@
+<h2 mat-dialog-title>Detalle Liquidación de Comisión</h2>
+<mat-dialog-content>
+  <div *ngIf="loading" class="spinner-container"><mat-spinner diameter="40"></mat-spinner></div>
+  <div *ngIf="liquidacion && !loading">
+    <div class="cabecera">
+      <div class="dato"><span class="label">Funcionario</span><span>{{ liquidacion.funcionario?.persona?.nombre }} {{ liquidacion.funcionario?.persona?.apellido }}</span></div>
+      <div class="dato"><span class="label">Período</span><span>{{ liquidacion.periodo }}</span></div>
+      <div class="dato"><span class="label">Estado</span><span>{{ liquidacion.estado }}</span></div>
+      <div class="dato"><span class="label">Total</span><span class="total">{{ liquidacion.totalCalculado | number:'1.0-2' }}</span></div>
+    </div>
+
+    <table mat-table [dataSource]="liquidacion.items || []" class="full-width">
+      <ng-container matColumnDef="concepto">
+        <th mat-header-cell *matHeaderCellDef>Concepto</th>
+        <td mat-cell *matCellDef="let i">{{ i.concepto }}</td>
+      </ng-container>
+      <ng-container matColumnDef="monto">
+        <th mat-header-cell *matHeaderCellDef>Monto</th>
+        <td mat-cell *matCellDef="let i" [class.negativo]="i.monto < 0">{{ i.monto | number:'1.0-2' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="esManual">
+        <th mat-header-cell *matHeaderCellDef>Manual</th>
+        <td mat-cell *matCellDef="let i"><mat-icon *ngIf="i.esManual" color="accent">person</mat-icon></td>
+      </ng-container>
+      <ng-container matColumnDef="acciones">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let i">
+          <button mat-icon-button (click)="eliminarItem(i)" *ngIf="liquidacion.estado === 'BORRADOR'">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="itemsColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: itemsColumns;"></tr>
+    </table>
+  </div>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cerrar()">Cerrar</button>
+</mat-dialog-actions>

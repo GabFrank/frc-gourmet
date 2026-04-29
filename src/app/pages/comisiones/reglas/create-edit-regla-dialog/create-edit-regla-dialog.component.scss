@@ -1,0 +1,13 @@
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 16px 0; }
+.full { grid-column: 1 / -1; }
+.toggles { grid-column: 1 / -1; display: flex; gap: 24px; padding: 8px 0; }
+.tab-content { padding: 16px 0; }
+.add-row { display: flex; align-items: center; gap: 8px; }
+.add-requisito { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.flex1 { flex: 1; }
+.chip-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.chip { display: flex; align-items: center; background: var(--mat-chip-bg, rgba(0,0,0,0.1)); border-radius: 16px; padding: 4px 12px; }
+.chip-remove { transform: scale(0.7); }
+.hint { opacity: 0.6; font-size: 12px; }
+.full-width { width: 100%; }
+mat-dialog-content { min-width: 600px; max-height: 70vh; }

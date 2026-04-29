@@ -2945,4 +2945,97 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('pagar-liquidacion-final', id, payload);
   },
 
+  // =============================================
+  // Comisiones - Reglas
+  // =============================================
+  getReglasComision: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-reglas-comision', filtros);
+  },
+  getReglaComision: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-regla-comision', id);
+  },
+  createReglaComision: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-regla-comision', data);
+  },
+  updateReglaComision: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-regla-comision', id, data);
+  },
+  deleteReglaComision: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-regla-comision', id);
+  },
+  getFuncionariosRegla: async (reglaId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-funcionarios-regla', reglaId);
+  },
+  asignarFuncionarioRegla: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('asignar-funcionario-regla', data);
+  },
+  desasignarFuncionarioRegla: async (asignacionId: number): Promise<any> => {
+    return await ipcRenderer.invoke('desasignar-funcionario-regla', asignacionId);
+  },
+
+  // =============================================
+  // Comisiones - Liquidaciones
+  // =============================================
+  getLiquidacionesComision: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-liquidaciones-comision', filtros);
+  },
+  getLiquidacionComision: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-liquidacion-comision', id);
+  },
+  generarLiquidacionComision: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('generar-liquidacion-comision', payload);
+  },
+  generarLiquidacionesComisionMes: async (periodo: string): Promise<any> => {
+    return await ipcRenderer.invoke('generar-liquidaciones-comision-mes', periodo);
+  },
+  aprobarLiquidacionComision: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('aprobar-liquidacion-comision', id);
+  },
+  agregarItemManualLiquidacionComision: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('agregar-item-manual-liquidacion-comision', payload);
+  },
+  eliminarItemLiquidacionComision: async (itemId: number): Promise<any> => {
+    return await ipcRenderer.invoke('eliminar-item-liquidacion-comision', itemId);
+  },
+  anularLiquidacionComision: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('anular-liquidacion-comision', id);
+  },
+
+  // =============================================
+  // Comisiones - Equipos
+  // =============================================
+  getEquiposComision: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-equipos-comision', filtros);
+  },
+  getEquipoComision: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-equipo-comision', id);
+  },
+  createEquipoComision: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-equipo-comision', data);
+  },
+  updateEquipoComision: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-equipo-comision', id, data);
+  },
+  deleteEquipoComision: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-equipo-comision', id);
+  },
+  agregarMiembroEquipo: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('agregar-miembro-equipo', payload);
+  },
+  eliminarMiembroEquipo: async (miembroId: number): Promise<any> => {
+    return await ipcRenderer.invoke('eliminar-miembro-equipo', miembroId);
+  },
+  actualizarPorcentajeMiembro: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('actualizar-porcentaje-miembro', payload);
+  },
+  asignarReglaEquipo: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('asignar-regla-equipo', payload);
+  },
+  desasignarReglaEquipo: async (asignacionId: number): Promise<any> => {
+    return await ipcRenderer.invoke('desasignar-regla-equipo', asignacionId);
+  },
+  evaluarEquipoPeriodo: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('evaluar-equipo-periodo', payload);
+  },
+
 });

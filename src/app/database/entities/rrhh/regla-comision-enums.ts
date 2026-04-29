@@ -1,0 +1,33 @@
+export enum TipoReglaComision {
+  META_UNIDADES = 'META_UNIDADES',
+  PORCENTAJE_VENTA = 'PORCENTAJE_VENTA',
+  META_VENTA_LOCAL = 'META_VENTA_LOCAL',
+  EXTRA_MANUAL = 'EXTRA_MANUAL',
+  PENALIZACION_MANUAL = 'PENALIZACION_MANUAL',
+  EQUIPO_PORCENTAJE = 'EQUIPO_PORCENTAJE',
+}
+
+export enum ModoValidacionComision {
+  TODO_O_NADA = 'TODO_O_NADA',
+  PROPORCIONAL = 'PROPORCIONAL',
+}
+
+export enum RecurrenciaComision {
+  UNICA = 'UNICA',
+  DEFINIDA = 'DEFINIDA',
+  INDEFINIDA = 'INDEFINIDA',
+}
+
+export enum TipoRequisitoComision {
+  TARDANZA_MAX = 'TARDANZA_MAX',
+  QUEJA_MAX = 'QUEJA_MAX',
+  ASISTENCIA_MIN = 'ASISTENCIA_MIN',
+  CUSTOM = 'CUSTOM',
+}
+
+export enum LiquidacionComisionEstado {
+  BORRADOR = 'BORRADOR',
+  APROBADA = 'APROBADA',
+  INTEGRADA = 'INTEGRADA',
+  ANULADA = 'ANULADA',
+}

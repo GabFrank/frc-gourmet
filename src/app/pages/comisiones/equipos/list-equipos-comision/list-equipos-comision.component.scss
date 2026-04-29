@@ -1,0 +1,10 @@
+.page { padding: 16px; }
+.header { display: flex; justify-content: space-between; align-items: center; }
+.title { display: flex; align-items: center; gap: 8px; }
+.title h2 { margin: 0; }
+.table-card { margin-top: 16px; }
+.full-width { width: 100%; }
+.spinner-container { display: flex; justify-content: center; padding: 32px; }
+.empty-state { text-align: center; padding: 32px; opacity: 0.6; }
+.chip-active { color: var(--color-success, green); font-weight: 500; }
+.chip-inactive { color: var(--color-warn, orange); }

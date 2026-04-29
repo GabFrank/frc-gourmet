@@ -46,6 +46,8 @@ import { registerValesHandlers } from './electron/handlers/vales.handler';
 import { registerLiquidacionSueldoHandlers, seedLiquidacionConceptos } from './electron/handlers/liquidacion-sueldo.handler';
 import { registerVacacionesHandlers } from './electron/handlers/vacaciones.handler';
 import { registerLiquidacionFinalHandlers } from './electron/handlers/liquidacion-final.handler';
+import { registerComisionesHandlers } from './electron/handlers/comisiones.handler';
+import { registerEquiposComisionHandlers } from './electron/handlers/equipos-comision.handler';
 import { seedInitialData } from './electron/utils/seed-data';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
 // Unificado en recetas.handler: sabores y variaciones
@@ -104,6 +106,12 @@ function initializeDatabase() {
       registerLiquidacionSueldoHandlers(dataSource, getCurrentUser); // RRHH Fase 4: Liquidacion + Bonos + Aguinaldos
       registerVacacionesHandlers(dataSource, getCurrentUser); // RRHH Fase 5: Vacaciones
       registerLiquidacionFinalHandlers(dataSource, getCurrentUser); // RRHH Fase 5: Liquidacion final
+      registerComisionesHandlers(dataSource, getCurrentUser); // RRHH Fase 6: Comisiones
+      registerEquiposComisionHandlers(dataSource, getCurrentUser); // RRHH Fase 6: Equipos de comision
+
+      // Startup migration: populate vendedor_id from created_by for historic ventas
+      dataSource.query(`UPDATE ventas SET vendedor_id = created_by WHERE vendedor_id IS NULL AND created_by IS NOT NULL`)
+        .catch((e: any) => console.warn('Migration vendedor_id:', e.message));
 
       // Scheduler: procesa acreditaciones POS pendientes cada 5 min (en main process)
       startAcreditacionesScheduler(dataSource, 5);

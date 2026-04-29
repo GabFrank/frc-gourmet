@@ -846,6 +846,39 @@ interface ElectronAPI {
   generarLiquidacionFinal: (payload: any) => Promise<any>;
   aprobarLiquidacionFinal: (id: number) => Promise<any>;
   pagarLiquidacionFinal: (id: number, payload: any) => Promise<any>;
+
+  // Comisiones - Reglas
+  getReglasComision: (filtros?: any) => Promise<any[]>;
+  getReglaComision: (id: number) => Promise<any>;
+  createReglaComision: (data: any) => Promise<any>;
+  updateReglaComision: (id: number, data: any) => Promise<any>;
+  deleteReglaComision: (id: number) => Promise<any>;
+  getFuncionariosRegla: (reglaId: number) => Promise<any[]>;
+  asignarFuncionarioRegla: (data: any) => Promise<any>;
+  desasignarFuncionarioRegla: (asignacionId: number) => Promise<any>;
+
+  // Comisiones - Liquidaciones
+  getLiquidacionesComision: (filtros?: any) => Promise<any[]>;
+  getLiquidacionComision: (id: number) => Promise<any>;
+  generarLiquidacionComision: (payload: any) => Promise<any>;
+  generarLiquidacionesComisionMes: (periodo: string) => Promise<any>;
+  aprobarLiquidacionComision: (id: number) => Promise<any>;
+  agregarItemManualLiquidacionComision: (payload: any) => Promise<any>;
+  eliminarItemLiquidacionComision: (itemId: number) => Promise<any>;
+  anularLiquidacionComision: (id: number) => Promise<any>;
+
+  // Comisiones - Equipos
+  getEquiposComision: (filtros?: any) => Promise<any[]>;
+  getEquipoComision: (id: number) => Promise<any>;
+  createEquipoComision: (data: any) => Promise<any>;
+  updateEquipoComision: (id: number, data: any) => Promise<any>;
+  deleteEquipoComision: (id: number) => Promise<any>;
+  agregarMiembroEquipo: (payload: any) => Promise<any>;
+  eliminarMiembroEquipo: (miembroId: number) => Promise<any>;
+  actualizarPorcentajeMiembro: (payload: any) => Promise<any>;
+  asignarReglaEquipo: (payload: any) => Promise<any>;
+  desasignarReglaEquipo: (asignacionId: number) => Promise<any>;
+  evaluarEquipoPeriodo: (payload: any) => Promise<any>;
 }
 
 
@@ -3281,6 +3314,93 @@ export class RepositoryService {
   }
   pagarLiquidacionFinal(id: number, payload: any): Observable<any> {
     return from(this.api.pagarLiquidacionFinal(id, payload));
+  }
+
+  // ===================== COMISIONES: REGLAS =====================
+  getReglasComision(filtros?: any): Observable<any[]> {
+    return from(this.api.getReglasComision(filtros));
+  }
+  getReglaComision(id: number): Observable<any> {
+    return from(this.api.getReglaComision(id));
+  }
+  createReglaComision(data: any): Observable<any> {
+    return from(this.api.createReglaComision(data));
+  }
+  updateReglaComision(id: number, data: any): Observable<any> {
+    return from(this.api.updateReglaComision(id, data));
+  }
+  deleteReglaComision(id: number): Observable<any> {
+    return from(this.api.deleteReglaComision(id));
+  }
+  getFuncionariosRegla(reglaId: number): Observable<any[]> {
+    return from(this.api.getFuncionariosRegla(reglaId));
+  }
+  asignarFuncionarioRegla(data: any): Observable<any> {
+    return from(this.api.asignarFuncionarioRegla(data));
+  }
+  desasignarFuncionarioRegla(asignacionId: number): Observable<any> {
+    return from(this.api.desasignarFuncionarioRegla(asignacionId));
+  }
+
+  // ===================== COMISIONES: LIQUIDACIONES =====================
+  getLiquidacionesComision(filtros?: any): Observable<any[]> {
+    return from(this.api.getLiquidacionesComision(filtros));
+  }
+  getLiquidacionComision(id: number): Observable<any> {
+    return from(this.api.getLiquidacionComision(id));
+  }
+  generarLiquidacionComision(payload: any): Observable<any> {
+    return from(this.api.generarLiquidacionComision(payload));
+  }
+  generarLiquidacionesComisionMes(periodo: string): Observable<any> {
+    return from(this.api.generarLiquidacionesComisionMes(periodo));
+  }
+  aprobarLiquidacionComision(id: number): Observable<any> {
+    return from(this.api.aprobarLiquidacionComision(id));
+  }
+  agregarItemManualLiquidacionComision(payload: any): Observable<any> {
+    return from(this.api.agregarItemManualLiquidacionComision(payload));
+  }
+  eliminarItemLiquidacionComision(itemId: number): Observable<any> {
+    return from(this.api.eliminarItemLiquidacionComision(itemId));
+  }
+  anularLiquidacionComision(id: number): Observable<any> {
+    return from(this.api.anularLiquidacionComision(id));
+  }
+
+  // ===================== COMISIONES: EQUIPOS =====================
+  getEquiposComision(filtros?: any): Observable<any[]> {
+    return from(this.api.getEquiposComision(filtros));
+  }
+  getEquipoComision(id: number): Observable<any> {
+    return from(this.api.getEquipoComision(id));
+  }
+  createEquipoComision(data: any): Observable<any> {
+    return from(this.api.createEquipoComision(data));
+  }
+  updateEquipoComision(id: number, data: any): Observable<any> {
+    return from(this.api.updateEquipoComision(id, data));
+  }
+  deleteEquipoComision(id: number): Observable<any> {
+    return from(this.api.deleteEquipoComision(id));
+  }
+  agregarMiembroEquipo(payload: any): Observable<any> {
+    return from(this.api.agregarMiembroEquipo(payload));
+  }
+  eliminarMiembroEquipo(miembroId: number): Observable<any> {
+    return from(this.api.eliminarMiembroEquipo(miembroId));
+  }
+  actualizarPorcentajeMiembro(payload: any): Observable<any> {
+    return from(this.api.actualizarPorcentajeMiembro(payload));
+  }
+  asignarReglaEquipo(payload: any): Observable<any> {
+    return from(this.api.asignarReglaEquipo(payload));
+  }
+  desasignarReglaEquipo(asignacionId: number): Observable<any> {
+    return from(this.api.desasignarReglaEquipo(asignacionId));
+  }
+  evaluarEquipoPeriodo(payload: any): Observable<any> {
+    return from(this.api.evaluarEquipoPeriodo(payload));
   }
 
 }

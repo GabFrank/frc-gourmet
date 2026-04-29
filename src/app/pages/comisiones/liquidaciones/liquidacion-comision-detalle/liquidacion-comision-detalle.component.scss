@@ -1,0 +1,8 @@
+.spinner-container { display: flex; justify-content: center; padding: 32px; }
+.cabecera { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px 0; }
+.dato { display: flex; flex-direction: column; }
+.label { font-size: 11px; opacity: 0.6; text-transform: uppercase; }
+.total { font-size: 1.2em; font-weight: bold; }
+.full-width { width: 100%; }
+.negativo { color: var(--mat-warn-color, red); }
+mat-dialog-content { min-width: 600px; }

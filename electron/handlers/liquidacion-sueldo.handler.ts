@@ -3,6 +3,8 @@ import { Between, DataSource } from 'typeorm';
 import { LiquidacionSueldo } from '../../src/app/database/entities/rrhh/liquidacion-sueldo.entity';
 import { LiquidacionItem } from '../../src/app/database/entities/rrhh/liquidacion-item.entity';
 import { LiquidacionConcepto } from '../../src/app/database/entities/rrhh/liquidacion-concepto.entity';
+import { LiquidacionComision } from '../../src/app/database/entities/rrhh/liquidacion-comision.entity';
+import { LiquidacionComisionEstado } from '../../src/app/database/entities/rrhh/regla-comision-enums';
 import { LiquidacionSueldoEstado } from '../../src/app/database/entities/rrhh/liquidacion-sueldo-estado.enum';
 import { LiquidacionItemTipo } from '../../src/app/database/entities/rrhh/liquidacion-item-tipo.enum';
 import { Bono } from '../../src/app/database/entities/rrhh/bono.entity';
@@ -340,6 +342,26 @@ export function registerLiquidacionSueldoHandlers(
         }
       }
 
+      // 9) Comision APROBADA del periodo
+      const liqComRepo = queryRunner.manager.getRepository(LiquidacionComision);
+      const liqComAprobada = await liqComRepo.findOne({
+        where: {
+          funcionario: { id: funcionarioId } as any,
+          periodo,
+          estado: LiquidacionComisionEstado.APROBADA,
+        },
+      });
+      if (liqComAprobada && Number(liqComAprobada.totalCalculado) > 0) {
+        await crearItem(
+          'COMISION',
+          `Comision periodo ${periodo}`,
+          Number(liqComAprobada.totalCalculado),
+          LiquidacionItemTipo.HABER,
+          liqComAprobada.id,
+          'LIQUIDACION_COMISION',
+        );
+      }
+
       // Recalcular totales
       const allItems = await itemRepo.find({ where: { liquidacion: { id: liq.id } as any } });
       const tot = await recalcularTotales(allItems);
@@ -561,6 +583,21 @@ export function registerLiquidacionSueldoHandlers(
             agui.fechaPago = new Date();
             agui.liquidacionId = liq.id;
             await aguiRepo.save(agui);
+          }
+        }
+      }
+
+      // Marcar LiquidacionComision como INTEGRADA si existe
+      const comIds = items
+        .filter((i) => i.referenciaTipo === 'LIQUIDACION_COMISION' && i.referenciaId)
+        .map((i) => i.referenciaId!) as number[];
+      if (comIds.length) {
+        const liqComRepo = queryRunner.manager.getRepository(LiquidacionComision);
+        for (const cId of comIds) {
+          const liqCom = await liqComRepo.findOne({ where: { id: cId } });
+          if (liqCom && liqCom.estado === LiquidacionComisionEstado.APROBADA) {
+            liqCom.estado = LiquidacionComisionEstado.INTEGRADA;
+            await liqComRepo.save(liqCom);
           }
         }
       }

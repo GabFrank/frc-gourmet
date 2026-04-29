@@ -68,6 +68,10 @@ import { ListPrestamosFuncionariosComponent } from './pages/rrhh/prestamos-funci
 import { ListLiquidacionesSueldoComponent } from './pages/rrhh/liquidaciones-sueldo/list/list-liquidaciones-sueldo.component';
 import { ListBonosComponent } from './pages/rrhh/bonos/list-bonos.component';
 import { ListAguinaldosComponent } from './pages/rrhh/aguinaldos/list-aguinaldos.component';
+// Comisiones (Fase 6)
+import { ListReglasComisionComponent } from './pages/comisiones/reglas/list-reglas-comision/list-reglas-comision.component';
+import { ListEquiposComisionComponent } from './pages/comisiones/equipos/list-equipos-comision/list-equipos-comision.component';
+import { ListLiquidacionesComisionComponent } from './pages/comisiones/liquidaciones/list-liquidaciones-comision/list-liquidaciones-comision.component';
 
 @Component({
   selector: 'app-root',
@@ -435,6 +439,22 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
 
   openAguinaldosTab() {
     this.tabsService.openTab('Aguinaldos', ListAguinaldosComponent, { source: 'navigation' }, 'aguinaldos-tab', true);
+    this.closeMenu();
+  }
+
+  // ===================== COMISIONES =====================
+  openReglasComisionTab() {
+    this.tabsService.openTab('Reglas de Comisión', ListReglasComisionComponent, { source: 'navigation' }, 'reglas-comision-tab', true);
+    this.closeMenu();
+  }
+
+  openEquiposComisionTab() {
+    this.tabsService.openTab('Equipos Comisión', ListEquiposComisionComponent, { source: 'navigation' }, 'equipos-comision-tab', true);
+    this.closeMenu();
+  }
+
+  openLiquidacionesComisionTab() {
+    this.tabsService.openTab('Liquidaciones Comisión', ListLiquidacionesComisionComponent, { source: 'navigation' }, 'liquidaciones-comision-tab', true);
     this.closeMenu();
   }
 

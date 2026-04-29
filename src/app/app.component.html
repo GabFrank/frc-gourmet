@@ -188,6 +188,34 @@
           </div>
         </mat-expansion-panel>
 
+        <!-- Comisiones Menu -->
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel"
+                            [expanded]="isMenuSectionExpanded('comisiones')"
+                            [hideToggle]="!isMenuExpanded">
+          <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'comisiones')">
+            <mat-panel-title>
+              <div class="menu-item-content" [ngClass]="{'centered': !isMenuExpanded}">
+                <mat-icon class="nav-icon">percent</mat-icon>
+                <span class="nav-title" *ngIf="isMenuExpanded">Comisiones</span>
+              </div>
+            </mat-panel-title>
+          </mat-expansion-panel-header>
+          <div class="submenu-container">
+            <a mat-list-item (click)="openReglasComisionTab()">
+              <mat-icon matListItemIcon>rule</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Reglas</span>
+            </a>
+            <a mat-list-item (click)="openEquiposComisionTab()">
+              <mat-icon matListItemIcon>group</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Equipos</span>
+            </a>
+            <a mat-list-item (click)="openLiquidacionesComisionTab()">
+              <mat-icon matListItemIcon>receipt</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Liquidaciones</span>
+            </a>
+          </div>
+        </mat-expansion-panel>
+
         <!-- Productos Menu -->
         <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel"
                             [expanded]="isMenuSectionExpanded('productos')"
