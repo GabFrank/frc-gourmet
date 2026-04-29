@@ -29,6 +29,11 @@ import { Feriado } from './entities/rrhh/feriado.entity';
 import { HoraExtra } from './entities/rrhh/hora-extra.entity';
 import { Vale } from './entities/rrhh/vale.entity';
 import { MotivoVale } from './entities/rrhh/motivo-vale.entity';
+import { LiquidacionSueldo } from './entities/rrhh/liquidacion-sueldo.entity';
+import { LiquidacionItem } from './entities/rrhh/liquidacion-item.entity';
+import { LiquidacionConcepto } from './entities/rrhh/liquidacion-concepto.entity';
+import { Bono } from './entities/rrhh/bono.entity';
+import { Aguinaldo } from './entities/rrhh/aguinaldo.entity';
 
 import { Moneda } from './entities/financiero/moneda.entity';
 import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
@@ -182,6 +187,11 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       HoraExtra,
       Vale,
       MotivoVale,
+      LiquidacionSueldo,
+      LiquidacionItem,
+      LiquidacionConcepto,
+      Bono,
+      Aguinaldo,
       // Financiero entities
       Moneda,
       TipoPrecio,

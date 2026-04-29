@@ -806,6 +806,31 @@ interface ElectronAPI {
   confirmarVale: (id: number, payload: any) => Promise<any>;
   anularVale: (id: number, motivo: string) => Promise<any>;
   marcarValeDescontado: (id: number, liquidacionId: number) => Promise<any>;
+
+  // RRHH - Liquidacion conceptos
+  getLiquidacionConceptos: () => Promise<any[]>;
+  seedLiquidacionConceptos: () => Promise<any>;
+  updateLiquidacionConcepto: (id: number, data: any) => Promise<any>;
+
+  // RRHH - Liquidaciones de sueldo
+  getLiquidacionesSueldo: (filtros?: any) => Promise<any[]>;
+  getLiquidacionSueldo: (id: number) => Promise<any>;
+  generarLiquidacionBorrador: (payload: any) => Promise<any>;
+  agregarItemLiquidacion: (liquidacionId: number, data: any) => Promise<any>;
+  eliminarItemLiquidacion: (itemId: number) => Promise<any>;
+  aprobarLiquidacionSueldo: (id: number) => Promise<any>;
+  volverBorradorLiquidacionSueldo: (id: number) => Promise<any>;
+  pagarLiquidacionSueldo: (id: number, payload: any) => Promise<any>;
+  anularLiquidacionSueldo: (id: number, motivo: string) => Promise<any>;
+
+  // RRHH - Bonos
+  getBonos: (filtros?: any) => Promise<any[]>;
+  createBono: (data: any) => Promise<any>;
+  anularBono: (id: number) => Promise<any>;
+
+  // RRHH - Aguinaldos
+  getAguinaldos: (filtros?: any) => Promise<any[]>;
+  calcularAguinaldosAnio: (anio: number) => Promise<any>;
 }
 
 
@@ -3145,6 +3170,65 @@ export class RepositoryService {
   }
   marcarValeDescontado(id: number, liquidacionId: number): Observable<any> {
     return from(this.api.marcarValeDescontado(id, liquidacionId));
+  }
+
+  // ===================== RRHH: LIQUIDACION CONCEPTOS =====================
+  getLiquidacionConceptos(): Observable<any[]> {
+    return from(this.api.getLiquidacionConceptos());
+  }
+  seedLiquidacionConceptos(): Observable<any> {
+    return from(this.api.seedLiquidacionConceptos());
+  }
+  updateLiquidacionConcepto(id: number, data: any): Observable<any> {
+    return from(this.api.updateLiquidacionConcepto(id, data));
+  }
+
+  // ===================== RRHH: LIQUIDACIONES SUELDO =====================
+  getLiquidacionesSueldo(filtros?: any): Observable<any[]> {
+    return from(this.api.getLiquidacionesSueldo(filtros));
+  }
+  getLiquidacionSueldo(id: number): Observable<any> {
+    return from(this.api.getLiquidacionSueldo(id));
+  }
+  generarLiquidacionBorrador(payload: any): Observable<any> {
+    return from(this.api.generarLiquidacionBorrador(payload));
+  }
+  agregarItemLiquidacion(liquidacionId: number, data: any): Observable<any> {
+    return from(this.api.agregarItemLiquidacion(liquidacionId, data));
+  }
+  eliminarItemLiquidacion(itemId: number): Observable<any> {
+    return from(this.api.eliminarItemLiquidacion(itemId));
+  }
+  aprobarLiquidacionSueldo(id: number): Observable<any> {
+    return from(this.api.aprobarLiquidacionSueldo(id));
+  }
+  volverBorradorLiquidacionSueldo(id: number): Observable<any> {
+    return from(this.api.volverBorradorLiquidacionSueldo(id));
+  }
+  pagarLiquidacionSueldo(id: number, payload: any): Observable<any> {
+    return from(this.api.pagarLiquidacionSueldo(id, payload));
+  }
+  anularLiquidacionSueldo(id: number, motivo: string): Observable<any> {
+    return from(this.api.anularLiquidacionSueldo(id, motivo));
+  }
+
+  // ===================== RRHH: BONOS =====================
+  getBonos(filtros?: any): Observable<any[]> {
+    return from(this.api.getBonos(filtros));
+  }
+  createBono(data: any): Observable<any> {
+    return from(this.api.createBono(data));
+  }
+  anularBono(id: number): Observable<any> {
+    return from(this.api.anularBono(id));
+  }
+
+  // ===================== RRHH: AGUINALDOS =====================
+  getAguinaldos(filtros?: any): Observable<any[]> {
+    return from(this.api.getAguinaldos(filtros));
+  }
+  calcularAguinaldosAnio(anio: number): Observable<any> {
+    return from(this.api.calcularAguinaldosAnio(anio));
   }
 
 }

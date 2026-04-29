@@ -161,6 +161,18 @@
               <mat-icon matListItemIcon>account_balance</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Prestamos</span>
             </a>
+            <a mat-list-item (click)="openLiquidacionesSueldoTab()">
+              <mat-icon matListItemIcon>request_quote</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Liquidaciones</span>
+            </a>
+            <a mat-list-item (click)="openBonosTab()">
+              <mat-icon matListItemIcon>card_giftcard</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Bonos</span>
+            </a>
+            <a mat-list-item (click)="openAguinaldosTab()">
+              <mat-icon matListItemIcon>star</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Aguinaldos</span>
+            </a>
             <a mat-list-item (click)="openFeriadosTab()">
               <mat-icon matListItemIcon>celebration</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Feriados</span>

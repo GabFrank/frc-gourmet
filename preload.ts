@@ -2837,4 +2837,71 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('marcar-vale-descontado', id, liquidacionId);
   },
 
+  // =============================================
+  // RRHH - Liquidacion conceptos
+  // =============================================
+  getLiquidacionConceptos: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-liquidacion-conceptos');
+  },
+  seedLiquidacionConceptos: async (): Promise<any> => {
+    return await ipcRenderer.invoke('seed-liquidacion-conceptos');
+  },
+  updateLiquidacionConcepto: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-liquidacion-concepto', id, data);
+  },
+
+  // =============================================
+  // RRHH - Liquidaciones de sueldo
+  // =============================================
+  getLiquidacionesSueldo: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-liquidaciones-sueldo', filtros);
+  },
+  getLiquidacionSueldo: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-liquidacion-sueldo', id);
+  },
+  generarLiquidacionBorrador: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('generar-liquidacion-borrador', payload);
+  },
+  agregarItemLiquidacion: async (liquidacionId: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('agregar-item-liquidacion', liquidacionId, data);
+  },
+  eliminarItemLiquidacion: async (itemId: number): Promise<any> => {
+    return await ipcRenderer.invoke('eliminar-item-liquidacion', itemId);
+  },
+  aprobarLiquidacionSueldo: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('aprobar-liquidacion-sueldo', id);
+  },
+  volverBorradorLiquidacionSueldo: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('volver-borrador-liquidacion-sueldo', id);
+  },
+  pagarLiquidacionSueldo: async (id: number, payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('pagar-liquidacion-sueldo', id, payload);
+  },
+  anularLiquidacionSueldo: async (id: number, motivo: string): Promise<any> => {
+    return await ipcRenderer.invoke('anular-liquidacion-sueldo', id, motivo);
+  },
+
+  // =============================================
+  // RRHH - Bonos
+  // =============================================
+  getBonos: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-bonos', filtros);
+  },
+  createBono: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-bono', data);
+  },
+  anularBono: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('anular-bono', id);
+  },
+
+  // =============================================
+  // RRHH - Aguinaldos
+  // =============================================
+  getAguinaldos: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-aguinaldos', filtros);
+  },
+  calcularAguinaldosAnio: async (anio: number): Promise<any> => {
+    return await ipcRenderer.invoke('calcular-aguinaldos-anio', anio);
+  },
+
 });

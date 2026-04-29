@@ -43,6 +43,7 @@ import { registerAsistenciasHandlers } from './electron/handlers/asistencias.han
 import { registerFeriadosHandlers } from './electron/handlers/feriados.handler';
 import { registerHorasExtraHandlers } from './electron/handlers/horas-extra.handler';
 import { registerValesHandlers } from './electron/handlers/vales.handler';
+import { registerLiquidacionSueldoHandlers, seedLiquidacionConceptos } from './electron/handlers/liquidacion-sueldo.handler';
 import { seedInitialData } from './electron/utils/seed-data';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
 // Unificado en recetas.handler: sabores y variaciones
@@ -98,6 +99,7 @@ function initializeDatabase() {
       registerFeriadosHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Feriados
       registerHorasExtraHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Horas extra
       registerValesHandlers(dataSource, getCurrentUser); // RRHH Fase 3: Vales + Adelantos
+      registerLiquidacionSueldoHandlers(dataSource, getCurrentUser); // RRHH Fase 4: Liquidacion + Bonos + Aguinaldos
 
       // Scheduler: procesa acreditaciones POS pendientes cada 5 min (en main process)
       startAcreditacionesScheduler(dataSource, 5);
@@ -106,6 +108,7 @@ function initializeDatabase() {
       seedInitialData(dataSource);
       seedPermissions(dataSource).catch((e) => console.error('Error seeding permissions:', e));
       seedConfiguracionRrhh(dataSource).catch((e) => console.error('Error seeding configuracion rrhh:', e));
+      seedLiquidacionConceptos(dataSource).catch((e) => console.error('Error seeding liquidacion conceptos:', e));
     })
     .catch((error) => {
       console.error('Failed to initialize database:', error);

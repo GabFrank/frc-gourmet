@@ -65,6 +65,9 @@ import { ListHorasExtraComponent } from './pages/rrhh/horas-extra/list-horas-ext
 import { ListValesComponent } from './pages/rrhh/vales/list-vales.component';
 import { ListMotivosValeComponent } from './pages/rrhh/motivos-vale/list-motivos-vale.component';
 import { ListPrestamosFuncionariosComponent } from './pages/rrhh/prestamos-funcionarios/list-prestamos-funcionarios.component';
+import { ListLiquidacionesSueldoComponent } from './pages/rrhh/liquidaciones-sueldo/list/list-liquidaciones-sueldo.component';
+import { ListBonosComponent } from './pages/rrhh/bonos/list-bonos.component';
+import { ListAguinaldosComponent } from './pages/rrhh/aguinaldos/list-aguinaldos.component';
 
 @Component({
   selector: 'app-root',
@@ -417,6 +420,21 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
 
   openPrestamosFuncionariosTab() {
     this.tabsService.openTab('Prestamos a funcionarios', ListPrestamosFuncionariosComponent, { source: 'navigation' }, 'prestamos-func-tab', true);
+    this.closeMenu();
+  }
+
+  openLiquidacionesSueldoTab() {
+    this.tabsService.openTab('Liquidaciones sueldo', ListLiquidacionesSueldoComponent, { source: 'navigation' }, 'liquidaciones-sueldo-tab', true);
+    this.closeMenu();
+  }
+
+  openBonosTab() {
+    this.tabsService.openTab('Bonos', ListBonosComponent, { source: 'navigation' }, 'bonos-tab', true);
+    this.closeMenu();
+  }
+
+  openAguinaldosTab() {
+    this.tabsService.openTab('Aguinaldos', ListAguinaldosComponent, { source: 'navigation' }, 'aguinaldos-tab', true);
     this.closeMenu();
   }
 
