@@ -794,6 +794,18 @@ interface ElectronAPI {
   getHorasExtra: (filtros?: any) => Promise<any[]>;
   createHoraExtra: (data: any) => Promise<any>;
   anularHoraExtra: (id: number) => Promise<any>;
+
+  // RRHH - Vales + Motivos
+  getMotivosVale: () => Promise<any[]>;
+  createMotivoVale: (data: any) => Promise<any>;
+  updateMotivoVale: (id: number, data: any) => Promise<any>;
+  deleteMotivoVale: (id: number) => Promise<any>;
+  getVales: (filtros?: any) => Promise<any[]>;
+  getValesPendientesDescuento: (funcionarioId: number) => Promise<any[]>;
+  createVale: (data: any) => Promise<any>;
+  confirmarVale: (id: number, payload: any) => Promise<any>;
+  anularVale: (id: number, motivo: string) => Promise<any>;
+  marcarValeDescontado: (id: number, liquidacionId: number) => Promise<any>;
 }
 
 
@@ -3101,6 +3113,38 @@ export class RepositoryService {
   }
   anularHoraExtra(id: number): Observable<any> {
     return from(this.api.anularHoraExtra(id));
+  }
+
+  // ===================== RRHH: VALES =====================
+  getMotivosVale(): Observable<any[]> {
+    return from(this.api.getMotivosVale());
+  }
+  createMotivoVale(data: any): Observable<any> {
+    return from(this.api.createMotivoVale(data));
+  }
+  updateMotivoVale(id: number, data: any): Observable<any> {
+    return from(this.api.updateMotivoVale(id, data));
+  }
+  deleteMotivoVale(id: number): Observable<any> {
+    return from(this.api.deleteMotivoVale(id));
+  }
+  getVales(filtros?: any): Observable<any[]> {
+    return from(this.api.getVales(filtros));
+  }
+  getValesPendientesDescuento(funcionarioId: number): Observable<any[]> {
+    return from(this.api.getValesPendientesDescuento(funcionarioId));
+  }
+  createVale(data: any): Observable<any> {
+    return from(this.api.createVale(data));
+  }
+  confirmarVale(id: number, payload: any): Observable<any> {
+    return from(this.api.confirmarVale(id, payload));
+  }
+  anularVale(id: number, motivo: string): Observable<any> {
+    return from(this.api.anularVale(id, motivo));
+  }
+  marcarValeDescontado(id: number, liquidacionId: number): Observable<any> {
+    return from(this.api.marcarValeDescontado(id, liquidacionId));
   }
 
 }

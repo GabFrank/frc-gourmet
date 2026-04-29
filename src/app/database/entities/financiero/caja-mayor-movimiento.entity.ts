@@ -68,6 +68,19 @@ export class CajaMayorMovimiento extends BaseModel {
   @Column({ name: 'acreditacion_pos_id', type: 'int', nullable: true })
   acreditacionPosId?: number;
 
+  // Trazabilidad RRHH
+  @Column({ name: 'vale_id', type: 'int', nullable: true })
+  valeId?: number;
+
+  @Column({ name: 'liquidacion_sueldo_id', type: 'int', nullable: true })
+  liquidacionSueldoId?: number;
+
+  @Column({ name: 'liquidacion_comision_id', type: 'int', nullable: true })
+  liquidacionComisionId?: number;
+
+  @Column({ name: 'cuenta_por_cobrar_cuota_id', type: 'int', nullable: true })
+  cuentaPorCobrarCuotaId?: number;
+
   // Contra-movimiento para anulaciones
   @ManyToOne('CajaMayorMovimiento', { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'referencia_anulacion_id' })

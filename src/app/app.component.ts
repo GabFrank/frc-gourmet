@@ -62,6 +62,9 @@ import { ListAsistenciasComponent } from './pages/rrhh/asistencias/list-asistenc
 import { ListPenalizacionesComponent } from './pages/rrhh/penalizaciones/list-penalizaciones.component';
 import { ListFeriadosComponent } from './pages/rrhh/feriados/list-feriados.component';
 import { ListHorasExtraComponent } from './pages/rrhh/horas-extra/list-horas-extra.component';
+import { ListValesComponent } from './pages/rrhh/vales/list-vales.component';
+import { ListMotivosValeComponent } from './pages/rrhh/motivos-vale/list-motivos-vale.component';
+import { ListPrestamosFuncionariosComponent } from './pages/rrhh/prestamos-funcionarios/list-prestamos-funcionarios.component';
 
 @Component({
   selector: 'app-root',
@@ -399,6 +402,21 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
 
   openHorasExtraTab() {
     this.tabsService.openTab('Horas extra', ListHorasExtraComponent, { source: 'navigation' }, 'horas-extra-tab', true);
+    this.closeMenu();
+  }
+
+  openValesTab() {
+    this.tabsService.openTab('Vales', ListValesComponent, { source: 'navigation' }, 'vales-tab', true);
+    this.closeMenu();
+  }
+
+  openMotivosValeTab() {
+    this.tabsService.openTab('Motivos de vale', ListMotivosValeComponent, { source: 'navigation' }, 'motivos-vale-tab', true);
+    this.closeMenu();
+  }
+
+  openPrestamosFuncionariosTab() {
+    this.tabsService.openTab('Prestamos a funcionarios', ListPrestamosFuncionariosComponent, { source: 'navigation' }, 'prestamos-func-tab', true);
     this.closeMenu();
   }
 

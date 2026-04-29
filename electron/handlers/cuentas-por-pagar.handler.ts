@@ -269,12 +269,16 @@ export function registerCuentasPorPagarHandlers(
       const repo = dataSource.getRepository(CuentaPorPagar);
       const qb = repo.createQueryBuilder('cpp')
         .leftJoinAndSelect('cpp.proveedor', 'proveedor')
+        .leftJoinAndSelect('cpp.funcionario', 'funcionario')
+        .leftJoinAndSelect('funcionario.persona', 'funcionarioPersona')
         .leftJoinAndSelect('cpp.moneda', 'moneda')
         .orderBy('cpp.fechaInicio', 'DESC');
 
       if (filtros?.estado) qb.andWhere('cpp.estado = :estado', { estado: filtros.estado });
       if (filtros?.tipo) qb.andWhere('cpp.tipo = :tipo', { tipo: filtros.tipo });
       if (filtros?.proveedorId) qb.andWhere('cpp.proveedor_id = :pid', { pid: filtros.proveedorId });
+      if (filtros?.funcionarioId) qb.andWhere('cpp.funcionario_id = :fid', { fid: filtros.funcionarioId });
+      if (filtros?.soloPrestamosFuncionario) qb.andWhere('cpp.tipo = :tpf', { tpf: CuentaPorPagarTipo.PRESTAMO_FUNCIONARIO });
 
       if (filtros?.pageSize != null) {
         const pageSize = Number(filtros.pageSize) || 15;
@@ -295,7 +299,7 @@ export function registerCuentasPorPagarHandlers(
       const repo = dataSource.getRepository(CuentaPorPagar);
       return await repo.findOne({
         where: { id },
-        relations: ['proveedor', 'moneda', 'cuotas'],
+        relations: ['proveedor', 'funcionario', 'funcionario.persona', 'moneda', 'cuotas'],
       });
     } catch (error) {
       console.error(`Error getting cuenta por pagar ${id}:`, error);
@@ -321,6 +325,7 @@ export function registerCuentasPorPagarHandlers(
         descripcion: data.descripcion?.toUpperCase(),
         tipo: data.tipo || CuentaPorPagarTipo.OTRO,
         proveedor: data.proveedorId ? { id: data.proveedorId } as any : null,
+        funcionario: data.funcionarioId ? { id: data.funcionarioId } as any : null,
         montoTotal,
         montoPagado: 0,
         moneda: { id: data.monedaId } as any,
@@ -453,7 +458,7 @@ export function registerCuentasPorPagarHandlers(
       }
 
       const obsBase = `CUOTA #${cuota.numero} CPP #${cuota.cuentaPorPagar?.id || '?'}`;
-      const tipoMov = cpp?.tipo === CuentaPorPagarTipo.PRESTAMO
+      const tipoMov = (cpp?.tipo === CuentaPorPagarTipo.PRESTAMO || cpp?.tipo === CuentaPorPagarTipo.PRESTAMO_FUNCIONARIO)
         ? TipoMovimiento.EGRESO_CUOTA_PRESTAMO
         : TipoMovimiento.EGRESO_CUOTA_COMPRA;
 

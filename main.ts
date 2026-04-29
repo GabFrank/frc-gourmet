@@ -42,6 +42,7 @@ import { registerFuncionarioDocumentosHandlers } from './electron/handlers/funci
 import { registerAsistenciasHandlers } from './electron/handlers/asistencias.handler';
 import { registerFeriadosHandlers } from './electron/handlers/feriados.handler';
 import { registerHorasExtraHandlers } from './electron/handlers/horas-extra.handler';
+import { registerValesHandlers } from './electron/handlers/vales.handler';
 import { seedInitialData } from './electron/utils/seed-data';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
 // Unificado en recetas.handler: sabores y variaciones
@@ -96,6 +97,7 @@ function initializeDatabase() {
       registerAsistenciasHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Turnos + Asistencias + Penalizaciones
       registerFeriadosHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Feriados
       registerHorasExtraHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Horas extra
+      registerValesHandlers(dataSource, getCurrentUser); // RRHH Fase 3: Vales + Adelantos
 
       // Scheduler: procesa acreditaciones POS pendientes cada 5 min (en main process)
       startAcreditacionesScheduler(dataSource, 5);

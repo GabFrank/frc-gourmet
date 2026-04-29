@@ -27,6 +27,8 @@ import { Asistencia } from './entities/rrhh/asistencia.entity';
 import { Penalizacion } from './entities/rrhh/penalizacion.entity';
 import { Feriado } from './entities/rrhh/feriado.entity';
 import { HoraExtra } from './entities/rrhh/hora-extra.entity';
+import { Vale } from './entities/rrhh/vale.entity';
+import { MotivoVale } from './entities/rrhh/motivo-vale.entity';
 
 import { Moneda } from './entities/financiero/moneda.entity';
 import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
@@ -178,6 +180,8 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       Penalizacion,
       Feriado,
       HoraExtra,
+      Vale,
+      MotivoVale,
       // Financiero entities
       Moneda,
       TipoPrecio,

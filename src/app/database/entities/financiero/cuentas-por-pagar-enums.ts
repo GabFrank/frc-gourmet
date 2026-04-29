@@ -14,5 +14,6 @@ export enum CuentaPorPagarEstado {
 export enum CuentaPorPagarTipo {
   COMPRA = 'COMPRA',
   PRESTAMO = 'PRESTAMO',
+  PRESTAMO_FUNCIONARIO = 'PRESTAMO_FUNCIONARIO',
   OTRO = 'OTRO'
 }

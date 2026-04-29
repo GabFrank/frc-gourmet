@@ -2,6 +2,7 @@ import { Column, Entity, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import { Proveedor } from '../compras/proveedor.entity';
 import { Moneda } from './moneda.entity';
+import { Funcionario } from '../rrhh/funcionario.entity';
 import { CuentaPorPagarEstado, CuentaPorPagarTipo } from './cuentas-por-pagar-enums';
 
 @Entity('cuentas_por_pagar')
@@ -19,6 +20,10 @@ export class CuentaPorPagar extends BaseModel {
   @ManyToOne(() => Proveedor, { nullable: true })
   @JoinColumn({ name: 'proveedor_id' })
   proveedor?: Proveedor;
+
+  @ManyToOne(() => Funcionario, { nullable: true })
+  @JoinColumn({ name: 'funcionario_id' })
+  funcionario?: Funcionario;
 
   @Column({ type: 'decimal', precision: 14, scale: 2, name: 'monto_total' })
   montoTotal!: number;

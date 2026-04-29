@@ -149,6 +149,18 @@
               <mat-icon matListItemIcon>more_time</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Horas extra</span>
             </a>
+            <a mat-list-item (click)="openValesTab()">
+              <mat-icon matListItemIcon>receipt_long</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Vales</span>
+            </a>
+            <a mat-list-item (click)="openMotivosValeTab()">
+              <mat-icon matListItemIcon>label</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Motivos de vale</span>
+            </a>
+            <a mat-list-item (click)="openPrestamosFuncionariosTab()">
+              <mat-icon matListItemIcon>account_balance</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Prestamos</span>
+            </a>
             <a mat-list-item (click)="openFeriadosTab()">
               <mat-icon matListItemIcon>celebration</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Feriados</span>

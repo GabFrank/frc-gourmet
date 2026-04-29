@@ -2803,4 +2803,38 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('anular-hora-extra', id);
   },
 
+  // =============================================
+  // RRHH - Vales + Motivos
+  // =============================================
+  getMotivosVale: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-motivos-vale');
+  },
+  createMotivoVale: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-motivo-vale', data);
+  },
+  updateMotivoVale: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-motivo-vale', id, data);
+  },
+  deleteMotivoVale: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-motivo-vale', id);
+  },
+  getVales: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-vales', filtros);
+  },
+  getValesPendientesDescuento: async (funcionarioId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-vales-pendientes-descuento', funcionarioId);
+  },
+  createVale: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-vale', data);
+  },
+  confirmarVale: async (id: number, payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('confirmar-vale', id, payload);
+  },
+  anularVale: async (id: number, motivo: string): Promise<any> => {
+    return await ipcRenderer.invoke('anular-vale', id, motivo);
+  },
+  marcarValeDescontado: async (id: number, liquidacionId: number): Promise<any> => {
+    return await ipcRenderer.invoke('marcar-vale-descontado', id, liquidacionId);
+  },
+
 });
