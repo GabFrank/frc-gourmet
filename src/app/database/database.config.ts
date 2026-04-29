@@ -21,6 +21,12 @@ import { Funcionario } from './entities/rrhh/funcionario.entity';
 import { HistoricoCargo } from './entities/rrhh/historico-cargo.entity';
 import { HistoricoSalario } from './entities/rrhh/historico-salario.entity';
 import { FuncionarioDocumento } from './entities/rrhh/funcionario-documento.entity';
+import { Turno } from './entities/rrhh/turno.entity';
+import { FuncionarioTurno } from './entities/rrhh/funcionario-turno.entity';
+import { Asistencia } from './entities/rrhh/asistencia.entity';
+import { Penalizacion } from './entities/rrhh/penalizacion.entity';
+import { Feriado } from './entities/rrhh/feriado.entity';
+import { HoraExtra } from './entities/rrhh/hora-extra.entity';
 
 import { Moneda } from './entities/financiero/moneda.entity';
 import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
@@ -166,6 +172,12 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       HistoricoCargo,
       HistoricoSalario,
       FuncionarioDocumento,
+      Turno,
+      FuncionarioTurno,
+      Asistencia,
+      Penalizacion,
+      Feriado,
+      HoraExtra,
       // Financiero entities
       Moneda,
       TipoPrecio,

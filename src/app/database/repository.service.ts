@@ -761,6 +761,39 @@ interface ElectronAPI {
   deleteFuncionarioDocumento: (id: number) => Promise<any>;
   getFuncionarioDocumentoBase64: (id: number) => Promise<any>;
   updateFuncionarioDocumento: (id: number, data: any) => Promise<any>;
+
+  // RRHH - Turnos
+  getTurnos: () => Promise<any[]>;
+  getTurno: (id: number) => Promise<any>;
+  createTurno: (data: any) => Promise<any>;
+  updateTurno: (id: number, data: any) => Promise<any>;
+  deleteTurno: (id: number) => Promise<any>;
+  asignarTurnoFuncionario: (data: any) => Promise<any>;
+  getFuncionarioTurnos: (funcionarioId: number) => Promise<any[]>;
+
+  // RRHH - Asistencias
+  getAsistencias: (filtros?: any) => Promise<any[]>;
+  getAsistencia: (id: number) => Promise<any>;
+  createAsistencia: (data: any) => Promise<any>;
+  updateAsistencia: (id: number, data: any) => Promise<any>;
+  justificarAsistencia: (id: number, data: any) => Promise<any>;
+  marcarAsistenciaMasiva: (payload: any) => Promise<any>;
+
+  // RRHH - Penalizaciones
+  getPenalizaciones: (filtros?: any) => Promise<any[]>;
+  createPenalizacion: (data: any) => Promise<any>;
+  anularPenalizacion: (id: number) => Promise<any>;
+
+  // RRHH - Feriados
+  getFeriados: (anio?: number) => Promise<any[]>;
+  createFeriado: (data: any) => Promise<any>;
+  updateFeriado: (id: number, data: any) => Promise<any>;
+  deleteFeriado: (id: number) => Promise<any>;
+
+  // RRHH - Horas extra
+  getHorasExtra: (filtros?: any) => Promise<any[]>;
+  createHoraExtra: (data: any) => Promise<any>;
+  anularHoraExtra: (id: number) => Promise<any>;
 }
 
 
@@ -2989,6 +3022,85 @@ export class RepositoryService {
   }
   updateFuncionarioDocumento(id: number, data: any): Observable<any> {
     return from(this.api.updateFuncionarioDocumento(id, data));
+  }
+
+  // ===================== RRHH: TURNOS =====================
+  getTurnos(): Observable<any[]> {
+    return from(this.api.getTurnos());
+  }
+  getTurno(id: number): Observable<any> {
+    return from(this.api.getTurno(id));
+  }
+  createTurno(data: any): Observable<any> {
+    return from(this.api.createTurno(data));
+  }
+  updateTurno(id: number, data: any): Observable<any> {
+    return from(this.api.updateTurno(id, data));
+  }
+  deleteTurno(id: number): Observable<any> {
+    return from(this.api.deleteTurno(id));
+  }
+  asignarTurnoFuncionario(data: any): Observable<any> {
+    return from(this.api.asignarTurnoFuncionario(data));
+  }
+  getFuncionarioTurnos(funcionarioId: number): Observable<any[]> {
+    return from(this.api.getFuncionarioTurnos(funcionarioId));
+  }
+
+  // ===================== RRHH: ASISTENCIAS =====================
+  getAsistencias(filtros?: any): Observable<any[]> {
+    return from(this.api.getAsistencias(filtros));
+  }
+  getAsistencia(id: number): Observable<any> {
+    return from(this.api.getAsistencia(id));
+  }
+  createAsistencia(data: any): Observable<any> {
+    return from(this.api.createAsistencia(data));
+  }
+  updateAsistencia(id: number, data: any): Observable<any> {
+    return from(this.api.updateAsistencia(id, data));
+  }
+  justificarAsistencia(id: number, data: any): Observable<any> {
+    return from(this.api.justificarAsistencia(id, data));
+  }
+  marcarAsistenciaMasiva(payload: any): Observable<any> {
+    return from(this.api.marcarAsistenciaMasiva(payload));
+  }
+
+  // ===================== RRHH: PENALIZACIONES =====================
+  getPenalizaciones(filtros?: any): Observable<any[]> {
+    return from(this.api.getPenalizaciones(filtros));
+  }
+  createPenalizacion(data: any): Observable<any> {
+    return from(this.api.createPenalizacion(data));
+  }
+  anularPenalizacion(id: number): Observable<any> {
+    return from(this.api.anularPenalizacion(id));
+  }
+
+  // ===================== RRHH: FERIADOS =====================
+  getFeriados(anio?: number): Observable<any[]> {
+    return from(this.api.getFeriados(anio));
+  }
+  createFeriado(data: any): Observable<any> {
+    return from(this.api.createFeriado(data));
+  }
+  updateFeriado(id: number, data: any): Observable<any> {
+    return from(this.api.updateFeriado(id, data));
+  }
+  deleteFeriado(id: number): Observable<any> {
+    return from(this.api.deleteFeriado(id));
+  }
+
+  // ===================== RRHH: HORAS EXTRA =====================
+  getHorasExtra(filtros?: any): Observable<any[]> {
+    return from(this.api.getHorasExtra(filtros));
+  }
+  createHoraExtra(data: any): Observable<any> {
+    return from(this.api.createHoraExtra(data));
+  }
+  anularHoraExtra(id: number): Observable<any> {
+    return from(this.api.anularHoraExtra(id));
   }
 
 }

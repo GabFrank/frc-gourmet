@@ -57,6 +57,11 @@ import { ListPermisosComponent } from './pages/personalizacion/permisos/list-per
 import { ListConfiguracionRrhhComponent } from './pages/rrhh/configuracion/list-configuracion-rrhh/list-configuracion-rrhh.component';
 import { ListCargosComponent } from './pages/rrhh/cargos/list-cargos.component';
 import { ListFuncionariosComponent } from './pages/rrhh/funcionarios/list-funcionarios/list-funcionarios.component';
+import { ListTurnosComponent } from './pages/rrhh/turnos/list-turnos.component';
+import { ListAsistenciasComponent } from './pages/rrhh/asistencias/list-asistencias.component';
+import { ListPenalizacionesComponent } from './pages/rrhh/penalizaciones/list-penalizaciones.component';
+import { ListFeriadosComponent } from './pages/rrhh/feriados/list-feriados.component';
+import { ListHorasExtraComponent } from './pages/rrhh/horas-extra/list-horas-extra.component';
 
 @Component({
   selector: 'app-root',
@@ -369,6 +374,31 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       'funcionarios-tab',
       true
     );
+    this.closeMenu();
+  }
+
+  openTurnosTab() {
+    this.tabsService.openTab('Turnos', ListTurnosComponent, { source: 'navigation' }, 'turnos-tab', true);
+    this.closeMenu();
+  }
+
+  openAsistenciasTab() {
+    this.tabsService.openTab('Asistencias', ListAsistenciasComponent, { source: 'navigation' }, 'asistencias-tab', true);
+    this.closeMenu();
+  }
+
+  openPenalizacionesTab() {
+    this.tabsService.openTab('Penalizaciones', ListPenalizacionesComponent, { source: 'navigation' }, 'penalizaciones-tab', true);
+    this.closeMenu();
+  }
+
+  openFeriadosTab() {
+    this.tabsService.openTab('Feriados', ListFeriadosComponent, { source: 'navigation' }, 'feriados-tab', true);
+    this.closeMenu();
+  }
+
+  openHorasExtraTab() {
+    this.tabsService.openTab('Horas extra', ListHorasExtraComponent, { source: 'navigation' }, 'horas-extra-tab', true);
     this.closeMenu();
   }
 

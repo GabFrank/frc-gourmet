@@ -2714,4 +2714,93 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('update-funcionario-documento', id, data);
   },
 
+  // =============================================
+  // RRHH - Turnos
+  // =============================================
+  getTurnos: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-turnos');
+  },
+  getTurno: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-turno', id);
+  },
+  createTurno: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-turno', data);
+  },
+  updateTurno: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-turno', id, data);
+  },
+  deleteTurno: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-turno', id);
+  },
+  asignarTurnoFuncionario: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('asignar-turno-funcionario', data);
+  },
+  getFuncionarioTurnos: async (funcionarioId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-funcionario-turnos', funcionarioId);
+  },
+
+  // =============================================
+  // RRHH - Asistencias
+  // =============================================
+  getAsistencias: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-asistencias', filtros);
+  },
+  getAsistencia: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-asistencia', id);
+  },
+  createAsistencia: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-asistencia', data);
+  },
+  updateAsistencia: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-asistencia', id, data);
+  },
+  justificarAsistencia: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('justificar-asistencia', id, data);
+  },
+  marcarAsistenciaMasiva: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('marcar-asistencia-masiva', payload);
+  },
+
+  // =============================================
+  // RRHH - Penalizaciones
+  // =============================================
+  getPenalizaciones: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-penalizaciones', filtros);
+  },
+  createPenalizacion: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-penalizacion', data);
+  },
+  anularPenalizacion: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('anular-penalizacion', id);
+  },
+
+  // =============================================
+  // RRHH - Feriados
+  // =============================================
+  getFeriados: async (anio?: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-feriados', anio);
+  },
+  createFeriado: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-feriado', data);
+  },
+  updateFeriado: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-feriado', id, data);
+  },
+  deleteFeriado: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-feriado', id);
+  },
+
+  // =============================================
+  // RRHH - Horas extra
+  // =============================================
+  getHorasExtra: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-horas-extra', filtros);
+  },
+  createHoraExtra: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-hora-extra', data);
+  },
+  anularHoraExtra: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('anular-hora-extra', id);
+  },
+
 });

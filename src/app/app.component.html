@@ -133,6 +133,26 @@
               <mat-icon matListItemIcon>badge</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Funcionarios</span>
             </a>
+            <a mat-list-item (click)="openTurnosTab()">
+              <mat-icon matListItemIcon>schedule</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Turnos</span>
+            </a>
+            <a mat-list-item (click)="openAsistenciasTab()">
+              <mat-icon matListItemIcon>fact_check</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Asistencias</span>
+            </a>
+            <a mat-list-item (click)="openPenalizacionesTab()">
+              <mat-icon matListItemIcon>gavel</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Penalizaciones</span>
+            </a>
+            <a mat-list-item (click)="openHorasExtraTab()">
+              <mat-icon matListItemIcon>more_time</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Horas extra</span>
+            </a>
+            <a mat-list-item (click)="openFeriadosTab()">
+              <mat-icon matListItemIcon>celebration</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Feriados</span>
+            </a>
             <a mat-list-item (click)="openListPermisosTab()">
               <mat-icon matListItemIcon>verified_user</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Permisos</span>

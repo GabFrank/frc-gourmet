@@ -39,6 +39,9 @@ import { registerPermissionsHandlers, seedPermissions } from './electron/handler
 import { registerConfiguracionRrhhHandlers, seedConfiguracionRrhh } from './electron/handlers/configuracion-rrhh.handler';
 import { registerRrhhFuncionariosHandlers } from './electron/handlers/rrhh-funcionarios.handler';
 import { registerFuncionarioDocumentosHandlers } from './electron/handlers/funcionario-documentos.handler';
+import { registerAsistenciasHandlers } from './electron/handlers/asistencias.handler';
+import { registerFeriadosHandlers } from './electron/handlers/feriados.handler';
+import { registerHorasExtraHandlers } from './electron/handlers/horas-extra.handler';
 import { seedInitialData } from './electron/utils/seed-data';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
 // Unificado en recetas.handler: sabores y variaciones
@@ -90,6 +93,9 @@ function initializeDatabase() {
       registerConfiguracionRrhhHandlers(dataSource, getCurrentUser); // RRHH: ConfiguracionRrhh (parametros legales)
       registerRrhhFuncionariosHandlers(dataSource, getCurrentUser); // RRHH Fase 1: Cargos + Funcionarios + Historicos
       registerFuncionarioDocumentosHandlers(dataSource, getCurrentUser); // RRHH Fase 1: Documentos del funcionario (filesystem)
+      registerAsistenciasHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Turnos + Asistencias + Penalizaciones
+      registerFeriadosHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Feriados
+      registerHorasExtraHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Horas extra
 
       // Scheduler: procesa acreditaciones POS pendientes cada 5 min (en main process)
       startAcreditacionesScheduler(dataSource, 5);
