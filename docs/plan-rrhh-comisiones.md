@@ -1,245 +1,325 @@
-# Plan — Análisis ventas + Specs RRHH y Comisiones para frc-gourmet-legacy
+# Plan de implementación — Módulo RRHH + Comisiones (Don Franco)
+
+> Repo: `frc-gourmet-legacy` — Angular 15 standalone + Electron + TypeORM SQLite (`synchronize:true`).
+> Este plan reemplaza la versión anterior (que mezclaba un análisis de PDFs externo). Aquí solo se trata el alcance de RRHH + Comisiones, integrando profundamente con el módulo Caja Mayor (Fase 1 ya en producción).
+
+---
 
 ## Contexto
 
-Restaurante Don Franco tiene 15 PDFs (enero-2025 → marzo-2026) de reportes de ventas por producto/mes generados por un sistema legacy externo que será reemplazado. El usuario quiere:
+Restaurante Don Franco (Paraguay, guaraníes + IPS) necesita un módulo de RRHH integral. Al explorar el repo se detectó que el módulo financiero **Caja Mayor (Fase 1 completada)** ya implementa infraestructura crítica que el plan anterior duplicaba:
 
-1. Analizar esos PDFs para obtener datos reales (productos, medias, rankings) y usarlos como baseline para diseñar el nuevo módulo.
-2. Especificar un módulo de **RRHH** (funcionarios, cargos, turnos/asistencia, salarios/liquidación, vales, préstamos recurrentes, créditos a clientes con movimientos, penalizaciones).
-3. Especificar un módulo de **Comisiones** con reglas configurables (meta unidades, % sobre venta, meta venta total, extras y penalizaciones manuales, requisitos todo-o-nada o proporcionales) para entregar al equipo dev que trabaja en [frc-gourmet-legacy](https://github.com/GabFrank/frc-gourmet-legacy).
+- Enum `TipoMovimiento` con `EGRESO_SALARIO`, `EGRESO_VALE`, `EGRESO_CUOTA_PRESTAMO` ya definidos.
+- `CuentaPorPagar` + `CuentaPorPagarCuota` con tipo `PRESTAMO`.
+- `Gasto` recurrente.
+- Helpers transaccionales atómicos: `actualizarSaldo`, `esIngreso`.
+- Anulación con contra-movimientos.
+- `RetiroCaja` con responsable.
 
-La idea: el PDF aporta datos reales para que decisiones de diseño (categorías, roles, metas) estén ancladas a la operación real; los specs entregables son implementables directos en el repo existente (Angular 15 + Electron + TypeORM + SQLite).
+Además el plan anterior omitía piezas comunes de un módulo RRHH completo: vacaciones, aguinaldo, liquidación final / indemnización, adelanto distinto a vale, bonos no recurrentes, históricos cargo/salario, documentos del funcionario, feriados, horas extra, dashboard real con KPIs, exports PDF/Excel, recibos firmables, notificaciones, configuración de parámetros legales, comisión por equipo, vendedor explícito en `Venta`, permisos granulares, y créditos a clientes (`CuentaPorCobrar` espejo de `CuentaPorPagar`).
 
-**Orden confirmado**: Spec RRHH → Análisis ventas → Spec Comisiones. Las comisiones dependen de funcionarios (RRHH) y del catálogo/categorización real (análisis).
-
-**Origen PDF**: one-shot. No se necesita importador recurrente en el spec. POS futuro alimenta ventas.
-
----
-
-## Supuestos y decisiones confirmadas con el usuario
-
-- Integración: módulo integrado al repo frc-gourmet-legacy, reutilizando `Persona`, `Usuario`, `Producto`, `Familia`/`Subfamilia`, `Venta`, `VentaItem`, `Caja`, `FormasPago`, `Cliente`.
-- Penalizaciones: registro manual por supervisor.
-- Liquidación comisión: mensual, cálculo automático + aprobación supervisor.
-- Validación de requisitos: configurable por regla (todo-o-nada o proporcional).
-- Asignación productos ↔ funcionario: categoría como helper de carga masiva, lista final editable por producto.
-- Tipos de comisión soportados: meta unidades + % sobre venta + meta venta local + extras manuales (únicos o recurrentes definidos/indefinidos) + penalizaciones.
-- Vales: pueden salir de caja operativa hoy o de caja mayor en el futuro (cajaOrigen flexible, extensible a FK Caja).
-- Préstamos recurrentes: cuotas se precargan al mes y supervisor puede editar/saltar.
-- Columna de margen del PDF es errónea → se ignora. Costo vendrá de `PrecioCosto` del POS.
-- Roles/cargos aún no definidos → se proponen tras análisis PDF.
+**Outcome esperado**: módulo RRHH+Comisiones implementable en 8 fases mergeables independientes, reutilizando todo lo viable del Caja Mayor, con justificación clara de cada decisión arquitectónica.
 
 ---
 
-## Repo target — hallazgos clave
+## 1. Decisiones arquitectónicas (8)
 
-Stack: Angular 15 standalone + Electron 24 + TypeORM 0.3 + SQLite. `synchronize: true` (no migraciones). Convenciones: strings UPPERCASE en DB, entidades extienden `BaseModel` (id/createdAt/updatedAt/createdBy/updatedBy→Usuario), tablas snake_case plural, componentes standalone + TabsService.
-
-**Ya existe y se reutiliza**:
-- `Persona` ([persona.entity.ts](../../../workspace/frc-gourmet-legacy/src/app/database/entities/personas/persona.entity.ts)) — base para `Funcionario`.
-- `Usuario` — login, FK persona_id. `VentaItem.createdBy` identifica al mozo.
-- `Role` + `UsuarioRole` — permisos sistema (NO cargo laboral).
-- `Cliente` con `credito`/`limite_credito` (sin historial de movimientos).
-- `Producto`, `Familia→Subfamilia→Producto`, `Presentacion`, `PrecioVenta`, `PrecioCosto`.
-- `Venta` (estado, caja, pago, descuentos), `VentaItem` (producto, cantidad, precios, estado, created_by).
-- `Caja` (sesión con apertura/cierre), `Moneda`, `FormasPago`, `Pago`/`PagoDetalle`.
-- Dashboard ventas con `TopProducto` interface (datos mock).
-- `rrhhDash` — placeholder visual sin lógica.
-
-**NO existe**: Funcionario, Cargo, Turno, Asistencia, LiquidacionSueldo, Vales, PréstamoFuncionario + cuotas, MovimientoCreditoCliente, Penalización, ReglaComision, LiquidacionComision, libs PDF para exports.
-
-**Gotchas críticos para el equipo dev**:
-- Todos los enums/strings UPPERCASE.
-- Extender `BaseModel`; nunca duplicar campos de Persona.
-- Patrón de módulo nuevo: entity → registrar en `database.config.ts` → `electron/handlers/X.handler.ts` → `preload.ts` (interfaz + contextBridge) → `repository.service.ts` (métodos Observable) → componente standalone → `app.component.ts` `openXxxTab()` + entrada sidenav.
-- No hay migraciones: reinicio crea tablas. Backup DB antes de reiniciar en prod.
-- `VentaItem.createdBy` = atribución al funcionario. Confirmar con cliente si es correcto o si hay que agregar `mozo_id` explícito en `Venta`.
+| # | Decisión | Recomendación | Justificación |
+|---|---|---|---|
+| **D1** | Préstamos a funcionarios | **EXTENDER `CuentaPorPagar`** (agregar `funcionario_id` nullable + nuevo enum `PRESTAMO_FUNCIONARIO`) | Reutiliza `pagar-cpp-cuota` (ya emite `EGRESO_CUOTA_PRESTAMO`), generación auto de cuotas mensuales, estados, UI `pagar-cuota-dialog`. Inventar `PrestamoFuncionario` paralelo duplica ~500 líneas. |
+| **D2** | Atribución de venta | **Agregar `vendedor_id` FK Usuario explícito** en `Venta` y opcional en `VentaItem` | `createdBy` puede ser cajero/supervisor, no el mozo. Mesas con mozos rotativos exigen reasignación. Sin esto las comisiones son inverificables. Migración 1-vez: `vendedor_id = created_by` para ventas históricas. |
+| **D3** | Vales | **Entidad `Vale` propia** que genera `CajaMayorMovimiento` al confirmar | Ciclo de vida (SOLICITADO→CONFIRMADO→DESCONTADO→ANULADO) no encaja en un movimiento simple. Permite "vales pendientes de descuento". Anulación reusa `anular-caja-mayor-movimiento`. |
+| **D4** | Permisos | **Entidad `Permission` + `RolePermission`** consultable, no hardcoded en guards | `Role`+`UsuarioRole` está infrautilizado; esto los activa. Configurable por admin. ~25 codes seed. |
+| **D5** | Documentos funcionario | **Filesystem en `userData/funcionario-documentos/{id}/`** + entidad `FuncionarioDocumento` | Patrón ya establecido (`profile-images/`, `producto-images/` en `image-handler.utils.ts`). SQLite no debe almacenar PDFs grandes. |
+| **D6** | Adelanto de salario | **Caso especial de `Vale`** con flag `esAdelanto: boolean` | 95% del flujo es idéntico. Solo cambia categoría contable en liquidación. |
+| **D7** | Liquidación de sueldo | **Entidad propia `LiquidacionSueldo`** (NO extender `Gasto`) | `Gasto` apunta a Proveedor, flujo distinto. Liquidación tiene N items haberes/descuentos, aprobación, recibo firmable, lote de pago. Sí reusa `EGRESO_SALARIO` + `actualizarSaldo()`. |
+| **D8** | Categorías de vales/comisiones | **NO reutilizar `GastoCategoria`** (jerárquica para gastos contables); crear `MotivoVale`, `MotivoBono`, `LiquidacionConcepto` planos | `GastoCategoria` es para terceros/contabilidad operativa. Vales/bonos son transacciones a funcionarios con semántica distinta. |
 
 ---
 
-## Estructura de salidas del proyecto `don-franco-gestion/`
+## 2. Patrones de integración con Caja Mayor
 
-```
-don-franco-gestion/
-  meses/                        (15 PDFs existentes)
-  scripts/
-    extract_pdfs.py             (Fase 0 — extracción PDF → texto/JSON crudo)
-    analyze.py                  (Fase 1 — produce 4 entregables)
-  output/
-    monthly/{mes}-{año}.json    (15 archivos, estructura por mes)
-    consolidated.csv            (1 fila por producto-mes)
-    report.md                   (rankings, medias, tendencias)
-    categories.json             (agrupación sugerida por categoría)
-  specs/
-    rrhh.md                     (Entregable RRHH — entregable al equipo dev)
-    comisiones.md               (Entregable Comisiones — entregable al equipo dev)
+**Helpers reutilizables (no duplicar)**:
+- `actualizarSaldo(qr, cajaMayorId, monedaId, formaPagoId, monto, tipo)` en `electron/handlers/caja-mayor.handler.ts:29`.
+- `esIngreso(tipo)` en `electron/handlers/caja-mayor.handler.ts:16`.
+- `setEntityUserTracking(...)` en `electron/utils/entity.utils.ts`.
+- `anular-caja-mayor-movimiento` en `electron/handlers/caja-mayor.handler.ts:291` — genera contra-movimiento con `referenciaAnulacion`.
+- `pagar-cpp-cuota` en `electron/handlers/cuentas-por-pagar.handler.ts:414` — pago atómico de cuota + movimiento `EGRESO_CUOTA_PRESTAMO`.
+- `confirmarSaldosNegativos` en `src/app/shared/utils/saldo-negativo-confirm.ts`.
+
+**Trazabilidad bidireccional** — agregar columnas `int nullable` en `caja-mayor-movimiento.entity.ts`:
+```ts
+@Column({ name: 'vale_id', type: 'int', nullable: true }) valeId?: number;
+@Column({ name: 'liquidacion_sueldo_id', type: 'int', nullable: true }) liquidacionSueldoId?: number;
+@Column({ name: 'liquidacion_comision_id', type: 'int', nullable: true }) liquidacionComisionId?: number;
+@Column({ name: 'cuenta_por_cobrar_cuota_id', type: 'int', nullable: true }) cuentaPorCobrarCuotaId?: number;
 ```
 
----
-
-## Fase 0 — Setup extracción PDF
-
-1. Verificar PDFs tienen texto seleccionable (no imágenes): `pdftotext enero-2025.pdf -`. Si son imágenes → requiere OCR (`tesseract`), ampliar alcance.
-2. Instalar dependencias: `brew install poppler` (para `pdftotext`) + `pip install pdfplumber` (tablas multi-columna).
-3. Inspeccionar 3 PDFs representativos (enero-2025, julio-2025, enero-2026) para identificar delimitadores y cambios de formato.
-
-## Fase 1 — Análisis de ventas (4 entregables simultáneos)
-
-Orden interno:
-1. `extract_pdfs.py` sobre los 15 PDFs → texto crudo por mes.
-2. Diseñar parser en `analyze.py`, probar con 1 PDF, ajustar por variaciones.
-3. Correr sobre 15, producir entregables.
-
-**Formato `output/monthly/{mes}-{año}.json`**:
+**Pseudocódigo flujo VALE (egreso desde caja mayor)**:
 ```
-{ "mes": "enero-2025", "totalVentaMes": number,
-  "productos": [ { "nombre": "UPPERCASE", "cantidad": number, "ventaTotal": number } ] }
+async confirmarVale(valeId, userId):
+  qr = dataSource.createQueryRunner(); await qr.startTransaction()
+  vale = qr.findOne(Vale, { id, relations: ['funcionario','cajaMayor','moneda','formaPago'] })
+  if vale.estado != 'SOLICITADO': throw
+  movimiento = qr.create(CajaMayorMovimiento, {
+    cajaMayor, tipoMovimiento: EGRESO_VALE, moneda, formaPago, monto: vale.monto,
+    fecha: now, observacion: `VALE #${vale.id} — ${funcionario.nombre}`,
+    valeId: vale.id
+  })
+  setEntityUserTracking(dataSource, movimiento, userId)
+  saved = qr.save(movimiento)
+  await actualizarSaldo(qr, cajaMayorId, monedaId, formaPagoId, monto, EGRESO_VALE)
+  vale.estado = 'CONFIRMADO'; vale.movimiento_id = saved.id
+  qr.save(vale); qr.commitTransaction()
 ```
-Se omite margen/costo (dato erróneo del PDF).
 
-**`output/consolidated.csv`**: columnas `mes, producto, cantidad, venta_total`.
+**Flujo CUOTA PRÉSTAMO FUNCIONARIO** — 100% reutiliza `pagar-cpp-cuota`. Solo extender el switch para que `PRESTAMO_FUNCIONARIO` también emita `EGRESO_CUOTA_PRESTAMO`.
 
-**`output/report.md`**: top 10 global, ranking mes a mes, peores performers, media mensual, varianza estacional, productos detectados solo esporádicamente.
+**Flujo PAGO LIQUIDACIÓN SUELDO** — análogo a Vale pero con `tipoMovimiento: EGRESO_SALARIO` y `liquidacionSueldoId`. Tras commit: marcar vales asociados como `DESCONTADO`, comisiones como `INTEGRADA`.
 
-**`output/categories.json`**: categorías inferidas por nombre (PARRILLA, PIZZA, PASTAS, EMPANADAS, BEBIDAS, POSTRES, MINUTAS, GUARNICIONES, QUESADILLAS). Input directo para reglas de comisión. Mínimo 5 categorías con ≥3 productos cada una.
-
-**Validación Fase 1**: checksum `sum(ventaTotal) == total PDF` tolerancia 0% en 3 meses manualmente; detección de duplicados por normalización UPPERCASE; cobertura 100% de productos.
+**Anulación de cualquier egreso RRHH**: llamar `anular-caja-mayor-movimiento(id, motivo)` y revertir estado de la entidad origen.
 
 ---
 
-## Fase 2 — Spec RRHH (`specs/rrhh.md`)
+## 3. Fases de implementación
 
-Secciones obligatorias: contexto/objetivo, glosario, RF numerados (RF-RH-001…), modelo de datos (por subdominio), diagrama de relaciones textual, flujos clave, UI/UX por pantalla, integraciones con entidades existentes, criterios de aceptación por RF, fuera de alcance, riesgos/supuestos, puntos de extensión, tabla de trazabilidad RF→entidad→pantalla.
+### Fase 0 — Fundamentos (Persona+, Permisos, ConfiguracionRrhh)
 
-**Entidades nuevas por subdominio**:
-
-*Funcionarios*
-- `Cargo` (id, nombre UPPERCASE, descripcion, activo). Distinto a `Role`.
-- `Funcionario` (persona_id FK, cargo_id FK, fechaIngreso, fechaEgreso nullable, salarioBase, usuario_id nullable FK, activo).
-
-*Turnos y asistencia*
-- `Turno` (nombre enum MAÑANA/TARDE/NOCHE/CORRIDO, horaEntrada, horaSalida).
-- `FuncionarioTurno` (funcionario_id, turno_id, fechaDesde, fechaHasta nullable) — historial de cambios.
-- `Asistencia` (funcionario_id, fecha, horaEntrada nullable, horaSalida nullable, estado PRESENTE/AUSENTE/TARDANZA/MEDIA_FALTA/JUSTIFICADO, observacion, registradoPor_id FK Usuario).
-
-*Salarios / liquidación*
-- `LiquidacionSueldo` (funcionario_id, periodo YYYY-MM, salarioBase, totalHaberes, totalDescuentos, totalNeto, estado BORRADOR/APROBADO/PAGADO, aprobadoPor_id, fechaAprobacion, fechaPago).
-- `LiquidacionItem` (liquidacion_id, tipo SALARIO_BASE/COMISION/VALE/PRESTAMO_CUOTA/PENALIZACION/EXTRA_MANUAL, descripcion, monto ± , referencia_id nullable).
-
-*Créditos funcionarios (vales + préstamos)*
-- `CreditoFuncionario` (funcionario_id, tipo VALE/PRESTAMO, monto, descripcion, fechaOtorgamiento, cajaOrigen OPERATIVA/MAYOR, caja_id nullable FK (extensión), estado ACTIVO/CANCELADO/COMPLETADO, totalCuotas nullable (null = indefinido), creadoPor_id).
-- `CuotaCreditoFuncionario` (credito_id, numeroCuota, montoOriginal, montoPagado, fechaProgramada, fechaPago nullable, estado PENDIENTE/PAGADA/SALTEADA/EDITADA, editadaPor_id, observacion).
-
-*Créditos clientes*
-- `MovimientoCreditoCliente` (cliente_id FK, tipo CARGO/PAGO, monto, venta_id nullable FK, fecha, creadoPor_id). Saldo = sum(CARGO) − sum(PAGO). Se respeta `Cliente.limite_credito`.
-
-*Penalizaciones*
-- `Penalizacion` (funcionario_id, tipo TARDANZA/QUEJA/AMBIENTE/OTRO, descripcion, monto negativo, fecha, registradaPor_id, asistencia_id nullable).
-
-**Flujos clave a documentar**:
-1. Alta funcionario: Persona existente o nueva → Funcionario → Cargo → Turno.
-2. Fichaje diario → eventual tardanza → penalización opcional.
-3. Vale: crear `CreditoFuncionario` tipo VALE → cuota única → se descuenta próxima liquidación.
-4. Préstamo recurrente: crear `CreditoFuncionario` tipo PRESTAMO → N cuotas precargadas → cada mes auto-insert en liquidación, supervisor puede editar/saltar (estado EDITADA/SALTEADA).
-5. Cierre de mes: generar `LiquidacionSueldo` en BORRADOR → auto-agrega salario + cuotas pendientes + penalizaciones + (posteriormente) comisión aprobada → supervisor aprueba → PAGADO.
-6. Crédito cliente: venta con forma pago CREDITO → `MovimientoCreditoCliente` CARGO → cobros posteriores como PAGO.
-
-**Puntos de extensión**:
-- `CreditoFuncionario.cajaOrigen` hoy enum, FK `caja_id` opcional desde ya (para cuando exista caja mayor real).
-- `LiquidacionItem.referencia_id` genérico = nuevos tipos sin migración.
-
-**Roles sugeridos (refinar post-Fase 1)**: MOZO, PARRILLERO, PIZZERO, CAJERO, COCINERO, LAVACOPAS, ENCARGADO, DELIVERY, ADMINISTRADOR. Correlacionar con `categories.json`.
-
----
-
-## Fase 3 — Spec Comisiones (`specs/comisiones.md`)
-
-Mismas secciones estructurales que RRHH.
+**Modificaciones**: `persona.entity.ts` (+ `apellido`, `email`, `fechaNacimiento`, `sexo` enum M/F/OTRO, `estadoCivil` enum SOLTERO/CASADO/UNION_LIBRE/DIVORCIADO/VIUDO, todos nullable).
 
 **Entidades nuevas**:
-- `ReglaComision` (nombre, descripcion, tipo META_UNIDADES/PORCENTAJE_VENTA/META_VENTA_LOCAL/EXTRA_MANUAL/PENALIZACION_MANUAL, montoBase nullable, porcentaje nullable, metaUnidades nullable, metaMontoLocal nullable, modoValidacion TODO_O_NADA/PROPORCIONAL, recurrencia UNICA/DEFINIDA/INDEFINIDA, mesesRecurrencia nullable, activo).
-- `ReglaComisionProducto` (regla_id, producto_id) — lista editable; `subfamilia_id` es helper de carga masiva inicial, no binding.
-- `ReglaComisionRequisito` (regla_id, descripcion, tipo TARDANZA_MAX/QUEJA_MAX/CUSTOM, umbral, peso decimal) — los pesos suman 1 en modo PROPORCIONAL.
-- `FuncionarioReglaComision` (funcionario_id, regla_id, fechaDesde, fechaHasta nullable, parametroExtra JSON nullable).
-- `LiquidacionComision` (funcionario_id, periodo, estado BORRADOR/APROBADO, totalCalculado, totalFinal, aprobadoPor_id, fechaAprobacion).
-- `LiquidacionComisionItem` (liquidacion_id, regla_id nullable, descripcion, montoCalculado, montoFinal editable, tipo CALCULADO/MANUAL_EXTRA/MANUAL_PENALIZACION, observacion).
+- `Permission` (codigo UPPERCASE UNIQUE, descripcion, modulo, activo)
+- `RolePermission` (role_id, permission_id)
+- `ConfiguracionRrhh` (clave UNIQUE, valor string, tipo NUMBER/STRING/BOOLEAN/DATE, descripcion). Seed inicial con valores PY (ver §5).
 
-**Motor de evaluación (por `FuncionarioReglaComision` activa en periodo)**:
-1. Query `VentaItem` del periodo, `producto_id` IN reglas productos, `venta.estado=CONCLUIDA`, `venta_item.created_by=funcionario.usuario_id`.
-2. Métricas: unidades, monto productos, monto venta local total.
-3. Evaluar requisitos (`ReglaComisionRequisito`) contra datos del mes (`Penalizacion`, etc.).
-4. Aplicar `modoValidacion`: TODO_O_NADA (todos cumplen → total; alguno falla → 0); PROPORCIONAL (monto × Σ pesos_cumplidos).
-5. Calcular monto base según tipo (fijo o % de ventas).
-6. Restar penalizaciones mensuales del funcionario (tipo PENALIZACION_MANUAL o aplicar `Penalizacion` del mes).
-7. Generar `LiquidacionComisionItem` por regla.
+**Handlers**: `electron/handlers/permissions.handler.ts`, `electron/handlers/configuracion-rrhh.handler.ts`. Helper `getConfig(clave)`.
 
-**Pipeline cierre de mes**:
-```
-Fin de mes → query VentaItem → evaluar reglas por funcionario
-  → LiquidacionComision BORRADOR con items
-  → supervisor edita montoFinal / agrega extras manuales / penalizaciones
-  → supervisor aprueba → APROBADO
-  → sistema inserta LiquidacionItem tipo COMISION en LiquidacionSueldo del mes
-  → LiquidacionSueldo flujo normal hasta PAGADO
-```
+**UI**: `src/app/pages/personalizacion/permisos/{list-permisos,assign-permisos-role-dialog}`, `src/app/pages/rrhh/configuracion/list-configuracion-rrhh`.
 
-**Ejemplos con datos reales**: completar post-Fase 1 usando `report.md` y `categories.json` (ej: "PARRILLERO sobre PARRILLA: meta X unidades/mes = Y bono fijo; valores X/Y calibrados a media mensual de la categoría").
+**Aceptación**: CRUD permisos, `PermissionService.has('RRHH_VALE_CREAR')` correcto, editar IPS% persiste, alta Persona con campos nuevos no rompe Cliente/Usuario existente.
+
+### Fase 1 — Funcionarios (catálogo + legajo)
+
+**Entidades nuevas**: `Cargo`, `Funcionario` (persona_id FK + cargo_id + fechaIngreso + fechaEgreso nullable + motivoEgreso enum + salarioBase + monedaSalario_id + esJornalero + valorJornal + usuario_id nullable + ipsActivo + numeroIps + cuentaBancariaPropia + activo), `HistoricoCargo`, `HistoricoSalario`, `FuncionarioDocumento` (tipo CEDULA/CONTRATO/CERTIFICADO/OTRO + rutaRelativa + vencimiento nullable).
+
+**Handlers**: `electron/handlers/rrhh-funcionarios.handler.ts`, `electron/handlers/funcionario-documentos.handler.ts` (upload base64 al filesystem). Crear `electron/utils/document-handler.utils.ts`.
+
+**UI**: `src/app/pages/rrhh/{cargos,funcionarios}/...` — `funcionario-detalle` con tabs: Datos, Historial Cargo, Historial Salario, Documentos, Asistencia, Vales, Préstamos, Vacaciones, Liquidaciones.
+
+### Fase 2 — Turnos, Asistencia, Penalizaciones, Feriados, Horas extra
+
+**Entidades nuevas**: `Turno`, `FuncionarioTurno`, `Asistencia` (estado PRESENTE/AUSENTE/TARDANZA/MEDIA_FALTA/JUSTIFICADO/FERIADO + minutosTardanza + horasTrabajadas + justificada), `Penalizacion`, `Feriado`, `HoraExtra` (DIURNA/NOCTURNA/FERIADO + recargoPorcentaje + montoCalculado).
+
+**Handlers**: `electron/handlers/{asistencias,feriados,horas-extra}.handler.ts`. Tardanza > tolerancia genera `Penalizacion` automática.
+
+### Fase 3 — Vales, Adelantos, Préstamos
+
+**Modificaciones**:
+- `cuenta-por-pagar.entity.ts`: `+ funcionario_id` FK nullable; `+ PRESTAMO_FUNCIONARIO` en enum.
+- `caja-mayor-movimiento.entity.ts`: `+ vale_id` int nullable.
+- `cuentas-por-pagar.handler.ts:307` acepta `funcionarioId`; switch en `:457` extender.
+
+**Entidades nuevas**: `Vale` (estado SOLICITADO/CONFIRMADO/DESCONTADO/ANULADO + esAdelanto + liquidacion_id nullable + movimiento_id nullable + autorizadoPor + comprobante_url), `MotivoVale`.
+
+**Handlers**: `electron/handlers/vales.handler.ts`.
+
+### Fase 4 — Liquidación de Sueldo + IPS + Aguinaldo + Bonos
+
+**Entidades nuevas**: `LiquidacionSueldo`, `LiquidacionItem`, `LiquidacionConcepto`, `Bono`, `Aguinaldo`.
+
+**Modificación**: `caja-mayor-movimiento.entity.ts` `+ liquidacion_sueldo_id`.
+
+**Handlers**: `electron/handlers/liquidacion-sueldo.handler.ts` con:
+- `generar-liquidacion-borrador(funcionarioId, periodo)` → query asistencia + penalizaciones + horas extra + vales pendientes + cuotas préstamo + comisión APROBADA → items auto.
+- `aprobar-liquidacion(id)` (permiso `RRHH_LIQUIDACION_APROBAR`).
+- `pagar-liquidacion(id, cajaMayorId, monedaId, formaPagoId)` transaccional → `EGRESO_SALARIO` + marcar vales DESCONTADO + cuotas PAGADA + comisión INTEGRADA.
+- `generar-liquidaciones-mes(periodo)` batch.
+- `calcular-aguinaldo(anio)` → 1/12 del total ganado.
+
+### Fase 5 — Vacaciones + Liquidación Final
+
+**Entidades nuevas**: `Vacacion`, `VacacionPeriodo`, `LiquidacionFinal` (motivoEgreso + antiguedadDias/Meses/Anios + salarioPromedioUltimos6Meses + indemnizacionMonto + indemnizacionAplica + vacacionesNoGozadas + montoVacacionesNoGozadas + aguinaldoProporcional + totalLiquidado + estado), `LiquidacionFinalItem`.
+
+**Handlers**: `electron/handlers/vacaciones.handler.ts` (auto-genera al aniversario según escala PY), `electron/handlers/liquidacion-final.handler.ts`.
+
+### Fase 6 — Comisiones (reglas, motor, liquidación, equipos)
+
+**Modificaciones**: `venta.entity.ts` `+ vendedor_id`, `venta-item.entity.ts` `+ vendedor_id`, `caja-mayor-movimiento.entity.ts` `+ liquidacion_comision_id`. Migración 1-vez startup: `UPDATE ventas SET vendedor_id = created_by WHERE vendedor_id IS NULL`.
+
+**Entidades nuevas**: `ReglaComision` (tipo META_UNIDADES/PORCENTAJE_VENTA/META_VENTA_LOCAL/EXTRA_MANUAL/PENALIZACION_MANUAL/EQUIPO_PORCENTAJE), `ReglaComisionProducto`, `ReglaComisionRequisito`, `FuncionarioReglaComision`, `EquipoComision`, `EquipoComisionMiembro`, `EquipoComisionRegla`, `LiquidacionComision`, `LiquidacionComisionItem`.
+
+**Motor de evaluación** (por `FuncionarioReglaComision` activa):
+1. Query `VentaItem JOIN Venta` con `venta.estado=CONCLUIDA`, `ventaItem.estado != CANCELADO`, `COALESCE(ventaItem.vendedor_id, venta.vendedor_id) = funcionario.usuario_id`, `producto_id IN reglaProductos`, fecha en periodo.
+2. Métricas: unidades, montoProductos, montoVentaTotalLocal.
+3. Evaluar requisitos contra Penalizacion+Asistencia.
+4. Aplicar `modoValidacion`: TODO_O_NADA / PROPORCIONAL.
+5. Calcular monto según tipo (fijo o %).
+6. Restar penalizaciones manuales tipo COMISION_DESCUENTO.
+7. Para `EQUIPO_PORCENTAJE`: distribuir según `porcentajeReparto`.
+8. Snapshot de parámetros en `LiquidacionComisionItem.observacion`.
+
+### Fase 7 — CuentaPorCobrar + Movimientos Cliente
+
+**Modificaciones**: `cliente.entity.ts` `+ saldoActual`. `caja-mayor-enums.ts` `+ INGRESO_COBRO_CLIENTE` y agregar a `esIngreso()`. `caja-mayor-movimiento.entity.ts` `+ cuenta_por_cobrar_cuota_id`.
+
+**Entidades nuevas**: `CuentaPorCobrar`, `CuentaPorCobrarCuota`, `MovimientoCliente`.
+
+### Fase 8 — Dashboard RRHH + Reportes + Exports + Notificaciones
+
+**Entidades nuevas**: `NotificacionRrhh`.
+
+**Librerías a agregar a `package.json`**: `pdfmake`, `exceljs`. Chart.js ya disponible.
+
+**UI**:
+- `src/app/pages/rrhh/dashboard/rrhh-dashboard` (REEMPLAZA `rrhhDash` placeholder). KPIs: total nómina mes, % asistencia, vales pendientes, préstamos activos, próximos cumpleaños, vacaciones próximas (30d), top 5 vendedores. Sección Atajos integrando con `dashboard-shortcuts.handler.ts`.
+- `src/app/pages/rrhh/notificaciones/list-notificaciones-rrhh` + badge en sidenav.
+- `src/app/pages/rrhh/reportes/reportes-rrhh-page` con selector + filtros + export PDF/Excel.
 
 ---
 
-## Archivos críticos del repo target (para referencia del spec)
+## 4. Modelo de datos resumen — 38 entidades nuevas
 
-- [database.config.ts](../../../workspace/frc-gourmet-legacy/src/app/database/database.config.ts) — registrar 15+ entidades nuevas.
-- [preload.ts](../../../workspace/frc-gourmet-legacy/preload.ts) — interfaz `ElectronAPI` + contextBridge para channels de RRHH/Comisiones.
-- [repository.service.ts](../../../workspace/frc-gourmet-legacy/src/app/database/repository.service.ts) — métodos Observable por operación.
-- [main.ts](../../../workspace/frc-gourmet-legacy/main.ts) — invocar `registerRrhhHandlers(dataSource, getCurrentUser)` y `registerComisionesHandlers(...)`.
-- [app.component.ts](../../../workspace/frc-gourmet-legacy/src/app/app.component.ts) — métodos `openFuncionariosTab()`, `openAsistenciasTab()`, `openLiquidacionesTab()`, `openReglasComisionTab()`, `openLiquidacionComisionTab()`; entradas sidenav en `app.component.html`.
-- Nuevos: `electron/handlers/rrhh.handler.ts`, `electron/handlers/comisiones.handler.ts`.
-- Nuevos: `src/app/database/entities/rrhh/*.entity.ts`, `src/app/database/entities/comisiones/*.entity.ts`.
-- Nuevos: `src/app/pages/rrhh/...`, `src/app/pages/comisiones/...`.
+| # | Entidad | Propósito |
+|---|---|---|
+| 1 | `Permission` | Catálogo de permisos granulares |
+| 2 | `RolePermission` | Asignación N:M Role↔Permission |
+| 3 | `ConfiguracionRrhh` | Parámetros configurables (IPS%, vacaciones, salario mínimo) |
+| 4 | `Cargo` | Cargo laboral (≠ Role de sistema) |
+| 5 | `Funcionario` | Empleado (FK Persona+Cargo+Usuario opcional) |
+| 6 | `HistoricoCargo` | Trazabilidad cambios de cargo |
+| 7 | `HistoricoSalario` | Trazabilidad cambios salariales |
+| 8 | `FuncionarioDocumento` | Metadata documentos (filesystem) |
+| 9 | `Turno` | Definición de turnos |
+| 10 | `FuncionarioTurno` | Asignación funcionario→turno |
+| 11 | `Asistencia` | Fichaje diario |
+| 12 | `Penalizacion` | Sanciones (manual o auto) |
+| 13 | `Feriado` | Días no laborables con recargo |
+| 14 | `HoraExtra` | Horas extra con recargo |
+| 15 | `Vale` | Adelanto/préstamo corto |
+| 16 | `MotivoVale` | Catálogo motivos |
+| 17 | `LiquidacionSueldo` | Cabecera mensual |
+| 18 | `LiquidacionItem` | Detalle haberes/descuentos |
+| 19 | `LiquidacionConcepto` | Catálogo conceptos |
+| 20 | `Bono` | Bonos manuales o recurrentes |
+| 21 | `Aguinaldo` | 13° salario |
+| 22 | `Vacacion` | Días por año de servicio |
+| 23 | `VacacionPeriodo` | Período de goce |
+| 24 | `LiquidacionFinal` | Liquidación al egreso |
+| 25 | `LiquidacionFinalItem` | Detalle |
+| 26 | `ReglaComision` | Definición de regla |
+| 27 | `ReglaComisionProducto` | Productos efectivos |
+| 28 | `ReglaComisionRequisito` | Requisitos cumplibles |
+| 29 | `FuncionarioReglaComision` | Asignación funcionario→regla |
+| 30 | `EquipoComision` | Agrupación grupal |
+| 31 | `EquipoComisionMiembro` | Miembros con % reparto |
+| 32 | `EquipoComisionRegla` | Reglas del equipo |
+| 33 | `LiquidacionComision` | Cabecera mensual comisión |
+| 34 | `LiquidacionComisionItem` | Detalle por regla |
+| 35 | `CuentaPorCobrar` | Crédito pendiente cliente |
+| 36 | `CuentaPorCobrarCuota` | Cuota de cobro |
+| 37 | `MovimientoCliente` | Histórico cargos/pagos |
+| 38 | `NotificacionRrhh` | Notificaciones del módulo |
 
 ---
 
-## Convenciones a respetar en los specs (para que sea implementable directo)
+## 5. Gaps regulatorios Paraguay (configurables en `ConfiguracionRrhh`)
 
-- Enums UPPERCASE (`'BORRADOR'`, `'APROBADO'`, `'TODO_O_NADA'`).
-- `extends BaseModel`.
-- `@Entity('tabla_snake_case_plural')`, columnas `@Column({ name: 'snake_case' })`.
-- FK con `@JoinColumn({ name: 'xxx_id' })`.
-- Registro obligatorio en `database.config.ts`.
-- Patrón IPC completo (handler + preload + repository + componente + tab + sidenav).
-
----
-
-## Riesgos y supuestos
-
-| Riesgo | Mitigación |
-|---|---|
-| PDFs son imágenes escaneadas | Verificar con `pdftotext` antes de Fase 1. Si sí → OCR con `tesseract`. |
-| Formato PDF varía entre meses | Inspeccionar 3 PDFs (enero-2025, julio-2025, enero-2026) antes de generalizar parser. |
-| Margen PDF mal calculado | Ignorado por decisión del usuario; costo real del POS. |
-| `VentaItem.createdBy` no identifica al mozo comisionable | Confirmar con usuario; alternativa: agregar `mozo_id` FK explícito en `Venta`. |
-| Roles no definidos | Se proponen sugeridos, usuario confirma tras análisis. |
-| `synchronize: true` puede dañar DB en prod | Backup SQLite antes de reiniciar con entidades nuevas. |
-| Comisión doble por cargo | Reglas son por-funcionario, no por-cargo. |
-| Vale desde caja mayor inexistente | `cajaOrigen` enum por ahora + `caja_id` nullable desde ya. |
+| Concepto | Default | Clave config |
+|---|---|---|
+| IPS aporte funcionario | 9% | `IPS_PORCENTAJE_FUNCIONARIO` |
+| IPS aporte patronal | 16.5% | `IPS_PORCENTAJE_PATRONAL` |
+| Salario mínimo legal | (PYG) | `SALARIO_MINIMO_LEGAL_PYG` |
+| Vacaciones <5 años | 12 hábiles | `DIAS_VACACIONES_HASTA_5A` |
+| Vacaciones 5-10 años | 18 hábiles | `DIAS_VACACIONES_5_10A` |
+| Vacaciones >10 años | 30 hábiles | `DIAS_VACACIONES_MAS_10A` |
+| Aguinaldo | 1/12 anual | hardcoded fórmula |
+| Indemnización despido injustif. | 15 jornales/año | `INDEMNIZACION_DIAS_POR_ANIO` |
+| Antigüedad mínima indemnización | 90 días | `INDEMNIZACION_ANTIGUEDAD_MIN_DIAS` |
+| HE diurna recargo | +50% | `RECARGO_HE_DIURNA` |
+| HE nocturna recargo | +100% | `RECARGO_HE_NOCTURNA` |
+| HE feriado recargo | +100% | `RECARGO_HE_FERIADO` |
+| Tolerancia tardanza | 5 min | `TOLERANCIA_TARDANZA_MIN` |
+| Prescripción vacaciones | 24 meses | `PRESCRIPCION_VACACIONES_MESES` |
+| Día cierre mes | 30 | `DIA_CIERRE_MES` |
 
 ---
 
-## Verificación end-to-end
+## 6. Verificación end-to-end
 
-**Fase 1 (análisis)**:
-- `python scripts/extract_pdfs.py && python scripts/analyze.py`.
-- Validar `output/monthly/enero-2025.json`: `sum(ventaTotal) == total PDF` ±0%.
-- Validar 3 meses (enero-2025, julio-2025, marzo-2026) manualmente.
-- `output/categories.json` tiene ≥5 categorías con ≥3 productos.
-- `output/consolidated.csv` tiene #productos × 15 filas (aprox).
-- `output/report.md` incluye top 10, bottom 10, media mensual.
+Setup: 2 funcionarios, 1 cargo, 1 turno, caja mayor abierta con saldo PYG EFECTIVO.
 
-**Specs (fase 2 y 3)**:
-- Checklist: cada RF numerado único.
-- Cada entidad tiene: tabla, todos los campos con tipo, FKs, enums declarados.
-- Cada pantalla: nombre tab, componente, CRUD, filtros.
-- Tabla de trazabilidad RF→entidad→pantalla completa al final del doc.
-- Review cruzado: RRHH no refiere a comisiones, Comisiones refiere a LiquidacionSueldo de RRHH.
-- Dev legible: un dev que no vio este proyecto puede abrir `rrhh.md`, leer 20 min, empezar a codear.
+| # | Acción | Validación |
+|---|---|---|
+| 1 | Seed permisos + asignar a role ADMIN | Permission ≥ 25 |
+| 2 | Alta Funcionario A (MOZO, 2.500.000) | HistoricoCargo + HistoricoSalario auto |
+| 3 | Subir cédula PDF | Archivo en `userData/funcionario-documentos/{id}/` |
+| 4 | Asistencia día 1 PRESENTE, día 2 TARDANZA 15min | Penalizacion auto |
+| 5 | Crear Vale 200k SOLICITADO | Saldo CajaMayor sin cambios |
+| 6 | Confirmar Vale | Saldo -200k, mov EGRESO_VALE |
+| 7 | Préstamo CPP 600k/6 cuotas | 6 cuotas 100k |
+| 8 | Pagar cuota 1 | Saldo -100k, mov EGRESO_CUOTA_PRESTAMO |
+| 9 | Regla META_UNIDADES PARRILLA 50u=150k | FuncionarioReglaComision activa |
+| 10 | 60 ventas vendedor=A producto PARRILLA | Datos para evaluar |
+| 11 | Generar liquidación comisión | Item COMISION 150k |
+| 12 | Aprobar liquidación comisión | estado APROBADA |
+| 13 | Generar liquidación sueldo BORRADOR | Items: SALARIO 2.500k, COMISION 150k, IPS -225k, VALE -200k, PRESTAMO_CUOTA -100k, PENAL -X |
+| 14 | Agregar Bono Manual 50k | Item BONO 50k |
+| 15 | Aprobar liquidación sueldo | APROBADA |
+| 16 | Pagar liquidación | Saldo -neto, EGRESO_SALARIO, vale DESCONTADO, comisión INTEGRADA, recibo PDF |
+| 17 | Export Excel "Liquidaciones del mes" | Archivo con formato |
+| 18 | Anular liquidación pagada | Contra-mov ANULACION, saldo revertido |
+| 19 | Egreso Funcionario A motivo DESPIDO_INJUSTIFICADO | Wizard liquidación final |
+| 20 | Pagar liquidación final | EGRESO_SALARIO obs "LIQUIDACION FINAL" |
+
+---
+
+## 7. Riesgos transversales
+
+| # | Riesgo | Mitigación |
+|---|---|---|
+| R1 | Modificar `Persona` rompe Cliente/Usuario/Proveedor | Campos nuevos `nullable`. Smoke test alta Cliente, login, alta Proveedor |
+| R2 | `vendedor_id` requiere refactor flujos POS | Migración 1-vez startup `UPDATE ventas SET vendedor_id=created_by`. Default = `getCurrentUser()`. Tocar `ventas.handler.ts` + componente POS |
+| R3 | `synchronize:true` puede alterar columnas | Backup obligatorio antes de cada deploy |
+| R4 | Filesystem documentos no en backup DB | Tab "Backup completo" futuro empacar `frc-gourmet.db + funcionario-documentos/` |
+| R5 | Concurrencia: dos cajeros confirman mismo vale | Estado SOLICITADO→CONFIRMADO con check + transacción atómica |
+| R6 | Penalización auto duplicada al regenerar liquidación | Idempotencia: borrar items auto al regenerar BORRADOR; preservar `manual=true` |
+| R7 | Liquidación comisión aprobada sin liq. sueldo | Auto-generar BORRADOR de sueldo si no existe |
+| R8 | Tipos de cambio multi-moneda | Convertir a `monedaPago` con `MonedaCambio` activo del día gen.; persistir ratio en LiquidacionItem |
+| R9 | Regla comisión modificada con período en curso | Snapshot parámetros en `LiquidacionComisionItem.observacion` |
+| R10 | Funcionario sin `usuario_id` en regla comisión | Validar `usuario_id IS NOT NULL` al asignar |
+| R11 | Performance: asistencia 5+ años | Index en `Asistencia(funcionario_id, fecha)` |
+| R12 | UI POS asume `createdBy`=vendedor | Refactor componentes que muestran "Vendedor" → usar `Venta.vendedor` con fallback `createdBy` |
+
+---
+
+## 8. Modificaciones priorizadas a entidades existentes
+
+| Prio | Archivo | Cambio | Bloquea fase |
+|---|---|---|---|
+| 1 | `persona.entity.ts` | + apellido, email, fechaNacimiento, sexo, estadoCivil | Fase 0 (todas) |
+| 2 | `caja-mayor-movimiento.entity.ts` | + valeId, liquidacionSueldoId, liquidacionComisionId, cuentaPorCobrarCuotaId | Fase 3, 4, 6, 7 |
+| 3 | `cuenta-por-pagar.entity.ts` | + funcionario_id; nuevo enum PRESTAMO_FUNCIONARIO | Fase 3 |
+| 4 | `caja-mayor-enums.ts` | + INGRESO_COBRO_CLIENTE; agregar a esIngreso() | Fase 7 |
+| 5 | `cliente.entity.ts` | + saldoActual | Fase 7 |
+| 6 | `venta.entity.ts` | + vendedor_id FK Usuario nullable | Fase 6 |
+| 7 | `venta-item.entity.ts` | + vendedor_id FK Usuario nullable | Fase 6 |
+| 8 | `cuentas-por-pagar.handler.ts:307,457` | aceptar funcionarioId; switch para PRESTAMO_FUNCIONARIO | Fase 3 |
+| 9 | `ventas.handler.ts` | aceptar vendedorId default getCurrentUser().id | Fase 6 |
+| 10 | `app.component.ts` + html | nuevos `openXxxTab()` agrupados sidenav RRHH y Comisiones | Cada fase |
+| 11 | `database.config.ts` | registrar 38 entidades | Cada fase |
+| 12 | `preload.ts` + `repository.service.ts` | interfaces + métodos Observable | Cada fase |
+| 13 | `main.ts` | `registerXxxHandlers(...)` por handler | Cada fase |
+| 14 | `image-handler.utils.ts` o nuevo `document-handler.utils.ts` | saveDocumento/deleteDocumento | Fase 1 |
+| 15 | `package.json` | + pdfmake, exceljs | Fase 8 |
+| 16 | `src/app/pages/personas/rrhhDash/` | reemplazar placeholder por nuevo `RrhhDashboardComponent` | Fase 8 |
+
+---
+
+## 9. Orden de ejecución
+
+1. **Backup DB de prod** (obligatorio, `frc-gourmet.db` en `userData`).
+2. Branch `feature/rrhh-fase-0` → modificar Persona, agregar Permission/RolePermission/ConfiguracionRrhh, registrar en `database.config.ts`, handler+preload+repo. Seed permisos + valores PY. Smoke test (alta cliente, login). Merge.
+3. Iterar Fases 1→8. Cada fase mergeable independiente, respetando orden de bloqueos.
+4. Antes de Fase 6: correr migración 1-vez `UPDATE ventas SET vendedor_id = created_by`.
+5. Tras Fase 8: deprecar `RrhhDashComponent` (placeholder), apuntar `openRrhhDashTab()` al nuevo.
+6. Cada merge a main: smoke test E2E de la fase + verificar que el resto de la app siga funcionando.

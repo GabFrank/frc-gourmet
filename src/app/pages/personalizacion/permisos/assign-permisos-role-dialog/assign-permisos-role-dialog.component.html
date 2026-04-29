@@ -1,0 +1,56 @@
+<h2 mat-dialog-title>
+  Permisos del rol: {{ data.role?.descripcion }}
+</h2>
+
+<mat-dialog-content class="dialog-content">
+  <div *ngIf="loading" class="spinner-container">
+    <mat-progress-spinner mode="indeterminate" diameter="36"></mat-progress-spinner>
+  </div>
+
+  <mat-accordion *ngIf="!loading">
+    <mat-expansion-panel *ngFor="let g of porModulo" [expanded]="true">
+      <mat-expansion-panel-header>
+        <mat-panel-title>
+          <mat-icon>folder</mat-icon>
+          <span class="modulo-label">{{ g.modulo }}</span>
+        </mat-panel-title>
+        <mat-panel-description>
+          {{ contarAsignados(g) }} / {{ g.items.length }}
+        </mat-panel-description>
+      </mat-expansion-panel-header>
+
+      <div class="acciones-bloque">
+        <button mat-button color="primary" (click)="toggleModulo(g, true)">
+          <mat-icon>check_box</mat-icon>
+          Marcar todos
+        </button>
+        <button mat-button (click)="toggleModulo(g, false)">
+          <mat-icon>check_box_outline_blank</mat-icon>
+          Desmarcar todos
+        </button>
+      </div>
+
+      <div class="permisos-grid">
+        <mat-checkbox *ngFor="let it of g.items" [(ngModel)]="it.asignado">
+          <div class="permiso-item">
+            <strong>{{ it.permiso.codigo }}</strong>
+            <span class="descripcion" *ngIf="it.permiso.descripcion">{{ it.permiso.descripcion }}</span>
+          </div>
+        </mat-checkbox>
+      </div>
+    </mat-expansion-panel>
+  </mat-accordion>
+
+  <div *ngIf="!loading && porModulo.length === 0" class="empty">
+    No hay permisos activos para asignar.
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cerrar()" [disabled]="saving">Cancelar</button>
+  <button mat-flat-button color="primary" (click)="guardar()" [disabled]="loading || saving">
+    <mat-icon *ngIf="!saving">save</mat-icon>
+    <mat-progress-spinner *ngIf="saving" mode="indeterminate" diameter="20"></mat-progress-spinner>
+    Guardar
+  </button>
+</mat-dialog-actions>

@@ -40,8 +40,13 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
       const persona = personaRepository.create({
         nombre: personaData.nombre,
+        apellido: personaData.apellido ?? null,
+        email: personaData.email ?? null,
         telefono: personaData.telefono,
         direccion: personaData.direccion,
+        fechaNacimiento: personaData.fechaNacimiento ?? null,
+        sexo: personaData.sexo ?? null,
+        estadoCivil: personaData.estadoCivil ?? null,
         tipoDocumento: personaData.tipoDocumento,
         documento: personaData.documento,
         tipoPersona: personaData.tipoPersona,
@@ -73,8 +78,13 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
       // Update fields selectively
       if (personaData.nombre !== undefined) persona.nombre = personaData.nombre;
+      if (personaData.apellido !== undefined) persona.apellido = personaData.apellido ?? undefined;
+      if (personaData.email !== undefined) persona.email = personaData.email ?? undefined;
       if (personaData.telefono !== undefined) persona.telefono = personaData.telefono;
       if (personaData.direccion !== undefined) persona.direccion = personaData.direccion;
+      if (personaData.fechaNacimiento !== undefined) persona.fechaNacimiento = personaData.fechaNacimiento ?? undefined;
+      if (personaData.sexo !== undefined) persona.sexo = personaData.sexo ?? undefined;
+      if (personaData.estadoCivil !== undefined) persona.estadoCivil = personaData.estadoCivil ?? undefined;
       if (personaData.tipoDocumento !== undefined) persona.tipoDocumento = personaData.tipoDocumento;
       if (personaData.documento !== undefined) persona.documento = personaData.documento;
       if (personaData.tipoPersona !== undefined) persona.tipoPersona = personaData.tipoPersona;

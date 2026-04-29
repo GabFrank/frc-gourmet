@@ -9,10 +9,14 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule } from '@angular/material/core';
 import { RepositoryService } from '../../../database/repository.service';
 import { Persona } from '../../../database/entities/personas/persona.entity';
 import { DocumentoTipo } from '../../../database/entities/personas/documento-tipo.enum';
 import { PersonaTipo } from '../../../database/entities/personas/persona-tipo.enum';
+import { Sexo } from '../../../database/entities/personas/sexo.enum';
+import { EstadoCivil } from '../../../database/entities/personas/estado-civil.enum';
 import { firstValueFrom } from 'rxjs';
 
 @Component({
@@ -28,6 +32,8 @@ import { firstValueFrom } from 'rxjs';
     MatCheckboxModule,
     MatIconModule,
     MatProgressSpinnerModule,
+    MatDatepickerModule,
+    MatNativeDateModule,
     ReactiveFormsModule
   ],
   templateUrl: './create-edit-persona.component.html',
@@ -37,6 +43,8 @@ export class CreateEditPersonaComponent implements OnInit {
   personaForm: FormGroup;
   documentoTipos = Object.values(DocumentoTipo);
   personaTipos = Object.values(PersonaTipo);
+  sexos = Object.values(Sexo);
+  estadosCiviles = Object.values(EstadoCivil);
   isEditing = false;
   loading = false;
   
@@ -53,8 +61,13 @@ export class CreateEditPersonaComponent implements OnInit {
   ) {
     this.personaForm = this.fb.group({
       nombre: ['', [Validators.required]],
+      apellido: [''],
+      email: ['', [Validators.email]],
       telefono: [''],
       direccion: [''],
+      fechaNacimiento: [null],
+      sexo: [null],
+      estadoCivil: [null],
       tipoDocumento: [DocumentoTipo.CI, [Validators.required]],
       documento: ['', [Validators.required]],
       tipoPersona: [PersonaTipo.FISICA, [Validators.required]],
@@ -79,8 +92,13 @@ export class CreateEditPersonaComponent implements OnInit {
       // Patch form with existing persona data
       this.personaForm.patchValue({
         nombre: this.data.persona.nombre,
+        apellido: (this.data.persona as any).apellido || '',
+        email: (this.data.persona as any).email || '',
         telefono: this.data.persona.telefono || '',
         direccion: this.data.persona.direccion || '',
+        fechaNacimiento: (this.data.persona as any).fechaNacimiento || null,
+        sexo: (this.data.persona as any).sexo || null,
+        estadoCivil: (this.data.persona as any).estadoCivil || null,
         tipoDocumento: this.data.persona.tipoDocumento,
         documento: this.data.persona.documento,
         tipoPersona: this.data.persona.tipoPersona,
@@ -185,12 +203,17 @@ export class CreateEditPersonaComponent implements OnInit {
     this.loading = true;
     const formData = this.personaForm.value;
     
-    // Convert string fields to uppercase
+    // Convert string fields to uppercase (email queda en lowercase para validar formato)
     const personaData = {
       ...formData,
       nombre: formData.nombre?.toUpperCase() || '',
+      apellido: formData.apellido?.toUpperCase() || null,
+      email: formData.email?.toLowerCase() || null,
       telefono: formData.telefono?.toUpperCase() || '',
       direccion: formData.direccion?.toUpperCase() || '',
+      fechaNacimiento: formData.fechaNacimiento || null,
+      sexo: formData.sexo || null,
+      estadoCivil: formData.estadoCivil || null,
       documento: formData.documento?.toUpperCase() || '',
       // Don't set imageUrl here, we'll set it based on the conditions below
       imageUrl: undefined

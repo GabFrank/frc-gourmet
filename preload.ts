@@ -2426,6 +2426,14 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('acreditar-transferencia-bancaria', payload);
   },
 
+  // Movimientos bancarios (historico unificado + manuales)
+  getMovimientosCuentaBancaria: async (cuentaBancariaId: number, filtros?: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-movimientos-cuenta-bancaria', cuentaBancariaId, filtros);
+  },
+  createMovimientoBancario: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-movimiento-bancario', data);
+  },
+
   // Compra Categorias
   getCompraCategorias: async (): Promise<any[]> => {
     return await ipcRenderer.invoke('get-compra-categorias');
@@ -2472,6 +2480,169 @@ contextBridge.exposeInMainWorld('api', {
   },
   pagarCppCuota: async (payload: any): Promise<any> => {
     return await ipcRenderer.invoke('pagar-cpp-cuota', payload);
+  },
+
+  // Dashboard Shortcuts
+  getDashboardShortcuts: async (dashboardKey?: string): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-dashboard-shortcuts', dashboardKey);
+  },
+  createDashboardShortcut: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-dashboard-shortcut', data);
+  },
+  updateDashboardShortcut: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-dashboard-shortcut', id, data);
+  },
+  deleteDashboardShortcut: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-dashboard-shortcut', id);
+  },
+
+  // =============================================
+  // Fase 4: Entradas Varias
+  // =============================================
+  getEntradaVariaCategorias: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-entrada-varia-categorias');
+  },
+  getEntradaVariaCategoria: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-entrada-varia-categoria', id);
+  },
+  createEntradaVariaCategoria: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-entrada-varia-categoria', data);
+  },
+  updateEntradaVariaCategoria: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-entrada-varia-categoria', id, data);
+  },
+  deleteEntradaVariaCategoria: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-entrada-varia-categoria', id);
+  },
+  getEntradasVarias: async (filtros?: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-entradas-varias', filtros);
+  },
+  getEntradaVaria: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-entrada-varia', id);
+  },
+  createEntradaVaria: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-entrada-varia', data);
+  },
+  anularEntradaVaria: async (id: number, motivo: string): Promise<any> => {
+    return await ipcRenderer.invoke('anular-entrada-varia', id, motivo);
+  },
+
+  // =============================================
+  // Fase 4: Operaciones Financieras
+  // =============================================
+  getOperacionFinancieraCategorias: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-operacion-financiera-categorias');
+  },
+  getOperacionFinancieraCategoria: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-operacion-financiera-categoria', id);
+  },
+  createOperacionFinancieraCategoria: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-operacion-financiera-categoria', data);
+  },
+  updateOperacionFinancieraCategoria: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-operacion-financiera-categoria', id, data);
+  },
+  deleteOperacionFinancieraCategoria: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-operacion-financiera-categoria', id);
+  },
+  getOperacionesFinancieras: async (filtros?: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-operaciones-financieras', filtros);
+  },
+  getOperacionFinanciera: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-operacion-financiera', id);
+  },
+  createOperacionFinanciera: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-operacion-financiera', data);
+  },
+  anularOperacionFinanciera: async (id: number, motivo: string): Promise<any> => {
+    return await ipcRenderer.invoke('anular-operacion-financiera', id, motivo);
+  },
+
+  // =============================================
+  // Fase 4: Chequeras + Cheques
+  // =============================================
+  getChequeras: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-chequeras');
+  },
+  getChequera: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-chequera', id);
+  },
+  createChequera: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-chequera', data);
+  },
+  updateChequera: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-chequera', id, data);
+  },
+  deleteChequera: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-chequera', id);
+  },
+  getCheques: async (filtros?: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-cheques', filtros);
+  },
+  getCheque: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cheque', id);
+  },
+  emitirCheque: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('emitir-cheque', data);
+  },
+  cobrarCheque: async (id: number, data?: any): Promise<any> => {
+    return await ipcRenderer.invoke('cobrar-cheque', id, data);
+  },
+  anularCheque: async (id: number, motivo: string): Promise<any> => {
+    return await ipcRenderer.invoke('anular-cheque', id, motivo);
+  },
+
+  // =============================================
+  // RRHH - Permisos
+  // =============================================
+  getPermissions: async (modulo?: string): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-permissions', modulo);
+  },
+  getAllPermissions: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-all-permissions');
+  },
+  createPermission: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-permission', data);
+  },
+  updatePermission: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-permission', id, data);
+  },
+  deletePermission: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-permission', id);
+  },
+  getRolePermissions: async (roleId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-role-permissions', roleId);
+  },
+  setRolePermissions: async (roleId: number, permissionIds: number[]): Promise<any> => {
+    return await ipcRenderer.invoke('set-role-permissions', roleId, permissionIds);
+  },
+  getPermissionsByUser: async (userId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-permissions-by-user', userId);
+  },
+  seedPermissions: async (): Promise<any> => {
+    return await ipcRenderer.invoke('seed-permissions');
+  },
+
+  // =============================================
+  // RRHH - Configuracion
+  // =============================================
+  getConfiguracionesRrhh: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-configuraciones-rrhh');
+  },
+  getConfiguracionRrhh: async (clave: string): Promise<any> => {
+    return await ipcRenderer.invoke('get-configuracion-rrhh', clave);
+  },
+  createConfiguracionRrhh: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-configuracion-rrhh', data);
+  },
+  updateConfiguracionRrhh: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-configuracion-rrhh', id, data);
+  },
+  deleteConfiguracionRrhh: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-configuracion-rrhh', id);
+  },
+  seedConfiguracionRrhh: async (): Promise<any> => {
+    return await ipcRenderer.invoke('seed-configuracion-rrhh');
   },
 
 });

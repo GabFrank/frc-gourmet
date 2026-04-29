@@ -1,0 +1,111 @@
+<div class="config-page">
+  <mat-card class="header-card">
+    <mat-card-content>
+      <div class="header">
+        <div class="title">
+          <mat-icon>tune</mat-icon>
+          <h2>Configuracion RRHH</h2>
+          <span class="subtitle">Parametros legales y operativos (referencia PY 2026)</span>
+        </div>
+        <div class="actions">
+          <button mat-stroked-button color="primary" (click)="resemenbrarBase()" matTooltip="Crea las configuraciones base que no existan">
+            <mat-icon>cloud_download</mat-icon>
+            Sembrar base
+          </button>
+          <button mat-flat-button color="primary" (click)="showCreateForm()" *ngIf="!showInlineForm">
+            <mat-icon>add</mat-icon>
+            Nueva clave
+          </button>
+        </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card *ngIf="showInlineForm" class="form-card">
+    <mat-card-content>
+      <form [formGroup]="inlineForm" (ngSubmit)="submitInlineForm()" class="inline-form">
+        <mat-form-field appearance="outline">
+          <mat-label>Clave</mat-label>
+          <input matInput formControlName="clave" placeholder="EJ: IPS_PORCENTAJE_FUNCIONARIO" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Valor</mat-label>
+          <input matInput formControlName="valor" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Tipo</mat-label>
+          <mat-select formControlName="tipo">
+            <mat-option *ngFor="let t of tipos" [value]="t">{{ t }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="full-line">
+          <mat-label>Descripcion</mat-label>
+          <input matInput formControlName="descripcion" />
+        </mat-form-field>
+        <mat-slide-toggle formControlName="activo">Activo</mat-slide-toggle>
+
+        <div class="form-actions">
+          <button type="button" mat-button (click)="cancelInlineForm()">Cancelar</button>
+          <button type="submit" mat-flat-button color="primary" [disabled]="inlineForm.invalid">
+            {{ editingId ? 'Actualizar' : 'Crear' }}
+          </button>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="data-card">
+    <mat-card-content>
+      <div *ngIf="loading" class="spinner-container">
+        <mat-progress-spinner mode="indeterminate" diameter="40"></mat-progress-spinner>
+      </div>
+      <table mat-table [dataSource]="configs" class="full-width" *ngIf="!loading">
+        <ng-container matColumnDef="clave">
+          <th mat-header-cell *matHeaderCellDef>Clave</th>
+          <td mat-cell *matCellDef="let c">{{ c.clave }}</td>
+        </ng-container>
+        <ng-container matColumnDef="valor">
+          <th mat-header-cell *matHeaderCellDef>Valor</th>
+          <td mat-cell *matCellDef="let c">{{ c.valor || '-' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="tipo">
+          <th mat-header-cell *matHeaderCellDef>Tipo</th>
+          <td mat-cell *matCellDef="let c">{{ c.tipo }}</td>
+        </ng-container>
+        <ng-container matColumnDef="descripcion">
+          <th mat-header-cell *matHeaderCellDef>Descripcion</th>
+          <td mat-cell *matCellDef="let c">{{ c.descripcion || '-' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="activo">
+          <th mat-header-cell *matHeaderCellDef>Activo</th>
+          <td mat-cell *matCellDef="let c">
+            <mat-icon [class.estado-verde]="c.activo" [class.estado-rojo]="!c.activo">
+              {{ c.activo ? 'check_circle' : 'cancel' }}
+            </mat-icon>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef class="acciones-col">Acciones</th>
+          <td mat-cell *matCellDef="let c">
+            <button mat-icon-button [matMenuTriggerFor]="menu">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="editConfig(c)">
+                <mat-icon>edit</mat-icon>
+                <span>Editar</span>
+              </button>
+              <button mat-menu-item (click)="deleteConfig(c)">
+                <mat-icon>delete</mat-icon>
+                <span>Eliminar</span>
+              </button>
+            </mat-menu>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+      </table>
+      <div *ngIf="!loading && configs.length === 0" class="empty">Sin configuraciones cargadas.</div>
+    </mat-card-content>
+  </mat-card>
+</div>

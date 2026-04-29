@@ -1,0 +1,48 @@
+.dialog-content {
+  min-width: 600px;
+  min-height: 240px;
+
+  .spinner-container {
+    display: flex;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .modulo-label {
+    margin-left: 6px;
+    font-weight: 500;
+  }
+
+  .acciones-bloque {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .permisos-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+
+    mat-checkbox {
+      align-items: flex-start;
+    }
+  }
+
+  .permiso-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    .descripcion {
+      font-size: 12px;
+      opacity: 0.75;
+    }
+  }
+
+  .empty {
+    padding: 24px;
+    text-align: center;
+    opacity: 0.7;
+  }
+}

@@ -34,6 +34,9 @@ import { registerRecetasHandlers } from './electron/handlers/recetas.handler';
 import { registerCajaMayorHandlers } from './electron/handlers/caja-mayor.handler';
 import { registerBankingHandlers, startAcreditacionesScheduler } from './electron/handlers/banking.handler';
 import { registerCuentasPorPagarHandlers } from './electron/handlers/cuentas-por-pagar.handler';
+import { registerDashboardShortcutsHandlers } from './electron/handlers/dashboard-shortcuts.handler';
+import { registerPermissionsHandlers, seedPermissions } from './electron/handlers/permissions.handler';
+import { registerConfiguracionRrhhHandlers, seedConfiguracionRrhh } from './electron/handlers/configuracion-rrhh.handler';
 import { seedInitialData } from './electron/utils/seed-data';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
 // Unificado en recetas.handler: sabores y variaciones
@@ -80,12 +83,17 @@ function initializeDatabase() {
       registerCajaMayorHandlers(dataSource, getCurrentUser); // Caja Mayor + Gastos + Retiros
       registerBankingHandlers(dataSource, getCurrentUser); // CuentasBancarias + MaquinasPos + Acreditaciones
       registerCuentasPorPagarHandlers(dataSource, getCurrentUser); // CompraCategoria + CompraCuota + CuentaPorPagar
+      registerDashboardShortcutsHandlers(dataSource, getCurrentUser); // Dashboard Shortcuts personalizables
+      registerPermissionsHandlers(dataSource, getCurrentUser); // RRHH: Permission + RolePermission
+      registerConfiguracionRrhhHandlers(dataSource, getCurrentUser); // RRHH: ConfiguracionRrhh (parametros legales)
 
       // Scheduler: procesa acreditaciones POS pendientes cada 5 min (en main process)
       startAcreditacionesScheduler(dataSource, 5);
 
       // Seed initial data (idempotent - only inserts if tables are empty)
       seedInitialData(dataSource);
+      seedPermissions(dataSource).catch((e) => console.error('Error seeding permissions:', e));
+      seedConfiguracionRrhh(dataSource).catch((e) => console.error('Error seeding configuracion rrhh:', e));
     })
     .catch((error) => {
       console.error('Failed to initialize database:', error);

@@ -1,0 +1,136 @@
+<div class="permisos-page">
+  <mat-card class="header-card">
+    <mat-card-content>
+      <div class="header">
+        <div class="title">
+          <mat-icon>verified_user</mat-icon>
+          <h2>Permisos del sistema</h2>
+        </div>
+        <div class="actions">
+          <button mat-stroked-button color="primary" (click)="resemenbrarPermisosBase()" matTooltip="Crea los permisos del catalogo base que no existan">
+            <mat-icon>cloud_download</mat-icon>
+            Sembrar base
+          </button>
+          <button mat-flat-button color="primary" (click)="showCreateForm()" *ngIf="!showInlineForm">
+            <mat-icon>add</mat-icon>
+            Nuevo permiso
+          </button>
+        </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card *ngIf="showInlineForm" class="form-card">
+    <mat-card-content>
+      <form [formGroup]="inlineForm" (ngSubmit)="submitInlineForm()" class="inline-form">
+        <mat-form-field appearance="outline">
+          <mat-label>Codigo</mat-label>
+          <input matInput formControlName="codigo" placeholder="EJ: RRHH_VALE_CREAR" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="ancho-largo">
+          <mat-label>Descripcion</mat-label>
+          <input matInput formControlName="descripcion" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Modulo</mat-label>
+          <input matInput formControlName="modulo" placeholder="RRHH / COMISIONES / SISTEMA" />
+        </mat-form-field>
+        <mat-slide-toggle formControlName="activo">Activo</mat-slide-toggle>
+
+        <div class="form-actions">
+          <button type="button" mat-button (click)="cancelInlineForm()">Cancelar</button>
+          <button type="submit" mat-flat-button color="primary" [disabled]="inlineForm.invalid">
+            {{ editingId ? 'Actualizar' : 'Crear' }}
+          </button>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="filtros-card">
+    <mat-card-content>
+      <div class="filtros">
+        <span class="filtros-label">Modulo:</span>
+        <button
+          *ngFor="let m of modulos"
+          mat-stroked-button
+          [color]="filtroModulo === m ? 'primary' : ''"
+          (click)="cambiarFiltro(m)">
+          {{ m }}
+        </button>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="data-card">
+    <mat-card-content>
+      <div *ngIf="loading" class="spinner-container">
+        <mat-progress-spinner mode="indeterminate" diameter="40"></mat-progress-spinner>
+      </div>
+
+      <table mat-table [dataSource]="permisosFiltrados" class="full-width" *ngIf="!loading">
+        <ng-container matColumnDef="codigo">
+          <th mat-header-cell *matHeaderCellDef>Codigo</th>
+          <td mat-cell *matCellDef="let p">{{ p.codigo }}</td>
+        </ng-container>
+        <ng-container matColumnDef="descripcion">
+          <th mat-header-cell *matHeaderCellDef>Descripcion</th>
+          <td mat-cell *matCellDef="let p">{{ p.descripcion || '-' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="modulo">
+          <th mat-header-cell *matHeaderCellDef>Modulo</th>
+          <td mat-cell *matCellDef="let p">{{ p.modulo || '-' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="activo">
+          <th mat-header-cell *matHeaderCellDef>Activo</th>
+          <td mat-cell *matCellDef="let p">
+            <mat-icon [class.estado-verde]="p.activo" [class.estado-rojo]="!p.activo">
+              {{ p.activo ? 'check_circle' : 'cancel' }}
+            </mat-icon>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef class="acciones-col">Acciones</th>
+          <td mat-cell *matCellDef="let p">
+            <button mat-icon-button [matMenuTriggerFor]="menu">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="editPermiso(p)">
+                <mat-icon>edit</mat-icon>
+                <span>Editar</span>
+              </button>
+              <button mat-menu-item (click)="deletePermiso(p)">
+                <mat-icon>delete</mat-icon>
+                <span>Eliminar</span>
+              </button>
+            </mat-menu>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+      </table>
+
+      <div *ngIf="!loading && permisosFiltrados.length === 0" class="empty">
+        Sin permisos para mostrar.
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="data-card">
+    <mat-card-header>
+      <mat-card-title>Asignar permisos a roles</mat-card-title>
+      <mat-card-subtitle>Click en un rol para editar sus permisos.</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="roles-list">
+        <button mat-stroked-button *ngFor="let r of roles" (click)="abrirAsignacion(r)">
+          <mat-icon>group</mat-icon>
+          {{ r.descripcion }}
+        </button>
+      </div>
+      <div *ngIf="!roles?.length" class="empty">No hay roles cargados.</div>
+    </mat-card-content>
+  </mat-card>
+</div>

@@ -673,6 +673,69 @@ interface ElectronAPI {
   cancelarCuentaPorPagar: (id: number) => Promise<any>;
   getCuentaPorPagarCuotas: (cppId: number) => Promise<any[]>;
   pagarCppCuota: (payload: any) => Promise<any>;
+
+  // Dashboard Shortcuts
+  getDashboardShortcuts: (dashboardKey?: string) => Promise<any[]>;
+  createDashboardShortcut: (data: any) => Promise<any>;
+  updateDashboardShortcut: (id: number, data: any) => Promise<any>;
+  deleteDashboardShortcut: (id: number) => Promise<any>;
+
+  // Fase 4: Entradas Varias
+  getEntradaVariaCategorias: () => Promise<any[]>;
+  getEntradaVariaCategoria: (id: number) => Promise<any>;
+  createEntradaVariaCategoria: (data: any) => Promise<any>;
+  updateEntradaVariaCategoria: (id: number, data: any) => Promise<any>;
+  deleteEntradaVariaCategoria: (id: number) => Promise<any>;
+  getEntradasVarias: (filtros?: any) => Promise<any>;
+  getEntradaVaria: (id: number) => Promise<any>;
+  createEntradaVaria: (data: any) => Promise<any>;
+  anularEntradaVaria: (id: number, motivo: string) => Promise<any>;
+
+  // Fase 4: Operaciones Financieras
+  getOperacionFinancieraCategorias: () => Promise<any[]>;
+  getOperacionFinancieraCategoria: (id: number) => Promise<any>;
+  createOperacionFinancieraCategoria: (data: any) => Promise<any>;
+  updateOperacionFinancieraCategoria: (id: number, data: any) => Promise<any>;
+  deleteOperacionFinancieraCategoria: (id: number) => Promise<any>;
+  getOperacionesFinancieras: (filtros?: any) => Promise<any>;
+  getOperacionFinanciera: (id: number) => Promise<any>;
+  createOperacionFinanciera: (data: any) => Promise<any>;
+  anularOperacionFinanciera: (id: number, motivo: string) => Promise<any>;
+
+  // Movimientos bancarios (historico unificado + manuales)
+  getMovimientosCuentaBancaria: (cuentaBancariaId: number, filtros?: any) => Promise<any>;
+  createMovimientoBancario: (data: any) => Promise<any>;
+
+  // Fase 4: Chequeras + Cheques
+  getChequeras: () => Promise<any[]>;
+  getChequera: (id: number) => Promise<any>;
+  createChequera: (data: any) => Promise<any>;
+  updateChequera: (id: number, data: any) => Promise<any>;
+  deleteChequera: (id: number) => Promise<any>;
+  getCheques: (filtros?: any) => Promise<any>;
+  getCheque: (id: number) => Promise<any>;
+  emitirCheque: (data: any) => Promise<any>;
+  cobrarCheque: (id: number, data?: any) => Promise<any>;
+  anularCheque: (id: number, motivo: string) => Promise<any>;
+
+  // RRHH - Permisos
+  getPermissions: (modulo?: string) => Promise<any[]>;
+  getAllPermissions: () => Promise<any[]>;
+  createPermission: (data: any) => Promise<any>;
+  updatePermission: (id: number, data: any) => Promise<any>;
+  deletePermission: (id: number) => Promise<any>;
+  getRolePermissions: (roleId: number) => Promise<any[]>;
+  setRolePermissions: (roleId: number, permissionIds: number[]) => Promise<any>;
+  getPermissionsByUser: (userId: number) => Promise<any[]>;
+  seedPermissions: () => Promise<any>;
+
+  // RRHH - Configuracion
+  getConfiguracionesRrhh: () => Promise<any[]>;
+  getConfiguracionRrhh: (clave: string) => Promise<any>;
+  createConfiguracionRrhh: (data: any) => Promise<any>;
+  updateConfiguracionRrhh: (id: number, data: any) => Promise<any>;
+  deleteConfiguracionRrhh: (id: number) => Promise<any>;
+  seedConfiguracionRrhh: () => Promise<any>;
 }
 
 
@@ -2677,6 +2740,167 @@ export class RepositoryService {
   }
   pagarCppCuota(payload: any): Observable<any> {
     return from(this.api.pagarCppCuota(payload));
+  }
+
+  // ===================== DASHBOARD SHORTCUTS =====================
+  getDashboardShortcuts(dashboardKey?: string): Observable<any[]> {
+    return from(this.api.getDashboardShortcuts(dashboardKey));
+  }
+  createDashboardShortcut(data: any): Observable<any> {
+    return from(this.api.createDashboardShortcut(data));
+  }
+  updateDashboardShortcut(id: number, data: any): Observable<any> {
+    return from(this.api.updateDashboardShortcut(id, data));
+  }
+  deleteDashboardShortcut(id: number): Observable<any> {
+    return from(this.api.deleteDashboardShortcut(id));
+  }
+
+  // ===================== FASE 4: ENTRADAS VARIAS =====================
+  getEntradaVariaCategorias(): Observable<any[]> {
+    return from(this.api.getEntradaVariaCategorias());
+  }
+  getEntradaVariaCategoria(id: number): Observable<any> {
+    return from(this.api.getEntradaVariaCategoria(id));
+  }
+  createEntradaVariaCategoria(data: any): Observable<any> {
+    return from(this.api.createEntradaVariaCategoria(data));
+  }
+  updateEntradaVariaCategoria(id: number, data: any): Observable<any> {
+    return from(this.api.updateEntradaVariaCategoria(id, data));
+  }
+  deleteEntradaVariaCategoria(id: number): Observable<any> {
+    return from(this.api.deleteEntradaVariaCategoria(id));
+  }
+  getEntradasVarias(filtros?: any): Observable<any> {
+    return from(this.api.getEntradasVarias(filtros));
+  }
+  getEntradaVaria(id: number): Observable<any> {
+    return from(this.api.getEntradaVaria(id));
+  }
+  createEntradaVaria(data: any): Observable<any> {
+    return from(this.api.createEntradaVaria(data));
+  }
+  anularEntradaVaria(id: number, motivo: string): Observable<any> {
+    return from(this.api.anularEntradaVaria(id, motivo));
+  }
+
+  // ===================== FASE 4: OPERACIONES FINANCIERAS =====================
+  getOperacionFinancieraCategorias(): Observable<any[]> {
+    return from(this.api.getOperacionFinancieraCategorias());
+  }
+  getOperacionFinancieraCategoria(id: number): Observable<any> {
+    return from(this.api.getOperacionFinancieraCategoria(id));
+  }
+  createOperacionFinancieraCategoria(data: any): Observable<any> {
+    return from(this.api.createOperacionFinancieraCategoria(data));
+  }
+  updateOperacionFinancieraCategoria(id: number, data: any): Observable<any> {
+    return from(this.api.updateOperacionFinancieraCategoria(id, data));
+  }
+  deleteOperacionFinancieraCategoria(id: number): Observable<any> {
+    return from(this.api.deleteOperacionFinancieraCategoria(id));
+  }
+  getOperacionesFinancieras(filtros?: any): Observable<any> {
+    return from(this.api.getOperacionesFinancieras(filtros));
+  }
+  getOperacionFinanciera(id: number): Observable<any> {
+    return from(this.api.getOperacionFinanciera(id));
+  }
+  createOperacionFinanciera(data: any): Observable<any> {
+    return from(this.api.createOperacionFinanciera(data));
+  }
+  anularOperacionFinanciera(id: number, motivo: string): Observable<any> {
+    return from(this.api.anularOperacionFinanciera(id, motivo));
+  }
+
+  // ===================== MOVIMIENTOS CUENTA BANCARIA =====================
+  getMovimientosCuentaBancaria(cuentaBancariaId: number, filtros?: any): Observable<any> {
+    return from(this.api.getMovimientosCuentaBancaria(cuentaBancariaId, filtros));
+  }
+  createMovimientoBancario(data: any): Observable<any> {
+    return from(this.api.createMovimientoBancario(data));
+  }
+
+  // ===================== FASE 4: CHEQUERAS + CHEQUES =====================
+  getChequeras(): Observable<any[]> {
+    return from(this.api.getChequeras());
+  }
+  getChequera(id: number): Observable<any> {
+    return from(this.api.getChequera(id));
+  }
+  createChequera(data: any): Observable<any> {
+    return from(this.api.createChequera(data));
+  }
+  updateChequera(id: number, data: any): Observable<any> {
+    return from(this.api.updateChequera(id, data));
+  }
+  deleteChequera(id: number): Observable<any> {
+    return from(this.api.deleteChequera(id));
+  }
+  getCheques(filtros?: any): Observable<any> {
+    return from(this.api.getCheques(filtros));
+  }
+  getCheque(id: number): Observable<any> {
+    return from(this.api.getCheque(id));
+  }
+  emitirCheque(data: any): Observable<any> {
+    return from(this.api.emitirCheque(data));
+  }
+  cobrarCheque(id: number, data?: any): Observable<any> {
+    return from(this.api.cobrarCheque(id, data));
+  }
+  anularCheque(id: number, motivo: string): Observable<any> {
+    return from(this.api.anularCheque(id, motivo));
+  }
+
+  // ===================== RRHH: PERMISOS =====================
+  getPermissions(modulo?: string): Observable<any[]> {
+    return from(this.api.getPermissions(modulo));
+  }
+  getAllPermissions(): Observable<any[]> {
+    return from(this.api.getAllPermissions());
+  }
+  createPermission(data: any): Observable<any> {
+    return from(this.api.createPermission(data));
+  }
+  updatePermission(id: number, data: any): Observable<any> {
+    return from(this.api.updatePermission(id, data));
+  }
+  deletePermission(id: number): Observable<any> {
+    return from(this.api.deletePermission(id));
+  }
+  getRolePermissions(roleId: number): Observable<any[]> {
+    return from(this.api.getRolePermissions(roleId));
+  }
+  setRolePermissions(roleId: number, permissionIds: number[]): Observable<any> {
+    return from(this.api.setRolePermissions(roleId, permissionIds));
+  }
+  getPermissionsByUser(userId: number): Observable<any[]> {
+    return from(this.api.getPermissionsByUser(userId));
+  }
+  seedPermissions(): Observable<any> {
+    return from(this.api.seedPermissions());
+  }
+
+  // ===================== RRHH: CONFIGURACION =====================
+  getConfiguracionesRrhh(): Observable<any[]> {
+    return from(this.api.getConfiguracionesRrhh());
+  }
+  getConfiguracionRrhh(clave: string): Observable<any> {
+    return from(this.api.getConfiguracionRrhh(clave));
+  }
+  createConfiguracionRrhh(data: any): Observable<any> {
+    return from(this.api.createConfiguracionRrhh(data));
+  }
+  updateConfiguracionRrhh(id: number, data: any): Observable<any> {
+    return from(this.api.updateConfiguracionRrhh(id, data));
+  }
+  deleteConfiguracionRrhh(id: number): Observable<any> {
+    return from(this.api.deleteConfiguracionRrhh(id));
+  }
+  seedConfiguracionRrhh(): Observable<any> {
+    return from(this.api.seedConfiguracionRrhh());
   }
 
 }

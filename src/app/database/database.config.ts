@@ -10,7 +10,12 @@ import { Role } from './entities/personas/role.entity';
 import { UsuarioRole } from './entities/personas/usuario-role.entity';
 import { TipoCliente } from './entities/personas/tipo-cliente.entity';
 import { Cliente } from './entities/personas/cliente.entity';
+import { Permission } from './entities/personas/permission.entity';
+import { RolePermission } from './entities/personas/role-permission.entity';
 import { LoginSession } from './entities/auth/login-session.entity';
+
+// RRHH entities
+import { ConfiguracionRrhh } from './entities/rrhh/configuracion-rrhh.entity';
 
 import { Moneda } from './entities/financiero/moneda.entity';
 import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
@@ -70,12 +75,26 @@ import { GastoDetalle } from './entities/financiero/gasto-detalle.entity';
 import { CuentaBancaria } from './entities/financiero/cuenta-bancaria.entity';
 import { MaquinaPos } from './entities/financiero/maquina-pos.entity';
 import { AcreditacionPos } from './entities/financiero/acreditacion-pos.entity';
+import { MovimientoBancario } from './entities/financiero/movimiento-bancario.entity';
 
 // Compras + CuentasPorPagar (Fase 3)
 import { CompraCategoria } from './entities/compras/compra-categoria.entity';
 import { CompraCuota } from './entities/compras/compra-cuota.entity';
 import { CuentaPorPagar } from './entities/financiero/cuenta-por-pagar.entity';
 import { CuentaPorPagarCuota } from './entities/financiero/cuenta-por-pagar-cuota.entity';
+
+// Entradas Varias + Operaciones Financieras (caja mayor)
+import { EntradaVariaCategoria } from './entities/financiero/entrada-varia-categoria.entity';
+import { EntradaVaria } from './entities/financiero/entrada-varia.entity';
+import { OperacionFinancieraCategoria } from './entities/financiero/operacion-financiera-categoria.entity';
+import { OperacionFinanciera } from './entities/financiero/operacion-financiera.entity';
+
+// Chequeras + Cheques (banking)
+import { Chequera } from './entities/financiero/chequera.entity';
+import { Cheque } from './entities/financiero/cheque.entity';
+
+// Personalización
+import { DashboardShortcut } from './entities/personalizacion/dashboard-shortcut.entity';
 
 // Import compras entities
 import { Proveedor } from './entities/compras/proveedor.entity';
@@ -132,7 +151,11 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       UsuarioRole,
       TipoCliente,
       Cliente,
+      Permission,
+      RolePermission,
       LoginSession,
+      // RRHH entities
+      ConfiguracionRrhh,
       // Financiero entities
       Moneda,
       TipoPrecio,
@@ -156,11 +179,21 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       CuentaBancaria,
       MaquinaPos,
       AcreditacionPos,
+      MovimientoBancario,
       // CuentasPorPagar (Fase 3)
       CompraCategoria,
       CompraCuota,
       CuentaPorPagar,
       CuentaPorPagarCuota,
+      // Entradas Varias + Operaciones Financieras + Chequeras + Cheques
+      EntradaVariaCategoria,
+      EntradaVaria,
+      OperacionFinancieraCategoria,
+      OperacionFinanciera,
+      Chequera,
+      Cheque,
+      // Personalización
+      DashboardShortcut,
       // Productos entities
       Familia,
       Subfamilia,

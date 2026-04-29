@@ -53,6 +53,8 @@ import { ListProductosComponent } from './pages/productos/list-productos/list-pr
 import { ListSaboresComponent } from './pages/gestion-sabores/list-sabores/list-sabores.component';
 import { VentasDashboardComponent } from './pages/ventas/dashboard/ventas-dashboard.component';
 import { CajaMayorDashboardComponent } from './pages/financiero/caja-mayor/dashboard/caja-mayor-dashboard.component';
+import { ListPermisosComponent } from './pages/personalizacion/permisos/list-permisos/list-permisos.component';
+import { ListConfiguracionRrhhComponent } from './pages/rrhh/configuracion/list-configuracion-rrhh/list-configuracion-rrhh.component';
 
 @Component({
   selector: 'app-root',
@@ -319,6 +321,28 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       RrhhDashComponent,
       { source: 'navigation' },
       'rrhh-dash-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openListPermisosTab() {
+    this.tabsService.openTab(
+      'Permisos',
+      ListPermisosComponent,
+      { source: 'navigation' },
+      'permisos-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openConfiguracionRrhhTab() {
+    this.tabsService.openTab(
+      'Configuracion RRHH',
+      ListConfiguracionRrhhComponent,
+      { source: 'navigation' },
+      'configuracion-rrhh-tab',
       true
     );
     this.closeMenu();

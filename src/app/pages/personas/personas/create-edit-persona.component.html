@@ -33,15 +33,31 @@
         <input type="file" #fileInput style="display: none" accept="image/*" (change)="onImageSelected($event)">
       </div>
       
-      <!-- Nombre field -->
+      <!-- Nombre / Apellido fields -->
+      <div class="row-fields">
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Nombre*</mat-label>
+          <input matInput formControlName="nombre" placeholder="Ingrese el nombre" required>
+          <mat-error *ngIf="personaForm.get('nombre')?.hasError('required')">
+            El nombre es obligatorio
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Apellido</mat-label>
+          <input matInput formControlName="apellido" placeholder="Ingrese el apellido">
+        </mat-form-field>
+      </div>
+
+      <!-- Email -->
       <mat-form-field appearance="outline" class="full-width">
-        <mat-label>Nombre*</mat-label>
-        <input matInput formControlName="nombre" placeholder="Ingrese el nombre" required>
-        <mat-error *ngIf="personaForm.get('nombre')?.hasError('required')">
-          El nombre es obligatorio
+        <mat-label>Email</mat-label>
+        <input matInput formControlName="email" type="email" placeholder="ejemplo@dominio.com">
+        <mat-error *ngIf="personaForm.get('email')?.hasError('email')">
+          Email invalido
         </mat-error>
       </mat-form-field>
-      
+
       <!-- Documento fields -->
       <div class="row-fields">
         <mat-form-field appearance="outline" class="half-width">
@@ -89,7 +105,33 @@
         <mat-label>Dirección</mat-label>
         <input matInput formControlName="direccion" placeholder="Ingrese la dirección">
       </mat-form-field>
-      
+
+      <!-- Datos demograficos (legajo RRHH) -->
+      <div class="row-fields">
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Fecha de nacimiento</mat-label>
+          <input matInput [matDatepicker]="picker" formControlName="fechaNacimiento">
+          <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+          <mat-datepicker #picker></mat-datepicker>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Sexo</mat-label>
+          <mat-select formControlName="sexo">
+            <mat-option [value]="null">-- Sin especificar --</mat-option>
+            <mat-option *ngFor="let s of sexos" [value]="s">{{ s }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Estado civil</mat-label>
+        <mat-select formControlName="estadoCivil">
+          <mat-option [value]="null">-- Sin especificar --</mat-option>
+          <mat-option *ngFor="let ec of estadosCiviles" [value]="ec">{{ ec }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
       <!-- Active checkbox -->
       <div class="checkbox-container">
         <mat-checkbox formControlName="activo" color="primary">
