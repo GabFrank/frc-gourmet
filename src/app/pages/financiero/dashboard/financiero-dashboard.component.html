@@ -1,6 +1,26 @@
 <div class="dashboard-container">
   <h1 class="dashboard-title">Dashboard Financiero</h1>
 
+  <div *ngIf="shortcuts.length > 0" class="shortcuts-section">
+    <h3 class="section-subtitle">Accesos directos</h3>
+    <div class="shortcuts-grid">
+      <mat-card *ngFor="let s of shortcuts"
+                class="shortcut-card"
+                [ngStyle]="{'border-left': '4px solid ' + s.color}"
+                (click)="abrirShortcut(s)">
+        <div class="shortcut-row">
+          <div class="shortcut-icon" [ngStyle]="{'background-color': s.color}">
+            <mat-icon>{{s.icono}}</mat-icon>
+          </div>
+          <span class="shortcut-titulo">{{s.titulo}}</span>
+          <button mat-icon-button class="shortcut-delete" (click)="eliminarShortcut(s, $event)" matTooltip="Eliminar">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      </mat-card>
+    </div>
+  </div>
+
   <div class="dashboard-grid">
     <mat-card *ngFor="let item of dashboardItems"
               class="dashboard-card"

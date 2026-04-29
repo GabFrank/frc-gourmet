@@ -1,0 +1,64 @@
+.dialog-container {
+  padding: 12px 4px;
+  min-width: 90vw;
+  max-width: 1300px;
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+    padding: 0 12px;
+
+    h2 { margin: 0; font-weight: 300; }
+
+    .saldo-info {
+      margin-top: 4px;
+      font-size: 14px;
+      color: rgba(0,0,0,0.7);
+      .reservado { color: #ff9800; margin-left: 8px; font-size: 12px; }
+    }
+
+    .header-actions { display: flex; gap: 8px; align-items: center; }
+  }
+
+  .filters-card {
+    margin: 0 12px 16px;
+    padding: 16px;
+
+    .filters-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-end;
+
+      mat-form-field { flex: 1; min-width: 160px; }
+      .filter-actions { display: flex; gap: 8px; align-items: center; margin-bottom: 22px; }
+    }
+  }
+
+  .spinner-container { display: flex; justify-content: center; padding: 40px; }
+  .full-width { width: 100%; }
+  .text-right { text-align: right; }
+
+  .monto-ingreso { color: #2e7d32; font-weight: 500; }
+  .monto-egreso { color: #c62828; font-weight: 500; }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px;
+    color: rgba(0,0,0,0.4);
+    mat-icon { font-size: 48px; width: 48px; height: 48px; margin-bottom: 10px; }
+  }
+}
+
+:host-context(.dark-theme) {
+  .dialog-container {
+    .header .saldo-info { color: rgba(255,255,255,0.7); }
+    .empty-state { color: rgba(255,255,255,0.4); }
+    .monto-ingreso { color: #66bb6a; }
+    .monto-egreso { color: #ef5350; }
+  }
+}

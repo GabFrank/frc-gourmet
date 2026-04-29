@@ -1,7 +1,7 @@
 import { Component, OnInit, Optional, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA, MatDialog } from '@angular/material/dialog';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -13,8 +13,10 @@ import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { CreateEditEntradaVariaDialogComponent } from '../entradas-varias/create-edit-entrada-varia/create-edit-entrada-varia-dialog.component';
+import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financieras/create-operacion-financiera/create-operacion-financiera-dialog.component';
 
-type IngresoTipo = 'AJUSTE' | 'RETIRO_CAJA' | null;
+type IngresoTipo = 'AJUSTE' | 'RETIRO_CAJA' | 'ENTRADA_VARIA' | 'OPERACION_FINANCIERA' | null;
 
 @Component({
   selector: 'app-registrar-ingreso-dialog',
@@ -50,18 +52,32 @@ export class RegistrarIngresoDialogComponent implements OnInit {
 
   tiposIngreso = [
     {
-      tipo: 'AJUSTE' as IngresoTipo,
-      titulo: 'Ajuste de Saldo',
-      descripcion: 'Ingreso manual con motivo (caja inicial, sobrante, etc.)',
-      icono: 'tune',
-      color: '#4caf50',
-    },
-    {
       tipo: 'RETIRO_CAJA' as IngresoTipo,
       titulo: 'Retiro de Caja de Venta',
       descripcion: 'Ingresar un retiro flotante de una caja de venta',
       icono: 'move_up',
       color: '#0d47a1',
+    },
+    {
+      tipo: 'ENTRADA_VARIA' as IngresoTipo,
+      titulo: 'Entrada Varia',
+      descripcion: 'Préstamos recibidos, devoluciones, intereses, premios, etc.',
+      icono: 'trending_up',
+      color: '#2e7d32',
+    },
+    {
+      tipo: 'OPERACION_FINANCIERA' as IngresoTipo,
+      titulo: 'Operacion Financiera',
+      descripcion: 'Cambio de divisa, retiro bancario, transferencia entre cajas',
+      icono: 'swap_horiz',
+      color: '#6a1b9a',
+    },
+    {
+      tipo: 'AJUSTE' as IngresoTipo,
+      titulo: 'Ajuste de Saldo',
+      descripcion: 'Ingreso manual con motivo (caja inicial, sobrante, etc.)',
+      icono: 'tune',
+      color: '#4caf50',
     },
   ];
 
@@ -69,6 +85,7 @@ export class RegistrarIngresoDialogComponent implements OnInit {
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
     private snackBar: MatSnackBar,
+    private dialog: MatDialog,
     @Optional() public dialogRef: MatDialogRef<RegistrarIngresoDialogComponent>,
     @Optional() @Inject(MAT_DIALOG_DATA) public data: any,
   ) {}
@@ -108,6 +125,27 @@ export class RegistrarIngresoDialogComponent implements OnInit {
   }
 
   seleccionarTipo(tipo: IngresoTipo): void {
+    if (tipo === 'ENTRADA_VARIA') {
+      this.dialogRef?.close(false);
+      this.dialog.open(CreateEditEntradaVariaDialogComponent, {
+        width: '720px',
+        data: { cajaMayorId: this.cajaMayorId },
+      }).afterClosed().subscribe(result => {
+        if (result) this.dialogRef?.close(true);
+      });
+      return;
+    }
+    if (tipo === 'OPERACION_FINANCIERA') {
+      this.dialogRef?.close(false);
+      this.dialog.open(CreateOperacionFinancieraDialogComponent, {
+        width: '900px',
+        maxHeight: '90vh',
+        data: { cajaMayorId: this.cajaMayorId },
+      }).afterClosed().subscribe(result => {
+        if (result) this.dialogRef?.close(true);
+      });
+      return;
+    }
     this.tipoSeleccionado = tipo;
   }
 

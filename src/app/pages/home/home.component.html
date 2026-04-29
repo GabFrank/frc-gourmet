@@ -15,4 +15,25 @@
       </mat-card-header>
     </mat-card>
   </div>
+
+  <!-- Accesos directos personalizados -->
+  <ng-container *ngIf="shortcuts.length > 0">
+    <h3 class="section-subtitle">Mis accesos directos</h3>
+    <div class="shortcuts-grid">
+      <mat-card *ngFor="let s of shortcuts"
+                class="shortcut-card"
+                [ngStyle]="{'border-left': '4px solid ' + s.color}"
+                (click)="abrirShortcut(s)">
+        <div class="shortcut-row">
+          <div class="shortcut-icon" [ngStyle]="{'background-color': s.color}">
+            <mat-icon>{{s.icono}}</mat-icon>
+          </div>
+          <span class="shortcut-titulo">{{s.titulo}}</span>
+          <button mat-icon-button class="shortcut-delete" (click)="eliminarShortcut(s, $event)" matTooltip="Eliminar">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      </mat-card>
+    </div>
+  </ng-container>
 </div>

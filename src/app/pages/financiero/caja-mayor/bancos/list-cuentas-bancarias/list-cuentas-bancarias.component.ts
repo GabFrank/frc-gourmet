@@ -13,6 +13,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateEditCuentaBancariaDialogComponent } from '../create-edit-cuenta-bancaria/create-edit-cuenta-bancaria-dialog.component';
+import { MovimientosCuentaBancariaDialogComponent } from '../movimientos-cuenta-bancaria-dialog/movimientos-cuenta-bancaria-dialog.component';
 
 @Component({
   selector: 'app-list-cuentas-bancarias',
@@ -68,6 +69,16 @@ export class ListCuentasBancariasComponent implements OnInit {
   crear(): void {
     const dialogRef = this.dialog.open(CreateEditCuentaBancariaDialogComponent, { width: '600px' });
     dialogRef.afterClosed().subscribe(result => { if (result) this.loadData(); });
+  }
+
+  verHistorico(cuenta: any): void {
+    const ref = this.dialog.open(MovimientosCuentaBancariaDialogComponent, {
+      width: '95vw',
+      maxWidth: '1400px',
+      maxHeight: '90vh',
+      data: { cuentaBancaria: cuenta },
+    });
+    ref.afterClosed().subscribe(() => this.loadData());
   }
 
   editar(cuenta: any): void {

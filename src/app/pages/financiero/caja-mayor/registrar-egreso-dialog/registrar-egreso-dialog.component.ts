@@ -2,6 +2,7 @@ import { Component, OnInit, Optional, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA, MatDialog } from '@angular/material/dialog';
+import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -14,8 +15,10 @@ import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CreateEditGastoDialogComponent } from '../gastos/create-edit-gasto/create-edit-gasto-dialog.component';
+import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financieras/create-operacion-financiera/create-operacion-financiera-dialog.component';
+import { EmitirChequeDialogComponent } from '../cheques/emitir-cheque/emitir-cheque-dialog.component';
 
-type EgresoTipo = 'GASTO' | 'AJUSTE' | null;
+type EgresoTipo = 'GASTO' | 'AJUSTE' | 'OPERACION_FINANCIERA' | 'EMITIR_CHEQUE' | null;
 
 @Component({
   selector: 'app-registrar-egreso-dialog',
@@ -53,6 +56,20 @@ export class RegistrarEgresoDialogComponent implements OnInit {
       descripcion: 'Registrar un gasto categorizado (servicios, operativo, etc.)',
       icono: 'receipt_long',
       color: '#e65100',
+    },
+    {
+      tipo: 'OPERACION_FINANCIERA' as EgresoTipo,
+      titulo: 'Operacion Financiera',
+      descripcion: 'Cambio de divisa, deposito bancario, transferencia entre cajas',
+      icono: 'swap_horiz',
+      color: '#6a1b9a',
+    },
+    {
+      tipo: 'EMITIR_CHEQUE' as EgresoTipo,
+      titulo: 'Emitir Cheque',
+      descripcion: 'Emitir cheque propio (a la vista o diferido)',
+      icono: 'request_quote',
+      color: '#0d47a1',
     },
     {
       tipo: 'AJUSTE' as EgresoTipo,
@@ -101,18 +118,27 @@ export class RegistrarEgresoDialogComponent implements OnInit {
 
   seleccionarTipo(tipo: EgresoTipo): void {
     if (tipo === 'GASTO') {
-      // Cerrar este diálogo y abrir el de gasto
       this.dialogRef?.close(false);
-      const gastoRef = this.dialog.open(CreateEditGastoDialogComponent, {
+      this.dialog.open(CreateEditGastoDialogComponent, {
         width: '700px',
         data: { cajaMayorId: this.cajaMayorId },
       });
-      gastoRef.afterClosed().subscribe(result => {
-        // El componente padre recargará datos via el afterClosed del diálogo original
-        // Necesitamos propagar el resultado
-        if (result) {
-          // El diálogo ya se cerró, el padre debe recargar
-        }
+      return;
+    }
+    if (tipo === 'OPERACION_FINANCIERA') {
+      this.dialogRef?.close(false);
+      this.dialog.open(CreateOperacionFinancieraDialogComponent, {
+        width: '900px',
+        maxHeight: '90vh',
+        data: { cajaMayorId: this.cajaMayorId },
+      });
+      return;
+    }
+    if (tipo === 'EMITIR_CHEQUE') {
+      this.dialogRef?.close(false);
+      this.dialog.open(EmitirChequeDialogComponent, {
+        width: '720px',
+        data: { cajaMayorId: this.cajaMayorId },
       });
       return;
     }
@@ -126,15 +152,21 @@ export class RegistrarEgresoDialogComponent implements OnInit {
   async guardarAjuste(): Promise<void> {
     if (this.ajusteForm.invalid) return;
 
+    const form = this.ajusteForm.value;
+    const monto = Number(form.monto);
+
+    // Saldo negativo: pre-validar y confirmar
+    const ok = await this.confirmarSaldoSiNegativo(form.moneda, form.formaPago, monto);
+    if (!ok) return;
+
     this.saving = true;
     try {
-      const form = this.ajusteForm.value;
       await firstValueFrom(this.repositoryService.createCajaMayorMovimiento({
         cajaMayor: { id: this.cajaMayorId },
         tipoMovimiento: 'AJUSTE_NEGATIVO',
         moneda: { id: form.moneda },
         formaPago: { id: form.formaPago },
-        monto: form.monto,
+        monto,
         observacion: form.motivo.toUpperCase(),
       }));
       this.snackBar.open('Egreso registrado correctamente', 'Cerrar', { duration: 3000 });
@@ -144,6 +176,25 @@ export class RegistrarEgresoDialogComponent implements OnInit {
       this.snackBar.open('Error al registrar egreso', 'Cerrar', { duration: 3000 });
     } finally {
       this.saving = false;
+    }
+  }
+
+  private async confirmarSaldoSiNegativo(monedaId: number, formaPagoId: number, monto: number): Promise<boolean> {
+    try {
+      const saldos: any[] = await firstValueFrom(this.repositoryService.getCajaMayorSaldos(this.cajaMayorId));
+      const s = (saldos || []).find(x => x.moneda?.id === monedaId && x.formaPago?.id === formaPagoId);
+      const saldoActual = s ? Number(s.saldo) : 0;
+      const moneda = this.monedas.find(m => m.id === monedaId);
+      const fp = this.formasPago.find(p => p.id === formaPagoId);
+      return confirmarSaldosNegativos(this.dialog, [{
+        label: `${moneda?.denominacion || ''} / ${fp?.nombre || ''}`,
+        saldoActual,
+        monto,
+        monedaSimbolo: moneda?.simbolo || '',
+      }]);
+    } catch (e) {
+      console.error('Error verificando saldo:', e);
+      return true;
     }
   }
 

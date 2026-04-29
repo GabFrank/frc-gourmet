@@ -16,6 +16,10 @@ import { ListDispositivosComponent } from '../dispositivos/list-dispositivos.com
 import { ListMonedasComponent } from '../monedas/list-monedas/list-monedas.component';
 import { CreateEditFormaPagoComponent } from '../formas-pago/create-edit-forma-pago.component';
 import { CajaMayorDashboardComponent } from '../caja-mayor/dashboard/caja-mayor-dashboard.component';
+import { firstValueFrom } from 'rxjs';
+import { RepositoryService } from 'src/app/database/repository.service';
+import { abrirShortcut } from 'src/app/shared/utils/dashboard-shortcut-router';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 @Component({
   selector: 'app-financiero-dashboard',
@@ -30,7 +34,8 @@ import { CajaMayorDashboardComponent } from '../caja-mayor/dashboard/caja-mayor-
     MatDividerModule,
     MatGridListModule,
     MatDialogModule,
-    MatSnackBarModule
+    MatSnackBarModule,
+    MatTooltipModule
   ]
 })
 export class FinancieroDashboardComponent implements OnInit {
@@ -87,16 +92,42 @@ export class FinancieroDashboardComponent implements OnInit {
     }
   ];
 
+  shortcuts: any[] = [];
+
   constructor(
     private router: Router,
     private tabsService: TabsService,
     private dialog: MatDialog,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private repositoryService: RepositoryService,
   ) {}
 
   ngOnInit(): void {
-    // Load any necessary data for the dashboard
     console.log('Financiero Dashboard initialized');
+    this.loadShortcuts();
+  }
+
+  async loadShortcuts(): Promise<void> {
+    try {
+      const list = await firstValueFrom(this.repositoryService.getDashboardShortcuts('FINANCIERO'));
+      this.shortcuts = list || [];
+    } catch (e) { console.error(e); }
+  }
+
+  abrirShortcut(s: any): void {
+    abrirShortcut(s, this.tabsService);
+  }
+
+  async eliminarShortcut(s: any, event: Event): Promise<void> {
+    event.stopPropagation();
+    try {
+      await firstValueFrom(this.repositoryService.deleteDashboardShortcut(s.id));
+      this.snackBar.open('Acceso directo eliminado', 'Cerrar', { duration: 2000 });
+      this.loadShortcuts();
+    } catch (e) {
+      console.error(e);
+      this.snackBar.open('Error al eliminar', 'Cerrar', { duration: 3000 });
+    }
   }
 
   navigateTo(route: string): void {

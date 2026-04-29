@@ -21,10 +21,14 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { confirmarSaldosNegativos, SaldoNegativoCheck } from 'src/app/shared/utils/saldo-negativo-confirm';
 import { RegistrarIngresoDialogComponent } from '../registrar-ingreso-dialog/registrar-ingreso-dialog.component';
 import { RegistrarEgresoDialogComponent } from '../registrar-egreso-dialog/registrar-egreso-dialog.component';
 import { CreateEditGastoDialogComponent } from '../gastos/create-edit-gasto/create-edit-gasto-dialog.component';
 import { EditMovimientoDialogComponent } from '../edit-movimiento-dialog/edit-movimiento-dialog.component';
+import { CreateEditEntradaVariaDialogComponent } from '../entradas-varias/create-edit-entrada-varia/create-edit-entrada-varia-dialog.component';
+import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financieras/create-operacion-financiera/create-operacion-financiera-dialog.component';
+import { EmitirChequeDialogComponent } from '../cheques/emitir-cheque/emitir-cheque-dialog.component';
 
 interface MovimientoConsolidado {
   fecha: Date;
@@ -121,6 +125,17 @@ export class CajaMayorDetalleComponent implements OnInit {
     if (data?.cajaMayor) {
       this.cajaMayor = data.cajaMayor;
       this.loadData();
+    } else if (data?.cajaMayorIdShortcut) {
+      // Llamado desde un acceso directo: solo recibimos el id.
+      this.repositoryService.getCajaMayor(data.cajaMayorIdShortcut).subscribe({
+        next: (cm) => {
+          if (cm) {
+            this.cajaMayor = cm;
+            this.loadData();
+          }
+        },
+        error: (e) => console.error('Error cargando caja mayor desde shortcut:', e),
+      });
     }
   }
 
@@ -291,6 +306,11 @@ export class CajaMayorDetalleComponent implements OnInit {
     dialogRef.afterClosed().subscribe(result => {
       if (result) {
         this.loadData();
+      } else {
+        this.detectarYEscucharSubdialog([
+          CreateEditEntradaVariaDialogComponent,
+          CreateOperacionFinancieraDialogComponent,
+        ]);
       }
     });
   }
@@ -305,22 +325,28 @@ export class CajaMayorDetalleComponent implements OnInit {
       if (result) {
         this.loadData();
       } else {
-        // Si eligio GASTO, el dialogo de egreso se cierra con false y abre el de gasto
-        // Esperamos un poco y escuchamos si se abrió otro dialog
-        setTimeout(() => {
-          // Buscar si hay un dialog de gasto abierto
-          const openDialogs = this.dialog.openDialogs;
-          const gastoDialog = openDialogs.find(d => d.componentInstance instanceof CreateEditGastoDialogComponent);
-          if (gastoDialog) {
-            gastoDialog.afterClosed().subscribe(gastoResult => {
-              if (gastoResult) {
-                this.loadData();
-              }
-            });
-          }
-        }, 300);
+        this.detectarYEscucharSubdialog([
+          CreateEditGastoDialogComponent,
+          CreateOperacionFinancieraDialogComponent,
+          EmitirChequeDialogComponent,
+        ]);
       }
     });
+  }
+
+  // Cuando un diálogo "selector" se cierra con false, puede haber abierto un sub-diálogo.
+  // Buscamos el primer diálogo abierto que coincida con los componentes esperados,
+  // y nos suscribimos a su cierre para recargar datos.
+  private detectarYEscucharSubdialog(componentes: any[]): void {
+    setTimeout(() => {
+      const openDialogs = this.dialog.openDialogs;
+      const sub = openDialogs.find(d => componentes.some(c => d.componentInstance instanceof c));
+      if (sub) {
+        sub.afterClosed().subscribe(r => {
+          if (r) this.loadData();
+        });
+      }
+    }, 300);
   }
 
   editarMovimiento(mov: MovimientoConsolidado): void {
@@ -344,6 +370,7 @@ export class CajaMayorDetalleComponent implements OnInit {
         data: {
           movimientoId: mov.movimientoIds[0],
           tipoMovimiento: mov.tipoMovimiento,
+          cajaMayorId: this.cajaMayor?.id,
           detalle: {
             monedaId: moneda?.id,
             formaPagoId: formaPago?.id,
@@ -384,6 +411,9 @@ export class CajaMayorDetalleComponent implements OnInit {
 
     const result = await firstValueFrom(dialogRef.afterClosed());
     if (result) {
+      // Si anular un ingreso dejaria saldo negativo, pedir confirmacion adicional
+      const okSaldo = await this.verificarSaldoAnular(mov);
+      if (!okSaldo) return;
       try {
         // Si es un gasto, anular el gasto completo
         if (mov.gastoId) {
@@ -400,6 +430,50 @@ export class CajaMayorDetalleComponent implements OnInit {
         console.error('Error anulando movimiento:', error);
         this.snackBar.open('Error al anular movimiento', 'Cerrar', { duration: 3000 });
       }
+    }
+  }
+
+  // Si el movimiento a anular es un INGRESO, su contra-movimiento (egreso) puede
+  // dejar el saldo negativo. Pre-validar y pedir confirmacion.
+  private async verificarSaldoAnular(mov: MovimientoConsolidado): Promise<boolean> {
+    const tipo = mov.tipoMovimiento || '';
+    const esIngreso = tipo.startsWith('INGRESO_') || tipo === 'TRANSFERENCIA_ENTRADA' || tipo === 'AJUSTE_POSITIVO';
+    if (!esIngreso) return true; // anular un egreso REPONE saldo, no lo deja negativo
+    if (!this.cajaMayor?.id) return true;
+
+    try {
+      const saldos: any[] = await firstValueFrom(this.repositoryService.getCajaMayorSaldos(this.cajaMayor.id));
+      const checks: SaldoNegativoCheck[] = [];
+      // Sumar montos a debitar por (moneda+fp) — todos los detalles del grupo
+      const map = new Map<string, { simbolo: string; denominacion: string; fp: string; monto: number }>();
+      for (const d of mov.detalles) {
+        const key = `${d.monedaSimbolo}-${d.formaPagoNombre}`;
+        const existing = map.get(key);
+        if (existing) {
+          existing.monto += Number(d.monto);
+        } else {
+          map.set(key, {
+            simbolo: d.monedaSimbolo,
+            denominacion: '',
+            fp: d.formaPagoNombre,
+            monto: Number(d.monto),
+          });
+        }
+      }
+      for (const grupo of map.values()) {
+        const s = (saldos || []).find(x => x.moneda?.simbolo === grupo.simbolo && x.formaPago?.nombre === grupo.fp);
+        const saldoActual = s ? Number(s.saldo) : 0;
+        checks.push({
+          label: `${s?.moneda?.denominacion || grupo.simbolo} / ${grupo.fp}`,
+          saldoActual,
+          monto: grupo.monto,
+          monedaSimbolo: grupo.simbolo,
+        });
+      }
+      return confirmarSaldosNegativos(this.dialog, checks);
+    } catch (e) {
+      console.error('Error verificando saldo en anular:', e);
+      return true;
     }
   }
 

@@ -14,7 +14,7 @@ import { MatButtonModule } from '@angular/material/button';
   template: `
     <h2 mat-dialog-title>{{ data.title }}</h2>
     <mat-dialog-content>
-      <p>{{ data.message }}</p>
+      <p style="white-space: pre-line;">{{ data.message }}</p>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button mat-dialog-close>No</button>

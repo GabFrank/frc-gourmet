@@ -14,6 +14,57 @@
   gap: 16px;
 }
 
+.section-subtitle {
+  margin: 28px 0 12px;
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.shortcut-card {
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+  &:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15); }
+
+  .shortcut-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px;
+
+    .shortcut-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      mat-icon { font-size: 20px; width: 20px; height: 20px; }
+    }
+    .shortcut-titulo {
+      flex: 1;
+      font-weight: 500;
+      font-size: 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .shortcut-delete { opacity: 0.4; transition: opacity 0.15s; }
+    &:hover .shortcut-delete { opacity: 1; }
+  }
+}
+
+:host-context(.dark-theme) .section-subtitle { color: rgba(255, 255, 255, 0.55); }
+
 .acceso-card {
   cursor: pointer;
   transition: transform 0.15s, box-shadow 0.15s;

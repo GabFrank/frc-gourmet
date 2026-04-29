@@ -8,56 +8,19 @@ import { Gasto } from '../../src/app/database/entities/financiero/gasto.entity';
 import { GastoDetalle } from '../../src/app/database/entities/financiero/gasto-detalle.entity';
 import { RetiroCaja } from '../../src/app/database/entities/financiero/retiro-caja.entity';
 import { RetiroCajaDetalle } from '../../src/app/database/entities/financiero/retiro-caja-detalle.entity';
+import { EntradaVariaCategoria } from '../../src/app/database/entities/financiero/entrada-varia-categoria.entity';
+import { EntradaVaria } from '../../src/app/database/entities/financiero/entrada-varia.entity';
+import { OperacionFinancieraCategoria } from '../../src/app/database/entities/financiero/operacion-financiera-categoria.entity';
+import { OperacionFinanciera } from '../../src/app/database/entities/financiero/operacion-financiera.entity';
+import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
 import { CajaMayorEstado, TipoMovimiento, GastoEstado, RetiroCajaEstado } from '../../src/app/database/entities/financiero/caja-mayor-enums';
+import { TipoOperacionFinanciera, DiferenciaDestinoTipo } from '../../src/app/database/entities/financiero/operaciones-financieras-enums';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { esIngreso, actualizarSaldoCajaMayor } from './caja-mayor-utils';
 
-// Helper: determina si un tipo de movimiento es ingreso (+) o egreso (-)
-function esIngreso(tipo: TipoMovimiento): boolean {
-  return [
-    TipoMovimiento.INGRESO_RETIRO_CAJA,
-    TipoMovimiento.INGRESO_CIERRE_CAJA,
-    TipoMovimiento.INGRESO_ENTRADA_VARIA,
-    TipoMovimiento.INGRESO_OPERACION_FINANCIERA,
-    TipoMovimiento.INGRESO_RETIRO_BANCO,
-    TipoMovimiento.TRANSFERENCIA_ENTRADA,
-    TipoMovimiento.AJUSTE_POSITIVO,
-  ].includes(tipo);
-}
-
-// Helper: actualiza saldo atomicamente dentro de una transaccion
-async function actualizarSaldo(
-  queryRunner: any,
-  cajaMayorId: number,
-  monedaId: number,
-  formaPagoId: number,
-  monto: number,
-  tipo: TipoMovimiento
-) {
-  const delta = esIngreso(tipo) ? monto : -monto;
-
-  // Buscar saldo existente
-  let saldo = await queryRunner.manager.findOne(CajaMayorSaldo, {
-    where: {
-      cajaMayor: { id: cajaMayorId },
-      moneda: { id: monedaId },
-      formaPago: { id: formaPagoId },
-    },
-  });
-
-  if (saldo) {
-    saldo.saldo = Number(saldo.saldo) + delta;
-    await queryRunner.manager.save(CajaMayorSaldo, saldo);
-  } else {
-    const nuevoSaldo = queryRunner.manager.create(CajaMayorSaldo, {
-      cajaMayor: { id: cajaMayorId },
-      moneda: { id: monedaId },
-      formaPago: { id: formaPagoId },
-      saldo: delta,
-    });
-    await queryRunner.manager.save(CajaMayorSaldo, nuevoSaldo);
-  }
-}
+// Alias local para mantener firma legacy de actualizarSaldo
+const actualizarSaldo = actualizarSaldoCajaMayor;
 
 export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
 
@@ -886,6 +849,652 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     } catch (error) {
       await queryRunner.rollbackTransaction();
       console.error(`Error ingresando retiro ${retiroId} a caja mayor ${cajaMayorId}:`, error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  // ===================== ENTRADA VARIA CATEGORIAS =====================
+
+  ipcMain.handle('get-entrada-varia-categorias', async () => {
+    try {
+      const repo = dataSource.getRepository(EntradaVariaCategoria);
+      return await repo.find({ relations: ['padre', 'hijos'], order: { nombre: 'ASC' } });
+    } catch (error) {
+      console.error('Error getting entrada varia categorias:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('get-entrada-varia-categoria', async (_event, id: number) => {
+    try {
+      const repo = dataSource.getRepository(EntradaVariaCategoria);
+      return await repo.findOne({ where: { id }, relations: ['padre', 'hijos'] });
+    } catch (error) {
+      console.error(`Error getting entrada varia categoria ${id}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('create-entrada-varia-categoria', async (_event, data: any) => {
+    try {
+      const repo = dataSource.getRepository(EntradaVariaCategoria);
+      const entity = repo.create({ ...data, nombre: data.nombre?.toUpperCase() });
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error('Error creating entrada varia categoria:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('update-entrada-varia-categoria', async (_event, id: number, data: any) => {
+    try {
+      const repo = dataSource.getRepository(EntradaVariaCategoria);
+      const entity = await repo.findOneBy({ id });
+      if (!entity) throw new Error(`EntradaVariaCategoria ${id} no encontrada`);
+      const merge: any = { ...data };
+      if (data.nombre) merge.nombre = data.nombre.toUpperCase();
+      repo.merge(entity, merge);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error(`Error updating entrada varia categoria ${id}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('delete-entrada-varia-categoria', async (_event, id: number) => {
+    try {
+      const repo = dataSource.getRepository(EntradaVariaCategoria);
+      const entity = await repo.findOneBy({ id });
+      if (!entity) throw new Error(`EntradaVariaCategoria ${id} no encontrada`);
+      entity.activo = false;
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error(`Error deleting entrada varia categoria ${id}:`, error);
+      throw error;
+    }
+  });
+
+  // ===================== ENTRADAS VARIAS =====================
+
+  ipcMain.handle('get-entradas-varias', async (_event, filtros?: any) => {
+    try {
+      const repo = dataSource.getRepository(EntradaVaria);
+      const qb = repo.createQueryBuilder('ev')
+        .leftJoinAndSelect('ev.entradaVariaCategoria', 'cat')
+        .leftJoinAndSelect('cat.padre', 'catPadre')
+        .leftJoinAndSelect('ev.moneda', 'moneda')
+        .leftJoinAndSelect('ev.formaPago', 'formaPago')
+        .leftJoinAndSelect('ev.cajaMayor', 'cajaMayor')
+        .leftJoinAndSelect('ev.cuentaBancaria', 'cuentaBancaria')
+        .leftJoinAndSelect('ev.createdBy', 'createdBy')
+        .leftJoinAndSelect('createdBy.persona', 'createdByPersona')
+        .orderBy('ev.fecha', 'DESC');
+
+      if (filtros?.fechaDesde) qb.andWhere('ev.fecha >= :fd', { fd: filtros.fechaDesde });
+      if (filtros?.fechaHasta) qb.andWhere('ev.fecha <= :fh', { fh: filtros.fechaHasta });
+      if (filtros?.entradaVariaCategoriaId) qb.andWhere('ev.entrada_varia_categoria_id = :catId', { catId: filtros.entradaVariaCategoriaId });
+      if (filtros?.cajaMayorId) qb.andWhere('ev.caja_mayor_id = :cmId', { cmId: filtros.cajaMayorId });
+      if (filtros?.anulado !== undefined) qb.andWhere('ev.anulado = :anulado', { anulado: filtros.anulado });
+
+      if (filtros?.pageSize != null) {
+        const pageSize = Number(filtros.pageSize) || 15;
+        const page = Math.max(0, Number(filtros.page) || 0);
+        qb.skip(page * pageSize).take(pageSize);
+        const [items, total] = await qb.getManyAndCount();
+        return { items, total };
+      }
+
+      return await qb.getMany();
+    } catch (error) {
+      console.error('Error getting entradas varias:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('get-entrada-varia', async (_event, id: number) => {
+    try {
+      const repo = dataSource.getRepository(EntradaVaria);
+      return await repo.findOne({
+        where: { id },
+        relations: ['entradaVariaCategoria', 'entradaVariaCategoria.padre', 'moneda', 'formaPago', 'cajaMayor', 'createdBy', 'createdBy.persona'],
+      });
+    } catch (error) {
+      console.error(`Error getting entrada varia ${id}:`, error);
+      throw error;
+    }
+  });
+
+  // Crear entrada varia: transaccional. Soporta dos destinos:
+  // 1. Caja Mayor: crea EntradaVaria + CajaMayorMovimiento INGRESO_ENTRADA_VARIA + actualiza saldo CM
+  // 2. Cuenta Bancaria: crea EntradaVaria + suma a saldo de cuenta bancaria
+  ipcMain.handle('create-entrada-varia', async (_event, data: any) => {
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const destinoTipo = data.destinoTipo || 'CAJA_MAYOR';
+      const cajaMayorId = data.cajaMayor?.id || data.cajaMayor || data.cajaMayorId || null;
+      const cuentaBancariaId = data.cuentaBancaria?.id || data.cuentaBancariaId || null;
+      const monedaId = data.moneda?.id || data.moneda || data.monedaId;
+      const formaPagoId = data.formaPago?.id || data.formaPago || data.formaPagoId;
+      const monto = Number(data.monto);
+
+      const entrada = queryRunner.manager.create(EntradaVaria, {
+        entradaVariaCategoria: data.entradaVariaCategoria || (data.entradaVariaCategoriaId ? { id: data.entradaVariaCategoriaId } : null),
+        descripcion: data.descripcion?.toUpperCase(),
+        monto,
+        numeroComprobante: data.numeroComprobante?.toUpperCase() || null,
+        observacion: data.observacion?.toUpperCase() || null,
+        fecha: data.fecha || new Date(),
+        moneda: { id: monedaId },
+        formaPago: { id: formaPagoId },
+        cajaMayor: destinoTipo === 'CAJA_MAYOR' && cajaMayorId ? { id: cajaMayorId } : null,
+        cuentaBancaria: destinoTipo === 'CUENTA_BANCARIA' && cuentaBancariaId ? { id: cuentaBancariaId } : null,
+      });
+      await setEntityUserTracking(dataSource, entrada, getCurrentUser()?.id, false);
+      const saved = await queryRunner.manager.save(EntradaVaria, entrada);
+
+      if (destinoTipo === 'CAJA_MAYOR') {
+        if (!cajaMayorId) throw new Error('cajaMayorId requerido para destino CAJA_MAYOR');
+        const currentUser = getCurrentUser();
+        const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
+          cajaMayor: { id: cajaMayorId },
+          tipoMovimiento: TipoMovimiento.INGRESO_ENTRADA_VARIA,
+          moneda: { id: monedaId },
+          formaPago: { id: formaPagoId },
+          monto,
+          fecha: data.fecha || new Date(),
+          observacion: `ENTRADA VARIA: ${data.descripcion || ''}`.toUpperCase(),
+          entradaVariaId: saved.id,
+        });
+        if (currentUser) movimiento.responsable = currentUser;
+        await setEntityUserTracking(dataSource, movimiento, currentUser?.id, false);
+        await queryRunner.manager.save(CajaMayorMovimiento, movimiento);
+        await actualizarSaldo(queryRunner, cajaMayorId, monedaId, formaPagoId, monto, TipoMovimiento.INGRESO_ENTRADA_VARIA);
+      } else if (destinoTipo === 'CUENTA_BANCARIA') {
+        if (!cuentaBancariaId) throw new Error('cuentaBancariaId requerido para destino CUENTA_BANCARIA');
+        const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
+        const cb = await cbRepo.findOne({ where: { id: cuentaBancariaId } });
+        if (!cb) throw new Error(`CuentaBancaria ${cuentaBancariaId} no encontrada`);
+        cb.saldo = Number(cb.saldo) + monto;
+        await queryRunner.manager.save(CuentaBancaria, cb);
+      }
+
+      await queryRunner.commitTransaction();
+      return saved;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error creating entrada varia:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  ipcMain.handle('anular-entrada-varia', async (_event, id: number, motivo: string) => {
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const repo = queryRunner.manager.getRepository(EntradaVaria);
+      const entrada = await repo.findOne({
+        where: { id },
+        relations: ['cajaMayor', 'cuentaBancaria', 'moneda', 'formaPago'],
+      });
+      if (!entrada) throw new Error(`EntradaVaria ${id} no encontrada`);
+      if (entrada.anulado) throw new Error('La entrada varia ya esta anulada');
+
+      entrada.anulado = true;
+      await setEntityUserTracking(dataSource, entrada, getCurrentUser()?.id, true);
+      await queryRunner.manager.save(EntradaVaria, entrada);
+
+      if (entrada.cajaMayor) {
+        const movRepo = queryRunner.manager.getRepository(CajaMayorMovimiento);
+        const movOriginal = await movRepo.findOne({
+          where: { entradaVariaId: id, tipoMovimiento: TipoMovimiento.INGRESO_ENTRADA_VARIA },
+          relations: ['cajaMayor', 'moneda', 'formaPago'],
+        });
+        if (movOriginal) {
+          const contra = queryRunner.manager.create(CajaMayorMovimiento, {
+            cajaMayor: movOriginal.cajaMayor,
+            tipoMovimiento: TipoMovimiento.ANULACION,
+            moneda: movOriginal.moneda,
+            formaPago: movOriginal.formaPago,
+            monto: movOriginal.monto,
+            fecha: new Date(),
+            observacion: `ANULACION ENTRADA VARIA: ${motivo}`.toUpperCase(),
+            entradaVariaId: id,
+            referenciaAnulacion: movOriginal,
+          });
+          const currentUser = getCurrentUser();
+          if (currentUser) contra.responsable = currentUser;
+          await setEntityUserTracking(dataSource, contra, currentUser?.id, false);
+          await queryRunner.manager.save(CajaMayorMovimiento, contra);
+
+          await actualizarSaldo(
+            queryRunner,
+            movOriginal.cajaMayor.id,
+            movOriginal.moneda.id,
+            movOriginal.formaPago.id,
+            Number(movOriginal.monto),
+            TipoMovimiento.AJUSTE_NEGATIVO,
+          );
+        }
+      }
+
+      if (entrada.cuentaBancaria) {
+        const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
+        const cb = await cbRepo.findOne({ where: { id: entrada.cuentaBancaria.id } });
+        if (cb) {
+          cb.saldo = Number(cb.saldo) - Number(entrada.monto);
+          await queryRunner.manager.save(CuentaBancaria, cb);
+        }
+      }
+
+      await queryRunner.commitTransaction();
+      return { success: true };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error(`Error anulando entrada varia ${id}:`, error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  // ===================== OPERACION FINANCIERA CATEGORIAS =====================
+
+  ipcMain.handle('get-operacion-financiera-categorias', async () => {
+    try {
+      const repo = dataSource.getRepository(OperacionFinancieraCategoria);
+      return await repo.find({ relations: ['padre', 'hijos'], order: { nombre: 'ASC' } });
+    } catch (error) {
+      console.error('Error getting operacion financiera categorias:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('get-operacion-financiera-categoria', async (_event, id: number) => {
+    try {
+      const repo = dataSource.getRepository(OperacionFinancieraCategoria);
+      return await repo.findOne({ where: { id }, relations: ['padre', 'hijos'] });
+    } catch (error) {
+      console.error(`Error getting operacion financiera categoria ${id}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('create-operacion-financiera-categoria', async (_event, data: any) => {
+    try {
+      const repo = dataSource.getRepository(OperacionFinancieraCategoria);
+      const entity = repo.create({ ...data, nombre: data.nombre?.toUpperCase() });
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error('Error creating operacion financiera categoria:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('update-operacion-financiera-categoria', async (_event, id: number, data: any) => {
+    try {
+      const repo = dataSource.getRepository(OperacionFinancieraCategoria);
+      const entity = await repo.findOneBy({ id });
+      if (!entity) throw new Error(`OperacionFinancieraCategoria ${id} no encontrada`);
+      const merge: any = { ...data };
+      if (data.nombre) merge.nombre = data.nombre.toUpperCase();
+      repo.merge(entity, merge);
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error(`Error updating operacion financiera categoria ${id}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('delete-operacion-financiera-categoria', async (_event, id: number) => {
+    try {
+      const repo = dataSource.getRepository(OperacionFinancieraCategoria);
+      const entity = await repo.findOneBy({ id });
+      if (!entity) throw new Error(`OperacionFinancieraCategoria ${id} no encontrada`);
+      entity.activo = false;
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
+      return await repo.save(entity);
+    } catch (error) {
+      console.error(`Error deleting operacion financiera categoria ${id}:`, error);
+      throw error;
+    }
+  });
+
+  // ===================== OPERACIONES FINANCIERAS =====================
+
+  ipcMain.handle('get-operaciones-financieras', async (_event, filtros?: any) => {
+    try {
+      const repo = dataSource.getRepository(OperacionFinanciera);
+      const qb = repo.createQueryBuilder('op')
+        .leftJoinAndSelect('op.operacionFinancieraCategoria', 'cat')
+        .leftJoinAndSelect('op.cajaMayorOrigen', 'cmO')
+        .leftJoinAndSelect('op.cajaMayorDestino', 'cmD')
+        .leftJoinAndSelect('op.monedaOrigen', 'monO')
+        .leftJoinAndSelect('op.monedaDestino', 'monD')
+        .leftJoinAndSelect('op.formaPagoOrigen', 'fpO')
+        .leftJoinAndSelect('op.formaPagoDestino', 'fpD')
+        .leftJoinAndSelect('op.cuentaBancariaOrigen', 'cbO')
+        .leftJoinAndSelect('op.cuentaBancariaDestino', 'cbD')
+        .leftJoinAndSelect('op.createdBy', 'createdBy')
+        .leftJoinAndSelect('createdBy.persona', 'createdByPersona')
+        .orderBy('op.fecha', 'DESC');
+
+      if (filtros?.tipoOperacion) qb.andWhere('op.tipo_operacion = :t', { t: filtros.tipoOperacion });
+      if (filtros?.fechaDesde) qb.andWhere('op.fecha >= :fd', { fd: filtros.fechaDesde });
+      if (filtros?.fechaHasta) qb.andWhere('op.fecha <= :fh', { fh: filtros.fechaHasta });
+      if (filtros?.cajaMayorId) {
+        qb.andWhere('(op.caja_mayor_origen_id = :cmId OR op.caja_mayor_destino_id = :cmId)', { cmId: filtros.cajaMayorId });
+      }
+      if (filtros?.anulado !== undefined) qb.andWhere('op.anulado = :anulado', { anulado: filtros.anulado });
+
+      if (filtros?.pageSize != null) {
+        const pageSize = Number(filtros.pageSize) || 15;
+        const page = Math.max(0, Number(filtros.page) || 0);
+        qb.skip(page * pageSize).take(pageSize);
+        const [items, total] = await qb.getManyAndCount();
+        return { items, total };
+      }
+
+      return await qb.getMany();
+    } catch (error) {
+      console.error('Error getting operaciones financieras:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('get-operacion-financiera', async (_event, id: number) => {
+    try {
+      const repo = dataSource.getRepository(OperacionFinanciera);
+      return await repo.findOne({
+        where: { id },
+        relations: [
+          'operacionFinancieraCategoria',
+          'cajaMayorOrigen', 'cajaMayorDestino',
+          'monedaOrigen', 'monedaDestino',
+          'formaPagoOrigen', 'formaPagoDestino',
+          'cuentaBancariaOrigen', 'cuentaBancariaDestino',
+          'createdBy', 'createdBy.persona',
+        ],
+      });
+    } catch (error) {
+      console.error(`Error getting operacion financiera ${id}:`, error);
+      throw error;
+    }
+  });
+
+  // Crear operacion financiera transaccional con form dinamico segun tipo:
+  // CAMBIO_DIVISA, DEPOSITO_BANCARIO, RETIRO_BANCARIO, TRANSFERENCIA_ENTRE_CAJAS
+  ipcMain.handle('create-operacion-financiera', async (_event, data: any) => {
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const tipoOp = data.tipoOperacion as TipoOperacionFinanciera;
+      const currentUser = getCurrentUser();
+
+      const op = queryRunner.manager.create(OperacionFinanciera, {
+        tipoOperacion: tipoOp,
+        operacionFinancieraCategoria: data.operacionFinancieraCategoriaId
+          ? { id: data.operacionFinancieraCategoriaId }
+          : null,
+        descripcion: (data.descripcion || '').toUpperCase(),
+        fecha: data.fecha || new Date(),
+        cotizacion: data.cotizacion || null,
+        numeroComprobante: data.numeroComprobante?.toUpperCase() || null,
+        comprobanteUrl: data.comprobanteUrl || null,
+        diferencia: data.diferencia || 0,
+        diferenciaDestinoTipo: data.diferenciaDestinoTipo || null,
+        diferenciaObservacion: data.diferenciaObservacion?.toUpperCase() || null,
+        observacion: data.observacion?.toUpperCase() || null,
+        cajaMayorOrigen: data.cajaMayorOrigenId ? { id: data.cajaMayorOrigenId } : null,
+        monedaOrigen: data.monedaOrigenId ? { id: data.monedaOrigenId } : null,
+        formaPagoOrigen: data.formaPagoOrigenId ? { id: data.formaPagoOrigenId } : null,
+        montoOrigen: data.montoOrigen || null,
+        cuentaBancariaOrigen: data.cuentaBancariaOrigenId ? { id: data.cuentaBancariaOrigenId } : null,
+        cajaMayorDestino: data.cajaMayorDestinoId ? { id: data.cajaMayorDestinoId } : null,
+        monedaDestino: data.monedaDestinoId ? { id: data.monedaDestinoId } : null,
+        formaPagoDestino: data.formaPagoDestinoId ? { id: data.formaPagoDestinoId } : null,
+        montoDestino: data.montoDestino || null,
+        cuentaBancariaDestino: data.cuentaBancariaDestinoId ? { id: data.cuentaBancariaDestinoId } : null,
+      });
+      await setEntityUserTracking(dataSource, op, currentUser?.id, false);
+      const savedOp = await queryRunner.manager.save(OperacionFinanciera, op);
+      const opId = savedOp.id;
+
+      switch (tipoOp) {
+        case TipoOperacionFinanciera.CAMBIO_DIVISA: {
+          const cmId = data.cajaMayorOrigenId;
+          const movOut = queryRunner.manager.create(CajaMayorMovimiento, {
+            cajaMayor: { id: cmId },
+            tipoMovimiento: TipoMovimiento.EGRESO_OPERACION_FINANCIERA,
+            moneda: { id: data.monedaOrigenId },
+            formaPago: { id: data.formaPagoOrigenId },
+            monto: data.montoOrigen,
+            fecha: data.fecha || new Date(),
+            observacion: `CAMBIO DIVISA (SALIDA): ${data.descripcion || ''}`.toUpperCase(),
+            operacionFinancieraId: opId,
+          });
+          if (currentUser) movOut.responsable = currentUser;
+          await setEntityUserTracking(dataSource, movOut, currentUser?.id, false);
+          await queryRunner.manager.save(CajaMayorMovimiento, movOut);
+          await actualizarSaldo(queryRunner, cmId, data.monedaOrigenId, data.formaPagoOrigenId, Number(data.montoOrigen), TipoMovimiento.EGRESO_OPERACION_FINANCIERA);
+
+          const movIn = queryRunner.manager.create(CajaMayorMovimiento, {
+            cajaMayor: { id: cmId },
+            tipoMovimiento: TipoMovimiento.INGRESO_OPERACION_FINANCIERA,
+            moneda: { id: data.monedaDestinoId },
+            formaPago: { id: data.formaPagoDestinoId },
+            monto: data.montoDestino,
+            fecha: data.fecha || new Date(),
+            observacion: `CAMBIO DIVISA (ENTRADA): ${data.descripcion || ''}`.toUpperCase(),
+            operacionFinancieraId: opId,
+          });
+          if (currentUser) movIn.responsable = currentUser;
+          await setEntityUserTracking(dataSource, movIn, currentUser?.id, false);
+          await queryRunner.manager.save(CajaMayorMovimiento, movIn);
+          await actualizarSaldo(queryRunner, cmId, data.monedaDestinoId, data.formaPagoDestinoId, Number(data.montoDestino), TipoMovimiento.INGRESO_OPERACION_FINANCIERA);
+          break;
+        }
+
+        case TipoOperacionFinanciera.DEPOSITO_BANCARIO: {
+          const cmId = data.cajaMayorOrigenId;
+          const movOut = queryRunner.manager.create(CajaMayorMovimiento, {
+            cajaMayor: { id: cmId },
+            tipoMovimiento: TipoMovimiento.EGRESO_DEPOSITO_BANCO,
+            moneda: { id: data.monedaOrigenId },
+            formaPago: { id: data.formaPagoOrigenId },
+            monto: data.montoOrigen,
+            fecha: data.fecha || new Date(),
+            observacion: `DEPOSITO BANCO: ${data.descripcion || ''}`.toUpperCase(),
+            operacionFinancieraId: opId,
+          });
+          if (currentUser) movOut.responsable = currentUser;
+          await setEntityUserTracking(dataSource, movOut, currentUser?.id, false);
+          await queryRunner.manager.save(CajaMayorMovimiento, movOut);
+          await actualizarSaldo(queryRunner, cmId, data.monedaOrigenId, data.formaPagoOrigenId, Number(data.montoOrigen), TipoMovimiento.EGRESO_DEPOSITO_BANCO);
+
+          const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
+          const cb = await cbRepo.findOne({ where: { id: data.cuentaBancariaDestinoId } });
+          if (!cb) throw new Error(`Cuenta bancaria destino ${data.cuentaBancariaDestinoId} no encontrada`);
+          cb.saldo = Number(cb.saldo) + Number(data.montoDestino);
+          await queryRunner.manager.save(CuentaBancaria, cb);
+          break;
+        }
+
+        case TipoOperacionFinanciera.RETIRO_BANCARIO: {
+          const cmId = data.cajaMayorDestinoId;
+          const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
+          const cb = await cbRepo.findOne({ where: { id: data.cuentaBancariaOrigenId } });
+          if (!cb) throw new Error(`Cuenta bancaria origen ${data.cuentaBancariaOrigenId} no encontrada`);
+          cb.saldo = Number(cb.saldo) - Number(data.montoOrigen);
+          await queryRunner.manager.save(CuentaBancaria, cb);
+
+          const movIn = queryRunner.manager.create(CajaMayorMovimiento, {
+            cajaMayor: { id: cmId },
+            tipoMovimiento: TipoMovimiento.INGRESO_RETIRO_BANCO,
+            moneda: { id: data.monedaDestinoId },
+            formaPago: { id: data.formaPagoDestinoId },
+            monto: data.montoDestino,
+            fecha: data.fecha || new Date(),
+            observacion: `RETIRO BANCO: ${data.descripcion || ''}`.toUpperCase(),
+            operacionFinancieraId: opId,
+          });
+          if (currentUser) movIn.responsable = currentUser;
+          await setEntityUserTracking(dataSource, movIn, currentUser?.id, false);
+          await queryRunner.manager.save(CajaMayorMovimiento, movIn);
+          await actualizarSaldo(queryRunner, cmId, data.monedaDestinoId, data.formaPagoDestinoId, Number(data.montoDestino), TipoMovimiento.INGRESO_RETIRO_BANCO);
+          break;
+        }
+
+        case TipoOperacionFinanciera.TRANSFERENCIA_ENTRE_CAJAS: {
+          const movOut = queryRunner.manager.create(CajaMayorMovimiento, {
+            cajaMayor: { id: data.cajaMayorOrigenId },
+            tipoMovimiento: TipoMovimiento.TRANSFERENCIA_SALIDA,
+            moneda: { id: data.monedaOrigenId },
+            formaPago: { id: data.formaPagoOrigenId },
+            monto: data.montoOrigen,
+            fecha: data.fecha || new Date(),
+            observacion: `TRANSFERENCIA → CM #${data.cajaMayorDestinoId}: ${data.descripcion || ''}`.toUpperCase(),
+            operacionFinancieraId: opId,
+          });
+          if (currentUser) movOut.responsable = currentUser;
+          await setEntityUserTracking(dataSource, movOut, currentUser?.id, false);
+          await queryRunner.manager.save(CajaMayorMovimiento, movOut);
+          await actualizarSaldo(queryRunner, data.cajaMayorOrigenId, data.monedaOrigenId, data.formaPagoOrigenId, Number(data.montoOrigen), TipoMovimiento.TRANSFERENCIA_SALIDA);
+
+          const movIn = queryRunner.manager.create(CajaMayorMovimiento, {
+            cajaMayor: { id: data.cajaMayorDestinoId },
+            tipoMovimiento: TipoMovimiento.TRANSFERENCIA_ENTRADA,
+            moneda: { id: data.monedaDestinoId },
+            formaPago: { id: data.formaPagoDestinoId },
+            monto: data.montoDestino,
+            fecha: data.fecha || new Date(),
+            observacion: `TRANSFERENCIA ← CM #${data.cajaMayorOrigenId}: ${data.descripcion || ''}`.toUpperCase(),
+            operacionFinancieraId: opId,
+          });
+          if (currentUser) movIn.responsable = currentUser;
+          await setEntityUserTracking(dataSource, movIn, currentUser?.id, false);
+          await queryRunner.manager.save(CajaMayorMovimiento, movIn);
+          await actualizarSaldo(queryRunner, data.cajaMayorDestinoId, data.monedaDestinoId, data.formaPagoDestinoId, Number(data.montoDestino), TipoMovimiento.TRANSFERENCIA_ENTRADA);
+          break;
+        }
+      }
+
+      // Diferencia opcional → AJUSTE_POSITIVO/NEGATIVO en moneda destino
+      if (data.diferencia && Number(data.diferencia) !== 0 && data.diferenciaDestinoTipo && data.diferenciaDestinoTipo !== DiferenciaDestinoTipo.IGNORAR) {
+        const diferencia = Number(data.diferencia);
+        const cmId = data.cajaMayorDestinoId || data.cajaMayorOrigenId;
+        const monId = data.monedaDestinoId || data.monedaOrigenId;
+        const fpId = data.formaPagoDestinoId || data.formaPagoOrigenId;
+        const tipoMov = diferencia > 0 ? TipoMovimiento.AJUSTE_POSITIVO : TipoMovimiento.AJUSTE_NEGATIVO;
+        const tipoMovDescriptor = data.diferenciaDestinoTipo === DiferenciaDestinoTipo.GASTO ? 'GASTO POR DIFERENCIA' : 'VALE POR DIFERENCIA';
+
+        const movDif = queryRunner.manager.create(CajaMayorMovimiento, {
+          cajaMayor: { id: cmId },
+          tipoMovimiento: tipoMov,
+          moneda: { id: monId },
+          formaPago: { id: fpId },
+          monto: Math.abs(diferencia),
+          fecha: data.fecha || new Date(),
+          observacion: `${tipoMovDescriptor}: ${data.diferenciaObservacion || ''}`.toUpperCase(),
+          operacionFinancieraId: opId,
+        });
+        if (currentUser) movDif.responsable = currentUser;
+        await setEntityUserTracking(dataSource, movDif, currentUser?.id, false);
+        await queryRunner.manager.save(CajaMayorMovimiento, movDif);
+        await actualizarSaldo(queryRunner, cmId, monId, fpId, Math.abs(diferencia), tipoMov);
+      }
+
+      await queryRunner.commitTransaction();
+      return savedOp;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error creating operacion financiera:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  ipcMain.handle('anular-operacion-financiera', async (_event, id: number, motivo: string) => {
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const opRepo = queryRunner.manager.getRepository(OperacionFinanciera);
+      const op = await opRepo.findOne({
+        where: { id },
+        relations: ['cuentaBancariaOrigen', 'cuentaBancariaDestino'],
+      });
+      if (!op) throw new Error(`OperacionFinanciera ${id} no encontrada`);
+      if (op.anulado) throw new Error('La operacion ya esta anulada');
+
+      op.anulado = true;
+      await setEntityUserTracking(dataSource, op, getCurrentUser()?.id, true);
+      await queryRunner.manager.save(OperacionFinanciera, op);
+
+      const movRepo = queryRunner.manager.getRepository(CajaMayorMovimiento);
+      const movs = await movRepo.find({
+        where: { operacionFinancieraId: id },
+        relations: ['cajaMayor', 'moneda', 'formaPago'],
+      });
+
+      const currentUser = getCurrentUser();
+      for (const mov of movs) {
+        if (mov.tipoMovimiento === TipoMovimiento.ANULACION) continue;
+
+        const contra = queryRunner.manager.create(CajaMayorMovimiento, {
+          cajaMayor: mov.cajaMayor,
+          tipoMovimiento: TipoMovimiento.ANULACION,
+          moneda: mov.moneda,
+          formaPago: mov.formaPago,
+          monto: mov.monto,
+          fecha: new Date(),
+          observacion: `ANULACION OP. FIN. #${id}: ${motivo}`.toUpperCase(),
+          operacionFinancieraId: id,
+          referenciaAnulacion: mov,
+        });
+        if (currentUser) contra.responsable = currentUser;
+        await setEntityUserTracking(dataSource, contra, currentUser?.id, false);
+        await queryRunner.manager.save(CajaMayorMovimiento, contra);
+
+        const tipoContrario = esIngreso(mov.tipoMovimiento)
+          ? TipoMovimiento.AJUSTE_NEGATIVO
+          : TipoMovimiento.AJUSTE_POSITIVO;
+        await actualizarSaldo(queryRunner, mov.cajaMayor.id, mov.moneda.id, mov.formaPago.id, Number(mov.monto), tipoContrario);
+      }
+
+      const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
+      if (op.tipoOperacion === TipoOperacionFinanciera.DEPOSITO_BANCARIO && op.cuentaBancariaDestino) {
+        const cb = await cbRepo.findOne({ where: { id: op.cuentaBancariaDestino.id } });
+        if (cb) {
+          cb.saldo = Number(cb.saldo) - Number(op.montoDestino || 0);
+          await queryRunner.manager.save(CuentaBancaria, cb);
+        }
+      } else if (op.tipoOperacion === TipoOperacionFinanciera.RETIRO_BANCARIO && op.cuentaBancariaOrigen) {
+        const cb = await cbRepo.findOne({ where: { id: op.cuentaBancariaOrigen.id } });
+        if (cb) {
+          cb.saldo = Number(cb.saldo) + Number(op.montoOrigen || 0);
+          await queryRunner.manager.save(CuentaBancaria, cb);
+        }
+      }
+
+      await queryRunner.commitTransaction();
+      return { success: true };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error(`Error anulando operacion financiera ${id}:`, error);
       throw error;
     } finally {
       await queryRunner.release();

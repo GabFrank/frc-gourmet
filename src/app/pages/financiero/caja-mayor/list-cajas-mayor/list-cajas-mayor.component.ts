@@ -16,6 +16,7 @@ import { TabsService } from 'src/app/services/tabs.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateEditCajaMayorDialogComponent } from '../create-edit-caja-mayor/create-edit-caja-mayor-dialog.component';
 import { CajaMayorDetalleComponent } from '../caja-mayor-detalle/caja-mayor-detalle.component';
+import { CrearAccesoDirectoDialogComponent } from 'src/app/shared/components/crear-acceso-directo-dialog/crear-acceso-directo-dialog.component';
 
 @Component({
   selector: 'app-list-cajas-mayor',
@@ -81,6 +82,31 @@ export class ListCajasMayorComponent implements OnInit {
 
   verDetalle(cajaMayor: any): void {
     this.tabsService.openTab('Caja Mayor: ' + cajaMayor.nombre, CajaMayorDetalleComponent, { cajaMayor });
+  }
+
+  crearAccesoDirecto(cajaMayor: any, dashboardKey: string): void {
+    this.dialog.open(CrearAccesoDirectoDialogComponent, {
+      width: '550px',
+      data: {
+        dashboardsDisponibles: [{ key: dashboardKey, label: this.dashboardLabel(dashboardKey) }],
+        tituloSugerido: cajaMayor.nombre,
+        iconoSugerido: 'account_balance',
+        colorSugerido: '#1b5e20',
+        targetType: 'CAJA_MAYOR_DETALLE',
+        targetData: { cajaMayorId: cajaMayor.id },
+      },
+    });
+  }
+
+  private dashboardLabel(key: string): string {
+    switch (key) {
+      case 'HOME': return 'Inicio';
+      case 'FINANCIERO': return 'Dashboard Financiero';
+      case 'VENTAS': return 'Dashboard de Ventas';
+      case 'COMPRAS': return 'Dashboard de Compras';
+      case 'CAJA_MAYOR': return 'Dashboard de Caja Mayor';
+      default: return key;
+    }
   }
 
   async cerrarCaja(cajaMayor: any): Promise<void> {

@@ -1,0 +1,127 @@
+<div class="dialog-container">
+  <div class="header">
+    <div>
+      <h2>{{cuentaBancaria?.nombre}} - {{cuentaBancaria?.banco}}</h2>
+      <div class="saldo-info">
+        Saldo actual: <strong>{{cuentaBancaria?.moneda?.simbolo}} {{cuentaBancaria?.saldo | number:'1.0-2'}}</strong>
+        <span *ngIf="cuentaBancaria?.saldoReservado > 0" class="reservado">
+          (Reservado: {{cuentaBancaria?.saldoReservado | number:'1.0-2'}})
+        </span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button mat-raised-button color="primary" (click)="abrirCrearMovimiento()">
+        <mat-icon>add</mat-icon>
+        Movimiento Manual
+      </button>
+      <button mat-icon-button (click)="cerrar()" matTooltip="Cerrar">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <mat-card class="filters-card">
+    <form [formGroup]="filterForm" class="filters-row">
+      <mat-form-field appearance="outline">
+        <mat-label>Desde</mat-label>
+        <input matInput [matDatepicker]="picker1" formControlName="fechaDesde">
+        <mat-datepicker-toggle matSuffix [for]="picker1"></mat-datepicker-toggle>
+        <mat-datepicker #picker1></mat-datepicker>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Hasta</mat-label>
+        <input matInput [matDatepicker]="picker2" formControlName="fechaHasta">
+        <mat-datepicker-toggle matSuffix [for]="picker2"></mat-datepicker-toggle>
+        <mat-datepicker #picker2></mat-datepicker>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Tipo</mat-label>
+        <mat-select formControlName="tipo">
+          <mat-option *ngFor="let t of tiposFiltro" [value]="t.value">{{t.label}}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Direccion</mat-label>
+        <mat-select formControlName="esIngreso">
+          <mat-option [value]="null">Todas</mat-option>
+          <mat-option [value]="true">Solo Ingresos</mat-option>
+          <mat-option [value]="false">Solo Egresos</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <div class="filter-actions">
+        <button mat-stroked-button (click)="aplicarFiltros()">
+          <mat-icon>search</mat-icon>
+          Filtrar
+        </button>
+        <button mat-button (click)="limpiarFiltros()">
+          <mat-icon>clear</mat-icon>
+          Limpiar
+        </button>
+      </div>
+    </form>
+  </mat-card>
+
+  <div *ngIf="loading" class="spinner-container">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+
+  <mat-card *ngIf="!loading">
+    <table mat-table [dataSource]="movimientos" class="full-width">
+      <ng-container matColumnDef="fecha">
+        <th mat-header-cell *matHeaderCellDef>Fecha</th>
+        <td mat-cell *matCellDef="let row">{{row.fecha | date:'dd/MM/yy HH:mm'}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="tipo">
+        <th mat-header-cell *matHeaderCellDef>Tipo</th>
+        <td mat-cell *matCellDef="let row">{{row.tipo}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="descripcion">
+        <th mat-header-cell *matHeaderCellDef>Descripcion</th>
+        <td mat-cell *matCellDef="let row">{{row.descripcion}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="comprobante">
+        <th mat-header-cell *matHeaderCellDef>Comprobante</th>
+        <td mat-cell *matCellDef="let row">{{row.numeroComprobante || '-'}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="origen">
+        <th mat-header-cell *matHeaderCellDef>Origen</th>
+        <td mat-cell *matCellDef="let row">
+          <mat-chip [ngStyle]="{'background-color': origenColor(row.origen), color: 'white'}">
+            {{row.origen}}
+          </mat-chip>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="monto">
+        <th mat-header-cell *matHeaderCellDef class="text-right">Monto</th>
+        <td mat-cell *matCellDef="let row" class="text-right" [ngClass]="row.esIngreso ? 'monto-ingreso' : 'monto-egreso'">
+          {{row.esIngreso ? '+' : '-'}} {{row.monto | number:'1.0-2'}}
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+
+    <mat-paginator
+      [length]="total"
+      [pageSize]="pageSize"
+      [pageIndex]="page"
+      [pageSizeOptions]="pageSizeOptions"
+      (page)="onPageChange($event)">
+    </mat-paginator>
+
+    <div *ngIf="movimientos.length === 0" class="empty-state">
+      <mat-icon>receipt_long</mat-icon>
+      <p>No hay movimientos registrados</p>
+    </div>
+  </mat-card>
+</div>

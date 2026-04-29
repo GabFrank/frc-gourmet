@@ -1,7 +1,8 @@
 import { Component, OnInit, Optional, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA, MatDialog } from '@angular/material/dialog';
+import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
@@ -57,6 +58,7 @@ export class PagarCuotaDialogComponent implements OnInit {
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
     private snackBar: MatSnackBar,
+    private dialog: MatDialog,
     @Optional() public dialogRef: MatDialogRef<PagarCuotaDialogComponent>,
     @Optional() @Inject(MAT_DIALOG_DATA) public data: PagarCuotaDialogData,
   ) {}
@@ -126,15 +128,21 @@ export class PagarCuotaDialogComponent implements OnInit {
   async onSubmit(): Promise<void> {
     if (this.form.invalid || !this.cuota?.id) return;
     const f = this.form.value;
-    if (Number(f.monto) > this.restante + 0.005) {
+    const monto = Number(f.monto);
+    if (monto > this.restante + 0.005) {
       this.snackBar.open(`Monto excede el restante (${this.restante})`, 'Cerrar', { duration: 3000 });
       return;
     }
+
+    // Validar saldo de la fuente y pedir confirmacion si quedaria negativo
+    const ok = await this.confirmarSaldoSiNegativo(f, monto);
+    if (!ok) return;
+
     this.saving = true;
     try {
       const payload: any = {
         cuotaId: this.cuota.id,
-        monto: Number(f.monto),
+        monto,
         fuente: f.fuente,
         observacion: f.observacion || null,
       };
@@ -159,6 +167,32 @@ export class PagarCuotaDialogComponent implements OnInit {
     } finally {
       this.saving = false;
     }
+  }
+
+  // Verifica si la operación dejaria saldo negativo en la fuente, y si es así
+  // pide confirmacion explicita al usuario.
+  private async confirmarSaldoSiNegativo(f: any, monto: number): Promise<boolean> {
+    let saldoActual = 0;
+    let label = '';
+    let monedaSimbolo = '';
+
+    if (f.fuente === 'CAJA_MAYOR') {
+      const saldos: any[] = await firstValueFrom(this.repositoryService.getCajaMayorSaldos(f.cajaMayorId));
+      const s = (saldos || []).find(x => x.moneda?.id === f.monedaId && x.formaPago?.id === f.formaPagoId);
+      saldoActual = s ? Number(s.saldo) : 0;
+      const cm = this.cajasMayor.find(c => c.id === f.cajaMayorId);
+      const fp = this.formasPago.find(p => p.id === f.formaPagoId);
+      const moneda = this.monedas.find(m => m.id === f.monedaId);
+      monedaSimbolo = moneda?.simbolo || '';
+      label = `${cm?.nombre || 'Caja Mayor'} (${moneda?.denominacion || ''} / ${fp?.nombre || ''})`;
+    } else {
+      const cb: any = await firstValueFrom(this.repositoryService.getCuentaBancaria(f.cuentaBancariaId));
+      saldoActual = cb ? Number(cb.saldo) : 0;
+      monedaSimbolo = cb?.moneda?.simbolo || '';
+      label = `${cb?.nombre || 'Cuenta Bancaria'} (${cb?.moneda?.denominacion || ''})`;
+    }
+
+    return confirmarSaldosNegativos(this.dialog, [{ label, saldoActual, monto, monedaSimbolo }]);
   }
 
   onCancel(): void { this.dialogRef?.close(false); }

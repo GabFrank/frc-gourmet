@@ -51,6 +51,7 @@
         <td mat-cell *matCellDef="let row">
           <button mat-icon-button [matMenuTriggerFor]="m"><mat-icon>more_vert</mat-icon></button>
           <mat-menu #m="matMenu">
+            <button mat-menu-item (click)="verHistorico(row)"><mat-icon>history</mat-icon><span>Historico de movimientos</span></button>
             <button mat-menu-item (click)="editar(row)"><mat-icon>edit</mat-icon><span>Editar</span></button>
             <button mat-menu-item (click)="desactivar(row)" *ngIf="row.activo"><mat-icon>block</mat-icon><span>Desactivar</span></button>
           </mat-menu>

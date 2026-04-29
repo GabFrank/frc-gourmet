@@ -1,7 +1,8 @@
 import { Component, OnInit, Optional, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormGroup, FormBuilder, Validators, FormControl } from '@angular/forms';
-import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA, MatDialog } from '@angular/material/dialog';
+import { confirmarSaldosNegativos, SaldoNegativoCheck } from 'src/app/shared/utils/saldo-negativo-confirm';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
@@ -84,6 +85,7 @@ export class CreateEditGastoDialogComponent implements OnInit {
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
     private snackBar: MatSnackBar,
+    private dialog: MatDialog,
     @Optional() public dialogRef: MatDialogRef<CreateEditGastoDialogComponent>,
     @Optional() @Inject(MAT_DIALOG_DATA) public data: any,
   ) {}
@@ -310,6 +312,14 @@ export class CreateEditGastoDialogComponent implements OnInit {
   async onSubmit(): Promise<void> {
     if (this.form.invalid || this.detalles.length === 0) return;
 
+    // Saldos negativos: validar tanto en create como en edit (en edit ya
+    // factorizamos la reversion de los detalles previos del mismo gasto).
+    const cajaMayorId = this.form.value.cajaMayorId;
+    if (cajaMayorId) {
+      const ok = await this.confirmarSaldoSiNegativo(cajaMayorId);
+      if (!ok) return;
+    }
+
     this.saving = true;
     try {
       const f = this.form.value;
@@ -349,5 +359,56 @@ export class CreateEditGastoDialogComponent implements OnInit {
 
   onCancel(): void {
     this.dialogRef?.close(false);
+  }
+
+  // Verifica saldos previo a guardar el gasto. Para edit, descuenta los detalles
+  // previos del mismo gasto (que serán reverteados por el handler) antes de
+  // aplicar los detalles nuevos.
+  private async confirmarSaldoSiNegativo(cajaMayorId: number): Promise<boolean> {
+    try {
+      const saldos: any[] = await firstValueFrom(this.repositoryService.getCajaMayorSaldos(cajaMayorId));
+
+      // Net delta por (monedaId, formaPagoId): newMonto - oldMonto
+      const deltas = new Map<string, number>();
+      for (const d of this.detalles) {
+        const key = `${d.monedaId}-${d.formaPagoId}`;
+        deltas.set(key, (deltas.get(key) || 0) + Number(d.monto));
+      }
+
+      // En edit, restar los detalles previos (el handler los reverte)
+      if (this.isEditing && this.gastoId) {
+        const gasto: any = await firstValueFrom(this.repositoryService.getGasto(this.gastoId));
+        for (const d of (gasto?.detalles || [])) {
+          const monedaId = d.moneda?.id;
+          const formaPagoId = d.formaPago?.id;
+          if (!monedaId || !formaPagoId) continue;
+          const key = `${monedaId}-${formaPagoId}`;
+          deltas.set(key, (deltas.get(key) || 0) - Number(d.monto));
+        }
+      }
+
+      const checks: SaldoNegativoCheck[] = [];
+      for (const [key, monto] of deltas.entries()) {
+        if (Math.abs(monto) < 0.005) continue;
+        const [monedaIdStr, formaPagoIdStr] = key.split('-');
+        const monedaId = Number(monedaIdStr);
+        const formaPagoId = Number(formaPagoIdStr);
+        const s = (saldos || []).find(x => x.moneda?.id === monedaId && x.formaPago?.id === formaPagoId);
+        const saldoActual = s ? Number(s.saldo) : 0;
+        const moneda = this.monedas.find(m => m.id === monedaId);
+        const fp = this.formasPago.find(p => p.id === formaPagoId);
+        checks.push({
+          label: `${moneda?.denominacion || ''} / ${fp?.nombre || ''}`,
+          saldoActual,
+          monto,
+          monedaSimbolo: moneda?.simbolo || '',
+        });
+      }
+
+      return confirmarSaldosNegativos(this.dialog, checks);
+    } catch (e) {
+      console.error('Error verificando saldos:', e);
+      return true; // fail-open
+    }
   }
 }

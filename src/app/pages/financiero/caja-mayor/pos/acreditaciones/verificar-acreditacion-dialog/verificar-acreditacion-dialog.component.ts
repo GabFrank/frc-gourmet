@@ -1,7 +1,8 @@
 import { Component, OnInit, Optional, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA, MatDialog } from '@angular/material/dialog';
+import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
@@ -36,6 +37,7 @@ export class VerificarAcreditacionDialogComponent implements OnInit {
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
     private snackBar: MatSnackBar,
+    private dialog: MatDialog,
     @Optional() public dialogRef: MatDialogRef<VerificarAcreditacionDialogComponent>,
     @Optional() @Inject(MAT_DIALOG_DATA) public data: any,
   ) {}
@@ -54,6 +56,25 @@ export class VerificarAcreditacionDialogComponent implements OnInit {
 
   async onSubmit(): Promise<void> {
     if (this.form.invalid || !this.acreditacion?.id) return;
+
+    // Si el ajuste de la diferencia dejaria la cuenta bancaria en negativo, confirmar.
+    // Logica del backend (verificar-acreditacion-pos):
+    //  - Si ya fue ACREDITADO_AUTO: cb.saldo += diferencia (puede ser +/-)
+    //  - Si no: cb.saldo += montoReal (siempre +)
+    // Solo el primer caso puede dejar saldo negativo.
+    const yaAcreditado = this.acreditacion.estado === 'ACREDITADO_AUTO';
+    if (yaAcreditado && this.diferencia < 0) {
+      const cb = this.acreditacion.cuentaBancaria;
+      const saldoActual = cb ? Number(cb.saldo) : 0;
+      const ok = await confirmarSaldosNegativos(this.dialog, [{
+        label: `${cb?.nombre || 'Cuenta Bancaria'} (${cb?.moneda?.denominacion || ''})`,
+        saldoActual,
+        monto: Math.abs(this.diferencia),
+        monedaSimbolo: cb?.moneda?.simbolo || '',
+      }]);
+      if (!ok) return;
+    }
+
     this.saving = true;
     try {
       await firstValueFrom(this.repositoryService.verificarAcreditacionPos(

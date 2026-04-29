@@ -1,0 +1,49 @@
+mat-dialog-content {
+  min-width: 500px;
+  max-width: 700px;
+}
+
+.cuenta-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background-color: rgba(33, 150, 243, 0.1);
+  border-radius: 4px;
+  font-size: 14px;
+  margin-bottom: 16px;
+  mat-icon { color: #2196f3; }
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+
+  .span-2 { grid-column: span 2; }
+}
+
+.radio-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 4px 0;
+
+  mat-radio-button {
+    display: flex;
+    align-items: center;
+    mat-icon {
+      vertical-align: middle;
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+      margin-right: 4px;
+    }
+    .ingreso-icon { color: #4caf50; }
+    .egreso-icon { color: #f44336; }
+  }
+}
+
+mat-spinner { display: inline-block; }
+
+:host-context(.dark-theme) .cuenta-info { background-color: rgba(100, 181, 246, 0.15); }
