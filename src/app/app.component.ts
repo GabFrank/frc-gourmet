@@ -53,6 +53,7 @@ import { ListProductosComponent } from './pages/productos/list-productos/list-pr
 import { ListSaboresComponent } from './pages/gestion-sabores/list-sabores/list-sabores.component';
 import { VentasDashboardComponent } from './pages/ventas/dashboard/ventas-dashboard.component';
 import { CajaMayorDashboardComponent } from './pages/financiero/caja-mayor/dashboard/caja-mayor-dashboard.component';
+import { ListCuentasPorCobrarComponent } from './pages/financiero/caja-mayor/cuentas-por-cobrar/list-cuentas-por-cobrar/list-cuentas-por-cobrar.component';
 import { ListPermisosComponent } from './pages/personalizacion/permisos/list-permisos/list-permisos.component';
 import { ListConfiguracionRrhhComponent } from './pages/rrhh/configuracion/list-configuracion-rrhh/list-configuracion-rrhh.component';
 import { ListCargosComponent } from './pages/rrhh/cargos/list-cargos.component';
@@ -606,6 +607,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       CajaMayorDashboardComponent,
       { source: 'navigation' },
       'caja-mayor-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openCuentasPorCobrarTab() {
+    this.tabsService.openTab(
+      'Cuentas por Cobrar',
+      ListCuentasPorCobrarComponent,
+      { source: 'navigation' },
+      'cuentas-por-cobrar-tab',
       true
     );
     this.closeMenu();

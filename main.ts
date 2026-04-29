@@ -48,6 +48,8 @@ import { registerVacacionesHandlers } from './electron/handlers/vacaciones.handl
 import { registerLiquidacionFinalHandlers } from './electron/handlers/liquidacion-final.handler';
 import { registerComisionesHandlers } from './electron/handlers/comisiones.handler';
 import { registerEquiposComisionHandlers } from './electron/handlers/equipos-comision.handler';
+import { registerCuentasPorCobrarHandlers } from './electron/handlers/cuentas-por-cobrar.handler';
+import { registerMovimientosClienteHandlers } from './electron/handlers/movimientos-cliente.handler';
 import { seedInitialData } from './electron/utils/seed-data';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
 // Unificado en recetas.handler: sabores y variaciones
@@ -108,6 +110,8 @@ function initializeDatabase() {
       registerLiquidacionFinalHandlers(dataSource, getCurrentUser); // RRHH Fase 5: Liquidacion final
       registerComisionesHandlers(dataSource, getCurrentUser); // RRHH Fase 6: Comisiones
       registerEquiposComisionHandlers(dataSource, getCurrentUser); // RRHH Fase 6: Equipos de comision
+      registerCuentasPorCobrarHandlers(dataSource, getCurrentUser); // Fase 7: CuentasPorCobrar
+      registerMovimientosClienteHandlers(dataSource, getCurrentUser); // Fase 7: MovimientosCliente
 
       // Startup migration: populate vendedor_id from created_by for historic ventas
       dataSource.query(`UPDATE ventas SET vendedor_id = created_by WHERE vendedor_id IS NULL AND created_by IS NOT NULL`)

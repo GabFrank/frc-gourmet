@@ -1,0 +1,51 @@
+<h2 mat-dialog-title>Cobrar Cuota #{{cuota?.numero}}</h2>
+<mat-dialog-content [formGroup]="form">
+  <div class="info-row" *ngIf="contextoLabel">
+    <span class="info-label">Cuenta:</span> <span>{{contextoLabel}}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Monto cuota:</span> <span>{{cuota?.monto | number:'1.0-2'}}</span>
+    <span class="info-label" style="margin-left:12px">Cobrado:</span> <span>{{cuota?.montoCobrado | number:'1.0-2'}}</span>
+    <span class="info-label" style="margin-left:12px">Restante:</span> <span><b>{{restante | number:'1.0-2'}}</b></span>
+  </div>
+  <mat-divider style="margin: 8px 0 16px"></mat-divider>
+
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>Monto a cobrar</mat-label>
+    <input matInput type="number" formControlName="montoCobrar" [max]="restante" min="0.01">
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>Caja Mayor</mat-label>
+    <mat-select formControlName="cajaMayorId">
+      <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{c.nombre}}</mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  <div class="two-col">
+    <mat-form-field appearance="outline">
+      <mat-label>Moneda</mat-label>
+      <mat-select formControlName="monedaId">
+        <mat-option *ngFor="let m of monedas" [value]="m.id">{{m.denominacion}} ({{m.simbolo}})</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Forma de Pago</mat-label>
+      <mat-select formControlName="formaPagoId">
+        <mat-option *ngFor="let f of formasPago" [value]="f.id">{{f.nombre}}</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
+
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>Observación</mat-label>
+    <input matInput formControlName="observacion">
+  </mat-form-field>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button (click)="onCancel()">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="form.invalid || saving">
+    <mat-spinner *ngIf="saving" diameter="18" style="display:inline-block;margin-right:8px"></mat-spinner>
+    Registrar Cobro
+  </button>
+</mat-dialog-actions>

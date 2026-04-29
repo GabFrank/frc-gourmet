@@ -1,0 +1,103 @@
+<div class="page-container">
+  <div class="page-header">
+    <h2>Cuentas por Cobrar</h2>
+    <div class="header-actions">
+      <button mat-stroked-button (click)="toggleFiltros()">
+        <mat-icon>{{showFiltros ? 'expand_less' : 'filter_list'}}</mat-icon> Filtros
+      </button>
+      <button mat-raised-button color="primary" (click)="crear()">
+        <mat-icon>add</mat-icon> Nueva Cuenta
+      </button>
+    </div>
+  </div>
+
+  <div class="filtros-bar" *ngIf="showFiltros" [formGroup]="filtrosForm">
+    <mat-form-field appearance="outline" class="f-field">
+      <mat-label>Estado</mat-label>
+      <mat-select formControlName="estado">
+        <mat-option [value]="null">Todos</mat-option>
+        <mat-option *ngFor="let e of estadoOptions" [value]="e">{{e}}</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="f-field">
+      <mat-label>Tipo</mat-label>
+      <mat-select formControlName="tipo">
+        <mat-option [value]="null">Todos</mat-option>
+        <mat-option *ngFor="let t of tipoOptions" [value]="t">{{t}}</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <div class="f-actions">
+      <button mat-flat-button color="primary" (click)="aplicarFiltros()"><mat-icon>search</mat-icon> Aplicar</button>
+      <button mat-stroked-button (click)="limpiarFiltros()"><mat-icon>clear</mat-icon> Limpiar</button>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="spinner-container">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+
+  <mat-card *ngIf="!loading">
+    <table mat-table [dataSource]="cuentas" class="full-width">
+      <ng-container matColumnDef="cliente">
+        <th mat-header-cell *matHeaderCellDef>Cliente</th>
+        <td mat-cell *matCellDef="let r">{{clienteNombre(r)}}</td>
+      </ng-container>
+      <ng-container matColumnDef="tipo">
+        <th mat-header-cell *matHeaderCellDef>Tipo</th>
+        <td mat-cell *matCellDef="let r">{{r.tipo}}</td>
+      </ng-container>
+      <ng-container matColumnDef="descripcion">
+        <th mat-header-cell *matHeaderCellDef>Descripción</th>
+        <td mat-cell *matCellDef="let r">{{r.descripcion || '-'}}</td>
+      </ng-container>
+      <ng-container matColumnDef="montoTotal">
+        <th mat-header-cell *matHeaderCellDef>Total</th>
+        <td mat-cell *matCellDef="let r">{{r.moneda?.simbolo}} {{r.montoTotal | number:'1.0-2'}}</td>
+      </ng-container>
+      <ng-container matColumnDef="montoCobrado">
+        <th mat-header-cell *matHeaderCellDef>Cobrado</th>
+        <td mat-cell *matCellDef="let r">{{r.montoCobrado | number:'1.0-2'}}</td>
+      </ng-container>
+      <ng-container matColumnDef="restante">
+        <th mat-header-cell *matHeaderCellDef>Restante</th>
+        <td mat-cell *matCellDef="let r">{{restante(r) | number:'1.0-2'}}</td>
+      </ng-container>
+      <ng-container matColumnDef="cuotas">
+        <th mat-header-cell *matHeaderCellDef>Cuotas</th>
+        <td mat-cell *matCellDef="let r">{{r.cantidadCuotas}}</td>
+      </ng-container>
+      <ng-container matColumnDef="fechaInicio">
+        <th mat-header-cell *matHeaderCellDef>Fecha Inicio</th>
+        <td mat-cell *matCellDef="let r">{{r.fechaInicio | date:'dd/MM/yyyy'}}</td>
+      </ng-container>
+      <ng-container matColumnDef="estado">
+        <th mat-header-cell *matHeaderCellDef>Estado</th>
+        <td mat-cell *matCellDef="let r">
+          <mat-chip-listbox>
+            <mat-chip [color]="estadoColor(r.estado)">{{r.estado}}</mat-chip>
+          </mat-chip-listbox>
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let r">
+          <button mat-icon-button [matMenuTriggerFor]="m"><mat-icon>more_vert</mat-icon></button>
+          <mat-menu #m="matMenu">
+            <button mat-menu-item (click)="verDetalle(r)"><mat-icon>visibility</mat-icon><span>Ver detalle</span></button>
+            <button mat-menu-item (click)="cancelar(r)" *ngIf="r.estado === 'ACTIVO'"><mat-icon>block</mat-icon><span>Cancelar</span></button>
+          </mat-menu>
+        </td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+    <div *ngIf="cuentas.length === 0" class="empty-state">No hay cuentas por cobrar</div>
+    <mat-paginator
+      [length]="total"
+      [pageSize]="pageSize"
+      [pageIndex]="pageIndex"
+      [pageSizeOptions]="[15, 30, 50]"
+      (page)="onPageChange($event)"
+      showFirstLastButtons></mat-paginator>
+  </mat-card>
+</div>

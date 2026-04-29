@@ -1,0 +1,62 @@
+<div class="page-container">
+  <div class="page-header">
+    <h2>Cliente: {{clienteNombre()}}</h2>
+  </div>
+
+  <div *ngIf="loading" class="spinner-container">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+
+  <div *ngIf="!loading">
+    <div class="saldo-cards">
+      <mat-card class="saldo-card">
+        <mat-card-content>
+          <div class="saldo-label">Saldo Deudor</div>
+          <div class="saldo-value" [class.positivo]="saldoActual > 0">{{saldoActual | number:'1.0-2'}}</div>
+          <div class="saldo-sub">deuda acumulada del cliente</div>
+        </mat-card-content>
+      </mat-card>
+      <mat-card class="saldo-card warn" *ngIf="cuotasVencidas > 0">
+        <mat-card-content>
+          <div class="saldo-label">Cuotas Vencidas</div>
+          <div class="saldo-value warn">{{cuotasVencidas}}</div>
+          <div class="saldo-sub">cuotas pendientes y vencidas</div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <h3>Movimientos del Cliente</h3>
+    <mat-card>
+      <table mat-table [dataSource]="movimientos" class="full-width">
+        <ng-container matColumnDef="fecha">
+          <th mat-header-cell *matHeaderCellDef>Fecha</th>
+          <td mat-cell *matCellDef="let m">{{m.fecha | date:'dd/MM/yyyy HH:mm'}}</td>
+        </ng-container>
+        <ng-container matColumnDef="tipo">
+          <th mat-header-cell *matHeaderCellDef>Tipo</th>
+          <td mat-cell *matCellDef="let m">
+            <span class="tipo-badge" [attr.data-tipo]="tipoColor(m.tipo)">{{m.tipo}}</span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="monto">
+          <th mat-header-cell *matHeaderCellDef>Monto</th>
+          <td mat-cell *matCellDef="let m">{{m.monto | number:'1.0-2'}}</td>
+        </ng-container>
+        <ng-container matColumnDef="observacion">
+          <th mat-header-cell *matHeaderCellDef>Observación</th>
+          <td mat-cell *matCellDef="let m">{{m.observacion || '-'}}</td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="movColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: movColumns;"></tr>
+      </table>
+      <div *ngIf="movimientos.length === 0" class="empty-state">Sin movimientos registrados</div>
+      <mat-paginator
+        [length]="totalMovimientos"
+        [pageSize]="pageSize"
+        [pageIndex]="pageIndex"
+        [pageSizeOptions]="[20, 50, 100]"
+        (page)="onPageChange($event)"
+        showFirstLastButtons></mat-paginator>
+    </mat-card>
+  </div>
+</div>

@@ -3038,4 +3038,41 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('evaluar-equipo-periodo', payload);
   },
 
+  // === Cuentas por Cobrar (Fase 7) ===
+  getCuentasPorCobrar: async (filtros?: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-cuentas-por-cobrar', filtros);
+  },
+  getCuentaPorCobrar: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cuenta-por-cobrar', id);
+  },
+  createCuentaPorCobrar: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-cuenta-por-cobrar', data);
+  },
+  updateCuentaPorCobrar: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-cuenta-por-cobrar', id, data);
+  },
+  cancelarCuentaPorCobrar: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('cancelar-cuenta-por-cobrar', payload);
+  },
+  getCuentaPorCobrarCuotas: async (cpcId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-cuenta-por-cobrar-cuotas', cpcId);
+  },
+  cobrarCpcCuota: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('cobrar-cpc-cuota', payload);
+  },
+  anularCobroCpcCuota: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('anular-cobro-cpc-cuota', payload);
+  },
+  recalcularSaldoCliente: async (clienteId: number): Promise<any> => {
+    return await ipcRenderer.invoke('recalcular-saldo-cliente', clienteId);
+  },
+
+  // === Movimientos Cliente (Fase 7) ===
+  getMovimientosCliente: async (clienteId: number, filtros?: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-movimientos-cliente', clienteId, filtros);
+  },
+  getSaldoCliente: async (clienteId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-saldo-cliente', clienteId);
+  },
+
 });

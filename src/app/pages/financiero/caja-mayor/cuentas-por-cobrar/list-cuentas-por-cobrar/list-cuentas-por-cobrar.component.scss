@@ -1,0 +1,41 @@
+.page-container {
+  padding: 16px;
+}
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  h2 { margin: 0; }
+}
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+.filtros-bar {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--mat-sidenav-container-background-color);
+}
+.f-field { min-width: 160px; }
+.f-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.spinner-container {
+  display: flex;
+  justify-content: center;
+  padding: 40px;
+}
+.full-width { width: 100%; }
+.empty-state {
+  text-align: center;
+  padding: 32px;
+  color: var(--mat-list-item-unselected-trailing-supporting-text-color);
+}

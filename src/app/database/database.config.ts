@@ -115,6 +115,11 @@ import { CompraCuota } from './entities/compras/compra-cuota.entity';
 import { CuentaPorPagar } from './entities/financiero/cuenta-por-pagar.entity';
 import { CuentaPorPagarCuota } from './entities/financiero/cuenta-por-pagar-cuota.entity';
 
+// CuentasPorCobrar + MovimientosCliente (Fase 7)
+import { CuentaPorCobrar } from './entities/financiero/cuenta-por-cobrar.entity';
+import { CuentaPorCobrarCuota } from './entities/financiero/cuenta-por-cobrar-cuota.entity';
+import { MovimientoCliente } from './entities/financiero/movimiento-cliente.entity';
+
 // Entradas Varias + Operaciones Financieras (caja mayor)
 import { EntradaVariaCategoria } from './entities/financiero/entrada-varia-categoria.entity';
 import { EntradaVaria } from './entities/financiero/entrada-varia.entity';
@@ -249,6 +254,10 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       CompraCuota,
       CuentaPorPagar,
       CuentaPorPagarCuota,
+      // CuentasPorCobrar + MovimientosCliente (Fase 7)
+      CuentaPorCobrar,
+      CuentaPorCobrarCuota,
+      MovimientoCliente,
       // Entradas Varias + Operaciones Financieras + Chequeras + Cheques
       EntradaVariaCategoria,
       EntradaVaria,

@@ -33,4 +33,7 @@ export class Cliente extends BaseModel {
 
   @Column({ type: 'float', default: 0 })
   limite_credito!: number;
+
+  @Column({ type: 'decimal', precision: 18, scale: 2, default: 0, name: 'saldo_actual' })
+  saldoActual!: number;
 } 

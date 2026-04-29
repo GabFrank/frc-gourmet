@@ -1,0 +1,62 @@
+<h2 mat-dialog-title>Nueva Cuenta por Cobrar</h2>
+<mat-dialog-content [formGroup]="form">
+  <div class="form-row">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Cliente</mat-label>
+      <mat-select formControlName="clienteId">
+        <mat-option *ngFor="let c of clientes" [value]="c.id">{{clienteLabel(c)}}</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
+  <div class="form-row two-col">
+    <mat-form-field appearance="outline">
+      <mat-label>Tipo</mat-label>
+      <mat-select formControlName="tipo">
+        <mat-option *ngFor="let t of tipoOptions" [value]="t">{{t}}</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Moneda</mat-label>
+      <mat-select formControlName="monedaId">
+        <mat-option *ngFor="let m of monedas" [value]="m.id">{{m.denominacion}} ({{m.simbolo}})</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
+  <div class="form-row">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Descripción</mat-label>
+      <input matInput formControlName="descripcion" placeholder="Descripción opcional">
+    </mat-form-field>
+  </div>
+  <div class="form-row two-col">
+    <mat-form-field appearance="outline">
+      <mat-label>Monto Total</mat-label>
+      <input matInput type="number" formControlName="montoTotal" min="0.01">
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Cantidad de Cuotas</mat-label>
+      <input matInput type="number" formControlName="cantidadCuotas" min="1">
+    </mat-form-field>
+  </div>
+  <div class="form-row">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Fecha de Inicio</mat-label>
+      <input matInput [matDatepicker]="picker" formControlName="fechaInicio">
+      <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+      <mat-datepicker #picker></mat-datepicker>
+    </mat-form-field>
+  </div>
+  <div class="form-row">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Observación</mat-label>
+      <textarea matInput formControlName="observacion" rows="2"></textarea>
+    </mat-form-field>
+  </div>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button (click)="onCancel()">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="form.invalid || saving">
+    <mat-spinner *ngIf="saving" diameter="18" style="display:inline-block;margin-right:8px"></mat-spinner>
+    Crear Cuenta
+  </button>
+</mat-dialog-actions>

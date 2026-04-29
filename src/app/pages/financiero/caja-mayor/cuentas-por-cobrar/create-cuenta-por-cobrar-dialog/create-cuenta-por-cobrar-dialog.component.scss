@@ -1,0 +1,9 @@
+.form-row {
+  margin-bottom: 8px;
+  &.two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+}
+.full-width { width: 100%; }

@@ -879,6 +879,21 @@ interface ElectronAPI {
   asignarReglaEquipo: (payload: any) => Promise<any>;
   desasignarReglaEquipo: (asignacionId: number) => Promise<any>;
   evaluarEquipoPeriodo: (payload: any) => Promise<any>;
+
+  // Cuentas por Cobrar (Fase 7)
+  getCuentasPorCobrar: (filtros?: any) => Promise<any>;
+  getCuentaPorCobrar: (id: number) => Promise<any>;
+  createCuentaPorCobrar: (data: any) => Promise<any>;
+  updateCuentaPorCobrar: (id: number, data: any) => Promise<any>;
+  cancelarCuentaPorCobrar: (payload: any) => Promise<any>;
+  getCuentaPorCobrarCuotas: (cpcId: number) => Promise<any[]>;
+  cobrarCpcCuota: (payload: any) => Promise<any>;
+  anularCobroCpcCuota: (payload: any) => Promise<any>;
+  recalcularSaldoCliente: (clienteId: number) => Promise<any>;
+
+  // Movimientos Cliente (Fase 7)
+  getMovimientosCliente: (clienteId: number, filtros?: any) => Promise<any>;
+  getSaldoCliente: (clienteId: number) => Promise<any>;
 }
 
 
@@ -3401,6 +3416,43 @@ export class RepositoryService {
   }
   evaluarEquipoPeriodo(payload: any): Observable<any> {
     return from(this.api.evaluarEquipoPeriodo(payload));
+  }
+
+  // ===================== CUENTAS POR COBRAR (Fase 7) =====================
+  getCuentasPorCobrar(filtros?: any): Observable<any> {
+    return from(this.api.getCuentasPorCobrar(filtros));
+  }
+  getCuentaPorCobrar(id: number): Observable<any> {
+    return from(this.api.getCuentaPorCobrar(id));
+  }
+  createCuentaPorCobrar(data: any): Observable<any> {
+    return from(this.api.createCuentaPorCobrar(data));
+  }
+  updateCuentaPorCobrar(id: number, data: any): Observable<any> {
+    return from(this.api.updateCuentaPorCobrar(id, data));
+  }
+  cancelarCuentaPorCobrar(payload: any): Observable<any> {
+    return from(this.api.cancelarCuentaPorCobrar(payload));
+  }
+  getCuentaPorCobrarCuotas(cpcId: number): Observable<any[]> {
+    return from(this.api.getCuentaPorCobrarCuotas(cpcId));
+  }
+  cobrarCpcCuota(payload: any): Observable<any> {
+    return from(this.api.cobrarCpcCuota(payload));
+  }
+  anularCobroCpcCuota(payload: any): Observable<any> {
+    return from(this.api.anularCobroCpcCuota(payload));
+  }
+  recalcularSaldoCliente(clienteId: number): Observable<any> {
+    return from(this.api.recalcularSaldoCliente(clienteId));
+  }
+
+  // ===================== MOVIMIENTOS CLIENTE (Fase 7) =====================
+  getMovimientosCliente(clienteId: number, filtros?: any): Observable<any> {
+    return from(this.api.getMovimientosCliente(clienteId, filtros));
+  }
+  getSaldoCliente(clienteId: number): Observable<any> {
+    return from(this.api.getSaldoCliente(clienteId));
   }
 
 }

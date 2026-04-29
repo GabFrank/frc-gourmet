@@ -1,0 +1,106 @@
+<div class="page-container" *ngIf="!loading; else spinner">
+  <div class="page-header" *ngIf="cpc">
+    <div>
+      <h2>Cuenta por Cobrar #{{cpc.id}}</h2>
+      <span class="cliente-label">{{clienteNombre()}}</span>
+    </div>
+    <mat-chip-listbox>
+      <mat-chip [color]="cpcEstadoColor(cpc.estado)">{{cpc.estado}}</mat-chip>
+    </mat-chip-listbox>
+  </div>
+
+  <mat-card class="resumen-card" *ngIf="cpc">
+    <div class="resumen-grid">
+      <div class="resumen-item">
+        <span class="label">Tipo</span>
+        <span class="value">{{cpc.tipo}}</span>
+      </div>
+      <div class="resumen-item">
+        <span class="label">Descripción</span>
+        <span class="value">{{cpc.descripcion || '-'}}</span>
+      </div>
+      <div class="resumen-item">
+        <span class="label">Monto Total</span>
+        <span class="value">{{cpc.moneda?.simbolo}} {{cpc.montoTotal | number:'1.0-2'}}</span>
+      </div>
+      <div class="resumen-item">
+        <span class="label">Cobrado</span>
+        <span class="value">{{cpc.moneda?.simbolo}} {{cpc.montoCobrado | number:'1.0-2'}}</span>
+      </div>
+      <div class="resumen-item">
+        <span class="label">Restante</span>
+        <span class="value">{{cpc.moneda?.simbolo}} {{(cpc.montoTotal - cpc.montoCobrado) | number:'1.0-2'}}</span>
+      </div>
+      <div class="resumen-item">
+        <span class="label">Fecha Inicio</span>
+        <span class="value">{{cpc.fechaInicio | date:'dd/MM/yyyy'}}</span>
+      </div>
+      <div class="resumen-item">
+        <span class="label">Cuotas</span>
+        <span class="value">{{cpc.cantidadCuotas}}</span>
+      </div>
+      <div class="resumen-item" *ngIf="cpc.observacion">
+        <span class="label">Observación</span>
+        <span class="value">{{cpc.observacion}}</span>
+      </div>
+    </div>
+  </mat-card>
+
+  <h3>Cuotas</h3>
+  <mat-card>
+    <table mat-table [dataSource]="cuotas" class="full-width">
+      <ng-container matColumnDef="numero">
+        <th mat-header-cell *matHeaderCellDef>#</th>
+        <td mat-cell *matCellDef="let c">{{c.numero}}</td>
+      </ng-container>
+      <ng-container matColumnDef="fechaVencimiento">
+        <th mat-header-cell *matHeaderCellDef>Vencimiento</th>
+        <td mat-cell *matCellDef="let c">{{c.fechaVencimiento | date:'dd/MM/yyyy'}}</td>
+      </ng-container>
+      <ng-container matColumnDef="monto">
+        <th mat-header-cell *matHeaderCellDef>Monto</th>
+        <td mat-cell *matCellDef="let c">{{c.monto | number:'1.0-2'}}</td>
+      </ng-container>
+      <ng-container matColumnDef="montoCobrado">
+        <th mat-header-cell *matHeaderCellDef>Cobrado</th>
+        <td mat-cell *matCellDef="let c">{{c.montoCobrado | number:'1.0-2'}}</td>
+      </ng-container>
+      <ng-container matColumnDef="restante">
+        <th mat-header-cell *matHeaderCellDef>Restante</th>
+        <td mat-cell *matCellDef="let c">{{restante(c) | number:'1.0-2'}}</td>
+      </ng-container>
+      <ng-container matColumnDef="estado">
+        <th mat-header-cell *matHeaderCellDef>Estado</th>
+        <td mat-cell *matCellDef="let c">
+          <span class="estado-badge" [attr.data-estado]="c.estado">{{c.estado}}</span>
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="fechaCobro">
+        <th mat-header-cell *matHeaderCellDef>Fecha Cobro</th>
+        <td mat-cell *matCellDef="let c">{{c.fechaCobro | date:'dd/MM/yyyy'}}</td>
+      </ng-container>
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let c">
+          <button mat-icon-button [matMenuTriggerFor]="m" *ngIf="cpc?.estado === 'ACTIVO'">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #m="matMenu">
+            <button mat-menu-item (click)="cobrar(c)" *ngIf="c.estado === 'PENDIENTE' || c.estado === 'PARCIAL'">
+              <mat-icon>payments</mat-icon><span>Cobrar cuota</span>
+            </button>
+            <button mat-menu-item (click)="anularCobro(c)" *ngIf="c.montoCobrado > 0 && c.estado !== 'CANCELADO'">
+              <mat-icon>undo</mat-icon><span>Anular cobro</span>
+            </button>
+          </mat-menu>
+        </td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="cuotaColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: cuotaColumns;"></tr>
+    </table>
+    <div *ngIf="cuotas.length === 0" class="empty-state">Sin cuotas registradas</div>
+  </mat-card>
+</div>
+<ng-template #spinner>
+  <div class="spinner-container"><mat-spinner diameter="40"></mat-spinner></div>
+</ng-template>

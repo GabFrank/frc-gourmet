@@ -321,6 +321,10 @@
               <mat-icon matListItemIcon>account_balance</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Caja Mayor</span>
             </a>
+            <a mat-list-item (click)="openCuentasPorCobrarTab()">
+              <mat-icon matListItemIcon>request_quote</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Cuentas por Cobrar</span>
+            </a>
           </div>
         </mat-expansion-panel>
 
