@@ -37,6 +37,8 @@ import { registerCuentasPorPagarHandlers } from './electron/handlers/cuentas-por
 import { registerDashboardShortcutsHandlers } from './electron/handlers/dashboard-shortcuts.handler';
 import { registerPermissionsHandlers, seedPermissions } from './electron/handlers/permissions.handler';
 import { registerConfiguracionRrhhHandlers, seedConfiguracionRrhh } from './electron/handlers/configuracion-rrhh.handler';
+import { registerRrhhFuncionariosHandlers } from './electron/handlers/rrhh-funcionarios.handler';
+import { registerFuncionarioDocumentosHandlers } from './electron/handlers/funcionario-documentos.handler';
 import { seedInitialData } from './electron/utils/seed-data';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
 // Unificado en recetas.handler: sabores y variaciones
@@ -86,6 +88,8 @@ function initializeDatabase() {
       registerDashboardShortcutsHandlers(dataSource, getCurrentUser); // Dashboard Shortcuts personalizables
       registerPermissionsHandlers(dataSource, getCurrentUser); // RRHH: Permission + RolePermission
       registerConfiguracionRrhhHandlers(dataSource, getCurrentUser); // RRHH: ConfiguracionRrhh (parametros legales)
+      registerRrhhFuncionariosHandlers(dataSource, getCurrentUser); // RRHH Fase 1: Cargos + Funcionarios + Historicos
+      registerFuncionarioDocumentosHandlers(dataSource, getCurrentUser); // RRHH Fase 1: Documentos del funcionario (filesystem)
 
       // Scheduler: procesa acreditaciones POS pendientes cada 5 min (en main process)
       startAcreditacionesScheduler(dataSource, 5);

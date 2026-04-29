@@ -1,0 +1,71 @@
+.funcionarios-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+
+  .header-card,
+  .filtros-card,
+  .data-card {
+    width: 100%;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    .title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      h2 { margin: 0; font-size: 20px; }
+    }
+  }
+
+  .filtros {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+
+    mat-form-field {
+      min-width: 200px;
+    }
+  }
+
+  .full-width { width: 100%; }
+  .acciones-col { width: 60px; }
+
+  .moneda {
+    margin-left: 4px;
+    opacity: 0.65;
+    font-size: 12px;
+  }
+
+  .egreso-info {
+    margin-left: 8px;
+    opacity: 0.7;
+    font-size: 12px;
+  }
+
+  .spinner-container {
+    display: flex;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .empty {
+    padding: 16px;
+    text-align: center;
+    opacity: 0.7;
+  }
+
+  .estado-verde { color: #43a047; }
+  .estado-rojo { color: #e53935; }
+
+  tr.mat-row {
+    cursor: pointer;
+  }
+}

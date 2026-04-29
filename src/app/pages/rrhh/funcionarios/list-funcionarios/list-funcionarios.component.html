@@ -1,0 +1,117 @@
+<div class="funcionarios-page">
+  <mat-card class="header-card">
+    <mat-card-content>
+      <div class="header">
+        <div class="title">
+          <mat-icon>badge</mat-icon>
+          <h2>Funcionarios</h2>
+        </div>
+        <div class="actions">
+          <button mat-flat-button color="primary" (click)="abrirCrear()">
+            <mat-icon>person_add</mat-icon>
+            Nuevo funcionario
+          </button>
+        </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="filtros-card">
+    <mat-card-content>
+      <div class="filtros">
+        <mat-form-field appearance="outline">
+          <mat-label>Buscar (nombre / apellido / codigo)</mat-label>
+          <input matInput [(ngModel)]="busqueda" (keyup.enter)="buscar()" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Cargo</mat-label>
+          <mat-select [(ngModel)]="filtroCargoId">
+            <mat-option [value]="null">Todos</mat-option>
+            <mat-option *ngFor="let c of cargos" [value]="c.id">{{ c.nombre }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-slide-toggle [(ngModel)]="soloActivos">Solo activos</mat-slide-toggle>
+        <button mat-flat-button color="primary" (click)="buscar()">
+          <mat-icon>search</mat-icon>
+          Filtrar
+        </button>
+        <button mat-stroked-button (click)="limpiarFiltros()">
+          <mat-icon>clear</mat-icon>
+          Limpiar
+        </button>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="data-card">
+    <mat-card-content>
+      <div *ngIf="loading" class="spinner-container">
+        <mat-progress-spinner mode="indeterminate" diameter="40"></mat-progress-spinner>
+      </div>
+
+      <table mat-table [dataSource]="funcionarios" class="full-width" *ngIf="!loading">
+        <ng-container matColumnDef="codigo">
+          <th mat-header-cell *matHeaderCellDef>Codigo</th>
+          <td mat-cell *matCellDef="let f">{{ f.codigoInterno || '-' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="nombre">
+          <th mat-header-cell *matHeaderCellDef>Nombre</th>
+          <td mat-cell *matCellDef="let f">
+            {{ f.persona?.nombre }} {{ f.persona?.apellido || '' }}
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="cargo">
+          <th mat-header-cell *matHeaderCellDef>Cargo</th>
+          <td mat-cell *matCellDef="let f">{{ f.cargo?.nombre || '-' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="fechaIngreso">
+          <th mat-header-cell *matHeaderCellDef>Ingreso</th>
+          <td mat-cell *matCellDef="let f">{{ f.fechaIngreso | date:'shortDate' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="salario">
+          <th mat-header-cell *matHeaderCellDef>Salario base</th>
+          <td mat-cell *matCellDef="let f">
+            {{ f.salarioBase | number:'1.0-2' }}
+            <span class="moneda" *ngIf="f.monedaSalario?.simbolo">{{ f.monedaSalario.simbolo }}</span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="activo">
+          <th mat-header-cell *matHeaderCellDef>Estado</th>
+          <td mat-cell *matCellDef="let f">
+            <mat-icon [class.estado-verde]="f.activo" [class.estado-rojo]="!f.activo">
+              {{ f.activo ? 'check_circle' : 'cancel' }}
+            </mat-icon>
+            <span *ngIf="!f.activo && f.fechaEgreso" class="egreso-info">
+              Egreso: {{ f.fechaEgreso | date:'shortDate' }}
+            </span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef class="acciones-col">Acciones</th>
+          <td mat-cell *matCellDef="let f">
+            <button mat-icon-button [matMenuTriggerFor]="menu">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="abrirDetalle(f)">
+                <mat-icon>open_in_new</mat-icon>
+                <span>Abrir detalle</span>
+              </button>
+              <button mat-menu-item (click)="abrirEditar(f)">
+                <mat-icon>edit</mat-icon>
+                <span>Editar datos</span>
+              </button>
+            </mat-menu>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns" (dblclick)="abrirDetalle(row)"></tr>
+      </table>
+
+      <div *ngIf="!loading && funcionarios.length === 0" class="empty">
+        Sin funcionarios para los filtros aplicados.
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

@@ -125,6 +125,14 @@
               <mat-icon matListItemIcon>business</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Clientes</span>
             </a>
+            <a mat-list-item (click)="openCargosTab()">
+              <mat-icon matListItemIcon>work</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Cargos</span>
+            </a>
+            <a mat-list-item (click)="openFuncionariosTab()">
+              <mat-icon matListItemIcon>badge</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Funcionarios</span>
+            </a>
             <a mat-list-item (click)="openListPermisosTab()">
               <mat-icon matListItemIcon>verified_user</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Permisos</span>

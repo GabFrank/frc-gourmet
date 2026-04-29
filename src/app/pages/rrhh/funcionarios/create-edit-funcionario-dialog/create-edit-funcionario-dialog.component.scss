@@ -1,0 +1,20 @@
+.dialog-content {
+  min-width: 720px;
+
+  .spinner-container {
+    display: flex;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: center;
+
+    .full {
+      grid-column: 1 / -1;
+    }
+  }
+}

@@ -55,6 +55,8 @@ import { VentasDashboardComponent } from './pages/ventas/dashboard/ventas-dashbo
 import { CajaMayorDashboardComponent } from './pages/financiero/caja-mayor/dashboard/caja-mayor-dashboard.component';
 import { ListPermisosComponent } from './pages/personalizacion/permisos/list-permisos/list-permisos.component';
 import { ListConfiguracionRrhhComponent } from './pages/rrhh/configuracion/list-configuracion-rrhh/list-configuracion-rrhh.component';
+import { ListCargosComponent } from './pages/rrhh/cargos/list-cargos.component';
+import { ListFuncionariosComponent } from './pages/rrhh/funcionarios/list-funcionarios/list-funcionarios.component';
 
 @Component({
   selector: 'app-root',
@@ -343,6 +345,28 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       ListConfiguracionRrhhComponent,
       { source: 'navigation' },
       'configuracion-rrhh-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openCargosTab() {
+    this.tabsService.openTab(
+      'Cargos',
+      ListCargosComponent,
+      { source: 'navigation' },
+      'cargos-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openFuncionariosTab() {
+    this.tabsService.openTab(
+      'Funcionarios',
+      ListFuncionariosComponent,
+      { source: 'navigation' },
+      'funcionarios-tab',
       true
     );
     this.closeMenu();

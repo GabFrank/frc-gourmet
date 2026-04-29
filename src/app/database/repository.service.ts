@@ -736,6 +736,31 @@ interface ElectronAPI {
   updateConfiguracionRrhh: (id: number, data: any) => Promise<any>;
   deleteConfiguracionRrhh: (id: number) => Promise<any>;
   seedConfiguracionRrhh: () => Promise<any>;
+
+  // RRHH - Cargos
+  getCargos: () => Promise<any[]>;
+  getCargo: (id: number) => Promise<any>;
+  createCargo: (data: any) => Promise<any>;
+  updateCargo: (id: number, data: any) => Promise<any>;
+  deleteCargo: (id: number) => Promise<any>;
+
+  // RRHH - Funcionarios
+  getFuncionarios: (filtros?: any) => Promise<any[]>;
+  getFuncionario: (id: number) => Promise<any>;
+  createFuncionario: (data: any) => Promise<any>;
+  updateFuncionario: (id: number, data: any) => Promise<any>;
+  cambiarCargoFuncionario: (id: number, data: any) => Promise<any>;
+  cambiarSalarioFuncionario: (id: number, data: any) => Promise<any>;
+  egresarFuncionario: (id: number, data: any) => Promise<any>;
+  getHistoricoCargos: (funcionarioId: number) => Promise<any[]>;
+  getHistoricoSalarios: (funcionarioId: number) => Promise<any[]>;
+
+  // RRHH - Documentos
+  getFuncionarioDocumentos: (funcionarioId: number) => Promise<any[]>;
+  uploadFuncionarioDocumento: (payload: any) => Promise<any>;
+  deleteFuncionarioDocumento: (id: number) => Promise<any>;
+  getFuncionarioDocumentoBase64: (id: number) => Promise<any>;
+  updateFuncionarioDocumento: (id: number, data: any) => Promise<any>;
 }
 
 
@@ -2901,6 +2926,69 @@ export class RepositoryService {
   }
   seedConfiguracionRrhh(): Observable<any> {
     return from(this.api.seedConfiguracionRrhh());
+  }
+
+  // ===================== RRHH: CARGOS =====================
+  getCargos(): Observable<any[]> {
+    return from(this.api.getCargos());
+  }
+  getCargo(id: number): Observable<any> {
+    return from(this.api.getCargo(id));
+  }
+  createCargo(data: any): Observable<any> {
+    return from(this.api.createCargo(data));
+  }
+  updateCargo(id: number, data: any): Observable<any> {
+    return from(this.api.updateCargo(id, data));
+  }
+  deleteCargo(id: number): Observable<any> {
+    return from(this.api.deleteCargo(id));
+  }
+
+  // ===================== RRHH: FUNCIONARIOS =====================
+  getFuncionarios(filtros?: any): Observable<any[]> {
+    return from(this.api.getFuncionarios(filtros));
+  }
+  getFuncionario(id: number): Observable<any> {
+    return from(this.api.getFuncionario(id));
+  }
+  createFuncionario(data: any): Observable<any> {
+    return from(this.api.createFuncionario(data));
+  }
+  updateFuncionario(id: number, data: any): Observable<any> {
+    return from(this.api.updateFuncionario(id, data));
+  }
+  cambiarCargoFuncionario(id: number, data: any): Observable<any> {
+    return from(this.api.cambiarCargoFuncionario(id, data));
+  }
+  cambiarSalarioFuncionario(id: number, data: any): Observable<any> {
+    return from(this.api.cambiarSalarioFuncionario(id, data));
+  }
+  egresarFuncionario(id: number, data: any): Observable<any> {
+    return from(this.api.egresarFuncionario(id, data));
+  }
+  getHistoricoCargos(funcionarioId: number): Observable<any[]> {
+    return from(this.api.getHistoricoCargos(funcionarioId));
+  }
+  getHistoricoSalarios(funcionarioId: number): Observable<any[]> {
+    return from(this.api.getHistoricoSalarios(funcionarioId));
+  }
+
+  // ===================== RRHH: DOCUMENTOS =====================
+  getFuncionarioDocumentos(funcionarioId: number): Observable<any[]> {
+    return from(this.api.getFuncionarioDocumentos(funcionarioId));
+  }
+  uploadFuncionarioDocumento(payload: any): Observable<any> {
+    return from(this.api.uploadFuncionarioDocumento(payload));
+  }
+  deleteFuncionarioDocumento(id: number): Observable<any> {
+    return from(this.api.deleteFuncionarioDocumento(id));
+  }
+  getFuncionarioDocumentoBase64(id: number): Observable<any> {
+    return from(this.api.getFuncionarioDocumentoBase64(id));
+  }
+  updateFuncionarioDocumento(id: number, data: any): Observable<any> {
+    return from(this.api.updateFuncionarioDocumento(id, data));
   }
 
 }

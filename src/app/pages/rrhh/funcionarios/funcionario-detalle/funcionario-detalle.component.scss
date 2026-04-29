@@ -1,0 +1,89 @@
+.detalle-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+
+  .header-card {
+    width: 100%;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+
+    .header-left {
+      h2 {
+        margin: 0 0 8px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        .estado-chip {
+          margin-left: 8px;
+        }
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        opacity: 0.85;
+
+        span {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+
+          mat-icon {
+            font-size: 18px;
+            width: 18px;
+            height: 18px;
+          }
+        }
+      }
+    }
+  }
+
+  .tabs {
+    width: 100%;
+
+    mat-card {
+      margin-top: 12px;
+    }
+  }
+
+  .datos-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+
+    .full {
+      grid-column: 1 / -1;
+    }
+  }
+
+  .docs-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 12px;
+  }
+
+  .full-width { width: 100%; }
+  .acciones-col { width: 60px; }
+
+  .spinner-container {
+    display: flex;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .empty {
+    padding: 16px;
+    text-align: center;
+    opacity: 0.7;
+  }
+}

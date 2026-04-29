@@ -16,6 +16,11 @@ import { LoginSession } from './entities/auth/login-session.entity';
 
 // RRHH entities
 import { ConfiguracionRrhh } from './entities/rrhh/configuracion-rrhh.entity';
+import { Cargo } from './entities/rrhh/cargo.entity';
+import { Funcionario } from './entities/rrhh/funcionario.entity';
+import { HistoricoCargo } from './entities/rrhh/historico-cargo.entity';
+import { HistoricoSalario } from './entities/rrhh/historico-salario.entity';
+import { FuncionarioDocumento } from './entities/rrhh/funcionario-documento.entity';
 
 import { Moneda } from './entities/financiero/moneda.entity';
 import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
@@ -156,6 +161,11 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       LoginSession,
       // RRHH entities
       ConfiguracionRrhh,
+      Cargo,
+      Funcionario,
+      HistoricoCargo,
+      HistoricoSalario,
+      FuncionarioDocumento,
       // Financiero entities
       Moneda,
       TipoPrecio,

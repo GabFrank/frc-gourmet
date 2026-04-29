@@ -2645,4 +2645,73 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('seed-configuracion-rrhh');
   },
 
+  // =============================================
+  // RRHH - Cargos
+  // =============================================
+  getCargos: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-cargos');
+  },
+  getCargo: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cargo', id);
+  },
+  createCargo: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-cargo', data);
+  },
+  updateCargo: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-cargo', id, data);
+  },
+  deleteCargo: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-cargo', id);
+  },
+
+  // =============================================
+  // RRHH - Funcionarios
+  // =============================================
+  getFuncionarios: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-funcionarios', filtros);
+  },
+  getFuncionario: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-funcionario', id);
+  },
+  createFuncionario: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-funcionario', data);
+  },
+  updateFuncionario: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-funcionario', id, data);
+  },
+  cambiarCargoFuncionario: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('cambiar-cargo-funcionario', id, data);
+  },
+  cambiarSalarioFuncionario: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('cambiar-salario-funcionario', id, data);
+  },
+  egresarFuncionario: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('egresar-funcionario', id, data);
+  },
+  getHistoricoCargos: async (funcionarioId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-historico-cargos', funcionarioId);
+  },
+  getHistoricoSalarios: async (funcionarioId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-historico-salarios', funcionarioId);
+  },
+
+  // =============================================
+  // RRHH - Documentos del funcionario
+  // =============================================
+  getFuncionarioDocumentos: async (funcionarioId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-funcionario-documentos', funcionarioId);
+  },
+  uploadFuncionarioDocumento: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('upload-funcionario-documento', payload);
+  },
+  deleteFuncionarioDocumento: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-funcionario-documento', id);
+  },
+  getFuncionarioDocumentoBase64: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-funcionario-documento-base64', id);
+  },
+  updateFuncionarioDocumento: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-funcionario-documento', id, data);
+  },
+
 });

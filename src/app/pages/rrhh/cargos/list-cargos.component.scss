@@ -1,0 +1,68 @@
+.cargos-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+
+  .header-card,
+  .form-card,
+  .data-card {
+    width: 100%;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+
+    .title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      h2 { margin: 0; font-size: 20px; }
+
+      .subtitle {
+        font-size: 13px;
+        opacity: 0.7;
+        margin-left: 8px;
+      }
+    }
+  }
+
+  .inline-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 12px;
+    align-items: center;
+
+    .full-line { grid-column: 1 / -1; }
+
+    .form-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+  }
+
+  .full-width { width: 100%; }
+  .acciones-col { width: 60px; }
+
+  .spinner-container {
+    display: flex;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .empty {
+    padding: 16px;
+    text-align: center;
+    opacity: 0.7;
+  }
+
+  .estado-verde { color: #43a047; }
+  .estado-rojo { color: #e53935; }
+}
