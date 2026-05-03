@@ -282,7 +282,8 @@ export class LiquidacionSueldoDetalleComponent implements OnInit {
   pagar(): void {
     if (!this.liquidacion) return;
     const ref = this.dialog.open(PagarLiquidacionDialogComponent, {
-      width: '700px',
+      width: '900px',
+      maxWidth: '95vw',
       data: { liquidacion: this.liquidacion },
     });
     ref.afterClosed().subscribe((res) => { if (res?.saved) this.load(); });

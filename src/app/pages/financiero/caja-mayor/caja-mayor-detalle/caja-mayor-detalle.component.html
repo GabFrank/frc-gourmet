@@ -19,6 +19,10 @@
         <mat-icon>remove_circle</mat-icon>
         Registrar Egreso
       </button>
+      <button mat-stroked-button (click)="abrirConfiguracion()" matTooltip="Configurar cards visibles">
+        <mat-icon>tune</mat-icon>
+        Configurar
+      </button>
       <button mat-raised-button color="warn" (click)="cerrarCajaMayor()">
         <mat-icon>lock</mat-icon>
         Cerrar Caja Mayor
@@ -31,36 +35,83 @@
   </div>
 
   <div *ngIf="!loading" class="content-section">
-    <!-- Saldos por Forma de Pago -->
-    <div class="saldos-section">
-      <h3 class="section-title">Saldo en Caja</h3>
-      <div class="saldos-cards" *ngIf="saldosPorFormaPago.length > 0">
-        <mat-card *ngFor="let grupo of saldosPorFormaPago" class="saldo-card">
-          <mat-card-header>
-            <mat-icon mat-card-avatar class="saldo-icon">account_balance_wallet</mat-icon>
-            <mat-card-title>{{grupo.formaPagoNombre}}</mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <div *ngFor="let m of grupo.monedas" class="saldo-moneda-row">
-              <span class="saldo-moneda-label">{{m.simbolo}} {{m.denominacion}}</span>
-              <span class="saldo-moneda-valor" [ngClass]="{'negativo': m.saldo < 0}">{{m.saldo | number:'1.0-2'}}</span>
+    <!-- Sidebar Saldos (derecha) -->
+    <aside class="saldos-sidebar">
+      <h3 class="sidebar-title">Saldo en Caja</h3>
+      <div class="sidebar-cards" *ngIf="saldosPorFormaPago.length > 0">
+        <div *ngFor="let grupo of saldosPorFormaPago" class="mini-card">
+          <div class="mini-card-head">
+            <mat-icon class="mini-icon">account_balance_wallet</mat-icon>
+            <span class="mini-title">{{grupo.formaPagoNombre}}</span>
+          </div>
+          <div class="mini-rows">
+            <div *ngFor="let m of grupo.monedas" class="mini-row">
+              <span class="mini-label">{{m.simbolo}} {{m.denominacion}}</span>
+              <span class="mini-valor" [ngClass]="{'negativo': m.saldo < 0}">{{m.saldo | number:'1.0-2'}}</span>
             </div>
-          </mat-card-content>
-        </mat-card>
+          </div>
+        </div>
       </div>
-      <div *ngIf="saldosPorFormaPago.length === 0" class="empty-state">
-        <p>No hay saldos registrados</p>
+      <div *ngIf="saldosPorFormaPago.length === 0" class="empty-state-sm">
+        <p>Sin saldos</p>
       </div>
-    </div>
 
-    <!-- Movimientos -->
+      <ng-container *ngIf="cuentasBancariasCards.length > 0">
+        <h3 class="sidebar-title">Cuentas bancarias</h3>
+        <div class="sidebar-cards">
+          <div *ngFor="let cb of cuentasBancariasCards" class="mini-card cb-mini">
+            <div class="mini-card-head">
+              <mat-icon class="mini-icon">account_balance</mat-icon>
+              <div class="cb-titles">
+                <span class="mini-title" [matTooltip]="cb.nombre">{{cb.nombre}}</span>
+                <span class="cb-meta">{{cb.banco}} · {{cb.numeroCuenta}}</span>
+              </div>
+            </div>
+            <div class="mini-rows">
+              <div class="mini-row">
+                <span class="mini-label">Actual</span>
+                <span class="mini-valor" [ngClass]="{'negativo': cb.saldo < 0}">
+                  {{cb.monedaSimbolo}} {{cb.saldo | number:'1.0-2'}}
+                </span>
+              </div>
+              <div class="mini-row">
+                <span class="mini-label reservado-lbl" matTooltip="Cheques diferidos emitidos pendientes de cobro">Reservado</span>
+                <span class="mini-valor reservado">
+                  {{cb.monedaSimbolo}} {{cb.saldoReservado | number:'1.0-2'}}
+                </span>
+              </div>
+              <div class="mini-row">
+                <span class="mini-label futuro-lbl" matTooltip="Acreditaciones POS pendientes">Futuro</span>
+                <span class="mini-valor futuro">
+                  {{cb.monedaSimbolo}} {{cb.saldoFuturo | number:'1.0-2'}}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </ng-container>
+    </aside>
+
+    <!-- Movimientos (columna principal) -->
     <mat-card class="section-card">
       <mat-card-header class="movimientos-header">
         <mat-card-title>Movimientos</mat-card-title>
-        <button mat-stroked-button (click)="toggleFiltros()" class="filtros-toggle">
-          <mat-icon>{{showFiltros ? 'expand_less' : 'filter_list'}}</mat-icon>
-          Filtros
-        </button>
+        <div class="header-actions">
+          <button mat-stroked-button
+                  (click)="onToggleVerAnulaciones()"
+                  [class.toggle-active]="verAnulaciones"
+                  [matTooltip]="verAnulaciones ? 'Ocultar contra-movimientos de anulacion' : 'Mostrar contra-movimientos de anulacion'">
+            <mat-icon>{{verAnulaciones ? 'visibility' : 'visibility_off'}}</mat-icon>
+            {{verAnulaciones ? 'Anulaciones visibles' : 'Ver anulaciones'}}
+          </button>
+          <button mat-stroked-button (click)="toggleFiltros()" class="filtros-toggle">
+            <mat-icon>{{showFiltros ? 'expand_less' : 'filter_list'}}</mat-icon>
+            Filtros
+          </button>
+          <button mat-icon-button (click)="loadMovimientos()" [disabled]="loadingMovimientos" matTooltip="Actualizar tabla">
+            <mat-icon [class.spinning]="loadingMovimientos">refresh</mat-icon>
+          </button>
+        </div>
       </mat-card-header>
 
       <!-- Barra de filtros compacta -->
@@ -114,6 +165,7 @@
       </div>
 
       <mat-card-content>
+        <div class="movimientos-scroll">
         <div *ngIf="loadingMovimientos" class="movimientos-loading">
           <mat-spinner diameter="28"></mat-spinner>
         </div>
@@ -127,8 +179,9 @@
             <th mat-header-cell *matHeaderCellDef>Tipo</th>
             <td mat-cell *matCellDef="let row">
               <mat-chip-listbox>
-                <mat-chip [ngStyle]="{'background-color': row.tipoMovimiento.startsWith('INGRESO') || row.tipoMovimiento.startsWith('AJUSTE_POS') || row.tipoMovimiento.startsWith('TRANSFERENCIA_E') ? '#4caf50' : '#f44336', 'color': 'white'}">
-                  {{row.tipoMovimiento}}
+                <mat-chip [matTooltip]="row.tipoMovimiento"
+                          [ngStyle]="{'background-color': row.tipoIsIngreso ? '#4caf50' : '#f44336', 'color': 'white'}">
+                  {{row.tipoLabel}}
                 </mat-chip>
               </mat-chip-listbox>
             </td>
@@ -137,7 +190,7 @@
           <ng-container matColumnDef="detalles">
             <th mat-header-cell *matHeaderCellDef>Detalle</th>
             <td mat-cell *matCellDef="let row">
-              <div *ngFor="let d of row.detalles" class="detalle-line">
+              <div *ngFor="let d of row.detalles" class="detalle-line" [class.tachado]="row.anulacion">
                 <span class="det-monto">{{d.monedaSimbolo}} {{d.monto | number:'1.0-2'}}</span>
                 <span class="det-fp">{{d.formaPagoNombre}}</span>
               </div>
@@ -146,18 +199,32 @@
 
           <ng-container matColumnDef="responsable">
             <th mat-header-cell *matHeaderCellDef>Responsable</th>
-            <td mat-cell *matCellDef="let row">{{row.responsableNombre}}</td>
+            <td mat-cell *matCellDef="let row" [matTooltip]="row.responsableNombre" matTooltipPosition="above">{{row.responsableNombre}}</td>
           </ng-container>
 
           <ng-container matColumnDef="observacion">
             <th mat-header-cell *matHeaderCellDef>Observacion</th>
-            <td mat-cell *matCellDef="let row">{{row.observacion}}</td>
+            <td mat-cell *matCellDef="let row">
+              <div class="obs-cell">
+                <span [class.tachado]="row.anulacion" class="obs-text">{{row.observacion}}</span>
+                <span *ngIf="row.anulacion"
+                      class="chip-anulado"
+                      [matTooltip]="'Anulado el ' + (row.anulacion.fecha | date:'dd/MM/yyyy HH:mm') + (row.anulacion.motivo ? ' • Motivo: ' + row.anulacion.motivo : '') + (row.anulacion.responsableNombre ? ' • Por: ' + row.anulacion.responsableNombre : '')">
+                  <mat-icon>block</mat-icon>
+                  ANULADO
+                </span>
+                <span *ngIf="row.contraDeId" class="chip-contra" matTooltip="Contra-movimiento de anulacion">
+                  <mat-icon>undo</mat-icon>
+                  ANULACION DE #{{row.contraDeId}}
+                </span>
+              </div>
+            </td>
           </ng-container>
 
           <ng-container matColumnDef="actions">
             <th mat-header-cell *matHeaderCellDef></th>
             <td mat-cell *matCellDef="let row">
-              <button mat-icon-button [matMenuTriggerFor]="movMenu" *ngIf="!row.esAnulacion && cajaMayor?.estado === 'ABIERTA'">
+              <button mat-icon-button [matMenuTriggerFor]="movMenu" *ngIf="!row.esAnulacion && !row.anulacion && !row.contraDeId && cajaMayor?.estado === 'ABIERTA'">
                 <mat-icon>more_vert</mat-icon>
               </button>
               <mat-menu #movMenu="matMenu">
@@ -174,11 +241,12 @@
           </ng-container>
 
           <tr mat-header-row *matHeaderRowDef="movimientosColumns"></tr>
-          <tr mat-row *matRowDef="let row; columns: movimientosColumns;" [ngClass]="{'anulado-row': row.esAnulacion}"></tr>
+          <tr mat-row *matRowDef="let row; columns: movimientosColumns;" [ngClass]="{'anulado-row': row.esAnulacion || row.anulacion, 'contra-row': row.contraDeId}"></tr>
         </table>
         <div *ngIf="!loadingMovimientos && movimientosConsolidados.length === 0" class="empty-state">
           <p>No hay movimientos para los filtros aplicados</p>
         </div>
+        </div><!-- /movimientos-scroll -->
 
         <mat-paginator
           [length]="total"

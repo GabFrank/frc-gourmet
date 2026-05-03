@@ -1,0 +1,83 @@
+:host {
+  display: block;
+  min-width: 480px;
+}
+
+.loading-block {
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+}
+
+.cfg-section {
+  padding: 16px 0;
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  h3 {
+    margin: 0;
+    font-weight: 500;
+    font-size: 15px;
+  }
+
+  .bulk-actions {
+    display: flex;
+    gap: 6px;
+
+    button {
+      font-size: 11px;
+      line-height: 24px;
+      min-height: 26px;
+      padding: 0 8px;
+    }
+  }
+
+  .hint {
+    margin: 0 0 10px;
+    font-size: 12px;
+    color: rgba(0, 0, 0, 0.6);
+  }
+
+  .check-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-left: 4px;
+  }
+
+  .empty {
+    margin: 4px 0;
+    font-size: 13px;
+    color: rgba(0, 0, 0, 0.45);
+    font-style: italic;
+  }
+}
+
+.cb-line {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: 1.2;
+
+  .cb-meta {
+    font-size: 11px;
+    color: rgba(0, 0, 0, 0.55);
+  }
+}
+
+:host-context(.dark-theme) {
+  .cfg-section .hint {
+    color: rgba(255, 255, 255, 0.6);
+  }
+  .cfg-section .empty {
+    color: rgba(255, 255, 255, 0.4);
+  }
+  .cb-line .cb-meta {
+    color: rgba(255, 255, 255, 0.55);
+  }
+}

@@ -26,12 +26,21 @@ import { RepositoryService } from 'src/app/database/repository.service';
   template: `
     <h2 mat-dialog-title>Pagar liquidacion</h2>
     <mat-dialog-content>
-      <p>
-        Funcionario: <strong>{{ data.liquidacion?.funcionario?.persona?.nombre }} {{ data.liquidacion?.funcionario?.persona?.apellido || '' }}</strong>
-      </p>
-      <p>Periodo: <strong>{{ data.liquidacion?.periodo }}</strong></p>
-      <p>Total neto: <strong>{{ data.liquidacion?.totalNeto | number:'1.0-2' }}</strong></p>
-      <form [formGroup]="form" class="form">
+      <div class="info-row">
+        <div class="info-item">
+          <span class="lbl">Funcionario</span>
+          <strong>{{ data.liquidacion?.funcionario?.persona?.nombre }} {{ data.liquidacion?.funcionario?.persona?.apellido || '' }}</strong>
+        </div>
+        <div class="info-item">
+          <span class="lbl">Periodo</span>
+          <strong>{{ data.liquidacion?.periodo }}</strong>
+        </div>
+        <div class="info-item">
+          <span class="lbl">Total neto</span>
+          <strong>{{ data.liquidacion?.totalNeto | number:'1.0-2' }} PYG</strong>
+        </div>
+      </div>
+      <form [formGroup]="form" class="form-row">
         <mat-form-field appearance="outline">
           <mat-label>Caja mayor</mat-label>
           <mat-select formControlName="cajaMayorId">
@@ -60,7 +69,16 @@ import { RepositoryService } from 'src/app/database/repository.service';
     </mat-dialog-actions>
   `,
   styles: [`
-    .form { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; min-width: 700px; margin-top: 12px; }
+    .info-row { display: flex; flex-wrap: wrap; gap: 24px; padding: 8px 0 16px; }
+    .info-item { display: flex; flex-direction: column; gap: 2px; }
+    .info-item .lbl { font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.4px; }
+    .info-item strong { font-size: 14px; }
+    .form-row { display: flex; gap: 12px; flex-wrap: nowrap; }
+    .form-row mat-form-field { flex: 1 1 0; min-width: 0; }
+    @media (max-width: 720px) {
+      .form-row { flex-wrap: wrap; }
+      .form-row mat-form-field { flex: 1 1 100%; }
+    }
   `],
 })
 export class PagarLiquidacionDialogComponent implements OnInit {

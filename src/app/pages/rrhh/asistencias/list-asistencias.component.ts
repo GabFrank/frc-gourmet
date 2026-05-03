@@ -17,6 +17,7 @@ import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { MarcarAsistenciaMasivaDialogComponent } from './marcar-asistencia-masiva-dialog.component';
+import { MarcarAsistenciaDialogComponent } from './marcar-asistencia-dialog.component';
 
 const ESTADOS = ['PRESENTE', 'AUSENTE', 'TARDANZA', 'MEDIA_FALTA', 'JUSTIFICADO', 'FERIADO', 'VACACION'];
 
@@ -46,9 +47,14 @@ const ESTADOS = ['PRESENTE', 'AUSENTE', 'TARDANZA', 'MEDIA_FALTA', 'JUSTIFICADO'
         <mat-card-content>
           <div class="header">
             <div class="title"><mat-icon>fact_check</mat-icon> <h2>Asistencias</h2></div>
-            <button mat-flat-button color="primary" (click)="abrirMasiva()">
-              <mat-icon>group</mat-icon> Marcar masiva
-            </button>
+            <div class="header-actions">
+              <button mat-stroked-button color="primary" (click)="abrirIndividual()">
+                <mat-icon>person_add</mat-icon> Marcar individual
+              </button>
+              <button mat-flat-button color="primary" (click)="abrirMasiva()">
+                <mat-icon>group</mat-icon> Marcar masiva
+              </button>
+            </div>
           </div>
         </mat-card-content>
       </mat-card>
@@ -136,6 +142,7 @@ const ESTADOS = ['PRESENTE', 'AUSENTE', 'TARDANZA', 'MEDIA_FALTA', 'JUSTIFICADO'
   styles: [`
     .page { display: flex; flex-direction: column; gap: 16px; padding: 16px; }
     .header { display: flex; justify-content: space-between; align-items: center; }
+    .header-actions { display: flex; gap: 8px; }
     .title { display: flex; align-items: center; gap: 8px; h2 { margin: 0; font-size: 20px; } }
     .filtros { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
     .spinner { display: flex; justify-content: center; padding: 24px; }
@@ -204,6 +211,16 @@ export class ListAsistenciasComponent implements OnInit {
   abrirMasiva(): void {
     const ref = this.dialog.open(MarcarAsistenciaMasivaDialogComponent, { width: '900px' });
     ref.afterClosed().subscribe((res) => { if (res?.saved) this.load(); });
+  }
+
+  abrirIndividual(): void {
+    const ref = this.dialog.open(MarcarAsistenciaDialogComponent, { width: '640px' });
+    ref.afterClosed().subscribe((res) => {
+      if (res?.saved) {
+        this.snackBar.open('Asistencia registrada', 'Cerrar', { duration: 2500 });
+        this.load();
+      }
+    });
   }
 
   async justificar(a: any): Promise<void> {

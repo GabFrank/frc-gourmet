@@ -45,6 +45,35 @@ async function descontarSaldoCajaMayor(
   await queryRunner.manager.save(CajaMayorSaldo, saldo);
 }
 
+// Helper: actualiza/crea saldo cajaMayor sumando un monto (para ingresos)
+async function sumarSaldoCajaMayor(
+  queryRunner: any,
+  cajaMayorId: number,
+  monedaId: number,
+  formaPagoId: number,
+  monto: number,
+): Promise<void> {
+  const saldoRepo = queryRunner.manager.getRepository(CajaMayorSaldo);
+  let saldo = await saldoRepo.findOne({
+    where: {
+      cajaMayor: { id: cajaMayorId },
+      moneda: { id: monedaId },
+      formaPago: { id: formaPagoId },
+    },
+    relations: ['cajaMayor', 'moneda', 'formaPago'],
+  });
+  if (!saldo) {
+    saldo = saldoRepo.create({
+      cajaMayor: { id: cajaMayorId } as any,
+      moneda: { id: monedaId } as any,
+      formaPago: { id: formaPagoId } as any,
+      saldo: 0,
+    });
+  }
+  saldo.saldo = Number(saldo.saldo) + Number(monto);
+  await queryRunner.manager.save(CajaMayorSaldo, saldo);
+}
+
 function calcularEstadoCuota(monto: number, montoPagado: number): CuotaEstado {
   if (montoPagado >= monto) return CuotaEstado.PAGADA;
   if (montoPagado > 0) return CuotaEstado.PARCIAL;
@@ -358,6 +387,34 @@ export function registerCuentasPorPagarHandlers(
         await queryRunner.manager.save(CuentaPorPagarCuota, cuota);
       }
 
+      // Si es PRESTAMO_FUNCIONARIO y se especifico fuente de desembolso, generar EGRESO en Caja Mayor
+      if (entity.tipo === CuentaPorPagarTipo.PRESTAMO_FUNCIONARIO && data.cajaMayorId) {
+        const cajaMayorId = Number(data.cajaMayorId);
+        const monedaIdMov = Number(data.monedaId);
+        const formaPagoId = Number(data.formaPagoId);
+        if (!cajaMayorId || !monedaIdMov || !formaPagoId) {
+          throw new Error('Para PRESTAMO_FUNCIONARIO se requiere cajaMayorId, monedaId y formaPagoId');
+        }
+        const userIdMov = getCurrentUser()?.id;
+        const userEntity = userIdMov
+          ? await queryRunner.manager.findOne(Usuario, { where: { id: userIdMov } })
+          : null;
+        const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
+          cajaMayor: { id: cajaMayorId } as any,
+          tipoMovimiento: TipoMovimiento.EGRESO_DESEMBOLSO_PRESTAMO_FUNCIONARIO,
+          moneda: { id: monedaIdMov } as any,
+          formaPago: { id: formaPagoId } as any,
+          monto: montoTotal,
+          fecha: new Date(),
+          observacion: `DESEMBOLSO PRESTAMO FUNCIONARIO #${cppSaved.id} - ${entity.descripcion}`,
+          cuentaPorPagarId: cppSaved.id,
+          responsable: userEntity || undefined,
+        });
+        await setEntityUserTracking(dataSource, movimiento, userIdMov, false);
+        await queryRunner.manager.save(CajaMayorMovimiento, movimiento);
+        await descontarSaldoCajaMayor(queryRunner, cajaMayorId, monedaIdMov, formaPagoId, montoTotal);
+      }
+
       await queryRunner.commitTransaction();
       return cppSaved;
     } catch (error) {
@@ -434,6 +491,7 @@ export function registerCuentasPorPagarHandlers(
       });
       if (!cuota) throw new Error(`CuentaPorPagarCuota ${cuotaId} no encontrada`);
       if (cuota.estado === CuotaEstado.PAGADA) throw new Error('Cuota ya pagada');
+      if (cuota.estado === CuotaEstado.CANCELADA) throw new Error('La cuota esta anulada');
 
       const restante = Number(cuota.monto) - Number(cuota.montoPagado);
       if (monto <= 0 || monto > restante + 0.005) {
@@ -457,10 +515,17 @@ export function registerCuentasPorPagarHandlers(
         await queryRunner.manager.save(CuentaPorPagar, cpp);
       }
 
-      const obsBase = `CUOTA #${cuota.numero} CPP #${cuota.cuentaPorPagar?.id || '?'}`;
-      const tipoMov = (cpp?.tipo === CuentaPorPagarTipo.PRESTAMO || cpp?.tipo === CuentaPorPagarTipo.PRESTAMO_FUNCIONARIO)
-        ? TipoMovimiento.EGRESO_CUOTA_PRESTAMO
-        : TipoMovimiento.EGRESO_CUOTA_COMPRA;
+      const esPrestamoFuncionario = cpp?.tipo === CuentaPorPagarTipo.PRESTAMO_FUNCIONARIO;
+      const obsPrefix = esPrestamoFuncionario ? 'COBRO' : 'PAGO';
+      const obsBase = `${obsPrefix} CUOTA #${cuota.numero} CPP #${cuota.cuentaPorPagar?.id || '?'}`;
+      let tipoMov: TipoMovimiento;
+      if (esPrestamoFuncionario) {
+        tipoMov = TipoMovimiento.INGRESO_COBRO_CUOTA_PRESTAMO_FUNCIONARIO;
+      } else if (cpp?.tipo === CuentaPorPagarTipo.PRESTAMO) {
+        tipoMov = TipoMovimiento.EGRESO_CUOTA_PRESTAMO;
+      } else {
+        tipoMov = TipoMovimiento.EGRESO_CUOTA_COMPRA;
+      }
 
       if (fuente === 'CAJA_MAYOR') {
         const cajaMayorId = payload.cajaMayorId;
@@ -485,14 +550,20 @@ export function registerCuentasPorPagarHandlers(
         }
         await setEntityUserTracking(dataSource, movimiento, cu?.id, false);
         await queryRunner.manager.save(CajaMayorMovimiento, movimiento);
-        await descontarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, monto);
+        if (esPrestamoFuncionario) {
+          await sumarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, monto);
+        } else {
+          await descontarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, monto);
+        }
       } else if (fuente === 'CUENTA_BANCARIA') {
         const cuentaBancariaId = payload.cuentaBancariaId;
         if (!cuentaBancariaId) throw new Error('Falta cuentaBancariaId');
         const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
         const cb = await cbRepo.findOne({ where: { id: cuentaBancariaId } });
         if (!cb) throw new Error('Cuenta bancaria no encontrada');
-        cb.saldo = Number(cb.saldo) - monto;
+        cb.saldo = esPrestamoFuncionario
+          ? Number(cb.saldo) + monto
+          : Number(cb.saldo) - monto;
         await queryRunner.manager.save(CuentaBancaria, cb);
       } else {
         throw new Error('Fuente de pago no valida');
@@ -503,6 +574,52 @@ export function registerCuentasPorPagarHandlers(
     } catch (error) {
       await queryRunner.rollbackTransaction();
       console.error('Error pagando cuota CPP:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  // Anular cuota pendiente (sin pago) — descuenta el saldo no pagado del CPP
+  ipcMain.handle('cancelar-cpp-cuota', async (_event, payload: any) => {
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const cuotaId: number = payload.cuotaId;
+      const motivo: string = (payload.motivo || '').toUpperCase();
+      const cuotaRepo = queryRunner.manager.getRepository(CuentaPorPagarCuota);
+      const cppRepo = queryRunner.manager.getRepository(CuentaPorPagar);
+      const cuota = await cuotaRepo.findOne({
+        where: { id: cuotaId },
+        relations: ['cuentaPorPagar'],
+      });
+      if (!cuota) throw new Error(`CuentaPorPagarCuota ${cuotaId} no encontrada`);
+      if (cuota.estado === CuotaEstado.PAGADA) throw new Error('No se puede anular una cuota ya pagada');
+      if (cuota.estado === CuotaEstado.CANCELADA) throw new Error('La cuota ya esta anulada');
+
+      const restante = +(Number(cuota.monto) - Number(cuota.montoPagado)).toFixed(2);
+      cuota.estado = CuotaEstado.CANCELADA;
+      cuota.observacion = motivo
+        ? `${cuota.observacion ? cuota.observacion + ' | ' : ''}ANULADA: ${motivo}`
+        : (cuota.observacion ? `${cuota.observacion} | ANULADA` : 'ANULADA');
+      await setEntityUserTracking(dataSource, cuota, getCurrentUser()?.id, true);
+      await queryRunner.manager.save(CuentaPorPagarCuota, cuota);
+
+      const cpp = await cppRepo.findOne({ where: { id: cuota.cuentaPorPagar.id }, relations: ['cuotas'] });
+      if (cpp) {
+        cpp.montoTotal = +(Number(cpp.montoTotal) - restante).toFixed(2);
+        const cuotasActivas = (cpp.cuotas || []).filter((c: any) => c.estado !== CuotaEstado.CANCELADA);
+        const todasPagadas = cuotasActivas.length > 0 && cuotasActivas.every((c: any) => Number(c.montoPagado) >= Number(c.monto) - 0.005);
+        if (todasPagadas) cpp.estado = CuentaPorPagarEstado.PAGADO;
+        await queryRunner.manager.save(CuentaPorPagar, cpp);
+      }
+
+      await queryRunner.commitTransaction();
+      return { success: true, cuota };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error anulando cuota CPP:', error);
       throw error;
     } finally {
       await queryRunner.release();

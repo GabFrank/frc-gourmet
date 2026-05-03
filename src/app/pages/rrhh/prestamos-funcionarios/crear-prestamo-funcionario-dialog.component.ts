@@ -32,7 +32,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
   template: `
     <h2 mat-dialog-title>Nuevo prestamo a funcionario</h2>
     <mat-dialog-content>
-      <p class="info">Crea una CuentaPorPagar tipo PRESTAMO_FUNCIONARIO con N cuotas mensuales.</p>
+      <p class="info">La empresa entrega el dinero al funcionario. Se generara un movimiento EGRESO en Caja Mayor por el monto total.</p>
       <div *ngIf="loading" class="spinner"><mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner></div>
       <form [formGroup]="form" *ngIf="!loading" class="form">
         <mat-form-field appearance="outline" class="full">
@@ -56,17 +56,33 @@ import { RepositoryService } from 'src/app/database/repository.service';
           <input matInput type="number" formControlName="cantidadCuotas" />
         </mat-form-field>
         <mat-form-field appearance="outline">
+          <mat-label>Fecha primera cuota</mat-label>
+          <input matInput [matDatepicker]="p" formControlName="fechaInicio" />
+          <mat-datepicker-toggle matSuffix [for]="p"></mat-datepicker-toggle>
+          <mat-datepicker #p></mat-datepicker>
+        </mat-form-field>
+
+        <div class="separator full">Origen del desembolso</div>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Caja Mayor</mat-label>
+          <mat-select formControlName="cajaMayorId">
+            <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{ c.nombre }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
           <mat-label>Moneda</mat-label>
           <mat-select formControlName="monedaId">
             <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
           </mat-select>
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>Fecha primera cuota</mat-label>
-          <input matInput [matDatepicker]="p" formControlName="fechaInicio" />
-          <mat-datepicker-toggle matSuffix [for]="p"></mat-datepicker-toggle>
-          <mat-datepicker #p></mat-datepicker>
+          <mat-label>Forma de pago</mat-label>
+          <mat-select formControlName="formaPagoId">
+            <mat-option *ngFor="let f of formasPago" [value]="f.id">{{ f.descripcion || f.nombre }}</mat-option>
+          </mat-select>
         </mat-form-field>
+
         <mat-form-field appearance="outline" class="full">
           <mat-label>Observacion</mat-label>
           <input matInput formControlName="observacion" />
@@ -85,6 +101,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
     .spinner { display: flex; justify-content: center; padding: 24px; }
     .form { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; min-width: 720px; }
     .full { grid-column: 1 / -1; }
+    .separator { font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; opacity: 0.65; padding: 4px 0; border-bottom: 1px solid rgba(128,128,128,0.25); margin: 4px 0 0; }
   `],
 })
 export class CrearPrestamoFuncionarioDialogComponent implements OnInit {
@@ -93,6 +110,8 @@ export class CrearPrestamoFuncionarioDialogComponent implements OnInit {
   form: FormGroup;
   funcionarios: any[] = [];
   monedas: any[] = [];
+  cajasMayor: any[] = [];
+  formasPago: any[] = [];
 
   constructor(
     private dialogRef: MatDialogRef<CrearPrestamoFuncionarioDialogComponent>,
@@ -107,6 +126,8 @@ export class CrearPrestamoFuncionarioDialogComponent implements OnInit {
       cantidadCuotas: [6, [Validators.required, Validators.min(1)]],
       monedaId: [null, Validators.required],
       fechaInicio: [new Date(), Validators.required],
+      cajaMayorId: [null, Validators.required],
+      formaPagoId: [null, Validators.required],
       observacion: [''],
     });
   }
@@ -114,12 +135,16 @@ export class CrearPrestamoFuncionarioDialogComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     this.loading = true;
     try {
-      const [funcs, monedas] = await Promise.all([
+      const [funcs, monedas, cajas, formas] = await Promise.all([
         firstValueFrom(this.repositoryService.getFuncionarios({ soloActivos: true })),
         firstValueFrom(this.repositoryService.getMonedas()),
+        firstValueFrom(this.repositoryService.getCajasMayor()),
+        firstValueFrom(this.repositoryService.getFormasPago()),
       ]);
       this.funcionarios = funcs || [];
       this.monedas = monedas || [];
+      this.cajasMayor = (cajas || []).filter((c: any) => c.estado === 'ABIERTA');
+      this.formasPago = formas || [];
     } catch (e) {
       console.error(e);
     } finally {

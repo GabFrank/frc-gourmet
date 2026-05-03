@@ -44,11 +44,28 @@
       </ng-container>
       <ng-container matColumnDef="tipo">
         <th mat-header-cell *matHeaderCellDef>Tipo</th>
-        <td mat-cell *matCellDef="let r">{{r.tipo}}</td>
+        <td mat-cell *matCellDef="let r">
+          <div class="tipo-cell">
+            <mat-icon
+              class="dir-icon"
+              [class.dir-ingreso]="direccion(r.tipo) === 'INGRESO'"
+              [class.dir-egreso]="direccion(r.tipo) === 'EGRESO'"
+              [matTooltip]="direccion(r.tipo) === 'INGRESO' ? 'A favor de la empresa (cobrar)' : (direccion(r.tipo) === 'EGRESO' ? 'En contra de la empresa (pagar)' : 'Sin direccion')"
+            >
+              {{ direccion(r.tipo) === 'INGRESO' ? 'arrow_downward' : (direccion(r.tipo) === 'EGRESO' ? 'arrow_upward' : 'remove') }}
+            </mat-icon>
+            <span>{{ tipoLabel(r.tipo) }}</span>
+          </div>
+        </td>
       </ng-container>
-      <ng-container matColumnDef="proveedor">
-        <th mat-header-cell *matHeaderCellDef>Proveedor</th>
-        <td mat-cell *matCellDef="let r">{{r.proveedor?.nombre || '-'}}</td>
+      <ng-container matColumnDef="beneficiario">
+        <th mat-header-cell *matHeaderCellDef>Beneficiario / Origen</th>
+        <td mat-cell *matCellDef="let r">
+          <div class="beneficiario-cell">
+            <span class="rol-label">{{ beneficiarioRol(r) }}</span>
+            <strong>{{ beneficiarioLabel(r) }}</strong>
+          </div>
+        </td>
       </ng-container>
       <ng-container matColumnDef="montoTotal">
         <th mat-header-cell *matHeaderCellDef>Total</th>

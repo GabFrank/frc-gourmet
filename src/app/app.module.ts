@@ -17,6 +17,8 @@ import { MatListModule } from '@angular/material/list';
 import { MatCardModule } from '@angular/material/card';
 import { MatGridListModule } from '@angular/material/grid-list';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS, MatFormFieldModule } from '@angular/material/form-field';
+import { MatPaginatorIntl } from '@angular/material/paginator';
+import { PaginatorIntlEs } from './shared/utils/paginator-intl-es';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
@@ -141,7 +143,8 @@ import { GestionRecetasModule } from './pages/gestion-recetas/gestion-recetas.mo
       useValue: {
         subscriptSizing: 'dynamic'
       }
-    }
+    },
+    { provide: MatPaginatorIntl, useClass: PaginatorIntlEs }
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA]
 })

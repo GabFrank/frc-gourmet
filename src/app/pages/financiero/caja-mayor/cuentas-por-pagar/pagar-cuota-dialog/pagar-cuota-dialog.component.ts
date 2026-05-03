@@ -19,6 +19,8 @@ interface PagarCuotaDialogData {
   cuota: any; // CompraCuota o CuentaPorPagarCuota cargada
   // Para mostrar contexto:
   contextoLabel?: string;
+  // Direccion del flujo de caja: 'PAGAR' (default) la empresa paga; 'COBRAR' la empresa cobra (prestamo a funcionario)
+  direccion?: 'PAGAR' | 'COBRAR';
 }
 
 @Component({
@@ -47,6 +49,12 @@ export class PagarCuotaDialogComponent implements OnInit {
   cuota: any = null;
   cuotaTipo: 'COMPRA' | 'CPP' = 'COMPRA';
   contextoLabel = '';
+  direccion: 'PAGAR' | 'COBRAR' = 'PAGAR';
+  esCobro = false;
+  titulo = '';
+  fuenteLabel = '';
+  montoLabel = '';
+  accionLabel = '';
   restante = 0;
 
   cajasMayor: any[] = [];
@@ -67,6 +75,12 @@ export class PagarCuotaDialogComponent implements OnInit {
     this.cuota = this.data?.cuota;
     this.cuotaTipo = this.data?.cuotaTipo || 'COMPRA';
     this.contextoLabel = this.data?.contextoLabel || '';
+    this.direccion = this.data?.direccion || 'PAGAR';
+    this.esCobro = this.direccion === 'COBRAR';
+    this.titulo = this.esCobro ? `Cobrar Cuota #${this.cuota?.numero || ''}` : `Pagar Cuota #${this.cuota?.numero || ''}`;
+    this.fuenteLabel = this.esCobro ? 'Destino del cobro' : 'Fuente de pago';
+    this.montoLabel = this.esCobro ? 'Monto a cobrar' : 'Monto a pagar';
+    this.accionLabel = this.esCobro ? 'Cobrar' : 'Pagar';
     this.restante = +(Number(this.cuota?.monto || 0) - Number(this.cuota?.montoPagado || 0)).toFixed(2);
 
     this.form = this.fb.group({
@@ -134,9 +148,11 @@ export class PagarCuotaDialogComponent implements OnInit {
       return;
     }
 
-    // Validar saldo de la fuente y pedir confirmacion si quedaria negativo
-    const ok = await this.confirmarSaldoSiNegativo(f, monto);
-    if (!ok) return;
+    // Validar saldo de la fuente solo si es egreso (PAGAR). Si es cobro, no aplica
+    if (!this.esCobro) {
+      const ok = await this.confirmarSaldoSiNegativo(f, monto);
+      if (!ok) return;
+    }
 
     this.saving = true;
     try {
@@ -159,11 +175,11 @@ export class PagarCuotaDialogComponent implements OnInit {
       } else {
         await firstValueFrom(this.repositoryService.pagarCppCuota(payload));
       }
-      this.snackBar.open('Pago registrado', 'Cerrar', { duration: 3000 });
+      this.snackBar.open(this.esCobro ? 'Cobro registrado' : 'Pago registrado', 'Cerrar', { duration: 3000 });
       this.dialogRef?.close(true);
     } catch (e) {
       console.error(e);
-      this.snackBar.open('Error al registrar pago', 'Cerrar', { duration: 3000 });
+      this.snackBar.open(this.esCobro ? 'Error al registrar cobro' : 'Error al registrar pago', 'Cerrar', { duration: 3000 });
     } finally {
       this.saving = false;
     }

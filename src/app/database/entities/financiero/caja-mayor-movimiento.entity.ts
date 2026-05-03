@@ -62,6 +62,9 @@ export class CajaMayorMovimiento extends BaseModel {
   @Column({ name: 'cuenta_por_pagar_cuota_id', type: 'int', nullable: true })
   cuentaPorPagarCuotaId?: number;
 
+  @Column({ name: 'cuenta_por_pagar_id', type: 'int', nullable: true })
+  cuentaPorPagarId?: number;
+
   @Column({ name: 'cheque_id', type: 'int', nullable: true })
   chequeId?: number;
 

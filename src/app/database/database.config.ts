@@ -99,6 +99,7 @@ import { MonedaCambio } from './entities/financiero/moneda-cambio.entity';
 import { CajaMayor } from './entities/financiero/caja-mayor.entity';
 import { CajaMayorSaldo } from './entities/financiero/caja-mayor-saldo.entity';
 import { CajaMayorMovimiento } from './entities/financiero/caja-mayor-movimiento.entity';
+import { CajaMayorConfiguracion } from './entities/financiero/caja-mayor-configuracion.entity';
 import { GastoCategoria } from './entities/financiero/gasto-categoria.entity';
 import { Gasto } from './entities/financiero/gasto.entity';
 import { RetiroCaja } from './entities/financiero/retiro-caja.entity';
@@ -243,6 +244,7 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       CajaMayor,
       CajaMayorSaldo,
       CajaMayorMovimiento,
+      CajaMayorConfiguracion,
       GastoCategoria,
       Gasto,
       GastoDetalle,

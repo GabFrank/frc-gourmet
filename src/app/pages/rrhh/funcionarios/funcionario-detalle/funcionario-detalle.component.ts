@@ -18,6 +18,7 @@ import { CambioSalarioDialogComponent } from '../cambio-salario-dialog/cambio-sa
 import { EgresarFuncionarioDialogComponent } from '../egresar-funcionario-dialog/egresar-funcionario-dialog.component';
 import { UploadDocumentoDialogComponent } from '../upload-documento-dialog/upload-documento-dialog.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { AsignarTurnoFuncionarioDialogComponent } from '../asignar-turno-dialog/asignar-turno-funcionario-dialog.component';
 
 @Component({
   selector: 'app-funcionario-detalle',
@@ -36,6 +37,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
     MatChipsModule,
     MatDialogModule,
     MatSnackBarModule,
+    AsignarTurnoFuncionarioDialogComponent,
   ],
 })
 export class FuncionarioDetalleComponent implements OnInit {
@@ -47,12 +49,15 @@ export class FuncionarioDetalleComponent implements OnInit {
   historicoCargos: any[] = [];
   historicoSalarios: any[] = [];
   documentos: any[] = [];
+  turnos: any[] = [];
   loadingHistorico = false;
   loadingDocumentos = false;
+  loadingTurnos = false;
 
   cargosColumns = ['fechaDesde', 'fechaHasta', 'cargo', 'motivo'];
   salariosColumns = ['fechaVigencia', 'salarioAnterior', 'salarioNuevo', 'moneda', 'motivo'];
   documentosColumns = ['tipo', 'nombre', 'tamano', 'fechaSubida', 'vencimiento', 'actions'];
+  turnosColumns = ['turno', 'horario', 'fechaDesde', 'fechaHasta', 'actions'];
 
   constructor(
     private repositoryService: RepositoryService,
@@ -82,6 +87,7 @@ export class FuncionarioDetalleComponent implements OnInit {
       this.funcionario = await firstValueFrom(this.repositoryService.getFuncionario(this.funcionarioId));
       this.loadHistoricos();
       this.loadDocumentos();
+      this.loadTurnos();
     } catch (error) {
       console.error('Error loading funcionario:', error);
       this.snackBar.open('Error al cargar funcionario', 'Cerrar', { duration: 3500 });
@@ -117,6 +123,75 @@ export class FuncionarioDetalleComponent implements OnInit {
     } finally {
       this.loadingDocumentos = false;
     }
+  }
+
+  async loadTurnos(): Promise<void> {
+    if (!this.funcionarioId) return;
+    this.loadingTurnos = true;
+    try {
+      this.turnos = await firstValueFrom(this.repositoryService.getFuncionarioTurnos(this.funcionarioId)) || [];
+    } catch (e) {
+      console.error('Error cargando turnos del funcionario:', e);
+    } finally {
+      this.loadingTurnos = false;
+    }
+  }
+
+  abrirAsignarTurno(): void {
+    if (!this.funcionarioId || !this.funcionario) return;
+    const nombre = `${this.funcionario.persona?.nombre || ''} ${this.funcionario.persona?.apellido || ''}`.trim();
+    const ref = this.dialog.open(AsignarTurnoFuncionarioDialogComponent, {
+      width: '560px',
+      data: { funcionarioId: this.funcionarioId, funcionarioNombre: nombre },
+    });
+    ref.afterClosed().subscribe((res) => {
+      if (res?.saved) {
+        this.snackBar.open('Turno asignado', 'Cerrar', { duration: 2500 });
+        this.loadTurnos();
+      }
+    });
+  }
+
+  editarTurno(t: any): void {
+    if (!this.funcionarioId || !this.funcionario) return;
+    const nombre = `${this.funcionario.persona?.nombre || ''} ${this.funcionario.persona?.apellido || ''}`.trim();
+    const ref = this.dialog.open(AsignarTurnoFuncionarioDialogComponent, {
+      width: '560px',
+      data: {
+        funcionarioId: this.funcionarioId,
+        funcionarioNombre: nombre,
+        funcionarioTurnoId: t.id,
+        turnoId: t.turno?.id,
+        fechaDesde: t.fechaDesde,
+      },
+    });
+    ref.afterClosed().subscribe((res) => {
+      if (res?.saved) {
+        this.snackBar.open('Asignacion actualizada', 'Cerrar', { duration: 2500 });
+        this.loadTurnos();
+      }
+    });
+  }
+
+  cerrarTurno(t: any): void {
+    const ref = this.dialog.open(ConfirmationDialogComponent, {
+      width: '420px',
+      data: {
+        title: 'Cerrar asignacion de turno',
+        message: `Cerrar la asignacion del turno "${t.turno?.nombre || ''}" con fecha de hoy?`,
+      },
+    });
+    ref.afterClosed().subscribe(async (ok) => {
+      if (!ok) return;
+      try {
+        await firstValueFrom(this.repositoryService.cerrarFuncionarioTurno(t.id));
+        this.snackBar.open('Asignacion cerrada', 'Cerrar', { duration: 2500 });
+        this.loadTurnos();
+      } catch (e: any) {
+        console.error(e);
+        this.snackBar.open(`Error: ${e?.message || 'no se pudo cerrar'}`, 'Cerrar', { duration: 4000 });
+      }
+    });
   }
 
   abrirEditar(): void {

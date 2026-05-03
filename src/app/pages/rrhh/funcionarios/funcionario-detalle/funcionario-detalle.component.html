@@ -136,6 +136,59 @@
       </mat-card>
     </mat-tab>
 
+    <mat-tab label="Turnos">
+      <mat-card>
+        <mat-card-content>
+          <div class="docs-header">
+            <button mat-flat-button color="primary" (click)="abrirAsignarTurno()" [disabled]="!funcionario.activo">
+              <mat-icon>schedule</mat-icon>
+              Asignar nuevo turno
+            </button>
+          </div>
+          <div *ngIf="loadingTurnos" class="spinner-container">
+            <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
+          </div>
+          <table mat-table [dataSource]="turnos" class="full-width" *ngIf="!loadingTurnos">
+            <ng-container matColumnDef="turno">
+              <th mat-header-cell *matHeaderCellDef>Turno</th>
+              <td mat-cell *matCellDef="let t">{{ t.turno?.nombre || '-' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="horario">
+              <th mat-header-cell *matHeaderCellDef>Horario</th>
+              <td mat-cell *matCellDef="let t">{{ t.turno?.horaEntrada || '-' }} - {{ t.turno?.horaSalida || '-' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="fechaDesde">
+              <th mat-header-cell *matHeaderCellDef>Desde</th>
+              <td mat-cell *matCellDef="let t">{{ t.fechaDesde | date:'shortDate' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="fechaHasta">
+              <th mat-header-cell *matHeaderCellDef>Hasta</th>
+              <td mat-cell *matCellDef="let t">{{ (t.fechaHasta | date:'shortDate') || 'Vigente' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef class="acc-col">Acciones</th>
+              <td mat-cell *matCellDef="let t">
+                <button mat-icon-button [matMenuTriggerFor]="menuT">
+                  <mat-icon>more_vert</mat-icon>
+                </button>
+                <mat-menu #menuT="matMenu">
+                  <button mat-menu-item (click)="editarTurno(t)">
+                    <mat-icon>edit</mat-icon><span>Editar fecha desde</span>
+                  </button>
+                  <button mat-menu-item (click)="cerrarTurno(t)" *ngIf="!t.fechaHasta">
+                    <mat-icon>event_busy</mat-icon><span>Cerrar asignacion</span>
+                  </button>
+                </mat-menu>
+              </td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="turnosColumns"></tr>
+            <tr mat-row *matRowDef="let r; columns: turnosColumns"></tr>
+          </table>
+          <div *ngIf="!loadingTurnos && turnos.length === 0" class="empty">Sin turnos asignados.</div>
+        </mat-card-content>
+      </mat-card>
+    </mat-tab>
+
     <mat-tab label="Documentos">
       <mat-card>
         <mat-card-content>

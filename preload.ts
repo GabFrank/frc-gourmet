@@ -2315,6 +2315,23 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('anular-caja-mayor-movimiento', id, motivo);
   },
 
+  // Configuracion Caja Mayor
+  getCajaMayorConfiguracion: async (cajaMayorId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-caja-mayor-configuracion', cajaMayorId);
+  },
+  saveCajaMayorConfiguracion: async (
+    cajaMayorId: number,
+    data: { formaPagoIds: number[]; cuentaBancariaIds: number[] }
+  ): Promise<any> => {
+    return await ipcRenderer.invoke('save-caja-mayor-configuracion', cajaMayorId, data);
+  },
+  getCuentaBancariaResumen: async (cuentaBancariaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cuenta-bancaria-resumen', cuentaBancariaId);
+  },
+  getCuentasBancariasResumenes: async (ids: number[]): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-cuentas-bancarias-resumenes', ids);
+  },
+
   // Gasto Categorias
   getGastoCategorias: async (): Promise<any[]> => {
     return await ipcRenderer.invoke('get-gasto-categorias');
@@ -2480,6 +2497,9 @@ contextBridge.exposeInMainWorld('api', {
   },
   pagarCppCuota: async (payload: any): Promise<any> => {
     return await ipcRenderer.invoke('pagar-cpp-cuota', payload);
+  },
+  cancelarCppCuota: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('cancelar-cpp-cuota', payload);
   },
 
   // Dashboard Shortcuts
@@ -2735,6 +2755,12 @@ contextBridge.exposeInMainWorld('api', {
   asignarTurnoFuncionario: async (data: any): Promise<any> => {
     return await ipcRenderer.invoke('asignar-turno-funcionario', data);
   },
+  cerrarFuncionarioTurno: async (id: number, fechaHasta?: Date): Promise<any> => {
+    return await ipcRenderer.invoke('cerrar-funcionario-turno', id, fechaHasta);
+  },
+  updateFuncionarioTurno: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-funcionario-turno', id, data);
+  },
   getFuncionarioTurnos: async (funcionarioId: number): Promise<any[]> => {
     return await ipcRenderer.invoke('get-funcionario-turnos', funcionarioId);
   },
@@ -2769,6 +2795,9 @@ contextBridge.exposeInMainWorld('api', {
   },
   createPenalizacion: async (data: any): Promise<any> => {
     return await ipcRenderer.invoke('create-penalizacion', data);
+  },
+  updatePenalizacion: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-penalizacion', data);
   },
   anularPenalizacion: async (id: number): Promise<any> => {
     return await ipcRenderer.invoke('anular-penalizacion', id);

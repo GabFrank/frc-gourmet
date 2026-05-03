@@ -3,6 +3,9 @@ import { DataSource } from 'typeorm';
 import { CajaMayor } from '../../src/app/database/entities/financiero/caja-mayor.entity';
 import { CajaMayorSaldo } from '../../src/app/database/entities/financiero/caja-mayor-saldo.entity';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
+import { CajaMayorConfiguracion } from '../../src/app/database/entities/financiero/caja-mayor-configuracion.entity';
+import { AcreditacionPos } from '../../src/app/database/entities/financiero/acreditacion-pos.entity';
+import { AcreditacionPosEstado } from '../../src/app/database/entities/financiero/banking-enums';
 import { GastoCategoria } from '../../src/app/database/entities/financiero/gasto-categoria.entity';
 import { Gasto } from '../../src/app/database/entities/financiero/gasto.entity';
 import { GastoDetalle } from '../../src/app/database/entities/financiero/gasto-detalle.entity';
@@ -195,6 +198,40 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       if (filtros?.proveedorId) {
         qb.andWhere('gasto.proveedor_id = :proveedorId', { proveedorId: filtros.proveedorId });
       }
+      // Por defecto se ocultan las contra-anulaciones; el original se decora con info de su anulacion.
+      if (!filtros?.incluirAnulaciones) {
+        qb.andWhere('mov.referencia_anulacion_id IS NULL');
+      }
+
+      // Decora cada item con info de su anulacion (si fue anulado).
+      const decorar = async (items: any[]) => {
+        if (!items.length) return items;
+        const ids = items.map((m: any) => m.id);
+        const anulaciones = await repo.createQueryBuilder('a')
+          .leftJoinAndSelect('a.responsable', 'r')
+          .leftJoinAndSelect('r.persona', 'p')
+          .loadRelationIdAndMap('a.referenciaAnulacionId', 'a.referenciaAnulacion')
+          .where('a.referencia_anulacion_id IN (:...ids)', { ids })
+          .getMany();
+        const byOrigId = new Map<number, any>();
+        for (const a of anulaciones) {
+          const origId = (a as any).referenciaAnulacionId;
+          if (!origId) continue;
+          byOrigId.set(origId, {
+            id: a.id,
+            fecha: a.fecha,
+            motivo: ((a as any).observacion || '').replace(/^ANULACION:\s*/i, '').trim(),
+            responsableNombre:
+              (a as any).responsable?.persona?.nombre ||
+              (a as any).responsable?.nickname ||
+              null,
+          });
+        }
+        for (const m of items) {
+          (m as any).anulacion = byOrigId.get(m.id) || null;
+        }
+        return items;
+      };
 
       // Paginacion (devuelve { items, total } cuando se pasa pageSize)
       if (filtros?.pageSize != null) {
@@ -202,10 +239,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         const page = Math.max(0, Number(filtros.page) || 0);
         qb.skip(page * pageSize).take(pageSize);
         const [items, total] = await qb.getManyAndCount();
+        await decorar(items);
         return { items, total };
       }
 
-      return await qb.getMany();
+      const items = await qb.getMany();
+      await decorar(items);
+      return items;
     } catch (error) {
       console.error(`Error getting movimientos for caja mayor ${cajaMayorId}:`, error);
       throw error;
@@ -262,6 +302,57 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         relations: ['cajaMayor', 'moneda', 'formaPago'],
       });
       if (!original) throw new Error(`Movimiento ID ${id} not found`);
+
+      if (original.tipoMovimiento === TipoMovimiento.ANULACION) {
+        throw new Error('No se puede anular un movimiento de tipo ANULACION');
+      }
+
+      // Bloquear anulacion directa de movimientos vinculados a otros modulos.
+      // Estos deben anularse desde el modulo origen (que reverte estados cruzados).
+      if (original.liquidacionSueldoId) {
+        throw new Error(
+          `Este movimiento corresponde a la liquidacion de sueldo #${original.liquidacionSueldoId}. ` +
+          `Anular desde el modulo de Liquidaciones de Sueldo (revierte vales, cuotas CPP, aguinaldos y comisiones).`
+        );
+      }
+      if (original.cuentaPorPagarCuotaId) {
+        throw new Error(
+          `Este movimiento corresponde al pago/cobro de la cuota CPP #${original.cuentaPorPagarCuotaId}. ` +
+          `Anular desde el modulo de Cuentas por Pagar (revierte el estado de la cuota y el saldo del CPP).`
+        );
+      }
+      if (original.valeId) {
+        throw new Error(
+          `Este movimiento corresponde al vale #${original.valeId}. ` +
+          `Anular desde el modulo de Vales.`
+        );
+      }
+      if (original.liquidacionComisionId) {
+        throw new Error(
+          `Este movimiento corresponde a la liquidacion de comision #${original.liquidacionComisionId}. ` +
+          `Anular desde el modulo de Comisiones.`
+        );
+      }
+      if (original.cuentaPorCobrarCuotaId) {
+        throw new Error(
+          `Este movimiento corresponde al cobro de la cuota CPC #${original.cuentaPorCobrarCuotaId}. ` +
+          `Anular desde el modulo de Cuentas por Cobrar.`
+        );
+      }
+      if (original.cuentaPorPagarId) {
+        throw new Error(
+          `Este movimiento corresponde al desembolso del CPP #${original.cuentaPorPagarId}. ` +
+          `Anular desde el modulo de Cuentas por Pagar (anula el CPP completo).`
+        );
+      }
+
+      // Verificar si ya fue anulado previamente
+      const yaAnulado = await repo.findOne({
+        where: { referenciaAnulacion: { id: original.id } as any },
+      });
+      if (yaAnulado) {
+        throw new Error(`El movimiento ID ${id} ya fue anulado previamente (anulacion ID ${yaAnulado.id})`);
+      }
 
       // Crear contra-movimiento
       const contraMovimiento = queryRunner.manager.create(CajaMayorMovimiento, {
@@ -1498,6 +1589,147 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       throw error;
     } finally {
       await queryRunner.release();
+    }
+  });
+
+  // ===================== CONFIGURACION CAJA MAYOR =====================
+
+  ipcMain.handle('get-caja-mayor-configuracion', async (_event: any, cajaMayorId: number) => {
+    try {
+      const repo = dataSource.getRepository(CajaMayorConfiguracion);
+      const config = await repo
+        .createQueryBuilder('cfg')
+        .leftJoinAndSelect('cfg.formasPagoVisibles', 'fp')
+        .leftJoinAndSelect('cfg.cuentasBancariasVisibles', 'cb')
+        .leftJoinAndSelect('cb.moneda', 'cbMoneda')
+        .where('cfg.caja_mayor_id = :cajaMayorId', { cajaMayorId })
+        .getOne();
+      return config || null;
+    } catch (error) {
+      console.error(`Error getting configuracion caja mayor ${cajaMayorId}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle(
+    'save-caja-mayor-configuracion',
+    async (
+      _event: any,
+      cajaMayorId: number,
+      data: { formaPagoIds: number[]; cuentaBancariaIds: number[] }
+    ) => {
+      const queryRunner = dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      try {
+        const cajaMayor = await queryRunner.manager.findOne(CajaMayor, { where: { id: cajaMayorId } });
+        if (!cajaMayor) throw new Error(`Caja Mayor ID ${cajaMayorId} not found`);
+
+        const repo = queryRunner.manager.getRepository(CajaMayorConfiguracion);
+        let config = await repo
+          .createQueryBuilder('cfg')
+          .leftJoinAndSelect('cfg.formasPagoVisibles', 'fp')
+          .leftJoinAndSelect('cfg.cuentasBancariasVisibles', 'cb')
+          .where('cfg.caja_mayor_id = :cajaMayorId', { cajaMayorId })
+          .getOne();
+
+        if (!config) {
+          config = repo.create({ cajaMayor });
+          await setEntityUserTracking(dataSource, config, getCurrentUser()?.id, false);
+        } else {
+          await setEntityUserTracking(dataSource, config, getCurrentUser()?.id, true);
+        }
+
+        const fpIds = Array.isArray(data?.formaPagoIds) ? data.formaPagoIds : [];
+        const cbIds = Array.isArray(data?.cuentaBancariaIds) ? data.cuentaBancariaIds : [];
+
+        config.formasPagoVisibles = fpIds.map((id) => ({ id })) as any;
+        config.cuentasBancariasVisibles = cbIds.map((id) => ({ id })) as any;
+
+        const saved = await queryRunner.manager.save(CajaMayorConfiguracion, config);
+        await queryRunner.commitTransaction();
+        return saved;
+      } catch (error) {
+        await queryRunner.rollbackTransaction();
+        console.error(`Error saving configuracion caja mayor ${cajaMayorId}:`, error);
+        throw error;
+      } finally {
+        await queryRunner.release();
+      }
+    }
+  );
+
+  ipcMain.handle('get-cuenta-bancaria-resumen', async (_event: any, cuentaBancariaId: number) => {
+    try {
+      const cbRepo = dataSource.getRepository(CuentaBancaria);
+      const cb = await cbRepo.findOne({
+        where: { id: cuentaBancariaId },
+        relations: ['moneda'],
+      });
+      if (!cb) throw new Error(`CuentaBancaria ID ${cuentaBancariaId} not found`);
+
+      const futuroRow = await dataSource
+        .getRepository(AcreditacionPos)
+        .createQueryBuilder('a')
+        .select('COALESCE(SUM(a.montoEsperado), 0)', 'futuro')
+        .where('a.cuenta_bancaria_id = :id', { id: cuentaBancariaId })
+        .andWhere('a.estado = :estado', { estado: AcreditacionPosEstado.PENDIENTE })
+        .getRawOne();
+
+      return {
+        id: cb.id,
+        nombre: cb.nombre,
+        banco: (cb as any).banco,
+        numeroCuenta: (cb as any).numeroCuenta,
+        moneda: cb.moneda,
+        saldo: Number(cb.saldo) || 0,
+        saldoReservado: Number((cb as any).saldoReservado) || 0,
+        saldoFuturo: Number(futuroRow?.futuro) || 0,
+      };
+    } catch (error) {
+      console.error(`Error getting resumen cuenta bancaria ${cuentaBancariaId}:`, error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('get-cuentas-bancarias-resumenes', async (_event: any, ids: number[]) => {
+    try {
+      if (!Array.isArray(ids) || ids.length === 0) return [];
+      const cbRepo = dataSource.getRepository(CuentaBancaria);
+      const cuentas = await cbRepo
+        .createQueryBuilder('cb')
+        .leftJoinAndSelect('cb.moneda', 'moneda')
+        .where('cb.id IN (:...ids)', { ids })
+        .getMany();
+
+      const futuros = await dataSource
+        .getRepository(AcreditacionPos)
+        .createQueryBuilder('a')
+        .select('a.cuenta_bancaria_id', 'cuentaBancariaId')
+        .addSelect('COALESCE(SUM(a.montoEsperado), 0)', 'futuro')
+        .where('a.cuenta_bancaria_id IN (:...ids)', { ids })
+        .andWhere('a.estado = :estado', { estado: AcreditacionPosEstado.PENDIENTE })
+        .groupBy('a.cuenta_bancaria_id')
+        .getRawMany();
+
+      const futuroByCb = new Map<number, number>();
+      for (const r of futuros) {
+        futuroByCb.set(Number(r.cuentaBancariaId), Number(r.futuro) || 0);
+      }
+
+      return cuentas.map((cb: any) => ({
+        id: cb.id,
+        nombre: cb.nombre,
+        banco: cb.banco,
+        numeroCuenta: cb.numeroCuenta,
+        moneda: cb.moneda,
+        saldo: Number(cb.saldo) || 0,
+        saldoReservado: Number(cb.saldoReservado) || 0,
+        saldoFuturo: futuroByCb.get(cb.id) || 0,
+      }));
+    } catch (error) {
+      console.error('Error getting resumenes cuentas bancarias:', error);
+      throw error;
     }
   });
 }

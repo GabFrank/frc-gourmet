@@ -29,4 +29,7 @@ export class CuentaPorPagarCuota extends BaseModel {
 
   @Column({ type: 'datetime', name: 'fecha_pago', nullable: true })
   fechaPago?: Date;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  observacion?: string;
 }

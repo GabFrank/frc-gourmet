@@ -1,0 +1,32 @@
+<h2 mat-dialog-title>{{ isEdit ? 'Editar asignacion de turno' : 'Asignar turno' }}</h2>
+<mat-dialog-content>
+  <p class="info">Funcionario: <strong>{{ data.funcionarioNombre }}</strong></p>
+
+  <div *ngIf="loadingTurnos" class="spinner-wrap">
+    <mat-progress-spinner mode="indeterminate" diameter="28"></mat-progress-spinner>
+  </div>
+
+  <form [formGroup]="form" class="form" *ngIf="!loadingTurnos">
+    <mat-form-field appearance="outline">
+      <mat-label>Turno</mat-label>
+      <mat-select formControlName="turnoId">
+        <mat-option *ngFor="let t of turnos" [value]="t.id">
+          {{ t.nombre }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Fecha desde</mat-label>
+      <input matInput [matDatepicker]="dpDesde" formControlName="fechaDesde" />
+      <mat-datepicker-toggle matSuffix [for]="dpDesde"></mat-datepicker-toggle>
+      <mat-datepicker #dpDesde></mat-datepicker>
+    </mat-form-field>
+  </form>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()" [disabled]="saving">Cancelar</button>
+  <button mat-flat-button color="primary" (click)="submit()" [disabled]="form.invalid || saving || loadingTurnos">
+    {{ isEdit ? 'Guardar' : 'Asignar' }}
+  </button>
+</mat-dialog-actions>

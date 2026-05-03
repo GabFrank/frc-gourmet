@@ -10,6 +10,7 @@ export function esIngreso(tipo: TipoMovimiento): boolean {
     TipoMovimiento.INGRESO_OPERACION_FINANCIERA,
     TipoMovimiento.INGRESO_RETIRO_BANCO,
     TipoMovimiento.INGRESO_COBRO_CLIENTE,
+    TipoMovimiento.INGRESO_COBRO_CUOTA_PRESTAMO_FUNCIONARIO,
     TipoMovimiento.TRANSFERENCIA_ENTRADA,
     TipoMovimiento.AJUSTE_POSITIVO,
   ].includes(tipo);

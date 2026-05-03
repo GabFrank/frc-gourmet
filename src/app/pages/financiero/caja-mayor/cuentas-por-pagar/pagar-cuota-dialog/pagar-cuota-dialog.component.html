@@ -1,11 +1,11 @@
-<h2 mat-dialog-title>Pagar Cuota #{{cuota?.numero}}</h2>
+<h2 mat-dialog-title>{{ titulo }}</h2>
 
 <mat-dialog-content>
   <div class="info-section">
     <div class="info-row" *ngIf="contextoLabel"><span class="label">Contexto:</span><span>{{contextoLabel}}</span></div>
     <div class="info-row"><span class="label">Vencimiento:</span><span>{{cuota?.fechaVencimiento | date:'dd/MM/yyyy'}}</span></div>
     <div class="info-row"><span class="label">Monto cuota:</span><span>{{cuota?.monto | number:'1.0-2'}}</span></div>
-    <div class="info-row"><span class="label">Pagado:</span><span>{{cuota?.montoPagado | number:'1.0-2'}}</span></div>
+    <div class="info-row"><span class="label">{{ esCobro ? 'Cobrado:' : 'Pagado:' }}</span><span>{{cuota?.montoPagado | number:'1.0-2'}}</span></div>
     <div class="info-row highlight"><span class="label">Restante:</span><strong>{{restante | number:'1.0-2'}}</strong></div>
   </div>
 
@@ -13,7 +13,7 @@
 
   <form [formGroup]="form" class="form-container">
     <div class="fuente-section">
-      <label class="fuente-label">Fuente de pago:</label>
+      <label class="fuente-label">{{ fuenteLabel }}:</label>
       <mat-radio-group formControlName="fuente">
         <mat-radio-button value="CAJA_MAYOR">Caja Mayor</mat-radio-button>
         <mat-radio-button value="CUENTA_BANCARIA">Cuenta Bancaria</mat-radio-button>
@@ -55,7 +55,7 @@
     </ng-container>
 
     <mat-form-field appearance="outline" class="full-width">
-      <mat-label>Monto a pagar</mat-label>
+      <mat-label>{{ montoLabel }}</mat-label>
       <input matInput type="number" formControlName="monto" min="0.01" step="0.01">
     </mat-form-field>
 
@@ -70,6 +70,6 @@
   <button mat-button (click)="onCancel()" [disabled]="saving">Cancelar</button>
   <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="form.invalid || saving">
     <mat-spinner *ngIf="saving" diameter="20"></mat-spinner>
-    <span *ngIf="!saving">Pagar</span>
+    <span *ngIf="!saving">{{ accionLabel }}</span>
   </button>
 </mat-dialog-actions>

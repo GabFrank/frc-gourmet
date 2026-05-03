@@ -56,9 +56,9 @@ export class ListCuentasPorPagarComponent implements OnInit {
   showFiltros = false;
   filtrosForm!: FormGroup;
   estadoOptions = ['ACTIVO', 'PAGADO', 'CANCELADO'];
-  tipoOptions = ['COMPRA', 'PRESTAMO', 'OTRO'];
+  tipoOptions = ['COMPRA', 'PRESTAMO', 'PRESTAMO_FUNCIONARIO', 'OTRO'];
 
-  displayedColumns = ['descripcion', 'tipo', 'proveedor', 'montoTotal', 'montoPagado', 'restante', 'cuotas', 'estado', 'actions'];
+  displayedColumns = ['descripcion', 'tipo', 'beneficiario', 'montoTotal', 'montoPagado', 'restante', 'cuotas', 'estado', 'actions'];
 
   constructor(
     private repositoryService: RepositoryService,
@@ -150,5 +150,33 @@ export class ListCuentasPorPagarComponent implements OnInit {
 
   restante(c: any): number {
     return +(Number(c.montoTotal || 0) - Number(c.montoPagado || 0)).toFixed(2);
+  }
+
+  direccion(tipo: string): 'EGRESO' | 'INGRESO' | 'NEUTRO' {
+    if (tipo === 'PRESTAMO_FUNCIONARIO') return 'INGRESO';
+    if (tipo === 'COMPRA' || tipo === 'PRESTAMO') return 'EGRESO';
+    return 'NEUTRO';
+  }
+
+  tipoLabel(tipo: string): string {
+    switch (tipo) {
+      case 'PRESTAMO_FUNCIONARIO': return 'PRESTAMO FUNCIONARIO';
+      default: return tipo;
+    }
+  }
+
+  beneficiarioLabel(r: any): string {
+    if (r.tipo === 'PRESTAMO_FUNCIONARIO' && r.funcionario) {
+      const p = r.funcionario.persona;
+      return `${p?.nombre || ''} ${p?.apellido || ''}`.trim() || '-';
+    }
+    return r.proveedor?.nombre || '-';
+  }
+
+  beneficiarioRol(r: any): string {
+    if (r.tipo === 'PRESTAMO_FUNCIONARIO') return 'Funcionario';
+    if (r.tipo === 'COMPRA') return 'Proveedor';
+    if (r.tipo === 'PRESTAMO') return 'Acreedor';
+    return 'Beneficiario';
   }
 }

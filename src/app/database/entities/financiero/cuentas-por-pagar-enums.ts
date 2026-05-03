@@ -2,7 +2,8 @@ export enum CuotaEstado {
   PENDIENTE = 'PENDIENTE',
   PARCIAL = 'PARCIAL',
   PAGADA = 'PAGADA',
-  VENCIDA = 'VENCIDA'
+  VENCIDA = 'VENCIDA',
+  CANCELADA = 'CANCELADA'
 }
 
 export enum CuentaPorPagarEstado {

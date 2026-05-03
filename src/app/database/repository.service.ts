@@ -614,6 +614,13 @@ interface ElectronAPI {
   getCajaMayorMovimientos: (cajaMayorId: number, filtros?: any) => Promise<any>;
   createCajaMayorMovimiento: (data: any) => Promise<any>;
   anularCajaMayorMovimiento: (id: number, motivo: string) => Promise<any>;
+  getCajaMayorConfiguracion: (cajaMayorId: number) => Promise<any>;
+  saveCajaMayorConfiguracion: (
+    cajaMayorId: number,
+    data: { formaPagoIds: number[]; cuentaBancariaIds: number[] }
+  ) => Promise<any>;
+  getCuentaBancariaResumen: (cuentaBancariaId: number) => Promise<any>;
+  getCuentasBancariasResumenes: (ids: number[]) => Promise<any[]>;
   getGastoCategorias: () => Promise<any[]>;
   getGastoCategoria: (id: number) => Promise<any>;
   createGastoCategoria: (data: any) => Promise<any>;
@@ -673,6 +680,7 @@ interface ElectronAPI {
   cancelarCuentaPorPagar: (id: number) => Promise<any>;
   getCuentaPorPagarCuotas: (cppId: number) => Promise<any[]>;
   pagarCppCuota: (payload: any) => Promise<any>;
+  cancelarCppCuota: (payload: any) => Promise<any>;
 
   // Dashboard Shortcuts
   getDashboardShortcuts: (dashboardKey?: string) => Promise<any[]>;
@@ -769,6 +777,8 @@ interface ElectronAPI {
   updateTurno: (id: number, data: any) => Promise<any>;
   deleteTurno: (id: number) => Promise<any>;
   asignarTurnoFuncionario: (data: any) => Promise<any>;
+  cerrarFuncionarioTurno: (id: number, fechaHasta?: Date) => Promise<any>;
+  updateFuncionarioTurno: (id: number, data: any) => Promise<any>;
   getFuncionarioTurnos: (funcionarioId: number) => Promise<any[]>;
 
   // RRHH - Asistencias
@@ -782,6 +792,7 @@ interface ElectronAPI {
   // RRHH - Penalizaciones
   getPenalizaciones: (filtros?: any) => Promise<any[]>;
   createPenalizacion: (data: any) => Promise<any>;
+  updatePenalizacion: (data: any) => Promise<any>;
   anularPenalizacion: (id: number) => Promise<any>;
 
   // RRHH - Feriados
@@ -2773,6 +2784,21 @@ export class RepositoryService {
   anularCajaMayorMovimiento(id: number, motivo: string): Observable<any> {
     return from(this.api.anularCajaMayorMovimiento(id, motivo));
   }
+  getCajaMayorConfiguracion(cajaMayorId: number): Observable<any> {
+    return from(this.api.getCajaMayorConfiguracion(cajaMayorId));
+  }
+  saveCajaMayorConfiguracion(
+    cajaMayorId: number,
+    data: { formaPagoIds: number[]; cuentaBancariaIds: number[] }
+  ): Observable<any> {
+    return from(this.api.saveCajaMayorConfiguracion(cajaMayorId, data));
+  }
+  getCuentaBancariaResumen(cuentaBancariaId: number): Observable<any> {
+    return from(this.api.getCuentaBancariaResumen(cuentaBancariaId));
+  }
+  getCuentasBancariasResumenes(ids: number[]): Observable<any[]> {
+    return from(this.api.getCuentasBancariasResumenes(ids));
+  }
 
   // Gasto Categorias
   getGastoCategorias(): Observable<any[]> {
@@ -2927,6 +2953,9 @@ export class RepositoryService {
   }
   pagarCppCuota(payload: any): Observable<any> {
     return from(this.api.pagarCppCuota(payload));
+  }
+  cancelarCppCuota(payload: any): Observable<any> {
+    return from(this.api.cancelarCppCuota(payload));
   }
 
   // ===================== DASHBOARD SHORTCUTS =====================
@@ -3172,6 +3201,12 @@ export class RepositoryService {
   asignarTurnoFuncionario(data: any): Observable<any> {
     return from(this.api.asignarTurnoFuncionario(data));
   }
+  cerrarFuncionarioTurno(id: number, fechaHasta?: Date): Observable<any> {
+    return from(this.api.cerrarFuncionarioTurno(id, fechaHasta));
+  }
+  updateFuncionarioTurno(id: number, data: any): Observable<any> {
+    return from(this.api.updateFuncionarioTurno(id, data));
+  }
   getFuncionarioTurnos(funcionarioId: number): Observable<any[]> {
     return from(this.api.getFuncionarioTurnos(funcionarioId));
   }
@@ -3202,6 +3237,9 @@ export class RepositoryService {
   }
   createPenalizacion(data: any): Observable<any> {
     return from(this.api.createPenalizacion(data));
+  }
+  updatePenalizacion(data: any): Observable<any> {
+    return from(this.api.updatePenalizacion(data));
   }
   anularPenalizacion(id: number): Observable<any> {
     return from(this.api.anularPenalizacion(id));

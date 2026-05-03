@@ -1,0 +1,62 @@
+<h2 mat-dialog-title>Configurar Caja Mayor</h2>
+
+<mat-dialog-content>
+  <div *ngIf="loading" class="loading-block">
+    <mat-spinner diameter="32"></mat-spinner>
+  </div>
+
+  <div *ngIf="!loading">
+    <section class="cfg-section">
+      <div class="section-header">
+        <h3>Formas de pago a mostrar</h3>
+        <div class="bulk-actions">
+          <button mat-stroked-button type="button" (click)="toggleTodasFp(true)">Todas</button>
+          <button mat-stroked-button type="button" (click)="toggleTodasFp(false)">Ninguna</button>
+        </div>
+      </div>
+      <p class="hint">Cards de saldo en efectivo agrupados por forma de pago.</p>
+
+      <div class="check-list" *ngIf="formasPago.length > 0; else emptyFp">
+        <mat-checkbox *ngFor="let fp of formasPago" [(ngModel)]="fp.visible">
+          {{fp.nombre}}
+        </mat-checkbox>
+      </div>
+      <ng-template #emptyFp>
+        <p class="empty">No hay formas de pago activas.</p>
+      </ng-template>
+    </section>
+
+    <mat-divider></mat-divider>
+
+    <section class="cfg-section">
+      <div class="section-header">
+        <h3>Cuentas bancarias a mostrar</h3>
+        <div class="bulk-actions">
+          <button mat-stroked-button type="button" (click)="toggleTodasCb(true)">Todas</button>
+          <button mat-stroked-button type="button" (click)="toggleTodasCb(false)">Ninguna</button>
+        </div>
+      </div>
+      <p class="hint">Cards mostrando saldo actual, futuro (POS pendientes) y reservado (cheques diferidos).</p>
+
+      <div class="check-list" *ngIf="cuentasBancarias.length > 0; else emptyCb">
+        <mat-checkbox *ngFor="let cb of cuentasBancarias" [(ngModel)]="cb.visible">
+          <span class="cb-line">
+            <strong>{{cb.nombre}}</strong>
+            <span class="cb-meta">{{cb.banco}} · {{cb.numeroCuenta}} · {{cb.monedaSimbolo}}</span>
+          </span>
+        </mat-checkbox>
+      </div>
+      <ng-template #emptyCb>
+        <p class="empty">No hay cuentas bancarias activas.</p>
+      </ng-template>
+    </section>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-stroked-button (click)="cancelar()" [disabled]="guardando">Cancelar</button>
+  <button mat-flat-button color="primary" (click)="guardar()" [disabled]="loading || guardando">
+    <mat-icon>save</mat-icon>
+    Guardar
+  </button>
+</mat-dialog-actions>

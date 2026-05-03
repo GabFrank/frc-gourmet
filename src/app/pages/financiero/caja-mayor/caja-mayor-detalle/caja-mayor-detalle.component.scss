@@ -1,5 +1,19 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
 .detalle-container {
   padding: 20px;
+  box-sizing: border-box;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 
   .header-section {
     display: flex;
@@ -8,6 +22,7 @@
     margin-bottom: 24px;
     flex-wrap: wrap;
     gap: 16px;
+    flex-shrink: 0;
 
     .header-info {
       display: flex;
@@ -39,65 +54,217 @@
   }
 
   .content-section {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    grid-template-areas: "main sidebar";
+    gap: 20px;
+    align-items: stretch;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .saldos-sidebar {
+    grid-area: sidebar;
     display: flex;
     flex-direction: column;
-    gap: 20px;
-  }
+    gap: 10px;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
 
-  .saldos-section {
-    .section-title {
-      margin: 0 0 12px;
-      font-weight: 400;
-      font-size: 18px;
+    .sidebar-title {
+      margin: 6px 0 2px;
+      font-weight: 500;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: rgba(0, 0, 0, 0.55);
+    }
+
+    .sidebar-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .empty-state-sm {
+      padding: 8px 12px;
+      font-size: 12px;
+      color: rgba(0, 0, 0, 0.45);
+      font-style: italic;
     }
   }
 
-  .saldos-cards {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
+  .mini-card {
+    background: rgba(0, 0, 0, 0.025);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 6px;
+    padding: 8px 10px;
 
-  .saldo-card {
-    min-width: 200px;
-    flex: 1;
-    max-width: 280px;
-
-    .saldo-icon {
-      color: rgba(0,0,0,0.5);
-      font-size: 24px;
+    .mini-card-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      margin-bottom: 6px;
     }
 
-    .saldo-moneda-row {
+    .mini-icon {
+      color: rgba(0, 0, 0, 0.5);
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+    }
+
+    .mini-title {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: rgba(0, 0, 0, 0.85);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .cb-titles {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .cb-meta {
+      font-size: 10px;
+      color: rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .mini-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .mini-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 6px 0;
-      border-bottom: 1px solid rgba(0,0,0,0.06);
-
-      &:last-child {
-        border-bottom: none;
-      }
+      gap: 8px;
     }
 
-    .saldo-moneda-label {
-      color: rgba(0,0,0,0.6);
+    .mini-label {
+      font-size: 11px;
+      color: rgba(0, 0, 0, 0.6);
+    }
+
+    .mini-valor {
       font-size: 13px;
-    }
-
-    .saldo-moneda-valor {
       font-weight: 600;
-      font-size: 15px;
+      color: rgba(0, 0, 0, 0.9);
+      font-variant-numeric: tabular-nums;
 
       &.negativo {
         color: #f44336;
       }
+
+      &.reservado {
+        color: #ff9800;
+      }
+
+      &.futuro {
+        color: #2196f3;
+      }
+    }
+
+    .reservado-lbl {
+      color: rgba(255, 152, 0, 0.85);
+    }
+
+    .futuro-lbl {
+      color: rgba(33, 150, 243, 0.85);
     }
   }
 
   .section-card {
+    grid-area: main;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+
     .full-width {
       width: 100%;
+    }
+
+    // Material wraps card content; lo hacemos flex column para scroll interno
+    ::ng-deep .mat-mdc-card-content {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+  }
+
+  .movimientos-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+
+    // Header de tabla sticky al hacer scroll
+    table {
+      .mat-mdc-header-cell {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #fff;
+      }
+    }
+  }
+
+  .section-card mat-paginator {
+    flex-shrink: 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  // En pantallas chicas, sidebar pasa arriba y se permite scroll de pagina
+  @media (max-width: 1100px) {
+    .detalle-container {
+      overflow: visible;
+    }
+    .content-section {
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        "sidebar"
+        "main";
+      overflow: visible;
+    }
+    .saldos-sidebar {
+      height: auto;
+      overflow: visible;
+      .sidebar-cards {
+        flex-direction: row;
+        flex-wrap: wrap;
+      }
+      .mini-card {
+        flex: 1 1 220px;
+        min-width: 220px;
+      }
+    }
+    .section-card {
+      height: auto;
+      overflow: visible;
+      ::ng-deep .mat-mdc-card-content {
+        overflow: visible;
+      }
+    }
+    .movimientos-scroll {
+      overflow: visible;
     }
   }
 
@@ -106,7 +273,13 @@
     flex-direction: row !important;
     justify-content: space-between;
     align-items: center;
-    flex: 1;
+    flex-shrink: 0;
+
+    .header-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
 
     .filtros-toggle {
       font-size: 12px;
@@ -114,6 +287,15 @@
       min-height: 30px;
       padding: 0 10px;
     }
+
+    .spinning {
+      animation: spin 0.8s linear infinite;
+    }
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
   .filtros-bar {
@@ -122,6 +304,7 @@
     gap: 8px;
     align-items: flex-start;
     padding: 8px 16px 0;
+    flex-shrink: 0;
 
     .f-field {
       margin: 0;
@@ -180,9 +363,77 @@
     color: rgba(0,0,0,0.4);
   }
 
+  // Fila cuyo movimiento original fue anulado: desaturado, sin tachado total
+  // (los hijos con clase .tachado se encargan del strike sobre montos/observacion).
   .anulado-row {
-    opacity: 0.5;
+    opacity: 0.65;
+  }
+
+  // Fila que ES la contra-anulacion (visible solo con toggle "Ver anulaciones")
+  .contra-row {
+    background-color: rgba(244, 67, 54, 0.04);
+  }
+
+  .tachado {
     text-decoration: line-through;
+    text-decoration-thickness: 1px;
+    color: rgba(0, 0, 0, 0.5);
+  }
+
+  .mat-column-responsable {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .obs-cell {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+
+    .obs-text {
+      flex: 0 1 auto;
+    }
+  }
+
+  .chip-anulado,
+  .chip-contra {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    height: 20px;
+    padding: 0 8px;
+    border-radius: 10px;
+    color: white !important;
+    white-space: nowrap;
+
+    mat-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+      color: white;
+    }
+  }
+
+  .chip-anulado {
+    background-color: #f44336;
+  }
+
+  .chip-contra {
+    background-color: #ff9800;
+  }
+
+  // Boton "Ver anulaciones" — evitar wrap del label
+  .movimientos-header .header-actions button {
+    white-space: nowrap;
+  }
+  .toggle-active {
+    background-color: rgba(255, 152, 0, 0.12);
   }
 
   .detalle-line {
@@ -214,17 +465,52 @@
     color: rgba(255,255,255,0.5);
   }
 
-  .saldo-card {
-    .saldo-icon {
-      color: rgba(255,255,255,0.5);
+  .tachado {
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .contra-row {
+    background-color: rgba(244, 67, 54, 0.08);
+  }
+
+  .saldos-sidebar .sidebar-title {
+    color: rgba(255, 255, 255, 0.55);
+  }
+
+  .saldos-sidebar .empty-state-sm {
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  .movimientos-scroll table .mat-mdc-header-cell {
+    background: #424242;
+  }
+
+  .mini-card {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.1);
+
+    .mini-card-head {
+      border-bottom-color: rgba(255, 255, 255, 0.08);
     }
 
-    .saldo-moneda-row {
-      border-bottom-color: rgba(255,255,255,0.06);
+    .mini-icon {
+      color: rgba(255, 255, 255, 0.55);
     }
 
-    .saldo-moneda-label {
-      color: rgba(255,255,255,0.6);
+    .mini-title {
+      color: rgba(255, 255, 255, 0.92);
+    }
+
+    .cb-meta {
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    .mini-label {
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .mini-valor {
+      color: rgba(255, 255, 255, 0.92);
     }
   }
 }

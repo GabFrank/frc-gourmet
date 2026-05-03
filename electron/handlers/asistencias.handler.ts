@@ -71,7 +71,9 @@ async function crearAsistenciaInterno(
       const autoPenalizar = await getConfigBoolean(dataSource, 'PENALIZACION_AUTO_TARDANZA', true);
       if (autoPenalizar) {
         const penRepo = queryRunner.manager.getRepository(Penalizacion);
-        const monto = await getConfigNumber(dataSource, 'PENALIZACION_MONTO_TARDANZA', 0);
+        const montoFijo = await getConfigNumber(dataSource, 'PENALIZACION_MONTO_TARDANZA', 0);
+        const montoPorMinuto = await getConfigNumber(dataSource, 'PENALIZACION_MONTO_POR_MINUTO_TARDANZA', 0);
+        const monto = +(montoFijo + montoPorMinuto * (minutosTardanza || 0)).toFixed(2);
         const pen = penRepo.create({
           funcionario,
           asistencia: saved,
@@ -198,6 +200,26 @@ export function registerAsistenciasHandlers(
     });
   });
 
+  ipcMain.handle('cerrar-funcionario-turno', async (_e, id: number, fechaHasta?: Date) => {
+    const repo = dataSource.getRepository(FuncionarioTurno);
+    const existing = await repo.findOne({ where: { id } });
+    if (!existing) throw new Error(`Asignacion de turno ${id} no encontrada`);
+    if (existing.fechaHasta) throw new Error('La asignacion ya esta cerrada');
+    existing.fechaHasta = fechaHasta ?? new Date();
+    await setEntityUserTracking(dataSource, existing, getCurrentUser()?.id, true);
+    return await repo.save(existing);
+  });
+
+  ipcMain.handle('update-funcionario-turno', async (_e, id: number, data: any) => {
+    const repo = dataSource.getRepository(FuncionarioTurno);
+    const existing = await repo.findOne({ where: { id } });
+    if (!existing) throw new Error(`Asignacion de turno ${id} no encontrada`);
+    if (data.fechaDesde !== undefined) existing.fechaDesde = data.fechaDesde;
+    if (data.fechaHasta !== undefined) existing.fechaHasta = data.fechaHasta;
+    await setEntityUserTracking(dataSource, existing, getCurrentUser()?.id, true);
+    return await repo.save(existing);
+  });
+
   // ==================== ASISTENCIAS ====================
   ipcMain.handle('get-asistencias', async (_e, filtros: any) => {
     const repo = dataSource.getRepository(Asistencia);
@@ -318,6 +340,19 @@ export function registerAsistenciasHandlers(
     });
     await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
     return await repo.save(entity);
+  });
+
+  ipcMain.handle('update-penalizacion', async (_e, data: any) => {
+    const repo = dataSource.getRepository(Penalizacion);
+    const existing = await repo.findOne({ where: { id: data.id } });
+    if (!existing) throw new Error(`Penalizacion ${data.id} no encontrada`);
+    if (existing.anulada) throw new Error('No se puede editar una penalizacion anulada');
+    if (data.tipo !== undefined) existing.tipo = data.tipo;
+    if (data.descripcion !== undefined) existing.descripcion = data.descripcion;
+    if (data.monto !== undefined) existing.monto = data.monto;
+    if (data.fecha !== undefined) existing.fecha = data.fecha;
+    await setEntityUserTracking(dataSource, existing, getCurrentUser()?.id, true);
+    return await repo.save(existing);
   });
 
   ipcMain.handle('anular-penalizacion', async (_e, id: number) => {

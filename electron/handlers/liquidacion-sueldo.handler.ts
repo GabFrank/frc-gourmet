@@ -15,7 +15,7 @@ import { ValeEstado } from '../../src/app/database/entities/rrhh/vale-estado.enu
 import { Penalizacion } from '../../src/app/database/entities/rrhh/penalizacion.entity';
 import { HoraExtra } from '../../src/app/database/entities/rrhh/hora-extra.entity';
 import { CuentaPorPagar } from '../../src/app/database/entities/financiero/cuenta-por-pagar.entity';
-import { CuentaPorPagarTipo } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
+import { CuentaPorPagarTipo, CuentaPorPagarEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
 import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
 import { CuotaEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
@@ -627,38 +627,124 @@ export function registerLiquidacionSueldoHandlers(
       const liqRepo = queryRunner.manager.getRepository(LiquidacionSueldo);
       const liq = await liqRepo.findOne({ where: { id }, relations: ['monedaPago'] });
       if (!liq) throw new Error(`Liquidacion ${id} no encontrada`);
+      if (liq.estado === LiquidacionSueldoEstado.ANULADA) throw new Error('La liquidacion ya esta anulada');
 
       const userId = getCurrentUser()?.id;
       const userEntity = userId
         ? await queryRunner.manager.findOne(Usuario, { where: { id: userId } })
         : null;
 
-      // Si fue PAGADA, contra-movimiento
-      if (liq.estado === LiquidacionSueldoEstado.PAGADA && liq.movimientoId) {
-        const movOriginal = await queryRunner.manager.findOne(CajaMayorMovimiento, {
-          where: { id: liq.movimientoId },
-          relations: ['cajaMayor', 'moneda', 'formaPago'],
-        });
-        if (movOriginal) {
-          const cajaMayorId = movOriginal.cajaMayor?.id;
-          const monedaId = movOriginal.moneda?.id;
-          const formaPagoId = movOriginal.formaPago?.id;
-          if (cajaMayorId && monedaId && formaPagoId) {
-            const contra = queryRunner.manager.create(CajaMayorMovimiento, {
-              cajaMayor: { id: cajaMayorId } as any,
-              tipoMovimiento: TipoMovimiento.AJUSTE_POSITIVO,
-              moneda: { id: monedaId } as any,
-              formaPago: { id: formaPagoId } as any,
-              monto: movOriginal.monto,
-              fecha: new Date(),
-              observacion: `ANULACION LIQ #${liq.id}` + (motivo ? ` - ${motivo}` : ''),
-              referenciaAnulacion: movOriginal,
-              liquidacionSueldoId: liq.id,
-              responsable: userEntity || undefined,
-            });
-            await setEntityUserTracking(dataSource, contra, userId, false);
-            await queryRunner.manager.save(CajaMayorMovimiento, contra);
-            await actualizarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, Number(movOriginal.monto), TipoMovimiento.AJUSTE_POSITIVO);
+      const eraPagada = liq.estado === LiquidacionSueldoEstado.PAGADA;
+
+      // Revertir efectos sobre entidades referenciadas (sólo si estaba PAGADA)
+      if (eraPagada) {
+        const itemRepo = queryRunner.manager.getRepository(LiquidacionItem);
+        const items = await itemRepo.find({ where: { liquidacion: { id: liq.id } as any } });
+
+        // Vales: DESCONTADO -> CONFIRMADO, limpiar liquidacionId
+        const valesIds = items
+          .filter((i) => i.referenciaTipo === 'VALE' && i.referenciaId)
+          .map((i) => i.referenciaId!) as number[];
+        if (valesIds.length) {
+          const valeRepo = queryRunner.manager.getRepository(Vale);
+          for (const vId of valesIds) {
+            const vale = await valeRepo.findOne({ where: { id: vId } });
+            if (vale && vale.estado === ValeEstado.DESCONTADO && vale.liquidacionId === liq.id) {
+              vale.estado = ValeEstado.CONFIRMADO;
+              (vale as any).liquidacionId = null;
+              await setEntityUserTracking(dataSource, vale, userId, true);
+              await valeRepo.save(vale);
+            }
+          }
+        }
+
+        // Cuotas de prestamo: PAGADA -> PENDIENTE/PARCIAL, restar montoPagado del CPP, revertir CPP a ACTIVO
+        const cuotasItems = items.filter((i) => i.referenciaTipo === 'CPP_CUOTA' && i.referenciaId);
+        if (cuotasItems.length) {
+          const cuotaRepo = queryRunner.manager.getRepository(CuentaPorPagarCuota);
+          const cppRepo = queryRunner.manager.getRepository(CuentaPorPagar);
+          for (const it of cuotasItems) {
+            const cuota = await cuotaRepo.findOne({ where: { id: it.referenciaId! }, relations: ['cuentaPorPagar'] });
+            if (!cuota) continue;
+            const montoRevertir = Number(it.monto);
+            const nuevoPagado = Math.max(0, +(Number(cuota.montoPagado) - montoRevertir).toFixed(2));
+            cuota.montoPagado = nuevoPagado;
+            cuota.estado = nuevoPagado <= 0 ? CuotaEstado.PENDIENTE : CuotaEstado.PARCIAL;
+            if (nuevoPagado <= 0) (cuota as any).fechaPago = null;
+            await setEntityUserTracking(dataSource, cuota, userId, true);
+            await cuotaRepo.save(cuota);
+
+            const cpp = await cppRepo.findOne({ where: { id: cuota.cuentaPorPagar.id } });
+            if (cpp) {
+              cpp.montoPagado = Math.max(0, +(Number(cpp.montoPagado) - montoRevertir).toFixed(2));
+              if (cpp.estado === CuentaPorPagarEstado.PAGADO) cpp.estado = CuentaPorPagarEstado.ACTIVO;
+              await setEntityUserTracking(dataSource, cpp, userId, true);
+              await cppRepo.save(cpp);
+            }
+          }
+        }
+
+        // Aguinaldos: PAGADO -> APROBADO, limpiar liquidacionId y fechaPago
+        const aguiIds = items
+          .filter((i) => i.referenciaTipo === 'AGUINALDO' && i.referenciaId)
+          .map((i) => i.referenciaId!) as number[];
+        if (aguiIds.length) {
+          const aguiRepo = queryRunner.manager.getRepository(Aguinaldo);
+          for (const aId of aguiIds) {
+            const agui = await aguiRepo.findOne({ where: { id: aId } });
+            if (agui && agui.estado === AguinaldoEstado.PAGADO && agui.liquidacionId === liq.id) {
+              agui.estado = AguinaldoEstado.APROBADO;
+              (agui as any).liquidacionId = null;
+              (agui as any).fechaPago = null;
+              await setEntityUserTracking(dataSource, agui, userId, true);
+              await aguiRepo.save(agui);
+            }
+          }
+        }
+
+        // Liquidaciones de comision: INTEGRADA -> APROBADA
+        const comIds = items
+          .filter((i) => i.referenciaTipo === 'LIQUIDACION_COMISION' && i.referenciaId)
+          .map((i) => i.referenciaId!) as number[];
+        if (comIds.length) {
+          const liqComRepo = queryRunner.manager.getRepository(LiquidacionComision);
+          for (const cId of comIds) {
+            const liqCom = await liqComRepo.findOne({ where: { id: cId } });
+            if (liqCom && liqCom.estado === LiquidacionComisionEstado.INTEGRADA) {
+              liqCom.estado = LiquidacionComisionEstado.APROBADA;
+              await setEntityUserTracking(dataSource, liqCom, userId, true);
+              await liqComRepo.save(liqCom);
+            }
+          }
+        }
+
+        // Contra-movimiento en Caja Mayor por el total neto pagado
+        if (liq.movimientoId) {
+          const movOriginal = await queryRunner.manager.findOne(CajaMayorMovimiento, {
+            where: { id: liq.movimientoId },
+            relations: ['cajaMayor', 'moneda', 'formaPago'],
+          });
+          if (movOriginal) {
+            const cajaMayorId = movOriginal.cajaMayor?.id;
+            const monedaId = movOriginal.moneda?.id;
+            const formaPagoId = movOriginal.formaPago?.id;
+            if (cajaMayorId && monedaId && formaPagoId) {
+              const contra = queryRunner.manager.create(CajaMayorMovimiento, {
+                cajaMayor: { id: cajaMayorId } as any,
+                tipoMovimiento: TipoMovimiento.AJUSTE_POSITIVO,
+                moneda: { id: monedaId } as any,
+                formaPago: { id: formaPagoId } as any,
+                monto: movOriginal.monto,
+                fecha: new Date(),
+                observacion: `ANULACION LIQ #${liq.id}` + (motivo ? ` - ${motivo}` : ''),
+                referenciaAnulacion: movOriginal,
+                liquidacionSueldoId: liq.id,
+                responsable: userEntity || undefined,
+              });
+              await setEntityUserTracking(dataSource, contra, userId, false);
+              await queryRunner.manager.save(CajaMayorMovimiento, contra);
+              await actualizarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, Number(movOriginal.monto), TipoMovimiento.AJUSTE_POSITIVO);
+            }
           }
         }
       }

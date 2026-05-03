@@ -24,3 +24,30 @@
 .full-width { width: 100%; }
 .empty-state { text-align: center; padding: 24px; color: rgba(0,0,0,0.45); }
 :host-context(.dark-theme) .empty-state { color: rgba(255,255,255,0.45); }
+
+.tipo-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  .dir-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    opacity: 0.85;
+  }
+  .dir-ingreso { color: #43a047; }
+  .dir-egreso { color: #e53935; }
+}
+
+.beneficiario-cell {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  .rol-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    opacity: 0.6;
+    letter-spacing: 0.4px;
+  }
+}

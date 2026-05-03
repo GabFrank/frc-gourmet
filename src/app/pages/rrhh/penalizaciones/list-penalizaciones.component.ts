@@ -70,7 +70,7 @@ const TIPOS = [
           <form [formGroup]="form" (ngSubmit)="submit()" class="form">
             <mat-form-field appearance="outline">
               <mat-label>Funcionario</mat-label>
-              <mat-select formControlName="funcionarioId">
+              <mat-select formControlName="funcionarioId" [disabled]="!!editingId">
                 <mat-option *ngFor="let f of funcionarios" [value]="f.id">
                   {{ f.persona?.nombre }} {{ f.persona?.apellido || '' }}
                 </mat-option>
@@ -98,7 +98,7 @@ const TIPOS = [
             </mat-form-field>
             <div class="actions">
               <button type="button" mat-button (click)="cancelInlineForm()">Cancelar</button>
-              <button type="submit" mat-flat-button color="primary" [disabled]="form.invalid">Crear</button>
+              <button type="submit" mat-flat-button color="primary" [disabled]="form.invalid">{{ editingId ? 'Guardar cambios' : 'Crear' }}</button>
             </div>
           </form>
         </mat-card-content>
@@ -141,7 +141,10 @@ const TIPOS = [
             </ng-container>
             <ng-container matColumnDef="tipo">
               <th mat-header-cell *matHeaderCellDef>Tipo</th>
-              <td mat-cell *matCellDef="let p">{{ p.tipo }}</td>
+              <td mat-cell *matCellDef="let p">
+                {{ p.tipo }}
+                <span class="chip-auto" *ngIf="p.autoGenerada" title="Generada automaticamente desde asistencia">AUTO</span>
+              </td>
             </ng-container>
             <ng-container matColumnDef="monto">
               <th mat-header-cell *matHeaderCellDef>Monto</th>
@@ -164,6 +167,9 @@ const TIPOS = [
                   <mat-icon>more_vert</mat-icon>
                 </button>
                 <mat-menu #menu="matMenu">
+                  <button mat-menu-item (click)="editar(p)" *ngIf="!p.autoGenerada">
+                    <mat-icon>edit</mat-icon><span>Editar</span>
+                  </button>
                   <button mat-menu-item (click)="anular(p)">
                     <mat-icon>cancel</mat-icon><span>Anular</span>
                   </button>
@@ -191,6 +197,7 @@ const TIPOS = [
     .empty { padding: 16px; text-align: center; opacity: 0.7; }
     .acc-col { width: 60px; }
     .estado-rojo { color: #e53935; }
+    .chip-auto { display: inline-block; margin-left: 6px; padding: 1px 6px; font-size: 10px; font-weight: 600; border-radius: 8px; background: rgba(255, 152, 0, 0.18); color: #ff9800; vertical-align: middle; }
   `],
 })
 export class ListPenalizacionesComponent implements OnInit {
@@ -203,6 +210,7 @@ export class ListPenalizacionesComponent implements OnInit {
   filtroTipo: string | null = null;
   soloVigentes = true;
   showInlineForm = false;
+  editingId: number | null = null;
   form!: FormGroup;
 
   constructor(
@@ -244,22 +252,40 @@ export class ListPenalizacionesComponent implements OnInit {
   }
 
   showCreateForm(): void {
+    this.editingId = null;
     this.form.reset({ tipo: 'OTRO', fecha: new Date(), monto: 0 });
     this.showInlineForm = true;
   }
 
-  cancelInlineForm(): void { this.showInlineForm = false; }
+  editar(p: any): void {
+    this.editingId = p.id;
+    this.form.reset({
+      funcionarioId: p.funcionario?.id,
+      tipo: p.tipo,
+      fecha: p.fecha ? new Date(p.fecha) : new Date(),
+      monto: p.monto,
+      descripcion: p.descripcion || '',
+    });
+    this.showInlineForm = true;
+  }
+
+  cancelInlineForm(): void { this.showInlineForm = false; this.editingId = null; }
 
   async submit(): Promise<void> {
     if (this.form.invalid) return;
     try {
-      await firstValueFrom(this.repositoryService.createPenalizacion(this.form.value));
-      this.snackBar.open('Penalizacion creada', 'Cerrar', { duration: 2500 });
+      if (this.editingId) {
+        await firstValueFrom(this.repositoryService.updatePenalizacion({ id: this.editingId, ...this.form.value }));
+        this.snackBar.open('Penalizacion actualizada', 'Cerrar', { duration: 2500 });
+      } else {
+        await firstValueFrom(this.repositoryService.createPenalizacion(this.form.value));
+        this.snackBar.open('Penalizacion creada', 'Cerrar', { duration: 2500 });
+      }
       this.cancelInlineForm();
       this.load();
     } catch (e) {
       console.error(e);
-      this.snackBar.open('Error al crear penalizacion', 'Cerrar', { duration: 3500 });
+      this.snackBar.open('Error al guardar penalizacion', 'Cerrar', { duration: 3500 });
     }
   }
 

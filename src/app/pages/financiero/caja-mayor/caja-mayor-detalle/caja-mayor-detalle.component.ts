@@ -33,13 +33,22 @@ import { EmitirChequeDialogComponent } from '../cheques/emitir-cheque/emitir-che
 interface MovimientoConsolidado {
   fecha: Date;
   tipoMovimiento: string;
+  tipoLabel: string;
+  tipoIsIngreso: boolean;
   detalles: { monedaSimbolo: string; formaPagoNombre: string; monto: number }[];
   responsableNombre: string;
   observacion: string;
   gastoId?: number;
   retiroCajaId?: number;
   movimientoIds: number[];
-  esAnulacion: boolean;
+  esAnulacion: boolean; // este grupo es un contra-movimiento (toggle "Ver anulaciones")
+  anulacion?: {
+    id: number;
+    fecha: Date;
+    motivo: string;
+    responsableNombre: string | null;
+  } | null;
+  contraDeId?: number; // si esta fila ES la contra de otra (toggle ON), referencia al original
 }
 
 @Component({
@@ -75,6 +84,18 @@ export class CajaMayorDetalleComponent implements OnInit {
 
   cajaMayor: any = null;
   saldosPorFormaPago: { formaPagoNombre: string; monedas: { simbolo: string; denominacion: string; saldo: number }[] }[] = [];
+  cuentasBancariasCards: Array<{
+    id: number;
+    nombre: string;
+    banco: string;
+    numeroCuenta: string;
+    monedaSimbolo: string;
+    saldo: number;
+    saldoFuturo: number;
+    saldoReservado: number;
+  }> = [];
+  // IDs de FPs visibles (null = sin config previa, mostrar todas).
+  private formasPagoVisiblesIds: Set<number> | null = null;
   movimientosConsolidados: MovimientoConsolidado[] = [];
   loading = false;
   loadingMovimientos = false;
@@ -97,6 +118,40 @@ export class CajaMayorDetalleComponent implements OnInit {
   ];
   proveedores: any[] = [];
   responsables: any[] = [];
+
+  // Etiquetas humanizadas para los tipos de movimiento (display only).
+  private readonly tipoLabelMap: Record<string, string> = {
+    INGRESO_RETIRO_CAJA: 'Retiro de Caja (entrada)',
+    INGRESO_CIERRE_CAJA: 'Cierre de Caja',
+    INGRESO_ENTRADA_VARIA: 'Entrada Varia',
+    INGRESO_OPERACION_FINANCIERA: 'Operacion Financiera (entrada)',
+    INGRESO_RETIRO_BANCO: 'Retiro de Banco',
+    INGRESO_COBRO_CUOTA_PRESTAMO_FUNCIONARIO: 'Cobro cuota prestamo func.',
+    INGRESO_COBRO_CUENTA_POR_COBRAR: 'Cobro cuenta por cobrar',
+    TRANSFERENCIA_ENTRADA: 'Transferencia (entrada)',
+    AJUSTE_POSITIVO: 'Ajuste (+)',
+    EGRESO_GASTO: 'Gasto',
+    EGRESO_COMPRA: 'Compra',
+    EGRESO_CUOTA_COMPRA: 'Cuota compra',
+    EGRESO_CUOTA_PRESTAMO: 'Cuota prestamo',
+    EGRESO_VALE: 'Vale',
+    EGRESO_SALARIO: 'Salario',
+    EGRESO_CHEQUE: 'Cheque',
+    EGRESO_OPERACION_FINANCIERA: 'Operacion Financiera (salida)',
+    EGRESO_DEPOSITO_BANCO: 'Deposito a Banco',
+    EGRESO_CAJA_INICIAL: 'Caja Inicial (salida)',
+    EGRESO_DESEMBOLSO_PRESTAMO_FUNCIONARIO: 'Desembolso prestamo func.',
+    TRANSFERENCIA_SALIDA: 'Transferencia (salida)',
+    AJUSTE_NEGATIVO: 'Ajuste (-)',
+    ANULACION: 'Anulacion',
+  };
+
+  tipoLabel(tipo: string): string {
+    return this.tipoLabelMap[tipo] || tipo;
+  }
+
+  // Toggle para mostrar tambien las contra-anulaciones (default: ocultas)
+  verAnulaciones = false;
 
   constructor(
     private repositoryService: RepositoryService,
@@ -157,8 +212,37 @@ export class CajaMayorDetalleComponent implements OnInit {
 
     this.loading = true;
     try {
-      const saldos = await firstValueFrom(this.repositoryService.getCajaMayorSaldos(this.cajaMayor.id));
+      const [saldos, config] = await Promise.all([
+        firstValueFrom(this.repositoryService.getCajaMayorSaldos(this.cajaMayor.id)),
+        firstValueFrom(this.repositoryService.getCajaMayorConfiguracion(this.cajaMayor.id)),
+      ]);
+
+      // Aplica filtros de config: si no hay config, mostrar todas las FPs y ninguna CB.
+      this.formasPagoVisiblesIds = config?.formasPagoVisibles
+        ? new Set<number>((config.formasPagoVisibles as any[]).map((fp) => fp.id))
+        : null;
+
       this.saldosPorFormaPago = this.agruparSaldosPorFormaPago(saldos || []);
+
+      const cbIds: number[] = config?.cuentasBancariasVisibles
+        ? (config.cuentasBancariasVisibles as any[]).map((cb) => cb.id)
+        : [];
+      if (cbIds.length > 0) {
+        const resumenes = await firstValueFrom(this.repositoryService.getCuentasBancariasResumenes(cbIds));
+        this.cuentasBancariasCards = (resumenes || []).map((r: any) => ({
+          id: r.id,
+          nombre: r.nombre,
+          banco: r.banco,
+          numeroCuenta: r.numeroCuenta,
+          monedaSimbolo: r.moneda?.simbolo || '-',
+          saldo: Number(r.saldo) || 0,
+          saldoFuturo: Number(r.saldoFuturo) || 0,
+          saldoReservado: Number(r.saldoReservado) || 0,
+        }));
+      } else {
+        this.cuentasBancariasCards = [];
+      }
+
       await this.loadMovimientos();
     } catch (error) {
       console.error('Error loading caja mayor details:', error);
@@ -166,6 +250,19 @@ export class CajaMayorDetalleComponent implements OnInit {
     } finally {
       this.loading = false;
     }
+  }
+
+  abrirConfiguracion(): void {
+    if (!this.cajaMayor?.id) return;
+    import('../configurar-caja-mayor-dialog/configurar-caja-mayor-dialog.component').then((m) => {
+      const ref = this.dialog.open(m.ConfigurarCajaMayorDialogComponent, {
+        width: '560px',
+        data: { cajaMayorId: this.cajaMayor.id },
+      });
+      ref.afterClosed().subscribe((result) => {
+        if (result) this.loadData();
+      });
+    });
   }
 
   async loadMovimientos(): Promise<void> {
@@ -186,6 +283,7 @@ export class CajaMayorDetalleComponent implements OnInit {
       if (f.tipoMovimiento) filtros.tipoMovimiento = f.tipoMovimiento;
       if (f.proveedorId) filtros.proveedorId = f.proveedorId;
       if (f.responsableId) filtros.responsableId = f.responsableId;
+      if (this.verAnulaciones) filtros.incluirAnulaciones = true;
 
       const result: any = await firstValueFrom(this.repositoryService.getCajaMayorMovimientos(this.cajaMayor.id, filtros));
       const items = result?.items || [];
@@ -202,6 +300,12 @@ export class CajaMayorDetalleComponent implements OnInit {
   onPageChange(event: PageEvent): void {
     this.pageIndex = event.pageIndex;
     this.pageSize = event.pageSize;
+    this.loadMovimientos();
+  }
+
+  onToggleVerAnulaciones(): void {
+    this.verAnulaciones = !this.verAnulaciones;
+    this.pageIndex = 0;
     this.loadMovimientos();
   }
 
@@ -224,7 +328,12 @@ export class CajaMayorDetalleComponent implements OnInit {
 
   private agruparSaldosPorFormaPago(saldos: any[]): { formaPagoNombre: string; monedas: { simbolo: string; denominacion: string; saldo: number }[] }[] {
     // Solo mostrar formas de pago que movimentan caja (efectivo)
-    const saldosEfectivo = saldos.filter(s => s.formaPago?.movimentaCaja === true);
+    let saldosEfectivo = saldos.filter(s => s.formaPago?.movimentaCaja === true);
+
+    // Si hay configuracion previa, restringir al subconjunto de FPs visibles.
+    if (this.formasPagoVisiblesIds) {
+      saldosEfectivo = saldosEfectivo.filter(s => this.formasPagoVisiblesIds!.has(s.formaPago?.id));
+    }
 
     const map = new Map<string, { formaPagoNombre: string; monedas: { simbolo: string; denominacion: string; saldo: number }[] }>();
 
@@ -254,6 +363,7 @@ export class CajaMayorDetalleComponent implements OnInit {
       const gastoId = mov.gasto?.id;
       const retiroCajaId = mov.retiroCaja?.id;
       const isAnulacion = mov.tipoMovimiento === 'ANULACION';
+      const contraDeId = mov.referenciaAnulacion?.id;
       const key = gastoId ? `gasto-${gastoId}` :
                   retiroCajaId ? `retiro-${retiroCajaId}` :
                   `mov-${mov.id}`;
@@ -277,16 +387,22 @@ export class CajaMayorDetalleComponent implements OnInit {
         grupo.detalles.push(detalle);
         grupo.movimientoIds.push(mov.id);
       } else {
+        const tipo: string = mov.tipoMovimiento || '';
+        const esIngreso = tipo.startsWith('INGRESO') || tipo.startsWith('AJUSTE_POS') || tipo === 'TRANSFERENCIA_ENTRADA';
         grupos.set(key, {
           fecha: mov.fecha,
-          tipoMovimiento: mov.tipoMovimiento,
+          tipoMovimiento: tipo,
+          tipoLabel: this.tipoLabel(tipo),
+          tipoIsIngreso: esIngreso,
           detalles: [detalle],
           responsableNombre: mov.responsable?.persona?.nombre || mov.responsable?.nickname || '-',
           observacion: mov.observacion || '-',
           gastoId,
           retiroCajaId,
           movimientoIds: [mov.id],
-          esAnulacion: isAnulacion,
+          esAnulacion: isAnulacion || !!contraDeId,
+          anulacion: mov.anulacion || null,
+          contraDeId: contraDeId || undefined,
         });
       }
     }
@@ -426,9 +542,10 @@ export class CajaMayorDetalleComponent implements OnInit {
         }
         this.snackBar.open('Movimiento anulado correctamente', 'Cerrar', { duration: 3000 });
         this.loadData();
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error anulando movimiento:', error);
-        this.snackBar.open('Error al anular movimiento', 'Cerrar', { duration: 3000 });
+        const msg = this.extraerMensajeError(error) || 'Error al anular movimiento';
+        this.snackBar.open(msg, 'Cerrar', { duration: 8000, panelClass: ['error-snackbar'] });
       }
     }
   }
@@ -475,6 +592,16 @@ export class CajaMayorDetalleComponent implements OnInit {
       console.error('Error verificando saldo en anular:', e);
       return true;
     }
+  }
+
+  private extraerMensajeError(error: any): string | null {
+    if (!error) return null;
+    const raw = error.message || (typeof error === 'string' ? error : '');
+    if (!raw) return null;
+    // Los errores que vienen del proceso main de Electron por IPC
+    // suelen llegar prefijados con "Error invoking remote method '...': Error: <mensaje real>".
+    const match = raw.match(/Error:\s*([^]*)$/);
+    return (match ? match[1] : raw).trim();
   }
 
   async cerrarCajaMayor(): Promise<void> {

@@ -33,6 +33,8 @@ const SEED_CONFIG: SeedItem[] = [
   // Asistencia / Cierre
   { clave: 'TOLERANCIA_TARDANZA_MIN', valor: '5', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Minutos de tolerancia para tardanza' },
   { clave: 'PENALIZACION_AUTO_TARDANZA', valor: 'true', tipo: ConfiguracionRrhhTipo.BOOLEAN, descripcion: 'Generar penalizacion automatica al detectar tardanza > tolerancia' },
+  { clave: 'PENALIZACION_MONTO_TARDANZA', valor: '0', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Monto fijo (PYG) de la penalizacion automatica por tardanza. Si es 0, se genera la penalizacion sin descuento monetario' },
+  { clave: 'PENALIZACION_MONTO_POR_MINUTO_TARDANZA', valor: '0', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Monto (PYG) por minuto de tardanza, sumado al fijo. Si es 0, no se aplica' },
   { clave: 'DIA_CIERRE_MES', valor: '30', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Dia del mes en que se cierra el periodo de liquidacion' },
 ];
 
