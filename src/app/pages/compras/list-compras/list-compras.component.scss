@@ -1,0 +1,133 @@
+.list-compras-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding: 16px 20px 0 20px;
+  box-sizing: border-box;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex: 0 0 auto;
+
+  h2 {
+    margin: 0;
+    font-weight: 400;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .spinning {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+}
+
+.filtros-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 0;
+  margin-bottom: 8px;
+  flex: 0 0 auto;
+
+  .f-field {
+    width: 180px;
+
+    &.f-search {
+      width: 260px;
+    }
+
+    ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+      display: none;
+    }
+  }
+
+  .filtros-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    height: 56px;
+  }
+}
+
+.table-container {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--mdc-elevated-card-container-color, transparent);
+  border-radius: 4px;
+  min-height: 0;
+}
+
+.table-scroll {
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 0;
+}
+
+.compras-table {
+  width: 100%;
+
+  th.mat-mdc-header-cell {
+    font-weight: 600;
+    background: var(--mat-app-surface, transparent);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .text-right { text-align: right; }
+  .mono { font-feature-settings: 'tnum'; }
+  .muted { color: var(--mat-sys-on-surface-variant); font-size: 12px; margin-left: 4px; }
+
+  .prov-cell {
+    max-width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+
+  &.chip-amarillo { background: #fff8e1; color: #c87f00; border: 1px solid #ffd54f; }
+  &.chip-verde { background: #e8f5e9; color: #1b5e20; border: 1px solid #a5d6a7; }
+  &.chip-rojo { background: #ffebee; color: #b71c1c; border: 1px solid #ef9a9a; }
+  &.chip-naranja { background: #fff3e0; color: #bf360c; border: 1px solid #ffb74d; }
+  &.chip-celeste { background: #e1f5fe; color: #01579b; border: 1px solid #81d4fa; }
+  &.chip-gris { background: #eeeeee; color: #424242; border: 1px solid #bdbdbd; }
+}
+
+.no-data-row .empty-state {
+  text-align: center;
+  padding: 40px 16px;
+  color: var(--mat-sys-on-surface-variant);
+
+  mat-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    opacity: 0.4;
+  }
+}

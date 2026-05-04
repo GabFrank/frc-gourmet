@@ -40,7 +40,13 @@
     <table mat-table [dataSource]="cuentas" class="full-width">
       <ng-container matColumnDef="descripcion">
         <th mat-header-cell *matHeaderCellDef>Descripción</th>
-        <td mat-cell *matCellDef="let r">{{r.descripcion}}</td>
+        <td mat-cell *matCellDef="let r">
+          <div class="desc-line">{{r.descripcion}}</div>
+          <span *ngIf="r.compraId" class="origen-link" (click)="$event.stopPropagation(); abrirCompra(r.compraId)" matTooltip="Ver compra origen">
+            <mat-icon class="origen-icon">shopping_cart</mat-icon>
+            Compra #{{ r.compraId }}
+          </span>
+        </td>
       </ng-container>
       <ng-container matColumnDef="tipo">
         <th mat-header-cell *matHeaderCellDef>Tipo</th>

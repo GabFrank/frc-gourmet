@@ -1,31 +1,31 @@
 import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseModel } from '../base.entity';
-// Import type references to avoid circular dependencies
+import { Producto } from '../productos/producto.entity';
 import type { Compra } from './compra.entity';
 import type { Proveedor } from './proveedor.entity';
 
-/**
- * Entity representing the relationship between suppliers and products/ingredients
- */
+// Unicidad (proveedor, producto) se valida en el handler `upsertProveedorProducto`.
+// (No se usa @Index unique por compatibilidad con datos legacy donde producto_id puede ser NULL.)
 @Entity('proveedores_productos')
 export class ProveedorProducto extends BaseModel {
   @Column({ default: true })
   activo!: boolean;
 
-  // Relationships - Use string references to avoid circular dependencies
+  @Column({ type: 'decimal', precision: 14, scale: 2, nullable: true, name: 'ultimo_costo_unitario' })
+  ultimoCostoUnitario?: number;
+
+  @Column({ type: 'date', nullable: true, name: 'ultima_compra_fecha' })
+  ultimaCompraFecha?: Date;
+
   @ManyToOne('Proveedor', 'proveedorProductos', {
     createForeignKeyConstraints: false
   })
   @JoinColumn({ name: 'proveedor_id' })
   proveedor!: Proveedor;
 
-  // @ManyToOne(() => Producto, { nullable: true })
-  // @JoinColumn({ name: 'producto_id' })
-  // producto?: Producto;
-
-  // @ManyToOne(() => Ingrediente, { nullable: true })
-  // @JoinColumn({ name: 'ingrediente_id' })
-  // ingrediente?: Ingrediente;
+  @ManyToOne(() => Producto, { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'producto_id' })
+  producto?: Producto;
 
   @ManyToOne('Compra', '', {
     nullable: true,

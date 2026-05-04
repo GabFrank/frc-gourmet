@@ -19,6 +19,7 @@ import { PrecioVenta } from 'src/app/database/entities/productos/precio-venta.en
 export interface ProductoSearchDialogData {
   searchTerm: string;
   cantidad: number;
+  mode?: 'venta' | 'compra';
 }
 
 @Component({
@@ -128,8 +129,9 @@ export class ProductoSearchDialogComponent implements OnInit {
     this.hasSearched = true;
 
     try {
+      const mode = this.data?.mode || 'venta';
       const results = await firstValueFrom(
-        this.repositoryService.searchProductosByNombre(searchTerm)
+        this.repositoryService.searchProductosByNombre(searchTerm, mode)
       );
       this.searchResults = results || [];
       this.totalItems = this.searchResults.length;

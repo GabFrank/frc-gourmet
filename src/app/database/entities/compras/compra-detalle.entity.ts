@@ -1,41 +1,37 @@
 import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseModel } from '../base.entity';
-// Import type reference to avoid circular dependency
+import { Producto } from '../productos/producto.entity';
+import { Presentacion } from '../productos/presentacion.entity';
 import type { Compra } from './compra.entity';
 
-/**
- * Entity representing purchase details
- */
 @Entity('compras_detalles')
 export class CompraDetalle extends BaseModel {
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column('decimal', { precision: 10, scale: 3, default: 0 })
   cantidad!: number;
 
-  @Column('decimal', { precision: 10, scale: 2 })
-  valor!: number;
+  @Column('decimal', { precision: 14, scale: 2, name: 'costo_unitario_presentacion', default: 0 })
+  costoUnitarioPresentacion!: number;
+
+  @Column('decimal', { precision: 14, scale: 2, default: 0 })
+  subtotal!: number;
+
+  @Column('decimal', { precision: 14, scale: 3, name: 'cantidad_unidad_base', default: 0 })
+  cantidadUnidadBase!: number;
 
   @Column({ default: true })
   activo!: boolean;
 
-  @Column({ nullable: true })
-  tipo_medida?: string;
-
-  // Relationships - Use string reference to avoid circular dependency
   @ManyToOne('Compra', 'detalles', {
     createForeignKeyConstraints: false
   })
   @JoinColumn({ name: 'compra_id' })
   compra!: Compra;
 
-  // @ManyToOne(() => Producto, { nullable: true })
-  // @JoinColumn({ name: 'producto_id' })
-  // producto?: Producto;
+  @ManyToOne(() => Producto, { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'producto_id' })
+  producto?: Producto;
 
-  // @ManyToOne(() => Ingrediente, { nullable: true })
-  // @JoinColumn({ name: 'ingrediente_id' })
-  // ingrediente?: Ingrediente;
-
-  // @ManyToOne(() => Presentacion, { nullable: true })
-  // @JoinColumn({ name: 'presentacion_id' })
-  // presentacion?: Presentacion;
+  @ManyToOne(() => Presentacion, { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'presentacion_id' })
+  presentacion?: Presentacion;
 }

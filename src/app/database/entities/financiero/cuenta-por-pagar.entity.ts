@@ -51,6 +51,9 @@ export class CuentaPorPagar extends BaseModel {
   @Column({ type: 'text', nullable: true })
   observacion?: string;
 
+  @Column({ name: 'compra_id', type: 'int', nullable: true })
+  compraId?: number;
+
   @OneToMany('CuentaPorPagarCuota', 'cuentaPorPagar')
   cuotas?: any[];
 }

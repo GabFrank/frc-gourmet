@@ -8,6 +8,8 @@ import { Router } from '@angular/router';
 import { TabsService } from '../../../services/tabs.service';
 import { ListProveedoresComponent } from '../proveedores/list-proveedores.component';
 import { ListCompraCategoriasComponent } from '../categorias/list-compra-categorias.component';
+import { ListComprasComponent } from '../list-compras/list-compras.component';
+import { CreateEditCompraComponent } from '../create-edit-compra/create-edit-compra.component';
 
 @Component({
   selector: 'app-compras-dashboard',
@@ -27,7 +29,7 @@ export class ComprasDashboardComponent implements OnInit {
   dashboardItems = [
     {
       title: 'Compras',
-      description: 'Gestión de compras a proveedores',
+      description: 'Listar y gestionar compras a proveedores',
       icon: 'shopping_cart',
       route: 'compras',
       color: '#4caf50'
@@ -38,13 +40,6 @@ export class ComprasDashboardComponent implements OnInit {
       icon: 'business',
       route: 'proveedores',
       color: '#2196f3'
-    },
-    {
-      title: 'Pagos',
-      description: 'Gestión de pagos a proveedores',
-      icon: 'payments',
-      route: 'pagos',
-      color: '#f44336'
     },
     {
       title: 'Categorías de Compra',
@@ -64,18 +59,15 @@ export class ComprasDashboardComponent implements OnInit {
     console.log('Compras Dashboard initialized');
   }
 
-  // Method to navigate to different sections
   navigateTo(route: string): void {
-    console.log(`Navigating to: ${route}`);
-
     if (route === 'compras') {
-      // this.tabsService.openTab(
-      //   'Compras',
-      //   ListComprasComponent,
-      //   { source: 'dashboard' },
-      //   'compras-tab',
-      //   true
-      // );
+      this.tabsService.openTab(
+        'Compras',
+        ListComprasComponent,
+        { source: 'dashboard' },
+        'compras-tab',
+        true
+      );
     } else if (route === 'proveedores') {
       this.tabsService.openTab(
         'Proveedores',
@@ -92,15 +84,14 @@ export class ComprasDashboardComponent implements OnInit {
     }
   }
 
-  // Create a new compra
   createCompra(): void {
-    // this.tabsService.openTab(
-    //   'Nueva Compra',
-    //   CreateEditCompraComponent,
-    //   {}, // No specific data needed for new compra
-    //   `nueva-compra-${Date.now()}`, // Unique ID for the tab
-    //   true // Closable
-    // );
+    this.tabsService.openTab(
+      'Nueva compra',
+      CreateEditCompraComponent,
+      { mode: 'create' },
+      `nueva-compra-${Date.now()}`,
+      true,
+    );
   }
 
   // Used by the tab service

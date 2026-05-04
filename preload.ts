@@ -1294,6 +1294,23 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('deleteCompra', compraId);
   },
 
+  // Compra workflow (borrador, finalizar, anular)
+  getComprasPaginado: async (params: any) => {
+    return await ipcRenderer.invoke('get-compras-paginado', params);
+  },
+  createCompraBorrador: async (data: any) => {
+    return await ipcRenderer.invoke('create-compra-borrador', data);
+  },
+  updateCompraBorrador: async (id: number, data: any) => {
+    return await ipcRenderer.invoke('update-compra-borrador', id, data);
+  },
+  finalizarCompra: async (id: number, payload: any) => {
+    return await ipcRenderer.invoke('finalizar-compra', id, payload);
+  },
+  anularCompra: async (id: number, motivo: string) => {
+    return await ipcRenderer.invoke('anular-compra', id, motivo);
+  },
+
   // CompraDetalle methods
   getCompraDetalles: async (compraId: number) => {
     return await ipcRenderer.invoke('getCompraDetalles', compraId);
@@ -2106,8 +2123,8 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // Additional helper methods
-  searchProductosByNombre: async (nombre: string): Promise<Producto[]> => {
-    return await ipcRenderer.invoke('search-productos-by-nombre', nombre);
+  searchProductosByNombre: async (nombre: string, mode: 'venta' | 'compra' = 'venta'): Promise<Producto[]> => {
+    return await ipcRenderer.invoke('search-productos-by-nombre', nombre, mode);
   },
   getProductosByTipo: async (tipo: string): Promise<Producto[]> => {
     return await ipcRenderer.invoke('get-productos-by-tipo', tipo);

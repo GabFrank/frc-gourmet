@@ -46,6 +46,7 @@ import { ListDispositivosComponent } from './pages/financiero/dispositivos/list-
 import { ListCajasComponent } from './pages/financiero/cajas/list-cajas.component';
 import { FinancieroDashboardComponent } from './pages/financiero/dashboard/financiero-dashboard.component';
 import { ComprasDashboardComponent } from './pages/compras/dashboard/compras-dashboard.component';
+import { ListComprasComponent } from './pages/compras/list-compras/list-compras.component';
 import { ProductosDashboardComponent } from './pages/productos/dashboard/productos-dashboard.component';
 import { ListRecetasComponent } from './pages/gestion-recetas/list-recetas/list-recetas.component';
 import { ListAdicionalesComponent } from './pages/gestion-recetas/list-adicionales/list-adicionales.component';
@@ -679,13 +680,14 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   openComprasTab() {
-    // this.tabsService.openTab(
-    //   'Compras',
-    //   ListComprasComponent,
-    //   { source: 'navigation' },
-    //   'compras-tab',
-    //   true
-    // );
+    this.tabsService.openTab(
+      'Compras',
+      ListComprasComponent,
+      { source: 'navigation' },
+      'compras-tab',
+      true,
+    );
+    this.closeMenu();
   }
 
   openMovimientosStockTab() {

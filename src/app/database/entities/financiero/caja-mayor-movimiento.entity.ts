@@ -84,6 +84,10 @@ export class CajaMayorMovimiento extends BaseModel {
   @Column({ name: 'cuenta_por_cobrar_cuota_id', type: 'int', nullable: true })
   cuentaPorCobrarCuotaId?: number;
 
+  // Trazabilidad Compras
+  @Column({ name: 'compra_id', type: 'int', nullable: true })
+  compraId?: number;
+
   // Contra-movimiento para anulaciones
   @ManyToOne('CajaMayorMovimiento', { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'referencia_anulacion_id' })

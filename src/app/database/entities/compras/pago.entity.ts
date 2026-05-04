@@ -5,9 +5,8 @@ import { PagoEstado } from './estado.enum';
 import { Compra } from './compra.entity';
 import type { PagoDetalle } from './pago-detalle.entity';
 
-/**
- * Entity representing a payment to suppliers
- */
+// @deprecated — Pagos a proveedores ahora se registran via CajaMayor (contado) o CuentaPorPagar (credito).
+// Esta entidad se mantiene solo para preservar datos legacy de compras antiguas.
 @Entity('pagos')
 export class Pago extends BaseModel {
   @Column({

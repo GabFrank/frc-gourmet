@@ -1,0 +1,173 @@
+<div class="list-compras-container">
+  <div class="page-header">
+    <h2>Compras</h2>
+    <div class="header-actions">
+      <button mat-icon-button matTooltip="Filtros" (click)="toggleFiltros()" [color]="showFiltros ? 'accent' : ''">
+        <mat-icon>filter_list</mat-icon>
+      </button>
+      <button mat-icon-button matTooltip="Refrescar" (click)="loadData()" [disabled]="loading">
+        <mat-icon [class.spinning]="loading">refresh</mat-icon>
+      </button>
+      <button mat-flat-button color="primary" (click)="nuevaCompra()">
+        <mat-icon>add</mat-icon>
+        Nueva compra
+      </button>
+    </div>
+  </div>
+
+  <div class="filtros-bar" *ngIf="showFiltros" [formGroup]="filtrosForm">
+    <mat-form-field appearance="outline" class="f-field f-search">
+      <mat-label>Buscar (nº nota / proveedor)</mat-label>
+      <input matInput formControlName="search" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="f-field">
+      <mat-label>Proveedor</mat-label>
+      <mat-select formControlName="proveedorId">
+        <mat-option [value]="null">Todos</mat-option>
+        <mat-option *ngFor="let p of proveedores" [value]="p.id">{{ p.nombre }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="f-field">
+      <mat-label>Categoría</mat-label>
+      <mat-select formControlName="compraCategoriaId">
+        <mat-option [value]="null">Todas</mat-option>
+        <mat-option *ngFor="let c of categorias" [value]="c.id">{{ c.nombre }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="f-field">
+      <mat-label>Estado</mat-label>
+      <mat-select formControlName="estado">
+        <mat-option [value]="null">Todos</mat-option>
+        <mat-option *ngFor="let e of estadoOptions" [value]="e">{{ estadoLabel(e) }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="f-field">
+      <mat-label>Pago</mat-label>
+      <mat-select formControlName="credito">
+        <mat-option *ngFor="let o of creditoOptions" [value]="o.value">{{ o.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="f-field">
+      <mat-label>Desde</mat-label>
+      <input matInput [matDatepicker]="pDesde" formControlName="fechaDesde" />
+      <mat-datepicker-toggle matSuffix [for]="pDesde"></mat-datepicker-toggle>
+      <mat-datepicker #pDesde></mat-datepicker>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="f-field">
+      <mat-label>Hasta</mat-label>
+      <input matInput [matDatepicker]="pHasta" formControlName="fechaHasta" />
+      <mat-datepicker-toggle matSuffix [for]="pHasta"></mat-datepicker-toggle>
+      <mat-datepicker #pHasta></mat-datepicker>
+    </mat-form-field>
+
+    <div class="filtros-actions">
+      <button mat-stroked-button (click)="aplicarFiltros()">Aplicar</button>
+      <button mat-button (click)="limpiarFiltros()">Limpiar</button>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <div class="table-scroll">
+    <table mat-table [dataSource]="compras" class="compras-table">
+      <ng-container matColumnDef="id">
+        <th mat-header-cell *matHeaderCellDef>Nº</th>
+        <td mat-cell *matCellDef="let c">#{{ c.id }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="fecha">
+        <th mat-header-cell *matHeaderCellDef>Fecha</th>
+        <td mat-cell *matCellDef="let c">{{ c.fechaCompra | date:'dd/MM/yyyy' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="proveedor">
+        <th mat-header-cell *matHeaderCellDef>Proveedor</th>
+        <td mat-cell *matCellDef="let c" class="prov-cell" [matTooltip]="c.proveedor?.nombre || ''">
+          {{ c.proveedor?.nombre || '-' }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="categoria">
+        <th mat-header-cell *matHeaderCellDef>Categoría</th>
+        <td mat-cell *matCellDef="let c">{{ c.compraCategoria?.nombre || '-' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="numeroNota">
+        <th mat-header-cell *matHeaderCellDef>Nº Nota</th>
+        <td mat-cell *matCellDef="let c">{{ c.numeroNota || '-' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="total">
+        <th mat-header-cell *matHeaderCellDef class="text-right">Total</th>
+        <td mat-cell *matCellDef="let c" class="text-right mono">
+          {{ c.total | number:'1.0-2' }} <span class="muted">{{ c.moneda?.simbolo || '' }}</span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="pago">
+        <th mat-header-cell *matHeaderCellDef>Pago</th>
+        <td mat-cell *matCellDef="let c">
+          <span *ngIf="c.credito" class="chip chip-naranja">Crédito</span>
+          <span *ngIf="!c.credito" class="chip chip-celeste">Contado</span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="estado">
+        <th mat-header-cell *matHeaderCellDef>Estado</th>
+        <td mat-cell *matCellDef="let c">
+          <span class="chip" [ngClass]="estadoChipClass(c.estado)">{{ estadoLabel(c.estado) }}</span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef class="text-right">Acciones</th>
+        <td mat-cell *matCellDef="let c" class="text-right">
+          <button mat-icon-button [matMenuTriggerFor]="menu">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #menu="matMenu">
+            <button mat-menu-item (click)="verDetalle(c)">
+              <mat-icon>visibility</mat-icon>
+              <span>Ver detalle</span>
+            </button>
+            <button mat-menu-item (click)="editarBorrador(c)" [disabled]="c.estado !== 'ABIERTO'">
+              <mat-icon>edit</mat-icon>
+              <span>Editar borrador</span>
+            </button>
+            <button mat-menu-item (click)="anular(c)" [disabled]="c.estado === 'CANCELADO'">
+              <mat-icon>block</mat-icon>
+              <span>Anular</span>
+            </button>
+          </mat-menu>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+
+      <tr class="mat-row no-data-row" *matNoDataRow>
+        <td class="mat-cell" [attr.colspan]="displayedColumns.length">
+          <div class="empty-state">
+            <mat-icon>shopping_cart</mat-icon>
+            <p *ngIf="!loading">No hay compras para mostrar.</p>
+            <p *ngIf="loading">Cargando...</p>
+          </div>
+        </td>
+      </tr>
+    </table>
+    </div>
+
+    <mat-paginator
+      [length]="total"
+      [pageSize]="pageSize"
+      [pageIndex]="pageIndex"
+      [pageSizeOptions]="[10, 25, 50, 100]"
+      (page)="onPage($event)">
+    </mat-paginator>
+  </div>
+</div>

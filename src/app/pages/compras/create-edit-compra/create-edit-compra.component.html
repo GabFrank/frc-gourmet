@@ -1,0 +1,175 @@
+<div class="ce-compra-container" [formGroup]="form">
+
+  <div class="page-header">
+    <div class="title-block">
+      <h2>{{ mode === 'create' ? 'Nueva compra' : 'Compra #' + compraId }}</h2>
+      <span class="chip" *ngIf="estadoActual === 'ABIERTO'" [class.chip-amarillo]="true">Borrador</span>
+      <span class="chip" *ngIf="estadoActual === 'FINALIZADO'" [class.chip-verde]="true">Finalizada</span>
+      <span class="chip" *ngIf="estadoActual === 'CANCELADO'" [class.chip-rojo]="true">Anulada</span>
+    </div>
+    <div class="header-actions">
+      <button mat-stroked-button [disabled]="saving || finalizing || estadoActual !== 'ABIERTO'" (click)="guardarBorrador()">
+        <mat-icon>save</mat-icon>
+        Guardar borrador
+      </button>
+      <button mat-flat-button color="primary" [disabled]="saving || finalizing || estadoActual !== 'ABIERTO'" (click)="finalizar()">
+        <mat-icon>done_all</mat-icon>
+        Finalizar compra
+      </button>
+    </div>
+  </div>
+
+  <div class="loading-overlay" *ngIf="loading">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+
+  <!-- Cabecera -->
+  <div class="seccion cabecera">
+    <h3>Datos de la compra</h3>
+    <div class="grid">
+      <mat-form-field appearance="outline">
+        <mat-label>Proveedor *</mat-label>
+        <mat-select formControlName="proveedorId">
+          <mat-option *ngFor="let p of proveedores" [value]="p.id">{{ p.nombre }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Categoría</mat-label>
+        <mat-select formControlName="compraCategoriaId">
+          <mat-option [value]="null">Ninguna</mat-option>
+          <mat-option *ngFor="let c of categorias" [value]="c.id">{{ c.nombre }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Moneda *</mat-label>
+        <mat-select formControlName="monedaId">
+          <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }} ({{ m.simbolo }})</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Fecha de compra *</mat-label>
+        <input matInput [matDatepicker]="pf" formControlName="fechaCompra" />
+        <mat-datepicker-toggle matSuffix [for]="pf"></mat-datepicker-toggle>
+        <mat-datepicker #pf></mat-datepicker>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Nº Nota / Factura</mat-label>
+        <input matInput formControlName="numeroNota" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Tipo de boleta</mat-label>
+        <mat-select formControlName="tipoBoleta">
+          <mat-option *ngFor="let t of tipoBoletaOptions" [value]="t">{{ t }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Forma de pago</mat-label>
+        <mat-select formControlName="formaPagoId">
+          <mat-option [value]="null">Ninguna</mat-option>
+          <mat-option *ngFor="let fp of formasPago" [value]="fp.id">{{ fp.nombre }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <div class="credito-toggle">
+        <mat-slide-toggle formControlName="credito">A crédito (cuotas)</mat-slide-toggle>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detalles -->
+  <div class="seccion detalles">
+    <div class="seccion-header">
+      <h3>Detalles ({{ items.length }})</h3>
+      <div class="seccion-actions">
+        <button mat-stroked-button (click)="crearNuevoProducto()" [disabled]="estadoActual !== 'ABIERTO'" matTooltip="Crear un producto nuevo (se abre en otra pestaña)">
+          <mat-icon>add_box</mat-icon>
+          Nuevo producto
+        </button>
+        <button mat-flat-button color="accent" (click)="agregarItem()" [disabled]="estadoActual !== 'ABIERTO'">
+          <mat-icon>add</mat-icon>
+          Agregar a la compra
+        </button>
+      </div>
+    </div>
+
+    <table mat-table [dataSource]="items" class="detalles-table">
+      <ng-container matColumnDef="producto">
+        <th mat-header-cell *matHeaderCellDef>Producto</th>
+        <td mat-cell *matCellDef="let it">
+          <div class="prod-name">{{ it.productoNombre }}</div>
+          <div class="prod-meta">
+            <span *ngIf="!it.productoControlaStock" class="muted-mini">no controla stock</span>
+            <span *ngIf="it.unidadBase" class="muted-mini">UB: {{ it.unidadBase }}</span>
+          </div>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="presentacion">
+        <th mat-header-cell *matHeaderCellDef>Presentación</th>
+        <td mat-cell *matCellDef="let it">
+          <mat-form-field appearance="outline" class="cell-field" *ngIf="it.presentaciones?.length">
+            <mat-select [(value)]="it.presentacionId" (selectionChange)="onPresentacionChange(it, $event.value)" [disabled]="estadoActual !== 'ABIERTO'">
+              <mat-option *ngFor="let p of it.presentaciones" [value]="p.id">{{ presentacionLabel(p) }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <span *ngIf="!it.presentaciones?.length" class="muted-mini">Sin presentaciones</span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="cantidad">
+        <th mat-header-cell *matHeaderCellDef class="text-right">Cantidad</th>
+        <td mat-cell *matCellDef="let it" class="text-right">
+          <mat-form-field appearance="outline" class="cell-field cell-num">
+            <input matInput type="number" min="0" step="0.01" [ngModel]="it.cantidad" (ngModelChange)="onCantidadChange(it, $event)" [disabled]="estadoActual !== 'ABIERTO'" />
+          </mat-form-field>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="costoUnitario">
+        <th mat-header-cell *matHeaderCellDef class="text-right">Costo unit.</th>
+        <td mat-cell *matCellDef="let it" class="text-right">
+          <mat-form-field appearance="outline" class="cell-field cell-num">
+            <input matInput type="number" min="0" step="0.01" [ngModel]="it.costoUnitarioPresentacion" (ngModelChange)="onCostoChange(it, $event)" [disabled]="estadoActual !== 'ABIERTO'" />
+          </mat-form-field>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="subtotal">
+        <th mat-header-cell *matHeaderCellDef class="text-right">Subtotal</th>
+        <td mat-cell *matCellDef="let it" class="text-right mono">{{ subtotalItem(it) | number:'1.0-2' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef class="text-right"></th>
+        <td mat-cell *matCellDef="let it; let i = index" class="text-right">
+          <button mat-icon-button color="warn" (click)="eliminarItem(i)" [disabled]="estadoActual !== 'ABIERTO'" matTooltip="Quitar">
+            <mat-icon>delete_outline</mat-icon>
+          </button>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+
+      <tr class="mat-row no-data-row" *matNoDataRow>
+        <td class="mat-cell" [attr.colspan]="displayedColumns.length">
+          <div class="empty-state">
+            <mat-icon>inventory_2</mat-icon>
+            <p>No hay productos. Hacé click en "Agregar producto".</p>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <div class="totales-bar">
+      <div class="total-label">Total compra</div>
+      <div class="total-value mono">{{ total | number:'1.0-2' }}</div>
+    </div>
+  </div>
+</div>

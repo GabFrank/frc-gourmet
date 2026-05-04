@@ -123,6 +123,18 @@ export class ListCuentasPorPagarComponent implements OnInit {
     this.tabsService.openTab(`CPP #${c.id}`, CuentaPorPagarDetalleComponent, { cuentaPorPagarId: c.id });
   }
 
+  async abrirCompra(compraId: number): Promise<void> {
+    if (!compraId) return;
+    const { CompraDetalleComponent } = await import('src/app/pages/compras/compra-detalle/compra-detalle.component');
+    this.tabsService.openTab(
+      `Compra #${compraId}`,
+      CompraDetalleComponent,
+      { compraId },
+      `detalle-compra-${compraId}`,
+      true,
+    );
+  }
+
   async cancelar(c: any): Promise<void> {
     const ref = this.dialog.open(ConfirmationDialogComponent, {
       data: { title: 'Cancelar Cuenta', message: `¿Cancelar la cuenta "${c.descripcion}"? No se eliminará pero pasará a estado CANCELADO.` },

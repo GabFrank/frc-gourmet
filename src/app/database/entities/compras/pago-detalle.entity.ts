@@ -15,9 +15,7 @@ export enum TipoDetalle {
   AUMENTO = 'AUMENTO'       // Additional amount paid
 }
 
-/**
- * Entity representing payment details for supplier payments
- */
+// @deprecated — ver Pago entity. Solo legacy.
 @Entity('pagos_detalles')
 export class PagoDetalle extends BaseModel {
   @Column('decimal', { precision: 10, scale: 2 })

@@ -198,6 +198,12 @@ interface ElectronAPI {
   createCompra: (compraData: Partial<Compra>) => Promise<Compra>;
   updateCompra: (compraId: number, compraData: Partial<Compra>) => Promise<any>;
   deleteCompra: (compraId: number) => Promise<any>;
+  // Compra workflow (borrador, finalizar, anular)
+  getComprasPaginado: (params: any) => Promise<{ items: Compra[]; total: number; page: number; pageSize: number }>;
+  createCompraBorrador: (data: any) => Promise<Compra>;
+  updateCompraBorrador: (id: number, data: any) => Promise<Compra>;
+  finalizarCompra: (id: number, payload: any) => Promise<Compra>;
+  anularCompra: (id: number, motivo: string) => Promise<{ success: boolean }>;
   // Add CompraDetalle operations
   getCompraDetalles: (compraId: number) => Promise<CompraDetalle[]>;
   getCompraDetalle: (compraDetalleId: number) => Promise<CompraDetalle>;
@@ -555,7 +561,7 @@ interface ElectronAPI {
   procesarStockVenta: (ventaId: number) => Promise<any>;
   revertirStockVenta: (ventaId: number) => Promise<any>;
   // Additional helper methods
-  searchProductosByNombre: (nombre: string) => Promise<Producto[]>;
+  searchProductosByNombre: (nombre: string, mode?: 'venta' | 'compra') => Promise<Producto[]>;
   getProductosByTipo: (tipo: string) => Promise<Producto[]>;
   getProductosWithStock: () => Promise<Producto[]>;
   // Conversion Moneda methods
@@ -1489,6 +1495,27 @@ export class RepositoryService {
 
   deleteCompra(compraId: number): Observable<any> {
     return from(this.api.deleteCompra(compraId));
+  }
+
+  // Compra workflow
+  getComprasPaginado(params: any): Observable<{ items: Compra[]; total: number; page: number; pageSize: number }> {
+    return from(this.api.getComprasPaginado(params));
+  }
+
+  createCompraBorrador(data: any): Observable<Compra> {
+    return from(this.api.createCompraBorrador(data));
+  }
+
+  updateCompraBorrador(id: number, data: any): Observable<Compra> {
+    return from(this.api.updateCompraBorrador(id, data));
+  }
+
+  finalizarCompra(id: number, payload: any): Observable<Compra> {
+    return from(this.api.finalizarCompra(id, payload));
+  }
+
+  anularCompra(id: number, motivo: string): Observable<{ success: boolean }> {
+    return from(this.api.anularCompra(id, motivo));
   }
 
   // CompraDetalle methods
@@ -2585,8 +2612,8 @@ export class RepositoryService {
   }
 
   // Additional helper methods
-  searchProductosByNombre(nombre: string): Observable<Producto[]> {
-    return from(this.api.searchProductosByNombre(nombre));
+  searchProductosByNombre(nombre: string, mode: 'venta' | 'compra' = 'venta'): Observable<Producto[]> {
+    return from(this.api.searchProductosByNombre(nombre, mode));
   }
 
   getProductosByTipo(tipo: string): Observable<Producto[]> {

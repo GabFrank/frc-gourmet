@@ -2,6 +2,8 @@ import { Column, Entity, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import { CuotaEstado } from '../financiero/cuentas-por-pagar-enums';
 
+// @deprecated — Las cuotas de compra a credito ahora se manejan via CuentaPorPagar+CuentaPorPagarCuota.
+// Esta entidad se mantiene solo para preservar datos legacy.
 @Entity('compras_cuotas')
 export class CompraCuota extends BaseModel {
   @ManyToOne('Compra', 'cuotas', { nullable: false, onDelete: 'CASCADE', createForeignKeyConstraints: false })

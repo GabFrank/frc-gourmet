@@ -4,14 +4,10 @@ import { Moneda } from '../financiero/moneda.entity';
 import { CompraEstado } from './estado.enum';
 import { TipoBoleta } from './tipo-boleta.enum';
 import { FormasPago } from './forma-pago.entity';
-// Import type references to avoid circular dependencies
 import type { CompraDetalle } from './compra-detalle.entity';
 import type { Pago } from './pago.entity';
 import type { Proveedor } from './proveedor.entity';
 
-/**
- * Entity representing a purchase from suppliers
- */
 @Entity('compras')
 export class Compra extends BaseModel {
   @Column({
@@ -47,7 +43,12 @@ export class Compra extends BaseModel {
   @Column({ nullable: true, name: 'plazo_dias', type: 'int' })
   plazoDias?: number;
 
-  // Relationships - Use string references to avoid circular dependencies
+  @Column({ type: 'decimal', precision: 14, scale: 2, default: 0 })
+  total!: number;
+
+  @Column({ nullable: true, name: 'motivo_anulacion', type: 'text' })
+  motivoAnulacion?: string;
+
   @ManyToOne('Proveedor', 'compras', {
     nullable: true,
     createForeignKeyConstraints: false
@@ -55,6 +56,7 @@ export class Compra extends BaseModel {
   @JoinColumn({ name: 'proveedor_id' })
   proveedor?: Proveedor;
 
+  // @deprecated — uso legacy. Compras nuevas se pagan via CajaMayor (contado) o CuentaPorPagar (credito).
   @ManyToOne('Pago', 'compras', {
     nullable: true,
     createForeignKeyConstraints: false
@@ -77,6 +79,7 @@ export class Compra extends BaseModel {
   @JoinColumn({ name: 'compra_categoria_id' })
   compraCategoria?: any;
 
-  @OneToMany('CompraCuota', 'compra')
-  cuotas?: any[];
+  @ManyToOne('CuentaPorPagar', { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'cuenta_por_pagar_id' })
+  cuentaPorPagar?: any;
 }

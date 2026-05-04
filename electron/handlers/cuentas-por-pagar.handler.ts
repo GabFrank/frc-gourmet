@@ -362,6 +362,7 @@ export function registerCuentasPorPagarHandlers(
         cantidadCuotas,
         estado: CuentaPorPagarEstado.ACTIVO,
         observacion: data.observacion?.toUpperCase() || null,
+        compraId: data.compraId ?? undefined,
       });
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       const saved = await queryRunner.manager.save(CuentaPorPagar, entity);

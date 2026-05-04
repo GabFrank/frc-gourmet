@@ -345,6 +345,12 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           `Anular desde el modulo de Cuentas por Pagar (anula el CPP completo).`
         );
       }
+      if (original.compraId) {
+        throw new Error(
+          `Este movimiento corresponde a la compra #${original.compraId}. ` +
+          `Anular desde el modulo de Compras (revierte stock, costo y caja).`
+        );
+      }
 
       // Verificar si ya fue anulado previamente
       const yaAnulado = await repo.findOne({

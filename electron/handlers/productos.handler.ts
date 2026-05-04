@@ -1358,13 +1358,20 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     }
   });
 
-  ipcMain.handle('search-productos-by-nombre', async (_event: any, nombre: string) => {
+  ipcMain.handle('search-productos-by-nombre', async (_event: any, nombre: string, mode: 'venta' | 'compra' = 'venta') => {
     try {
       const repo = dataSource.getRepository(Producto);
       const pvRepo = dataSource.getRepository(PrecioVenta);
 
+      const where: any = { activo: true };
+      if (mode === 'compra') {
+        where.esComprable = true;
+      } else {
+        where.esVendible = true;
+      }
+
       const productos = await repo.find({
-        where: { activo: true, esVendible: true },
+        where,
         relations: ['presentaciones', 'presentaciones.preciosVenta', 'presentaciones.preciosVenta.moneda', 'receta'],
         order: { nombre: 'ASC' }
       });
