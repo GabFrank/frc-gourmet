@@ -1,0 +1,158 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.panel-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+
+  h4 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: rgba(0, 0, 0, 0.65);
+  }
+
+  .counter {
+    font-size: 11px;
+    background: rgba(0, 0, 0, 0.08);
+    padding: 1px 8px;
+    border-radius: 10px;
+    color: rgba(0, 0, 0, 0.65);
+  }
+}
+
+.panel-body {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.04);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.table-scroll {
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 0;
+}
+
+.panel-table {
+  width: 100%;
+  font-size: 12px;
+
+  th.mat-mdc-header-cell {
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    background: rgba(0, 0, 0, 0.02);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 6px 8px;
+  }
+
+  td.mat-mdc-cell {
+    padding: 6px 8px;
+  }
+
+  .prov-name {
+    display: inline-block;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+  }
+
+  .muted-mini {
+    color: rgba(0, 0, 0, 0.55);
+    font-size: 11px;
+  }
+
+  .text-right { text-align: right; }
+  .mono { font-feature-settings: 'tnum'; }
+}
+
+mat-paginator {
+  ::ng-deep .mat-mdc-paginator-page-size-label,
+  ::ng-deep .mat-mdc-paginator-range-label { font-size: 11px; }
+}
+
+.empty-state {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 12px;
+  color: rgba(0, 0, 0, 0.45);
+  text-align: center;
+
+  mat-icon {
+    font-size: 36px;
+    width: 36px;
+    height: 36px;
+    opacity: 0.4;
+    margin-bottom: 8px;
+  }
+
+  p { margin: 0; font-size: 12px; }
+}
+
+.empty-inline {
+  padding: 16px;
+  text-align: center;
+}
+
+:host-context(.dark-theme) {
+  .panel-card {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+  .panel-header {
+    border-color: rgba(255, 255, 255, 0.08);
+    h4 { color: rgba(255, 255, 255, 0.7); }
+    .counter {
+      background: rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.7);
+    }
+  }
+  .loading-overlay { background: rgba(255, 255, 255, 0.04); }
+  .panel-table {
+    th.mat-mdc-header-cell { background: rgba(255, 255, 255, 0.04); }
+    .muted-mini { color: rgba(255, 255, 255, 0.55); }
+  }
+  .empty-state { color: rgba(255, 255, 255, 0.45); }
+}

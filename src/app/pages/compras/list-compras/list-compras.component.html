@@ -117,6 +117,22 @@
         </td>
       </ng-container>
 
+      <ng-container matColumnDef="estadoPago">
+        <th mat-header-cell *matHeaderCellDef>Estado de pago</th>
+        <td mat-cell *matCellDef="let c">
+          <span *ngIf="c.estadoPago === 'PAGADO'" class="chip chip-verde">Pagado</span>
+          <span *ngIf="c.estadoPago === 'PARCIAL'" class="chip chip-amarillo">
+            Parcial
+            <span class="muted-mini" *ngIf="c.cuotasTotal != null"> {{ c.cuotasPagadas }}/{{ c.cuotasTotal }}</span>
+          </span>
+          <span *ngIf="c.estadoPago === 'PENDIENTE'" class="chip chip-naranja">
+            Pendiente
+            <span class="muted-mini" *ngIf="c.cuotasTotal != null"> 0/{{ c.cuotasTotal }}</span>
+          </span>
+          <span *ngIf="!c.estadoPago" class="muted-mini">—</span>
+        </td>
+      </ng-container>
+
       <ng-container matColumnDef="estado">
         <th mat-header-cell *matHeaderCellDef>Estado</th>
         <td mat-cell *matCellDef="let c">

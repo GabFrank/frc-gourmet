@@ -17,8 +17,9 @@ import { RepositoryService } from 'src/app/database/repository.service';
 import { CreateEditGastoDialogComponent } from '../gastos/create-edit-gasto/create-edit-gasto-dialog.component';
 import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financieras/create-operacion-financiera/create-operacion-financiera-dialog.component';
 import { EmitirChequeDialogComponent } from '../cheques/emitir-cheque/emitir-cheque-dialog.component';
+import { PagarComprasDialogComponent } from '../pagar-compras-dialog/pagar-compras-dialog.component';
 
-type EgresoTipo = 'GASTO' | 'AJUSTE' | 'OPERACION_FINANCIERA' | 'EMITIR_CHEQUE' | null;
+type EgresoTipo = 'GASTO' | 'AJUSTE' | 'OPERACION_FINANCIERA' | 'EMITIR_CHEQUE' | 'PAGAR_COMPRAS' | null;
 
 @Component({
   selector: 'app-registrar-egreso-dialog',
@@ -50,6 +51,13 @@ export class RegistrarEgresoDialogComponent implements OnInit {
   cajaMayorId: number = 0;
 
   tiposEgreso = [
+    {
+      tipo: 'PAGAR_COMPRAS' as EgresoTipo,
+      titulo: 'Pagar Compras',
+      descripcion: 'Pagar una o varias cuotas pendientes de compras (contado o crédito)',
+      icono: 'shopping_cart_checkout',
+      color: '#1565c0',
+    },
     {
       tipo: 'GASTO' as EgresoTipo,
       titulo: 'Gasto',
@@ -138,6 +146,15 @@ export class RegistrarEgresoDialogComponent implements OnInit {
       this.dialogRef?.close(false);
       this.dialog.open(EmitirChequeDialogComponent, {
         width: '720px',
+        data: { cajaMayorId: this.cajaMayorId },
+      });
+      return;
+    }
+    if (tipo === 'PAGAR_COMPRAS') {
+      this.dialogRef?.close(false);
+      this.dialog.open(PagarComprasDialogComponent, {
+        width: '900px',
+        maxWidth: '95vw',
         data: { cajaMayorId: this.cajaMayorId },
       });
       return;

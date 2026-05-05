@@ -1,4 +1,4 @@
-import { Entity, OneToOne, JoinColumn, ManyToMany, JoinTable } from 'typeorm';
+import { Entity, OneToOne, JoinColumn, ManyToMany, JoinTable, Column } from 'typeorm';
 import { BaseModel } from '../base.entity';
 
 @Entity('caja_mayor_configuraciones')
@@ -22,4 +22,10 @@ export class CajaMayorConfiguracion extends BaseModel {
     inverseJoinColumn: { name: 'cuenta_bancaria_id', referencedColumnName: 'id' },
   })
   cuentasBancariasVisibles?: any[];
+
+  @Column({ name: 'mostrar_cuentas_por_pagar', type: 'boolean', default: false })
+  mostrarCuentasPorPagar!: boolean;
+
+  @Column({ name: 'mostrar_cuentas_por_cobrar', type: 'boolean', default: false })
+  mostrarCuentasPorCobrar!: boolean;
 }

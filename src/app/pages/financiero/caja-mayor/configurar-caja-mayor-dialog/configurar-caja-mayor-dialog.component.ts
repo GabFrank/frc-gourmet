@@ -48,6 +48,8 @@ export class ConfigurarCajaMayorDialogComponent implements OnInit {
   guardando = false;
   formasPago: OpcionFp[] = [];
   cuentasBancarias: OpcionCb[] = [];
+  mostrarCuentasPorPagar = false;
+  mostrarCuentasPorCobrar = false;
 
   constructor(
     public dialogRef: MatDialogRef<ConfigurarCajaMayorDialogComponent>,
@@ -92,6 +94,9 @@ export class ConfigurarCajaMayorDialogComponent implements OnInit {
           // Default: opt-in. Solo si la config previa lo marcaba.
           visible: tieneConfig ? cbVisibleIds.has(cb.id) : false,
         }));
+
+      this.mostrarCuentasPorPagar = !!config?.mostrarCuentasPorPagar;
+      this.mostrarCuentasPorCobrar = !!config?.mostrarCuentasPorCobrar;
     } catch (error: any) {
       console.error('Error cargando configuracion de caja mayor:', error);
       this.snackBar.open('Error al cargar configuracion', 'Cerrar', { duration: 3000 });
@@ -122,6 +127,8 @@ export class ConfigurarCajaMayorDialogComponent implements OnInit {
         this.repositoryService.saveCajaMayorConfiguracion(this.data.cajaMayorId, {
           formaPagoIds,
           cuentaBancariaIds,
+          mostrarCuentasPorPagar: this.mostrarCuentasPorPagar,
+          mostrarCuentasPorCobrar: this.mostrarCuentasPorCobrar,
         }),
       );
       this.snackBar.open('Configuracion guardada', 'Cerrar', { duration: 2500 });

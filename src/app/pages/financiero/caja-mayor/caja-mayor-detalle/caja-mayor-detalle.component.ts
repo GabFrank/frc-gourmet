@@ -29,6 +29,9 @@ import { EditMovimientoDialogComponent } from '../edit-movimiento-dialog/edit-mo
 import { CreateEditEntradaVariaDialogComponent } from '../entradas-varias/create-edit-entrada-varia/create-edit-entrada-varia-dialog.component';
 import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financieras/create-operacion-financiera/create-operacion-financiera-dialog.component';
 import { EmitirChequeDialogComponent } from '../cheques/emitir-cheque/emitir-cheque-dialog.component';
+import { PagarComprasDialogComponent } from '../pagar-compras-dialog/pagar-compras-dialog.component';
+import { MovimientosCuentaBancariaDialogComponent } from '../bancos/movimientos-cuenta-bancaria-dialog/movimientos-cuenta-bancaria-dialog.component';
+import { TabsService } from 'src/app/services/tabs.service';
 
 interface MovimientoConsolidado {
   fecha: Date;
@@ -94,12 +97,23 @@ export class CajaMayorDetalleComponent implements OnInit {
     saldoFuturo: number;
     saldoReservado: number;
   }> = [];
+  // Cards CPP/CPC: visibilidad por config + buckets por moneda
+  mostrarCpp = false;
+  mostrarCpc = false;
+  cppResumen: Array<{
+    monedaId: number; monedaSimbolo: string; monedaDenominacion: string;
+    esteMes: number; mesQueViene: number; total: number; vencidas: number;
+  }> = [];
+  cpcResumen: Array<{
+    monedaId: number; monedaSimbolo: string; monedaDenominacion: string;
+    esteMes: number; mesQueViene: number; total: number; vencidas: number;
+  }> = [];
   // IDs de FPs visibles (null = sin config previa, mostrar todas).
   private formasPagoVisiblesIds: Set<number> | null = null;
   movimientosConsolidados: MovimientoConsolidado[] = [];
   loading = false;
   loadingMovimientos = false;
-  movimientosColumns = ['fecha', 'tipoMovimiento', 'detalles', 'responsable', 'observacion', 'actions'];
+  movimientosColumns = ['fecha', 'tipoMovimiento', 'detalles', 'observacion', 'responsable', 'actions'];
 
   // Paginacion
   pageSize = 15;
@@ -158,6 +172,7 @@ export class CajaMayorDetalleComponent implements OnInit {
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
     private fb: FormBuilder,
+    private tabsService: TabsService,
   ) {}
 
   ngOnInit(): void {
@@ -222,6 +237,9 @@ export class CajaMayorDetalleComponent implements OnInit {
         ? new Set<number>((config.formasPagoVisibles as any[]).map((fp) => fp.id))
         : null;
 
+      this.mostrarCpp = !!config?.mostrarCuentasPorPagar;
+      this.mostrarCpc = !!config?.mostrarCuentasPorCobrar;
+
       this.saldosPorFormaPago = this.agruparSaldosPorFormaPago(saldos || []);
 
       const cbIds: number[] = config?.cuentasBancariasVisibles
@@ -242,6 +260,28 @@ export class CajaMayorDetalleComponent implements OnInit {
       } else {
         this.cuentasBancariasCards = [];
       }
+
+      // Resumenes CPP/CPC en paralelo (solo si configurados como visibles)
+      const tareas: Promise<any>[] = [];
+      if (this.mostrarCpp) {
+        tareas.push(
+          firstValueFrom(this.repositoryService.getCajaMayorCppResumen())
+            .then((r) => (this.cppResumen = r || []))
+            .catch((e) => { console.error('Error CPP resumen:', e); this.cppResumen = []; }),
+        );
+      } else {
+        this.cppResumen = [];
+      }
+      if (this.mostrarCpc) {
+        tareas.push(
+          firstValueFrom(this.repositoryService.getCajaMayorCpcResumen())
+            .then((r) => (this.cpcResumen = r || []))
+            .catch((e) => { console.error('Error CPC resumen:', e); this.cpcResumen = []; }),
+        );
+      } else {
+        this.cpcResumen = [];
+      }
+      if (tareas.length > 0) await Promise.all(tareas);
 
       await this.loadMovimientos();
     } catch (error) {
@@ -413,6 +453,31 @@ export class CajaMayorDetalleComponent implements OnInit {
     );
   }
 
+  abrirMovimientosCuentaBancaria(cb: any): void {
+    if (!cb?.id) return;
+    this.tabsService.openTabWithData(
+      `Cuenta: ${cb.nombre}`,
+      MovimientosCuentaBancariaDialogComponent,
+      { cuentaBancariaId: cb.id, cuentaBancaria: cb },
+      `cb-mov-${cb.id}`,
+      true,
+    );
+  }
+
+  async abrirCuentasPorPagar(): Promise<void> {
+    const { ListCuentasPorPagarComponent } = await import(
+      '../cuentas-por-pagar/list-cuentas-por-pagar/list-cuentas-por-pagar.component'
+    );
+    this.tabsService.openTab('Cuentas por Pagar', ListCuentasPorPagarComponent);
+  }
+
+  async abrirCuentasPorCobrar(): Promise<void> {
+    const { ListCuentasPorCobrarComponent } = await import(
+      '../cuentas-por-cobrar/list-cuentas-por-cobrar/list-cuentas-por-cobrar.component'
+    );
+    this.tabsService.openTab('Cuentas por Cobrar', ListCuentasPorCobrarComponent);
+  }
+
   registrarIngreso(): void {
     const dialogRef = this.dialog.open(RegistrarIngresoDialogComponent, {
       width: '550px',
@@ -445,6 +510,7 @@ export class CajaMayorDetalleComponent implements OnInit {
           CreateEditGastoDialogComponent,
           CreateOperacionFinancieraDialogComponent,
           EmitirChequeDialogComponent,
+          PagarComprasDialogComponent,
         ]);
       }
     });

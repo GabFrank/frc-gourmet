@@ -1372,6 +1372,15 @@ contextBridge.exposeInMainWorld('api', {
   deleteProveedorProducto: async (proveedorProductoId: number) => {
     return await ipcRenderer.invoke('deleteProveedorProducto', proveedorProductoId);
   },
+  getProveedorProductosPaginado: async (params: any) => {
+    return await ipcRenderer.invoke('getProveedorProductosPaginado', params);
+  },
+  getUltimasComprasProducto: async (params: any) => {
+    return await ipcRenderer.invoke('getUltimasComprasProducto', params);
+  },
+  getUltimoCostoProducto: async (params: any) => {
+    return await ipcRenderer.invoke('getUltimoCostoProducto', params);
+  },
 
   // System information
   getSystemMacAddress: () => ipcRenderer.invoke('get-system-mac-address'),
@@ -2338,7 +2347,12 @@ contextBridge.exposeInMainWorld('api', {
   },
   saveCajaMayorConfiguracion: async (
     cajaMayorId: number,
-    data: { formaPagoIds: number[]; cuentaBancariaIds: number[] }
+    data: {
+      formaPagoIds: number[];
+      cuentaBancariaIds: number[];
+      mostrarCuentasPorPagar?: boolean;
+      mostrarCuentasPorCobrar?: boolean;
+    }
   ): Promise<any> => {
     return await ipcRenderer.invoke('save-caja-mayor-configuracion', cajaMayorId, data);
   },
@@ -2347,6 +2361,12 @@ contextBridge.exposeInMainWorld('api', {
   },
   getCuentasBancariasResumenes: async (ids: number[]): Promise<any[]> => {
     return await ipcRenderer.invoke('get-cuentas-bancarias-resumenes', ids);
+  },
+  getCajaMayorCppResumen: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-caja-mayor-cpp-resumen');
+  },
+  getCajaMayorCpcResumen: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-caja-mayor-cpc-resumen');
   },
 
   // Gasto Categorias
@@ -2514,6 +2534,12 @@ contextBridge.exposeInMainWorld('api', {
   },
   pagarCppCuota: async (payload: any): Promise<any> => {
     return await ipcRenderer.invoke('pagar-cpp-cuota', payload);
+  },
+  pagarCuotasComprasLote: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('pagar-cuotas-compras-lote', payload);
+  },
+  getCuotasPendientesCompras: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-cuotas-pendientes-compras', filtros);
   },
   cancelarCppCuota: async (payload: any): Promise<any> => {
     return await ipcRenderer.invoke('cancelar-cpp-cuota', payload);

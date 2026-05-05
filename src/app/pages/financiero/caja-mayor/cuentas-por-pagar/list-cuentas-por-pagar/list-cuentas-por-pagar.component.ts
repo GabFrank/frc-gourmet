@@ -14,6 +14,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatPaginatorModule, MatPaginator, PageEvent } from '@angular/material/paginator';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
@@ -42,6 +43,7 @@ import { TabsService } from 'src/app/services/tabs.service';
     MatPaginatorModule,
     MatFormFieldModule,
     MatSelectModule,
+    MatSlideToggleModule,
     DatePipe,
   ]
 })
@@ -72,6 +74,7 @@ export class ListCuentasPorPagarComponent implements OnInit {
     this.filtrosForm = this.fb.group({
       estado: [null],
       tipo: [null],
+      incluirContadoCompras: [false],
     });
     this.loadData();
   }
@@ -84,6 +87,9 @@ export class ListCuentasPorPagarComponent implements OnInit {
       const filtros: any = { page: this.pageIndex, pageSize: this.pageSize };
       if (f.estado) filtros.estado = f.estado;
       if (f.tipo) filtros.tipo = f.tipo;
+      // Por defecto, ocultar las CPP de compras al contado para no contaminar la lista
+      // con todos los tickets diarios. Toggle "incluirContadoCompras" las muestra.
+      if (!f.incluirContadoCompras) filtros.excluirContadoCompras = true;
       const r: any = await firstValueFrom(this.repositoryService.getCuentasPorPagar(filtros));
       this.cuentas = r?.items || [];
       this.total = r?.total || 0;

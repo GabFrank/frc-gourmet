@@ -80,6 +80,116 @@ function calcularEstadoCuota(monto: number, montoPagado: number): CuotaEstado {
   return CuotaEstado.PENDIENTE;
 }
 
+// Aplica el pago de una cuota CPP dentro de una transaccion existente.
+// Reutilizado por `pagar-cpp-cuota` (1 cuota) y `pagar-cuotas-compras-lote` (N cuotas).
+// NO commitea la transaccion: el caller maneja commit/rollback.
+async function aplicarPagoCpoCuota(
+  queryRunner: any,
+  payload: {
+    cuotaId: number;
+    monto: number;
+    fuente: 'CAJA_MAYOR' | 'CUENTA_BANCARIA';
+    cajaMayorId?: number;
+    monedaId?: number;
+    formaPagoId?: number;
+    cuentaBancariaId?: number;
+    observacion?: string;
+  },
+  currentUser: Usuario | null,
+  dataSource: DataSource,
+): Promise<{ cuota: CuentaPorPagarCuota; cpp: CuentaPorPagar | null; tipoMov: TipoMovimiento }> {
+  const cuotaId = payload.cuotaId;
+  const monto = Number(payload.monto);
+  const fuente = payload.fuente;
+  const observacion: string = (payload.observacion || '').toUpperCase();
+
+  const cuotaRepo = queryRunner.manager.getRepository(CuentaPorPagarCuota);
+  const cppRepo = queryRunner.manager.getRepository(CuentaPorPagar);
+  const cuota = await cuotaRepo.findOne({
+    where: { id: cuotaId },
+    relations: ['cuentaPorPagar'],
+  });
+  if (!cuota) throw new Error(`CuentaPorPagarCuota ${cuotaId} no encontrada`);
+  if (cuota.estado === CuotaEstado.PAGADA) throw new Error(`Cuota #${cuota.numero} ya pagada`);
+  if (cuota.estado === CuotaEstado.CANCELADA) throw new Error(`Cuota #${cuota.numero} esta anulada`);
+
+  const restante = Number(cuota.monto) - Number(cuota.montoPagado);
+  if (monto <= 0 || monto > restante + 0.005) {
+    throw new Error(`Monto invalido para cuota #${cuota.numero} (restante: ${restante})`);
+  }
+
+  cuota.montoPagado = +(Number(cuota.montoPagado) + monto).toFixed(2);
+  cuota.estado = calcularEstadoCuota(Number(cuota.monto), Number(cuota.montoPagado));
+  if (cuota.estado === CuotaEstado.PAGADA) {
+    cuota.fechaPago = new Date();
+  }
+  await setEntityUserTracking(dataSource, cuota, currentUser?.id, true);
+  await queryRunner.manager.save(CuentaPorPagarCuota, cuota);
+
+  const cpp = await cppRepo.findOne({ where: { id: cuota.cuentaPorPagar.id }, relations: ['cuotas'] });
+  if (cpp) {
+    cpp.montoPagado = +(Number(cpp.montoPagado) + monto).toFixed(2);
+    const todasPagadas = (cpp.cuotas || []).every((c: any) => Number(c.montoPagado) >= Number(c.monto) - 0.005);
+    if (todasPagadas) cpp.estado = CuentaPorPagarEstado.PAGADO;
+    await queryRunner.manager.save(CuentaPorPagar, cpp);
+  }
+
+  const esPrestamoFuncionario = cpp?.tipo === CuentaPorPagarTipo.PRESTAMO_FUNCIONARIO;
+  const obsPrefix = esPrestamoFuncionario ? 'COBRO' : 'PAGO';
+  const obsBase = `${obsPrefix} CUOTA #${cuota.numero} CPP #${cuota.cuentaPorPagar?.id || '?'}`;
+  let tipoMov: TipoMovimiento;
+  if (esPrestamoFuncionario) {
+    tipoMov = TipoMovimiento.INGRESO_COBRO_CUOTA_PRESTAMO_FUNCIONARIO;
+  } else if (cpp?.tipo === CuentaPorPagarTipo.PRESTAMO) {
+    tipoMov = TipoMovimiento.EGRESO_CUOTA_PRESTAMO;
+  } else {
+    tipoMov = TipoMovimiento.EGRESO_CUOTA_COMPRA;
+  }
+
+  if (fuente === 'CAJA_MAYOR') {
+    const cajaMayorId = payload.cajaMayorId;
+    const monedaId = payload.monedaId;
+    const formaPagoId = payload.formaPagoId;
+    if (!cajaMayorId || !monedaId || !formaPagoId) {
+      throw new Error('Faltan datos para pago desde caja mayor');
+    }
+    const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
+      cajaMayor: { id: cajaMayorId } as any,
+      tipoMovimiento: tipoMov,
+      moneda: { id: monedaId } as any,
+      formaPago: { id: formaPagoId } as any,
+      monto,
+      fecha: new Date(),
+      observacion: observacion ? `${obsBase} — ${observacion}` : obsBase,
+      cuentaPorPagarCuotaId: cuota.id,
+    });
+    if (currentUser) {
+      movimiento.responsable = currentUser;
+    }
+    await setEntityUserTracking(dataSource, movimiento, currentUser?.id, false);
+    await queryRunner.manager.save(CajaMayorMovimiento, movimiento);
+    if (esPrestamoFuncionario) {
+      await sumarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, monto);
+    } else {
+      await descontarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, monto);
+    }
+  } else if (fuente === 'CUENTA_BANCARIA') {
+    const cuentaBancariaId = payload.cuentaBancariaId;
+    if (!cuentaBancariaId) throw new Error('Falta cuentaBancariaId');
+    const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
+    const cb = await cbRepo.findOne({ where: { id: cuentaBancariaId } });
+    if (!cb) throw new Error('Cuenta bancaria no encontrada');
+    cb.saldo = esPrestamoFuncionario
+      ? Number(cb.saldo) + monto
+      : Number(cb.saldo) - monto;
+    await queryRunner.manager.save(CuentaBancaria, cb);
+  } else {
+    throw new Error('Fuente de pago no valida');
+  }
+
+  return { cuota, cpp, tipoMov };
+}
+
 export function registerCuentasPorPagarHandlers(
   dataSource: DataSource,
   getCurrentUser: () => Usuario | null,
@@ -301,6 +411,8 @@ export function registerCuentasPorPagarHandlers(
         .leftJoinAndSelect('cpp.funcionario', 'funcionario')
         .leftJoinAndSelect('funcionario.persona', 'funcionarioPersona')
         .leftJoinAndSelect('cpp.moneda', 'moneda')
+        // CPP solo tiene `compraId` como columna plana (no relacion). JOIN raw a la tabla.
+        .leftJoin('compras', 'compra', 'compra.id = cpp.compra_id')
         .orderBy('cpp.fechaInicio', 'DESC');
 
       if (filtros?.estado) qb.andWhere('cpp.estado = :estado', { estado: filtros.estado });
@@ -308,6 +420,11 @@ export function registerCuentasPorPagarHandlers(
       if (filtros?.proveedorId) qb.andWhere('cpp.proveedor_id = :pid', { pid: filtros.proveedorId });
       if (filtros?.funcionarioId) qb.andWhere('cpp.funcionario_id = :fid', { fid: filtros.funcionarioId });
       if (filtros?.soloPrestamosFuncionario) qb.andWhere('cpp.tipo = :tpf', { tpf: CuentaPorPagarTipo.PRESTAMO_FUNCIONARIO });
+      // Excluye CPPs originadas en compras al contado (compra.credito = false). Las compras a credito
+      // o las CPPs sin compra (prestamos, etc.) siguen apareciendo. Default: false (lista todo).
+      if (filtros?.excluirContadoCompras === true) {
+        qb.andWhere('(cpp.compra_id IS NULL OR compra.credito = 1)');
+      }
 
       if (filtros?.pageSize != null) {
         const pageSize = Number(filtros.pageSize) || 15;
@@ -473,111 +590,155 @@ export function registerCuentasPorPagarHandlers(
     }
   });
 
-  // Pagar cuota de cuenta por pagar (similar a pagar compra cuota)
+  // Pagar cuota de cuenta por pagar (1 cuota). Wrapper sobre `aplicarPagoCpoCuota`.
   ipcMain.handle('pagar-cpp-cuota', async (_event, payload: any) => {
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      const cuotaId: number = payload.cuotaId;
-      const monto: number = Number(payload.monto);
-      const fuente: 'CAJA_MAYOR' | 'CUENTA_BANCARIA' = payload.fuente;
-      const observacion: string = (payload.observacion || '').toUpperCase();
-
-      const cuotaRepo = queryRunner.manager.getRepository(CuentaPorPagarCuota);
-      const cppRepo = queryRunner.manager.getRepository(CuentaPorPagar);
-      const cuota = await cuotaRepo.findOne({
-        where: { id: cuotaId },
-        relations: ['cuentaPorPagar'],
-      });
-      if (!cuota) throw new Error(`CuentaPorPagarCuota ${cuotaId} no encontrada`);
-      if (cuota.estado === CuotaEstado.PAGADA) throw new Error('Cuota ya pagada');
-      if (cuota.estado === CuotaEstado.CANCELADA) throw new Error('La cuota esta anulada');
-
-      const restante = Number(cuota.monto) - Number(cuota.montoPagado);
-      if (monto <= 0 || monto > restante + 0.005) {
-        throw new Error(`Monto inválido (restante: ${restante})`);
-      }
-
-      cuota.montoPagado = +(Number(cuota.montoPagado) + monto).toFixed(2);
-      cuota.estado = calcularEstadoCuota(Number(cuota.monto), Number(cuota.montoPagado));
-      if (cuota.estado === CuotaEstado.PAGADA) {
-        cuota.fechaPago = new Date();
-      }
-      await setEntityUserTracking(dataSource, cuota, getCurrentUser()?.id, true);
-      await queryRunner.manager.save(CuentaPorPagarCuota, cuota);
-
-      // Actualizar montoPagado en CuentaPorPagar y eventualmente marcarla como PAGADO
-      const cpp = await cppRepo.findOne({ where: { id: cuota.cuentaPorPagar.id }, relations: ['cuotas'] });
-      if (cpp) {
-        cpp.montoPagado = +(Number(cpp.montoPagado) + monto).toFixed(2);
-        const todasPagadas = (cpp.cuotas || []).every((c: any) => Number(c.montoPagado) >= Number(c.monto) - 0.005);
-        if (todasPagadas) cpp.estado = CuentaPorPagarEstado.PAGADO;
-        await queryRunner.manager.save(CuentaPorPagar, cpp);
-      }
-
-      const esPrestamoFuncionario = cpp?.tipo === CuentaPorPagarTipo.PRESTAMO_FUNCIONARIO;
-      const obsPrefix = esPrestamoFuncionario ? 'COBRO' : 'PAGO';
-      const obsBase = `${obsPrefix} CUOTA #${cuota.numero} CPP #${cuota.cuentaPorPagar?.id || '?'}`;
-      let tipoMov: TipoMovimiento;
-      if (esPrestamoFuncionario) {
-        tipoMov = TipoMovimiento.INGRESO_COBRO_CUOTA_PRESTAMO_FUNCIONARIO;
-      } else if (cpp?.tipo === CuentaPorPagarTipo.PRESTAMO) {
-        tipoMov = TipoMovimiento.EGRESO_CUOTA_PRESTAMO;
-      } else {
-        tipoMov = TipoMovimiento.EGRESO_CUOTA_COMPRA;
-      }
-
-      if (fuente === 'CAJA_MAYOR') {
-        const cajaMayorId = payload.cajaMayorId;
-        const monedaId = payload.monedaId;
-        const formaPagoId = payload.formaPagoId;
-        if (!cajaMayorId || !monedaId || !formaPagoId) {
-          throw new Error('Faltan datos para pago desde caja mayor');
-        }
-        const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
-          cajaMayor: { id: cajaMayorId } as any,
-          tipoMovimiento: tipoMov,
-          moneda: { id: monedaId } as any,
-          formaPago: { id: formaPagoId } as any,
-          monto,
-          fecha: new Date(),
-          observacion: observacion ? `${obsBase} — ${observacion}` : obsBase,
-          cuentaPorPagarCuotaId: cuota.id,
-        });
-        const cu = getCurrentUser();
-        if (cu) {
-          movimiento.responsable = cu;
-        }
-        await setEntityUserTracking(dataSource, movimiento, cu?.id, false);
-        await queryRunner.manager.save(CajaMayorMovimiento, movimiento);
-        if (esPrestamoFuncionario) {
-          await sumarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, monto);
-        } else {
-          await descontarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, monto);
-        }
-      } else if (fuente === 'CUENTA_BANCARIA') {
-        const cuentaBancariaId = payload.cuentaBancariaId;
-        if (!cuentaBancariaId) throw new Error('Falta cuentaBancariaId');
-        const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
-        const cb = await cbRepo.findOne({ where: { id: cuentaBancariaId } });
-        if (!cb) throw new Error('Cuenta bancaria no encontrada');
-        cb.saldo = esPrestamoFuncionario
-          ? Number(cb.saldo) + monto
-          : Number(cb.saldo) - monto;
-        await queryRunner.manager.save(CuentaBancaria, cb);
-      } else {
-        throw new Error('Fuente de pago no valida');
-      }
-
+      const result = await aplicarPagoCpoCuota(queryRunner, payload, getCurrentUser(), dataSource);
       await queryRunner.commitTransaction();
-      return { success: true, cuota };
+      return { success: true, cuota: result.cuota };
     } catch (error) {
       await queryRunner.rollbackTransaction();
       console.error('Error pagando cuota CPP:', error);
       throw error;
     } finally {
       await queryRunner.release();
+    }
+  });
+
+  // Pagar varias cuotas CPP tipo COMPRA en una sola transaccion (lote).
+  // Reutiliza el helper aplicarPagoCpoCuota por cada cuota.
+  // Payload: {
+  //   pagos: Array<{ cuotaId, monto, observacion? }>,
+  //   fuente: 'CAJA_MAYOR' | 'CUENTA_BANCARIA',
+  //   cajaMayorId?, monedaId?, formaPagoId?, cuentaBancariaId?
+  // }
+  ipcMain.handle('pagar-cuotas-compras-lote', async (_event, payload: any) => {
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const pagos: Array<{ cuotaId: number; monto: number; observacion?: string }> = payload?.pagos || [];
+      if (!Array.isArray(pagos) || pagos.length === 0) {
+        throw new Error('No hay cuotas para pagar.');
+      }
+      const fuente = payload?.fuente;
+      if (fuente !== 'CAJA_MAYOR' && fuente !== 'CUENTA_BANCARIA') {
+        throw new Error('Fuente de pago invalida.');
+      }
+
+      const currentUser = getCurrentUser();
+      let totalPagado = 0;
+      let cuotasActualizadas = 0;
+      let movimientosCreados = 0;
+
+      for (const pago of pagos) {
+        await aplicarPagoCpoCuota(
+          queryRunner,
+          {
+            cuotaId: Number(pago.cuotaId),
+            monto: Number(pago.monto),
+            fuente,
+            cajaMayorId: payload.cajaMayorId,
+            monedaId: payload.monedaId,
+            formaPagoId: payload.formaPagoId,
+            cuentaBancariaId: payload.cuentaBancariaId,
+            observacion: pago.observacion,
+          },
+          currentUser,
+          dataSource,
+        );
+        totalPagado += Number(pago.monto);
+        cuotasActualizadas++;
+        if (fuente === 'CAJA_MAYOR') movimientosCreados++;
+      }
+
+      await queryRunner.commitTransaction();
+      return {
+        success: true,
+        totalPagado: +totalPagado.toFixed(2),
+        cuotasActualizadas,
+        movimientosCreados,
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error en pago lote de cuotas:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  // Lista cuotas pendientes de CPP tipo COMPRA. Para el dialog "Pagar compras".
+  ipcMain.handle('get-cuotas-pendientes-compras', async (_event, filtros?: any) => {
+    try {
+      const repo = dataSource.getRepository(CuentaPorPagarCuota);
+      const qb = repo.createQueryBuilder('cuota')
+        .leftJoin('cuota.cuentaPorPagar', 'cpp')
+        .leftJoin('cpp.proveedor', 'pv')
+        .leftJoin('cpp.moneda', 'mon')
+        // CPP solo tiene `compraId` como columna plana (no relacion). JOIN raw a la tabla.
+        .leftJoin('compras', 'compra', 'compra.id = cpp.compra_id')
+        .where('cpp.tipo = :tipo', { tipo: CuentaPorPagarTipo.COMPRA })
+        .andWhere('cuota.estado IN (:...estados)', {
+          estados: [CuotaEstado.PENDIENTE, CuotaEstado.PARCIAL],
+        })
+        .andWhere('cpp.estado = :cppEstado', { cppEstado: CuentaPorPagarEstado.ACTIVO });
+
+      if (filtros?.proveedorId) qb.andWhere('pv.id = :pid', { pid: filtros.proveedorId });
+      if (filtros?.monedaId) qb.andWhere('mon.id = :mid', { mid: filtros.monedaId });
+      if (filtros?.fechaVencHasta) qb.andWhere('cuota.fechaVencimiento <= :fh', { fh: filtros.fechaVencHasta });
+
+      qb.select([
+        'cuota.id AS id',
+        'cpp.id AS cppId',
+        'compra.id AS compraId',
+        'compra.numero_nota AS compraNumeroNota',
+        'compra.fecha_compra AS compraFechaCompra',
+        'compra.credito AS compraCredito',
+        'cuota.numero AS numero',
+        'cpp.cantidadCuotas AS cantidadCuotas',
+        'cuota.fechaVencimiento AS fechaVencimiento',
+        'cuota.monto AS monto',
+        'cuota.montoPagado AS montoPagado',
+        'cuota.estado AS estado',
+        'pv.id AS proveedorId',
+        'pv.nombre AS proveedorNombre',
+        'mon.id AS monedaId',
+        'mon.simbolo AS monedaSimbolo',
+        'mon.denominacion AS monedaDenominacion',
+      ])
+        .orderBy('pv.nombre', 'ASC')
+        .addOrderBy('cuota.fechaVencimiento', 'ASC')
+        .addOrderBy('cuota.id', 'ASC');
+
+      const itemsRaw = await qb.getRawMany();
+      const items = itemsRaw.map((r: any) => ({
+        id: Number(r.id),
+        cppId: Number(r.cppId),
+        compraId: r.compraId != null ? Number(r.compraId) : null,
+        compraNumeroNota: r.compraNumeroNota || null,
+        compraFechaCompra: r.compraFechaCompra || null,
+        compraCredito: !!r.compraCredito,
+        numero: Number(r.numero),
+        cantidadCuotas: Number(r.cantidadCuotas) || 1,
+        fechaVencimiento: r.fechaVencimiento,
+        monto: Number(r.monto) || 0,
+        montoPagado: Number(r.montoPagado) || 0,
+        saldoPendiente: +(Number(r.monto) - Number(r.montoPagado)).toFixed(2),
+        estado: r.estado,
+        proveedorId: r.proveedorId != null ? Number(r.proveedorId) : null,
+        proveedorNombre: r.proveedorNombre || null,
+        monedaId: r.monedaId != null ? Number(r.monedaId) : null,
+        monedaSimbolo: r.monedaSimbolo || null,
+        monedaDenominacion: r.monedaDenominacion || null,
+      }));
+      return items;
+    } catch (error) {
+      console.error('Error getting cuotas pendientes compras:', error);
+      throw error;
     }
   });
 

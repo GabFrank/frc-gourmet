@@ -26,6 +26,11 @@
         <mat-option *ngFor="let t of tipoOptions" [value]="t">{{t}}</mat-option>
       </mat-select>
     </mat-form-field>
+    <div class="f-toggle">
+      <mat-slide-toggle formControlName="incluirContadoCompras">
+        Incluir pagos contado pendientes
+      </mat-slide-toggle>
+    </div>
     <div class="f-actions">
       <button mat-flat-button color="primary" (click)="aplicarFiltros()"><mat-icon>search</mat-icon> Aplicar</button>
       <button mat-stroked-button (click)="limpiarFiltros()"><mat-icon>clear</mat-icon> Limpiar</button>

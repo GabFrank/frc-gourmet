@@ -23,6 +23,17 @@ import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 
 // ===== Helpers internos =====
 
+// Parsea 'YYYY-MM-DD' como Date en zona local (evita el shift por UTC).
+// `new Date('2026-05-04')` interpreta como UTC midnight, que en UTC-3 cae el dia anterior.
+function parseLocalDate(s: any): Date | undefined {
+  if (!s) return undefined;
+  if (s instanceof Date) return s;
+  const str = String(s);
+  const m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return new Date(str);
+}
+
 // Stock actual en unidad base = SUMA(movimientos activos) con signo segun tipo
 async function getStockActualUnidadBase(qr: any, productoId: number): Promise<number> {
   const movs = await qr.manager
@@ -270,6 +281,58 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     qb.skip((page - 1) * pageSize).take(pageSize);
 
     const [items, total] = await qb.getManyAndCount();
+
+    // Enriquecer cada compra con estado de pago derivado del CPP (cuotas pagadas vs total).
+    // - Sin CPP (data legacy contado): se asume PAGADO (mov caja mayor directo) si esta FINALIZADA.
+    // - Con CPP: PAGADO si todas las cuotas estan PAGADA; PENDIENTE si ninguna paga; PARCIAL otherwise.
+    if (items.length > 0) {
+      const compraIds = items.map((c: any) => c.id);
+      const cppRows: any[] = await dataSource.getRepository(CuentaPorPagar)
+        .createQueryBuilder('cpp')
+        .leftJoin('cpp.cuotas', 'cuota')
+        .where('cpp.compra_id IN (:...ids)', { ids: compraIds })
+        .select([
+          'cpp.compra_id AS compraId',
+          'cpp.cantidadCuotas AS cantidadCuotas',
+          'COUNT(cuota.id) AS totalCuotas',
+          "SUM(CASE WHEN cuota.estado = 'PAGADA' THEN 1 ELSE 0 END) AS cuotasPagadas",
+          "SUM(CASE WHEN cuota.estado = 'PARCIAL' THEN 1 ELSE 0 END) AS cuotasParciales",
+          'cpp.montoTotal AS montoTotal',
+          'cpp.montoPagado AS montoPagado',
+        ])
+        .groupBy('cpp.compra_id')
+        .addGroupBy('cpp.cantidadCuotas')
+        .addGroupBy('cpp.montoTotal')
+        .addGroupBy('cpp.montoPagado')
+        .getRawMany();
+
+      const cppMap = new Map<number, any>();
+      for (const r of cppRows) cppMap.set(Number(r.compraId), r);
+
+      for (const c of items as any[]) {
+        const r = cppMap.get(c.id);
+        if (r) {
+          const total = Number(r.totalCuotas) || 0;
+          const pagadas = Number(r.cuotasPagadas) || 0;
+          const parciales = Number(r.cuotasParciales) || 0;
+          let estadoPago: 'PAGADO' | 'PARCIAL' | 'PENDIENTE';
+          if (total > 0 && pagadas === total) estadoPago = 'PAGADO';
+          else if (pagadas > 0 || parciales > 0) estadoPago = 'PARCIAL';
+          else estadoPago = 'PENDIENTE';
+          (c as any).estadoPago = estadoPago;
+          (c as any).cuotasPagadas = pagadas;
+          (c as any).cuotasTotal = total;
+          (c as any).montoPagado = +(Number(r.montoPagado) || 0).toFixed(2);
+        } else {
+          // Compra sin CPP: legacy contado finalizada => PAGADO; ABIERTO/CANCELADO => N/A.
+          (c as any).estadoPago = c.estado === 'FINALIZADO' ? 'PAGADO' : null;
+          (c as any).cuotasPagadas = null;
+          (c as any).cuotasTotal = null;
+          (c as any).montoPagado = null;
+        }
+      }
+    }
+
     return { items, total, page, pageSize };
   });
 
@@ -312,7 +375,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
         activo: true,
         numeroNota: data.numeroNota?.toUpperCase() || null,
         tipoBoleta: data.tipoBoleta || null,
-        fechaCompra: data.fechaCompra ? new Date(data.fechaCompra) : new Date(),
+        fechaCompra: parseLocalDate(data.fechaCompra) || new Date(),
         credito: !!data.credito,
         plazoDias: data.plazoDias ?? null,
         proveedor: data.proveedorId ? { id: data.proveedorId } as any : null,
@@ -386,7 +449,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       // Actualizar cabecera
       if (data.numeroNota !== undefined) compra.numeroNota = data.numeroNota?.toUpperCase() || undefined;
       if (data.tipoBoleta !== undefined) compra.tipoBoleta = data.tipoBoleta || undefined;
-      if (data.fechaCompra !== undefined) compra.fechaCompra = data.fechaCompra ? new Date(data.fechaCompra) : undefined;
+      if (data.fechaCompra !== undefined) compra.fechaCompra = parseLocalDate(data.fechaCompra);
       if (data.credito !== undefined) compra.credito = !!data.credito;
       if (data.plazoDias !== undefined) compra.plazoDias = data.plazoDias ?? undefined;
       if (data.proveedorId !== undefined) compra.proveedor = data.proveedorId ? { id: data.proveedorId } as any : undefined;
@@ -453,8 +516,15 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     }
   });
 
-  // Finaliza una compra: impacta stock + costo + caja mayor (contado) o CPP (credito)
-  // payload: { cajaMayorId?, formaPagoId?, fechaCreditoInicio?, cantidadCuotas? }
+  // Finaliza una compra: impacta stock + costo + SIEMPRE genera CPP (1 cuota contado, N credito).
+  // El pago efectivo se hace despues via "pagar-cuotas-compras-lote" (Caja Mayor → Egreso → Pagar compras).
+  // payload: {
+  //   formaPagoCompra?: 'EFECTIVO' | 'BANCO',  // default EFECTIVO
+  //   cuentaBancariaId?: number | null,         // opcional si BANCO (puede decidirse al pagar)
+  //   fechaCreditoInicio?: string,              // si credito = true: fecha de la 1ra cuota
+  //   cantidadCuotas?: number,                  // si credito = true: N cuotas mensuales
+  //   pagarAhora?: boolean,                     // solo si credito = false: indica retornar cuotaId para abrir dialog de pago
+  // }
   ipcMain.handle('finalizar-compra', async (_event: any, id: number, payload: any = {}) => {
     const qr = dataSource.createQueryRunner();
     await qr.connect();
@@ -482,7 +552,11 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       for (const d of compra.detalles) total += Number(d.subtotal);
       total = +total.toFixed(2);
 
-      const fecha = compra.fechaCompra || new Date();
+      // Fecha de boleta (para stock movement y precio_costo, refleja la fecha facturada)
+      const fechaBoleta = compra.fechaCompra || new Date();
+      // Fecha del movimiento de caja mayor: timestamp real de la operacion (consistente con
+      // gastos, retiros, etc.). Evita ademas problemas de display de medianoche sin TZ.
+      const ahora = new Date();
       const monedaId = compra.moneda.id;
 
       // 1. Por cada detalle: stock + costo promedio + ProveedorProducto upsert
@@ -494,6 +568,11 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
           ? Number(det.costoUnitarioPresentacion) / presentacionCantidad
           : Number(det.costoUnitarioPresentacion);
 
+        // IMPORTANTE: el costo promedio ponderado debe calcularse ANTES de persistir
+        // el StockMovimiento. Si no, getStockActualUnidadBase devuelve el stock con la
+        // cantidad nueva ya sumada y la formula la cuenta dos veces (denominador inflado).
+        await aplicarCostoPromedioPonderado(qr, productoId, cantidadUB, +costoUnitarioUB.toFixed(2), monedaId, fechaBoleta, userId);
+
         // Stock movement (solo si producto controla stock)
         if (det.producto.controlaStock) {
           const sm = qr.manager.create(StockMovimiento, {
@@ -501,7 +580,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
             tipo: StockMovimientoTipo.COMPRA,
             tipoReferencia: StockMovimientoTipoReferencia.COMPRA,
             referencia: id,
-            fecha,
+            fecha: fechaBoleta,
             activo: true,
             observaciones: `COMPRA #${id} — ${compra.proveedor?.nombre || ''}`.toUpperCase(),
             producto: { id: productoId } as any,
@@ -510,61 +589,47 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
           await qr.manager.save(StockMovimiento, sm);
         }
 
-        // Costo promedio ponderado
-        await aplicarCostoPromedioPonderado(qr, productoId, cantidadUB, +costoUnitarioUB.toFixed(2), monedaId, fecha, userId);
-
-        // ProveedorProducto upsert
-        await upsertProveedorProducto(qr, compra.proveedor.id, productoId, Number(det.costoUnitarioPresentacion), fecha, id, userId);
+        // ProveedorProducto upsert: guardamos el costo en UNIDAD BASE para que la UI
+        // pueda comparar entre compras de distintas presentaciones sin re-calcular.
+        await upsertProveedorProducto(qr, compra.proveedor.id, productoId, +costoUnitarioUB.toFixed(2), fechaBoleta, id, userId);
       }
 
-      // 2. Pago: contado (caja mayor) o credito (CPP)
-      if (compra.credito) {
-        const fechaInicio = payload.fechaCreditoInicio ? new Date(payload.fechaCreditoInicio) : fecha;
-        const cantidadCuotas = Math.max(1, Number(payload.cantidadCuotas) || 1);
-        const cppEntity = qr.manager.create(CuentaPorPagar, {
-          descripcion: `COMPRA #${id} — ${compra.proveedor?.nombre || ''}`.toUpperCase(),
-          tipo: CuentaPorPagarTipo.COMPRA,
-          proveedor: { id: compra.proveedor.id } as any,
-          montoTotal: total,
-          montoPagado: 0,
-          moneda: { id: monedaId } as any,
-          fechaInicio,
-          cantidadCuotas,
-          estado: CuentaPorPagarEstado.ACTIVO,
-          observacion: compra.numeroNota ? `NOTA ${compra.numeroNota}` : null,
-          compraId: id,
-        });
-        await setEntityUserTracking(dataSource, cppEntity, userId, false);
-        const cppSaved = await qr.manager.save(CuentaPorPagar, cppEntity);
-        const cppId = (Array.isArray(cppSaved) ? cppSaved[0] : cppSaved).id;
+      // 2. SIEMPRE generar CPP. Contado = 1 cuota a venc. fechaCompra. Credito = N cuotas mensuales.
+      const cantidadCuotas = compra.credito
+        ? Math.max(1, Number(payload.cantidadCuotas) || 1)
+        : 1;
+      const fechaInicio = compra.credito
+        ? (parseLocalDate(payload.fechaCreditoInicio) || fechaBoleta)
+        : fechaBoleta;
 
-        await generarCuotasMensualesCPP(qr, cppId, total, cantidadCuotas, fechaInicio, userId);
+      const cppEntity = qr.manager.create(CuentaPorPagar, {
+        descripcion: `COMPRA #${id} — ${compra.proveedor?.nombre || ''}`.toUpperCase(),
+        tipo: CuentaPorPagarTipo.COMPRA,
+        proveedor: { id: compra.proveedor.id } as any,
+        montoTotal: total,
+        montoPagado: 0,
+        moneda: { id: monedaId } as any,
+        fechaInicio,
+        cantidadCuotas,
+        estado: CuentaPorPagarEstado.ACTIVO,
+        observacion: compra.numeroNota ? `NOTA ${compra.numeroNota}` : null,
+        compraId: id,
+      });
+      await setEntityUserTracking(dataSource, cppEntity, userId, false);
+      const cppSaved = await qr.manager.save(CuentaPorPagar, cppEntity);
+      const cppId = (Array.isArray(cppSaved) ? cppSaved[0] : cppSaved).id;
 
-        compra.cuentaPorPagar = { id: cppId } as any;
+      await generarCuotasMensualesCPP(qr, cppId, total, cantidadCuotas, fechaInicio, userId);
+
+      compra.cuentaPorPagar = { id: cppId } as any;
+
+      // Persistir forma de pago (enum) y cuenta bancaria opcional.
+      const formaPagoCompra = String(payload.formaPagoCompra || 'EFECTIVO').toUpperCase();
+      (compra as any).formaPagoCompra = formaPagoCompra === 'BANCO' ? 'BANCO' : 'EFECTIVO';
+      if (payload.cuentaBancariaId) {
+        (compra as any).cuentaBancaria = { id: Number(payload.cuentaBancariaId) } as any;
       } else {
-        // Contado: requiere cajaMayorId + formaPagoId
-        const cajaMayorId = Number(payload.cajaMayorId);
-        const formaPagoId = Number(payload.formaPagoId || compra.formaPago?.id);
-        if (!cajaMayorId || !formaPagoId) {
-          throw new Error('Para compras al contado se requieren cajaMayorId y formaPagoId.');
-        }
-        const cu = getCurrentUser();
-        const movimiento = qr.manager.create(CajaMayorMovimiento, {
-          cajaMayor: { id: cajaMayorId } as any,
-          tipoMovimiento: TipoMovimiento.EGRESO_COMPRA,
-          moneda: { id: monedaId } as any,
-          formaPago: { id: formaPagoId } as any,
-          monto: total,
-          fecha,
-          observacion: `COMPRA #${id} — ${compra.proveedor?.nombre || ''}`.toUpperCase(),
-          compraId: id,
-        });
-        if (cu) movimiento.responsable = cu;
-        await setEntityUserTracking(dataSource, movimiento, userId, false);
-        await qr.manager.save(CajaMayorMovimiento, movimiento);
-        await actualizarSaldoCajaMayor(qr, cajaMayorId, monedaId, formaPagoId, total, TipoMovimiento.EGRESO_COMPRA);
-
-        compra.formaPago = { id: formaPagoId } as any;
+        (compra as any).cuentaBancaria = null;
       }
 
       // 3. Marcar como FINALIZADO
@@ -573,11 +638,22 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       await setEntityUserTracking(dataSource, compra, userId, true);
       await qr.manager.save(Compra, compra);
 
+      // Si pagarAhora y es contado, ubicar la cuotaId (1ra y unica) para retornar.
+      let cuotaIdParaPagar: number | null = null;
+      if (!compra.credito && payload.pagarAhora === true) {
+        const cuota = await qr.manager.getRepository(CuentaPorPagarCuota).findOne({
+          where: { cuentaPorPagar: { id: cppId } } as any,
+          order: { numero: 'ASC' },
+        });
+        cuotaIdParaPagar = cuota?.id ?? null;
+      }
+
       await qr.commitTransaction();
-      return await dataSource.getRepository(Compra).findOne({
+      const compraFinal = await dataSource.getRepository(Compra).findOne({
         where: { id },
-        relations: ['proveedor', 'proveedor.persona', 'moneda', 'formaPago', 'compraCategoria', 'detalles', 'detalles.producto', 'detalles.presentacion', 'cuentaPorPagar'],
+        relations: ['proveedor', 'proveedor.persona', 'moneda', 'formaPago', 'compraCategoria', 'detalles', 'detalles.producto', 'detalles.presentacion', 'cuentaPorPagar', 'cuentaBancaria'],
       });
+      return { compra: compraFinal, cuotaIdParaPagar };
     } catch (e) {
       await qr.rollbackTransaction();
       throw e;
@@ -807,6 +883,191 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
     await repo.save(entity);
     return { success: true, affected: 1 };
+  });
+
+  // Productos del proveedor con paginacion + busqueda por nombre del producto.
+  // Enriquece cada item con `ultimoCostoUnidadBase` y `presentacionNombre` (de la ultima compra)
+  // para que la UI compare costos consistentemente en unidad base.
+  ipcMain.handle('getProveedorProductosPaginado', async (_event: any, params: any) => {
+    const proveedorId = Number(params?.proveedorId);
+    if (!proveedorId) return { items: [], total: 0, page: 0, pageSize: 10 };
+    const search: string = params?.search ? String(params.search).trim().toUpperCase() : '';
+    const pageSize = Math.min(50, Math.max(1, Number(params?.pageSize) || 10));
+    const page = Math.max(0, Number(params?.page) || 0);
+
+    const repo = dataSource.getRepository(ProveedorProducto);
+    const qb = repo.createQueryBuilder('pp')
+      .leftJoinAndSelect('pp.producto', 'prod')
+      .leftJoin('pp.proveedor', 'pv')
+      .where('pv.id = :proveedorId', { proveedorId })
+      .andWhere('pp.activo = 1')
+      .orderBy('pp.ultimaCompraFecha', 'DESC')
+      .addOrderBy('pp.id', 'DESC');
+
+    if (search) {
+      qb.andWhere('prod.nombre LIKE :s', { s: `%${search}%` });
+    }
+    qb.skip(page * pageSize).take(pageSize);
+    const [items, total] = await qb.getManyAndCount();
+
+    // Enriquecer con datos de la ultima compra (presentacion + factor) para calcular UB.
+    if (items.length > 0) {
+      const compraIds = items.map((it: any) => it.compra?.id).filter((v: any) => !!v);
+      const productoIds = items.map((it: any) => it.producto?.id).filter((v: any) => !!v);
+      let detalles: any[] = [];
+      if (compraIds.length && productoIds.length) {
+        const cdRepo = dataSource.getRepository(CompraDetalle);
+        detalles = await cdRepo.createQueryBuilder('cd')
+          .leftJoin('cd.presentacion', 'pres')
+          .where('cd.compra_id IN (:...compraIds)', { compraIds })
+          .andWhere('cd.producto_id IN (:...productoIds)', { productoIds })
+          .select([
+            'cd.compra_id AS compraId',
+            'cd.producto_id AS productoId',
+            'cd.costoUnitarioPresentacion AS costoUnitarioPresentacion',
+            'pres.nombre AS presentacionNombre',
+            'pres.cantidad AS presentacionCantidad',
+          ])
+          .getRawMany();
+      }
+      const detalleMap = new Map<string, any>();
+      for (const d of detalles) {
+        detalleMap.set(`${d.compraId}_${d.productoId}`, d);
+      }
+      for (const item of items as any[]) {
+        const key = `${item.compra?.id}_${item.producto?.id}`;
+        const det = detalleMap.get(key);
+        if (det) {
+          const factor = det.presentacionCantidad ? Number(det.presentacionCantidad) : 1;
+          const costoPres = Number(det.costoUnitarioPresentacion) || 0;
+          item.ultimoCostoUnidadBase = factor > 0 ? +(costoPres / factor).toFixed(2) : costoPres;
+          item.ultimaPresentacionNombre = det.presentacionNombre || null;
+          item.ultimaPresentacionCantidad = factor;
+        } else {
+          // Fallback: si no hay detalle (datos legacy), asume cantidad=1.
+          item.ultimoCostoUnidadBase = item.ultimoCostoUnitario != null ? Number(item.ultimoCostoUnitario) : null;
+          item.ultimaPresentacionNombre = null;
+          item.ultimaPresentacionCantidad = 1;
+        }
+      }
+    }
+
+    return { items, total, page, pageSize };
+  });
+
+  // Ultimas compras de un producto (cualquier proveedor) para comparar precios.
+  // Retorna { items, total, page, pageSize }.
+  ipcMain.handle('getUltimasComprasProducto', async (_event: any, params: any) => {
+    const productoId = Number(params?.productoId);
+    if (!productoId) return { items: [], total: 0, page: 0, pageSize: 5 };
+    const pageSize = Math.min(50, Math.max(1, Number(params?.pageSize) || 5));
+    const page = Math.max(0, Number(params?.page) || 0);
+
+    const cdRepo = dataSource.getRepository(CompraDetalle);
+    const qb = cdRepo.createQueryBuilder('cd')
+      .innerJoin('cd.compra', 'c')
+      .leftJoin('c.proveedor', 'pv')
+      .leftJoin('c.moneda', 'mon')
+      .leftJoin('cd.presentacion', 'pres')
+      .where('cd.producto_id = :productoId', { productoId })
+      .andWhere('c.estado = :estado', { estado: CompraEstado.FINALIZADO })
+      .select([
+        'cd.id AS id',
+        'c.id AS compraId',
+        'c.fechaCompra AS fechaCompra',
+        'pv.nombre AS proveedorNombre',
+        'mon.simbolo AS monedaSimbolo',
+        'cd.cantidad AS cantidad',
+        'cd.cantidadUnidadBase AS cantidadUnidadBase',
+        'cd.costoUnitarioPresentacion AS costoUnitario',
+        'pres.nombre AS presentacionNombre',
+        'pres.cantidad AS presentacionCantidad',
+      ])
+      .orderBy('c.fechaCompra', 'DESC')
+      .addOrderBy('c.id', 'DESC')
+      .offset(page * pageSize)
+      .limit(pageSize);
+
+    const itemsRaw = await qb.getRawMany();
+    // Enriquecer con costoUnidadBase para que la UI compare en una unica unidad.
+    const items = itemsRaw.map((r: any) => {
+      const factor = r.presentacionCantidad ? Number(r.presentacionCantidad) : 1;
+      const costoPres = Number(r.costoUnitario) || 0;
+      const costoUB = factor > 0 ? +(costoPres / factor).toFixed(2) : costoPres;
+      return { ...r, costoUnidadBase: costoUB };
+    });
+    const totalRow = await cdRepo.createQueryBuilder('cd')
+      .innerJoin('cd.compra', 'c')
+      .where('cd.producto_id = :productoId', { productoId })
+      .andWhere('c.estado = :estado', { estado: CompraEstado.FINALIZADO })
+      .getCount();
+    return { items, total: totalRow, page, pageSize };
+  });
+
+  // Ultimo costo conocido del producto, EN UNIDAD BASE.
+  // Si se pasa proveedorId, prioriza la ultima compra del par (proveedor, producto).
+  // Fallback: ultimo CompraDetalle FINALIZADO de cualquier proveedor.
+  ipcMain.handle('getUltimoCostoProducto', async (_event: any, params: any) => {
+    const productoId = Number(params?.productoId);
+    if (!productoId) return { ultimoCosto: null, fuente: null, fecha: null };
+    const proveedorId = params?.proveedorId ? Number(params.proveedorId) : null;
+    const cdRepo = dataSource.getRepository(CompraDetalle);
+
+    // Prioriza la ultima compra del par (proveedor, producto): JOIN con compra.proveedor.
+    if (proveedorId) {
+      const row = await cdRepo.createQueryBuilder('cd')
+        .innerJoin('cd.compra', 'c')
+        .leftJoin('cd.presentacion', 'pres')
+        .where('cd.producto_id = :productoId', { productoId })
+        .andWhere('c.proveedor_id = :proveedorId', { proveedorId })
+        .andWhere('c.estado = :estado', { estado: CompraEstado.FINALIZADO })
+        .orderBy('c.fechaCompra', 'DESC')
+        .addOrderBy('c.id', 'DESC')
+        .select([
+          'cd.costoUnitarioPresentacion AS costo',
+          'pres.cantidad AS presFactor',
+          'c.fechaCompra AS fecha',
+        ])
+        .limit(1)
+        .getRawOne();
+      if (row && row.costo != null) {
+        const factor = row.presFactor ? Number(row.presFactor) : 1;
+        const costoPres = Number(row.costo);
+        const costoUB = factor > 0 ? +(costoPres / factor).toFixed(2) : costoPres;
+        return {
+          ultimoCosto: costoUB,
+          fuente: 'PROVEEDOR_PRODUCTO',
+          fecha: row.fecha || null,
+        };
+      }
+    }
+
+    // Fallback: cualquier proveedor.
+    const row = await cdRepo.createQueryBuilder('cd')
+      .innerJoin('cd.compra', 'c')
+      .leftJoin('cd.presentacion', 'pres')
+      .where('cd.producto_id = :productoId', { productoId })
+      .andWhere('c.estado = :estado', { estado: CompraEstado.FINALIZADO })
+      .orderBy('c.fechaCompra', 'DESC')
+      .addOrderBy('c.id', 'DESC')
+      .select([
+        'cd.costoUnitarioPresentacion AS costo',
+        'pres.cantidad AS presFactor',
+        'c.fechaCompra AS fecha',
+      ])
+      .limit(1)
+      .getRawOne();
+    if (row && row.costo != null) {
+      const factor = row.presFactor ? Number(row.presFactor) : 1;
+      const costoPres = Number(row.costo);
+      const costoUB = factor > 0 ? +(costoPres / factor).toFixed(2) : costoPres;
+      return {
+        ultimoCosto: costoUB,
+        fuente: 'COMPRA_DETALLE',
+        fecha: row.fecha || null,
+      };
+    }
+    return { ultimoCosto: null, fuente: null, fecha: null };
   });
 
   // ===================== FORMAS DE PAGO =====================

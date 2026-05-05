@@ -1,0 +1,80 @@
+<h2 mat-dialog-title>Finalizar compra #{{ data.compraId }}</h2>
+<mat-dialog-content [formGroup]="form" class="content">
+  <div class="resumen">
+    <div class="resumen-row">
+      <span class="lbl">Total:</span>
+      <span class="val mono">{{ data.total | number:'1.0-2' }} {{ data.moneda?.simbolo || '' }}</span>
+    </div>
+    <div class="resumen-row">
+      <span class="lbl">Tipo de pago:</span>
+      <span class="chip" [class.chip-naranja]="data.credito" [class.chip-celeste]="!data.credito">
+        {{ data.credito ? 'A crédito (cuotas)' : 'Contado (1 cuota)' }}
+      </span>
+    </div>
+  </div>
+
+  <h3>Forma de pago</h3>
+  <div class="forma-pago-block">
+    <mat-button-toggle-group formControlName="formaPagoCompra" class="forma-toggle">
+      <mat-button-toggle value="EFECTIVO">
+        <mat-icon>payments</mat-icon>
+        Efectivo
+      </mat-button-toggle>
+      <mat-button-toggle value="BANCO">
+        <mat-icon>account_balance</mat-icon>
+        Banco
+      </mat-button-toggle>
+    </mat-button-toggle-group>
+
+    <mat-form-field appearance="outline" *ngIf="form.value.formaPagoCompra === 'BANCO'" class="cuenta-field">
+      <mat-label>Cuenta bancaria (opcional)</mat-label>
+      <mat-select formControlName="cuentaBancariaId">
+        <mat-option [value]="null">Decidir al pagar</mat-option>
+        <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">
+          {{ cb.nombre || cb.banco }} <span class="muted-mini" *ngIf="cb.numeroCuenta">· {{ cb.numeroCuenta }}</span>
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
+
+  <ng-container *ngIf="data.credito">
+    <h3>Plan de pago</h3>
+    <div class="grid">
+      <mat-form-field appearance="outline">
+        <mat-label>Cantidad de cuotas *</mat-label>
+        <input matInput type="number" min="1" max="60" formControlName="cantidadCuotas" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Fecha primera cuota *</mat-label>
+        <input matInput [matDatepicker]="pCre" formControlName="fechaCreditoInicio" />
+        <mat-datepicker-toggle matSuffix [for]="pCre"></mat-datepicker-toggle>
+        <mat-datepicker #pCre></mat-datepicker>
+      </mat-form-field>
+    </div>
+    <div class="cuota-preview" *ngIf="form.value.cantidadCuotas > 0">
+      Se generarán <strong>{{ form.value.cantidadCuotas }}</strong> cuotas mensuales
+      de <strong class="mono">{{ (data.total / form.value.cantidadCuotas) | number:'1.0-2' }}</strong>
+      (la última ajusta diferencia por redondeo).
+    </div>
+    <p class="hint">
+      Se creará una <strong>Cuenta por Pagar</strong> con esas cuotas. El pago se hace después desde Caja Mayor → Egreso → Pagar compras.
+    </p>
+  </ng-container>
+
+  <ng-container *ngIf="!data.credito">
+    <h3>Pago</h3>
+    <div class="pagar-ahora-row">
+      <mat-slide-toggle formControlName="pagarAhora">Pagar inmediatamente</mat-slide-toggle>
+      <span class="hint inline">Si está activo, después de finalizar se abre el diálogo para registrar el pago.</span>
+    </div>
+    <p class="hint">
+      Se creará una <strong>Cuenta por Pagar</strong> con 1 cuota a vencer hoy. Si dejás "Pagar inmediatamente" desactivado, podés pagarla más tarde desde Caja Mayor.
+    </p>
+  </ng-container>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>Cancelar</button>
+  <button mat-flat-button color="primary" (click)="confirmar()" [disabled]="!isValido()">
+    Confirmar finalización
+  </button>
+</mat-dialog-actions>

@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
 import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -16,19 +16,20 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, merge } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ProductoSearchDialogComponent } from 'src/app/shared/components/producto-search-dialog/producto-search-dialog.component';
-import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { TabsService } from 'src/app/services/tabs.service';
 import { FinalizarCompraDialogComponent } from '../finalizar-compra-dialog/finalizar-compra-dialog.component';
 import { GestionarProductoComponent } from 'src/app/pages/productos/gestionar-producto/gestionar-producto.component';
+import { PanelProductosProveedorComponent } from './panel-productos-proveedor/panel-productos-proveedor.component';
+import { PanelHistoricoProductoComponent } from './panel-historico-producto/panel-historico-producto.component';
 
-interface ItemRow {
+interface ItemSeed {
   productoId: number;
   productoNombre: string;
   productoControlaStock: boolean;
-  unidadBase?: string;
+  unidadBase?: string | null;
   presentacionId?: number | null;
   presentaciones: any[];
   cantidad: number;
@@ -42,7 +43,6 @@ interface ItemRow {
   styleUrls: ['./create-edit-compra.component.scss'],
   imports: [
     CommonModule,
-    FormsModule,
     ReactiveFormsModule,
     MatTableModule,
     MatButtonModule,
@@ -60,6 +60,8 @@ interface ItemRow {
     MatCardModule,
     MatChipsModule,
     DecimalPipe,
+    PanelProductosProveedorComponent,
+    PanelHistoricoProductoComponent,
   ],
 })
 export class CreateEditCompraComponent implements OnInit {
@@ -68,8 +70,13 @@ export class CreateEditCompraComponent implements OnInit {
   estadoActual: string = 'ABIERTO';
 
   form!: FormGroup;
-  items: ItemRow[] = [];
+  itemsArray!: FormArray<FormGroup>;
+  itemsDataSource: FormGroup[] = [];
   total = 0;
+
+  // Estado para los paneles laterales
+  proveedorIdActivo: number | null = null;
+  productoIdHistorico: number | null = null;
 
   proveedores: any[] = [];
   categorias: any[] = [];
@@ -99,16 +106,23 @@ export class CreateEditCompraComponent implements OnInit {
       fechaCompra: [new Date(), Validators.required],
       numeroNota: [''],
       tipoBoleta: ['COMUN'],
-      formaPagoId: [null],
       credito: [false],
       cantidadCuotas: [1],
       fechaCreditoInicio: [null],
+      items: this.fb.array<FormGroup>([]),
     });
+    this.itemsArray = this.form.get('items') as FormArray<FormGroup>;
+    this.itemsArray.valueChanges.subscribe(() => this.recalcular());
+    this.refreshDataSource();
+
+    this.form.get('proveedorId')!.valueChanges.subscribe((id: any) => {
+      this.proveedorIdActivo = id ? Number(id) : null;
+    });
+
     this.loadCatalogos().then(() => {
       if (this.mode === 'edit' && this.compraId) {
         this.loadCompra(this.compraId);
       } else {
-        // Default moneda principal si existe
         const principal = this.monedas.find((m: any) => m.principal);
         if (principal) this.form.patchValue({ monedaId: principal.id });
       }
@@ -151,16 +165,15 @@ export class CreateEditCompraComponent implements OnInit {
         fechaCompra: compra.fechaCompra ? new Date(compra.fechaCompra) : new Date(),
         numeroNota: compra.numeroNota || '',
         tipoBoleta: compra.tipoBoleta || 'COMUN',
-        formaPagoId: compra.formaPago?.id || null,
         credito: !!compra.credito,
       });
-      // Cargar presentaciones por producto y construir items
-      this.items = [];
+
+      this.itemsArray.clear({ emitEvent: false });
       for (const det of (compra.detalles || [])) {
         const presentaciones = det.producto?.id
           ? await this.cargarPresentaciones(det.producto.id)
           : [];
-        this.items.push({
+        this.itemsArray.push(this.buildItemFormGroup({
           productoId: det.producto.id,
           productoNombre: det.producto.nombre,
           productoControlaStock: det.producto.controlaStock,
@@ -169,9 +182,10 @@ export class CreateEditCompraComponent implements OnInit {
           presentaciones,
           cantidad: Number(det.cantidad),
           costoUnitarioPresentacion: Number(det.costoUnitarioPresentacion),
-        });
+        }), { emitEvent: false });
       }
-      this.recalcularTotal();
+      this.refreshDataSource();
+      this.recalcular();
       if (this.estadoActual !== 'ABIERTO') {
         this.form.disable();
       }
@@ -180,6 +194,65 @@ export class CreateEditCompraComponent implements OnInit {
     } finally {
       this.loading = false;
     }
+  }
+
+  private buildItemFormGroup(seed: ItemSeed): FormGroup {
+    const cant = Number(seed.cantidad) || 0;
+    const costoUnit = Number(seed.costoUnitarioPresentacion) || 0;
+    const subInicial = +(cant * costoUnit).toFixed(2);
+
+    const fg = this.fb.group({
+      productoId: [seed.productoId, Validators.required],
+      productoNombre: [seed.productoNombre || ''],
+      productoControlaStock: [!!seed.productoControlaStock],
+      unidadBase: [seed.unidadBase || null],
+      presentaciones: [seed.presentaciones || []],
+      presentacionId: [seed.presentacionId ?? null],
+      cantidad: [cant, [Validators.required, Validators.min(0.001)]],
+      costoUnitarioPresentacion: [costoUnit, [Validators.min(0)]],
+      subtotal: [subInicial, [Validators.min(0)]],
+    });
+
+    // Bidirectional sync entre cantidad / costo unit / subtotal:
+    // - cantidad o costo cambian → subtotal = cantidad × costo.
+    // - subtotal cambia → costo = subtotal / cantidad (si cantidad > 0).
+    // Usamos `emitEvent: false` para evitar feedback loop.
+    const cantCtrl = fg.get('cantidad')!;
+    const costoCtrl = fg.get('costoUnitarioPresentacion')!;
+    const subCtrl = fg.get('subtotal')!;
+
+    merge(cantCtrl.valueChanges, costoCtrl.valueChanges).subscribe(() => {
+      const c = Number(cantCtrl.value || 0);
+      const cu = Number(costoCtrl.value || 0);
+      const sub = +(c * cu).toFixed(2);
+      if (Number(subCtrl.value) !== sub) {
+        subCtrl.setValue(sub, { emitEvent: false });
+      }
+    });
+
+    subCtrl.valueChanges.subscribe(value => {
+      const c = Number(cantCtrl.value || 0);
+      const sub = Number(value || 0);
+      if (c <= 0) return;
+      const cu = +(sub / c).toFixed(2);
+      if (Number(costoCtrl.value) !== cu) {
+        costoCtrl.setValue(cu, { emitEvent: false });
+      }
+    });
+
+    return fg;
+  }
+
+  private refreshDataSource(): void {
+    this.itemsDataSource = [...this.itemsArray.controls];
+  }
+
+  private recalcular(): void {
+    let total = 0;
+    for (const ctrl of this.itemsArray.controls) {
+      total += Number(ctrl.get('subtotal')?.value || 0);
+    }
+    this.total = +total.toFixed(2);
   }
 
   async agregarItem(): Promise<void> {
@@ -192,21 +265,68 @@ export class CreateEditCompraComponent implements OnInit {
     if (!result?.producto) return;
 
     const productoId = result.producto.id;
-    const presentaciones = await this.cargarPresentaciones(productoId);
-    const presentacionId = result.presentacion?.id || (presentaciones.find((p: any) => p.principal)?.id ?? presentaciones[0]?.id ?? null);
+    let costoInicial = 0;
+    try {
+      const ultimo: any = await firstValueFrom(this.repo.getUltimoCostoProducto({
+        productoId,
+        proveedorId: this.proveedorIdActivo,
+      }));
+      if (ultimo?.ultimoCosto != null) costoInicial = Number(ultimo.ultimoCosto);
+    } catch (e) {
+      console.error('Error cargando ultimo costo', e);
+    }
 
-    this.items.push({
+    await this.pushProductoAItems(
+      result.producto,
+      result.presentacion?.id ?? null,
+      Number(result.cantidad) || 1,
+      costoInicial,
+    );
+  }
+
+  async onProductoFromPanel(payload: { producto: any; ultimoCostoUnidadBase: number | null }): Promise<void> {
+    if (this.estadoActual !== 'ABIERTO') return;
+    if (!payload?.producto) return;
+    const costoUB = payload.ultimoCostoUnidadBase != null ? Number(payload.ultimoCostoUnidadBase) : 0;
+    await this.pushProductoAItems(payload.producto, null, 1, costoUB);
+  }
+
+  onItemRowSelected(productoId: number | null | undefined): void {
+    if (!productoId) return;
+    this.productoIdHistorico = Number(productoId);
+  }
+
+  // `costoInicialUB` se interpreta como costo en UNIDAD BASE.
+  // El form trabaja con `costoUnitarioPresentacion`, asi que multiplicamos por
+  // la cantidad de la presentacion seleccionada para obtener el costo facturado.
+  private async pushProductoAItems(
+    producto: any,
+    presentacionPreSeleccionadaId: number | null,
+    cantidadInicial: number,
+    costoInicialUB: number,
+  ): Promise<void> {
+    if (!producto?.id) return;
+    const productoId = Number(producto.id);
+    const presentaciones = await this.cargarPresentaciones(productoId);
+    const presentacionId = presentacionPreSeleccionadaId
+      || (presentaciones.find((p: any) => p.principal)?.id ?? presentaciones[0]?.id ?? null);
+
+    const presentacionSel = presentaciones.find((p: any) => p.id === presentacionId);
+    const factor = presentacionSel?.cantidad ? Number(presentacionSel.cantidad) : 1;
+    const costoEnPresentacion = +(Number(costoInicialUB || 0) * factor).toFixed(2);
+
+    this.itemsArray.push(this.buildItemFormGroup({
       productoId,
-      productoNombre: result.producto.nombre,
-      productoControlaStock: !!result.producto.controlaStock,
-      unidadBase: result.producto.unidadBase,
+      productoNombre: producto.nombre,
+      productoControlaStock: !!producto.controlaStock,
+      unidadBase: producto.unidadBase,
       presentacionId,
       presentaciones,
-      cantidad: Number(result.cantidad) || 1,
-      costoUnitarioPresentacion: 0,
-    });
-    this.items = [...this.items];
-    this.recalcularTotal();
+      cantidad: Number(cantidadInicial) || 1,
+      costoUnitarioPresentacion: costoEnPresentacion,
+    }));
+    this.refreshDataSource();
+    this.productoIdHistorico = productoId;
   }
 
   crearNuevoProducto(): void {
@@ -220,31 +340,8 @@ export class CreateEditCompraComponent implements OnInit {
   }
 
   eliminarItem(index: number): void {
-    this.items.splice(index, 1);
-    this.items = [...this.items];
-    this.recalcularTotal();
-  }
-
-  onCantidadChange(item: ItemRow, value: any): void {
-    item.cantidad = Number(value) || 0;
-    this.recalcularTotal();
-  }
-
-  onCostoChange(item: ItemRow, value: any): void {
-    item.costoUnitarioPresentacion = Number(value) || 0;
-    this.recalcularTotal();
-  }
-
-  onPresentacionChange(item: ItemRow, value: any): void {
-    item.presentacionId = value;
-  }
-
-  subtotalItem(item: ItemRow): number {
-    return +(Number(item.cantidad || 0) * Number(item.costoUnitarioPresentacion || 0)).toFixed(2);
-  }
-
-  recalcularTotal(): void {
-    this.total = this.items.reduce((sum, it) => sum + this.subtotalItem(it), 0);
+    this.itemsArray.removeAt(index);
+    this.refreshDataSource();
   }
 
   presentacionLabel(p: any): string {
@@ -254,7 +351,7 @@ export class CreateEditCompraComponent implements OnInit {
   }
 
   buildPayload(): any {
-    const f = this.form.value;
+    const f = this.form.getRawValue();
     return {
       proveedorId: f.proveedorId,
       compraCategoriaId: f.compraCategoriaId || null,
@@ -262,9 +359,8 @@ export class CreateEditCompraComponent implements OnInit {
       fechaCompra: this.formatDate(f.fechaCompra),
       numeroNota: f.numeroNota || null,
       tipoBoleta: f.tipoBoleta || null,
-      formaPagoId: f.formaPagoId || null,
       credito: !!f.credito,
-      detalles: this.items.map(it => ({
+      detalles: (f.items as any[]).map(it => ({
         productoId: it.productoId,
         presentacionId: it.presentacionId || null,
         cantidad: Number(it.cantidad) || 0,
@@ -274,15 +370,28 @@ export class CreateEditCompraComponent implements OnInit {
   }
 
   validarParaGuardar(): string | null {
-    const f = this.form.value;
+    const f = this.form.getRawValue();
     if (!f.proveedorId) return 'Seleccioná un proveedor.';
     if (!f.monedaId) return 'Seleccioná una moneda.';
-    if (this.items.length === 0) return 'Agregá al menos un ítem a la compra.';
-    for (const it of this.items) {
+    if (this.itemsArray.length === 0) return 'Agregá al menos un ítem a la compra.';
+    for (const it of (f.items as any[])) {
       if (!it.productoId) return 'Hay un ítem sin producto.';
-      if (it.cantidad <= 0) return `Cantidad inválida en ${it.productoNombre}.`;
-      if (it.costoUnitarioPresentacion < 0) return `Costo inválido en ${it.productoNombre}.`;
+      if (Number(it.cantidad) <= 0) return `Cantidad inválida en ${it.productoNombre}.`;
+      if (Number(it.costoUnitarioPresentacion) < 0) return `Costo inválido en ${it.productoNombre}.`;
     }
+    return null;
+  }
+
+  validarParaFinalizar(): string | null {
+    const baseErr = this.validarParaGuardar();
+    if (baseErr) return baseErr;
+    const f = this.form.getRawValue();
+    for (const it of (f.items as any[])) {
+      if (Number(it.costoUnitarioPresentacion) <= 0) {
+        return `Costo unitario debe ser mayor a 0 en ${it.productoNombre}.`;
+      }
+    }
+    if (this.total <= 0) return 'El total de la compra debe ser mayor a 0.';
     return null;
   }
 
@@ -298,7 +407,6 @@ export class CreateEditCompraComponent implements OnInit {
       if (this.mode === 'create') {
         const created: any = await firstValueFrom(this.repo.createCompraBorrador(payload));
         this.snackBar.open(`Borrador creado #${created.id}`, 'Cerrar', { duration: 3000 });
-        // Cambiar a modo edit
         this.mode = 'edit';
         this.compraId = created.id;
         this.estadoActual = created.estado;
@@ -314,12 +422,11 @@ export class CreateEditCompraComponent implements OnInit {
   }
 
   async finalizar(): Promise<void> {
-    const err = this.validarParaGuardar();
+    const err = this.validarParaFinalizar();
     if (err) {
       this.snackBar.open(err, 'Cerrar', { duration: 4000 });
       return;
     }
-    // Guardar primero (asegurar estado actualizado)
     if (this.mode === 'create' || !this.compraId) {
       await this.guardarBorrador();
       if (!this.compraId) return;
@@ -327,7 +434,7 @@ export class CreateEditCompraComponent implements OnInit {
       await this.guardarBorrador();
     }
 
-    const f = this.form.value;
+    const f = this.form.getRawValue();
     const ref = this.dialog.open(FinalizarCompraDialogComponent, {
       width: '560px',
       data: {
@@ -335,7 +442,6 @@ export class CreateEditCompraComponent implements OnInit {
         total: this.total,
         moneda: this.monedas.find((m: any) => m.id === f.monedaId),
         credito: !!f.credito,
-        formaPagoIdInicial: f.formaPagoId || null,
       },
     });
     const result = await firstValueFrom(ref.afterClosed());
@@ -343,9 +449,23 @@ export class CreateEditCompraComponent implements OnInit {
 
     this.finalizing = true;
     try {
-      await firstValueFrom(this.repo.finalizarCompra(this.compraId!, result.payload));
+      const resp: any = await firstValueFrom(this.repo.finalizarCompra(this.compraId!, result.payload));
       this.snackBar.open('Compra finalizada', 'Cerrar', { duration: 3000 });
-      // Cerrar el tab actual
+
+      // Si el usuario eligio "Pagar ahora" en contado, abrir el dialog de pago con la cuota preseleccionada.
+      const cuotaIdParaPagar: number | null = resp?.cuotaIdParaPagar ?? null;
+      if (cuotaIdParaPagar) {
+        const { PagarComprasDialogComponent } = await import(
+          'src/app/pages/financiero/caja-mayor/pagar-compras-dialog/pagar-compras-dialog.component'
+        );
+        const payRef = this.dialog.open(PagarComprasDialogComponent, {
+          width: '900px',
+          maxWidth: '95vw',
+          data: { cuotaIdsPreseleccionadas: [cuotaIdParaPagar] },
+        });
+        await firstValueFrom(payRef.afterClosed());
+      }
+
       const currentIdx = this.tabsService.currentIndex;
       if (currentIdx >= 0) this.tabsService.removeTab(currentIdx);
     } catch (e: any) {
@@ -358,7 +478,6 @@ export class CreateEditCompraComponent implements OnInit {
   async cargarPresentaciones(productoId: number): Promise<any[]> {
     try {
       const res: any = await firstValueFrom(this.repo.getPresentacionesByProducto(productoId, 0, 100, 'activos'));
-      // Soporta tanto formato paginado { items, total } como array directo
       if (Array.isArray(res)) return res;
       return res?.items || res?.data || [];
     } catch (e) {

@@ -3,7 +3,9 @@ import { BaseModel } from '../base.entity';
 import { Moneda } from '../financiero/moneda.entity';
 import { CompraEstado } from './estado.enum';
 import { TipoBoleta } from './tipo-boleta.enum';
+import { FormaPagoCompra } from './forma-pago-compra.enum';
 import { FormasPago } from './forma-pago.entity';
+import { CuentaBancaria } from '../financiero/cuenta-bancaria.entity';
 import type { CompraDetalle } from './compra-detalle.entity';
 import type { Pago } from './pago.entity';
 import type { Proveedor } from './proveedor.entity';
@@ -68,9 +70,23 @@ export class Compra extends BaseModel {
   @JoinColumn({ name: 'moneda_id' })
   moneda!: Moneda;
 
+  // @deprecated — sustituido por `formaPagoCompra` (enum acotado).
   @ManyToOne(() => FormasPago, { nullable: true })
   @JoinColumn({ name: 'forma_pago_id' })
   formaPago?: FormasPago;
+
+  @Column({
+    type: 'text',
+    enum: FormaPagoCompra,
+    default: FormaPagoCompra.EFECTIVO,
+    name: 'forma_pago_compra',
+  })
+  formaPagoCompra!: FormaPagoCompra;
+
+  // Cuenta bancaria opcional al cargar la compra (puede decidirse al pagar).
+  @ManyToOne(() => CuentaBancaria, { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'cuenta_bancaria_id' })
+  cuentaBancaria?: CuentaBancaria;
 
   @OneToMany('CompraDetalle', 'compra')
   detalles!: CompraDetalle[];

@@ -16,6 +16,8 @@ import { EntradaVaria } from '../../src/app/database/entities/financiero/entrada
 import { OperacionFinancieraCategoria } from '../../src/app/database/entities/financiero/operacion-financiera-categoria.entity';
 import { OperacionFinanciera } from '../../src/app/database/entities/financiero/operacion-financiera.entity';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
+import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
+import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
 import { CajaMayorEstado, TipoMovimiento, GastoEstado, RetiroCajaEstado } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { TipoOperacionFinanciera, DiferenciaDestinoTipo } from '../../src/app/database/entities/financiero/operaciones-financieras-enums';
 import { setEntityUserTracking } from '../utils/entity.utils';
@@ -1622,7 +1624,12 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     async (
       _event: any,
       cajaMayorId: number,
-      data: { formaPagoIds: number[]; cuentaBancariaIds: number[] }
+      data: {
+        formaPagoIds: number[];
+        cuentaBancariaIds: number[];
+        mostrarCuentasPorPagar?: boolean;
+        mostrarCuentasPorCobrar?: boolean;
+      }
     ) => {
       const queryRunner = dataSource.createQueryRunner();
       await queryRunner.connect();
@@ -1651,6 +1658,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
         config.formasPagoVisibles = fpIds.map((id) => ({ id })) as any;
         config.cuentasBancariasVisibles = cbIds.map((id) => ({ id })) as any;
+        config.mostrarCuentasPorPagar = data?.mostrarCuentasPorPagar === true;
+        config.mostrarCuentasPorCobrar = data?.mostrarCuentasPorCobrar === true;
 
         const saved = await queryRunner.manager.save(CajaMayorConfiguracion, config);
         await queryRunner.commitTransaction();
@@ -1664,6 +1673,157 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       }
     }
   );
+
+  // Resumen CPP por moneda con buckets {esteMes, mesQueViene, total, vencidas}.
+  // Lista cuotas pendientes/parciales agrupadas por moneda.
+  ipcMain.handle('get-caja-mayor-cpp-resumen', async () => {
+    try {
+      const ahora = new Date();
+      const anio = ahora.getFullYear();
+      const mes = ahora.getMonth();
+      const finEsteMes = new Date(anio, mes + 1, 0, 23, 59, 59, 999);
+      const finProxMes = new Date(anio, mes + 2, 0, 23, 59, 59, 999);
+      const inicioHoy = new Date(anio, mes, ahora.getDate(), 0, 0, 0, 0);
+
+      const rows: any[] = await dataSource
+        .getRepository(CuentaPorPagarCuota)
+        .createQueryBuilder('cuota')
+        .leftJoin('cuota.cuentaPorPagar', 'cpp')
+        .leftJoin('cpp.moneda', 'moneda')
+        .select('moneda.id', 'monedaId')
+        .addSelect('moneda.simbolo', 'monedaSimbolo')
+        .addSelect('moneda.denominacion', 'monedaDenominacion')
+        .addSelect('cuota.fechaVencimiento', 'fechaVencimiento')
+        .addSelect('cuota.monto', 'monto')
+        .addSelect('cuota.montoPagado', 'montoPagado')
+        .where("cuota.estado IN ('PENDIENTE', 'PARCIAL')")
+        .getRawMany();
+
+      const grupos = new Map<number, {
+        monedaId: number;
+        monedaSimbolo: string;
+        monedaDenominacion: string;
+        esteMes: number;
+        mesQueViene: number;
+        total: number;
+        vencidas: number;
+      }>();
+
+      for (const r of rows) {
+        const monedaId = Number(r.monedaId) || 0;
+        if (!monedaId) continue;
+        const venc = r.fechaVencimiento ? new Date(r.fechaVencimiento) : null;
+        const saldo = +(Number(r.monto) - Number(r.montoPagado)).toFixed(2);
+        if (saldo <= 0 || !venc) continue;
+
+        let g = grupos.get(monedaId);
+        if (!g) {
+          g = {
+            monedaId,
+            monedaSimbolo: r.monedaSimbolo || '',
+            monedaDenominacion: r.monedaDenominacion || '',
+            esteMes: 0,
+            mesQueViene: 0,
+            total: 0,
+            vencidas: 0,
+          };
+          grupos.set(monedaId, g);
+        }
+        g.total += saldo;
+        if (venc < inicioHoy) g.vencidas += saldo;
+        if (venc <= finEsteMes) g.esteMes += saldo;
+        else if (venc <= finProxMes) g.mesQueViene += saldo;
+      }
+
+      return Array.from(grupos.values()).map((g) => ({
+        monedaId: g.monedaId,
+        monedaSimbolo: g.monedaSimbolo,
+        monedaDenominacion: g.monedaDenominacion,
+        esteMes: +g.esteMes.toFixed(2),
+        mesQueViene: +g.mesQueViene.toFixed(2),
+        total: +g.total.toFixed(2),
+        vencidas: +g.vencidas.toFixed(2),
+      }));
+    } catch (error) {
+      console.error('Error getting CPP resumen:', error);
+      throw error;
+    }
+  });
+
+  // Resumen CPC por moneda con buckets {esteMes, mesQueViene, total, vencidas}.
+  ipcMain.handle('get-caja-mayor-cpc-resumen', async () => {
+    try {
+      const ahora = new Date();
+      const anio = ahora.getFullYear();
+      const mes = ahora.getMonth();
+      const finEsteMes = new Date(anio, mes + 1, 0, 23, 59, 59, 999);
+      const finProxMes = new Date(anio, mes + 2, 0, 23, 59, 59, 999);
+      const inicioHoy = new Date(anio, mes, ahora.getDate(), 0, 0, 0, 0);
+
+      const rows: any[] = await dataSource
+        .getRepository(CuentaPorCobrarCuota)
+        .createQueryBuilder('cuota')
+        .leftJoin('cuota.cuentaPorCobrar', 'cpc')
+        .leftJoin('cpc.moneda', 'moneda')
+        .select('moneda.id', 'monedaId')
+        .addSelect('moneda.simbolo', 'monedaSimbolo')
+        .addSelect('moneda.denominacion', 'monedaDenominacion')
+        .addSelect('cuota.fechaVencimiento', 'fechaVencimiento')
+        .addSelect('cuota.monto', 'monto')
+        .addSelect('cuota.montoCobrado', 'montoCobrado')
+        .where("cuota.estado IN ('PENDIENTE', 'PARCIAL')")
+        .getRawMany();
+
+      const grupos = new Map<number, {
+        monedaId: number;
+        monedaSimbolo: string;
+        monedaDenominacion: string;
+        esteMes: number;
+        mesQueViene: number;
+        total: number;
+        vencidas: number;
+      }>();
+
+      for (const r of rows) {
+        const monedaId = Number(r.monedaId) || 0;
+        if (!monedaId) continue;
+        const venc = r.fechaVencimiento ? new Date(r.fechaVencimiento) : null;
+        const saldo = +(Number(r.monto) - Number(r.montoCobrado)).toFixed(2);
+        if (saldo <= 0 || !venc) continue;
+
+        let g = grupos.get(monedaId);
+        if (!g) {
+          g = {
+            monedaId,
+            monedaSimbolo: r.monedaSimbolo || '',
+            monedaDenominacion: r.monedaDenominacion || '',
+            esteMes: 0,
+            mesQueViene: 0,
+            total: 0,
+            vencidas: 0,
+          };
+          grupos.set(monedaId, g);
+        }
+        g.total += saldo;
+        if (venc < inicioHoy) g.vencidas += saldo;
+        if (venc <= finEsteMes) g.esteMes += saldo;
+        else if (venc <= finProxMes) g.mesQueViene += saldo;
+      }
+
+      return Array.from(grupos.values()).map((g) => ({
+        monedaId: g.monedaId,
+        monedaSimbolo: g.monedaSimbolo,
+        monedaDenominacion: g.monedaDenominacion,
+        esteMes: +g.esteMes.toFixed(2),
+        mesQueViene: +g.mesQueViene.toFixed(2),
+        total: +g.total.toFixed(2),
+        vencidas: +g.vencidas.toFixed(2),
+      }));
+    } catch (error) {
+      console.error('Error getting CPC resumen:', error);
+      throw error;
+    }
+  });
 
   ipcMain.handle('get-cuenta-bancaria-resumen', async (_event: any, cuentaBancariaId: number) => {
     try {

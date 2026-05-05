@@ -74,7 +74,7 @@ export class ListComprasComponent implements OnInit {
     { label: 'Solo crédito', value: true },
   ];
 
-  displayedColumns = ['id', 'fecha', 'proveedor', 'categoria', 'numeroNota', 'total', 'pago', 'estado', 'actions'];
+  displayedColumns = ['id', 'fecha', 'proveedor', 'categoria', 'numeroNota', 'total', 'pago', 'estadoPago', 'estado', 'actions'];
 
   constructor(
     private repositoryService: RepositoryService,

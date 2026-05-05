@@ -230,6 +230,9 @@ interface ElectronAPI {
   createProveedorProducto: (proveedorProductoData: Partial<ProveedorProducto>) => Promise<ProveedorProducto>;
   updateProveedorProducto: (proveedorProductoId: number, proveedorProductoData: Partial<ProveedorProducto>) => Promise<any>;
   deleteProveedorProducto: (proveedorProductoId: number) => Promise<any>;
+  getProveedorProductosPaginado: (params: { proveedorId: number; search?: string; page?: number; pageSize?: number }) => Promise<{ items: any[]; total: number; page: number; pageSize: number }>;
+  getUltimasComprasProducto: (params: { productoId: number; page?: number; pageSize?: number }) => Promise<{ items: any[]; total: number; page: number; pageSize: number }>;
+  getUltimoCostoProducto: (params: { productoId: number; proveedorId?: number | null }) => Promise<{ ultimoCosto: number | null; fuente: 'PROVEEDOR_PRODUCTO' | 'COMPRA_DETALLE' | null; fecha: string | Date | null }>;
   // Add FormasPago operations
   getFormasPago: () => Promise<FormasPago[]>;
   getFormaPago: (formaPagoId: number) => Promise<FormasPago>;
@@ -623,10 +626,17 @@ interface ElectronAPI {
   getCajaMayorConfiguracion: (cajaMayorId: number) => Promise<any>;
   saveCajaMayorConfiguracion: (
     cajaMayorId: number,
-    data: { formaPagoIds: number[]; cuentaBancariaIds: number[] }
+    data: {
+      formaPagoIds: number[];
+      cuentaBancariaIds: number[];
+      mostrarCuentasPorPagar?: boolean;
+      mostrarCuentasPorCobrar?: boolean;
+    }
   ) => Promise<any>;
   getCuentaBancariaResumen: (cuentaBancariaId: number) => Promise<any>;
   getCuentasBancariasResumenes: (ids: number[]) => Promise<any[]>;
+  getCajaMayorCppResumen: () => Promise<any[]>;
+  getCajaMayorCpcResumen: () => Promise<any[]>;
   getGastoCategorias: () => Promise<any[]>;
   getGastoCategoria: (id: number) => Promise<any>;
   createGastoCategoria: (data: any) => Promise<any>;
@@ -686,6 +696,8 @@ interface ElectronAPI {
   cancelarCuentaPorPagar: (id: number) => Promise<any>;
   getCuentaPorPagarCuotas: (cppId: number) => Promise<any[]>;
   pagarCppCuota: (payload: any) => Promise<any>;
+  pagarCuotasComprasLote: (payload: any) => Promise<any>;
+  getCuotasPendientesCompras: (filtros?: any) => Promise<any[]>;
   cancelarCppCuota: (payload: any) => Promise<any>;
 
   // Dashboard Shortcuts
@@ -1608,6 +1620,18 @@ export class RepositoryService {
 
   deleteProveedorProducto(proveedorProductoId: number): Observable<any> {
     return from(this.api.deleteProveedorProducto(proveedorProductoId));
+  }
+
+  getProveedorProductosPaginado(params: { proveedorId: number; search?: string; page?: number; pageSize?: number }): Observable<{ items: any[]; total: number; page: number; pageSize: number }> {
+    return from(this.api.getProveedorProductosPaginado(params));
+  }
+
+  getUltimasComprasProducto(params: { productoId: number; page?: number; pageSize?: number }): Observable<{ items: any[]; total: number; page: number; pageSize: number }> {
+    return from(this.api.getUltimasComprasProducto(params));
+  }
+
+  getUltimoCostoProducto(params: { productoId: number; proveedorId?: number | null }): Observable<{ ultimoCosto: number | null; fuente: 'PROVEEDOR_PRODUCTO' | 'COMPRA_DETALLE' | null; fecha: string | Date | null }> {
+    return from(this.api.getUltimoCostoProducto(params));
   }
 
   // FormasPago methods
@@ -2816,7 +2840,12 @@ export class RepositoryService {
   }
   saveCajaMayorConfiguracion(
     cajaMayorId: number,
-    data: { formaPagoIds: number[]; cuentaBancariaIds: number[] }
+    data: {
+      formaPagoIds: number[];
+      cuentaBancariaIds: number[];
+      mostrarCuentasPorPagar?: boolean;
+      mostrarCuentasPorCobrar?: boolean;
+    }
   ): Observable<any> {
     return from(this.api.saveCajaMayorConfiguracion(cajaMayorId, data));
   }
@@ -2825,6 +2854,12 @@ export class RepositoryService {
   }
   getCuentasBancariasResumenes(ids: number[]): Observable<any[]> {
     return from(this.api.getCuentasBancariasResumenes(ids));
+  }
+  getCajaMayorCppResumen(): Observable<any[]> {
+    return from(this.api.getCajaMayorCppResumen());
+  }
+  getCajaMayorCpcResumen(): Observable<any[]> {
+    return from(this.api.getCajaMayorCpcResumen());
   }
 
   // Gasto Categorias
@@ -2980,6 +3015,12 @@ export class RepositoryService {
   }
   pagarCppCuota(payload: any): Observable<any> {
     return from(this.api.pagarCppCuota(payload));
+  }
+  pagarCuotasComprasLote(payload: any): Observable<any> {
+    return from(this.api.pagarCuotasComprasLote(payload));
+  }
+  getCuotasPendientesCompras(filtros?: any): Observable<any[]> {
+    return from(this.api.getCuotasPendientesCompras(filtros));
   }
   cancelarCppCuota(payload: any): Observable<any> {
     return from(this.api.cancelarCppCuota(payload));

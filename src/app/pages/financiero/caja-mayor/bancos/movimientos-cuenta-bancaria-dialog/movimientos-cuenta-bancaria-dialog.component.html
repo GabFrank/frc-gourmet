@@ -1,4 +1,4 @@
-<div class="dialog-container">
+<div class="dialog-container" [class.tab-mode]="isTab">
   <div class="header">
     <div>
       <h2>{{cuentaBancaria?.nombre}} - {{cuentaBancaria?.banco}}</h2>
@@ -14,7 +14,7 @@
         <mat-icon>add</mat-icon>
         Movimiento Manual
       </button>
-      <button mat-icon-button (click)="cerrar()" matTooltip="Cerrar">
+      <button *ngIf="!isTab" mat-icon-button (click)="cerrar()" matTooltip="Cerrar">
         <mat-icon>close</mat-icon>
       </button>
     </div>

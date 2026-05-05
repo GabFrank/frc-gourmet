@@ -94,6 +94,7 @@
   .text-right { text-align: right; }
   .mono { font-feature-settings: 'tnum'; }
   .muted { color: var(--mat-sys-on-surface-variant); font-size: 12px; margin-left: 4px; }
+  .muted-mini { color: rgba(0, 0, 0, 0.55); font-size: 10px; margin-left: 2px; }
 
   .prov-cell {
     max-width: 220px;

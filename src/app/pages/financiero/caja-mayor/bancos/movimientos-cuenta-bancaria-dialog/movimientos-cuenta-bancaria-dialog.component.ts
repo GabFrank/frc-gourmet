@@ -58,15 +58,20 @@ export class MovimientosCuentaBancariaDialogComponent implements OnInit {
     { value: 'ENTRADA_VARIA', label: 'Entrada Varia' },
   ];
 
+  // En modo dialog: dialogRef y data inyectados.
+  // En modo tab: data se setea via setData() llamado por el contenedor de tabs.
+  isTab = false;
+
   constructor(
     private repositoryService: RepositoryService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
     private fb: FormBuilder,
-    @Optional() public dialogRef: MatDialogRef<MovimientosCuentaBancariaDialogComponent>,
+    @Optional() public dialogRef: MatDialogRef<MovimientosCuentaBancariaDialogComponent> | null,
     @Optional() @Inject(MAT_DIALOG_DATA) public data: any,
   ) {
     this.cuentaBancaria = data?.cuentaBancaria;
+    this.isTab = !this.dialogRef;
   }
 
   ngOnInit(): void {
@@ -76,7 +81,24 @@ export class MovimientosCuentaBancariaDialogComponent implements OnInit {
       tipo: [null],
       esIngreso: [null],
     });
-    this.loadData();
+    if (this.cuentaBancaria?.id) this.loadData();
+  }
+
+  setData(data: any): void {
+    if (data?.cuentaBancaria) {
+      this.cuentaBancaria = data.cuentaBancaria;
+      if (this.filterForm) this.loadData();
+    } else if (data?.cuentaBancariaId) {
+      this.repositoryService.getCuentaBancaria(data.cuentaBancariaId).subscribe({
+        next: (cb) => {
+          if (cb) {
+            this.cuentaBancaria = cb;
+            if (this.filterForm) this.loadData();
+          }
+        },
+        error: (e) => console.error('Error cargando cuenta bancaria desde tab:', e),
+      });
+    }
   }
 
   async loadData(): Promise<void> {

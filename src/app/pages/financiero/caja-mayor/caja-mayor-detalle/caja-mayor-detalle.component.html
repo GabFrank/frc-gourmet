@@ -56,16 +56,101 @@
         <p>Sin saldos</p>
       </div>
 
+      <ng-container *ngIf="mostrarCpp">
+        <h3 class="sidebar-title">Cuentas por Pagar</h3>
+        <div class="sidebar-cards" *ngIf="cppResumen.length > 0; else emptyCpp">
+          <div *ngFor="let g of cppResumen" class="mini-card cb-clickable"
+               (click)="abrirCuentasPorPagar()"
+               matTooltip="Ver lista de Cuentas por Pagar">
+            <div class="mini-card-head">
+              <mat-icon class="mini-icon">arrow_upward</mat-icon>
+              <div class="cb-titles">
+                <span class="mini-title">CPP {{g.monedaSimbolo}}</span>
+                <span class="cb-meta">{{g.monedaDenominacion}}</span>
+              </div>
+              <mat-icon class="cb-link-icon">open_in_new</mat-icon>
+            </div>
+            <div class="mini-rows">
+              <div class="mini-row">
+                <span class="mini-label">Este mes</span>
+                <span class="mini-valor">{{g.monedaSimbolo}} {{g.esteMes | number:'1.0-2'}}</span>
+              </div>
+              <div class="mini-row">
+                <span class="mini-label">Mes que viene</span>
+                <span class="mini-valor">{{g.monedaSimbolo}} {{g.mesQueViene | number:'1.0-2'}}</span>
+              </div>
+              <div class="mini-row">
+                <span class="mini-label">Total</span>
+                <span class="mini-valor" [ngClass]="{'negativo': g.vencidas > 0}">
+                  {{g.monedaSimbolo}} {{g.total | number:'1.0-2'}}
+                </span>
+              </div>
+              <div class="mini-row" *ngIf="g.vencidas > 0">
+                <span class="mini-label" style="color: #f44336;">Vencidas</span>
+                <span class="mini-valor negativo">{{g.monedaSimbolo}} {{g.vencidas | number:'1.0-2'}}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ng-template #emptyCpp>
+          <div class="empty-state-sm">Sin pendientes</div>
+        </ng-template>
+      </ng-container>
+
+      <ng-container *ngIf="mostrarCpc">
+        <h3 class="sidebar-title">Cuentas por Cobrar</h3>
+        <div class="sidebar-cards" *ngIf="cpcResumen.length > 0; else emptyCpc">
+          <div *ngFor="let g of cpcResumen" class="mini-card cb-clickable"
+               (click)="abrirCuentasPorCobrar()"
+               matTooltip="Ver lista de Cuentas por Cobrar">
+            <div class="mini-card-head">
+              <mat-icon class="mini-icon">arrow_downward</mat-icon>
+              <div class="cb-titles">
+                <span class="mini-title">CPC {{g.monedaSimbolo}}</span>
+                <span class="cb-meta">{{g.monedaDenominacion}}</span>
+              </div>
+              <mat-icon class="cb-link-icon">open_in_new</mat-icon>
+            </div>
+            <div class="mini-rows">
+              <div class="mini-row">
+                <span class="mini-label">Este mes</span>
+                <span class="mini-valor">{{g.monedaSimbolo}} {{g.esteMes | number:'1.0-2'}}</span>
+              </div>
+              <div class="mini-row">
+                <span class="mini-label">Mes que viene</span>
+                <span class="mini-valor">{{g.monedaSimbolo}} {{g.mesQueViene | number:'1.0-2'}}</span>
+              </div>
+              <div class="mini-row">
+                <span class="mini-label">Total</span>
+                <span class="mini-valor" [ngClass]="{'negativo': g.vencidas > 0}">
+                  {{g.monedaSimbolo}} {{g.total | number:'1.0-2'}}
+                </span>
+              </div>
+              <div class="mini-row" *ngIf="g.vencidas > 0">
+                <span class="mini-label" style="color: #f44336;">Vencidas</span>
+                <span class="mini-valor negativo">{{g.monedaSimbolo}} {{g.vencidas | number:'1.0-2'}}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ng-template #emptyCpc>
+          <div class="empty-state-sm">Sin pendientes</div>
+        </ng-template>
+      </ng-container>
+
       <ng-container *ngIf="cuentasBancariasCards.length > 0">
         <h3 class="sidebar-title">Cuentas bancarias</h3>
         <div class="sidebar-cards">
-          <div *ngFor="let cb of cuentasBancariasCards" class="mini-card cb-mini">
+          <div *ngFor="let cb of cuentasBancariasCards" class="mini-card cb-mini cb-clickable"
+               (click)="abrirMovimientosCuentaBancaria(cb)"
+               matTooltip="Ver movimientos de la cuenta">
             <div class="mini-card-head">
               <mat-icon class="mini-icon">account_balance</mat-icon>
               <div class="cb-titles">
                 <span class="mini-title" [matTooltip]="cb.nombre">{{cb.nombre}}</span>
                 <span class="cb-meta">{{cb.banco}} · {{cb.numeroCuenta}}</span>
               </div>
+              <mat-icon class="cb-link-icon">open_in_new</mat-icon>
             </div>
             <div class="mini-rows">
               <div class="mini-row">
@@ -178,12 +263,9 @@
           <ng-container matColumnDef="tipoMovimiento">
             <th mat-header-cell *matHeaderCellDef>Tipo</th>
             <td mat-cell *matCellDef="let row">
-              <mat-chip-listbox>
-                <mat-chip [matTooltip]="row.tipoMovimiento"
-                          [ngStyle]="{'background-color': row.tipoIsIngreso ? '#4caf50' : '#f44336', 'color': 'white'}">
-                  {{row.tipoLabel}}
-                </mat-chip>
-              </mat-chip-listbox>
+              <span class="chip chip-tipo" [matTooltip]="row.tipoMovimiento">
+                {{row.tipoLabel}}
+              </span>
             </td>
           </ng-container>
 

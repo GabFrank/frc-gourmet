@@ -1,7 +1,20 @@
+:host {
+  display: block;
+  box-sizing: border-box;
+}
+
 .dialog-container {
   padding: 12px 4px;
   min-width: 90vw;
   max-width: 1300px;
+
+  // Modo tab: ocupa todo el ancho/alto disponible
+  &.tab-mode {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+    padding: 16px 20px;
+  }
 
   .header {
     display: flex;

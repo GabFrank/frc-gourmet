@@ -50,6 +50,21 @@
         <p class="empty">No hay cuentas bancarias activas.</p>
       </ng-template>
     </section>
+
+    <mat-divider></mat-divider>
+
+    <section class="cfg-section">
+      <h3>Resumenes adicionales</h3>
+      <p class="hint">Cards en el sidebar con totales por moneda agrupados por bucket (este mes / mes que viene / total / vencidas).</p>
+      <div class="check-list">
+        <mat-checkbox [(ngModel)]="mostrarCuentasPorPagar">
+          Cuentas por Pagar
+        </mat-checkbox>
+        <mat-checkbox [(ngModel)]="mostrarCuentasPorCobrar">
+          Cuentas por Cobrar
+        </mat-checkbox>
+      </div>
+    </section>
   </div>
 </mat-dialog-content>
 
