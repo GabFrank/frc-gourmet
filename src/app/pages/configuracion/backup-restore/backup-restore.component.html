@@ -1,0 +1,333 @@
+<div class="backup-restore-container">
+
+  <div class="page-header">
+    <div class="title-block">
+      <mat-icon class="title-icon">backup</mat-icon>
+      <div>
+        <h2>Backup y Restauración</h2>
+        <p class="subtitle">Crear copias de seguridad de la BD, restaurarlas y configurar respaldo automático</p>
+      </div>
+    </div>
+    <button mat-stroked-button (click)="refreshAll()" [disabled]="loading" matTooltip="Refrescar">
+      <mat-icon>refresh</mat-icon>
+      <span>Refrescar</span>
+    </button>
+  </div>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <div *ngIf="loading && busyMessage" class="busy-message">
+    <mat-icon>hourglass_empty</mat-icon>
+    <span>{{ busyMessage }}</span>
+  </div>
+
+  <mat-tab-group animationDuration="0ms" class="backup-tabs">
+
+    <!-- ================== TAB 1: ESTADO + CREAR BACKUP ================== -->
+    <mat-tab label="Backup">
+      <div class="tab-content">
+
+        <mat-card class="info-card">
+          <mat-card-header>
+            <mat-card-title>Estado de la base de datos</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="info-grid" *ngIf="info">
+              <div class="info-row">
+                <span class="info-label">Versión de app:</span>
+                <span class="info-value">{{ info.appVersion }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">BD existe:</span>
+                <span class="info-value">
+                  <mat-icon class="ok-icon" *ngIf="info.dbExists">check_circle</mat-icon>
+                  <mat-icon class="err-icon" *ngIf="!info.dbExists">error</mat-icon>
+                  {{ info.dbExists ? 'Sí' : 'No' }}
+                </span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Tamaño de BD:</span>
+                <span class="info-value">{{ formatSize(info.dbSize) }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Última modificación:</span>
+                <span class="info-value">{{ formatDate(info.dbModifiedAt) }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Imágenes de perfil:</span>
+                <span class="info-value">{{ formatSize(info.profileImagesSize) }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Imágenes de productos:</span>
+                <span class="info-value">{{ formatSize(info.productoImagesSize) }}</span>
+              </div>
+              <div class="info-row info-row-wide">
+                <span class="info-label">Carpeta de backups:</span>
+                <span class="info-value mono">{{ info.backupDir }}</span>
+              </div>
+              <div class="info-row info-row-wide">
+                <span class="info-label">Ruta userData:</span>
+                <span class="info-value mono">{{ info.userDataPath }}</span>
+              </div>
+            </div>
+            <div *ngIf="!info" class="loading-placeholder">Cargando...</div>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card class="action-card">
+          <mat-card-header>
+            <mat-card-title>Crear backup manual</mat-card-title>
+            <mat-card-subtitle>El backup queda en la carpeta de backups configurada o podés exportarlo a otra ubicación</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="action-grid">
+              <button mat-stroked-button color="primary"
+                      (click)="createBackupLocal(false)"
+                      [disabled]="loading">
+                <mat-icon>save</mat-icon>
+                <span>Backup rápido (solo BD)</span>
+              </button>
+              <button mat-stroked-button color="primary"
+                      (click)="createBackupLocal(true)"
+                      [disabled]="loading">
+                <mat-icon>archive</mat-icon>
+                <span>Backup completo (BD + imágenes)</span>
+              </button>
+              <button mat-stroked-button
+                      (click)="createAndExport(false)"
+                      [disabled]="loading">
+                <mat-icon>file_download</mat-icon>
+                <span>Exportar BD a archivo...</span>
+              </button>
+              <button mat-stroked-button
+                      (click)="createAndExport(true)"
+                      [disabled]="loading">
+                <mat-icon>folder_zip</mat-icon>
+                <span>Exportar completo a archivo...</span>
+              </button>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card class="action-card">
+          <mat-card-header>
+            <mat-card-title>Restaurar desde archivo</mat-card-title>
+            <mat-card-subtitle>Reemplaza la BD actual con un backup. La app se reinicia.</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <button mat-flat-button color="warn"
+                    (click)="restoreFromFile()"
+                    [disabled]="loading">
+              <mat-icon>restore</mat-icon>
+              <span>Elegir archivo .db o .frcbak...</span>
+            </button>
+          </mat-card-content>
+        </mat-card>
+
+      </div>
+    </mat-tab>
+
+    <!-- ================== TAB 2: BACKUPS LOCALES ================== -->
+    <mat-tab label="Backups locales">
+      <div class="tab-content">
+
+        <mat-card class="action-card">
+          <mat-card-header>
+            <mat-card-title>Backups en disco</mat-card-title>
+            <mat-card-subtitle class="mono">{{ backupsDir }}</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+
+            <div *ngIf="backupsDataSource.data.length === 0" class="empty-state">
+              <mat-icon>inbox</mat-icon>
+              <p>No hay backups locales todavía. Creá uno desde la pestaña anterior.</p>
+            </div>
+
+            <div *ngIf="backupsDataSource.data.length > 0" class="table-wrapper">
+              <table mat-table [dataSource]="backupsDataSource">
+                <ng-container matColumnDef="fileName">
+                  <th mat-header-cell *matHeaderCellDef>Archivo</th>
+                  <td mat-cell *matCellDef="let row" class="mono">{{ row.fileName }}</td>
+                </ng-container>
+
+                <ng-container matColumnDef="createdAt">
+                  <th mat-header-cell *matHeaderCellDef>Fecha</th>
+                  <td mat-cell *matCellDef="let row">{{ formatDate(row.createdAt) }}</td>
+                </ng-container>
+
+                <ng-container matColumnDef="size">
+                  <th mat-header-cell *matHeaderCellDef>Tamaño</th>
+                  <td mat-cell *matCellDef="let row">{{ formatSize(row.size) }}</td>
+                </ng-container>
+
+                <ng-container matColumnDef="isAutomatic">
+                  <th mat-header-cell *matHeaderCellDef>Origen</th>
+                  <td mat-cell *matCellDef="let row">
+                    <span class="chip" [ngClass]="row.isAutomatic ? 'chip-auto' : 'chip-manual'">
+                      {{ row.isAutomatic ? 'AUTO' : 'MANUAL' }}
+                    </span>
+                  </td>
+                </ng-container>
+
+                <ng-container matColumnDef="hasImages">
+                  <th mat-header-cell *matHeaderCellDef>Tipo</th>
+                  <td mat-cell *matCellDef="let row">
+                    <span class="chip" [ngClass]="row.hasImages ? 'chip-full' : 'chip-db'">
+                      {{ row.hasImages ? 'BD + IMG' : 'SOLO BD' }}
+                    </span>
+                  </td>
+                </ng-container>
+
+                <ng-container matColumnDef="actions">
+                  <th mat-header-cell *matHeaderCellDef class="actions-col">Acciones</th>
+                  <td mat-cell *matCellDef="let row" class="actions-col">
+                    <button mat-icon-button [matMenuTriggerFor]="rowMenu" matTooltip="Acciones">
+                      <mat-icon>more_vert</mat-icon>
+                    </button>
+                    <mat-menu #rowMenu="matMenu">
+                      <button mat-menu-item (click)="restoreFromList(row)">
+                        <mat-icon>restore</mat-icon>
+                        <span>Restaurar este backup</span>
+                      </button>
+                      <button mat-menu-item (click)="deleteBackup(row)">
+                        <mat-icon>delete</mat-icon>
+                        <span>Eliminar</span>
+                      </button>
+                    </mat-menu>
+                  </td>
+                </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+                <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+              </table>
+              <mat-paginator [pageSize]="10" [pageSizeOptions]="[5, 10, 25, 50]" showFirstLastButtons></mat-paginator>
+            </div>
+
+          </mat-card-content>
+        </mat-card>
+
+      </div>
+    </mat-tab>
+
+    <!-- ================== TAB 3: AUTO-BACKUP ================== -->
+    <mat-tab label="Auto-backup">
+      <div class="tab-content" *ngIf="config">
+
+        <mat-card class="action-card">
+          <mat-card-header>
+            <mat-card-title>Backup automático</mat-card-title>
+            <mat-card-subtitle>Programa la creación periódica de backups</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+
+            <div class="form-row">
+              <mat-slide-toggle [(ngModel)]="config.autoBackupEnabled" (change)="toggleAutoBackup()" color="primary">
+                Activar auto-backup
+              </mat-slide-toggle>
+            </div>
+
+            <div class="form-row">
+              <mat-form-field appearance="outline">
+                <mat-label>Intervalo</mat-label>
+                <mat-select [(ngModel)]="config.intervalHours" [disabled]="!config.autoBackupEnabled">
+                  <mat-option *ngFor="let opt of intervalOptions" [value]="opt.value">{{ opt.label }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Cantidad a retener</mat-label>
+                <mat-select [(ngModel)]="config.retentionCount" [disabled]="!config.autoBackupEnabled">
+                  <mat-option *ngFor="let n of retentionOptions" [value]="n">{{ n }} backups</mat-option>
+                </mat-select>
+                <mat-hint>Los más viejos se borran automáticamente</mat-hint>
+              </mat-form-field>
+            </div>
+
+            <div class="form-row">
+              <mat-slide-toggle [(ngModel)]="config.includeImages" color="primary">
+                Incluir imágenes en backup automático
+              </mat-slide-toggle>
+              <span class="hint-text">(Aumenta el tamaño del archivo)</span>
+            </div>
+
+            <div class="form-row dir-row">
+              <div class="dir-display">
+                <span class="dir-label">Carpeta de backups:</span>
+                <span class="dir-value mono">{{ config.customBackupDir || '(default: userData/backups)' }}</span>
+              </div>
+              <button mat-stroked-button (click)="pickCustomBackupDir()">
+                <mat-icon>folder_open</mat-icon>
+                <span>Cambiar</span>
+              </button>
+              <button mat-stroked-button (click)="resetCustomDir()" *ngIf="config.customBackupDir">
+                <mat-icon>restart_alt</mat-icon>
+                <span>Default</span>
+              </button>
+            </div>
+
+            <div class="form-row info-row-status" *ngIf="config.autoBackupEnabled">
+              <div>
+                <span class="info-label">Último backup automático:</span>
+                <span class="info-value">{{ formatDate(config.lastAutoBackupAt) }}</span>
+              </div>
+              <div>
+                <span class="info-label">Próximo backup automático:</span>
+                <span class="info-value">{{ formatDate(config.nextAutoBackupAt) }}</span>
+              </div>
+            </div>
+
+            <div class="form-row buttons-row">
+              <button mat-flat-button color="primary" (click)="saveConfig()" [disabled]="loading">
+                <mat-icon>save</mat-icon>
+                <span>Guardar configuración</span>
+              </button>
+              <button mat-stroked-button (click)="triggerAutoBackupNow()" [disabled]="loading">
+                <mat-icon>flash_on</mat-icon>
+                <span>Ejecutar ahora</span>
+              </button>
+            </div>
+
+          </mat-card-content>
+        </mat-card>
+
+      </div>
+    </mat-tab>
+
+    <!-- ================== TAB 4: AVANZADO / RESET ================== -->
+    <mat-tab label="Avanzado">
+      <div class="tab-content">
+
+        <mat-card class="action-card warn-card">
+          <mat-card-header>
+            <mat-card-title>
+              <mat-icon class="warn-title-icon">warning</mat-icon>
+              Resetear base de datos
+            </mat-card-title>
+            <mat-card-subtitle>
+              Elimina la BD actual. Al reiniciarse la app se generarán los datos iniciales (monedas, formas de pago, permisos, etc).
+              <strong>Antes de borrar se hace un backup de seguridad automático</strong> en la carpeta de backups.
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="warn-text">
+              <p>Esta operación es irreversible. Vas a perder:</p>
+              <ul>
+                <li>Todos los productos, recetas, atajos PdV</li>
+                <li>Todos los clientes, funcionarios, ventas, compras</li>
+                <li>Saldos de caja mayor, cuentas bancarias, CPP, CPC</li>
+                <li>Liquidaciones, asistencias, vales</li>
+              </ul>
+              <p>La app se reiniciará automáticamente.</p>
+            </div>
+            <button mat-flat-button color="warn" (click)="resetDatabase()" [disabled]="loading">
+              <mat-icon>delete_forever</mat-icon>
+              <span>Resetear base de datos</span>
+            </button>
+          </mat-card-content>
+        </mat-card>
+
+      </div>
+    </mat-tab>
+
+  </mat-tab-group>
+
+</div>

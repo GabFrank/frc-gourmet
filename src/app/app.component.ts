@@ -57,6 +57,7 @@ import { CajaMayorDashboardComponent } from './pages/financiero/caja-mayor/dashb
 import { ListCuentasPorCobrarComponent } from './pages/financiero/caja-mayor/cuentas-por-cobrar/list-cuentas-por-cobrar/list-cuentas-por-cobrar.component';
 import { ListPermisosComponent } from './pages/personalizacion/permisos/list-permisos/list-permisos.component';
 import { ListConfiguracionRrhhComponent } from './pages/rrhh/configuracion/list-configuracion-rrhh/list-configuracion-rrhh.component';
+import { BackupRestoreComponent } from './pages/configuracion/backup-restore/backup-restore.component';
 import { ListCargosComponent } from './pages/rrhh/cargos/list-cargos.component';
 import { ListFuncionariosComponent } from './pages/rrhh/funcionarios/list-funcionarios/list-funcionarios.component';
 import { ListTurnosComponent } from './pages/rrhh/turnos/list-turnos.component';
@@ -405,6 +406,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       ListConfiguracionRrhhComponent,
       { source: 'navigation' },
       'configuracion-rrhh-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openBackupRestoreTab() {
+    this.tabsService.openTab(
+      'Backup y Restauración',
+      BackupRestoreComponent,
+      { source: 'navigation' },
+      'backup-restore-tab',
       true
     );
     this.closeMenu();

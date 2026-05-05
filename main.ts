@@ -51,10 +51,13 @@ import { registerEquiposComisionHandlers } from './electron/handlers/equipos-com
 import { registerCuentasPorCobrarHandlers } from './electron/handlers/cuentas-por-cobrar.handler';
 import { registerMovimientosClienteHandlers } from './electron/handlers/movimientos-cliente.handler';
 import { seedInitialData } from './electron/utils/seed-data';
+import { seedSystemData } from './electron/utils/seed-system';
 // RRHH Fase 8 - Dashboard, Notificaciones, Reportes
 import { registerNotificacionesRrhhHandlers, generarNotificacionesRrhh } from './electron/handlers/notificaciones-rrhh.handler';
 import { registerDashboardRrhhHandlers } from './electron/handlers/dashboard-rrhh.handler';
 import { registerReportesRrhhHandlers } from './electron/handlers/reportes-rrhh.handler';
+// Backup & Restore handler
+import { registerBackupHandlers, startAutoBackupScheduler } from './electron/handlers/backup.handler';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
 // Unificado en recetas.handler: sabores y variaciones
 
@@ -128,11 +131,25 @@ function initializeDatabase() {
       // Scheduler: procesa acreditaciones POS pendientes cada 5 min (en main process)
       startAcreditacionesScheduler(dataSource, 5);
 
+      // Backup & Restore handlers
+      registerBackupHandlers(dataSource);
+
       // Seed initial data (idempotent - only inserts if tables are empty)
-      seedInitialData(dataSource);
-      seedPermissions(dataSource).catch((e) => console.error('Error seeding permissions:', e));
-      seedConfiguracionRrhh(dataSource).catch((e) => console.error('Error seeding configuracion rrhh:', e));
-      seedLiquidacionConceptos(dataSource).catch((e) => console.error('Error seeding liquidacion conceptos:', e));
+      // Orden: 1) datos generales 2) permisos+conceptos 3) admin user (necesita permisos ya creados)
+      (async () => {
+        try {
+          await seedInitialData(dataSource);
+          await seedPermissions(dataSource);
+          await seedConfiguracionRrhh(dataSource);
+          await seedLiquidacionConceptos(dataSource);
+          await seedSystemData(dataSource);
+        } catch (e) {
+          console.error('Error en seeds iniciales:', e);
+        }
+      })();
+
+      // Auto-backup scheduler (lee config persistida; idempotente si está deshabilitado)
+      startAutoBackupScheduler(app.getPath('userData'));
       // Generar notificaciones RRHH al startup y cada 24h
       generarNotificacionesRrhh().catch((e) => console.error('Error generando notificaciones RRHH:', e));
       setInterval(() => { generarNotificacionesRrhh().catch((e) => console.error('Error notif RRHH interval:', e)); }, 24 * 60 * 60 * 1000);

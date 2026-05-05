@@ -357,6 +357,10 @@
               <mat-icon matListItemIcon>devices</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Dispositivos y puntos de venta</span>
             </a>
+            <a mat-list-item (click)="openBackupRestoreTab()">
+              <mat-icon matListItemIcon>backup</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Backup y Restauración</span>
+            </a>
           </div>
         </mat-expansion-panel>
 

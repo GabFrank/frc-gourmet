@@ -3222,4 +3222,45 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('export-reporte-resumen-ips-excel', periodo);
   },
 
+  // ================== BACKUP & RESTORE ==================
+  backupGetInfo: async (): Promise<any> => {
+    return await ipcRenderer.invoke('backup-get-info');
+  },
+  backupCreate: async (opts: { includeImages?: boolean; customDir?: string; notes?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('backup-create', opts);
+  },
+  backupCreateAndExport: async (opts: { includeImages?: boolean; notes?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('backup-create-and-export', opts);
+  },
+  backupList: async (): Promise<any> => {
+    return await ipcRenderer.invoke('backup-list');
+  },
+  backupDelete: async (fullPath: string): Promise<any> => {
+    return await ipcRenderer.invoke('backup-delete', fullPath);
+  },
+  backupPickRestoreFile: async (): Promise<any> => {
+    return await ipcRenderer.invoke('backup-pick-restore-file');
+  },
+  backupPickFolder: async (): Promise<any> => {
+    return await ipcRenderer.invoke('backup-pick-folder');
+  },
+  backupRestore: async (opts: { filePath: string }): Promise<any> => {
+    return await ipcRenderer.invoke('backup-restore', opts);
+  },
+  backupConfigGet: async (): Promise<any> => {
+    return await ipcRenderer.invoke('backup-config-get');
+  },
+  backupConfigSet: async (partial: any): Promise<any> => {
+    return await ipcRenderer.invoke('backup-config-set', partial);
+  },
+  backupTriggerAutoNow: async (): Promise<any> => {
+    return await ipcRenderer.invoke('backup-trigger-auto-now');
+  },
+  backupDbReset: async (opts: { confirmation: string }): Promise<any> => {
+    return await ipcRenderer.invoke('backup-db-reset', opts);
+  },
+  backupClearImages: async (opts: { confirmation: string }): Promise<any> => {
+    return await ipcRenderer.invoke('backup-clear-images', opts);
+  },
+
 });
