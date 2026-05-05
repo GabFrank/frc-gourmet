@@ -47,6 +47,7 @@ import { ListCajasComponent } from './pages/financiero/cajas/list-cajas.componen
 import { FinancieroDashboardComponent } from './pages/financiero/dashboard/financiero-dashboard.component';
 import { ComprasDashboardComponent } from './pages/compras/dashboard/compras-dashboard.component';
 import { ListComprasComponent } from './pages/compras/list-compras/list-compras.component';
+import { ListFacturaImportsComponent } from './pages/compras/list-factura-imports/list-factura-imports.component';
 import { ProductosDashboardComponent } from './pages/productos/dashboard/productos-dashboard.component';
 import { ListRecetasComponent } from './pages/gestion-recetas/list-recetas/list-recetas.component';
 import { ListAdicionalesComponent } from './pages/gestion-recetas/list-adicionales/list-adicionales.component';
@@ -58,6 +59,7 @@ import { ListCuentasPorCobrarComponent } from './pages/financiero/caja-mayor/cue
 import { ListPermisosComponent } from './pages/personalizacion/permisos/list-permisos/list-permisos.component';
 import { ListConfiguracionRrhhComponent } from './pages/rrhh/configuracion/list-configuracion-rrhh/list-configuracion-rrhh.component';
 import { BackupRestoreComponent } from './pages/configuracion/backup-restore/backup-restore.component';
+import { IaConfigComponent } from './pages/configuracion/ia-config/ia-config.component';
 import { ListCargosComponent } from './pages/rrhh/cargos/list-cargos.component';
 import { ListFuncionariosComponent } from './pages/rrhh/funcionarios/list-funcionarios/list-funcionarios.component';
 import { ListTurnosComponent } from './pages/rrhh/turnos/list-turnos.component';
@@ -422,6 +424,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     this.closeMenu();
   }
 
+  openIaConfigTab() {
+    this.tabsService.openTab(
+      'Configurar IA',
+      IaConfigComponent,
+      { source: 'navigation' },
+      'ia-config-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
   openCargosTab() {
     this.tabsService.openTab(
       'Cargos',
@@ -697,6 +710,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       ListComprasComponent,
       { source: 'navigation' },
       'compras-tab',
+      true,
+    );
+    this.closeMenu();
+  }
+
+  openFacturaImportsTab() {
+    this.tabsService.openTab(
+      'Importaciones IA',
+      ListFacturaImportsComponent,
+      { source: 'navigation' },
+      'factura-imports-tab',
       true,
     );
     this.closeMenu();

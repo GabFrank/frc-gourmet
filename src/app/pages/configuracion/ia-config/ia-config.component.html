@@ -1,0 +1,74 @@
+<div class="ia-config-container">
+  <h2>Configuracion de IA (OCR de facturas)</h2>
+
+  <mat-card *ngIf="!loading">
+    <mat-card-content>
+      <p class="info-text">
+        Configura las credenciales de OpenAI usadas para extraer datos de facturas de compra mediante GPT-4o vision.
+        La API key se guarda solo en este equipo, en <code>userData/ia-config.json</code>.
+      </p>
+
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="api-key-field">
+          <mat-label>OpenAI API Key</mat-label>
+          <input
+            matInput
+            [type]="apiKeyVisible ? 'text' : 'password'"
+            [(ngModel)]="apiKey"
+            placeholder="sk-..."
+            autocomplete="off"
+          />
+          <button mat-icon-button matSuffix (click)="toggleApiKeyVisible()" [attr.aria-label]="'Mostrar/ocultar'">
+            <mat-icon>{{ apiKeyVisible ? 'visibility_off' : 'visibility' }}</mat-icon>
+          </button>
+        </mat-form-field>
+      </div>
+
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="modelo-field">
+          <mat-label>Modelo</mat-label>
+          <mat-select [(ngModel)]="modelo">
+            <mat-option *ngFor="let m of modelos" [value]="m.value">
+              {{ m.label }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+        <span class="costo-info">{{ costoSeleccionado }}</span>
+      </div>
+
+      <div class="form-row">
+        <mat-slide-toggle [(ngModel)]="habilitado" color="primary">
+          Habilitar importacion de facturas con IA
+        </mat-slide-toggle>
+      </div>
+
+      <div class="actions-row">
+        <button
+          mat-stroked-button
+          color="primary"
+          (click)="probar()"
+          [disabled]="testing || saving || !apiKey"
+        >
+          <mat-icon>wifi_tethering</mat-icon>
+          <span *ngIf="!testing">Probar conexion</span>
+          <mat-spinner *ngIf="testing" diameter="18"></mat-spinner>
+        </button>
+
+        <button
+          mat-flat-button
+          color="primary"
+          (click)="guardar()"
+          [disabled]="saving"
+        >
+          <mat-icon>save</mat-icon>
+          <span *ngIf="!saving">Guardar</span>
+          <mat-spinner *ngIf="saving" diameter="18"></mat-spinner>
+        </button>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <div *ngIf="loading" class="loading-container">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+</div>

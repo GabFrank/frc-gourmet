@@ -8,6 +8,11 @@
       <button mat-icon-button matTooltip="Refrescar" (click)="loadData()" [disabled]="loading">
         <mat-icon [class.spinning]="loading">refresh</mat-icon>
       </button>
+      <button mat-stroked-button color="accent" (click)="importarConIA()" [disabled]="importing" matTooltip="Importar factura desde imagen/PDF con IA">
+        <mat-icon>auto_awesome</mat-icon>
+        <span *ngIf="!importing">Importar con IA</span>
+        <mat-spinner *ngIf="importing" diameter="18"></mat-spinner>
+      </button>
       <button mat-flat-button color="primary" (click)="nuevaCompra()">
         <mat-icon>add</mat-icon>
         Nueva compra

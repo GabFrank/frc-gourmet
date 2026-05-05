@@ -3263,4 +3263,41 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('backup-clear-images', opts);
   },
 
+  // ================== IA CONFIG ==================
+  iaConfigGet: async (): Promise<any> => {
+    return await ipcRenderer.invoke('ia-config-get');
+  },
+  iaConfigSet: async (partial: any): Promise<any> => {
+    return await ipcRenderer.invoke('ia-config-set', partial);
+  },
+  iaConfigTest: async (): Promise<any> => {
+    return await ipcRenderer.invoke('ia-config-test');
+  },
+
+  // ================== FACTURA IMPORT (OCR + IA) ==================
+  facturaImportPickFile: async (): Promise<any> => {
+    return await ipcRenderer.invoke('factura-import-pick-file');
+  },
+  facturaImportProcess: async (payload: { filePath: string }): Promise<any> => {
+    return await ipcRenderer.invoke('factura-import-process', payload);
+  },
+  facturaImportReprocess: async (payload: { documentoId: number }): Promise<any> => {
+    return await ipcRenderer.invoke('factura-import-reprocess', payload);
+  },
+  facturaImportGet: async (payload: { documentoId: number }): Promise<any> => {
+    return await ipcRenderer.invoke('factura-import-get', payload);
+  },
+  facturaImportList: async (payload: { page?: number; pageSize?: number; estado?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('factura-import-list', payload);
+  },
+  facturaImportDescartar: async (payload: { documentoId: number }): Promise<any> => {
+    return await ipcRenderer.invoke('factura-import-descartar', payload);
+  },
+  facturaImportMatch: async (payload: { documentoId: number }): Promise<any> => {
+    return await ipcRenderer.invoke('factura-import-match', payload);
+  },
+  facturaImportConfirm: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('factura-import-confirm', payload);
+  },
+
 });

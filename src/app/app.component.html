@@ -293,6 +293,10 @@
               <mat-icon matListItemIcon>shopping_cart</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Compras</span>
             </a>
+            <a mat-list-item (click)="openFacturaImportsTab()">
+              <mat-icon matListItemIcon>auto_awesome</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Importaciones IA</span>
+            </a>
           </div>
         </mat-expansion-panel>
 
@@ -360,6 +364,10 @@
             <a mat-list-item (click)="openBackupRestoreTab()">
               <mat-icon matListItemIcon>backup</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Backup y Restauración</span>
+            </a>
+            <a mat-list-item (click)="openIaConfigTab()">
+              <mat-icon matListItemIcon>auto_awesome</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Configurar IA</span>
             </a>
           </div>
         </mat-expansion-panel>

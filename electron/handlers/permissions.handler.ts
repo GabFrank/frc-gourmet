@@ -53,6 +53,9 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'RRHH_DASHBOARD_VER', descripcion: 'Ver dashboard de RRHH con KPIs', modulo: 'RRHH' },
   { codigo: 'RRHH_REPORTE_GENERAR', descripcion: 'Generar y exportar reportes RRHH (PDF/Excel)', modulo: 'RRHH' },
   { codigo: 'RRHH_NOTIFICACIONES_VER', descripcion: 'Ver notificaciones del modulo RRHH', modulo: 'RRHH' },
+  // Compras - Importacion OCR/IA
+  { codigo: 'COMPRAS_IMPORTAR_FACTURA', descripcion: 'Importar facturas de compra con OCR + IA', modulo: 'COMPRAS' },
+  { codigo: 'SISTEMA_CONFIGURAR_IA', descripcion: 'Configurar credenciales y parametros de IA (OCR de facturas)', modulo: 'SISTEMA' },
 ];
 
 export async function seedPermissions(dataSource: DataSource) {

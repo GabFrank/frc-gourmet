@@ -1,0 +1,135 @@
+<div class="list-factura-imports-container">
+  <div class="page-header">
+    <h2>Importaciones de facturas (IA)</h2>
+    <div class="header-actions">
+      <button mat-icon-button matTooltip="Refrescar" (click)="load()" [disabled]="loading">
+        <mat-icon [class.spinning]="loading">refresh</mat-icon>
+      </button>
+      <button mat-flat-button color="primary" (click)="nuevaImportacion()" [disabled]="importing">
+        <mat-icon>auto_awesome</mat-icon>
+        <span *ngIf="!importing">Nueva importación</span>
+        <mat-spinner *ngIf="importing" diameter="18"></mat-spinner>
+      </button>
+    </div>
+  </div>
+
+  <div class="filtros-bar">
+    <mat-form-field appearance="outline" class="f-field">
+      <mat-label>Estado</mat-label>
+      <mat-select [(ngModel)]="estadoFiltro">
+        <mat-option *ngFor="let e of estadosDisponibles" [value]="e.value">{{ e.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <button mat-stroked-button (click)="filtrar()">
+      <mat-icon>filter_list</mat-icon>
+      Filtrar
+    </button>
+  </div>
+
+  <table mat-table [dataSource]="items" class="imports-table">
+    <ng-container matColumnDef="archivo">
+      <th mat-header-cell *matHeaderCellDef>Archivo</th>
+      <td mat-cell *matCellDef="let it">
+        <mat-icon [matTooltip]="it.archivoTipo">{{ it.archivoTipo === 'PDF' ? 'picture_as_pdf' : 'image' }}</mat-icon>
+        <span class="archivo-nombre">{{ it.archivoNombre }}</span>
+        <div class="proveedor-detectado">
+          <small>{{ proveedorDetectado(it) }}</small>
+        </div>
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="fecha">
+      <th mat-header-cell *matHeaderCellDef>Fecha</th>
+      <td mat-cell *matCellDef="let it">{{ it.createdAt | date:'short' }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="estado">
+      <th mat-header-cell *matHeaderCellDef>Estado</th>
+      <td mat-cell *matCellDef="let it">
+        <mat-chip [class]="estadoChipClass(it.estado)">{{ it.estado }}</mat-chip>
+        <div *ngIf="it.errorMensaje" class="error-msg">
+          <small>{{ it.errorMensaje }}</small>
+        </div>
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="modelo">
+      <th mat-header-cell *matHeaderCellDef>Modelo</th>
+      <td mat-cell *matCellDef="let it">{{ it.modeloUsado || '-' }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="tokens">
+      <th mat-header-cell *matHeaderCellDef>Tokens / Costo</th>
+      <td mat-cell *matCellDef="let it">
+        <div *ngIf="it.tokensPrompt || it.tokensCompletion">
+          {{ (it.tokensPrompt || 0) }} / {{ (it.tokensCompletion || 0) }}
+          <small>· USD {{ costoTotal(it) | number:'1.4-4' }}</small>
+        </div>
+        <div *ngIf="!it.tokensPrompt">-</div>
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="compra">
+      <th mat-header-cell *matHeaderCellDef>Compra</th>
+      <td mat-cell *matCellDef="let it">
+        <a *ngIf="it.compra?.id" (click)="verCompra(it)" class="link-compra">#{{ it.compra.id }}</a>
+        <span *ngIf="!it.compra?.id">-</span>
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="acciones">
+      <th mat-header-cell *matHeaderCellDef></th>
+      <td mat-cell *matCellDef="let it">
+        <button mat-icon-button [matMenuTriggerFor]="menu">
+          <mat-icon>more_vert</mat-icon>
+        </button>
+        <mat-menu #menu="matMenu">
+          <button
+            mat-menu-item
+            (click)="revisar(it.id)"
+            [disabled]="it.estado !== 'REQUIERE_REVISION' && it.estado !== 'CONFIRMADO'">
+            <mat-icon>preview</mat-icon>
+            <span>Revisar</span>
+          </button>
+          <button
+            mat-menu-item
+            (click)="reprocesar(it)"
+            [disabled]="it.estado === 'CONFIRMADO' || it.estado === 'PROCESANDO'">
+            <mat-icon>refresh</mat-icon>
+            <span>Reprocesar con IA</span>
+          </button>
+          <button
+            mat-menu-item
+            (click)="verCompra(it)"
+            [disabled]="!it.compra?.id">
+            <mat-icon>open_in_new</mat-icon>
+            <span>Ver compra vinculada</span>
+          </button>
+          <button
+            mat-menu-item
+            (click)="descartar(it)"
+            [disabled]="it.estado === 'CONFIRMADO' || it.estado === 'DESCARTADO'">
+            <mat-icon>delete_outline</mat-icon>
+            <span>Descartar</span>
+          </button>
+        </mat-menu>
+      </td>
+    </ng-container>
+
+    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+    <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+  </table>
+
+  <div *ngIf="!loading && items.length === 0" class="empty-state">
+    <mat-icon>inbox</mat-icon>
+    <p>Sin importaciones aún. Tocá "Nueva importación" para empezar.</p>
+  </div>
+
+  <mat-paginator
+    [length]="total"
+    [pageSize]="pageSize"
+    [pageIndex]="page - 1"
+    [pageSizeOptions]="[10, 25, 50, 100]"
+    (page)="onPage($event)">
+  </mat-paginator>
+</div>

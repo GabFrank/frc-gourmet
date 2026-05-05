@@ -1,0 +1,62 @@
+.ia-config-container {
+  padding: 24px;
+  max-width: 720px;
+  margin: 0 auto;
+
+  h2 {
+    margin: 0 0 16px 0;
+    color: var(--text-primary);
+  }
+
+  .info-text {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-bottom: 16px;
+
+    code {
+      background: var(--surface-variant);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+  }
+
+  .form-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 8px;
+  }
+
+  .api-key-field {
+    width: 100%;
+  }
+
+  .modelo-field {
+    min-width: 320px;
+  }
+
+  .costo-info {
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+
+  .actions-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+
+    button {
+      mat-spinner {
+        display: inline-block;
+        margin-left: 8px;
+      }
+    }
+  }
+
+  .loading-container {
+    display: flex;
+    justify-content: center;
+    padding: 48px;
+  }
+}

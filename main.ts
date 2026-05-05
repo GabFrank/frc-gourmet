@@ -58,6 +58,8 @@ import { registerDashboardRrhhHandlers } from './electron/handlers/dashboard-rrh
 import { registerReportesRrhhHandlers } from './electron/handlers/reportes-rrhh.handler';
 // Backup & Restore handler
 import { registerBackupHandlers, startAutoBackupScheduler } from './electron/handlers/backup.handler';
+// Importacion de facturas via OCR + IA
+import { registerFacturaImportHandlers } from './electron/handlers/factura-import.handler';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
 // Unificado en recetas.handler: sabores y variaciones
 
@@ -133,6 +135,9 @@ function initializeDatabase() {
 
       // Backup & Restore handlers
       registerBackupHandlers(dataSource);
+
+      // Importacion de facturas con OCR + IA
+      registerFacturaImportHandlers(dataSource, getCurrentUser);
 
       // Seed initial data (idempotent - only inserts if tables are empty)
       // Orden: 1) datos generales 2) permisos+conceptos 3) admin user (necesita permisos ya creados)
@@ -222,6 +227,17 @@ function createWindow(): void {
       return;
     }
 
+    // Handle factura imports (PDFs/images de facturas OCR)
+    if (urlPath.startsWith('factura-imports/')) {
+      const fileName = urlPath.replace('factura-imports/', '');
+      const dir = path.join(app.getPath('userData'), 'factura-imports');
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      callback({ path: path.join(dir, fileName) });
+      return;
+    }
+
     // Handle other app:// URLs - check in app folder first
     let normalizedPath = path.normalize(`${app.getAppPath()}/${urlPath}`);
     if (fs.existsSync(normalizedPath)) {
@@ -269,6 +285,17 @@ app.on('ready', () => {
           const imagePath = path.join(imagesDir, fileName);
           // console.log('Serving product image from:', imagePath);
           callback({ path: imagePath });
+          return;
+        }
+
+        // Handle factura imports (PDFs/images de facturas OCR)
+        if (urlPath.startsWith('factura-imports/')) {
+          const fileName = urlPath.replace('factura-imports/', '');
+          const dir = path.join(app.getPath('userData'), 'factura-imports');
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+          callback({ path: path.join(dir, fileName) });
           return;
         }
 

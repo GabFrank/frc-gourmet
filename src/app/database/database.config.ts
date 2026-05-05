@@ -144,6 +144,9 @@ import { Compra } from './entities/compras/compra.entity';
 import { CompraDetalle } from './entities/compras/compra-detalle.entity';
 import { ProveedorProducto } from './entities/compras/proveedor-producto.entity';
 import { FormasPago } from './entities/compras/forma-pago.entity';
+import { DocumentoCompraImportado } from './entities/compras/documento-compra-importado.entity';
+import { OcrAliasProveedor } from './entities/compras/ocr-alias-proveedor.entity';
+import { OcrAliasProducto } from './entities/compras/ocr-alias-producto.entity';
 
 // Migrations deshabilitadas en desarrollo: usamos synchronize=true
 
@@ -312,6 +315,9 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       CompraDetalle,
       ProveedorProducto,
       FormasPago,
+      DocumentoCompraImportado,
+      OcrAliasProveedor,
+      OcrAliasProducto,
       // Ventas entities
       PrecioDelivery,
       Delivery,

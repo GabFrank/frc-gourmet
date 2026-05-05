@@ -23,6 +23,8 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
 import { TabsService } from 'src/app/services/tabs.service';
 import { CreateEditCompraComponent } from '../create-edit-compra/create-edit-compra.component';
 import { CompraDetalleComponent } from '../compra-detalle/compra-detalle.component';
+import { ImportarFacturaDialogComponent } from '../importar-factura-dialog/importar-factura-dialog.component';
+import { FacturaImportService } from 'src/app/services/factura-import.service';
 
 @Component({
   selector: 'app-list-compras',
@@ -76,12 +78,15 @@ export class ListComprasComponent implements OnInit {
 
   displayedColumns = ['id', 'fecha', 'proveedor', 'categoria', 'numeroNota', 'total', 'pago', 'estadoPago', 'estado', 'actions'];
 
+  importing = false;
+
   constructor(
     private repositoryService: RepositoryService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
     private fb: FormBuilder,
     private tabsService: TabsService,
+    private facturaImport: FacturaImportService,
   ) {}
 
   ngOnInit(): void {
@@ -177,6 +182,52 @@ export class ListComprasComponent implements OnInit {
       `nueva-compra-${Date.now()}`,
       true,
     );
+  }
+
+  async importarConIA(): Promise<void> {
+    if (this.importing) return;
+    try {
+      const pick = await firstValueFrom(this.facturaImport.pickFile());
+      if (pick.canceled || !pick.filePath) return;
+
+      this.importing = true;
+      this.snackBar.open('Procesando con IA, esto puede tardar 10-30s...', 'Cerrar', { duration: 5000 });
+      const proc = await firstValueFrom(this.facturaImport.process(pick.filePath));
+      this.importing = false;
+
+      if (!proc.success || !proc.documentoId) {
+        this.snackBar.open('Error al procesar: ' + (proc.error || 'desconocido'), 'Cerrar', { duration: 7000 });
+        return;
+      }
+
+      this.abrirDialogoRevision(proc.documentoId);
+    } catch (e: any) {
+      this.importing = false;
+      this.snackBar.open('Error: ' + e?.message, 'Cerrar', { duration: 6000 });
+    }
+  }
+
+  abrirDialogoRevision(documentoId: number): void {
+    const ref = this.dialog.open(ImportarFacturaDialogComponent, {
+      width: '95vw',
+      maxWidth: '95vw',
+      height: '90vh',
+      data: { documentoId },
+      panelClass: 'importar-factura-dialog-panel',
+    });
+    ref.afterClosed().subscribe((res: any) => {
+      if (res?.compraId) {
+        this.snackBar.open('Compra borrador creada. Abriendo para revisión...', 'Cerrar', { duration: 4000 });
+        this.tabsService.openTab(
+          `Compra #${res.compraId} (borrador)`,
+          CreateEditCompraComponent,
+          { mode: 'edit', compraId: res.compraId },
+          `editar-compra-${res.compraId}`,
+          true,
+        );
+        this.loadData();
+      }
+    });
   }
 
   editarBorrador(compra: any): void {
