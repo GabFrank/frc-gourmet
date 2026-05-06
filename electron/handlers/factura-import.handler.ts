@@ -20,10 +20,11 @@ import { CompraEstado } from '../../src/app/database/entities/compras/estado.enu
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { readIaConfig, writeIaConfig, IaConfig, DEFAULT_IA_CONFIG } from '../utils/ia-config.utils';
 import {
+  buildVisionDataUrl,
   callOpenAiVision,
   copyArchivoToImports,
-  mimeFromExt,
   normalizeText,
+  parseOpenAiError,
   validateFacturaJson,
   FacturaJson,
 } from '../utils/factura-import.utils';
@@ -74,7 +75,7 @@ export function registerFacturaImportHandlers(
       const latencyMs = Date.now() - start;
       if (!res.ok) {
         const txt = await res.text();
-        return { success: false, message: `OpenAI ${res.status}: ${txt.slice(0, 300)}`, latencyMs };
+        return { success: false, message: parseOpenAiError(res.status, txt), latencyMs };
       }
       return { success: true, message: 'Conexion OK', latencyMs, modelo: cfg.modelo };
     } catch (e: any) {
@@ -130,11 +131,19 @@ export function registerFacturaImportHandlers(
     const savedDoc = await repo.save(doc);
 
     try {
-      const buf = fs.readFileSync(copied.destPath);
-      const base64 = buf.toString('base64');
-      const ext = path.extname(copied.destPath).toLowerCase();
-      const mime = mimeFromExt(ext);
-      const dataUrl = `data:${mime};base64,${base64}`;
+      const dataUrl = await buildVisionDataUrl(copied.destPath);
+      const sizeKb = (dataUrl.length * 0.75 / 1024).toFixed(1);
+      console.log(`[factura-import] imagen lista para vision: ${sizeKb} KB (${copied.archivoTipo})`);
+
+      // Persistir PNG al lado del PDF para inspeccion manual si falla
+      if (copied.archivoTipo === 'PDF' && dataUrl.startsWith('data:image/png;base64,')) {
+        const pngPath = copied.destPath.replace(/\.pdf$/i, '.render.png');
+        try {
+          const b64 = dataUrl.split(',')[1];
+          fs.writeFileSync(pngPath, Buffer.from(b64, 'base64'));
+          console.log(`[factura-import] PNG render guardado en ${pngPath}`);
+        } catch (e) { /* noop */ }
+      }
 
       const aiRes = await callOpenAiVision({
         apiKey: cfg.openaiApiKey,
@@ -196,8 +205,7 @@ export function registerFacturaImportHandlers(
     await repo.save(doc);
 
     try {
-      const buf = fs.readFileSync(fullPath);
-      const dataUrl = `data:${mimeFromExt(path.extname(fullPath))};base64,${buf.toString('base64')}`;
+      const dataUrl = await buildVisionDataUrl(fullPath);
       const aiRes = await callOpenAiVision({ apiKey: cfg.openaiApiKey, modelo: cfg.modelo, base64DataUrl: dataUrl });
 
       doc.jsonCrudo = JSON.stringify(aiRes.json);
