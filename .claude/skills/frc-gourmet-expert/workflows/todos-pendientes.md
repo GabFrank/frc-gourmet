@@ -1,11 +1,19 @@
 # TODOs pendientes del proyecto
 
-Snapshot **2026-05-05**. Verificar `git log` y memorias antes de afirmar que algo sigue pendiente.
+Snapshot **2026-05-06**. Verificar `git log` y memorias antes de afirmar que algo sigue pendiente.
+
+## Recientemente completado (2026-05)
+
+- [x] **Importación de facturas con OCR + IA** — GPT-4o vision + matching por aliases + revisor en tab + reprocesar/descartar. Detalles → [domains/importacion-facturas-ocr.md](../domains/importacion-facturas-ocr.md).
+- [x] **`Producto.iva`** (default 10, valores 0/5/10) y **`Producto.registroCompleto`** (boolean para chip "Parcial"). `Producto.subfamilia` ahora nullable.
+- [x] **Backup/Restore + Reset BD + Seed admin** (commit `607a880`).
 
 ## Acciones inmediatas
 
 - [ ] Limpiar `.js` y `.js.map` del repo (deberían estar en `.gitignore`).
 - [ ] Eliminar entidad `RecetaAdicional` legacy (reemplazada por `RecetaAdicionalVinculacion`).
+- [ ] **Permisos OCR**: `COMPRAS_IMPORTAR_FACTURA` y `SISTEMA_CONFIGURAR_IA` están seedeados pero no se chequean en sidenav. Agregar `*ngIf="hasPermission(...)"` a las entradas correspondientes.
+- [ ] **Inferidor de presentación** (regex en `producto-inference.util.ts`) no detecta unidad cuando la descripción no incluye número/unidad explícita (ej "MANDIOCA" sin tamaño). Mejora futura: que el OCR sugiera unidad y cantidad por separado en el JSON.
 
 ## Refactor técnico
 

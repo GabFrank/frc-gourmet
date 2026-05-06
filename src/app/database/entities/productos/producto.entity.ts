@@ -33,6 +33,10 @@ export class Producto extends BaseModel {
   @Column({ type: 'boolean', default: false, comment: 'Indica si el producto puede ser usado como ingrediente en recetas.' })
   esIngrediente!: boolean;
 
+  // IVA del producto en porcentaje (0, 5, 10). Pensado para futura facturación electrónica (SIFEN).
+  @Column({ type: 'int', default: 10 })
+  iva!: number;
+
   // --- Campos de Control de Stock ---
   @Column({ type: 'decimal', precision: 10, scale: 3, nullable: true, comment: 'Stock mínimo para alertas' })
   stockMinimo?: number;
@@ -40,10 +44,17 @@ export class Producto extends BaseModel {
   @Column({ type: 'decimal', precision: 10, scale: 3, nullable: true, comment: 'Stock máximo para control' })
   stockMaximo?: number;
 
+  // Indica si el registro está completo (precios, recetas, clasificación final).
+  // Productos creados desde importación OCR/IA arrancan en false hasta que el usuario completa.
+  @Column({ type: 'boolean', default: true, name: 'registro_completo' })
+  registroCompleto!: boolean;
+
   // Relationships
-  @ManyToOne(() => Subfamilia, subfamilia => subfamilia.productos)
+  // Subfamilia es opcional: productos creados desde importación OCR pueden no tener
+  // clasificación todavía (registro parcial). Se completa después desde gestión-producto.
+  @ManyToOne(() => Subfamilia, subfamilia => subfamilia.productos, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'subfamilia_id' })
-  subfamilia!: Subfamilia;
+  subfamilia?: Subfamilia;
 
   // ⚠️ LEGACY: Mantener por compatibilidad durante migración
   @OneToOne('Receta', { nullable: true })

@@ -1,8 +1,8 @@
-import { Component } from '@angular/core';
+import { Component, Inject, Optional } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -63,7 +63,12 @@ export class CrearProveedorInlineDialogComponent {
     private repo: RepositoryService,
     private dialogRef: MatDialogRef<CrearProveedorInlineDialogComponent>,
     private snackBar: MatSnackBar,
-  ) {}
+    @Optional() @Inject(MAT_DIALOG_DATA) public data: { nombre?: string; ruc?: string; telefono?: string } | null,
+  ) {
+    if (data?.nombre) this.nombre = (data.nombre || '').trim();
+    if (data?.ruc) this.ruc = (data.ruc || '').trim();
+    if (data?.telefono) this.telefono = (data.telefono || '').trim();
+  }
 
   cancelar(): void {
     this.dialogRef.close(null);

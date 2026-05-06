@@ -45,7 +45,8 @@
    └ Movimientos de Stock              inventory         → (TODO — handler vacío)
 ▾ Compras                             shopping_cart
    ├ Dashboard                         dashboard         → ComprasDashboardComponent
-   └ Compras                           shopping_cart     → ListComprasComponent
+   ├ Compras                           shopping_cart     → ListComprasComponent
+   └ Importaciones IA                  auto_awesome      → ListFacturaImportsComponent
 ▾ Financiero                          attach_money
    ├ Dashboard                         dashboard         → FinancieroDashboardComponent
    ├ Cajas                             point_of_sale     → ListCajasComponent
@@ -54,9 +55,11 @@
    ├ Caja Mayor                        account_balance   → CajaMayorDashboardComponent
    └ Cuentas por Cobrar                request_quote     → ListCuentasPorCobrarComponent
 ─────
-▾ Configuración                        settings
+▾ Sistema / Configuración             settings
    ├ Impresoras                        print             → PrinterSettingsComponent (dialog)
-   └ Dispositivos y Puntos de Venta    devices           → ListDispositivosComponent
+   ├ Dispositivos y Puntos de Venta    devices           → ListDispositivosComponent
+   ├ Backup y Restauración             backup            → BackupRestoreComponent
+   └ Configurar IA                     auto_awesome      → IaConfigComponent
 ─────
 [Salir]                               exit_to_app       → logout()
 ```

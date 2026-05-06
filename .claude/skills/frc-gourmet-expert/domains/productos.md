@@ -49,7 +49,9 @@ Familia (familia)
 | `esIngrediente` | boolean | Default false. Si true, disponible en recetas |
 | `stockMinimo` | decimal(10,3), nullable | Para alertas |
 | `stockMaximo` | decimal(10,3), nullable | Para control |
-| `subfamilia_id` | FK | Categoría |
+| `iva` | int, default 10 | IVA en porcentaje (0/5/10). Pensado para futura facturación electrónica SIFEN. Validado en `createProducto`/`updateProducto`. |
+| `registroCompleto` | boolean, default true | Si false → producto creado parcial (típicamente desde import OCR). UI muestra chip "Parcial" en list-productos + filtro "Solo parciales". |
+| `subfamilia_id` | FK, **nullable** | Categoría. Nullable desde 2026-05 para soportar productos parciales sin clasificar (ej. creados desde import OCR). |
 | `imageUrl` | varchar, nullable | `app://producto-images/<file>` (parcialmente desactivado) |
 
 ## Presentaciones

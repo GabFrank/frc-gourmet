@@ -32,6 +32,7 @@ export interface MatchItem {
     precioUnitario: number;
     subtotal: number;
     codigoProveedor: string | null;
+    iva: number | null;
   };
   match: { productoId: number; presentacionId: number | null; nombre: string } | null;
   confianza: Confianza;
@@ -52,6 +53,7 @@ export interface MatchResult {
   proveedor: {
     textoOcr: string;
     rucOcr: string | null;
+    telefonoOcr: string | null;
     match: { id: number; nombre: string } | null;
     confianza: Confianza;
     candidatos: ProveedorCandidato[];

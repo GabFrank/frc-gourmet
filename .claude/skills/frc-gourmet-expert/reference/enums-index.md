@@ -50,6 +50,10 @@ TipoBoleta = LEGAL | COMUN | OTRO | SIN_COMPROBANTE
 // compras/forma-pago-compra.enum.ts
 FormaPagoCompra = EFECTIVO | BANCO
 
+// compras/documento-compra-importado-estado.enum.ts (módulo OCR + IA)
+DocumentoCompraImportadoEstado = PENDIENTE | PROCESANDO | REQUIERE_REVISION | CONFIRMADO | ERROR | DESCARTADO
+DocumentoCompraImportadoTipo = PDF | IMAGE
+
 // (Pago, deprecated)
 PagoEstado = ABIERTO | PAGO_PARCIAL | PAGADO | CANCELADO
 ```

@@ -348,6 +348,11 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         whereConditions.esIngrediente = filters.esIngrediente === 'true';
       }
 
+      // Filtro por registroCompleto (registro parcial vs completo)
+      if (filters.registroCompleto && filters.registroCompleto !== 'all') {
+        whereConditions.registroCompleto = filters.registroCompleto === 'true';
+      }
+
       // Configurar paginación
       const page = filters.page || 0;
       const pageSize = filters.pageSize || 10;
@@ -394,24 +399,39 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const subfamiliaRepository = dataSource.getRepository(Subfamilia);
       const currentUser = getCurrentUser();
 
-      const subfamilia = await subfamiliaRepository.findOneBy({ id: productoData.subfamiliaId });
-      if (!subfamilia) {
-        return { success: false, message: 'Subfamilia not found' };
+      // Subfamilia es opcional (productos parciales creados desde import OCR pueden no tenerla).
+      let subfamilia: Subfamilia | null = null;
+      const subId = productoData.subfamiliaId
+        ?? productoData.subfamilia?.id
+        ?? null;
+      if (subId) {
+        subfamilia = await subfamiliaRepository.findOneBy({ id: subId });
+        if (!subfamilia) {
+          return { success: false, message: 'Subfamilia not found' };
+        }
+      }
+
+      // Validacion IVA
+      const ivaNum = Number(productoData.iva ?? 10);
+      if (![0, 5, 10].includes(ivaNum)) {
+        throw new Error('IVA inválido. Debe ser 0, 5 o 10.');
       }
 
       const producto = productoRepository.create({
         nombre: productoData.nombre?.toUpperCase(),
         tipo: productoData.tipo,
         unidadBase: productoData.unidadBase?.toUpperCase(),
-        subfamilia: subfamilia,
+        subfamilia: subfamilia ?? undefined,
         activo: productoData.activo !== undefined ? productoData.activo : true,
+        iva: ivaNum,
         // Campos de configuración booleanos
         esVendible: productoData.esVendible !== undefined ? productoData.esVendible : true,
         esComprable: productoData.esComprable !== undefined ? productoData.esComprable : false,
         controlaStock: productoData.controlaStock !== undefined ? productoData.controlaStock : true,
         esIngrediente: productoData.esIngrediente !== undefined ? productoData.esIngrediente : false,
         stockMinimo: productoData.stockMinimo,
-        stockMaximo: productoData.stockMaximo
+        stockMaximo: productoData.stockMaximo,
+        registroCompleto: productoData.registroCompleto !== undefined ? productoData.registroCompleto : true,
       });
 
       await setEntityUserTracking(dataSource, producto, currentUser?.id, false);
@@ -453,6 +473,18 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       // Actualizar campos de control de stock
       if (productoData.stockMinimo !== undefined) producto.stockMinimo = productoData.stockMinimo;
       if (productoData.stockMaximo !== undefined) producto.stockMaximo = productoData.stockMaximo;
+
+      // IVA con validacion
+      if (productoData.iva !== undefined) {
+        const ivaNum = Number(productoData.iva);
+        if (![0, 5, 10].includes(ivaNum)) {
+          throw new Error('IVA inválido. Debe ser 0, 5 o 10.');
+        }
+        producto.iva = ivaNum;
+      }
+
+      // Estado de registro (parcial vs completo)
+      if (productoData.registroCompleto !== undefined) producto.registroCompleto = productoData.registroCompleto;
 
       // Actualizar subfamilia si se proporciona
       if (productoData.subfamiliaId !== undefined) {
@@ -553,7 +585,12 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const productoRepository = dataSource.getRepository(Producto);
       const currentUser = getCurrentUser();
 
-      const producto = await productoRepository.findOneBy({ id: presentacionData.productoId });
+      // Aceptar tanto productoId (legacy) como producto: { id }
+      const productoId = presentacionData.productoId ?? presentacionData.producto?.id;
+      if (!productoId) {
+        return { success: false, message: 'productoId requerido' };
+      }
+      const producto = await productoRepository.findOneBy({ id: productoId });
       if (!producto) {
         return { success: false, message: 'Producto not found' };
       }
@@ -561,7 +598,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       // Si la nueva presentación será principal, desmarcar todas las demás
       if (presentacionData.principal) {
         await presentacionRepository.update(
-          { producto: { id: presentacionData.productoId }, activo: true },
+          { producto: { id: productoId }, activo: true },
           { principal: false }
         );
       }
@@ -753,7 +790,12 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const presentacionRepository = dataSource.getRepository(Presentacion);
       const currentUser = getCurrentUser();
 
-      const presentacion = await presentacionRepository.findOneBy({ id: codigoBarraData.presentacionId });
+      // Aceptar presentacionId (legacy) o presentacion: { id }
+      const presentacionId = codigoBarraData.presentacionId ?? codigoBarraData.presentacion?.id;
+      if (!presentacionId) {
+        return { success: false, message: 'presentacionId requerido' };
+      }
+      const presentacion = await presentacionRepository.findOneBy({ id: presentacionId });
       if (!presentacion) {
         return { success: false, message: 'Presentacion not found' };
       }
@@ -762,7 +804,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       if (codigoBarraData.principal) {
         console.log('Marking as principal, unmarking others...');
         await codigoBarraRepository.update(
-          { presentacion: { id: codigoBarraData.presentacionId }, principal: true },
+          { presentacion: { id: presentacionId }, principal: true },
           { principal: false }
         );
       }

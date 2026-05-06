@@ -67,6 +67,16 @@
             </mat-select>
             <mat-error>El tipo de producto es requerido.</mat-error>
           </mat-form-field>
+
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>IVA (%)</mat-label>
+            <mat-select formControlName="iva" required>
+              <mat-option [value]="10">10%</mat-option>
+              <mat-option [value]="5">5%</mat-option>
+              <mat-option [value]="0">Exento (0%)</mat-option>
+            </mat-select>
+            <mat-error>El IVA es requerido.</mat-error>
+          </mat-form-field>
         </div>
 
         <div class="toggles-container">

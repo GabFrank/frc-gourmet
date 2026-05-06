@@ -85,6 +85,7 @@
 
 .panel-table {
   width: 100%;
+  table-layout: fixed;
   font-size: 12px;
 
   th.mat-mdc-header-cell {
@@ -101,14 +102,24 @@
 
   td.mat-mdc-cell {
     padding: 6px 8px;
+    vertical-align: middle;
   }
+
+  // Columnas: nombre flexible (con wrap), costo + fecha juntos, actions chica
+  .mat-column-nombre { width: auto; }
+  .mat-column-ultimoCosto { width: 130px; text-align: right; }
+  .mat-column-actions { width: 56px; }
 
   .prod-name {
     font-weight: 500;
-    white-space: nowrap;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
   }
 
   .muted-mini {

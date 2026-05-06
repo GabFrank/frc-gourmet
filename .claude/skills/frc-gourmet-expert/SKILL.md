@@ -45,6 +45,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | **Recetas, Sabores, Variaciones** (refactor 2024-07-29, multi-sabor pizza) | [domains/recetas-sabores-variaciones.md](domains/recetas-sabores-variaciones.md) |
 | **Ventas y PdV** (mesas, comandas, atajos, delivery, cobro) | [domains/ventas-pdv.md](domains/ventas-pdv.md) |
 | **Compras** (proveedor, finalizar, pago unificado vía CPP) | [domains/compras-cpp.md](domains/compras-cpp.md) |
+| **Importación de facturas con OCR + IA** (GPT-4o vision, aliases, revisor en tab) | [domains/importacion-facturas-ocr.md](domains/importacion-facturas-ocr.md) |
 | **Caja Mayor** (movimientos, anulaciones, configuración) | [domains/financiero-caja-mayor.md](domains/financiero-caja-mayor.md) |
 | **Bancos, cheques, POS** (cuentas bancarias, acreditaciones) | [domains/financiero-bancos-pos.md](domains/financiero-bancos-pos.md) |
 | **CPP / CPC** (dirección de flujo, préstamos a funcionarios) | [domains/financiero-cpp-cpc.md](domains/financiero-cpp-cpc.md) |
@@ -93,15 +94,17 @@ Estas las debo respetar SIEMPRE, sin que el usuario las repita:
 
 ---
 
-## 4. Estado actual del repo (snapshot 2026-05-05)
+## 4. Estado actual del repo (snapshot 2026-05-06)
 
 > Esta sección puede quedar desactualizada. Si el usuario pregunta por estado actual, **revisar `git log` y memorias antes de responder**.
 
-- **Última fase mergeada:** Compras MVP con flujo de pago unificado vía CPP (commit `c2e0a70`).
+- **Última feature mergeada:** Importación de facturas con OCR + IA (GPT-4o vision) — extrae proveedor + items + teléfono, hace matching por aliases + Levenshtein, crea Compra borrador. Aprende de cada confirmación. Tab dedicado de revisión, dialogs inline para crear proveedor/producto. Pantalla `Sistema → Configurar IA` con probador. Lista de Importaciones IA con reprocesar/descartar. **Producto** ahora tiene campo `iva` (0/5/10, default 10) y `registroCompleto` (boolean para chip "Parcial" en list-productos). `Producto.subfamilia` es nullable. Detalles → [domains/importacion-facturas-ocr.md](domains/importacion-facturas-ocr.md).
+- **Backup/Restore + Reset BD + Seed admin** (commit `607a880`).
+- **Compras MVP** con flujo de pago unificado vía CPP (commit `c2e0a70`).
 - **RRHH** completado hasta Fase 8 (dashboard, notificaciones, reportes con exports).
 - **Ventas/PdV** muy avanzado (cobro multi-pago, delivery, mesas, comandas, atajos, multi-sabor, descuento de stock automático).
 - **Productos** con refactor de variaciones completado (RecetaPresentacion sustituye al multiplicador).
-- **Pendientes mayores:** UI de Promociones, Producción, Reservas avanzadas, Visor de documentos, autocompletes en selects largos, migración ngModel→Reactive Forms, sweep de fechas timezone-safe.
+- **Pendientes mayores:** UI de Promociones, Producción, Reservas avanzadas, autocompletes en selects largos, migración ngModel→Reactive Forms, sweep de fechas timezone-safe, completar permisos `COMPRAS_IMPORTAR_FACTURA` y `SISTEMA_CONFIGURAR_IA` en sidenav (creados pero no chequeados).
 
 Detalles → [workflows/todos-pendientes.md](workflows/todos-pendientes.md).
 

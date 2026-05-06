@@ -2,6 +2,8 @@
 
 Workflow de compras a proveedores. Borrador → Finalizar → Pago vía CPP.
 
+> **Atajo:** podés cargar una compra desde la **foto/PDF de la factura** usando inteligencia artificial. Botón **Importar con IA** en el listado de compras. El sistema lee el documento, te muestra el borrador y vos solo confirmás. Detalles → [20-importacion-facturas-ia.md](20-importacion-facturas-ia.md).
+
 ## Pre-requisitos
 
 - Productos con `esComprable=true` (capítulo 4).

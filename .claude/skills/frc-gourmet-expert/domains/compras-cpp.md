@@ -2,6 +2,8 @@
 
 Workflow de compras a proveedores con pago unificado vía CPP (refactor 2026-05-05).
 
+> **Vinculado:** existe un módulo de **Importación de facturas con OCR + IA** que crea Compras borrador (estado ABIERTO) a partir de fotos/PDFs vía GPT-4o vision, con sistema de aliases que aprende. Una vez creado el borrador desde OCR, el flujo de **finalización** (stock, costo, CPP) es el mismo que se describe acá. Documentación dedicada → [importacion-facturas-ocr.md](importacion-facturas-ocr.md).
+
 ## Estados de la compra
 
 ```

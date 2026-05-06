@@ -1,0 +1,224 @@
+<div class="revisar-factura-container">
+  <div class="page-header">
+    <div class="header-title">
+      <mat-icon>auto_awesome</mat-icon>
+      <h2>Revisar factura importada</h2>
+      <span class="doc-num" *ngIf="matchResult?.documento?.numeroNota">· {{ matchResult?.documento?.numeroNota }}</span>
+    </div>
+    <div class="header-actions">
+      <button
+        mat-stroked-button
+        (click)="abrirVerFactura()"
+        [disabled]="loading || !previewImgUrl || previewImgError"
+        matTooltip="Ver factura original">
+        <mat-icon>visibility</mat-icon>
+        Ver factura
+      </button>
+      <button mat-stroked-button (click)="cerrarTab()" [disabled]="confirming">
+        Cancelar
+      </button>
+      <button mat-flat-button color="primary" (click)="confirmar()" [disabled]="loading || confirming">
+        <mat-icon>check</mat-icon>
+        <span *ngIf="!confirming">Confirmar y crear borrador</span>
+        <mat-spinner *ngIf="confirming" diameter="18"></mat-spinner>
+      </button>
+    </div>
+  </div>
+
+  <div class="content-body" *ngIf="!loading">
+    <div class="right-pane" *ngIf="matchResult">
+
+      <mat-card class="section-card">
+        <mat-card-header>
+          <mat-card-title>Proveedor</mat-card-title>
+          <mat-chip [class]="proveedorChipClass()">{{ proveedorChipLabel() }}</mat-chip>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="ocr-info">
+            OCR: <strong>{{ matchResult.proveedor.textoOcr }}</strong>
+            <span *ngIf="matchResult.proveedor.rucOcr"> · RUC: <strong>{{ matchResult.proveedor.rucOcr }}</strong></span>
+            <span *ngIf="matchResult.proveedor.telefonoOcr"> · Tel: <strong>{{ matchResult.proveedor.telefonoOcr }}</strong></span>
+          </div>
+          <div class="proveedor-row">
+            <mat-form-field appearance="outline" class="grow">
+              <mat-label>Proveedor del sistema</mat-label>
+              <mat-select [(ngModel)]="proveedorIdSeleccionado" (selectionChange)="onProveedorSeleccion()">
+                <mat-optgroup *ngIf="matchResult.proveedor.candidatos.length" label="Sugerencias">
+                  <mat-option
+                    *ngFor="let c of matchResult.proveedor.candidatos"
+                    [value]="c.id">
+                    {{ c.nombre }} ({{ (c.score * 100) | number:'1.0-0' }}%)
+                  </mat-option>
+                </mat-optgroup>
+                <mat-optgroup label="Todos">
+                  <mat-option
+                    *ngFor="let p of proveedoresAll"
+                    [value]="p.id">
+                    {{ p.nombre }}
+                  </mat-option>
+                </mat-optgroup>
+              </mat-select>
+            </mat-form-field>
+            <button mat-stroked-button color="primary" (click)="abrirCrearProveedor()">
+              <mat-icon>add</mat-icon>
+              Crear nuevo
+            </button>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="section-card">
+        <mat-card-header>
+          <mat-card-title>Datos del documento</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="row-fields">
+            <mat-form-field appearance="outline" class="grow">
+              <mat-label>Número nota</mat-label>
+              <input matInput [(ngModel)]="numeroNota" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="medium">
+              <mat-label>Fecha</mat-label>
+              <input matInput [matDatepicker]="picker" [(ngModel)]="fechaCompra" />
+              <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
+              <mat-datepicker #picker></mat-datepicker>
+            </mat-form-field>
+          </div>
+          <div class="row-fields">
+            <mat-form-field appearance="outline" class="medium">
+              <mat-label>Tipo</mat-label>
+              <mat-select [(ngModel)]="tipoBoleta">
+                <mat-option value="LEGAL">LEGAL</mat-option>
+                <mat-option value="COMUN">COMÚN</mat-option>
+                <mat-option value="OTRO">OTRO</mat-option>
+                <mat-option value="SIN_COMPROBANTE">SIN COMPROBANTE</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="medium">
+              <mat-label>Moneda</mat-label>
+              <mat-select [(ngModel)]="monedaIdSeleccionada">
+                <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+          <div class="total-info">
+            <span class="label">Total detectado:</span>
+            <span class="value">{{ matchResult.documento.total | number:'1.0-2' }} {{ matchResult.documento.moneda }}</span>
+          </div>
+          <div class="total-info" [class.total-diff]="totalAjustado !== matchResult.documento.total">
+            <span class="label">Total ajustado:</span>
+            <span class="value">{{ totalAjustado | number:'1.0-2' }} {{ matchResult.documento.moneda }}</span>
+            <span class="omitidos-badge" *ngIf="itemsOmitidos > 0">
+              {{ itemsOmitidos }} omitido{{ itemsOmitidos === 1 ? '' : 's' }}
+            </span>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="section-card">
+        <mat-card-header>
+          <mat-card-title>Ítems ({{ itemsVm.length }})</mat-card-title>
+        </mat-card-header>
+        <mat-card-content class="items-content">
+          <table mat-table [dataSource]="itemsVm" class="items-table">
+            <ng-container matColumnDef="estado">
+              <th mat-header-cell *matHeaderCellDef class="col-estado">Estado</th>
+              <td mat-cell *matCellDef="let v" [ngClass]="['col-estado', v.rowClass]">
+                <mat-chip [class]="v.chipClass">{{ v.chipLabel }}</mat-chip>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="descripcion">
+              <th mat-header-cell *matHeaderCellDef class="col-desc">Descripción OCR</th>
+              <td mat-cell *matCellDef="let v" [ngClass]="['col-desc', v.rowClass]">
+                <div class="desc-text">{{ v.lineaOcr.descripcion }}</div>
+                <small *ngIf="v.lineaOcr.codigoProveedor">cod: {{ v.lineaOcr.codigoProveedor }}</small>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="cantidad">
+              <th mat-header-cell *matHeaderCellDef class="col-cant">Cant.</th>
+              <td mat-cell *matCellDef="let v" [ngClass]="['col-cant', 'num', v.rowClass]">
+                {{ v.lineaOcr.cantidad | number:'1.0-2' }}
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="precio">
+              <th mat-header-cell *matHeaderCellDef class="col-precio">P. Unit.</th>
+              <td mat-cell *matCellDef="let v" [ngClass]="['col-precio', v.rowClass]">
+                <input
+                  type="number"
+                  class="precio-input"
+                  [(ngModel)]="v.costoUnitario"
+                  (ngModelChange)="onCostoChange(v)" />
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="subtotal">
+              <th mat-header-cell *matHeaderCellDef class="col-sub">Subtotal</th>
+              <td mat-cell *matCellDef="let v" [ngClass]="['col-sub', 'num', v.rowClass]">
+                {{ (v.lineaOcr.cantidad * v.costoUnitario) | number:'1.0-2' }}
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="producto">
+              <th mat-header-cell *matHeaderCellDef class="col-prod">Producto</th>
+              <td mat-cell *matCellDef="let v" [ngClass]="['col-prod', v.rowClass]">
+                <div class="select-with-action">
+                  <mat-form-field appearance="outline" class="cell-select">
+                    <mat-select
+                      [ngModel]="v.selectedProductoId"
+                      (selectionChange)="onProductoChange(v, $event.value)">
+                      <mat-optgroup *ngIf="v.candidatos.length" label="Sugerencias">
+                        <mat-option *ngFor="let c of v.candidatos" [value]="c.productoId">
+                          {{ c.nombre }} ({{ (c.score * 100) | number:'1.0-0' }}%)
+                        </mat-option>
+                      </mat-optgroup>
+                    </mat-select>
+                  </mat-form-field>
+                  <button mat-icon-button (click)="abrirCrearProducto(v)" matTooltip="Crear producto nuevo">
+                    <mat-icon>add_circle_outline</mat-icon>
+                  </button>
+                </div>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="presentacion">
+              <th mat-header-cell *matHeaderCellDef class="col-pres">Presentación</th>
+              <td mat-cell *matCellDef="let v" [ngClass]="['col-pres', v.rowClass]">
+                <mat-form-field appearance="outline" class="cell-select">
+                  <mat-select
+                    [(ngModel)]="v.selectedPresentacionId"
+                    [disabled]="!v.selectedProductoId"
+                    (selectionChange)="onPresentacionSeleccion(v)">
+                    <mat-option *ngFor="let p of v.presentacionesDisponibles" [value]="p.id">
+                      {{ p.nombre }} ({{ p.cantidad | number:'1.0-2' }})
+                    </mat-option>
+                  </mat-select>
+                </mat-form-field>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="acciones">
+              <th mat-header-cell *matHeaderCellDef class="col-acc"></th>
+              <td mat-cell *matCellDef="let v" class="col-acc">
+                <button mat-icon-button (click)="toggleOmitir(v)" [matTooltip]="v.omitir ? 'Restaurar' : 'Omitir línea'">
+                  <mat-icon>{{ v.omitir ? 'replay' : 'remove_circle_outline' }}</mat-icon>
+                </button>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="itemsColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: itemsColumns"></tr>
+          </table>
+        </mat-card-content>
+      </mat-card>
+
+    </div>
+  </div>
+
+  <div class="loading-container" *ngIf="loading">
+    <mat-spinner diameter="48"></mat-spinner>
+    <p>Cargando datos de la factura...</p>
+  </div>
+</div>

@@ -16,6 +16,9 @@ import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatSortModule } from '@angular/material/sort';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { FormsModule } from '@angular/forms';
 import { TabsService } from '../../../services/tabs.service';
 import { RepositoryService } from '../../../database/repository.service';
 import { Producto } from '../../../database/entities/productos/producto.entity';
@@ -39,7 +42,10 @@ import { GestionarProductoComponent } from '../gestionar-producto/gestionar-prod
     MatPaginatorModule,
     MatSortModule,
     MatMenuModule,
-    MatProgressSpinnerModule
+    MatProgressSpinnerModule,
+    MatTooltipModule,
+    MatSlideToggleModule,
+    FormsModule,
   ]
 })
 export class ListProductosComponent implements OnInit {
@@ -65,6 +71,7 @@ export class ListProductosComponent implements OnInit {
   esComprableFilter = new FormControl('');
   controlaStockFilter = new FormControl('');
   esIngredienteFilter = new FormControl('');
+  registroCompletoFilter = new FormControl('');
   
   // Filter options
   tipoOptions = Object.values(ProductoTipo);
@@ -116,6 +123,7 @@ export class ListProductosComponent implements OnInit {
     this.esComprableFilter.valueChanges.subscribe(() => this.applyFilters());
     this.controlaStockFilter.valueChanges.subscribe(() => this.applyFilters());
     this.esIngredienteFilter.valueChanges.subscribe(() => this.applyFilters());
+    this.registroCompletoFilter.valueChanges.subscribe(() => this.applyFilters());
   }
   
   loadProductos(): void {
@@ -129,6 +137,7 @@ export class ListProductosComponent implements OnInit {
       esComprable: this.esComprableFilter.value || '',
       controlaStock: this.controlaStockFilter.value || '',
       esIngrediente: this.esIngredienteFilter.value || '',
+      registroCompleto: this.registroCompletoFilter.value || '',
       page: this.currentPage,
       pageSize: this.pageSize
     };
@@ -166,6 +175,7 @@ export class ListProductosComponent implements OnInit {
     this.esComprableFilter.setValue('');
     this.controlaStockFilter.setValue('');
     this.esIngredienteFilter.setValue('');
+    this.registroCompletoFilter.setValue('');
     this.applyFilters();
   }
   

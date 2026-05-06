@@ -45,6 +45,7 @@ Todo en una sola aplicación de escritorio que corre en tu PC (Windows / macOS /
 17. [Reportes y dashboards](17-reportes-y-dashboards.md)
 18. [Solución de problemas comunes](18-solucion-de-problemas.md)
 19. [Glosario](19-glosario.md)
+20. [Importación de facturas con IA (OCR)](20-importacion-facturas-ia.md)
 
 ## Cómo leer este manual
 

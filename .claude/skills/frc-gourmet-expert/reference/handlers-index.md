@@ -25,6 +25,7 @@
 | **cuentas-por-cobrar.handler.ts** | 501 | CuentaPorCobrar, CuentaPorCobrarCuota | `cobrar-cpc-cuota`, `cobrar-cuotas-lote` |
 | **movimientos-cliente.handler.ts** | 65 | MovimientoCliente | Tracking de saldo cliente |
 | **compras.handler.ts** | 1196 | Proveedor, ProveedorProducto, Compra, CompraDetalle, FormasPago | Refactor 2026-05-05 (pago unificado vía CPP) |
+| **factura-import.handler.ts** | 470 | DocumentoCompraImportado, OcrAliasProveedor, OcrAliasProducto + IaConfig (JSON userData) | Importación facturas con OCR + IA. Endpoints: `ia-config-{get,set,test}`, `factura-import-{pick-file,process,reprocess,get,list,descartar,match,confirm}`. Usa GPT-4o vision (1 llamada). PDFs renderizados a PNG con pdfjs-dist + @napi-rs/canvas. Confirmar = transacción Compra ABIERTO + upsert aliases. Detalles → [domains/importacion-facturas-ocr.md](../domains/importacion-facturas-ocr.md) |
 | **ventas.handler.ts** | 2579 | Venta, VentaItem, VentaItemSabor, VentaItemAdicional, VentaItemIngredienteModificacion, VentaItemObservacion, Comanda, ComandaItem, PdvMesa, Sector, Reserva, Delivery, PrecioDelivery, PdvCategoria*, PdvAtajoGrupo*, PdvAtajoItem*, PdvConfig | El segundo más grande. Incluye `procesarStockVenta` (323 líneas) y `revertirStockVenta`. |
 | **rrhh-funcionarios.handler.ts** | 373 | Cargo, Funcionario, HistoricoCargo, HistoricoSalario | + transacción de alta funcionario |
 | **funcionario-documentos.handler.ts** | 105 | FuncionarioDocumento | Filesystem en `userData/funcionario-documentos/{id}/` |

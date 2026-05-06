@@ -28,7 +28,7 @@
 |---|---|---|
 | Familia | `familias` | |
 | Subfamilia | `subfamilias` | |
-| Producto | `productos` | tipo: ProductoTipo |
+| Producto | `productos` | tipo: ProductoTipo. Campos clave: `iva` (int 0/5/10, default 10, para SIFEN futuro), `registroCompleto` (boolean, default true; productos creados desde import OCR arrancan en false → chip "Parcial"). `subfamilia` es **nullable** (productos parciales sin clasificar). |
 | Presentacion | `presentaciones` | |
 | CodigoBarra | `codigos_barra` | N por presentación |
 | PrecioVenta | `precios_venta` | Polimórfico (presentacion / receta / producto / recetaPresentacion) |
@@ -84,7 +84,7 @@
 | PdvAtajoItemProducto | `pdv_atajo_item_productos` | M:N atajo→producto |
 | PdvConfig | `pdv_config` | Config global PdV (1 fila) |
 
-## Compras (10)
+## Compras (13)
 
 | Entidad | Tabla | Notas |
 |---|---|---|
@@ -97,7 +97,10 @@
 | Pago | `pagos` | DEPRECATED |
 | PagoDetalle | `pagos_detalles` | DEPRECATED |
 | FormasPago | `formas_pago` | Tabla general (PYG, USD, Tarjeta, etc.) |
-| (Estado/TipoBoleta enums) | — | |
+| DocumentoCompraImportado | `documentos_compra_importados` | Factura subida vía OCR + IA. Estado PENDIENTE/PROCESANDO/REQUIERE_REVISION/CONFIRMADO/ERROR/DESCARTADO. Vinculada a Compra al confirmar. |
+| OcrAliasProveedor | `ocr_aliases_proveedor` | Mapeo `(textoOcr o rucOcr) → Proveedor`. `vecesUsado >= 2` = match ALTA |
+| OcrAliasProducto | `ocr_aliases_producto` | Mapeo `(proveedor + textoOcr) → Producto + Presentacion`. Aprende por proveedor (mismo "POLLO 1KG" puede ser distinto producto según proveedor) |
+| (Estado/TipoBoleta/DocumentoEstado enums) | — | |
 
 ## Financiero (~30)
 

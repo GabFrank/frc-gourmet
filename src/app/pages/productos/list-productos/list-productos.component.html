@@ -84,6 +84,15 @@
           </mat-option>
         </mat-select>
       </mat-form-field>
+
+      <mat-form-field appearance="outline" class="filter-field">
+        <mat-label>Registro</mat-label>
+        <mat-select [formControl]="registroCompletoFilter">
+          <mat-option value="">Todos</mat-option>
+          <mat-option value="true">Completos</mat-option>
+          <mat-option value="false">Solo parciales</mat-option>
+        </mat-select>
+      </mat-form-field>
     </div>
   </div>
 
@@ -106,7 +115,16 @@
       <!-- Nombre Column -->
       <ng-container matColumnDef="nombre">
         <th mat-header-cell *matHeaderCellDef> Nombre </th>
-        <td mat-cell *matCellDef="let producto"> {{producto.nombre | uppercase}} </td>
+        <td mat-cell *matCellDef="let producto">
+          {{producto.nombre | uppercase}}
+          <span
+            *ngIf="producto.registroCompleto === false"
+            class="parcial-badge"
+            matTooltip="Registro parcial: completar clasificación, precios y recetas">
+            <mat-icon>warning_amber</mat-icon>
+            Parcial
+          </span>
+        </td>
       </ng-container>
 
       <!-- Tipo Column -->

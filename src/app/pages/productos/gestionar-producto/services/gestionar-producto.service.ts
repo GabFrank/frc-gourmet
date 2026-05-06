@@ -419,6 +419,7 @@ export class GestionarProductoService {
           nombre: producto.nombre?.toUpperCase(),
           tipo: producto.tipo,
           unidadBase: producto.unidadBase,
+          iva: (producto as any).iva ?? 10,
           activo: producto.activo,
           esVendible: producto.esVendible,
           esComprable: producto.esComprable,
@@ -472,6 +473,7 @@ export class GestionarProductoService {
         nombre: ['', [Validators.required, Validators.maxLength(255)]],
         tipo: [ProductoTipo.RETAIL, [Validators.required]],
         unidadBase: [this.unidadBaseList[0].nombre, [Validators.required]],
+        iva: [10, [Validators.required]],
         activo: [true],
         // Campos de configuración según el análisis
         esVendible: [true],
@@ -730,6 +732,7 @@ export class GestionarProductoService {
       nombre: productoData.nombre?.toUpperCase() || '',
       tipo: productoData.tipo,
       unidadBase: productoData.unidadBase,
+      iva: Number(productoData.iva ?? 10),
       activo: productoData.activo,
       esVendible: productoData.esVendible,
       esComprable: productoData.esComprable,

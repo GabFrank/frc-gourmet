@@ -23,7 +23,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
 import { TabsService } from 'src/app/services/tabs.service';
 import { CreateEditCompraComponent } from '../create-edit-compra/create-edit-compra.component';
 import { CompraDetalleComponent } from '../compra-detalle/compra-detalle.component';
-import { ImportarFacturaDialogComponent } from '../importar-factura-dialog/importar-factura-dialog.component';
+import { RevisarFacturaComponent } from '../revisar-factura/revisar-factura.component';
 import { FacturaImportService } from 'src/app/services/factura-import.service';
 
 @Component({
@@ -200,34 +200,22 @@ export class ListComprasComponent implements OnInit {
         return;
       }
 
-      this.abrirDialogoRevision(proc.documentoId);
+      this.abrirRevisionTab(proc.documentoId);
     } catch (e: any) {
       this.importing = false;
       this.snackBar.open('Error: ' + e?.message, 'Cerrar', { duration: 6000 });
     }
   }
 
-  abrirDialogoRevision(documentoId: number): void {
-    const ref = this.dialog.open(ImportarFacturaDialogComponent, {
-      width: '95vw',
-      maxWidth: '95vw',
-      height: '90vh',
-      data: { documentoId },
-      panelClass: 'importar-factura-dialog-panel',
-    });
-    ref.afterClosed().subscribe((res: any) => {
-      if (res?.compraId) {
-        this.snackBar.open('Compra borrador creada. Abriendo para revisión...', 'Cerrar', { duration: 4000 });
-        this.tabsService.openTab(
-          `Compra #${res.compraId} (borrador)`,
-          CreateEditCompraComponent,
-          { mode: 'edit', compraId: res.compraId },
-          `editar-compra-${res.compraId}`,
-          true,
-        );
-        this.loadData();
-      }
-    });
+  abrirRevisionTab(documentoId: number): void {
+    const tabId = `revisar-factura-${documentoId}`;
+    this.tabsService.openTab(
+      `Revisar factura #${documentoId}`,
+      RevisarFacturaComponent,
+      { documentoId, tabId },
+      tabId,
+      true,
+    );
   }
 
   editarBorrador(compra: any): void {

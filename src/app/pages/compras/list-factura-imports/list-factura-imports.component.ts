@@ -17,7 +17,7 @@ import { firstValueFrom } from 'rxjs';
 import { FacturaImportItem, FacturaImportService } from 'src/app/services/factura-import.service';
 import { TabsService } from 'src/app/services/tabs.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { ImportarFacturaDialogComponent } from '../importar-factura-dialog/importar-factura-dialog.component';
+import { RevisarFacturaComponent } from '../revisar-factura/revisar-factura.component';
 import { CreateEditCompraComponent } from '../create-edit-compra/create-edit-compra.component';
 import { CompraDetalleComponent } from '../compra-detalle/compra-detalle.component';
 
@@ -162,25 +162,14 @@ export class ListFacturaImportsComponent implements OnInit {
   }
 
   revisar(documentoId: number): void {
-    const ref = this.dialog.open(ImportarFacturaDialogComponent, {
-      width: '95vw',
-      maxWidth: '95vw',
-      height: '90vh',
-      data: { documentoId },
-      panelClass: 'importar-factura-dialog-panel',
-    });
-    ref.afterClosed().subscribe((res: any) => {
-      this.load();
-      if (res?.compraId) {
-        this.tabsService.openTab(
-          `Compra #${res.compraId} (borrador)`,
-          CreateEditCompraComponent,
-          { mode: 'edit', compraId: res.compraId },
-          `editar-compra-${res.compraId}`,
-          true,
-        );
-      }
-    });
+    const tabId = `revisar-factura-${documentoId}`;
+    this.tabsService.openTab(
+      `Revisar factura #${documentoId}`,
+      RevisarFacturaComponent,
+      { documentoId, tabId },
+      tabId,
+      true,
+    );
   }
 
   reprocesar(it: FacturaImportItem): void {

@@ -27,8 +27,9 @@ Se abre un editor con tabs internas:
 
 - **Nombre** (UPPERCASE).
 - **Tipo** de producto (uno de los 5 anteriores).
-- **Familia** y **Subfamilia**.
+- **Familia** y **Subfamilia** (opcionales — productos creados desde import OCR pueden quedar sin clasificar y completarse después).
 - **Unidad base**: KILOGRAMO / LITRO / UNIDAD / GRAMO / etc. La medida que usás para inventario.
+- **IVA (%)**: 10 (default), 5 o 0 (exento). Pensado para futura facturación electrónica SIFEN.
 - **Flags**:
   - **Es vendible** (✅ default): aparece en PdV.
   - **Es comprable** (depende del tipo): aparece en buscador de compras.
@@ -36,6 +37,8 @@ Se abre un editor con tabs internas:
   - **Es ingrediente**: puede usarse en recetas.
 - **Stock mínimo / máximo**: para alertas (TODO).
 - **Imagen** (parcialmente desactivado).
+
+> **Productos parciales:** los productos creados desde el módulo de **Importación de facturas con IA** (capítulo 20) arrancan con datos mínimos y aparecen en la lista con un chip naranja **"Parcial"**. Usá el filtro **"Solo parciales"** en la lista de productos para encontrarlos y completar familia/subfamilia/precios/recetas con calma.
 
 ### Tab 2: Presentaciones (RETAIL / RETAIL_INGREDIENTE)
 

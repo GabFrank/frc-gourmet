@@ -149,6 +149,10 @@ PdV refresca el estado de las mesas cada 1 segundo. Con 50 mesas, son ~50 querie
 - **`getPdvConfig` retorna array** con un solo elemento (legacy). Usar `result[0]`.
 - **Imágenes de producto** parcialmente desactivadas (handler comentado en `images.handler.ts:31-121`).
 - **Compras pre-refactor 2026-05-05 contado** sin CPP — aparecen como "ya pagadas". Es **intencional**, no se migran.
+- **`get-presentaciones-by-producto` devuelve `{ data, total, page, pageSize }`** — NO `{ items }`. Si ves un componente leyendo `res.items` está roto. Causó un bug en el módulo OCR (presentaciones siempre vacías).
+- **`create-presentacion` y `create-codigo-barra`** aceptan tanto `productoId`/`presentacionId` planos como `producto: { id }` / `presentacion: { id }` (estilo TypeORM relations). Tolerancia explícita desde 2026-05-06.
+- **Productos creados desde import OCR** llegan con `subfamilia=null` y `registroCompleto=false` — chip "Parcial" en list-productos. No es bug, completar después desde gestionar-producto.
+- **Patrón mat-select con item dinámicamente creado**: si `[ngModel]` apunta a un id que aún no está en `<mat-option>`, mat-select emite `null` por race con DOM. **Fix correcto**: prepender al array de opciones primero, `setTimeout(0)` antes de setear el valor. Implementado en `revisar-factura.component.ts:abrirCrearProducto`.
 - **Lista CPP filtra contado por defecto** — toggle UI activa.
 - **Handlers de RecetaPresentacion en `recetas.handler.ts`**, NO en `receta-presentacion.handler.ts` (existe pero NO se registra).
 - **Bono auto-generado por tardanza** no se recalcula si cambian los valores de config — solo aplica al siguiente registro de asistencia.

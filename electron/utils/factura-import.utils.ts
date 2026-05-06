@@ -5,14 +5,31 @@ import { getFacturaImportsDir } from './ia-config.utils';
 
 export const FACTURA_PROMPT = `Sos un asistente que ayuda a un comercio gastronomico a digitalizar
 sus comprobantes de compra propios (facturas y notas de proveedores) para cargarlos al sistema
-de gestion del negocio. La imagen es un comprobante de compra del comercio que estas asistiendo.
+de gestion del negocio. La imagen es un comprobante de compra: el comercio asistido COMPRA
+mercaderia o servicios, y otra empresa los VENDE.
+
+REGLA CRITICA — IDENTIFICACION DEL PROVEEDOR:
+En toda factura legal paraguaya (y en general en cualquier comprobante comercial) hay DOS partes:
+
+  1) EMISOR / VENDEDOR / REMITENTE: la empresa que EMITE la factura, vende y cobra. Sus datos
+     suelen estar en la parte SUPERIOR del comprobante: razon social, RUC, direccion, telefono,
+     timbrado, numero de factura. Es la persona/empresa que firma o sella el documento.
+  2) RECEPTOR / CLIENTE / COMPRADOR / DESTINATARIO: la empresa que RECIBE la factura y paga.
+     Sus datos suelen estar bajo etiquetas como "Cliente:", "Senores:", "Razon social:",
+     "Facturado a:", "Nombre o Razon Social del Cliente:", "Destinatario:", o en una caja
+     intermedia separada del encabezado.
+
+El campo "proveedor" del JSON DEBE corresponder al EMISOR / VENDEDOR / REMITENTE, NUNCA al
+cliente/receptor. No importa si el receptor es el comercio que estas asistiendo o cualquier
+otra empresa: ignoralo a la hora de armar "proveedor". Si tenes dudas, mira quien tiene el
+timbrado, el numero de factura y el sello/firma — ese es el emisor.
 
 Tu tarea: leer la imagen y devolver UN unico objeto JSON valido (sin markdown, sin texto extra)
 con los campos del esquema. Si un campo no aparece o no es legible, usa null.
 
 Esquema requerido:
 {
-  "proveedor": { "nombre": string, "ruc": string|null, "razonSocial": string|null },
+  "proveedor": { "nombre": string, "ruc": string|null, "razonSocial": string|null, "telefono": string|null },
   "documento": {
     "numeroNota": string|null,
     "fecha": string|null,
@@ -36,6 +53,8 @@ Esquema requerido:
 }
 
 Reglas:
+- "proveedor" = EMISOR de la factura (vendedor). NUNCA el cliente/receptor.
+- Capturá "telefono" del emisor si aparece (campo "Tel:", "Teléfono:" o similar). Si no aparece, null.
 - Convertí toda descripción de producto a MAYÚSCULAS.
 - Fecha en formato "YYYY-MM-DD".
 - Si la moneda no se ve, asumí PYG.
@@ -54,7 +73,7 @@ export interface FacturaJsonItem {
 }
 
 export interface FacturaJson {
-  proveedor: { nombre: string; ruc: string | null; razonSocial: string | null };
+  proveedor: { nombre: string; ruc: string | null; razonSocial: string | null; telefono: string | null };
   documento: {
     numeroNota: string | null;
     fecha: string | null;
@@ -152,6 +171,59 @@ export function copyArchivoToImports(userDataPath: string, srcPath: string): {
     archivoTipo,
     destPath,
   };
+}
+
+export interface InferenciaPresentacion {
+  unidadBase: 'UNIDAD' | 'KG' | 'GRAMO' | 'LITRO' | 'MILILITRO';
+  cantidadPresentacion: number;
+  nombrePresentacion: string;
+  posibleGtin: string | null;
+}
+
+/**
+ * Heurística para inferir presentación desde la descripción OCR de un item.
+ * Busca patrones como "750 ML", "1.5 LT", "500G", "2 KG" y normaliza a unidad base.
+ */
+export function inferirPresentacion(descripcion: string, codigoProveedor?: string | null): InferenciaPresentacion {
+  const desc = (descripcion || '').toUpperCase();
+  const result: InferenciaPresentacion = {
+    unidadBase: 'UNIDAD',
+    cantidadPresentacion: 1,
+    nombrePresentacion: 'UNIDAD',
+    posibleGtin: null,
+  };
+
+  // GTIN: 8-14 digitos
+  if (codigoProveedor && /^\d{8,14}$/.test(codigoProveedor.trim())) {
+    result.posibleGtin = codigoProveedor.trim();
+  }
+
+  // Match "<numero> <unidad>" — admite punto/coma decimal y espacios opcionales.
+  const re = /(\d+(?:[.,]\d+)?)\s*(ML|MILILITROS?|L|LT|LITROS?|KG|KILOS?|KILOGRAMOS?|G|GR|GRAMOS?|CC|UN|UND|UNID|UNIDAD)\b/i;
+  const m = desc.match(re);
+  if (m) {
+    const num = parseFloat(m[1].replace(',', '.'));
+    const u = m[2].toUpperCase();
+    if (['ML', 'CC', 'MILILITRO', 'MILILITROS'].includes(u)) {
+      result.unidadBase = 'MILILITRO';
+      result.cantidadPresentacion = num;
+      result.nombrePresentacion = `${num} ML`;
+    } else if (['L', 'LT', 'LITRO', 'LITROS'].includes(u)) {
+      result.unidadBase = 'LITRO';
+      result.cantidadPresentacion = num;
+      result.nombrePresentacion = `${num} L`;
+    } else if (['KG', 'KILO', 'KILOS', 'KILOGRAMO', 'KILOGRAMOS'].includes(u)) {
+      result.unidadBase = 'KG';
+      result.cantidadPresentacion = num;
+      result.nombrePresentacion = `${num} KG`;
+    } else if (['G', 'GR', 'GRAMO', 'GRAMOS'].includes(u)) {
+      result.unidadBase = 'GRAMO';
+      result.cantidadPresentacion = num;
+      result.nombrePresentacion = `${num} G`;
+    }
+  }
+
+  return result;
 }
 
 export function mimeFromExt(ext: string): string {

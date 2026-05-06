@@ -25,6 +25,7 @@ export interface MatchItem {
     precioUnitario: number;
     subtotal: number;
     codigoProveedor: string | null;
+    iva: number | null;
   };
   match: { productoId: number; presentacionId: number | null; nombre: string } | null;
   confianza: Confianza;
@@ -45,6 +46,7 @@ export interface MatchResult {
   proveedor: {
     textoOcr: string;
     rucOcr: string | null;
+    telefonoOcr: string | null;
     match: { id: number; nombre: string } | null;
     confianza: Confianza;
     candidatos: ProveedorCandidato[];
@@ -220,6 +222,7 @@ export function buildMatchResult(opts: BuildOpts): MatchResult {
         precioUnitario: line.precioUnitario,
         subtotal: line.subtotal,
         codigoProveedor: codigoProv,
+        iva: (line as any).iva ?? null,
       },
       match: itemMatch,
       confianza: itemConfianza,
@@ -241,6 +244,7 @@ export function buildMatchResult(opts: BuildOpts): MatchResult {
     proveedor: {
       textoOcr: factura.proveedor.nombre,
       rucOcr,
+      telefonoOcr: (factura.proveedor as any).telefono || null,
       match: provMatch,
       confianza: provConfianza,
       candidatos: provCandidatos,
