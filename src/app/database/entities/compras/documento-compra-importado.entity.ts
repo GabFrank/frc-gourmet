@@ -50,6 +50,9 @@ export class DocumentoCompraImportado extends BaseModel {
   @Column({ name: 'modelo_usado', type: 'varchar', length: 50, nullable: true })
   modeloUsado?: string;
 
+  @Column({ name: 'prompt_version', type: 'int', nullable: true })
+  promptVersion?: number;
+
   @ManyToOne('Compra', { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'compra_id' })
   compra?: Compra;

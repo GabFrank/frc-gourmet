@@ -27,11 +27,23 @@ import {
   parseOpenAiError,
   validateFacturaJson,
   FacturaJson,
+  FACTURA_PROMPT_BASE,
 } from '../utils/factura-import.utils';
 import {
   buildMatchResult,
   MatchResult,
 } from '../utils/ocr-matcher.utils';
+import {
+  ensureIaPromptConfig,
+  loadEffectivePrompt,
+  parseAdiciones,
+  setAdiciones,
+} from '../utils/ia-prompt.utils';
+import { IaPromptConfig } from '../../src/app/database/entities/ia/ia-prompt-config.entity';
+import {
+  IaPromptSugerencia,
+  IaPromptSugerenciaEstado,
+} from '../../src/app/database/entities/ia/ia-prompt-sugerencia.entity';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -59,6 +71,99 @@ export function registerFacturaImportHandlers(
     }
     writeIaConfig(app.getPath('userData'), next);
     return { success: true, config: { ...next, openaiApiKey: next.openaiApiKey ? '***' : '' } };
+  });
+
+  // ============ IA PROMPT CONFIG ============
+  ipcMain.handle('ia-prompt-get', async () => {
+    const cfg = await ensureIaPromptConfig(dataSource);
+    return {
+      id: cfg.id,
+      promptBase: cfg.promptBase,
+      promptBaseSeed: FACTURA_PROMPT_BASE,
+      adiciones: parseAdiciones(cfg),
+      version: cfg.version,
+    };
+  });
+
+  ipcMain.handle('ia-prompt-set-adiciones', async (_e, payload: { adiciones: string[] }) => {
+    const cfg = await setAdiciones(dataSource, payload?.adiciones || []);
+    return {
+      success: true,
+      version: cfg.version,
+      adiciones: parseAdiciones(cfg),
+    };
+  });
+
+  ipcMain.handle('ia-prompt-effective', async () => {
+    const eff = await loadEffectivePrompt(dataSource);
+    return { text: eff.text, version: eff.version, lengthChars: eff.text.length };
+  });
+
+  // ============ IA PROMPT SUGERENCIAS ============
+  ipcMain.handle('ia-prompt-sugerencia-list', async (_e, payload: { estado?: IaPromptSugerenciaEstado } = {}) => {
+    const repo = dataSource.getRepository(IaPromptSugerencia);
+    const qb = repo.createQueryBuilder('s')
+      .leftJoinAndSelect('s.documentoOrigen', 'd')
+      .orderBy('s.createdAt', 'DESC');
+    if (payload.estado) qb.andWhere('s.estado = :estado', { estado: payload.estado });
+    return await qb.getMany();
+  });
+
+  ipcMain.handle('ia-prompt-sugerencia-create', async (_e, payload: { texto: string; motivo?: string; documentoOrigenId?: number; origen?: string }) => {
+    const userId = getCurrentUser()?.id;
+    const repo = dataSource.getRepository(IaPromptSugerencia);
+    const texto = (payload?.texto || '').trim();
+    if (!texto) return { success: false, error: 'Texto vacio.' };
+    const sug = repo.create({
+      texto,
+      motivo: payload?.motivo,
+      origen: (payload?.origen || 'USUARIO').toUpperCase(),
+      estado: IaPromptSugerenciaEstado.PENDIENTE,
+      documentoOrigen: payload?.documentoOrigenId
+        ? ({ id: payload.documentoOrigenId } as any)
+        : undefined,
+    });
+    await setEntityUserTracking(dataSource, sug, userId, false);
+    const saved = await repo.save(sug);
+    return { success: true, id: saved.id };
+  });
+
+  ipcMain.handle('ia-prompt-sugerencia-aprobar', async (_e, payload: { id: number }) => {
+    const userId = getCurrentUser()?.id;
+    const repo = dataSource.getRepository(IaPromptSugerencia);
+    const sug = await repo.findOne({ where: { id: payload.id } });
+    if (!sug) return { success: false, error: 'Sugerencia no encontrada.' };
+    if (sug.estado !== IaPromptSugerenciaEstado.PENDIENTE) {
+      return { success: false, error: `Sugerencia ya esta ${sug.estado}.` };
+    }
+    const cfg = await ensureIaPromptConfig(dataSource);
+    const adiciones = parseAdiciones(cfg);
+    if (!adiciones.includes(sug.texto)) adiciones.push(sug.texto);
+    await setAdiciones(dataSource, adiciones);
+    sug.estado = IaPromptSugerenciaEstado.APROBADA;
+    await setEntityUserTracking(dataSource, sug, userId, true);
+    await repo.save(sug);
+    return { success: true };
+  });
+
+  ipcMain.handle('ia-prompt-sugerencia-rechazar', async (_e, payload: { id: number; motivo?: string }) => {
+    const userId = getCurrentUser()?.id;
+    const repo = dataSource.getRepository(IaPromptSugerencia);
+    const sug = await repo.findOne({ where: { id: payload.id } });
+    if (!sug) return { success: false, error: 'Sugerencia no encontrada.' };
+    sug.estado = IaPromptSugerenciaEstado.RECHAZADA;
+    if (payload?.motivo) sug.motivo = payload.motivo;
+    await setEntityUserTracking(dataSource, sug, userId, true);
+    await repo.save(sug);
+    return { success: true };
+  });
+
+  ipcMain.handle('ia-prompt-sugerencia-delete', async (_e, payload: { id: number }) => {
+    const repo = dataSource.getRepository(IaPromptSugerencia);
+    const sug = await repo.findOne({ where: { id: payload.id } });
+    if (!sug) return { success: false, error: 'Sugerencia no encontrada.' };
+    await repo.remove(sug);
+    return { success: true };
   });
 
   ipcMain.handle('ia-config-test', async () => {
@@ -117,6 +222,8 @@ export function registerFacturaImportHandlers(
       return { success: false, error: `Archivo demasiado grande (${(stat.size / 1024 / 1024).toFixed(1)}MB). Max 5MB.` };
     }
 
+    const promptEff = await loadEffectivePrompt(dataSource);
+
     const copied = copyArchivoToImports(userDataPath, payload.filePath);
     const repo = dataSource.getRepository(DocumentoCompraImportado);
     const doc = repo.create({
@@ -126,6 +233,7 @@ export function registerFacturaImportHandlers(
       estado: DocumentoCompraImportadoEstado.PROCESANDO,
       intentos: 1,
       modeloUsado: cfg.modelo,
+      promptVersion: promptEff.version,
     });
     await setEntityUserTracking(dataSource, doc, userId, false);
     const savedDoc = await repo.save(doc);
@@ -149,6 +257,7 @@ export function registerFacturaImportHandlers(
         apiKey: cfg.openaiApiKey,
         modelo: cfg.modelo,
         base64DataUrl: dataUrl,
+        promptText: promptEff.text,
       });
 
       savedDoc.jsonCrudo = JSON.stringify(aiRes.json);
@@ -198,15 +307,22 @@ export function registerFacturaImportHandlers(
       return { success: false, error: 'Archivo original no encontrado en disco.' };
     }
 
+    const promptEff = await loadEffectivePrompt(dataSource);
     doc.estado = DocumentoCompraImportadoEstado.PROCESANDO;
     doc.intentos = (doc.intentos || 0) + 1;
     doc.errorMensaje = undefined;
+    doc.promptVersion = promptEff.version;
     await setEntityUserTracking(dataSource, doc, userId, true);
     await repo.save(doc);
 
     try {
       const dataUrl = await buildVisionDataUrl(fullPath);
-      const aiRes = await callOpenAiVision({ apiKey: cfg.openaiApiKey, modelo: cfg.modelo, base64DataUrl: dataUrl });
+      const aiRes = await callOpenAiVision({
+        apiKey: cfg.openaiApiKey,
+        modelo: cfg.modelo,
+        base64DataUrl: dataUrl,
+        promptText: promptEff.text,
+      });
 
       doc.jsonCrudo = JSON.stringify(aiRes.json);
       doc.tokensPrompt = aiRes.tokensPrompt;

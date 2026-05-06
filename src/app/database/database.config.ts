@@ -148,6 +148,10 @@ import { DocumentoCompraImportado } from './entities/compras/documento-compra-im
 import { OcrAliasProveedor } from './entities/compras/ocr-alias-proveedor.entity';
 import { OcrAliasProducto } from './entities/compras/ocr-alias-producto.entity';
 
+// IA Prompt config
+import { IaPromptConfig } from './entities/ia/ia-prompt-config.entity';
+import { IaPromptSugerencia } from './entities/ia/ia-prompt-sugerencia.entity';
+
 // Migrations deshabilitadas en desarrollo: usamos synchronize=true
 
 // Import new PDV entities
@@ -318,6 +322,9 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       DocumentoCompraImportado,
       OcrAliasProveedor,
       OcrAliasProducto,
+      // IA Prompt config + sugerencias
+      IaPromptConfig,
+      IaPromptSugerencia,
       // Ventas entities
       PrecioDelivery,
       Delivery,

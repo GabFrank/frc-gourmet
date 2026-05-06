@@ -26,6 +26,14 @@ export interface MatchItem {
     subtotal: number;
     codigoProveedor: string | null;
     iva: number | null;
+    unidadMedidaOcr: string | null;
+    presentacionInferida: {
+      tipo: 'UNITARIA' | 'PACK';
+      cantidadPaquete: number;
+      contenidoUnitario: { valor: number; unidad: string } | null;
+      nombreProductoLimpio: string;
+      nombrePresentacion: string;
+    } | null;
   };
   match: { productoId: number; presentacionId: number | null; nombre: string } | null;
   confianza: Confianza;
@@ -223,6 +231,8 @@ export function buildMatchResult(opts: BuildOpts): MatchResult {
         subtotal: line.subtotal,
         codigoProveedor: codigoProv,
         iva: (line as any).iva ?? null,
+        unidadMedidaOcr: (line as any).unidadMedidaOcr ?? null,
+        presentacionInferida: (line as any).presentacionInferida ?? null,
       },
       match: itemMatch,
       confianza: itemConfianza,

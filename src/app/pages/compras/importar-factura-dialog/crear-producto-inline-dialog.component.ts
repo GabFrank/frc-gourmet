@@ -144,15 +144,27 @@ export class CrearProductoInlineDialogComponent {
   saving = false;
 
   constructor(
-    @Inject(MAT_DIALOG_DATA) public data: { descripcionOcr?: string; codigoProveedorOcr?: string | null; ivaOcr?: number | null },
+    @Inject(MAT_DIALOG_DATA) public data: {
+      descripcionOcr?: string;
+      codigoProveedorOcr?: string | null;
+      ivaOcr?: number | null;
+      presentacionInferidaOcr?: any;
+      unidadMedidaOcr?: string | null;
+    },
     private repo: RepositoryService,
     private dialogRef: MatDialogRef<CrearProductoInlineDialogComponent>,
     private snackBar: MatSnackBar,
   ) {
     if (data?.descripcionOcr) {
       const desc = data.descripcionOcr.toUpperCase();
-      this.nombre = desc;
-      const inf = inferirPresentacion(desc, data.codigoProveedorOcr || null);
+      const inf = inferirPresentacion(
+        desc,
+        data.codigoProveedorOcr || null,
+        data.presentacionInferidaOcr || null,
+        data.unidadMedidaOcr || null,
+      );
+      // Nombre LIMPIO (sin notacion de pack); fallback a desc original.
+      this.nombre = inf.nombreProductoSugerido || desc;
       this.unidadBase = inf.unidadBase;
       this.presentacionNombre = inf.nombrePresentacion;
       this.presentacionCantidad = inf.cantidadPresentacion;

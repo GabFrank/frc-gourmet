@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
@@ -25,6 +26,16 @@ import { CrearProveedorInlineDialogComponent } from '../importar-factura-dialog/
 import { CrearProductoInlineDialogComponent } from '../importar-factura-dialog/crear-producto-inline-dialog.component';
 import { CreateEditCompraComponent } from '../create-edit-compra/create-edit-compra.component';
 import { VerFacturaDialogComponent } from './ver-factura-dialog.component';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
+
+interface ProductoLite {
+  id: number;
+  nombre: string;
+  /** True si vino como sugerencia del matcher OCR. */
+  sugerido?: boolean;
+  /** Score 0..1 si vino del matcher. */
+  score?: number;
+}
 
 interface ItemVm extends MatchItem {
   chipLabel: string;
@@ -33,7 +44,14 @@ interface ItemVm extends MatchItem {
   selectedProductoId: number | null;
   selectedPresentacionId: number | null;
   presentacionesDisponibles: { id: number; nombre: string; cantidad: number; principal: boolean }[];
+  cantidad: number;
   costoUnitario: number;
+  /** Pre-computado: cantidad * costoUnitario. Recalcular tras cualquier cambio. */
+  subtotal: number;
+  /** Texto del autocomplete (lo que escribe o se muestra). */
+  productoQuery: string;
+  /** Lista filtrada actual del autocomplete (top primero los sugeridos del matcher). */
+  productosFiltrados: ProductoLite[];
 }
 
 @Component({
@@ -42,6 +60,7 @@ interface ItemVm extends MatchItem {
   imports: [
     CommonModule,
     FormsModule,
+    MatAutocompleteModule,
     MatButtonModule,
     MatCardModule,
     MatChipsModule,
@@ -60,6 +79,7 @@ interface ItemVm extends MatchItem {
     MatTooltipModule,
     DatePipe,
     DecimalPipe,
+    CurrencyInputDirective,
   ],
   templateUrl: './revisar-factura.component.html',
   styleUrls: ['./revisar-factura.component.scss'],
@@ -79,6 +99,9 @@ export class RevisarFacturaComponent implements OnInit {
 
   proveedoresAll: any[] = [];
   monedas: any[] = [];
+  productosAll: ProductoLite[] = [];
+
+  decimalesMoneda = 0;
 
   proveedorIdSeleccionado: number | null = null;
   monedaIdSeleccionada: number | null = null;
@@ -124,10 +147,16 @@ export class RevisarFacturaComponent implements OnInit {
         ? doc.archivoUrl.replace(/\.pdf$/i, '.render.png')
         : doc.archivoUrl;
 
-      const [match, provs, monedas] = await Promise.all([
+      const [match, provs, monedas, productosRes] = await Promise.all([
         firstValueFrom(this.service.match(this.documentoId)),
         firstValueFrom(this.repo.getProveedores()),
         firstValueFrom(this.repo.getMonedas()),
+        firstValueFrom(this.repo.getProductosWithFilters({
+          activo: 'true',
+          esComprable: 'true',
+          page: 1,
+          pageSize: 5000,
+        })),
       ]);
 
       if ((match as any).error) {
@@ -138,11 +167,16 @@ export class RevisarFacturaComponent implements OnInit {
       this.matchResult = match as MatchResult;
       this.proveedoresAll = provs || [];
       this.monedas = monedas || [];
+      this.productosAll = ((productosRes as any)?.items || []).map((p: any) => ({
+        id: p.id,
+        nombre: p.nombre,
+      }));
 
       const monedaPyg = this.monedas.find(m => (m.denominacion || '').toUpperCase() === 'GUARANI')
         || this.monedas.find(m => (m.simbolo || '').toUpperCase() === 'PYG')
         || this.monedas[0];
       this.monedaIdSeleccionada = monedaPyg?.id || null;
+      this.recalcDecimalesMoneda();
 
       this.proveedorIdSeleccionado = this.matchResult.proveedor.match?.id || null;
       this.numeroNota = this.matchResult.documento.numeroNota || '';
@@ -178,6 +212,8 @@ export class RevisarFacturaComponent implements OnInit {
     const conf = item.confianza;
     const chipLabel = conf === 'ALTA' ? 'Auto-vinculado' : conf === 'MEDIA' ? 'Sugerencia' : 'Sin coincidencia';
     const chipClass = conf === 'ALTA' ? 'chip-verde' : conf === 'MEDIA' ? 'chip-amarillo' : 'chip-naranja';
+    const productosFiltrados: ProductoLite[] = this.productosFiltradosBase(item);
+    const productoQuery = item.match?.nombre || '';
     return {
       ...item,
       chipLabel,
@@ -186,8 +222,57 @@ export class RevisarFacturaComponent implements OnInit {
       selectedProductoId: item.match?.productoId || null,
       selectedPresentacionId: item.match?.presentacionId || null,
       presentacionesDisponibles: [],
+      cantidad: Number(item.lineaOcr.cantidad) || 0,
       costoUnitario: item.lineaOcr.precioUnitario,
+      subtotal: (Number(item.lineaOcr.cantidad) || 0) * (Number(item.lineaOcr.precioUnitario) || 0),
+      productoQuery,
+      productosFiltrados,
     };
+  }
+
+  /**
+   * Lista base del autocomplete: candidatos del matcher arriba (sugeridos) +
+   * el resto de productos activos comprables. Limitada a 50 para perf.
+   */
+  private productosFiltradosBase(item: MatchItem, query?: string): ProductoLite[] {
+    const q = (query || '').trim().toUpperCase();
+    const sugeridosIds = new Set<number>(item.candidatos.map(c => c.productoId));
+    const sugeridos: ProductoLite[] = item.candidatos.map(c => ({
+      id: c.productoId,
+      nombre: c.nombre,
+      sugerido: true,
+      score: c.score,
+    }));
+    const resto = this.productosAll.filter(p => !sugeridosIds.has(p.id));
+    let combined: ProductoLite[];
+    if (!q) {
+      combined = [...sugeridos, ...resto].slice(0, 50);
+    } else {
+      const filtSug = sugeridos.filter(p => p.nombre.toUpperCase().includes(q));
+      const filtResto = resto.filter(p => p.nombre.toUpperCase().includes(q));
+      combined = [...filtSug, ...filtResto].slice(0, 50);
+    }
+    return combined;
+  }
+
+  onProductoQuery(vm: ItemVm): void {
+    vm.productosFiltrados = this.productosFiltradosBase(vm, vm.productoQuery);
+    // Si el usuario tipea algo que NO coincide con nada seleccionado, des-vincular.
+    if (vm.selectedProductoId) {
+      const sel = this.productosAll.find(p => p.id === vm.selectedProductoId);
+      if (sel && (vm.productoQuery || '').toUpperCase() !== (sel.nombre || '').toUpperCase()) {
+        vm.selectedProductoId = null;
+        vm.selectedPresentacionId = null;
+        vm.presentacionesDisponibles = [];
+      }
+    }
+  }
+
+  displayProducto = (p: ProductoLite | null): string => p?.nombre || '';
+
+  async onProductoSeleccionado(vm: ItemVm, p: ProductoLite): Promise<void> {
+    vm.productoQuery = p.nombre;
+    await this.onProductoChange(vm, p.id);
   }
 
   private async loadPresentaciones(productoId: number): Promise<void> {
@@ -293,41 +378,47 @@ export class RevisarFacturaComponent implements OnInit {
         descripcionOcr: vm.lineaOcr.descripcion,
         codigoProveedorOcr: vm.lineaOcr.codigoProveedor,
         ivaOcr: (vm.lineaOcr as any).iva,
+        presentacionInferidaOcr: (vm.lineaOcr as any).presentacionInferida || null,
+        unidadMedidaOcr: (vm.lineaOcr as any).unidadMedidaOcr || null,
       },
     });
     ref.afterClosed().subscribe(async (res: any) => {
       if (res?.producto) {
-        // Insertar el producto creado al tope de candidatos para que el mat-select tenga la opcion.
+        const nuevo: ProductoLite = {
+          id: res.producto.id,
+          nombre: res.producto.nombre,
+        };
+        // Insertar en la lista global (al tope) y en candidatos del item.
+        if (!this.productosAll.some(p => p.id === nuevo.id)) {
+          this.productosAll = [nuevo, ...this.productosAll];
+        }
         vm.candidatos = [
           {
-            productoId: res.producto.id,
+            productoId: nuevo.id,
             presentacionId: res.presentacion?.id || null,
-            nombre: res.producto.nombre,
+            nombre: nuevo.nombre,
             presentacionNombre: res.presentacion?.nombre || null,
             score: 1,
           },
-          ...(vm.candidatos || []).filter(c => c.productoId !== res.producto.id),
+          ...(vm.candidatos || []).filter(c => c.productoId !== nuevo.id),
         ];
         if (res.presentacion) {
-          this.presentacionesPorProducto[res.producto.id] = [{
+          this.presentacionesPorProducto[nuevo.id] = [{
             id: res.presentacion.id,
             nombre: res.presentacion.nombre,
             cantidad: Number(res.presentacion.cantidad) || 1,
             principal: !!res.presentacion.principal,
           }];
-          vm.presentacionesDisponibles = this.presentacionesPorProducto[res.producto.id];
+          vm.presentacionesDisponibles = this.presentacionesPorProducto[nuevo.id];
         }
-        // Setear selecciones DESPUES de que la opcion exista en la lista (Angular debe rerender primero).
-        setTimeout(() => {
-          vm.selectedProductoId = res.producto.id;
-          if (res.presentacion) {
-            vm.selectedPresentacionId = res.presentacion.id;
-          }
-          vm.confianza = 'ALTA';
-          vm.chipLabel = 'Producto nuevo';
-          vm.chipClass = 'chip-verde';
-          this.recalcularTotal();
-        }, 0);
+        vm.selectedProductoId = nuevo.id;
+        vm.productoQuery = nuevo.nombre;
+        vm.productosFiltrados = this.productosFiltradosBase(vm);
+        if (res.presentacion) vm.selectedPresentacionId = res.presentacion.id;
+        vm.confianza = 'ALTA';
+        vm.chipLabel = 'Producto nuevo';
+        vm.chipClass = 'chip-verde';
+        this.recalcularTotal();
         this.snackBar.open('Producto creado.', 'Cerrar', { duration: 2500 });
       }
     });
@@ -343,13 +434,12 @@ export class RevisarFacturaComponent implements OnInit {
     let total = 0;
     let omitidos = 0;
     for (const vm of this.itemsVm) {
+      vm.subtotal = (Number(vm.cantidad) || 0) * (Number(vm.costoUnitario) || 0);
       if (vm.omitir) {
         omitidos++;
         continue;
       }
-      const cant = Number(vm.lineaOcr.cantidad) || 0;
-      const costo = Number(vm.costoUnitario) || 0;
-      total += cant * costo;
+      total += vm.subtotal;
     }
     this.totalAjustado = +total.toFixed(2);
     this.itemsOmitidos = omitidos;
@@ -357,6 +447,20 @@ export class RevisarFacturaComponent implements OnInit {
 
   onCostoChange(_vm: ItemVm): void {
     this.recalcularTotal();
+  }
+
+  onCantidadChange(_vm: ItemVm): void {
+    this.recalcularTotal();
+  }
+
+  onMonedaChange(): void {
+    this.recalcDecimalesMoneda();
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const m = this.monedas.find(x => x.id === this.monedaIdSeleccionada);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   onPreviewError(): void {
@@ -404,8 +508,8 @@ export class RevisarFacturaComponent implements OnInit {
           indice: v.indice,
           productoId: v.selectedProductoId as number,
           presentacionId: v.selectedPresentacionId,
-          cantidad: v.lineaOcr.cantidad,
-          costoUnitario: v.costoUnitario,
+          cantidad: Number(v.cantidad),
+          costoUnitario: Number(v.costoUnitario),
           descripcionOcr: v.lineaOcr.descripcion,
           omitir: v.omitir,
         })),

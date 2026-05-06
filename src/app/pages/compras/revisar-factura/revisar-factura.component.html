@@ -96,7 +96,7 @@
             </mat-form-field>
             <mat-form-field appearance="outline" class="medium">
               <mat-label>Moneda</mat-label>
-              <mat-select [(ngModel)]="monedaIdSeleccionada">
+              <mat-select [(ngModel)]="monedaIdSeleccionada" (selectionChange)="onMonedaChange()">
                 <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
               </mat-select>
             </mat-form-field>
@@ -138,26 +138,40 @@
 
             <ng-container matColumnDef="cantidad">
               <th mat-header-cell *matHeaderCellDef class="col-cant">Cant.</th>
-              <td mat-cell *matCellDef="let v" [ngClass]="['col-cant', 'num', v.rowClass]">
-                {{ v.lineaOcr.cantidad | number:'1.0-2' }}
+              <td mat-cell *matCellDef="let v" [ngClass]="['col-cant', v.rowClass]">
+                <mat-form-field appearance="outline" class="cell-num">
+                  <input
+                    matInput
+                    type="text"
+                    inputmode="decimal"
+                    [(ngModel)]="v.cantidad"
+                    (ngModelChange)="onCantidadChange(v)"
+                    appCurrencyInput
+                    [decimals]="2" />
+                </mat-form-field>
               </td>
             </ng-container>
 
             <ng-container matColumnDef="precio">
               <th mat-header-cell *matHeaderCellDef class="col-precio">P. Unit.</th>
               <td mat-cell *matCellDef="let v" [ngClass]="['col-precio', v.rowClass]">
-                <input
-                  type="number"
-                  class="precio-input"
-                  [(ngModel)]="v.costoUnitario"
-                  (ngModelChange)="onCostoChange(v)" />
+                <mat-form-field appearance="outline" class="cell-num">
+                  <input
+                    matInput
+                    type="text"
+                    inputmode="decimal"
+                    [(ngModel)]="v.costoUnitario"
+                    (ngModelChange)="onCostoChange(v)"
+                    appCurrencyInput
+                    [decimals]="decimalesMoneda" />
+                </mat-form-field>
               </td>
             </ng-container>
 
             <ng-container matColumnDef="subtotal">
               <th mat-header-cell *matHeaderCellDef class="col-sub">Subtotal</th>
               <td mat-cell *matCellDef="let v" [ngClass]="['col-sub', 'num', v.rowClass]">
-                {{ (v.lineaOcr.cantidad * v.costoUnitario) | number:'1.0-2' }}
+                {{ v.subtotal | number:(decimalesMoneda === 0 ? '1.0-0' : '1.2-2') }}
               </td>
             </ng-container>
 
@@ -166,15 +180,22 @@
               <td mat-cell *matCellDef="let v" [ngClass]="['col-prod', v.rowClass]">
                 <div class="select-with-action">
                   <mat-form-field appearance="outline" class="cell-select">
-                    <mat-select
-                      [ngModel]="v.selectedProductoId"
-                      (selectionChange)="onProductoChange(v, $event.value)">
-                      <mat-optgroup *ngIf="v.candidatos.length" label="Sugerencias">
-                        <mat-option *ngFor="let c of v.candidatos" [value]="c.productoId">
-                          {{ c.nombre }} ({{ (c.score * 100) | number:'1.0-0' }}%)
-                        </mat-option>
-                      </mat-optgroup>
-                    </mat-select>
+                    <input
+                      matInput
+                      type="text"
+                      [(ngModel)]="v.productoQuery"
+                      (input)="onProductoQuery(v)"
+                      [matAutocomplete]="autoP"
+                      placeholder="Buscar producto..." />
+                    <mat-autocomplete
+                      #autoP="matAutocomplete"
+                      [displayWith]="displayProducto"
+                      (optionSelected)="onProductoSeleccionado(v, $event.option.value)">
+                      <mat-option *ngFor="let p of v.productosFiltrados" [value]="p">
+                        <span [class.sugerido]="p.sugerido">{{ p.nombre }}</span>
+                        <small *ngIf="p.score" class="autocomplete-score"> ({{ (p.score * 100) | number:'1.0-0' }}%)</small>
+                      </mat-option>
+                    </mat-autocomplete>
                   </mat-form-field>
                   <button mat-icon-button (click)="abrirCrearProducto(v)" matTooltip="Crear producto nuevo">
                     <mat-icon>add_circle_outline</mat-icon>

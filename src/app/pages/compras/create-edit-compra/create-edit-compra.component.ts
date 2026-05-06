@@ -24,6 +24,7 @@ import { FinalizarCompraDialogComponent } from '../finalizar-compra-dialog/final
 import { GestionarProductoComponent } from 'src/app/pages/productos/gestionar-producto/gestionar-producto.component';
 import { PanelProductosProveedorComponent } from './panel-productos-proveedor/panel-productos-proveedor.component';
 import { PanelHistoricoProductoComponent } from './panel-historico-producto/panel-historico-producto.component';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 interface ItemSeed {
   productoId: number;
@@ -62,6 +63,7 @@ interface ItemSeed {
     DecimalPipe,
     PanelProductosProveedorComponent,
     PanelHistoricoProductoComponent,
+    CurrencyInputDirective,
   ],
 })
 export class CreateEditCompraComponent implements OnInit {
@@ -83,12 +85,22 @@ export class CreateEditCompraComponent implements OnInit {
   monedas: any[] = [];
   formasPago: any[] = [];
 
+  private recalcDecimalesMoneda(): void {
+    const id = this.form?.get('monedaId')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
+  }
+
   tipoBoletaOptions = ['LEGAL', 'COMUN', 'OTRO', 'SIN_COMPROBANTE'];
   displayedColumns = ['producto', 'presentacion', 'cantidad', 'costoUnitario', 'subtotal', 'actions'];
 
   loading = false;
   saving = false;
   finalizing = false;
+
+  /** Decimales segun la moneda seleccionada (PYG=0, USD/BRL=2). Se actualiza cuando cambia monedaId. */
+  decimalesMoneda = 0;
 
   constructor(
     private fb: FormBuilder,
@@ -114,6 +126,10 @@ export class CreateEditCompraComponent implements OnInit {
     this.itemsArray = this.form.get('items') as FormArray<FormGroup>;
     this.itemsArray.valueChanges.subscribe(() => this.recalcular());
     this.refreshDataSource();
+
+    this.form.get('monedaId')!.valueChanges.subscribe((id: any) => {
+      this.recalcDecimalesMoneda();
+    });
 
     this.form.get('proveedorId')!.valueChanges.subscribe((id: any) => {
       this.proveedorIdActivo = id ? Number(id) : null;
@@ -147,6 +163,7 @@ export class CreateEditCompraComponent implements OnInit {
       this.categorias = (cats as any[]) || [];
       this.monedas = (monedas as any[]) || [];
       this.formasPago = (fps as any[]) || [];
+      this.recalcDecimalesMoneda();
     } catch (e) {
       console.error('Error cargando catalogos', e);
     }

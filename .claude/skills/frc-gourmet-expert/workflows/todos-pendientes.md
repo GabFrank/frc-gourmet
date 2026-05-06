@@ -17,6 +17,29 @@ Snapshot **2026-05-06**. Verificar `git log` y memorias antes de afirmar que alg
 
 ## Refactor técnico
 
+- [ ] **Sweep `appCurrencyInput` global**. Directiva nueva en `src/app/shared/directives/currency-input.directive.ts` formatea inputs monetarios con separador locale-aware (PYG sin decimales, USD/BRL con coma decimal). Aplicada SOLO en `compras/create-edit-compra/` (costoUnitario + subtotal). Falta escanear y aplicar al resto del proyecto. Patrón:
+  ```html
+  <input matInput type="text" inputmode="decimal"
+         formControlName="campo" appCurrencyInput [decimals]="decimalesMoneda" />
+  ```
+  Donde `decimalesMoneda` es propiedad reactiva en el componente, recalculada cuando cambia `monedaId` (ver `recalcDecimalesMoneda()` en create-edit-compra). **No usar getter** (regla del proyecto). Buscar candidatos:
+  ```bash
+  grep -rn 'type="number".*min="0".*step' src/app
+  grep -rn "monto\|importe\|costo\|precio\|saldo\|total" src/app/pages --include="*.html"
+  ```
+  Lugares prioritarios (alto impacto):
+  - **PdV cobrar venta** (`cobrar-venta-dialog`): inputs de monto pagado por forma.
+  - **Caja Mayor**: registrar gasto, retiro, entrada varia, operacion financiera (montos).
+  - **CPP / CPC**: pagar cuotas (montos a pagar).
+  - **Bancos**: movimientos bancarios, acreditaciones POS.
+  - **RRHH**: vales (monto), liquidaciones (montos), prestamos.
+  - **Productos**: precios de venta/costo en `gestionar-producto`.
+  - **Conteos**: `conteo-detalle` (cantidades de billetes ya manejan locale propio, revisar).
+  
+  Para precios de venta donde la moneda es la del precio (no la del form), pasar `[decimals]="precio.moneda?.decimales || 0"`.
+  
+  El locale `es-PY` esta registrado globalmente en `main.ts` (DecimalPipe usa `'es-PY'` por default via `LOCALE_ID`). Para mostrar valores read-only, pipe ya formatea: `{{ valor | number:(dec === 0 ? '1.0-0' : '1.2-2') }}`. (`project_todo_currency_input_global`)
+
 - [ ] **Migrar `ngModel` → Reactive Forms** en todo el proyecto. `grep -rn "ngModel" src/app/`. Priorizar los que están dentro de un `[formGroup]` (rompen con `NG01350`). Patrón ya aplicado en `compras/create-edit-compra/`. (`project_todo_ngmodel_to_reactive`)
 
 - [ ] **Sweep de fechas timezone-safe**. `grep -rn "new Date(data\." electron/handlers/` y reemplazar por `parseLocalDate(s)` (helper ya existe en `compras.handler.ts` — moverlo a `electron/utils/date.utils.ts`). Handlers afectados (columnas `date` sin hora):

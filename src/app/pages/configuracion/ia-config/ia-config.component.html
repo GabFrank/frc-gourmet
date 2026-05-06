@@ -1,74 +1,224 @@
 <div class="ia-config-container">
   <h2>Configuracion de IA (OCR de facturas)</h2>
 
-  <mat-card *ngIf="!loading">
-    <mat-card-content>
-      <p class="info-text">
-        Configura las credenciales de OpenAI usadas para extraer datos de facturas de compra mediante GPT-4o vision.
-        La API key se guarda solo en este equipo, en <code>userData/ia-config.json</code>.
-      </p>
-
-      <div class="form-row">
-        <mat-form-field appearance="outline" class="api-key-field">
-          <mat-label>OpenAI API Key</mat-label>
-          <input
-            matInput
-            [type]="apiKeyVisible ? 'text' : 'password'"
-            [(ngModel)]="apiKey"
-            placeholder="sk-..."
-            autocomplete="off"
-          />
-          <button mat-icon-button matSuffix (click)="toggleApiKeyVisible()" [attr.aria-label]="'Mostrar/ocultar'">
-            <mat-icon>{{ apiKeyVisible ? 'visibility_off' : 'visibility' }}</mat-icon>
-          </button>
-        </mat-form-field>
-      </div>
-
-      <div class="form-row">
-        <mat-form-field appearance="outline" class="modelo-field">
-          <mat-label>Modelo</mat-label>
-          <mat-select [(ngModel)]="modelo">
-            <mat-option *ngFor="let m of modelos" [value]="m.value">
-              {{ m.label }}
-            </mat-option>
-          </mat-select>
-        </mat-form-field>
-        <span class="costo-info">{{ costoSeleccionado }}</span>
-      </div>
-
-      <div class="form-row">
-        <mat-slide-toggle [(ngModel)]="habilitado" color="primary">
-          Habilitar importacion de facturas con IA
-        </mat-slide-toggle>
-      </div>
-
-      <div class="actions-row">
-        <button
-          mat-stroked-button
-          color="primary"
-          (click)="probar()"
-          [disabled]="testing || saving || !apiKey"
-        >
-          <mat-icon>wifi_tethering</mat-icon>
-          <span *ngIf="!testing">Probar conexion</span>
-          <mat-spinner *ngIf="testing" diameter="18"></mat-spinner>
-        </button>
-
-        <button
-          mat-flat-button
-          color="primary"
-          (click)="guardar()"
-          [disabled]="saving"
-        >
-          <mat-icon>save</mat-icon>
-          <span *ngIf="!saving">Guardar</span>
-          <mat-spinner *ngIf="saving" diameter="18"></mat-spinner>
-        </button>
-      </div>
-    </mat-card-content>
-  </mat-card>
-
   <div *ngIf="loading" class="loading-container">
     <mat-spinner diameter="40"></mat-spinner>
   </div>
+
+  <mat-tab-group *ngIf="!loading" animationDuration="0ms" class="ia-tabs">
+    <!-- ================ TAB 1: CONEXION ================ -->
+    <mat-tab label="Conexion">
+      <div class="tab-pane">
+        <p class="info-text">
+          Configura las credenciales de OpenAI usadas para extraer datos de facturas mediante GPT-4o vision.
+          La API key se guarda solo en este equipo, en <code>userData/ia-config.json</code>.
+        </p>
+
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="api-key-field">
+            <mat-label>OpenAI API Key</mat-label>
+            <input
+              matInput
+              [type]="apiKeyVisible ? 'text' : 'password'"
+              [(ngModel)]="apiKey"
+              placeholder="sk-..."
+              autocomplete="off"
+            />
+            <button mat-icon-button matSuffix (click)="toggleApiKeyVisible()" [attr.aria-label]="'Mostrar/ocultar'">
+              <mat-icon>{{ apiKeyVisible ? 'visibility_off' : 'visibility' }}</mat-icon>
+            </button>
+          </mat-form-field>
+        </div>
+
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="modelo-field">
+            <mat-label>Modelo</mat-label>
+            <mat-select [(ngModel)]="modelo">
+              <mat-option *ngFor="let m of modelos" [value]="m.value">
+                {{ m.label }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+          <span class="costo-info">{{ costoSeleccionado }}</span>
+        </div>
+
+        <div class="form-row">
+          <mat-slide-toggle [(ngModel)]="habilitado" color="primary">
+            Habilitar importacion de facturas con IA
+          </mat-slide-toggle>
+        </div>
+
+        <div class="actions-row">
+          <button mat-stroked-button color="primary" (click)="probar()" [disabled]="testing || saving || !apiKey">
+            <mat-icon>wifi_tethering</mat-icon>
+            <span *ngIf="!testing">Probar conexion</span>
+            <mat-spinner *ngIf="testing" diameter="18"></mat-spinner>
+          </button>
+          <button mat-flat-button color="primary" (click)="guardar()" [disabled]="saving">
+            <mat-icon>save</mat-icon>
+            <span *ngIf="!saving">Guardar</span>
+            <mat-spinner *ngIf="saving" diameter="18"></mat-spinner>
+          </button>
+        </div>
+      </div>
+    </mat-tab>
+
+    <!-- ================ TAB 2: PROMPT ================ -->
+    <mat-tab label="Prompt">
+      <div class="tab-pane">
+        <p class="info-text">
+          El <strong>prompt base</strong> es la instruccion principal que se envia a la IA por cada factura.
+          Es de solo lectura y se actualiza automaticamente con cada version de la app.
+          Podes agregar <strong>reglas adicionales</strong> propias para casos especificos de tu negocio.
+          Las adiciones se appendean al final del prompt base — el prompt base tiene prioridad si hay conflicto.
+        </p>
+
+        <div class="prompt-meta" *ngIf="promptCfg">
+          <span class="badge"><mat-icon>tag</mat-icon> Version {{ promptCfg.version }}</span>
+          <span class="badge"><mat-icon>format_size</mat-icon> {{ efectivoLengthChars }} chars</span>
+          <span class="badge" *ngIf="promptCfg.adiciones.length">
+            <mat-icon>add_circle</mat-icon> {{ promptCfg.adiciones.length }} adiciones
+          </span>
+        </div>
+
+        <mat-card class="prompt-base-card" *ngIf="promptCfg">
+          <mat-card-content>
+            <div class="card-header">
+              <strong>Prompt base (read-only)</strong>
+              <button mat-button (click)="togglePromptBase()">
+                <mat-icon>{{ promptBaseExpanded ? 'expand_less' : 'expand_more' }}</mat-icon>
+                {{ promptBaseExpanded ? 'Ocultar' : 'Ver completo' }}
+              </button>
+            </div>
+            <pre class="prompt-base" *ngIf="promptBaseExpanded">{{ promptCfg.promptBase }}</pre>
+            <p class="info-text" *ngIf="!promptBaseExpanded">
+              ({{ promptCfg.promptBase.length }} caracteres — click para expandir)
+            </p>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card class="adiciones-card" *ngIf="promptCfg">
+          <mat-card-content>
+            <strong>Reglas adicionales</strong>
+            <p class="info-text" *ngIf="promptCfg.adiciones.length === 0">
+              No hay adiciones cargadas. Agrega una abajo.
+            </p>
+            <div class="adiciones-list">
+              <div class="adicion-item" *ngFor="let a of promptCfg.adiciones; let i = index">
+                <span class="adicion-bullet">•</span>
+                <span class="adicion-text">{{ a }}</span>
+                <button
+                  mat-icon-button
+                  (click)="quitarAdicion(i)"
+                  [disabled]="savingAdiciones"
+                  matTooltip="Quitar adicion"
+                >
+                  <mat-icon>close</mat-icon>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-row nueva-adicion">
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Nueva regla adicional</mat-label>
+                <textarea
+                  matInput
+                  rows="2"
+                  [(ngModel)]="nuevaAdicion"
+                  placeholder="Ej: Si el proveedor es FOO S.A., siempre asumir IVA 5% aunque la factura no lo aclare."
+                ></textarea>
+              </mat-form-field>
+            </div>
+
+            <div class="actions-row">
+              <button
+                mat-flat-button
+                color="primary"
+                (click)="agregarAdicion()"
+                [disabled]="!nuevaAdicion.trim() || savingAdiciones"
+              >
+                <mat-icon>add</mat-icon> Agregar al prompt
+                <mat-spinner *ngIf="savingAdiciones" diameter="18"></mat-spinner>
+              </button>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </mat-tab>
+
+    <!-- ================ TAB 3: SUGERENCIAS ================ -->
+    <mat-tab label="Sugerencias">
+      <div class="tab-pane">
+        <p class="info-text">
+          Las <strong>sugerencias</strong> son propuestas de mejora al prompt que requieren tu aprobacion antes de aplicarse.
+          Podes crearlas vos mismo aca, o pueden venir generadas automaticamente desde documentos con errores recurrentes (proximamente).
+          Al aprobar una sugerencia, su texto se appendea como una nueva adicion al prompt.
+        </p>
+
+        <mat-card class="nueva-sug-card">
+          <mat-card-content>
+            <strong>Crear sugerencia</strong>
+            <div class="form-row">
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Texto de la sugerencia</mat-label>
+                <textarea matInput rows="2" [(ngModel)]="nuevaSugTexto" placeholder="Regla que querrias incorporar al prompt"></textarea>
+              </mat-form-field>
+            </div>
+            <div class="form-row">
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Motivo (opcional)</mat-label>
+                <input matInput [(ngModel)]="nuevaSugMotivo" placeholder="Por que la propones" />
+              </mat-form-field>
+            </div>
+            <div class="actions-row">
+              <button mat-flat-button color="primary" (click)="crearSugerencia()" [disabled]="!nuevaSugTexto.trim() || savingSug">
+                <mat-icon>send</mat-icon> Enviar sugerencia
+                <mat-spinner *ngIf="savingSug" diameter="18"></mat-spinner>
+              </button>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <h3 class="section-title">Lista de sugerencias</h3>
+
+        <div *ngIf="loadingSugerencias" class="loading-container">
+          <mat-spinner diameter="32"></mat-spinner>
+        </div>
+
+        <p class="info-text" *ngIf="!loadingSugerencias && sugerencias.length === 0">
+          No hay sugerencias registradas todavia.
+        </p>
+
+        <div class="sug-list" *ngIf="!loadingSugerencias && sugerencias.length">
+          <mat-card class="sug-card" *ngFor="let s of sugerencias">
+            <mat-card-content>
+              <div class="sug-header">
+                <span class="chip chip-{{ s.estado.toLowerCase() }}">{{ s.estado }}</span>
+                <span class="chip chip-origen">{{ s.origen }}</span>
+                <span class="sug-fecha">{{ s.createdAt | date:'short' }}</span>
+              </div>
+              <p class="sug-texto">{{ s.texto }}</p>
+              <p class="sug-motivo" *ngIf="s.motivo"><em>Motivo:</em> {{ s.motivo }}</p>
+              <div class="sug-actions" *ngIf="s.estado === 'PENDIENTE'">
+                <button mat-stroked-button color="primary" (click)="aprobarSugerencia(s)">
+                  <mat-icon>check</mat-icon> Aprobar
+                </button>
+                <button mat-stroked-button (click)="rechazarSugerencia(s)">
+                  <mat-icon>close</mat-icon> Rechazar
+                </button>
+                <button mat-icon-button (click)="eliminarSugerencia(s)" matTooltip="Eliminar">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+              <div class="sug-actions" *ngIf="s.estado !== 'PENDIENTE'">
+                <button mat-icon-button (click)="eliminarSugerencia(s)" matTooltip="Eliminar">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+            </mat-card-content>
+          </mat-card>
+        </div>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
 </div>

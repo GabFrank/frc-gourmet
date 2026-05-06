@@ -3274,6 +3274,32 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('ia-config-test');
   },
 
+  // ================== IA PROMPT CONFIG ==================
+  iaPromptGet: async (): Promise<any> => {
+    return await ipcRenderer.invoke('ia-prompt-get');
+  },
+  iaPromptSetAdiciones: async (payload: { adiciones: string[] }): Promise<any> => {
+    return await ipcRenderer.invoke('ia-prompt-set-adiciones', payload);
+  },
+  iaPromptEffective: async (): Promise<any> => {
+    return await ipcRenderer.invoke('ia-prompt-effective');
+  },
+  iaPromptSugerenciaList: async (payload: { estado?: string } = {}): Promise<any> => {
+    return await ipcRenderer.invoke('ia-prompt-sugerencia-list', payload);
+  },
+  iaPromptSugerenciaCreate: async (payload: { texto: string; motivo?: string; documentoOrigenId?: number; origen?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('ia-prompt-sugerencia-create', payload);
+  },
+  iaPromptSugerenciaAprobar: async (payload: { id: number }): Promise<any> => {
+    return await ipcRenderer.invoke('ia-prompt-sugerencia-aprobar', payload);
+  },
+  iaPromptSugerenciaRechazar: async (payload: { id: number; motivo?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('ia-prompt-sugerencia-rechazar', payload);
+  },
+  iaPromptSugerenciaDelete: async (payload: { id: number }): Promise<any> => {
+    return await ipcRenderer.invoke('ia-prompt-sugerencia-delete', payload);
+  },
+
   // ================== FACTURA IMPORT (OCR + IA) ==================
   facturaImportPickFile: async (): Promise<any> => {
     return await ipcRenderer.invoke('factura-import-pick-file');

@@ -3,7 +3,12 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { getFacturaImportsDir } from './ia-config.utils';
 
-export const FACTURA_PROMPT = `Sos un asistente que ayuda a un comercio gastronomico a digitalizar
+/**
+ * Prompt BASE (semilla inmutable). Se persiste en BD al primer arranque y se versiona.
+ * Cualquier mejora estable al sistema va aca; mejoras del usuario se almacenan como
+ * "adiciones" sumadas en runtime via buildEffectivePrompt().
+ */
+export const FACTURA_PROMPT_BASE = `Sos un asistente que ayuda a un comercio gastronomico a digitalizar
 sus comprobantes de compra propios (facturas y notas de proveedores) para cargarlos al sistema
 de gestion del negocio. La imagen es un comprobante de compra: el comercio asistido COMPRA
 mercaderia o servicios, y otra empresa los VENDE.
@@ -23,6 +28,71 @@ El campo "proveedor" del JSON DEBE corresponder al EMISOR / VENDEDOR / REMITENTE
 cliente/receptor. No importa si el receptor es el comercio que estas asistiendo o cualquier
 otra empresa: ignoralo a la hora de armar "proveedor". Si tenes dudas, mira quien tiene el
 timbrado, el numero de factura y el sello/firma — ese es el emisor.
+
+REGLA — UNIDAD DE MEDIDA POR ITEM:
+Si la factura tiene una columna explicita de unidad de medida (etiquetas: "U.M.", "UM",
+"Unidad Medida", "Unidad", "Med", "UN", "UNI", "KG", "LT", "LITRO", "GR", "CC", "PAQ", "CJA",
+etc), usala literal en el campo "unidadMedidaOcr" de cada item. Si no hay columna, null.
+
+REGLA CRITICA — POR DEFECTO TODO PRODUCTO ES UNIDAD (UN):
+Las facturas de gastronomia/almacen casi siempre venden productos en UNIDAD (cajas, paquetes,
+latas, botellas, frascos, conos individuales). Las menciones dentro de la descripcion como
+"95G", "70CC", "500ML", "51CC", "1.5L" describen el CONTENIDO de cada unidad para identificar
+el SKU — NO indican que el producto se venda al peso/volumen al cliente. Default fuerte:
+unidadBase = UNIDAD ("UN") salvo evidencia inequivoca:
+
+  - Si la columna U.M. dice UN/UNI/UND/UNIDAD → unidad = "UN" (siempre).
+  - Si la columna U.M. dice KG/LT/LITRO/ML/G/GR → unidad acorde.
+  - Si NO hay columna U.M. y la descripcion no tiene notacion de pack ni "(NU)", podes
+    asumir unidad volumetrica/masica solo si el contexto es claro (ej: "HARINA 1KG" suelto).
+  - En duda: UNIDAD.
+
+REGLA CRITICA — PACK / CAJA / NOTACION (interpretacion correcta de los numeros):
+Las descripciones suelen tener notaciones de pack que indican que el item facturado es UNA
+caja/pack, dentro de la cual hay N unidades. Patrones comunes:
+
+  a) "NxV<unidad>" — ej: "16X70CC", "12X500ML", "24X355ML", "6X1.5L"
+     → N = cantidadPaquete (cuantas unidades hay en la caja)
+     → V<unidad> = contenidoUnitario (volumen de cada unidad, descriptivo del SKU)
+  b) "(NU)" / "(N U)" / "(N)" al final — ej: "CONO 95G (18U)", "TUBITO 50G (24)"
+     → N = cantidadPaquete
+     → "95G" / "50G" antes del parentesis = contenidoUnitario
+  c) "CAJA X N" / "PACK X N" / "DISPLAY X N" / "BLISTER X N"
+     → N = cantidadPaquete; contenidoUnitario lo que aparezca antes de la notacion.
+
+Cuando detectes alguno de estos patrones, poblar "presentacionInferida":
+{
+  "tipo": "PACK",
+  "cantidadPaquete": N,                                 // cuantas UNIDADES trae el pack
+  "contenidoUnitario": { "valor": V, "unidad": "ML"|"L"|"CC"|"G"|"KG"|"GR"|"UN" } | null,
+  "nombreProductoLimpio": string,                       // descripcion SIN la notacion de pack
+  "nombrePresentacion": string                          // "CAJA X16", "PACK X12", etc
+}
+
+Si NO hay notacion de pack y el item es suelto (ej: "GASEOSA COCA 2L"):
+{
+  "tipo": "UNITARIA",
+  "cantidadPaquete": 1,
+  "contenidoUnitario": { "valor": 2, "unidad": "L" } | null,
+  "nombreProductoLimpio": "GASEOSA COCA 2L",
+  "nombrePresentacion": "UNIDAD"
+}
+
+Si no se puede inferir nada (ej: servicios, sin descripcion clara), "presentacionInferida": null.
+
+REGLA — NOMBRE DEL PRODUCTO LIMPIO:
+"nombreProductoLimpio" debe ser la descripcion en MAYUSCULAS pero **sin** la notacion de pack
+(quitar "16X70CC" → dejar "70CC" si era contenido; quitar "(18U)", quitar "CAJA X12", etc).
+SI conserva el contenido unitario (95G / 70CC / 500ML / 1.5L) cuando ese dato sirve para
+diferenciar SKUs (porque un mismo producto puede venir en distintos contenidos). Ejemplos:
+
+  Original                                   nombreProductoLimpio                cantidadPaquete   nombrePresentacion
+  --------                                   --------------------                ---------------   ------------------
+  "HELADO CORAZON BON O BON 16X70CC"         "HELADO CORAZON BON O BON 70CC"     16                "CAJA X16"
+  "CONO COFLER BLOCK 95G (18U)"              "CONO COFLER BLOCK 95G"             18                "CAJA X18"
+  "HEL.MOGUL TUBITO 50G (24)"                "HEL.MOGUL TUBITO 50G"              24                "CAJA X24"
+  "FANTA NARANJA 12X500ML"                   "FANTA NARANJA 500ML"               12                "PACK X12"
+  "GASEOSA COCA 2L" (suelta)                 "GASEOSA COCA 2L"                   1                 "UNIDAD"
 
 Tu tarea: leer la imagen y devolver UN unico objeto JSON valido (sin markdown, sin texto extra)
 con los campos del esquema. Si un campo no aparece o no es legible, usa null.
@@ -47,21 +117,50 @@ Esquema requerido:
       "precioUnitario": number,
       "subtotal": number,
       "iva": number|null,
-      "codigoProveedor": string|null
+      "codigoProveedor": string|null,
+      "unidadMedidaOcr": string|null,
+      "presentacionInferida": {
+        "tipo": "UNITARIA"|"PACK",
+        "cantidadPaquete": number,
+        "contenidoUnitario": { "valor": number, "unidad": "UN"|"ML"|"L"|"CC"|"G"|"KG"|"GR" } | null,
+        "nombreProductoLimpio": string,
+        "nombrePresentacion": string
+      } | null
     }
   ]
 }
 
 Reglas:
 - "proveedor" = EMISOR de la factura (vendedor). NUNCA el cliente/receptor.
-- Capturá "telefono" del emisor si aparece (campo "Tel:", "Teléfono:" o similar). Si no aparece, null.
-- Convertí toda descripción de producto a MAYÚSCULAS.
+- Captura "telefono" del emisor si aparece (campo "Tel:", "Telefono:" o similar). Si no aparece, null.
+- Convierte toda descripcion de producto a MAYUSCULAS.
 - Fecha en formato "YYYY-MM-DD".
-- Si la moneda no se ve, asumí PYG.
+- Si la moneda no se ve, asume PYG.
 - subtotal = cantidad * precioUnitario.
-- IVA es porcentaje numérico (0, 5, 10).
+- IVA es porcentaje numerico (0, 5, 10).
 - Si no es factura legal con timbrado, tipo = "COMUN".
-- Devolvé UN SOLO objeto JSON, sin envolver en arrays.`;
+- Devuelve UN SOLO objeto JSON, sin envolver en arrays.`;
+
+/**
+ * Compone el prompt efectivo: base + adiciones del usuario (si hay).
+ * Las adiciones se appendean bajo "Reglas adicionales del usuario" — la IA debe respetarlas
+ * pero en caso de conflicto con el prompt base, el base gana (regla explicita en el sufijo).
+ */
+export function buildEffectivePrompt(promptBase: string, adiciones: string[]): string {
+  const limpias = (adiciones || [])
+    .map(s => (s || '').trim())
+    .filter(s => s.length > 0);
+  if (limpias.length === 0) return promptBase;
+  const bullets = limpias.map(s => `- ${s}`).join('\n');
+  return `${promptBase}\n\nReglas adicionales del usuario (si entran en conflicto con las reglas anteriores, las anteriores tienen prioridad):\n${bullets}`;
+}
+
+export function hashPrompt(s: string): string {
+  return crypto.createHash('sha256').update(s).digest('hex');
+}
+
+// Compat: nombre viejo apunta al base. Codigo nuevo debe usar buildEffectivePrompt.
+export const FACTURA_PROMPT = FACTURA_PROMPT_BASE;
 
 export interface FacturaJsonItem {
   descripcion: string;
@@ -70,6 +169,21 @@ export interface FacturaJsonItem {
   subtotal: number;
   iva: number | null;
   codigoProveedor: string | null;
+  unidadMedidaOcr: string | null;
+  presentacionInferida: PresentacionInferidaOcr | null;
+}
+
+export interface ContenidoUnitarioOcr {
+  valor: number;
+  unidad: 'UN' | 'ML' | 'L' | 'CC' | 'G' | 'KG' | 'GR';
+}
+
+export interface PresentacionInferidaOcr {
+  tipo: 'UNITARIA' | 'PACK';
+  cantidadPaquete: number;
+  contenidoUnitario: ContenidoUnitarioOcr | null;
+  nombreProductoLimpio: string;
+  nombrePresentacion: string;
 }
 
 export interface FacturaJson {
@@ -137,6 +251,52 @@ export function validateFacturaJson(raw: unknown): { ok: true; result: Validated
       it.subtotal = it.cantidad * it.precioUnitario;
     }
     it.descripcion = normalizeText(it.descripcion);
+    // Campos nuevos: tolerantes — si la IA todavia no los devolvio (modelo viejo o
+    // factura pobre), default a null sin fallar.
+    if (typeof it.unidadMedidaOcr !== 'string') it.unidadMedidaOcr = null;
+    else it.unidadMedidaOcr = normalizeText(it.unidadMedidaOcr);
+    if (!it.presentacionInferida || typeof it.presentacionInferida !== 'object') {
+      it.presentacionInferida = null;
+    } else {
+      const pi: any = it.presentacionInferida;
+      const tipo = String(pi.tipo || '').toUpperCase();
+      const cantPaq = Number(pi.cantidadPaquete);
+      // Tolerar shape viejo (volumenUnitario+unidad planos) por si la IA aun lo usa.
+      let contenido: ContenidoUnitarioOcr | null = null;
+      if (pi.contenidoUnitario && typeof pi.contenidoUnitario === 'object') {
+        const v = Number(pi.contenidoUnitario.valor);
+        const u = String(pi.contenidoUnitario.unidad || '').toUpperCase();
+        if (Number.isFinite(v) && v > 0 && ['UN', 'ML', 'L', 'CC', 'G', 'KG', 'GR'].includes(u)) {
+          contenido = { valor: v, unidad: u as any };
+        }
+      } else if (Number.isFinite(Number(pi.volumenUnitario)) && pi.unidad) {
+        const v = Number(pi.volumenUnitario);
+        const u = String(pi.unidad || '').toUpperCase();
+        if (v > 0 && ['UN', 'ML', 'L', 'CC', 'G', 'KG', 'GR'].includes(u)) {
+          contenido = { valor: v, unidad: u as any };
+        }
+      }
+      const nombreLimpio = typeof pi.nombreProductoLimpio === 'string' && pi.nombreProductoLimpio.trim()
+        ? normalizeText(pi.nombreProductoLimpio)
+        : it.descripcion;
+      const nombrePres = typeof pi.nombrePresentacion === 'string' && pi.nombrePresentacion.trim()
+        ? normalizeText(pi.nombrePresentacion)
+        : (tipo === 'PACK' && cantPaq > 1 ? `CAJA X${cantPaq}` : 'UNIDAD');
+      if (
+        (tipo !== 'UNITARIA' && tipo !== 'PACK') ||
+        !Number.isFinite(cantPaq) || cantPaq <= 0
+      ) {
+        it.presentacionInferida = null;
+      } else {
+        it.presentacionInferida = {
+          tipo,
+          cantidadPaquete: Math.round(cantPaq),
+          contenidoUnitario: contenido,
+          nombreProductoLimpio: nombreLimpio,
+          nombrePresentacion: nombrePres,
+        };
+      }
+    }
   }
 
   const sumItems = data.items.reduce((s: number, it: any) => s + (it.subtotal || 0), 0);
@@ -174,55 +334,190 @@ export function copyArchivoToImports(userDataPath: string, srcPath: string): {
 }
 
 export interface InferenciaPresentacion {
+  /**
+   * unidadBase del producto. Default fuerte: UNIDAD. Solo cambia a volumetrica/masica si
+   * la columna U.M. lo dice explicitamente o si el item es claramente suelto sin pack.
+   */
   unidadBase: 'UNIDAD' | 'KG' | 'GRAMO' | 'LITRO' | 'MILILITRO';
+  /**
+   * Cantidad de la presentacion EN unidad base. Para pack (caja X16) = 16, porque ingresan
+   * 16 UNIDADES al stock por cada caja. Para item suelto en gramos/ml = el peso/volumen.
+   */
   cantidadPresentacion: number;
+  /** Nombre legible: "CAJA X16", "PACK X12", "UNIDAD", "500 ML" segun el caso. */
   nombrePresentacion: string;
+  /** Nombre del producto limpio (sin notacion de pack), conservando contenido para SKU. */
+  nombreProductoSugerido: string;
   posibleGtin: string | null;
+  /** Cuantas unidades trae el pack/caja. 1 si es item suelto. */
+  cantidadPaquete: number;
+  esPack: boolean;
+}
+
+function unidadOcrAUnidadBase(u: string): InferenciaPresentacion['unidadBase'] | null {
+  const x = (u || '').toUpperCase();
+  if (['ML', 'CC', 'MILILITRO', 'MILILITROS'].includes(x)) return 'MILILITRO';
+  if (['L', 'LT', 'LITRO', 'LITROS'].includes(x)) return 'LITRO';
+  if (['KG', 'KILO', 'KILOS', 'KILOGRAMO', 'KILOGRAMOS'].includes(x)) return 'KG';
+  if (['G', 'GR', 'GRAMO', 'GRAMOS'].includes(x)) return 'GRAMO';
+  if (['UN', 'UND', 'UNI', 'UNID', 'UNIDAD', 'UNIDADES'].includes(x)) return 'UNIDAD';
+  return null;
+}
+
+function nombreVolumetrico(unidadBase: InferenciaPresentacion['unidadBase'], num: number): string {
+  if (unidadBase === 'MILILITRO') return `${num} ML`;
+  if (unidadBase === 'LITRO') return `${num} L`;
+  if (unidadBase === 'KG') return `${num} KG`;
+  if (unidadBase === 'GRAMO') return `${num} G`;
+  return 'UNIDAD';
 }
 
 /**
- * Heurística para inferir presentación desde la descripción OCR de un item.
- * Busca patrones como "750 ML", "1.5 LT", "500G", "2 KG" y normaliza a unidad base.
+ * Limpia el nombre del producto removiendo notaciones de pack pero preservando
+ * el contenido unitario que sirve para diferenciar SKUs.
+ *
+ * "HELADO CORAZON 16X70CC" → "HELADO CORAZON 70CC"
+ * "CONO COFLER 95G (18U)"  → "CONO COFLER 95G"
+ * "MOGUL TUBITO 50G (24)"  → "MOGUL TUBITO 50G"
+ * "FANTA 12X500ML"         → "FANTA 500ML"
+ * "CAJA X 6 GASEOSA 2L"    → "GASEOSA 2L"
  */
-export function inferirPresentacion(descripcion: string, codigoProveedor?: string | null): InferenciaPresentacion {
+function limpiarNombreProducto(desc: string): string {
+  let s = (desc || '').toUpperCase();
+  // Remover patron NxV<unidad> sustituyendolo por solo "V<unidad>" (preserva contenido).
+  s = s.replace(/(\d+)\s*[Xx]\s*(\d+(?:[.,]\d+)?\s*(?:ML|MILILITROS?|L|LT|LITROS?|KG|KILOS?|KILOGRAMOS?|G|GR|GRAMOS?|CC))/g, '$2');
+  // Remover "(NU)" / "(N U)" / "(N)" al final de la descripcion.
+  s = s.replace(/\s*\((\d+)\s*U?\)\s*/g, ' ');
+  // Remover "CAJA X N" / "PACK X N" / "DISPLAY X N" / "BLISTER X N".
+  s = s.replace(/\b(?:CAJA|PACK|DISPLAY|BLISTER|FARDO|BOLSA)\s*[Xx]\s*\d+/g, '');
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Inferir presentacion desde un item OCR.
+ *
+ * Prioridades:
+ *   1. presentacionInferida del OCR (la IA ya estructuro pack/unitaria + nombre limpio).
+ *   2. unidadMedidaOcr explicita (columna U.M. de la factura) — autoritativa.
+ *   3. Heuristica regex sobre la descripcion para detectar pack y limpiar nombre.
+ *
+ * Default fuerte: unidadBase = UNIDAD.
+ */
+export function inferirPresentacion(
+  descripcion: string,
+  codigoProveedor?: string | null,
+  presentacionInferida?: PresentacionInferidaOcr | null,
+  unidadMedidaOcr?: string | null,
+): InferenciaPresentacion {
   const desc = (descripcion || '').toUpperCase();
   const result: InferenciaPresentacion = {
     unidadBase: 'UNIDAD',
     cantidadPresentacion: 1,
     nombrePresentacion: 'UNIDAD',
+    nombreProductoSugerido: desc,
     posibleGtin: null,
+    cantidadPaquete: 1,
+    esPack: false,
   };
 
-  // GTIN: 8-14 digitos
   if (codigoProveedor && /^\d{8,14}$/.test(codigoProveedor.trim())) {
     result.posibleGtin = codigoProveedor.trim();
   }
 
-  // Match "<numero> <unidad>" — admite punto/coma decimal y espacios opcionales.
-  const re = /(\d+(?:[.,]\d+)?)\s*(ML|MILILITROS?|L|LT|LITROS?|KG|KILOS?|KILOGRAMOS?|G|GR|GRAMOS?|CC|UN|UND|UNID|UNIDAD)\b/i;
-  const m = desc.match(re);
-  if (m) {
-    const num = parseFloat(m[1].replace(',', '.'));
-    const u = m[2].toUpperCase();
-    if (['ML', 'CC', 'MILILITRO', 'MILILITROS'].includes(u)) {
-      result.unidadBase = 'MILILITRO';
-      result.cantidadPresentacion = num;
-      result.nombrePresentacion = `${num} ML`;
-    } else if (['L', 'LT', 'LITRO', 'LITROS'].includes(u)) {
-      result.unidadBase = 'LITRO';
-      result.cantidadPresentacion = num;
-      result.nombrePresentacion = `${num} L`;
-    } else if (['KG', 'KILO', 'KILOS', 'KILOGRAMO', 'KILOGRAMOS'].includes(u)) {
-      result.unidadBase = 'KG';
-      result.cantidadPresentacion = num;
-      result.nombrePresentacion = `${num} KG`;
-    } else if (['G', 'GR', 'GRAMO', 'GRAMOS'].includes(u)) {
-      result.unidadBase = 'GRAMO';
-      result.cantidadPresentacion = num;
-      result.nombrePresentacion = `${num} G`;
+  // U.M. de la factura es autoritativa para la unidadBase.
+  let umExplicita: InferenciaPresentacion['unidadBase'] | null = null;
+  if (unidadMedidaOcr) umExplicita = unidadOcrAUnidadBase(unidadMedidaOcr);
+
+  // 1) Si la IA estructuro presentacionInferida, usarla casi tal cual.
+  if (presentacionInferida) {
+    const cantPaq = Math.max(1, Math.round(Number(presentacionInferida.cantidadPaquete) || 1));
+    const esPack = presentacionInferida.tipo === 'PACK' && cantPaq > 1;
+    // unidadBase: UoM explicita manda. Sin UoM → UNIDAD.
+    result.unidadBase = umExplicita || 'UNIDAD';
+    result.cantidadPaquete = cantPaq;
+    result.esPack = esPack;
+    if (esPack) {
+      result.cantidadPresentacion = cantPaq;
+      result.nombrePresentacion = (presentacionInferida.nombrePresentacion || `CAJA X${cantPaq}`).toUpperCase();
+    } else {
+      // Item suelto: si UoM volumetrica/masica, usar el contenido unitario como cantidad.
+      const cont = presentacionInferida.contenidoUnitario;
+      if (cont && result.unidadBase !== 'UNIDAD') {
+        const ubCont = unidadOcrAUnidadBase(cont.unidad) || 'UNIDAD';
+        // Solo si la unidad del contenido coincide con la UoM, sino UNIDAD.
+        if (ubCont !== 'UNIDAD' && ubCont === result.unidadBase) {
+          result.cantidadPresentacion = cont.valor;
+          result.nombrePresentacion = nombreVolumetrico(result.unidadBase, cont.valor);
+        } else {
+          result.cantidadPresentacion = 1;
+          result.nombrePresentacion = 'UNIDAD';
+        }
+      } else {
+        result.cantidadPresentacion = 1;
+        result.nombrePresentacion = (presentacionInferida.nombrePresentacion || 'UNIDAD').toUpperCase();
+      }
+    }
+    result.nombreProductoSugerido = (presentacionInferida.nombreProductoLimpio || limpiarNombreProducto(desc)).toUpperCase();
+    return result;
+  }
+
+  // 2) Sin presentacionInferida del OCR — heuristica local.
+  // Default: UNIDAD salvo que UoM diga otra cosa.
+  result.unidadBase = umExplicita || 'UNIDAD';
+  result.nombreProductoSugerido = limpiarNombreProducto(desc);
+
+  // Patron pack "NxV<unidad>" o "(NU)" en la descripcion.
+  const rePackInner = /(\d+)\s*[Xx]\s*(\d+(?:[.,]\d+)?)\s*(ML|MILILITROS?|L|LT|LITROS?|KG|KILOS?|KILOGRAMOS?|G|GR|GRAMOS?|CC)\b/;
+  const rePackParen = /\((\d+)\s*U?\)/;
+  const rePackPrefijo = /\b(?:CAJA|PACK|DISPLAY|BLISTER|FARDO|BOLSA)\s*[Xx]\s*(\d+)\b/;
+
+  let cantPaqDetectada: number | null = null;
+  const m1 = desc.match(rePackInner);
+  if (m1) {
+    const n = parseInt(m1[1], 10);
+    if (Number.isFinite(n) && n > 1) cantPaqDetectada = n;
+  }
+  if (cantPaqDetectada == null) {
+    const m2 = desc.match(rePackParen);
+    if (m2) {
+      const n = parseInt(m2[1], 10);
+      if (Number.isFinite(n) && n > 1) cantPaqDetectada = n;
+    }
+  }
+  if (cantPaqDetectada == null) {
+    const m3 = desc.match(rePackPrefijo);
+    if (m3) {
+      const n = parseInt(m3[1], 10);
+      if (Number.isFinite(n) && n > 1) cantPaqDetectada = n;
     }
   }
 
+  if (cantPaqDetectada != null) {
+    result.cantidadPaquete = cantPaqDetectada;
+    result.esPack = true;
+    result.cantidadPresentacion = cantPaqDetectada;
+    result.nombrePresentacion = `CAJA X${cantPaqDetectada}`;
+    return result;
+  }
+
+  // Sin pack: si UoM explicita es volumetrica/masica, intentar leer contenido del nombre.
+  if (umExplicita && umExplicita !== 'UNIDAD') {
+    const re = /(\d+(?:[.,]\d+)?)\s*(ML|MILILITROS?|L|LT|LITROS?|KG|KILOS?|KILOGRAMOS?|G|GR|GRAMOS?|CC)\b/;
+    const m = desc.match(re);
+    if (m) {
+      const num = parseFloat(m[1].replace(',', '.'));
+      const ub = unidadOcrAUnidadBase(m[2]);
+      if (ub && ub === umExplicita) {
+        result.cantidadPresentacion = num;
+        result.nombrePresentacion = nombreVolumetrico(umExplicita, num);
+        return result;
+      }
+    }
+  }
+
+  // Default final: UNIDAD suelta.
+  result.cantidadPresentacion = 1;
+  result.nombrePresentacion = 'UNIDAD';
   return result;
 }
 
@@ -390,6 +685,8 @@ export async function callOpenAiVision(opts: {
   modelo: string;
   base64DataUrl: string;
   timeoutMs?: number;
+  /** Prompt completo (base + adiciones). Si se omite, usa FACTURA_PROMPT_BASE. */
+  promptText?: string;
 }): Promise<OpenAiCallResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 45000);
@@ -398,7 +695,7 @@ export async function callOpenAiVision(opts: {
     const body = {
       model: opts.modelo,
       messages: [
-        { role: 'system', content: FACTURA_PROMPT },
+        { role: 'system', content: opts.promptText || FACTURA_PROMPT_BASE },
         {
           role: 'user',
           content: [
