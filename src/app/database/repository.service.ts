@@ -934,6 +934,13 @@ interface ElectronAPI {
   // Dashboard RRHH (Fase 8)
   getDashboardRrhhKpis: (periodo: string) => Promise<any>;
 
+  // Dashboards por dominio
+  getDashboardVentasKpis: (rango?: string) => Promise<any>;
+  getDashboardComprasKpis: () => Promise<any>;
+  getDashboardProductosKpis: () => Promise<any>;
+  getDashboardFinancieroKpis: () => Promise<any>;
+  getDashboardCajaMayorKpis: () => Promise<any>;
+
   // Reportes RRHH (Fase 8)
   getReporteLiquidacionesMesData: (periodo: string) => Promise<any>;
   exportReporteLiquidacionesMesExcel: (periodo: string) => Promise<any>;
@@ -3610,6 +3617,23 @@ export class RepositoryService {
   // ===================== DASHBOARD RRHH (Fase 8) =====================
   getDashboardRrhhKpis(periodo: string): Observable<any> {
     return from(this.api.getDashboardRrhhKpis(periodo));
+  }
+
+  // ===================== DASHBOARDS POR DOMINIO =====================
+  getDashboardVentasKpis(rango: string = 'week'): Observable<any> {
+    return from(this.api.getDashboardVentasKpis(rango));
+  }
+  getDashboardComprasKpis(): Observable<any> {
+    return from(this.api.getDashboardComprasKpis());
+  }
+  getDashboardProductosKpis(): Observable<any> {
+    return from(this.api.getDashboardProductosKpis());
+  }
+  getDashboardFinancieroKpis(): Observable<any> {
+    return from(this.api.getDashboardFinancieroKpis());
+  }
+  getDashboardCajaMayorKpis(): Observable<any> {
+    return from(this.api.getDashboardCajaMayorKpis());
   }
 
   // ===================== REPORTES RRHH (Fase 8) =====================

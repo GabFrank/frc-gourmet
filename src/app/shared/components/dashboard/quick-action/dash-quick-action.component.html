@@ -1,0 +1,10 @@
+<button class="dashboard-quick-action"
+        type="button"
+        [disabled]="disabled"
+        [matTooltip]="tooltip || title"
+        (click)="onClick()">
+  <span class="dashboard-quick-action-icon" [style.background-color]="color">
+    <mat-icon>{{ icon }}</mat-icon>
+  </span>
+  <span>{{ title }}</span>
+</button>

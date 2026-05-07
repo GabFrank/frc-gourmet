@@ -1,0 +1,9 @@
+<div class="dashboard-section-header">
+  <mat-icon *ngIf="icon">{{ icon }}</mat-icon>
+  <span class="dashboard-section-title">{{ title }}</span>
+  <span *ngIf="badge !== null && badge !== undefined"
+        class="dashboard-section-badge"
+        [ngClass]="'badge-' + badgeColor">
+    {{ badge }}
+  </span>
+</div>

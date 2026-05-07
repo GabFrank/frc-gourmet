@@ -1,0 +1,34 @@
+<div class="dashboard-card">
+  <app-dash-section-header [icon]="icon" [title]="title"></app-dash-section-header>
+  <mat-divider></mat-divider>
+
+  <div *ngIf="items.length === 0" class="dashboard-empty-state">
+    <mat-icon>info_outline</mat-icon>
+    <span>{{ emptyText }}</span>
+  </div>
+
+  <div class="dashboard-ranking-list" *ngIf="items.length > 0">
+    <div *ngFor="let item of items; let i = index" class="dashboard-ranking-item">
+      <div class="dashboard-ranking-rank"
+           [ngClass]="{
+             'rank-gold': i === 0,
+             'rank-silver': i === 1,
+             'rank-bronze': i === 2
+           }">
+        {{ i + 1 }}
+      </div>
+      <div class="dashboard-ranking-info">
+        <div class="dashboard-ranking-name-row">
+          <span class="dashboard-ranking-name">{{ item.nombre }}</span>
+          <span class="dashboard-ranking-secondary">{{ item.valorPrincipal }}</span>
+        </div>
+        <div *ngIf="item.porcentaje !== undefined" class="dashboard-ranking-bar-container">
+          <div class="dashboard-ranking-bar" [style.width.%]="item.porcentaje"></div>
+        </div>
+        <span *ngIf="item.valorSecundario !== undefined" class="dashboard-ranking-total">
+          {{ item.valorSecundario }}
+        </span>
+      </div>
+    </div>
+  </div>
+</div>

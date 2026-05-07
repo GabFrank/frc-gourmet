@@ -1,239 +1,11 @@
-// ===== Dashboard Container =====
-.dashboard-container {
-  padding: 24px;
-  max-width: 1400px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
+// Estilos especificos del dashboard de Ventas (lo comun esta en _dashboard.scss).
 
-// ===== Header =====
-.dashboard-header {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.dashboard-title {
-  font-size: 1.8rem;
-  font-weight: 600;
-  margin: 0;
-  color: var(--primary-text-color, #e0e0e0);
-}
-
-.dashboard-subtitle {
-  font-size: 0.95rem;
-  color: var(--secondary-text-color, #888);
-}
-
-// ===== Stats Row =====
-.stats-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-}
-
-.stat-chip {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 20px;
-  border-radius: 12px;
-  background: var(--card-bg, rgba(255, 255, 255, 0.04));
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-  transition: border-color 0.2s;
-
-  &:hover {
-    border-color: rgba(124, 77, 255, 0.3);
-  }
-
-  mat-icon {
-    font-size: 28px;
-    width: 28px;
-    height: 28px;
-    color: #7c4dff;
-    opacity: 0.8;
-  }
-}
-
-.stat-chip-data {
-  display: flex;
-  flex-direction: column;
-}
-
-.stat-chip-value {
-  font-size: 1.15rem;
-  font-weight: 600;
-  color: var(--primary-text-color, #e0e0e0);
-}
-
-.stat-chip-label {
-  font-size: 0.75rem;
-  color: var(--secondary-text-color, #888);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-// ===== Quick Actions =====
-.quick-actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.quick-action-btn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 18px 10px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-  background: var(--card-bg, rgba(255, 255, 255, 0.03));
-  cursor: pointer;
-  transition: all 0.2s;
-  color: var(--primary-text-color, #e0e0e0);
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.06);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  }
-}
-
-.quick-action-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-
-  mat-icon {
-    color: white;
-    font-size: 20px;
-    width: 20px;
-    height: 20px;
-  }
-}
-
-.quick-action-label {
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-
-// ===== Main Content (2 columns) =====
-.main-content {
-  display: grid;
-  grid-template-columns: 1fr 380px;
-  gap: 20px;
-}
-
-.col-left {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  min-width: 0;
-}
-
-.col-right {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-// ===== Cards base =====
-mat-card.chart-card,
-mat-card.cajas-card,
-mat-card.top-productos-card {
-  border-radius: 12px;
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-  padding: 0;
-  overflow: hidden;
-}
-
-.section-header,
-.chart-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 20px;
-
-  mat-icon {
-    color: #7c4dff;
-    opacity: 0.8;
-  }
-}
-
-.section-title,
-.chart-title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--primary-text-color, #e0e0e0);
-}
-
-// ===== Chart =====
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-}
-
-.chart-title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.chart-chips {
-  display: flex;
-  gap: 6px;
-}
-
-.range-chip {
-  padding: 5px 14px;
-  border-radius: 20px;
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
-  background: transparent;
-  color: var(--secondary-text-color, #999);
-  font-size: 0.78rem;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    border-color: rgba(124, 77, 255, 0.4);
-    color: var(--primary-text-color, #ddd);
-  }
-
-  &.range-chip-active {
-    background: rgba(124, 77, 255, 0.15);
-    border-color: #7c4dff;
-    color: #b388ff;
-    font-weight: 500;
-  }
-}
-
-.chart-container {
-  padding: 16px 20px 20px;
-  height: 280px;
-}
-
-// ===== Cajas abiertas =====
-.cajas-badge {
-  margin-left: auto;
-  background: rgba(76, 175, 80, 0.15);
-  color: #66bb6a;
-  padding: 2px 10px;
-  border-radius: 12px;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
+// Cajas abiertas - accordion
 .caja-panel {
   background: transparent !important;
   box-shadow: none !important;
 
-  .mat-expansion-panel-body {
+  ::ng-deep .mat-expansion-panel-body {
     padding: 0 20px 16px;
   }
 }
@@ -248,19 +20,19 @@ mat-card.top-productos-card {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #66bb6a;
-  box-shadow: 0 0 6px rgba(102, 187, 106, 0.4);
+  background: var(--success-color);
+  box-shadow: 0 0 6px rgba(76, 175, 80, 0.4);
 }
 
 .caja-cajero {
   font-weight: 500;
   font-size: 0.9rem;
-  color: var(--primary-text-color, #e0e0e0);
+  color: var(--text-primary);
 }
 
 .caja-header-time {
   font-size: 0.8rem;
-  color: var(--secondary-text-color, #888);
+  color: var(--text-secondary);
 }
 
 .caja-detail-grid {
@@ -276,14 +48,14 @@ mat-card.top-productos-card {
   gap: 10px;
   padding: 10px 12px;
   border-radius: 8px;
-  background: var(--card-bg, rgba(255, 255, 255, 0.03));
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
+  background: var(--hover-bg);
+  border: 1px solid var(--border-light);
 
   mat-icon {
     font-size: 20px;
     width: 20px;
     height: 20px;
-    color: var(--secondary-text-color, #888);
+    color: var(--text-secondary);
   }
 }
 
@@ -294,7 +66,7 @@ mat-card.top-productos-card {
 
 .detail-label {
   font-size: 0.7rem;
-  color: var(--secondary-text-color, #888);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
@@ -302,141 +74,10 @@ mat-card.top-productos-card {
 .detail-value {
   font-size: 0.9rem;
   font-weight: 500;
-  color: var(--primary-text-color, #e0e0e0);
+  color: var(--text-primary);
 
   &.highlight {
-    color: #66bb6a;
+    color: var(--success-color);
     font-weight: 600;
-  }
-}
-
-.empty-state {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 20px;
-  color: var(--secondary-text-color, #888);
-  font-size: 0.9rem;
-
-  mat-icon {
-    color: var(--secondary-text-color, #888);
-  }
-}
-
-// ===== Top Productos =====
-.top-list {
-  padding: 8px 0;
-}
-
-.top-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 10px 20px;
-  transition: background 0.15s;
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.02);
-  }
-}
-
-.top-rank {
-  min-width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--secondary-text-color, #888);
-
-  &.rank-gold {
-    background: rgba(255, 193, 7, 0.15);
-    color: #ffc107;
-  }
-
-  &.rank-silver {
-    background: rgba(189, 189, 189, 0.15);
-    color: #bdbdbd;
-  }
-
-  &.rank-bronze {
-    background: rgba(255, 152, 0, 0.12);
-    color: #ff9800;
-  }
-}
-
-.top-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.top-name-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.top-name {
-  font-size: 0.82rem;
-  font-weight: 500;
-  color: var(--primary-text-color, #e0e0e0);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.top-cantidad {
-  font-size: 0.72rem;
-  color: var(--secondary-text-color, #888);
-  white-space: nowrap;
-  margin-left: 8px;
-}
-
-.top-bar-container {
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.06);
-  margin-bottom: 3px;
-  overflow: hidden;
-}
-
-.top-bar {
-  height: 100%;
-  border-radius: 2px;
-  background: linear-gradient(90deg, #7c4dff, #b388ff);
-  transition: width 0.4s ease;
-}
-
-.top-total {
-  font-size: 0.72rem;
-  color: var(--secondary-text-color, #999);
-}
-
-// ===== Responsive =====
-@media (max-width: 1024px) {
-  .main-content {
-    grid-template-columns: 1fr;
-  }
-
-  .stats-row {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 600px) {
-  .dashboard-container {
-    padding: 16px;
-  }
-
-  .stats-row {
-    grid-template-columns: 1fr;
-  }
-
-  .quick-actions {
-    flex-direction: column;
   }
 }

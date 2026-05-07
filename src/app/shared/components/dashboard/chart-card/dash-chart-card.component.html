@@ -1,0 +1,19 @@
+<div class="dashboard-card">
+  <div class="dashboard-chart-header">
+    <div class="dashboard-chart-title-row">
+      <mat-icon>{{ icon }}</mat-icon>
+      <span class="dashboard-chart-title">{{ title }}</span>
+    </div>
+    <div class="dashboard-chart-chips">
+      <ng-content></ng-content>
+    </div>
+  </div>
+  <mat-divider></mat-divider>
+  <div class="dashboard-chart-container" [style.height.px]="height">
+    <canvas baseChart
+            [data]="chartData"
+            [options]="chartOptions"
+            [type]="chartType">
+    </canvas>
+  </div>
+</div>

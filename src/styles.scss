@@ -4,6 +4,9 @@
 // ✅ Importar variables de tema globales
 @import './styles/theme-variables.scss';
 
+// ✅ Padron unificado de dashboards
+@import './app/shared/styles/dashboard';
+
 // Import custom material icons
 @import 'assets/custom-material-icons.scss';
 

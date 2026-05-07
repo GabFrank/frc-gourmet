@@ -3169,6 +3169,23 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('get-dashboard-rrhh-kpis', periodo);
   },
 
+  // === Dashboards por dominio ===
+  getDashboardVentasKpis: async (rango: string = 'week'): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-ventas-kpis', rango);
+  },
+  getDashboardComprasKpis: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-compras-kpis');
+  },
+  getDashboardProductosKpis: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-productos-kpis');
+  },
+  getDashboardFinancieroKpis: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-financiero-kpis');
+  },
+  getDashboardCajaMayorKpis: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-caja-mayor-kpis');
+  },
+
   // === Reportes RRHH (Fase 8) ===
   getReporteLiquidacionesMesData: async (periodo: string): Promise<any> => {
     return await ipcRenderer.invoke('get-reporte-liquidaciones-mes-data', periodo);

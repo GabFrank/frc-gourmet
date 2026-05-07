@@ -2,96 +2,87 @@
 
   <!-- Header -->
   <div class="dashboard-header">
-    <h1 class="dashboard-title">Ventas</h1>
-    <span class="dashboard-subtitle">Panel de control</span>
-  </div>
-
-  <!-- Stats rápidos -->
-  <div class="stats-row">
-    <div class="stat-chip">
-      <mat-icon>shopping_cart</mat-icon>
-      <div class="stat-chip-data">
-        <span class="stat-chip-value">{{ ventasHoy }}</span>
-        <span class="stat-chip-label">Ventas hoy</span>
-      </div>
+    <div class="dashboard-header-title">
+      <h1 class="dashboard-title">Ventas</h1>
+      <span class="dashboard-subtitle">Panel de control</span>
     </div>
-    <div class="stat-chip">
-      <mat-icon>payments</mat-icon>
-      <div class="stat-chip-data">
-        <span class="stat-chip-value">{{ totalHoyPYG | number:'1.0-0' }} Gs</span>
-        <span class="stat-chip-label">Total hoy</span>
-      </div>
-    </div>
-    <div class="stat-chip">
-      <mat-icon>confirmation_number</mat-icon>
-      <div class="stat-chip-data">
-        <span class="stat-chip-value">{{ ticketPromedio | number:'1.0-0' }} Gs</span>
-        <span class="stat-chip-label">Ticket promedio</span>
-      </div>
-    </div>
-    <div class="stat-chip">
-      <mat-icon>table_restaurant</mat-icon>
-      <div class="stat-chip-data">
-        <span class="stat-chip-value">{{ mesasOcupadas }} / {{ mesasTotal }}</span>
-        <span class="stat-chip-label">Mesas ocupadas</span>
-      </div>
+    <div class="dashboard-header-actions">
+      <button mat-icon-button (click)="cargarKpis()" [disabled]="loading" matTooltip="Actualizar">
+        <mat-icon>refresh</mat-icon>
+      </button>
     </div>
   </div>
 
-  <!-- Accesos directos -->
-  <div class="quick-actions">
-    <button *ngFor="let action of quickActions"
-            class="quick-action-btn"
-            (click)="navigateTo(action.action)"
-            [matTooltip]="action.title">
-      <div class="quick-action-icon" [ngStyle]="{'background-color': action.color}">
-        <mat-icon>{{ action.icon }}</mat-icon>
-      </div>
-      <span class="quick-action-label">{{ action.title }}</span>
-    </button>
+  <!-- Stat chips -->
+  <div class="dashboard-stats-row">
+    <app-dash-stat-chip
+      icon="shopping_cart"
+      [value]="ventasHoy"
+      label="Ventas hoy"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="payments"
+      [value]="formatPYG(totalHoyPYG) + ' Gs'"
+      label="Total hoy"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="confirmation_number"
+      [value]="formatPYG(ticketPromedio) + ' Gs'"
+      label="Ticket promedio"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="table_restaurant"
+      [value]="mesasOcupadas + ' / ' + mesasTotal"
+      label="Mesas ocupadas"
+      [loading]="loading">
+    </app-dash-stat-chip>
   </div>
 
-  <!-- Contenido principal: 2 columnas -->
-  <div class="main-content">
+  <!-- Quick actions -->
+  <div class="dashboard-quick-actions">
+    <app-dash-quick-action *ngFor="let a of quickActions"
+      [icon]="a.icon"
+      [title]="a.title"
+      [color]="a.color"
+      (action)="navigateTo(a.action)">
+    </app-dash-quick-action>
+  </div>
 
-    <!-- Columna izquierda -->
-    <div class="col-left">
+  <!-- Main content -->
+  <div class="dashboard-main-content">
 
-      <!-- Grafico de ventas -->
-      <mat-card class="chart-card">
-        <div class="chart-header">
-          <div class="chart-title-row">
-            <mat-icon>trending_up</mat-icon>
-            <span class="chart-title">Ventas por periodo</span>
-          </div>
-          <div class="chart-chips">
-            <button *ngFor="let chip of rangosChips"
-                    class="range-chip"
-                    [class.range-chip-active]="chip.selected"
-                    (click)="selectRango(chip)">
-              {{ chip.label }}
-            </button>
-          </div>
-        </div>
-        <mat-divider></mat-divider>
-        <div class="chart-container">
-          <canvas baseChart
-                  [data]="chartData"
-                  [options]="chartOptions"
-                  type="line">
-          </canvas>
-        </div>
-      </mat-card>
+    <!-- Col izquierda -->
+    <div class="dashboard-col-left">
+
+      <!-- Chart -->
+      <app-dash-chart-card
+        title="Ventas por periodo"
+        icon="trending_up"
+        [chartData]="chartData"
+        [chartOptions]="chartOptions"
+        chartType="line">
+        <button *ngFor="let chip of rangosChips"
+                class="dashboard-range-chip"
+                [class.range-chip-active]="chip.selected"
+                (click)="selectRango(chip)">
+          {{ chip.label }}
+        </button>
+      </app-dash-chart-card>
 
       <!-- Cajas abiertas -->
-      <mat-card class="cajas-card">
-        <div class="section-header">
-          <mat-icon>point_of_sale</mat-icon>
-          <span class="section-title">Cajas abiertas</span>
-          <span class="cajas-badge">{{ cajasAbiertas.length }}</span>
-        </div>
+      <div class="dashboard-card cajas-card">
+        <app-dash-section-header
+          icon="point_of_sale"
+          title="Cajas abiertas"
+          [badge]="cajasAbiertas.length"
+          badgeColor="success">
+        </app-dash-section-header>
         <mat-divider></mat-divider>
-        <mat-accordion multi>
+
+        <mat-accordion multi *ngIf="cajasAbiertas.length > 0">
           <mat-expansion-panel *ngFor="let caja of cajasAbiertas" class="caja-panel">
             <mat-expansion-panel-header>
               <mat-panel-title>
@@ -114,31 +105,10 @@
                 </div>
               </div>
               <div class="caja-detail-item">
-                <mat-icon>timer</mat-icon>
-                <div class="caja-detail-text">
-                  <span class="detail-label">Tiempo abierto</span>
-                  <span class="detail-value">{{ caja.horasAbierto }}</span>
-                </div>
-              </div>
-              <div class="caja-detail-item">
-                <mat-icon>account_balance_wallet</mat-icon>
-                <div class="caja-detail-text">
-                  <span class="detail-label">Apertura Gs</span>
-                  <span class="detail-value">{{ caja.valorAperturaPYG | number:'1.0-0' }}</span>
-                </div>
-              </div>
-              <div class="caja-detail-item">
-                <mat-icon>attach_money</mat-icon>
-                <div class="caja-detail-text">
-                  <span class="detail-label">Apertura USD</span>
-                  <span class="detail-value">{{ caja.valorAperturaUSD | number:'1.0-2' }}</span>
-                </div>
-              </div>
-              <div class="caja-detail-item">
                 <mat-icon>trending_up</mat-icon>
                 <div class="caja-detail-text">
                   <span class="detail-label">Venta total</span>
-                  <span class="detail-value highlight">{{ caja.ventaTotal | number:'1.0-0' }} Gs</span>
+                  <span class="detail-value highlight">{{ formatPYG(caja.ventaTotal) }} Gs</span>
                 </div>
               </div>
               <div class="caja-detail-item">
@@ -159,44 +129,21 @@
           </mat-expansion-panel>
         </mat-accordion>
 
-        <div *ngIf="cajasAbiertas.length === 0" class="empty-state">
+        <div *ngIf="!loading && cajasAbiertas.length === 0" class="dashboard-empty-state">
           <mat-icon>info_outline</mat-icon>
           <span>No hay cajas abiertas en este momento</span>
         </div>
-      </mat-card>
+      </div>
     </div>
 
-    <!-- Columna derecha -->
-    <div class="col-right">
-
-      <!-- Top productos -->
-      <mat-card class="top-productos-card">
-        <div class="section-header">
-          <mat-icon>emoji_events</mat-icon>
-          <span class="section-title">Top productos vendidos</span>
-        </div>
-        <mat-divider></mat-divider>
-        <div class="top-list">
-          <div *ngFor="let producto of topProductos; let i = index" class="top-item">
-            <div class="top-rank" [ngClass]="{
-              'rank-gold': i === 0,
-              'rank-silver': i === 1,
-              'rank-bronze': i === 2
-            }">{{ i + 1 }}</div>
-            <div class="top-info">
-              <div class="top-name-row">
-                <span class="top-name">{{ producto.nombre }}</span>
-                <span class="top-cantidad">{{ producto.cantidad }} uds</span>
-              </div>
-              <div class="top-bar-container">
-                <div class="top-bar" [ngStyle]="{'width': producto.porcentaje + '%'}"></div>
-              </div>
-              <span class="top-total">{{ producto.total | number:'1.0-0' }} Gs</span>
-            </div>
-          </div>
-        </div>
-      </mat-card>
-
+    <!-- Col derecha -->
+    <div class="dashboard-col-right">
+      <app-dash-ranking
+        title="Top productos vendidos"
+        icon="emoji_events"
+        [items]="topProductos"
+        emptyText="Sin datos del periodo">
+      </app-dash-ranking>
     </div>
   </div>
 </div>

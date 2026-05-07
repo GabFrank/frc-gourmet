@@ -1,117 +1,65 @@
-.shortcuts-section {
-  margin-bottom: 24px;
+// Estilos especificos del dashboard de Financiero (lo comun esta en _dashboard.scss).
 
-  .section-subtitle {
-    margin: 0 0 12px;
-    font-size: 14px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: rgba(0, 0, 0, 0.55);
-  }
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  padding: 12px 20px 16px;
+}
 
-  .shortcuts-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 10px;
-  }
+.shortcut-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 14px;
+  border-radius: 8px;
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid #7c4dff;
+  cursor: pointer;
+  transition: background 0.2s;
 
-  .shortcut-card {
-    cursor: pointer;
-    transition: transform 0.1s, box-shadow 0.1s;
-    &:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15); }
-
-    .shortcut-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 4px;
-
-      .shortcut-icon {
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        color: white;
-        mat-icon { font-size: 20px; width: 20px; height: 20px; }
-      }
-      .shortcut-titulo {
-        flex: 1;
-        font-weight: 500;
-        font-size: 14px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .shortcut-delete { opacity: 0.4; transition: opacity 0.15s; }
-      &:hover .shortcut-delete { opacity: 1; }
-    }
+  &:hover {
+    background: var(--hover-bg);
   }
 }
 
-:host-context(.dark-theme) .shortcuts-section .section-subtitle {
-  color: rgba(255, 255, 255, 0.55);
-}
+.shortcut-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
 
-.dashboard-container {
-  padding: 20px;
-
-  .dashboard-title {
-    margin-bottom: 20px;
-    color: #333;
-    font-weight: 300;
-  }
-
-  .dashboard-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 20px;
-  }
-
-  .dashboard-card {
-    cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
-    min-height: 180px;
-
-    &:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23);
-    }
-
-    .card-icon {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      color: white;
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-
-      mat-icon {
-        font-size: 20px;
-        width: 20px;
-        height: 20px;
-      }
-    }
-
-    mat-card-content {
-      margin-top: 15px;
-      color: rgba(0,0,0,0.6);
-    }
+  mat-icon {
+    color: white;
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
   }
 }
 
-/* Dark theme adjustments */
-:host-context(.dark-theme) {
-  .dashboard-title {
-    color: #e0e0e0;
-  }
+.shortcut-titulo {
+  flex: 1;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-  .dashboard-card {
-    mat-card-content {
-      color: rgba(255,255,255,0.7);
-    }
+.shortcut-delete {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    color: var(--text-secondary);
   }
 }
