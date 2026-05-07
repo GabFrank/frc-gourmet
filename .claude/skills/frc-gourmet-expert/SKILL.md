@@ -53,6 +53,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | **Liquidaciones, comisiones** (sueldo, aguinaldo, equipos) | [domains/rrhh-liquidaciones.md](domains/rrhh-liquidaciones.md) |
 | **Personas, Clientes, Usuarios** | [domains/personas-clientes.md](domains/personas-clientes.md) |
 | **Impresoras térmicas** | [domains/cocina-impresion.md](domains/cocina-impresion.md) |
+| **Dashboards** (padrón unificado, componentes shared, handlers KPI) | [domains/dashboards.md](domains/dashboards.md) |
 | Reglas de código (UPPERCASE, no func en templates, colores) | [conventions/coding-rules.md](conventions/coding-rules.md) |
 | Patrones UI (mat-menu acciones, tab/dialog híbrido, full-height) | [conventions/ui-patterns.md](conventions/ui-patterns.md) |
 | Bugs comunes y workarounds (TypeORM null, fechas UTC, mat-chip) | [conventions/pitfalls-typeorm-electron.md](conventions/pitfalls-typeorm-electron.md) |
@@ -91,20 +92,24 @@ Estas las debo respetar SIEMPRE, sin que el usuario las repita:
 16. **Cada diálogo, un propósito** — no mezclar conceptos. ([feedback_separar_conceptos](#))
 17. **Componente de tabla con scroll local** — usar el patrón full-height de [conventions/ui-patterns.md](conventions/ui-patterns.md), no el scroll global de la tab.
 18. **Si el componente es muy grande para mat-dialog** — convertir a híbrido tab/dialog. ([feedback_componente_hibrido_tab_dialog](#))
+19. **Dashboards: padrón unificado obligatorio** — usar `<app-dash-stat-chip>`, `<app-dash-quick-action>`, `<app-dash-ranking>`, `<app-dash-section-header>`, `<app-dash-chart-card>` de `shared/components/dashboard/`; estilos comunes en `_dashboard.scss`; chart options vía `getDashboardChartOptions()`. Detalles → [domains/dashboards.md](domains/dashboards.md).
+20. **Si el usuario menciona trabajo paralelo de otro agente** — usar `git worktree add` (no `checkout` en el directorio principal). El checkout cambia el filesystem para todos los procesos. ([feedback_git_worktree_paralelo](#))
 
 ---
 
-## 4. Estado actual del repo (snapshot 2026-05-06)
+## 4. Estado actual del repo (snapshot 2026-05-07)
 
 > Esta sección puede quedar desactualizada. Si el usuario pregunta por estado actual, **revisar `git log` y memorias antes de responder**.
 
-- **Última feature mergeada:** Importación de facturas con OCR + IA (GPT-4o vision) — extrae proveedor + items + teléfono, hace matching por aliases + Levenshtein, crea Compra borrador. Aprende de cada confirmación. Tab dedicado de revisión, dialogs inline para crear proveedor/producto. Pantalla `Sistema → Configurar IA` con probador. Lista de Importaciones IA con reprocesar/descartar. **Producto** ahora tiene campo `iva` (0/5/10, default 10) y `registroCompleto` (boolean para chip "Parcial" en list-productos). `Producto.subfamilia` es nullable. Detalles → [domains/importacion-facturas-ocr.md](domains/importacion-facturas-ocr.md).
+- **Última feature en branch propio:** Refactor de dashboards — padrón unificado para los 7 dashboards (Home, Ventas, Compras, Productos, Financiero, Caja Mayor, RRHH). SCSS partial común + 5 componentes shared (`<app-dash-*>`) + 5 handlers KPI nuevos por dominio + 6 permisos `XXX_DASHBOARD_VER`. Branch `feat/dashboards-padron-unificado`, commit `2a061d8`. Detalles → [domains/dashboards.md](domains/dashboards.md). **Pendiente: merge a main + activar chequeo de permisos en frontend (PermissionService existe pero no se usa).**
+- **Importación de facturas con OCR + IA** (GPT-4o vision) — extrae proveedor + items + teléfono, hace matching por aliases + Levenshtein, crea Compra borrador. Aprende de cada confirmación. Tab dedicado de revisión, dialogs inline para crear proveedor/producto. Pantalla `Sistema → Configurar IA` con probador. Lista de Importaciones IA con reprocesar/descartar. **Producto** ahora tiene campo `iva` (0/5/10, default 10) y `registroCompleto` (boolean para chip "Parcial" en list-productos). `Producto.subfamilia` es nullable. Detalles → [domains/importacion-facturas-ocr.md](domains/importacion-facturas-ocr.md).
 - **Backup/Restore + Reset BD + Seed admin** (commit `607a880`).
 - **Compras MVP** con flujo de pago unificado vía CPP (commit `c2e0a70`).
 - **RRHH** completado hasta Fase 8 (dashboard, notificaciones, reportes con exports).
 - **Ventas/PdV** muy avanzado (cobro multi-pago, delivery, mesas, comandas, atajos, multi-sabor, descuento de stock automático).
 - **Productos** con refactor de variaciones completado (RecetaPresentacion sustituye al multiplicador).
-- **Pendientes mayores:** UI de Promociones, Producción, Reservas avanzadas, autocompletes en selects largos, migración ngModel→Reactive Forms, sweep de fechas timezone-safe, completar permisos `COMPRAS_IMPORTAR_FACTURA` y `SISTEMA_CONFIGURAR_IA` en sidenav (creados pero no chequeados).
+- **Refactor en paralelo activo:** branch `refactor/sweep-currency-ngmodel-fechas` (otro agente trabajando) — aplicar `appCurrencyInput` directive a dialogs/componentes. **No mezclar con otros refactors.**
+- **Pendientes mayores:** UI de Promociones, Producción, Reservas avanzadas, autocompletes en selects largos, migración ngModel→Reactive Forms, sweep de fechas timezone-safe, completar permisos `COMPRAS_IMPORTAR_FACTURA`/`SISTEMA_CONFIGURAR_IA`/`*_DASHBOARD_VER` en sidenav y `app.component.ts` (creados pero no chequeados).
 
 Detalles → [workflows/todos-pendientes.md](workflows/todos-pendientes.md).
 
