@@ -1,159 +1,24 @@
-.dashboard-container {
-  padding: 16px;
-  max-width: 1400px;
-}
+// Estilos especificos del dashboard de RRHH (lo comun esta en _dashboard.scss).
 
-.header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-  gap: 8px;
-}
+// 6 stat chips en una fila
+.dashboard-stats-row.stats-6 {
+  grid-template-columns: repeat(6, 1fr);
 
-.titulo-seccion {
-  margin: 0;
-  font-size: 1.4rem;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.periodo-selector {
-  width: 150px;
-  font-size: 14px;
-}
-
-.cargando-container {
-  display: flex;
-  justify-content: center;
-  padding: 40px;
-}
-
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.kpi-card {
-  text-align: center;
-}
-
-.kpi-card-alerta {
-  border-left: 4px solid var(--mat-warn-500, #f44336);
-}
-
-.kpi-icon-row {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 8px;
-}
-
-.kpi-icon {
-  font-size: 32px;
-  height: 32px;
-  width: 32px;
-}
-
-.kpi-valor {
-  font-size: 1.6rem;
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-.kpi-label {
-  font-size: 0.8rem;
-  opacity: 0.7;
-  margin-top: 4px;
-}
-
-.btn-accion-kpi {
-  margin-top: 8px;
-  font-size: 0.75rem;
-}
-
-.secciones-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
-}
-
-.seccion-card {
-  min-height: 200px;
-}
-
-.sin-datos {
-  opacity: 0.6;
-  font-style: italic;
-  padding: 12px 0;
-}
-
-.lista-compacta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--mat-divider-color, rgba(0,0,0,0.12));
-
-  &:last-child {
-    border-bottom: none;
+  @media (max-width: 1280px) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  @media (max-width: 768px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  @media (max-width: 500px) {
+    grid-template-columns: 1fr;
   }
 }
 
-.item-icon {
-  font-size: 20px;
-  height: 20px;
-  width: 20px;
-  flex-shrink: 0;
-}
+.periodo-selector {
+  width: 140px;
 
-.item-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.item-nombre {
-  font-weight: 500;
-  font-size: 0.9rem;
-}
-
-.item-detalle {
-  font-size: 0.75rem;
-  opacity: 0.7;
-}
-
-.tabla-mini {
-  width: 100%;
-  font-size: 0.85rem;
-}
-
-.col-numero {
-  text-align: right;
-}
-
-// Color helpers (theme-aware via CSS custom props not hardcoded colors)
-.icon-verde {
-  color: #4caf50;
-}
-
-.icon-amarillo {
-  color: #ff9800;
-}
-
-.icon-naranja {
-  color: #ff5722;
-}
-
-.icon-rojo {
-  color: #f44336;
-}
-
-.icon-celeste {
-  color: #03a9f4;
+  ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+    display: none;
+  }
 }

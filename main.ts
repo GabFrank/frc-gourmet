@@ -56,6 +56,12 @@ import { seedSystemData } from './electron/utils/seed-system';
 import { registerNotificacionesRrhhHandlers, generarNotificacionesRrhh } from './electron/handlers/notificaciones-rrhh.handler';
 import { registerDashboardRrhhHandlers } from './electron/handlers/dashboard-rrhh.handler';
 import { registerReportesRrhhHandlers } from './electron/handlers/reportes-rrhh.handler';
+// Dashboards por dominio
+import { registerDashboardVentasHandlers } from './electron/handlers/dashboard-ventas.handler';
+import { registerDashboardComprasHandlers } from './electron/handlers/dashboard-compras.handler';
+import { registerDashboardProductosHandlers } from './electron/handlers/dashboard-productos.handler';
+import { registerDashboardFinancieroHandlers } from './electron/handlers/dashboard-financiero.handler';
+import { registerDashboardCajaMayorHandlers } from './electron/handlers/dashboard-caja-mayor.handler';
 // Backup & Restore handler
 import { registerBackupHandlers, startAutoBackupScheduler } from './electron/handlers/backup.handler';
 // Importacion de facturas via OCR + IA
@@ -125,6 +131,13 @@ function initializeDatabase() {
       registerNotificacionesRrhhHandlers(dataSource, getCurrentUser); // Notificaciones RRHH
       registerDashboardRrhhHandlers(dataSource, getCurrentUser); // Dashboard KPIs RRHH
       registerReportesRrhhHandlers(dataSource, getCurrentUser); // Reportes + Exports RRHH
+
+      // Dashboards por dominio (Ventas, Compras, Productos, Financiero, Caja Mayor)
+      registerDashboardVentasHandlers(dataSource, getCurrentUser);
+      registerDashboardComprasHandlers(dataSource, getCurrentUser);
+      registerDashboardProductosHandlers(dataSource, getCurrentUser);
+      registerDashboardFinancieroHandlers(dataSource, getCurrentUser);
+      registerDashboardCajaMayorHandlers(dataSource, getCurrentUser);
 
       // Startup migration: populate vendedor_id from created_by for historic ventas
       dataSource.query(`UPDATE ventas SET vendedor_id = created_by WHERE vendedor_id IS NULL AND created_by IS NOT NULL`)

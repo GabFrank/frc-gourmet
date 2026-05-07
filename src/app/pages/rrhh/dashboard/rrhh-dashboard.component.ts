@@ -12,9 +12,13 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatChipsModule } from '@angular/material/chips';
+import { firstValueFrom } from 'rxjs';
 import { TabsService } from 'src/app/services/tabs.service';
 import { RepositoryService } from 'src/app/database/repository.service';
-import { firstValueFrom } from 'rxjs';
+import { DashStatChipComponent } from 'src/app/shared/components/dashboard/stat-chip/dash-stat-chip.component';
+import { DashQuickActionComponent } from 'src/app/shared/components/dashboard/quick-action/dash-quick-action.component';
+import { DashRankingListComponent, DashRankingItem } from 'src/app/shared/components/dashboard/ranking-list/dash-ranking-list.component';
+import { DashSectionHeaderComponent } from 'src/app/shared/components/dashboard/section-header/dash-section-header.component';
 
 @Component({
   selector: 'app-rrhh-dashboard',
@@ -35,10 +39,21 @@ import { firstValueFrom } from 'rxjs';
     MatTableModule,
     MatTooltipModule,
     MatChipsModule,
+    DashStatChipComponent,
+    DashQuickActionComponent,
+    DashRankingListComponent,
+    DashSectionHeaderComponent,
   ],
 })
 export class RrhhDashboardComponent implements OnInit {
-  cargando = false;
+  loading = false;
+
+  quickActions = [
+    { title: 'Funcionarios', icon: 'people', action: 'funcionarios', color: '#2196f3' },
+    { title: 'Liquidaciones', icon: 'request_quote', action: 'liquidaciones', color: '#4caf50' },
+    { title: 'Reportes', icon: 'bar_chart', action: 'reportes', color: '#9c27b0' },
+    { title: 'Notificaciones', icon: 'notifications', action: 'notificaciones', color: '#f44336' },
+  ];
 
   // Selector de periodo
   periodoSeleccionado = '';
@@ -55,9 +70,9 @@ export class RrhhDashboardComponent implements OnInit {
 
   proximosCumpleanios: any[] = [];
   vacacionesProximas: any[] = [];
-  top5Vendedores: any[] = [];
+  top5Vendedores: DashRankingItem[] = [];
 
-  columnsVendedores = ['nombre', 'totalVendido', 'cantVentas'];
+  proximosEventos: { tipo: 'cumple' | 'vacacion'; nombre: string; detalle: string; icon: string; color: 'warning' | 'info' }[] = [];
 
   constructor(
     private repo: RepositoryService,
@@ -85,7 +100,7 @@ export class RrhhDashboardComponent implements OnInit {
   }
 
   async cargarKpis(): Promise<void> {
-    this.cargando = true;
+    this.loading = true;
     try {
       const kpis = await firstValueFrom(this.repo.getDashboardRrhhKpis(this.periodoSeleccionado));
       if (kpis) {
@@ -98,12 +113,43 @@ export class RrhhDashboardComponent implements OnInit {
         this.liquidacionesPendientesPago = kpis.liquidacionesPendientesPago || 0;
         this.proximosCumpleanios = kpis.proximosCumpleanios || [];
         this.vacacionesProximas = kpis.vacacionesProximas || [];
-        this.top5Vendedores = kpis.top5Vendedores || [];
+
+        const top = kpis.top5Vendedores || [];
+        const maxTotal = top.reduce((m: number, v: any) => Math.max(m, Number(v.totalVendido || 0)), 0);
+        this.top5Vendedores = top.map((v: any) => ({
+          nombre: String(v.nombre || '').toUpperCase(),
+          valorPrincipal: `${v.cantVentas || 0} ventas`,
+          valorSecundario: `${this.formatPYG(v.totalVendido || 0)} Gs`,
+          porcentaje: maxTotal > 0 ? Math.round((Number(v.totalVendido || 0) / maxTotal) * 100) : 0,
+        }));
+
+        // Compilar proximos eventos
+        const eventos: any[] = [];
+        for (const c of this.proximosCumpleanios) {
+          eventos.push({
+            tipo: 'cumple',
+            nombre: c.nombre,
+            detalle: `${c.fechaCumpleanios} (${c.diasRestantes} dia/s)`,
+            icon: 'cake',
+            color: 'warning',
+          });
+        }
+        for (const v of this.vacacionesProximas) {
+          eventos.push({
+            tipo: 'vacacion',
+            nombre: v.nombre,
+            detalle: `${v.fechaDesde} - ${v.fechaHasta}`,
+            icon: 'beach_access',
+            color: 'info',
+          });
+        }
+        this.proximosEventos = eventos;
       }
     } catch (e) {
+      console.error(e);
       this.snack.open('Error al cargar datos del dashboard', 'Cerrar', { duration: 3000 });
     } finally {
-      this.cargando = false;
+      this.loading = false;
     }
   }
 
@@ -111,15 +157,32 @@ export class RrhhDashboardComponent implements OnInit {
     this.cargarKpis();
   }
 
-  abrirLiquidaciones(): void {
-    import('src/app/pages/rrhh/liquidaciones-sueldo/list/list-liquidaciones-sueldo.component').then(m => {
-      this.tabs.openTab('Liquidaciones', m.ListLiquidacionesSueldoComponent, {});
-    });
+  formatPYG(v: number): string {
+    return (v || 0).toLocaleString('es-PY', { maximumFractionDigits: 0 });
   }
 
-  abrirNotificaciones(): void {
-    import('src/app/pages/rrhh/notificaciones/list-notificaciones-rrhh.component').then(m => {
-      this.tabs.openTab('Notificaciones RRHH', m.ListNotificacionesRrhhComponent, {});
-    });
+  navigateTo(action: string): void {
+    switch (action) {
+      case 'funcionarios':
+        import('src/app/pages/rrhh/funcionarios/list-funcionarios/list-funcionarios.component').then(m => {
+          this.tabs.openTab('Funcionarios', m.ListFuncionariosComponent);
+        });
+        break;
+      case 'liquidaciones':
+        import('src/app/pages/rrhh/liquidaciones-sueldo/list/list-liquidaciones-sueldo.component').then(m => {
+          this.tabs.openTab('Liquidaciones', m.ListLiquidacionesSueldoComponent);
+        });
+        break;
+      case 'reportes':
+        import('src/app/pages/rrhh/reportes/reportes-rrhh-page.component').then(m => {
+          this.tabs.openTab('Reportes RRHH', m.ReportesRrhhPageComponent);
+        });
+        break;
+      case 'notificaciones':
+        import('src/app/pages/rrhh/notificaciones/list-notificaciones-rrhh.component').then(m => {
+          this.tabs.openTab('Notificaciones RRHH', m.ListNotificacionesRrhhComponent);
+        });
+        break;
+    }
   }
 }
