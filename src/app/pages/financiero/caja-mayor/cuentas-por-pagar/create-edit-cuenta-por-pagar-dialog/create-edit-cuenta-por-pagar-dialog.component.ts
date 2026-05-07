@@ -12,6 +12,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 @Component({
   selector: 'app-create-edit-cuenta-por-pagar-dialog',
@@ -30,6 +31,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
     MatNativeDateModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    CurrencyInputDirective,
   ]
 })
 export class CreateEditCuentaPorPagarDialogComponent implements OnInit {
@@ -38,6 +40,7 @@ export class CreateEditCuentaPorPagarDialogComponent implements OnInit {
   monedas: any[] = [];
   proveedores: any[] = [];
   tipoOptions = ['COMPRA', 'PRESTAMO', 'OTRO'];
+  decimalesMoneda = 0;
 
   constructor(
     private fb: FormBuilder,
@@ -59,6 +62,14 @@ export class CreateEditCuentaPorPagarDialogComponent implements OnInit {
       observacion: [''],
     });
     this.loadLookups();
+    this.form.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.form?.get('monedaId')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   async loadLookups(): Promise<void> {
@@ -69,6 +80,7 @@ export class CreateEditCuentaPorPagarDialogComponent implements OnInit {
       ]);
       this.monedas = monedas || [];
       this.proveedores = proveedores || [];
+      this.recalcDecimalesMoneda();
     } catch (e) { console.error(e); }
   }
 

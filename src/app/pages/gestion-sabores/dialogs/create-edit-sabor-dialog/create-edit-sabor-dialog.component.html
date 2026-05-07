@@ -121,7 +121,7 @@
 
                   <mat-form-field appearance="outline">
                     <mat-label>Precio de Venta</mat-label>
-                    <input matInput type="number" formControlName="precio" step="0.01" min="0">
+                    <input matInput type="text" inputmode="decimal" formControlName="precio" appCurrencyInput [decimals]="decimalesMoneda">
                     <mat-error *ngIf="variacion.get('precio')?.hasError('required')">
                       El precio es requerido
                     </mat-error>

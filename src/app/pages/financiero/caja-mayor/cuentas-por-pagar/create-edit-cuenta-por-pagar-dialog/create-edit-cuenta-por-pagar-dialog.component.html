@@ -26,7 +26,7 @@
     <div class="row">
       <mat-form-field appearance="outline" class="flex">
         <mat-label>Monto total</mat-label>
-        <input matInput type="number" formControlName="montoTotal" min="0.01" step="0.01">
+        <input matInput type="text" inputmode="decimal" formControlName="montoTotal" appCurrencyInput [decimals]="decimalesMoneda">
       </mat-form-field>
       <mat-form-field appearance="outline" class="flex">
         <mat-label>Moneda</mat-label>

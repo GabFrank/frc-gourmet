@@ -71,6 +71,9 @@ import { PrecioVentaDialogComponent } from './pages/productos/gestionar-producto
 // Gestion Recetas Module
 import { GestionRecetasModule } from './pages/gestion-recetas/gestion-recetas.module';
 
+// Shared directives standalone
+import { CurrencyInputDirective } from './shared/directives/currency-input.directive';
+
 @NgModule({
   imports: [
     BrowserModule,
@@ -113,7 +116,8 @@ import { GestionRecetasModule } from './pages/gestion-recetas/gestion-recetas.mo
     MatProgressBarModule,
     AppRoutingModule,
     TabContainerComponent,
-    GestionRecetasModule
+    GestionRecetasModule,
+    CurrencyInputDirective,
   ],
   declarations: [
     // No declarations since all components are standalone

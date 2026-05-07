@@ -40,7 +40,10 @@ export class ProductoPreciosCostoComponent implements OnInit, OnDestroy, AfterVi
   // Modo de edición
   isEditing = false;
   editingPrecioCostoId: number | null = null;
-  
+
+  // Decimales de la moneda seleccionada en el form
+  decimalesMoneda = 0;
+
   // Columnas para la tabla
   displayedColumns: string[] = ['id', 'fuente', 'moneda', 'valor', 'fecha', 'activo', 'acciones'];
   
@@ -105,6 +108,14 @@ export class ProductoPreciosCostoComponent implements OnInit, OnDestroy, AfterVi
       monedaId: ['', [Validators.required]],
       activo: [true]
     });
+    this.precioCostoForm.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.precioCostoForm?.get('monedaId')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   /**
