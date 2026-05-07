@@ -27,6 +27,7 @@ import { ListOperacionesFinancierasComponent } from '../operaciones-financieras/
 import { ListOperacionFinancieraCategoriasComponent } from '../operaciones-financieras/categorias/list-operacion-financiera-categorias.component';
 import { ListChequerasComponent } from '../cheques/list-chequeras/list-chequeras.component';
 import { ListChequesComponent } from '../cheques/list-cheques/list-cheques.component';
+import { CajaMayorDetalleComponent } from '../caja-mayor-detalle/caja-mayor-detalle.component';
 import { DashStatChipComponent } from 'src/app/shared/components/dashboard/stat-chip/dash-stat-chip.component';
 import { DashQuickActionComponent } from 'src/app/shared/components/dashboard/quick-action/dash-quick-action.component';
 import { DashSectionHeaderComponent } from 'src/app/shared/components/dashboard/section-header/dash-section-header.component';
@@ -39,6 +40,21 @@ interface VencimientoItem {
   monto: number;
   fechaVencimiento: string;
   dias: number;
+}
+
+interface CajaMayorAbiertaItem {
+  id: number;
+  nombre: string;
+  saldoPYG: number;
+  fechaApertura: Date | string;
+}
+
+type RangoValue = 'today' | 'week' | 'month' | 'last-month';
+
+interface RangoChip {
+  label: string;
+  value: RangoValue;
+  selected: boolean;
 }
 
 interface MenuItem {
@@ -112,7 +128,16 @@ export class CajaMayorDashboardComponent implements OnInit {
   chequesPorVencer = 0;
 
   proximosVencimientos: VencimientoItem[] = [];
+  cajasMayorAbiertas: CajaMayorAbiertaItem[] = [];
   shortcuts: any[] = [];
+
+  rangosChips: RangoChip[] = [
+    { label: 'Hoy', value: 'today', selected: false },
+    { label: 'Esta semana', value: 'week', selected: false },
+    { label: 'Este mes', value: 'month', selected: true },
+    { label: 'Mes anterior', value: 'last-month', selected: false },
+  ];
+  rangoSeleccionado: RangoValue = 'month';
 
   chartData: ChartData<'line'> = { labels: [], datasets: [] };
   chartOptions: ChartConfiguration<'line'>['options'] = getDashboardChartOptions('line');
@@ -133,7 +158,7 @@ export class CajaMayorDashboardComponent implements OnInit {
   async cargarKpis(): Promise<void> {
     this.loading = true;
     try {
-      const k = await firstValueFrom(this.repositoryService.getDashboardCajaMayorKpis());
+      const k = await firstValueFrom(this.repositoryService.getDashboardCajaMayorKpis(this.rangoSeleccionado));
       if (k) {
         this.saldoPYG = k.saldoPYG || 0;
         this.saldoUSD = k.saldoUSD || 0;
@@ -142,8 +167,9 @@ export class CajaMayorDashboardComponent implements OnInit {
         this.cppMontoTotalPYG = k.cppMontoTotalPYG || 0;
         this.chequesPorVencer = k.chequesPorVencer || 0;
         this.proximosVencimientos = k.proximosVencimientos || [];
+        this.cajasMayorAbiertas = k.cajasMayorAbiertas || [];
 
-        const mov = k.movimientos30d || { labels: [], entradas: [], salidas: [] };
+        const mov = k.movimientosPorRango || k.movimientos30d || { labels: [], entradas: [], salidas: [] };
         this.chartData = {
           labels: mov.labels || [],
           datasets: [
@@ -157,6 +183,21 @@ export class CajaMayorDashboardComponent implements OnInit {
     } finally {
       this.loading = false;
     }
+  }
+
+  selectRango(chip: RangoChip): void {
+    this.rangosChips.forEach(c => c.selected = false);
+    chip.selected = true;
+    this.rangoSeleccionado = chip.value;
+    this.cargarKpis();
+  }
+
+  abrirCajaMayor(item: CajaMayorAbiertaItem): void {
+    this.tabsService.openTab(
+      `Caja Mayor: ${item.nombre}`,
+      CajaMayorDetalleComponent,
+      { cajaMayorIdShortcut: item.id },
+    );
   }
 
   async loadShortcuts(): Promise<void> {

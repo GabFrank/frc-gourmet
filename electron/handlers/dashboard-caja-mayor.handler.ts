@@ -1,10 +1,12 @@
 import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
-import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
+import { CajaMayor } from '../../src/app/database/entities/financiero/caja-mayor.entity';
+import { CajaMayorEstado, TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { CuotaEstado, CuentaPorPagarEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
 import { ChequeEstado } from '../../src/app/database/entities/financiero/cheques-enums';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { Rango, bucketsForRango } from '../utils/dashboard-rangos.util';
 
 const TIPOS_INGRESO: TipoMovimiento[] = [
   TipoMovimiento.INGRESO_RETIRO_CAJA,
@@ -38,9 +40,9 @@ export function registerDashboardCajaMayorHandlers(
   _getCurrentUser: () => Usuario | null,
 ): void {
 
-  ipcMain.handle('get-dashboard-caja-mayor-kpis', async () => {
+  ipcMain.handle('get-dashboard-caja-mayor-kpis', async (_event, rango: Rango = 'month') => {
     try {
-      // 1. Saldos por moneda principal/USD/BRL
+      // Saldos por moneda principal/USD/BRL (estado actual)
       const monedaRepo = dataSource.getRepository(Moneda);
       const principal = await monedaRepo.findOne({ where: { principal: true, activo: true } });
       const usd = await monedaRepo.createQueryBuilder('m')
@@ -62,7 +64,7 @@ export function registerDashboardCajaMayorHandlers(
       const saldoUSD = await saldoPorMoneda(usd?.id);
       const saldoBRL = await saldoPorMoneda(brl?.id);
 
-      // 2. CPP vencidos (cuotas con fecha < hoy y pendientes)
+      // CPP vencidos / cheques (estado actual)
       const today = new Date(); today.setHours(0, 0, 0, 0);
       const hoyStr = today.toISOString().slice(0, 10);
       const cppVencidasRows: any[] = await dataSource.query(`
@@ -76,7 +78,6 @@ export function registerDashboardCajaMayorHandlers(
       const cppVencidos = Number(cppVencidasRows?.[0]?.cnt || 0);
       const cppMontoTotalPYG = Number(cppVencidasRows?.[0]?.suma || 0);
 
-      // 3. Cheques por vencer (proximos 7 dias, estado DIFERIDO)
       const en7 = new Date(today); en7.setDate(en7.getDate() + 7);
       const chequesRows: any[] = await dataSource.query(`
         SELECT COUNT(*) as cnt FROM cheques
@@ -85,10 +86,32 @@ export function registerDashboardCajaMayorHandlers(
       `, [ChequeEstado.DIFERIDO, today.toISOString(), en7.toISOString()]);
       const chequesPorVencer = Number(chequesRows?.[0]?.cnt || 0);
 
-      // 4. Movimientos ultimos 30 dias (entradas vs salidas)
-      const movimientos30d = await buildMovimientos30d(dataSource);
+      // Cajas mayor en estado ABIERTA con saldo PYG (para click-to-detail)
+      const cajaMayorRepo = dataSource.getRepository(CajaMayor);
+      const cmAbiertas = await cajaMayorRepo.find({
+        where: { estado: CajaMayorEstado.ABIERTA, activo: true },
+        order: { fechaApertura: 'ASC' },
+      });
+      const cajasMayorAbiertas: any[] = [];
+      for (const cm of cmAbiertas) {
+        const saldoCajaPYG = principal?.id
+          ? Number(((await dataSource.query(
+              `SELECT COALESCE(SUM(saldo), 0) as total FROM cajas_mayor_saldos WHERE caja_mayor_id = ? AND moneda_id = ?`,
+              [cm.id, principal.id],
+            )) as any[])?.[0]?.total || 0)
+          : 0;
+        cajasMayorAbiertas.push({
+          id: cm.id,
+          nombre: String(cm.nombre || '').toUpperCase(),
+          saldoPYG: saldoCajaPYG,
+          fechaApertura: cm.fechaApertura,
+        });
+      }
 
-      // 5. Proximos vencimientos (CPP + cheques) ordenado por fecha
+      // Movimientos por rango (entradas vs salidas)
+      const movimientosPorRango = await buildMovimientosPorRango(dataSource, rango, principal?.id);
+
+      // Proximos vencimientos (CPP + cheques) ordenado por fecha
       const cppListRows: any[] = await dataSource.query(`
         SELECT 'cpp' as tipo, c.id, c.fecha_vencimiento as fecha,
                (c.monto - c.monto_pagado) as monto,
@@ -133,7 +156,10 @@ export function registerDashboardCajaMayorHandlers(
         cppVencidos,
         cppMontoTotalPYG,
         chequesPorVencer,
-        movimientos30d,
+        cajasMayorAbiertas,
+        // legacy key (compat)
+        movimientos30d: movimientosPorRango,
+        movimientosPorRango,
         proximosVencimientos,
       };
     } catch (error) {
@@ -143,24 +169,22 @@ export function registerDashboardCajaMayorHandlers(
   });
 }
 
-async function buildMovimientos30d(
+async function buildMovimientosPorRango(
   dataSource: DataSource,
+  rango: Rango,
+  monedaId?: number,
 ): Promise<{ labels: string[]; entradas: number[]; salidas: number[] }> {
   const labels: string[] = [];
   const entradas: number[] = [];
   const salidas: number[] = [];
 
-  // Solo moneda principal
-  const principal = await dataSource.getRepository(Moneda).findOne({ where: { principal: true, activo: true } });
-  if (!principal) {
+  if (!monedaId) {
     return { labels, entradas, salidas };
   }
 
-  const today = new Date();
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(today); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0);
-    const f = new Date(d); f.setHours(23, 59, 59, 999);
-    labels.push(`${d.getDate()}/${d.getMonth() + 1}`);
+  const buckets = bucketsForRango(rango);
+  for (const b of buckets) {
+    labels.push(b.label);
 
     const ingRows: any[] = await dataSource.query(`
       SELECT COALESCE(SUM(monto), 0) as suma
@@ -168,7 +192,7 @@ async function buildMovimientos30d(
       WHERE moneda_id = ?
         AND fecha BETWEEN ? AND ?
         AND tipo_movimiento IN (${TIPOS_INGRESO.map(() => '?').join(',')})
-    `, [principal.id, d.toISOString(), f.toISOString(), ...TIPOS_INGRESO]);
+    `, [monedaId, b.desde.toISOString(), b.hasta.toISOString(), ...TIPOS_INGRESO]);
     entradas.push(Number(ingRows?.[0]?.suma || 0));
 
     const egRows: any[] = await dataSource.query(`
@@ -177,7 +201,7 @@ async function buildMovimientos30d(
       WHERE moneda_id = ?
         AND fecha BETWEEN ? AND ?
         AND tipo_movimiento IN (${TIPOS_EGRESO.map(() => '?').join(',')})
-    `, [principal.id, d.toISOString(), f.toISOString(), ...TIPOS_EGRESO]);
+    `, [monedaId, b.desde.toISOString(), b.hasta.toISOString(), ...TIPOS_EGRESO]);
     salidas.push(Number(egRows?.[0]?.suma || 0));
   }
 

@@ -158,12 +158,24 @@ Cada dashboard tiene un IPC único `get-dashboard-{dominio}-kpis(filtros?)` que 
 
 | Handler | IPC | Filtros |
 |---|---|---|
-| `electron/handlers/dashboard-ventas.handler.ts` | `get-dashboard-ventas-kpis` | `rango: 'today'\|'week'\|'month'\|'3months'\|'6months'` |
-| `electron/handlers/dashboard-compras.handler.ts` | `get-dashboard-compras-kpis` | — |
+| `electron/handlers/dashboard-ventas.handler.ts` | `get-dashboard-ventas-kpis` | `rango: Rango` (default `today`) |
+| `electron/handlers/dashboard-compras.handler.ts` | `get-dashboard-compras-kpis` | `rango: Rango` (default `month`) |
 | `electron/handlers/dashboard-productos.handler.ts` | `get-dashboard-productos-kpis` | — |
 | `electron/handlers/dashboard-financiero.handler.ts` | `get-dashboard-financiero-kpis` | — |
-| `electron/handlers/dashboard-caja-mayor.handler.ts` | `get-dashboard-caja-mayor-kpis` | — |
+| `electron/handlers/dashboard-caja-mayor.handler.ts` | `get-dashboard-caja-mayor-kpis` | `rango: Rango` (default `month`) |
 | `electron/handlers/dashboard-rrhh.handler.ts` | `get-dashboard-rrhh-kpis` | `periodo: 'YYYY-MM'` |
+
+### Helper compartido de rangos (2026-05-07)
+
+`electron/utils/dashboard-rangos.util.ts` exporta:
+- `type Rango = 'today' | 'week' | 'month' | 'last-month' | '3months' | '6months'`
+- `rangoToFechas(rango): { desde, hasta }` — calcula límites coherentes (today=00:00→23:59 hoy, month=día 1 mes actual, last-month=mes anterior completo).
+- `bucketsForRango(rango): Bucket[]` — devuelve buckets para charts. Granularidades: `today`→24 horarios, `week`→7 diarios, `month`/`last-month`→días del mes, `3months`→12 semanas (S1..S12), `6months`→6 meses calendario.
+- `rangoLabel(rango)` — string para mostrar.
+
+Todos los handlers de dashboard que aceptan rango lo usan. **Cuando agregues un dashboard nuevo o un nuevo KPI con rango, reusá este helper** — no dupliques el switch.
+
+**Stat chips sincronizados**: la regla del padrón es que los stat chips superiores reflejen el rango activo. El handler retorna keys nuevas (`ventasPeriodo`, `totalPeriodoPYG`, `comprasPeriodo`, `totalPeriodoPYG`) y mantiene las legacy (`ventasHoy`, `totalHoyPYG`, `comprasMes`, `totalMesPYG`) por compat. El frontend hace fallback con `?? legacy`. Saldos en moneda, mesas ocupadas, cajas abiertas y CPP vencidas quedan **fijas al estado actual** (no son agregables por período).
 
 ### Registro en 3 capas
 

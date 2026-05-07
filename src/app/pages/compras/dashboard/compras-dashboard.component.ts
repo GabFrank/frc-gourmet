@@ -31,6 +31,14 @@ interface VencimientoItem {
   urgencia: 'vencida' | 'urgente' | 'proxima';
 }
 
+type RangoValue = 'today' | 'week' | 'month' | 'last-month' | '3months' | '6months';
+
+interface RangoChip {
+  label: string;
+  value: RangoValue;
+  selected: boolean;
+}
+
 @Component({
   selector: 'app-compras-dashboard',
   standalone: true,
@@ -63,15 +71,28 @@ export class ComprasDashboardComponent implements OnInit {
     { title: 'Cuentas por Pagar', icon: 'request_quote', action: 'cpp', color: '#bf360c' },
   ];
 
-  // KPIs
-  comprasMes = 0;
-  totalMesPYG = 0;
+  // KPIs (sincronizados con rango)
+  comprasPeriodo = 0;
+  totalPeriodoPYG = 0;
   cppPorVencer = 0;
   totalCppVencidoPYG = 0;
   topProveedorNombre = '-';
 
+  comprasLabel = 'Compras del mes';
+  totalLabel = 'Total comprado';
+
   topProveedores: DashRankingItem[] = [];
   proximosVencimientos: VencimientoItem[] = [];
+
+  rangosChips: RangoChip[] = [
+    { label: 'Hoy', value: 'today', selected: false },
+    { label: 'Esta semana', value: 'week', selected: false },
+    { label: 'Este mes', value: 'month', selected: true },
+    { label: 'Mes anterior', value: 'last-month', selected: false },
+    { label: '3 meses', value: '3months', selected: false },
+    { label: '6 meses', value: '6months', selected: false },
+  ];
+  rangoSeleccionado: RangoValue = 'month';
 
   chartData: ChartData<'line'> = { labels: [], datasets: [] };
   chartOptions: ChartConfiguration<'line'>['options'] = getDashboardChartOptions('line');
@@ -89,11 +110,12 @@ export class ComprasDashboardComponent implements OnInit {
 
   async cargarKpis(): Promise<void> {
     this.loading = true;
+    this.updateLabels();
     try {
-      const k = await firstValueFrom(this.repository.getDashboardComprasKpis());
+      const k = await firstValueFrom(this.repository.getDashboardComprasKpis(this.rangoSeleccionado));
       if (k) {
-        this.comprasMes = k.comprasMes || 0;
-        this.totalMesPYG = k.totalMesPYG || 0;
+        this.comprasPeriodo = k.comprasPeriodo ?? k.comprasMes ?? 0;
+        this.totalPeriodoPYG = k.totalPeriodoPYG ?? k.totalMesPYG ?? 0;
         this.cppPorVencer = k.cppPorVencer || 0;
         this.totalCppVencidoPYG = k.totalCppVencidoPYG || 0;
         this.topProveedorNombre = k.topProveedores?.[0]?.nombre || '-';
@@ -120,6 +142,42 @@ export class ComprasDashboardComponent implements OnInit {
       console.error('Error cargando KPIs compras', e);
     } finally {
       this.loading = false;
+    }
+  }
+
+  selectRango(chip: RangoChip): void {
+    this.rangosChips.forEach(c => c.selected = false);
+    chip.selected = true;
+    this.rangoSeleccionado = chip.value;
+    this.cargarKpis();
+  }
+
+  private updateLabels(): void {
+    switch (this.rangoSeleccionado) {
+      case 'today':
+        this.comprasLabel = 'Compras hoy';
+        this.totalLabel = 'Total hoy';
+        break;
+      case 'week':
+        this.comprasLabel = 'Compras semana';
+        this.totalLabel = 'Total semana';
+        break;
+      case 'month':
+        this.comprasLabel = 'Compras del mes';
+        this.totalLabel = 'Total del mes';
+        break;
+      case 'last-month':
+        this.comprasLabel = 'Compras mes anterior';
+        this.totalLabel = 'Total mes anterior';
+        break;
+      case '3months':
+        this.comprasLabel = 'Compras 3 meses';
+        this.totalLabel = 'Total 3 meses';
+        break;
+      case '6months':
+        this.comprasLabel = 'Compras 6 meses';
+        this.totalLabel = 'Total 6 meses';
+        break;
     }
   }
 

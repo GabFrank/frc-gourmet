@@ -936,10 +936,10 @@ interface ElectronAPI {
 
   // Dashboards por dominio
   getDashboardVentasKpis: (rango?: string) => Promise<any>;
-  getDashboardComprasKpis: () => Promise<any>;
+  getDashboardComprasKpis: (rango?: string) => Promise<any>;
   getDashboardProductosKpis: () => Promise<any>;
   getDashboardFinancieroKpis: () => Promise<any>;
-  getDashboardCajaMayorKpis: () => Promise<any>;
+  getDashboardCajaMayorKpis: (rango?: string) => Promise<any>;
 
   // Reportes RRHH (Fase 8)
   getReporteLiquidacionesMesData: (periodo: string) => Promise<any>;
@@ -3620,11 +3620,11 @@ export class RepositoryService {
   }
 
   // ===================== DASHBOARDS POR DOMINIO =====================
-  getDashboardVentasKpis(rango: string = 'week'): Observable<any> {
+  getDashboardVentasKpis(rango: string = 'today'): Observable<any> {
     return from(this.api.getDashboardVentasKpis(rango));
   }
-  getDashboardComprasKpis(): Observable<any> {
-    return from(this.api.getDashboardComprasKpis());
+  getDashboardComprasKpis(rango: string = 'month'): Observable<any> {
+    return from(this.api.getDashboardComprasKpis(rango));
   }
   getDashboardProductosKpis(): Observable<any> {
     return from(this.api.getDashboardProductosKpis());
@@ -3632,8 +3632,8 @@ export class RepositoryService {
   getDashboardFinancieroKpis(): Observable<any> {
     return from(this.api.getDashboardFinancieroKpis());
   }
-  getDashboardCajaMayorKpis(): Observable<any> {
-    return from(this.api.getDashboardCajaMayorKpis());
+  getDashboardCajaMayorKpis(rango: string = 'month'): Observable<any> {
+    return from(this.api.getDashboardCajaMayorKpis(rango));
   }
 
   // ===================== REPORTES RRHH (Fase 8) =====================

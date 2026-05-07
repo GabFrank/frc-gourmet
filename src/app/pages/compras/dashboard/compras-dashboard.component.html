@@ -15,14 +15,14 @@
   <div class="dashboard-stats-row">
     <app-dash-stat-chip
       icon="shopping_cart"
-      [value]="comprasMes"
-      label="Compras del mes"
+      [value]="comprasPeriodo"
+      [label]="comprasLabel"
       [loading]="loading">
     </app-dash-stat-chip>
     <app-dash-stat-chip
       icon="payments"
-      [value]="formatPYG(totalMesPYG) + ' Gs'"
-      label="Total comprado"
+      [value]="formatPYG(totalPeriodoPYG) + ' Gs'"
+      [label]="totalLabel"
       [loading]="loading">
     </app-dash-stat-chip>
     <app-dash-stat-chip
@@ -55,11 +55,17 @@
     <div class="dashboard-col-left">
 
       <app-dash-chart-card
-        title="Compras por mes"
+        title="Compras por periodo"
         icon="trending_up"
         [chartData]="chartData"
         [chartOptions]="chartOptions"
         chartType="line">
+        <button *ngFor="let chip of rangosChips"
+                class="dashboard-range-chip"
+                [class.range-chip-active]="chip.selected"
+                (click)="selectRango(chip)">
+          {{ chip.label }}
+        </button>
       </app-dash-chart-card>
 
       <div class="dashboard-card">

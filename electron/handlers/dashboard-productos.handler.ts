@@ -41,29 +41,41 @@ export function registerDashboardProductosHandlers(
       // 4. Recetas activas
       const recetasActivas = await recetaRepo.count({ where: { activo: true } });
 
-      // 5. Productos con precio costo desactualizado (>30 dias)
-      const hace30 = new Date();
-      hace30.setDate(hace30.getDate() - 30);
-      hace30.setHours(0, 0, 0, 0);
-      const desactRows: any[] = await dataSource.query(`
-        SELECT p.id, p.nombre, MAX(pc.fecha) as ultima_fecha
-        FROM producto p
-        JOIN presentacion pr ON pr.producto_id = p.id
-        JOIN precio_costo pc ON pc.presentacion_id = pr.id AND pc.activo = 1
-        WHERE p.activo = 1
-        GROUP BY p.id, p.nombre
-        HAVING MAX(pc.fecha) < ?
-        ORDER BY MAX(pc.fecha) ASC
-        LIMIT 10
-      `, [hace30.toISOString().slice(0, 10)]);
+      // 5. Top CMV — productos con mejor margen
+      // CMV requiere precio_venta principal activo + precio_costo activo más reciente.
+      // Margen % = (precio_venta - precio_costo) / precio_venta * 100
+      // El precio_venta puede estar directo en producto o vía presentación.
       const today = new Date(); today.setHours(0, 0, 0, 0);
-      const productosPrecioDesactualizado = desactRows.map(r => {
-        const ult = new Date(r.ultima_fecha);
-        const dias = Math.floor((today.getTime() - ult.getTime()) / (24 * 60 * 60 * 1000));
+      const cmvRows: any[] = await dataSource.query(`
+        SELECT * FROM (
+          SELECT p.id, p.nombre,
+            (SELECT pv.valor FROM precio_venta pv
+              LEFT JOIN presentacion pre ON pre.id = pv.presentacion_id
+              WHERE pv.activo = 1
+                AND (pv.producto_id = p.id OR pre.producto_id = p.id)
+              ORDER BY pv.principal DESC, pv.id DESC LIMIT 1) as precio_venta,
+            (SELECT pc.valor FROM precio_costo pc
+              WHERE pc.activo = 1 AND pc.producto_id = p.id
+              ORDER BY pc.fecha DESC, pc.id DESC LIMIT 1) as precio_costo
+          FROM producto p
+          WHERE p.activo = 1
+        ) sub
+        WHERE precio_venta IS NOT NULL AND precio_costo IS NOT NULL
+          AND precio_venta > 0 AND precio_costo > 0
+          AND precio_venta > precio_costo
+        ORDER BY ((precio_venta - precio_costo) * 1.0 / precio_venta) DESC
+        LIMIT 10
+      `);
+      const topCmv = cmvRows.map(r => {
+        const pv = Number(r.precio_venta || 0);
+        const pc = Number(r.precio_costo || 0);
+        const margen = pv > 0 ? ((pv - pc) / pv) * 100 : 0;
         return {
-          producto: String(r.nombre || '').toUpperCase(),
-          ultimaActualizacion: r.ultima_fecha,
-          dias,
+          id: Number(r.id),
+          nombre: String(r.nombre || '').toUpperCase(),
+          precioVenta: pv,
+          precioCosto: pc,
+          margen: Math.round(margen * 10) / 10, // 1 decimal
         };
       });
 
@@ -86,6 +98,7 @@ export function registerDashboardProductosHandlers(
       `, [VentaEstado.CONCLUIDA, EstadoVentaItem.ACTIVO, inicioMes.toISOString(), finMes.toISOString()]);
       const maxTopTotal = topRows.reduce((m, r) => Math.max(m, Number(r.total || 0)), 0);
       const topVendidos = topRows.map(r => ({
+        id: Number(r.id),
         nombre: String(r.nombre || '').toUpperCase(),
         cantidad: Number(r.cantidad || 0),
         total: Number(r.total || 0),
@@ -108,7 +121,7 @@ export function registerDashboardProductosHandlers(
         productosSinPrecio,
         productosParciales,
         recetasActivas,
-        productosPrecioDesactualizado,
+        topCmv,
         topVendidos,
         productosParcialesLista,
       };

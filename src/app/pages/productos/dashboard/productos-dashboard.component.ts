@@ -11,6 +11,7 @@ import { TabsService } from '../../../services/tabs.service';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ListFamiliasComponent } from '../familias/list-familias.component';
 import { ListProductosComponent } from '../list-productos/list-productos.component';
+import { GestionarProductoComponent } from '../gestionar-producto/gestionar-producto.component';
 import { ListRecetasComponent } from '../../gestion-recetas/list-recetas/list-recetas.component';
 import { ListSaboresComponent } from '../../gestion-sabores/list-sabores/list-sabores.component';
 import { DashStatChipComponent } from 'src/app/shared/components/dashboard/stat-chip/dash-stat-chip.component';
@@ -52,7 +53,7 @@ export class ProductosDashboardComponent implements OnInit {
   productosSinPrecio = 0;
   productosParciales = 0;
 
-  productosPrecioDesactualizado: any[] = [];
+  topCmv: DashRankingItem[] = [];
   productosParcialesLista: any[] = [];
   topVendidos: DashRankingItem[] = [];
 
@@ -76,13 +77,22 @@ export class ProductosDashboardComponent implements OnInit {
         this.recetasActivas = k.recetasActivas || 0;
         this.productosSinPrecio = k.productosSinPrecio || 0;
         this.productosParciales = k.productosParciales || 0;
-        this.productosPrecioDesactualizado = k.productosPrecioDesactualizado || [];
         this.productosParcialesLista = k.productosParcialesLista || [];
+        const cmvList = k.topCmv || [];
+        const maxMargen = cmvList.reduce((m: number, c: any) => Math.max(m, Number(c.margen || 0)), 0);
+        this.topCmv = cmvList.map((c: any) => ({
+          nombre: c.nombre,
+          valorPrincipal: `${c.margen.toFixed(1)}%`,
+          valorSecundario: `${this.formatPYG(c.precioVenta)} / ${this.formatPYG(c.precioCosto)} Gs`,
+          porcentaje: maxMargen > 0 ? Math.round((Number(c.margen) / maxMargen) * 100) : 0,
+          payload: { id: c.id, nombre: c.nombre },
+        }));
         this.topVendidos = (k.topVendidos || []).map((p: any) => ({
           nombre: p.nombre,
           valorPrincipal: `${p.cantidad} uds`,
           valorSecundario: `${this.formatPYG(p.total)} Gs`,
           porcentaje: p.porcentaje,
+          payload: { id: p.id, nombre: p.nombre },
         }));
       }
     } catch (e) {
@@ -113,7 +123,18 @@ export class ProductosDashboardComponent implements OnInit {
     }
   }
 
-  openProducto(_id: number): void {
-    this.tabsService.openTab('Productos', ListProductosComponent, { source: 'dashboard' }, 'productos-tab', true);
+  openProducto(id: number, nombre?: string): void {
+    if (!id) return;
+    this.tabsService.openTab(
+      `Editar Producto${nombre ? ' - ' + nombre : ''}`,
+      GestionarProductoComponent,
+      { mode: 'edit', productoId: id },
+      `editar-producto-${id}-tab`,
+    );
+  }
+
+  onRankingClick(item: DashRankingItem): void {
+    const p = item.payload;
+    if (p?.id) this.openProducto(p.id, p.nombre);
   }
 }

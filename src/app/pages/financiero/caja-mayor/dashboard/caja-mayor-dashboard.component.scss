@@ -64,6 +64,70 @@
   }
 }
 
+// Cajas Mayor activas (lista clickeable)
+.cajas-mayor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 20px 16px;
+}
+
+.caja-mayor-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+  width: 100%;
+
+  &:hover {
+    background: var(--hover-bg);
+    border-color: rgba(124, 77, 255, 0.4);
+  }
+}
+
+.caja-mayor-icon {
+  color: var(--success-color);
+  font-size: 22px;
+  width: 22px;
+  height: 22px;
+}
+
+.caja-mayor-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.caja-mayor-nombre {
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.caja-mayor-saldo {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.caja-mayor-chevron {
+  color: var(--text-secondary);
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+}
+
 // Accordion grupos
 .grupo-accordion {
   ::ng-deep .mat-expansion-panel {

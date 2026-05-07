@@ -56,14 +56,27 @@ export class HomeComponent implements OnInit {
     { title: 'Notificaciones', icon: 'notifications', action: 'notificaciones', color: '#f44336' },
   ];
 
-  ventasHoy = 0;
-  totalHoyPYG = 0;
+  ventasPeriodo = 0;
+  totalPeriodoPYG = 0;
   cajasAbiertas = 0;
   cppVencidos = 0;
+
+  // Labels dinámicos según rango
+  ventasLabel = 'Ventas hoy';
+  totalLabel = 'Total hoy';
 
   alertas: { tipo: string; titulo: string; detalle: string; color: 'error' | 'warning' | 'info' }[] = [];
 
   shortcuts: any[] = [];
+
+  // Rango (subset: today / week / month / last-month)
+  rangosChips: { label: string; value: 'today' | 'week' | 'month' | 'last-month'; selected: boolean }[] = [
+    { label: 'Hoy', value: 'today', selected: false },
+    { label: 'Esta semana', value: 'week', selected: true },
+    { label: 'Este mes', value: 'month', selected: false },
+    { label: 'Mes anterior', value: 'last-month', selected: false },
+  ];
+  rangoSeleccionado: 'today' | 'week' | 'month' | 'last-month' = 'week';
 
   chartData: ChartData<'line'> = { labels: [], datasets: [] };
   chartOptions: ChartConfiguration<'line'>['options'] = getDashboardChartOptions('line');
@@ -83,16 +96,17 @@ export class HomeComponent implements OnInit {
 
   async cargarKpis(): Promise<void> {
     this.loading = true;
+    this.updateLabels();
     try {
       const [ventasKpi, comprasKpi, cmKpi] = await Promise.all([
-        firstValueFrom(this.repositoryService.getDashboardVentasKpis('week')).catch(() => null),
+        firstValueFrom(this.repositoryService.getDashboardVentasKpis(this.rangoSeleccionado)).catch(() => null),
         firstValueFrom(this.repositoryService.getDashboardComprasKpis()).catch(() => null),
         firstValueFrom(this.repositoryService.getDashboardCajaMayorKpis()).catch(() => null),
       ]);
 
       if (ventasKpi) {
-        this.ventasHoy = ventasKpi.ventasHoy || 0;
-        this.totalHoyPYG = ventasKpi.totalHoyPYG || 0;
+        this.ventasPeriodo = ventasKpi.ventasPeriodo ?? ventasKpi.ventasHoy ?? 0;
+        this.totalPeriodoPYG = ventasKpi.totalPeriodoPYG ?? ventasKpi.totalHoyPYG ?? 0;
         this.cajasAbiertas = (ventasKpi.cajasAbiertas || []).length;
 
         const periodo = ventasKpi.ventasPorPeriodo || { labels: [], ventas: [] };
@@ -161,6 +175,34 @@ export class HomeComponent implements OnInit {
         break;
       case 'notificaciones':
         this.tabsService.openTab('Notificaciones RRHH', ListNotificacionesRrhhComponent);
+        break;
+    }
+  }
+
+  selectRango(chip: { label: string; value: 'today' | 'week' | 'month' | 'last-month'; selected: boolean }): void {
+    this.rangosChips.forEach(c => c.selected = false);
+    chip.selected = true;
+    this.rangoSeleccionado = chip.value;
+    this.cargarKpis();
+  }
+
+  private updateLabels(): void {
+    switch (this.rangoSeleccionado) {
+      case 'today':
+        this.ventasLabel = 'Ventas hoy';
+        this.totalLabel = 'Total hoy';
+        break;
+      case 'week':
+        this.ventasLabel = 'Ventas semana';
+        this.totalLabel = 'Total semana';
+        break;
+      case 'month':
+        this.ventasLabel = 'Ventas del mes';
+        this.totalLabel = 'Total del mes';
+        break;
+      case 'last-month':
+        this.ventasLabel = 'Ventas mes anterior';
+        this.totalLabel = 'Total mes anterior';
         break;
     }
   }

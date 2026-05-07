@@ -8,7 +8,10 @@
   </div>
 
   <div class="dashboard-ranking-list" *ngIf="items.length > 0">
-    <div *ngFor="let item of items; let i = index" class="dashboard-ranking-item">
+    <div *ngFor="let item of items; let i = index"
+         class="dashboard-ranking-item"
+         [class.dashboard-ranking-item-clickable]="itemClick.observed"
+         (click)="itemClick.observed && itemClick.emit(item)">
       <div class="dashboard-ranking-rank"
            [ngClass]="{
              'rank-gold': i === 0,

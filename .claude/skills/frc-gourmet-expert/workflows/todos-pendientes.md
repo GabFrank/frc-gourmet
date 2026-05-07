@@ -4,6 +4,7 @@ Snapshot **2026-05-06**. Verificar `git log` y memorias antes de afirmar que alg
 
 ## Recientemente completado (2026-05)
 
+- [x] **Dashboards: padrón unificado + chips rango + bugs (2026-05-07)** — fix B1 SQL `pc.presentacion_id` (productos), fix B2 chart Ventas en 0 Gs (sumar desde `venta_items`), helper compartido `electron/utils/dashboard-rangos.util.ts` con `today/week/month/last-month/3months/6months`, chips de rango + stat chips sincronizados en Ventas/Home/Compras/Caja Mayor. Caja Mayor dashboard ahora lista cajas activas con click → detalle directo (`cajaMayorIdShortcut`). Branch `fix/dashboards-bugs-rangos`.
 - [x] **Importación de facturas con OCR + IA** — GPT-4o vision + matching por aliases + revisor en tab + reprocesar/descartar. Detalles → [domains/importacion-facturas-ocr.md](../domains/importacion-facturas-ocr.md).
 - [x] **`Producto.iva`** (default 10, valores 0/5/10) y **`Producto.registroCompleto`** (boolean para chip "Parcial"). `Producto.subfamilia` ahora nullable.
 - [x] **Backup/Restore + Reset BD + Seed admin** (commit `607a880`).
@@ -14,6 +15,7 @@ Snapshot **2026-05-06**. Verificar `git log` y memorias antes de afirmar que alg
 - [ ] Eliminar entidad `RecetaAdicional` legacy (reemplazada por `RecetaAdicionalVinculacion`).
 - [ ] **Permisos OCR**: `COMPRAS_IMPORTAR_FACTURA` y `SISTEMA_CONFIGURAR_IA` están seedeados pero no se chequean en sidenav. Agregar `*ngIf="hasPermission(...)"` a las entradas correspondientes.
 - [ ] **Inferidor de presentación** (regex en `producto-inference.util.ts`) no detecta unidad cuando la descripción no incluye número/unidad explícita (ej "MANDIOCA" sin tamaño). Mejora futura: que el OCR sugiera unidad y cantidad por separado en el JSON.
+- [ ] **UI configuración "Mis accesos directos"**: la card aparece en Home y Caja Mayor pero no hay UI para agregar nuevos directos desde ahí. Existe `CrearAccesoDirectoDialogComponent` (usado desde `list-cajas-mayor.component.ts:88`) que se podría reutilizar. Decidir entre: (a) botón "+" en el header de la card que abra el dialog existente con los `dashboardsDisponibles` filtrados al dashboard actual; (b) tab dedicada de gestión global con CRUD + reordenar drag-and-drop. Pendiente de definición con el usuario.
 
 ## Refactor técnico
 

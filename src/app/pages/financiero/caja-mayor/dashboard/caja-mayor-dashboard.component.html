@@ -81,12 +81,48 @@
     <div class="dashboard-col-left">
 
       <app-dash-chart-card
-        title="Movimientos ultimos 30 dias"
+        title="Movimientos por periodo"
         icon="trending_up"
         [chartData]="chartData"
         [chartOptions]="chartOptions"
         chartType="line">
+        <button *ngFor="let chip of rangosChips"
+                class="dashboard-range-chip"
+                [class.range-chip-active]="chip.selected"
+                (click)="selectRango(chip)">
+          {{ chip.label }}
+        </button>
       </app-dash-chart-card>
+
+      <!-- Cajas Mayor activas (click → detalle directo) -->
+      <div class="dashboard-card">
+        <app-dash-section-header
+          icon="account_balance"
+          title="Cajas Mayor activas"
+          [badge]="cajasMayorAbiertas.length"
+          [badgeColor]="cajasMayorAbiertas.length > 0 ? 'success' : 'default'">
+        </app-dash-section-header>
+        <mat-divider></mat-divider>
+
+        <div *ngIf="!loading && cajasMayorAbiertas.length === 0" class="dashboard-empty-state">
+          <mat-icon>info_outline</mat-icon>
+          <span>No hay cajas mayor abiertas</span>
+        </div>
+
+        <div class="cajas-mayor-list" *ngIf="cajasMayorAbiertas.length > 0">
+          <button *ngFor="let cm of cajasMayorAbiertas"
+                  class="caja-mayor-row"
+                  (click)="abrirCajaMayor(cm)"
+                  matTooltip="Abrir detalle">
+            <mat-icon class="caja-mayor-icon">account_balance</mat-icon>
+            <div class="caja-mayor-info">
+              <span class="caja-mayor-nombre">{{ cm.nombre }}</span>
+              <span class="caja-mayor-saldo">{{ formatPYG(cm.saldoPYG) }} Gs</span>
+            </div>
+            <mat-icon class="caja-mayor-chevron">chevron_right</mat-icon>
+          </button>
+        </div>
+      </div>
 
       <!-- Accordion: 4 grupos -->
       <div class="dashboard-card">

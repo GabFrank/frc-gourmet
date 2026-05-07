@@ -6,22 +6,32 @@ import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caj
 import { PdvMesa } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { ComandaItem, ComandaItemEstado } from '../../src/app/database/entities/ventas/comanda-item.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import {
+  Rango,
+  rangoToFechas,
+  bucketsForRango,
+} from '../utils/dashboard-rangos.util';
 
-type Rango = 'today' | 'week' | 'month' | '3months' | '6months';
-
-function rangoToFechas(rango: Rango): { desde: Date; hasta: Date } {
-  const hasta = new Date();
-  hasta.setHours(23, 59, 59, 999);
-  const desde = new Date();
-  desde.setHours(0, 0, 0, 0);
-  switch (rango) {
-    case 'today': break;
-    case 'week': desde.setDate(desde.getDate() - 6); break;
-    case 'month': desde.setDate(desde.getDate() - 29); break;
-    case '3months': desde.setMonth(desde.getMonth() - 3); break;
-    case '6months': desde.setMonth(desde.getMonth() - 6); break;
-  }
-  return { desde, hasta };
+async function ventasAggregateRange(
+  dataSource: DataSource,
+  desde: Date,
+  hasta: Date,
+): Promise<{ cnt: number; total: number }> {
+  // Suma desde venta_items para evitar Venta.total que es nullable.
+  // LEFT JOIN preserva ventas sin items. COUNT(DISTINCT) evita duplicar.
+  const rows: any[] = await dataSource.query(`
+    SELECT COUNT(DISTINCT v.id) as cnt,
+           COALESCE(SUM(vi.cantidad * vi.precio_venta_unitario), 0) as suma
+    FROM ventas v
+    LEFT JOIN venta_items vi ON vi.venta_id = v.id AND vi.estado = ?
+    WHERE v.estado = ?
+      AND v.created_at >= ?
+      AND v.created_at <= ?
+  `, [EstadoVentaItem.ACTIVO, VentaEstado.CONCLUIDA, desde.toISOString(), hasta.toISOString()]);
+  return {
+    cnt: Number(rows?.[0]?.cnt || 0),
+    total: Number(rows?.[0]?.suma || 0),
+  };
 }
 
 export function registerDashboardVentasHandlers(
@@ -29,26 +39,16 @@ export function registerDashboardVentasHandlers(
   _getCurrentUser: () => Usuario | null,
 ): void {
 
-  ipcMain.handle('get-dashboard-ventas-kpis', async (_event, rango: Rango = 'week') => {
+  ipcMain.handle('get-dashboard-ventas-kpis', async (_event, rango: Rango = 'today') => {
     try {
-      const hoyInicio = new Date();
-      hoyInicio.setHours(0, 0, 0, 0);
-      const hoyFin = new Date();
-      hoyFin.setHours(23, 59, 59, 999);
+      // Stat chips sincronizados con el rango seleccionado
+      const { desde, hasta } = rangoToFechas(rango);
+      const periodo = await ventasAggregateRange(dataSource, desde, hasta);
+      const ventasPeriodo = periodo.cnt;
+      const totalPeriodoPYG = periodo.total;
+      const ticketPromedio = ventasPeriodo > 0 ? Math.round(totalPeriodoPYG / ventasPeriodo) : 0;
 
-      // 1. Ventas hoy + total hoy
-      const ventasHoyRows: any[] = await dataSource.query(`
-        SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
-        FROM ventas
-        WHERE estado = ?
-          AND created_at >= ?
-          AND created_at <= ?
-      `, [VentaEstado.CONCLUIDA, hoyInicio.toISOString(), hoyFin.toISOString()]);
-      const ventasHoy = Number(ventasHoyRows?.[0]?.cnt || 0);
-      const totalHoyPYG = Number(ventasHoyRows?.[0]?.suma || 0);
-      const ticketPromedio = ventasHoy > 0 ? Math.round(totalHoyPYG / ventasHoy) : 0;
-
-      // 2. Mesas
+      // Mesas (estado actual, no agregable por período)
       const mesaRepo = dataSource.getRepository(PdvMesa);
       const mesasTotal = await mesaRepo.count({ where: { activo: true } as any });
       const mesasOcupadas = await mesaRepo
@@ -57,7 +57,7 @@ export function registerDashboardVentasHandlers(
         .andWhere('m.estado = :e', { e: 'OCUPADO' })
         .getCount();
 
-      // 3. Comandas pendientes en cocina
+      // Comandas pendientes en cocina (estado actual)
       let comandasPendientes = 0;
       try {
         comandasPendientes = await dataSource.getRepository(ComandaItem)
@@ -66,7 +66,7 @@ export function registerDashboardVentasHandlers(
           .getCount();
       } catch { /* opt */ }
 
-      // 4. Cajas abiertas
+      // Cajas abiertas (estado actual)
       const cajasAbiertasEntities = await dataSource.getRepository(Caja).find({
         where: { estado: CajaEstado.ABIERTO, activo: true },
         relations: ['createdBy', 'createdBy.persona', 'dispositivo'],
@@ -84,11 +84,14 @@ export function registerDashboardVentasHandlers(
         const min = totalMin % 60;
         const horasAbierto = `${horas}h ${min}m`;
 
-        // Ventas + monto de la caja
+        // Ventas + monto de la caja (suma desde venta_items, no SUM(total))
         const cajaTotalsRows: any[] = await dataSource.query(`
-          SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
-          FROM ventas WHERE caja_id = ? AND estado = ?
-        `, [caja.id, VentaEstado.CONCLUIDA]);
+          SELECT COUNT(DISTINCT v.id) as cnt,
+                 COALESCE(SUM(vi.cantidad * vi.precio_venta_unitario), 0) as suma
+          FROM ventas v
+          LEFT JOIN venta_items vi ON vi.venta_id = v.id AND vi.estado = ?
+          WHERE v.caja_id = ? AND v.estado = ?
+        `, [EstadoVentaItem.ACTIVO, caja.id, VentaEstado.CONCLUIDA]);
         const cantidadVentas = Number(cajaTotalsRows?.[0]?.cnt || 0);
         const ventaTotal = Number(cajaTotalsRows?.[0]?.suma || 0);
 
@@ -111,8 +114,7 @@ export function registerDashboardVentasHandlers(
         });
       }
 
-      // 5. Top productos (en el rango)
-      const { desde, hasta } = rangoToFechas(rango);
+      // Top productos (en el rango)
       const topRows: any[] = await dataSource.query(`
         SELECT p.id, p.nombre, SUM(vi.cantidad) as cantidad,
                SUM(vi.cantidad * vi.precio_venta_unitario) as total
@@ -136,12 +138,16 @@ export function registerDashboardVentasHandlers(
         porcentaje: maxTotal > 0 ? Math.round((Number(r.total || 0) / maxTotal) * 100) : 0,
       }));
 
-      // 6. Ventas por periodo (chart)
+      // Ventas por periodo (chart) — buckets dinámicos según rango
       const periodoData = await buildVentasPorPeriodo(dataSource, rango);
 
       return {
-        ventasHoy,
-        totalHoyPYG,
+        // legacy keys (compat con frontends que aún no migraron)
+        ventasHoy: ventasPeriodo,
+        totalHoyPYG: totalPeriodoPYG,
+        // nuevos labels coherentes con rango
+        ventasPeriodo,
+        totalPeriodoPYG,
         ticketPromedio,
         mesasOcupadas,
         mesasTotal,
@@ -161,68 +167,16 @@ async function buildVentasPorPeriodo(
   dataSource: DataSource,
   rango: Rango,
 ): Promise<{ labels: string[]; ventas: number[]; cantidades: number[] }> {
+  const buckets = bucketsForRango(rango);
   const labels: string[] = [];
   const ventas: number[] = [];
   const cantidades: number[] = [];
 
-  const now = new Date();
-  if (rango === 'today' || rango === 'week') {
-    const diasNombre = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-      const f = new Date(d); f.setHours(23, 59, 59, 999);
-      const rows: any[] = await dataSource.query(`
-        SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
-        FROM ventas
-        WHERE estado = ? AND created_at >= ? AND created_at <= ?
-      `, [VentaEstado.CONCLUIDA, d.toISOString(), f.toISOString()]);
-      labels.push(diasNombre[d.getDay()]);
-      ventas.push(Number(rows?.[0]?.suma || 0));
-      cantidades.push(Number(rows?.[0]?.cnt || 0));
-    }
-  } else if (rango === 'month') {
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-      const f = new Date(d); f.setHours(23, 59, 59, 999);
-      const rows: any[] = await dataSource.query(`
-        SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
-        FROM ventas WHERE estado = ? AND created_at >= ? AND created_at <= ?
-      `, [VentaEstado.CONCLUIDA, d.toISOString(), f.toISOString()]);
-      labels.push(`${d.getDate()}`);
-      ventas.push(Number(rows?.[0]?.suma || 0));
-      cantidades.push(Number(rows?.[0]?.cnt || 0));
-    }
-  } else if (rango === '3months') {
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - (i * 7) - 6);
-      d.setHours(0, 0, 0, 0);
-      const f = new Date(d); f.setDate(f.getDate() + 6); f.setHours(23, 59, 59, 999);
-      const rows: any[] = await dataSource.query(`
-        SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
-        FROM ventas WHERE estado = ? AND created_at >= ? AND created_at <= ?
-      `, [VentaEstado.CONCLUIDA, d.toISOString(), f.toISOString()]);
-      labels.push(`S${12 - i}`);
-      ventas.push(Number(rows?.[0]?.suma || 0));
-      cantidades.push(Number(rows?.[0]?.cnt || 0));
-    }
-  } else { // 6months
-    const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const f = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
-      const rows: any[] = await dataSource.query(`
-        SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
-        FROM ventas WHERE estado = ? AND created_at >= ? AND created_at <= ?
-      `, [VentaEstado.CONCLUIDA, d.toISOString(), f.toISOString()]);
-      labels.push(meses[d.getMonth()]);
-      ventas.push(Number(rows?.[0]?.suma || 0));
-      cantidades.push(Number(rows?.[0]?.cnt || 0));
-    }
+  for (const b of buckets) {
+    const agg = await ventasAggregateRange(dataSource, b.desde, b.hasta);
+    labels.push(b.label);
+    ventas.push(agg.total);
+    cantidades.push(agg.cnt);
   }
 
   return { labels, ventas, cantidades };

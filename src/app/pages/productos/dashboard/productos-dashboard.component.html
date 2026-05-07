@@ -50,69 +50,48 @@
     </app-dash-quick-action>
   </div>
 
-  <div class="dashboard-main-content">
+  <!-- 3 cards lado a lado: Top CMV + Mas vendidos + Productos parciales -->
+  <div class="dashboard-rankings-row">
+    <app-dash-ranking
+      title="Top productos con mejor CMV"
+      icon="trending_up"
+      [items]="topCmv"
+      emptyText="Sin productos con costo y precio configurados"
+      (itemClick)="onRankingClick($event)">
+    </app-dash-ranking>
 
-    <div class="dashboard-col-left">
+    <app-dash-ranking
+      title="Mas vendidos del mes"
+      icon="emoji_events"
+      [items]="topVendidos"
+      emptyText="Sin ventas este mes"
+      (itemClick)="onRankingClick($event)">
+    </app-dash-ranking>
 
-      <div class="dashboard-card">
-        <app-dash-section-header
-          icon="schedule"
-          title="Precios desactualizados (>30 dias)"
-          [badge]="productosPrecioDesactualizado.length"
-          badgeColor="warning">
-        </app-dash-section-header>
-        <mat-divider></mat-divider>
+    <div class="dashboard-card">
+      <app-dash-section-header
+        icon="construction"
+        title="Productos parciales"
+        [badge]="productosParcialesLista.length"
+        badgeColor="info">
+      </app-dash-section-header>
+      <mat-divider></mat-divider>
 
-        <div *ngIf="!loading && productosPrecioDesactualizado.length === 0" class="dashboard-empty-state">
-          <mat-icon>check_circle</mat-icon>
-          <span>Todos los productos con precio actualizado</span>
-        </div>
+      <div *ngIf="!loading && productosParcialesLista.length === 0" class="dashboard-empty-state">
+        <mat-icon>check_circle</mat-icon>
+        <span>Todos los productos completos</span>
+      </div>
 
-        <div class="dashboard-alert-list" *ngIf="productosPrecioDesactualizado.length > 0">
-          <div *ngFor="let p of productosPrecioDesactualizado" class="dashboard-alert-item alert-warning">
-            <mat-icon>schedule</mat-icon>
-            <div class="dashboard-alert-info">
-              <span class="dashboard-alert-title">{{ p.producto }}</span>
-              <span class="dashboard-alert-detail">Ultima actualizacion: {{ p.dias }} dia(s)</span>
-            </div>
+      <div class="dashboard-alert-list" *ngIf="productosParcialesLista.length > 0">
+        <div *ngFor="let p of productosParcialesLista" class="dashboard-alert-item alert-info"
+             (click)="openProducto(p.id, p.nombre)" style="cursor: pointer;">
+          <mat-icon>edit</mat-icon>
+          <div class="dashboard-alert-info">
+            <span class="dashboard-alert-title">{{ p.nombre }}</span>
+            <span class="dashboard-alert-detail">Falta completar registro</span>
           </div>
         </div>
       </div>
-
-      <div class="dashboard-card">
-        <app-dash-section-header
-          icon="construction"
-          title="Productos parciales"
-          [badge]="productosParcialesLista.length"
-          badgeColor="info">
-        </app-dash-section-header>
-        <mat-divider></mat-divider>
-
-        <div *ngIf="!loading && productosParcialesLista.length === 0" class="dashboard-empty-state">
-          <mat-icon>check_circle</mat-icon>
-          <span>Todos los productos completos</span>
-        </div>
-
-        <div class="dashboard-alert-list" *ngIf="productosParcialesLista.length > 0">
-          <div *ngFor="let p of productosParcialesLista" class="dashboard-alert-item alert-info"
-               (click)="openProducto(p.id)" style="cursor: pointer;">
-            <mat-icon>edit</mat-icon>
-            <div class="dashboard-alert-info">
-              <span class="dashboard-alert-title">{{ p.nombre }}</span>
-              <span class="dashboard-alert-detail">Falta completar registro</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="dashboard-col-right">
-      <app-dash-ranking
-        title="Mas vendidos del mes"
-        icon="emoji_events"
-        [items]="topVendidos"
-        emptyText="Sin ventas este mes">
-      </app-dash-ranking>
     </div>
   </div>
 </div>

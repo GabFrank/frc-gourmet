@@ -17,14 +17,14 @@
   <div class="dashboard-stats-row">
     <app-dash-stat-chip
       icon="shopping_cart"
-      [value]="ventasHoy"
-      label="Ventas hoy"
+      [value]="ventasPeriodo"
+      [label]="ventasLabel"
       [loading]="loading">
     </app-dash-stat-chip>
     <app-dash-stat-chip
       icon="payments"
-      [value]="formatPYG(totalHoyPYG) + ' Gs'"
-      label="Total hoy"
+      [value]="formatPYG(totalPeriodoPYG) + ' Gs'"
+      [label]="totalLabel"
       [loading]="loading">
     </app-dash-stat-chip>
     <app-dash-stat-chip

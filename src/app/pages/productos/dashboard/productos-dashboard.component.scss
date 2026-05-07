@@ -1,1 +1,24 @@
 // Estilos especificos del dashboard de Productos (lo comun esta en _dashboard.scss).
+
+.dashboard-rankings-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  width: 100%;
+  box-sizing: border-box;
+  align-items: start;
+
+  > * { min-width: 0; }
+}
+
+@media (max-width: 1280px) {
+  .dashboard-rankings-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-rankings-row {
+    grid-template-columns: 1fr;
+  }
+}

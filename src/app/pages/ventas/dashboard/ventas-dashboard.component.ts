@@ -42,9 +42,11 @@ interface CajaAbierta {
   cantidadVentas: number;
 }
 
+type RangoValue = 'today' | 'week' | 'month' | 'last-month' | '3months' | '6months';
+
 interface RangoChip {
   label: string;
-  value: 'week' | 'month' | '3months' | '6months';
+  value: RangoValue;
   selected: boolean;
 }
 
@@ -89,25 +91,31 @@ export class VentasDashboardComponent implements OnInit {
     { title: 'Caja Mayor', icon: 'account_balance', action: 'caja-mayor', color: '#1b5e20' },
   ];
 
-  // --- KPIs ---
-  ventasHoy = 0;
-  totalHoyPYG = 0;
+  // --- KPIs (sincronizados con rango) ---
+  ventasPeriodo = 0;
+  totalPeriodoPYG = 0;
   ticketPromedio = 0;
   mesasOcupadas = 0;
   mesasTotal = 0;
   comandasPendientes = 0;
+
+  // Labels dinámicos según rango (sin getters — regla del proyecto)
+  ventasLabel = 'Ventas hoy';
+  totalLabel = 'Total hoy';
 
   cajasAbiertas: CajaAbierta[] = [];
   topProductos: DashRankingItem[] = [];
 
   // --- Rango ---
   rangosChips: RangoChip[] = [
-    { label: 'Esta semana', value: 'week', selected: true },
+    { label: 'Hoy', value: 'today', selected: true },
+    { label: 'Esta semana', value: 'week', selected: false },
     { label: 'Este mes', value: 'month', selected: false },
+    { label: 'Mes anterior', value: 'last-month', selected: false },
     { label: '3 meses', value: '3months', selected: false },
     { label: '6 meses', value: '6months', selected: false },
   ];
-  rangoSeleccionado: 'week' | 'month' | '3months' | '6months' = 'week';
+  rangoSeleccionado: RangoValue = 'today';
 
   // --- Chart ---
   chartData: ChartData<'line'> = { labels: [], datasets: [] };
@@ -127,11 +135,12 @@ export class VentasDashboardComponent implements OnInit {
 
   async cargarKpis(): Promise<void> {
     this.loading = true;
+    this.updateLabels();
     try {
       const kpis = await firstValueFrom(this.repository.getDashboardVentasKpis(this.rangoSeleccionado));
       if (kpis) {
-        this.ventasHoy = kpis.ventasHoy || 0;
-        this.totalHoyPYG = kpis.totalHoyPYG || 0;
+        this.ventasPeriodo = kpis.ventasPeriodo ?? kpis.ventasHoy ?? 0;
+        this.totalPeriodoPYG = kpis.totalPeriodoPYG ?? kpis.totalHoyPYG ?? 0;
         this.ticketPromedio = kpis.ticketPromedio || 0;
         this.mesasOcupadas = kpis.mesasOcupadas || 0;
         this.mesasTotal = kpis.mesasTotal || 0;
@@ -165,6 +174,35 @@ export class VentasDashboardComponent implements OnInit {
     chip.selected = true;
     this.rangoSeleccionado = chip.value;
     this.cargarKpis();
+  }
+
+  private updateLabels(): void {
+    switch (this.rangoSeleccionado) {
+      case 'today':
+        this.ventasLabel = 'Ventas hoy';
+        this.totalLabel = 'Total hoy';
+        break;
+      case 'week':
+        this.ventasLabel = 'Ventas semana';
+        this.totalLabel = 'Total semana';
+        break;
+      case 'month':
+        this.ventasLabel = 'Ventas del mes';
+        this.totalLabel = 'Total del mes';
+        break;
+      case 'last-month':
+        this.ventasLabel = 'Ventas mes anterior';
+        this.totalLabel = 'Total mes anterior';
+        break;
+      case '3months':
+        this.ventasLabel = 'Ventas 3 meses';
+        this.totalLabel = 'Total 3 meses';
+        break;
+      case '6months':
+        this.ventasLabel = 'Ventas 6 meses';
+        this.totalLabel = 'Total 6 meses';
+        break;
+    }
   }
 
   formatPYG(v: number): string {

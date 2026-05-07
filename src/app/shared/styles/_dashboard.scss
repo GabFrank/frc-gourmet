@@ -338,6 +338,10 @@
   &:hover {
     background: var(--hover-bg);
   }
+
+  &.dashboard-ranking-item-clickable {
+    cursor: pointer;
+  }
 }
 
 .dashboard-ranking-rank {
