@@ -19,6 +19,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 interface DetalleRow {
   monedaId: number;
@@ -52,6 +53,7 @@ interface DetalleRow {
     MatAutocompleteModule,
     MatTooltipModule,
     MatDividerModule,
+    CurrencyInputDirective,
   ]
 })
 export class CreateEditGastoDialogComponent implements OnInit {
@@ -60,6 +62,7 @@ export class CreateEditGastoDialogComponent implements OnInit {
   categoriaFilter = new FormControl('');
   proveedorFilter = new FormControl('');
   saving = false;
+  decimalesMoneda = 0;
 
   gastoCategorias: any[] = [];
   categoriasFiltradas: any[] = [];
@@ -113,6 +116,8 @@ export class CreateEditGastoDialogComponent implements OnInit {
       formaPagoId: [null, Validators.required],
       monto: [null, [Validators.required, Validators.min(0.01)]],
     });
+
+    this.detalleForm.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
 
     this.categoriaFilter.valueChanges.subscribe(val => {
       this.filtrarCategorias(val || '');
@@ -359,6 +364,13 @@ export class CreateEditGastoDialogComponent implements OnInit {
 
   onCancel(): void {
     this.dialogRef?.close(false);
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.detalleForm?.get('monedaId')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   // Verifica saldos previo a guardar el gasto. Para edit, descuenta los detalles
