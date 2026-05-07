@@ -1094,6 +1094,20 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('delete-profile-image', imageUrl);
   },
 
+  // === Generic files API (sirve cualquier carpeta `userData/<X>/`) ===
+  saveFile: async (input: { carpeta: string; base64: string; fileName: string; generateThumbnails?: boolean }): Promise<any> => {
+    return await ipcRenderer.invoke('save-file', input);
+  },
+  deleteFile: async (url: string): Promise<{ ok: boolean }> => {
+    return await ipcRenderer.invoke('delete-file', { url });
+  },
+  readFileBase64: async (url: string): Promise<{ base64: string; mimeType: string }> => {
+    return await ipcRenderer.invoke('read-file-base64', { url });
+  },
+  openFileWithSystem: async (url: string): Promise<{ ok: boolean; error?: string }> => {
+    return await ipcRenderer.invoke('open-file-with-system', { url });
+  },
+
   // Utility functions
   on: (channel: string, callback: (data: any) => void): void => {
     // Deliberately strip event as it includes `sender`

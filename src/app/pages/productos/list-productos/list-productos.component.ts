@@ -24,6 +24,7 @@ import { RepositoryService } from '../../../database/repository.service';
 import { Producto } from '../../../database/entities/productos/producto.entity';
 import { ProductoTipo } from '../../../database/entities/productos/producto-tipo.enum';
 import { GestionarProductoComponent } from '../gestionar-producto/gestionar-producto.component';
+import { thumbUrl } from 'src/app/shared/utils/image-url.util';
 
 @Component({
   selector: 'app-list-productos',
@@ -224,7 +225,19 @@ export class ListProductosComponent implements OnInit {
       `detalle-producto-${producto.id}-tab`
     );
   }
-  
+
+  thumbFor(url?: string | null): string | undefined {
+    return thumbUrl(url) || (url ?? undefined);
+  }
+
+  onThumbError(event: Event, originalUrl?: string | null): void {
+    // Si la derivada thumb no existe (legacy), caer al original.
+    const img = event.target as HTMLImageElement;
+    if (originalUrl && img.src !== originalUrl) {
+      img.src = originalUrl;
+    }
+  }
+
   getTipoLabel(tipo: string): string {
     const tipoMap: { [key: string]: string } = {
       'RETAIL_INGREDIENTE': 'Ingrediente Retail',

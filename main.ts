@@ -25,6 +25,7 @@ import { registerPrinterHandlers } from './electron/handlers/printers.handler';
 import { registerPersonasHandlers } from './electron/handlers/personas.handler';
 import { registerAuthHandlers } from './electron/handlers/auth.handler';
 import { registerImageHandlers } from './electron/handlers/images.handler';
+import { registerFilesHandlers } from './electron/handlers/files.handler';
 import { registerProductosHandlers } from './electron/handlers/productos.handler';
 import { registerFinancieroHandlers } from './electron/handlers/financiero.handler';
 import { registerComprasHandlers } from './electron/handlers/compras.handler';
@@ -104,6 +105,7 @@ function initializeDatabase() {
       registerPersonasHandlers(dataSource, getCurrentUser);
       registerAuthHandlers(dataSource, getCurrentUser, setCurrentUser);
       registerImageHandlers(dataSource);
+      registerFilesHandlers(); // generic file IPCs (save/delete/read/open)
       registerProductosHandlers(dataSource, getCurrentUser);
       registerFinancieroHandlers(dataSource, getCurrentUser);
       registerComprasHandlers(dataSource, getCurrentUser);
@@ -218,125 +220,52 @@ function createWindow(): void {
     win = null;
   });
 
-  // Register the app:// protocol for serving local files
-  // This part remains here
+  // app:// protocol — registered once in app.on('ready') below.
+}
+
+// Single, generic handler for app:// URLs. Maps `app://<carpeta>/<file>` to
+// `userData/<carpeta>/<file>`. Falls back to the app folder for legacy URLs
+// that point to bundled assets.
+function registerAppProtocol(): void {
+  if (protocol.isProtocolRegistered && protocol.isProtocolRegistered('app')) {
+    return;
+  }
   protocol.registerFileProtocol('app', (request: { url: string }, callback: (response: any) => void) => {
-    const urlPath = request.url.substring(6); // Remove 'app://'
+    const urlPath = request.url.replace(/^app:\/\//, '');
+    const userDataPath = app.getPath('userData');
+    const userDataResolved = path.normalize(path.join(userDataPath, urlPath));
 
-    // Handle profile images
-    if (urlPath.startsWith('profile-images/')) {
-      const fileName = urlPath.replace('profile-images/', '');
-      const imagesDir = path.join(app.getPath('userData'), 'profile-images');
-      if (!fs.existsSync(imagesDir)) {
-        fs.mkdirSync(imagesDir, { recursive: true });
+    // Ensure the parent dir exists for known buckets so first-write doesn't fail
+    // before any file is requested. Cheap and idempotent.
+    const knownBuckets = ['profile-images', 'producto-images', 'factura-imports', 'funcionario-documentos', 'adjuntos'];
+    for (const bucket of knownBuckets) {
+      if (urlPath.startsWith(bucket + '/')) {
+        const bucketDir = path.join(userDataPath, bucket);
+        if (!fs.existsSync(bucketDir)) fs.mkdirSync(bucketDir, { recursive: true });
+        break;
       }
-      callback({ path: path.join(imagesDir, fileName) });
+    }
+
+    if (fs.existsSync(userDataResolved)) {
+      callback({ path: userDataResolved });
       return;
     }
 
-    // Handle product images
-    if (urlPath.startsWith('producto-images/')) {
-      const fileName = urlPath.replace('producto-images/', '');
-      const imagesDir = path.join(app.getPath('userData'), 'producto-images');
-      if (!fs.existsSync(imagesDir)) {
-        fs.mkdirSync(imagesDir, { recursive: true });
-      }
-      const imagePath = path.join(imagesDir, fileName);
-      // console.log('Serving product image from:', imagePath); // Optional logging
-      callback({ path: imagePath });
+    // Fallback: app folder (bundled assets)
+    const appResolved = path.normalize(path.join(app.getAppPath(), urlPath));
+    if (fs.existsSync(appResolved)) {
+      callback({ path: appResolved });
       return;
     }
 
-    // Handle factura imports (PDFs/images de facturas OCR)
-    if (urlPath.startsWith('factura-imports/')) {
-      const fileName = urlPath.replace('factura-imports/', '');
-      const dir = path.join(app.getPath('userData'), 'factura-imports');
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      callback({ path: path.join(dir, fileName) });
-      return;
-    }
-
-    // Handle other app:// URLs - check in app folder first
-    let normalizedPath = path.normalize(`${app.getAppPath()}/${urlPath}`);
-    if (fs.existsSync(normalizedPath)) {
-      callback({ path: normalizedPath });
-    } else {
-      // Try user data directory as fallback
-      const userDataPath = app.getPath('userData');
-      normalizedPath = path.normalize(`${userDataPath}/${urlPath}`);
-      if (fs.existsSync(normalizedPath)) {
-        callback({ path: normalizedPath });
-      } else {
-        console.error(`File not found: ${normalizedPath}`);
-        callback({ error: -2 /* ENOENT */ });
-      }
-    }
+    // Not found — return userData path so the renderer gets a clear ENOENT
+    callback({ path: userDataResolved });
   });
 }
 
 // Initialize the database when the app is ready
 app.on('ready', () => {
-  // The protocol registration needs to happen before createWindow in 'ready'
-  // Ensure it only happens once
-  if (!protocol.isProtocolRegistered('app')) {
-      protocol.registerFileProtocol('app', (request: { url: string }, callback: (response: any) => void) => {
-        const urlPath = request.url.substring(6); // Remove 'app://'
-
-        // Handle profile images
-        if (urlPath.startsWith('profile-images/')) {
-          const fileName = urlPath.replace('profile-images/', '');
-          const imagesDir = path.join(app.getPath('userData'), 'profile-images');
-          if (!fs.existsSync(imagesDir)) {
-            fs.mkdirSync(imagesDir, { recursive: true });
-          }
-          callback({ path: path.join(imagesDir, fileName) });
-          return;
-        }
-
-        // Handle product images
-        if (urlPath.startsWith('producto-images/')) {
-          const fileName = urlPath.replace('producto-images/', '');
-          const imagesDir = path.join(app.getPath('userData'), 'producto-images');
-          if (!fs.existsSync(imagesDir)) {
-            fs.mkdirSync(imagesDir, { recursive: true });
-          }
-          const imagePath = path.join(imagesDir, fileName);
-          // console.log('Serving product image from:', imagePath);
-          callback({ path: imagePath });
-          return;
-        }
-
-        // Handle factura imports (PDFs/images de facturas OCR)
-        if (urlPath.startsWith('factura-imports/')) {
-          const fileName = urlPath.replace('factura-imports/', '');
-          const dir = path.join(app.getPath('userData'), 'factura-imports');
-          if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-          }
-          callback({ path: path.join(dir, fileName) });
-          return;
-        }
-
-        // Handle other app:// URLs - check in app folder first
-        let normalizedPath = path.normalize(`${app.getAppPath()}/${urlPath}`);
-        if (fs.existsSync(normalizedPath)) {
-          callback({ path: normalizedPath });
-        } else {
-          // Try user data directory as fallback
-          const userDataPath = app.getPath('userData');
-          normalizedPath = path.normalize(`${userDataPath}/${urlPath}`);
-          if (fs.existsSync(normalizedPath)) {
-            callback({ path: normalizedPath });
-          } else {
-            console.error(`File not found: ${normalizedPath}`);
-            callback({ error: -2 /* ENOENT */ });
-          }
-        }
-      });
-  }
-
+  registerAppProtocol();
   initializeDatabase();
   createWindow();
 });

@@ -13,6 +13,7 @@ import { Cliente } from './entities/personas/cliente.entity';
 import { Permission } from './entities/personas/permission.entity';
 import { RolePermission } from './entities/personas/role-permission.entity';
 import { LoginSession } from './entities/auth/login-session.entity';
+import { Adjunto } from './entities/shared/adjunto.entity';
 
 // RRHH entities
 import { ConfiguracionRrhh } from './entities/rrhh/configuracion-rrhh.entity';
@@ -202,6 +203,8 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       Permission,
       RolePermission,
       LoginSession,
+      // Shared
+      Adjunto,
       // RRHH entities
       ConfiguracionRrhh,
       Cargo,

@@ -426,7 +426,8 @@ export class GestionarProductoService {
           controlaStock: producto.controlaStock,
           esIngrediente: producto.esIngrediente,
           stockMinimo: producto.stockMinimo,
-          stockMaximo: producto.stockMaximo
+          stockMaximo: producto.stockMaximo,
+          imageUrl: (producto as any).imageUrl ?? null
         });
 
         // Cargar subfamilias si hay familia seleccionada
@@ -481,7 +482,8 @@ export class GestionarProductoService {
         controlaStock: [true],
         esIngrediente: [false],
         stockMinimo: [null, [Validators.min(0)]],
-        stockMaximo: [null, [Validators.min(0)]]
+        stockMaximo: [null, [Validators.min(0)]],
+        imageUrl: [null]
       }, { validators: this.stockRangeValidator }),
       presentaciones: this.fb.array([]),
       precios: this.fb.group({

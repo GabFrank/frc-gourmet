@@ -150,6 +150,16 @@ export class ProductoInformacionGeneralComponent implements OnInit, OnDestroy {
     this.productoService.guardarProducto();
   }
 
+  onImagenUploaded(event: { url: string; fileName: string; mimeType: string; tamanoBytes: number; thumbUrl?: string; mediumUrl?: string }): void {
+    this.informacionPrincipalForm.patchValue({ imageUrl: event.url });
+    this.informacionPrincipalForm.markAsDirty();
+  }
+
+  onImagenRemoved(): void {
+    this.informacionPrincipalForm.patchValue({ imageUrl: null });
+    this.informacionPrincipalForm.markAsDirty();
+  }
+
   /**
    * Crea un nuevo producto abriendo una nueva pestaña
    */

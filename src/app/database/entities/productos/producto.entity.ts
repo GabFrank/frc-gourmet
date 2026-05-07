@@ -49,6 +49,11 @@ export class Producto extends BaseModel {
   @Column({ type: 'boolean', default: true, name: 'registro_completo' })
   registroCompleto!: boolean;
 
+  // Imagen principal — URL `app://producto-images/<file>`. Las derivadas
+  // (thumb 96px, medium 400px) se infieren con el helper image-url.util.ts.
+  @Column({ type: 'varchar', length: 500, nullable: true, name: 'image_url' })
+  imageUrl?: string;
+
   // Relationships
   // Subfamilia es opcional: productos creados desde importación OCR pueden no tener
   // clasificación todavía (registro parcial). Se completa después desde gestión-producto.

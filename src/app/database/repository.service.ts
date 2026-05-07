@@ -123,6 +123,11 @@ interface ElectronAPI {
   // Profile image operations
   saveProfileImage: (base64Data: string, fileName: string) => Promise<{ imageUrl: string }>;
   deleteProfileImage: (imageUrl: string) => Promise<boolean>;
+  // Generic files API
+  saveFile: (input: { carpeta: string; base64: string; fileName: string; generateThumbnails?: boolean }) => Promise<{ url: string; fileName: string; mimeType: string; tamanoBytes: number; thumbUrl?: string; mediumUrl?: string }>;
+  deleteFile: (url: string) => Promise<{ ok: boolean }>;
+  readFileBase64: (url: string) => Promise<{ base64: string; mimeType: string }>;
+  openFileWithSystem: (url: string) => Promise<{ ok: boolean; error?: string }>;
 
 
   // Moneda methods
@@ -1259,6 +1264,20 @@ export class RepositoryService {
    */
   deleteProfileImage(imageUrl: string): Observable<boolean> {
     return from(this.api.deleteProfileImage(imageUrl));
+  }
+
+  // ===================== GENERIC FILES API =====================
+  saveFile(input: { carpeta: string; base64: string; fileName: string; generateThumbnails?: boolean }): Observable<{ url: string; fileName: string; mimeType: string; tamanoBytes: number; thumbUrl?: string; mediumUrl?: string }> {
+    return from(this.api.saveFile(input));
+  }
+  deleteFile(url: string): Observable<{ ok: boolean }> {
+    return from(this.api.deleteFile(url));
+  }
+  readFileBase64(url: string): Observable<{ base64: string; mimeType: string }> {
+    return from(this.api.readFileBase64(url));
+  }
+  openFileWithSystem(url: string): Observable<{ ok: boolean; error?: string }> {
+    return from(this.api.openFileWithSystem(url));
   }
 
 

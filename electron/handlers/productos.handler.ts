@@ -432,6 +432,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         stockMinimo: productoData.stockMinimo,
         stockMaximo: productoData.stockMaximo,
         registroCompleto: productoData.registroCompleto !== undefined ? productoData.registroCompleto : true,
+        imageUrl: productoData.imageUrl || undefined,
       });
 
       await setEntityUserTracking(dataSource, producto, currentUser?.id, false);
@@ -485,6 +486,27 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
       // Estado de registro (parcial vs completo)
       if (productoData.registroCompleto !== undefined) producto.registroCompleto = productoData.registroCompleto;
+
+      // Imagen — al cambiar URL, eliminar archivo viejo del filesystem.
+      if (productoData.imageUrl !== undefined) {
+        const oldUrl = producto.imageUrl;
+        const newUrl = productoData.imageUrl || undefined;
+        if (oldUrl && oldUrl !== newUrl) {
+          try {
+            const fs = require('fs');
+            const path = require('path');
+            const { app } = require('electron');
+            const { deleteImageDerivatives } = require('../utils/image-resize.utils');
+            const rest = oldUrl.replace(/^app:\/\//, '');
+            const abs = path.join(app.getPath('userData'), rest);
+            if (fs.existsSync(abs)) fs.unlinkSync(abs);
+            deleteImageDerivatives(abs);
+          } catch (err) {
+            console.warn('producto.imageUrl: failed to delete old file:', err);
+          }
+        }
+        producto.imageUrl = newUrl;
+      }
 
       // Actualizar subfamilia si se proporciona
       if (productoData.subfamiliaId !== undefined) {

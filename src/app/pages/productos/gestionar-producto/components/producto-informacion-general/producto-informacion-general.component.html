@@ -138,6 +138,23 @@
             </mat-error>
           </mat-form-field>
         </div>
+
+        <!-- Imagen principal del producto -->
+        <div class="form-row imagen-row">
+          <div class="imagen-section">
+            <label class="imagen-label">Imagen principal</label>
+            <app-file-upload
+              accept="image/*"
+              carpeta="producto-images"
+              [currentUrl]="informacionPrincipalForm.get('imageUrl')?.value"
+              [maxSizeMB]="5"
+              label="Subir imagen"
+              hint="JPG, PNG hasta 5MB. Se generan thumbnails automáticamente."
+              (uploaded)="onImagenUploaded($event)"
+              (removed)="onImagenRemoved()">
+            </app-file-upload>
+          </div>
+        </div>
       </mat-card-content>
     </mat-card>
 
