@@ -66,6 +66,8 @@ import { registerDashboardCajaMayorHandlers } from './electron/handlers/dashboar
 import { registerBackupHandlers, startAutoBackupScheduler } from './electron/handlers/backup.handler';
 // Importacion de facturas via OCR + IA
 import { registerFacturaImportHandlers } from './electron/handlers/factura-import.handler';
+// Auto-updater
+import { initAutoUpdater } from './electron/utils/auto-updater';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
 // Unificado en recetas.handler: sabores y variaciones
 
@@ -200,10 +202,15 @@ function createWindow(): void {
   } else {
     // Load the built app from the dist folder
     win.loadURL(url.format({
-      pathname: path.join(__dirname, 'dist/index.html'),
+      pathname: path.join(__dirname, 'dist/frc-gourmet/index.html'),
       protocol: 'file:',
       slashes: true
     }));
+  }
+
+  // Auto-updater (solo en build empaquetada).
+  if (win) {
+    initAutoUpdater(win);
   }
 
   // Event when the window is closed.

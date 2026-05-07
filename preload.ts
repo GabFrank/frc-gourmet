@@ -3343,4 +3343,26 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('factura-import-confirm', payload);
   },
 
+  // Auto-updater (electron-updater)
+  autoUpdateGetConfig: async (): Promise<any> => {
+    return await ipcRenderer.invoke('auto-update:get-config');
+  },
+  autoUpdateSetChannel: async (channel: 'stable' | 'beta' | 'alpha'): Promise<any> => {
+    return await ipcRenderer.invoke('auto-update:set-channel', channel);
+  },
+  autoUpdateSetAutoCheck: async (enabled: boolean): Promise<any> => {
+    return await ipcRenderer.invoke('auto-update:set-auto-check', enabled);
+  },
+  autoUpdateCheckNow: async (): Promise<any> => {
+    return await ipcRenderer.invoke('auto-update:check-now');
+  },
+  autoUpdateQuitAndInstall: async (): Promise<any> => {
+    return await ipcRenderer.invoke('auto-update:quit-and-install');
+  },
+  autoUpdateOnStatus: (handler: (status: string, payload: any) => void): (() => void) => {
+    const listener = (_event: any, data: { status: string; payload: any }) => handler(data.status, data.payload);
+    ipcRenderer.on('auto-update:status', listener);
+    return () => ipcRenderer.removeListener('auto-update:status', listener);
+  },
+
 });

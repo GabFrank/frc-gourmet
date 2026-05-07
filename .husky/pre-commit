@@ -1,0 +1,2 @@
+echo "[husky] pre-commit: typechecking electron + ng (rápido) ..."
+npx tsc -p tsconfig.electron.json --noEmit || exit 1

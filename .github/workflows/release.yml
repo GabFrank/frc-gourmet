@@ -1,0 +1,145 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+      - release/beta
+      - dev
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # 1. Determinar versión y crear el GitHub Release vacío
+  # ──────────────────────────────────────────────────────────────────────────
+  release:
+    name: Semantic-release (versión + tag + release)
+    runs-on: ubuntu-latest
+    outputs:
+      new_release_published: ${{ steps.semrel.outputs.new_release_published }}
+      new_release_version: ${{ steps.semrel.outputs.new_release_version }}
+      new_release_git_tag: ${{ steps.semrel.outputs.new_release_git_tag }}
+      new_release_channel: ${{ steps.semrel.outputs.new_release_channel }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install deps
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+
+      - name: Verify build compiles
+        run: npm run build:prod
+        env:
+          NODE_OPTIONS: --max_old_space_size=8192
+
+      - name: Run semantic-release
+        id: semrel
+        run: |
+          npx semantic-release
+          # Capturar outputs (semantic-release v22 no emite outputs nativos a GH Actions)
+          if git tag --points-at HEAD | grep -q '^v'; then
+            TAG=$(git tag --points-at HEAD | grep '^v' | head -1)
+            VERSION=${TAG#v}
+            CHANNEL=stable
+            [[ "$VERSION" == *-beta* ]] && CHANNEL=beta
+            [[ "$VERSION" == *-alpha* ]] && CHANNEL=alpha
+            echo "new_release_published=true" >> $GITHUB_OUTPUT
+            echo "new_release_version=$VERSION" >> $GITHUB_OUTPUT
+            echo "new_release_git_tag=$TAG" >> $GITHUB_OUTPUT
+            echo "new_release_channel=$CHANNEL" >> $GITHUB_OUTPUT
+          else
+            echo "new_release_published=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Release output" >> $GITHUB_STEP_SUMMARY
+          echo "- published: ${{ steps.semrel.outputs.new_release_published }}" >> $GITHUB_STEP_SUMMARY
+          echo "- version: ${{ steps.semrel.outputs.new_release_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- channel: ${{ steps.semrel.outputs.new_release_channel }}" >> $GITHUB_STEP_SUMMARY
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 2. Build matrix: empaquetar instaladores y subirlos al release
+  # ──────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build ${{ matrix.os }}
+    needs: release
+    if: needs.release.outputs.new_release_published == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Sincronizar con el commit que semantic-release acaba de pushear (bump de version)
+      - name: Pull version-bump commit
+        shell: bash
+        run: git pull --ff-only origin ${{ github.ref_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install deps
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+
+      - name: Build app
+        run: npm run build:prod
+        env:
+          NODE_OPTIONS: --max_old_space_size=8192
+
+      - name: Build & publish installer
+        run: npx electron-builder --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Code signing — agregar como secrets en repo cuando estén disponibles
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Upload installers as workflow artifact (debug)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.yml
+            release/latest*.yml
+            release/alpha*.yml
+            release/beta*.yml
+          if-no-files-found: ignore
+          retention-days: 14
