@@ -353,10 +353,36 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       // VentaItem sabores (variaciones multi-sabor)
       VentaItemSabor
     ],
-    synchronize: true, // Automatically creates tables in development
+    // Sincronización automática vs migraciones:
+    //  - Dev / app no empaquetada: synchronize=true (TypeORM crea/altera tablas)
+    //  - Prod / app empaquetada: synchronize=false + migrations corren al iniciar
+    // En el primer arranque de una instalación nueva el bootstrap hace synchronize una vez
+    // y marca todas las migraciones como aplicadas (ver DatabaseService.initialize).
+    synchronize: !isPackagedApp(),
     logging: process.env['NODE_ENV'] === 'development',
-    migrations: [],
+    migrations: getMigrations(),
+    migrationsRun: false, // Lo controla manualmente DatabaseService tras el backup
+    migrationsTableName: 'typeorm_migrations',
   };
+}
+
+/** Detecta si la app corre empaquetada (instalador) vs en dev. */
+export function isPackagedApp(): boolean {
+  if (process.env['ELECTRON_IS_PACKAGED'] === '1') return true;
+  if (process.env['NODE_ENV'] === 'production') return true;
+  try {
+    // electron.app no existe en el renderer; sólo en el proceso principal.
+    return !!(electron as any)?.app?.isPackaged;
+  } catch {
+    return false;
+  }
+}
+
+/** Lista de migraciones a ejecutar. Se importan acá para que el bundler las incluya. */
+function getMigrations(): Function[] {
+  // Las migraciones se agregan acá conforme se generan con `npm run migration:generate`.
+  // Ver src/app/database/migrations/README.md
+  return [];
 }
 
 /**
