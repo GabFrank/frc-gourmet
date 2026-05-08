@@ -88,7 +88,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -120,12 +120,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Code signing — agregar como secrets en repo cuando estén disponibles
+          # Code signing Windows — opcional. Sin secrets el .exe sale unsigned
+          # (SmartScreen muestra warning una vez, usuario "Más info → Ejecutar de todos modos").
+          # Ver docs/RELEASE.md sección "Code signing" para opciones gratis.
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Upload installers as workflow artifact (debug)
         if: always()
@@ -134,8 +133,6 @@ jobs:
           name: installers-${{ matrix.os }}
           path: |
             release/*.exe
-            release/*.dmg
-            release/*.zip
             release/*.AppImage
             release/*.yml
             release/latest*.yml

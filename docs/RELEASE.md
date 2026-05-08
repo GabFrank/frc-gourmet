@@ -94,10 +94,10 @@ Push a `dev` dispara `release.yml`:
    - Commit `chore(release): 1.4.0-alpha.8 [skip ci]`
    - Crea tag `v1.4.0-alpha.8`
    - Crea GitHub Release (prerelease=true)
-2. Job `build` matrix (win/mac/linux):
+2. Job `build` matrix (win/linux):
    - Pull del commit nuevo
    - Build Angular
-   - `electron-builder --publish always` → sube `.exe` / `.dmg` / `.AppImage` + `alpha.yml` al GitHub Release
+   - `electron-builder --publish always` → sube `.exe` + `.AppImage` + `alpha.yml` al GitHub Release
 
 ### 3. Promover alpha → beta
 
@@ -148,32 +148,57 @@ git push
 
 ## Code signing
 
-### Windows
+### Plataformas soportadas
 
-1. Comprar certificado **Code Signing** (EV o OV) — recomendado EV de Sectigo/DigiCert (~$300/año).
-2. Exportar a `.pfx` con password.
-3. Subir como secrets en GitHub:
-   ```
-   CSC_LINK            = base64 del .pfx (`base64 -i cert.pfx | pbcopy`)
-   CSC_KEY_PASSWORD    = password del .pfx
-   ```
-4. electron-builder firma automáticamente al detectar las env vars.
+Solo se generan instaladores para **Windows** (NSIS `.exe`) y **Linux** (`.AppImage`). macOS está dropeado del pipeline (no se requieren releases para Mac). Si en el futuro hace falta, hay que reagregar `mac` block en `package.json` y `macos-latest` al matrix de `release.yml`.
 
-### macOS
+### Windows — opciones (de menor a mayor esfuerzo)
 
-1. Apple Developer Program ($99/año).
-2. Crear "Developer ID Application" cert en Apple Developer portal.
-3. Notarización con `notarytool`:
-   ```
-   APPLE_ID                       = email Apple ID
-   APPLE_APP_SPECIFIC_PASSWORD    = generada en appleid.apple.com → Security → App-Specific Passwords
-   APPLE_TEAM_ID                  = de https://developer.apple.com/account → Membership
-   ```
-4. En `package.json` cambiar `"notarize": false` → `"notarize": { "teamId": "${APPLE_TEAM_ID}" }`.
+#### A) Sin firma (default actual) ✅
+
+`release.yml` corre `electron-builder` sin certs → `.exe` sin firma. Comportamiento al usuario:
+
+1. Usuario descarga `FRC-Gourmet-Setup-X.Y.Z.exe`.
+2. SmartScreen warning: "Windows protegió tu PC".
+3. Usuario clickea **"Más información"** → **"Ejecutar de todos modos"**.
+4. NSIS instala normal.
+
+**Aceptable** para distribución interna o instalaciones controladas. El warning aparece **una vez por instalación**, no en cada uso. Cero costo, cero infra.
+
+#### B) Self-signed cert (gratis, marginal mejora)
+
+Genera un cert auto-firmado, lo importás como "Trusted Root CA" en cada PC cliente, y `electron-builder` lo usa para firmar. Útil solo si controlás todas las PCs target (ej. instalaciones en sucursales propias).
+
+```powershell
+# En Windows (PowerShell admin):
+$cert = New-SelfSignedCertificate -DnsName "FRC Sistemas Informaticos" -Type CodeSigning -CertStoreLocation Cert:\CurrentUser\My
+Export-PfxCertificate -Cert $cert -FilePath frc-codesign.pfx -Password (ConvertTo-SecureString "tu-password" -AsPlainText -Force)
+```
+
+Luego `base64 frc-codesign.pfx > cert.b64` y subir como secret `CSC_LINK` + `CSC_KEY_PASSWORD`. `electron-builder` lo detecta y firma automáticamente.
+
+**Limitación:** SmartScreen sigue avisando porque el cert no tiene reputación con Microsoft. Solo evita el warning si el cert está pre-instalado como trusted en el equipo cliente.
+
+#### C) SignPath Foundation (gratis para OSS)
+
+[signpath.io](https://signpath.io/foundation) firma binarios con un cert OV de SignPath gratis para proyectos open-source. Requiere:
+- Repo público en GitHub.
+- Aplicar al programa Foundation.
+- Integración via su GitHub Action.
+
+Da una firma reconocida y elimina SmartScreen tras un rato (reputation building). FRC Gourmet es repo público → elegible.
+
+#### D) Azure Trusted Signing (~$10/mes)
+
+Microsoft mismo provee firma cloud-based desde 2024. ~$9.99/mes. Reputación inmediata con SmartScreen. Requiere validación de identidad. Reemplaza el modelo viejo de comprar EV cert ($300/año).
 
 ### Linux (AppImage)
 
-No requiere firma. Opcionalmente firmar con GPG (no implementado).
+No requiere firma. AppImage corre directo si tiene permiso de ejecución (`chmod +x`).
+
+### Recomendación actual
+
+Empezar con **A) sin firma** y monitorear el feedback de usuarios. Si el SmartScreen se vuelve molesto en producción → evaluar **C)** SignPath Foundation primero (gratis), si no califica → **D)** Azure Trusted Signing. Saltarse self-signed (B), no aporta valor real.
 
 ## Auto-update en el cliente
 
@@ -218,13 +243,10 @@ dev:
 | Secret | Origen | Obligatorio |
 |---|---|---|
 | `GITHUB_TOKEN` | auto-provisto por Actions | sí |
-| `CSC_LINK` | base64 del .pfx Windows | solo para builds firmadas Windows |
-| `CSC_KEY_PASSWORD` | password .pfx | solo para builds firmadas Windows |
-| `APPLE_ID` | email Apple Dev | solo para notarización mac |
-| `APPLE_APP_SPECIFIC_PASSWORD` | generada en appleid | solo notarización mac |
-| `APPLE_TEAM_ID` | Team ID Apple | solo notarización mac |
+| `CSC_LINK` | base64 del .pfx Windows (self-signed o SignPath/Azure cert) | opcional |
+| `CSC_KEY_PASSWORD` | password del .pfx | opcional |
 
-Sin certificados, los builds salen sin firma → SmartScreen / Gatekeeper bloquean al usuario hasta que confirme manualmente. Aceptable para alpha/beta interno; **no aceptable para stable**.
+Sin certs Windows los builds salen sin firma → SmartScreen warning una vez por instalación. **Aceptable** para distribución actual. Evaluar firma cuando volumen lo justifique (ver "Code signing" arriba).
 
 ## Verificar versión deployada
 
@@ -247,13 +269,10 @@ Manifest del canal:
 ### "electron-builder dice 'No suitable application icons found'"
 - Falta `build/icon.png` 512×512. Ver `build/README.md`.
 
-### "Mac build se queda colgado en notarize"
-- `notarize: false` en package.json. Cuando esté listo, flippear a `{teamId}`.
-
 ### "El cliente no recibe la update"
 - Verificar que el manifest del canal exista: `https://github.com/GabFrank/frc-gourmet/releases/latest/download/<canal>.yml`
 - Verificar canal seteado en cliente: `update-config.json` en userData
-- Logs: en macOS `~/Library/Logs/frc-gourmet/main.log`
+- Logs Windows: `%APPDATA%\frc-gourmet\logs\main.log`
 
 ### "CI rompe en `npm ci` con peer-deps"
 - Usamos `--legacy-peer-deps` en todos los workflows. Si agregás un nuevo workflow, no olvidarlo.
