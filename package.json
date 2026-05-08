@@ -42,6 +42,7 @@
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/app/database/datasource.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/app/database/datasource.ts",
     "migration:show": "typeorm-ts-node-commonjs migration:show -d src/app/database/datasource.ts",
+    "icons": "node scripts/generate-icons.js",
     "prepare": "husky || true"
   },
   "private": true,
@@ -128,6 +129,7 @@
     "node-polyfill-webpack-plugin": "2.0.1",
     "npm-run-all": "4.1.5",
     "playwright": "^1.58.2",
+    "png-to-ico": "^3.0.1",
     "semantic-release": "^22.0.12",
     "ts-node": "10.9.1",
     "typescript": "~4.9.5",
@@ -179,14 +181,21 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
-      "artifactName": "FRC-Gourmet-${version}-${arch}.${ext}"
+      "artifactName": "FRC-Gourmet-${version}-${arch}.${ext}",
+      "icon": "build/icon.icns"
     },
     "dmg": {
       "title": "FRC Gourmet ${version}"
@@ -195,11 +204,14 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "FRC-Gourmet-Setup-${version}.${ext}",
-      "publisherName": "FRC Sistemas Informaticos"
+      "publisherName": "FRC Sistemas Informaticos",
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,
@@ -218,10 +230,13 @@
       "target": [
         {
           "target": "AppImage",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
-      "artifactName": "FRC-Gourmet-${version}-${arch}.${ext}"
+      "artifactName": "FRC-Gourmet-${version}-${arch}.${ext}",
+      "icon": "build/icons"
     }
   }
 }
