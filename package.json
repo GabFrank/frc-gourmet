@@ -171,35 +171,6 @@
         "releaseType": "release"
       }
     ],
-    "mac": {
-      "category": "public.app-category.business",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
-      "notarize": false,
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        }
-      ],
-      "artifactName": "FRC-Gourmet-${version}-${arch}.${ext}",
-      "icon": "build/icon.icns"
-    },
-    "dmg": {
-      "title": "FRC Gourmet ${version}"
-    },
     "win": {
       "target": [
         {
