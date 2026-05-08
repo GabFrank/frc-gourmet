@@ -28,15 +28,14 @@ if (!cliDbPath && !fs.existsSync(tmpDir)) {
 const userDataPath = cliDbPath ? path.dirname(cliDbPath) : tmpDir;
 const dbFile = cliDbPath ? path.basename(cliDbPath) : 'cli-frc-gourmet.db';
 
-const baseOptions = getDataSourceOptions(userDataPath) as DataSourceOptions & { database: string };
+const baseOptions = getDataSourceOptions(userDataPath);
 
-export const AppDataSource = new DataSource({
-  ...baseOptions,
+const AppDataSource = new DataSource({
+  ...(baseOptions as any),
   database: path.join(userDataPath, dbFile),
-  // En CLI nunca queremos synchronize automático: queremos ver el diff vs migraciones.
   synchronize: false,
   migrationsRun: false,
-  logging: ['error', 'warn', 'migration'],
-});
+  logging: ['error', 'warn', 'migration'] as ('error' | 'warn' | 'migration')[],
+} as DataSourceOptions);
 
 export default AppDataSource;
