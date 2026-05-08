@@ -129,6 +129,12 @@ interface ElectronAPI {
   readFileBase64: (url: string) => Promise<{ base64: string; mimeType: string }>;
   openFileWithSystem: (url: string) => Promise<{ ok: boolean; error?: string }>;
 
+  // Adjuntos polimorficos
+  getAdjuntos: (params: { entidadTipo: string; entidadId: number }) => Promise<any[]>;
+  createAdjunto: (data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }) => Promise<any>;
+  updateAdjunto: (id: number, data: { tipo?: string; observacion?: string }) => Promise<any>;
+  deleteAdjunto: (id: number) => Promise<{ success: boolean; message?: string }>;
+
 
   // Moneda methods
   getMonedas: () => Promise<Moneda[]>;
@@ -1279,6 +1285,20 @@ export class RepositoryService {
   }
   openFileWithSystem(url: string): Observable<{ ok: boolean; error?: string }> {
     return from(this.api.openFileWithSystem(url));
+  }
+
+  // ===================== ADJUNTOS POLIMORFICOS =====================
+  getAdjuntos(params: { entidadTipo: string; entidadId: number }): Observable<any[]> {
+    return from(this.api.getAdjuntos(params));
+  }
+  createAdjunto(data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }): Observable<any> {
+    return from(this.api.createAdjunto(data));
+  }
+  updateAdjunto(id: number, data: { tipo?: string; observacion?: string }): Observable<any> {
+    return from(this.api.updateAdjunto(id, data));
+  }
+  deleteAdjunto(id: number): Observable<{ success: boolean; message?: string }> {
+    return from(this.api.deleteAdjunto(id));
   }
 
 

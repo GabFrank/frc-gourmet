@@ -1108,6 +1108,20 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('open-file-with-system', { url });
   },
 
+  // === Adjuntos polimorficos ===
+  getAdjuntos: async (params: { entidadTipo: string; entidadId: number }): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-adjuntos', params);
+  },
+  createAdjunto: async (data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('create-adjunto', data);
+  },
+  updateAdjunto: async (id: number, data: { tipo?: string; observacion?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('update-adjunto', id, data);
+  },
+  deleteAdjunto: async (id: number): Promise<{ success: boolean; message?: string }> => {
+    return await ipcRenderer.invoke('delete-adjunto', id);
+  },
+
   // Utility functions
   on: (channel: string, callback: (data: any) => void): void => {
     // Deliberately strip event as it includes `sender`

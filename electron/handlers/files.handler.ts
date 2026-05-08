@@ -29,18 +29,34 @@ interface SaveFileResult {
   mediumUrl?: string;
 }
 
-function sanitizeFileName(name: string): string {
-  // Remove path separators and control chars, keep extension.
-  const cleaned = name.replace(/[\\/]/g, '_').replace(/[\x00-\x1f]/g, '');
-  return cleaned.length > 0 ? cleaned : 'file';
+// Prefijo corto por bucket — identifica el dominio sin ambigüedad en el filesystem.
+const BUCKET_PREFIX: Record<string, string> = {
+  'profile-images': 'pers',
+  'producto-images': 'prod',
+  'funcionario-documentos': 'func',
+  'factura-imports': 'fact',
+  'adjuntos': 'adj',
+};
+
+function safeExtension(originalName: string): string {
+  const ext = path.extname(originalName).toLowerCase();
+  // Sólo permitir extensiones razonables; default a .bin si no hay.
+  if (!ext || !/^\.[a-z0-9]{1,8}$/i.test(ext)) return '.bin';
+  return ext;
 }
 
-function uniqueFileName(dir: string, fileName: string): string {
-  if (!fs.existsSync(path.join(dir, fileName))) return fileName;
-  const ext = path.extname(fileName);
-  const base = path.basename(fileName, ext);
+/**
+ * Genera nombre estandarizado: `<prefix>-<timestamp>-<random>.<ext>`. Descarta
+ * el nombre original del usuario — el nombre original se preserva en BD
+ * (`nombreArchivo`) y es lo que ve el usuario en la UI. En disco nos importa
+ * unicidad, ordenamiento cronológico y trazabilidad por bucket.
+ */
+function generateStandardFileName(carpeta: string, originalName: string): string {
+  const top = carpeta.split('/')[0];
+  const prefix = BUCKET_PREFIX[top] ?? 'file';
   const ts = Date.now();
-  return `${base}.${ts}${ext}`;
+  const rand = Math.random().toString(36).slice(2, 5); // 3 chars
+  return `${prefix}-${ts}-${rand}${safeExtension(originalName)}`;
 }
 
 function inferMimeType(fileName: string): string {
@@ -92,11 +108,16 @@ export function registerFilesHandlers(): void {
     if (!ALLOWED_CARPETAS.has(carpeta)) {
       throw new Error(`save-file: carpeta '${carpeta}' no permitida`);
     }
-    const safeName = sanitizeFileName(fileName);
     const dir = path.join(app.getPath('userData'), carpeta);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-    const finalName = uniqueFileName(dir, safeName);
+    // Nombre estandarizado en disco: `<prefix>-<ts>-<rand>.<ext>`.
+    // El nombre original (`fileName`) sólo se devuelve en `result.fileName`
+    // para que el caller lo persista en la columna `nombreArchivo` de la BD.
+    let finalName = generateStandardFileName(carpeta, fileName);
+    while (fs.existsSync(path.join(dir, finalName))) {
+      finalName = generateStandardFileName(carpeta, fileName); // colisión astronómicamente improbable
+    }
     const absPath = path.join(dir, finalName);
 
     // Strip data: prefix if present.
@@ -109,7 +130,7 @@ export function registerFilesHandlers(): void {
 
     const result: SaveFileResult = {
       url,
-      fileName: finalName,
+      fileName: fileName, // ← devolvemos el nombre original (lo que verá el usuario)
       mimeType,
       tamanoBytes: buffer.length,
     };

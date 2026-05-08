@@ -26,6 +26,7 @@ import { registerPersonasHandlers } from './electron/handlers/personas.handler';
 import { registerAuthHandlers } from './electron/handlers/auth.handler';
 import { registerImageHandlers } from './electron/handlers/images.handler';
 import { registerFilesHandlers } from './electron/handlers/files.handler';
+import { registerAdjuntosHandlers } from './electron/handlers/adjuntos.handler';
 import { registerProductosHandlers } from './electron/handlers/productos.handler';
 import { registerFinancieroHandlers } from './electron/handlers/financiero.handler';
 import { registerComprasHandlers } from './electron/handlers/compras.handler';
@@ -112,6 +113,7 @@ function initializeDatabase() {
       registerAuthHandlers(dataSource, getCurrentUser, setCurrentUser);
       registerImageHandlers(dataSource);
       registerFilesHandlers(); // generic file IPCs (save/delete/read/open)
+      registerAdjuntosHandlers(dataSource, getCurrentUser); // CRUD generico de adjuntos polimorficos
       registerProductosHandlers(dataSource, getCurrentUser);
       registerFinancieroHandlers(dataSource, getCurrentUser);
       registerComprasHandlers(dataSource, getCurrentUser);
