@@ -88,6 +88,23 @@ async function writeDerivative(
 }
 
 /**
+ * Deletes the original file at app:// URL plus its derivatives.
+ * Silent on missing files. Use when an entity's imageUrl changes or is cleared.
+ */
+export function deleteImageByUrl(url: string | null | undefined): void {
+  if (!url) return;
+  try {
+    const { app } = require('electron');
+    const rest = url.replace(/^app:\/\//, '');
+    const abs = path.join(app.getPath('userData'), rest);
+    if (fs.existsSync(abs)) fs.unlinkSync(abs);
+    deleteImageDerivatives(abs);
+  } catch (err) {
+    console.warn('[image-resize] deleteImageByUrl failed:', url, err);
+  }
+}
+
+/**
  * Removes <base>.thumb.jpg and <base>.medium.jpg next to the original.
  * Silent if they don't exist.
  */

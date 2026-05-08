@@ -128,8 +128,31 @@ export class ProductoPresentacionesPreciosComponent implements OnInit, OnDestroy
       nombre: ['', [Validators.required, Validators.maxLength(255)]],
       cantidad: [1, [Validators.required, Validators.min(0.001)]],
       principal: [false],
-      activo: [true]
+      activo: [true],
+      imageUrl: [null]
     });
+  }
+
+  onPresentacionImagenUploaded(event: { url: string }): void {
+    this.presentacionForm.patchValue({ imageUrl: event.url });
+    this.presentacionForm.markAsDirty();
+  }
+
+  onPresentacionImagenRemoved(): void {
+    this.presentacionForm.patchValue({ imageUrl: null });
+    this.presentacionForm.markAsDirty();
+  }
+
+  thumbForPresentacion(url?: string | null): string | undefined {
+    if (!url) return undefined;
+    return url.replace(/(\.[^./]+)$/, '.thumb.jpg');
+  }
+
+  onThumbErrorPres(event: Event, originalUrl?: string | null): void {
+    const img = event.target as HTMLImageElement;
+    if (originalUrl && img.src !== originalUrl) {
+      img.src = originalUrl;
+    }
   }
 
   /**
@@ -199,7 +222,8 @@ export class ProductoPresentacionesPreciosComponent implements OnInit, OnDestroy
         cantidad: formValue.cantidad,
         principal: formValue.principal,
         activo: formValue.activo,
-        productoId: productoId
+        productoId: productoId,
+        imageUrl: formValue.imageUrl ?? null
       };
 
       this.isLoading = true;
@@ -212,11 +236,12 @@ export class ProductoPresentacionesPreciosComponent implements OnInit, OnDestroy
             }
           });
           
-          this.presentacionForm.reset({ 
-            nombre: '', 
-            cantidad: 1, 
-            principal: false, 
-            activo: true 
+          this.presentacionForm.reset({
+            nombre: '',
+            cantidad: 1,
+            principal: false,
+            activo: true,
+            imageUrl: null
           });
           
           const mensaje = formValue.principal 
@@ -465,7 +490,8 @@ export class ProductoPresentacionesPreciosComponent implements OnInit, OnDestroy
       nombre: presentacion.nombre,
       cantidad: presentacion.cantidad,
       principal: presentacion.principal,
-      activo: presentacion.activo
+      activo: presentacion.activo,
+      imageUrl: (presentacion as any).imageUrl ?? null
     });
     
     // Hacer scroll al formulario
@@ -491,7 +517,8 @@ export class ProductoPresentacionesPreciosComponent implements OnInit, OnDestroy
       nombre: (formValue.nombre.trim() || 'N/A').toUpperCase(), // Si no hay nombre, usar 'N/A'
       cantidad: formValue.cantidad,
       principal: formValue.principal,
-      activo: formValue.activo
+      activo: formValue.activo,
+      imageUrl: formValue.imageUrl ?? null
     };
 
     this.isLoading = true;
@@ -527,11 +554,12 @@ export class ProductoPresentacionesPreciosComponent implements OnInit, OnDestroy
   cancelarEdicion(): void {
     this.isEditing = false;
     this.editingPresentacionId = null;
-    this.presentacionForm.reset({ 
-      nombre: '', 
-      cantidad: 1, 
-      principal: false, 
-      activo: true 
+    this.presentacionForm.reset({
+      nombre: '',
+      cantidad: 1,
+      principal: false,
+      activo: true,
+      imageUrl: null
     });
   }
 

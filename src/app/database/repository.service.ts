@@ -507,6 +507,7 @@ interface ElectronAPI {
     categoria: string;
     descripcion?: string;
     productoId: number;
+    imageUrl?: string | null;
   }) => Promise<{ sabor: any; receta: any; mensaje: string }>;
   updateSabor: (saborId: number, saborData: Partial<any>) => Promise<any>;
   deleteSabor: (saborId: number) => Promise<{ success: boolean; mensaje: string }>;
@@ -2550,6 +2551,7 @@ export class RepositoryService {
     categoria: string;
     descripcion?: string;
     productoId: number;
+    imageUrl?: string | null;
   }): Observable<{ sabor: any; receta: any; mensaje: string }> {
     return from(this.api.createSabor(saborData));
   }

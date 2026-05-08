@@ -52,6 +52,7 @@ import { registerEquiposComisionHandlers } from './electron/handlers/equipos-com
 import { registerCuentasPorCobrarHandlers } from './electron/handlers/cuentas-por-cobrar.handler';
 import { registerMovimientosClienteHandlers } from './electron/handlers/movimientos-cliente.handler';
 import { seedInitialData } from './electron/utils/seed-data';
+import { runBootstrapMigrations } from './electron/utils/db-migrations-bootstrap';
 import { seedSystemData } from './electron/utils/seed-system';
 // RRHH Fase 8 - Dashboard, Notificaciones, Reportes
 import { registerNotificacionesRrhhHandlers, generarNotificacionesRrhh } from './electron/handlers/notificaciones-rrhh.handler';
@@ -98,8 +99,13 @@ function initializeDatabase() {
   // Initialize database service
   dbService = DatabaseService.getInstance();
   dbService.initialize(userDataPath)
-    .then((dataSource) => {
+    .then(async (dataSource) => {
       console.log('Database initialized successfully');
+
+      // Bootstrap-time SQL fixes (idempotentes) que synchronize:true no aplica solo.
+      // Ej: drop de UNIQUE residual cuando una relacion cambio de OneToOne a ManyToOne.
+      await runBootstrapMigrations(dataSource);
+
       // Register all IPC handlers *after* the database is ready
       registerPrinterHandlers(dataSource);
       registerPersonasHandlers(dataSource, getCurrentUser);

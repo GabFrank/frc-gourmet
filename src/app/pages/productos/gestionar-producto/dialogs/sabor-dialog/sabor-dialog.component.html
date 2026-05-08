@@ -84,6 +84,21 @@
         </mat-form-field>
       </div>
 
+      <!-- Imagen del sabor -->
+      <div class="form-row sabor-image-row">
+        <h4>Imagen del sabor</h4>
+        <app-file-upload
+          accept="image/*"
+          carpeta="producto-images"
+          [currentUrl]="saborForm.get('imageUrl')?.value"
+          [maxSizeMB]="5"
+          label="Subir imagen"
+          hint="Opcional. JPG, PNG hasta 5MB. Si vacío, el carrusel del producto usará la imagen del producto."
+          (uploaded)="onSaborImagenUploaded($event)"
+          (removed)="onSaborImagenRemoved()">
+        </app-file-upload>
+      </div>
+
     </form>
 
     <!-- Info Card -->

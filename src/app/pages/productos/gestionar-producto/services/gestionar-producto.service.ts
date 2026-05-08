@@ -742,7 +742,8 @@ export class GestionarProductoService {
       esIngrediente: productoData.esIngrediente,
       stockMinimo: productoData.stockMinimo,
       stockMaximo: productoData.stockMaximo,
-      subfamiliaId: productoData.subfamiliaId
+      subfamiliaId: productoData.subfamiliaId,
+      imageUrl: productoData.imageUrl ?? null
     };
 
     if (this._isEditMode.value) {

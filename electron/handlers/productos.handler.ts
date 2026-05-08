@@ -385,7 +385,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const productoRepository = dataSource.getRepository(Producto);
       return await productoRepository.findOne({
         where: { id: productoId },
-        relations: ['subfamilia', 'subfamilia.familia', 'receta', 'presentaciones', 'preciosCosto']
+        relations: ['subfamilia', 'subfamilia.familia', 'receta', 'presentaciones', 'preciosCosto', 'sabores']
       });
     } catch (error) {
       console.error('Error getting producto:', error);
@@ -492,18 +492,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         const oldUrl = producto.imageUrl;
         const newUrl = productoData.imageUrl || undefined;
         if (oldUrl && oldUrl !== newUrl) {
-          try {
-            const fs = require('fs');
-            const path = require('path');
-            const { app } = require('electron');
-            const { deleteImageDerivatives } = require('../utils/image-resize.utils');
-            const rest = oldUrl.replace(/^app:\/\//, '');
-            const abs = path.join(app.getPath('userData'), rest);
-            if (fs.existsSync(abs)) fs.unlinkSync(abs);
-            deleteImageDerivatives(abs);
-          } catch (err) {
-            console.warn('producto.imageUrl: failed to delete old file:', err);
-          }
+          const { deleteImageByUrl } = require('../utils/image-resize.utils');
+          deleteImageByUrl(oldUrl);
         }
         producto.imageUrl = newUrl;
       }
@@ -630,7 +620,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         cantidad: presentacionData.cantidad,
         principal: presentacionData.principal,
         producto: producto,
-        activo: presentacionData.activo !== undefined ? presentacionData.activo : true
+        activo: presentacionData.activo !== undefined ? presentacionData.activo : true,
+        imageUrl: presentacionData.imageUrl || undefined
       });
 
       await setEntityUserTracking(dataSource, presentacion, currentUser?.id, false);
@@ -676,6 +667,15 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       }
       if (presentacionData.activo !== undefined) {
         presentacion.activo = presentacionData.activo;
+      }
+      if (presentacionData.imageUrl !== undefined) {
+        const oldUrl = presentacion.imageUrl;
+        const newUrl = presentacionData.imageUrl || undefined;
+        if (oldUrl && oldUrl !== newUrl) {
+          const { deleteImageByUrl } = require('../utils/image-resize.utils');
+          deleteImageByUrl(oldUrl);
+        }
+        presentacion.imageUrl = newUrl;
       }
 
       await setEntityUserTracking(dataSource, presentacion, currentUser?.id, true);
