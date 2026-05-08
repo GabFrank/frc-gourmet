@@ -23,8 +23,15 @@ A modern Electron Angular desktop application for restaurant inventory managemen
 
 ### Prerequisites
 
-- Node.js 14+ and npm
+- Node.js 18+ (`>=18.17.0 <21`) y npm
 - Angular CLI (`npm install -g @angular/cli`)
+
+### Documentación clave
+
+- **[docs/RELEASE.md](docs/RELEASE.md)** — Proceso de release completo (canales alpha/beta/stable, semantic-release, code signing, auto-update).
+- **[docs/MIGRATIONS.md](docs/MIGRATIONS.md)** — TypeORM migrations (cómo agregar cambios de schema sin perder datos).
+- **[build/README.md](build/README.md)** — Recursos de empaquetado (íconos, entitlements, NSIS).
+- **[CLAUDE.md](CLAUDE.md)** — Instrucciones para agentes IA trabajando en el repo.
 
 ### Getting Started
 

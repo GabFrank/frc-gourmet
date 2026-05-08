@@ -5,6 +5,8 @@
 /tmp
 /out-tsc
 /bazel-out
+/release
+/release-builds
 
 # Compiled TypeScript (auto-generated from .ts files)
 *.js.map
@@ -47,3 +49,28 @@ testem.log
 # System files
 .DS_Store
 Thumbs.db
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.pepk
+*.jks
+*.keystore
+keys/
+secrets/
+
+# SQLite databases (DB vive en userData de Electron, nunca en repo)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Semantic-release cache
+.semantic-release-cache/
+
+# Playwright artifacts
+/playwright-report
+/test-results
