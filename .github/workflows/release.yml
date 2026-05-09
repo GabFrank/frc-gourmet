@@ -64,6 +64,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Deshabilita hooks de husky (commit-msg + pre-commit) durante el commit
+          # de version-bump que hace @semantic-release/git. En CI no aporta valor:
+          # el commit lo genera la herramienta, no el dev.
+          HUSKY: 0
 
       - name: Summary
         if: always()
