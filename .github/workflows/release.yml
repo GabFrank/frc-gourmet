@@ -64,10 +64,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Deshabilita hooks de husky (commit-msg + pre-commit) durante el commit
-          # de version-bump que hace @semantic-release/git. En CI no aporta valor:
-          # el commit lo genera la herramienta, no el dev.
-          HUSKY: 0
 
       - name: Summary
         if: always()
@@ -102,6 +98,22 @@ jobs:
         with:
           node-version: 18
           cache: npm
+
+      - name: Patch package.json version
+        shell: bash
+        env:
+          VERSION: ${{ needs.release.outputs.new_release_version }}
+        run: |
+          # semantic-release crea solo tag + GitHub release (no pushea bump
+          # commit a master). package.json en el tag aun tiene la version vieja.
+          # Patcheamos in-place; electron-builder lee version desde package.json.
+          node -e "
+            const fs=require('fs');
+            const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+            pkg.version='${VERSION}';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2)+'\n');
+          "
+          echo "package.json bumped a ${VERSION}"
 
       - name: Install deps
         run: npm ci --legacy-peer-deps --no-audit --no-fund
