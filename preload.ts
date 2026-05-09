@@ -1094,6 +1094,34 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('delete-profile-image', imageUrl);
   },
 
+  // === Generic files API (sirve cualquier carpeta `userData/<X>/`) ===
+  saveFile: async (input: { carpeta: string; base64: string; fileName: string; generateThumbnails?: boolean }): Promise<any> => {
+    return await ipcRenderer.invoke('save-file', input);
+  },
+  deleteFile: async (url: string): Promise<{ ok: boolean }> => {
+    return await ipcRenderer.invoke('delete-file', { url });
+  },
+  readFileBase64: async (url: string): Promise<{ base64: string; mimeType: string }> => {
+    return await ipcRenderer.invoke('read-file-base64', { url });
+  },
+  openFileWithSystem: async (url: string): Promise<{ ok: boolean; error?: string }> => {
+    return await ipcRenderer.invoke('open-file-with-system', { url });
+  },
+
+  // === Adjuntos polimorficos ===
+  getAdjuntos: async (params: { entidadTipo: string; entidadId: number }): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-adjuntos', params);
+  },
+  createAdjunto: async (data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('create-adjunto', data);
+  },
+  updateAdjunto: async (id: number, data: { tipo?: string; observacion?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('update-adjunto', id, data);
+  },
+  deleteAdjunto: async (id: number): Promise<{ success: boolean; message?: string }> => {
+    return await ipcRenderer.invoke('delete-adjunto', id);
+  },
+
   // Utility functions
   on: (channel: string, callback: (data: any) => void): void => {
     // Deliberately strip event as it includes `sender`

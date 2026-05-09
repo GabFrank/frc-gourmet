@@ -1,0 +1,78 @@
+<div class="viewer-dialog">
+  <div class="viewer-header">
+    <div class="viewer-title">
+      <mat-icon>description</mat-icon>
+      <span>{{ data.title || data.fileName }}</span>
+    </div>
+    <button mat-icon-button (click)="close()" matTooltip="Cerrar">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <div class="viewer-body">
+    <div *ngIf="loading" class="viewer-loading">
+      <mat-spinner diameter="40"></mat-spinner>
+      <span>Cargando...</span>
+    </div>
+
+    <div *ngIf="errorMsg && !loading" class="viewer-error">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ errorMsg }}</span>
+    </div>
+
+    <ng-container *ngIf="!loading && !errorMsg">
+
+      <!-- Imagen -->
+      <div *ngIf="kind === 'image'" class="viewer-image-wrap">
+        <img [src]="data.url" [alt]="data.fileName" />
+      </div>
+
+      <!-- PDF -->
+      <div *ngIf="kind === 'pdf'" class="viewer-pdf-wrap">
+        <div class="pdf-toolbar">
+          <button mat-icon-button (click)="pdfPrevPage()" [disabled]="pdfPage <= 1" matTooltip="Anterior">
+            <mat-icon>chevron_left</mat-icon>
+          </button>
+          <span class="pdf-page-info">Página {{ pdfPage }} / {{ pdfPageCount }}</span>
+          <button mat-icon-button (click)="pdfNextPage()" [disabled]="pdfPage >= pdfPageCount" matTooltip="Siguiente">
+            <mat-icon>chevron_right</mat-icon>
+          </button>
+          <span class="pdf-spacer"></span>
+          <button mat-icon-button (click)="pdfZoomOut()" matTooltip="Zoom out">
+            <mat-icon>zoom_out</mat-icon>
+          </button>
+          <span class="pdf-zoom-info">{{ (pdfZoom * 100) | number:'1.0-0' }}%</span>
+          <button mat-icon-button (click)="pdfZoomIn()" matTooltip="Zoom in">
+            <mat-icon>zoom_in</mat-icon>
+          </button>
+        </div>
+        <div #pdfContainer class="pdf-canvas-container"></div>
+      </div>
+
+      <!-- Texto plano -->
+      <div *ngIf="kind === 'text'" class="viewer-text-wrap">
+        <pre>{{ textContent }}</pre>
+      </div>
+
+      <!-- No soportado -->
+      <div *ngIf="kind === 'unsupported'" class="viewer-unsupported">
+        <mat-icon>insert_drive_file</mat-icon>
+        <p>Este tipo de archivo no se puede visualizar acá. Podés abrirlo con la aplicación predeterminada del sistema o descargarlo.</p>
+      </div>
+
+    </ng-container>
+  </div>
+
+  <div class="viewer-footer">
+    <button mat-stroked-button (click)="openWithSystem()">
+      <mat-icon>open_in_new</mat-icon>
+      <span>Abrir con sistema</span>
+    </button>
+    <button mat-stroked-button (click)="download()">
+      <mat-icon>download</mat-icon>
+      <span>Descargar</span>
+    </button>
+    <span class="footer-spacer"></span>
+    <button mat-button (click)="close()">Cerrar</button>
+  </div>
+</div>

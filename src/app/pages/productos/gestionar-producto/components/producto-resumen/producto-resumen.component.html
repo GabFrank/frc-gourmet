@@ -6,22 +6,33 @@
     
     <div class="product-carousel">
       <div class="carousel-container">
-        <img [src]="mockImages[currentImageIndex]" 
-             [alt]="productoNombre" 
-             class="product-image">
-        
-        <button class="carousel-btn prev-btn" (click)="previousImage()">
-          <mat-icon>chevron_left</mat-icon>
-        </button>
-        
-        <button class="carousel-btn next-btn" (click)="nextImage()">
-          <mat-icon>chevron_right</mat-icon>
-        </button>
+        <ng-container *ngIf="carouselImages.length > 0; else sinImagen">
+          <img [src]="carouselImages[currentImageIndex].displayUrl"
+               (error)="onCarouselImgError($event, carouselImages[currentImageIndex].url)"
+               [alt]="carouselImages[currentImageIndex].label"
+               class="product-image">
+
+          <button class="carousel-btn prev-btn" (click)="previousImage()" *ngIf="carouselImages.length > 1">
+            <mat-icon>chevron_left</mat-icon>
+          </button>
+
+          <button class="carousel-btn next-btn" (click)="nextImage()" *ngIf="carouselImages.length > 1">
+            <mat-icon>chevron_right</mat-icon>
+          </button>
+
+          <div class="carousel-label">{{ carouselImages[currentImageIndex].label }}</div>
+        </ng-container>
+
+        <ng-template #sinImagen>
+          <div class="product-image placeholder-image">
+            <mat-icon>image_not_supported</mat-icon>
+          </div>
+        </ng-template>
       </div>
-      
-      <div class="carousel-indicators">
-        <button 
-          *ngFor="let image of mockImages; let i = index"
+
+      <div class="carousel-indicators" *ngIf="carouselImages.length > 1">
+        <button
+          *ngFor="let image of carouselImages; let i = index"
           class="indicator-btn"
           [class.active]="i === currentImageIndex"
           (click)="goToImage(i)">

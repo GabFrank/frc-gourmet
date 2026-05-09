@@ -229,6 +229,10 @@
                   <mat-icon>more_vert</mat-icon>
                 </button>
                 <mat-menu #docMenu="matMenu">
+                  <button mat-menu-item (click)="verDocumento(d)">
+                    <mat-icon>visibility</mat-icon>
+                    <span>Ver</span>
+                  </button>
                   <button mat-menu-item (click)="descargarDocumento(d)">
                     <mat-icon>download</mat-icon>
                     <span>Descargar</span>

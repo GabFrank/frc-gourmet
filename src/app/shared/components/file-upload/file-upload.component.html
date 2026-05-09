@@ -1,0 +1,41 @@
+<div class="file-upload" [class.has-file]="hasFile" [class.disabled]="disabled">
+
+  <input #fileInput type="file" hidden
+         [accept]="accept"
+         [disabled]="disabled || uploading"
+         (change)="onFileSelected($event)" />
+
+  <ng-container *ngIf="!hasFile">
+    <button type="button" mat-stroked-button color="primary"
+            (click)="triggerFileInput()"
+            [disabled]="disabled || uploading">
+      <mat-spinner *ngIf="uploading" diameter="18" class="spinner-inline"></mat-spinner>
+      <mat-icon *ngIf="!uploading">cloud_upload</mat-icon>
+      <span>{{ uploading ? 'Subiendo...' : label }}</span>
+    </button>
+    <span class="hint" *ngIf="hint">{{ hint }}</span>
+  </ng-container>
+
+  <ng-container *ngIf="hasFile">
+    <div class="preview-wrapper" *ngIf="showPreview && isImage">
+      <img [src]="previewUrl" [alt]="lastFileName || 'imagen'" (error)="onPreviewError()" />
+    </div>
+    <div class="preview-wrapper non-image" *ngIf="showPreview && !isImage">
+      <mat-icon>insert_drive_file</mat-icon>
+      <span class="filename">{{ lastFileName || (currentUrl?.split('/')?.pop()) }}</span>
+    </div>
+
+    <div class="actions">
+      <button type="button" mat-stroked-button (click)="triggerFileInput()" [disabled]="disabled || uploading">
+        <mat-spinner *ngIf="uploading" diameter="16" class="spinner-inline"></mat-spinner>
+        <mat-icon *ngIf="!uploading">swap_horiz</mat-icon>
+        <span>Reemplazar</span>
+      </button>
+      <button type="button" mat-stroked-button color="warn" (click)="remove()" [disabled]="disabled || uploading">
+        <mat-icon>delete</mat-icon>
+        <span>Quitar</span>
+      </button>
+    </div>
+  </ng-container>
+
+</div>

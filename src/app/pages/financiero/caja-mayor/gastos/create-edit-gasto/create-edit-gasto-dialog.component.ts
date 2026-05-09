@@ -1,6 +1,7 @@
 import { Component, OnInit, Optional, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormGroup, FormBuilder, Validators, FormControl } from '@angular/forms';
+import { AdjuntosListComponent } from 'src/app/shared/components/adjuntos-list/adjuntos-list.component';
 import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA, MatDialog } from '@angular/material/dialog';
 import { confirmarSaldosNegativos, SaldoNegativoCheck } from 'src/app/shared/utils/saldo-negativo-confirm';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -52,6 +53,7 @@ interface DetalleRow {
     MatAutocompleteModule,
     MatTooltipModule,
     MatDividerModule,
+    AdjuntosListComponent,
   ]
 })
 export class CreateEditGastoDialogComponent implements OnInit {
@@ -75,6 +77,8 @@ export class CreateEditGastoDialogComponent implements OnInit {
   cajaMayorFijo = false;
   isEditing = false;
   gastoId: number | null = null;
+  /** True una vez que se creo o edito al menos una vez en esta sesion del dialog. */
+  private touched = false;
 
   // Tabla de detalles de pago
   detalles: DetalleRow[] = [];
@@ -344,11 +348,18 @@ export class CreateEditGastoDialogComponent implements OnInit {
       if (this.isEditing && this.gastoId) {
         await firstValueFrom(this.repositoryService.editGasto(this.gastoId, gastoData));
         this.snackBar.open('Gasto actualizado correctamente', 'Cerrar', { duration: 3000 });
+        this.touched = true;
+        this.form.markAsPristine();
+        // En edit, mantener el dialog abierto: el usuario puede seguir adjuntando archivos.
       } else {
-        await firstValueFrom(this.repositoryService.createGasto(gastoData));
-        this.snackBar.open('Gasto registrado correctamente', 'Cerrar', { duration: 3000 });
+        const saved: any = await firstValueFrom(this.repositoryService.createGasto(gastoData));
+        this.snackBar.open('Gasto registrado. Ya podés adjuntar comprobantes.', 'Cerrar', { duration: 3000 });
+        // Pasar a modo edit para habilitar la seccion de adjuntos sin cerrar.
+        this.gastoId = saved?.id ?? null;
+        this.isEditing = !!this.gastoId;
+        this.touched = true;
+        this.form.markAsPristine();
       }
-      this.dialogRef?.close(true);
     } catch (error) {
       console.error('Error saving gasto:', error);
       this.snackBar.open('Error al guardar gasto', 'Cerrar', { duration: 3000 });
@@ -358,7 +369,14 @@ export class CreateEditGastoDialogComponent implements OnInit {
   }
 
   onCancel(): void {
-    this.dialogRef?.close(false);
+    // Devolvemos `touched` para que la lista refresque si hubo create/edit en esta sesion.
+    this.dialogRef?.close(this.touched);
+  }
+
+  onAdjuntosChanged(): void {
+    // Si solo se modificaron adjuntos, igual hay que refrescar la lista al cerrar
+    // para reflejar contadores/badges.
+    this.touched = true;
   }
 
   // Verifica saldos previo a guardar el gasto. Para edit, descuenta los detalles

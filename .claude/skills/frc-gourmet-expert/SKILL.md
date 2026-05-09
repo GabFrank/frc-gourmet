@@ -36,6 +36,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 |---|---|
 | Cómo está estructurado el proyecto, qué hace cada capa | [architecture/overview.md](architecture/overview.md) |
 | Cómo añadir una nueva entidad de punta a punta | [workflows/add-new-entity.md](workflows/add-new-entity.md) |
+| **Archivos, imágenes, adjuntos, visor de docs** (`app://`, `<app-file-upload>`, `<app-document-viewer>`, thumbnails, entity `Adjunto`) | [domains/archivos-y-adjuntos.md](domains/archivos-y-adjuntos.md) |
 | Cómo viaja un dato del frontend al backend (IPC) | [architecture/ipc-pattern.md](architecture/ipc-pattern.md) |
 | TypeORM, BaseModel, sync, ubicación del .db | [architecture/database.md](architecture/database.md) |
 | `main.ts`, ciclo de vida Electron, custom protocols | [architecture/electron-bootstrap.md](architecture/electron-bootstrap.md) |

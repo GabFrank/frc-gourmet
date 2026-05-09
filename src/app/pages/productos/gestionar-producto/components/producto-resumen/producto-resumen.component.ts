@@ -7,6 +7,13 @@ import { Producto } from 'src/app/database/entities/productos/producto.entity';
 import { Familia } from 'src/app/database/entities/productos/familia.entity';
 import { Subfamilia } from 'src/app/database/entities/productos/subfamilia.entity';
 import { Receta } from 'src/app/database/entities/productos/receta.entity';
+import { mediumUrl } from 'src/app/shared/utils/image-url.util';
+
+interface CarouselImage {
+  url: string;
+  displayUrl: string;
+  label: string;
+}
 
 @Component({
   selector: 'app-producto-resumen',
@@ -42,14 +49,7 @@ export class ProductoResumenComponent implements OnInit, OnDestroy {
   productoPrecioVenta = 0;
   productoMargenGanancia = 0;
   
-  // Mock data solo para imágenes
-  mockImages = [
-    'https://images.unsplash.com/photo-1604382355076-af4b0eb60143?w=400&h=300&fit=crop',
-    'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400&h=300&fit=crop',
-    'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=400&h=300&fit=crop',
-    'https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=400&h=300&fit=crop'
-  ];
-
+  carouselImages: CarouselImage[] = [];
   currentImageIndex = 0;
   
   private destroy$ = new Subject<void>();
@@ -71,6 +71,12 @@ export class ProductoResumenComponent implements OnInit, OnDestroy {
         this.resetData();
       }
     });
+
+    // Reaccionar a cambios en el imageUrl del form (preview live al subir)
+    const imageCtrl = this.productoService.informacionPrincipalForm.get('imageUrl');
+    imageCtrl?.valueChanges.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      this.buildCarouselImages();
+    });
   }
 
   ngOnDestroy(): void {
@@ -86,6 +92,7 @@ export class ProductoResumenComponent implements OnInit, OnDestroy {
       next: (producto: Producto) => {
         this.producto = producto;
         this.updateComputedProperties();
+        this.buildCarouselImages();
         this.loadRelatedData();
       },
       error: (error: any) => {
@@ -186,6 +193,8 @@ export class ProductoResumenComponent implements OnInit, OnDestroy {
     this.familia = null;
     this.subfamilia = null;
     this.receta = null;
+    this.carouselImages = [];
+    this.currentImageIndex = 0;
     this.resetComputedProperties();
   }
 
@@ -295,14 +304,46 @@ export class ProductoResumenComponent implements OnInit, OnDestroy {
     return this.productoUnidadBase || this.formData.get('unidadBase')?.value || '';
   }
 
-  // Métodos para el carrusel de imágenes (mock data)
+  // Carrusel: producto.imageUrl + presentaciones[].imageUrl + sabores[].imageUrl
+  private buildCarouselImages(): void {
+    const items: CarouselImage[] = [];
+    const formImageUrl = this.productoService.informacionPrincipalForm.get('imageUrl')?.value as string | null;
+    const principalUrl = formImageUrl || this.producto?.imageUrl;
+    if (principalUrl) {
+      items.push({ url: principalUrl, displayUrl: mediumUrl(principalUrl) ?? principalUrl, label: 'Principal' });
+    }
+    for (const p of this.producto?.presentaciones ?? []) {
+      if (p.imageUrl) {
+        items.push({ url: p.imageUrl, displayUrl: mediumUrl(p.imageUrl) ?? p.imageUrl, label: `Presentación: ${p.nombre ?? ''}`.trim() });
+      }
+    }
+    for (const s of this.producto?.sabores ?? []) {
+      if (s.imageUrl) {
+        items.push({ url: s.imageUrl, displayUrl: mediumUrl(s.imageUrl) ?? s.imageUrl, label: `Sabor: ${s.nombre ?? ''}`.trim() });
+      }
+    }
+    this.carouselImages = items;
+    if (this.currentImageIndex >= items.length) {
+      this.currentImageIndex = 0;
+    }
+  }
+
+  onCarouselImgError(event: Event, originalUrl: string): void {
+    const img = event.target as HTMLImageElement;
+    if (img.src !== originalUrl) {
+      img.src = originalUrl;
+    }
+  }
+
   nextImage(): void {
-    this.currentImageIndex = (this.currentImageIndex + 1) % this.mockImages.length;
+    if (!this.carouselImages.length) return;
+    this.currentImageIndex = (this.currentImageIndex + 1) % this.carouselImages.length;
   }
 
   previousImage(): void {
-    this.currentImageIndex = this.currentImageIndex === 0 
-      ? this.mockImages.length - 1 
+    if (!this.carouselImages.length) return;
+    this.currentImageIndex = this.currentImageIndex === 0
+      ? this.carouselImages.length - 1
       : this.currentImageIndex - 1;
   }
 

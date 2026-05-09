@@ -13,6 +13,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CreateEditFuncionarioDialogComponent } from '../create-edit-funcionario-dialog/create-edit-funcionario-dialog.component';
+import { DocumentViewerDialogComponent } from 'src/app/shared/components/document-viewer-dialog/document-viewer-dialog.component';
 import { CambioCargoDialogComponent } from '../cambio-cargo-dialog/cambio-cargo-dialog.component';
 import { CambioSalarioDialogComponent } from '../cambio-salario-dialog/cambio-salario-dialog.component';
 import { EgresarFuncionarioDialogComponent } from '../egresar-funcionario-dialog/egresar-funcionario-dialog.component';
@@ -258,6 +259,27 @@ export class FuncionarioDetalleComponent implements OnInit {
       console.error(e);
       this.snackBar.open('Error al eliminar documento', 'Cerrar', { duration: 3500 });
     }
+  }
+
+  verDocumento(doc: any): void {
+    const url = doc.archivoUrl || (doc.rutaRelativa ? `app://${doc.rutaRelativa}` : null);
+    if (!url) {
+      this.snackBar.open('Documento sin URL', 'Cerrar', { duration: 2500 });
+      return;
+    }
+    this.dialog.open(DocumentViewerDialogComponent, {
+      width: '80vw',
+      maxWidth: '1100px',
+      height: '85vh',
+      maxHeight: '900px',
+      panelClass: 'document-viewer-panel',
+      data: {
+        url,
+        fileName: doc.nombreArchivo,
+        mimeType: doc.mimeType || 'application/octet-stream',
+        title: doc.tipo ? `${doc.tipo} — ${doc.nombreArchivo}` : doc.nombreArchivo,
+      },
+    });
   }
 
   async descargarDocumento(doc: any): Promise<void> {

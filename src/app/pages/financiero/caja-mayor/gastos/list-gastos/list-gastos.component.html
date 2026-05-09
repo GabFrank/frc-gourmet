@@ -104,9 +104,9 @@
             <mat-icon>more_vert</mat-icon>
           </button>
           <mat-menu #menu="matMenu">
-            <button mat-menu-item (click)="verDetalle(row)">
-              <mat-icon>visibility</mat-icon>
-              <span>Ver Detalle</span>
+            <button mat-menu-item (click)="abrirGasto(row)">
+              <mat-icon>edit</mat-icon>
+              <span>Abrir / Editar</span>
             </button>
             <button mat-menu-item (click)="anularGasto(row)" *ngIf="row.estado === 'ACTIVO'">
               <mat-icon>cancel</mat-icon>

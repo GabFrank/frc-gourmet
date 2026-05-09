@@ -123,6 +123,17 @@ interface ElectronAPI {
   // Profile image operations
   saveProfileImage: (base64Data: string, fileName: string) => Promise<{ imageUrl: string }>;
   deleteProfileImage: (imageUrl: string) => Promise<boolean>;
+  // Generic files API
+  saveFile: (input: { carpeta: string; base64: string; fileName: string; generateThumbnails?: boolean }) => Promise<{ url: string; fileName: string; mimeType: string; tamanoBytes: number; thumbUrl?: string; mediumUrl?: string }>;
+  deleteFile: (url: string) => Promise<{ ok: boolean }>;
+  readFileBase64: (url: string) => Promise<{ base64: string; mimeType: string }>;
+  openFileWithSystem: (url: string) => Promise<{ ok: boolean; error?: string }>;
+
+  // Adjuntos polimorficos
+  getAdjuntos: (params: { entidadTipo: string; entidadId: number }) => Promise<any[]>;
+  createAdjunto: (data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }) => Promise<any>;
+  updateAdjunto: (id: number, data: { tipo?: string; observacion?: string }) => Promise<any>;
+  deleteAdjunto: (id: number) => Promise<{ success: boolean; message?: string }>;
 
 
   // Moneda methods
@@ -502,6 +513,7 @@ interface ElectronAPI {
     categoria: string;
     descripcion?: string;
     productoId: number;
+    imageUrl?: string | null;
   }) => Promise<{ sabor: any; receta: any; mensaje: string }>;
   updateSabor: (saborId: number, saborData: Partial<any>) => Promise<any>;
   deleteSabor: (saborId: number) => Promise<{ success: boolean; mensaje: string }>;
@@ -1259,6 +1271,34 @@ export class RepositoryService {
    */
   deleteProfileImage(imageUrl: string): Observable<boolean> {
     return from(this.api.deleteProfileImage(imageUrl));
+  }
+
+  // ===================== GENERIC FILES API =====================
+  saveFile(input: { carpeta: string; base64: string; fileName: string; generateThumbnails?: boolean }): Observable<{ url: string; fileName: string; mimeType: string; tamanoBytes: number; thumbUrl?: string; mediumUrl?: string }> {
+    return from(this.api.saveFile(input));
+  }
+  deleteFile(url: string): Observable<{ ok: boolean }> {
+    return from(this.api.deleteFile(url));
+  }
+  readFileBase64(url: string): Observable<{ base64: string; mimeType: string }> {
+    return from(this.api.readFileBase64(url));
+  }
+  openFileWithSystem(url: string): Observable<{ ok: boolean; error?: string }> {
+    return from(this.api.openFileWithSystem(url));
+  }
+
+  // ===================== ADJUNTOS POLIMORFICOS =====================
+  getAdjuntos(params: { entidadTipo: string; entidadId: number }): Observable<any[]> {
+    return from(this.api.getAdjuntos(params));
+  }
+  createAdjunto(data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }): Observable<any> {
+    return from(this.api.createAdjunto(data));
+  }
+  updateAdjunto(id: number, data: { tipo?: string; observacion?: string }): Observable<any> {
+    return from(this.api.updateAdjunto(id, data));
+  }
+  deleteAdjunto(id: number): Observable<{ success: boolean; message?: string }> {
+    return from(this.api.deleteAdjunto(id));
   }
 
 
@@ -2531,6 +2571,7 @@ export class RepositoryService {
     categoria: string;
     descripcion?: string;
     productoId: number;
+    imageUrl?: string | null;
   }): Observable<{ sabor: any; receta: any; mensaje: string }> {
     return from(this.api.createSabor(saborData));
   }

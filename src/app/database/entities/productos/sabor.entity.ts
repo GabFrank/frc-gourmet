@@ -16,6 +16,10 @@ export class Sabor extends BaseModel {
   @Column({ type: 'boolean', default: true })
   activo!: boolean;
 
+  // Imagen del sabor (PIZZA Pepperoni vs Calabresa). URL `app://producto-images/<file>`.
+  @Column({ type: 'varchar', length: 500, nullable: true, name: 'image_url' })
+  imageUrl?: string;
+
   // Relationships
   @ManyToOne(() => Producto, producto => producto.sabores)
   @JoinColumn({ name: 'producto_id' })

@@ -67,7 +67,8 @@ export class SaborDialogComponent implements OnInit, OnDestroy {
       categoria: ['PIZZA', [Validators.required]],
       descripcion: ['', [
         Validators.maxLength(200)
-      ]]
+      ]],
+      imageUrl: [null]
     });
   }
 
@@ -76,9 +77,20 @@ export class SaborDialogComponent implements OnInit, OnDestroy {
       this.saborForm.patchValue({
         nombre: this.data.sabor.nombre,
         categoria: this.data.sabor.categoria,
-        descripcion: this.data.sabor.descripcion || ''
+        descripcion: this.data.sabor.descripcion || '',
+        imageUrl: (this.data.sabor as any).imageUrl ?? null
       });
     }
+  }
+
+  onSaborImagenUploaded(event: { url: string }): void {
+    this.saborForm.patchValue({ imageUrl: event.url });
+    this.saborForm.markAsDirty();
+  }
+
+  onSaborImagenRemoved(): void {
+    this.saborForm.patchValue({ imageUrl: null });
+    this.saborForm.markAsDirty();
   }
 
   // Custom validator para evitar nombres que solo contengan espacios
@@ -152,7 +164,8 @@ export class SaborDialogComponent implements OnInit, OnDestroy {
       productoId: this.data.productoId,
       nombre: this.saborForm.value.nombre.trim().toUpperCase(),
       categoria: this.saborForm.value.categoria.toUpperCase(),
-      descripcion: this.saborForm.value.descripcion?.trim().toUpperCase() || undefined
+      descripcion: this.saborForm.value.descripcion?.trim().toUpperCase() || undefined,
+      imageUrl: this.saborForm.value.imageUrl ?? null
     };
 
     this.saboresService.crearSabor(saborData)
@@ -184,7 +197,8 @@ export class SaborDialogComponent implements OnInit, OnDestroy {
     const saborData = {
       nombre: this.saborForm.value.nombre.trim().toUpperCase(),
       categoria: this.saborForm.value.categoria.toUpperCase(),
-      descripcion: this.saborForm.value.descripcion?.trim().toUpperCase() || undefined
+      descripcion: this.saborForm.value.descripcion?.trim().toUpperCase() || undefined,
+      imageUrl: this.saborForm.value.imageUrl ?? null
     };
 
     this.saboresService.actualizarSabor(this.data.sabor.id, saborData)

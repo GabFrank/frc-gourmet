@@ -4,12 +4,19 @@ Snapshot **2026-05-06**. Verificar `git log` y memorias antes de afirmar que alg
 
 ## Recientemente completado (2026-05)
 
+- [x] **Sistema unificado de imágenes y adjuntos (release 1)** — branch `feat/files-imagenes-adjuntos`. Cimientos shared (`<app-file-upload>`, `<app-document-viewer>` con PDF inline via `pdfjs-dist`, helper `image-resize.utils.ts` con thumbnails 96/400px usando `@napi-rs/canvas`, helper IPC genérico `files.handler.ts`, util frontend `image-url.util.ts`). Custom protocol `app://` simplificado a un solo handler genérico. Entity polimórfica `Adjunto` declarada (no usada todavía). Aplicado: `Producto.imageUrl` (info-general + thumbnail en `list-productos`), `FuncionarioDocumento` con visor inline. Detalles → [domains/archivos-y-adjuntos.md](../domains/archivos-y-adjuntos.md).
+- [x] **Dashboards: padrón unificado + chips rango + bugs (2026-05-07)** — fix B1 SQL `pc.presentacion_id` (productos), fix B2 chart Ventas en 0 Gs (sumar desde `venta_items`), helper compartido `electron/utils/dashboard-rangos.util.ts` con `today/week/month/last-month/3months/6months`, chips de rango + stat chips sincronizados en Ventas/Home/Compras/Caja Mayor. Caja Mayor dashboard ahora lista cajas activas con click → detalle directo (`cajaMayorIdShortcut`). Branch `fix/dashboards-bugs-rangos`.
 - [x] **Importación de facturas con OCR + IA** — GPT-4o vision + matching por aliases + revisor en tab + reprocesar/descartar. Detalles → [domains/importacion-facturas-ocr.md](../domains/importacion-facturas-ocr.md).
 - [x] **`Producto.iva`** (default 10, valores 0/5/10) y **`Producto.registroCompleto`** (boolean para chip "Parcial"). `Producto.subfamilia` ahora nullable.
 - [x] **Backup/Restore + Reset BD + Seed admin** (commit `607a880`).
 
 ## Acciones inmediatas
 
+- [ ] **Adjuntos polimórficos release 2** — Aplicar entity `Adjunto` (ya declarada) a: gastos, vales, préstamos a funcionario, CPP/CPP_CUOTA, CPC/CPC_CUOTA, cheques, retiros, operaciones financieras, movimientos bancarios, acreditaciones POS, comprobantes de venta, asistencias, compras manuales (sin OCR). Crear handlers `get-adjuntos`, `create-adjunto`, `delete-adjunto` polimórficos. Componente `<app-adjuntos-list>` shared para mostrar adjuntos por entidad+id con upload + visor.
+- [ ] **Imagen en Presentación + Sabor** — columnas `imageUrl` ya existen en BD. Falta UI: thumbnail clickeable en cada presentacion del producto (dialog con `<app-file-upload>`), idem en `create-edit-sabor-dialog`. Dejar fallback al `producto.imageUrl` si la presentacion no tiene la suya.
+- [ ] **Migrar `create-edit-persona` a `<app-file-upload>`** — actualmente usa `<input type=file>` artesanal con `save-profile-image` legacy. Reemplazar por shared `<app-file-upload carpeta="profile-images">` mantiene los mismos URLs `app://profile-images/<file>` sin migración de datos. Beneficia: thumbnails automáticos, preview consistente.
+- [ ] **Migrar `PdvCategoriaItem.imagen` (base64 → app://)** — hoy guarda base64 directo en BD (anti-patrón). Crear job de migración que: lee cada `imagen` que empieza con `data:image/...`, llama `save-file` con carpeta='producto-images' o nueva 'pdv-images', actualiza la columna con la URL devuelta, y opcionalmente elimina el data URL viejo (o deja la columna apuntando al archivo). Patrón: tab de "Mantenimiento BD" con botón "Migrar imágenes legacy".
+- [ ] **Backup/restore extender a carpetas userData** — el backup actual cubre solo la BD. Sumar `userData/{profile-images,producto-images,funcionario-documentos,factura-imports,adjuntos}` al ZIP de backup. Restore correspondiente.
 - [ ] Limpiar `.js` y `.js.map` del repo (deberían estar en `.gitignore`).
 - [ ] Eliminar entidad `RecetaAdicional` legacy (reemplazada por `RecetaAdicionalVinculacion`).
 - [ ] **Permisos OCR**: `COMPRAS_IMPORTAR_FACTURA` y `SISTEMA_CONFIGURAR_IA` están seedeados pero no se chequean en sidenav. Agregar `*ngIf="hasPermission(...)"` a las entradas correspondientes.

@@ -71,6 +71,9 @@ import { PrecioVentaDialogComponent } from './pages/productos/gestionar-producto
 // Gestion Recetas Module
 import { GestionRecetasModule } from './pages/gestion-recetas/gestion-recetas.module';
 
+// Standalone shared components used in non-standalone declarations
+import { FileUploadComponent } from './shared/components/file-upload/file-upload.component';
+
 @NgModule({
   imports: [
     BrowserModule,
@@ -113,7 +116,8 @@ import { GestionRecetasModule } from './pages/gestion-recetas/gestion-recetas.mo
     MatProgressBarModule,
     AppRoutingModule,
     TabContainerComponent,
-    GestionRecetasModule
+    GestionRecetasModule,
+    FileUploadComponent
   ],
   declarations: [
     // No declarations since all components are standalone

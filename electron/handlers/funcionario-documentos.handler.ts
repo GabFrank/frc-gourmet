@@ -10,6 +10,22 @@ import {
   readFuncionarioDocumentoBase64,
 } from '../utils/document-handler.utils';
 
+/**
+ * Convierte una `rutaRelativa` (ej `funcionario-documentos/3/contrato.pdf`) en
+ * una URL `app://...` consumible directamente por `<img>`, `<a href>` o el
+ * visor de documentos. Compatible con datos legacy.
+ */
+function toArchivoUrl(rutaRelativa: string | null | undefined): string | undefined {
+  if (!rutaRelativa) return undefined;
+  if (rutaRelativa.startsWith('app://')) return rutaRelativa;
+  return `app://${rutaRelativa}`;
+}
+
+function decorateDocumento<T extends { rutaRelativa?: string }>(doc: T | null): T & { archivoUrl?: string } | null {
+  if (!doc) return null;
+  return { ...doc, archivoUrl: toArchivoUrl(doc.rutaRelativa) };
+}
+
 export function registerFuncionarioDocumentosHandlers(
   dataSource: DataSource,
   getCurrentUser: () => Usuario | null,
@@ -17,10 +33,11 @@ export function registerFuncionarioDocumentosHandlers(
   ipcMain.handle('get-funcionario-documentos', async (_event, funcionarioId: number) => {
     try {
       const repo = dataSource.getRepository(FuncionarioDocumento);
-      return await repo.find({
+      const docs = await repo.find({
         where: { funcionario: { id: funcionarioId } as any },
         order: { fechaSubida: 'DESC' },
       });
+      return docs.map(d => decorateDocumento(d));
     } catch (error) {
       console.error(`Error getting documentos del funcionario ${funcionarioId}:`, error);
       throw error;
@@ -53,7 +70,8 @@ export function registerFuncionarioDocumentosHandlers(
         observacion,
       });
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+      return decorateDocumento(saved);
     } catch (error) {
       console.error('Error subiendo documento del funcionario:', error);
       throw error;
