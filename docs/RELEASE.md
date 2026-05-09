@@ -92,12 +92,14 @@ Push a `develop` dispara `release.yml`:
 1. Job `release` corre `semantic-release`:
    - Analiza commits desde el último tag alpha
    - Calcula nueva versión (ej. `1.4.0-alpha.8`)
-   - Escribe `package.json` + `CHANGELOG.md`
-   - Commit `chore(release): 1.4.0-alpha.8 [skip ci]`
    - Crea tag `v1.4.0-alpha.8`
-   - Crea GitHub Release (prerelease=true)
+   - Crea GitHub Release (prerelease=true) con notas auto-generadas
+
+   > **No** pushea cambios a `develop`/`release/beta`/`master`. La rama queda intacta. `package.json` en la rama mantiene la version anterior (irrelevante — la version real vive en el tag y se patchea en el job build).
+
 2. Job `build` matrix (win/linux):
-   - Pull del commit nuevo
+   - Checkout del tag exacto (`v1.4.0-alpha.8`)
+   - **Patch in-place de `package.json`** con la version del tag (sin commit)
    - Build Angular
    - `electron-builder --publish always` → sube `.exe` + `.AppImage` + `alpha.yml` al GitHub Release
 
