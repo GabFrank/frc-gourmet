@@ -55,6 +55,7 @@ import { registerMovimientosClienteHandlers } from './electron/handlers/movimien
 import { seedInitialData } from './electron/utils/seed-data';
 import { runBootstrapMigrations } from './electron/utils/db-migrations-bootstrap';
 import { seedSystemData } from './electron/utils/seed-system';
+import { migratePlaintextPasswords } from './electron/utils/migrate-passwords';
 // RRHH Fase 8 - Dashboard, Notificaciones, Reportes
 import { registerNotificacionesRrhhHandlers, generarNotificacionesRrhh } from './electron/handlers/notificaciones-rrhh.handler';
 import { registerDashboardRrhhHandlers } from './electron/handlers/dashboard-rrhh.handler';
@@ -106,6 +107,13 @@ function initializeDatabase() {
       // Bootstrap-time SQL fixes (idempotentes) que synchronize:true no aplica solo.
       // Ej: drop de UNIQUE residual cuando una relacion cambio de OneToOne a ManyToOne.
       await runBootstrapMigrations(dataSource);
+
+      // F0: hashear passwords plaintext con bcrypt (idempotente). Antes de auth handlers.
+      try {
+        await migratePlaintextPasswords(dataSource);
+      } catch (e) {
+        console.error('[migrate-passwords] error:', e);
+      }
 
       // Register all IPC handlers *after* the database is ready
       registerPrinterHandlers(dataSource);
