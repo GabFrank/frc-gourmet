@@ -156,6 +156,7 @@ import { IaPromptSugerencia } from './entities/ia/ia-prompt-sugerencia.entity';
 
 // Migrations baseline + futuras
 import { Initial1778266131852 } from './migrations/1778266131852-Initial';
+import { AddRefreshTokens1778353819592 } from './migrations/1778353819592-AddRefreshTokens';
 
 // Import new PDV entities
 import { PrecioDelivery } from './entities/ventas/precio-delivery.entity';
@@ -184,15 +185,77 @@ import { PdvAtajoItemProducto } from './entities/ventas/pdv-atajo-item-producto.
 import { VentaItemSabor } from './entities/ventas/venta-item-sabor.entity';
 
 /**
+ * Override de conexion. F1.1: el caller (main.ts) lo construye leyendo
+ * app-settings.database + keytar para password Postgres. Si no se pasa,
+ * default = SQLite en `userData/frc-gourmet.db` (back compat).
+ */
+export interface DbConnectionOverride {
+  type: 'sqlite' | 'postgres';
+  // sqlite
+  sqlitePath?: string; // 'default' o path absoluto
+  // postgres
+  host?: string;
+  port?: number;
+  database?: string;
+  username?: string;
+  password?: string; // resuelto desde keytar antes de llegar aca
+  schema?: string;
+  ssl?: boolean;
+}
+
+/**
  * Get the configuration for TypeORM
  * @param userDataPath Path to store the database file
+ * @param override     Si se pasa, define backend (sqlite custom o postgres)
  * @returns DataSourceOptions for TypeORM configuration
  */
-export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
+export function getDataSourceOptions(
+  userDataPath: string,
+  override?: DbConnectionOverride,
+): DataSourceOptions {
+  const entities = getEntitiesList();
+  const sharedOptions = {
+    entities,
+    // Sincronización automática vs migraciones:
+    //  - Dev / app no empaquetada: synchronize=true (TypeORM crea/altera tablas)
+    //  - Prod / app empaquetada: synchronize=false + migrations corren al iniciar
+    // En el primer arranque de una instalación nueva el bootstrap hace synchronize una vez
+    // y marca todas las migraciones como aplicadas (ver DatabaseService.initialize).
+    synchronize: !isPackagedApp(),
+    logging: process.env['NODE_ENV'] === 'development',
+    migrations: getMigrations(),
+    migrationsRun: false, // Lo controla manualmente DatabaseService tras el backup
+    migrationsTableName: 'typeorm_migrations',
+  };
+
+  if (override?.type === 'postgres') {
+    return {
+      type: 'postgres',
+      host: override.host || 'localhost',
+      port: override.port || 5432,
+      database: override.database || 'frc_gourmet',
+      username: override.username || 'postgres',
+      password: override.password || '',
+      schema: override.schema,
+      ssl: override.ssl,
+      ...sharedOptions,
+    } as DataSourceOptions;
+  }
+
+  // sqlite default o con path custom
+  const dbPath =
+    override?.sqlitePath && override.sqlitePath !== 'default'
+      ? override.sqlitePath
+      : path.join(userDataPath, 'frc-gourmet.db');
   return {
     type: 'sqlite',
-    database: path.join(userDataPath, 'frc-gourmet.db'),
-    entities: [
+    database: dbPath,
+    ...sharedOptions,
+  };
+}
+
+function getEntitiesList(): any[] {
+  return [
       // Entity classes
       Printer,
       Persona,
@@ -357,19 +420,8 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       PdvAtajoGrupoItem,
       PdvAtajoItemProducto,
       // VentaItem sabores (variaciones multi-sabor)
-      VentaItemSabor
-    ],
-    // Sincronización automática vs migraciones:
-    //  - Dev / app no empaquetada: synchronize=true (TypeORM crea/altera tablas)
-    //  - Prod / app empaquetada: synchronize=false + migrations corren al iniciar
-    // En el primer arranque de una instalación nueva el bootstrap hace synchronize una vez
-    // y marca todas las migraciones como aplicadas (ver DatabaseService.initialize).
-    synchronize: !isPackagedApp(),
-    logging: process.env['NODE_ENV'] === 'development',
-    migrations: getMigrations(),
-    migrationsRun: false, // Lo controla manualmente DatabaseService tras el backup
-    migrationsTableName: 'typeorm_migrations',
-  };
+      VentaItemSabor,
+  ];
 }
 
 /** Detecta si la app corre empaquetada (instalador) vs en dev. */
@@ -390,15 +442,20 @@ function getMigrations(): Function[] {
   // Ver src/app/database/migrations/README.md
   return [
     Initial1778266131852,
+    AddRefreshTokens1778353819592,
   ];
 }
 
 /**
  * Create a new TypeORM DataSource
  * @param userDataPath Path to store the database file
+ * @param override     Connection override (sqlite path o postgres). Default sqlite.
  * @returns Promise with DataSource
  */
-export function createDataSource(userDataPath: string): Promise<DataSource> {
-  const dataSource = new DataSource(getDataSourceOptions(userDataPath));
+export function createDataSource(
+  userDataPath: string,
+  override?: DbConnectionOverride,
+): Promise<DataSource> {
+  const dataSource = new DataSource(getDataSourceOptions(userDataPath, override));
   return dataSource.initialize();
 }

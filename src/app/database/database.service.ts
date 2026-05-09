@@ -1,7 +1,7 @@
 import { DataSource, MigrationInterface } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
-import { createDataSource, getDataSourceOptions, isPackagedApp } from './database.config';
+import { createDataSource, getDataSourceOptions, isPackagedApp, DbConnectionOverride } from './database.config';
 
 /**
  * Service to manage database operations with TypeORM.
@@ -27,15 +27,39 @@ export class DatabaseService {
     return DatabaseService.instance;
   }
 
-  public async initialize(userDataPath: string): Promise<DataSource> {
+  public async initialize(
+    userDataPath: string,
+    override?: DbConnectionOverride,
+  ): Promise<DataSource> {
     if (this.dataSource) return this.dataSource;
 
-    const dbPath = path.join(userDataPath, 'frc-gourmet.db');
-    const dbExists = fs.existsSync(dbPath);
-    const packaged = isPackagedApp();
-    const baseOptions = getDataSourceOptions(userDataPath);
+    const isPostgres = override?.type === 'postgres';
+    const baseOptions = getDataSourceOptions(userDataPath, override);
     const migrations = ((baseOptions as any).migrations || []) as Function[];
     const hasMigrations = migrations.length > 0;
+    const packaged = isPackagedApp();
+
+    // Postgres: el flujo de "bootstrap nuevo + cp del .db" no aplica.
+    // Schema lo maneja synchronize en dev o migrations en prod. preMigrationBackup
+    // (cp file) tampoco aplica — el usuario es responsable de pg_dump externo.
+    if (isPostgres) {
+      console.log(`[DB] Backend: postgres @ ${override?.host}:${override?.port}/${override?.database}`);
+      this.dataSource = await createDataSource(userDataPath, override);
+      if (packaged && hasMigrations) {
+        const pending = await this.dataSource.showMigrations();
+        if (pending) {
+          console.log('[DB] Aplicando migraciones pendientes (postgres)...');
+          await this.dataSource.runMigrations({ transaction: 'each' });
+        }
+      }
+      return this.dataSource;
+    }
+
+    // SQLite (default o path custom)
+    const dbPath = override?.sqlitePath && override.sqlitePath !== 'default'
+      ? override.sqlitePath
+      : path.join(userDataPath, 'frc-gourmet.db');
+    const dbExists = fs.existsSync(dbPath);
 
     // Caso 1: app empaquetada + BD nueva → bootstrap con synchronize, luego marcar migrations como aplicadas.
     if (packaged && !dbExists) {
@@ -46,17 +70,17 @@ export class DatabaseService {
         await this.markAllMigrationsAsApplied(bootstrap, migrations);
       }
       await bootstrap.destroy();
-      this.dataSource = await createDataSource(userDataPath);
+      this.dataSource = await createDataSource(userDataPath, override);
       console.log('[DB] Bootstrap completo.');
       return this.dataSource;
     }
 
     // Caso 2: app empaquetada + BD existente + migraciones definidas → backup + migrate.
     if (packaged && dbExists && hasMigrations) {
-      this.lastPreMigrationBackup = this.preMigrationBackup(userDataPath);
+      this.lastPreMigrationBackup = this.preMigrationBackup(dbPath, userDataPath);
       console.log('[DB] Backup pre-migration:', this.lastPreMigrationBackup);
       try {
-        this.dataSource = await createDataSource(userDataPath);
+        this.dataSource = await createDataSource(userDataPath, override);
         const pending = await this.dataSource.showMigrations();
         if (pending) {
           console.log('[DB] Aplicando migraciones pendientes...');
@@ -73,7 +97,7 @@ export class DatabaseService {
     }
 
     // Caso 3: dev (no empaquetado) → synchronize hace su trabajo.
-    this.dataSource = await createDataSource(userDataPath);
+    this.dataSource = await createDataSource(userDataPath, override);
     return this.dataSource;
   }
 
@@ -96,9 +120,8 @@ export class DatabaseService {
     return this.lastPreMigrationBackup;
   }
 
-  /** Copia frc-gourmet.db a userData/backups/...premigrate_<ts>.db antes de migrar. */
-  private preMigrationBackup(userDataPath: string): string {
-    const dbPath = path.join(userDataPath, 'frc-gourmet.db');
+  /** Copia el archivo .db a userData/backups/...premigrate_<ts>.db antes de migrar. */
+  private preMigrationBackup(dbPath: string, userDataPath: string): string {
     const backupDir = path.join(userDataPath, 'backups');
     if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
