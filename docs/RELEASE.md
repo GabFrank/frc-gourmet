@@ -7,26 +7,28 @@ Este documento define el proceso completo de release: ramas, commits, canales (a
 ## TL;DR
 
 ```
-feat/foo --PR--> dev (alpha) --PR--> release/beta (beta) --PR--> main (stable)
-hotfix/foo --PR--> main           --PR--> dev (back-merge obligatorio)
+feat/foo --PR--> develop (alpha) --PR--> release/beta (beta) --PR--> master (stable)
+hotfix/foo --PR--> master           --PR--> develop (back-merge obligatorio)
 ```
 
 - **Conventional commits**: `feat:` (minor), `fix:` (patch), `feat!:` o `BREAKING CHANGE:` (major).
 - **Merge commits, NO squash** en promociones entre ramas (semantic-release necesita los commits individuales).
 - **CI** valida cada PR (lint + build + commitlint).
-- **Push a `dev`/`release/beta`/`main`** dispara `release.yml` → semantic-release → matrix build → instaladores publicados al GitHub Release.
+- **Push a `develop`/`release/beta`/`master`** dispara `release.yml` → semantic-release → matrix build → instaladores publicados al GitHub Release.
 - Auto-update en cliente: electron-updater chequea el canal cada 30 min y notifica.
 
 ## Ramas
 
 | Rama | Canal de release | Versión ejemplo | Quién mergea |
 |---|---|---|---|
-| `main` | **stable** | `1.4.0` | PR desde `release/beta` |
-| `release/beta` | **beta** | `1.4.0-beta.3` | PR desde `dev` |
-| `dev` | **alpha** | `1.4.0-alpha.7` | PRs desde `feat/*` `fix/*` `refactor/*` |
+| `master` | **stable** | `1.4.0` | PR desde `release/beta` |
+| `release/beta` | **beta** | `1.4.0-beta.3` | PR desde `develop` |
+| `develop` | **alpha** | `1.4.0-alpha.7` | PRs desde `feat/*` `fix/*` `refactor/*` |
 | `feat/*` `fix/*` etc. | — | — | autor del feature |
 
-`main`, `release/beta`, `dev` deben estar protegidas: no push directo, PR obligatorio, CI verde.
+`master`, `release/beta`, `develop` deben estar protegidas: no push directo, PR obligatorio, CI verde.
+
+> **Nomenclatura alineada con `frc-comercial`** (los 4 repos del SaaS Franco Systems usan `master` + `release/beta` + `develop`). Mantener el mismo patron entre repos del ecosistema.
 
 ## Convenciones de commit
 
@@ -73,19 +75,19 @@ electron-builder publica al manifest correcto basado en el sufijo de la versión
 ### 1. Trabajar un feature
 
 ```bash
-git checkout dev && git pull
+git checkout develop && git pull
 git checkout -b feat/mi-cambio
 # editar...
 git commit -m "feat(modulo): descripcion"
 git push -u origin feat/mi-cambio
-# Abrir PR a `dev`
+# Abrir PR a `develop`
 ```
 
-CI corre `lint + build + commitlint`. Reviewer aprueba → **merge commit** a `dev`.
+CI corre `lint + build + commitlint`. Reviewer aprueba → **merge commit** a `develop`.
 
 ### 2. Release alpha automática
 
-Push a `dev` dispara `release.yml`:
+Push a `develop` dispara `release.yml`:
 
 1. Job `release` corre `semantic-release`:
    - Analiza commits desde el último tag alpha
@@ -101,15 +103,15 @@ Push a `dev` dispara `release.yml`:
 
 ### 3. Promover alpha → beta
 
-Cuando el conjunto de cambios en `dev` está listo para QA externa:
+Cuando el conjunto de cambios en `develop` está listo para QA externa:
 
 ```bash
 git checkout release/beta && git pull
-git pull origin dev               # merge dev → release/beta
+git pull origin develop           # merge develop → release/beta
 git push
 ```
 
-> **Importante:** usar `git merge dev`, **NO** `git merge --squash`. semantic-release lee los commits individuales para calcular el bump correcto.
+> **Importante:** usar `git merge develop`, **NO** `git merge --squash`. semantic-release lee los commits individuales para calcular el bump correcto.
 
 Push dispara `release.yml` → versión `1.4.0-beta.1`, instaladores publicados, manifest `beta.yml`.
 
@@ -118,7 +120,7 @@ Push dispara `release.yml` → versión `1.4.0-beta.1`, instaladores publicados,
 Después de validar en beta:
 
 ```bash
-git checkout main && git pull
+git checkout master && git pull
 git merge release/beta            # merge commit, NO squash
 git push
 ```
@@ -128,19 +130,19 @@ Genera `1.4.0` (sin sufijo), publica a `latest.yml`.
 ### 5. Hotfix
 
 ```bash
-git checkout main && git pull
+git checkout master && git pull
 git checkout -b hotfix/bug-critico
 # fix...
 git commit -m "fix(modulo): descripcion"
 git push -u origin hotfix/bug-critico
-# PR a main
+# PR a master
 ```
 
-Después del merge a `main` (genera `1.4.1`), **back-merge obligatorio** a `dev`:
+Después del merge a `master` (genera `1.4.1`), **back-merge obligatorio** a `develop`:
 
 ```bash
-git checkout dev && git pull
-git merge main
+git checkout develop && git pull
+git merge master
 git push
 ```
 
@@ -218,7 +220,7 @@ Canal: por defecto `stable`. Cambiar desde Sistema → Actualizaciones (UI pendi
 ## Branch protection rules (configurar en GitHub)
 
 ```
-main:
+master:
   - Require a pull request before merging: ✅
   - Require approvals: 1
   - Dismiss stale reviews: ✅
@@ -230,9 +232,9 @@ main:
   - Restrict who can push: solo admins (enforce_admins=true en periodos críticos)
 
 release/beta:
-  - mismo que main pero approvals=1
+  - mismo que master pero approvals=1
 
-dev:
+develop:
   - Require PR ✅
   - Require status checks: lint-and-build
   - approvals=0 (o 1 según preferencia)

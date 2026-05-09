@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, release/beta, dev]
+    branches: [master, release/beta, develop]
   push:
     branches: [feat/**, fix/**, refactor/**, chore/**]
 
@@ -12,8 +12,12 @@ concurrency:
 
 jobs:
   lint-and-build:
-    name: Lint + Build (Node 18)
-    runs-on: ubuntu-latest
+    name: Lint + Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 

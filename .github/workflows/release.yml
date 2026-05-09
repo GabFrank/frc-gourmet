@@ -3,9 +3,9 @@ name: Release
 on:
   push:
     branches:
-      - main
+      - master
       - release/beta
-      - dev
+      - develop
 
 permissions:
   contents: write
@@ -42,11 +42,6 @@ jobs:
 
       - name: Install deps
         run: npm ci --legacy-peer-deps --no-audit --no-fund
-
-      - name: Verify build compiles
-        run: npm run build:prod
-        env:
-          NODE_OPTIONS: --max_old_space_size=8192
 
       - name: Run semantic-release
         id: semrel
@@ -91,16 +86,13 @@ jobs:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
+      # Checkout exacto al tag que semantic-release acaba de crear — evita race
+      # condition entre matrix runners (ambos haciendo pull del bump commit).
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.ref_name }}
+          ref: ${{ needs.release.outputs.new_release_git_tag }}
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      # Sincronizar con el commit que semantic-release acaba de pushear (bump de version)
-      - name: Pull version-bump commit
-        shell: bash
-        run: git pull --ff-only origin ${{ github.ref_name }}
 
       - uses: actions/setup-node@v4
         with:

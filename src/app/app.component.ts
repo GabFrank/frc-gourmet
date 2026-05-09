@@ -82,6 +82,8 @@ import { RrhhDashboardComponent } from './pages/rrhh/dashboard/rrhh-dashboard.co
 import { ListNotificacionesRrhhComponent } from './pages/rrhh/notificaciones/list-notificaciones-rrhh.component';
 import { ReportesRrhhPageComponent } from './pages/rrhh/reportes/reportes-rrhh-page.component';
 import { RepositoryService } from './database/repository.service';
+import { UpdateService } from './services/update.service';
+import { UpdateChannelDialogComponent } from './shared/components/update-channel-dialog/update-channel-dialog.component';
 
 @Component({
   selector: 'app-root',
@@ -125,6 +127,11 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   notificacionesNoLeidas = 0;
   private notifInterval: any;
 
+  // Auto-update toolbar state
+  updateAvailable = false;
+  updateDownloaded = false;
+  private updateStatusSub: Subscription | null = null;
+
   @ViewChild('drawer') sidenav!: MatSidenav;
 
   isHandset$: Observable<boolean> = this.breakpointObserver
@@ -145,6 +152,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     private router: Router,
     private snackBar: MatSnackBar,
     private repo: RepositoryService,
+    private updateService: UpdateService,
   ) {
     // Subscribe to authentication state changes
     this.authService.currentUser$.subscribe((user) => {
@@ -224,6 +232,19 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       this.cargarNotificacionesNoLeidas();
       this.notifInterval = setInterval(() => this.cargarNotificacionesNoLeidas(), 5 * 60 * 1000);
     }
+
+    // Suscribirse al estado del auto-updater para mostrar badge en toolbar
+    this.updateStatusSub = this.updateService.status$.subscribe((evt) => {
+      if (evt.status === 'available') {
+        this.updateAvailable = true;
+      } else if (evt.status === 'downloaded') {
+        this.updateAvailable = true;
+        this.updateDownloaded = true;
+      } else if (evt.status === 'not-available') {
+        this.updateAvailable = false;
+        this.updateDownloaded = false;
+      }
+    });
   }
 
   ngAfterViewInit(): void {
@@ -236,6 +257,16 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.notifInterval) {
       clearInterval(this.notifInterval);
     }
+    if (this.updateStatusSub) {
+      this.updateStatusSub.unsubscribe();
+    }
+  }
+
+  openUpdateDialog(): void {
+    this.dialog.open(UpdateChannelDialogComponent, {
+      width: '520px',
+      maxHeight: '90vh',
+    });
   }
 
   cargarNotificacionesNoLeidas(): void {
