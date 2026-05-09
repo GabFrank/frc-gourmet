@@ -27,7 +27,7 @@ jobs:
           cache: npm
 
       - name: Install deps
-        run: npm ci --legacy-peer-deps --no-audit --no-fund
+        run: npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
 
       - name: Typecheck Electron
         run: npx tsc -p tsconfig.electron.json --noEmit
@@ -56,7 +56,7 @@ jobs:
           cache: npm
 
       - name: Install commitlint
-        run: npm ci --legacy-peer-deps --no-audit --no-fund
+        run: npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
 
       - name: Validate commits in PR
         run: |
