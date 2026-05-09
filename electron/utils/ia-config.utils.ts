@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { readAppSettings, updateAppSettings } from './app-settings.utils';
 
 export interface IaConfig {
   openaiApiKey: string;
@@ -13,7 +14,7 @@ export const DEFAULT_IA_CONFIG: IaConfig = {
   habilitado: false,
 };
 
-const CONFIG_FILE_NAME = 'ia-config.json';
+const LEGACY_CONFIG_FILE_NAME = 'ia-config.json';
 const KEYCHAIN_SERVICE = 'com.frcgourmet.app';
 const KEYCHAIN_ACCOUNT = 'openai-api-key';
 
@@ -24,7 +25,7 @@ interface IaConfigPersisted {
 }
 
 export function getIaConfigPath(userDataPath: string): string {
-  return path.join(userDataPath, CONFIG_FILE_NAME);
+  return path.join(userDataPath, LEGACY_CONFIG_FILE_NAME);
 }
 
 export function getFacturaImportsDir(userDataPath: string): string {
@@ -75,43 +76,49 @@ async function setKeyInKeychain(value: string): Promise<void> {
 
 /* ───────────────────── API pública ───────────────────── */
 
-/** Lee config (JSON + keytar). Migra automaticamente la key plaintext si existe. */
-export async function readIaConfig(userDataPath: string): Promise<IaConfig> {
+async function migrateLegacyIaConfig(userDataPath: string): Promise<void> {
   const p = getIaConfigPath(userDataPath);
-  let persisted: IaConfigPersisted = {};
-  if (fs.existsSync(p)) {
-    try {
-      persisted = JSON.parse(fs.readFileSync(p, 'utf-8')) as IaConfigPersisted;
-    } catch (e) {
-      console.warn('No se pudo leer ia-config.json:', e);
+  if (!fs.existsSync(p)) return;
+  try {
+    const persisted = JSON.parse(fs.readFileSync(p, 'utf-8')) as IaConfigPersisted;
+    // openaiApiKey legacy en JSON → keytar
+    if (persisted.openaiApiKey) {
+      await setKeyInKeychain(persisted.openaiApiKey);
+      console.log('[ia-config] openaiApiKey movida a keychain.');
     }
+    // modelo/habilitado → app-settings
+    updateAppSettings(userDataPath, (s) => ({
+      ...s,
+      ia: {
+        ...s.ia,
+        modelo: persisted.modelo ?? s.ia.modelo,
+        habilitado: persisted.habilitado ?? s.ia.habilitado,
+      },
+    }));
+    fs.unlinkSync(p);
+    console.log('[ia-config] ia-config.json migrado a app-settings.json y eliminado.');
+  } catch (e) {
+    console.warn('[ia-config] error migrando legacy ia-config:', e);
   }
+}
 
-  // Migración legado: si la key estaba en JSON, moverla a keychain y borrarla del JSON
-  let key = '';
-  if (persisted.openaiApiKey) {
-    key = persisted.openaiApiKey;
-    await setKeyInKeychain(key);
-    delete persisted.openaiApiKey;
-    fs.writeFileSync(p, JSON.stringify(persisted, null, 2), 'utf-8');
-    console.log('[ia-config] Migración: openaiApiKey movida a keychain, removida de JSON.');
-  } else {
-    key = await getKeyFromKeychain();
-  }
-
+/** Lee config (app-settings + keytar). Migra automaticamente legacy si existe. */
+export async function readIaConfig(userDataPath: string): Promise<IaConfig> {
+  await migrateLegacyIaConfig(userDataPath);
+  const settings = readAppSettings(userDataPath);
+  const key = await getKeyFromKeychain();
   return {
     openaiApiKey: key,
-    modelo: persisted.modelo ?? DEFAULT_IA_CONFIG.modelo,
-    habilitado: persisted.habilitado ?? DEFAULT_IA_CONFIG.habilitado,
+    modelo: settings.ia.modelo,
+    habilitado: settings.ia.habilitado,
   };
 }
 
-/** Escribe config (JSON sin key + keytar para la key). */
+/** Escribe config (app-settings sin key + keytar para la key). */
 export async function writeIaConfig(userDataPath: string, config: IaConfig): Promise<void> {
-  const persisted: IaConfigPersisted = {
-    modelo: config.modelo,
-    habilitado: config.habilitado,
-  };
-  fs.writeFileSync(getIaConfigPath(userDataPath), JSON.stringify(persisted, null, 2), 'utf-8');
+  updateAppSettings(userDataPath, (s) => ({
+    ...s,
+    ia: { modelo: config.modelo, habilitado: config.habilitado },
+  }));
   await setKeyInKeychain(config.openaiApiKey || '');
 }

@@ -13,6 +13,7 @@ import { Dispositivo } from '../../src/app/database/entities/financiero/disposit
 import { Sector } from '../../src/app/database/entities/ventas/sector.entity';
 import { Cargo } from '../../src/app/database/entities/rrhh/cargo.entity';
 import { MotivoVale } from '../../src/app/database/entities/rrhh/motivo-vale.entity';
+import { hashPassword } from './password.utils';
 
 /**
  * Seed de datos minimos del sistema para que la app sea operable post-reset.
@@ -94,7 +95,7 @@ async function seedAdminUserAndRole(dataSource: DataSource): Promise<void> {
   const usuario = usuarioRepo.create({
     persona: savedPersona,
     nickname: 'admin',
-    password: 'admin',
+    password: await hashPassword('admin'),
     activo: true,
   });
   await usuarioRepo.save(usuario);

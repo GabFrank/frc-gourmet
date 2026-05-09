@@ -133,11 +133,27 @@ jobs:
         env:
           NODE_OPTIONS: --max_old_space_size=8192
 
-      - name: Build & publish installer
-        # CSC_LINK/CSC_KEY_PASSWORD se setean siempre via env: (GH Actions no
-        # soporta condicionales en env). Si los secrets estan vacios, electron-builder
-        # interpreta string vacio como path invalido. Los unseteamos en bash si vacios.
-        # Sin certs el .exe sale unsigned (SmartScreen warning una vez).
+      # F0 (SignPath): si SIGNPATH_API_TOKEN esta configurado, separamos build
+      # vs publish para poder firmar el .exe entre medio. Si no, mantenemos el
+      # publish-always tradicional. Detectamos en un step temprano y bifurcamos.
+      - name: Detect SignPath availability (Windows only)
+        id: signpath
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        run: |
+          if [ -n "${SIGNPATH_API_TOKEN}" ]; then
+            echo "enabled=true" >> $GITHUB_OUTPUT
+            echo "[signpath] secret detectado, flujo de firma activado."
+          else
+            echo "enabled=false" >> $GITHUB_OUTPUT
+            echo "[signpath] secret no configurado, fallback a publish unsigned."
+          fi
+
+      # Path A — sin SignPath (linux siempre, windows cuando no hay token)
+      - name: Build & publish installer (unsigned)
+        if: matrix.os != 'windows-latest' || steps.signpath.outputs.enabled != 'true'
         shell: bash
         run: |
           if [ -z "${CSC_LINK}" ]; then unset CSC_LINK CSC_KEY_PASSWORD; fi
@@ -147,6 +163,58 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+
+      # Path B — con SignPath (solo Windows). Flujo: build sin publish → upload
+      # artifact a Actions → SignPath descarga, firma, sube de vuelta → regenerar
+      # latest.yml/alpha.yml/beta.yml con el sha512 del .exe firmado → publish
+      # final via gh release upload.
+      - name: Package installer (windows, no publish)
+        if: matrix.os == 'windows-latest' && steps.signpath.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          if [ -z "${CSC_LINK}" ]; then unset CSC_LINK CSC_KEY_PASSWORD; fi
+          npx electron-builder --publish never
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+
+      - name: Upload unsigned exe to Actions artifacts (for SignPath)
+        if: matrix.os == 'windows-latest' && steps.signpath.outputs.enabled == 'true'
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-exe
+          path: release/*.exe
+          retention-days: 1
+
+      - name: Sign Windows installer with SignPath
+        if: matrix.os == 'windows-latest' && steps.signpath.outputs.enabled == 'true'
+        uses: SignPath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
+          project-slug: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ secrets.SIGNPATH_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: release/
+
+      - name: Regenerate updater manifests with signed exe hash
+        if: matrix.os == 'windows-latest' && steps.signpath.outputs.enabled == 'true'
+        shell: bash
+        run: node scripts/regenerate-updater-manifest.js
+
+      - name: Publish signed Windows assets to GitHub Release
+        if: matrix.os == 'windows-latest' && steps.signpath.outputs.enabled == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release.outputs.new_release_git_tag }}
+        run: |
+          cd release
+          ASSETS=$(find . -maxdepth 1 -type f \( -name "*.exe" -o -name "*.yml" -o -name "*.blockmap" \))
+          echo "Subiendo: $ASSETS"
+          gh release upload "$TAG" $ASSETS --clobber
 
       - name: Upload installers as workflow artifact (debug)
         if: always()
