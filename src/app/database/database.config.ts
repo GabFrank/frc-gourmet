@@ -13,6 +13,7 @@ import { Cliente } from './entities/personas/cliente.entity';
 import { Permission } from './entities/personas/permission.entity';
 import { RolePermission } from './entities/personas/role-permission.entity';
 import { LoginSession } from './entities/auth/login-session.entity';
+import { RefreshToken } from './entities/auth/refresh-token.entity';
 import { Adjunto } from './entities/shared/adjunto.entity';
 
 // RRHH entities
@@ -203,6 +204,7 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       Permission,
       RolePermission,
       LoginSession,
+      RefreshToken,
       // Shared
       Adjunto,
       // RRHH entities
