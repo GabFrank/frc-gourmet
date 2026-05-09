@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { readAppSettings, updateAppSettings, BackupSettings } from './app-settings.utils';
 
 export interface BackupMetadata {
   fileName: string;
@@ -32,7 +33,7 @@ export const DEFAULT_BACKUP_CONFIG: BackupConfig = {
   lastAutoBackupAt: undefined,
 };
 
-const CONFIG_FILE_NAME = 'backup-config.json';
+const LEGACY_CONFIG_FILE_NAME = 'backup-config.json';
 const BACKUP_PREFIX = 'frc-gourmet-backup';
 
 export function getBackupDir(userDataPath: string, override?: string): string {
@@ -55,24 +56,34 @@ export function getProductoImagesPath(userDataPath: string): string {
   return path.join(userDataPath, 'producto-images');
 }
 
-export function readBackupConfig(userDataPath: string): BackupConfig {
-  const configPath = path.join(userDataPath, CONFIG_FILE_NAME);
-  if (!fs.existsSync(configPath)) {
-    return { ...DEFAULT_BACKUP_CONFIG };
-  }
+function migrateLegacyBackupConfig(userDataPath: string): void {
+  const legacyPath = path.join(userDataPath, LEGACY_CONFIG_FILE_NAME);
+  if (!fs.existsSync(legacyPath)) return;
   try {
-    const raw = fs.readFileSync(configPath, 'utf-8');
-    const parsed = JSON.parse(raw);
-    return { ...DEFAULT_BACKUP_CONFIG, ...parsed };
+    const raw = fs.readFileSync(legacyPath, 'utf-8');
+    const parsed = JSON.parse(raw) as Partial<BackupConfig>;
+    updateAppSettings(userDataPath, (s) => ({
+      ...s,
+      backup: { ...s.backup, ...(parsed as BackupSettings) },
+    }));
+    fs.unlinkSync(legacyPath);
+    console.log('[backup-utils] backup-config.json migrado a app-settings.json y eliminado.');
   } catch (e) {
-    console.warn('No se pudo leer backup-config.json, usando default:', e);
-    return { ...DEFAULT_BACKUP_CONFIG };
+    console.warn('[backup-utils] error migrando backup-config legacy:', e);
   }
 }
 
+export function readBackupConfig(userDataPath: string): BackupConfig {
+  migrateLegacyBackupConfig(userDataPath);
+  const settings = readAppSettings(userDataPath);
+  return { ...DEFAULT_BACKUP_CONFIG, ...settings.backup };
+}
+
 export function writeBackupConfig(userDataPath: string, config: BackupConfig): void {
-  const configPath = path.join(userDataPath, CONFIG_FILE_NAME);
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+  updateAppSettings(userDataPath, (s) => ({
+    ...s,
+    backup: { ...s.backup, ...config },
+  }));
 }
 
 export function timestampSlug(d: Date = new Date()): string {

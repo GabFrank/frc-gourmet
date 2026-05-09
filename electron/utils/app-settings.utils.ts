@@ -47,11 +47,28 @@ export interface UpdateSettings {
   lastCheckAt?: string;
 }
 
+export interface BackupSettings {
+  autoBackupEnabled: boolean;
+  intervalHours: number;
+  retentionCount: number;
+  customBackupDir?: string;
+  includeImages: boolean;
+  lastAutoBackupAt?: string;
+}
+
+export interface IaSettings {
+  modelo: string;
+  habilitado: boolean;
+  // openaiApiKey persiste en keytar, NO en este JSON.
+}
+
 export interface AppSettings {
   mode: AppMode;
   database: DatabaseSettings;
   network: NetworkSettings | null;
   update: UpdateSettings;
+  backup: BackupSettings;
+  ia: IaSettings;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -59,6 +76,16 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   database: { type: 'sqlite', path: 'default' },
   network: null,
   update: { channel: 'stable', autoCheck: true },
+  backup: {
+    autoBackupEnabled: false,
+    intervalHours: 24,
+    retentionCount: 7,
+    includeImages: false,
+  },
+  ia: {
+    modelo: 'gpt-4o',
+    habilitado: false,
+  },
 };
 
 export function getAppSettingsPath(userDataPath: string): string {
@@ -82,17 +109,19 @@ function deepMerge<T>(base: T, override: Partial<T> | undefined | null): T {
   return out as T;
 }
 
+function cloneDefaults(): AppSettings {
+  return deepMerge(DEFAULT_APP_SETTINGS, {});
+}
+
 export function readAppSettings(userDataPath: string): AppSettings {
   const p = getAppSettingsPath(userDataPath);
-  if (!fs.existsSync(p)) {
-    return { ...DEFAULT_APP_SETTINGS, database: { ...DEFAULT_APP_SETTINGS.database }, update: { ...DEFAULT_APP_SETTINGS.update } };
-  }
+  if (!fs.existsSync(p)) return cloneDefaults();
   try {
     const raw = JSON.parse(fs.readFileSync(p, 'utf-8'));
     return deepMerge(DEFAULT_APP_SETTINGS, raw);
   } catch (e) {
     console.warn('[app-settings] no se pudo leer, usando defaults:', e);
-    return { ...DEFAULT_APP_SETTINGS, database: { ...DEFAULT_APP_SETTINGS.database }, update: { ...DEFAULT_APP_SETTINGS.update } };
+    return cloneDefaults();
   }
 }
 

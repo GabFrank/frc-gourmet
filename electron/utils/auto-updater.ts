@@ -14,11 +14,12 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { UpdateInfo } from 'electron-updater';
+import { readAppSettings, updateAppSettings } from './app-settings.utils';
 
 let autoUpdater: any | null = null;
 let pollTimer: NodeJS.Timeout | null = null;
 
-const UPDATE_CONFIG_FILE = 'update-config.json';
+const LEGACY_UPDATE_CONFIG_FILE = 'update-config.json';
 const POLL_INTERVAL_MS = 30 * 60 * 1000; // 30 min
 const STARTUP_DELAY_MS = 8 * 1000; // 8s después de window ready
 
@@ -43,8 +44,8 @@ const DEFAULT_CONFIG: UpdateConfig = {
   autoCheck: true,
 };
 
-function configPath(): string {
-  return path.join(app.getPath('userData'), UPDATE_CONFIG_FILE);
+function legacyConfigPath(): string {
+  return path.join(app.getPath('userData'), LEGACY_UPDATE_CONFIG_FILE);
 }
 
 function inferChannelFromVersion(version: string): UpdateChannel {
@@ -53,20 +54,48 @@ function inferChannelFromVersion(version: string): UpdateChannel {
   return 'stable';
 }
 
-function readUpdateConfig(): UpdateConfig {
+function migrateLegacyUpdateConfig(): void {
+  const p = legacyConfigPath();
+  if (!fs.existsSync(p)) return;
   try {
-    if (fs.existsSync(configPath())) {
-      const raw = JSON.parse(fs.readFileSync(configPath(), 'utf-8'));
-      return { ...DEFAULT_CONFIG, ...raw };
-    }
+    const raw = JSON.parse(fs.readFileSync(p, 'utf-8')) as Partial<UpdateConfig>;
+    updateAppSettings(app.getPath('userData'), (s) => ({
+      ...s,
+      update: { ...s.update, ...raw },
+    }));
+    fs.unlinkSync(p);
+    console.log('[auto-updater] update-config.json migrado a app-settings.json y eliminado.');
   } catch (e) {
-    console.warn('[auto-updater] No se pudo leer update-config:', e);
+    console.warn('[auto-updater] error migrando update-config legacy:', e);
   }
-  return { ...DEFAULT_CONFIG, channel: inferChannelFromVersion(app.getVersion()) };
+}
+
+function readUpdateConfig(): UpdateConfig {
+  migrateLegacyUpdateConfig();
+  try {
+    const settings = readAppSettings(app.getPath('userData'));
+    const persisted = settings.update;
+    // Si nunca se guardo channel y el JSON no existia, inferir de la version actual.
+    const settingsExist = fs.existsSync(path.join(app.getPath('userData'), 'app-settings.json'));
+    const channel: UpdateChannel = settingsExist
+      ? persisted.channel
+      : inferChannelFromVersion(app.getVersion());
+    return {
+      channel,
+      autoCheck: persisted.autoCheck,
+      lastCheckAt: persisted.lastCheckAt,
+    };
+  } catch (e) {
+    console.warn('[auto-updater] No se pudo leer settings:', e);
+    return { ...DEFAULT_CONFIG, channel: inferChannelFromVersion(app.getVersion()) };
+  }
 }
 
 function writeUpdateConfig(cfg: UpdateConfig): void {
-  fs.writeFileSync(configPath(), JSON.stringify(cfg, null, 2), 'utf-8');
+  updateAppSettings(app.getPath('userData'), (s) => ({
+    ...s,
+    update: { channel: cfg.channel, autoCheck: cfg.autoCheck, lastCheckAt: cfg.lastCheckAt },
+  }));
 }
 
 export function initAutoUpdater(mainWindow: BrowserWindow): void {
