@@ -155,8 +155,6 @@ import { IaPromptConfig } from './entities/ia/ia-prompt-config.entity';
 import { IaPromptSugerencia } from './entities/ia/ia-prompt-sugerencia.entity';
 
 // Migrations baseline + futuras
-import { Initial1778266131852 } from './migrations/1778266131852-Initial';
-import { AddRefreshTokens1778353819592 } from './migrations/1778353819592-AddRefreshTokens';
 
 // Import new PDV entities
 import { PrecioDelivery } from './entities/ventas/precio-delivery.entity';
@@ -177,6 +175,8 @@ import { Reserva } from './entities/ventas/reserva.entity';
 import { Comanda } from './entities/ventas/comanda.entity';
 import { ComandaItem } from './entities/ventas/comanda-item.entity';
 import { Sector } from './entities/ventas/sector.entity';
+// Migrations
+import { Baseline1778357391461 } from './migrations/1778357391461-Baseline';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -216,15 +216,13 @@ export function getDataSourceOptions(
   const entities = getEntitiesList();
   const sharedOptions = {
     entities,
-    // Sincronización automática vs migraciones:
-    //  - Dev / app no empaquetada: synchronize=true (TypeORM crea/altera tablas)
-    //  - Prod / app empaquetada: synchronize=false + migrations corren al iniciar
-    // En el primer arranque de una instalación nueva el bootstrap hace synchronize una vez
-    // y marca todas las migraciones como aplicadas (ver DatabaseService.initialize).
-    synchronize: !isPackagedApp(),
+    // F1.5: synchronize eliminado definitivamente. Toda nueva entity exige
+    // migration generada con `npm run migration:generate`.
+    // DatabaseService corre las migrations manualmente tras backup pre-migrate.
+    synchronize: false,
     logging: process.env['NODE_ENV'] === 'development',
     migrations: getMigrations(),
-    migrationsRun: false, // Lo controla manualmente DatabaseService tras el backup
+    migrationsRun: false,
     migrationsTableName: 'typeorm_migrations',
   };
 
@@ -441,8 +439,7 @@ function getMigrations(): Function[] {
   // Las migraciones se agregan acá conforme se generan con `npm run migration:generate`.
   // Ver src/app/database/migrations/README.md
   return [
-    Initial1778266131852,
-    AddRefreshTokens1778353819592,
+    Baseline1778357391461,
   ];
 }
 
