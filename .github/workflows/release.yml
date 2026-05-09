@@ -41,7 +41,12 @@ jobs:
           cache: npm
 
       - name: Install deps
-        run: npm ci --legacy-peer-deps --no-audit --no-fund
+        # --omit=optional skip canvas (transitive de pdfjs-dist@optionalDependencies).
+        # canvas intenta compilar cairo y rompe en ambos OS porque no tenemos los
+        # headers nativos. El codigo usa @napi-rs/canvas (prebuilt napi binary)
+        # que monkey-patchea CanvasFactory de pdfjs, asi que canvas nativo no
+        # hace falta.
+        run: npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
 
       - name: Run semantic-release
         id: semrel
@@ -116,7 +121,12 @@ jobs:
           echo "package.json bumped a ${VERSION}"
 
       - name: Install deps
-        run: npm ci --legacy-peer-deps --no-audit --no-fund
+        # --omit=optional skip canvas (transitive de pdfjs-dist@optionalDependencies).
+        # canvas intenta compilar cairo y rompe en ambos OS porque no tenemos los
+        # headers nativos. El codigo usa @napi-rs/canvas (prebuilt napi binary)
+        # que monkey-patchea CanvasFactory de pdfjs, asi que canvas nativo no
+        # hace falta.
+        run: npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
 
       - name: Build app
         run: npm run build:prod
