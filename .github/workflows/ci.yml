@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, release/beta, dev]
+    branches: [master, release/beta, develop]
   push:
     branches: [feat/**, fix/**, refactor/**, chore/**]
 
@@ -12,8 +12,12 @@ concurrency:
 
 jobs:
   lint-and-build:
-    name: Lint + Build (Node 18)
-    runs-on: ubuntu-latest
+    name: Lint + Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -23,7 +27,7 @@ jobs:
           cache: npm
 
       - name: Install deps
-        run: npm ci --legacy-peer-deps --no-audit --no-fund
+        run: npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
 
       - name: Typecheck Electron
         run: npx tsc -p tsconfig.electron.json --noEmit
@@ -52,7 +56,7 @@ jobs:
           cache: npm
 
       - name: Install commitlint
-        run: npm ci --legacy-peer-deps --no-audit --no-fund
+        run: npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
 
       - name: Validate commits in PR
         run: |

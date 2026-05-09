@@ -7,26 +7,28 @@ Este documento define el proceso completo de release: ramas, commits, canales (a
 ## TL;DR
 
 ```
-feat/foo --PR--> dev (alpha) --PR--> release/beta (beta) --PR--> main (stable)
-hotfix/foo --PR--> main           --PR--> dev (back-merge obligatorio)
+feat/foo --PR--> develop (alpha) --PR--> release/beta (beta) --PR--> master (stable)
+hotfix/foo --PR--> master           --PR--> develop (back-merge obligatorio)
 ```
 
 - **Conventional commits**: `feat:` (minor), `fix:` (patch), `feat!:` o `BREAKING CHANGE:` (major).
 - **Merge commits, NO squash** en promociones entre ramas (semantic-release necesita los commits individuales).
 - **CI** valida cada PR (lint + build + commitlint).
-- **Push a `dev`/`release/beta`/`main`** dispara `release.yml` → semantic-release → matrix build → instaladores publicados al GitHub Release.
+- **Push a `develop`/`release/beta`/`master`** dispara `release.yml` → semantic-release → matrix build → instaladores publicados al GitHub Release.
 - Auto-update en cliente: electron-updater chequea el canal cada 30 min y notifica.
 
 ## Ramas
 
 | Rama | Canal de release | Versión ejemplo | Quién mergea |
 |---|---|---|---|
-| `main` | **stable** | `1.4.0` | PR desde `release/beta` |
-| `release/beta` | **beta** | `1.4.0-beta.3` | PR desde `dev` |
-| `dev` | **alpha** | `1.4.0-alpha.7` | PRs desde `feat/*` `fix/*` `refactor/*` |
+| `master` | **stable** | `1.4.0` | PR desde `release/beta` |
+| `release/beta` | **beta** | `1.4.0-beta.3` | PR desde `develop` |
+| `develop` | **alpha** | `1.4.0-alpha.7` | PRs desde `feat/*` `fix/*` `refactor/*` |
 | `feat/*` `fix/*` etc. | — | — | autor del feature |
 
-`main`, `release/beta`, `dev` deben estar protegidas: no push directo, PR obligatorio, CI verde.
+`master`, `release/beta`, `develop` deben estar protegidas: no push directo, PR obligatorio, CI verde.
+
+> **Nomenclatura alineada con `frc-comercial`** (los 4 repos del SaaS Franco Systems usan `master` + `release/beta` + `develop`). Mantener el mismo patron entre repos del ecosistema.
 
 ## Convenciones de commit
 
@@ -73,43 +75,45 @@ electron-builder publica al manifest correcto basado en el sufijo de la versión
 ### 1. Trabajar un feature
 
 ```bash
-git checkout dev && git pull
+git checkout develop && git pull
 git checkout -b feat/mi-cambio
 # editar...
 git commit -m "feat(modulo): descripcion"
 git push -u origin feat/mi-cambio
-# Abrir PR a `dev`
+# Abrir PR a `develop`
 ```
 
-CI corre `lint + build + commitlint`. Reviewer aprueba → **merge commit** a `dev`.
+CI corre `lint + build + commitlint`. Reviewer aprueba → **merge commit** a `develop`.
 
 ### 2. Release alpha automática
 
-Push a `dev` dispara `release.yml`:
+Push a `develop` dispara `release.yml`:
 
 1. Job `release` corre `semantic-release`:
    - Analiza commits desde el último tag alpha
    - Calcula nueva versión (ej. `1.4.0-alpha.8`)
-   - Escribe `package.json` + `CHANGELOG.md`
-   - Commit `chore(release): 1.4.0-alpha.8 [skip ci]`
    - Crea tag `v1.4.0-alpha.8`
-   - Crea GitHub Release (prerelease=true)
-2. Job `build` matrix (win/mac/linux):
-   - Pull del commit nuevo
+   - Crea GitHub Release (prerelease=true) con notas auto-generadas
+
+   > **No** pushea cambios a `develop`/`release/beta`/`master`. La rama queda intacta. `package.json` en la rama mantiene la version anterior (irrelevante — la version real vive en el tag y se patchea en el job build).
+
+2. Job `build` matrix (win/linux):
+   - Checkout del tag exacto (`v1.4.0-alpha.8`)
+   - **Patch in-place de `package.json`** con la version del tag (sin commit)
    - Build Angular
-   - `electron-builder --publish always` → sube `.exe` / `.dmg` / `.AppImage` + `alpha.yml` al GitHub Release
+   - `electron-builder --publish always` → sube `.exe` + `.AppImage` + `alpha.yml` al GitHub Release
 
 ### 3. Promover alpha → beta
 
-Cuando el conjunto de cambios en `dev` está listo para QA externa:
+Cuando el conjunto de cambios en `develop` está listo para QA externa:
 
 ```bash
 git checkout release/beta && git pull
-git pull origin dev               # merge dev → release/beta
+git pull origin develop           # merge develop → release/beta
 git push
 ```
 
-> **Importante:** usar `git merge dev`, **NO** `git merge --squash`. semantic-release lee los commits individuales para calcular el bump correcto.
+> **Importante:** usar `git merge develop`, **NO** `git merge --squash`. semantic-release lee los commits individuales para calcular el bump correcto.
 
 Push dispara `release.yml` → versión `1.4.0-beta.1`, instaladores publicados, manifest `beta.yml`.
 
@@ -118,7 +122,7 @@ Push dispara `release.yml` → versión `1.4.0-beta.1`, instaladores publicados,
 Después de validar en beta:
 
 ```bash
-git checkout main && git pull
+git checkout master && git pull
 git merge release/beta            # merge commit, NO squash
 git push
 ```
@@ -128,19 +132,19 @@ Genera `1.4.0` (sin sufijo), publica a `latest.yml`.
 ### 5. Hotfix
 
 ```bash
-git checkout main && git pull
+git checkout master && git pull
 git checkout -b hotfix/bug-critico
 # fix...
 git commit -m "fix(modulo): descripcion"
 git push -u origin hotfix/bug-critico
-# PR a main
+# PR a master
 ```
 
-Después del merge a `main` (genera `1.4.1`), **back-merge obligatorio** a `dev`:
+Después del merge a `master` (genera `1.4.1`), **back-merge obligatorio** a `develop`:
 
 ```bash
-git checkout dev && git pull
-git merge main
+git checkout develop && git pull
+git merge master
 git push
 ```
 
@@ -148,32 +152,57 @@ git push
 
 ## Code signing
 
-### Windows
+### Plataformas soportadas
 
-1. Comprar certificado **Code Signing** (EV o OV) — recomendado EV de Sectigo/DigiCert (~$300/año).
-2. Exportar a `.pfx` con password.
-3. Subir como secrets en GitHub:
-   ```
-   CSC_LINK            = base64 del .pfx (`base64 -i cert.pfx | pbcopy`)
-   CSC_KEY_PASSWORD    = password del .pfx
-   ```
-4. electron-builder firma automáticamente al detectar las env vars.
+Solo se generan instaladores para **Windows** (NSIS `.exe`) y **Linux** (`.AppImage`). macOS está dropeado del pipeline (no se requieren releases para Mac). Si en el futuro hace falta, hay que reagregar `mac` block en `package.json` y `macos-latest` al matrix de `release.yml`.
 
-### macOS
+### Windows — opciones (de menor a mayor esfuerzo)
 
-1. Apple Developer Program ($99/año).
-2. Crear "Developer ID Application" cert en Apple Developer portal.
-3. Notarización con `notarytool`:
-   ```
-   APPLE_ID                       = email Apple ID
-   APPLE_APP_SPECIFIC_PASSWORD    = generada en appleid.apple.com → Security → App-Specific Passwords
-   APPLE_TEAM_ID                  = de https://developer.apple.com/account → Membership
-   ```
-4. En `package.json` cambiar `"notarize": false` → `"notarize": { "teamId": "${APPLE_TEAM_ID}" }`.
+#### A) Sin firma (default actual) ✅
+
+`release.yml` corre `electron-builder` sin certs → `.exe` sin firma. Comportamiento al usuario:
+
+1. Usuario descarga `FRC-Gourmet-Setup-X.Y.Z.exe`.
+2. SmartScreen warning: "Windows protegió tu PC".
+3. Usuario clickea **"Más información"** → **"Ejecutar de todos modos"**.
+4. NSIS instala normal.
+
+**Aceptable** para distribución interna o instalaciones controladas. El warning aparece **una vez por instalación**, no en cada uso. Cero costo, cero infra.
+
+#### B) Self-signed cert (gratis, marginal mejora)
+
+Genera un cert auto-firmado, lo importás como "Trusted Root CA" en cada PC cliente, y `electron-builder` lo usa para firmar. Útil solo si controlás todas las PCs target (ej. instalaciones en sucursales propias).
+
+```powershell
+# En Windows (PowerShell admin):
+$cert = New-SelfSignedCertificate -DnsName "FRC Sistemas Informaticos" -Type CodeSigning -CertStoreLocation Cert:\CurrentUser\My
+Export-PfxCertificate -Cert $cert -FilePath frc-codesign.pfx -Password (ConvertTo-SecureString "tu-password" -AsPlainText -Force)
+```
+
+Luego `base64 frc-codesign.pfx > cert.b64` y subir como secret `CSC_LINK` + `CSC_KEY_PASSWORD`. `electron-builder` lo detecta y firma automáticamente.
+
+**Limitación:** SmartScreen sigue avisando porque el cert no tiene reputación con Microsoft. Solo evita el warning si el cert está pre-instalado como trusted en el equipo cliente.
+
+#### C) SignPath Foundation (gratis para OSS)
+
+[signpath.io](https://signpath.io/foundation) firma binarios con un cert OV de SignPath gratis para proyectos open-source. Requiere:
+- Repo público en GitHub.
+- Aplicar al programa Foundation.
+- Integración via su GitHub Action.
+
+Da una firma reconocida y elimina SmartScreen tras un rato (reputation building). FRC Gourmet es repo público → elegible.
+
+#### D) Azure Trusted Signing (~$10/mes)
+
+Microsoft mismo provee firma cloud-based desde 2024. ~$9.99/mes. Reputación inmediata con SmartScreen. Requiere validación de identidad. Reemplaza el modelo viejo de comprar EV cert ($300/año).
 
 ### Linux (AppImage)
 
-No requiere firma. Opcionalmente firmar con GPG (no implementado).
+No requiere firma. AppImage corre directo si tiene permiso de ejecución (`chmod +x`).
+
+### Recomendación actual
+
+Empezar con **A) sin firma** y monitorear el feedback de usuarios. Si el SmartScreen se vuelve molesto en producción → evaluar **C)** SignPath Foundation primero (gratis), si no califica → **D)** Azure Trusted Signing. Saltarse self-signed (B), no aporta valor real.
 
 ## Auto-update en el cliente
 
@@ -193,7 +222,7 @@ Canal: por defecto `stable`. Cambiar desde Sistema → Actualizaciones (UI pendi
 ## Branch protection rules (configurar en GitHub)
 
 ```
-main:
+master:
   - Require a pull request before merging: ✅
   - Require approvals: 1
   - Dismiss stale reviews: ✅
@@ -205,9 +234,9 @@ main:
   - Restrict who can push: solo admins (enforce_admins=true en periodos críticos)
 
 release/beta:
-  - mismo que main pero approvals=1
+  - mismo que master pero approvals=1
 
-dev:
+develop:
   - Require PR ✅
   - Require status checks: lint-and-build
   - approvals=0 (o 1 según preferencia)
@@ -218,13 +247,10 @@ dev:
 | Secret | Origen | Obligatorio |
 |---|---|---|
 | `GITHUB_TOKEN` | auto-provisto por Actions | sí |
-| `CSC_LINK` | base64 del .pfx Windows | solo para builds firmadas Windows |
-| `CSC_KEY_PASSWORD` | password .pfx | solo para builds firmadas Windows |
-| `APPLE_ID` | email Apple Dev | solo para notarización mac |
-| `APPLE_APP_SPECIFIC_PASSWORD` | generada en appleid | solo notarización mac |
-| `APPLE_TEAM_ID` | Team ID Apple | solo notarización mac |
+| `CSC_LINK` | base64 del .pfx Windows (self-signed o SignPath/Azure cert) | opcional |
+| `CSC_KEY_PASSWORD` | password del .pfx | opcional |
 
-Sin certificados, los builds salen sin firma → SmartScreen / Gatekeeper bloquean al usuario hasta que confirme manualmente. Aceptable para alpha/beta interno; **no aceptable para stable**.
+Sin certs Windows los builds salen sin firma → SmartScreen warning una vez por instalación. **Aceptable** para distribución actual. Evaluar firma cuando volumen lo justifique (ver "Code signing" arriba).
 
 ## Verificar versión deployada
 
@@ -247,13 +273,10 @@ Manifest del canal:
 ### "electron-builder dice 'No suitable application icons found'"
 - Falta `build/icon.png` 512×512. Ver `build/README.md`.
 
-### "Mac build se queda colgado en notarize"
-- `notarize: false` en package.json. Cuando esté listo, flippear a `{teamId}`.
-
 ### "El cliente no recibe la update"
 - Verificar que el manifest del canal exista: `https://github.com/GabFrank/frc-gourmet/releases/latest/download/<canal>.yml`
 - Verificar canal seteado en cliente: `update-config.json` en userData
-- Logs: en macOS `~/Library/Logs/frc-gourmet/main.log`
+- Logs Windows: `%APPDATA%\frc-gourmet\logs\main.log`
 
 ### "CI rompe en `npm ci` con peer-deps"
 - Usamos `--legacy-peer-deps` en todos los workflows. Si agregás un nuevo workflow, no olvidarlo.

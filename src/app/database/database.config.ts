@@ -152,7 +152,8 @@ import { OcrAliasProducto } from './entities/compras/ocr-alias-producto.entity';
 import { IaPromptConfig } from './entities/ia/ia-prompt-config.entity';
 import { IaPromptSugerencia } from './entities/ia/ia-prompt-sugerencia.entity';
 
-// Migrations deshabilitadas en desarrollo: usamos synchronize=true
+// Migrations baseline + futuras
+import { Initial1778266131852 } from './migrations/1778266131852-Initial';
 
 // Import new PDV entities
 import { PrecioDelivery } from './entities/ventas/precio-delivery.entity';
@@ -382,7 +383,9 @@ export function isPackagedApp(): boolean {
 function getMigrations(): Function[] {
   // Las migraciones se agregan acá conforme se generan con `npm run migration:generate`.
   // Ver src/app/database/migrations/README.md
-  return [];
+  return [
+    Initial1778266131852,
+  ];
 }
 
 /**

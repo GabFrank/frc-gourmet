@@ -1,0 +1,102 @@
+<h2 mat-dialog-title>
+  <mat-icon class="dialog-icon">system_update</mat-icon>
+  Actualizaciones
+</h2>
+
+<mat-dialog-content class="update-dialog-content">
+  <ng-container *ngIf="!available; else availableTpl">
+    <p class="dev-note">
+      <mat-icon>info</mat-icon>
+      El sistema de actualizaciones automáticas solo está activo en la versión
+      empaquetada (build de producción). En modo desarrollo no hay nada que actualizar.
+    </p>
+  </ng-container>
+
+  <ng-template #availableTpl>
+    <section class="section">
+      <div class="section-header">Canal de actualización</div>
+      <mat-radio-group
+        class="channel-group"
+        [(ngModel)]="channel"
+        (change)="onChannelChange(channel)">
+        <mat-radio-button value="stable">
+          <div class="radio-label">
+            <span class="radio-title">Stable</span>
+            <span class="radio-hint">Versión estable. Recomendado para uso diario.</span>
+          </div>
+        </mat-radio-button>
+        <mat-radio-button value="beta">
+          <div class="radio-label">
+            <span class="radio-title">Beta</span>
+            <span class="radio-hint">Pre-release validado por QA. Puede tener bugs menores.</span>
+          </div>
+        </mat-radio-button>
+        <mat-radio-button value="alpha">
+          <div class="radio-label">
+            <span class="radio-title">Alpha</span>
+            <span class="radio-hint">Builds más recientes. Solo dev/QA. Inestable.</span>
+          </div>
+        </mat-radio-button>
+      </mat-radio-group>
+    </section>
+
+    <mat-divider></mat-divider>
+
+    <section class="section">
+      <div class="autocheck-row">
+        <div>
+          <div class="section-header">Verificación automática</div>
+          <span class="hint">Buscar actualizaciones cada 30 minutos en background.</span>
+        </div>
+        <mat-slide-toggle
+          color="primary"
+          [(ngModel)]="autoCheck"
+          (change)="onAutoCheckChange(autoCheck)">
+        </mat-slide-toggle>
+      </div>
+    </section>
+
+    <mat-divider></mat-divider>
+
+    <section class="section status-section">
+      <div class="status-row">
+        <span class="status-label">Estado:</span>
+        <span class="status-value">{{ statusLabel() }}</span>
+      </div>
+      <mat-progress-bar
+        *ngIf="status.status === 'progress'"
+        mode="determinate"
+        [value]="downloadPercent">
+      </mat-progress-bar>
+      <div class="status-row">
+        <span class="status-label">Última verificación:</span>
+        <span class="status-value">{{ formatLastCheck() }}</span>
+      </div>
+      <div class="status-row" *ngIf="appVersion">
+        <span class="status-label">Versión actual:</span>
+        <span class="status-value">v{{ appVersion }}</span>
+      </div>
+    </section>
+  </ng-template>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end" class="dialog-actions">
+  <button
+    *ngIf="available && status.status === 'downloaded'"
+    mat-raised-button
+    color="warn"
+    (click)="installNow()">
+    <mat-icon>restart_alt</mat-icon>
+    Instalar y reiniciar
+  </button>
+  <button
+    *ngIf="available"
+    mat-stroked-button
+    color="primary"
+    [disabled]="status.status === 'checking' || status.status === 'progress'"
+    (click)="checkNow()">
+    <mat-icon>search</mat-icon>
+    Buscar ahora
+  </button>
+  <button mat-button (click)="close()">Cerrar</button>
+</mat-dialog-actions>

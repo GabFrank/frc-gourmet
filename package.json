@@ -42,6 +42,7 @@
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/app/database/datasource.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/app/database/datasource.ts",
     "migration:show": "typeorm-ts-node-commonjs migration:show -d src/app/database/datasource.ts",
+    "icons": "node scripts/generate-icons.js",
     "prepare": "husky || true"
   },
   "private": true,
@@ -94,10 +95,8 @@
     "@ngx-translate/core": "14.0.0",
     "@ngx-translate/http-loader": "7.0.0",
     "@playwright/test": "^1.58.2",
-    "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/commit-analyzer": "^11.1.0",
     "@semantic-release/exec": "^6.0.3",
-    "@semantic-release/git": "^10.0.1",
     "@semantic-release/github": "^9.2.6",
     "@semantic-release/release-notes-generator": "^12.1.0",
     "@types/electron": "^1.6.12",
@@ -128,6 +127,7 @@
     "node-polyfill-webpack-plugin": "2.0.1",
     "npm-run-all": "4.1.5",
     "playwright": "^1.58.2",
+    "png-to-ico": "^3.0.1",
     "semantic-release": "^22.0.12",
     "ts-node": "10.9.1",
     "typescript": "~4.9.5",
@@ -169,37 +169,18 @@
         "releaseType": "release"
       }
     ],
-    "mac": {
-      "category": "public.app-category.business",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
-      "notarize": false,
-      "target": [
-        {
-          "target": "dmg",
-          "arch": ["x64", "arm64"]
-        },
-        {
-          "target": "zip",
-          "arch": ["x64", "arm64"]
-        }
-      ],
-      "artifactName": "FRC-Gourmet-${version}-${arch}.${ext}"
-    },
-    "dmg": {
-      "title": "FRC Gourmet ${version}"
-    },
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "FRC-Gourmet-Setup-${version}.${ext}",
-      "publisherName": "FRC Sistemas Informaticos"
+      "publisherName": "FRC Sistemas Informaticos",
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,
@@ -218,10 +199,13 @@
       "target": [
         {
           "target": "AppImage",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
-      "artifactName": "FRC-Gourmet-${version}-${arch}.${ext}"
+      "artifactName": "FRC-Gourmet-${version}-${arch}.${ext}",
+      "icon": "build/icons"
     }
   }
 }

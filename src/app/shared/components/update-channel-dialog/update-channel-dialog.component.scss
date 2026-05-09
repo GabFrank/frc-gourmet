@@ -1,0 +1,95 @@
+:host {
+  display: block;
+  min-width: 480px;
+  max-width: 560px;
+}
+
+.dialog-icon {
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+.update-dialog-content {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.section {
+  padding: 12px 0;
+}
+
+.section-header {
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.hint {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.channel-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.radio-label {
+  display: flex;
+  flex-direction: column;
+  margin-left: 4px;
+}
+
+.radio-title {
+  font-weight: 500;
+}
+
+.radio-hint {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-top: 2px;
+}
+
+.autocheck-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.status-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.status-label {
+  opacity: 0.7;
+}
+
+.status-value {
+  font-weight: 500;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.dev-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  opacity: 0.85;
+
+  mat-icon {
+    flex-shrink: 0;
+  }
+}

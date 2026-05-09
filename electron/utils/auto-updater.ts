@@ -24,6 +24,14 @@ const STARTUP_DELAY_MS = 8 * 1000; // 8s después de window ready
 
 export type UpdateChannel = 'stable' | 'beta' | 'alpha';
 
+// electron-updater busca <channel>.yml. Mapeo interno → manifest publicado:
+//   stable → latest.yml (default de electron-builder, NO existe stable.yml)
+//   beta   → beta.yml
+//   alpha  → alpha.yml
+function toUpdaterChannel(c: UpdateChannel): string {
+  return c === 'stable' ? 'latest' : c;
+}
+
 interface UpdateConfig {
   channel: UpdateChannel;
   autoCheck: boolean;
@@ -77,7 +85,7 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
   }
 
   const cfg = readUpdateConfig();
-  autoUpdater.channel = cfg.channel;
+  autoUpdater.channel = toUpdaterChannel(cfg.channel);
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = cfg.channel !== 'stable';
@@ -154,7 +162,7 @@ function registerIpc(): void {
     cfg.channel = channel;
     writeUpdateConfig(cfg);
     if (autoUpdater) {
-      autoUpdater.channel = channel;
+      autoUpdater.channel = toUpdaterChannel(channel);
       autoUpdater.allowPrerelease = channel !== 'stable';
     }
     return cfg;

@@ -3,9 +3,9 @@ name: Release
 on:
   push:
     branches:
-      - main
+      - master
       - release/beta
-      - dev
+      - develop
 
 permissions:
   contents: write
@@ -41,12 +41,12 @@ jobs:
           cache: npm
 
       - name: Install deps
-        run: npm ci --legacy-peer-deps --no-audit --no-fund
-
-      - name: Verify build compiles
-        run: npm run build:prod
-        env:
-          NODE_OPTIONS: --max_old_space_size=8192
+        # --omit=optional skip canvas (transitive de pdfjs-dist@optionalDependencies).
+        # canvas intenta compilar cairo y rompe en ambos OS porque no tenemos los
+        # headers nativos. El codigo usa @napi-rs/canvas (prebuilt napi binary)
+        # que monkey-patchea CanvasFactory de pdfjs, asi que canvas nativo no
+        # hace falta.
+        run: npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
 
       - name: Run semantic-release
         id: semrel
@@ -88,27 +88,45 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
+      # Checkout exacto al tag que semantic-release acaba de crear — evita race
+      # condition entre matrix runners (ambos haciendo pull del bump commit).
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.ref_name }}
+          ref: ${{ needs.release.outputs.new_release_git_tag }}
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      # Sincronizar con el commit que semantic-release acaba de pushear (bump de version)
-      - name: Pull version-bump commit
-        shell: bash
-        run: git pull --ff-only origin ${{ github.ref_name }}
 
       - uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: npm
 
+      - name: Patch package.json version
+        shell: bash
+        env:
+          VERSION: ${{ needs.release.outputs.new_release_version }}
+        run: |
+          # semantic-release crea solo tag + GitHub release (no pushea bump
+          # commit a master). package.json en el tag aun tiene la version vieja.
+          # Patcheamos in-place; electron-builder lee version desde package.json.
+          node -e "
+            const fs=require('fs');
+            const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+            pkg.version='${VERSION}';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2)+'\n');
+          "
+          echo "package.json bumped a ${VERSION}"
+
       - name: Install deps
-        run: npm ci --legacy-peer-deps --no-audit --no-fund
+        # --omit=optional skip canvas (transitive de pdfjs-dist@optionalDependencies).
+        # canvas intenta compilar cairo y rompe en ambos OS porque no tenemos los
+        # headers nativos. El codigo usa @napi-rs/canvas (prebuilt napi binary)
+        # que monkey-patchea CanvasFactory de pdfjs, asi que canvas nativo no
+        # hace falta.
+        run: npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
 
       - name: Build app
         run: npm run build:prod
@@ -116,16 +134,19 @@ jobs:
           NODE_OPTIONS: --max_old_space_size=8192
 
       - name: Build & publish installer
-        run: npx electron-builder --publish always
+        # CSC_LINK/CSC_KEY_PASSWORD se setean siempre via env: (GH Actions no
+        # soporta condicionales en env). Si los secrets estan vacios, electron-builder
+        # interpreta string vacio como path invalido. Los unseteamos en bash si vacios.
+        # Sin certs el .exe sale unsigned (SmartScreen warning una vez).
+        shell: bash
+        run: |
+          if [ -z "${CSC_LINK}" ]; then unset CSC_LINK CSC_KEY_PASSWORD; fi
+          npx electron-builder --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Code signing — agregar como secrets en repo cuando estén disponibles
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Upload installers as workflow artifact (debug)
         if: always()
@@ -134,8 +155,6 @@ jobs:
           name: installers-${{ matrix.os }}
           path: |
             release/*.exe
-            release/*.dmg
-            release/*.zip
             release/*.AppImage
             release/*.yml
             release/latest*.yml
