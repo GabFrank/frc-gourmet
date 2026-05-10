@@ -56,20 +56,50 @@ Si falla la migración, el archivo queda intacto. Restaurable desde Sistema → 
 
 > Postgres no tiene este step. Hacé `pg_dump` antes de un upgrade que aplique migrations en prod.
 
-## Baseline (regenerada en F1.4 sobre F1.5)
+## Baselines (dual driver — F1.4)
 
-La baseline actual es `1778378410416-Baseline.ts` — contiene CREATE TABLE para todas las ~170 entities. Es **SQLite-flavor** (TypeORM emite SQL específico del driver al generar). Generada desde entities ya driver-agnósticas (sin `type: 'datetime'` explícito, decimals con precision en lugar de float).
+Dos baselines coexisten porque `migration:generate` produce SQL específico al driver target. `getMigrations()` en `database.config.ts` elige cuál cargar según el driver activo:
+
+| Archivo | Driver | Notas |
+|---|---|---|
+| `1778378410416-Baseline.ts` | SQLite | `INTEGER PRIMARY KEY AUTOINCREMENT`, `datetime`, `datetime('now')`, CHECK constraints para enums |
+| `1778380893207-BaselinePostgres.ts` | Postgres | `SERIAL`, `TIMESTAMP`, `now()`, `boolean true/false`, `text` para columnas enum (sin CHECK — validación a nivel app) |
+
+Las **entities** son driver-agnósticas (sin `type: 'datetime'` explícito, decimals con precision en lugar de float). Migraciones incrementales post-baseline pueden ser portables si se generan contra cada driver y se mergean (o se escriben con guard `if (queryRunner.connection.options.type === 'postgres')`).
 
 Historial de regeneraciones:
 - `Initial1778266131852` (deploy-infra, era synchronize)
 - `Baseline1778357391461` (F1.5 — regeneró desde cero, eliminando synchronize)
-- `Baseline1778378410416` (F1.4 — regeneró tras hacer entities driver-agnósticas)
+- `Baseline1778378410416` (F1.4 — entities driver-agnósticas, baseline SQLite)
+- `BaselinePostgres1778380893207` (F1.4 — baseline Postgres correspondiente)
 
 > ⚠️ Si tu BD dev fue creada con synchronize antes de F1.5: **resetear** vía `Sistema → Backup → Reset BD` antes del primer arranque post-F1.5. La baseline va a fallar con "table already exists" sobre tablas que synchronize ya creó.
 >
 > Si tu BD dev arrancó con la baseline F1.5 (`Baseline1778357391461`): hacer un `UPDATE typeorm_migrations SET name='Baseline1778378410416', timestamp=1778378410416 WHERE name='Baseline1778357391461'` antes de arrancar, sino la nueva baseline va a fallar igual con "table already exists".
 
 A partir de F1.4, **nunca más** regenerar baseline. Solo agregar migraciones incrementales encima.
+
+### Generar baseline Postgres (referencia)
+
+Si en el futuro hay que regenerar la baseline Postgres, los pasos son:
+
+```bash
+# 1. Crear BD Postgres vacía
+createdb frc_gourmet_baseline_pg
+
+# 2. Generar baseline contra ella (env vars del datasource CLI)
+FRC_DB_TYPE=postgres FRC_PG_DATABASE=frc_gourmet_baseline_pg FRC_PG_USERNAME=$USER \
+  TS_NODE_PROJECT=tsconfig.typeorm.json \
+  npm run migration:generate -- src/app/database/migrations/BaselinePostgres
+
+# 3. Validar corriéndola
+FRC_DB_TYPE=postgres FRC_PG_DATABASE=frc_gourmet_baseline_pg FRC_PG_USERNAME=$USER \
+  TS_NODE_PROJECT=tsconfig.typeorm.json \
+  npm run migration:run
+
+# 4. Cleanup
+dropdb frc_gourmet_baseline_pg
+```
 
 ## CLI rápido
 
@@ -95,15 +125,24 @@ FRC_DB_PATH="/Users/$USER/Library/Application Support/frc-gourmet/frc-gourmet.db
 
 ## Postgres
 
-**Estado actual:** la baseline `Baseline1778378410416` es SQLite-flavor (TypeORM emite SQL específico al driver target durante `migration:generate`). NO corre en Postgres tal cual: tiene `datetime`, `datetime('now')`, `boolean DEFAULT (0)`, `integer PRIMARY KEY AUTOINCREMENT` que no son válidos en Postgres.
+**Estado actual (post-F1.4):** Postgres soportado fresh install. `getMigrations()` elige `BaselinePostgres1778380893207` cuando el driver es postgres, y `Baseline1778378410416` cuando es sqlite. Validado con `migration:run` contra una Postgres vacía → 150 tablas creadas, FKs correctos.
 
-Para soportar fresh installs de Postgres se necesita una baseline alternativa generada contra Postgres. Approaches posibles:
-1. Generar `BaselinePostgres<ts>.ts` con `FRC_DB_PATH` apuntando a una BD Postgres docker-compose, y modificar `getMigrations()` en `database.config.ts` para devolver una u otra baseline según `options.type`.
-2. Reescribir baseline a mano usando la Object API de TypeORM (`new Table({...})`, `queryRunner.createTable()`) que TypeORM traduce per-driver. Más mantenible si hay pocas entities, inmanejable con ~170.
+Migraciones incrementales (post-baseline) deben ser portables. Dos approaches:
 
-Las **entities** ya son driver-agnósticas desde F1.4 (sin `type: 'datetime'` explícito, decimals con precision en lugar de float). Migraciones incrementales generadas a futuro pueden producir SQL portable si se generan contra el driver target.
+1. **Driver-aware migration** — escribir SQL distinto según `queryRunner.connection.options.type`:
+    ```ts
+    public async up(queryRunner: QueryRunner): Promise<void> {
+      const isPg = queryRunner.connection.options.type === 'postgres';
+      await queryRunner.query(isPg
+        ? `ALTER TABLE foo ADD COLUMN bar TIMESTAMP`
+        : `ALTER TABLE foo ADD COLUMN bar datetime`
+      );
+    }
+    ```
+2. **Object API de TypeORM** — usar `Table`, `TableColumn`, `queryRunner.addColumn()` que TypeORM traduce per-driver. Más mantenible para cambios chicos.
 
-Sin embargo:
+Limitaciones conocidas:
+- Postgres baseline usa `text` (sin CHECK) para columnas enum — la validación queda en TypeScript app-side. SQLite baseline usa `varchar CHECK(... IN (...))` que sí valida en BD.
 - SQL específico de SQLite (ej. `datetime('now')`) puede romper.
 - Tipos: el generator usa types portable cuando puede, pero validar la migración manualmente si la app va a Postgres.
 - F1.4 (entities Postgres-compat) está pendiente — todavía no garantizamos paridad.
