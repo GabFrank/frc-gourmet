@@ -23,6 +23,7 @@ import { registerSpecialRoutes } from './special-routes';
 import { registerRpcRoute } from './rpc-router';
 import { registerAuthRoutes } from './auth-routes';
 import { registerFileRoutes } from './file-routes';
+import { registerAuthPlugin } from './auth-middleware';
 
 export interface ServerOptions {
   port: number;
@@ -60,6 +61,9 @@ export async function startServer(opts: ServerOptions): Promise<FastifyInstance>
     timeWindow: '1 minute',
   });
 
+  // JWT plugin (decora fastify.authenticate)
+  await registerAuthPlugin(fastify);
+
   // Endpoints sin auth (version, health)
   registerSpecialRoutes(fastify, {
     appVersion: opts.appVersion,
@@ -70,7 +74,7 @@ export async function startServer(opts: ServerOptions): Promise<FastifyInstance>
   // Auth (login + refresh, no requieren JWT previo)
   registerAuthRoutes(fastify, opts.dataSource);
 
-  // RPC (requiere JWT — el middleware se aplica adentro)
+  // RPC (requiere JWT — el middleware se aplica via onRequest hook)
   registerRpcRoute(fastify);
 
   // Files (requiere JWT)
