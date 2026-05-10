@@ -123,24 +123,24 @@ async function buildHistoricoCotizaciones(
 
     if (usdMoneda) {
       const rows: any[] = await dbQuery(dataSource, `
-        SELECT compra_local FROM monedas_cambio
+        SELECT "compraLocal" FROM monedas_cambio
         WHERE moneda_origen_id = ? AND moneda_destino_id = ?
           AND created_at <= ?
         ORDER BY created_at DESC LIMIT 1
       `, [usdMoneda.id, principal.id, d.toISOString()]);
-      usd.push(Number(rows?.[0]?.compra_local || 0));
+      usd.push(Number(rows?.[0]?.compraLocal || 0));
     } else {
       usd.push(0);
     }
 
     if (brlMoneda) {
       const rows: any[] = await dbQuery(dataSource, `
-        SELECT compra_local FROM monedas_cambio
+        SELECT "compraLocal" FROM monedas_cambio
         WHERE moneda_origen_id = ? AND moneda_destino_id = ?
           AND created_at <= ?
         ORDER BY created_at DESC LIMIT 1
       `, [brlMoneda.id, principal.id, d.toISOString()]);
-      brl.push(Number(rows?.[0]?.compra_local || 0));
+      brl.push(Number(rows?.[0]?.compraLocal || 0));
     } else {
       brl.push(0);
     }
