@@ -22,6 +22,7 @@ import { Usuario } from './src/app/database/entities/personas/usuario.entity';
 
 // Import the new handler registration functions
 import { installHandlerRegistry, handlerRegistryCount } from './electron/utils/handler-registry';
+import { startServer, stopServer } from './electron/server/server';
 import { registerPrinterHandlers } from './electron/handlers/printers.handler';
 import { registerPersonasHandlers } from './electron/handlers/personas.handler';
 import { registerAuthHandlers } from './electron/handlers/auth.handler';
@@ -226,6 +227,25 @@ function initializeDatabase() {
         }
       })();
 
+      // F3: arrancar Fastify HTTP server si mode === 'server'
+      const settings = readAppSettings(app.getPath('userData'));
+      if (settings.mode === 'server') {
+        const port = settings.network?.serverPort || 7070;
+        const driver: 'sqlite' | 'postgres' = settings.database.type;
+        const appVersion = (() => {
+          try { return require('./package.json').version || '0.0.0'; } catch { return '0.0.0'; }
+        })();
+        // schemaVersion = nombre de la baseline activa (queda inmutable post-arranque)
+        const schemaVersion = driver === 'postgres'
+          ? 'BaselinePostgres1778380893207'
+          : 'Baseline1778378410416';
+        startServer({
+          port, appVersion, schemaVersion, driver, dataSource,
+        }).catch((e) => console.error('[server] Error al arrancar Fastify:', e));
+      } else {
+        console.log(`[server] Modo '${settings.mode}', no se arranca Fastify.`);
+      }
+
       // Auto-backup scheduler (lee config persistida; idempotente si está deshabilitado)
       startAutoBackupScheduler(app.getPath('userData'));
       // Generar notificaciones RRHH al startup y cada 24h
@@ -330,12 +350,20 @@ app.on('ready', () => {
 app.on('window-all-closed', () => {
   // On macOS specific behavior
   if (process.platform !== 'darwin') {
+    // Stop Fastify server (idempotente — si nunca arranco no hace nada)
+    stopServer().catch(() => {});
     // Close the database connection
     if (dbService) {
       dbService.close();
     }
     app.quit();
   }
+});
+
+app.on('before-quit', () => {
+  // Stop server explicitly antes de quit (cubrira el caso macOS donde el handler
+  // de window-all-closed no termina la app)
+  stopServer().catch(() => {});
 });
 
 app.on('activate', () => {
