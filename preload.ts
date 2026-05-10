@@ -2,6 +2,125 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { EstadoVentaItem } from './src/app/database/entities/ventas/venta-item.entity';
 
+// =====================================================================
+// F4: invokeRouter — sustituye ipcRenderer.invoke en mode === 'client'.
+//
+// En modo standalone/server: pasa directo al ipcRenderer.invoke local.
+// En modo cliente: hace fetch contra el server HTTP (POST /api/rpc),
+// con auto-refresh del JWT al recibir 401, y especial-casing para
+// los channels de auth (login/logout) que van a /api/auth/*.
+//
+// Channel allowlist `ALWAYS_LOCAL_CHANNELS`: handlers que siempre van
+// por IPC aunque estemos en cliente (impresoras locales, file dialogs,
+// system info — operaciones que el cliente debe ejecutar en su propia
+// maquina, no en el server).
+// =====================================================================
+
+const APP_MODE = (process.env['FRC_APP_MODE'] as 'standalone' | 'server' | 'client') || 'standalone';
+const SERVER_URL = process.env['FRC_SERVER_URL'] || '';
+
+const ALWAYS_LOCAL_CHANNELS = new Set<string>([
+  // Impresoras / hardware local del cliente
+  'print-receipt',
+  'print-test-page',
+  'get-printer-list',
+  // Files locales (rare)
+  'select-file-dialog',
+  'select-folder-dialog',
+  // Que no haga sentido routear a server
+  'set-current-user',
+  'get-current-user',
+]);
+
+let accessToken: string | null = null;
+let refreshToken: string | null = null;
+
+async function httpFetch(path: string, body: any, withAuth = true): Promise<any> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (withAuth && accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+  const url = `${SERVER_URL}${path}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    const err: any = new Error(`HTTP ${res.status}: ${txt}`);
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+}
+
+async function refreshAccessIfPossible(): Promise<boolean> {
+  if (!refreshToken) return false;
+  try {
+    const data = await httpFetch('/api/auth/refresh', { refreshToken }, false);
+    accessToken = data.accessToken;
+    refreshToken = data.refreshToken || refreshToken;
+    return true;
+  } catch {
+    accessToken = null;
+    refreshToken = null;
+    return false;
+  }
+}
+
+async function invokeRouter(channel: string, ...args: any[]): Promise<any> {
+  // Local channels o cualquier modo no-cliente → IPC directo
+  if (APP_MODE !== 'client' || ALWAYS_LOCAL_CHANNELS.has(channel)) {
+    return ipcRenderer.invoke(channel, ...args);
+  }
+
+  // Login special case
+  if (channel === 'login') {
+    const loginData = args[0] || {};
+    const data = await httpFetch('/api/auth/login', loginData, false);
+    accessToken = data.accessToken;
+    refreshToken = data.refreshToken;
+    // El renderer espera el shape de la IPC (success/usuario/token/sessionId/message)
+    return {
+      success: data.success,
+      usuario: data.usuario,
+      token: data.accessToken,
+      sessionId: data.sessionId,
+      message: 'Inicio de sesion exitoso',
+    };
+  }
+  // Logout special case
+  if (channel === 'logout' || channel === 'logout-session') {
+    try { await httpFetch('/api/auth/logout', { refreshToken }, false); } catch {}
+    accessToken = null;
+    refreshToken = null;
+    return true;
+  }
+
+  // RPC genérico
+  const doRpc = async () => httpFetch('/api/rpc', { method: channel, params: args }, true);
+  try {
+    const data = await doRpc();
+    return data.result;
+  } catch (err: any) {
+    if (err?.status === 401 && refreshToken) {
+      const ok = await refreshAccessIfPossible();
+      if (ok) {
+        const data = await doRpc();
+        return data.result;
+      }
+    }
+    throw err;
+  }
+}
+
+// Replace ipcRenderer.invoke con invokeRouter en cliente, transparente al resto.
+if (APP_MODE === 'client') {
+  console.log(`[preload] mode=client → invokeRouter via HTTP @ ${SERVER_URL}`);
+  (ipcRenderer as any).invoke = invokeRouter;
+} else {
+  console.log(`[preload] mode=${APP_MODE} → IPC directo`);
+}
+
 // Define types for our API
 interface Category {
   id: number;
@@ -914,6 +1033,22 @@ interface ObservacionProducto {
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('api', {
+  // F2/F4: app-mode resolver para que el RepositoryService factory decida
+  // entre IpcService (standalone/server) y HttpService (cliente).
+  // Esto NO va por IPC porque tiene que ser sincrónico (factory de Angular DI
+  // se ejecuta en boot). Se resuelve en preload via env vars que main.ts
+  // setea antes que el renderer cargue.
+  getAppMode: (): 'standalone' | 'server' | 'client' => {
+    const mode = process.env['FRC_APP_MODE'];
+    if (mode === 'client' || mode === 'server') return mode;
+    return 'standalone';
+  },
+  // F4: URL del server cuando mode === 'client'. Para que el HttpService
+  // sepa contra dónde apuntar.
+  getServerUrl: (): string | null => {
+    return process.env['FRC_SERVER_URL'] || null;
+  },
+
   // Database operations
   getCategories: async (): Promise<Category[]> => {
     return await ipcRenderer.invoke('get-categories');

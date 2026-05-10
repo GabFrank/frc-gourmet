@@ -227,8 +227,16 @@ function initializeDatabase() {
         }
       })();
 
-      // F3: arrancar Fastify HTTP server si mode === 'server'
+      // F4: exponer mode al renderer via process.env (preload los lee).
+      // Sirve para que el factory `repositoryFactory()` en app.module decida
+      // qué impl del repository inyectar al boot del Angular.
       const settings = readAppSettings(app.getPath('userData'));
+      process.env['FRC_APP_MODE'] = settings.mode;
+      if (settings.mode === 'client' && settings.network?.serverUrl) {
+        process.env['FRC_SERVER_URL'] = settings.network.serverUrl;
+      }
+
+      // F3: arrancar Fastify HTTP server si mode === 'server'
       if (settings.mode === 'server') {
         const port = settings.network?.serverPort || 7070;
         const driver: 'sqlite' | 'postgres' = settings.database.type;
