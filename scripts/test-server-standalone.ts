@@ -23,11 +23,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 
-import { getDataSourceOptions } from '../src/app/database/database.config';
 import { handlerRegistry } from '../electron/utils/handler-registry';
-import { registerSpecialRoutes } from '../electron/server/special-routes';
-import { registerAuthRoutes } from '../electron/server/auth-routes';
-import { registerRpcRoute } from '../electron/server/rpc-router';
 
 // Mock de electron.ipcMain — necesario porque los handlers lo importan al
 // register. Como no estamos en Electron, lo monkey-patchamos antes que se
@@ -48,8 +44,31 @@ require.cache[require.resolve('electron')] = {
   id: 'electron',
   filename: 'electron',
   loaded: true,
-  exports: { ipcMain: mockIpcMain, app: { getPath: () => path.resolve(__dirname, '../.tmp') } },
+  exports: {
+    ipcMain: mockIpcMain,
+    app: {
+      getPath: () => path.resolve(__dirname, '../.tmp'),
+      isReady: () => true,
+      relaunch: () => {},
+      exit: () => {},
+      on: () => {},
+    },
+    BrowserWindow: class { static getAllWindows() { return []; } },
+    dialog: {},
+    shell: {},
+    protocol: { registerSchemesAsPrivileged: () => {}, registerFileProtocol: () => {}, registerStringProtocol: () => {} },
+    nativeImage: { createFromPath: () => ({}) },
+    Menu: { buildFromTemplate: () => ({}), setApplicationMenu: () => {} },
+  },
 } as any;
+
+// Despues del mock — ahora si podemos importar handlers sin que crashee al
+// hacer ipcMain.handle()
+import { getDataSourceOptions } from '../src/app/database/database.config';
+import { registerSpecialRoutes } from '../electron/server/special-routes';
+import { registerAuthRoutes } from '../electron/server/auth-routes';
+import { registerRpcRoute } from '../electron/server/rpc-router';
+import { registerAllAppHandlers } from '../electron/utils/register-all-handlers';
 
 async function main() {
   const tmpDir = path.resolve(__dirname, '../.tmp');
@@ -81,14 +100,28 @@ async function main() {
   await userRepo.save(admin);
   console.log('[test] Admin user creado: admin / admin');
 
-  // Sin Electron real, escribimos directo en handlerRegistry (skipeando el
-  // monkey-patch de installHandlerRegistry — que requiere ipcMain real).
+  // Mini-test handlers: para validar smoke + RPC.
   handlerRegistry.set('test-echo', async (_event: any, msg: string) => {
     return { echo: msg, timestamp: Date.now() };
   });
   handlerRegistry.set('count-usuarios', async () => {
     return userRepo.count();
   });
+
+  // Registrar TODOS los handlers reales contra el ipcMain mockeado, asi el
+  // RPC resuelve cualquier method que el cliente real pida (getProductos,
+  // getLoginSessions, get-dashboard-shortcuts, etc.).
+  let currentUser: any = admin;
+  const getCurrentUser = () => currentUser;
+  const setCurrentUser = (u: any) => { currentUser = u; };
+  console.log('[test] Registrando todos los handlers de la app...');
+  try {
+    registerAllAppHandlers({ dataSource, getCurrentUser, setCurrentUser });
+    console.log(`[test] ${handlerRegistry.size} handlers registrados.`);
+  } catch (e: any) {
+    console.warn(`[test] WARNING al registrar handlers: ${e?.message || e}`);
+    console.warn('[test] El server seguira con los handlers basicos.');
+  }
 
   // Bootstrap Fastify
   const fastify = Fastify({ logger: { level: 'info' } });
