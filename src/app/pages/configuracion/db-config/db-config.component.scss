@@ -1,0 +1,88 @@
+.db-config-page {
+  padding: 16px;
+
+  // Override global uppercase de styles.scss — host/db/user/path postgres
+  // son case-sensitive y no pueden ser forzados a mayuscula.
+  ::ng-deep input.mat-mdc-input-element,
+  ::ng-deep .mat-mdc-text-field-wrapper input,
+  ::ng-deep .mat-input-element,
+  ::ng-deep .mat-mdc-form-field input {
+    text-transform: none !important;
+  }
+
+  mat-card {
+    max-width: 920px;
+    margin: 0 auto;
+  }
+
+  .loading-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 24px 0;
+  }
+
+  .tab-body {
+    padding: 16px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .hint {
+    color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+
+    @media (max-width: 600px) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .full-width {
+    width: 100%;
+  }
+
+  .actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .inline-spinner {
+      display: inline-block;
+    }
+  }
+
+  .test-result {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-radius: 4px;
+
+    &.ok {
+      color: #2e7d32;
+      background: rgba(46, 125, 50, 0.08);
+    }
+
+    &.err {
+      color: #c62828;
+      background: rgba(198, 40, 40, 0.08);
+    }
+  }
+}

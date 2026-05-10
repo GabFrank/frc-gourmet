@@ -380,6 +380,10 @@
               <mat-icon matListItemIcon>auto_awesome</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Configurar IA</span>
             </a>
+            <a mat-list-item (click)="openDbConfigTab()">
+              <mat-icon matListItemIcon>storage</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Configurar BD</span>
+            </a>
           </div>
         </mat-expansion-panel>
 

@@ -3308,6 +3308,20 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('backup-clear-images', opts);
   },
 
+  // ================== DB CONFIG (F1) ==================
+  dbConfigGet: async (): Promise<any> => {
+    return await ipcRenderer.invoke('db-config-get');
+  },
+  dbConfigSave: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('db-config-save', payload);
+  },
+  dbConfigTestConnection: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('db-config-test-connection', payload);
+  },
+  dbConfigRestartApp: async (): Promise<any> => {
+    return await ipcRenderer.invoke('db-config-restart-app');
+  },
+
   // ================== IA CONFIG ==================
   iaConfigGet: async (): Promise<any> => {
     return await ipcRenderer.invoke('ia-config-get');
