@@ -336,7 +336,7 @@ export const recetaPresentacionHandlers = {
         .leftJoinAndSelect('adicionalesVinculados.adicional', 'adicional')
         .where('receta.producto_variacion_id = :productoId', { productoId })
         .andWhere('rp.presentacion_id = :presentacionId', { presentacionId })
-        .andWhere('rp.activo = 1')
+        .andWhere('rp.activo = true')
         .orderBy('sabor.nombre', 'ASC')
         .getMany();
 

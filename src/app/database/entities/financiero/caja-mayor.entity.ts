@@ -18,10 +18,10 @@ export class CajaMayor extends BaseModel {
   })
   estado!: CajaMayorEstado;
 
-  @Column({ type: 'datetime', name: 'fecha_apertura' })
+  @Column({ name: 'fecha_apertura' })
   fechaApertura!: Date;
 
-  @Column({ type: 'datetime', name: 'fecha_cierre', nullable: true })
+  @Column({ name: 'fecha_cierre', nullable: true })
   fechaCierre?: Date;
 
   @ManyToOne(() => Usuario)

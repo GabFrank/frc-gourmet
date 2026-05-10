@@ -12,6 +12,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 interface CobrarCuotaDialogData {
   cuota: any;
@@ -34,6 +35,7 @@ interface CobrarCuotaDialogData {
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatDividerModule,
+    CurrencyInputDirective,
   ]
 })
 export class CobrarCuotaDialogComponent implements OnInit {
@@ -43,6 +45,7 @@ export class CobrarCuotaDialogComponent implements OnInit {
   cuota: any = null;
   contextoLabel = '';
   restante = 0;
+  decimalesMoneda = 0;
 
   cajasMayor: any[] = [];
   monedas: any[] = [];
@@ -71,6 +74,15 @@ export class CobrarCuotaDialogComponent implements OnInit {
     });
 
     this.loadLookups();
+    this.form.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.form?.get('monedaId')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    let dec: any = m?.decimales;
+    if (dec == null) dec = this.cuota?.cuentaPorCobrar?.moneda?.decimales;
+    this.decimalesMoneda = Number.isFinite(Number(dec)) ? Number(dec) : 0;
   }
 
   async loadLookups(): Promise<void> {
@@ -83,6 +95,7 @@ export class CobrarCuotaDialogComponent implements OnInit {
       this.cajasMayor = (cajas || []).filter((c: any) => c.estado === 'ABIERTA');
       this.monedas = monedas || [];
       this.formasPago = (formas || []).filter((f: any) => f.movimentaCaja);
+      this.recalcDecimalesMoneda();
     } catch (e) { console.error(e); }
   }
 

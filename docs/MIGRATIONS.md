@@ -1,66 +1,105 @@
 # Migraciones de schema
 
-> **TL;DR:** En dev `synchronize: true` (TypeORM ajusta tablas solo). En prod la app usa migraciones versionadas + backup automático antes de cada migración.
+> **TL;DR:** F1.5 eliminó `synchronize:true` definitivamente. Toda nueva entity exige migración generada con `npm run migration:generate`. Sin migración no hay schema.
 
 ## Modelo
 
 | Entorno | `synchronize` | Migraciones |
 |---|---|---|
-| Dev local (`npm start`) | true | no corren |
-| App empaquetada (.dmg / .exe / .AppImage) | false | corren al iniciar |
-| Primer arranque empaquetado, BD inexistente | true (bootstrap) | marcadas como aplicadas |
+| Cualquiera (dev / packaged / postgres / sqlite) | **false** | corren al iniciar |
 
-Detección: `app.isPackaged` (de Electron) o `NODE_ENV=production`. Ver `database.config.ts:isPackagedApp()`.
+Tabla de tracking: **`typeorm_migrations`** (mismo nombre en SQLite y Postgres).
 
-Tabla de tracking en SQLite: **`typeorm_migrations`**.
+`DatabaseService.initialize()` aplica migrations pendientes con `transaction: 'each'`. Para SQLite, copia el `.db` a `<userData>/backups/...premigrate_<ts>.db` antes de migrar (no aplica a Postgres — usuario hace `pg_dump` externo).
 
 ## Flujo developer
 
 1. Modificar entity (agregar columna, índice, tabla, etc.).
-2. **No** correr la app aún (synchronize la aplicaría sin migración).
-3. Generar migración:
+2. Generar migración:
    ```bash
    npm run migration:generate -- src/app/database/migrations/AgregarCampoXEnY
    ```
-4. Revisar el SQL generado. **Reglas:**
+   El CLI compara la BD temporal (`.tmp/cli-frc-gourmet.db`) con tus entities y produce el SQL diff. Si la BD temp no existe se crea vacía y la migración generada va a contener CREATE TABLE para todo (no es lo que querés a menos que sea baseline).
+
+   Para diff incremental contra la BD que ya tiene migrations aplicadas:
+   ```bash
+   # 1. Asegurar BD temp con migrations al día
+   rm -f .tmp/cli-frc-gourmet.db
+   npm run migration:run
+
+   # 2. Generar diff
+   npm run migration:generate -- src/app/database/migrations/AgregarCampoXEnY
+   ```
+3. Revisar el SQL generado. **Reglas:**
    - Migración aditiva (no DROP, no RENAME directo).
    - Para renombrar: agregar nueva → backfill → mantener vieja una versión → DROP en versión siguiente.
    - Idempotente cuando se pueda (`IF NOT EXISTS`).
-5. Importar la migración en `database.config.ts:getMigrations()`:
+4. Importar la migración en `database.config.ts:getMigrations()`:
    ```ts
    import { AgregarCampoXEnY1730000000000 } from './migrations/1730000000000-AgregarCampoXEnY';
    function getMigrations(): Function[] {
-     return [AgregarCampoXEnY1730000000000];
+     return [Baseline1778357391461, AgregarCampoXEnY1730000000000];
    }
    ```
-6. Probar en dev: `npm start`. En dev synchronize ya aplicó el cambio, la migración no corre. Para probar la migración, simular prod:
-   ```bash
-   ELECTRON_IS_PACKAGED=1 npm run electron:local
-   ```
-7. Commit con `feat(db): agregar campo X en Y` o `fix(db): ...`.
+5. Probar en dev: `npm start`. La migración corre al arranque, log `[DB] Aplicando migraciones pendientes...`.
+6. Commit con `feat(db): agregar campo X en Y` o `fix(db): ...`.
 
-## Backup automático pre-migration
+## Backup automático pre-migration (SQLite)
 
-Antes de aplicar migraciones pendientes en prod, `DatabaseService.initialize()` copia `frc-gourmet.db` a:
+Antes de aplicar migraciones, `DatabaseService` copia el `.db` a:
 
 ```
 <userData>/backups/frc-gourmet-backup_premigrate_<ISO-timestamp>.db
 ```
 
-Si falla la migración, el archivo queda intacto y es restaurable manualmente desde Sistema → Backups.
+Si falla la migración, el archivo queda intacto. Restaurable desde Sistema → Backups.
 
-## Generar baseline (primer release)
+> Postgres no tiene este step. Hacé `pg_dump` antes de un upgrade que aplique migrations en prod.
 
-Antes del primer `1.0.0` que llegue a otros usuarios:
+## Baselines (dual driver — F1.4)
+
+Dos baselines coexisten porque `migration:generate` produce SQL específico al driver target. `getMigrations()` en `database.config.ts` elige cuál cargar según el driver activo:
+
+| Archivo | Driver | Notas |
+|---|---|---|
+| `1778378410416-Baseline.ts` | SQLite | `INTEGER PRIMARY KEY AUTOINCREMENT`, `datetime`, `datetime('now')`, CHECK constraints para enums |
+| `1778380893207-BaselinePostgres.ts` | Postgres | `SERIAL`, `TIMESTAMP`, `now()`, `boolean true/false`, `text` para columnas enum (sin CHECK — validación a nivel app) |
+
+Las **entities** son driver-agnósticas (sin `type: 'datetime'` explícito, decimals con precision en lugar de float). Migraciones incrementales post-baseline pueden ser portables si se generan contra cada driver y se mergean (o se escriben con guard `if (queryRunner.connection.options.type === 'postgres')`).
+
+Historial de regeneraciones:
+- `Initial1778266131852` (deploy-infra, era synchronize)
+- `Baseline1778357391461` (F1.5 — regeneró desde cero, eliminando synchronize)
+- `Baseline1778378410416` (F1.4 — entities driver-agnósticas, baseline SQLite)
+- `BaselinePostgres1778380893207` (F1.4 — baseline Postgres correspondiente)
+
+> ⚠️ Si tu BD dev fue creada con synchronize antes de F1.5: **resetear** vía `Sistema → Backup → Reset BD` antes del primer arranque post-F1.5. La baseline va a fallar con "table already exists" sobre tablas que synchronize ya creó.
+>
+> Si tu BD dev arrancó con la baseline F1.5 (`Baseline1778357391461`): hacer un `UPDATE typeorm_migrations SET name='Baseline1778378410416', timestamp=1778378410416 WHERE name='Baseline1778357391461'` antes de arrancar, sino la nueva baseline va a fallar igual con "table already exists".
+
+A partir de F1.4, **nunca más** regenerar baseline. Solo agregar migraciones incrementales encima.
+
+### Generar baseline Postgres (referencia)
+
+Si en el futuro hay que regenerar la baseline Postgres, los pasos son:
 
 ```bash
-rm -rf .tmp/cli-frc-gourmet.db
-npm run migration:generate -- src/app/database/migrations/Initial
+# 1. Crear BD Postgres vacía
+createdb frc_gourmet_baseline_pg
+
+# 2. Generar baseline contra ella (env vars del datasource CLI)
+FRC_DB_TYPE=postgres FRC_PG_DATABASE=frc_gourmet_baseline_pg FRC_PG_USERNAME=$USER \
+  TS_NODE_PROJECT=tsconfig.typeorm.json \
+  npm run migration:generate -- src/app/database/migrations/BaselinePostgres
+
+# 3. Validar corriéndola
+FRC_DB_TYPE=postgres FRC_PG_DATABASE=frc_gourmet_baseline_pg FRC_PG_USERNAME=$USER \
+  TS_NODE_PROJECT=tsconfig.typeorm.json \
+  npm run migration:run
+
+# 4. Cleanup
+dropdb frc_gourmet_baseline_pg
 ```
-
-El archivo `<timestamp>-Initial.ts` contiene todas las CREATE TABLE actuales. Importarlo en `database.config.ts`. A partir de acá nunca más volver a generar baseline.
-
-> ⚠️ Para usuarios EXISTENTES que ya tienen BD creada con synchronize, la baseline se marca como aplicada automáticamente en el primer arranque post-actualización (no se reaplica). Ver lógica en `DatabaseService.markAllMigrationsAsApplied()`.
 
 ## CLI rápido
 
@@ -79,14 +118,39 @@ FRC_DB_PATH="/Users/$USER/Library/Application Support/frc-gourmet/frc-gourmet.db
 
 ## Limitaciones SQLite
 
-- `ALTER TABLE DROP COLUMN` solo desde SQLite 3.35 (incluido en sqlite3 npm 5.1+).
+- `ALTER TABLE DROP COLUMN` desde SQLite 3.35 (incluido en sqlite3 npm 5.1+).
 - `ALTER TABLE RENAME COLUMN` desde 3.25.
-- Para cambios complejos (alterar tipo, multiples drops), TypeORM usa el patrón "create new table, copy data, drop old, rename" — esto reescribe la tabla completa y puede ser lento con datos.
+- Para cambios complejos (alterar tipo, multiples drops), TypeORM usa el patrón "create new table, copy data, drop old, rename" — reescribe la tabla completa y puede ser lento con datos.
 - Probá siempre en una copia de la BD real antes de mergear.
+
+## Postgres
+
+**Estado actual (post-F1.4):** Postgres soportado fresh install. `getMigrations()` elige `BaselinePostgres1778380893207` cuando el driver es postgres, y `Baseline1778378410416` cuando es sqlite. Validado con `migration:run` contra una Postgres vacía → 150 tablas creadas, FKs correctos.
+
+Migraciones incrementales (post-baseline) deben ser portables. Dos approaches:
+
+1. **Driver-aware migration** — escribir SQL distinto según `queryRunner.connection.options.type`:
+    ```ts
+    public async up(queryRunner: QueryRunner): Promise<void> {
+      const isPg = queryRunner.connection.options.type === 'postgres';
+      await queryRunner.query(isPg
+        ? `ALTER TABLE foo ADD COLUMN bar TIMESTAMP`
+        : `ALTER TABLE foo ADD COLUMN bar datetime`
+      );
+    }
+    ```
+2. **Object API de TypeORM** — usar `Table`, `TableColumn`, `queryRunner.addColumn()` que TypeORM traduce per-driver. Más mantenible para cambios chicos.
+
+Limitaciones conocidas:
+- Postgres baseline usa `text` (sin CHECK) para columnas enum — la validación queda en TypeScript app-side. SQLite baseline usa `varchar CHECK(... IN (...))` que sí valida en BD.
+- SQL específico de SQLite (ej. `datetime('now')`) puede romper.
+- Tipos: el generator usa types portable cuando puede, pero validar la migración manualmente si la app va a Postgres.
+- F1.4 (entities Postgres-compat) está pendiente — todavía no garantizamos paridad.
 
 ## Qué NO hacer
 
-- Modificar una migración ya merged → genera otra que la corrija.
+- Modificar una migración ya merged → generar otra que la corrija.
 - DROP/RENAME en una sola migración sin estrategia de 2 versiones.
 - Subir migraciones que dependan de datos que pueden no existir (validar con `IF EXISTS`).
-- Saltarse el backup pre-migration (siempre debe correr).
+- Saltarse el backup pre-migration (siempre debe correr en SQLite).
+- Volver a habilitar `synchronize:true` aunque sea "solo en dev".

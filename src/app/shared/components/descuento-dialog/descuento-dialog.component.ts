@@ -1,6 +1,6 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -23,7 +23,6 @@ export interface DescuentoDialogData {
   standalone: true,
   imports: [
     CommonModule,
-    FormsModule,
     ReactiveFormsModule,
     MatDialogModule,
     MatButtonModule,
@@ -47,11 +46,17 @@ export class DescuentoDialogComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.tipoDescuento = this.data.descuentoMonto ? 'monto' : 'porcentaje';
+    const tipoInicial: 'porcentaje' | 'monto' = this.data.descuentoMonto ? 'monto' : 'porcentaje';
+    this.tipoDescuento = tipoInicial;
     this.form = this.fb.group({
+      tipoDescuento: [tipoInicial, Validators.required],
       porcentaje: [this.data.descuentoPorcentaje || 0, [Validators.min(0), Validators.max(100)]],
       monto: [this.data.descuentoMonto || 0, [Validators.min(0)]],
       motivo: [this.data.descuentoMotivo || '', Validators.required],
+    });
+    this.form.get('tipoDescuento')!.valueChanges.subscribe((v: 'porcentaje' | 'monto') => {
+      this.tipoDescuento = v;
+      this.recalcular();
     });
     this.recalcular();
     this.form.valueChanges.subscribe(() => this.recalcular());
@@ -65,10 +70,6 @@ export class DescuentoDialogComponent implements OnInit {
       this.montoDescuento = this.form.get('monto')?.value || 0;
     }
     this.totalConDescuento = Math.max(0, this.data.subtotal - this.montoDescuento);
-  }
-
-  onTipoChange(): void {
-    this.recalcular();
   }
 
   quitarDescuento(): void {

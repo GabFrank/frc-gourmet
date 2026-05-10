@@ -27,7 +27,7 @@ export class CajaMayorMovimiento extends BaseModel {
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   monto!: number;
 
-  @Column({ type: 'datetime' })
+  @Column()
   fecha!: Date;
 
   @ManyToOne(() => Usuario)

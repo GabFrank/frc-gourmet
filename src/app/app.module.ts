@@ -71,6 +71,8 @@ import { PrecioVentaDialogComponent } from './pages/productos/gestionar-producto
 // Gestion Recetas Module
 import { GestionRecetasModule } from './pages/gestion-recetas/gestion-recetas.module';
 
+// Shared directives standalone
+import { CurrencyInputDirective } from './shared/directives/currency-input.directive';
 // Standalone shared components used in non-standalone declarations
 import { FileUploadComponent } from './shared/components/file-upload/file-upload.component';
 
@@ -117,7 +119,8 @@ import { FileUploadComponent } from './shared/components/file-upload/file-upload
     AppRoutingModule,
     TabContainerComponent,
     GestionRecetasModule,
-    FileUploadComponent
+    CurrencyInputDirective,
+    FileUploadComponent,
   ],
   declarations: [
     // No declarations since all components are standalone

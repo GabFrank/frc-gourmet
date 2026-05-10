@@ -17,7 +17,7 @@ export class Reserva extends BaseModel {
   @Column()
   numero_cliente!: string;
 
-  @Column({ type: 'datetime' })
+  @Column()
   fecha_hora_reserva!: Date;
 
   @Column({ type: 'int', default: 1 })

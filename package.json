@@ -209,5 +209,9 @@
       "artifactName": "FRC-Gourmet-${version}-${arch}.${ext}",
       "icon": "build/icons"
     }
+  },
+  "optionalDependencies": {
+    "@types/pg": "^8.20.0",
+    "pg": "^8.20.0"
   }
 }

@@ -17,6 +17,7 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { TipoReglaComision, ModoValidacionComision, RecurrenciaComision, TipoRequisitoComision } from 'src/app/database/entities/rrhh/regla-comision-enums';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 @Component({
   selector: 'app-create-edit-regla-dialog',
@@ -38,6 +39,7 @@ import { TipoReglaComision, ModoValidacionComision, RecurrenciaComision, TipoReq
     MatSnackBarModule,
     MatDatepickerModule,
     MatNativeDateModule,
+    CurrencyInputDirective,
   ],
   templateUrl: './create-edit-regla-dialog.component.html',
   styleUrls: ['./create-edit-regla-dialog.component.scss'],
@@ -46,6 +48,7 @@ export class CreateEditReglaDialogComponent implements OnInit {
   form!: FormGroup;
   loading = false;
   isEdit = false;
+  decimalesMoneda = 0;
 
   tiposRegla = Object.values(TipoReglaComision);
   modos = Object.values(ModoValidacionComision);

@@ -13,6 +13,7 @@ import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 interface PagarCuotaDialogData {
   cuotaTipo: 'COMPRA' | 'CPP';
@@ -40,6 +41,7 @@ interface PagarCuotaDialogData {
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatDividerModule,
+    CurrencyInputDirective,
   ]
 })
 export class PagarCuotaDialogComponent implements OnInit {
@@ -56,6 +58,7 @@ export class PagarCuotaDialogComponent implements OnInit {
   montoLabel = '';
   accionLabel = '';
   restante = 0;
+  decimalesMoneda = 0;
 
   cajasMayor: any[] = [];
   cuentasBancarias: any[] = [];
@@ -82,6 +85,7 @@ export class PagarCuotaDialogComponent implements OnInit {
     this.montoLabel = this.esCobro ? 'Monto a cobrar' : 'Monto a pagar';
     this.accionLabel = this.esCobro ? 'Cobrar' : 'Pagar';
     this.restante = +(Number(this.cuota?.monto || 0) - Number(this.cuota?.montoPagado || 0)).toFixed(2);
+    this.recalcDecimalesMoneda();
 
     this.form = this.fb.group({
       fuente: ['CAJA_MAYOR', Validators.required],
@@ -96,8 +100,29 @@ export class PagarCuotaDialogComponent implements OnInit {
     });
 
     this.loadLookups();
-    this.form.get('fuente')!.valueChanges.subscribe(() => this.applyValidators());
+    this.form.get('fuente')!.valueChanges.subscribe(() => {
+      this.applyValidators();
+      this.recalcDecimalesMoneda();
+    });
+    this.form.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
+    this.form.get('cuentaBancariaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
     this.applyValidators();
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const fuente = this.form?.get('fuente')?.value;
+    let dec: any = null;
+    if (fuente === 'CAJA_MAYOR') {
+      const id = this.form?.get('monedaId')?.value;
+      const m = this.monedas.find((x: any) => x.id === id);
+      dec = m?.decimales;
+    } else if (fuente === 'CUENTA_BANCARIA') {
+      const id = this.form?.get('cuentaBancariaId')?.value;
+      const cb = this.cuentasBancarias.find((x: any) => x.id === id);
+      dec = cb?.moneda?.decimales;
+    }
+    if (dec == null) dec = this.cuota?.cuentaPorPagar?.moneda?.decimales ?? this.cuota?.compra?.moneda?.decimales;
+    this.decimalesMoneda = Number.isFinite(Number(dec)) ? Number(dec) : 0;
   }
 
   applyValidators(): void {

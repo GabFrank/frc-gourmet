@@ -30,7 +30,7 @@ export class ComandaItem extends BaseModel {
   @Column({ type: 'varchar', length: 500, nullable: true })
   observacion?: string;
 
-  @Column({ type: 'datetime', nullable: true, name: 'fecha_listo' })
+  @Column({ nullable: true, name: 'fecha_listo' })
   fechaListo?: Date;
 
   @Column({ default: true })

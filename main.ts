@@ -56,6 +56,10 @@ import { seedInitialData } from './electron/utils/seed-data';
 import { runBootstrapMigrations } from './electron/utils/db-migrations-bootstrap';
 import { seedSystemData } from './electron/utils/seed-system';
 import { migratePlaintextPasswords } from './electron/utils/migrate-passwords';
+import { readAppSettings } from './electron/utils/app-settings.utils';
+import { getDbPassword } from './electron/utils/db-password.utils';
+import type { DbConnectionOverride } from './src/app/database/database.config';
+import { registerDbConfigHandlers } from './electron/handlers/db-config.handler';
 // RRHH Fase 8 - Dashboard, Notificaciones, Reportes
 import { registerNotificacionesRrhhHandlers, generarNotificacionesRrhh } from './electron/handlers/notificaciones-rrhh.handler';
 import { registerDashboardRrhhHandlers } from './electron/handlers/dashboard-rrhh.handler';
@@ -94,13 +98,37 @@ function setCurrentUser(user: Usuario | null): void {
   currentUser = user;
 }
 
+async function buildDbOverride(userDataPath: string): Promise<DbConnectionOverride | undefined> {
+  const settings = readAppSettings(userDataPath);
+  const db = settings.database;
+  if (db.type === 'postgres') {
+    const password = await getDbPassword();
+    return {
+      type: 'postgres',
+      host: db.host,
+      port: db.port,
+      database: db.database,
+      username: db.username,
+      password,
+      schema: db.schema,
+      ssl: db.ssl,
+    };
+  }
+  // sqlite con path opcional
+  if (db.path && db.path !== 'default') {
+    return { type: 'sqlite', sqlitePath: db.path };
+  }
+  return undefined; // sqlite default, mantiene comportamiento legacy
+}
+
 function initializeDatabase() {
   // Get user data path
   const userDataPath = app.getPath('userData');
 
   // Initialize database service
   dbService = DatabaseService.getInstance();
-  dbService.initialize(userDataPath)
+  buildDbOverride(userDataPath)
+    .then((override) => dbService!.initialize(userDataPath, override))
     .then(async (dataSource) => {
       console.log('Database initialized successfully');
 
@@ -168,6 +196,9 @@ function initializeDatabase() {
 
       // Backup & Restore handlers
       registerBackupHandlers(dataSource);
+
+      // F1: Configuracion de BD (sqlite path / postgres)
+      registerDbConfigHandlers();
 
       // Importacion de facturas con OCR + IA
       registerFacturaImportHandlers(dataSource, getCurrentUser);

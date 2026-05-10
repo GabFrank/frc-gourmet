@@ -30,7 +30,7 @@ export class Aguinaldo extends BaseModel {
   @Column({ name: 'meses_trabajados', type: 'int', default: 0 })
   mesesTrabajados!: number;
 
-  @Column({ name: 'fecha_pago', type: 'datetime', nullable: true })
+  @Column({ name: 'fecha_pago', nullable: true })
   fechaPago?: Date;
 
   @Column({ name: 'liquidacion_id', type: 'int', nullable: true })

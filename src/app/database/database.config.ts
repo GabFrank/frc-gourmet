@@ -155,7 +155,6 @@ import { IaPromptConfig } from './entities/ia/ia-prompt-config.entity';
 import { IaPromptSugerencia } from './entities/ia/ia-prompt-sugerencia.entity';
 
 // Migrations baseline + futuras
-import { Initial1778266131852 } from './migrations/1778266131852-Initial';
 
 // Import new PDV entities
 import { PrecioDelivery } from './entities/ventas/precio-delivery.entity';
@@ -176,6 +175,9 @@ import { Reserva } from './entities/ventas/reserva.entity';
 import { Comanda } from './entities/ventas/comanda.entity';
 import { ComandaItem } from './entities/ventas/comanda-item.entity';
 import { Sector } from './entities/ventas/sector.entity';
+// Migrations
+import { Baseline1778378410416 } from './migrations/1778378410416-Baseline';
+import { BaselinePostgres1778380893207 } from './migrations/1778380893207-BaselinePostgres';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -184,15 +186,76 @@ import { PdvAtajoItemProducto } from './entities/ventas/pdv-atajo-item-producto.
 import { VentaItemSabor } from './entities/ventas/venta-item-sabor.entity';
 
 /**
+ * Override de conexion. F1.1: el caller (main.ts) lo construye leyendo
+ * app-settings.database + keytar para password Postgres. Si no se pasa,
+ * default = SQLite en `userData/frc-gourmet.db` (back compat).
+ */
+export interface DbConnectionOverride {
+  type: 'sqlite' | 'postgres';
+  // sqlite
+  sqlitePath?: string; // 'default' o path absoluto
+  // postgres
+  host?: string;
+  port?: number;
+  database?: string;
+  username?: string;
+  password?: string; // resuelto desde keytar antes de llegar aca
+  schema?: string;
+  ssl?: boolean;
+}
+
+/**
  * Get the configuration for TypeORM
  * @param userDataPath Path to store the database file
+ * @param override     Si se pasa, define backend (sqlite custom o postgres)
  * @returns DataSourceOptions for TypeORM configuration
  */
-export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
+export function getDataSourceOptions(
+  userDataPath: string,
+  override?: DbConnectionOverride,
+): DataSourceOptions {
+  const entities = getEntitiesList();
+  const driverType: 'sqlite' | 'postgres' = override?.type === 'postgres' ? 'postgres' : 'sqlite';
+  const sharedOptions = {
+    entities,
+    // F1.5: synchronize eliminado definitivamente. Toda nueva entity exige
+    // migration generada con `npm run migration:generate`.
+    // DatabaseService corre las migrations manualmente tras backup pre-migrate.
+    synchronize: false,
+    logging: process.env['NODE_ENV'] === 'development',
+    migrations: getMigrations(driverType),
+    migrationsRun: false,
+    migrationsTableName: 'typeorm_migrations',
+  };
+
+  if (override?.type === 'postgres') {
+    return {
+      type: 'postgres',
+      host: override.host || 'localhost',
+      port: override.port || 5432,
+      database: override.database || 'frc_gourmet',
+      username: override.username || 'postgres',
+      password: override.password || '',
+      schema: override.schema,
+      ssl: override.ssl,
+      ...sharedOptions,
+    } as DataSourceOptions;
+  }
+
+  // sqlite default o con path custom
+  const dbPath =
+    override?.sqlitePath && override.sqlitePath !== 'default'
+      ? override.sqlitePath
+      : path.join(userDataPath, 'frc-gourmet.db');
   return {
     type: 'sqlite',
-    database: path.join(userDataPath, 'frc-gourmet.db'),
-    entities: [
+    database: dbPath,
+    ...sharedOptions,
+  };
+}
+
+function getEntitiesList(): any[] {
+  return [
       // Entity classes
       Printer,
       Persona,
@@ -357,19 +420,8 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
       PdvAtajoGrupoItem,
       PdvAtajoItemProducto,
       // VentaItem sabores (variaciones multi-sabor)
-      VentaItemSabor
-    ],
-    // Sincronización automática vs migraciones:
-    //  - Dev / app no empaquetada: synchronize=true (TypeORM crea/altera tablas)
-    //  - Prod / app empaquetada: synchronize=false + migrations corren al iniciar
-    // En el primer arranque de una instalación nueva el bootstrap hace synchronize una vez
-    // y marca todas las migraciones como aplicadas (ver DatabaseService.initialize).
-    synchronize: !isPackagedApp(),
-    logging: process.env['NODE_ENV'] === 'development',
-    migrations: getMigrations(),
-    migrationsRun: false, // Lo controla manualmente DatabaseService tras el backup
-    migrationsTableName: 'typeorm_migrations',
-  };
+      VentaItemSabor,
+  ];
 }
 
 /** Detecta si la app corre empaquetada (instalador) vs en dev. */
@@ -384,21 +436,35 @@ export function isPackagedApp(): boolean {
   }
 }
 
-/** Lista de migraciones a ejecutar. Se importan acá para que el bundler las incluya. */
-function getMigrations(): Function[] {
-  // Las migraciones se agregan acá conforme se generan con `npm run migration:generate`.
-  // Ver src/app/database/migrations/README.md
+/**
+ * Lista de migraciones a ejecutar. Se importan acá para que el bundler las incluya.
+ *
+ * F1.4: la baseline difiere por driver porque `migration:generate` produce SQL
+ * específico al driver target. Mantenemos dos baselines y elegimos según
+ * el driver activo. Migraciones incrementales (post-baseline) van al final
+ * y deben ser portables (testear en ambos drivers o usar guard `if (driverType)`).
+ */
+function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
+  const baseline = driverType === 'postgres'
+    ? BaselinePostgres1778380893207
+    : Baseline1778378410416;
   return [
-    Initial1778266131852,
+    baseline,
+    // Agregar migraciones incrementales acá conforme se generan con
+    // `npm run migration:generate`. Ver docs/MIGRATIONS.md
   ];
 }
 
 /**
  * Create a new TypeORM DataSource
  * @param userDataPath Path to store the database file
+ * @param override     Connection override (sqlite path o postgres). Default sqlite.
  * @returns Promise with DataSource
  */
-export function createDataSource(userDataPath: string): Promise<DataSource> {
-  const dataSource = new DataSource(getDataSourceOptions(userDataPath));
+export function createDataSource(
+  userDataPath: string,
+  override?: DbConnectionOverride,
+): Promise<DataSource> {
+  const dataSource = new DataSource(getDataSourceOptions(userDataPath, override));
   return dataSource.initialize();
 }

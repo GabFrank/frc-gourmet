@@ -73,7 +73,7 @@ export class Venta extends BaseModel {
   @JoinColumn({ name: 'descuento_autorizado_por_id' })
   descuentoAutorizadoPor?: Usuario;
 
-  @Column({ name: 'fecha_cierre', type: 'datetime', nullable: true })
+  @Column({ name: 'fecha_cierre', nullable: true })
   fechaCierre?: Date;
 
   // Comanda (tarjeta de cuenta individual)

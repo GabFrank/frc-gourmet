@@ -29,7 +29,7 @@ export class LiquidacionComision extends BaseModel {
   @JoinColumn({ name: 'aprobado_por_id' })
   aprobadoPor?: Usuario;
 
-  @Column({ name: 'fecha_aprobacion', type: 'datetime', nullable: true })
+  @Column({ name: 'fecha_aprobacion', nullable: true })
   fechaAprobacion?: Date;
 
   @Column({ type: 'text', nullable: true })

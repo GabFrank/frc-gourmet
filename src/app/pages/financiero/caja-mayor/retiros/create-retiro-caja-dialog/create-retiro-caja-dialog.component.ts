@@ -14,6 +14,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 interface DetalleRow {
   monedaId: number;
@@ -43,6 +44,7 @@ interface DetalleRow {
     MatSnackBarModule,
     MatDividerModule,
     MatTooltipModule,
+    CurrencyInputDirective,
   ]
 })
 export class CreateRetiroCajaDialogComponent implements OnInit {
@@ -50,6 +52,7 @@ export class CreateRetiroCajaDialogComponent implements OnInit {
   detalleForm!: FormGroup;
   saving = false;
   loading = true;
+  decimalesMoneda = 0;
 
   cajaId: number = 0;
   cajaNombre: string = '';
@@ -85,7 +88,16 @@ export class CreateRetiroCajaDialogComponent implements OnInit {
       monto: [null, [Validators.required, Validators.min(0.01)]],
     });
 
+    this.detalleForm.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
+
     this.loadData();
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.detalleForm?.get('monedaId')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   async loadData(): Promise<void> {

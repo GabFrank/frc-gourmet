@@ -54,13 +54,13 @@
             <!-- Valor Field -->
             <mat-form-field appearance="outline" class="form-field">
               <mat-label>Valor*</mat-label>
-              <input matInput 
-                     type="number"
+              <input matInput
+                     type="text"
+                     inputmode="decimal"
                      formControlName="valor"
                      placeholder="Ingrese el valor del precio"
-                     min="0.01"
-                     step="0.01"
-                     required>
+                     required
+                     appCurrencyInput [decimals]="decimalesMoneda">
               <mat-icon matSuffix>attach_money</mat-icon>
               <mat-error *ngIf="precioForm.get('valor')?.invalid && precioForm.get('valor')?.touched">
                 El valor debe ser mayor a 0

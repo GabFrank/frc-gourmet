@@ -11,6 +11,7 @@ import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { confirmarSaldosNegativos, SaldoNegativoCheck } from 'src/app/shared/utils/saldo-negativo-confirm';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 @Component({
   selector: 'app-edit-movimiento-dialog',
@@ -27,6 +28,7 @@ import { confirmarSaldosNegativos, SaldoNegativoCheck } from 'src/app/shared/uti
     MatButtonModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    CurrencyInputDirective,
   ]
 })
 export class EditMovimientoDialogComponent implements OnInit {
@@ -34,6 +36,7 @@ export class EditMovimientoDialogComponent implements OnInit {
   monedas: any[] = [];
   formasPago: any[] = [];
   saving = false;
+  decimalesMoneda = 0;
   movimientoId: number = 0;
   tipoMovimiento: string = '';
   cajaMayorId: number = 0;
@@ -68,6 +71,14 @@ export class EditMovimientoDialogComponent implements OnInit {
     });
 
     this.loadLookups();
+    this.form.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.form?.get('monedaId')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   async loadLookups(): Promise<void> {
@@ -78,6 +89,7 @@ export class EditMovimientoDialogComponent implements OnInit {
       ]);
       this.monedas = monedas || [];
       this.formasPago = formasPago || [];
+      this.recalcDecimalesMoneda();
     } catch (error) {
       console.error('Error loading lookups:', error);
     }

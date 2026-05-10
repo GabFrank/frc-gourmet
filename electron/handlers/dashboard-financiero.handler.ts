@@ -4,6 +4,7 @@ import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caj
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { dbQuery } from '../utils/db-query';
 
 export function registerDashboardFinancieroHandlers(
   dataSource: DataSource,
@@ -22,7 +23,7 @@ export function registerDashboardFinancieroHandlers(
       const monedasActivas = await monedaRepo.count({ where: { activo: true } });
 
       // 3. Dispositivos PdV
-      const dispositivosRows: any[] = await dataSource.query(`SELECT COUNT(*) as cnt FROM dispositivos WHERE activo = 1`);
+      const dispositivosRows: any[] = await dbQuery(dataSource, `SELECT COUNT(*) as cnt FROM dispositivos WHERE activo = true`);
       const dispositivosPdv = Number(dispositivosRows?.[0]?.cnt || 0);
 
       // 4. Cotizaciones actuales (USD y BRL contra moneda principal)
@@ -33,7 +34,7 @@ export function registerDashboardFinancieroHandlers(
         const usd = await monedaRepo.findOne({ where: { activo: true, denominacion: 'DOLAR' } });
         const usdAlt = !usd ? await dataSource.getRepository(Moneda)
           .createQueryBuilder('m')
-          .where('m.activo = 1')
+          .where('m.activo = true')
           .andWhere('UPPER(m.simbolo) IN (:...syms)', { syms: ['USD', '$', 'US$'] })
           .getOne() : null;
         const usdMoneda = usd || usdAlt;
@@ -47,7 +48,7 @@ export function registerDashboardFinancieroHandlers(
 
         const brl = await dataSource.getRepository(Moneda)
           .createQueryBuilder('m')
-          .where('m.activo = 1')
+          .where('m.activo = true')
           .andWhere('UPPER(m.simbolo) IN (:...syms)', { syms: ['BRL', 'R$'] })
           .getOne();
         if (brl) {
@@ -108,11 +109,11 @@ async function buildHistoricoCotizaciones(
 
   const usdMoneda = await dataSource.getRepository(Moneda)
     .createQueryBuilder('m')
-    .where('m.activo = 1 AND UPPER(m.simbolo) IN (:...syms)', { syms: ['USD', '$', 'US$'] })
+    .where('m.activo = true AND UPPER(m.simbolo) IN (:...syms)', { syms: ['USD', '$', 'US$'] })
     .getOne();
   const brlMoneda = await dataSource.getRepository(Moneda)
     .createQueryBuilder('m')
-    .where('m.activo = 1 AND UPPER(m.simbolo) IN (:...syms)', { syms: ['BRL', 'R$'] })
+    .where('m.activo = true AND UPPER(m.simbolo) IN (:...syms)', { syms: ['BRL', 'R$'] })
     .getOne();
 
   const today = new Date();
@@ -121,25 +122,25 @@ async function buildHistoricoCotizaciones(
     labels.push(`${d.getDate()}/${d.getMonth() + 1}`);
 
     if (usdMoneda) {
-      const rows: any[] = await dataSource.query(`
-        SELECT compra_local FROM monedas_cambio
+      const rows: any[] = await dbQuery(dataSource, `
+        SELECT "compraLocal" FROM monedas_cambio
         WHERE moneda_origen_id = ? AND moneda_destino_id = ?
           AND created_at <= ?
         ORDER BY created_at DESC LIMIT 1
       `, [usdMoneda.id, principal.id, d.toISOString()]);
-      usd.push(Number(rows?.[0]?.compra_local || 0));
+      usd.push(Number(rows?.[0]?.compraLocal || 0));
     } else {
       usd.push(0);
     }
 
     if (brlMoneda) {
-      const rows: any[] = await dataSource.query(`
-        SELECT compra_local FROM monedas_cambio
+      const rows: any[] = await dbQuery(dataSource, `
+        SELECT "compraLocal" FROM monedas_cambio
         WHERE moneda_origen_id = ? AND moneda_destino_id = ?
           AND created_at <= ?
         ORDER BY created_at DESC LIMIT 1
       `, [brlMoneda.id, principal.id, d.toISOString()]);
-      brl.push(Number(rows?.[0]?.compra_local || 0));
+      brl.push(Number(rows?.[0]?.compraLocal || 0));
     } else {
       brl.push(0);
     }

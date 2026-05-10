@@ -15,6 +15,7 @@ import { MatRadioModule } from '@angular/material/radio';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 @Component({
   selector: 'app-crear-movimiento-bancario-dialog',
@@ -26,12 +27,14 @@ import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-co
     MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule,
     MatSelectModule, MatDatepickerModule, MatNativeDateModule,
     MatProgressSpinnerModule, MatSnackBarModule, MatRadioModule,
+    CurrencyInputDirective,
   ]
 })
 export class CrearMovimientoBancarioDialogComponent implements OnInit {
   form!: FormGroup;
   saving = false;
   cuentaBancaria: any;
+  decimalesMoneda = 0;
 
   constructor(
     private fb: FormBuilder,
@@ -42,6 +45,8 @@ export class CrearMovimientoBancarioDialogComponent implements OnInit {
     @Optional() @Inject(MAT_DIALOG_DATA) public data: any,
   ) {
     this.cuentaBancaria = data?.cuentaBancaria;
+    const dec = Number(this.cuentaBancaria?.moneda?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   ngOnInit(): void {

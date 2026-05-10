@@ -15,6 +15,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CreateEditEntradaVariaDialogComponent } from '../entradas-varias/create-edit-entrada-varia/create-edit-entrada-varia-dialog.component';
 import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financieras/create-operacion-financiera/create-operacion-financiera-dialog.component';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 type IngresoTipo = 'AJUSTE' | 'RETIRO_CAJA' | 'ENTRADA_VARIA' | 'OPERACION_FINANCIERA' | null;
 
@@ -36,6 +37,7 @@ type IngresoTipo = 'AJUSTE' | 'RETIRO_CAJA' | 'ENTRADA_VARIA' | 'OPERACION_FINAN
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatDividerModule,
+    CurrencyInputDirective,
   ]
 })
 export class RegistrarIngresoDialogComponent implements OnInit {
@@ -49,6 +51,7 @@ export class RegistrarIngresoDialogComponent implements OnInit {
   saving = false;
   loading = true;
   cajaMayorId: number = 0;
+  decimalesMoneda = 0;
 
   tiposIngreso = [
     {
@@ -98,7 +101,15 @@ export class RegistrarIngresoDialogComponent implements OnInit {
       monto: [null, [Validators.required, Validators.min(0.01)]],
       motivo: ['', Validators.required],
     });
+    this.ajusteForm.get('moneda')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
     this.loadData();
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.ajusteForm?.get('moneda')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   async loadData(): Promise<void> {

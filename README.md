@@ -16,7 +16,7 @@ A modern Electron Angular desktop application for restaurant inventory managemen
 - **Frontend**: Angular 15 with TypeScript
 - **UI Framework**: Angular Material
 - **Desktop Framework**: Electron
-- **Database**: SQLite with TypeORM
+- **Database**: SQLite (default) o Postgres, ambos con TypeORM. Configurable en Sistema → Configurar BD.
 - **Build Tools**: Angular CLI, Electron Builder
 
 ## Development
@@ -55,6 +55,25 @@ A modern Electron Angular desktop application for restaurant inventory managemen
    ```
    npm run electron
    ```
+
+### Cambios de schema (migrations)
+
+Cualquier cambio en `src/app/database/entities/**` (agregar columna, índice, tabla, etc.) **requiere migration**. `synchronize:true` está deshabilitado: el schema solo cambia vía migrations versionadas.
+
+```bash
+# Generar migration desde diff entities ↔ BD CLI temporal
+npm run migration:generate -- src/app/database/migrations/NombreCambio
+
+# Aplicar migrations pendientes manualmente
+npm run migration:run
+
+# Listar estado
+npm run migration:show
+```
+
+Después de generar, importar la clase en `src/app/database/database.config.ts → getMigrations()`. Detalles completos en [docs/MIGRATIONS.md](docs/MIGRATIONS.md).
+
+El pre-commit hook (`scripts/check-entity-migration.sh`) avisa si modificás entities sin migration en el mismo commit, y bloquea si agregás entity nueva sin migration. Override puntual: `SKIP_ENTITY_MIGRATION_CHECK=1 git commit ...`.
 
 ### Building for Production
 

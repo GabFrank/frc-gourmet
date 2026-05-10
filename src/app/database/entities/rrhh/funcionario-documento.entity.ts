@@ -33,7 +33,7 @@ export class FuncionarioDocumento extends BaseModel {
   @Column({ name: 'tamano_bytes', type: 'integer', nullable: true })
   tamanoBytes?: number;
 
-  @Column({ name: 'fecha_subida', type: 'datetime' })
+  @Column({ name: 'fecha_subida' })
   fechaSubida!: Date;
 
   @Column({ type: 'date', nullable: true })

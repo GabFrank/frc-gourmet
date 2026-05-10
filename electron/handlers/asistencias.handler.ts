@@ -9,6 +9,7 @@ import { PenalizacionTipo } from '../../src/app/database/entities/rrhh/penalizac
 import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 import { getConfigBoolean, getConfigNumber } from './configuracion-rrhh.handler';
 
 function diffMinutos(horaA: string | undefined, horaB: string | undefined): number {
@@ -54,7 +55,7 @@ async function crearAsistenciaInterno(
     const asistencia = repo.create({
       funcionario,
       turno: turno || undefined,
-      fecha: data.fecha,
+      fecha: parseLocalDate(data.fecha)!,
       horaEntrada: data.horaEntrada,
       horaSalida: data.horaSalida,
       estado,
@@ -80,7 +81,7 @@ async function crearAsistenciaInterno(
           tipo: PenalizacionTipo.TARDANZA,
           descripcion: `Tardanza ${minutosTardanza} min (${data.fecha})`,
           monto,
-          fecha: data.fecha,
+          fecha: parseLocalDate(data.fecha)!,
           registradoPor: userEntity || undefined,
           autoGenerada: true,
         });
@@ -171,13 +172,13 @@ export function registerAsistenciasHandlers(
         .andWhere('ft.fecha_hasta IS NULL')
         .getOne();
       if (activo) {
-        activo.fechaHasta = data.fechaDesde ?? new Date();
+        activo.fechaHasta = parseLocalDate(data.fechaDesde) ?? new Date();
         await repo.save(activo);
       }
       const entity = repo.create({
         funcionario,
         turno,
-        fechaDesde: data.fechaDesde ?? new Date(),
+        fechaDesde: parseLocalDate(data.fechaDesde) ?? new Date(),
       });
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       const saved = await repo.save(entity);
@@ -214,8 +215,8 @@ export function registerAsistenciasHandlers(
     const repo = dataSource.getRepository(FuncionarioTurno);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Asignacion de turno ${id} no encontrada`);
-    if (data.fechaDesde !== undefined) existing.fechaDesde = data.fechaDesde;
-    if (data.fechaHasta !== undefined) existing.fechaHasta = data.fechaHasta;
+    if (data.fechaDesde !== undefined) existing.fechaDesde = parseLocalDate(data.fechaDesde)!;
+    if (data.fechaHasta !== undefined) existing.fechaHasta = parseLocalDate(data.fechaHasta);
     await setEntityUserTracking(dataSource, existing, getCurrentUser()?.id, true);
     return await repo.save(existing);
   });
@@ -334,7 +335,7 @@ export function registerAsistenciasHandlers(
       tipo: data.tipo,
       descripcion: data.descripcion,
       monto: data.monto,
-      fecha: data.fecha,
+      fecha: parseLocalDate(data.fecha)!,
       autoGenerada: false,
       anulada: false,
     });
@@ -350,7 +351,7 @@ export function registerAsistenciasHandlers(
     if (data.tipo !== undefined) existing.tipo = data.tipo;
     if (data.descripcion !== undefined) existing.descripcion = data.descripcion;
     if (data.monto !== undefined) existing.monto = data.monto;
-    if (data.fecha !== undefined) existing.fecha = data.fecha;
+    if (data.fecha !== undefined) existing.fecha = parseLocalDate(data.fecha)!;
     await setEntityUserTracking(dataSource, existing, getCurrentUser()?.id, true);
     return await repo.save(existing);
   });

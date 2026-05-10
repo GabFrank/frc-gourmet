@@ -25,7 +25,7 @@ export class MovimientoBancario extends BaseModel {
   @Column({ type: 'decimal', precision: 14, scale: 2 })
   monto!: number;
 
-  @Column({ type: 'datetime' })
+  @Column()
   fecha!: Date;
 
   @Column({ type: 'text', nullable: true })

@@ -22,6 +22,12 @@ export async function runBootstrapMigrations(dataSource: DataSource): Promise<vo
  * estándar: tabla nueva sin el UNIQUE, copiar filas, drop vieja, rename.
  */
 async function dropRecetaPresentacionUniqueRecetaId(dataSource: DataSource): Promise<void> {
+  // Solo aplica a SQLite — la query usa sqlite_master + ALTER TABLE workarounds
+  // SQLite-specific. En Postgres el constraint UNIQUE residual no existe (la
+  // baseline se generó con ManyToOne ya correcto).
+  if (dataSource.options.type !== 'sqlite' && dataSource.options.type !== 'better-sqlite3') {
+    return;
+  }
   try {
     const rows: Array<{ sql: string }> = await dataSource.query(
       `SELECT sql FROM sqlite_master WHERE type='table' AND name='receta_presentacion'`
