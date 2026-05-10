@@ -47,19 +47,19 @@ export class Delivery extends BaseModel {
   })
   estado!: DeliveryEstado;
 
-  @Column({ name: 'fecha_abierto', type: 'datetime' })
+  @Column({ name: 'fecha_abierto' })
   fechaAbierto!: Date;
 
-  @Column({ name: 'fecha_para_entrega', type: 'datetime', nullable: true })
+  @Column({ name: 'fecha_para_entrega', nullable: true })
   fechaParaEntrega?: Date;
 
-  @Column({ name: 'fecha_en_camino', type: 'datetime', nullable: true })
+  @Column({ name: 'fecha_en_camino', nullable: true })
   fechaEnCamino?: Date;
 
-  @Column({ name: 'fecha_entregado', type: 'datetime', nullable: true })
+  @Column({ name: 'fecha_entregado', nullable: true })
   fechaEntregado?: Date;
 
-  @Column({ name: 'fecha_cancelacion', type: 'datetime', nullable: true })
+  @Column({ name: 'fecha_cancelacion', nullable: true })
   fechaCancelacion?: Date;
 
   @Column({ name: 'motivo_cancelacion', type: 'varchar', length: 500, nullable: true })

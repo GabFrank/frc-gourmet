@@ -18,6 +18,6 @@ export class TipoCliente extends BaseModel {
   @Column({ default: false })
   descuento!: boolean;
 
-  @Column({ type: 'float', default: 0 })
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 0 })
   porcentaje_descuento!: number;
 } 

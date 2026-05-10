@@ -12,7 +12,7 @@ export class Conteo extends BaseModel {
   @Column({ nullable: true })
   tipo?: string;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ nullable: true })
   fecha?: Date;
 
   @Column({ nullable: true })

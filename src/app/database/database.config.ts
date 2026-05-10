@@ -176,7 +176,7 @@ import { Comanda } from './entities/ventas/comanda.entity';
 import { ComandaItem } from './entities/ventas/comanda-item.entity';
 import { Sector } from './entities/ventas/sector.entity';
 // Migrations
-import { Baseline1778357391461 } from './migrations/1778357391461-Baseline';
+import { Baseline1778378410416 } from './migrations/1778378410416-Baseline';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -439,7 +439,7 @@ function getMigrations(): Function[] {
   // Las migraciones se agregan acá conforme se generan con `npm run migration:generate`.
   // Ver src/app/database/migrations/README.md
   return [
-    Baseline1778357391461,
+    Baseline1778378410416,
   ];
 }
 

@@ -21,7 +21,7 @@ export class EntradaVaria extends BaseModel {
   @JoinColumn({ name: 'forma_pago_id' })
   formaPago!: any;
 
-  @Column({ type: 'datetime' })
+  @Column()
   fecha!: Date;
 
   @ManyToOne('CajaMayor', { nullable: true, createForeignKeyConstraints: false })

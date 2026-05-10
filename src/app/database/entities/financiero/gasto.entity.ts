@@ -26,7 +26,7 @@ export class Gasto extends BaseModel {
   @OneToMany('GastoDetalle', 'gasto', { cascade: true })
   detalles?: any[];
 
-  @Column({ type: 'datetime' })
+  @Column()
   fecha!: Date;
 
   @ManyToOne('CajaMayor', { nullable: false, createForeignKeyConstraints: false })

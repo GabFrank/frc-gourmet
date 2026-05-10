@@ -27,7 +27,7 @@ export class RefreshToken extends BaseModel {
   @Column({ name: 'expires_at' })
   expiresAt!: Date;
 
-  @Column({ name: 'revoked_at', nullable: true, type: 'datetime' })
+  @Column({ name: 'revoked_at', nullable: true })
   revokedAt?: Date | null;
 
   @Column({ nullable: true })
