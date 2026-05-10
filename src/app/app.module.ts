@@ -73,6 +73,9 @@ import { GestionRecetasModule } from './pages/gestion-recetas/gestion-recetas.mo
 
 // Shared directives standalone
 import { CurrencyInputDirective } from './shared/directives/currency-input.directive';
+// F2 cliente/servidor: abstract RepositoryService + impls
+import { RepositoryService } from './database/repository.service';
+import { RepositoryIpcService } from './database/repository-ipc.service';
 // Standalone shared components used in non-standalone declarations
 import { FileUploadComponent } from './shared/components/file-upload/file-upload.component';
 
@@ -151,7 +154,11 @@ import { FileUploadComponent } from './shared/components/file-upload/file-upload
         subscriptSizing: 'dynamic'
       }
     },
-    { provide: MatPaginatorIntl, useClass: PaginatorIntlEs }
+    { provide: MatPaginatorIntl, useClass: PaginatorIntlEs },
+    // F2: componentes inyectan RepositoryService (abstract). En esta release
+    // siempre devolvemos la impl Ipc. Cuando F4 traiga el modo cliente, esto
+    // se transforma en useFactory que decide segun app-settings.mode.
+    { provide: RepositoryService, useExisting: RepositoryIpcService },
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA]
 })
