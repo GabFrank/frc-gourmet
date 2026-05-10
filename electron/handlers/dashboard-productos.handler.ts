@@ -49,8 +49,7 @@ export function registerDashboardProductosHandlers(
       const desactRows: any[] = await dbQuery(dataSource, `
         SELECT p.id, p.nombre, MAX(pc.fecha) as ultima_fecha
         FROM producto p
-        JOIN presentacion pr ON pr.producto_id = p.id
-        JOIN precio_costo pc ON pc.presentacion_id = pr.id AND pc.activo = true
+        JOIN precio_costo pc ON pc.producto_id = p.id AND pc.activo = true
         WHERE p.activo = true
         GROUP BY p.id, p.nombre
         HAVING MAX(pc.fecha) < ?
