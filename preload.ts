@@ -30,6 +30,14 @@ const ALWAYS_LOCAL_CHANNELS = new Set<string>([
   // Que no haga sentido routear a server
   'set-current-user',
   'get-current-user',
+  // Config local (cambian el modo del cliente, no del server)
+  'app-mode-get',
+  'app-mode-save',
+  'app-mode-test-server',
+  'db-config-get',
+  'db-config-save',
+  'db-config-test-connection',
+  'db-config-restart-app',
 ]);
 
 let accessToken: string | null = null;
@@ -3455,6 +3463,17 @@ contextBridge.exposeInMainWorld('api', {
   },
   dbConfigRestartApp: async (): Promise<any> => {
     return await ipcRenderer.invoke('db-config-restart-app');
+  },
+
+  // ================== APP MODE (F4.2) ==================
+  appModeGet: async (): Promise<any> => {
+    return await ipcRenderer.invoke('app-mode-get');
+  },
+  appModeSave: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('app-mode-save', payload);
+  },
+  appModeTestServer: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('app-mode-test-server', payload);
   },
 
   // ================== IA CONFIG ==================
