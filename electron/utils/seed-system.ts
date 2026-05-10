@@ -13,6 +13,7 @@ import { Dispositivo } from '../../src/app/database/entities/financiero/disposit
 import { Sector } from '../../src/app/database/entities/ventas/sector.entity';
 import { Cargo } from '../../src/app/database/entities/rrhh/cargo.entity';
 import { MotivoVale } from '../../src/app/database/entities/rrhh/motivo-vale.entity';
+import { hashPassword } from './password.utils';
 
 /**
  * Seed de datos minimos del sistema para que la app sea operable post-reset.
@@ -25,6 +26,7 @@ export async function seedSystemData(dataSource: DataSource): Promise<void> {
   console.log('Checking if system seed data is needed...');
   try {
     await seedAdminUserAndRole(dataSource);
+    await syncAdminPermissions(dataSource);
     await seedTipoCliente(dataSource);
     await seedTipoPrecio(dataSource);
     await seedMonedasBilletes(dataSource);
@@ -35,6 +37,36 @@ export async function seedSystemData(dataSource: DataSource): Promise<void> {
     console.log('System seed data check complete.');
   } catch (error) {
     console.error('Error during system seed:', error);
+  }
+}
+
+/**
+ * Si el rol ADMINISTRADOR ya existe (admin creado en seed inicial), asegura que
+ * tenga TODOS los permisos del sistema, incluyendo los agregados despues.
+ * Idempotente: solo asigna los faltantes.
+ */
+async function syncAdminPermissions(dataSource: DataSource): Promise<void> {
+  const roleRepo = dataSource.getRepository(Role);
+  const adminRole = await roleRepo.findOne({ where: { descripcion: 'ADMINISTRADOR' } });
+  if (!adminRole) return;
+
+  const permissionRepo = dataSource.getRepository(Permission);
+  const rolePermissionRepo = dataSource.getRepository(RolePermission);
+
+  const allPermissions = await permissionRepo.find();
+  let added = 0;
+  for (const perm of allPermissions) {
+    const exists = await rolePermissionRepo.findOne({
+      where: { role: { id: adminRole.id }, permission: { id: perm.id } },
+    });
+    if (!exists) {
+      const rp = rolePermissionRepo.create({ role: adminRole, permission: perm });
+      await rolePermissionRepo.save(rp);
+      added++;
+    }
+  }
+  if (added > 0) {
+    console.log(`  Sync ADMINISTRADOR: ${added} permiso(s) nuevos asignados.`);
   }
 }
 
@@ -63,7 +95,7 @@ async function seedAdminUserAndRole(dataSource: DataSource): Promise<void> {
   const usuario = usuarioRepo.create({
     persona: savedPersona,
     nickname: 'admin',
-    password: 'admin',
+    password: await hashPassword('admin'),
     activo: true,
   });
   await usuarioRepo.save(usuario);

@@ -18,6 +18,11 @@ export class Presentacion extends BaseModel {
   @Column({ type: 'boolean', default: true })
   activo!: boolean;
 
+  // Imagen específica de la presentación (ej: botella vs litro). URL
+  // `app://producto-images/<file>`. Si vacío, la UI cae al `producto.imageUrl`.
+  @Column({ type: 'varchar', length: 500, nullable: true, name: 'image_url' })
+  imageUrl?: string;
+
   // Relationships
   @ManyToOne(() => Producto, producto => producto.presentaciones)
   @JoinColumn({ name: 'producto_id' })

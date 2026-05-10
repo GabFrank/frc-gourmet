@@ -1477,7 +1477,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
     });
   });
 
-  ipcMain.handle('create-sabor', async (_e: IpcMainInvokeEvent, saborData: { nombre: string; categoria: string; descripcion?: string; productoId: number; }) => {
+  ipcMain.handle('create-sabor', async (_e: IpcMainInvokeEvent, saborData: { nombre: string; categoria: string; descripcion?: string; productoId: number; imageUrl?: string; }) => {
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1492,7 +1492,8 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         categoria: saborData.categoria.toUpperCase(),
         descripcion: saborData.descripcion?.toUpperCase(),
         producto: { id: saborData.productoId },
-        activo: true
+        activo: true,
+        imageUrl: saborData.imageUrl || undefined
       });
       const saborGuardado = await saborRepo.save(sabor);
 
@@ -1521,14 +1522,26 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
     }
   });
 
-  ipcMain.handle('update-sabor', async (_e: IpcMainInvokeEvent, id: number, saborData: Partial<Sabor>) => {
+  ipcMain.handle('update-sabor', async (_e: IpcMainInvokeEvent, id: number, saborData: Partial<Sabor> & { imageUrl?: string | null }) => {
     const repo = dataSource.getRepository(Sabor);
+
+    // Si llega imageUrl distinta, borrar archivo viejo
+    if (saborData.imageUrl !== undefined) {
+      const existing = await repo.findOne({ where: { id } });
+      const oldUrl = existing?.imageUrl;
+      const newUrl = saborData.imageUrl || undefined;
+      if (oldUrl && oldUrl !== newUrl) {
+        const { deleteImageByUrl } = require('../utils/image-resize.utils');
+        deleteImageByUrl(oldUrl);
+      }
+    }
+
     await repo.update(id, {
       ...saborData,
       nombre: saborData.nombre?.toUpperCase(),
       categoria: saborData.categoria?.toUpperCase(),
       descripcion: saborData.descripcion?.toUpperCase()
-    });
+    } as any);
     return await repo.findOne({ where: { id } });
   });
 
@@ -1543,16 +1556,16 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         relations: ['receta', 'receta.ingredientes']
       });
 
-      // Eliminar variaciones y sus recetas asociadas
+      // 1) Eliminar primero todas las variaciones (FK a receta).
+      const recetaIds = new Set<number>();
       for (const variacion of variaciones) {
-        if (variacion.receta) {
-          // Eliminar ingredientes de la receta
-          await queryRunner.manager.getRepository(RecetaIngrediente).delete({ receta: { id: variacion.receta.id } });
-          // Eliminar la receta
-          await queryRunner.manager.getRepository(Receta).delete({ id: variacion.receta.id });
-        }
-        // Eliminar la variación
+        if (variacion.receta?.id) recetaIds.add(variacion.receta.id);
         await queryRunner.manager.getRepository(RecetaPresentacion).delete({ id: variacion.id });
+      }
+      // 2) Después borrar recetas (deduplicadas) y sus ingredientes — varias variaciones pueden compartir la misma receta.
+      for (const recetaId of recetaIds) {
+        await queryRunner.manager.getRepository(RecetaIngrediente).delete({ receta: { id: recetaId } });
+        await queryRunner.manager.getRepository(Receta).delete({ id: recetaId });
       }
 
       // Eliminar el sabor

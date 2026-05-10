@@ -1,0 +1,10 @@
+<div class="dashboard-stat-chip" [ngClass]="'chip-' + color">
+  <mat-icon>{{ icon }}</mat-icon>
+  <div class="dashboard-stat-chip-data">
+    <span class="dashboard-stat-chip-value">
+      <mat-spinner *ngIf="loading; else valTpl" diameter="14"></mat-spinner>
+      <ng-template #valTpl>{{ value }}</ng-template>
+    </span>
+    <span class="dashboard-stat-chip-label">{{ label }}</span>
+  </div>
+</div>

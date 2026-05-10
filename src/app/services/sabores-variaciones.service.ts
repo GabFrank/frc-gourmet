@@ -13,6 +13,7 @@ export interface Sabor {
   activo: boolean;
   producto?: any;
   variaciones?: RecetaPresentacion[];
+  imageUrl?: string | null;
 }
 
 export interface RecetaPresentacion {
@@ -136,6 +137,7 @@ export class SaboresVariacionesService {
     categoria: string;
     descripcion?: string;
     productoId: number;
+    imageUrl?: string | null;
   }): Observable<{ sabor: Sabor; receta: any; mensaje: string }> {
 
     this._loading$.next(true);

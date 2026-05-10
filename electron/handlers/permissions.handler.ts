@@ -56,6 +56,13 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   // Compras - Importacion OCR/IA
   { codigo: 'COMPRAS_IMPORTAR_FACTURA', descripcion: 'Importar facturas de compra con OCR + IA', modulo: 'COMPRAS' },
   { codigo: 'SISTEMA_CONFIGURAR_IA', descripcion: 'Configurar credenciales y parametros de IA (OCR de facturas)', modulo: 'SISTEMA' },
+  // Dashboards por dominio
+  { codigo: 'HOME_DASHBOARD_VER', descripcion: 'Ver dashboard de inicio', modulo: 'SISTEMA' },
+  { codigo: 'VENTAS_DASHBOARD_VER', descripcion: 'Ver dashboard de Ventas con KPIs', modulo: 'VENTAS' },
+  { codigo: 'COMPRAS_DASHBOARD_VER', descripcion: 'Ver dashboard de Compras con KPIs', modulo: 'COMPRAS' },
+  { codigo: 'PRODUCTOS_DASHBOARD_VER', descripcion: 'Ver dashboard de Productos con KPIs', modulo: 'PRODUCTOS' },
+  { codigo: 'FINANCIERO_DASHBOARD_VER', descripcion: 'Ver dashboard Financiero con KPIs', modulo: 'FINANCIERO' },
+  { codigo: 'CAJA_MAYOR_DASHBOARD_VER', descripcion: 'Ver dashboard de Caja Mayor con KPIs', modulo: 'FINANCIERO' },
 ];
 
 export async function seedPermissions(dataSource: DataSource) {

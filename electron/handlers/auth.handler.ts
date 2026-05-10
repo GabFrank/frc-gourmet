@@ -3,10 +3,9 @@ import { DataSource } from 'typeorm';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { LoginSession } from '../../src/app/database/entities/auth/login-session.entity';
 import * as jwt from 'jsonwebtoken';
+import { verifyPassword } from '../utils/password.utils';
+import { getJwtSecret } from '../utils/jwt-secret.utils';
 
-
-// JWT Secret and Expiration - Consider moving to environment variables or a config file
-const JWT_SECRET = 'frc-gourmet-secret-key';
 const TOKEN_EXPIRATION = '7d';
 
 export function registerAuthHandlers(
@@ -31,16 +30,14 @@ export function registerAuthHandlers(
         return { success: false, message: 'Usuario no encontrado o inactivo' };
       }
 
-      // Basic password check (replace with bcrypt in production)
-      const passwordValid = password === usuario.password;
+      const passwordValid = await verifyPassword(password, usuario.password);
       if (!passwordValid) {
         return { success: false, message: 'Contraseña incorrecta' };
       }
 
-      // Generate JWT
       const token = jwt.sign(
         { id: usuario.id, nickname: usuario.nickname },
-        JWT_SECRET,
+        await getJwtSecret(),
         { expiresIn: TOKEN_EXPIRATION }
       );
 
@@ -86,7 +83,7 @@ export function registerAuthHandlers(
         return { success: false, message: 'USUARIO NO ENCONTRADO O INACTIVO' };
       }
 
-      const passwordValid = data.password === usuario.password;
+      const passwordValid = await verifyPassword(data.password, usuario.password);
       if (!passwordValid) {
         return { success: false, message: 'CONTRASEÑA INCORRECTA' };
       }

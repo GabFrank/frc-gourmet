@@ -1,11 +1,23 @@
 {
   "name": "frc-gourmet",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "main": "main.js",
   "description": "Gastronomic software for restaurant management",
+  "homepage": "https://github.com/GabFrank/frc-gourmet",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GabFrank/frc-gourmet.git"
+  },
+  "bugs": {
+    "url": "https://github.com/GabFrank/frc-gourmet/issues"
+  },
   "author": {
-    "name": "FRC Gourmet",
-    "email": ""
+    "name": "FRC Sistemas Informaticos",
+    "email": "frcsistemasinformaticos@gmail.com"
+  },
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18.17.0 <21"
   },
   "scripts": {
     "ng": "ng",
@@ -13,15 +25,25 @@
     "build": "npm run electron:serve-tsc && ng build --base-href ./",
     "build:dev": "npm run build -- -c dev",
     "build:prod": "npm run build -- -c production",
+    "check": "npm run electron:serve-tsc && ng build --configuration production --base-href ./",
     "ng:serve": "ng serve --port 4201",
     "electron:serve-tsc": "tsc -p tsconfig.electron.json",
     "electron:serve": "wait-on http-get://localhost:4201/ && npm run electron:serve-tsc && electron . --serve",
     "electron:local": "npm run build:prod && electron .",
     "electron:build": "npm run build:prod && electron-builder build",
+    "electron:publish": "npm run build:prod && electron-builder build --publish always",
     "test": "ng test",
     "test:e2e": "npm run electron:serve-tsc && npx playwright test",
     "test:e2e:dev": "npm run electron:serve-tsc && npx playwright test",
-    "lint": "ng lint"
+    "lint": "ng lint",
+    "release": "semantic-release",
+    "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/app/database/datasource.ts",
+    "migration:create": "typeorm-ts-node-commonjs migration:create",
+    "migration:run": "typeorm-ts-node-commonjs migration:run -d src/app/database/datasource.ts",
+    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/app/database/datasource.ts",
+    "migration:show": "typeorm-ts-node-commonjs migration:show -d src/app/database/datasource.ts",
+    "icons": "node scripts/generate-icons.js",
+    "prepare": "husky || true"
   },
   "private": true,
   "dependencies": {
@@ -38,10 +60,13 @@
     "@angular/router": "15.2.9",
     "@napi-rs/canvas": "^1.0.0",
     "@types/uuid": "^9.0.7",
+    "bcryptjs": "^3.0.3",
     "chart.js": "^4.5.1",
     "electron-pos-printer": "^1.3.7",
+    "electron-updater": "^6.1.8",
     "exceljs": "^4.4.0",
     "jsonwebtoken": "^9.0.2",
+    "keytar": "^7.9.0",
     "ng2-charts": "^4.1.1",
     "ngx-currency": "^2.5.3",
     "node-thermal-printer": "^4.4.4",
@@ -66,9 +91,16 @@
     "@angular/cli": "15.2.8",
     "@angular/compiler-cli": "15.2.9",
     "@babel/plugin-syntax-import-attributes": "^7.26.0",
+    "@commitlint/cli": "^19.5.0",
+    "@commitlint/config-conventional": "^19.5.0",
     "@ngx-translate/core": "14.0.0",
     "@ngx-translate/http-loader": "7.0.0",
     "@playwright/test": "^1.58.2",
+    "@semantic-release/commit-analyzer": "^11.1.0",
+    "@semantic-release/exec": "^6.0.3",
+    "@semantic-release/github": "^9.2.6",
+    "@semantic-release/release-notes-generator": "^12.1.0",
+    "@types/bcryptjs": "^2.4.6",
     "@types/electron": "^1.6.12",
     "@types/jasmine": "4.3.1",
     "@types/jasminewd2": "2.0.10",
@@ -86,6 +118,7 @@
     "eslint-plugin-import": "2.27.5",
     "eslint-plugin-jsdoc": "44.2.3",
     "eslint-plugin-prefer-arrow": "1.2.3",
+    "husky": "^9.1.6",
     "jasmine-core": "4.6.0",
     "jasmine-spec-reporter": "7.0.0",
     "karma": "6.4.2",
@@ -96,6 +129,8 @@
     "node-polyfill-webpack-plugin": "2.0.1",
     "npm-run-all": "4.1.5",
     "playwright": "^1.58.2",
+    "png-to-ico": "^3.0.1",
+    "semantic-release": "^22.0.12",
     "ts-node": "10.9.1",
     "typescript": "~4.9.5",
     "wait-on": "7.0.1",
@@ -104,31 +139,75 @@
   "build": {
     "appId": "com.frcgourmet.app",
     "productName": "FRC Gourmet",
+    "copyright": "Copyright (c) ${author}",
     "directories": {
-      "output": "release/"
+      "output": "release/",
+      "buildResources": "build"
     },
     "files": [
-      "dist",
+      "dist/**/*",
       "main.js",
-      "preload.js"
+      "main.js.map",
+      "preload.js",
+      "preload.js.map",
+      "electron/**/*.js",
+      "electron/**/*.js.map",
+      "src/app/database/**/*.js",
+      "src/app/database/**/*.js.map",
+      "package.json",
+      "node_modules/**/*"
     ],
-    "mac": {
-      "icon": "dist/assets/icons/icon.icns",
-      "target": [
-        "dmg"
-      ]
-    },
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/sqlite3/**",
+      "**/node_modules/keytar/**",
+      "**/node_modules/@napi-rs/canvas/**"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "GabFrank",
+        "repo": "frc-gourmet",
+        "releaseType": "release"
+      }
+    ],
     "win": {
-      "icon": "dist/assets/icons/icon.ico",
       "target": [
-        "nsis"
-      ]
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "FRC-Gourmet-Setup-${version}.${ext}",
+      "publisherName": "FRC Sistemas Informaticos",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "FRC Gourmet",
+      "uninstallDisplayName": "FRC Gourmet ${version}",
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh"
     },
     "linux": {
-      "icon": "dist/assets/icons",
+      "category": "Office",
       "target": [
-        "AppImage"
-      ]
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "FRC-Gourmet-${version}-${arch}.${ext}",
+      "icon": "build/icons"
     }
   }
 }

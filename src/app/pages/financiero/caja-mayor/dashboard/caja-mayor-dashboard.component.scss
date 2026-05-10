@@ -1,112 +1,136 @@
-.dashboard-container {
-  padding: 20px;
+// Estilos especificos del dashboard de Caja Mayor (lo comun esta en _dashboard.scss).
 
-  .dashboard-title {
-    margin-bottom: 20px;
-    color: #333;
-    font-weight: 300;
-  }
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  padding: 12px 20px 16px;
+}
 
-  .shortcuts-section {
-    margin-bottom: 24px;
+.shortcut-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 14px;
+  border-radius: 8px;
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid #7c4dff;
+  cursor: pointer;
+  transition: background 0.2s;
 
-    .section-subtitle {
-      margin: 0 0 12px;
-      font-size: 14px;
-      font-weight: 500;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: rgba(0, 0, 0, 0.55);
-    }
-
-    .shortcuts-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 10px;
-    }
-
-    .shortcut-card {
-      cursor: pointer;
-      transition: transform 0.1s, box-shadow 0.1s;
-      &:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15); }
-
-      .shortcut-row {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 4px;
-
-        .shortcut-icon {
-          width: 36px;
-          height: 36px;
-          border-radius: 50%;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          color: white;
-          mat-icon { font-size: 20px; width: 20px; height: 20px; }
-        }
-        .shortcut-titulo {
-          flex: 1;
-          font-weight: 500;
-          font-size: 14px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .shortcut-delete { opacity: 0.4; transition: opacity 0.15s; }
-        &:hover .shortcut-delete { opacity: 1; }
-      }
-    }
-  }
-
-  .dashboard-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 20px;
-  }
-
-  .dashboard-card {
-    cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
-    min-height: 180px;
-
-    &:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23);
-    }
-
-    .card-icon {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      color: white;
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-
-      mat-icon {
-        font-size: 20px;
-        width: 20px;
-        height: 20px;
-      }
-    }
-
-    mat-card-content {
-      margin-top: 15px;
-      color: rgba(0,0,0,0.6);
-    }
+  &:hover {
+    background: var(--hover-bg);
   }
 }
 
-:host-context(.dark-theme) {
-  .dashboard-title {
-    color: #e0e0e0;
+.shortcut-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+
+  mat-icon {
+    color: white;
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.shortcut-titulo {
+  flex: 1;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shortcut-delete {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    color: var(--text-secondary);
+  }
+}
+
+// Accordion grupos
+.grupo-accordion {
+  ::ng-deep .mat-expansion-panel {
+    background: transparent !important;
+    box-shadow: none !important;
+    border-bottom: 1px solid var(--border-light);
+    border-radius: 0 !important;
+
+    &:last-of-type {
+      border-bottom: none;
+    }
   }
 
-  .dashboard-card {
-    mat-card-content {
-      color: rgba(255,255,255,0.7);
-    }
+  ::ng-deep .mat-expansion-panel-header {
+    padding: 0 20px;
+    height: 52px !important;
+  }
+
+  ::ng-deep .mat-expansion-panel-body {
+    padding: 0 20px 16px !important;
+  }
+}
+
+.grupo-icon {
+  margin-right: 10px;
+  color: #7c4dff;
+  opacity: 0.85;
+}
+
+.grupo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.grupo-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+
+  &:hover {
+    background: var(--hover-bg);
+    border-color: rgba(124, 77, 255, 0.4);
+  }
+
+  mat-icon {
+    color: var(--text-secondary);
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+
+  span {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }

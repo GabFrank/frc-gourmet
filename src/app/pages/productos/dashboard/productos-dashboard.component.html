@@ -1,27 +1,118 @@
 <div class="dashboard-container">
-  <h1 class="dashboard-title">Dashboard de productos</h1>
 
-  <div class="dashboard-grid">
-    <mat-card *ngFor="let item of dashboardItems"
-              class="dashboard-card"
-              [class.disabled-card]="item.disabled"
-              (click)="navigateTo(item)"
-              [matTooltip]="item.disabled ? 'En desarrollo' : ''"
-              [ngStyle]="{'border-top': '4px solid ' + item.color}">
-      <mat-card-header>
-        <div mat-card-avatar class="card-icon" [ngStyle]="{'background-color': item.disabled ? '#9e9e9e' : item.color}">
-          <mat-icon>{{item.icon}}</mat-icon>
-        </div>
-        <mat-card-title>{{item.title}}</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <p>{{item.description}}</p>
-      </mat-card-content>
-      <mat-card-actions align="end">
-        <button mat-button [color]="item.disabled ? '' : 'primary'" [disabled]="item.disabled">
-          {{ item.disabled ? 'EN DESARROLLO' : 'ABRIR' }}
-        </button>
-      </mat-card-actions>
-    </mat-card>
+  <div class="dashboard-header">
+    <div class="dashboard-header-title">
+      <h1 class="dashboard-title">Productos</h1>
+      <span class="dashboard-subtitle">Panel de control</span>
+    </div>
+    <div class="dashboard-header-actions">
+      <button mat-icon-button (click)="cargarKpis()" [disabled]="loading" matTooltip="Actualizar">
+        <mat-icon>refresh</mat-icon>
+      </button>
+    </div>
   </div>
-</div> 
+
+  <div class="dashboard-stats-row">
+    <app-dash-stat-chip
+      icon="restaurant"
+      [value]="productosActivos"
+      label="Productos activos"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="menu_book"
+      [value]="recetasActivas"
+      label="Recetas activas"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="money_off"
+      color="warning"
+      [value]="productosSinPrecio"
+      label="Sin precio"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="warning"
+      color="warning"
+      [value]="productosParciales"
+      label="Parciales (incompletos)"
+      [loading]="loading">
+    </app-dash-stat-chip>
+  </div>
+
+  <div class="dashboard-quick-actions">
+    <app-dash-quick-action *ngFor="let a of quickActions"
+      [icon]="a.icon"
+      [title]="a.title"
+      [color]="a.color"
+      (action)="navigateTo(a.action)">
+    </app-dash-quick-action>
+  </div>
+
+  <div class="dashboard-main-content">
+
+    <div class="dashboard-col-left">
+
+      <div class="dashboard-card">
+        <app-dash-section-header
+          icon="schedule"
+          title="Precios desactualizados (>30 dias)"
+          [badge]="productosPrecioDesactualizado.length"
+          badgeColor="warning">
+        </app-dash-section-header>
+        <mat-divider></mat-divider>
+
+        <div *ngIf="!loading && productosPrecioDesactualizado.length === 0" class="dashboard-empty-state">
+          <mat-icon>check_circle</mat-icon>
+          <span>Todos los productos con precio actualizado</span>
+        </div>
+
+        <div class="dashboard-alert-list" *ngIf="productosPrecioDesactualizado.length > 0">
+          <div *ngFor="let p of productosPrecioDesactualizado" class="dashboard-alert-item alert-warning">
+            <mat-icon>schedule</mat-icon>
+            <div class="dashboard-alert-info">
+              <span class="dashboard-alert-title">{{ p.producto }}</span>
+              <span class="dashboard-alert-detail">Ultima actualizacion: {{ p.dias }} dia(s)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dashboard-card">
+        <app-dash-section-header
+          icon="construction"
+          title="Productos parciales"
+          [badge]="productosParcialesLista.length"
+          badgeColor="info">
+        </app-dash-section-header>
+        <mat-divider></mat-divider>
+
+        <div *ngIf="!loading && productosParcialesLista.length === 0" class="dashboard-empty-state">
+          <mat-icon>check_circle</mat-icon>
+          <span>Todos los productos completos</span>
+        </div>
+
+        <div class="dashboard-alert-list" *ngIf="productosParcialesLista.length > 0">
+          <div *ngFor="let p of productosParcialesLista" class="dashboard-alert-item alert-info"
+               (click)="openProducto(p.id)" style="cursor: pointer;">
+            <mat-icon>edit</mat-icon>
+            <div class="dashboard-alert-info">
+              <span class="dashboard-alert-title">{{ p.nombre }}</span>
+              <span class="dashboard-alert-detail">Falta completar registro</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dashboard-col-right">
+      <app-dash-ranking
+        title="Mas vendidos del mes"
+        icon="emoji_events"
+        [items]="topVendidos"
+        emptyText="Sin ventas este mes">
+      </app-dash-ranking>
+    </div>
+  </div>
+</div>

@@ -7,6 +7,7 @@ import { UsuarioRole } from '../../src/app/database/entities/personas/usuario-ro
 import { TipoCliente } from '../../src/app/database/entities/personas/tipo-cliente.entity';
 import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
 import { setEntityUserTracking } from '../utils/entity.utils'; // Import the utility function
+import { hashPassword } from '../utils/password.utils';
 
 export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
 
@@ -172,10 +173,11 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
          }
       }
 
+      const plainPassword = usuarioData.password || "123";
       const usuario = usuarioRepository.create({
         persona: persona, // Assign the potentially null persona object
         nickname: usuarioData.nickname,
-        password: usuarioData.password || "123",
+        password: await hashPassword(plainPassword),
         activo: usuarioData.activo !== undefined ? usuarioData.activo : true
       });
 
@@ -249,7 +251,9 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
       }
 
       // Update other fields
-      if (usuarioData.password !== undefined) usuario.password = usuarioData.password;
+      if (usuarioData.password !== undefined && usuarioData.password !== '') {
+        usuario.password = await hashPassword(usuarioData.password);
+      }
       if (usuarioData.activo !== undefined) usuario.activo = usuarioData.activo;
 
       await setEntityUserTracking(dataSource, usuario, currentUser?.id, true);

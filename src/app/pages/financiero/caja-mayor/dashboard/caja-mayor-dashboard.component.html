@@ -1,44 +1,194 @@
 <div class="dashboard-container">
-  <h1 class="dashboard-title">Caja Mayor</h1>
 
-  <!-- Accesos directos personalizados -->
-  <div *ngIf="shortcuts.length > 0" class="shortcuts-section">
-    <h3 class="section-subtitle">Accesos directos</h3>
-    <div class="shortcuts-grid">
-      <mat-card *ngFor="let s of shortcuts"
-                class="shortcut-card"
-                [ngStyle]="{'border-left': '4px solid ' + s.color}"
-                (click)="abrirShortcut(s)">
-        <div class="shortcut-row">
-          <div class="shortcut-icon" [ngStyle]="{'background-color': s.color}">
-            <mat-icon>{{s.icono}}</mat-icon>
-          </div>
-          <span class="shortcut-titulo">{{s.titulo}}</span>
-          <button mat-icon-button class="shortcut-delete" (click)="eliminarShortcut(s, $event)" matTooltip="Eliminar">
-            <mat-icon>close</mat-icon>
-          </button>
-        </div>
-      </mat-card>
+  <div class="dashboard-header">
+    <div class="dashboard-header-title">
+      <h1 class="dashboard-title">Caja Mayor</h1>
+      <span class="dashboard-subtitle">Movimientos y operaciones</span>
+    </div>
+    <div class="dashboard-header-actions">
+      <button mat-icon-button (click)="cargarKpis()" [disabled]="loading" matTooltip="Actualizar">
+        <mat-icon>refresh</mat-icon>
+      </button>
     </div>
   </div>
 
-  <div class="dashboard-grid">
-    <mat-card *ngFor="let item of dashboardItems"
-              class="dashboard-card"
-              (click)="navigateTo(item.route)"
-              [ngStyle]="{'border-top': '4px solid ' + item.color}">
-      <mat-card-header>
-        <div mat-card-avatar class="card-icon" [ngStyle]="{'background-color': item.color}">
-          <mat-icon>{{item.icon}}</mat-icon>
+  <div class="dashboard-stats-row">
+    <app-dash-stat-chip
+      icon="account_balance_wallet"
+      color="success"
+      [value]="formatPYG(saldoPYG) + ' Gs'"
+      label="Saldo PYG"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="attach_money"
+      [value]="formatUSD(saldoUSD)"
+      label="Saldo USD"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="warning"
+      color="error"
+      [value]="cppVencidos"
+      label="CPP vencidas"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="schedule"
+      color="warning"
+      [value]="chequesPorVencer"
+      label="Cheques 7 dias"
+      [loading]="loading">
+    </app-dash-stat-chip>
+  </div>
+
+  <div class="dashboard-quick-actions">
+    <app-dash-quick-action *ngFor="let a of quickActions"
+      [icon]="a.icon"
+      [title]="a.title"
+      [color]="a.color"
+      (action)="navigateTo(a.action)">
+    </app-dash-quick-action>
+  </div>
+
+  <!-- Shortcuts personalizados -->
+  <div class="dashboard-card" *ngIf="shortcuts.length > 0">
+    <app-dash-section-header
+      icon="bookmarks"
+      title="Mis accesos directos"
+      [badge]="shortcuts.length"
+      badgeColor="info">
+    </app-dash-section-header>
+    <mat-divider></mat-divider>
+    <div class="shortcuts-grid">
+      <div *ngFor="let s of shortcuts"
+           class="shortcut-card"
+           [style.border-left-color]="s.color"
+           (click)="abrirShortcut(s)">
+        <div class="shortcut-icon" [style.background-color]="s.color">
+          <mat-icon>{{ s.icono }}</mat-icon>
         </div>
-        <mat-card-title>{{item.title}}</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <p>{{item.description}}</p>
-      </mat-card-content>
-      <mat-card-actions align="end">
-        <button mat-button color="primary">ABRIR</button>
-      </mat-card-actions>
-    </mat-card>
+        <span class="shortcut-titulo">{{ s.titulo }}</span>
+        <button mat-icon-button class="shortcut-delete" (click)="eliminarShortcut(s, $event)" matTooltip="Eliminar">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard-main-content">
+
+    <div class="dashboard-col-left">
+
+      <app-dash-chart-card
+        title="Movimientos ultimos 30 dias"
+        icon="trending_up"
+        [chartData]="chartData"
+        [chartOptions]="chartOptions"
+        chartType="line">
+      </app-dash-chart-card>
+
+      <!-- Accordion: 4 grupos -->
+      <div class="dashboard-card">
+        <app-dash-section-header
+          icon="apps"
+          title="Operativa">
+        </app-dash-section-header>
+        <mat-divider></mat-divider>
+
+        <mat-accordion multi class="grupo-accordion">
+
+          <mat-expansion-panel expanded>
+            <mat-expansion-panel-header>
+              <mat-panel-title>
+                <mat-icon class="grupo-icon">swap_horiz</mat-icon>
+                Operaciones
+              </mat-panel-title>
+            </mat-expansion-panel-header>
+            <div class="grupo-grid">
+              <button *ngFor="let item of grupoOperaciones"
+                      class="grupo-btn"
+                      (click)="navigateTo(item.action)">
+                <mat-icon>{{ item.icon }}</mat-icon>
+                <span>{{ item.title }}</span>
+              </button>
+            </div>
+          </mat-expansion-panel>
+
+          <mat-expansion-panel>
+            <mat-expansion-panel-header>
+              <mat-panel-title>
+                <mat-icon class="grupo-icon">account_balance</mat-icon>
+                Bancos &amp; POS
+              </mat-panel-title>
+            </mat-expansion-panel-header>
+            <div class="grupo-grid">
+              <button *ngFor="let item of grupoBancos"
+                      class="grupo-btn"
+                      (click)="navigateTo(item.action)">
+                <mat-icon>{{ item.icon }}</mat-icon>
+                <span>{{ item.title }}</span>
+              </button>
+            </div>
+          </mat-expansion-panel>
+
+          <mat-expansion-panel>
+            <mat-expansion-panel-header>
+              <mat-panel-title>
+                <mat-icon class="grupo-icon">request_quote</mat-icon>
+                Cuentas por Pagar
+              </mat-panel-title>
+            </mat-expansion-panel-header>
+            <div class="grupo-grid">
+              <button *ngFor="let item of grupoCpp"
+                      class="grupo-btn"
+                      (click)="navigateTo(item.action)">
+                <mat-icon>{{ item.icon }}</mat-icon>
+                <span>{{ item.title }}</span>
+              </button>
+            </div>
+          </mat-expansion-panel>
+
+        </mat-accordion>
+      </div>
+    </div>
+
+    <div class="dashboard-col-right">
+      <div class="dashboard-card">
+        <app-dash-section-header
+          icon="event"
+          title="Proximos vencimientos"
+          [badge]="proximosVencimientos.length"
+          [badgeColor]="proximosVencimientos.length > 0 ? 'warning' : 'default'">
+        </app-dash-section-header>
+        <mat-divider></mat-divider>
+
+        <div *ngIf="!loading && proximosVencimientos.length === 0" class="dashboard-empty-state">
+          <mat-icon>check_circle</mat-icon>
+          <span>Sin vencimientos en 7 dias</span>
+        </div>
+
+        <div class="dashboard-alert-list" *ngIf="proximosVencimientos.length > 0">
+          <div *ngFor="let v of proximosVencimientos"
+               class="dashboard-alert-item"
+               [ngClass]="{
+                 'alert-error': v.dias < 0,
+                 'alert-warning': v.dias >= 0 && v.dias <= 3,
+                 'alert-info': v.dias > 3
+               }">
+            <mat-icon>{{ v.tipo === 'cheque' ? 'receipt' : 'request_quote' }}</mat-icon>
+            <div class="dashboard-alert-info">
+              <span class="dashboard-alert-title">{{ v.descripcion }}</span>
+              <span class="dashboard-alert-detail">
+                {{ formatPYG(v.monto) }} Gs ·
+                <ng-container *ngIf="v.dias < 0">vencido hace {{ -v.dias }}d</ng-container>
+                <ng-container *ngIf="v.dias === 0">vence hoy</ng-container>
+                <ng-container *ngIf="v.dias > 0">en {{ v.dias }} dia(s)</ng-container>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>

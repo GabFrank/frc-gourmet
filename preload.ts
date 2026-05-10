@@ -1094,6 +1094,34 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('delete-profile-image', imageUrl);
   },
 
+  // === Generic files API (sirve cualquier carpeta `userData/<X>/`) ===
+  saveFile: async (input: { carpeta: string; base64: string; fileName: string; generateThumbnails?: boolean }): Promise<any> => {
+    return await ipcRenderer.invoke('save-file', input);
+  },
+  deleteFile: async (url: string): Promise<{ ok: boolean }> => {
+    return await ipcRenderer.invoke('delete-file', { url });
+  },
+  readFileBase64: async (url: string): Promise<{ base64: string; mimeType: string }> => {
+    return await ipcRenderer.invoke('read-file-base64', { url });
+  },
+  openFileWithSystem: async (url: string): Promise<{ ok: boolean; error?: string }> => {
+    return await ipcRenderer.invoke('open-file-with-system', { url });
+  },
+
+  // === Adjuntos polimorficos ===
+  getAdjuntos: async (params: { entidadTipo: string; entidadId: number }): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-adjuntos', params);
+  },
+  createAdjunto: async (data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('create-adjunto', data);
+  },
+  updateAdjunto: async (id: number, data: { tipo?: string; observacion?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('update-adjunto', id, data);
+  },
+  deleteAdjunto: async (id: number): Promise<{ success: boolean; message?: string }> => {
+    return await ipcRenderer.invoke('delete-adjunto', id);
+  },
+
   // Utility functions
   on: (channel: string, callback: (data: any) => void): void => {
     // Deliberately strip event as it includes `sender`
@@ -3169,6 +3197,23 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('get-dashboard-rrhh-kpis', periodo);
   },
 
+  // === Dashboards por dominio ===
+  getDashboardVentasKpis: async (rango: string = 'week'): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-ventas-kpis', rango);
+  },
+  getDashboardComprasKpis: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-compras-kpis');
+  },
+  getDashboardProductosKpis: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-productos-kpis');
+  },
+  getDashboardFinancieroKpis: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-financiero-kpis');
+  },
+  getDashboardCajaMayorKpis: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-caja-mayor-kpis');
+  },
+
   // === Reportes RRHH (Fase 8) ===
   getReporteLiquidacionesMesData: async (periodo: string): Promise<any> => {
     return await ipcRenderer.invoke('get-reporte-liquidaciones-mes-data', periodo);
@@ -3324,6 +3369,28 @@ contextBridge.exposeInMainWorld('api', {
   },
   facturaImportConfirm: async (payload: any): Promise<any> => {
     return await ipcRenderer.invoke('factura-import-confirm', payload);
+  },
+
+  // Auto-updater (electron-updater)
+  autoUpdateGetConfig: async (): Promise<any> => {
+    return await ipcRenderer.invoke('auto-update:get-config');
+  },
+  autoUpdateSetChannel: async (channel: 'stable' | 'beta' | 'alpha'): Promise<any> => {
+    return await ipcRenderer.invoke('auto-update:set-channel', channel);
+  },
+  autoUpdateSetAutoCheck: async (enabled: boolean): Promise<any> => {
+    return await ipcRenderer.invoke('auto-update:set-auto-check', enabled);
+  },
+  autoUpdateCheckNow: async (): Promise<any> => {
+    return await ipcRenderer.invoke('auto-update:check-now');
+  },
+  autoUpdateQuitAndInstall: async (): Promise<any> => {
+    return await ipcRenderer.invoke('auto-update:quit-and-install');
+  },
+  autoUpdateOnStatus: (handler: (status: string, payload: any) => void): (() => void) => {
+    const listener = (_event: any, data: { status: string; payload: any }) => handler(data.status, data.payload);
+    ipcRenderer.on('auto-update:status', listener);
+    return () => ipcRenderer.removeListener('auto-update:status', listener);
   },
 
 });

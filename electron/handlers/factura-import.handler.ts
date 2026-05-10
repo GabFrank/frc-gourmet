@@ -53,23 +53,23 @@ export function registerFacturaImportHandlers(
 ) {
   // ============ IA CONFIG ============
   ipcMain.handle('ia-config-get', async () => {
-    const cfg = readIaConfig(app.getPath('userData'));
+    const cfg = await readIaConfig(app.getPath('userData'));
     return { ...cfg, openaiApiKey: cfg.openaiApiKey ? '***' : '' };
   });
 
   ipcMain.handle('ia-config-get-raw', async () => {
-    return readIaConfig(app.getPath('userData'));
+    return await readIaConfig(app.getPath('userData'));
   });
 
   ipcMain.handle('ia-config-set', async (_e, partial: Partial<IaConfig>) => {
-    const current = readIaConfig(app.getPath('userData'));
+    const current = await readIaConfig(app.getPath('userData'));
     const next: IaConfig = { ...current };
     if (partial.modelo !== undefined) next.modelo = partial.modelo || DEFAULT_IA_CONFIG.modelo;
     if (partial.habilitado !== undefined) next.habilitado = !!partial.habilitado;
     if (partial.openaiApiKey !== undefined && partial.openaiApiKey !== '***') {
       next.openaiApiKey = partial.openaiApiKey;
     }
-    writeIaConfig(app.getPath('userData'), next);
+    await writeIaConfig(app.getPath('userData'), next);
     return { success: true, config: { ...next, openaiApiKey: next.openaiApiKey ? '***' : '' } };
   });
 
@@ -167,7 +167,7 @@ export function registerFacturaImportHandlers(
   });
 
   ipcMain.handle('ia-config-test', async () => {
-    const cfg = readIaConfig(app.getPath('userData'));
+    const cfg = await readIaConfig(app.getPath('userData'));
     if (!cfg.openaiApiKey) {
       return { success: false, message: 'API key vacia.' };
     }
@@ -210,7 +210,7 @@ export function registerFacturaImportHandlers(
   ipcMain.handle('factura-import-process', async (_e, payload: { filePath: string }) => {
     const userDataPath = app.getPath('userData');
     const userId = getCurrentUser()?.id;
-    const cfg = readIaConfig(userDataPath);
+    const cfg = await readIaConfig(userDataPath);
     if (!cfg.habilitado || !cfg.openaiApiKey) {
       return { success: false, error: 'IA deshabilitada o sin API key. Configura desde Sistema → Configurar IA.' };
     }
@@ -293,7 +293,7 @@ export function registerFacturaImportHandlers(
   ipcMain.handle('factura-import-reprocess', async (_e, payload: { documentoId: number }) => {
     const userDataPath = app.getPath('userData');
     const userId = getCurrentUser()?.id;
-    const cfg = readIaConfig(userDataPath);
+    const cfg = await readIaConfig(userDataPath);
     if (!cfg.habilitado || !cfg.openaiApiKey) {
       return { success: false, error: 'IA deshabilitada o sin API key.' };
     }

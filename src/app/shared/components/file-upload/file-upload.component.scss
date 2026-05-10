@@ -1,0 +1,77 @@
+.file-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+
+  &.disabled {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.spinner-inline {
+  margin-right: 6px;
+  vertical-align: middle;
+
+  ::ng-deep circle {
+    stroke: currentColor;
+  }
+}
+
+.preview-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 240px;
+  min-height: 120px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--card-background);
+  overflow: hidden;
+
+  img {
+    max-width: 100%;
+    max-height: 240px;
+    object-fit: contain;
+    display: block;
+  }
+
+  &.non-image {
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px;
+    text-align: center;
+    color: var(--text-secondary);
+
+    mat-icon {
+      font-size: 36px;
+      width: 36px;
+      height: 36px;
+    }
+
+    .filename {
+      font-size: 0.85rem;
+      word-break: break-all;
+      color: var(--text-primary);
+    }
+  }
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  button {
+    span {
+      margin-left: 4px;
+    }
+  }
+}

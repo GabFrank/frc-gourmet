@@ -1,16 +1,22 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
-import { MatGridListModule } from '@angular/material/grid-list';
-import { Router } from '@angular/router';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { firstValueFrom } from 'rxjs';
 import { TabsService } from '../../../services/tabs.service';
+import { RepositoryService } from 'src/app/database/repository.service';
 import { ListFamiliasComponent } from '../familias/list-familias.component';
 import { ListProductosComponent } from '../list-productos/list-productos.component';
 import { ListRecetasComponent } from '../../gestion-recetas/list-recetas/list-recetas.component';
-import { MatTooltipModule } from '@angular/material/tooltip';
+import { ListSaboresComponent } from '../../gestion-sabores/list-sabores/list-sabores.component';
+import { DashStatChipComponent } from 'src/app/shared/components/dashboard/stat-chip/dash-stat-chip.component';
+import { DashQuickActionComponent } from 'src/app/shared/components/dashboard/quick-action/dash-quick-action.component';
+import { DashRankingListComponent, DashRankingItem } from 'src/app/shared/components/dashboard/ranking-list/dash-ranking-list.component';
+import { DashSectionHeaderComponent } from 'src/app/shared/components/dashboard/section-header/dash-section-header.component';
 
 @Component({
   selector: 'app-productos-dashboard',
@@ -20,156 +26,94 @@ import { MatTooltipModule } from '@angular/material/tooltip';
     MatCardModule,
     MatIconModule,
     MatButtonModule,
+    MatTooltipModule,
     MatDividerModule,
-    MatGridListModule,
-    MatTooltipModule
+    MatProgressSpinnerModule,
+    DashStatChipComponent,
+    DashQuickActionComponent,
+    DashRankingListComponent,
+    DashSectionHeaderComponent,
   ],
   templateUrl: './productos-dashboard.component.html',
-  styleUrls: ['./productos-dashboard.component.scss']
+  styleUrls: ['./productos-dashboard.component.scss'],
 })
-export class ProductosDashboardComponent {
-  // Dashboard cards for productos management
-  dashboardItems = [
-    {
-      title: 'Familias',
-      description: 'Administrar familias de productos',
-      icon: 'category',
-      route: 'familias',
-      color: '#4caf50',
-      disabled: false
-    },
-    {
-      title: 'Subfamilias',
-      description: 'Administrar subfamilias de productos',
-      icon: 'subdirectory_arrow_right',
-      route: 'subfamilias',
-      color: '#2196f3',
-      disabled: true
-    },
-    {
-      title: 'Productos',
-      description: 'Gestión completa de productos',
-      icon: 'restaurant',
-      route: 'productos',
-      color: '#f44336',
-      disabled: false
-    },
-    {
-      title: 'Presentaciones',
-      description: 'Administrar presentaciones y códigos de barra',
-      icon: 'inventory',
-      route: 'presentaciones',
-      color: '#ff9800',
-      disabled: true
-    },
-    {
-      title: 'Precios de Venta',
-      description: 'Configurar precios de venta por presentación',
-      icon: 'sell',
-      route: 'precos-venda',
-      color: '#9c27b0',
-      disabled: true
-    },
-    {
-      title: 'Precios de Costo',
-      description: 'Administrar precios de costo de productos',
-      icon: 'attach_money',
-      route: 'precos-costo',
-      color: '#e91e63',
-      disabled: true
-    },
-    {
-      title: 'Recetas',
-      description: 'Gestión de recetas e ingredientes',
-      icon: 'menu_book',
-      route: 'recetas',
-      color: '#795548',
-      disabled: false
-    },
-    {
-      title: 'Stock',
-      description: 'Movimientos y control de inventario',
-      icon: 'inventory_2',
-      route: 'stock',
-      color: '#607d8b',
-      disabled: true
-    },
-    {
-      title: 'Combos',
-      description: 'Administrar combos y paquetes de productos',
-      icon: 'restaurant_menu',
-      route: 'combos',
-      color: '#3f51b5',
-      disabled: true
-    },
-    {
-      title: 'Promociones',
-      description: 'Configurar promociones y ofertas especiales',
-      icon: 'local_offer',
-      route: 'promociones',
-      color: '#009688',
-      disabled: true
-    },
-    {
-      title: 'Producción',
-      description: 'Registros de producción y costos',
-      icon: 'precision_manufacturing',
-      route: 'produccion',
-      color: '#cddc39',
-      disabled: true
-    },
-    {
-      title: 'Sistema Pizza',
-      description: 'Sabores, tamaños y ensamblado de pizzas',
-      icon: 'local_pizza',
-      route: 'pizza',
-      color: '#ffc107',
-      disabled: true
-    }
+export class ProductosDashboardComponent implements OnInit {
+  loading = true;
+
+  quickActions = [
+    { title: 'Productos', icon: 'restaurant', action: 'productos', color: '#f44336' },
+    { title: 'Familias', icon: 'category', action: 'familias', color: '#4caf50' },
+    { title: 'Recetas', icon: 'menu_book', action: 'recetas', color: '#795548' },
+    { title: 'Sabores', icon: 'local_pizza', action: 'sabores', color: '#ffc107' },
   ];
 
+  productosActivos = 0;
+  recetasActivas = 0;
+  productosSinPrecio = 0;
+  productosParciales = 0;
+
+  productosPrecioDesactualizado: any[] = [];
+  productosParcialesLista: any[] = [];
+  topVendidos: DashRankingItem[] = [];
+
   constructor(
-    private router: Router,
-    private tabsService: TabsService
+    private tabsService: TabsService,
+    private repository: RepositoryService,
   ) {}
 
-  // Method to navigate to different productos sections
-  navigateTo(item: any): void {
-    if (item.disabled) return;
+  ngOnInit(): void {
+    this.cargarKpis();
+  }
 
-    console.log(`Navigating to productos: ${item.route}`);
+  setData(_data: any): void {}
 
-    switch (item.route) {
-      case 'familias':
-        this.tabsService.openTab(
-          'Familias',
-          ListFamiliasComponent,
-          { source: 'dashboard' },
-          'familias-tab',
-          true
-        );
-        break;
+  async cargarKpis(): Promise<void> {
+    this.loading = true;
+    try {
+      const k = await firstValueFrom(this.repository.getDashboardProductosKpis());
+      if (k) {
+        this.productosActivos = k.productosActivos || 0;
+        this.recetasActivas = k.recetasActivas || 0;
+        this.productosSinPrecio = k.productosSinPrecio || 0;
+        this.productosParciales = k.productosParciales || 0;
+        this.productosPrecioDesactualizado = k.productosPrecioDesactualizado || [];
+        this.productosParcialesLista = k.productosParcialesLista || [];
+        this.topVendidos = (k.topVendidos || []).map((p: any) => ({
+          nombre: p.nombre,
+          valorPrincipal: `${p.cantidad} uds`,
+          valorSecundario: `${this.formatPYG(p.total)} Gs`,
+          porcentaje: p.porcentaje,
+        }));
+      }
+    } catch (e) {
+      console.error('Error cargando KPIs productos', e);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  formatPYG(v: number): string {
+    return (v || 0).toLocaleString('es-PY', { maximumFractionDigits: 0 });
+  }
+
+  navigateTo(action: string): void {
+    switch (action) {
       case 'productos':
-        this.tabsService.openTab(
-          'Productos',
-          ListProductosComponent,
-          { source: 'dashboard' },
-          'productos-tab',
-          true
-        );
+        this.tabsService.openTab('Productos', ListProductosComponent, { source: 'dashboard' }, 'productos-tab', true);
+        break;
+      case 'familias':
+        this.tabsService.openTab('Familias', ListFamiliasComponent, { source: 'dashboard' }, 'familias-tab', true);
         break;
       case 'recetas':
-        this.tabsService.openTab(
-          'Recetas',
-          ListRecetasComponent,
-          { source: 'dashboard' },
-          'recetas-tab',
-          true
-        );
+        this.tabsService.openTab('Recetas', ListRecetasComponent, { source: 'dashboard' }, 'recetas-tab', true);
         break;
-      default:
-        console.warn(`Unknown or disabled route: ${item.route}`);
+      case 'sabores':
+        this.tabsService.openTab('Sabores', ListSaboresComponent, { source: 'dashboard' }, 'sabores-tab', true);
         break;
     }
   }
-} 
+
+  openProducto(_id: number): void {
+    this.tabsService.openTab('Productos', ListProductosComponent, { source: 'dashboard' }, 'productos-tab', true);
+  }
+}

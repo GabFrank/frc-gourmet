@@ -26,9 +26,13 @@ export function saveFuncionarioDocumento(
 ): { rutaRelativa: string; tamanoBytes: number; mimeType: string } {
   const dirPath = getFuncionarioDocPath(funcionarioId);
 
-  // Generar nombre unico (timestamp prefix) para evitar colisiones
-  const sanitized = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const uniqueName = `${Date.now()}_${sanitized}`;
+  // Nombre estandarizado: `func-<ts>-<rand>.<ext>`. El nombre original lo
+  // preserva la BD (`FuncionarioDocumento.nombreArchivo`) para mostrar al usuario.
+  const ext = path.extname(fileName).toLowerCase();
+  const safeExt = (ext && /^\.[a-z0-9]{1,8}$/i.test(ext)) ? ext : '.bin';
+  const ts = Date.now();
+  const rand = Math.random().toString(36).slice(2, 5);
+  const uniqueName = `func-${ts}-${rand}${safeExt}`;
   const filePath = path.join(dirPath, uniqueName);
 
   // Detectar mimeType del data URL si no se paso

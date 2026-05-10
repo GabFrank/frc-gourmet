@@ -4,9 +4,11 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDividerModule } from '@angular/material/divider';
-import { MatGridListModule } from '@angular/material/grid-list';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatExpansionModule } from '@angular/material/expansion';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { ChartConfiguration, ChartData } from 'chart.js';
 import { firstValueFrom } from 'rxjs';
 import { TabsService } from 'src/app/services/tabs.service';
 import { RepositoryService } from 'src/app/database/repository.service';
@@ -19,13 +21,32 @@ import { ListCuentasBancariasComponent } from '../bancos/list-cuentas-bancarias/
 import { ListMaquinasPosComponent } from '../pos/list-maquinas-pos/list-maquinas-pos.component';
 import { ListAcreditacionesPosComponent } from '../pos/acreditaciones/list-acreditaciones-pos.component';
 import { ListCuentasPorPagarComponent } from '../cuentas-por-pagar/list-cuentas-por-pagar/list-cuentas-por-pagar.component';
-import { ListCompraCategoriasComponent } from 'src/app/pages/compras/categorias/list-compra-categorias.component';
 import { ListEntradasVariasComponent } from '../entradas-varias/list-entradas-varias/list-entradas-varias.component';
 import { ListEntradaVariaCategoriasComponent } from '../entradas-varias/categorias/list-entrada-varia-categorias.component';
 import { ListOperacionesFinancierasComponent } from '../operaciones-financieras/list-operaciones-financieras/list-operaciones-financieras.component';
 import { ListOperacionFinancieraCategoriasComponent } from '../operaciones-financieras/categorias/list-operacion-financiera-categorias.component';
 import { ListChequerasComponent } from '../cheques/list-chequeras/list-chequeras.component';
 import { ListChequesComponent } from '../cheques/list-cheques/list-cheques.component';
+import { DashStatChipComponent } from 'src/app/shared/components/dashboard/stat-chip/dash-stat-chip.component';
+import { DashQuickActionComponent } from 'src/app/shared/components/dashboard/quick-action/dash-quick-action.component';
+import { DashSectionHeaderComponent } from 'src/app/shared/components/dashboard/section-header/dash-section-header.component';
+import { DashChartCardComponent } from 'src/app/shared/components/dashboard/chart-card/dash-chart-card.component';
+import { getDashboardChartOptions, DASHBOARD_CHART_COLORS, buildLineDataset } from 'src/app/shared/utils/dashboard-chart-theme';
+
+interface VencimientoItem {
+  tipo: 'cpp' | 'cheque';
+  descripcion: string;
+  monto: number;
+  fechaVencimiento: string;
+  dias: number;
+}
+
+interface MenuItem {
+  title: string;
+  icon: string;
+  action: string;
+  description?: string;
+}
 
 @Component({
   selector: 'app-caja-mayor-dashboard',
@@ -38,121 +59,63 @@ import { ListChequesComponent } from '../cheques/list-cheques/list-cheques.compo
     MatIconModule,
     MatButtonModule,
     MatDividerModule,
-    MatGridListModule,
     MatTooltipModule,
     MatSnackBarModule,
-  ]
+    MatExpansionModule,
+    MatProgressSpinnerModule,
+    DashStatChipComponent,
+    DashQuickActionComponent,
+    DashSectionHeaderComponent,
+    DashChartCardComponent,
+  ],
 })
 export class CajaMayorDashboardComponent implements OnInit {
-  dashboardItems = [
-    {
-      title: 'Cajas Mayor',
-      description: 'Abrir, cerrar y administrar cajas mayor',
-      icon: 'account_balance',
-      route: 'cajas-mayor',
-      color: '#1b5e20'
-    },
-    {
-      title: 'Gastos',
-      description: 'Registrar y consultar gastos categorizados',
-      icon: 'receipt_long',
-      route: 'gastos',
-      color: '#e65100'
-    },
-    {
-      title: 'Categorias de Gasto',
-      description: 'Administrar categorias y subcategorias de gastos',
-      icon: 'category',
-      route: 'gasto-categorias',
-      color: '#4a148c'
-    },
-    {
-      title: 'Retiros de Caja',
-      description: 'Retiros de cajas de venta e ingresos a caja mayor',
-      icon: 'move_up',
-      route: 'retiros',
-      color: '#0d47a1'
-    },
-    {
-      title: 'Cuentas Bancarias',
-      description: 'Administrar cuentas bancarias y saldos',
-      icon: 'account_balance_wallet',
-      route: 'cuentas-bancarias',
-      color: '#00695c'
-    },
-    {
-      title: 'Maquinas POS',
-      description: 'Configurar terminales de tarjetas con cuenta destino y comisión',
-      icon: 'credit_card',
-      route: 'maquinas-pos',
-      color: '#3949ab'
-    },
-    {
-      title: 'Acreditaciones POS',
-      description: 'Verificar acreditaciones, diferencias y comisiones',
-      icon: 'fact_check',
-      route: 'acreditaciones-pos',
-      color: '#ad1457'
-    },
-    {
-      title: 'Cuentas por Pagar',
-      description: 'Gestionar deudas, préstamos y cuotas pendientes',
-      icon: 'request_quote',
-      route: 'cuentas-por-pagar',
-      color: '#bf360c'
-    },
-    {
-      title: 'Categorías de Compra',
-      description: 'Administrar categorías para clasificar compras',
-      icon: 'inventory_2',
-      route: 'compra-categorias',
-      color: '#5d4037'
-    },
-    {
-      title: 'Entradas Varias',
-      description: 'Ingresos no operativos: préstamos recibidos, intereses, devoluciones',
-      icon: 'trending_up',
-      route: 'entradas-varias',
-      color: '#2e7d32'
-    },
-    {
-      title: 'Categorias de Entradas Varias',
-      description: 'Administrar categorias para clasificar entradas varias',
-      icon: 'category',
-      route: 'entrada-varia-categorias',
-      color: '#1b5e20'
-    },
-    {
-      title: 'Operaciones Financieras',
-      description: 'Cambios de divisa, depositos/retiros bancarios y transferencias entre cajas',
-      icon: 'swap_horiz',
-      route: 'operaciones-financieras',
-      color: '#6a1b9a'
-    },
-    {
-      title: 'Categorias de Op. Financieras',
-      description: 'Administrar categorias para clasificar operaciones',
-      icon: 'category',
-      route: 'operacion-financiera-categorias',
-      color: '#4a148c'
-    },
-    {
-      title: 'Chequeras',
-      description: 'Administrar chequeras propias asociadas a cuentas bancarias',
-      icon: 'menu_book',
-      route: 'chequeras',
-      color: '#1565c0'
-    },
-    {
-      title: 'Cheques',
-      description: 'Emitir, cobrar y anular cheques propios (a la vista o diferidos)',
-      icon: 'request_quote',
-      route: 'cheques',
-      color: '#0d47a1'
-    },
+  loading = true;
+
+  quickActions = [
+    { title: 'Cajas Mayor', icon: 'account_balance', action: 'cajas-mayor', color: '#1b5e20' },
+    { title: 'Gastos', icon: 'receipt_long', action: 'gastos', color: '#e65100' },
+    { title: 'Entradas Varias', icon: 'trending_up', action: 'entradas-varias', color: '#2e7d32' },
+    { title: 'Retiros', icon: 'move_up', action: 'retiros', color: '#0d47a1' },
+    { title: 'Operaciones', icon: 'swap_horiz', action: 'operaciones', color: '#6a1b9a' },
+    { title: 'CPP', icon: 'request_quote', action: 'cpp', color: '#bf360c' },
   ];
 
+  // Accordion
+  grupoOperaciones: MenuItem[] = [
+    { title: 'Cajas Mayor', icon: 'account_balance', action: 'cajas-mayor' },
+    { title: 'Gastos', icon: 'receipt_long', action: 'gastos' },
+    { title: 'Categorias de Gasto', icon: 'category', action: 'gasto-categorias' },
+    { title: 'Retiros de Caja', icon: 'move_up', action: 'retiros' },
+    { title: 'Entradas Varias', icon: 'trending_up', action: 'entradas-varias' },
+    { title: 'Categorias Entradas', icon: 'category', action: 'entrada-varia-categorias' },
+    { title: 'Operaciones Financieras', icon: 'swap_horiz', action: 'operaciones-financieras' },
+    { title: 'Categorias Op. Financieras', icon: 'category', action: 'operacion-financiera-categorias' },
+  ];
+  grupoBancos: MenuItem[] = [
+    { title: 'Cuentas Bancarias', icon: 'account_balance_wallet', action: 'cuentas-bancarias' },
+    { title: 'Maquinas POS', icon: 'credit_card', action: 'maquinas-pos' },
+    { title: 'Acreditaciones POS', icon: 'fact_check', action: 'acreditaciones-pos' },
+    { title: 'Chequeras', icon: 'menu_book', action: 'chequeras' },
+    { title: 'Cheques', icon: 'request_quote', action: 'cheques' },
+  ];
+  grupoCpp: MenuItem[] = [
+    { title: 'Cuentas por Pagar', icon: 'request_quote', action: 'cuentas-por-pagar' },
+  ];
+
+  // KPIs
+  saldoPYG = 0;
+  saldoUSD = 0;
+  saldoBRL = 0;
+  cppVencidos = 0;
+  cppMontoTotalPYG = 0;
+  chequesPorVencer = 0;
+
+  proximosVencimientos: VencimientoItem[] = [];
   shortcuts: any[] = [];
+
+  chartData: ChartData<'line'> = { labels: [], datasets: [] };
+  chartOptions: ChartConfiguration<'line'>['options'] = getDashboardChartOptions('line');
 
   constructor(
     private tabsService: TabsService,
@@ -161,10 +124,40 @@ export class CajaMayorDashboardComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    this.cargarKpis();
     this.loadShortcuts();
   }
 
-  setData(data: any): void {}
+  setData(_data: any): void {}
+
+  async cargarKpis(): Promise<void> {
+    this.loading = true;
+    try {
+      const k = await firstValueFrom(this.repositoryService.getDashboardCajaMayorKpis());
+      if (k) {
+        this.saldoPYG = k.saldoPYG || 0;
+        this.saldoUSD = k.saldoUSD || 0;
+        this.saldoBRL = k.saldoBRL || 0;
+        this.cppVencidos = k.cppVencidos || 0;
+        this.cppMontoTotalPYG = k.cppMontoTotalPYG || 0;
+        this.chequesPorVencer = k.chequesPorVencer || 0;
+        this.proximosVencimientos = k.proximosVencimientos || [];
+
+        const mov = k.movimientos30d || { labels: [], entradas: [], salidas: [] };
+        this.chartData = {
+          labels: mov.labels || [],
+          datasets: [
+            buildLineDataset('Entradas', mov.entradas || [], DASHBOARD_CHART_COLORS.success, DASHBOARD_CHART_COLORS.successSoft, true),
+            buildLineDataset('Salidas', mov.salidas || [], DASHBOARD_CHART_COLORS.error, DASHBOARD_CHART_COLORS.errorSoft, true),
+          ],
+        };
+      }
+    } catch (e) {
+      console.error('Error cargando KPIs caja mayor', e);
+    } finally {
+      this.loading = false;
+    }
+  }
 
   async loadShortcuts(): Promise<void> {
     try {
@@ -189,8 +182,15 @@ export class CajaMayorDashboardComponent implements OnInit {
     }
   }
 
-  navigateTo(route: string): void {
-    switch (route) {
+  formatPYG(v: number): string {
+    return (v || 0).toLocaleString('es-PY', { maximumFractionDigits: 0 });
+  }
+  formatUSD(v: number): string {
+    return (v || 0).toLocaleString('es-PY', { maximumFractionDigits: 2 });
+  }
+
+  navigateTo(action: string): void {
+    switch (action) {
       case 'cajas-mayor':
         this.tabsService.openTab('Cajas Mayor', ListCajasMayorComponent);
         break;
@@ -213,10 +213,8 @@ export class CajaMayorDashboardComponent implements OnInit {
         this.tabsService.openTab('Acreditaciones POS', ListAcreditacionesPosComponent);
         break;
       case 'cuentas-por-pagar':
+      case 'cpp':
         this.tabsService.openTab('Cuentas por Pagar', ListCuentasPorPagarComponent);
-        break;
-      case 'compra-categorias':
-        this.tabsService.openTab('Categorías de Compra', ListCompraCategoriasComponent);
         break;
       case 'entradas-varias':
         this.tabsService.openTab('Entradas Varias', ListEntradasVariasComponent);
@@ -224,6 +222,7 @@ export class CajaMayorDashboardComponent implements OnInit {
       case 'entrada-varia-categorias':
         this.tabsService.openTab('Categorias de Entradas Varias', ListEntradaVariaCategoriasComponent);
         break;
+      case 'operaciones':
       case 'operaciones-financieras':
         this.tabsService.openTab('Operaciones Financieras', ListOperacionesFinancierasComponent);
         break;

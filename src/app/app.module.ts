@@ -73,6 +73,8 @@ import { GestionRecetasModule } from './pages/gestion-recetas/gestion-recetas.mo
 
 // Shared directives standalone
 import { CurrencyInputDirective } from './shared/directives/currency-input.directive';
+// Standalone shared components used in non-standalone declarations
+import { FileUploadComponent } from './shared/components/file-upload/file-upload.component';
 
 @NgModule({
   imports: [
@@ -118,6 +120,7 @@ import { CurrencyInputDirective } from './shared/directives/currency-input.direc
     TabContainerComponent,
     GestionRecetasModule,
     CurrencyInputDirective,
+    FileUploadComponent,
   ],
   declarations: [
     // No declarations since all components are standalone

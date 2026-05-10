@@ -26,6 +26,17 @@
     </div>
 
     <!-- Toolbar actions -->
+    <button
+      mat-icon-button
+      (click)="openUpdateDialog()"
+      matTooltip="{{ updateDownloaded ? 'Actualización lista para instalar' : (updateAvailable ? 'Actualización disponible' : 'Actualizaciones') }}">
+      <mat-icon
+        [matBadge]="updateDownloaded ? '!' : (updateAvailable ? '•' : null)"
+        matBadgeColor="warn"
+        matBadgeSize="small">
+        system_update
+      </mat-icon>
+    </button>
     <button mat-icon-button>
       <mat-icon matBadge="5" matBadgeColor="warn">notifications</mat-icon>
     </button>
