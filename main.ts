@@ -354,6 +354,22 @@ function registerAppProtocol(): void {
 // Initialize the database when the app is ready
 app.on('ready', () => {
   registerAppProtocol();
+
+  // F4: setear env vars de mode/serverUrl ANTES de createWindow para que el
+  // preload los lea al cargar (el renderer hereda process.env del main al
+  // momento del spawn). initializeDatabase() corre async y los setea muy
+  // tarde — para entonces el preload ya leyo defaults.
+  try {
+    const earlySettings = readAppSettings(app.getPath('userData'));
+    process.env['FRC_APP_MODE'] = earlySettings.mode;
+    if (earlySettings.mode === 'client' && earlySettings.network?.serverUrl) {
+      process.env['FRC_SERVER_URL'] = earlySettings.network.serverUrl;
+    }
+    console.log(`[main] early FRC_APP_MODE=${earlySettings.mode} (preload heredara este valor)`);
+  } catch (e) {
+    console.warn('[main] no se pudo leer app-settings temprano:', e);
+  }
+
   initializeDatabase();
   createWindow();
 });

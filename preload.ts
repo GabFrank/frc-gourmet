@@ -19,17 +19,18 @@ import { EstadoVentaItem } from './src/app/database/entities/ventas/venta-item.e
 const APP_MODE = (process.env['FRC_APP_MODE'] as 'standalone' | 'server' | 'client') || 'standalone';
 const SERVER_URL = process.env['FRC_SERVER_URL'] || '';
 
+// IMPORTANTE: guardar la referencia original ANTES de monkey-patchear
+// (sino: invokeRouter -> ipcRenderer.invoke (== invokeRouter) -> recursion infinita)
+const _originalInvoke = ipcRenderer.invoke.bind(ipcRenderer);
+
 const ALWAYS_LOCAL_CHANNELS = new Set<string>([
   // Impresoras / hardware local del cliente
   'print-receipt',
   'print-test-page',
-  'get-printer-list',
-  // Files locales (rare)
-  'select-file-dialog',
-  'select-folder-dialog',
-  // Que no haga sentido routear a server
-  'set-current-user',
-  'get-current-user',
+  'get-printers',
+  // User session local (no JWT — el current-user se setea local tras login)
+  'getCurrentUser',
+  'setCurrentUser',
   // Config local (cambian el modo del cliente, no del server)
   'app-mode-get',
   'app-mode-save',
@@ -38,6 +39,12 @@ const ALWAYS_LOCAL_CHANNELS = new Set<string>([
   'db-config-save',
   'db-config-test-connection',
   'db-config-restart-app',
+  // Backup local
+  'backup-list',
+  'backup-create',
+  'backup-restore',
+  // Logs locales
+  'log-error',
 ]);
 
 let accessToken: string | null = null;
@@ -76,9 +83,10 @@ async function refreshAccessIfPossible(): Promise<boolean> {
 }
 
 async function invokeRouter(channel: string, ...args: any[]): Promise<any> {
-  // Local channels o cualquier modo no-cliente → IPC directo
+  // Local channels o cualquier modo no-cliente → IPC directo (referencia
+  // original, no la reemplazada — sino recursion infinita)
   if (APP_MODE !== 'client' || ALWAYS_LOCAL_CHANNELS.has(channel)) {
-    return ipcRenderer.invoke(channel, ...args);
+    return _originalInvoke(channel, ...args);
   }
 
   // Login special case

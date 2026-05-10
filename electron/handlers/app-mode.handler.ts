@@ -55,8 +55,11 @@ export function registerAppModeHandlers() {
   ipcMain.handle('app-mode-test-server', async (_e, payload: { serverUrl: string }): Promise<AppModeOpResult> => {
     const url = payload?.serverUrl?.trim() || '';
     if (!url) return { success: false, message: 'URL requerida.' };
+    // Workaround: Node 18 fetch (undici) en main process puede no fallback de
+    // IPv6 a IPv4. Forzar 127.0.0.1 cuando piden localhost.
+    const probeUrl = url.replace(/^(https?:\/\/)localhost(:|\/|$)/i, '$1127.0.0.1$2');
     try {
-      const versionUrl = url.replace(/\/$/, '') + '/api/version';
+      const versionUrl = probeUrl.replace(/\/$/, '') + '/api/version';
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 5000);
       const resp = await fetch(versionUrl, { signal: ctrl.signal });
