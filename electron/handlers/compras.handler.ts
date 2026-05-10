@@ -30,7 +30,7 @@ async function getStockActualUnidadBase(qr: any, productoId: number): Promise<nu
     .getRepository(StockMovimiento)
     .createQueryBuilder('m')
     .where('m.producto_id = :pid', { pid: productoId })
-    .andWhere('m.activo = 1')
+    .andWhere('m.activo = true')
     .getMany();
   let total = 0;
   for (const m of movs) {
@@ -59,7 +59,7 @@ async function getCostoActivoActual(qr: any, productoId: number): Promise<number
     .getRepository(PrecioCosto)
     .createQueryBuilder('pc')
     .where('pc.producto_id = :pid', { pid: productoId })
-    .andWhere('pc.activo = 1')
+    .andWhere('pc.activo = true')
     .orderBy('pc.id', 'DESC')
     .getOne();
   return pc ? Number(pc.valor) : null;
@@ -890,12 +890,12 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       .leftJoinAndSelect('pp.producto', 'prod')
       .leftJoin('pp.proveedor', 'pv')
       .where('pv.id = :proveedorId', { proveedorId })
-      .andWhere('pp.activo = 1')
+      .andWhere('pp.activo = true')
       .orderBy('pp.ultimaCompraFecha', 'DESC')
       .addOrderBy('pp.id', 'DESC');
 
     if (search) {
-      qb.andWhere('prod.nombre LIKE :s', { s: `%${search}%` });
+      qb.andWhere('UPPER(prod.nombre) LIKE UPPER(:s)', { s: `%${search}%` });
     }
     qb.skip(page * pageSize).take(pageSize);
     const [items, total] = await qb.getManyAndCount();
