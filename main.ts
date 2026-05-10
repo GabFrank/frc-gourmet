@@ -21,6 +21,7 @@ import { DatabaseService } from './src/app/database/database.service';
 import { Usuario } from './src/app/database/entities/personas/usuario.entity';
 
 // Import the new handler registration functions
+import { installHandlerRegistry, handlerRegistryCount } from './electron/utils/handler-registry';
 import { registerPrinterHandlers } from './electron/handlers/printers.handler';
 import { registerPersonasHandlers } from './electron/handlers/personas.handler';
 import { registerAuthHandlers } from './electron/handlers/auth.handler';
@@ -143,6 +144,12 @@ function initializeDatabase() {
         console.error('[migrate-passwords] error:', e);
       }
 
+      // F3 paso 2: monkey-patch ipcMain.handle para que cada handler que
+      // se registre abajo quede tambien copiado en handlerRegistry.
+      // Necesario para que el server HTTP de F3 pueda routear /api/rpc al
+      // mismo handler sin reescribir nada.
+      installHandlerRegistry();
+
       // Register all IPC handlers *after* the database is ready
       registerPrinterHandlers(dataSource);
       registerPersonasHandlers(dataSource, getCurrentUser);
@@ -186,6 +193,8 @@ function initializeDatabase() {
       registerDashboardProductosHandlers(dataSource, getCurrentUser);
       registerDashboardFinancieroHandlers(dataSource, getCurrentUser);
       registerDashboardCajaMayorHandlers(dataSource, getCurrentUser);
+
+      console.log(`[F3] handlerRegistry: ${handlerRegistryCount()} channels registrados (disponibles via IPC + futuro /api/rpc).`);
 
       // Startup migration: populate vendedor_id from created_by for historic ventas
       dataSource.query(`UPDATE ventas SET vendedor_id = created_by WHERE vendedor_id IS NULL AND created_by IS NOT NULL`)
