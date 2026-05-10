@@ -424,7 +424,7 @@ export function registerCuentasPorPagarHandlers(
       // Excluye CPPs originadas en compras al contado (compra.credito = false). Las compras a credito
       // o las CPPs sin compra (prestamos, etc.) siguen apareciendo. Default: false (lista todo).
       if (filtros?.excluirContadoCompras === true) {
-        qb.andWhere('(cpp.compra_id IS NULL OR compra.credito = 1)');
+        qb.andWhere('(cpp.compra_id IS NULL OR compra.credito = true)');
       }
 
       if (filtros?.pageSize != null) {

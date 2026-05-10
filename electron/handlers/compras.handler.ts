@@ -95,7 +95,7 @@ async function aplicarCostoPromedioPonderado(
     .createQueryBuilder()
     .update(PrecioCosto)
     .set({ activo: false })
-    .where('producto_id = :pid AND activo = 1', { pid: productoId })
+    .where('producto_id = :pid AND activo = true', { pid: productoId })
     .execute();
 
   // Crear nuevo costo activo

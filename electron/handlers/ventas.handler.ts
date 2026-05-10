@@ -41,6 +41,7 @@ import { Adicional } from '../../src/app/database/entities/productos/adicional.e
 import { TipoModificacionIngrediente } from '../../src/app/database/entities/ventas/venta-item-ingrediente-modificacion.entity';
 import { EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
 import { VentaItemSabor } from '../../src/app/database/entities/ventas/venta-item-sabor.entity';
+import { dbQuery } from '../utils/db-query';
 
 export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Remove this line - get the current user in each handler instead
@@ -486,7 +487,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // Conteo apertura por moneda
       const conteoApertura: any[] = [];
       if (caja.conteoApertura?.id) {
-        const rows = await dataSource.query(`
+        const rows = await dbQuery(dataSource, `
           SELECT mb.moneda_id, m.simbolo, m.denominacion, SUM(cd.cantidad * mb.valor) as total
           FROM conteos_detalles cd
           JOIN monedas_billetes mb ON cd.moneda_billete_id = mb.id
@@ -502,7 +503,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // Conteo cierre por moneda
       const conteoCierre: any[] = [];
       if (caja.conteoCierre?.id) {
-        const rows = await dataSource.query(`
+        const rows = await dbQuery(dataSource, `
           SELECT mb.moneda_id, m.simbolo, m.denominacion, SUM(cd.cantidad * mb.valor) as total
           FROM conteos_detalles cd
           JOIN monedas_billetes mb ON cd.moneda_billete_id = mb.id
@@ -605,7 +606,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   // Total ventas de una caja en moneda principal (liviano, para la lista)
   ipcMain.handle('getVentasTotalByCaja', async (_event: any, cajaId: number) => {
     try {
-      const result = await dataSource.query(`
+      const result = await dbQuery(dataSource, `
         SELECT
           COUNT(DISTINCT v.id) as cantidadVentas,
           COALESCE(SUM(CASE WHEN pd.tipo = 'PAGO' THEN pd.valor ELSE 0 END), 0)

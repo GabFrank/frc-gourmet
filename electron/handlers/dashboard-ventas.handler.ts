@@ -6,6 +6,7 @@ import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caj
 import { PdvMesa } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { ComandaItem, ComandaItemEstado } from '../../src/app/database/entities/ventas/comanda-item.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { dbQuery } from '../utils/db-query';
 
 type Rango = 'today' | 'week' | 'month' | '3months' | '6months';
 
@@ -37,7 +38,7 @@ export function registerDashboardVentasHandlers(
       hoyFin.setHours(23, 59, 59, 999);
 
       // 1. Ventas hoy + total hoy
-      const ventasHoyRows: any[] = await dataSource.query(`
+      const ventasHoyRows: any[] = await dbQuery(dataSource, `
         SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
         FROM ventas
         WHERE estado = ?
@@ -85,7 +86,7 @@ export function registerDashboardVentasHandlers(
         const horasAbierto = `${horas}h ${min}m`;
 
         // Ventas + monto de la caja
-        const cajaTotalsRows: any[] = await dataSource.query(`
+        const cajaTotalsRows: any[] = await dbQuery(dataSource, `
           SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
           FROM ventas WHERE caja_id = ? AND estado = ?
         `, [caja.id, VentaEstado.CONCLUIDA]);
@@ -93,7 +94,7 @@ export function registerDashboardVentasHandlers(
         const ventaTotal = Number(cajaTotalsRows?.[0]?.suma || 0);
 
         // Mesas distintas atendidas
-        const mesasRows: any[] = await dataSource.query(`
+        const mesasRows: any[] = await dbQuery(dataSource, `
           SELECT COUNT(DISTINCT mesa_id) as cnt FROM ventas WHERE caja_id = ? AND mesa_id IS NOT NULL
         `, [caja.id]);
         const mesasAtendidas = Number(mesasRows?.[0]?.cnt || 0);
@@ -113,7 +114,7 @@ export function registerDashboardVentasHandlers(
 
       // 5. Top productos (en el rango)
       const { desde, hasta } = rangoToFechas(rango);
-      const topRows: any[] = await dataSource.query(`
+      const topRows: any[] = await dbQuery(dataSource, `
         SELECT p.id, p.nombre, SUM(vi.cantidad) as cantidad,
                SUM(vi.cantidad * vi.precio_venta_unitario) as total
         FROM venta_items vi
@@ -173,7 +174,7 @@ async function buildVentasPorPeriodo(
       d.setDate(d.getDate() - i);
       d.setHours(0, 0, 0, 0);
       const f = new Date(d); f.setHours(23, 59, 59, 999);
-      const rows: any[] = await dataSource.query(`
+      const rows: any[] = await dbQuery(dataSource, `
         SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
         FROM ventas
         WHERE estado = ? AND created_at >= ? AND created_at <= ?
@@ -188,7 +189,7 @@ async function buildVentasPorPeriodo(
       d.setDate(d.getDate() - i);
       d.setHours(0, 0, 0, 0);
       const f = new Date(d); f.setHours(23, 59, 59, 999);
-      const rows: any[] = await dataSource.query(`
+      const rows: any[] = await dbQuery(dataSource, `
         SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
         FROM ventas WHERE estado = ? AND created_at >= ? AND created_at <= ?
       `, [VentaEstado.CONCLUIDA, d.toISOString(), f.toISOString()]);
@@ -202,7 +203,7 @@ async function buildVentasPorPeriodo(
       d.setDate(d.getDate() - (i * 7) - 6);
       d.setHours(0, 0, 0, 0);
       const f = new Date(d); f.setDate(f.getDate() + 6); f.setHours(23, 59, 59, 999);
-      const rows: any[] = await dataSource.query(`
+      const rows: any[] = await dbQuery(dataSource, `
         SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
         FROM ventas WHERE estado = ? AND created_at >= ? AND created_at <= ?
       `, [VentaEstado.CONCLUIDA, d.toISOString(), f.toISOString()]);
@@ -215,7 +216,7 @@ async function buildVentasPorPeriodo(
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const f = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
-      const rows: any[] = await dataSource.query(`
+      const rows: any[] = await dbQuery(dataSource, `
         SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
         FROM ventas WHERE estado = ? AND created_at >= ? AND created_at <= ?
       `, [VentaEstado.CONCLUIDA, d.toISOString(), f.toISOString()]);
