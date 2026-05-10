@@ -14,6 +14,7 @@ import { CajaMayorSaldo } from '../../src/app/database/entities/financiero/caja-
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 
 // Helper: actualiza/crea saldo cajaMayor restando un monto (para egresos de cuotas)
@@ -463,7 +464,7 @@ export function registerCuentasPorPagarHandlers(
       const cuotaRepo = queryRunner.manager.getRepository(CuentaPorPagarCuota);
 
       const cantidadCuotas = Math.max(1, Number(data.cantidadCuotas) || 1);
-      const fechaInicio = data.fechaInicio ? new Date(data.fechaInicio) : new Date();
+      const fechaInicio = parseLocalDate(data.fechaInicio) || new Date();
       const montoTotal = Number(data.montoTotal);
       const montoCuota = +(montoTotal / cantidadCuotas).toFixed(2);
 

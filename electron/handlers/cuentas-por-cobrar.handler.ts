@@ -14,6 +14,7 @@ import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 
 function calcularEstadoCuota(monto: number, montoCobrado: number): CuentaPorCobrarCuotaEstado {
@@ -79,7 +80,7 @@ export function registerCuentasPorCobrarHandlers(
 
       const cantidadCuotas = Math.max(1, Number(data.cantidadCuotas) || 1);
       const frecuenciaDias = Number(data.frecuenciaDias) || 30;
-      const fechaInicio = data.fechaInicio ? new Date(data.fechaInicio) : new Date();
+      const fechaInicio = parseLocalDate(data.fechaInicio) || new Date();
       const montoTotal = Number(data.montoTotal);
       const montoCuota = +(montoTotal / cantidadCuotas).toFixed(2);
       const cu = getCurrentUser();

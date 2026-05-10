@@ -18,21 +18,11 @@ import { CuentaPorPagar } from '../../src/app/database/entities/financiero/cuent
 import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
 import { CuentaPorPagarTipo, CuentaPorPagarEstado, CuotaEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 
 // ===== Helpers internos =====
-
-// Parsea 'YYYY-MM-DD' como Date en zona local (evita el shift por UTC).
-// `new Date('2026-05-04')` interpreta como UTC midnight, que en UTC-3 cae el dia anterior.
-function parseLocalDate(s: any): Date | undefined {
-  if (!s) return undefined;
-  if (s instanceof Date) return s;
-  const str = String(s);
-  const m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return new Date(str);
-}
 
 // Stock actual en unidad base = SUMA(movimientos activos) con signo segun tipo
 async function getStockActualUnidadBase(qr: any, productoId: number): Promise<number> {
