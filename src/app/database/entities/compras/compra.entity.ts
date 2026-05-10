@@ -98,4 +98,9 @@ export class Compra extends BaseModel {
   @ManyToOne('CuentaPorPagar', { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'cuenta_por_pagar_id' })
   cuentaPorPagar?: any;
+
+  // F5: device tracking — dispositivo donde se registró la compra.
+  @ManyToOne('Dispositivo', { nullable: true })
+  @JoinColumn({ name: 'dispositivo_id' })
+  dispositivo?: any;
 }

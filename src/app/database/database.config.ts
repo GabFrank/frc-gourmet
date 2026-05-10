@@ -178,6 +178,7 @@ import { Sector } from './entities/ventas/sector.entity';
 // Migrations
 import { Baseline1778378410416 } from './migrations/1778378410416-Baseline';
 import { BaselinePostgres1778380893207 } from './migrations/1778380893207-BaselinePostgres';
+import { AddDispositivoIdToTrackedEntities1778390000000 } from './migrations/1778390000000-AddDispositivoIdToTrackedEntities';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -450,8 +451,9 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     : Baseline1778378410416;
   return [
     baseline,
-    // Agregar migraciones incrementales acá conforme se generan con
-    // `npm run migration:generate`. Ver docs/MIGRATIONS.md
+    // Migraciones incrementales — corren post-baseline. Driver-aware si
+    // necesitan SQL especifico de cada driver. Ver docs/MIGRATIONS.md
+    AddDispositivoIdToTrackedEntities1778390000000,
   ];
 }
 

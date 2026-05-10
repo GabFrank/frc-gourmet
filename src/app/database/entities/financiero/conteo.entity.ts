@@ -1,4 +1,4 @@
-import { Column, Entity, OneToMany, OneToOne } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany, OneToOne } from 'typeorm';
 import { BaseModel } from '../base.entity';
 
 /**
@@ -26,4 +26,9 @@ export class Conteo extends BaseModel {
 
   @OneToOne('Caja', 'conteoCierre')
   cajaCierre?: any;
+
+  // F5: device tracking — dispositivo donde se hizo el conteo.
+  @ManyToOne('Dispositivo', { nullable: true })
+  @JoinColumn({ name: 'dispositivo_id' })
+  dispositivo?: any;
 }

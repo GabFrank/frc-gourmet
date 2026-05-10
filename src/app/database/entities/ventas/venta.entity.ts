@@ -44,6 +44,14 @@ export class Venta extends BaseModel {
   @JoinColumn({ name: 'caja_id' })
   caja!: Caja;
 
+  // F5: device tracking — el dispositivo desde donde se origino esta venta.
+  // Nullable porque ventas pre-F5 no tienen este dato. En cliente HTTP el
+  // server lo resuelve del JWT claim. En IPC standalone/server hoy lo dejan
+  // null hasta que la UI tenga registrado el dispositivo activo.
+  @ManyToOne('Dispositivo', { nullable: true })
+  @JoinColumn({ name: 'dispositivo_id' })
+  dispositivo?: any;
+
   @ManyToOne(() => Pago, { nullable: true })
   @JoinColumn({ name: 'pago_id' })
   pago?: Pago;
