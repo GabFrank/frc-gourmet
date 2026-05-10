@@ -76,6 +76,42 @@ import { CurrencyInputDirective } from './shared/directives/currency-input.direc
 // F2 cliente/servidor: abstract RepositoryService + impls
 import { RepositoryService } from './database/repository.service';
 import { RepositoryIpcService } from './database/repository-ipc.service';
+import { RepositoryHttpService } from './database/repository-http.service';
+
+/**
+ * F2: factory que decide la impl del repositorio en runtime.
+ *
+ * - `standalone` y `server`: usa IPC (Electron, BD local).
+ * - `cliente`: usa HTTP (llama al server por TCP).
+ *
+ * El mode se resuelve desde `window.api.getAppMode()` (lo expone el preload
+ * en F0). Si no esta disponible (renderer arrancado sin Electron, tests,
+ * SSR), default = 'standalone'.
+ *
+ * F4 reescribira los stubs del HttpService con la impl real. Hasta entonces,
+ * si se pasa al modo cliente cada metodo tira NotImplementedError.
+ */
+function repositoryFactory(
+  ipc: RepositoryIpcService,
+  http: RepositoryHttpService,
+): RepositoryService {
+  let mode: string = 'standalone';
+  try {
+    const api = (window as any).api;
+    if (api && typeof api.getAppMode === 'function') {
+      // F4: getAppMode() debe estar expuesto via preload.
+      mode = api.getAppMode() || 'standalone';
+    }
+  } catch {
+    /* default standalone */
+  }
+  if (mode === 'client') {
+    console.log('[RepositoryService] mode=client → HttpService');
+    return http;
+  }
+  console.log(`[RepositoryService] mode=${mode} → IpcService`);
+  return ipc;
+}
 // Standalone shared components used in non-standalone declarations
 import { FileUploadComponent } from './shared/components/file-upload/file-upload.component';
 
@@ -155,10 +191,12 @@ import { FileUploadComponent } from './shared/components/file-upload/file-upload
       }
     },
     { provide: MatPaginatorIntl, useClass: PaginatorIntlEs },
-    // F2: componentes inyectan RepositoryService (abstract). En esta release
-    // siempre devolvemos la impl Ipc. Cuando F4 traiga el modo cliente, esto
-    // se transforma en useFactory que decide segun app-settings.mode.
-    { provide: RepositoryService, useExisting: RepositoryIpcService },
+    // F2: factory decide impl segun app-mode. Default standalone → IPC.
+    {
+      provide: RepositoryService,
+      useFactory: repositoryFactory,
+      deps: [RepositoryIpcService, RepositoryHttpService],
+    },
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA]
 })
