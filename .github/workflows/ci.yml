@@ -64,3 +64,93 @@ jobs:
             --from ${{ github.event.pull_request.base.sha }} \
             --to   ${{ github.event.pull_request.head.sha }} \
             --verbose
+
+  migrate-postgres:
+    name: Migration run (Postgres baseline + incrementales)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: frc_gourmet_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install deps
+        run: npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
+
+      # Sanity check: el datasource debe arrancar sin tocar SQLite local.
+      - name: Verify Postgres ready
+        run: |
+          for i in {1..10}; do
+            pg_isready -h localhost -p 5432 -U postgres && break
+            sleep 2
+          done
+        env:
+          PGPASSWORD: postgres
+
+      # Corre la baseline driver-aware (BaselinePostgres) + cualquier
+      # migration incremental (F5 device_id, refresh tokens, etc.) contra
+      # un Postgres fresco. Si algo no es portable falla aca.
+      - name: Run migrations against Postgres
+        run: npm run migration:run
+        env:
+          TS_NODE_PROJECT: tsconfig.typeorm.json
+          FRC_DB_TYPE: postgres
+          FRC_PG_HOST: localhost
+          FRC_PG_PORT: '5432'
+          FRC_PG_DATABASE: frc_gourmet_ci
+          FRC_PG_USERNAME: postgres
+          FRC_PG_PASSWORD: postgres
+
+      # Verificacion explicita: la tabla de tracking debe tener al menos
+      # una fila (la baseline). Si la baseline no corrio o el conteo es 0,
+      # algo silenciosamente fallo.
+      - name: Verify typeorm_migrations populated
+        run: |
+          ROWS=$(PGPASSWORD=postgres psql -h localhost -U postgres -d frc_gourmet_ci -tAc "SELECT COUNT(*) FROM typeorm_migrations")
+          echo "typeorm_migrations rows: $ROWS"
+          if [ "$ROWS" -lt 1 ]; then
+            echo "::error::typeorm_migrations vacia despues de migration:run"
+            exit 1
+          fi
+          PGPASSWORD=postgres psql -h localhost -U postgres -d frc_gourmet_ci -c "\dt" | head -40
+          # Verifica que la tabla dispositivos existe (entity de F5)
+          PGPASSWORD=postgres psql -h localhost -U postgres -d frc_gourmet_ci -tAc "SELECT to_regclass('public.dispositivos')" | grep -q dispositivos || {
+            echo "::error::tabla dispositivos no existe — schema incompleto"
+            exit 1
+          }
+
+      # Re-ejecutar es idempotente: ninguna migration nueva debe correr.
+      - name: Re-run migrations is idempotent
+        run: npm run migration:run 2>&1 | tee /tmp/rerun.log
+        env:
+          TS_NODE_PROJECT: tsconfig.typeorm.json
+          FRC_DB_TYPE: postgres
+          FRC_PG_HOST: localhost
+          FRC_PG_PORT: '5432'
+          FRC_PG_DATABASE: frc_gourmet_ci
+          FRC_PG_USERNAME: postgres
+          FRC_PG_PASSWORD: postgres
+      - name: Assert no migrations re-ran
+        run: |
+          if grep -E "Migration \\S+ has been executed successfully" /tmp/rerun.log; then
+            echo "::error::una migration corrio dos veces (no idempotente)"
+            exit 1
+          fi
+          grep -q "No migrations are pending" /tmp/rerun.log || {
+            echo "::warning::no se encontro 'No migrations are pending' — verificar log"
+          }
