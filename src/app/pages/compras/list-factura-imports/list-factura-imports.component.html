@@ -1,17 +1,13 @@
 <div class="list-factura-imports-container">
-  <div class="page-header">
-    <h2>Importaciones de facturas (IA)</h2>
-    <div class="header-actions">
-      <button mat-icon-button matTooltip="Refrescar" (click)="load()" [disabled]="loading">
-        <mat-icon [class.spinning]="loading">refresh</mat-icon>
-      </button>
-      <button mat-flat-button color="primary" (click)="nuevaImportacion()" [disabled]="importing">
-        <mat-icon>auto_awesome</mat-icon>
-        <span *ngIf="!importing">Nueva importación</span>
-        <mat-spinner *ngIf="importing" diameter="18"></mat-spinner>
-      </button>
-    </div>
-  </div>
+  <app-table-toolbar title="Importaciones de facturas (IA)"
+                     [loading]="loading"
+                     (refresh)="load()">
+    <button mat-flat-button color="primary" (click)="nuevaImportacion()" [disabled]="importing">
+      <mat-icon>auto_awesome</mat-icon>
+      <span *ngIf="!importing">Nueva importación</span>
+      <mat-spinner *ngIf="importing" diameter="18"></mat-spinner>
+    </button>
+  </app-table-toolbar>
 
   <div class="filtros-bar">
     <mat-form-field appearance="outline" class="f-field">

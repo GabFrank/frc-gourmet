@@ -1,7 +1,8 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
+import { FormBuilder, FormControl, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -15,6 +16,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 
+import { AppUrlPipe } from '../../pipes/app-url.pipe';
 import { RepositoryService } from '../../../database/repository.service';
 import { PdvGrupoCategoria } from '../../../database/entities/ventas/pdv-grupo-categoria.entity';
 import { PdvCategoria } from '../../../database/entities/ventas/pdv-categoria.entity';
@@ -38,6 +40,7 @@ export interface CreateEditPdvCategoriasData {
     CommonModule,
     ReactiveFormsModule,
     MatDialogModule,
+    MatAutocompleteModule,
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
@@ -48,7 +51,8 @@ export interface CreateEditPdvCategoriasData {
     MatSnackBarModule,
     MatTabsModule,
     MatDividerModule,
-    MatTooltipModule
+    MatTooltipModule,
+    AppUrlPipe,
   ]
 })
 export class CreateEditPdvCategoriasComponent implements OnInit {
@@ -70,14 +74,19 @@ export class CreateEditPdvCategoriasComponent implements OnInit {
   categorias: PdvCategoria[] = [];
   items: PdvCategoriaItem[] = [];
   productos: Producto[] = [];
-  
+
+  // Autocomplete de Producto (solo para data.type === 'producto')
+  productoControl = new FormControl<Producto | string | null>(null);
+  filteredProductos: Producto[] = [];
+  selectedProducto: Producto | null = null;
+
   // Loading states
   loading = false;
   submitting = false;
   
   // Image handling
   imageFile: File | null = null;
-  imagePreview: string | ArrayBuffer | null = null;
+  imagePreview: string | null = null;
   
   constructor(
     private dialogRef: MatDialogRef<CreateEditPdvCategoriasComponent>,
@@ -212,19 +221,64 @@ export class CreateEditPdvCategoriasComponent implements OnInit {
       
       // Load productos if needed
       if (this.data.type === 'producto') {
-        requests.push(firstValueFrom(this.repositoryService.getProductos())
-          .then(productos => this.productos = productos));
+        requests.push(firstValueFrom(this.repositoryService.getProductosWithFilters({
+          activo: 'true',
+          page: 1,
+          pageSize: 5000,
+        })).then(res => {
+          this.productos = (res?.items || []) as Producto[];
+          this.filteredProductos = this.productos.slice(0, 50);
+          this.setupProductoAutocomplete();
+        }));
       }
-      
+
       // Wait for all requests to complete
       await Promise.all(requests);
-      
+
     } catch (error) {
       console.error('Error loading required data:', error);
       this.showSnackBar('Error al cargar datos necesarios');
     } finally {
       this.loading = false;
     }
+  }
+
+  /**
+   * Suscribe al valueChanges del autocomplete y filtra productos en memoria.
+   */
+  private setupProductoAutocomplete(): void {
+    this.productoControl.valueChanges.subscribe(value => {
+      if (typeof value === 'string') {
+        const filter = value.toUpperCase();
+        this.filteredProductos = this.productos
+          .filter(p => (p.nombre || '').toUpperCase().includes(filter))
+          .slice(0, 50);
+        // Si el texto no coincide con el producto seleccionado, des-vincular.
+        if (this.selectedProducto && (this.selectedProducto.nombre || '').toUpperCase() !== filter) {
+          this.selectedProducto = null;
+          this.productoForm.patchValue({ productoId: null });
+        }
+      } else if (value && typeof value === 'object') {
+        // Selección desde el dropdown
+        this.filteredProductos = this.productos.slice(0, 50);
+      } else {
+        this.filteredProductos = this.productos.slice(0, 50);
+      }
+    });
+  }
+
+  displayProducto = (p: Producto | null): string => (p && typeof p === 'object') ? (p.nombre || '') : '';
+
+  onProductoSelected(producto: Producto): void {
+    this.selectedProducto = producto;
+    this.productoForm.patchValue({ productoId: producto.id });
+  }
+
+  clearProducto(): void {
+    this.selectedProducto = null;
+    this.productoControl.setValue('');
+    this.productoForm.patchValue({ productoId: null });
+    this.filteredProductos = this.productos.slice(0, 50);
   }
   
   /**
@@ -269,7 +323,7 @@ export class CreateEditPdvCategoriasComponent implements OnInit {
       case 'producto': {
         // When editing a product assignment, entity contains both itemProducto and producto
         const itemProducto = entity.itemProducto;
-        
+
         this.productoForm.patchValue({
           id: itemProducto.id,
           categoriaItemId: itemProducto.categoriaItemId,
@@ -277,6 +331,13 @@ export class CreateEditPdvCategoriasComponent implements OnInit {
           nombre_alternativo: itemProducto.nombre_alternativo,
           activo: itemProducto.activo
         });
+
+        // Pre-poblar el autocomplete con el producto existente
+        const productoExistente = this.productos.find(p => p.id === itemProducto.productoId);
+        if (productoExistente) {
+          this.selectedProducto = productoExistente;
+          this.productoControl.setValue(productoExistente, { emitEvent: false });
+        }
         break;
       }
     }
@@ -456,7 +517,8 @@ export class CreateEditPdvCategoriasComponent implements OnInit {
       // Create preview
       const reader = new FileReader();
       reader.onload = (e) => {
-        this.imagePreview = e.target?.result || null;
+        const result = e.target?.result;
+        this.imagePreview = typeof result === 'string' ? result : null;
       };
       
       if (this.imageFile) {

@@ -42,22 +42,22 @@
           <div class="proveedor-row">
             <mat-form-field appearance="outline" class="grow">
               <mat-label>Proveedor del sistema</mat-label>
-              <mat-select [(ngModel)]="proveedorIdSeleccionado" (selectionChange)="onProveedorSeleccion()">
-                <mat-optgroup *ngIf="matchResult.proveedor.candidatos.length" label="Sugerencias">
-                  <mat-option
-                    *ngFor="let c of matchResult.proveedor.candidatos"
-                    [value]="c.id">
-                    {{ c.nombre }} ({{ (c.score * 100) | number:'1.0-0' }}%)
-                  </mat-option>
-                </mat-optgroup>
-                <mat-optgroup label="Todos">
-                  <mat-option
-                    *ngFor="let p of proveedoresAll"
-                    [value]="p.id">
-                    {{ p.nombre }}
-                  </mat-option>
-                </mat-optgroup>
-              </mat-select>
+              <input matInput
+                     [formControl]="proveedorControl"
+                     [matAutocomplete]="autoProvRf"
+                     placeholder="Escriba para buscar...">
+              <button *ngIf="selectedProveedor" mat-icon-button matSuffix type="button" (click)="clearProveedor()">
+                <mat-icon>close</mat-icon>
+              </button>
+              <mat-icon *ngIf="!selectedProveedor" matSuffix>search</mat-icon>
+              <mat-autocomplete #autoProvRf="matAutocomplete"
+                                [displayWith]="displayProveedor"
+                                (optionSelected)="onProveedorSelected($event.option.value)">
+                <mat-option *ngFor="let p of proveedoresFiltrados" [value]="p">
+                  <span [class.sugerido]="p.sugerido">{{ p.nombre }}</span>
+                  <small *ngIf="p.score"> ({{ (p.score * 100) | number:'1.0-0' }}%)</small>
+                </mat-option>
+              </mat-autocomplete>
             </mat-form-field>
             <button mat-stroked-button color="primary" (click)="abrirCrearProveedor()">
               <mat-icon>add</mat-icon>

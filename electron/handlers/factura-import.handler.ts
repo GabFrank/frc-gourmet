@@ -18,6 +18,7 @@ import { Compra } from '../../src/app/database/entities/compras/compra.entity';
 import { CompraDetalle } from '../../src/app/database/entities/compras/compra-detalle.entity';
 import { CompraEstado } from '../../src/app/database/entities/compras/estado.enum';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 import { readIaConfig, writeIaConfig, IaConfig, DEFAULT_IA_CONFIG } from '../utils/ia-config.utils';
 import {
   buildVisionDataUrl,
@@ -482,7 +483,7 @@ export function registerFacturaImportHandlers(
         activo: true,
         numeroNota: dc.numeroNota ? String(dc.numeroNota).toUpperCase() : null,
         tipoBoleta: dc.tipoBoleta || null,
-        fechaCompra: dc.fechaCompra ? new Date(dc.fechaCompra) : new Date(),
+        fechaCompra: parseLocalDate(dc.fechaCompra) || new Date(),
         credito: !!dc.credito,
         plazoDias: dc.plazoDias ?? null,
         proveedor: { id: payload.aliasProveedor.proveedorId } as any,

@@ -1,8 +1,10 @@
 import { Component, OnInit, Optional, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
 import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
@@ -23,7 +25,9 @@ import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input
     CommonModule,
     ReactiveFormsModule,
     MatDialogModule,
+    MatAutocompleteModule,
     MatFormFieldModule,
+    MatIconModule,
     MatInputModule,
     MatSelectModule,
     MatButtonModule,
@@ -39,6 +43,9 @@ export class CreateEditCuentaPorPagarDialogComponent implements OnInit {
   saving = false;
   monedas: any[] = [];
   proveedores: any[] = [];
+  filteredProveedores: any[] = [];
+  proveedorControl = new FormControl<any | string | null>(null);
+  selectedProveedor: any | null = null;
   tipoOptions = ['COMPRA', 'PRESTAMO', 'OTRO'];
   decimalesMoneda = 0;
 
@@ -80,8 +87,41 @@ export class CreateEditCuentaPorPagarDialogComponent implements OnInit {
       ]);
       this.monedas = monedas || [];
       this.proveedores = proveedores || [];
+      this.filteredProveedores = this.proveedores.slice(0, 50);
+      this.setupProveedorAutocomplete();
       this.recalcDecimalesMoneda();
     } catch (e) { console.error(e); }
+  }
+
+  private setupProveedorAutocomplete(): void {
+    this.proveedorControl.valueChanges.subscribe(value => {
+      if (typeof value === 'string') {
+        const filter = value.toUpperCase();
+        this.filteredProveedores = this.proveedores
+          .filter(p => (p.nombre || '').toUpperCase().includes(filter))
+          .slice(0, 50);
+        if (this.selectedProveedor && (this.selectedProveedor.nombre || '').toUpperCase() !== filter) {
+          this.selectedProveedor = null;
+          this.form.patchValue({ proveedorId: null });
+        }
+      } else {
+        this.filteredProveedores = this.proveedores.slice(0, 50);
+      }
+    });
+  }
+
+  displayProveedor = (p: any): string => (p && typeof p === 'object') ? (p.nombre || '') : '';
+
+  onProveedorSelected(proveedor: any): void {
+    this.selectedProveedor = proveedor;
+    this.form.patchValue({ proveedorId: proveedor.id });
+  }
+
+  clearProveedor(): void {
+    this.selectedProveedor = null;
+    this.proveedorControl.setValue('');
+    this.form.patchValue({ proveedorId: null });
+    this.filteredProveedores = this.proveedores.slice(0, 50);
   }
 
   async onSubmit(): Promise<void> {

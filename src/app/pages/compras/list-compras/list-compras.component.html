@@ -1,24 +1,20 @@
 <div class="list-compras-container">
-  <div class="page-header">
-    <h2>Compras</h2>
-    <div class="header-actions">
-      <button mat-icon-button matTooltip="Filtros" (click)="toggleFiltros()" [color]="showFiltros ? 'accent' : ''">
-        <mat-icon>filter_list</mat-icon>
-      </button>
-      <button mat-icon-button matTooltip="Refrescar" (click)="loadData()" [disabled]="loading">
-        <mat-icon [class.spinning]="loading">refresh</mat-icon>
-      </button>
-      <button mat-stroked-button color="accent" (click)="importarConIA()" [disabled]="importing" matTooltip="Importar factura desde imagen/PDF con IA">
-        <mat-icon>auto_awesome</mat-icon>
-        <span *ngIf="!importing">Importar con IA</span>
-        <mat-spinner *ngIf="importing" diameter="18"></mat-spinner>
-      </button>
-      <button mat-flat-button color="primary" (click)="nuevaCompra()">
-        <mat-icon>add</mat-icon>
-        Nueva compra
-      </button>
-    </div>
-  </div>
+  <app-table-toolbar title="Compras"
+                     [loading]="loading"
+                     [hasFilters]="true"
+                     [filtersVisible]="showFiltros"
+                     (refresh)="loadData()"
+                     (toggleFilters)="toggleFiltros()">
+    <button mat-stroked-button color="accent" (click)="importarConIA()" [disabled]="importing" matTooltip="Importar factura desde imagen/PDF con IA">
+      <mat-icon>auto_awesome</mat-icon>
+      <span *ngIf="!importing">Importar con IA</span>
+      <mat-spinner *ngIf="importing" diameter="18"></mat-spinner>
+    </button>
+    <button mat-flat-button color="primary" (click)="nuevaCompra()">
+      <mat-icon>add</mat-icon>
+      Nueva compra
+    </button>
+  </app-table-toolbar>
 
   <div class="filtros-bar" *ngIf="showFiltros" [formGroup]="filtrosForm">
     <mat-form-field appearance="outline" class="f-field f-search">
@@ -28,10 +24,19 @@
 
     <mat-form-field appearance="outline" class="f-field">
       <mat-label>Proveedor</mat-label>
-      <mat-select formControlName="proveedorId">
-        <mat-option [value]="null">Todos</mat-option>
-        <mat-option *ngFor="let p of proveedores" [value]="p.id">{{ p.nombre }}</mat-option>
-      </mat-select>
+      <input matInput
+             [formControl]="proveedorControl"
+             [matAutocomplete]="autoProvFiltro"
+             placeholder="Todos (escriba para filtrar)">
+      <button *ngIf="selectedProveedor" mat-icon-button matSuffix type="button" (click)="clearProveedor()">
+        <mat-icon>close</mat-icon>
+      </button>
+      <mat-icon *ngIf="!selectedProveedor" matSuffix>search</mat-icon>
+      <mat-autocomplete #autoProvFiltro="matAutocomplete"
+                        [displayWith]="displayProveedor"
+                        (optionSelected)="onProveedorSelected($event.option.value)">
+        <mat-option *ngFor="let p of filteredProveedores" [value]="p">{{ p.nombre }}</mat-option>
+      </mat-autocomplete>
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="f-field">

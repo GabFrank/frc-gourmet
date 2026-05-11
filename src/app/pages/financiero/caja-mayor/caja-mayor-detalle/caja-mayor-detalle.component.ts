@@ -1,6 +1,7 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
-import { ReactiveFormsModule, FormBuilder, FormGroup } from '@angular/forms';
+import { ReactiveFormsModule, FormBuilder, FormControl, FormGroup } from '@angular/forms';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatCardModule } from '@angular/material/card';
 import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
@@ -62,6 +63,7 @@ interface MovimientoConsolidado {
   imports: [
     CommonModule,
     ReactiveFormsModule,
+    MatAutocompleteModule,
     MatCardModule,
     MatTableModule,
     MatButtonModule,
@@ -131,6 +133,9 @@ export class CajaMayorDetalleComponent implements OnInit {
     'EGRESO_CAJA_INICIAL', 'TRANSFERENCIA_SALIDA', 'AJUSTE_NEGATIVO', 'ANULACION'
   ];
   proveedores: any[] = [];
+  filteredProveedores: any[] = [];
+  proveedorControl = new FormControl<any | string | null>(null);
+  selectedProveedor: any | null = null;
   responsables: any[] = [];
 
   // Etiquetas humanizadas para los tipos de movimiento (display only).
@@ -216,10 +221,43 @@ export class CajaMayorDetalleComponent implements OnInit {
         firstValueFrom(this.repositoryService.getUsuarios()),
       ]);
       this.proveedores = proveedores || [];
+      this.filteredProveedores = this.proveedores.slice(0, 50);
+      this.setupProveedorAutocomplete();
       this.responsables = usuarios || [];
     } catch (error) {
       console.error('Error loading lookups:', error);
     }
+  }
+
+  private setupProveedorAutocomplete(): void {
+    this.proveedorControl.valueChanges.subscribe(value => {
+      if (typeof value === 'string') {
+        const filter = value.toUpperCase();
+        this.filteredProveedores = this.proveedores
+          .filter(p => (p.nombre || '').toUpperCase().includes(filter))
+          .slice(0, 50);
+        if (this.selectedProveedor && (this.selectedProveedor.nombre || '').toUpperCase() !== filter) {
+          this.selectedProveedor = null;
+          this.filtrosForm.patchValue({ proveedorId: null });
+        }
+      } else {
+        this.filteredProveedores = this.proveedores.slice(0, 50);
+      }
+    });
+  }
+
+  displayProveedor = (p: any): string => (p && typeof p === 'object') ? (p.nombre || '') : '';
+
+  onProveedorSelected(proveedor: any): void {
+    this.selectedProveedor = proveedor;
+    this.filtrosForm.patchValue({ proveedorId: proveedor.id });
+  }
+
+  clearProveedor(): void {
+    this.selectedProveedor = null;
+    this.proveedorControl.setValue('');
+    this.filtrosForm.patchValue({ proveedorId: null });
+    this.filteredProveedores = this.proveedores.slice(0, 50);
   }
 
   async loadData(): Promise<void> {
@@ -361,6 +399,8 @@ export class CajaMayorDetalleComponent implements OnInit {
 
   limpiarFiltros(): void {
     this.filtrosForm.reset();
+    this.selectedProveedor = null;
+    this.proveedorControl.setValue('', { emitEvent: false });
     this.pageIndex = 0;
     if (this.paginator) this.paginator.firstPage();
     this.loadMovimientos();

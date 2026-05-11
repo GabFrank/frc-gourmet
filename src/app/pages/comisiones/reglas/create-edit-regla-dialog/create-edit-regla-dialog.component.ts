@@ -1,7 +1,8 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormControl, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
@@ -27,6 +28,7 @@ import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input
     FormsModule,
     ReactiveFormsModule,
     MatDialogModule,
+    MatAutocompleteModule,
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
@@ -62,7 +64,9 @@ export class CreateEditReglaDialogComponent implements OnInit {
 
   // Lista de productos para seleccionar
   productos: any[] = [];
-  selectedProductoId: number | null = null;
+  filteredProductos: any[] = [];
+  productoBuscarControl = new FormControl<any | string | null>(null);
+  selectedProducto: any | null = null;
 
   // Columnas tabla requisitos
   reqColumns = ['tipo', 'umbral', 'peso', 'descripcion', 'acciones'];
@@ -101,8 +105,32 @@ export class CreateEditReglaDialogComponent implements OnInit {
       activo: [r?.activo !== undefined ? r.activo : true],
     });
 
-    // Cargar lista de productos
-    this.repo.getProductos().subscribe({ next: (p) => this.productos = p });
+    // Cargar lista de productos (con paginado, solo activos)
+    this.repo.getProductosWithFilters({
+      activo: 'true',
+      page: 1,
+      pageSize: 5000,
+    }).subscribe({
+      next: (res: any) => {
+        this.productos = res?.items || [];
+        this.filteredProductos = this.productos.slice(0, 50);
+      },
+    });
+
+    // Suscripción de búsqueda incremental
+    this.productoBuscarControl.valueChanges.subscribe(value => {
+      if (typeof value === 'string') {
+        const filter = value.toUpperCase();
+        this.filteredProductos = this.productos
+          .filter(p => (p.nombre || '').toUpperCase().includes(filter))
+          .slice(0, 50);
+        if (this.selectedProducto && (this.selectedProducto.nombre || '').toUpperCase() !== filter) {
+          this.selectedProducto = null;
+        }
+      } else {
+        this.filteredProductos = this.productos.slice(0, 50);
+      }
+    });
 
     // Si editando, cargar productos y requisitos
     if (this.isEdit && r?.id) {
@@ -116,9 +144,10 @@ export class CreateEditReglaDialogComponent implements OnInit {
   }
 
   agregarProducto(): void {
-    if (this.selectedProductoId && !this.productoIds.includes(this.selectedProductoId)) {
-      this.productoIds = [...this.productoIds, this.selectedProductoId];
-      this.selectedProductoId = null;
+    if (this.selectedProducto && !this.productoIds.includes(this.selectedProducto.id)) {
+      this.productoIds = [...this.productoIds, this.selectedProducto.id];
+      this.selectedProducto = null;
+      this.productoBuscarControl.setValue('');
     }
   }
 
@@ -128,6 +157,12 @@ export class CreateEditReglaDialogComponent implements OnInit {
 
   getNombreProducto(pid: number): string {
     return this.productos.find((p) => p.id === pid)?.nombre || String(pid);
+  }
+
+  displayProducto = (p: any): string => (p && typeof p === 'object') ? (p.nombre || '') : '';
+
+  onProductoSeleccionado(producto: any): void {
+    this.selectedProducto = producto;
   }
 
   agregarRequisito(): void {

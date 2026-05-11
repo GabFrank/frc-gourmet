@@ -158,8 +158,10 @@ async function generarCuotasMensualesCPP(
 ): Promise<void> {
   const cuotaRepo = qr.manager.getRepository(CuentaPorPagarCuota);
   const montoCuota = +(montoTotal / cantidadCuotas).toFixed(2);
+  // Defensive: fechaInicio puede venir como string si proviene de compra.fechaCompra leida de BD (columna 'date')
+  const fechaInicioDate = parseLocalDate(fechaInicio) || new Date();
   for (let i = 0; i < cantidadCuotas; i++) {
-    const venc = new Date(fechaInicio);
+    const venc = new Date(fechaInicioDate);
     venc.setMonth(venc.getMonth() + i);
     const monto = (i === cantidadCuotas - 1)
       ? +(montoTotal - montoCuota * (cantidadCuotas - 1)).toFixed(2)

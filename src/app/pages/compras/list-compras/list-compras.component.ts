@@ -1,6 +1,7 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormBuilder, FormControl, FormGroup } from '@angular/forms';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -25,6 +26,7 @@ import { CreateEditCompraComponent } from '../create-edit-compra/create-edit-com
 import { CompraDetalleComponent } from '../compra-detalle/compra-detalle.component';
 import { RevisarFacturaComponent } from '../revisar-factura/revisar-factura.component';
 import { FacturaImportService } from 'src/app/services/factura-import.service';
+import { TableToolbarComponent } from 'src/app/shared/components/table-toolbar/table-toolbar.component';
 
 @Component({
   selector: 'app-list-compras',
@@ -35,6 +37,7 @@ import { FacturaImportService } from 'src/app/services/factura-import.service';
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
+    MatAutocompleteModule,
     MatTableModule,
     MatButtonModule,
     MatIconModule,
@@ -53,6 +56,7 @@ import { FacturaImportService } from 'src/app/services/factura-import.service';
     MatSlideToggleModule,
     DatePipe,
     DecimalPipe,
+    TableToolbarComponent,
   ]
 })
 export class ListComprasComponent implements OnInit {
@@ -60,6 +64,9 @@ export class ListComprasComponent implements OnInit {
 
   compras: any[] = [];
   proveedores: any[] = [];
+  filteredProveedores: any[] = [];
+  proveedorControl = new FormControl<any | string | null>(null);
+  selectedProveedor: any | null = null;
   categorias: any[] = [];
   dispositivos: any[] = [];
 
@@ -115,11 +122,44 @@ export class ListComprasComponent implements OnInit {
         firstValueFrom(this.repositoryService.getDispositivos()),
       ]);
       this.proveedores = (provs as any[]) || [];
+      this.filteredProveedores = this.proveedores.slice(0, 50);
+      this.setupProveedorAutocomplete();
       this.categorias = (cats as any[]) || [];
       this.dispositivos = ((disps as any[]) || []).filter((d: any) => d.activo);
     } catch (e) {
       console.error('Error cargando catalogos', e);
     }
+  }
+
+  private setupProveedorAutocomplete(): void {
+    this.proveedorControl.valueChanges.subscribe(value => {
+      if (typeof value === 'string') {
+        const filter = value.toUpperCase();
+        this.filteredProveedores = this.proveedores
+          .filter(p => (p.nombre || '').toUpperCase().includes(filter))
+          .slice(0, 50);
+        if (this.selectedProveedor && (this.selectedProveedor.nombre || '').toUpperCase() !== filter) {
+          this.selectedProveedor = null;
+          this.filtrosForm.patchValue({ proveedorId: null });
+        }
+      } else {
+        this.filteredProveedores = this.proveedores.slice(0, 50);
+      }
+    });
+  }
+
+  displayProveedor = (p: any): string => (p && typeof p === 'object') ? (p.nombre || '') : '';
+
+  onProveedorSelected(proveedor: any): void {
+    this.selectedProveedor = proveedor;
+    this.filtrosForm.patchValue({ proveedorId: proveedor.id });
+  }
+
+  clearProveedor(): void {
+    this.selectedProveedor = null;
+    this.proveedorControl.setValue('');
+    this.filtrosForm.patchValue({ proveedorId: null });
+    this.filteredProveedores = this.proveedores.slice(0, 50);
   }
 
   async loadData(): Promise<void> {
@@ -177,6 +217,8 @@ export class ListComprasComponent implements OnInit {
       search: '',
       dispositivoId: null,
     });
+    this.selectedProveedor = null;
+    this.proveedorControl.setValue('', { emitEvent: false });
     this.aplicarFiltros();
   }
 

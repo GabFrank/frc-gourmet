@@ -1,7 +1,8 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -23,6 +24,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
     CommonModule,
     ReactiveFormsModule,
     MatDialogModule,
+    MatAutocompleteModule,
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
@@ -47,6 +49,11 @@ export class CreateEditFuncionarioDialogComponent implements OnInit {
   cargos: any[] = [];
   monedas: any[] = [];
   usuarios: any[] = [];
+
+  // Autocomplete de Persona
+  personaControl = new FormControl<any | string | null>({ value: null, disabled: false });
+  filteredPersonas: any[] = [];
+  selectedPersona: any | null = null;
 
   constructor(
     private dialogRef: MatDialogRef<CreateEditFuncionarioDialogComponent>,
@@ -87,6 +94,8 @@ export class CreateEditFuncionarioDialogComponent implements OnInit {
       this.cargos = (cargos || []).filter((c: any) => c.activo);
       this.monedas = monedas || [];
       this.usuarios = (usuarios || []).filter((u: any) => u.activo);
+      this.filteredPersonas = this.personas.slice(0, 50);
+      this.setupPersonaAutocomplete();
 
       if (this.isEditing && this.data.funcionario) {
         const f = this.data.funcionario;
@@ -106,12 +115,19 @@ export class CreateEditFuncionarioDialogComponent implements OnInit {
           observacion: f.observacion,
           activo: f.activo,
         });
+        // Pre-poblar el autocomplete de Persona
+        const personaExistente = this.personas.find(p => p.id === f.persona?.id) || f.persona;
+        if (personaExistente) {
+          this.selectedPersona = personaExistente;
+          this.personaControl.setValue(personaExistente, { emitEvent: false });
+        }
         // En modo editar bloqueamos cambios criticos (cargo y salario son via dialogos especificos)
         this.form.get('personaId')?.disable();
         this.form.get('cargoId')?.disable();
         this.form.get('fechaIngreso')?.disable();
         this.form.get('salarioBase')?.disable();
         this.form.get('monedaSalarioId')?.disable();
+        this.personaControl.disable({ emitEvent: false });
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -119,6 +135,44 @@ export class CreateEditFuncionarioDialogComponent implements OnInit {
     } finally {
       this.loading = false;
     }
+  }
+
+  private personaLabel(p: any): string {
+    if (!p) return '';
+    const apellido = p.apellido ? ` ${p.apellido}` : '';
+    const documento = p.documento ? ` - ${p.documento}` : '';
+    return `${p.nombre || ''}${apellido}${documento}`.trim();
+  }
+
+  private setupPersonaAutocomplete(): void {
+    this.personaControl.valueChanges.subscribe(value => {
+      if (typeof value === 'string') {
+        const filter = value.toUpperCase();
+        this.filteredPersonas = this.personas
+          .filter(p => this.personaLabel(p).toUpperCase().includes(filter))
+          .slice(0, 50);
+        if (this.selectedPersona && this.personaLabel(this.selectedPersona).toUpperCase() !== filter) {
+          this.selectedPersona = null;
+          this.form.patchValue({ personaId: null });
+        }
+      } else {
+        this.filteredPersonas = this.personas.slice(0, 50);
+      }
+    });
+  }
+
+  displayPersona = (p: any): string => (p && typeof p === 'object') ? this.personaLabel(p) : '';
+
+  onPersonaSelected(persona: any): void {
+    this.selectedPersona = persona;
+    this.form.patchValue({ personaId: persona.id });
+  }
+
+  clearPersona(): void {
+    this.selectedPersona = null;
+    this.personaControl.setValue('');
+    this.form.patchValue({ personaId: null });
+    this.filteredPersonas = this.personas.slice(0, 50);
   }
 
   cancel(): void {

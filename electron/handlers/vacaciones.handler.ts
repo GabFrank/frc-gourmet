@@ -172,8 +172,8 @@ export function registerVacacionesHandlers(
 
       // Generar asistencias VACACION para los dias del rango si no existen
       if (!periodo.asistenciasGeneradas) {
-        const desde = new Date(periodo.fechaDesde);
-        const hasta = new Date(periodo.fechaHasta);
+        const desde = parseLocalDate(periodo.fechaDesde) || new Date();
+        const hasta = parseLocalDate(periodo.fechaHasta) || new Date();
         for (let d = new Date(desde); d <= hasta; d.setDate(d.getDate() + 1)) {
           const fechaIso = d.toISOString().slice(0, 10);
           const existing = await asisRepo.findOne({

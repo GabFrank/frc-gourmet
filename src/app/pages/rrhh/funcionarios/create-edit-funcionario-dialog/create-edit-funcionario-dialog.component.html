@@ -6,12 +6,23 @@
   <form [formGroup]="form" *ngIf="!loading" class="form-grid">
     <mat-form-field appearance="outline" class="full">
       <mat-label>Persona</mat-label>
-      <mat-select formControlName="personaId">
-        <mat-option *ngFor="let p of personas" [value]="p.id">
+      <input matInput
+             [formControl]="personaControl"
+             [matAutocomplete]="autoPersona"
+             placeholder="Escriba para buscar..."
+             required>
+      <button *ngIf="selectedPersona && !isEditing" mat-icon-button matSuffix type="button" (click)="clearPersona()">
+        <mat-icon>close</mat-icon>
+      </button>
+      <mat-icon *ngIf="!selectedPersona" matSuffix>person_search</mat-icon>
+      <mat-autocomplete #autoPersona="matAutocomplete"
+                        [displayWith]="displayPersona"
+                        (optionSelected)="onPersonaSelected($event.option.value)">
+        <mat-option *ngFor="let p of filteredPersonas" [value]="p">
           {{ p.nombre }} {{ p.apellido || '' }}
           <span *ngIf="p.documento"> - {{ p.documento }}</span>
         </mat-option>
-      </mat-select>
+      </mat-autocomplete>
     </mat-form-field>
 
     <mat-form-field appearance="outline">

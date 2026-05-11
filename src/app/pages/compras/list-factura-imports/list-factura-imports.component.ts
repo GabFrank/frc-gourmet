@@ -20,6 +20,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
 import { RevisarFacturaComponent } from '../revisar-factura/revisar-factura.component';
 import { CreateEditCompraComponent } from '../create-edit-compra/create-edit-compra.component';
 import { CompraDetalleComponent } from '../compra-detalle/compra-detalle.component';
+import { TableToolbarComponent } from 'src/app/shared/components/table-toolbar/table-toolbar.component';
 
 @Component({
   selector: 'app-list-factura-imports',
@@ -41,6 +42,7 @@ import { CompraDetalleComponent } from '../compra-detalle/compra-detalle.compone
     MatTooltipModule,
     DatePipe,
     DecimalPipe,
+    TableToolbarComponent,
   ],
   templateUrl: './list-factura-imports.component.html',
   styleUrls: ['./list-factura-imports.component.scss'],

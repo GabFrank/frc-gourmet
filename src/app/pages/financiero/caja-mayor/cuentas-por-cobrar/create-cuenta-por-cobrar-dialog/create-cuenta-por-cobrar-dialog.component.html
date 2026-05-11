@@ -3,9 +3,20 @@
   <div class="form-row">
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>Cliente</mat-label>
-      <mat-select formControlName="clienteId">
-        <mat-option *ngFor="let c of clientes" [value]="c.id">{{clienteLabel(c)}}</mat-option>
-      </mat-select>
+      <input matInput
+             [formControl]="clienteControl"
+             [matAutocomplete]="autoCliente"
+             placeholder="Escriba para buscar..."
+             required>
+      <button *ngIf="selectedCliente" mat-icon-button matSuffix type="button" (click)="clearCliente()">
+        <mat-icon>close</mat-icon>
+      </button>
+      <mat-icon *ngIf="!selectedCliente" matSuffix>person_search</mat-icon>
+      <mat-autocomplete #autoCliente="matAutocomplete"
+                        [displayWith]="displayCliente"
+                        (optionSelected)="onClienteSelected($event.option.value)">
+        <mat-option *ngFor="let c of filteredClientes" [value]="c">{{ clienteLabel(c) }}</mat-option>
+      </mat-autocomplete>
     </mat-form-field>
   </div>
   <div class="form-row two-col">
