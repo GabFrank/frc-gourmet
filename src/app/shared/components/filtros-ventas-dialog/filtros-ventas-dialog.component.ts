@@ -15,6 +15,7 @@ import { Usuario } from '../../../database/entities/personas/usuario.entity';
 import { FormasPago } from '../../../database/entities/compras/forma-pago.entity';
 import { Moneda } from '../../../database/entities/financiero/moneda.entity';
 import { PdvMesa } from '../../../database/entities/ventas/pdv-mesa.entity';
+import { Dispositivo } from '../../../database/entities/financiero/dispositivo.entity';
 
 export interface FiltrosAvanzados {
   mozoId?: number;
@@ -25,6 +26,8 @@ export interface FiltrosAvanzados {
   valorMin?: number | null;
   valorMax?: number | null;
   tieneDescuento?: string;
+  /** F5 paso 4: filtrar por dispositivo (multi-PC). */
+  dispositivoId?: number;
 }
 
 @Component({
@@ -52,6 +55,7 @@ export class FiltrosVentasDialogComponent implements OnInit {
   formasPago: FormasPago[] = [];
   monedas: Moneda[] = [];
   mesas: PdvMesa[] = [];
+  dispositivos: Dispositivo[] = [];
 
   // Autocomplete mozo
   mozoControl = new FormControl('');
@@ -66,6 +70,7 @@ export class FiltrosVentasDialogComponent implements OnInit {
   valorMin: number | null = null;
   valorMax: number | null = null;
   tieneDescuento: string = '';
+  dispositivoId: number | null = null;
 
   constructor(
     public dialogRef: MatDialogRef<FiltrosVentasDialogComponent>,
@@ -82,21 +87,24 @@ export class FiltrosVentasDialogComponent implements OnInit {
       this.valorMin = data.valorMin ?? null;
       this.valorMax = data.valorMax ?? null;
       this.tieneDescuento = data.tieneDescuento || '';
+      this.dispositivoId = data.dispositivoId || null;
     }
   }
 
   async ngOnInit(): Promise<void> {
-    const [usuarios, formasPago, monedas, mesas] = await Promise.all([
+    const [usuarios, formasPago, monedas, mesas, dispositivos] = await Promise.all([
       firstValueFrom(this.repositoryService.getUsuarios()),
       firstValueFrom(this.repositoryService.getFormasPago()),
       firstValueFrom(this.repositoryService.getMonedas()),
       firstValueFrom(this.repositoryService.getPdvMesas()),
+      firstValueFrom(this.repositoryService.getDispositivos()),
     ]);
     this.usuarios = usuarios.filter((u: any) => u.activo);
     this.filteredUsuarios = [...this.usuarios];
     this.formasPago = formasPago.filter((fp: any) => fp.activo);
     this.monedas = monedas;
     this.mesas = mesas.filter((m: any) => m.activo).sort((a: any, b: any) => a.numero - b.numero);
+    this.dispositivos = (dispositivos || []).filter((d: any) => d.activo);
 
     // Restaurar mozo seleccionado
     if (this.mozoId) {
@@ -145,6 +153,7 @@ export class FiltrosVentasDialogComponent implements OnInit {
       if (this.valorMax != null) result.valorMax = this.valorMax;
     }
     if (this.tieneDescuento) result.tieneDescuento = this.tieneDescuento;
+    if (this.dispositivoId) result.dispositivoId = this.dispositivoId;
     this.dialogRef.close(result);
   }
 
@@ -159,6 +168,7 @@ export class FiltrosVentasDialogComponent implements OnInit {
     this.valorMin = null;
     this.valorMax = null;
     this.tieneDescuento = '';
+    this.dispositivoId = null;
     this.dialogRef.close({} as FiltrosAvanzados);
   }
 

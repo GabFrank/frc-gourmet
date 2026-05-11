@@ -61,6 +61,7 @@ export class ListComprasComponent implements OnInit {
   compras: any[] = [];
   proveedores: any[] = [];
   categorias: any[] = [];
+  dispositivos: any[] = [];
 
   total = 0;
   pageSize = 25;
@@ -98,6 +99,7 @@ export class ListComprasComponent implements OnInit {
       fechaDesde: [null],
       fechaHasta: [null],
       search: [''],
+      dispositivoId: [null],
     });
     this.loadCatalogos();
     this.loadData();
@@ -107,12 +109,14 @@ export class ListComprasComponent implements OnInit {
 
   async loadCatalogos(): Promise<void> {
     try {
-      const [provs, cats] = await Promise.all([
+      const [provs, cats, disps] = await Promise.all([
         firstValueFrom(this.repositoryService.getProveedores()),
         firstValueFrom(this.repositoryService.getCompraCategorias()),
+        firstValueFrom(this.repositoryService.getDispositivos()),
       ]);
       this.proveedores = (provs as any[]) || [];
       this.categorias = (cats as any[]) || [];
+      this.dispositivos = ((disps as any[]) || []).filter((d: any) => d.activo);
     } catch (e) {
       console.error('Error cargando catalogos', e);
     }
@@ -133,6 +137,7 @@ export class ListComprasComponent implements OnInit {
       if (f.fechaDesde) params.fechaDesde = this.formatDate(f.fechaDesde);
       if (f.fechaHasta) params.fechaHasta = this.formatDate(f.fechaHasta);
       if (f.search) params.search = String(f.search).trim();
+      if (f.dispositivoId) params.dispositivoId = f.dispositivoId;
 
       const res: any = await firstValueFrom(this.repositoryService.getComprasPaginado(params));
       this.compras = res?.items || [];
@@ -170,6 +175,7 @@ export class ListComprasComponent implements OnInit {
       fechaDesde: null,
       fechaHasta: null,
       search: '',
+      dispositivoId: null,
     });
     this.aplicarFiltros();
   }

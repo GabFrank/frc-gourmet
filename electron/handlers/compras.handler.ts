@@ -259,6 +259,8 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     }
     if (params.fechaDesde) qb.andWhere('c.fechaCompra >= :fd', { fd: params.fechaDesde });
     if (params.fechaHasta) qb.andWhere('c.fechaCompra <= :fh', { fh: params.fechaHasta });
+    // F5 paso 4: filtro por dispositivo de origen
+    if (params.dispositivoId) qb.andWhere('c.dispositivo_id = :compraDispId', { compraDispId: params.dispositivoId });
     if (params.search) {
       qb.andWhere(new Brackets(b => {
         b.where('LOWER(c.numeroNota) LIKE :q', { q: `%${String(params.search).toLowerCase()}%` })

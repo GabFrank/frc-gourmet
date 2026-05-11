@@ -126,6 +126,7 @@ export class ListVentasComponent implements OnInit {
     if (this.filtrosAvanzados.valorMin != null) filtros.valorMin = this.filtrosAvanzados.valorMin;
     if (this.filtrosAvanzados.valorMax != null) filtros.valorMax = this.filtrosAvanzados.valorMax;
     if (this.filtrosAvanzados.tieneDescuento) filtros.tieneDescuento = this.filtrosAvanzados.tieneDescuento;
+    if (this.filtrosAvanzados.dispositivoId) filtros.dispositivoId = this.filtrosAvanzados.dispositivoId;
 
     const result = await firstValueFrom(
       this.repositoryService.getVentasByDateRange(
@@ -234,6 +235,7 @@ export class ListVentasComponent implements OnInit {
     if (f.mesaId) count++;
     if (f.tieneDescuento) count++;
     if (f.monedaValorId && (f.valorMin != null || f.valorMax != null)) count++;
+    if (f.dispositivoId) count++;
     return count;
   }
 

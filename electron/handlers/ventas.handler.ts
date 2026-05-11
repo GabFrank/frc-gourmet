@@ -452,6 +452,11 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           .setParameter('mozoId', filtros.mozoId);
       }
 
+      // F5 paso 4: filtro por dispositivo de origen (multi-PC en LAN).
+      if (filtros?.dispositivoId) {
+        qb.andWhere('venta.dispositivo_id = :ventaDispositivoId', { ventaDispositivoId: filtros.dispositivoId });
+      }
+
       qb.orderBy('venta.createdAt', 'DESC');
 
       // Paginación
