@@ -68,6 +68,7 @@ import { getDataSourceOptions } from '../src/app/database/database.config';
 import { registerSpecialRoutes } from '../electron/server/special-routes';
 import { registerAuthRoutes } from '../electron/server/auth-routes';
 import { registerRpcRoute } from '../electron/server/rpc-router';
+import { registerFileRoutes } from '../electron/server/file-routes';
 import { registerAllAppHandlers } from '../electron/utils/register-all-handlers';
 
 async function main() {
@@ -138,6 +139,7 @@ async function main() {
   });
   registerAuthRoutes(fastify, dataSource);
   registerRpcRoute(fastify);
+  registerFileRoutes(fastify, dataSource);
 
   await fastify.listen({ port: 7070, host: '0.0.0.0' });
   console.log('\n[test] Server escuchando en http://localhost:7070');

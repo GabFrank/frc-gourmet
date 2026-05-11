@@ -166,9 +166,14 @@ export class FileUploadComponent {
     this.removed.emit();
   }
 
-  onPreviewError(): void {
-    // Si la imagen falla, intenta caer al original (caso de derivadas legacy).
-    // El template ya usa medium con fallback al original via [src].
+  onPreviewError(event: Event): void {
+    // Si la derivada medium no existe (imagenes legacy o mode=client sin
+    // pre-genera de medium en el server), caer al original via proxy.
+    const img = event.target as HTMLImageElement;
+    const fallback = resolveAppUrl(this.currentUrl);
+    if (fallback && img.src !== fallback) {
+      img.src = fallback;
+    }
   }
 }
 

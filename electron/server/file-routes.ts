@@ -107,10 +107,27 @@ export function registerFileRoutes(fastify: FastifyInstance, dataSource: DataSou
       reply.code(400);
       return { error: 'url_invalida' };
     }
-    const abs = urlToAbsolute(url);
+    let abs = urlToAbsolute(url);
     if (!abs) {
       reply.code(400);
       return { error: 'archivo_url_fuera_de_scope' };
+    }
+    // Fallback a la imagen original si la derivada (.thumb.jpg / .medium.jpg)
+    // no existe — caso comun con imagenes legacy (subidas antes del pipeline
+    // de resize, o casos de e2e donde solo copiamos el original). Evita 404
+    // noise en DevTools + ahorra un roundtrip extra al cliente.
+    if (!fs.existsSync(abs)) {
+      const derivativeMatch = abs.match(/^(.+)\.(thumb|medium)\.jpg$/);
+      if (derivativeMatch) {
+        const baseNoExt = derivativeMatch[1];
+        for (const ext of ['.jpeg', '.jpg', '.png', '.webp', '.gif']) {
+          const candidate = baseNoExt + ext;
+          if (fs.existsSync(candidate)) {
+            abs = candidate;
+            break;
+          }
+        }
+      }
     }
     if (!fs.existsSync(abs)) {
       reply.code(404);
