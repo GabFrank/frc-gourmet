@@ -27,8 +27,11 @@ export class RefreshToken extends BaseModel {
   @Column({ name: 'expires_at' })
   expiresAt!: Date;
 
+  // Type: `Date` solo. `Date | null` resolvia a "Object" en TypeORM
+  // reflection metadata y rompia migration:run en Postgres. Para nulear
+  // en runtime, usar `as any` o cast — la columna ya es `nullable: true`.
   @Column({ name: 'revoked_at', nullable: true })
-  revokedAt?: Date | null;
+  revokedAt?: Date;
 
   @Column({ nullable: true })
   ip?: string;

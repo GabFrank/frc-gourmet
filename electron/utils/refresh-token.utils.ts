@@ -37,7 +37,7 @@ export async function issueRefreshToken(
     tokenHash,
     issuedAt,
     expiresAt,
-    revokedAt: null,
+    revokedAt: null as any,
     ip: meta?.ip,
     userAgent: meta?.userAgent,
   });
