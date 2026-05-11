@@ -89,8 +89,10 @@ jobs:
           node-version: 18
           cache: npm
 
-      - name: Install deps
-        run: npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
+      # Para este job necesitamos `pg` y `@types/pg` (en optionalDependencies).
+      # El resto del CI omite optionals para acelerar; aca los necesitamos.
+      - name: Install deps (incluyendo pg)
+        run: npm ci --legacy-peer-deps --include=optional --no-audit --no-fund
 
       # Sanity check: el datasource debe arrancar sin tocar SQLite local.
       - name: Verify Postgres ready
