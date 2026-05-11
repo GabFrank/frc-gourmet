@@ -60,6 +60,7 @@ import { ListPermisosComponent } from './pages/personalizacion/permisos/list-per
 import { ListConfiguracionRrhhComponent } from './pages/rrhh/configuracion/list-configuracion-rrhh/list-configuracion-rrhh.component';
 import { BackupRestoreComponent } from './pages/configuracion/backup-restore/backup-restore.component';
 import { IaConfigComponent } from './pages/configuracion/ia-config/ia-config.component';
+import { DbConfigComponent } from './pages/configuracion/db-config/db-config.component';
 import { ListCargosComponent } from './pages/rrhh/cargos/list-cargos.component';
 import { ListFuncionariosComponent } from './pages/rrhh/funcionarios/list-funcionarios/list-funcionarios.component';
 import { ListTurnosComponent } from './pages/rrhh/turnos/list-turnos.component';
@@ -461,6 +462,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       IaConfigComponent,
       { source: 'navigation' },
       'ia-config-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openDbConfigTab() {
+    this.tabsService.openTab(
+      'Configurar BD',
+      DbConfigComponent,
+      { source: 'navigation' },
+      'db-config-tab',
       true
     );
     this.closeMenu();
