@@ -1,0 +1,23 @@
+<div class="table-toolbar">
+  <div class="toolbar-title">
+    <mat-icon *ngIf="icon">{{ icon }}</mat-icon>
+    <h2>{{ title }}</h2>
+  </div>
+  <div class="toolbar-actions">
+    <button *ngIf="hasFilters"
+            mat-icon-button
+            matTooltip="Filtros"
+            [color]="filtersVisible ? 'accent' : ''"
+            (click)="toggleFilters.emit()">
+      <mat-icon>filter_list</mat-icon>
+    </button>
+    <button *ngIf="!hideRefresh"
+            mat-icon-button
+            matTooltip="Refrescar"
+            (click)="refresh.emit()"
+            [disabled]="loading">
+      <mat-icon [class.spinning]="loading">refresh</mat-icon>
+    </button>
+    <ng-content></ng-content>
+  </div>
+</div>

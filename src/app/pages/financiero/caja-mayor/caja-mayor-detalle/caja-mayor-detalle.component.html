@@ -225,10 +225,19 @@
 
         <mat-form-field appearance="outline" class="f-field f-proveedor">
           <mat-label>Proveedor</mat-label>
-          <mat-select formControlName="proveedorId">
-            <mat-option [value]="null">Todos</mat-option>
-            <mat-option *ngFor="let p of proveedores" [value]="p.id">{{p.nombre}}</mat-option>
-          </mat-select>
+          <input matInput
+                 [formControl]="proveedorControl"
+                 [matAutocomplete]="autoProvCm"
+                 placeholder="Todos (escriba para filtrar)">
+          <button *ngIf="selectedProveedor" mat-icon-button matSuffix type="button" (click)="clearProveedor()">
+            <mat-icon>close</mat-icon>
+          </button>
+          <mat-icon *ngIf="!selectedProveedor" matSuffix>search</mat-icon>
+          <mat-autocomplete #autoProvCm="matAutocomplete"
+                            [displayWith]="displayProveedor"
+                            (optionSelected)="onProveedorSelected($event.option.value)">
+            <mat-option *ngFor="let p of filteredProveedores" [value]="p">{{p.nombre}}</mat-option>
+          </mat-autocomplete>
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="f-field f-responsable">

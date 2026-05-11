@@ -1,7 +1,8 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormControl, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
@@ -22,6 +23,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
     FormsModule,
     ReactiveFormsModule,
     MatDialogModule,
+    MatAutocompleteModule,
     MatFormFieldModule,
     MatInputModule,
     MatButtonModule,
@@ -43,13 +45,15 @@ export class CreateEditEquipoDialogComponent implements OnInit {
   miembros: any[] = [];
   reglas: any[] = [];
   funcionarios: any[] = [];
+  filteredFuncionarios: any[] = [];
+  funcionarioControl = new FormControl<any | string | null>(null);
   reglasEquipo: any[] = [];
 
   miembrosColumns = ['funcionario', 'porcentaje', 'acciones'];
   reglasColumns = ['regla', 'fechaDesde', 'acciones'];
 
   // Nueva asignación de miembro
-  newMiembroFuncionarioId: number | null = null;
+  newMiembroFuncionario: any | null = null;
   newMiembroPorcentaje = 0;
 
   // Nueva asignación de regla
@@ -76,7 +80,25 @@ export class CreateEditEquipoDialogComponent implements OnInit {
       activo: [eq?.activo !== undefined ? eq.activo : true],
     });
 
-    this.repo.getFuncionarios({}).subscribe({ next: (f) => this.funcionarios = f });
+    this.repo.getFuncionarios({}).subscribe({
+      next: (f) => {
+        this.funcionarios = f;
+        this.filteredFuncionarios = this.funcionarios.slice(0, 50);
+      },
+    });
+    this.funcionarioControl.valueChanges.subscribe(value => {
+      if (typeof value === 'string') {
+        const filter = value.toUpperCase();
+        this.filteredFuncionarios = this.funcionarios
+          .filter(f => this.funcionarioLabel(f).toUpperCase().includes(filter))
+          .slice(0, 50);
+        if (this.newMiembroFuncionario && this.funcionarioLabel(this.newMiembroFuncionario).toUpperCase() !== filter) {
+          this.newMiembroFuncionario = null;
+        }
+      } else {
+        this.filteredFuncionarios = this.funcionarios.slice(0, 50);
+      }
+    });
     this.repo.getReglasComision({ activo: true }).subscribe({ next: (r) => this.reglasEquipo = r.filter((reg: any) => reg.esEquipo) });
 
     if (this.isEdit && eq?.id) {
@@ -120,18 +142,30 @@ export class CreateEditEquipoDialogComponent implements OnInit {
     }
   }
 
+  funcionarioLabel(f: any): string {
+    if (!f) return '';
+    return `${f.persona?.nombre || ''} ${f.persona?.apellido || ''}`.trim();
+  }
+
+  displayFuncionario = (f: any): string => (f && typeof f === 'object') ? this.funcionarioLabel(f) : '';
+
+  onMiembroFuncionarioSelected(funcionario: any): void {
+    this.newMiembroFuncionario = funcionario;
+  }
+
   async agregarMiembro(): Promise<void> {
-    if (!this.newMiembroFuncionarioId || !this.data.equipo?.id) {
+    if (!this.newMiembroFuncionario || !this.data.equipo?.id) {
       this.snackBar.open('Primero guarda el equipo', 'OK', { duration: 3000 });
       return;
     }
     try {
       await firstValueFrom(this.repo.agregarMiembroEquipo({
         equipoId: this.data.equipo.id,
-        funcionarioId: this.newMiembroFuncionarioId,
+        funcionarioId: this.newMiembroFuncionario.id,
         porcentajeReparto: this.newMiembroPorcentaje,
       }));
-      this.newMiembroFuncionarioId = null;
+      this.newMiembroFuncionario = null;
+      this.funcionarioControl.setValue('');
       this.newMiembroPorcentaje = 0;
       this.cargarDetalleEquipo(this.data.equipo.id);
     } catch (e: any) {

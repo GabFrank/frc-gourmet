@@ -25,11 +25,18 @@
         <div class="add-row">
           <mat-form-field appearance="outline" class="flex1">
             <mat-label>Funcionario</mat-label>
-            <mat-select [(ngModel)]="newMiembroFuncionarioId">
-              <mat-option *ngFor="let f of funcionarios" [value]="f.id">
+            <input matInput
+                   [formControl]="funcionarioControl"
+                   [matAutocomplete]="autoFuncEquipo"
+                   placeholder="Escriba para buscar...">
+            <mat-icon matSuffix>person_search</mat-icon>
+            <mat-autocomplete #autoFuncEquipo="matAutocomplete"
+                              [displayWith]="displayFuncionario"
+                              (optionSelected)="onMiembroFuncionarioSelected($event.option.value)">
+              <mat-option *ngFor="let f of filteredFuncionarios" [value]="f">
                 {{ f.persona?.nombre }} {{ f.persona?.apellido }}
               </mat-option>
-            </mat-select>
+            </mat-autocomplete>
           </mat-form-field>
           <mat-form-field appearance="outline">
             <mat-label>% Reparto</mat-label>

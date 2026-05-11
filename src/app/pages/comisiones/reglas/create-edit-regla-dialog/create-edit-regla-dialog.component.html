@@ -84,11 +84,18 @@
           <div class="add-row">
             <mat-form-field appearance="outline" class="flex1">
               <mat-label>Agregar producto</mat-label>
-              <mat-select [(ngModel)]="selectedProductoId" [ngModelOptions]="{standalone: true}">
-                <mat-option *ngFor="let p of productos" [value]="p.id">{{ p.nombre }}</mat-option>
-              </mat-select>
+              <input matInput
+                     [formControl]="productoBuscarControl"
+                     [matAutocomplete]="autoProductoRegla"
+                     placeholder="Escriba para buscar...">
+              <mat-icon matSuffix>search</mat-icon>
+              <mat-autocomplete #autoProductoRegla="matAutocomplete"
+                                [displayWith]="displayProducto"
+                                (optionSelected)="onProductoSeleccionado($event.option.value)">
+                <mat-option *ngFor="let p of filteredProductos" [value]="p">{{ p.nombre }}</mat-option>
+              </mat-autocomplete>
             </mat-form-field>
-            <button mat-icon-button color="primary" (click)="agregarProducto()" [disabled]="!selectedProductoId">
+            <button mat-icon-button color="primary" (click)="agregarProducto()" [disabled]="!selectedProducto">
               <mat-icon>add</mat-icon>
             </button>
           </div>

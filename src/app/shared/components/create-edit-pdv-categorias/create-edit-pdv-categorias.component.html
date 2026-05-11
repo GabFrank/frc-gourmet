@@ -85,7 +85,7 @@
           
           <div class="image-preview-container" *ngIf="imagePreview">
             <div class="image-preview">
-              <img [src]="imagePreview" alt="Vista previa de la imagen">
+              <img [src]="imagePreview | appUrl" alt="Vista previa de la imagen">
               <button mat-mini-fab color="warn" class="remove-image" (click)="clearImage()">
                 <mat-icon>close</mat-icon>
               </button>
@@ -123,12 +123,22 @@
         
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Producto</mat-label>
-          <mat-select formControlName="productoId" required>
-            <mat-option *ngFor="let producto of productos" [value]="producto.id">
+          <input matInput
+                 [formControl]="productoControl"
+                 [matAutocomplete]="autoProducto"
+                 placeholder="Escriba para buscar..."
+                 required>
+          <button *ngIf="selectedProducto" mat-icon-button matSuffix type="button" (click)="clearProducto()">
+            <mat-icon>close</mat-icon>
+          </button>
+          <mat-icon *ngIf="!selectedProducto" matSuffix>inventory_2</mat-icon>
+          <mat-autocomplete #autoProducto="matAutocomplete"
+                            [displayWith]="displayProducto"
+                            (optionSelected)="onProductoSelected($event.option.value)">
+            <mat-option *ngFor="let producto of filteredProductos" [value]="producto">
               {{producto.nombre}}
             </mat-option>
-          </mat-select>
-          <mat-icon matSuffix>inventory_2</mat-icon>
+          </mat-autocomplete>
           <mat-error *ngIf="productoForm.get('productoId')?.hasError('required')">
             El producto es obligatorio
           </mat-error>
