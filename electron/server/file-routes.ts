@@ -69,4 +69,64 @@ export function registerFileRoutes(fastify: FastifyInstance, dataSource: DataSou
     }
     return reply.send(fs.createReadStream(abs));
   });
+
+  /**
+   * GET /api/files/by-url?url=app://carpeta/file.jpg&token=<jwt>
+   *
+   * F4 image URL switch: las entidades guardan `imageUrl=app://producto-images/...`
+   * y en modo cliente el renderer no puede resolver `app://` (no hay BD ni
+   * filesystem local). Este endpoint resuelve la URL `app://` contra
+   * `userData/<carpeta>/<file>` del server y devuelve el binario.
+   *
+   * Acepta JWT via Authorization header O query `?token=` (porque `<img src>`
+   * no permite custom headers).
+   */
+  fastify.get<{ Querystring: { url?: string; token?: string } }>('/api/files/by-url', async (request, reply) => {
+    // Auth: header normal o ?token= en query (necesario para <img>).
+    const auth = request.headers.authorization;
+    let verifiedOk = false;
+    if (auth && auth.startsWith('Bearer ')) {
+      try { await request.jwtVerify(); verifiedOk = true; } catch { /* ignore */ }
+    }
+    if (!verifiedOk && request.query?.token) {
+      try {
+        // jwtVerify lee `Authorization`. Para el path query, decodificamos a mano.
+        const fakeAuth = `Bearer ${request.query.token}`;
+        (request as any).headers.authorization = fakeAuth;
+        await request.jwtVerify();
+        verifiedOk = true;
+      } catch { /* ignore */ }
+    }
+    if (!verifiedOk) {
+      reply.code(401);
+      return { error: 'unauthorized' };
+    }
+
+    const url = request.query?.url || '';
+    if (!url.startsWith('app://')) {
+      reply.code(400);
+      return { error: 'url_invalida' };
+    }
+    const abs = urlToAbsolute(url);
+    if (!abs) {
+      reply.code(400);
+      return { error: 'archivo_url_fuera_de_scope' };
+    }
+    if (!fs.existsSync(abs)) {
+      reply.code(404);
+      return { error: 'archivo_no_encontrado' };
+    }
+    // MIME basico por extension. node-mime existe en deps pero evitamos importar.
+    const ext = path.extname(abs).toLowerCase();
+    const mimes: Record<string, string> = {
+      '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+      '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+      '.pdf': 'application/pdf',
+    };
+    reply.type(mimes[ext] || 'application/octet-stream');
+    // Cache-Control: las imagenes son inmutables (nombre con hash/uuid). Cacheamos
+    // agresivo en el cliente para no re-fetchar al re-render.
+    reply.header('Cache-Control', 'private, max-age=3600');
+    return reply.send(fs.createReadStream(abs));
+  });
 }

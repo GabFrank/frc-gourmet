@@ -9,7 +9,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { mediumUrl } from 'src/app/shared/utils/image-url.util';
+import { mediumUrl, resolveAppUrl } from 'src/app/shared/utils/image-url.util';
 
 export type FileUploadCarpeta =
   | 'profile-images'
@@ -93,7 +93,9 @@ export class FileUploadComponent {
 
   get previewUrl(): string | undefined {
     if (!this.currentUrl || !this.isImage) return undefined;
-    return mediumUrl(this.currentUrl) || this.currentUrl;
+    // F4: resolveAppUrl ya esta aplicado dentro de mediumUrl(); fallback al
+    // original tambien debe pasar por el proxy para mode=client.
+    return mediumUrl(this.currentUrl) || resolveAppUrl(this.currentUrl);
   }
 
   triggerFileInput(): void {

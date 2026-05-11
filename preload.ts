@@ -1089,6 +1089,16 @@ contextBridge.exposeInMainWorld('api', {
     const n = parseInt(raw, 10);
     return Number.isFinite(n) && n > 0 ? n : null;
   },
+  /**
+   * F4 image URL switch: en mode=client, las imagenes `app://producto-images/x`
+   * no se pueden resolver localmente (el cliente no tiene los archivos). El
+   * helper Angular usa este token para construir
+   * `${SERVER_URL}/api/files/by-url?url=...&token=...` y que el `<img src>`
+   * lo cargue del server. Si aun no hay sesion, devuelve null.
+   */
+  getAccessToken: (): string | null => {
+    return accessToken;
+  },
 
   // Database operations
   getCategories: async (): Promise<Category[]> => {

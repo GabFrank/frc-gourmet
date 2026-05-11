@@ -23,6 +23,7 @@ import { PdvCategoriaItem } from '../../../database/entities/ventas/pdv-categori
 import { PdvItemProducto } from '../../../database/entities/ventas/pdv-item-producto.entity';
 import { Producto } from '../../../database/entities/productos/producto.entity';
 import { CreateEditPdvCategoriasComponent } from '../create-edit-pdv-categorias/create-edit-pdv-categorias.component';
+import { AppUrlPipe } from '../../pipes/app-url.pipe';
 
 /**
  * Node for category item
@@ -56,7 +57,8 @@ interface CategoryNode {
     MatCheckboxModule,
     MatTooltipModule,
     MatBadgeModule,
-    MatExpansionModule
+    MatExpansionModule,
+    AppUrlPipe,
   ]
 })
 export class ListPdvCategoriasComponent implements OnInit {

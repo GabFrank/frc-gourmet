@@ -9,6 +9,7 @@ import { Presentacion } from 'src/app/database/entities/productos/presentacion.e
 import { PrecioVenta } from 'src/app/database/entities/productos/precio-venta.entity';
 import { ProductoTipo } from 'src/app/database/entities/productos/producto-tipo.enum';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { thumbUrl, resolveAppUrl } from 'src/app/shared/utils/image-url.util';
 import { GestionarProductoService } from '../../services/gestionar-producto.service';
 import { PrecioVentaDialogComponent } from '../precio-venta-dialog/precio-venta-dialog.component';
 import { CodigoBarraDialogComponent } from '../codigo-barra-dialog/codigo-barra-dialog.component';
@@ -144,14 +145,15 @@ export class ProductoPresentacionesPreciosComponent implements OnInit, OnDestroy
   }
 
   thumbForPresentacion(url?: string | null): string | undefined {
-    if (!url) return undefined;
-    return url.replace(/(\.[^./]+)$/, '.thumb.jpg');
+    return thumbUrl(url) || resolveAppUrl(url ?? undefined);
   }
 
   onThumbErrorPres(event: Event, originalUrl?: string | null): void {
+    // F4: fallback al original tambien resuelto via proxy en mode=client.
     const img = event.target as HTMLImageElement;
-    if (originalUrl && img.src !== originalUrl) {
-      img.src = originalUrl;
+    const fallback = resolveAppUrl(originalUrl);
+    if (fallback && img.src !== fallback) {
+      img.src = fallback;
     }
   }
 
