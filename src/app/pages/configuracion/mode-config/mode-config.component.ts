@@ -9,10 +9,11 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatRadioModule } from '@angular/material/radio';
+import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { AppMode, AppModeDto, AppModeService } from 'src/app/services/app-mode.service';
+import { AppMode, AppModeDto, AppModeService, DispositivoOption } from 'src/app/services/app-mode.service';
 
 @Component({
   selector: 'app-mode-config',
@@ -28,6 +29,7 @@ import { AppMode, AppModeDto, AppModeService } from 'src/app/services/app-mode.s
     MatInputModule,
     MatProgressSpinnerModule,
     MatRadioModule,
+    MatSelectModule,
     MatSnackBarModule,
     MatTooltipModule,
   ],
@@ -38,12 +40,18 @@ export class ModeConfigComponent implements OnInit {
   loading = false;
   testing = false;
   saving = false;
+  loadingDispositivos = false;
 
   mode: AppMode = 'standalone';
   initialMode: AppMode = 'standalone';
 
   serverPort = 7070;
   serverUrl = 'http://192.168.1.10:7070';
+
+  /** F5 paso 3: dispositivo asignado a este PC. Persiste en AppSettings.deviceId. */
+  deviceId: number | null = null;
+  dispositivos: DispositivoOption[] = [];
+  dispositivosError: string | null = null;
 
   testResult: { ok: boolean; msg: string } | null = null;
 
@@ -55,6 +63,7 @@ export class ModeConfigComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await this.load();
+    await this.loadDispositivos();
   }
 
   async load(): Promise<void> {
@@ -63,6 +72,7 @@ export class ModeConfigComponent implements OnInit {
       const cfg = await this.svc.get();
       this.mode = cfg.mode;
       this.initialMode = cfg.mode;
+      this.deviceId = cfg.deviceId ?? null;
       if (cfg.mode === 'server') {
         this.serverPort = cfg.network?.serverPort ?? 7070;
       } else if (cfg.mode === 'client') {
@@ -75,18 +85,33 @@ export class ModeConfigComponent implements OnInit {
     }
   }
 
+  async loadDispositivos(): Promise<void> {
+    this.loadingDispositivos = true;
+    this.dispositivosError = null;
+    try {
+      const list = await this.svc.listDispositivos();
+      this.dispositivos = (list || []).filter(d => d.activo);
+    } catch (e) {
+      this.dispositivosError = this.errMsg(e);
+      this.dispositivos = [];
+    } finally {
+      this.loadingDispositivos = false;
+    }
+  }
+
   onModeChange(): void {
     this.testResult = null;
   }
 
   buildPayload(): AppModeDto {
+    const deviceId = this.deviceId && this.deviceId > 0 ? this.deviceId : null;
     if (this.mode === 'server') {
-      return { mode: 'server', network: { serverPort: this.serverPort || 7070 } };
+      return { mode: 'server', network: { serverPort: this.serverPort || 7070 }, deviceId };
     }
     if (this.mode === 'client') {
-      return { mode: 'client', network: { serverUrl: this.serverUrl?.trim() || '' } };
+      return { mode: 'client', network: { serverUrl: this.serverUrl?.trim() || '' }, deviceId };
     }
-    return { mode: 'standalone', network: null };
+    return { mode: 'standalone', network: null, deviceId };
   }
 
   async test(): Promise<void> {
@@ -119,6 +144,11 @@ export class ModeConfigComponent implements OnInit {
     } else {
       mensaje = `Se cambiara a modo cliente apuntando a ${payload.network?.serverUrl} y la app se reiniciara. Continuar?`;
     }
+    // F5 paso 3: anexar info del dispositivo seleccionado.
+    const dispNombre = payload.deviceId
+      ? this.dispositivos.find(d => d.id === payload.deviceId)?.nombre || `ID ${payload.deviceId}`
+      : 'sin asignar';
+    mensaje += `\n\nDispositivo: ${dispNombre}.`;
 
     const ref = this.dialog.open(ConfirmationDialogComponent, {
       data: {

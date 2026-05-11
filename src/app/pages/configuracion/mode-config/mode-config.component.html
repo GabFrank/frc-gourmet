@@ -84,6 +84,55 @@
           </mat-radio-button>
         </mat-radio-group>
 
+        <!-- F5 paso 3: device picker — aplicable a los 3 modos -->
+        <div class="device-section">
+          <div class="section-title">
+            <mat-icon>devices</mat-icon>
+            <strong>Dispositivo asignado a este PC</strong>
+            <mat-icon matTooltip="Opcional. Identifica fisicamente esta PC en la BD. Se persiste en ventas, compras, conteos y comandas creadas desde este equipo. En modo cliente se envia en el login para que el server lo firme en el JWT.">help_outline</mat-icon>
+          </div>
+
+          <div class="device-row">
+            <mat-form-field appearance="outline" class="device-select">
+              <mat-label>Dispositivo</mat-label>
+              <mat-select [(ngModel)]="deviceId" [disabled]="loadingDispositivos">
+                <mat-option [value]="null">— Sin asignar —</mat-option>
+                <mat-option *ngFor="let d of dispositivos" [value]="d.id">
+                  {{ d.nombre }} <span class="device-id-hint">(ID {{ d.id }})</span>
+                </mat-option>
+              </mat-select>
+              <mat-spinner *ngIf="loadingDispositivos" matSuffix diameter="16"></mat-spinner>
+            </mat-form-field>
+
+            <button mat-stroked-button (click)="loadDispositivos()" [disabled]="loadingDispositivos" class="refresh-btn"
+                    matTooltip="Recargar lista de dispositivos">
+              <mat-icon>refresh</mat-icon>
+            </button>
+          </div>
+
+          <p class="hint" *ngIf="!dispositivosError && dispositivos.length === 0 && !loadingDispositivos">
+            <ng-container *ngIf="initialMode !== 'client'">
+              No hay dispositivos disponibles. Cargalos desde
+              <strong>Financiero → Dispositivos</strong> y volve aca.
+            </ng-container>
+            <ng-container *ngIf="initialMode === 'client'">
+              No se pudieron cargar dispositivos del server. Verifica la sesion activa o que haya
+              dispositivos cargados en el server remoto.
+            </ng-container>
+          </p>
+
+          <p class="hint err" *ngIf="dispositivosError">
+            <mat-icon>error_outline</mat-icon>
+            No se pudo cargar la lista: {{ dispositivosError }}
+          </p>
+
+          <p class="hint" *ngIf="mode === 'client'">
+            <mat-icon>info</mat-icon>
+            En cliente, este ID se envia en el login al server y queda firmado en el JWT.
+            El server lo persiste en ventas/compras/conteos creadas desde esta PC.
+          </p>
+        </div>
+
         <div class="actions">
           <button mat-raised-button color="primary" (click)="saveAndRestart()"
                   [disabled]="testing || saving">

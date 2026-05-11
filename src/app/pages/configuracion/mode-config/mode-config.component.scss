@@ -118,12 +118,76 @@
     font-size: 12px;
     line-height: 1.5;
     margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    mat-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+      vertical-align: middle;
+    }
+
+    &.err {
+      color: #c62828;
+    }
 
     code {
       background: rgba(0, 0, 0, 0.05);
       padding: 1px 6px;
       border-radius: 3px;
       font-family: monospace;
+    }
+  }
+
+  .device-section {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--mdc-outlined-card-outline-color, rgba(0, 0, 0, 0.12));
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+
+      mat-icon {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+        color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+
+        &[matTooltip] {
+          cursor: help;
+          font-size: 16px;
+        }
+      }
+    }
+
+    .device-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      .device-select {
+        flex: 1;
+        max-width: 400px;
+      }
+
+      .refresh-btn {
+        min-width: 40px;
+        padding: 0 8px;
+      }
+    }
+
+    .device-id-hint {
+      color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+      font-size: 12px;
+      margin-left: 6px;
     }
   }
 
