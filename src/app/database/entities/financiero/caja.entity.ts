@@ -20,10 +20,10 @@ export class Caja extends BaseModel {
   @JoinColumn({ name: 'dispositivo_id' })
   dispositivo!: any;
 
-  @Column({ type: 'datetime', name: 'fecha_apertura' })
+  @Column({ name: 'fecha_apertura' })
   fechaApertura!: Date;
 
-  @Column({ type: 'datetime', name: 'fecha_cierre', nullable: true })
+  @Column({ name: 'fecha_cierre', nullable: true })
   fechaCierre?: Date;
 
   @OneToOne('Conteo', 'cajaApertura', { nullable: false, cascade: true })

@@ -30,6 +30,6 @@ export class CuentaPorCobrarCuota extends BaseModel {
   @Column({ type: 'text', nullable: true })
   observacion?: string;
 
-  @Column({ type: 'datetime', name: 'fecha_cobro', nullable: true })
+  @Column({ name: 'fecha_cobro', nullable: true })
   fechaCobro?: Date;
 }

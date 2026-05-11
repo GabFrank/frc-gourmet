@@ -5,6 +5,7 @@ import { HoraExtraTipo } from '../../src/app/database/entities/rrhh/hora-extra-t
 import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 import { getConfigNumber } from './configuracion-rrhh.handler';
 
 export function registerHorasExtraHandlers(
@@ -63,7 +64,7 @@ export function registerHorasExtraHandlers(
 
     const entity = repo.create({
       funcionario,
-      fecha: data.fecha,
+      fecha: parseLocalDate(data.fecha)!,
       horas: data.horas,
       tipo: data.tipo || HoraExtraTipo.DIURNA,
       recargoPorcentaje: recargo,

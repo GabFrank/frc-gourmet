@@ -11,6 +11,7 @@ import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.e
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 
 export function registerValesHandlers(
@@ -96,7 +97,7 @@ export function registerValesHandlers(
       funcionario,
       motivo: data.motivoId ? { id: data.motivoId } as any : undefined,
       monto: data.monto,
-      fecha: data.fecha || new Date(),
+      fecha: parseLocalDate(data.fecha) || new Date(),
       descripcion: data.descripcion,
       cajaMayor: data.cajaMayorId ? { id: data.cajaMayorId } as any : undefined,
       moneda,

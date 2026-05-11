@@ -24,6 +24,7 @@ export class VariacionDialogComponent implements OnInit, OnDestroy {
   variacionForm!: FormGroup;
   loading = false;
   readonly = false;
+  decimalesMoneda = 0;
 
   // Datos calculados
   margenCalculado = 0;

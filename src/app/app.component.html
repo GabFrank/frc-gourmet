@@ -384,6 +384,10 @@
               <mat-icon matListItemIcon>storage</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Configurar BD</span>
             </a>
+            <a mat-list-item (click)="openModeConfigTab()">
+              <mat-icon matListItemIcon>hub</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Modo de operacion</span>
+            </a>
           </div>
         </mat-expansion-panel>
 

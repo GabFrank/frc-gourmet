@@ -11,14 +11,13 @@
 
   <mat-divider></mat-divider>
 
-  <div class="tipo-section">
-    <mat-radio-group [(ngModel)]="tipoDescuento" (change)="onTipoChange()">
-      <mat-radio-button value="porcentaje">PORCENTAJE (%)</mat-radio-button>
-      <mat-radio-button value="monto">MONTO FIJO</mat-radio-button>
-    </mat-radio-group>
-  </div>
-
   <form [formGroup]="form">
+    <div class="tipo-section">
+      <mat-radio-group formControlName="tipoDescuento">
+        <mat-radio-button value="porcentaje">PORCENTAJE (%)</mat-radio-button>
+        <mat-radio-button value="monto">MONTO FIJO</mat-radio-button>
+      </mat-radio-group>
+    </div>
     <mat-form-field appearance="outline" *ngIf="tipoDescuento === 'porcentaje'" style="width: 100%">
       <mat-label>PORCENTAJE DE DESCUENTO</mat-label>
       <input matInput type="number" formControlName="porcentaje" min="0" max="100" />

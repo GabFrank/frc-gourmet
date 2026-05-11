@@ -10,6 +10,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 @Component({
   selector: 'app-verificar-acreditacion-dialog',
@@ -25,6 +26,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
     MatButtonModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    CurrencyInputDirective,
   ]
 })
 export class VerificarAcreditacionDialogComponent implements OnInit {
@@ -32,6 +34,7 @@ export class VerificarAcreditacionDialogComponent implements OnInit {
   saving = false;
   acreditacion: any = null;
   diferencia = 0;
+  decimalesMoneda = 0;
 
   constructor(
     private fb: FormBuilder,
@@ -45,6 +48,8 @@ export class VerificarAcreditacionDialogComponent implements OnInit {
   ngOnInit(): void {
     this.acreditacion = this.data?.acreditacion;
     const sugerido = Number(this.acreditacion?.montoEsperado || 0);
+    const dec = Number(this.acreditacion?.cuentaBancaria?.moneda?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
     this.form = this.fb.group({
       montoAcreditado: [sugerido, [Validators.required, Validators.min(0)]],
     });

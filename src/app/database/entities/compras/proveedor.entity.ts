@@ -13,17 +13,20 @@ export class Proveedor extends BaseModel {
   @Column()
   nombre!: string;
 
+  // Tipos sin `| null`: la reflection metadata de TypeORM resuelve el
+  // union a "Object" y Postgres lo rechaza. Para nulear, castear a any
+  // al setear (ver feedback_typeorm_null_undefined.md).
   @Column({ nullable: true })
-  razon_social?: string | null;
+  razon_social?: string;
 
   @Column({ nullable: true })
-  ruc?: string | null;
+  ruc?: string;
 
   @Column({ nullable: true })
-  telefono?: string | null;
+  telefono?: string;
 
   @Column({ nullable: true })
-  direccion?: string | null;
+  direccion?: string;
 
   @Column({ default: true })
   activo!: boolean;

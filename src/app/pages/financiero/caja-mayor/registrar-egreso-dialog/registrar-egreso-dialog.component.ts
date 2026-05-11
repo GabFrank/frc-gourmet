@@ -18,6 +18,7 @@ import { CreateEditGastoDialogComponent } from '../gastos/create-edit-gasto/crea
 import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financieras/create-operacion-financiera/create-operacion-financiera-dialog.component';
 import { EmitirChequeDialogComponent } from '../cheques/emitir-cheque/emitir-cheque-dialog.component';
 import { PagarComprasDialogComponent } from '../pagar-compras-dialog/pagar-compras-dialog.component';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 type EgresoTipo = 'GASTO' | 'AJUSTE' | 'OPERACION_FINANCIERA' | 'EMITIR_CHEQUE' | 'PAGAR_COMPRAS' | null;
 
@@ -39,6 +40,7 @@ type EgresoTipo = 'GASTO' | 'AJUSTE' | 'OPERACION_FINANCIERA' | 'EMITIR_CHEQUE' 
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatDividerModule,
+    CurrencyInputDirective,
   ]
 })
 export class RegistrarEgresoDialogComponent implements OnInit {
@@ -49,6 +51,7 @@ export class RegistrarEgresoDialogComponent implements OnInit {
   saving = false;
   loading = true;
   cajaMayorId: number = 0;
+  decimalesMoneda = 0;
 
   tiposEgreso = [
     {
@@ -105,7 +108,15 @@ export class RegistrarEgresoDialogComponent implements OnInit {
       monto: [null, [Validators.required, Validators.min(0.01)]],
       motivo: ['', Validators.required],
     });
+    this.ajusteForm.get('moneda')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
     this.loadData();
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.ajusteForm?.get('moneda')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   async loadData(): Promise<void> {

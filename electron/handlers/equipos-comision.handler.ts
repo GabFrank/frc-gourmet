@@ -11,6 +11,7 @@ import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.en
 import { TipoReglaComision, LiquidacionComisionEstado } from '../../src/app/database/entities/rrhh/regla-comision-enums';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 
 function getPeriodoBounds(periodo: string): { fechaInicio: Date; fechaFin: Date } {
   const [yStr, mStr] = periodo.split('-');
@@ -154,8 +155,8 @@ export function registerEquiposComisionHandlers(
     const asig = repo.create({
       equipo: { id: equipoId } as any,
       reglaComision: { id: reglaId } as any,
-      fechaDesde,
-      fechaHasta,
+      fechaDesde: parseLocalDate(fechaDesde)!,
+      fechaHasta: parseLocalDate(fechaHasta),
       activo: true,
     });
     await setEntityUserTracking(dataSource, asig, userId, false);

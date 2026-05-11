@@ -210,7 +210,7 @@
 
       <mat-form-field appearance="outline" class="input-col valor-input">
         <mat-label>Valor</mat-label>
-        <input matInput type="number" [(ngModel)]="valorInput" min="0" (keydown.enter)="onValorEnter()" #valorInputRef />
+        <input matInput type="text" inputmode="decimal" [(ngModel)]="valorInput" appCurrencyInput [decimals]="decimalesMoneda" (keydown.enter)="onValorEnter()" #valorInputRef />
       </mat-form-field>
 
       <div class="input-col tools-col">

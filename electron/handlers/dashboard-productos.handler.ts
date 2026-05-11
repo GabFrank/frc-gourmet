@@ -5,6 +5,7 @@ import { Receta } from '../../src/app/database/entities/productos/receta.entity'
 import { VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
 import { EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { dbQuery } from '../utils/db-query';
 
 export function registerDashboardProductosHandlers(
   dataSource: DataSource,
@@ -20,13 +21,13 @@ export function registerDashboardProductosHandlers(
       const productosActivos = await productoRepo.count({ where: { activo: true } });
 
       // 2. Productos sin precio (sin PrecioVenta activo asociado)
-      const sinPrecioRows: any[] = await dataSource.query(`
+      const sinPrecioRows: any[] = await dbQuery(dataSource, `
         SELECT COUNT(DISTINCT p.id) as cnt
         FROM producto p
-        WHERE p.activo = 1
+        WHERE p.activo = true
           AND NOT EXISTS (
             SELECT 1 FROM precio_venta pv
-            WHERE pv.activo = 1
+            WHERE pv.activo = true
               AND (pv.producto_id = p.id OR EXISTS (
                 SELECT 1 FROM presentacion pr
                 WHERE pr.producto_id = p.id AND (pv.presentacion_id = pr.id)
@@ -45,12 +46,11 @@ export function registerDashboardProductosHandlers(
       const hace30 = new Date();
       hace30.setDate(hace30.getDate() - 30);
       hace30.setHours(0, 0, 0, 0);
-      const desactRows: any[] = await dataSource.query(`
+      const desactRows: any[] = await dbQuery(dataSource, `
         SELECT p.id, p.nombre, MAX(pc.fecha) as ultima_fecha
         FROM producto p
-        JOIN presentacion pr ON pr.producto_id = p.id
-        JOIN precio_costo pc ON pc.presentacion_id = pr.id AND pc.activo = 1
-        WHERE p.activo = 1
+        JOIN precio_costo pc ON pc.producto_id = p.id AND pc.activo = true
+        WHERE p.activo = true
         GROUP BY p.id, p.nombre
         HAVING MAX(pc.fecha) < ?
         ORDER BY MAX(pc.fecha) ASC
@@ -70,7 +70,7 @@ export function registerDashboardProductosHandlers(
       // 6. Top vendidos del mes (cruce con Ventas)
       const inicioMes = new Date(today.getFullYear(), today.getMonth(), 1);
       const finMes = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
-      const topRows: any[] = await dataSource.query(`
+      const topRows: any[] = await dbQuery(dataSource, `
         SELECT p.id, p.nombre,
                SUM(vi.cantidad) as cantidad,
                SUM(vi.cantidad * vi.precio_venta_unitario) as total
@@ -93,9 +93,9 @@ export function registerDashboardProductosHandlers(
       }));
 
       // 7. Lista de productos parciales (los primeros 10)
-      const parcialesRows: any[] = await dataSource.query(`
+      const parcialesRows: any[] = await dbQuery(dataSource, `
         SELECT id, nombre FROM producto
-        WHERE activo = 1 AND registro_completo = 0
+        WHERE activo = true AND registro_completo = false
         ORDER BY created_at DESC LIMIT 10
       `);
       const productosParcialesLista = parcialesRows.map(r => ({

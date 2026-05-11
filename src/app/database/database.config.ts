@@ -176,7 +176,9 @@ import { Comanda } from './entities/ventas/comanda.entity';
 import { ComandaItem } from './entities/ventas/comanda-item.entity';
 import { Sector } from './entities/ventas/sector.entity';
 // Migrations
-import { Baseline1778357391461 } from './migrations/1778357391461-Baseline';
+import { Baseline1778378410416 } from './migrations/1778378410416-Baseline';
+import { BaselinePostgres1778380893207 } from './migrations/1778380893207-BaselinePostgres';
+import { AddDispositivoIdToTrackedEntities1778390000000 } from './migrations/1778390000000-AddDispositivoIdToTrackedEntities';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -214,6 +216,7 @@ export function getDataSourceOptions(
   override?: DbConnectionOverride,
 ): DataSourceOptions {
   const entities = getEntitiesList();
+  const driverType: 'sqlite' | 'postgres' = override?.type === 'postgres' ? 'postgres' : 'sqlite';
   const sharedOptions = {
     entities,
     // F1.5: synchronize eliminado definitivamente. Toda nueva entity exige
@@ -221,7 +224,7 @@ export function getDataSourceOptions(
     // DatabaseService corre las migrations manualmente tras backup pre-migrate.
     synchronize: false,
     logging: process.env['NODE_ENV'] === 'development',
-    migrations: getMigrations(),
+    migrations: getMigrations(driverType),
     migrationsRun: false,
     migrationsTableName: 'typeorm_migrations',
   };
@@ -434,12 +437,23 @@ export function isPackagedApp(): boolean {
   }
 }
 
-/** Lista de migraciones a ejecutar. Se importan acá para que el bundler las incluya. */
-function getMigrations(): Function[] {
-  // Las migraciones se agregan acá conforme se generan con `npm run migration:generate`.
-  // Ver src/app/database/migrations/README.md
+/**
+ * Lista de migraciones a ejecutar. Se importan acá para que el bundler las incluya.
+ *
+ * F1.4: la baseline difiere por driver porque `migration:generate` produce SQL
+ * específico al driver target. Mantenemos dos baselines y elegimos según
+ * el driver activo. Migraciones incrementales (post-baseline) van al final
+ * y deben ser portables (testear en ambos drivers o usar guard `if (driverType)`).
+ */
+function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
+  const baseline = driverType === 'postgres'
+    ? BaselinePostgres1778380893207
+    : Baseline1778378410416;
   return [
-    Baseline1778357391461,
+    baseline,
+    // Migraciones incrementales — corren post-baseline. Driver-aware si
+    // necesitan SQL especifico de cada driver. Ver docs/MIGRATIONS.md
+    AddDispositivoIdToTrackedEntities1778390000000,
   ];
 }
 

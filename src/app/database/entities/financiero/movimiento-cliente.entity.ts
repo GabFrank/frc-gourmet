@@ -19,7 +19,7 @@ export class MovimientoCliente extends BaseModel {
   @Column({ type: 'decimal', precision: 18, scale: 2 })
   monto!: number;
 
-  @Column({ type: 'datetime' })
+  @Column()
   fecha!: Date;
 
   @Column({ name: 'venta_id', type: 'int', nullable: true })

@@ -103,10 +103,10 @@ export class LiquidacionFinal extends BaseModel {
   @JoinColumn({ name: 'aprobado_por_id' })
   aprobadoPor?: Usuario;
 
-  @Column({ name: 'fecha_aprobacion', type: 'datetime', nullable: true })
+  @Column({ name: 'fecha_aprobacion', nullable: true })
   fechaAprobacion?: Date;
 
-  @Column({ name: 'fecha_pago', type: 'datetime', nullable: true })
+  @Column({ name: 'fecha_pago', nullable: true })
   fechaPago?: Date;
 
   @Column({ name: 'movimiento_id', type: 'int', nullable: true })

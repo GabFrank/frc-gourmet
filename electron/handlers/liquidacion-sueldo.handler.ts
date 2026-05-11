@@ -23,6 +23,7 @@ import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { getConfigNumber } from './configuracion-rrhh.handler';
 
@@ -787,7 +788,7 @@ export function registerLiquidacionSueldoHandlers(
       funcionario,
       tipo: data.tipo,
       monto: data.monto,
-      fecha: data.fecha,
+      fecha: parseLocalDate(data.fecha)!,
       motivo: data.motivo,
       esRecurrente: data.esRecurrente === true,
       frecuencia: data.frecuencia,

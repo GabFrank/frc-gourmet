@@ -27,13 +27,13 @@ export class AcreditacionPos extends BaseModel {
   @Column({ type: 'decimal', precision: 14, scale: 2, name: 'monto_acreditado', nullable: true })
   montoAcreditado?: number;
 
-  @Column({ type: 'datetime', name: 'fecha_transaccion' })
+  @Column({ name: 'fecha_transaccion' })
   fechaTransaccion!: Date;
 
-  @Column({ type: 'datetime', name: 'fecha_esperada_acreditacion' })
+  @Column({ name: 'fecha_esperada_acreditacion' })
   fechaEsperadaAcreditacion!: Date;
 
-  @Column({ type: 'datetime', name: 'fecha_acreditacion_real', nullable: true })
+  @Column({ name: 'fecha_acreditacion_real', nullable: true })
   fechaAcreditacionReal?: Date;
 
   @Column({
@@ -50,7 +50,7 @@ export class AcreditacionPos extends BaseModel {
   @JoinColumn({ name: 'verificado_por' })
   verificadoPor?: Usuario;
 
-  @Column({ type: 'datetime', nullable: true, name: 'fecha_verificacion' })
+  @Column({ nullable: true, name: 'fecha_verificacion' })
   fechaVerificacion?: Date;
 
   // Nullable FK to Venta — sin constraint para no requerir orden de carga

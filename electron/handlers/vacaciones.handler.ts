@@ -7,6 +7,7 @@ import { AsistenciaEstado } from '../../src/app/database/entities/rrhh/asistenci
 import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 import { getConfigNumber } from './configuracion-rrhh.handler';
 
 function diffDias(d1: Date, d2: Date): number {
@@ -115,8 +116,8 @@ export function registerVacacionesHandlers(
       const vacacion = await vacRepo.findOne({ where: { id: vacacionId } });
       if (!vacacion) throw new Error(`Vacacion ${vacacionId} no encontrada`);
 
-      const desde = new Date(fechaDesde);
-      const hasta = new Date(fechaHasta);
+      const desde = parseLocalDate(fechaDesde) || new Date();
+      const hasta = parseLocalDate(fechaHasta) || new Date();
       const dias = diffDias(desde, hasta) + 1;
       if (dias <= 0) throw new Error('Rango de fechas invalido');
       if (vacacion.diasGozados + dias > vacacion.diasGenerados) {

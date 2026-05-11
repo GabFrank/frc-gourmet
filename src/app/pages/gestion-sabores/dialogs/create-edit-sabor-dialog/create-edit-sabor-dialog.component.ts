@@ -13,6 +13,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { IngredienteSaborDialogComponent } from '../ingrediente-sabor-dialog/ingrediente-sabor-dialog.component';
 import { SaboresService } from '../../../../services/sabores.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 export interface CreateEditSaborDialogData {
   categoria?: string;
@@ -32,7 +33,8 @@ export interface CreateEditSaborDialogData {
     MatIconModule,
     MatTableModule,
     MatCardModule,
-    MatTooltipModule
+    MatTooltipModule,
+    CurrencyInputDirective,
   ],
   templateUrl: './create-edit-sabor-dialog.component.html',
   styleUrls: ['./create-edit-sabor-dialog.component.scss']
@@ -42,6 +44,7 @@ export class CreateEditSaborDialogComponent implements OnInit {
   saborForm!: FormGroup;
   loading = false;
   isEditMode = false;
+  decimalesMoneda = 0;
 
   // Columnas para las tablas
   ingredientesBaseColumns: string[] = ['nombre', 'cantidad', 'unidad', 'acciones'];

@@ -91,7 +91,7 @@
             
             <!-- Image preview for items -->
             <div *ngIf="node.type === 'item' && node.imagen" class="image-preview">
-              <img [src]="node.imagen" [alt]="node.nombre">
+              <img [src]="node.imagen | appUrl" [alt]="node.nombre">
             </div>
             
             <!-- Inactive badge -->

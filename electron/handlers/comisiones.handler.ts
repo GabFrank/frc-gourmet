@@ -18,6 +18,7 @@ import {
 } from '../../src/app/database/entities/rrhh/regla-comision-enums';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 
 function getPeriodoBounds(periodo: string): { fechaInicio: Date; fechaFin: Date } {
   const [yStr, mStr] = periodo.split('-');
@@ -292,8 +293,8 @@ export function registerComisionesHandlers(
         metaMontoLocal: data.metaMontoLocal,
         modoValidacion: data.modoValidacion || ModoValidacionComision.TODO_O_NADA,
         recurrencia: data.recurrencia,
-        fechaInicio: data.fechaInicio,
-        fechaFin: data.fechaFin,
+        fechaInicio: parseLocalDate(data.fechaInicio),
+        fechaFin: parseLocalDate(data.fechaFin),
         esEquipo: data.esEquipo || false,
         activo: data.activo !== undefined ? data.activo : true,
       });
@@ -356,8 +357,8 @@ export function registerComisionesHandlers(
       if (data.metaMontoLocal !== undefined) regla.metaMontoLocal = data.metaMontoLocal;
       if (data.modoValidacion !== undefined) regla.modoValidacion = data.modoValidacion;
       if (data.recurrencia !== undefined) regla.recurrencia = data.recurrencia;
-      if (data.fechaInicio !== undefined) regla.fechaInicio = data.fechaInicio;
-      if (data.fechaFin !== undefined) regla.fechaFin = data.fechaFin;
+      if (data.fechaInicio !== undefined) regla.fechaInicio = parseLocalDate(data.fechaInicio);
+      if (data.fechaFin !== undefined) regla.fechaFin = parseLocalDate(data.fechaFin);
       if (data.esEquipo !== undefined) regla.esEquipo = data.esEquipo;
       if (data.activo !== undefined) regla.activo = data.activo;
 

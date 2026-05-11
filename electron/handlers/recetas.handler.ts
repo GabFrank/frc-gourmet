@@ -1681,7 +1681,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       .leftJoinAndSelect('adicionalesVinculados.adicional', 'adicional')
       .where('sabor.producto_id = :productoId', { productoId })
       .andWhere('rp.presentacion_id = :presentacionId', { presentacionId })
-      .andWhere('rp.activo = 1')
+      .andWhere('rp.activo = true')
       .orderBy('sabor.nombre', 'ASC')
       .getMany();
 

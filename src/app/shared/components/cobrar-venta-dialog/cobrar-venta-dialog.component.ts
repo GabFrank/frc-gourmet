@@ -25,6 +25,7 @@ import { PagoEstado } from '../../../database/entities/compras/estado.enum';
 import { PagoDetalle, TipoDetalle } from '../../../database/entities/compras/pago-detalle.entity';
 import { AjusteCobrarDialogComponent } from './ajuste-cobrar-dialog.component';
 import { EditDetalleDialogComponent } from './edit-detalle-dialog.component';
+import { CurrencyInputDirective } from '../../directives/currency-input.directive';
 
 export interface CobrarVentaDialogData {
   venta: Venta;
@@ -80,6 +81,7 @@ interface CurrencyDisplay {
     MatTableModule,
     MatMenuModule,
     MatTooltipModule,
+    CurrencyInputDirective,
   ],
 })
 export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
@@ -112,6 +114,9 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
 
   // Indicates if the current input line will be PAGO or VUELTO
   currentLineType: 'PAGO' | 'VUELTO' = 'PAGO';
+
+  // Decimales de la moneda actualmente seleccionada (para appCurrencyInput)
+  decimalesMoneda = 0;
 
   // Costo
   costoTotal = 0;
@@ -358,6 +363,8 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
 
   autoFillValor(): void {
     if (!this.selectedMoneda) return;
+    const dec = Number(this.selectedMoneda.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
     const display = this.currencyDisplays.find(cd => cd.moneda.id === this.selectedMoneda!.id);
     if (!display) return;
 

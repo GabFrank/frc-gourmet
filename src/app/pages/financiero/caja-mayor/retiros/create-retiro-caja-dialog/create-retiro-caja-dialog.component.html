@@ -42,7 +42,7 @@
 
       <mat-form-field appearance="outline" class="det-field-monto">
         <mat-label>Monto</mat-label>
-        <input matInput type="number" formControlName="monto" min="0.01">
+        <input matInput type="text" inputmode="decimal" formControlName="monto" appCurrencyInput [decimals]="decimalesMoneda">
       </mat-form-field>
 
       <button mat-mini-fab color="primary"

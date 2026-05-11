@@ -21,6 +21,8 @@ import { DatabaseService } from './src/app/database/database.service';
 import { Usuario } from './src/app/database/entities/personas/usuario.entity';
 
 // Import the new handler registration functions
+import { installHandlerRegistry, handlerRegistryCount } from './electron/utils/handler-registry';
+import { startServer, stopServer } from './electron/server/server';
 import { registerPrinterHandlers } from './electron/handlers/printers.handler';
 import { registerPersonasHandlers } from './electron/handlers/personas.handler';
 import { registerAuthHandlers } from './electron/handlers/auth.handler';
@@ -57,9 +59,12 @@ import { runBootstrapMigrations } from './electron/utils/db-migrations-bootstrap
 import { seedSystemData } from './electron/utils/seed-system';
 import { migratePlaintextPasswords } from './electron/utils/migrate-passwords';
 import { readAppSettings } from './electron/utils/app-settings.utils';
+import { setCurrentDevice } from './electron/utils/current-device.utils';
+import { Dispositivo } from './src/app/database/entities/financiero/dispositivo.entity';
 import { getDbPassword } from './electron/utils/db-password.utils';
 import type { DbConnectionOverride } from './src/app/database/database.config';
 import { registerDbConfigHandlers } from './electron/handlers/db-config.handler';
+import { registerAppModeHandlers } from './electron/handlers/app-mode.handler';
 // RRHH Fase 8 - Dashboard, Notificaciones, Reportes
 import { registerNotificacionesRrhhHandlers, generarNotificacionesRrhh } from './electron/handlers/notificaciones-rrhh.handler';
 import { registerDashboardRrhhHandlers } from './electron/handlers/dashboard-rrhh.handler';
@@ -143,6 +148,12 @@ function initializeDatabase() {
         console.error('[migrate-passwords] error:', e);
       }
 
+      // F3 paso 2: monkey-patch ipcMain.handle para que cada handler que
+      // se registre abajo quede tambien copiado en handlerRegistry.
+      // Necesario para que el server HTTP de F3 pueda routear /api/rpc al
+      // mismo handler sin reescribir nada.
+      installHandlerRegistry();
+
       // Register all IPC handlers *after* the database is ready
       registerPrinterHandlers(dataSource);
       registerPersonasHandlers(dataSource, getCurrentUser);
@@ -187,6 +198,8 @@ function initializeDatabase() {
       registerDashboardFinancieroHandlers(dataSource, getCurrentUser);
       registerDashboardCajaMayorHandlers(dataSource, getCurrentUser);
 
+      console.log(`[F3] handlerRegistry: ${handlerRegistryCount()} channels registrados (disponibles via IPC + futuro /api/rpc).`);
+
       // Startup migration: populate vendedor_id from created_by for historic ventas
       dataSource.query(`UPDATE ventas SET vendedor_id = created_by WHERE vendedor_id IS NULL AND created_by IS NOT NULL`)
         .catch((e: any) => console.warn('Migration vendedor_id:', e.message));
@@ -199,6 +212,9 @@ function initializeDatabase() {
 
       // F1: Configuracion de BD (sqlite path / postgres)
       registerDbConfigHandlers();
+
+      // F4.2: Modo de operacion (standalone / server / cliente)
+      registerAppModeHandlers();
 
       // Importacion de facturas con OCR + IA
       registerFacturaImportHandlers(dataSource, getCurrentUser);
@@ -216,6 +232,56 @@ function initializeDatabase() {
           console.error('Error en seeds iniciales:', e);
         }
       })();
+
+      // F4: exponer mode al renderer via process.env (preload los lee).
+      // Sirve para que el factory `repositoryFactory()` en app.module decida
+      // qué impl del repository inyectar al boot del Angular.
+      const settings = readAppSettings(app.getPath('userData'));
+      process.env['FRC_APP_MODE'] = settings.mode;
+      if (settings.mode === 'client' && settings.network?.serverUrl) {
+        process.env['FRC_SERVER_URL'] = settings.network.serverUrl;
+      }
+
+      // F5 paso 3: cargar el Dispositivo configurado localmente (si existe)
+      // y exponerlo para que los handlers de creacion lo persistan en
+      // ventas/compras/conteos/comandas. Solo aplica al path IPC local —
+      // el path HTTP recibe device_id via JWT claim.
+      if (typeof settings.deviceId === 'number') {
+        try {
+          const disp = await dataSource.getRepository(Dispositivo).findOne({
+            where: { id: settings.deviceId },
+          });
+          if (disp && disp.activo) {
+            setCurrentDevice({ id: disp.id });
+            // Tambien exponer al renderer/preload (modo cliente lo envia en
+            // login + refresh para que el server lo firme en el JWT).
+            process.env['FRC_DEVICE_ID'] = String(disp.id);
+            console.log(`[F5] currentDevice cargado: id=${disp.id} (${disp.nombre || '?'})`);
+          } else {
+            console.warn(`[F5] deviceId=${settings.deviceId} no encontrado o inactivo en BD.`);
+          }
+        } catch (e) {
+          console.warn('[F5] error cargando currentDevice:', e);
+        }
+      }
+
+      // F3: arrancar Fastify HTTP server si mode === 'server'
+      if (settings.mode === 'server') {
+        const port = settings.network?.serverPort || 7070;
+        const driver: 'sqlite' | 'postgres' = settings.database.type;
+        const appVersion = (() => {
+          try { return require('./package.json').version || '0.0.0'; } catch { return '0.0.0'; }
+        })();
+        // schemaVersion = nombre de la baseline activa (queda inmutable post-arranque)
+        const schemaVersion = driver === 'postgres'
+          ? 'BaselinePostgres1778380893207'
+          : 'Baseline1778378410416';
+        startServer({
+          port, appVersion, schemaVersion, driver, dataSource,
+        }).catch((e) => console.error('[server] Error al arrancar Fastify:', e));
+      } else {
+        console.log(`[server] Modo '${settings.mode}', no se arranca Fastify.`);
+      }
 
       // Auto-backup scheduler (lee config persistida; idempotente si está deshabilitado)
       startAutoBackupScheduler(app.getPath('userData'));
@@ -313,6 +379,28 @@ function registerAppProtocol(): void {
 // Initialize the database when the app is ready
 app.on('ready', () => {
   registerAppProtocol();
+
+  // F4: setear env vars de mode/serverUrl ANTES de createWindow para que el
+  // preload los lea al cargar (el renderer hereda process.env del main al
+  // momento del spawn). initializeDatabase() corre async y los setea muy
+  // tarde — para entonces el preload ya leyo defaults.
+  try {
+    const earlySettings = readAppSettings(app.getPath('userData'));
+    process.env['FRC_APP_MODE'] = earlySettings.mode;
+    if (earlySettings.mode === 'client' && earlySettings.network?.serverUrl) {
+      process.env['FRC_SERVER_URL'] = earlySettings.network.serverUrl;
+    }
+    // F5 paso 3: tambien exponer el deviceId al preload para que lo inyecte
+    // en login + refresh (modo cliente). Lectura sync para que el renderer
+    // herede el valor al spawn — initializeDatabase() corre async, no llega.
+    if (typeof earlySettings.deviceId === 'number') {
+      process.env['FRC_DEVICE_ID'] = String(earlySettings.deviceId);
+    }
+    console.log(`[main] early FRC_APP_MODE=${earlySettings.mode} (preload heredara este valor)`);
+  } catch (e) {
+    console.warn('[main] no se pudo leer app-settings temprano:', e);
+  }
+
   initializeDatabase();
   createWindow();
 });
@@ -321,12 +409,20 @@ app.on('ready', () => {
 app.on('window-all-closed', () => {
   // On macOS specific behavior
   if (process.platform !== 'darwin') {
+    // Stop Fastify server (idempotente — si nunca arranco no hace nada)
+    stopServer().catch(() => {});
     // Close the database connection
     if (dbService) {
       dbService.close();
     }
     app.quit();
   }
+});
+
+app.on('before-quit', () => {
+  // Stop server explicitly antes de quit (cubrira el caso macOS donde el handler
+  // de window-all-closed no termina la app)
+  stopServer().catch(() => {});
 });
 
 app.on('activate', () => {

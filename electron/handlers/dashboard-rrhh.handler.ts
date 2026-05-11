@@ -11,6 +11,7 @@ import { VacacionPeriodo, VacacionPeriodoEstado } from '../../src/app/database/e
 import { CuentaPorPagar } from '../../src/app/database/entities/financiero/cuenta-por-pagar.entity';
 import { CuentaPorPagarTipo, CuentaPorPagarEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { dbQuery } from '../utils/db-query';
 
 export function registerDashboardRrhhHandlers(
   dataSource: DataSource,
@@ -116,7 +117,7 @@ export function registerDashboardRrhhHandlers(
       // 8. top5Vendedores del periodo
       const top5Vendedores: any[] = [];
       try {
-        const raw = await dataSource.query(`
+        const raw = await dbQuery(dataSource, `
           SELECT v.vendedor_id, SUM(v.total) as totalVendido, COUNT(*) as cantVentas
           FROM ventas v
           WHERE v.estado = 'CONCLUIDA'

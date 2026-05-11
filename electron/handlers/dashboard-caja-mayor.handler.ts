@@ -5,6 +5,7 @@ import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-
 import { CuotaEstado, CuentaPorPagarEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
 import { ChequeEstado } from '../../src/app/database/entities/financiero/cheques-enums';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { dbQuery } from '../utils/db-query';
 
 const TIPOS_INGRESO: TipoMovimiento[] = [
   TipoMovimiento.INGRESO_RETIRO_CAJA,
@@ -44,15 +45,15 @@ export function registerDashboardCajaMayorHandlers(
       const monedaRepo = dataSource.getRepository(Moneda);
       const principal = await monedaRepo.findOne({ where: { principal: true, activo: true } });
       const usd = await monedaRepo.createQueryBuilder('m')
-        .where('m.activo = 1 AND UPPER(m.simbolo) IN (:...s)', { s: ['USD', '$', 'US$'] })
+        .where('m.activo = true AND UPPER(m.simbolo) IN (:...s)', { s: ['USD', '$', 'US$'] })
         .getOne();
       const brl = await monedaRepo.createQueryBuilder('m')
-        .where('m.activo = 1 AND UPPER(m.simbolo) IN (:...s)', { s: ['BRL', 'R$'] })
+        .where('m.activo = true AND UPPER(m.simbolo) IN (:...s)', { s: ['BRL', 'R$'] })
         .getOne();
 
       const saldoPorMoneda = async (monedaId?: number): Promise<number> => {
         if (!monedaId) return 0;
-        const rows: any[] = await dataSource.query(`
+        const rows: any[] = await dbQuery(dataSource, `
           SELECT COALESCE(SUM(saldo), 0) as total
           FROM cajas_mayor_saldos WHERE moneda_id = ?
         `, [monedaId]);
@@ -65,7 +66,7 @@ export function registerDashboardCajaMayorHandlers(
       // 2. CPP vencidos (cuotas con fecha < hoy y pendientes)
       const today = new Date(); today.setHours(0, 0, 0, 0);
       const hoyStr = today.toISOString().slice(0, 10);
-      const cppVencidasRows: any[] = await dataSource.query(`
+      const cppVencidasRows: any[] = await dbQuery(dataSource, `
         SELECT COUNT(*) as cnt, COALESCE(SUM(c.monto - c.monto_pagado), 0) as suma
         FROM cuentas_por_pagar_cuotas c
         JOIN cuentas_por_pagar cpp ON cpp.id = c.cuenta_por_pagar_id
@@ -78,7 +79,7 @@ export function registerDashboardCajaMayorHandlers(
 
       // 3. Cheques por vencer (proximos 7 dias, estado DIFERIDO)
       const en7 = new Date(today); en7.setDate(en7.getDate() + 7);
-      const chequesRows: any[] = await dataSource.query(`
+      const chequesRows: any[] = await dbQuery(dataSource, `
         SELECT COUNT(*) as cnt FROM cheques
         WHERE estado = ? AND fecha_pago IS NOT NULL
           AND fecha_pago BETWEEN ? AND ?
@@ -89,7 +90,7 @@ export function registerDashboardCajaMayorHandlers(
       const movimientos30d = await buildMovimientos30d(dataSource);
 
       // 5. Proximos vencimientos (CPP + cheques) ordenado por fecha
-      const cppListRows: any[] = await dataSource.query(`
+      const cppListRows: any[] = await dbQuery(dataSource, `
         SELECT 'cpp' as tipo, c.id, c.fecha_vencimiento as fecha,
                (c.monto - c.monto_pagado) as monto,
                COALESCE(pr.razon_social, pr.nombre, cpp.descripcion) as descripcion
@@ -101,7 +102,7 @@ export function registerDashboardCajaMayorHandlers(
         LIMIT 10
       `, [CuotaEstado.PENDIENTE, CuotaEstado.PARCIAL, CuentaPorPagarEstado.ACTIVO, en7.toISOString().slice(0, 10)]);
 
-      const chequeListRows: any[] = await dataSource.query(`
+      const chequeListRows: any[] = await dbQuery(dataSource, `
         SELECT 'cheque' as tipo, ch.id, ch.fecha_pago as fecha,
                ch.monto, COALESCE(ch.beneficiario, 'CHEQUE') as descripcion
         FROM cheques ch
@@ -162,7 +163,7 @@ async function buildMovimientos30d(
     const f = new Date(d); f.setHours(23, 59, 59, 999);
     labels.push(`${d.getDate()}/${d.getMonth() + 1}`);
 
-    const ingRows: any[] = await dataSource.query(`
+    const ingRows: any[] = await dbQuery(dataSource, `
       SELECT COALESCE(SUM(monto), 0) as suma
       FROM cajas_mayor_movimientos
       WHERE moneda_id = ?
@@ -171,7 +172,7 @@ async function buildMovimientos30d(
     `, [principal.id, d.toISOString(), f.toISOString(), ...TIPOS_INGRESO]);
     entradas.push(Number(ingRows?.[0]?.suma || 0));
 
-    const egRows: any[] = await dataSource.query(`
+    const egRows: any[] = await dbQuery(dataSource, `
       SELECT COALESCE(SUM(monto), 0) as suma
       FROM cajas_mayor_movimientos
       WHERE moneda_id = ?

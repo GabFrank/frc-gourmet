@@ -9,6 +9,7 @@ import { Cargo as CargoEnt } from '../../src/app/database/entities/rrhh/cargo.en
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 
 export function registerRrhhFuncionariosHandlers(
   dataSource: DataSource,
@@ -146,11 +147,12 @@ export function registerRrhhFuncionariosHandlers(
         usuario = await queryRunner.manager.findOne(Usuario, { where: { id: data.usuarioId } });
       }
 
+      const fechaIngresoLocal = parseLocalDate(data.fechaIngreso) || new Date();
       const entity = funcRepo.create({
         persona,
         codigoInterno: data.codigoInterno ? String(data.codigoInterno).toUpperCase() : undefined,
         cargo,
-        fechaIngreso: data.fechaIngreso,
+        fechaIngreso: fechaIngresoLocal,
         salarioBase: data.salarioBase,
         monedaSalario: moneda,
         esJornalero: data.esJornalero === true,
@@ -170,7 +172,7 @@ export function registerRrhhFuncionariosHandlers(
       const histCargo = histCargoRepo.create({
         funcionario: saved,
         cargo,
-        fechaDesde: data.fechaIngreso,
+        fechaDesde: fechaIngresoLocal,
         motivo: 'INGRESO',
       });
       await setEntityUserTracking(dataSource, histCargo, userId, false);
@@ -182,7 +184,7 @@ export function registerRrhhFuncionariosHandlers(
         salarioAnterior: undefined,
         salarioNuevo: data.salarioBase,
         moneda,
-        fechaVigencia: data.fechaIngreso,
+        fechaVigencia: fechaIngresoLocal,
         motivo: 'INGRESO',
       });
       await setEntityUserTracking(dataSource, histSalario, userId, false);
@@ -241,7 +243,7 @@ export function registerRrhhFuncionariosHandlers(
       if (!funcionario) throw new Error(`Funcionario ${id} no encontrado`);
       const nuevoCargo = await queryRunner.manager.findOne(CargoEnt, { where: { id: data.nuevoCargoId } });
       if (!nuevoCargo) throw new Error(`Cargo ${data.nuevoCargoId} no encontrado`);
-      const fechaDesde = data.fechaDesde ?? new Date();
+      const fechaDesde = parseLocalDate(data.fechaDesde) ?? new Date();
 
       // Cerrar historico cargo activo
       const activo = await histRepo
@@ -304,7 +306,7 @@ export function registerRrhhFuncionariosHandlers(
         salarioAnterior: funcionario.salarioBase,
         salarioNuevo: data.salarioNuevo,
         moneda,
-        fechaVigencia: data.fechaVigencia ?? new Date(),
+        fechaVigencia: parseLocalDate(data.fechaVigencia) ?? new Date(),
         motivo: data.motivo || 'AJUSTE_SALARIAL',
         autorizadoPor: userEntity || undefined,
       });
@@ -332,7 +334,7 @@ export function registerRrhhFuncionariosHandlers(
       const repo = dataSource.getRepository(Funcionario);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`Funcionario ${id} no encontrado`);
-      existing.fechaEgreso = data.fechaEgreso || new Date();
+      existing.fechaEgreso = parseLocalDate(data.fechaEgreso) || new Date();
       existing.motivoEgreso = data.motivoEgreso;
       existing.activo = false;
       await setEntityUserTracking(dataSource, existing, getCurrentUser()?.id, true);

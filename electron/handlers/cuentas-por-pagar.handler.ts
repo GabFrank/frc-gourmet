@@ -14,6 +14,7 @@ import { CajaMayorSaldo } from '../../src/app/database/entities/financiero/caja-
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 
 // Helper: actualiza/crea saldo cajaMayor restando un monto (para egresos de cuotas)
@@ -423,7 +424,7 @@ export function registerCuentasPorPagarHandlers(
       // Excluye CPPs originadas en compras al contado (compra.credito = false). Las compras a credito
       // o las CPPs sin compra (prestamos, etc.) siguen apareciendo. Default: false (lista todo).
       if (filtros?.excluirContadoCompras === true) {
-        qb.andWhere('(cpp.compra_id IS NULL OR compra.credito = 1)');
+        qb.andWhere('(cpp.compra_id IS NULL OR compra.credito = true)');
       }
 
       if (filtros?.pageSize != null) {
@@ -463,7 +464,7 @@ export function registerCuentasPorPagarHandlers(
       const cuotaRepo = queryRunner.manager.getRepository(CuentaPorPagarCuota);
 
       const cantidadCuotas = Math.max(1, Number(data.cantidadCuotas) || 1);
-      const fechaInicio = data.fechaInicio ? new Date(data.fechaInicio) : new Date();
+      const fechaInicio = parseLocalDate(data.fechaInicio) || new Date();
       const montoTotal = Number(data.montoTotal);
       const montoCuota = +(montoTotal / cantidadCuotas).toFixed(2);
 

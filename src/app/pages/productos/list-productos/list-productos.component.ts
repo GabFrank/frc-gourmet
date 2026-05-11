@@ -24,7 +24,7 @@ import { RepositoryService } from '../../../database/repository.service';
 import { Producto } from '../../../database/entities/productos/producto.entity';
 import { ProductoTipo } from '../../../database/entities/productos/producto-tipo.enum';
 import { GestionarProductoComponent } from '../gestionar-producto/gestionar-producto.component';
-import { thumbUrl } from 'src/app/shared/utils/image-url.util';
+import { thumbUrl, resolveAppUrl } from 'src/app/shared/utils/image-url.util';
 
 @Component({
   selector: 'app-list-productos',
@@ -227,14 +227,16 @@ export class ListProductosComponent implements OnInit {
   }
 
   thumbFor(url?: string | null): string | undefined {
-    return thumbUrl(url) || (url ?? undefined);
+    return thumbUrl(url) || resolveAppUrl(url ?? undefined);
   }
 
   onThumbError(event: Event, originalUrl?: string | null): void {
     // Si la derivada thumb no existe (legacy), caer al original.
+    // F4: en mode=client el "original" debe pasarse por el proxy tambien.
     const img = event.target as HTMLImageElement;
-    if (originalUrl && img.src !== originalUrl) {
-      img.src = originalUrl;
+    const fallback = resolveAppUrl(originalUrl);
+    if (fallback && img.src !== fallback) {
+      img.src = fallback;
     }
   }
 

@@ -20,10 +20,10 @@ export class RetiroCaja extends BaseModel {
   })
   estado!: RetiroCajaEstado;
 
-  @Column({ type: 'datetime', name: 'fecha_retiro' })
+  @Column({ name: 'fecha_retiro' })
   fechaRetiro!: Date;
 
-  @Column({ type: 'datetime', name: 'fecha_ingreso', nullable: true })
+  @Column({ name: 'fecha_ingreso', nullable: true })
   fechaIngreso?: Date;
 
   @ManyToOne(() => Usuario)

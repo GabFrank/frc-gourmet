@@ -18,6 +18,7 @@ import { MatRadioModule } from '@angular/material/radio';
 import { firstValueFrom } from 'rxjs';
 import { startWith, map } from 'rxjs/operators';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 type BeneficiarioModo = 'PROVEEDOR' | 'TEXTO' | 'AL_PORTADOR';
 
@@ -32,11 +33,13 @@ type BeneficiarioModo = 'PROVEEDOR' | 'TEXTO' | 'AL_PORTADOR';
     MatSelectModule, MatDatepickerModule, MatNativeDateModule,
     MatProgressSpinnerModule, MatSnackBarModule, MatSlideToggleModule, MatDividerModule,
     MatAutocompleteModule, MatRadioModule,
+    CurrencyInputDirective,
   ]
 })
 export class EmitirChequeDialogComponent implements OnInit {
   form!: FormGroup;
   saving = false;
+  decimalesMoneda = 0;
 
   chequeras: any[] = [];
   monedas: any[] = [];
@@ -90,9 +93,19 @@ export class EmitirChequeDialogComponent implements OnInit {
         this.form.get('numeroCheque')?.setValue(ch.siguienteNumero, { emitEvent: false });
         if (ch.cuentaBancaria?.moneda?.id) {
           this.form.get('monedaId')?.setValue(ch.cuentaBancaria.moneda.id, { emitEvent: false });
+          this.recalcDecimalesMoneda();
         }
       }
     });
+
+    this.form.get('monedaId')?.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.form?.get('monedaId')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   private setupAutocomplete(): void {

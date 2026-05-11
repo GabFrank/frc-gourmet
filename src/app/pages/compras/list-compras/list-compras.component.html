@@ -71,6 +71,15 @@
       <mat-datepicker #pHasta></mat-datepicker>
     </mat-form-field>
 
+    <!-- F5 paso 4: filtro por dispositivo -->
+    <mat-form-field appearance="outline" class="f-field">
+      <mat-label>Dispositivo</mat-label>
+      <mat-select formControlName="dispositivoId">
+        <mat-option [value]="null">Todos</mat-option>
+        <mat-option *ngFor="let d of dispositivos" [value]="d.id">{{ d.nombre }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
     <div class="filtros-actions">
       <button mat-stroked-button (click)="aplicarFiltros()">Aplicar</button>
       <button mat-button (click)="limpiarFiltros()">Limpiar</button>
