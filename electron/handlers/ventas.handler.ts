@@ -12,6 +12,7 @@ import { PdvCategoria } from '../../src/app/database/entities/ventas/pdv-categor
 import { PdvCategoriaItem } from '../../src/app/database/entities/ventas/pdv-categoria-item.entity';
 import { PdvItemProducto } from '../../src/app/database/entities/ventas/pdv-item-producto.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
 import { Not, IsNull } from 'typeorm';
@@ -331,8 +332,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('createVenta', async (_event: any, data: any) => {
     try {
       const repo = dataSource.getRepository(Venta);
-      const entity = repo.create(data);
+      const entity: any = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
+      // F5 paso 3: si el caller no especifico dispositivo, resolverlo del
+      // request context (JWT en cliente HTTP, current-device en IPC local).
+      if (!data?.dispositivo && !data?.dispositivo_id) {
+        const deviceId = resolveRequestDeviceId(_event);
+        if (deviceId != null) entity.dispositivo = { id: deviceId };
+      }
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating venta:', error);
@@ -1558,8 +1565,13 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('createComanda', async (_event: any, data: any) => {
     try {
       const repo = dataSource.getRepository(Comanda);
-      const entity = repo.create({ ...data, estado: ComandaEstado.DISPONIBLE });
+      const entity: any = repo.create({ ...data, estado: ComandaEstado.DISPONIBLE });
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
+      // F5 paso 3: propagar device_id del request context si no vino explicito.
+      if (!data?.dispositivo && !data?.dispositivo_id) {
+        const deviceId = resolveRequestDeviceId(_event);
+        if (deviceId != null) entity.dispositivo = { id: deviceId };
+      }
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating Comanda:', error);

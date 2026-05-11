@@ -11,6 +11,7 @@ import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caj
 import { CajaMoneda } from '../../src/app/database/entities/financiero/caja-moneda.entity';
 import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 
 export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
@@ -255,8 +256,13 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('create-conteo', async (_event: IpcMainInvokeEvent, data: any) => {
     try {
       const repo = dataSource.getRepository(Conteo);
-      const entity = repo.create(data);
+      const entity: any = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
+      // F5 paso 3: propagar device_id del request context si no vino explicito.
+      if (!data?.dispositivo && !data?.dispositivo_id) {
+        const deviceId = resolveRequestDeviceId(_event);
+        if (deviceId != null) entity.dispositivo = { id: deviceId };
+      }
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating conteo:', error);

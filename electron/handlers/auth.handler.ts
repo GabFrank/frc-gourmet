@@ -2,9 +2,11 @@ import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { LoginSession } from '../../src/app/database/entities/auth/login-session.entity';
+import { Dispositivo } from '../../src/app/database/entities/financiero/dispositivo.entity';
 import * as jwt from 'jsonwebtoken';
 import { verifyPassword } from '../utils/password.utils';
 import { getJwtSecret } from '../utils/jwt-secret.utils';
+import { setCurrentDevice } from '../utils/current-device.utils';
 
 const TOKEN_EXPIRATION = '7d';
 
@@ -16,7 +18,7 @@ export function registerAuthHandlers(
 
   ipcMain.handle('login', async (_event: any, loginData: any) => {
     try {
-      const { nickname, password, deviceInfo } = loginData;
+      const { nickname, password, deviceInfo, deviceId } = loginData;
       const userRepository = dataSource.getRepository(Usuario);
       const sessionRepository = dataSource.getRepository(LoginSession);
 
@@ -56,6 +58,20 @@ export function registerAuthHandlers(
 
       // Set the current user globally in the main process
       setCurrentUser(usuario);
+
+      // F5 paso 3: tambien actualizar currentDevice si el login trajo deviceId
+      // (modo standalone donde el usuario eligio dispositivo en la wizard, o
+      // server donde el operador esta loggeando en ese PC). Si no vino, se
+      // mantiene el que ya esta seteado al boot desde app-settings.
+      if (typeof deviceId === 'number') {
+        try {
+          const dispRepo = dataSource.getRepository(Dispositivo);
+          const disp = await dispRepo.findOne({ where: { id: deviceId } });
+          if (disp && disp.activo) setCurrentDevice({ id: disp.id });
+        } catch (e) {
+          console.warn('[login] no se pudo resolver deviceId:', e);
+        }
+      }
 
       return {
         success: true,

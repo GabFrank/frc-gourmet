@@ -59,6 +59,8 @@ import { runBootstrapMigrations } from './electron/utils/db-migrations-bootstrap
 import { seedSystemData } from './electron/utils/seed-system';
 import { migratePlaintextPasswords } from './electron/utils/migrate-passwords';
 import { readAppSettings } from './electron/utils/app-settings.utils';
+import { setCurrentDevice } from './electron/utils/current-device.utils';
+import { Dispositivo } from './src/app/database/entities/financiero/dispositivo.entity';
 import { getDbPassword } from './electron/utils/db-password.utils';
 import type { DbConnectionOverride } from './src/app/database/database.config';
 import { registerDbConfigHandlers } from './electron/handlers/db-config.handler';
@@ -240,6 +242,29 @@ function initializeDatabase() {
         process.env['FRC_SERVER_URL'] = settings.network.serverUrl;
       }
 
+      // F5 paso 3: cargar el Dispositivo configurado localmente (si existe)
+      // y exponerlo para que los handlers de creacion lo persistan en
+      // ventas/compras/conteos/comandas. Solo aplica al path IPC local —
+      // el path HTTP recibe device_id via JWT claim.
+      if (typeof settings.deviceId === 'number') {
+        try {
+          const disp = await dataSource.getRepository(Dispositivo).findOne({
+            where: { id: settings.deviceId },
+          });
+          if (disp && disp.activo) {
+            setCurrentDevice({ id: disp.id });
+            // Tambien exponer al renderer/preload (modo cliente lo envia en
+            // login + refresh para que el server lo firme en el JWT).
+            process.env['FRC_DEVICE_ID'] = String(disp.id);
+            console.log(`[F5] currentDevice cargado: id=${disp.id} (${disp.nombre || '?'})`);
+          } else {
+            console.warn(`[F5] deviceId=${settings.deviceId} no encontrado o inactivo en BD.`);
+          }
+        } catch (e) {
+          console.warn('[F5] error cargando currentDevice:', e);
+        }
+      }
+
       // F3: arrancar Fastify HTTP server si mode === 'server'
       if (settings.mode === 'server') {
         const port = settings.network?.serverPort || 7070;
@@ -364,6 +389,12 @@ app.on('ready', () => {
     process.env['FRC_APP_MODE'] = earlySettings.mode;
     if (earlySettings.mode === 'client' && earlySettings.network?.serverUrl) {
       process.env['FRC_SERVER_URL'] = earlySettings.network.serverUrl;
+    }
+    // F5 paso 3: tambien exponer el deviceId al preload para que lo inyecte
+    // en login + refresh (modo cliente). Lectura sync para que el renderer
+    // herede el valor al spawn — initializeDatabase() corre async, no llega.
+    if (typeof earlySettings.deviceId === 'number') {
+      process.env['FRC_DEVICE_ID'] = String(earlySettings.deviceId);
     }
     console.log(`[main] early FRC_APP_MODE=${earlySettings.mode} (preload heredara este valor)`);
   } catch (e) {

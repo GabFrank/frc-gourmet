@@ -18,6 +18,16 @@ import { EstadoVentaItem } from './src/app/database/entities/ventas/venta-item.e
 
 const APP_MODE = (process.env['FRC_APP_MODE'] as 'standalone' | 'server' | 'client') || 'standalone';
 const SERVER_URL = process.env['FRC_SERVER_URL'] || '';
+// F5 paso 3: deviceId del cliente, set por main.ts via app-settings.json.
+// Se inyecta en /api/auth/login + /api/auth/refresh asi el server lo firma
+// en el JWT y los handlers de creacion lo persisten. Null si la wizard aun
+// no lo configuro — el server lo dejara null (columna nullable).
+const CLIENT_DEVICE_ID: number | null = (() => {
+  const raw = process.env['FRC_DEVICE_ID'];
+  if (!raw) return null;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+})();
 
 // IMPORTANTE: guardar la referencia original ANTES de monkey-patchear
 // (sino: invokeRouter -> ipcRenderer.invoke (== invokeRouter) -> recursion infinita)
@@ -71,7 +81,10 @@ async function httpFetch(path: string, body: any, withAuth = true): Promise<any>
 async function refreshAccessIfPossible(): Promise<boolean> {
   if (!refreshToken) return false;
   try {
-    const data = await httpFetch('/api/auth/refresh', { refreshToken }, false);
+    // F5 paso 3: reenvio deviceId para que el JWT nuevo lo siga llevando.
+    const body: any = { refreshToken };
+    if (CLIENT_DEVICE_ID != null) body.deviceId = CLIENT_DEVICE_ID;
+    const data = await httpFetch('/api/auth/refresh', body, false);
     accessToken = data.accessToken;
     refreshToken = data.refreshToken || refreshToken;
     return true;
@@ -91,7 +104,11 @@ async function invokeRouter(channel: string, ...args: any[]): Promise<any> {
 
   // Login special case
   if (channel === 'login') {
-    const loginData = args[0] || {};
+    const loginData = { ...(args[0] || {}) };
+    // F5 paso 3: agregar deviceId al body si el cliente lo tiene configurado.
+    if (CLIENT_DEVICE_ID != null && loginData.deviceId == null) {
+      loginData.deviceId = CLIENT_DEVICE_ID;
+    }
     const data = await httpFetch('/api/auth/login', loginData, false);
     accessToken = data.accessToken;
     refreshToken = data.refreshToken;
@@ -1063,6 +1080,14 @@ contextBridge.exposeInMainWorld('api', {
   // sepa contra dónde apuntar.
   getServerUrl: (): string | null => {
     return process.env['FRC_SERVER_URL'] || null;
+  },
+  // F5 paso 3: deviceId configurado en este PC (snapshot del boot). El
+  // wizard de modo lo guarda en app-settings.json y main.ts lo expone.
+  getDeviceId: (): number | null => {
+    const raw = process.env['FRC_DEVICE_ID'];
+    if (!raw) return null;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
   },
 
   // Database operations

@@ -69,6 +69,14 @@ export interface AppSettings {
   update: UpdateSettings;
   backup: BackupSettings;
   ia: IaSettings;
+  /**
+   * F5 paso 3: dispositivo "fisico" identificado para este proceso.
+   * - standalone/server: el PC donde corre la app (selección manual).
+   * - client: el dispositivo asignado a este PC cliente (se envia en login).
+   * Nullable cuando aun no se selecciono — los handlers caen a `null` y la
+   * columna `dispositivo_id` queda vacia (es nullable).
+   */
+  deviceId?: number | null;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -86,6 +94,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     modelo: 'gpt-4o',
     habilitado: false,
   },
+  deviceId: null,
 };
 
 export function getAppSettingsPath(userDataPath: string): string {

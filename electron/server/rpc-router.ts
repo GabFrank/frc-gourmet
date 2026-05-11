@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { invokeHandler } from '../utils/handler-registry';
+import { invokeHandlerWithContext } from '../utils/handler-registry';
 
 /**
  * Endpoint generico que delega a `handlerRegistry`. Hace de pegamento entre
@@ -49,7 +49,15 @@ export function registerRpcRoute(fastify: FastifyInstance): void {
     }
 
     try {
-      const result = await invokeHandler(method, ...(params || []));
+      // F5 paso 3: propagar al handler el device_id que vino en el JWT, asi
+      // los handlers de creacion (createVenta, etc.) lo persisten sin tener
+      // que cambiar la firma del IPC.
+      const jwtUser: any = (request as any).user || {};
+      const ctx = {
+        userId: typeof jwtUser.id === 'number' ? jwtUser.id : null,
+        deviceId: typeof jwtUser.device_id === 'number' ? jwtUser.device_id : null,
+      };
+      const result = await invokeHandlerWithContext(method, ctx, ...(params || []));
       return { result };
     } catch (err: any) {
       const msg = err?.message || String(err);

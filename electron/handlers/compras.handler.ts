@@ -18,6 +18,7 @@ import { CuentaPorPagar } from '../../src/app/database/entities/financiero/cuent
 import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
 import { CuentaPorPagarTipo, CuentaPorPagarEstado, CuotaEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
@@ -359,6 +360,8 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     await qr.startTransaction();
     try {
       const userId = getCurrentUser()?.id;
+      // F5 paso 3: device tracking
+      const deviceId = resolveRequestDeviceId(_event);
       const compra = qr.manager.create(Compra, {
         estado: CompraEstado.ABIERTO,
         isRecepcionMercaderia: data.isRecepcionMercaderia ?? false,
@@ -372,6 +375,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
         compraCategoria: data.compraCategoriaId ? { id: data.compraCategoriaId } as any : null,
         moneda: { id: data.monedaId } as any,
         formaPago: data.formaPagoId ? { id: data.formaPagoId } as any : null,
+        dispositivo: deviceId != null ? ({ id: deviceId } as any) : null,
         total: 0,
       });
       await setEntityUserTracking(dataSource, compra, userId, false);
@@ -776,8 +780,13 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   ipcMain.handle('createCompra', async (_event: any, data: any) => {
     const repo = dataSource.getRepository(Compra);
     const { detalles, ...rest } = data;
-    const entity = repo.create(rest);
+    const entity: any = repo.create(rest);
     await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
+    // F5 paso 3: propagar device_id del request context si no vino explicito.
+    if (!rest?.dispositivo && !rest?.dispositivo_id) {
+      const deviceId = resolveRequestDeviceId(_event);
+      if (deviceId != null) entity.dispositivo = { id: deviceId };
+    }
     return await repo.save(entity);
   });
 

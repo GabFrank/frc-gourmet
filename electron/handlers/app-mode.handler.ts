@@ -1,9 +1,12 @@
 import { app, ipcMain } from 'electron';
 import { readAppSettings, updateAppSettings, AppMode, NetworkSettings } from '../utils/app-settings.utils';
+import { setCurrentDevice } from '../utils/current-device.utils';
 
 export interface AppModeDto {
   mode: AppMode;
   network: NetworkSettings | null;
+  /** F5 paso 3: Dispositivo configurado para este PC (FK a dispositivos.id). */
+  deviceId?: number | null;
 }
 
 export interface AppModeOpResult {
@@ -19,6 +22,7 @@ export function registerAppModeHandlers() {
     return {
       mode: settings.mode,
       network: settings.network,
+      deviceId: settings.deviceId ?? null,
     };
   });
 
@@ -43,11 +47,21 @@ export function registerAppModeHandlers() {
       network = { serverUrl: url };
     }
 
+    const deviceId = typeof payload.deviceId === 'number' && payload.deviceId > 0
+      ? payload.deviceId
+      : null;
+
     updateAppSettings(app.getPath('userData'), (s) => ({
       ...s,
       mode: payload.mode,
       network,
+      deviceId,
     }));
+
+    // Sincronizar currentDevice en memoria. main.ts ya lo cargo al boot,
+    // pero si el usuario cambia el deviceId en caliente desde la wizard,
+    // queremos que el proximo create-venta (mismo proceso) lo refleje.
+    setCurrentDevice(deviceId != null ? { id: deviceId } : null);
 
     return { success: true };
   });

@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { DataSource } from 'typeorm';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { LoginSession } from '../../src/app/database/entities/auth/login-session.entity';
+import { Dispositivo } from '../../src/app/database/entities/financiero/dispositivo.entity';
 import { verifyPassword } from '../utils/password.utils';
 import {
   issueRefreshToken,
@@ -13,6 +14,13 @@ interface LoginBody {
   nickname: string;
   password: string;
   deviceInfo?: { userAgent?: string; browser?: string; os?: string };
+  /**
+   * F5 paso 3: id del Dispositivo asignado a este cliente. El server lo
+   * valida contra la tabla `dispositivos` y lo firma en el JWT para que
+   * los handlers de creacion (venta/compra/conteo/comanda) lo persistan.
+   * Opcional para compat con clientes pre-F5; si viene invalido se ignora.
+   */
+  deviceId?: number;
 }
 
 /**
@@ -33,11 +41,12 @@ export function registerAuthRoutes(fastify: FastifyInstance, dataSource: DataSou
           nickname: { type: 'string', minLength: 1 },
           password: { type: 'string', minLength: 1 },
           deviceInfo: { type: 'object', additionalProperties: true },
+          deviceId: { type: 'integer', minimum: 1 },
         },
       },
     },
   }, async (request, reply) => {
-    const { nickname, password, deviceInfo } = request.body;
+    const { nickname, password, deviceInfo, deviceId } = request.body;
     const userRepo = dataSource.getRepository(Usuario);
     const sessionRepo = dataSource.getRepository(LoginSession);
 
@@ -58,10 +67,26 @@ export function registerAuthRoutes(fastify: FastifyInstance, dataSource: DataSou
       return { error: 'password_incorrecto' };
     }
 
-    // Generar access token via @fastify/jwt (15min default)
+    // F5 paso 3: si el cliente envio deviceId, validar que el Dispositivo
+    // exista; si no existe, ignoramos silenciosamente (la columna FK queda
+    // null y no se firma en el JWT).
+    let resolvedDeviceId: number | null = null;
+    if (typeof deviceId === 'number') {
+      const dispRepo = dataSource.getRepository(Dispositivo);
+      const exists = await dispRepo.findOne({ where: { id: deviceId } });
+      if (exists && exists.activo) {
+        resolvedDeviceId = exists.id;
+      } else {
+        console.warn(`[auth/login] deviceId=${deviceId} no encontrado o inactivo; se ignora.`);
+      }
+    }
+
+    // Generar access token via @fastify/jwt (15min default). Incluye device_id
+    // para que /api/rpc lo lea y lo propague al handler de creacion.
     const accessToken = await reply.jwtSign({
       id: usuario.id,
       nickname: usuario.nickname,
+      device_id: resolvedDeviceId,
     });
 
     // Generar refresh token (30d default)
@@ -98,16 +123,21 @@ export function registerAuthRoutes(fastify: FastifyInstance, dataSource: DataSou
   });
 
   // ============== REFRESH ==============
-  fastify.post<{ Body: { refreshToken: string } }>('/api/auth/refresh', {
+  fastify.post<{ Body: { refreshToken: string; deviceId?: number } }>('/api/auth/refresh', {
     schema: {
       body: {
         type: 'object',
         required: ['refreshToken'],
-        properties: { refreshToken: { type: 'string', minLength: 1 } },
+        properties: {
+          refreshToken: { type: 'string', minLength: 1 },
+          // F5 paso 3: el cliente reenvia su deviceId asi el JWT nuevo lo
+          // incluye y los handlers de creacion siguen recibiendo el device.
+          deviceId: { type: 'integer', minimum: 1 },
+        },
       },
     },
   }, async (request, reply) => {
-    const { refreshToken } = request.body;
+    const { refreshToken, deviceId } = request.body;
     const ip = request.ip;
     const userAgent = request.headers['user-agent'] || '';
     const rotated = await rotateRefreshToken(dataSource, refreshToken, { ip, userAgent });
@@ -116,7 +146,6 @@ export function registerAuthRoutes(fastify: FastifyInstance, dataSource: DataSou
       return { error: 'refresh_invalido_o_expirado' };
     }
     // Hidratar el usuario para el access token nuevo
-    const userRepo = dataSource.getRepository(Usuario);
     const refreshRepo = dataSource.getRepository(
       require('../../src/app/database/entities/auth/refresh-token.entity').RefreshToken,
     );
@@ -129,7 +158,20 @@ export function registerAuthRoutes(fastify: FastifyInstance, dataSource: DataSou
       return { error: 'refresh_rotado_pero_sin_usuario' };
     }
     const usuario = fresh.usuario;
-    const accessToken = await reply.jwtSign({ id: usuario.id, nickname: usuario.nickname });
+
+    // Re-validar el deviceId que vino del cliente (mismo flujo que /login).
+    let resolvedDeviceId: number | null = null;
+    if (typeof deviceId === 'number') {
+      const dispRepo = dataSource.getRepository(Dispositivo);
+      const exists = await dispRepo.findOne({ where: { id: deviceId } });
+      if (exists && exists.activo) resolvedDeviceId = exists.id;
+    }
+
+    const accessToken = await reply.jwtSign({
+      id: usuario.id,
+      nickname: usuario.nickname,
+      device_id: resolvedDeviceId,
+    });
     return {
       accessToken,
       refreshToken: rotated.token,
