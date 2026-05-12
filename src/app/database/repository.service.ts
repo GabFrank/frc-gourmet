@@ -620,6 +620,9 @@ export abstract class RepositoryService {
   abstract getOnboardingStatus(): Observable<any>;
   abstract markOnboardingTask(payload: { taskKey: string; action: 'MANUAL' | 'SKIPPED' | 'RESET' }): Observable<any>;
   abstract getCotizacionMercado(): Observable<any>;
+  // Empresa (singleton)
+  abstract getEmpresa(): Observable<any>;
+  abstract updateEmpresa(data: any): Observable<any>;
   abstract getEntradaVariaCategorias(): Observable<any[]>;
   abstract getEntradaVariaCategoria(id: number): Observable<any>;
   abstract createEntradaVariaCategoria(data: any): Observable<any>;

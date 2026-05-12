@@ -10,7 +10,7 @@
       matTooltip="{{isMenuExpanded ? 'Colapsar menú' : 'Expandir menú'}}">
       <mat-icon aria-label="Side nav toggle icon">{{isMenuExpanded ? 'menu_open' : 'menu'}}</mat-icon>
     </button>
-    <span>FRC Gourmet</span>
+    <span class="empresa-nombre">{{ empresaNombre }}</span>
     <span class="toolbar-spacer"></span>
 
     <!-- Notificaciones: oculto hasta que tengamos el flujo conectado -->
@@ -365,6 +365,10 @@
             </mat-panel-title>
           </mat-expansion-panel-header>
           <div class="submenu-container">
+            <a mat-list-item (click)="openConfigurarEmpresaTab()">
+              <mat-icon matListItemIcon>business</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Datos de la Empresa</span>
+            </a>
             <a mat-list-item (click)="openPrinterSettings()">
               <mat-icon matListItemIcon>print</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Impresoras</span>

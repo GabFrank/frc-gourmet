@@ -1572,6 +1572,12 @@ export class RepositoryHttpService extends RepositoryService {
   getCotizacionMercado(): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getCotizacionMercado() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getEmpresa(): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getEmpresa() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  updateEmpresa(_data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.updateEmpresa() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getEntradaVariaCategorias(): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getEntradaVariaCategorias() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

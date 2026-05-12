@@ -1,0 +1,63 @@
+.configurar-empresa-container {
+  padding: 16px 24px;
+  max-width: 1080px;
+  margin: 0 auto;
+
+  h2 {
+    margin: 0 0 8px 0;
+    color: var(--text-primary);
+  }
+
+  .info-text {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+
+  .loading-container {
+    display: flex;
+    justify-content: center;
+    padding: 48px;
+  }
+
+  .empresa-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .form-card {
+    padding: 16px;
+    background: var(--surface);
+
+    mat-card-title {
+      font-size: 16px;
+      margin-bottom: 12px;
+      color: var(--text-primary);
+    }
+  }
+
+  .form-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+
+    .col-1 { flex: 1 1 240px; }
+    .col-2 { flex: 2 1 320px; }
+  }
+
+  .actions-row {
+    display: flex;
+    gap: 12px;
+    padding: 8px 0 24px 0;
+    position: sticky;
+    bottom: 0;
+    background: var(--background);
+    z-index: 1;
+
+    button {
+      mat-icon { margin-right: 4px; }
+      mat-spinner { display: inline-block; margin-right: 8px; }
+    }
+  }
+}

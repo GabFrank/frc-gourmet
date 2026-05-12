@@ -40,6 +40,7 @@ import { registerBankingHandlers, startAcreditacionesScheduler } from './electro
 import { registerCuentasPorPagarHandlers } from './electron/handlers/cuentas-por-pagar.handler';
 import { registerDashboardShortcutsHandlers } from './electron/handlers/dashboard-shortcuts.handler';
 import { registerOnboardingHandlers } from './electron/handlers/onboarding.handler';
+import { registerEmpresaHandlers } from './electron/handlers/empresa.handler';
 import { registerCotizacionMercadoHandlers } from './electron/handlers/cotizacion-mercado.handler';
 import { registerPermissionsHandlers, seedPermissions } from './electron/handlers/permissions.handler';
 import { registerConfiguracionRrhhHandlers, seedConfiguracionRrhh } from './electron/handlers/configuracion-rrhh.handler';
@@ -174,6 +175,7 @@ function initializeDatabase() {
       registerCuentasPorPagarHandlers(dataSource, getCurrentUser); // CompraCategoria + CompraCuota + CuentaPorPagar
       registerDashboardShortcutsHandlers(dataSource, getCurrentUser); // Dashboard Shortcuts personalizables
       registerOnboardingHandlers(dataSource, getCurrentUser); // Onboarding tasks (lista guiada en Home)
+      registerEmpresaHandlers(dataSource, getCurrentUser); // Empresa singleton (datos + branding + fiscal)
       registerCotizacionMercadoHandlers(); // Scraping de cotizaciones de mercado on-demand
       registerPermissionsHandlers(dataSource, getCurrentUser); // RRHH: Permission + RolePermission
       registerConfiguracionRrhhHandlers(dataSource, getCurrentUser); // RRHH: ConfiguracionRrhh (parametros legales)

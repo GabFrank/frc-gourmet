@@ -1,0 +1,130 @@
+<div class="configurar-empresa-container">
+  <h2>Datos de la empresa</h2>
+  <p class="info-text">
+    Esta informacion se muestra en el encabezado de la aplicacion y se usa en KuDEs, tickets y reportes exportados.
+  </p>
+
+  <div *ngIf="loading" class="loading-container">
+    <mat-spinner diameter="48"></mat-spinner>
+  </div>
+
+  <form *ngIf="!loading" [formGroup]="form" (ngSubmit)="guardar()" class="empresa-form">
+    <mat-card class="form-card">
+      <mat-card-title>Identificacion</mat-card-title>
+      <mat-card-content>
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="col-2">
+            <mat-label>Nombre</mat-label>
+            <input matInput formControlName="nombre" maxlength="120" autocomplete="off" />
+            <mat-error *ngIf="form.get('nombre')?.hasError('required')">Requerido</mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="col-2">
+            <mat-label>Nombre comercial</mat-label>
+            <input matInput formControlName="nombreComercial" maxlength="120" autocomplete="off" />
+          </mat-form-field>
+        </div>
+
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="col-2">
+            <mat-label>Razon social</mat-label>
+            <input matInput formControlName="razonSocial" maxlength="180" autocomplete="off" />
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="col-1">
+            <mat-label>RUC</mat-label>
+            <input matInput formControlName="ruc" maxlength="20" placeholder="80012345-6" autocomplete="off" />
+            <mat-hint>Formato: 12345678-1</mat-hint>
+            <mat-error *ngIf="form.get('ruc')?.hasError('rucFormato')">Formato invalido</mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="col-1">
+            <mat-label>Actividad economica</mat-label>
+            <input matInput formControlName="actividadEconomica" maxlength="120" autocomplete="off" />
+          </mat-form-field>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="form-card">
+      <mat-card-title>Contacto</mat-card-title>
+      <mat-card-content>
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="col-2">
+            <mat-label>Direccion</mat-label>
+            <input matInput formControlName="direccion" maxlength="200" autocomplete="off" />
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="col-1">
+            <mat-label>Telefono</mat-label>
+            <input matInput formControlName="telefono" maxlength="60" autocomplete="off" />
+          </mat-form-field>
+        </div>
+
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="col-1">
+            <mat-label>Email</mat-label>
+            <input matInput formControlName="email" maxlength="120" autocomplete="off" />
+            <mat-error *ngIf="form.get('email')?.hasError('email')">Email invalido</mat-error>
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="col-2">
+            <mat-label>Sitio web</mat-label>
+            <input matInput formControlName="sitioWeb" maxlength="200" autocomplete="off" placeholder="https://..." />
+          </mat-form-field>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="form-card">
+      <mat-card-title>Timbrado y facturacion</mat-card-title>
+      <mat-card-content>
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="col-1">
+            <mat-label>Numero de timbrado</mat-label>
+            <input matInput formControlName="timbradoNumero" maxlength="40" autocomplete="off" />
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="col-1">
+            <mat-label>Vigencia hasta</mat-label>
+            <input matInput formControlName="timbradoVigenciaHasta" [matDatepicker]="picker" readonly />
+            <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+            <mat-datepicker #picker></mat-datepicker>
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="col-1">
+            <mat-label>Punto de expedicion</mat-label>
+            <input matInput formControlName="puntoExpedicion" maxlength="20" placeholder="001-001" autocomplete="off" />
+          </mat-form-field>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="form-card">
+      <mat-card-title>Localizacion</mat-card-title>
+      <mat-card-content>
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="col-1">
+            <mat-label>Pais</mat-label>
+            <input matInput formControlName="pais" maxlength="60" autocomplete="off" />
+            <mat-error *ngIf="form.get('pais')?.hasError('required')">Requerido</mat-error>
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="col-1">
+            <mat-label>Zona horaria</mat-label>
+            <input matInput formControlName="zonaHoraria" maxlength="60" autocomplete="off" />
+            <mat-hint>Ej. America/Asuncion</mat-hint>
+            <mat-error *ngIf="form.get('zonaHoraria')?.hasError('required')">Requerido</mat-error>
+          </mat-form-field>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <div class="actions-row">
+      <button mat-flat-button color="primary" type="submit" [disabled]="saving || form.pristine">
+        <mat-icon *ngIf="!saving">save</mat-icon>
+        <mat-spinner *ngIf="saving" diameter="18"></mat-spinner>
+        <span>Guardar cambios</span>
+      </button>
+      <button mat-stroked-button type="button" (click)="load()" [disabled]="saving">
+        <mat-icon>refresh</mat-icon>
+        <span>Recargar</span>
+      </button>
+    </div>
+  </form>
+</div>
