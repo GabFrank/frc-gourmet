@@ -1256,8 +1256,14 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // Cliente operations
-  getClientes: async (): Promise<Cliente[]> => {
-    return await ipcRenderer.invoke('get-clientes');
+  getClientes: async (filters?: {
+    nombre?: string;
+    ruc?: string;
+    tipoClienteId?: number;
+    activo?: boolean;
+    conCredito?: boolean;
+  }): Promise<Cliente[]> => {
+    return await ipcRenderer.invoke('get-clientes', filters);
   },
   getCliente: async (clienteId: number): Promise<Cliente> => {
     return await ipcRenderer.invoke('get-cliente', clienteId);

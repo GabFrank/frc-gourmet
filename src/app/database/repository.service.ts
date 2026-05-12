@@ -65,6 +65,14 @@ export interface LoginResult {
   sessionId?: number;
 }
 
+export interface ClienteFilters {
+  nombre?: string;
+  ruc?: string;
+  tipoClienteId?: number;
+  activo?: boolean;
+  conCredito?: boolean;
+}
+
 /**
  * Abstracción del repositorio de datos.
  *
@@ -105,7 +113,7 @@ export abstract class RepositoryService {
   abstract createTipoCliente(tipoClienteData: Partial<TipoCliente>): Observable<TipoCliente>;
   abstract updateTipoCliente(tipoClienteId: number, tipoClienteData: Partial<TipoCliente>): Observable<any>;
   abstract deleteTipoCliente(tipoClienteId: number): Observable<any>;
-  abstract getClientes(): Observable<Cliente[]>;
+  abstract getClientes(filters?: ClienteFilters): Observable<Cliente[]>;
   abstract getCliente(clienteId: number): Observable<Cliente>;
   abstract createCliente(clienteData: Partial<Cliente>): Observable<Cliente>;
   abstract updateCliente(clienteId: number, clienteData: Partial<Cliente>): Observable<any>;

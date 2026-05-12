@@ -1,0 +1,110 @@
+<h2 mat-dialog-title>{{ isEditing ? 'Editar' : 'Nuevo' }} cliente</h2>
+<mat-dialog-content class="dialog-content">
+  <div *ngIf="loading" class="spinner-container">
+    <mat-progress-spinner mode="indeterminate" diameter="40"></mat-progress-spinner>
+  </div>
+
+  <form *ngIf="!loading" [formGroup]="form" class="form-stack">
+    <!-- Sección Identificación -->
+    <section class="section">
+      <h3 class="section-title">Identificación</h3>
+      <div class="form-grid">
+        <div class="persona-row full">
+          <mat-form-field appearance="outline" class="grow">
+            <mat-label>Persona</mat-label>
+            <input matInput
+                   [formControl]="personaControl"
+                   [matAutocomplete]="autoPersona"
+                   placeholder="Escriba para buscar..."
+                   required>
+            <button *ngIf="selectedPersona" mat-icon-button matSuffix type="button"
+                    (click)="clearPersona()" matTooltip="Quitar selección">
+              <mat-icon>close</mat-icon>
+            </button>
+            <mat-icon *ngIf="!selectedPersona" matSuffix>person_search</mat-icon>
+            <mat-autocomplete #autoPersona="matAutocomplete"
+                              [displayWith]="displayPersona"
+                              (optionSelected)="onPersonaSelected($event.option.value)">
+              <mat-option *ngFor="let p of filteredPersonas" [value]="p">
+                {{ p.nombre }} {{ p.apellido || '' }}
+                <span *ngIf="p.documento" class="muted"> - {{ p.documento }}</span>
+              </mat-option>
+            </mat-autocomplete>
+            <mat-hint *ngIf="!selectedPersona && !isEditing">Si no existe, créela con el botón +</mat-hint>
+          </mat-form-field>
+          <button mat-stroked-button type="button" color="primary"
+                  (click)="openNuevaPersonaDialog()" [disabled]="isEditing">
+            <mat-icon>person_add</mat-icon>
+            Nueva persona
+          </button>
+        </div>
+
+        <mat-form-field appearance="outline">
+          <mat-label>RUC</mat-label>
+          <input matInput formControlName="ruc" maxlength="20"
+                 placeholder="Ej: 80012345-6">
+          <mat-hint *ngIf="form.get('tributa')?.value">Obligatorio si tributa</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Razón social</mat-label>
+          <input matInput formControlName="razon_social" maxlength="120">
+        </mat-form-field>
+
+        <div class="tipo-cliente-row full">
+          <mat-form-field appearance="outline" class="grow">
+            <mat-label>Tipo de cliente</mat-label>
+            <mat-select formControlName="tipo_cliente_id" required>
+              <mat-option *ngFor="let t of tiposCliente" [value]="t.id">{{ t.descripcion }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <button mat-stroked-button type="button" color="primary"
+                  (click)="openTipoClienteDialog()">
+            <mat-icon>add</mat-icon>
+            Nuevo tipo
+          </button>
+        </div>
+
+        <mat-slide-toggle formControlName="tributa" class="full">Tributa (RUC obligatorio)</mat-slide-toggle>
+      </div>
+    </section>
+
+    <!-- Sección Crédito -->
+    <section class="section">
+      <h3 class="section-title">Crédito</h3>
+      <div class="form-grid">
+        <mat-slide-toggle formControlName="credito" class="full">Acepta crédito</mat-slide-toggle>
+
+        <div *ngIf="form.get('credito')?.value && personaSinDocumento" class="warning-banner full">
+          <mat-icon>warning</mat-icon>
+          <span>La persona seleccionada no tiene documento. Para asignar crédito es obligatorio cargarlo en su ficha.</span>
+        </div>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Límite de crédito</mat-label>
+          <input matInput type="text" formControlName="limite_credito"
+                 appCurrencyInput [decimals]="0">
+          <span matSuffix *ngIf="monedaPrincipal" class="suffix">{{ monedaPrincipal.simbolo }}</span>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" *ngIf="isEditing">
+          <mat-label>Saldo actual</mat-label>
+          <input matInput [value]="saldoActual | number:'1.0-2'" readonly>
+          <span matSuffix *ngIf="monedaPrincipal" class="suffix">{{ monedaPrincipal.simbolo }}</span>
+          <mat-hint>Calculado por movimientos del cliente</mat-hint>
+        </mat-form-field>
+      </div>
+    </section>
+
+    <!-- Estado -->
+    <section class="section">
+      <mat-slide-toggle formControlName="activo">Activo</mat-slide-toggle>
+    </section>
+  </form>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()" [disabled]="saving">Cancelar</button>
+  <button mat-flat-button color="primary" (click)="submit()" [disabled]="saving || form.invalid || !selectedPersona">
+    {{ isEditing ? 'Actualizar' : 'Crear' }}
+  </button>
+</mat-dialog-actions>
