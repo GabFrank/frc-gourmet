@@ -67,6 +67,31 @@
     }
   }
 
+  .init-postgres-row {
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border-color, rgba(0, 0, 0, 0.12));
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .hint.inline {
+      flex: 1;
+      min-width: 220px;
+    }
+
+    .inline-spinner {
+      display: inline-block;
+    }
+  }
+
   .test-result {
     display: flex;
     align-items: center;

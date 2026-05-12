@@ -49,6 +49,7 @@ const ALWAYS_LOCAL_CHANNELS = new Set<string>([
   'db-config-save',
   'db-config-test-connection',
   'db-config-restart-app',
+  'db-config-init-postgres',
   // Backup local
   'backup-list',
   'backup-create',
@@ -2773,6 +2774,19 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('delete-dashboard-shortcut', id);
   },
 
+  // Onboarding tasks (lista guiada en Home)
+  getOnboardingStatus: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-onboarding-status');
+  },
+  markOnboardingTask: async (payload: { taskKey: string; action: 'MANUAL' | 'SKIPPED' | 'RESET' }): Promise<any> => {
+    return await ipcRenderer.invoke('mark-onboarding-task', payload);
+  },
+
+  // Scraping de cotizaciones de mercado (on-demand)
+  getCotizacionMercado: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-cotizacion-mercado');
+  },
+
   // =============================================
   // Fase 4: Entradas Varias
   // =============================================
@@ -3506,6 +3520,9 @@ contextBridge.exposeInMainWorld('api', {
   },
   dbConfigRestartApp: async (): Promise<any> => {
     return await ipcRenderer.invoke('db-config-restart-app');
+  },
+  dbConfigInitPostgres: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('db-config-init-postgres', payload);
   },
 
   // ================== APP MODE (F4.2) ==================

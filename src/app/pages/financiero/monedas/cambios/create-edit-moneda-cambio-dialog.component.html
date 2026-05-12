@@ -36,7 +36,19 @@
         </mat-form-field>
       </div>
 
-      <h3 class="section-title">Cambio Oficial</h3>
+      <div class="cotizacion-mercado-row">
+        <h3 class="section-title">Cambio Oficial</h3>
+        <button mat-stroked-button
+                type="button"
+                class="btn-cotizacion"
+                (click)="obtenerCotizacionMercado()"
+                [disabled]="scraping || !form.get('monedaOrigen')?.value"
+                matTooltip="Obtiene la cotización actual de nortecambios.com.py">
+          <mat-icon *ngIf="!scraping">cloud_download</mat-icon>
+          <mat-spinner *ngIf="scraping" diameter="16"></mat-spinner>
+          Obtener cotización del mercado
+        </button>
+      </div>
       <div class="form-grid">
         <!-- Compra Oficial -->
         <app-currency-input
@@ -44,8 +56,9 @@
           label="Compra Oficial"
           placeholder="Ingrese valor de compra oficial"
           [required]="true"
-          [moneda]="form.get('monedaOrigen')?.value"
-          [min]="0.0001"
+          [moneda]="form.get('monedaDestino')?.value"
+          [showSymbol]="false"
+          [min]="1"
           hint="Valor oficial de compra del mercado">
         </app-currency-input>
 
@@ -55,8 +68,9 @@
           label="Venta Oficial"
           placeholder="Ingrese valor de venta oficial"
           [required]="true"
-          [moneda]="form.get('monedaOrigen')?.value"
-          [min]="0.0001"
+          [moneda]="form.get('monedaDestino')?.value"
+          [showSymbol]="false"
+          [min]="1"
           hint="Valor oficial de venta del mercado">
         </app-currency-input>
       </div>
@@ -69,8 +83,9 @@
           label="Compra Local"
           placeholder="Ingrese valor de compra local"
           [required]="true"
-          [moneda]="form.get('monedaOrigen')?.value"
-          [min]="0.0001"
+          [moneda]="form.get('monedaDestino')?.value"
+          [showSymbol]="false"
+          [min]="1"
           hint="Valor de compra para su negocio">
         </app-currency-input>
 
@@ -80,8 +95,9 @@
           label="Venta Local"
           placeholder="Ingrese valor de venta local"
           [required]="true"
-          [moneda]="form.get('monedaOrigen')?.value"
-          [min]="0.0001"
+          [moneda]="form.get('monedaDestino')?.value"
+          [showSymbol]="false"
+          [min]="1"
           hint="Valor de venta para su negocio">
         </app-currency-input>
       </div>

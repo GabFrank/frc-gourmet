@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
@@ -11,7 +11,8 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ChartConfiguration, ChartData } from 'chart.js';
-import { firstValueFrom } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
+import { filter } from 'rxjs/operators';
 import { TabsService } from 'src/app/services/tabs.service';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CajaMayorDashboardComponent } from 'src/app/pages/financiero/caja-mayor/dashboard/caja-mayor-dashboard.component';
@@ -23,6 +24,22 @@ import { DashQuickActionComponent } from 'src/app/shared/components/dashboard/qu
 import { DashSectionHeaderComponent } from 'src/app/shared/components/dashboard/section-header/dash-section-header.component';
 import { DashChartCardComponent } from 'src/app/shared/components/dashboard/chart-card/dash-chart-card.component';
 import { getDashboardChartOptions, DASHBOARD_CHART_COLORS, buildLineDataset } from 'src/app/shared/utils/dashboard-chart-theme';
+import { OnboardingService, OnboardingStatus } from 'src/app/services/onboarding.service';
+import {
+  OnboardingActionEvent,
+  OnboardingListComponent,
+  OnboardingMarkRequest,
+} from 'src/app/shared/components/onboarding/onboarding-list.component';
+// Componentes de listado usados por el mapper de acciones del onboarding
+import { ListUsuariosComponent } from 'src/app/pages/personas/usuarios/list-usuarios.component';
+import { ListFuncionariosComponent } from 'src/app/pages/rrhh/funcionarios/list-funcionarios/list-funcionarios.component';
+import { ListMonedasComponent } from 'src/app/pages/financiero/monedas/list-monedas/list-monedas.component';
+import { ListCuentasBancariasComponent } from 'src/app/pages/financiero/caja-mayor/bancos/list-cuentas-bancarias/list-cuentas-bancarias.component';
+import { ListMaquinasPosComponent } from 'src/app/pages/financiero/caja-mayor/pos/list-maquinas-pos/list-maquinas-pos.component';
+import { ListProveedoresComponent } from 'src/app/pages/compras/proveedores/list-proveedores.component';
+import { ListFamiliasComponent } from 'src/app/pages/productos/familias/list-familias.component';
+import { ListProductosComponent } from 'src/app/pages/productos/list-productos/list-productos.component';
+import { ListClientesComponent } from 'src/app/pages/personas/clientes/list-clientes.component';
 
 @Component({
   selector: 'app-home',
@@ -45,10 +62,14 @@ import { getDashboardChartOptions, DASHBOARD_CHART_COLORS, buildLineDataset } fr
     DashQuickActionComponent,
     DashSectionHeaderComponent,
     DashChartCardComponent,
+    OnboardingListComponent,
   ],
 })
-export class HomeComponent implements OnInit {
+export class HomeComponent implements OnInit, OnDestroy {
   loading = true;
+  onboardingStatus: OnboardingStatus | null = null;
+  showOnboarding = false;
+  private subs = new Subscription();
 
   quickActions = [
     { title: 'Abrir PdV', icon: 'point_of_sale', action: 'pdv', color: '#4caf50' },
@@ -72,11 +93,30 @@ export class HomeComponent implements OnInit {
     private tabsService: TabsService,
     private repositoryService: RepositoryService,
     private snackBar: MatSnackBar,
+    private onboardingService: OnboardingService,
   ) {}
 
   ngOnInit(): void {
     this.cargarKpis();
     this.loadShortcuts();
+    this.subs.add(
+      this.onboardingService.status$.subscribe((status) => {
+        this.onboardingStatus = status;
+        this.showOnboarding = !!status && !status.allCompleted;
+      }),
+    );
+    this.onboardingService.refresh().subscribe();
+
+    // Refrescar onboarding cada vez que el usuario vuelve al tab Home
+    this.subs.add(
+      this.tabsService.activeTab$
+        .pipe(filter((id) => id === 'home-tab'))
+        .subscribe(() => this.onboardingService.refresh().subscribe()),
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.subs.unsubscribe();
   }
 
   setData(_data: any): void {}
@@ -185,6 +225,76 @@ export class HomeComponent implements OnInit {
     } catch (e) {
       console.error(e);
       this.snackBar.open('Error al eliminar', 'Cerrar', { duration: 3000 });
+    }
+  }
+
+  /** Abre la pantalla asociada a un actionTabKey de onboarding. */
+  dispatchOnboardingAction(event: OnboardingActionEvent): void {
+    switch (event.actionTabKey) {
+      case 'USUARIOS':
+        this.tabsService.openTab('Usuarios', ListUsuariosComponent, {}, 'usuarios-tab');
+        break;
+      case 'FUNCIONARIOS':
+        this.tabsService.openTab('Funcionarios', ListFuncionariosComponent, {}, 'funcionarios-tab');
+        break;
+      case 'MONEDAS':
+        this.tabsService.openTab('Monedas', ListMonedasComponent, {}, 'monedas-tab');
+        break;
+      case 'CUENTAS_BANCARIAS':
+        this.tabsService.openTab('Cuentas bancarias', ListCuentasBancariasComponent, {}, 'cuentas-bancarias-tab');
+        break;
+      case 'MAQUINAS_POS':
+        this.tabsService.openTab('Máquinas POS', ListMaquinasPosComponent, {}, 'maquinas-pos-tab');
+        break;
+      case 'PROVEEDORES':
+        this.tabsService.openTab('Proveedores', ListProveedoresComponent, {}, 'proveedores-tab');
+        break;
+      case 'FAMILIAS':
+        this.tabsService.openTab('Familias', ListFamiliasComponent, {}, 'familias-tab');
+        break;
+      case 'PRODUCTOS':
+        this.tabsService.openTab('Productos', ListProductosComponent, {}, 'productos-tab');
+        break;
+      case 'PDV_ATAJOS':
+        this.tabsService.openTab('Punto de Venta (PDV)', PdvComponent, {}, 'pdv');
+        this.snackBar.open(
+          'Configurá grupos y atajos desde el menú del PdV (icono de configuración).',
+          'OK',
+          { duration: 5000 },
+        );
+        break;
+      case 'CLIENTES':
+        this.tabsService.openTab('Clientes', ListClientesComponent, {}, 'clientes-tab');
+        break;
+      case 'HOME':
+        this.snackBar.open(
+          'Para crear tu primer acceso directo, navegá a cualquier dashboard (Caja Mayor, Ventas, etc.) y usá el botón "Guardar como acceso directo".',
+          'OK',
+          { duration: 6000 },
+        );
+        break;
+    }
+  }
+
+  /** Maneja "marcar como completa / no aplica / resetear" desde el menú de cada tarea. */
+  async onOnboardingMarkRequest(req: OnboardingMarkRequest): Promise<void> {
+    try {
+      await firstValueFrom(this.onboardingService.markTask(req.taskKey, req.action));
+      await firstValueFrom(this.onboardingService.refresh());
+      const msg =
+        req.action === 'MANUAL'
+          ? 'Tarea marcada como completa'
+          : req.action === 'SKIPPED'
+          ? 'Tarea marcada como no aplica'
+          : 'Tarea reseteada';
+      this.snackBar.open(msg, 'OK', { duration: 2500 });
+      // Si tras este cambio se completó todo, refrescamos shortcuts para mostrarlos
+      if (this.onboardingStatus?.allCompleted) {
+        this.loadShortcuts();
+      }
+    } catch (e) {
+      console.error(e);
+      this.snackBar.open('Error actualizando la tarea', 'Cerrar', { duration: 3000 });
     }
   }
 }

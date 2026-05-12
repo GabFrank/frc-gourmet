@@ -1,5 +1,14 @@
 <div class="dashboard-container">
 
+  <ng-container *ngIf="showOnboarding; else dashboardContent">
+    <app-onboarding-list
+      [status]="onboardingStatus"
+      (action)="dispatchOnboardingAction($event)"
+      (markRequest)="onOnboardingMarkRequest($event)">
+    </app-onboarding-list>
+  </ng-container>
+
+  <ng-template #dashboardContent>
   <div class="dashboard-header">
     <div class="dashboard-header-title">
       <h1 class="dashboard-title">Inicio</h1>
@@ -112,4 +121,5 @@
       </div>
     </div>
   </div>
+  </ng-template>
 </div>

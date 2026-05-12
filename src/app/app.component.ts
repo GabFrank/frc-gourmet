@@ -124,6 +124,8 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   isAuthenticated = false;
   currentUser: Usuario | null = null;
   lastLoginTime: Date | null = null;
+  /** Label visible en el toolbar (nombre persona o nickname). Computado al cambiar currentUser. */
+  userDisplayName = '';
 
   // Notificaciones RRHH badge
   notificacionesNoLeidas = 0;
@@ -160,6 +162,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     this.authService.currentUser$.subscribe((user) => {
       this.isAuthenticated = !!user;
       this.currentUser = user;
+      this.userDisplayName = this.buildUserDisplayName(user);
 
       // If user is logged in, fetch login history
       if (this.isAuthenticated && user?.id) {
@@ -368,6 +371,18 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     this.isDarkTheme = !this.isDarkTheme;
     localStorage.setItem('darkTheme', this.isDarkTheme.toString());
     this.applyTheme();
+  }
+
+  /** Construye el label visible en el toolbar a partir del usuario actual.
+   * Prioriza Persona.nombre + apellido; si no hay persona usa nickname. */
+  private buildUserDisplayName(user: Usuario | null): string {
+    if (!user) return '';
+    const persona = (user as any).persona;
+    if (persona) {
+      const partes = [persona.nombre, persona.apellido].filter((p: any) => !!p);
+      if (partes.length > 0) return partes.join(' ');
+    }
+    return user.nickname || '';
   }
 
   openPrinterSettings(): void {
