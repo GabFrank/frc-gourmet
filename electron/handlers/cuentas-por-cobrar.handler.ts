@@ -16,6 +16,11 @@ import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
+import { Pago } from '../../src/app/database/entities/compras/pago.entity';
+import { PagoEstado } from '../../src/app/database/entities/compras/estado.enum';
+import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
+import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
 
 function calcularEstadoCuota(monto: number, montoCobrado: number): CuentaPorCobrarCuotaEstado {
   if (montoCobrado >= monto) return CuentaPorCobrarCuotaEstado.COBRADO;
@@ -497,6 +502,180 @@ export function registerCuentasPorCobrarHandlers(
     } catch (error) {
       console.error(`Error recalculando saldo cliente ${clienteId}:`, error);
       throw error;
+    }
+  });
+
+  // F2-extra: cerrar venta como crédito (atómico)
+  // Recibe: { ventaId, clienteId, montoTotal, monedaId, cantidadCuotas?, frecuenciaDias?, fechaInicio?, descripcion?, forzar? }
+  ipcMain.handle('cobrar-venta-credito', async (_event, data: any) => {
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const cu = getCurrentUser();
+      const ventaRepo = queryRunner.manager.getRepository(Venta);
+      const clienteRepo = queryRunner.manager.getRepository(Cliente);
+      const formaPagoRepo = queryRunner.manager.getRepository(FormasPago);
+      const pagoRepo = queryRunner.manager.getRepository(Pago);
+      const pagoDetalleRepo = queryRunner.manager.getRepository(PagoDetalle);
+      const cpcRepo = queryRunner.manager.getRepository(CuentaPorCobrar);
+      const cuotaRepo = queryRunner.manager.getRepository(CuentaPorCobrarCuota);
+      const movRepo = queryRunner.manager.getRepository(MovimientoCliente);
+
+      const venta = await ventaRepo.findOne({
+        where: { id: data.ventaId },
+        relations: ['cliente', 'caja', 'pago'],
+      });
+      if (!venta) throw new Error(`Venta ${data.ventaId} no encontrada`);
+      if (venta.estado === VentaEstado.CONCLUIDA) throw new Error('La venta ya está concluida');
+      if (venta.estado === VentaEstado.CANCELADA) throw new Error('La venta está cancelada');
+
+      const cliente = await clienteRepo.findOne({ where: { id: data.clienteId } });
+      if (!cliente) throw new Error(`Cliente ${data.clienteId} no encontrado`);
+      if (!cliente.activo) throw new Error('El cliente está inactivo');
+      if (!cliente.credito) throw new Error('El cliente no tiene crédito habilitado');
+
+      const montoTotal = Number(data.montoTotal);
+      if (!montoTotal || montoTotal <= 0) throw new Error('El monto debe ser mayor a cero');
+
+      // Validar límite de crédito (warning si excede, salvo que se fuerce)
+      const limite = Number(cliente.limite_credito) || 0;
+      const saldoAct = Number(cliente.saldoActual) || 0;
+      const saldoFinal = saldoAct + montoTotal;
+      if (limite > 0 && saldoFinal > limite && !data.forzar) {
+        return {
+          success: false,
+          requiereConfirmacion: true,
+          message: `El saldo proyectado (${saldoFinal.toFixed(2)}) excede el límite de crédito (${limite.toFixed(2)})`,
+          saldoActual: saldoAct,
+          saldoProyectado: saldoFinal,
+          limite,
+        };
+      }
+
+      // Get-or-create FormaPago "CUENTA CORRIENTE"
+      const NOMBRE_FP = 'CUENTA CORRIENTE';
+      let formaPago = await formaPagoRepo
+        .createQueryBuilder('fp')
+        .where('UPPER(fp.nombre) = :n', { n: NOMBRE_FP })
+        .getOne();
+      if (!formaPago) {
+        formaPago = formaPagoRepo.create({
+          nombre: NOMBRE_FP,
+          movimentaCaja: false,
+          principal: false,
+          orden: 99,
+          activo: true,
+        });
+        await setEntityUserTracking(dataSource, formaPago, cu?.id, false);
+        formaPago = await queryRunner.manager.save(FormasPago, formaPago);
+      }
+
+      // Crear/actualizar Pago y registrar PagoDetalle con el monto total a crédito
+      let pago = venta.pago as Pago | undefined;
+      if (!pago) {
+        pago = pagoRepo.create({
+          estado: PagoEstado.PAGADO,
+          caja: venta.caja,
+          activo: true,
+        });
+        await setEntityUserTracking(dataSource, pago, cu?.id, false);
+        pago = await queryRunner.manager.save(Pago, pago);
+      } else {
+        pago.estado = PagoEstado.PAGADO;
+        await setEntityUserTracking(dataSource, pago, cu?.id, true);
+        await queryRunner.manager.save(Pago, pago);
+      }
+
+      const pagoDetalle = pagoDetalleRepo.create({
+        valor: montoTotal,
+        descripcion: `VENTA #${venta.id} A CRÉDITO`.toUpperCase(),
+        tipo: TipoDetalle.PAGO,
+        pago,
+        moneda: { id: data.monedaId } as any,
+        formaPago,
+        activo: true,
+      });
+      await setEntityUserTracking(dataSource, pagoDetalle, cu?.id, false);
+      await queryRunner.manager.save(PagoDetalle, pagoDetalle);
+
+      // Cerrar venta
+      venta.estado = VentaEstado.CONCLUIDA;
+      venta.formaPago = formaPago;
+      venta.pago = pago;
+      venta.fechaCierre = new Date();
+      await setEntityUserTracking(dataSource, venta, cu?.id, true);
+      await queryRunner.manager.save(Venta, venta);
+
+      // Crear CPC + cuotas (replicando la lógica de create-cuenta-por-cobrar)
+      const cantidadCuotas = Math.max(1, Number(data.cantidadCuotas) || 1);
+      const frecuenciaDias = Number(data.frecuenciaDias) || 30;
+      const fechaInicio = parseLocalDate(data.fechaInicio) || new Date();
+      const montoCuota = +(montoTotal / cantidadCuotas).toFixed(2);
+      const descripcion = (data.descripcion || `VENTA #${venta.id} A CRÉDITO`).toUpperCase();
+
+      const cpcEntity = cpcRepo.create({
+        cliente: { id: data.clienteId } as any,
+        tipo: CuentaPorCobrarTipo.CREDITO_VENTA,
+        descripcion,
+        montoTotal,
+        montoCobrado: 0,
+        moneda: { id: data.monedaId } as any,
+        fechaInicio,
+        cantidadCuotas,
+        estado: CuentaPorCobrarEstado.ACTIVO,
+        ventaId: venta.id,
+      });
+      await setEntityUserTracking(dataSource, cpcEntity, cu?.id, false);
+      const cpcSaved = await queryRunner.manager.save(CuentaPorCobrar, cpcEntity);
+
+      for (let i = 0; i < cantidadCuotas; i++) {
+        const venc = new Date(fechaInicio);
+        if (frecuenciaDias === 30) {
+          venc.setMonth(venc.getMonth() + i);
+        } else {
+          venc.setDate(venc.getDate() + frecuenciaDias * i);
+        }
+        const monto = (i === cantidadCuotas - 1)
+          ? +(montoTotal - montoCuota * (cantidadCuotas - 1)).toFixed(2)
+          : montoCuota;
+        const cuota = cuotaRepo.create({
+          cuentaPorCobrar: { id: cpcSaved.id } as any,
+          numero: i + 1,
+          fechaVencimiento: venc,
+          monto,
+          montoCobrado: 0,
+          estado: CuentaPorCobrarCuotaEstado.PENDIENTE,
+        });
+        await setEntityUserTracking(dataSource, cuota, cu?.id, false);
+        await queryRunner.manager.save(CuentaPorCobrarCuota, cuota);
+      }
+
+      // MovimientoCliente CARGO + actualizar saldo
+      const movCargo = movRepo.create({
+        cliente: { id: data.clienteId } as any,
+        tipo: MovimientoClienteTipo.CARGO,
+        monto: montoTotal,
+        fecha: new Date(),
+        ventaId: venta.id,
+        cuentaPorCobrarId: cpcSaved.id,
+        observacion: `CARGO POR VENTA #${venta.id} A CRÉDITO`,
+        registradoPor: cu || undefined,
+      });
+      await setEntityUserTracking(dataSource, movCargo, cu?.id, false);
+      await queryRunner.manager.save(MovimientoCliente, movCargo);
+
+      cliente.saldoActual = +(saldoAct + montoTotal).toFixed(2);
+      await queryRunner.manager.save(Cliente, cliente);
+
+      await queryRunner.commitTransaction();
+      return { success: true, ventaId: venta.id, cpcId: cpcSaved.id };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error cobrar-venta-credito:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
   });
 }

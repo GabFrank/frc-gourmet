@@ -2055,6 +2055,18 @@ export class RepositoryHttpService extends RepositoryService {
   recalcularSaldoCliente(clienteId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.recalcularSaldoCliente() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+
+  getClienteEstadoCuenta(_clienteId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getClienteEstadoCuenta() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+
+  getMovimientosClienteStats(_clienteId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getMovimientosClienteStats() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+
+  cobrarVentaCredito(_payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.cobrarVentaCredito() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getMovimientosCliente(clienteId: number, filtros?: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getMovimientosCliente() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

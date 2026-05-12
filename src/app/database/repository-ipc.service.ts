@@ -926,6 +926,9 @@ interface ElectronAPI {
   cobrarCpcCuota: (payload: any) => Promise<any>;
   anularCobroCpcCuota: (payload: any) => Promise<any>;
   recalcularSaldoCliente: (clienteId: number) => Promise<any>;
+  getClienteEstadoCuenta: (clienteId: number) => Promise<any>;
+  getMovimientosClienteStats: (clienteId: number) => Promise<any>;
+  cobrarVentaCredito: (payload: any) => Promise<any>;
 
   // Movimientos Cliente (Fase 7)
   getMovimientosCliente: (clienteId: number, filtros?: any) => Promise<any>;
@@ -3633,6 +3636,18 @@ export class RepositoryIpcService extends RepositoryService {
   }
   recalcularSaldoCliente(clienteId: number): Observable<any> {
     return from(this.api.recalcularSaldoCliente(clienteId));
+  }
+
+  getClienteEstadoCuenta(clienteId: number): Observable<any> {
+    return from(this.api.getClienteEstadoCuenta(clienteId));
+  }
+
+  getMovimientosClienteStats(clienteId: number): Observable<any> {
+    return from(this.api.getMovimientosClienteStats(clienteId));
+  }
+
+  cobrarVentaCredito(payload: any): Observable<any> {
+    return from(this.api.cobrarVentaCredito(payload));
   }
 
   // ===================== MOVIMIENTOS CLIENTE (Fase 7) =====================

@@ -282,6 +282,11 @@
         <mat-icon>timelapse</mat-icon>
         Cobro Parcial
       </button>
+      <button mat-raised-button class="btn-credito" [disabled]="!canCobrarCredito"
+              (click)="cobrarCredito()" [matTooltip]="cobrarCreditoTooltip">
+        <mat-icon>credit_card</mat-icon>
+        Cobrar a crédito
+      </button>
       <button mat-raised-button class="btn-descuento" (click)="openAjusteDialog()" [disabled]="!selectedMoneda" matTooltip="Descuento/Aumento (F9)">
         <mat-icon>{{ saldoPrincipal > 0 ? 'discount' : 'add_circle' }}</mat-icon>
         {{ saldoPrincipal > 0 ? 'Descuento (F9)' : 'Aumento (F9)' }}

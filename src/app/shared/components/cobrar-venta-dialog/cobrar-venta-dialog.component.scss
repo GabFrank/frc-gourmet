@@ -492,6 +492,16 @@ mat-dialog-actions {
   }
 }
 
+.btn-credito {
+  background-color: #ef6c00 !important;
+  color: #fff !important;
+
+  &:disabled {
+    background-color: #2a2a2a !important;
+    color: #555 !important;
+  }
+}
+
 .btn-cancelar {
   background-color: #b71c1c !important;
 }

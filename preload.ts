@@ -3366,6 +3366,15 @@ contextBridge.exposeInMainWorld('api', {
   getSaldoCliente: async (clienteId: number): Promise<any> => {
     return await ipcRenderer.invoke('get-saldo-cliente', clienteId);
   },
+  getClienteEstadoCuenta: async (clienteId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cliente-estado-cuenta', clienteId);
+  },
+  getMovimientosClienteStats: async (clienteId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-movimientos-cliente-stats', clienteId);
+  },
+  cobrarVentaCredito: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('cobrar-venta-credito', payload);
+  },
 
   // === Notificaciones RRHH (Fase 8) ===
   getNotificacionesRrhh: async (filtros?: any): Promise<any[]> => {

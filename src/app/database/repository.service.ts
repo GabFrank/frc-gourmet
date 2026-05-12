@@ -791,6 +791,9 @@ export abstract class RepositoryService {
   abstract recalcularSaldoCliente(clienteId: number): Observable<any>;
   abstract getMovimientosCliente(clienteId: number, filtros?: any): Observable<any>;
   abstract getSaldoCliente(clienteId: number): Observable<any>;
+  abstract getClienteEstadoCuenta(clienteId: number): Observable<any>;
+  abstract getMovimientosClienteStats(clienteId: number): Observable<any>;
+  abstract cobrarVentaCredito(payload: any): Observable<any>;
   abstract getNotificacionesRrhh(filtros?: any): Observable<any[]>;
   abstract marcarNotificacionLeida(id: number): Observable<any>;
   abstract marcarTodasNotificacionesLeidas(usuarioId?: number): Observable<any>;

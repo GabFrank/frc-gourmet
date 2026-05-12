@@ -25,7 +25,9 @@ import { PagoEstado } from '../../../database/entities/compras/estado.enum';
 import { PagoDetalle, TipoDetalle } from '../../../database/entities/compras/pago-detalle.entity';
 import { AjusteCobrarDialogComponent } from './ajuste-cobrar-dialog.component';
 import { EditDetalleDialogComponent } from './edit-detalle-dialog.component';
+import { CobrarCreditoDialogComponent, CobrarCreditoDialogData } from './cobrar-credito-dialog.component';
 import { CurrencyInputDirective } from '../../directives/currency-input.directive';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 export interface CobrarVentaDialogData {
   venta: Venta;
@@ -81,6 +83,7 @@ interface CurrencyDisplay {
     MatTableModule,
     MatMenuModule,
     MatTooltipModule,
+    MatSnackBarModule,
     CurrencyInputDirective,
   ],
 })
@@ -135,11 +138,16 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     return moneda.simbolo + ' ' + valor.toLocaleString('es-PY', { minimumFractionDigits: dec, maximumFractionDigits: dec });
   }
 
+  // Pre-computed flags para el botón "Cobrar a crédito"
+  canCobrarCredito = false;
+  cobrarCreditoTooltip = '';
+
   constructor(
     public dialogRef: MatDialogRef<CobrarVentaDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: CobrarVentaDialogData,
     private repositoryService: RepositoryService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private snackBar: MatSnackBar,
   ) {}
 
   async ngOnInit(): Promise<void> {
@@ -301,10 +309,14 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     if (this.data.principalMoneda && monedaId === this.data.principalMoneda.id) {
       return 1;
     }
+    // Aceptamos rate en cualquier sentido. compraLocal expresa cuántos
+    // PRINCIPAL vale 1 OTRA, así que la fórmula es la misma en ambos casos.
     const rate = this.data.exchangeRates.find(
-      r => r.monedaOrigen?.id === this.data.principalMoneda?.id && r.monedaDestino?.id === monedaId
+      r =>
+        (r.monedaOrigen?.id === this.data.principalMoneda?.id && r.monedaDestino?.id === monedaId) ||
+        (r.monedaOrigen?.id === monedaId && r.monedaDestino?.id === this.data.principalMoneda?.id)
     );
-    return rate ? rate.compraLocal : 1;
+    return rate?.compraLocal || 1;
   }
 
   private convertToPrincipal(valor: number, monedaId: number): number {
@@ -343,6 +355,8 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
 
     this.saldoPrincipal = saldoNeto > 0 ? saldoNeto : 0;
     this.vueltoPrincipal = saldoNeto < 0 ? Math.abs(saldoNeto) : 0;
+
+    this.recomputeCobrarCredito();
 
     this.currencyDisplays = this.data.monedas.map(moneda => {
       const rate = this.getExchangeRate(moneda.id);
@@ -758,6 +772,74 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       console.error('Error al finalizar cobro:', error);
       this.processing = false;
     }
+  }
+
+  private recomputeCobrarCredito(): void {
+    const cliente: any = this.data.venta?.cliente;
+    if (!cliente?.id) {
+      this.canCobrarCredito = false;
+      this.cobrarCreditoTooltip = 'Asigne un cliente a la venta para vender a crédito';
+      return;
+    }
+    if (!cliente.credito) {
+      this.canCobrarCredito = false;
+      this.cobrarCreditoTooltip = `El cliente "${cliente.persona?.nombre || cliente.razon_social || cliente.id}" no tiene crédito habilitado`;
+      return;
+    }
+    if (this.saldoPrincipal <= 0) {
+      this.canCobrarCredito = false;
+      this.cobrarCreditoTooltip = 'No hay saldo pendiente para financiar';
+      return;
+    }
+    if (this.processing) {
+      this.canCobrarCredito = false;
+      this.cobrarCreditoTooltip = 'Procesando…';
+      return;
+    }
+    this.canCobrarCredito = true;
+    this.cobrarCreditoTooltip = 'Cerrar la venta como crédito y generar la cuenta por cobrar';
+  }
+
+  async cobrarCredito(): Promise<void> {
+    if (!this.canCobrarCredito) {
+      if (this.cobrarCreditoTooltip) {
+        this.snackBar.open(this.cobrarCreditoTooltip, 'Cerrar', { duration: 3500 });
+      }
+      return;
+    }
+    const cliente: any = this.data.venta.cliente;
+    const nombreCliente = cliente.persona
+      ? `${cliente.persona.nombre || ''}${cliente.persona.apellido ? ' ' + cliente.persona.apellido : ''}`.trim()
+      : (cliente.razon_social || '—');
+
+    const dialogData: CobrarCreditoDialogData = {
+      ventaId: this.data.venta.id!,
+      clienteId: cliente.id,
+      clienteNombre: nombreCliente || '—',
+      saldoActual: Number(cliente.saldoActual) || 0,
+      limiteCredito: Number(cliente.limite_credito) || 0,
+      monto: this.saldoPrincipal,
+      monedaId: this.data.principalMoneda.id!,
+      monedaSimbolo: this.data.principalMoneda.simbolo,
+    };
+
+    const ref = this.dialog.open(CobrarCreditoDialogComponent, {
+      width: '720px',
+      maxHeight: '90vh',
+      data: dialogData,
+      disableClose: true,
+    });
+
+    ref.afterClosed().subscribe((result) => {
+      if (result?.success) {
+        // Stock fire-and-forget (igual que finalizar())
+        this.repositoryService.procesarStockVenta(this.data.venta.id!).subscribe({
+          next: (r) => console.log('Stock procesado:', r),
+          error: (e) => console.error('Error procesando stock (no-blocking):', e),
+        });
+        this.dialogRef.close({ success: true, credito: true, ventaId: result.ventaId, cpcId: result.cpcId });
+      }
+    });
   }
 
   async cobroParcial(): Promise<void> {
