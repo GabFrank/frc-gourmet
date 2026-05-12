@@ -1,22 +1,44 @@
-# Base de datos — TypeORM + SQLite
+# Base de datos — TypeORM dual driver (SQLite / Postgres)
 
-## Configuración
+## Configuración (desde F1.5)
 
-`src/app/database/database.config.ts:181-347`:
+`src/app/database/database.config.ts:214-256` — `getDataSourceOptions(userDataPath, override?)`:
 
 ```typescript
-{
-  type: 'sqlite',
-  database: path.join(userDataPath, 'frc-gourmet.db'),
-  entities: [ /* ~170 clases listadas */ ],
-  synchronize: true,        // ⚠️ DEV: auto-altera tablas al cambiar entidades
+const driverType = override?.type === 'postgres' ? 'postgres' : 'sqlite';
+const shared = {
+  entities: getEntitiesList(),       // ~170 clases
+  synchronize: false,                 // ⚠️ desde F1.5 — toda nueva entity requiere migration
   logging: process.env['NODE_ENV'] === 'development',
-  migrations: [],
-}
+  migrations: getMigrations(driverType),   // dual baseline: elige SQLite o Postgres
+  migrationsRun: false,
+  migrationsTableName: 'typeorm_migrations',
+};
+
+if (override?.type === 'postgres') return { type: 'postgres', host, port, database, username, password, schema, ssl, ...shared };
+return { type: 'sqlite', database: dbPath, ...shared };
 ```
 
-- **Sin migraciones** — `synchronize: true` aplica diffs automáticamente. En prod esto sería un foot-gun, pero el proyecto trabaja sólo en local con un único usuario.
-- **Backup obligatorio** antes de cambiar entidades. Ubicación del .db: `~/Library/Application Support/frc-gourmet/frc-gourmet.db` (macOS).
+- **`synchronize: false` desde F1.5** — toda entity nueva exige migration generada con `npm run migration:generate -- src/app/database/migrations/<Nombre>` (o `:postgres` para Postgres).
+- **`migrations/` tiene dual baseline:** `1778380893206-Baseline.ts` (SQLite) y `1778380893207-BaselinePostgres.ts`. `getMigrations(driver)` devuelve la mitad correcta + las incrementales (que deben ser portables a ambos drivers, ver patterns en [conventions/pitfalls-typeorm-electron.md](../conventions/pitfalls-typeorm-electron.md)).
+- **`DatabaseService.runMigrations`** corre manualmente al iniciar, tras backup pre-migrate.
+- **`renameLegacyBaselineRows`** — si la DB ya tiene la baseline vieja registrada con otro nombre, se renombra en `typeorm_migrations` antes de `runMigrations` para no re-correr todo.
+
+### SQLite default
+- Path: `app.getPath('userData') + '/frc-gourmet.db'`. macOS: `~/Library/Application Support/frc-gourmet/`.
+- La app CREA el archivo si no existe.
+
+### Postgres
+- DB NO la crea la app — el operador hace `CREATE DATABASE frc_gourmet` antes (psql / TablePlus / pgAdmin).
+- App-settings persisten en `userData/app-settings.json`. Password va a **keytar** (no al JSON).
+- Cambiar driver desde UI: *Sistema → Configuración BD* → completar conexión → "Probar conexión" → Guardar → reinicio.
+- Al primer arranque con Postgres y DB vacía: corre `BaselinePostgres` + incrementales + seeds. Listo para login `admin/admin`.
+- Setup completo en PC nueva → [../workflows/setup-pc-nueva.md](../workflows/setup-pc-nueva.md).
+
+### Postgres compat (gotchas frecuentes)
+- Helper `dbQuery(qr, sqlLite, sqlPg)` cuando el SQL difiere.
+- Postgres: booleans = `= true/false` (no `= 1`), LIKE → `UPPER(...) LIKE UPPER(...)`, evitar `sqlite_master` / `PRAGMA`.
+- Memoria: `feedback_postgres_compat_patterns.md`.
 
 ## Singleton DataSource
 
@@ -26,6 +48,8 @@
 DatabaseService.getInstance().initialize(userDataPath)
   .then(dataSource => { /* registrar handlers */ });
 ```
+
+`initialize` lee `app-settings.json` para decidir driver, hace backup pre-migrate, corre migrations, y emite `dataSource` listo para que `main.ts` registre handlers + dispare seeds.
 
 Cierre limpio en `app.on('window-all-closed')`: `dbService.close()` → `dataSource.destroy()`.
 

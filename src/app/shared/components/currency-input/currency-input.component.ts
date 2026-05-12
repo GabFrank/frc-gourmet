@@ -77,6 +77,9 @@ export class CurrencyInputComponent implements ControlValueAccessor, OnChanges, 
   @Input() moneda: Moneda | null = null;
   @Input() disableFloating = false;
   @Input() selectOnFocus = true;
+  /** Si false, oculta el símbolo de la moneda (prefijo). Útil cuando el contexto
+   * ya deja claro la moneda (ej. cotizaciones donde la moneda destino se selecciona aparte). */
+  @Input() showSymbol = true;
 
   // we need to handle key press event
   @Output() keyPress = new EventEmitter<KeyboardEvent>();
@@ -102,13 +105,18 @@ export class CurrencyInputComponent implements ControlValueAccessor, OnChanges, 
 
     // Initialize with default configuration
     this.currencyConfig = this.currencyConfigService.getConfigForCurrency(this.moneda);
-    
+
     // Ensure negative values are allowed
     this.currencyConfig.allowNegative = true;
-    
+
     // Remove min constraint from currency config to allow negative values
     if (this.currencyConfig.min !== undefined && this.currencyConfig.min > 0) {
       this.currencyConfig.min = undefined;
+    }
+
+    // Si el contexto pidió ocultar el símbolo, limpiar el prefix
+    if (!this.showSymbol) {
+      this.currencyConfig.prefix = '';
     }
 
     // Apply currency mask to the input
@@ -150,13 +158,18 @@ export class CurrencyInputComponent implements ControlValueAccessor, OnChanges, 
         
         // Update config when currency changes
         this.currencyConfig = this.currencyConfigService.getConfigForCurrency(this.moneda);
-        
+
         // Ensure negative values are allowed regardless of currency
         this.currencyConfig.allowNegative = true;
-        
+
         // Remove min constraint from currency config to allow negative values
         if (this.currencyConfig.min !== undefined && this.currencyConfig.min > 0) {
           this.currencyConfig.min = undefined;
+        }
+
+        // Si el contexto pidió ocultar el símbolo, limpiar el prefix
+        if (!this.showSymbol) {
+          this.currencyConfig.prefix = '';
         }
         
         // Avoid immediate value rewriting that could cause recursion

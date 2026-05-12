@@ -1,7 +1,7 @@
 import { Injectable, Type, EventEmitter } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
-import { VentasDashboardComponent } from '../pages/ventas/dashboard/ventas-dashboard.component';
+import { HomeComponent } from '../pages/home/home.component';
 
 export interface Tab {
   id: string;
@@ -28,10 +28,10 @@ export class TabsService {
   activeTab$ = this.activeTabSubject.asObservable();
 
   constructor() {
-    //load list ingredientes tab using addTab method
-    // this.addTab('Lista de productos', ListProductosComponent);
-    // load ventas dashboard
-    this.addTab('Dashboard de ventas', VentasDashboardComponent);
+    // Tab inicial: Home dashboard (no closable). El cliente nuevo ve aca la
+    // lista guiada de tareas de onboarding; cuando termina, el panel cambia
+    // a accesos directos personalizables.
+    this.addTab('Inicio', HomeComponent, undefined, 'home-tab', false);
   }
 
   /**

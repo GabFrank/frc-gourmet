@@ -14,6 +14,8 @@ import { RepositoryService } from 'src/app/database/repository.service';
 import { Moneda } from 'src/app/database/entities/financiero/moneda.entity';
 import { MonedaCambio } from 'src/app/database/entities/financiero/moneda-cambio.entity';
 import { CurrencyInputComponent } from 'src/app/shared/components/currency-input/currency-input.component';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-create-edit-moneda-cambio-dialog',
@@ -29,6 +31,7 @@ import { CurrencyInputComponent } from 'src/app/shared/components/currency-input
     MatCheckboxModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    MatTooltipModule,
     FormsModule,
     ReactiveFormsModule,
     CurrencyInputComponent
@@ -42,6 +45,7 @@ export class CreateEditMonedaCambioDialogComponent implements OnInit {
   loading = false;
   saving = false;
   isEditMode = false;
+  scraping = false;
 
   constructor(
     private dialogRef: MatDialogRef<CreateEditMonedaCambioDialogComponent>,
@@ -115,6 +119,14 @@ export class CreateEditMonedaCambioDialogComponent implements OnInit {
     this.repositoryService.getMonedas().subscribe(
       (monedas) => {
         this.monedas = monedas.filter(m => m.activo);
+        // En modo crear, pre-seleccionar la moneda principal como destino
+        // (los valores se ingresan en moneda destino, ej. Gs para PY).
+        if (!this.isEditMode && !this.form.get('monedaDestino')?.value) {
+          const principal = this.monedas.find((m) => m.principal);
+          if (principal) {
+            this.form.patchValue({ monedaDestino: principal });
+          }
+        }
         this.loading = false;
       },
       (error) => {
@@ -225,5 +237,74 @@ export class CreateEditMonedaCambioDialogComponent implements OnInit {
 
   compareMonedas(moneda1: Moneda, moneda2: Moneda): boolean {
     return moneda1 && moneda2 && moneda1.id === moneda2.id;
+  }
+
+  /** Sugiere una compra local con margen de 50 puntos hacia abajo respecto del
+   * mercado, redondeada a múltiplo de 50 con ties hacia abajo.
+   * Ejemplos: 6090 → 6000, 6140 → 6100, 1190 → 1150, 1225 → 1150. */
+  private sugerirCompraLocal(compraMercado: number): number {
+    if (!Number.isFinite(compraMercado)) return compraMercado;
+    const ajustado = compraMercado - 50;
+    return Math.floor((ajustado + 24) / 50) * 50;
+  }
+
+  /** Sugiere una venta local con margen de 50 puntos hacia arriba respecto del
+   * mercado, redondeada a múltiplo de 50 con ties hacia arriba. */
+  private sugerirVentaLocal(ventaMercado: number): number {
+    if (!Number.isFinite(ventaMercado)) return ventaMercado;
+    const ajustado = ventaMercado + 50;
+    return Math.ceil((ajustado - 24) / 50) * 50;
+  }
+
+  /** Hace scraping de cotizaciones de mercado (nortecambios.com.py) y rellena
+   * los campos del cambio oficial para la moneda de origen seleccionada. */
+  async obtenerCotizacionMercado(): Promise<void> {
+    const origen: Moneda | null = this.form.get('monedaOrigen')?.value;
+    if (!origen?.denominacion) {
+      this.snackBar.open('Seleccioná la moneda de origen primero', 'OK', { duration: 3000 });
+      return;
+    }
+    const key = origen.denominacion.toUpperCase();
+    this.scraping = true;
+    try {
+      const res: any = await firstValueFrom(this.repositoryService.getCotizacionMercado());
+      if (!res?.success) {
+        this.snackBar.open(
+          'No se pudo obtener cotización del mercado: ' + (res?.message || 'error desconocido'),
+          'OK',
+          { duration: 5000 },
+        );
+        return;
+      }
+      const item = res.monedas?.[key];
+      if (!item) {
+        this.snackBar.open(
+          `Nortecambios no devolvió cotización para ${key}`,
+          'OK',
+          { duration: 4000 },
+        );
+        return;
+      }
+      const compraLocalSugerida = this.sugerirCompraLocal(item.compraMercado);
+      const ventaLocalSugerida = this.sugerirVentaLocal(item.ventaMercado);
+
+      this.form.patchValue({
+        compraOficial: item.compraMercado,
+        ventaOficial: item.ventaMercado,
+        compraLocal: compraLocalSugerida,
+        ventaLocal: ventaLocalSugerida,
+      });
+      this.snackBar.open(
+        `Cotización de ${key} actualizada (fuente: ${res.fuente}). Local sugerido con margen de 50.`,
+        'OK',
+        { duration: 4000 },
+      );
+    } catch (e: any) {
+      this.snackBar.open('Error obteniendo cotización: ' + (e?.message || e), 'OK', {
+        duration: 5000,
+      });
+    } finally {
+      this.scraping = false;
+    }
   }
 }

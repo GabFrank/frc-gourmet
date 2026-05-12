@@ -1,13 +1,11 @@
 import { DataSource } from 'typeorm';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
-import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
 import { Proveedor } from '../../src/app/database/entities/compras/proveedor.entity';
 import { GastoCategoria } from '../../src/app/database/entities/financiero/gasto-categoria.entity';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
 import { MaquinaPos } from '../../src/app/database/entities/financiero/maquina-pos.entity';
 import { CompraCategoria } from '../../src/app/database/entities/compras/compra-categoria.entity';
-import { TipoCuentaBancaria } from '../../src/app/database/entities/financiero/banking-enums';
 
 export async function seedInitialData(dataSource: DataSource): Promise<void> {
   console.log('Checking if seed data is needed...');
@@ -17,9 +15,6 @@ export async function seedInitialData(dataSource: DataSource): Promise<void> {
     await seedFormasPago(dataSource);
     await seedGastoCategorias(dataSource);
     await seedProveedores(dataSource);
-    await seedMonedasCambio(dataSource);
-    await seedCuentasBancarias(dataSource);
-    await seedMaquinasPos(dataSource);
     await seedCompraCategorias(dataSource);
     await linkFormasPagoBancarias(dataSource);
     console.log('Seed data check complete.');
@@ -193,9 +188,6 @@ async function seedProveedores(dataSource: DataSource): Promise<void> {
   }
 
   const proveedores = [
-    { nombre: 'ANDE', activo: true },
-    { nombre: 'ESSAP', activo: true },
-    { nombre: 'TIGO', activo: true },
     { nombre: 'PROVEEDOR GENERAL', activo: true },
   ];
 
@@ -204,165 +196,6 @@ async function seedProveedores(dataSource: DataSource): Promise<void> {
     await repo.save(entity);
   }
   console.log(`  Proveedores: ${proveedores.length} created.`);
-}
-
-// ===================== MONEDAS CAMBIO =====================
-async function seedMonedasCambio(dataSource: DataSource): Promise<void> {
-  const repo = dataSource.getRepository(MonedaCambio);
-  const count = await repo.count();
-  if (count > 0) {
-    console.log(`  MonedasCambio: ${count} already exist, skipping.`);
-    return;
-  }
-
-  const monedaRepo = dataSource.getRepository(Moneda);
-  const guarani = await monedaRepo.findOneBy({ denominacion: 'GUARANI' });
-  const dolar = await monedaRepo.findOneBy({ denominacion: 'DOLAR' });
-  const real = await monedaRepo.findOneBy({ denominacion: 'REAL' });
-
-  if (!guarani || !dolar || !real) {
-    console.log('  MonedasCambio: skipping, monedas not found.');
-    return;
-  }
-
-  const cambios = [
-    {
-      monedaOrigen: dolar,
-      monedaDestino: guarani,
-      compraOficial: 7300,
-      ventaOficial: 7400,
-      compraLocal: 7300,
-      ventaLocal: 7400,
-      activo: true,
-    },
-    {
-      monedaOrigen: real,
-      monedaDestino: guarani,
-      compraOficial: 1400,
-      ventaOficial: 1450,
-      compraLocal: 1400,
-      ventaLocal: 1450,
-      activo: true,
-    },
-  ];
-
-  for (const data of cambios) {
-    const entity = repo.create(data);
-    await repo.save(entity);
-  }
-  console.log(`  MonedasCambio: ${cambios.length} created.`);
-}
-
-// ===================== CUENTAS BANCARIAS =====================
-async function seedCuentasBancarias(dataSource: DataSource): Promise<void> {
-  const repo = dataSource.getRepository(CuentaBancaria);
-  const count = await repo.count();
-  if (count > 0) {
-    console.log(`  CuentasBancarias: ${count} already exist, skipping.`);
-    return;
-  }
-
-  const monedaRepo = dataSource.getRepository(Moneda);
-  const guarani = await monedaRepo.findOneBy({ denominacion: 'GUARANI' });
-  const dolar = await monedaRepo.findOneBy({ denominacion: 'DOLAR' });
-  if (!guarani) {
-    console.log('  CuentasBancarias: skipping, moneda principal no encontrada.');
-    return;
-  }
-
-  const cuentas = [
-    {
-      nombre: 'CTA OPERATIVA ITAU',
-      banco: 'ITAU',
-      numeroCuenta: '0001234567',
-      tipoCuenta: TipoCuentaBancaria.CORRIENTE,
-      moneda: guarani,
-      titular: 'FRC GOURMET S.A.',
-      alias: 'ITAU-OP',
-      saldo: 0,
-      activo: true,
-    },
-    {
-      nombre: 'CTA AHORROS CONTINENTAL',
-      banco: 'CONTINENTAL',
-      numeroCuenta: '7777889911',
-      tipoCuenta: TipoCuentaBancaria.AHORRO,
-      moneda: guarani,
-      titular: 'FRC GOURMET S.A.',
-      alias: 'CONT-AHORRO',
-      saldo: 0,
-      activo: true,
-    },
-    {
-      nombre: 'CTA USD ITAU',
-      banco: 'ITAU',
-      numeroCuenta: '0001234999',
-      tipoCuenta: TipoCuentaBancaria.AHORRO,
-      moneda: dolar || guarani,
-      titular: 'FRC GOURMET S.A.',
-      alias: 'ITAU-USD',
-      saldo: 0,
-      activo: true,
-    },
-  ];
-
-  for (const data of cuentas) {
-    const entity = repo.create(data);
-    await repo.save(entity);
-  }
-  console.log(`  CuentasBancarias: ${cuentas.length} created.`);
-}
-
-// ===================== MAQUINAS POS =====================
-async function seedMaquinasPos(dataSource: DataSource): Promise<void> {
-  const repo = dataSource.getRepository(MaquinaPos);
-  const count = await repo.count();
-  if (count > 0) {
-    console.log(`  MaquinasPos: ${count} already exist, skipping.`);
-    return;
-  }
-
-  const cbRepo = dataSource.getRepository(CuentaBancaria);
-  const itauOp = await cbRepo.findOneBy({ alias: 'ITAU-OP' });
-  const continental = await cbRepo.findOneBy({ alias: 'CONT-AHORRO' });
-  if (!itauOp) {
-    console.log('  MaquinasPos: skipping, cuenta bancaria operativa no encontrada.');
-    return;
-  }
-
-  // minutosAcreditacion: 2 = test rapido. En produccion: 1440=24h, 2160=36h, 2880=48h
-  const maquinas = [
-    {
-      nombre: 'BANCARD VISA/MASTER',
-      cuentaBancaria: itauOp,
-      proveedor: 'BANCARD',
-      porcentajeComision: 4.5,
-      minutosAcreditacion: 2,
-      activo: true,
-    },
-    {
-      nombre: 'INFONET',
-      cuentaBancaria: continental || itauOp,
-      proveedor: 'INFONET',
-      porcentajeComision: 5.0,
-      minutosAcreditacion: 5,
-      activo: true,
-    },
-    {
-      nombre: 'POCKET',
-      cuentaBancaria: itauOp,
-      proveedor: 'POCKET',
-      porcentajeComision: 3.5,
-      minutosAcreditacion: 0,
-      activo: true,
-    },
-  ];
-
-  for (const data of maquinas) {
-    const entity = repo.create(data);
-    await repo.save(entity);
-  }
-  console.log(`  MaquinasPos: ${maquinas.length} created.`);
 }
 
 // ===================== CATEGORIAS DE COMPRA =====================
@@ -428,21 +261,21 @@ async function seedCompraCategorias(dataSource: DataSource): Promise<void> {
 
 // ===================== LINK FORMAS PAGO -> BANCOS / POS =====================
 // Vincula formas de pago tipicas a maquinas POS (puede ser >1) y cuentas bancarias.
-// Idempotente: solo agrega vinculaciones que aún no existen.
+// Idempotente: solo agrega vinculaciones que aún no existen. Si no hay POS ni
+// cuentas creadas (cliente nuevo recien instalado), es no-op silencioso.
 async function linkFormasPagoBancarias(dataSource: DataSource): Promise<void> {
   const fpRepo = dataSource.getRepository(FormasPago);
   const cbRepo = dataSource.getRepository(CuentaBancaria);
   const mpRepo = dataSource.getRepository(MaquinaPos);
 
-  const itauOp = await cbRepo.findOneBy({ alias: 'ITAU-OP' });
   const todasMaquinas = await mpRepo.find({ where: { activo: true } });
+  const todasCuentas = await cbRepo.find({ where: { activo: true } });
 
-  if (!itauOp && todasMaquinas.length === 0) {
-    console.log('  LinkFormasPago: skipping, no banking entities seeded.');
+  if (todasMaquinas.length === 0 && todasCuentas.length === 0) {
+    console.log('  LinkFormasPago: skipping, no banking entities created yet.');
     return;
   }
 
-  const todasCuentas = await cbRepo.find({ where: { activo: true } });
   const formas = await fpRepo.find({ relations: ['maquinasPos', 'cuentasBancarias'] });
   let updated = 0;
 

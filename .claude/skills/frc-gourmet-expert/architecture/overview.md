@@ -6,8 +6,8 @@
 |---|---|---|
 | Frontend | Angular 15 (`15.2.9`) | Mix de standalone components + AppModule. Material Design 15. |
 | Desktop shell | Electron 24 | `nodeIntegration: false`, `contextIsolation: true`. Una sola ventana en fullscreen. |
-| Database | SQLite 5 (`sqlite3` ^5.1.6) | Archivo `frc-gourmet.db` en `app.getPath('userData')`. |
-| ORM | TypeORM 0.3.21 | `synchronize: true` en dev — sin migraciones explícitas. |
+| Database | SQLite 5 (`sqlite3` ^5.1.6) **o** Postgres (`pg` optional) | Driver seleccionable en runtime. SQLite default = `frc-gourmet.db` en `app.getPath('userData')`. Postgres requiere DB pre-creada. |
+| ORM | TypeORM 0.3.21 | `synchronize: false` desde F1.5 — migrations obligatorias. Dual baseline SQLite + Postgres en `migrations/` (`getMigrations(driver)` elige). |
 | Auth | JWT (`jsonwebtoken` ^9.0.2) | Token 7 días, secret hardcoded `'frc-gourmet-secret-key'`. ⚠️ Passwords en texto plano. |
 | Charts | Chart.js + ng2-charts | Dashboard RRHH y Financiero. |
 | Currency input | `ngx-currency` | Configurado por moneda (PYG sin decimales, USD/BRL con 2). |

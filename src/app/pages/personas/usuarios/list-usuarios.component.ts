@@ -22,6 +22,7 @@ import { MatDialogModule } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { CreateEditUsuarioComponent } from './create-edit-usuario.component';
 import { GenericSearchDialogComponent } from '../../../shared/components/generic-search-dialog/generic-search-dialog.component';
+import { ResetPasswordDialogComponent, ResetPasswordDialogData } from './reset-password-dialog/reset-password-dialog.component';
 
 @Component({
   selector: 'app-list-usuarios',
@@ -284,6 +285,22 @@ export class ListUsuariosComponent implements OnInit, OnChanges, AfterViewInit {
           duration: 3000
         });
       }
+    });
+  }
+
+  /** Abre el dialogo de Resetear password. Genera una nueva password aleatoria
+   * y la muestra una sola vez al admin. */
+  resetearPassword(usuario: Usuario): void {
+    if (!usuario?.id) return;
+    const dialogData: ResetPasswordDialogData = {
+      usuarioId: usuario.id,
+      nickname: usuario.nickname,
+    };
+    this.dialog.open(ResetPasswordDialogComponent, {
+      data: dialogData,
+      width: '560px',
+      maxWidth: '95vw',
+      disableClose: true,
     });
   }
 

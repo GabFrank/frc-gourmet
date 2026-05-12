@@ -1710,3 +1710,29 @@ input.mat-input-element {
     flex-shrink: 0 !important;
   }
 }
+
+// ============================================================================
+// Utility classes para flags booleanos (estados ON/OFF) en celdas de tablas
+// y otros indicadores visuales. Usa la paleta verde/rojo/gris consistente.
+// Aplica a .mat-icon dentro del elemento marcado.
+// ============================================================================
+.icon-success,
+.icon-success.mat-icon {
+  color: #2e7d32 !important;
+}
+
+.icon-danger,
+.icon-danger.mat-icon {
+  color: #c62828 !important;
+}
+
+.icon-muted,
+.icon-muted.mat-icon {
+  color: rgba(0, 0, 0, 0.38) !important;
+}
+
+// Variante para dark theme: gris claro
+.dark-theme .icon-muted,
+.dark-theme .icon-muted.mat-icon {
+  color: rgba(255, 255, 255, 0.38) !important;
+}
