@@ -28,6 +28,10 @@ import { EditDetalleDialogComponent } from './edit-detalle-dialog.component';
 import { CobrarCreditoDialogComponent, CobrarCreditoDialogData } from './cobrar-credito-dialog.component';
 import { CurrencyInputDirective } from '../../directives/currency-input.directive';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { Cliente } from '../../../database/entities/personas/cliente.entity';
+import { CreateEditClienteDialogComponent } from '../../../pages/personas/clientes/create-edit-cliente-dialog/create-edit-cliente-dialog.component';
 
 export interface CobrarVentaDialogData {
   venta: Venta;
@@ -84,6 +88,8 @@ interface CurrencyDisplay {
     MatMenuModule,
     MatTooltipModule,
     MatSnackBarModule,
+    MatAutocompleteModule,
+    ReactiveFormsModule,
     CurrencyInputDirective,
   ],
 })
@@ -142,6 +148,15 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
   canCobrarCredito = false;
   cobrarCreditoTooltip = '';
 
+  // Cliente asignado a la venta + autocomplete para asignar / cambiar
+  selectedCliente: Cliente | null = null;
+  clienteControl = new FormControl<Cliente | string | null>(null);
+  clientes: Cliente[] = [];
+  filteredClientes: Cliente[] = [];
+  clienteLabel = '';
+  clienteChipColor: 'success' | 'info' = 'info';
+  savingCliente = false;
+
   constructor(
     public dialogRef: MatDialogRef<CobrarVentaDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: CobrarVentaDialogData,
@@ -155,11 +170,124 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     this.calculateTotals();
     await this.loadFormasPago();
     await this.loadExistingPago();
+    await this.loadClientes();
+    this.setupClienteAutocomplete();
+    this.refreshClienteLabel();
 
     if (this.data.monedas.length > 0) {
       this.selectedMoneda = this.data.principalMoneda || this.data.monedas[0];
       this.autoFillValor();
     }
+  }
+
+  private async loadClientes(): Promise<void> {
+    try {
+      const list = await firstValueFrom(this.repositoryService.getClientes({ activo: true }));
+      this.clientes = (list || []).map((c: any) => {
+        c._label = this.clienteDisplayLabel(c);
+        return c;
+      });
+      this.filteredClientes = this.clientes.slice(0, 50);
+      // Si la venta ya tiene cliente, preseleccionar
+      const c: any = this.data.venta?.cliente;
+      if (c?.id) {
+        const existente = this.clientes.find((x: any) => x.id === c.id) || c;
+        this.selectedCliente = existente as Cliente;
+      }
+    } catch (e) {
+      console.error('Error cargando clientes en cobrar-venta:', e);
+    }
+  }
+
+  private clienteDisplayLabel(c: Cliente | null): string {
+    if (!c) return '';
+    const p: any = (c as any).persona;
+    const apellido = p?.apellido ? ` ${p.apellido}` : '';
+    const nombre = `${p?.nombre || ''}${apellido}`.trim();
+    return nombre || (c as any).razon_social || `#${c.id}`;
+  }
+
+  private setupClienteAutocomplete(): void {
+    this.clienteControl.valueChanges.subscribe((value) => {
+      if (typeof value === 'string') {
+        const filter = value.toUpperCase();
+        this.filteredClientes = this.clientes
+          .filter((c) => this.clienteDisplayLabel(c).toUpperCase().includes(filter))
+          .slice(0, 50);
+      } else {
+        this.filteredClientes = this.clientes.slice(0, 50);
+      }
+    });
+  }
+
+  displayCliente = (c: any): string => (c && typeof c === 'object' ? this.clienteDisplayLabel(c) : '');
+
+  private refreshClienteLabel(): void {
+    if (this.selectedCliente) {
+      this.clienteLabel = this.clienteDisplayLabel(this.selectedCliente);
+      this.clienteChipColor = (this.selectedCliente as any).credito ? 'success' : 'info';
+    } else {
+      this.clienteLabel = '';
+      this.clienteChipColor = 'info';
+    }
+    this.recomputeCobrarCredito();
+  }
+
+  async onClienteSelected(cliente: Cliente): Promise<void> {
+    if (this.savingCliente || cliente?.id === (this.selectedCliente as any)?.id) return;
+    this.savingCliente = true;
+    try {
+      await firstValueFrom(
+        this.repositoryService.updateVenta(this.data.venta.id!, { cliente: { id: cliente.id! } as any }),
+      );
+      this.selectedCliente = cliente;
+      (this.data.venta as any).cliente = cliente;
+      this.snackBar.open(`Cliente asignado: ${this.clienteDisplayLabel(cliente)}`, 'Cerrar', { duration: 2000 });
+      this.refreshClienteLabel();
+      this.clienteControl.setValue(cliente, { emitEvent: false });
+    } catch (e) {
+      console.error('Error asignando cliente:', e);
+      this.snackBar.open('Error al asignar cliente', 'Cerrar', { duration: 3000 });
+    } finally {
+      this.savingCliente = false;
+    }
+  }
+
+  async clearCliente(): Promise<void> {
+    if (!this.selectedCliente || this.savingCliente) return;
+    this.savingCliente = true;
+    try {
+      await firstValueFrom(
+        this.repositoryService.updateVenta(this.data.venta.id!, { cliente: null as any }),
+      );
+      this.selectedCliente = null;
+      (this.data.venta as any).cliente = null;
+      this.clienteControl.setValue('', { emitEvent: false });
+      this.filteredClientes = this.clientes.slice(0, 50);
+      this.snackBar.open('Cliente removido de la venta', 'Cerrar', { duration: 2000 });
+      this.refreshClienteLabel();
+    } catch (e) {
+      console.error('Error removiendo cliente:', e);
+      this.snackBar.open('Error al remover cliente', 'Cerrar', { duration: 3000 });
+    } finally {
+      this.savingCliente = false;
+    }
+  }
+
+  abrirNuevoCliente(): void {
+    const ref = this.dialog.open(CreateEditClienteDialogComponent, {
+      width: '760px',
+      maxHeight: '90vh',
+      data: { cliente: null },
+      disableClose: true,
+    });
+    ref.afterClosed().subscribe(async (result) => {
+      if (result?.saved && result.cliente) {
+        await this.loadClientes();
+        const nuevo = this.clientes.find((c) => c.id === result.cliente.id) || result.cliente;
+        if (nuevo) await this.onClienteSelected(nuevo as Cliente);
+      }
+    });
   }
 
   private async loadExistingPago(): Promise<void> {
