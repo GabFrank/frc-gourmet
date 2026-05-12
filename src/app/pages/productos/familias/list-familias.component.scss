@@ -44,17 +44,50 @@
   }
 }
 
-.filter-container {
-  .filter-card {
-    background-color: #363636;
-    margin: 10px;
-  }
-  .filter-field {
-    width: 100%;
-    max-width: 400px;
+.filter-card {
+  background-color: #363636;
+  margin: 10px;
+  padding: 8px 16px;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  grid-template-areas:
+    'nombre estado'
+    'actions actions';
+  gap: 12px;
+  align-items: center;
+
+  .filter-field-name { grid-area: nombre; }
+  .filter-field-status { grid-area: estado; }
+
+  .filter-actions {
+    grid-area: actions;
     display: flex;
-    flex-direction: column;
-    margin-top: 12px;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+
+    .spacer {
+      flex: 1;
+    }
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .filter-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'nombre'
+      'estado'
+      'actions';
   }
 }
 

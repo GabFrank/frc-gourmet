@@ -40,6 +40,9 @@ import { ListProveedoresComponent } from 'src/app/pages/compras/proveedores/list
 import { ListFamiliasComponent } from 'src/app/pages/productos/familias/list-familias.component';
 import { ListProductosComponent } from 'src/app/pages/productos/list-productos/list-productos.component';
 import { ListClientesComponent } from 'src/app/pages/personas/clientes/list-clientes.component';
+import { PdvConfigDialogComponent } from 'src/app/shared/components/pdv-config-dialog/pdv-config-dialog.component';
+import { PdvMesaDialogComponent } from 'src/app/shared/components/pdv-mesa-dialog/pdv-mesa-dialog.component';
+import { MatDialog } from '@angular/material/dialog';
 
 @Component({
   selector: 'app-home',
@@ -94,6 +97,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     private repositoryService: RepositoryService,
     private snackBar: MatSnackBar,
     private onboardingService: OnboardingService,
+    private dialog: MatDialog,
   ) {}
 
   ngOnInit(): void {
@@ -255,13 +259,17 @@ export class HomeComponent implements OnInit, OnDestroy {
       case 'PRODUCTOS':
         this.tabsService.openTab('Productos', ListProductosComponent, {}, 'productos-tab');
         break;
-      case 'PDV_ATAJOS':
-        this.tabsService.openTab('Punto de Venta (PDV)', PdvComponent, {}, 'pdv');
-        this.snackBar.open(
-          'Configurá grupos y atajos desde el menú del PdV (icono de configuración).',
-          'OK',
-          { duration: 5000 },
-        );
+      case 'PDV_CONFIG':
+        this.dialog
+          .open(PdvConfigDialogComponent, { width: '760px', maxWidth: '95vw' })
+          .afterClosed()
+          .subscribe(() => this.onboardingService.refresh().subscribe());
+        break;
+      case 'PDV_MESAS':
+        this.dialog
+          .open(PdvMesaDialogComponent, { width: '900px', maxWidth: '95vw' })
+          .afterClosed()
+          .subscribe(() => this.onboardingService.refresh().subscribe());
         break;
       case 'CLIENTES':
         this.tabsService.openTab('Clientes', ListClientesComponent, {}, 'clientes-tab');

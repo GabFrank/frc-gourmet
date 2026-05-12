@@ -58,7 +58,7 @@
           <mat-icon>group_add</mat-icon> Creación Masiva
         </button>
         
-        <button mat-raised-button color="warn" (click)="openSectorDialog()">
+        <button mat-stroked-button (click)="openSectorDialog()">
           <mat-icon>category</mat-icon> Nuevo Sector
         </button>
         
@@ -182,11 +182,11 @@
             </span>
           </div>
           <div class="sector-actions">
-            <button mat-icon-button color="primary" (click)="openSectorDialog(sector)" matTooltip="Editar sector">
+            <button mat-icon-button (click)="openSectorDialog(sector)" matTooltip="Editar sector">
               <mat-icon>edit</mat-icon>
             </button>
-            <button mat-icon-button color="warn" (click)="deleteSector(sector.id)" matTooltip="Eliminar sector">
-              <mat-icon>delete</mat-icon>
+            <button mat-icon-button (click)="deleteSector(sector.id)" matTooltip="Eliminar sector">
+              <mat-icon class="icon-danger">delete</mat-icon>
             </button>
           </div>
         </div>

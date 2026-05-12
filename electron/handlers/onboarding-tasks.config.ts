@@ -7,8 +7,8 @@ import { MaquinaPos } from '../../src/app/database/entities/financiero/maquina-p
 import { Proveedor } from '../../src/app/database/entities/compras/proveedor.entity';
 import { Familia } from '../../src/app/database/entities/productos/familia.entity';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
-import { PdvAtajoGrupo } from '../../src/app/database/entities/ventas/pdv-atajo-grupo.entity';
-import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
+import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
+import { PdvMesa } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { UsuarioRole } from '../../src/app/database/entities/personas/usuario-role.entity';
 import { DashboardShortcut } from '../../src/app/database/entities/personalizacion/dashboard-shortcut.entity';
 import { verifyPassword } from '../utils/password.utils';
@@ -131,24 +131,34 @@ export const ONBOARDING_TASKS: OnboardingTaskDef[] = [
     }),
   },
   {
-    key: 'PDV_ATAJOS',
-    titulo: 'Configurar atajos de PdV',
-    descripcion: 'Diseñá la pantalla de venta con grupos y atajos rápidos.',
-    icono: 'apps',
-    actionTabKey: 'PDV_ATAJOS',
+    key: 'PDV_CONFIG',
+    titulo: 'Revisar configuración del PdV',
+    descripcion: 'Definí tab por default, comandas, grilla de atajos, estrategia de precio en pizzas, etc.',
+    icono: 'tune',
+    actionTabKey: 'PDV_CONFIG',
     detect: async (ds) => ({
-      count: await ds.getRepository(PdvAtajoGrupo).count(),
+      count: await ds.getRepository(PdvConfig).count(),
+    }),
+  },
+  {
+    key: 'PDV_MESAS',
+    titulo: 'Crear mesas del salón',
+    descripcion: 'Solo si tu negocio atiende mesas. Marcalo como "No aplica" si sos delivery puro.',
+    icono: 'table_restaurant',
+    actionTabKey: 'PDV_MESAS',
+    detect: async (ds) => ({
+      count: await ds.getRepository(PdvMesa).count(),
     }),
   },
   {
     key: 'CLIENTES',
     titulo: 'Registrar clientes',
-    descripcion: 'Para crédito, fidelización y reportes (opcional).',
+    descripcion: 'Componente de Clientes en desarrollo — marcalo manualmente o como "No aplica" si no usás crédito/fidelización.',
     icono: 'people',
     actionTabKey: 'CLIENTES',
-    detect: async (ds) => ({
-      count: await ds.getRepository(Cliente).count(),
-    }),
+    // TODO: cambiar a auto-detect cuando se implemente el frontend.
+    // Backend ya tiene CRUD completo (get-clientes, create-cliente, etc.).
+    manualOnly: true,
   },
   {
     key: 'ROLES_USUARIOS',
