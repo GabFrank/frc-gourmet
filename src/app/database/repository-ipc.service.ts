@@ -60,7 +60,7 @@ import { RecetaAdicionalVinculacion } from './entities/productos/receta-adiciona
 import { RecetaIngredienteIntercambiable } from './entities/productos/receta-ingrediente-intercambiable.entity';
 
 // LoginResult queda definido en repository.service.ts (abstract base)
-import { RepositoryService, LoginResult } from './repository.service';
+import { RepositoryService, LoginResult, ClienteFilters } from './repository.service';
 
 // Define an interface for the electron API
 interface ElectronAPI {
@@ -93,7 +93,7 @@ interface ElectronAPI {
   updateTipoCliente: (tipoClienteId: number, tipoClienteData: any) => Promise<any>;
   deleteTipoCliente: (tipoClienteId: number) => Promise<any>;
   // Cliente operations
-  getClientes: () => Promise<Cliente[]>;
+  getClientes: (filters?: ClienteFilters) => Promise<Cliente[]>;
   getCliente: (clienteId: number) => Promise<Cliente>;
   createCliente: (clienteData: any) => Promise<Cliente>;
   updateCliente: (clienteId: number, clienteData: any) => Promise<any>;
@@ -933,6 +933,9 @@ interface ElectronAPI {
   cobrarCpcCuota: (payload: any) => Promise<any>;
   anularCobroCpcCuota: (payload: any) => Promise<any>;
   recalcularSaldoCliente: (clienteId: number) => Promise<any>;
+  getClienteEstadoCuenta: (clienteId: number) => Promise<any>;
+  getMovimientosClienteStats: (clienteId: number) => Promise<any>;
+  cobrarVentaCredito: (payload: any) => Promise<any>;
 
   // Movimientos Cliente (Fase 7)
   getMovimientosCliente: (clienteId: number, filtros?: any) => Promise<any>;
@@ -1139,8 +1142,8 @@ export class RepositoryIpcService extends RepositoryService {
   }
 
   // Cliente methods
-  getClientes(): Observable<Cliente[]> {
-    return from(this.api.getClientes());
+  getClientes(filters?: ClienteFilters): Observable<Cliente[]> {
+    return from(this.api.getClientes(filters));
   }
 
   getCliente(clienteId: number): Observable<Cliente> {
@@ -3651,6 +3654,18 @@ export class RepositoryIpcService extends RepositoryService {
   }
   recalcularSaldoCliente(clienteId: number): Observable<any> {
     return from(this.api.recalcularSaldoCliente(clienteId));
+  }
+
+  getClienteEstadoCuenta(clienteId: number): Observable<any> {
+    return from(this.api.getClienteEstadoCuenta(clienteId));
+  }
+
+  getMovimientosClienteStats(clienteId: number): Observable<any> {
+    return from(this.api.getMovimientosClienteStats(clienteId));
+  }
+
+  cobrarVentaCredito(payload: any): Observable<any> {
+    return from(this.api.cobrarVentaCredito(payload));
   }
 
   // ===================== MOVIMIENTOS CLIENTE (Fase 7) =====================

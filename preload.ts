@@ -1257,8 +1257,14 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // Cliente operations
-  getClientes: async (): Promise<Cliente[]> => {
-    return await ipcRenderer.invoke('get-clientes');
+  getClientes: async (filters?: {
+    nombre?: string;
+    ruc?: string;
+    tipoClienteId?: number;
+    activo?: boolean;
+    conCredito?: boolean;
+  }): Promise<Cliente[]> => {
+    return await ipcRenderer.invoke('get-clientes', filters);
   },
   getCliente: async (clienteId: number): Promise<Cliente> => {
     return await ipcRenderer.invoke('get-cliente', clienteId);
@@ -3373,6 +3379,15 @@ contextBridge.exposeInMainWorld('api', {
   },
   getSaldoCliente: async (clienteId: number): Promise<any> => {
     return await ipcRenderer.invoke('get-saldo-cliente', clienteId);
+  },
+  getClienteEstadoCuenta: async (clienteId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cliente-estado-cuenta', clienteId);
+  },
+  getMovimientosClienteStats: async (clienteId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-movimientos-cliente-stats', clienteId);
+  },
+  cobrarVentaCredito: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('cobrar-venta-credito', payload);
   },
 
   // === Notificaciones RRHH (Fase 8) ===

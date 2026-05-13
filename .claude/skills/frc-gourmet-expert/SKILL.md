@@ -105,6 +105,20 @@ Estas las debo respetar SIEMPRE, sin que el usuario las repita:
 
 ---
 
+## 4. Estado actual del repo (snapshot 2026-05-12)
+
+> Esta sección puede quedar desactualizada. Si el usuario pregunta por estado actual, **revisar `git log` y memorias antes de responder**.
+
+- **Última feature en branch propio:** **Clientes módulo completo F1 + F2 + venta a crédito** — F1 CRUD reescrito con autocomplete persona, botón "+ Nuevo persona/tipo" inline, validador cross-field tributa→ruc, soft delete. F2 cliente-detalle con padrón dashboards (4 stat-chips, 2 charts, CPC abiertas, historial paginado con filtros + export Excel/PDF, últimas ventas). Persona ahora puede crearse solo con nombre (documento opcional, validado contextualmente en cliente con crédito / funcionario / facturación). Venta a crédito directa desde PdV: botón "Cobrar a crédito" en cobrar-venta-dialog + dialog que configura cuotas/frecuencia/fecha → handler atómico `cobrar-venta-credito` que cierra venta CONCLUIDA con FormaPago "CUENTA CORRIENTE" + crea CPC + CARGO + actualiza saldo. Cobro desde Caja Mayor: botón "Cobrar a cliente" en caja-mayor-detalle → mini-dialog buscador de CPC ACTIVAS → cobrar-cuota-dialog (con caja/moneda/forma pre-seleccionadas). Fix Postgres: `pg.types.setTypeParser(1700)` en main.ts para que NUMERIC venga como `number` (evita concatenación de strings en sumas). Branch `feat/clientes-full`. Detalles → [domains/personas-clientes.md](domains/personas-clientes.md).
+- **Refactor de dashboards** — padrón unificado para los 7 dashboards (Home, Ventas, Compras, Productos, Financiero, Caja Mayor, RRHH). SCSS partial común + 5 componentes shared (`<app-dash-*>`) + 5 handlers KPI nuevos por dominio + 6 permisos `XXX_DASHBOARD_VER`. Branch `feat/dashboards-padron-unificado`, commit `2a061d8`. Detalles → [domains/dashboards.md](domains/dashboards.md). **Pendiente: merge a main + activar chequeo de permisos en frontend (PermissionService existe pero no se usa).**
+- **Importación de facturas con OCR + IA** (GPT-4o vision) — extrae proveedor + items + teléfono, hace matching por aliases + Levenshtein, crea Compra borrador. Aprende de cada confirmación. Tab dedicado de revisión, dialogs inline para crear proveedor/producto. Pantalla `Sistema → Configurar IA` con probador. Lista de Importaciones IA con reprocesar/descartar. **Producto** ahora tiene campo `iva` (0/5/10, default 10) y `registroCompleto` (boolean para chip "Parcial" en list-productos). `Producto.subfamilia` es nullable. Detalles → [domains/importacion-facturas-ocr.md](domains/importacion-facturas-ocr.md).
+- **Backup/Restore + Reset BD + Seed admin** (commit `607a880`).
+- **Compras MVP** con flujo de pago unificado vía CPP (commit `c2e0a70`).
+- **RRHH** completado hasta Fase 8 (dashboard, notificaciones, reportes con exports).
+- **Ventas/PdV** muy avanzado (cobro multi-pago, delivery, mesas, comandas, atajos, multi-sabor, descuento de stock automático).
+- **Productos** con refactor de variaciones completado (RecetaPresentacion sustituye al multiplicador).
+- **Refactor en paralelo activo:** branch `refactor/sweep-currency-ngmodel-fechas` (otro agente trabajando) — aplicar `appCurrencyInput` directive a dialogs/componentes. **No mezclar con otros refactors.**
+- **Pendientes mayores:** UI de Promociones, Producción, Reservas avanzadas, autocompletes en selects largos, migración ngModel→Reactive Forms, sweep de fechas timezone-safe, completar permisos `COMPRAS_IMPORTAR_FACTURA`/`SISTEMA_CONFIGURAR_IA`/`*_DASHBOARD_VER` en sidenav y `app.component.ts` (creados pero no chequeados), TODO scan de pre-selecciones (memoria `project_todo_preselecciones`), Clientes F3 (Loyalty/Tags/Direcciones) y F4 (cumpleaños/import/reportes).
 ## 4. Estado actual del repo (snapshot 2026-05-11)
 
 > Esta sección puede quedar desactualizada. Si el usuario pregunta por estado actual, **revisar `git log` y memorias antes de responder**.

@@ -501,13 +501,14 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
     this.filteredMonedas.forEach(moneda => {
       if (moneda.id === this.principalMoneda?.id) return; // Skip principal
 
-      // Find exchange rate from principal to this currency
+      // Buscar rate en ambos sentidos: compraLocal siempre expresa cuántos PRINCIPAL
+      // vale 1 OTRA, así que la fórmula PRINCIPAL/compraLocal funciona en ambos casos.
       const exchangeRate = this.exchangeRates.find(rate =>
-        rate.monedaOrigen.id === this.principalMoneda?.id &&
-        rate.monedaDestino.id === moneda.id
+        (rate.monedaOrigen?.id === this.principalMoneda?.id && rate.monedaDestino?.id === moneda.id) ||
+        (rate.monedaOrigen?.id === moneda.id && rate.monedaDestino?.id === this.principalMoneda?.id)
       );
 
-      if (exchangeRate) {
+      if (exchangeRate && exchangeRate.compraLocal) {
         // Use compraLocal rate to convert from principal to this currency, it must be a division
         const total = this.data.total / exchangeRate.compraLocal;
 
@@ -645,11 +646,11 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
         valueInPrincipal = detalle.valor;
       } else {
         const exchangeRate = this.exchangeRates.find(rate =>
-          rate.monedaDestino.id === detalle.moneda.id &&
-          rate.monedaOrigen.id === this.principalMoneda!.id
+          (rate.monedaOrigen?.id === this.principalMoneda!.id && rate.monedaDestino?.id === detalle.moneda.id) ||
+          (rate.monedaOrigen?.id === detalle.moneda.id && rate.monedaDestino?.id === this.principalMoneda!.id)
         );
 
-        if (exchangeRate) {
+        if (exchangeRate && exchangeRate.compraLocal) {
           valueInPrincipal = detalle.valor * exchangeRate.compraLocal;
         } else {
           this.snackBar.open('No se encontró el tipo de cambio para la moneda ' + detalle.moneda.denominacion, 'Cerrar', { duration: 3000 });
@@ -695,31 +696,19 @@ export class PagoDialogComponent implements OnInit, AfterViewInit, AfterViewChec
     this.filteredMonedas.forEach(moneda => {
       if (moneda.id === this.principalMoneda!.id) return; // Skip principal, already updated
 
-      // Find exchange rate from principal to this currency
+      // Rate en cualquier sentido: compraLocal expresa cuántos PRINCIPAL vale 1 OTRA.
+      // PRINCIPAL → OTRA siempre se obtiene dividiendo.
       const exchangeRate = this.exchangeRates.find(rate =>
-        rate.monedaOrigen.id === this.principalMoneda!.id &&
-        rate.monedaDestino.id === moneda.id
+        (rate.monedaOrigen?.id === this.principalMoneda!.id && rate.monedaDestino?.id === moneda.id) ||
+        (rate.monedaOrigen?.id === moneda.id && rate.monedaDestino?.id === this.principalMoneda!.id)
       );
 
-      if (exchangeRate) {
-        // Convert remaining principal amount to this currency
+      if (exchangeRate && exchangeRate.compraLocal) {
         const remainingInCurrency = remainingInPrincipal / exchangeRate.compraLocal;
         this.saldos.set(moneda.id!, remainingInCurrency);
       } else {
-        // Try reverse rate
-        const reverseRate = this.exchangeRates.find(rate =>
-          rate.monedaOrigen.id === moneda.id &&
-          rate.monedaDestino.id === this.principalMoneda!.id
-        );
-
-        if (reverseRate) {
-          // Convert using reverse rate
-          const remainingInCurrency = remainingInPrincipal * reverseRate.compraLocal;
-          this.saldos.set(moneda.id!, remainingInCurrency);
-        } else {
-          console.warn(`No exchange rate found from ${this.principalMoneda!.denominacion} to ${moneda.denominacion}`);
-          this.saldos.set(moneda.id!, 0);
-        }
+        console.warn(`No exchange rate found between ${this.principalMoneda!.denominacion} and ${moneda.denominacion}`);
+        this.saldos.set(moneda.id!, 0);
       }
     });
 

@@ -1,0 +1,185 @@
+<div class="list-clientes-container">
+  <mat-card class="filter-card">
+    <mat-card-header>
+      <mat-card-title>Gestión de clientes</mat-card-title>
+    </mat-card-header>
+
+    <mat-card-content>
+      <form [formGroup]="filterForm" class="filter-form">
+        <div class="filter-fields">
+          <mat-form-field appearance="outline">
+            <mat-label>Nombre / Razón social</mat-label>
+            <input matInput formControlName="nombre" placeholder="Ej: Carlos">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>RUC / Documento</mat-label>
+            <input matInput formControlName="ruc" placeholder="Ej: 80012345">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Tipo de cliente</mat-label>
+            <mat-select formControlName="tipoClienteId">
+              <mat-option value="">Todos</mat-option>
+              <mat-option *ngFor="let t of tiposCliente" [value]="t.id">{{ t.descripcion }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Estado</mat-label>
+            <mat-select formControlName="activo">
+              <mat-option value="">Todos</mat-option>
+              <mat-option value="true">Activos</mat-option>
+              <mat-option value="false">Inactivos</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Crédito</mat-label>
+            <mat-select formControlName="conCredito">
+              <mat-option value="">Todos</mat-option>
+              <mat-option value="true">Con crédito</mat-option>
+              <mat-option value="false">Sin crédito</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="filter-actions">
+          <div class="left-actions">
+            <button mat-raised-button color="primary" type="button" (click)="buscar()">
+              <mat-icon>search</mat-icon>
+              Buscar
+            </button>
+            <button mat-button type="button" (click)="limpiarFiltros()">
+              <mat-icon>clear</mat-icon>
+              Limpiar
+            </button>
+          </div>
+          <div class="right-actions">
+            <button mat-raised-button color="accent" type="button" (click)="nuevoCliente()">
+              <mat-icon>add</mat-icon>
+              Nuevo cliente
+            </button>
+          </div>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <div class="table-container">
+    <div class="loading-shade" *ngIf="isLoading">
+      <mat-spinner></mat-spinner>
+    </div>
+
+    <mat-card class="table-scroll-container">
+      <table mat-table [dataSource]="pagedClientes" class="mat-elevation-z2">
+
+        <ng-container matColumnDef="nombre">
+          <th mat-header-cell *matHeaderCellDef>Nombre</th>
+          <td mat-cell *matCellDef="let row">
+            <div class="cell-stack">
+              <span class="primary">{{ row._nombreCompleto }}</span>
+              <span class="muted" *ngIf="row.razon_social && row.razon_social !== row._nombreCompleto">
+                {{ row.razon_social }}
+              </span>
+            </div>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="ruc">
+          <th mat-header-cell *matHeaderCellDef>RUC / Doc</th>
+          <td mat-cell *matCellDef="let row">
+            <span *ngIf="row.ruc; else docPersona">{{ row.ruc }}</span>
+            <ng-template #docPersona>
+              <span class="muted">{{ row.persona?.documento || '—' }}</span>
+            </ng-template>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="tipo">
+          <th mat-header-cell *matHeaderCellDef>Tipo</th>
+          <td mat-cell *matCellDef="let row">{{ row.tipo_cliente?.descripcion || '—' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="saldo">
+          <th mat-header-cell *matHeaderCellDef>Saldo</th>
+          <td mat-cell *matCellDef="let row">
+            {{ row.saldoActual | number:'1.0-2' }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="limite">
+          <th mat-header-cell *matHeaderCellDef>Límite</th>
+          <td mat-cell *matCellDef="let row">
+            <span *ngIf="row.credito; else sinCredito">{{ row.limite_credito | number:'1.0-2' }}</span>
+            <ng-template #sinCredito><span class="muted">—</span></ng-template>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="pctUso">
+          <th mat-header-cell *matHeaderCellDef>Uso</th>
+          <td mat-cell *matCellDef="let row">
+            <span class="pct-badge" [ngClass]="row._pctClass">{{ row._pctLabel }}</span>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="estado">
+          <th mat-header-cell *matHeaderCellDef>Estado</th>
+          <td mat-cell *matCellDef="let row">
+            <span class="status-badge" [ngClass]="row.activo ? 'st-active' : 'st-inactive'">
+              {{ row.activo ? 'Activo' : 'Inactivo' }}
+            </span>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef>Acciones</th>
+          <td mat-cell *matCellDef="let row">
+            <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="editarCliente(row)">
+                <mat-icon>edit</mat-icon>
+                <span>Editar</span>
+              </button>
+              <button mat-menu-item (click)="verEstadoCuenta(row)">
+                <mat-icon>account_balance_wallet</mat-icon>
+                <span>Ver estado de cuenta</span>
+              </button>
+              <button mat-menu-item (click)="toggleActivo(row)">
+                <mat-icon>{{ row.activo ? 'toggle_on' : 'toggle_off' }}</mat-icon>
+                <span>{{ row.activo ? 'Desactivar' : 'Activar' }}</span>
+              </button>
+              <button mat-menu-item (click)="eliminarCliente(row)">
+                <mat-icon>delete</mat-icon>
+                <span>Eliminar</span>
+              </button>
+            </mat-menu>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;"
+            [ngClass]="{ 'inactive-row': !row.activo }"></tr>
+
+        <tr class="mat-row" *matNoDataRow>
+          <td class="mat-cell empty-row" [attr.colspan]="displayedColumns.length">
+            No se encontraron clientes con los filtros aplicados.
+          </td>
+        </tr>
+      </table>
+    </mat-card>
+
+    <div class="paginator-container">
+      <mat-paginator
+        [length]="totalClientes"
+        [pageSize]="pageSize"
+        [pageSizeOptions]="pageSizeOptions"
+        [pageIndex]="currentPage"
+        (page)="onPageChange($event)"
+        aria-label="Seleccionar página">
+      </mat-paginator>
+    </div>
+  </div>
+</div>

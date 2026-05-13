@@ -110,6 +110,20 @@ async function buildDbOverride(userDataPath: string): Promise<DbConnectionOverri
   const db = settings.database;
   if (db.type === 'postgres') {
     const password = await getDbPassword();
+    // Postgres devuelve NUMERIC/DECIMAL como string por default (preserva precisión).
+    // Para el caso de uso de esta app (montos PYG/USD/BRL con max 2 decimales y
+    // valores muy por debajo de 10^15) no necesitamos esa precisión y sí necesitamos
+    // que las operaciones aritméticas en el frontend funcionen sin coerciones manuales
+    // (decimal + decimal terminaba concatenando strings y mostrando vacío en PdV).
+    // Forzamos parseFloat en OID 1700 (numeric). OID 20 (int8/bigint) lo dejamos como
+    // está por seguridad — no se usa para montos.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const pgLib = require('pg');
+      pgLib.types.setTypeParser(1700, (v: string) => v == null ? null : parseFloat(v));
+    } catch (e) {
+      console.warn('[DB] No se pudo registrar pg.types numeric parser:', e);
+    }
     return {
       type: 'postgres',
       host: db.host,

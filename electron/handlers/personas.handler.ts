@@ -551,13 +551,43 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
   });
 
   // --- Cliente Handlers ---
-  ipcMain.handle('get-clientes', async () => {
+  ipcMain.handle('get-clientes', async (_event: any, filters?: {
+    nombre?: string;
+    ruc?: string;
+    tipoClienteId?: number;
+    activo?: boolean;
+    conCredito?: boolean;
+  }) => {
     try {
       const clienteRepository = dataSource.getRepository(Cliente);
-      return await clienteRepository.find({
-        relations: ['persona', 'tipo_cliente'],
-        order: { persona: { nombre: 'ASC' } }
-      });
+      const qb = clienteRepository.createQueryBuilder('cliente')
+        .leftJoinAndSelect('cliente.persona', 'persona')
+        .leftJoinAndSelect('cliente.tipo_cliente', 'tipo_cliente')
+        .orderBy('persona.nombre', 'ASC');
+
+      if (filters?.nombre) {
+        const nombre = `%${filters.nombre.trim().toUpperCase()}%`;
+        qb.andWhere(
+          '(UPPER(persona.nombre) LIKE :nombre OR UPPER(COALESCE(persona.apellido, \'\')) LIKE :nombre OR UPPER(COALESCE(cliente.razon_social, \'\')) LIKE :nombre)',
+          { nombre }
+        );
+      }
+      if (filters?.ruc) {
+        qb.andWhere('UPPER(COALESCE(cliente.ruc, \'\')) LIKE :ruc', {
+          ruc: `%${filters.ruc.trim().toUpperCase()}%`,
+        });
+      }
+      if (filters?.tipoClienteId !== undefined && filters.tipoClienteId !== null) {
+        qb.andWhere('cliente.tipo_cliente_id = :tipoClienteId', { tipoClienteId: filters.tipoClienteId });
+      }
+      if (filters?.activo !== undefined) {
+        qb.andWhere('cliente.activo = :activo', { activo: filters.activo });
+      }
+      if (filters?.conCredito !== undefined) {
+        qb.andWhere('cliente.credito = :conCredito', { conCredito: filters.conCredito });
+      }
+
+      return await qb.getMany();
     } catch (error) {
       console.error('Error getting clientes:', error);
       throw error;

@@ -18,6 +18,41 @@
   </div>
 
   <mat-dialog-content>
+    <!-- Cliente asignado -->
+    <div class="cliente-bar">
+      <ng-container *ngIf="selectedCliente; else clienteAutocompleteTpl">
+        <div class="cliente-chip" [ngClass]="'chip-' + clienteChipColor">
+          <mat-icon>person</mat-icon>
+          <span class="cliente-nombre">{{ clienteLabel }}</span>
+          <span class="cliente-credito" *ngIf="selectedCliente.credito">crédito habilitado</span>
+        </div>
+        <button mat-stroked-button type="button" (click)="clearCliente()" [disabled]="savingCliente">
+          <mat-icon>close</mat-icon> Quitar
+        </button>
+      </ng-container>
+      <ng-template #clienteAutocompleteTpl>
+        <mat-form-field appearance="outline" class="cliente-autocomplete" subscriptSizing="dynamic">
+          <mat-label>Cliente</mat-label>
+          <input matInput
+                 [formControl]="clienteControl"
+                 [matAutocomplete]="autoCliente"
+                 placeholder="Buscar cliente…">
+          <mat-icon matSuffix>person_search</mat-icon>
+          <mat-autocomplete #autoCliente="matAutocomplete"
+                            [displayWith]="displayCliente"
+                            (optionSelected)="onClienteSelected($event.option.value)">
+            <mat-option *ngFor="let c of $any(filteredClientes)" [value]="c">
+              {{ c._label || c.razon_social || ('#' + c.id) }}
+              <span class="cliente-credito-tag" *ngIf="c.credito"> · crédito</span>
+            </mat-option>
+          </mat-autocomplete>
+        </mat-form-field>
+        <button mat-stroked-button color="primary" type="button" (click)="abrirNuevoCliente()">
+          <mat-icon>person_add</mat-icon> Nuevo cliente
+        </button>
+      </ng-template>
+    </div>
+
     <!-- Totals bar -->
     <div class="totals-bar">
       <div class="currency-total-item" *ngFor="let cd of currencyDisplays">
@@ -281,6 +316,11 @@
       <button mat-raised-button class="btn-parcial" [disabled]="!canCobroParcial" (click)="cobroParcial()">
         <mat-icon>timelapse</mat-icon>
         Cobro Parcial
+      </button>
+      <button mat-raised-button class="btn-credito" [disabled]="!canCobrarCredito"
+              (click)="cobrarCredito()" [matTooltip]="cobrarCreditoTooltip">
+        <mat-icon>credit_card</mat-icon>
+        Cobrar a crédito
       </button>
       <button mat-raised-button class="btn-descuento" (click)="openAjusteDialog()" [disabled]="!selectedMoneda" matTooltip="Descuento/Aumento (F9)">
         <mat-icon>{{ saldoPrincipal > 0 ? 'discount' : 'add_circle' }}</mat-icon>

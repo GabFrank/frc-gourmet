@@ -1,0 +1,106 @@
+<h2 mat-dialog-title>
+  <mat-icon class="title-icon">credit_card</mat-icon>
+  Venta a crédito
+</h2>
+
+<mat-dialog-content class="dialog-content">
+  <!-- Resumen cliente -->
+  <section class="info-block">
+    <div class="row">
+      <span class="label">Cliente</span>
+      <span class="value">{{ data.clienteNombre }}</span>
+    </div>
+    <div class="row">
+      <span class="label">Venta</span>
+      <span class="value">#{{ data.ventaId }}</span>
+    </div>
+    <div class="row">
+      <span class="label">Monto a financiar</span>
+      <span class="value strong">
+        <span *ngIf="data.monedaSimbolo" class="moneda">{{ data.monedaSimbolo }}</span>
+        {{ data.monto | number:'1.0-2' }}
+      </span>
+    </div>
+  </section>
+
+  <!-- Saldo proyectado -->
+  <section class="saldo-block" [ngClass]="'saldo-' + saldoClass">
+    <div class="saldo-row">
+      <span class="label">Saldo actual</span>
+      <span class="value">{{ data.saldoActual | number:'1.0-2' }}</span>
+    </div>
+    <div class="saldo-row">
+      <span class="label">Saldo proyectado</span>
+      <span class="value strong">{{ saldoProyectado | number:'1.0-2' }}</span>
+    </div>
+    <div class="saldo-row" *ngIf="data.limiteCredito > 0">
+      <span class="label">Límite de crédito</span>
+      <span class="value">{{ data.limiteCredito | number:'1.0-2' }}</span>
+    </div>
+    <div class="saldo-warning" *ngIf="excedeLimite">
+      <mat-icon>warning</mat-icon>
+      <span>Excede el límite — al confirmar se pedirá aprobación.</span>
+    </div>
+  </section>
+
+  <!-- Form -->
+  <form [formGroup]="form" class="form-grid">
+    <mat-form-field appearance="outline">
+      <mat-label>Cantidad de cuotas</mat-label>
+      <input matInput type="number" min="1" max="60" formControlName="cantidadCuotas">
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Frecuencia</mat-label>
+      <mat-select formControlName="frecuenciaDias">
+        <mat-option *ngFor="let f of frecuenciaOptions" [value]="f.value">{{ f.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Fecha de inicio</mat-label>
+      <input matInput [matDatepicker]="picker" formControlName="fechaInicio">
+      <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+      <mat-datepicker #picker></mat-datepicker>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full">
+      <mat-label>Descripción (opcional)</mat-label>
+      <input matInput formControlName="descripcion" maxlength="200"
+             placeholder="Ej: VENTA EVENTO DEL 12/05">
+    </mat-form-field>
+  </form>
+
+  <!-- Vista previa de cuotas -->
+  <section class="preview-block" *ngIf="cuotasPreview.length">
+    <div class="preview-header">
+      <mat-icon>list_alt</mat-icon>
+      <span>Vista previa de cuotas</span>
+    </div>
+    <table class="preview-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Vencimiento</th>
+          <th class="right">Monto</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let c of cuotasPreview">
+          <td>{{ c.numero }}</td>
+          <td>{{ c.vencimiento | date:'dd/MM/yyyy' }}</td>
+          <td class="right">{{ c.monto | number:'1.0-2' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="cancel()" [disabled]="saving">Cancelar</button>
+  <button mat-flat-button color="primary" type="button" (click)="submit()" [disabled]="saving || form.invalid">
+    <mat-icon *ngIf="!saving">check</mat-icon>
+    <mat-progress-spinner *ngIf="saving" diameter="18" mode="indeterminate"></mat-progress-spinner>
+    Confirmar venta a crédito
+  </button>
+</mat-dialog-actions>

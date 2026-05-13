@@ -17,6 +17,7 @@ import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input
 interface CobrarCuotaDialogData {
   cuota: any;
   contextoLabel?: string;
+  cajaMayorId?: number;
 }
 
 @Component({
@@ -95,8 +96,34 @@ export class CobrarCuotaDialogComponent implements OnInit {
       this.cajasMayor = (cajas || []).filter((c: any) => c.estado === 'ABIERTA');
       this.monedas = monedas || [];
       this.formasPago = (formas || []).filter((f: any) => f.movimentaCaja);
+      this.applyPreSelecciones();
       this.recalcDecimalesMoneda();
     } catch (e) { console.error(e); }
+  }
+
+  private applyPreSelecciones(): void {
+    // Caja Mayor: respeta data.cajaMayorId, sino única abierta.
+    if (!this.form.get('cajaMayorId')?.value) {
+      const targetCaja = this.data?.cajaMayorId
+        ? this.cajasMayor.find(c => c.id === this.data!.cajaMayorId)
+        : (this.cajasMayor.length === 1 ? this.cajasMayor[0] : null);
+      if (targetCaja) this.form.patchValue({ cajaMayorId: targetCaja.id });
+    }
+    // Moneda: la de la CPC si existe, sino la principal, sino la única.
+    if (!this.form.get('monedaId')?.value) {
+      const monedaCpc = this.cuota?.cuentaPorCobrar?.moneda?.id;
+      const principal = this.monedas.find((m: any) => m.principal);
+      const targetMoneda = (monedaCpc && this.monedas.find((m: any) => m.id === monedaCpc))
+        || principal
+        || (this.monedas.length === 1 ? this.monedas[0] : null);
+      if (targetMoneda) this.form.patchValue({ monedaId: targetMoneda.id });
+    }
+    // Forma de pago: la principal, sino la única.
+    if (!this.form.get('formaPagoId')?.value) {
+      const principalFp = this.formasPago.find((f: any) => f.principal);
+      const targetFp = principalFp || (this.formasPago.length === 1 ? this.formasPago[0] : null);
+      if (targetFp) this.form.patchValue({ formaPagoId: targetFp.id });
+    }
   }
 
   async onSubmit(): Promise<void> {
