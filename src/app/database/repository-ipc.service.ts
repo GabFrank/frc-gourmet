@@ -717,6 +717,10 @@ interface ElectronAPI {
   getOnboardingStatus: () => Promise<any>;
   markOnboardingTask: (payload: { taskKey: string; action: 'MANUAL' | 'SKIPPED' | 'RESET' }) => Promise<any>;
 
+  // Empresa (singleton)
+  getEmpresa: () => Promise<any>;
+  updateEmpresa: (data: any) => Promise<any>;
+
   // Cotizaciones de mercado (scraping on-demand)
   getCotizacionMercado: () => Promise<any>;
 
@@ -3112,6 +3116,13 @@ export class RepositoryIpcService extends RepositoryService {
   }
   getCotizacionMercado(): Observable<any> {
     return from(this.api.getCotizacionMercado());
+  }
+  // ===================== EMPRESA (singleton) =====================
+  getEmpresa(): Observable<any> {
+    return from(this.api.getEmpresa());
+  }
+  updateEmpresa(data: any): Observable<any> {
+    return from(this.api.updateEmpresa(data));
   }
 
   // ===================== FASE 4: ENTRADAS VARIAS =====================

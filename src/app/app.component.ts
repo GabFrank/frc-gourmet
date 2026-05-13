@@ -86,6 +86,9 @@ import { ReportesRrhhPageComponent } from './pages/rrhh/reportes/reportes-rrhh-p
 import { RepositoryService } from './database/repository.service';
 import { UpdateService } from './services/update.service';
 import { UpdateChannelDialogComponent } from './shared/components/update-channel-dialog/update-channel-dialog.component';
+import { EmpresaService } from './shared/services/empresa.service';
+import { ConfigurarEmpresaComponent } from './pages/sistema/configurar-empresa/configurar-empresa.component';
+import { resolveAppUrl } from './shared/utils/image-url.util';
 
 @Component({
   selector: 'app-root',
@@ -131,6 +134,12 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   notificacionesNoLeidas = 0;
   private notifInterval: any;
 
+  /** Nombre de la empresa para el toolbar. Bindeado al EmpresaService.empresa$. */
+  empresaNombre = 'MI EMPRESA';
+  /** URL resuelta del logo para mostrar en el header (thumb o original como fallback). */
+  empresaLogoUrl: string | null = null;
+  private empresaSub: Subscription | null = null;
+
   // Auto-update toolbar state
   updateAvailable = false;
   updateDownloaded = false;
@@ -157,12 +166,30 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     private snackBar: MatSnackBar,
     private repo: RepositoryService,
     private updateService: UpdateService,
+    private empresaService: EmpresaService,
   ) {
+    // Suscribirse al servicio de empresa para mantener el nombre + logo del
+    // toolbar sincronizados con cualquier update (login, guardar en
+    // configurar-empresa, subir/quitar logo).
+    this.empresaSub = this.empresaService.empresa.subscribe((emp) => {
+      this.empresaNombre = emp?.nombre || 'MI EMPRESA';
+      const raw = emp?.logoUrl || null;
+      // Logo va sin thumbnails para preservar transparencia (los thumbs .jpg
+      // aplanan el alpha). El original suele pesar < 100KB, no es problema.
+      this.empresaLogoUrl = raw ? (resolveAppUrl(raw) || null) : null;
+    });
+
     // Subscribe to authentication state changes
     this.authService.currentUser$.subscribe((user) => {
       this.isAuthenticated = !!user;
       this.currentUser = user;
       this.userDisplayName = this.buildUserDisplayName(user);
+
+      // Al autenticar, recargar los datos de la empresa (handler requiere user
+      // context para tracking). Sin user, dejamos el cache previo / fallback.
+      if (this.isAuthenticated) {
+        this.empresaService.load();
+      }
 
       // If user is logged in, fetch login history
       if (this.isAuthenticated && user?.id) {
@@ -264,6 +291,9 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (this.updateStatusSub) {
       this.updateStatusSub.unsubscribe();
+    }
+    if (this.empresaSub) {
+      this.empresaSub.unsubscribe();
     }
   }
 
@@ -467,6 +497,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       BackupRestoreComponent,
       { source: 'navigation' },
       'backup-restore-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openConfigurarEmpresaTab() {
+    this.tabsService.openTab(
+      'Datos de la Empresa',
+      ConfigurarEmpresaComponent,
+      { source: 'navigation' },
+      'configurar-empresa-tab',
       true
     );
     this.closeMenu();

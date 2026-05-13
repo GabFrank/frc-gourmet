@@ -2788,6 +2788,14 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('mark-onboarding-task', payload);
   },
 
+  // Empresa (singleton: datos legales/branding/fiscales)
+  getEmpresa: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-empresa');
+  },
+  updateEmpresa: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-empresa', data);
+  },
+
   // Scraping de cotizaciones de mercado (on-demand)
   getCotizacionMercado: async (): Promise<any> => {
     return await ipcRenderer.invoke('get-cotizacion-mercado');
