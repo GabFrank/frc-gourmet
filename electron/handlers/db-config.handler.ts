@@ -128,4 +128,122 @@ export function registerDbConfigHandlers() {
     app.exit(0);
     return { success: true };
   });
+
+  /**
+   * Inicializa una instancia Postgres: conecta como superuser a la DB `postgres`
+   * del sistema y crea (si no existen) el rol target y la base de datos target.
+   * Idempotente: si ya existen, no falla. Las credenciales de superuser NO se
+   * persisten — solo viven en RAM durante esta llamada.
+   */
+  ipcMain.handle('db-config-init-postgres', async (
+    _e,
+    payload: {
+      host: string;
+      port: number;
+      ssl?: boolean;
+      // Superuser (no se guarda)
+      superuserUsername: string;
+      superuserPassword: string;
+      // Target a crear (sí se usa luego en db-config-save)
+      targetUsername: string;
+      targetPassword: string;
+      targetDatabase: string;
+    },
+  ) => {
+    if (!payload || !payload.host || !payload.port) {
+      return { success: false, message: 'Host y puerto son requeridos.' };
+    }
+    if (!payload.superuserUsername) {
+      return { success: false, message: 'Usuario superuser es requerido.' };
+    }
+    // Password puede ser vacia (pg_hba.conf en trust/peer no requiere password).
+    if (!payload.targetUsername || !payload.targetPassword || !payload.targetDatabase) {
+      return { success: false, message: 'Usuario, password y nombre de base de datos a crear son requeridos.' };
+    }
+
+    // Validacion basica de identificadores Postgres (sin necesidad de quoting complejo)
+    const safeIdent = /^[A-Za-z_][A-Za-z0-9_]*$/;
+    if (!safeIdent.test(payload.targetUsername)) {
+      return { success: false, message: 'Nombre de usuario invalido (solo letras, numeros, underscore; debe iniciar con letra).' };
+    }
+    if (!safeIdent.test(payload.targetDatabase)) {
+      return { success: false, message: 'Nombre de base de datos invalido (solo letras, numeros, underscore; debe iniciar con letra).' };
+    }
+
+    // Password contains apostrophe? Escape it for Postgres SQL literal
+    const sqlEscape = (s: string) => s.replace(/'/g, "''");
+
+    let temp: DataSource | null = null;
+    try {
+      temp = new DataSource({
+        type: 'postgres',
+        host: payload.host,
+        port: payload.port,
+        database: 'postgres', // DB del sistema, siempre existe
+        username: payload.superuserUsername,
+        password: payload.superuserPassword,
+        ssl: payload.ssl ? { rejectUnauthorized: false } : undefined,
+        entities: [],
+        synchronize: false,
+      });
+      await temp.initialize();
+
+      const created: string[] = [];
+      const skipped: string[] = [];
+
+      // 1. Crear/actualizar rol target
+      const roleRows: Array<{ exists: boolean }> = await temp.query(
+        `SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = $1) AS exists`,
+        [payload.targetUsername],
+      );
+      const roleExists = roleRows[0]?.exists === true;
+      if (!roleExists) {
+        await temp.query(
+          `CREATE ROLE "${payload.targetUsername}" WITH LOGIN PASSWORD '${sqlEscape(payload.targetPassword)}'`,
+        );
+        created.push(`usuario ${payload.targetUsername}`);
+      } else {
+        // Actualizar password si el usuario ya existia (asumimos que el operador
+        // quiere reusar el rol con la nueva password tipeada).
+        await temp.query(
+          `ALTER ROLE "${payload.targetUsername}" WITH LOGIN PASSWORD '${sqlEscape(payload.targetPassword)}'`,
+        );
+        skipped.push(`usuario ${payload.targetUsername} (ya existia; password actualizada)`);
+      }
+
+      // 2. Crear base de datos target (NO se puede hacer dentro de tx — TypeORM lo permite porque cada query() es autocommit)
+      const dbRows: Array<{ exists: boolean }> = await temp.query(
+        `SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1) AS exists`,
+        [payload.targetDatabase],
+      );
+      const dbExists = dbRows[0]?.exists === true;
+      if (!dbExists) {
+        await temp.query(
+          `CREATE DATABASE "${payload.targetDatabase}" OWNER "${payload.targetUsername}" ENCODING 'UTF8' TEMPLATE template0`,
+        );
+        created.push(`base de datos ${payload.targetDatabase}`);
+      } else {
+        skipped.push(`base de datos ${payload.targetDatabase} (ya existia)`);
+      }
+
+      // 3. Asegurar privilegios
+      await temp.query(
+        `GRANT ALL PRIVILEGES ON DATABASE "${payload.targetDatabase}" TO "${payload.targetUsername}"`,
+      );
+
+      const parts: string[] = [];
+      if (created.length > 0) parts.push(`Creado: ${created.join(', ')}.`);
+      if (skipped.length > 0) parts.push(`Ya existia: ${skipped.join(', ')}.`);
+      parts.push('Privilegios asignados.');
+
+      return { success: true, message: parts.join(' ') };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { success: false, message: `Error inicializando Postgres: ${msg}` };
+    } finally {
+      if (temp && temp.isInitialized) {
+        try { await temp.destroy(); } catch {}
+      }
+    }
+  });
 }

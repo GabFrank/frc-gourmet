@@ -81,18 +81,32 @@
               </div>
 
               <mat-slide-toggle [(ngModel)]="pgSsl">SSL (rejectUnauthorized=false)</mat-slide-toggle>
+
+              <div class="init-postgres-row">
+                <button mat-stroked-button (click)="initPostgres()" [disabled]="initializing || testing || saving">
+                  <mat-icon>build_circle</mat-icon>
+                  <span>Inicializar Postgres (crear DB + usuario)</span>
+                  <mat-spinner *ngIf="initializing" diameter="16" class="inline-spinner"></mat-spinner>
+                </button>
+                <span class="hint inline">Util cuando Postgres no tiene aun la DB ni el usuario. Pide credenciales del superuser temporalmente.</span>
+              </div>
+
+              <div *ngIf="initResult" class="test-result" [class.ok]="initResult.ok" [class.err]="!initResult.ok">
+                <mat-icon>{{ initResult.ok ? 'check_circle' : 'error' }}</mat-icon>
+                <span>{{ initResult.msg }}</span>
+              </div>
             </div>
           </mat-tab>
         </mat-tab-group>
 
         <div class="actions">
-          <button mat-stroked-button (click)="test()" [disabled]="testing || saving">
+          <button mat-stroked-button (click)="test()" [disabled]="testing || saving || initializing">
             <mat-icon>compare_arrows</mat-icon>
             <span>Probar conexion</span>
             <mat-spinner *ngIf="testing" diameter="16" class="inline-spinner"></mat-spinner>
           </button>
 
-          <button mat-raised-button color="primary" (click)="saveAndRestart()" [disabled]="testing || saving">
+          <button mat-raised-button color="primary" (click)="saveAndRestart()" [disabled]="testing || saving || initializing">
             <mat-icon>restart_alt</mat-icon>
             <span>Guardar y reiniciar</span>
             <mat-spinner *ngIf="saving" diameter="16" class="inline-spinner"></mat-spinner>

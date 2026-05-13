@@ -1,0 +1,81 @@
+<h2 mat-dialog-title>
+  <mat-icon>person_add</mat-icon>
+  Nuevo usuario
+</h2>
+
+<mat-dialog-content>
+  <!-- Loading inicial -->
+  <div *ngIf="loading" class="spinner-row">
+    <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
+  </div>
+
+  <!-- Vista 1: formulario -->
+  <ng-container *ngIf="!loading && !usuarioCreado">
+    <p class="hint">
+      Vamos a crear un usuario con una <strong>contraseña temporal aleatoria</strong>.
+      Una vez creado, vas a poder copiarla y pasársela al funcionario.
+      Él mismo podrá cambiarla luego desde el menú de su perfil.
+    </p>
+
+    <form [formGroup]="form" class="form-grid">
+      <mat-form-field appearance="outline" class="full">
+        <mat-label>Nickname (login)</mat-label>
+        <input matInput formControlName="nickname" placeholder="ej: jperez" />
+        <mat-icon matSuffix>account_circle</mat-icon>
+        <mat-hint>Solo minúsculas, números, punto, guión bajo y medio. 3 a 30 chars.</mat-hint>
+        <mat-error *ngIf="form.controls['nickname'].hasError('required')">
+          El nickname es requerido.
+        </mat-error>
+        <mat-error *ngIf="form.controls['nickname'].hasError('pattern')">
+          Formato inválido.
+        </mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full">
+        <mat-label>Roles (opcional)</mat-label>
+        <mat-select formControlName="roleIds" multiple>
+          <mat-option *ngFor="let r of roles" [value]="r.id">{{ r.descripcion }}</mat-option>
+        </mat-select>
+        <mat-hint>Podés asignar después también, desde la pantalla de usuarios.</mat-hint>
+      </mat-form-field>
+    </form>
+  </ng-container>
+
+  <!-- Vista 2: usuario creado, mostrar password -->
+  <ng-container *ngIf="usuarioCreado">
+    <p class="hint success">
+      <mat-icon>check_circle</mat-icon>
+      <span>Usuario <strong>{{ usuarioCreado.nickname }}</strong> creado correctamente.</span>
+    </p>
+
+    <p class="warning">
+      <mat-icon>warning</mat-icon>
+      <span>Esta es la única vez que verás esta contraseña. Copiala y pasala al funcionario.</span>
+    </p>
+
+    <div class="password-box">
+      <span class="label">Contraseña temporal:</span>
+      <code class="password">{{ usuarioCreado.passwordTemporal }}</code>
+      <button mat-icon-button (click)="copiarPassword()" matTooltip="Copiar al portapapeles">
+        <mat-icon>content_copy</mat-icon>
+      </button>
+    </div>
+  </ng-container>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <ng-container *ngIf="!usuarioCreado">
+    <button mat-button (click)="cancelar()" [disabled]="saving">Cancelar</button>
+    <button mat-raised-button color="primary" (click)="confirmar()" [disabled]="saving || form.invalid">
+      <mat-icon *ngIf="!saving">add</mat-icon>
+      <mat-progress-spinner *ngIf="saving" mode="indeterminate" diameter="16"></mat-progress-spinner>
+      <span>Crear usuario</span>
+    </button>
+  </ng-container>
+  <ng-container *ngIf="usuarioCreado">
+    <button mat-raised-button color="primary" (click)="cerrarOk()">
+      <mat-icon>check</mat-icon>
+      Listo
+    </button>
+  </ng-container>
+</mat-dialog-actions>

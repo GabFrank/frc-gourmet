@@ -1,0 +1,84 @@
+<h2 mat-dialog-title>
+  <mat-icon>build_circle</mat-icon>
+  Inicializar Postgres
+</h2>
+
+<mat-dialog-content>
+  <p class="hint">
+    Conectaremos como superuser a la base <code>postgres</code> del servidor y crearemos la base de datos y el usuario destino si no existen.
+    <br />
+    <strong>La contraseña del superuser no se guarda</strong> — solo se usa durante esta operacion.
+  </p>
+
+  <form [formGroup]="form" class="form-grid">
+    <h3 class="section-title">Servidor</h3>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Host</mat-label>
+      <input matInput formControlName="host" placeholder="localhost" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Puerto</mat-label>
+      <input matInput type="number" formControlName="port" placeholder="5432" />
+    </mat-form-field>
+
+    <mat-slide-toggle formControlName="ssl" class="full-width">
+      SSL (rejectUnauthorized=false)
+    </mat-slide-toggle>
+
+    <h3 class="section-title">Superuser (no se guarda)</h3>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Usuario superuser</mat-label>
+      <input matInput formControlName="superuserUsername" placeholder="postgres" />
+      <mat-icon matSuffix matTooltip="Tipicamente 'postgres' (Docker / Windows installer) o tu usuario de macOS (Homebrew / Postgres.app). Necesita CREATEDB y CREATEROLE.">info</mat-icon>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Password superuser (opcional)</mat-label>
+      <input matInput [type]="hideSuperuserPassword ? 'password' : 'text'" formControlName="superuserPassword" />
+      <button mat-icon-button matSuffix type="button" (click)="hideSuperuserPassword = !hideSuperuserPassword">
+        <mat-icon>{{ hideSuperuserPassword ? 'visibility_off' : 'visibility' }}</mat-icon>
+      </button>
+      <mat-hint>Dejar vacio si pg_hba.conf usa trust/peer en localhost.</mat-hint>
+    </mat-form-field>
+
+    <h3 class="section-title">A crear</h3>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Nombre del usuario destino</mat-label>
+      <input matInput formControlName="targetUsername" placeholder="frc_user" />
+      <mat-error *ngIf="form.controls['targetUsername'].hasError('pattern')">
+        Solo letras, numeros y underscore; debe iniciar con letra.
+      </mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Password del usuario destino</mat-label>
+      <input matInput [type]="hideTargetPassword ? 'password' : 'text'" formControlName="targetPassword" />
+      <button mat-icon-button matSuffix type="button" (click)="hideTargetPassword = !hideTargetPassword">
+        <mat-icon>{{ hideTargetPassword ? 'visibility_off' : 'visibility' }}</mat-icon>
+      </button>
+      <mat-error *ngIf="form.controls['targetPassword'].hasError('minlength')">
+        Minimo 4 caracteres.
+      </mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Nombre de la base de datos</mat-label>
+      <input matInput formControlName="targetDatabase" placeholder="frc_gourmet" />
+      <mat-error *ngIf="form.controls['targetDatabase'].hasError('pattern')">
+        Solo letras, numeros y underscore; debe iniciar con letra.
+      </mat-error>
+    </mat-form-field>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="confirm()" [disabled]="form.invalid">
+    <mat-icon>play_arrow</mat-icon>
+    Inicializar
+  </button>
+</mat-dialog-actions>

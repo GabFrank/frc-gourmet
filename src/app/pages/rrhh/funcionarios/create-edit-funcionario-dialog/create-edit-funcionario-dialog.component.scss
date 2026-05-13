@@ -16,5 +16,27 @@
     .full {
       grid-column: 1 / -1;
     }
+
+    .persona-row,
+    .usuario-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+
+      .persona-field,
+      .usuario-field {
+        flex: 1;
+      }
+
+      .btn-nueva-persona,
+      .btn-nuevo-usuario {
+        flex-shrink: 0;
+        height: 56px; // matchea altura de mat-form-field appearance=outline
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        white-space: nowrap;
+      }
+    }
   }
 }

@@ -19,26 +19,26 @@
 .filters-section {
   border-radius: 8px;
   padding: 16px;
-  
+
   h3 {
     margin-top: 0;
     margin-bottom: 16px;
-    color: rgba(0, 0, 0, 0.7);
+    color: var(--text-primary, rgba(0, 0, 0, 0.87));
     font-weight: 500;
   }
-  
+
   .filter-form {
     .filter-row {
       display: flex;
       flex-wrap: wrap;
       gap: 16px;
       align-items: flex-start;
-      
+
       mat-form-field {
         flex: 1;
         min-width: 200px;
       }
-      
+
       .filter-button {
         margin-top: 4px;
       }
@@ -50,67 +50,20 @@
 .actions-section {
   padding: 16px;
   border-radius: 8px;
-  
+
   .button-row {
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
-    
+
     button {
       flex: 1;
       min-width: 150px;
       padding: 6px 12px;
-      
+
       mat-icon {
         margin-right: 6px;
       }
-    }
-  }
-}
-
-/* Form Section */
-.form-section {
-  border-radius: 8px;
-  padding: 16px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  
-  &:nth-child(3) {
-    border-left: 4px solid rgba(63, 81, 181, 0.5); /* Accent color for batch section */
-  }
-  
-  h3 {
-    margin-top: 0;
-    margin-bottom: 16px;
-    color: inherit;
-  }
-  
-  .mesa-form {
-    .form-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
-      align-items: center;
-      
-      mat-form-field {
-        flex: 1;
-        min-width: 200px;
-      }
-      
-      .checkbox-container {
-        margin: 16px 8px;
-      }
-    }
-    
-    .button-container {
-      display: flex;
-      justify-content: flex-end;
-      gap: 16px;
-      margin-top: 16px;
-    }
-    
-    mat-hint {
-      font-style: italic;
-      opacity: 0.7;
     }
   }
 }
@@ -120,95 +73,98 @@
   h3 {
     margin-top: 0;
     margin-bottom: 16px;
-    color: rgba(0, 0, 0, 0.7);
+    color: var(--text-primary, rgba(0, 0, 0, 0.87));
     font-weight: 500;
   }
-  
+
   .loading-container {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: 32px;
-    
+
     p {
       margin-top: 16px;
-      opacity: 0.6;
+      color: var(--text-secondary, rgba(0, 0, 0, 0.6));
     }
   }
-  
+
   .empty-state {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: 32px;
-    background-color: #f5f5f5;
+    background-color: var(--surface-variant, rgba(0, 0, 0, 0.04));
+    border: 1px dashed var(--border-color, rgba(0, 0, 0, 0.12));
     border-radius: 8px;
-    
+
     mat-icon {
       font-size: 48px;
       height: 48px;
       width: 48px;
-      opacity: 0.5;
+      color: var(--text-secondary, rgba(0, 0, 0, 0.4));
       margin-bottom: 16px;
     }
-    
+
     p {
-      opacity: 0.7;
+      color: var(--text-secondary, rgba(0, 0, 0, 0.7));
       text-align: center;
+      margin: 0;
     }
   }
-  
+
   table {
     width: 100%;
-    
+
     .mat-column-numero {
       width: 80px;
     }
-    
+
     .mat-column-capacidad {
       width: 120px;
     }
-    
+
     .mat-column-sector {
       width: 120px;
     }
-    
-    .mat-column-activo, .mat-column-reservado {
+
+    .mat-column-activo,
+    .mat-column-reservado {
       width: 100px;
     }
-    
+
     .mat-column-actions {
       width: 60px;
       text-align: right;
     }
-    
+
     .status-badge {
       display: inline-block;
       border-radius: 16px;
       padding: 4px 8px;
       font-size: 12px;
       font-weight: 500;
-      
+
       &.active {
-        background-color: #e6f4ea;
-        color: #137333;
+        background-color: rgba(46, 125, 50, 0.15);
+        color: #2e7d32;
       }
-      
+
       &.inactive {
-        background-color: #f3f3f3;
-        color: #5f6368;
+        background-color: rgba(0, 0, 0, 0.08);
+        color: var(--text-secondary, rgba(0, 0, 0, 0.6));
       }
-      
+
       &.reserved {
-        background-color: #fce8e6;
-        color: #c5221f;
+        background-color: rgba(245, 124, 0, 0.15);
+        color: #ef6c00;
       }
-      
+
       &.available {
-        background-color: #e8f0fe;
-        color: #1a73e8;
+        background-color: rgba(25, 118, 210, 0.15);
+        color: #1976d2;
       }
     }
   }
@@ -219,49 +175,56 @@
   h3 {
     margin-top: 0;
     margin-bottom: 16px;
-    color: rgba(0, 0, 0, 0.7);
+    color: var(--text-primary, rgba(0, 0, 0, 0.87));
     font-weight: 500;
   }
-  
+
   .sector-cards {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 16px;
-    
+
     .sector-card {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background-color: white;
+      background-color: var(--surface, #fff);
+      border: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
       border-radius: 8px;
       padding: 16px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+
       .sector-info {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+
         h4 {
-          margin: 0 0 8px 0;
+          margin: 0;
           font-weight: 500;
+          color: var(--text-primary, rgba(0, 0, 0, 0.87));
         }
-        
+
         .status-badge {
           display: inline-block;
           border-radius: 16px;
           padding: 4px 8px;
           font-size: 12px;
           font-weight: 500;
-          
+          align-self: flex-start;
+
           &.active {
-            background-color: #e6f4ea;
-            color: #137333;
+            background-color: rgba(46, 125, 50, 0.15);
+            color: #2e7d32;
           }
-          
+
           &.inactive {
-            background-color: #f3f3f3;
-            color: #5f6368;
+            background-color: rgba(0, 0, 0, 0.08);
+            color: var(--text-secondary, rgba(0, 0, 0, 0.6));
           }
         }
       }
-      
+
       .sector-actions {
         display: flex;
         gap: 8px;
@@ -279,7 +242,7 @@
 /* Dialog title */
 ::ng-deep .mat-dialog-title {
   color: inherit;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
   padding-bottom: 8px;
 }
 
@@ -287,13 +250,13 @@
 @media (max-width: 768px) {
   .button-row {
     flex-direction: column;
-    
+
     button {
       width: 100%;
     }
   }
-  
+
   .sector-cards {
     grid-template-columns: 1fr;
   }
-} 
+}

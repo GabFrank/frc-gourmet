@@ -1,0 +1,40 @@
+.hint {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 0 0 16px 0;
+
+  code {
+    background: var(--surface-variant);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: 'Fira Code', 'Courier New', monospace;
+    font-size: 0.85em;
+  }
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  align-items: start;
+}
+
+.section-title {
+  grid-column: 1 / -1;
+  margin: 8px 0 0 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+h2[mat-dialog-title] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

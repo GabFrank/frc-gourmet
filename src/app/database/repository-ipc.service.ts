@@ -713,6 +713,13 @@ interface ElectronAPI {
   updateDashboardShortcut: (id: number, data: any) => Promise<any>;
   deleteDashboardShortcut: (id: number) => Promise<any>;
 
+  // Onboarding tasks
+  getOnboardingStatus: () => Promise<any>;
+  markOnboardingTask: (payload: { taskKey: string; action: 'MANUAL' | 'SKIPPED' | 'RESET' }) => Promise<any>;
+
+  // Cotizaciones de mercado (scraping on-demand)
+  getCotizacionMercado: () => Promise<any>;
+
   // Fase 4: Entradas Varias
   getEntradaVariaCategorias: () => Promise<any[]>;
   getEntradaVariaCategoria: (id: number) => Promise<any>;
@@ -3094,6 +3101,17 @@ export class RepositoryIpcService extends RepositoryService {
   }
   deleteDashboardShortcut(id: number): Observable<any> {
     return from(this.api.deleteDashboardShortcut(id));
+  }
+
+  // ===================== ONBOARDING TASKS =====================
+  getOnboardingStatus(): Observable<any> {
+    return from(this.api.getOnboardingStatus());
+  }
+  markOnboardingTask(payload: { taskKey: string; action: 'MANUAL' | 'SKIPPED' | 'RESET' }): Observable<any> {
+    return from(this.api.markOnboardingTask(payload));
+  }
+  getCotizacionMercado(): Observable<any> {
+    return from(this.api.getCotizacionMercado());
   }
 
   // ===================== FASE 4: ENTRADAS VARIAS =====================

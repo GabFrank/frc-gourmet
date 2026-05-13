@@ -14,6 +14,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { DbConfigDto, DbConfigService } from 'src/app/services/db-config.service';
+import { InitPostgresDialogComponent, InitPostgresDialogData, InitPostgresDialogResult } from './init-postgres-dialog/init-postgres-dialog.component';
 
 const PASSWORD_MASK = '***';
 
@@ -61,6 +62,8 @@ export class DbConfigComponent implements OnInit {
   pgSsl = false;
 
   testResult: { ok: boolean; msg: string } | null = null;
+  initResult: { ok: boolean; msg: string } | null = null;
+  initializing = false;
 
   constructor(
     private svc: DbConfigService,
@@ -170,6 +173,54 @@ export class DbConfigComponent implements OnInit {
       this.snack.open('Error: ' + this.errMsg(e), 'OK', { duration: 4000 });
     } finally {
       this.saving = false;
+    }
+  }
+
+  async initPostgres(): Promise<void> {
+    const dialogData: InitPostgresDialogData = {
+      host: this.pgHost?.trim() || 'localhost',
+      port: this.pgPort || 5432,
+      ssl: this.pgSsl,
+      targetUsername: this.pgUsername?.trim() || 'frc_user',
+      targetDatabase: this.pgDatabase?.trim() || 'frc_gourmet',
+    };
+
+    const ref = this.dialog.open<InitPostgresDialogComponent, InitPostgresDialogData, InitPostgresDialogResult>(
+      InitPostgresDialogComponent,
+      { data: dialogData, width: '520px', disableClose: true },
+    );
+
+    const result = await ref.afterClosed().toPromise();
+    if (!result) return;
+
+    this.initializing = true;
+    this.initResult = null;
+    try {
+      const r = await this.svc.initPostgres({
+        host: result.host,
+        port: result.port,
+        ssl: result.ssl,
+        superuserUsername: result.superuserUsername,
+        superuserPassword: result.superuserPassword,
+        targetUsername: result.targetUsername,
+        targetPassword: result.targetPassword,
+        targetDatabase: result.targetDatabase,
+      });
+      this.initResult = { ok: !!r.success, msg: r.message || (r.success ? 'OK' : 'Error desconocido') };
+      if (r.success) {
+        // Reflejar en el form para que el operador no tenga que retipear
+        this.pgHost = result.host;
+        this.pgPort = result.port;
+        this.pgDatabase = result.targetDatabase;
+        this.pgUsername = result.targetUsername;
+        this.pgPassword = result.targetPassword;
+        this.pgSsl = !!result.ssl;
+        this.snack.open('Inicializacion OK. Ahora podes Probar conexion y Guardar.', 'OK', { duration: 4000 });
+      }
+    } catch (e) {
+      this.initResult = { ok: false, msg: this.errMsg(e) };
+    } finally {
+      this.initializing = false;
     }
   }
 

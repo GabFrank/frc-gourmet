@@ -1,0 +1,93 @@
+<div class="onboarding-container" *ngIf="status">
+  <header class="onboarding-header">
+    <div class="header-text">
+      <h2>
+        <mat-icon>checklist</mat-icon>
+        Configurá tu sistema
+      </h2>
+      <p class="subtitle">
+        Completá estos pasos para dejar el sistema listo para operar. Una vez terminados, esta lista desaparece y vas a poder personalizar tu dashboard con accesos directos.
+      </p>
+    </div>
+    <div class="progress-block">
+      <div class="progress-text">
+        <span class="count">{{ status.totalCompleted }} / {{ status.totalTasks }}</span>
+        <span class="label">tareas completadas</span>
+      </div>
+      <mat-progress-bar mode="determinate" [value]="progressValue"></mat-progress-bar>
+    </div>
+  </header>
+
+  <ul class="task-list">
+    <li
+      *ngFor="let task of status.tasks; trackBy: trackByKey"
+      class="task-item"
+      [class.completed]="task.completed"
+    >
+      <button
+        type="button"
+        class="task-body"
+        (click)="onHacer(task)"
+        [attr.aria-label]="'Hacer: ' + task.titulo"
+      >
+        <div class="icon-circle" [class.done]="task.completed">
+          <mat-icon>{{ task.completed ? 'check' : task.icono }}</mat-icon>
+        </div>
+        <div class="task-text">
+          <div class="task-title">{{ task.titulo }}</div>
+          <div class="task-desc">{{ task.descripcion }}</div>
+        </div>
+      </button>
+
+      <div class="task-meta">
+        <span class="badge" [ngClass]="'badge-' + (task.completedBy || 'pending')">
+          <ng-container [ngSwitch]="task.completedBy">
+            <ng-container *ngSwitchCase="'auto'">AUTO</ng-container>
+            <ng-container *ngSwitchCase="'manual'">MANUAL</ng-container>
+            <ng-container *ngSwitchCase="'skipped'">NO APLICA</ng-container>
+            <ng-container *ngSwitchDefault>PENDIENTE</ng-container>
+          </ng-container>
+        </span>
+
+        <button
+          mat-icon-button
+          [matMenuTriggerFor]="menu"
+          aria-label="Más acciones"
+          matTooltip="Más acciones"
+        >
+          <mat-icon>more_vert</mat-icon>
+        </button>
+        <mat-menu #menu="matMenu">
+          <button mat-menu-item (click)="onHacer(task)">
+            <mat-icon>open_in_new</mat-icon>
+            <span>Hacer ahora</span>
+          </button>
+          <button
+            mat-menu-item
+            (click)="onMark(task, 'MANUAL')"
+            [disabled]="task.completedBy === 'manual'"
+          >
+            <mat-icon>check_circle</mat-icon>
+            <span>Marcar como completa</span>
+          </button>
+          <button
+            mat-menu-item
+            (click)="onMark(task, 'SKIPPED')"
+            [disabled]="task.completedBy === 'skipped'"
+          >
+            <mat-icon>block</mat-icon>
+            <span>No aplica</span>
+          </button>
+          <button
+            mat-menu-item
+            (click)="onMark(task, 'RESET')"
+            [disabled]="task.completedBy !== 'manual' && task.completedBy !== 'skipped'"
+          >
+            <mat-icon>restart_alt</mat-icon>
+            <span>Resetear</span>
+          </button>
+        </mat-menu>
+      </div>
+    </li>
+  </ul>
+</div>

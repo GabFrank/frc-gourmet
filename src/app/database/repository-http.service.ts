@@ -1563,6 +1563,15 @@ export class RepositoryHttpService extends RepositoryService {
   deleteDashboardShortcut(id: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.deleteDashboardShortcut() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getOnboardingStatus(): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getOnboardingStatus() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  markOnboardingTask(_payload: { taskKey: string; action: 'MANUAL' | 'SKIPPED' | 'RESET' }): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.markOnboardingTask() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getCotizacionMercado(): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getCotizacionMercado() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getEntradaVariaCategorias(): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getEntradaVariaCategorias() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

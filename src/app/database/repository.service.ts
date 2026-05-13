@@ -625,6 +625,9 @@ export abstract class RepositoryService {
   abstract createDashboardShortcut(data: any): Observable<any>;
   abstract updateDashboardShortcut(id: number, data: any): Observable<any>;
   abstract deleteDashboardShortcut(id: number): Observable<any>;
+  abstract getOnboardingStatus(): Observable<any>;
+  abstract markOnboardingTask(payload: { taskKey: string; action: 'MANUAL' | 'SKIPPED' | 'RESET' }): Observable<any>;
+  abstract getCotizacionMercado(): Observable<any>;
   abstract getEntradaVariaCategorias(): Observable<any[]>;
   abstract getEntradaVariaCategoria(id: number): Observable<any>;
   abstract createEntradaVariaCategoria(data: any): Observable<any>;

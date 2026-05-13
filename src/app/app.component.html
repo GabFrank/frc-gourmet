@@ -13,45 +13,46 @@
     <span>FRC Gourmet</span>
     <span class="toolbar-spacer"></span>
 
-    <!-- Theme toggle -->
-    <div class="theme-toggle">
-      <mat-icon>light_mode</mat-icon>
-      <mat-slide-toggle
-        [checked]="isDarkTheme"
-        (change)="toggleTheme()"
-        color="primary"
-        matTooltip="Toggle theme">
-      </mat-slide-toggle>
-      <mat-icon>dark_mode</mat-icon>
-    </div>
-
-    <!-- Toolbar actions -->
-    <button
-      mat-icon-button
-      (click)="openUpdateDialog()"
-      matTooltip="{{ updateDownloaded ? 'Actualización lista para instalar' : (updateAvailable ? 'Actualización disponible' : 'Actualizaciones') }}">
-      <mat-icon
-        [matBadge]="updateDownloaded ? '!' : (updateAvailable ? '•' : null)"
-        matBadgeColor="warn"
-        matBadgeSize="small">
-        system_update
-      </mat-icon>
-    </button>
+    <!-- Notificaciones: oculto hasta que tengamos el flujo conectado -->
+    <!--
     <button mat-icon-button>
       <mat-icon matBadge="5" matBadgeColor="warn">notifications</mat-icon>
     </button>
-    <button mat-icon-button [matMenuTriggerFor]="userMenu">
+    -->
+
+    <!-- Usuario activo: nombre + dropdown con tema, actualizaciones, perfil y logout -->
+    <button mat-button [matMenuTriggerFor]="userMenu" class="user-button">
       <mat-icon>account_circle</mat-icon>
+      <span class="user-label">{{ userDisplayName }}</span>
+      <mat-icon>arrow_drop_down</mat-icon>
     </button>
     <mat-menu #userMenu="matMenu">
+      <button mat-menu-item disabled>
+        <mat-icon>person</mat-icon>
+        <span>{{ userDisplayName }}</span>
+      </button>
+      <mat-divider></mat-divider>
       <button mat-menu-item>
         <mat-icon>account_circle</mat-icon>
         <span>Mi Perfil</span>
       </button>
+      <button mat-menu-item (click)="toggleTheme()">
+        <mat-icon>{{ isDarkTheme ? 'light_mode' : 'dark_mode' }}</mat-icon>
+        <span>{{ isDarkTheme ? 'Tema claro' : 'Tema oscuro' }}</span>
+      </button>
+      <button mat-menu-item (click)="openUpdateDialog()">
+        <mat-icon
+          [matBadge]="updateDownloaded ? '!' : (updateAvailable ? '•' : null)"
+          matBadgeColor="warn"
+          matBadgeSize="small">
+          system_update
+        </mat-icon>
+        <span>{{ updateDownloaded ? 'Instalar actualización' : (updateAvailable ? 'Actualización disponible' : 'Buscar actualizaciones') }}</span>
+      </button>
       <mat-divider></mat-divider>
       <button mat-menu-item (click)="logout()">
         <mat-icon>exit_to_app</mat-icon>
-        <span>Cerrar Sesión </span>
+        <span>Cerrar Sesión</span>
       </button>
     </mat-menu>
   </mat-toolbar>

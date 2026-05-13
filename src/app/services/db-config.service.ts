@@ -17,6 +17,17 @@ export interface DbConfigOpResult {
   message?: string;
 }
 
+export interface DbConfigInitPostgresDto {
+  host: string;
+  port: number;
+  ssl?: boolean;
+  superuserUsername: string;
+  superuserPassword: string;
+  targetUsername: string;
+  targetPassword: string;
+  targetDatabase: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class DbConfigService {
   private get api(): any {
@@ -37,5 +48,9 @@ export class DbConfigService {
 
   async restartApp(): Promise<DbConfigOpResult> {
     return await this.api.dbConfigRestartApp();
+  }
+
+  async initPostgres(payload: DbConfigInitPostgresDto): Promise<DbConfigOpResult> {
+    return await this.api.dbConfigInitPostgres(payload);
   }
 }
