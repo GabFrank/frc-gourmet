@@ -1,0 +1,122 @@
+.dialog-content {
+  min-width: 680px;
+  max-width: 880px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  .title-icon {
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+
+  .full { width: 100%; }
+
+  .opt-line {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+
+    .opt-cliente { font-weight: 500; }
+    .opt-meta {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+  }
+
+  .spinner-container {
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .cpc-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    padding: 12px;
+    border-radius: 6px;
+    background-color: rgba(0, 0, 0, 0.04);
+
+    .row {
+      display: flex;
+      flex-direction: column;
+      font-size: 13px;
+
+      .label { opacity: 0.7; font-size: 11px; }
+      .value.strong { font-weight: 600; font-size: 15px; }
+    }
+  }
+
+  .cuotas-block {
+    .block-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      opacity: 0.8;
+      margin-bottom: 8px;
+    }
+
+    .cuotas-table {
+      width: 100%;
+      border-collapse: collapse;
+
+      th, td {
+        padding: 6px 8px;
+        text-align: left;
+      }
+
+      .estado-badge {
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 500;
+
+        &.estado-pendiente {
+          background-color: rgba(33, 150, 243, 0.18);
+          color: #0277bd;
+        }
+        &.estado-parcial {
+          background-color: rgba(255, 152, 0, 0.22);
+          color: #c46100;
+        }
+        &.estado-cobrado {
+          background-color: rgba(76, 175, 80, 0.22);
+          color: #2e7d32;
+        }
+        &.estado-cancelado {
+          background-color: rgba(244, 67, 54, 0.18);
+          color: #c62828;
+        }
+      }
+    }
+  }
+}
+
+:host-context(.dark-theme) {
+  .dialog-content {
+    .cpc-summary {
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+    .cuotas-block .cuotas-table .estado-badge {
+      &.estado-pendiente {
+        background-color: rgba(33, 150, 243, 0.28);
+        color: #4fc3f7;
+      }
+      &.estado-parcial {
+        background-color: rgba(255, 152, 0, 0.32);
+        color: #ffb74d;
+      }
+      &.estado-cobrado {
+        background-color: rgba(76, 175, 80, 0.28);
+        color: #81c784;
+      }
+      &.estado-cancelado {
+        background-color: rgba(244, 67, 54, 0.28);
+        color: #ff8a80;
+      }
+    }
+  }
+}

@@ -1,0 +1,105 @@
+<h2 mat-dialog-title>
+  <mat-icon class="title-icon">payments</mat-icon>
+  Cobrar cuenta por cobrar
+</h2>
+
+<mat-dialog-content class="dialog-content">
+  <mat-form-field appearance="outline" class="full">
+    <mat-label>Buscar cliente o cuenta</mat-label>
+    <input matInput
+           [formControl]="searchControl"
+           [matAutocomplete]="autoCpc"
+           placeholder="Escriba nombre, razón social o #venta…">
+    <mat-icon matSuffix>search</mat-icon>
+    <mat-autocomplete #autoCpc="matAutocomplete"
+                      [displayWith]="displayCpc"
+                      (optionSelected)="onCpcSelected($event.option.value)">
+      <mat-option *ngFor="let c of filteredCpcs" [value]="c">
+        <div class="opt-line">
+          <span class="opt-cliente">{{ c.clienteNombre }}</span>
+          <span class="opt-meta">
+            <span *ngIf="c.ventaId">Venta #{{ c.ventaId }}</span>
+            · Pendiente {{ c.montoPendiente | number:'1.0-2' }} {{ c.monedaSimbolo }}
+          </span>
+        </div>
+      </mat-option>
+      <mat-option *ngIf="!filteredCpcs.length" disabled>
+        Sin cuentas por cobrar activas
+      </mat-option>
+    </mat-autocomplete>
+  </mat-form-field>
+
+  <div *ngIf="loading" class="spinner-container">
+    <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
+  </div>
+
+  <ng-container *ngIf="selectedCpc && !loading">
+    <div class="cpc-summary">
+      <div class="row">
+        <span class="label">Cliente</span>
+        <span class="value">{{ selectedCpc.clienteNombre }}</span>
+      </div>
+      <div class="row" *ngIf="selectedCpc.ventaId">
+        <span class="label">Venta</span>
+        <span class="value">#{{ selectedCpc.ventaId }}</span>
+      </div>
+      <div class="row">
+        <span class="label">Pendiente</span>
+        <span class="value strong">
+          {{ selectedCpc.montoPendiente | number:'1.0-2' }} {{ selectedCpc.monedaSimbolo }}
+        </span>
+      </div>
+      <button mat-button type="button" (click)="clearSelection()">
+        <mat-icon>close</mat-icon> Cambiar
+      </button>
+    </div>
+
+    <div class="cuotas-block">
+      <div class="block-header">
+        <mat-icon>list_alt</mat-icon>
+        <span>Cuotas</span>
+      </div>
+      <table mat-table [dataSource]="cuotas" class="cuotas-table">
+        <ng-container matColumnDef="numero">
+          <th mat-header-cell *matHeaderCellDef>#</th>
+          <td mat-cell *matCellDef="let q">{{ q.numero }}</td>
+        </ng-container>
+        <ng-container matColumnDef="fechaVencimiento">
+          <th mat-header-cell *matHeaderCellDef>Vencimiento</th>
+          <td mat-cell *matCellDef="let q">{{ q.fechaVencimiento | date:'dd/MM/yyyy' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="monto">
+          <th mat-header-cell *matHeaderCellDef>Monto</th>
+          <td mat-cell *matCellDef="let q">{{ q.monto | number:'1.0-2' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="restante">
+          <th mat-header-cell *matHeaderCellDef>Restante</th>
+          <td mat-cell *matCellDef="let q">{{ q.restante | number:'1.0-2' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="estado">
+          <th mat-header-cell *matHeaderCellDef>Estado</th>
+          <td mat-cell *matCellDef="let q">
+            <span class="estado-badge" [ngClass]="'estado-' + q.estado.toLowerCase()">{{ q.estado }}</span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let q">
+            <button mat-flat-button color="primary" type="button"
+                    [disabled]="q.estado === 'COBRADO' || q.estado === 'CANCELADO'"
+                    (click)="cobrarCuota(q)">
+              <mat-icon>payments</mat-icon>
+              Cobrar
+            </button>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="cuotaColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: cuotaColumns;"></tr>
+      </table>
+    </div>
+  </ng-container>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="cancel()">Cerrar</button>
+</mat-dialog-actions>

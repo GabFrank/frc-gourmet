@@ -1,0 +1,153 @@
+.dialog-content {
+  min-width: 560px;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  .title-icon {
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+
+  .info-block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px;
+    border-radius: 6px;
+    background-color: rgba(0, 0, 0, 0.04);
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+
+      .label { opacity: 0.7; }
+      .value.strong {
+        font-weight: 600;
+        font-size: 16px;
+      }
+      .moneda {
+        font-size: 12px;
+        opacity: 0.7;
+        margin-right: 2px;
+      }
+    }
+  }
+
+  .saldo-block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px;
+    border-radius: 6px;
+    border-left: 4px solid #4caf50;
+    background-color: rgba(76, 175, 80, 0.08);
+
+    &.saldo-warn {
+      border-left-color: #ff9800;
+      background-color: rgba(255, 152, 0, 0.1);
+    }
+    &.saldo-over {
+      border-left-color: #f44336;
+      background-color: rgba(244, 67, 54, 0.1);
+    }
+
+    .saldo-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+
+      .label { opacity: 0.7; }
+      .value.strong {
+        font-weight: 600;
+        font-size: 15px;
+      }
+    }
+
+    .saldo-warning {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px dashed rgba(244, 67, 54, 0.35);
+      font-size: 12px;
+      color: #c62828;
+
+      mat-icon {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+      }
+    }
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    align-items: start;
+
+    mat-form-field { width: 100%; }
+    .full { grid-column: 1 / -1; }
+
+    @media (max-width: 600px) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .preview-block {
+    .preview-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      opacity: 0.8;
+      margin-bottom: 6px;
+    }
+    .preview-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+
+      th, td {
+        padding: 6px 10px;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+      }
+      th {
+        text-align: left;
+        font-weight: 500;
+        opacity: 0.7;
+      }
+      .right { text-align: right; }
+    }
+  }
+}
+
+mat-dialog-actions button mat-progress-spinner {
+  display: inline-block;
+  margin-right: 6px;
+}
+
+:host-context(.dark-theme) {
+  .dialog-content {
+    .info-block {
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+    .saldo-block.saldo-warn {
+      background-color: rgba(255, 152, 0, 0.15);
+    }
+    .saldo-block.saldo-over {
+      background-color: rgba(244, 67, 54, 0.18);
+    }
+    .saldo-block .saldo-warning {
+      color: #ff8a80;
+    }
+    .preview-block .preview-table {
+      th, td { border-bottom-color: rgba(255, 255, 255, 0.08); }
+    }
+  }
+}

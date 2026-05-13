@@ -1,0 +1,15 @@
+.dialog-content {
+  min-width: 420px;
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: center;
+    padding-top: 8px;
+
+    .full {
+      grid-column: 1 / -1;
+    }
+  }
+}

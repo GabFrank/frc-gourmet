@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Observable, throwError } from 'rxjs';
-import { RepositoryService, LoginResult } from './repository.service';
+import { RepositoryService, LoginResult, ClienteFilters } from './repository.service';
 import { Printer } from './entities/printer.entity';
 import { Persona } from './entities/personas/persona.entity';
 import { DocumentoTipo } from './entities/personas/documento-tipo.enum';
@@ -155,7 +155,7 @@ export class RepositoryHttpService extends RepositoryService {
   deleteTipoCliente(tipoClienteId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.deleteTipoCliente() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  getClientes(): Observable<Cliente[]> {
+  getClientes(_filters?: ClienteFilters): Observable<Cliente[]> {
     return throwError(() => new Error(`RepositoryHttpService.getClientes() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getCliente(clienteId: number): Observable<Cliente> {
@@ -2069,6 +2069,18 @@ export class RepositoryHttpService extends RepositoryService {
   }
   recalcularSaldoCliente(clienteId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.recalcularSaldoCliente() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+
+  getClienteEstadoCuenta(_clienteId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getClienteEstadoCuenta() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+
+  getMovimientosClienteStats(_clienteId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getMovimientosClienteStats() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+
+  cobrarVentaCredito(_payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.cobrarVentaCredito() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getMovimientosCliente(clienteId: number, filtros?: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getMovimientosCliente() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;

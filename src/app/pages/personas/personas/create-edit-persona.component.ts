@@ -69,8 +69,8 @@ export class CreateEditPersonaComponent implements OnInit {
       fechaNacimiento: [null],
       sexo: [null],
       estadoCivil: [null],
-      tipoDocumento: [DocumentoTipo.CI, [Validators.required]],
-      documento: ['', [Validators.required]],
+      tipoDocumento: [DocumentoTipo.CI],
+      documento: [''],
       tipoPersona: [PersonaTipo.FISICA, [Validators.required]],
       activo: [true],
       imageUrl: ['']
@@ -211,7 +211,8 @@ export class CreateEditPersonaComponent implements OnInit {
       fechaNacimiento: formData.fechaNacimiento || null,
       sexo: formData.sexo || null,
       estadoCivil: formData.estadoCivil || null,
-      documento: formData.documento?.toUpperCase() || '',
+      documento: formData.documento?.trim() ? formData.documento.toUpperCase() : null,
+      tipoDocumento: formData.tipoDocumento || DocumentoTipo.CI,
       // Don't set imageUrl here, we'll set it based on the conditions below
       imageUrl: undefined
     };
