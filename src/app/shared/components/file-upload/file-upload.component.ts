@@ -15,7 +15,8 @@ export type FileUploadCarpeta =
   | 'profile-images'
   | 'producto-images'
   | 'funcionario-documentos'
-  | 'adjuntos';
+  | 'adjuntos'
+  | 'logos';
 
 export interface FileUploadResult {
   url: string;

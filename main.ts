@@ -356,7 +356,7 @@ function registerAppProtocol(): void {
 
     // Ensure the parent dir exists for known buckets so first-write doesn't fail
     // before any file is requested. Cheap and idempotent.
-    const knownBuckets = ['profile-images', 'producto-images', 'factura-imports', 'funcionario-documentos', 'adjuntos'];
+    const knownBuckets = ['profile-images', 'producto-images', 'factura-imports', 'funcionario-documentos', 'adjuntos', 'logos'];
     for (const bucket of knownBuckets) {
       if (urlPath.startsWith(bucket + '/')) {
         const bucketDir = path.join(userDataPath, bucket);

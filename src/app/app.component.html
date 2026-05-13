@@ -10,6 +10,12 @@
       matTooltip="{{isMenuExpanded ? 'Colapsar menú' : 'Expandir menú'}}">
       <mat-icon aria-label="Side nav toggle icon">{{isMenuExpanded ? 'menu_open' : 'menu'}}</mat-icon>
     </button>
+    <img
+      *ngIf="empresaLogoUrl"
+      class="empresa-logo"
+      [src]="empresaLogoUrl"
+      alt="Logo empresa"
+      (error)="empresaLogoUrl = null" />
     <span class="empresa-nombre">{{ empresaNombre }}</span>
     <span class="toolbar-spacer"></span>
 

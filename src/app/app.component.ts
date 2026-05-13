@@ -88,6 +88,7 @@ import { UpdateService } from './services/update.service';
 import { UpdateChannelDialogComponent } from './shared/components/update-channel-dialog/update-channel-dialog.component';
 import { EmpresaService } from './shared/services/empresa.service';
 import { ConfigurarEmpresaComponent } from './pages/sistema/configurar-empresa/configurar-empresa.component';
+import { resolveAppUrl } from './shared/utils/image-url.util';
 
 @Component({
   selector: 'app-root',
@@ -135,6 +136,8 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Nombre de la empresa para el toolbar. Bindeado al EmpresaService.empresa$. */
   empresaNombre = 'MI EMPRESA';
+  /** URL resuelta del logo para mostrar en el header (thumb o original como fallback). */
+  empresaLogoUrl: string | null = null;
   private empresaSub: Subscription | null = null;
 
   // Auto-update toolbar state
@@ -165,10 +168,15 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     private updateService: UpdateService,
     private empresaService: EmpresaService,
   ) {
-    // Suscribirse al servicio de empresa para mantener el nombre del toolbar
-    // sincronizado con cualquier update (login, guardar en configurar-empresa).
+    // Suscribirse al servicio de empresa para mantener el nombre + logo del
+    // toolbar sincronizados con cualquier update (login, guardar en
+    // configurar-empresa, subir/quitar logo).
     this.empresaSub = this.empresaService.empresa.subscribe((emp) => {
       this.empresaNombre = emp?.nombre || 'MI EMPRESA';
+      const raw = emp?.logoUrl || null;
+      // Logo va sin thumbnails para preservar transparencia (los thumbs .jpg
+      // aplanan el alpha). El original suele pesar < 100KB, no es problema.
+      this.empresaLogoUrl = raw ? (resolveAppUrl(raw) || null) : null;
     });
 
     // Subscribe to authentication state changes

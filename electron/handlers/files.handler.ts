@@ -11,6 +11,7 @@ const ALLOWED_CARPETAS = new Set([
   'funcionario-documentos',
   'factura-imports',
   'adjuntos',
+  'logos',
 ]);
 
 interface SaveFileInput {
@@ -36,6 +37,7 @@ const BUCKET_PREFIX: Record<string, string> = {
   'funcionario-documentos': 'func',
   'factura-imports': 'fact',
   'adjuntos': 'adj',
+  'logos': 'logo',
 };
 
 function safeExtension(originalName: string): string {

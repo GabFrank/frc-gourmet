@@ -10,7 +10,11 @@ import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { firstValueFrom } from 'rxjs';
 import { EmpresaService } from '../../../shared/services/empresa.service';
+import { FileUploadComponent, FileUploadResult } from '../../../shared/components/file-upload/file-upload.component';
+import { RepositoryService } from '../../../database/repository.service';
+import { resolveAppUrl } from '../../../shared/utils/image-url.util';
 
 /** Validador formato RUC Paraguay: 1..8 digitos, guion, 1 digito verificador. */
 function rucValidator(control: AbstractControl): ValidationErrors | null {
@@ -34,6 +38,7 @@ function rucValidator(control: AbstractControl): ValidationErrors | null {
     MatNativeDateModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    FileUploadComponent,
   ],
   templateUrl: './configurar-empresa.component.html',
   styleUrls: ['./configurar-empresa.component.scss'],
@@ -43,10 +48,17 @@ export class ConfigurarEmpresaComponent implements OnInit {
   loading = false;
   saving = false;
 
+  /**
+   * URL del logo. NO va al form (lo persistimos directo al subir/remover,
+   * no espera al "Guardar cambios" — es lo natural con file uploads).
+   */
+  logoUrl: string | null = null;
+
   constructor(
     private fb: FormBuilder,
     private empresaService: EmpresaService,
     private snackBar: MatSnackBar,
+    private repository: RepositoryService,
   ) {
     this.form = this.fb.group({
       nombre: ['', [Validators.required, Validators.maxLength(120)]],
@@ -91,12 +103,63 @@ export class ConfigurarEmpresaComponent implements OnInit {
           zonaHoraria: empresa.zonaHoraria || 'America/Asuncion',
           actividadEconomica: empresa.actividadEconomica || '',
         });
+        this.logoUrl = empresa.logoUrl || null;
         this.form.markAsPristine();
       }
     } catch (err: any) {
       this.snackBar.open('Error al cargar datos de empresa: ' + (err?.message || err), 'Cerrar', { duration: 5000 });
     } finally {
       this.loading = false;
+    }
+  }
+
+  /**
+   * URL resuelta para preview en la card. Usamos el original (no derivada
+   * .medium.jpg) para preservar transparencia de PNGs — los logos suelen ser
+   * PNG con fondo transparente y `.medium.jpg` los aplana a blanco/negro.
+   */
+  get logoPreviewUrl(): string | null {
+    if (!this.logoUrl) return null;
+    return resolveAppUrl(this.logoUrl) || null;
+  }
+
+  /**
+   * Sube el logo nuevo. Si habia uno previo, lo borra del disco para no
+   * acumular basura en `userData/logos/`. El logo se persiste inmediato
+   * (no espera "Guardar cambios") — patron natural para uploads.
+   */
+  async onLogoUploaded(result: FileUploadResult): Promise<void> {
+    const previous = this.logoUrl;
+    this.logoUrl = result.url;
+    try {
+      await this.empresaService.update({ logoUrl: result.url });
+      // Borrar el viejo solo si el update salio OK.
+      if (previous && previous !== result.url) {
+        try {
+          await firstValueFrom(this.repository.deleteFile(previous));
+        } catch (err) {
+          console.warn('No se pudo borrar logo previo:', err);
+        }
+      }
+      this.snackBar.open('Logo actualizado.', 'Cerrar', { duration: 2500 });
+    } catch (err: any) {
+      // Revertir UI si fallo el update
+      this.logoUrl = previous;
+      this.snackBar.open('Error al guardar el logo: ' + (err?.message || err), 'Cerrar', { duration: 5000 });
+    }
+  }
+
+  /**
+   * Quita el logo. `<app-file-upload>` ya borro el archivo del disco al
+   * confirmar; aca solo nuleamos la columna en BD.
+   */
+  async onLogoRemoved(): Promise<void> {
+    this.logoUrl = null;
+    try {
+      await this.empresaService.update({ logoUrl: null as any });
+      this.snackBar.open('Logo removido.', 'Cerrar', { duration: 2500 });
+    } catch (err: any) {
+      this.snackBar.open('Error al remover logo: ' + (err?.message || err), 'Cerrar', { duration: 5000 });
     }
   }
 

@@ -10,6 +10,32 @@
 
   <form *ngIf="!loading" [formGroup]="form" (ngSubmit)="guardar()" class="empresa-form">
     <mat-card class="form-card">
+      <mat-card-title>Logo</mat-card-title>
+      <mat-card-content>
+        <div class="logo-row">
+          <div class="logo-preview" [class.empty]="!logoPreviewUrl">
+            <img *ngIf="logoPreviewUrl" [src]="logoPreviewUrl" alt="Logo de empresa" />
+            <mat-icon *ngIf="!logoPreviewUrl">business</mat-icon>
+          </div>
+          <div class="logo-actions">
+            <app-file-upload
+              carpeta="logos"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              [maxSizeMB]="3"
+              [currentUrl]="logoUrl"
+              [showPreview]="false"
+              [generateThumbnails]="false"
+              label="Subir logo"
+              hint="PNG transparente recomendado. JPG/WebP/SVG aceptados. Hasta 3MB."
+              (uploaded)="onLogoUploaded($event)"
+              (removed)="onLogoRemoved()">
+            </app-file-upload>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="form-card">
       <mat-card-title>Identificacion</mat-card-title>
       <mat-card-content>
         <div class="form-row">
