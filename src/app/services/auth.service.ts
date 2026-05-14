@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { RepositoryService } from '../database/repository.service';
 import { Usuario } from '../database/entities/personas/usuario.entity';
 import { LoginSession } from '../database/entities/auth/login-session.entity';
+import { AppModeService, AppMode } from './app-mode.service';
 
 export interface LoginResult {
   success: boolean;
@@ -35,7 +36,8 @@ export class AuthService {
 
   constructor(
     private repositoryService: RepositoryService,
-    private router: Router
+    private router: Router,
+    private appModeService: AppModeService
   ) {
     this.loadFromLocalStorage();
   }
@@ -135,22 +137,61 @@ export class AuthService {
     this.repositoryService.setCurrentUser(null);
   }
 
-  // Load user data from localStorage on application startup
-  private loadFromLocalStorage(): void {
-    const userJson = localStorage.getItem(this.USER_KEY);
+  // Load user data from localStorage on application startup.
+  //
+  // P0-2: en modo standalone/server se valida contra el main process
+  // (verifica JWT + LoginSession activa en BD). Si falla, se limpia.
+  //
+  // En modo client la seguridad real la hace el server al verificar el
+  // JWT en cada request HTTP: la BD local del cliente no contiene esas
+  // sessions ni los users del server, asi que validar localmente daria
+  // false negatives. Restauramos UI state desde localStorage; si el JWT
+  // ya no vale, el primer request al server rebotara con 401 y el
+  // interceptor disparara logout.
+  private async loadFromLocalStorage(): Promise<void> {
     const token = localStorage.getItem(this.TOKEN_KEY);
-    const sessionId = localStorage.getItem(this.SESSION_ID_KEY);
-    
-    if (userJson && token && sessionId) {
+    const sessionIdStr = localStorage.getItem(this.SESSION_ID_KEY);
+    const userJson = localStorage.getItem(this.USER_KEY);
+
+    if (!token || !sessionIdStr || !userJson) return;
+
+    const parsedSessionId = parseInt(sessionIdStr, 10);
+    if (!Number.isFinite(parsedSessionId)) {
+      this.clearSession();
+      return;
+    }
+
+    let mode: AppMode = 'standalone';
+    try {
+      const cfg = await this.appModeService.get();
+      mode = cfg?.mode || 'standalone';
+    } catch { /* fallback standalone */ }
+
+    if (mode === 'client') {
       try {
         const user = JSON.parse(userJson) as Usuario;
-        this.sessionId = parseInt(sessionId, 10);
+        this.sessionId = parsedSessionId;
         this.currentUserSubject.next(user);
-        this.repositoryService.setCurrentUser(user);
-      } catch (error) {
-        console.error('Error parsing user data from localStorage:', error);
+      } catch {
         this.clearSession();
       }
+      return;
+    }
+
+    try {
+      const result = await firstValueFrom(
+        this.repositoryService.restoreSession(parsedSessionId, token)
+      );
+      if (result?.success && result.usuario) {
+        this.sessionId = parsedSessionId;
+        this.currentUserSubject.next(result.usuario);
+        localStorage.setItem(this.USER_KEY, JSON.stringify(result.usuario));
+      } else {
+        this.clearSession();
+      }
+    } catch (error) {
+      console.error('restoreSession error:', error);
+      this.clearSession();
     }
   }
 

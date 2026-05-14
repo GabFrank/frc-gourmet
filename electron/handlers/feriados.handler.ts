@@ -4,6 +4,7 @@ import { Feriado } from '../../src/app/database/entities/rrhh/feriado.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
+import { ensurePermission } from '../utils/auth.utils';
 
 export function registerFeriadosHandlers(
   dataSource: DataSource,
@@ -19,6 +20,7 @@ export function registerFeriadosHandlers(
   });
 
   ipcMain.handle('create-feriado', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     const repo = dataSource.getRepository(Feriado);
     const entity = repo.create({
       fecha: parseLocalDate(data.fecha)!,
@@ -32,6 +34,7 @@ export function registerFeriadosHandlers(
   });
 
   ipcMain.handle('update-feriado', async (_e, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     const repo = dataSource.getRepository(Feriado);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Feriado ${id} no encontrado`);
@@ -45,6 +48,7 @@ export function registerFeriadosHandlers(
   });
 
   ipcMain.handle('delete-feriado', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     const repo = dataSource.getRepository(Feriado);
     await repo.delete(id);
     return { success: true };

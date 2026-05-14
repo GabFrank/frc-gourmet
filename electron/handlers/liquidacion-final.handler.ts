@@ -14,6 +14,7 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { getConfigNumber } from './configuracion-rrhh.handler';
+import { ensurePermission } from '../utils/auth.utils';
 
 function diffDias(d1: Date, d2: Date): number {
   return Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
@@ -50,6 +51,7 @@ export function registerLiquidacionFinalHandlers(
   });
 
   ipcMain.handle('generar-liquidacion-final', async (_e, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_LIQUIDACION_FINAL_GENERAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -193,6 +195,7 @@ export function registerLiquidacionFinalHandlers(
   });
 
   ipcMain.handle('aprobar-liquidacion-final', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_LIQUIDACION_FINAL_GENERAR');
     const repo = dataSource.getRepository(LiquidacionFinal);
     const liq = await repo.findOne({ where: { id } });
     if (!liq) throw new Error(`Liquidacion final ${id} no encontrada`);
@@ -207,6 +210,7 @@ export function registerLiquidacionFinalHandlers(
   });
 
   ipcMain.handle('pagar-liquidacion-final', async (_e, id: number, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_LIQUIDACION_PAGAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();

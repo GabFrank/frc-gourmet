@@ -24,7 +24,20 @@ function urlToAbsolute(url: string): string | null {
   const relPath = rest.substring(slash + 1);
   const top = carpeta.split('/')[0];
   if (!ALLOWED_CARPETAS.has(top)) return null;
-  return path.join(app.getPath('userData'), carpeta, relPath);
+
+  // P0-4: prevencion de path traversal. `path.join` solo concatena —
+  // si relPath trae `..` o secuencias percent-encoded como `..%2F..`,
+  // resuelve hacia arriba (`userData/profile-images/../../../etc/passwd`
+  // → `/etc/passwd`). Bloqueamos cualquier `..` literal pre-join +
+  // validamos post-resolve que el path final cae bajo la carpeta
+  // permitida. Rechazamos symlinks/absolute paths embebidos.
+  if (relPath.includes('..') || path.isAbsolute(relPath)) return null;
+
+  const userData = app.getPath('userData');
+  const carpetaRoot = path.resolve(userData, top);
+  const abs = path.resolve(userData, carpeta, relPath);
+  if (abs !== carpetaRoot && !abs.startsWith(carpetaRoot + path.sep)) return null;
+  return abs;
 }
 
 /**

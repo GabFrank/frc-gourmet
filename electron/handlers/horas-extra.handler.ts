@@ -7,6 +7,7 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { getConfigNumber } from './configuracion-rrhh.handler';
+import { ensurePermission } from '../utils/auth.utils';
 
 export function registerHorasExtraHandlers(
   dataSource: DataSource,
@@ -28,6 +29,7 @@ export function registerHorasExtraHandlers(
   });
 
   ipcMain.handle('create-hora-extra', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_ASISTENCIA_REGISTRAR');
     const repo = dataSource.getRepository(HoraExtra);
     const funcionario = await dataSource.getRepository(Funcionario).findOne({
       where: { id: data.funcionarioId },
@@ -78,6 +80,7 @@ export function registerHorasExtraHandlers(
   });
 
   ipcMain.handle('anular-hora-extra', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_ASISTENCIA_REGISTRAR');
     const repo = dataSource.getRepository(HoraExtra);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`HoraExtra ${id} no encontrada`);

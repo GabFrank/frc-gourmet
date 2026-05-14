@@ -2,6 +2,24 @@ import { app, ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { readAppSettings, updateAppSettings, DatabaseSettings } from '../utils/app-settings.utils';
 import { getDbPassword, setDbPassword } from '../utils/db-password.utils';
+import { ensurePermission } from '../utils/auth.utils';
+import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+
+/**
+ * P0-1: helper para handlers de sistema que pueden invocarse tanto en
+ * setup inicial (sin sesion, sin BD operativa) como en re-config con admin
+ * logueado. Si hay un currentUser, exigir el permiso; si no hay, permitir
+ * (bootstrap mode).
+ */
+async function ensurePermissionIfLoggedIn(
+  dataSource: DataSource | undefined,
+  getCurrentUser: (() => Usuario | null) | undefined,
+  codigo: string,
+): Promise<void> {
+  if (!dataSource || !getCurrentUser) return;
+  if (getCurrentUser() == null) return; // bootstrap: setup inicial sin sesion
+  await ensurePermission(dataSource, getCurrentUser, codigo);
+}
 
 export interface DbConfigDto {
   type: 'sqlite' | 'postgres';
@@ -19,7 +37,10 @@ export interface DbConfigDto {
 
 const PASSWORD_MASK = '***';
 
-export function registerDbConfigHandlers() {
+export function registerDbConfigHandlers(
+  dataSource?: DataSource,
+  getCurrentUser?: () => Usuario | null,
+) {
   ipcMain.handle('db-config-get', async (): Promise<DbConfigDto> => {
     const settings = readAppSettings(app.getPath('userData'));
     const db = settings.database;
@@ -38,6 +59,7 @@ export function registerDbConfigHandlers() {
   });
 
   ipcMain.handle('db-config-save', async (_e, payload: DbConfigDto) => {
+    await ensurePermissionIfLoggedIn(dataSource, getCurrentUser, 'SISTEMA_BD_CONFIGURAR');
     if (!payload || (payload.type !== 'sqlite' && payload.type !== 'postgres')) {
       return { success: false, message: 'Tipo de BD invalido.' };
     }
@@ -124,6 +146,7 @@ export function registerDbConfigHandlers() {
   });
 
   ipcMain.handle('db-config-restart-app', async () => {
+    await ensurePermissionIfLoggedIn(dataSource, getCurrentUser, 'SISTEMA_BD_CONFIGURAR');
     app.relaunch();
     app.exit(0);
     return { success: true };
@@ -150,6 +173,7 @@ export function registerDbConfigHandlers() {
       targetDatabase: string;
     },
   ) => {
+    await ensurePermissionIfLoggedIn(dataSource, getCurrentUser, 'SISTEMA_BD_CONFIGURAR');
     if (!payload || !payload.host || !payload.port) {
       return { success: false, message: 'Host y puerto son requeridos.' };
     }

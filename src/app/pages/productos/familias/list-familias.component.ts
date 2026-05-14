@@ -19,6 +19,7 @@ import { RepositoryService } from '../../../database/repository.service';
 import { CreateEditFamiliaComponent } from './create-edit-familia.component';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { Familia } from '../../../database/entities/productos/familia.entity';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-familias',
@@ -39,6 +40,7 @@ import { Familia } from '../../../database/entities/productos/familia.entity';
     MatInputModule,
     MatSelectModule,
     MatMenuModule,
+    HasPermissionDirective,
   ],
   templateUrl: './list-familias.component.html',
   styleUrls: ['./list-familias.component.scss']

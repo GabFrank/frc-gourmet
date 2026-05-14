@@ -11,6 +11,7 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { getConfigBoolean, getConfigNumber } from './configuracion-rrhh.handler';
+import { ensurePermission } from '../utils/auth.utils';
 
 function diffMinutos(horaA: string | undefined, horaB: string | undefined): number {
   if (!horaA || !horaB) return 0;
@@ -119,6 +120,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('create-turno', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     const repo = dataSource.getRepository(Turno);
     const entity = repo.create({
       nombre: (data.nombre || '').toUpperCase(),
@@ -133,6 +135,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('update-turno', async (_e, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     const repo = dataSource.getRepository(Turno);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Turno ${id} no encontrado`);
@@ -147,6 +150,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('delete-turno', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     const repo = dataSource.getRepository(Turno);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) return { success: false };
@@ -212,6 +216,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('update-funcionario-turno', async (_e, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_ASISTENCIA_REGISTRAR');
     const repo = dataSource.getRepository(FuncionarioTurno);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Asignacion de turno ${id} no encontrada`);
@@ -248,6 +253,7 @@ export function registerAsistenciasHandlers(
 
   ipcMain.handle('create-asistencia', async (_e, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_ASISTENCIA_REGISTRAR');
       return await crearAsistenciaInterno(dataSource, getCurrentUser, data);
     } catch (e) {
       console.error('Error create-asistencia:', e);
@@ -256,6 +262,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('update-asistencia', async (_e, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_ASISTENCIA_REGISTRAR');
     const repo = dataSource.getRepository(Asistencia);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Asistencia ${id} no encontrada`);
@@ -271,6 +278,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('justificar-asistencia', async (_e, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_ASISTENCIA_JUSTIFICAR');
     const repo = dataSource.getRepository(Asistencia);
     const existing = await repo.findOne({ where: { id }, relations: ['funcionario'] });
     if (!existing) throw new Error(`Asistencia ${id} no encontrada`);
@@ -327,6 +335,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('create-penalizacion', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_PENALIZACION_REGISTRAR');
     const repo = dataSource.getRepository(Penalizacion);
     const funcionario = await dataSource.getRepository(Funcionario).findOne({ where: { id: data.funcionarioId } });
     if (!funcionario) throw new Error(`Funcionario ${data.funcionarioId} no encontrado`);
@@ -344,6 +353,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('update-penalizacion', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_PENALIZACION_REGISTRAR');
     const repo = dataSource.getRepository(Penalizacion);
     const existing = await repo.findOne({ where: { id: data.id } });
     if (!existing) throw new Error(`Penalizacion ${data.id} no encontrada`);
@@ -357,6 +367,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('anular-penalizacion', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_PENALIZACION_REGISTRAR');
     const repo = dataSource.getRepository(Penalizacion);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Penalizacion ${id} no encontrada`);

@@ -13,6 +13,7 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
+import { ensurePermission } from '../utils/auth.utils';
 
 export function registerValesHandlers(
   dataSource: DataSource,
@@ -24,6 +25,7 @@ export function registerValesHandlers(
   });
 
   ipcMain.handle('create-motivo-vale', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     const repo = dataSource.getRepository(MotivoVale);
     const entity = repo.create({
       nombre: (data.nombre || '').toUpperCase(),
@@ -35,6 +37,7 @@ export function registerValesHandlers(
   });
 
   ipcMain.handle('update-motivo-vale', async (_e, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     const repo = dataSource.getRepository(MotivoVale);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`MotivoVale ${id} no encontrado`);
@@ -46,6 +49,7 @@ export function registerValesHandlers(
   });
 
   ipcMain.handle('delete-motivo-vale', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     const repo = dataSource.getRepository(MotivoVale);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) return { success: false };
@@ -87,6 +91,7 @@ export function registerValesHandlers(
   });
 
   ipcMain.handle('create-vale', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VALE_CREAR');
     const repo = dataSource.getRepository(Vale);
     const funcionario = await dataSource.getRepository(Funcionario).findOne({ where: { id: data.funcionarioId } });
     if (!funcionario) throw new Error(`Funcionario ${data.funcionarioId} no encontrado`);
@@ -111,6 +116,7 @@ export function registerValesHandlers(
   });
 
   ipcMain.handle('confirmar-vale', async (_e, id: number, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VALE_CONFIRMAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -176,6 +182,7 @@ export function registerValesHandlers(
   });
 
   ipcMain.handle('anular-vale', async (_e, id: number, motivo: string) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VALE_CONFIRMAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();

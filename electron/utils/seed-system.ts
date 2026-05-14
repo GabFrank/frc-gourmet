@@ -18,7 +18,7 @@ import { Subfamilia } from '../../src/app/database/entities/productos/subfamilia
 import { Observacion } from '../../src/app/database/entities/productos/observacion.entity';
 import { Turno } from '../../src/app/database/entities/rrhh/turno.entity';
 import { Feriado } from '../../src/app/database/entities/rrhh/feriado.entity';
-import { hashPassword } from './password.utils';
+import { hashPassword, verifyPassword } from './password.utils';
 
 /**
  * Seed de datos minimos del sistema para que la app sea operable post-reset.
@@ -31,6 +31,7 @@ export async function seedSystemData(dataSource: DataSource): Promise<void> {
   console.log('Checking if system seed data is needed...');
   try {
     await seedAdminUserAndRole(dataSource);
+    await markDefaultAdminMustChangePassword(dataSource);
     await syncAdminPermissions(dataSource);
     await seedRolesPlantilla(dataSource);
     await seedTipoCliente(dataSource);
@@ -80,6 +81,29 @@ async function syncAdminPermissions(dataSource: DataSource): Promise<void> {
   }
 }
 
+/**
+ * P0-3 bootstrap idempotente: para instalaciones que YA tenian un admin
+ * con password default ('admin') antes de esta feature, marcamos la
+ * columna `mustChangePassword=true` para que en su proximo login se
+ * fuerce el cambio. Se evalua con verifyPassword en vez de comparar
+ * hashes — bcrypt tiene salt distinto por hash. Idempotente: solo
+ * actualiza si esta en false y el password matchea 'admin'.
+ */
+async function markDefaultAdminMustChangePassword(dataSource: DataSource): Promise<void> {
+  try {
+    const usuarioRepo = dataSource.getRepository(Usuario);
+    const admin = await usuarioRepo.findOne({ where: { nickname: 'admin' } });
+    if (!admin || admin.mustChangePassword || !admin.activo) return;
+    const stillDefault = await verifyPassword('admin', admin.password);
+    if (!stillDefault) return;
+    admin.mustChangePassword = true;
+    await usuarioRepo.save(admin);
+    console.log('  Admin existente con password default detectado: mustChangePassword marcado en true.');
+  } catch (e) {
+    console.warn('  markDefaultAdminMustChangePassword skipped:', e);
+  }
+}
+
 // ===================== ADMIN USER + ROLE + PERMISOS =====================
 async function seedAdminUserAndRole(dataSource: DataSource): Promise<void> {
   const usuarioRepo = dataSource.getRepository(Usuario);
@@ -107,6 +131,9 @@ async function seedAdminUserAndRole(dataSource: DataSource): Promise<void> {
     nickname: 'admin',
     password: await hashPassword('admin'),
     activo: true,
+    // P0-3: fuerza cambio de password en el primer login para no dejar
+    // la instalacion con admin/admin operativa.
+    mustChangePassword: true,
   });
   await usuarioRepo.save(usuario);
 
@@ -420,9 +447,11 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
   {
     descripcion: 'GERENTE',
     permisos: [
+      // Dashboards
       'HOME_DASHBOARD_VER',
       'VENTAS_DASHBOARD_VER', 'COMPRAS_DASHBOARD_VER', 'PRODUCTOS_DASHBOARD_VER',
       'FINANCIERO_DASHBOARD_VER', 'CAJA_MAYOR_DASHBOARD_VER', 'RRHH_DASHBOARD_VER',
+      // RRHH
       'RRHH_FUNCIONARIO_VER', 'RRHH_FUNCIONARIO_EDITAR',
       'RRHH_ASISTENCIA_REGISTRAR', 'RRHH_ASISTENCIA_JUSTIFICAR',
       'RRHH_VALE_CREAR', 'RRHH_VALE_CONFIRMAR',
@@ -431,17 +460,52 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       'RRHH_VACACION_GESTIONAR', 'RRHH_LIQUIDACION_FINAL_GENERAR',
       'RRHH_PENALIZACION_REGISTRAR', 'RRHH_BONO_OTORGAR',
       'RRHH_REPORTE_GENERAR', 'RRHH_NOTIFICACIONES_VER',
+      'RRHH_CONFIG_EDITAR',
+      // Comisiones
       'COMISION_REGLA_VER', 'COMISION_REGLA_GESTIONAR', 'COMISION_REGLA_EDITAR',
       'COMISION_LIQUIDACION_GENERAR', 'COMISION_LIQUIDACION_APROBAR',
       'COMISION_EQUIPO_GESTIONAR',
+      // CPC + Compras
       'CPC_GESTIONAR', 'CPC_COBRAR', 'CPC_CANCELAR',
       'COMPRAS_IMPORTAR_FACTURA',
+      // Productos / Recetas / Stock
+      'PRODUCTOS_VER', 'PRODUCTOS_GESTIONAR',
+      'CATEGORIAS_GESTIONAR',
+      'RECETAS_VER', 'RECETAS_GESTIONAR',
+      'INGREDIENTES_VER', 'INGREDIENTES_GESTIONAR',
+      'ADICIONALES_VER', 'ADICIONALES_GESTIONAR',
+      'SABORES_VER', 'SABORES_GESTIONAR',
+      'STOCK_MOVIMIENTO_VER', 'STOCK_MOVIMIENTO_REGISTRAR',
+      // Ventas
+      'VENTAS_PDV', 'VENTAS_HISTORICO_VER',
+      // Compras + Proveedores
+      'COMPRAS_VER', 'COMPRAS_GESTIONAR',
+      'PROVEEDORES_VER', 'PROVEEDORES_GESTIONAR',
+      // Personas / Clientes
+      'PERSONAS_VER', 'PERSONAS_GESTIONAR',
+      'CLIENTES_VER', 'CLIENTES_GESTIONAR',
+      // Financiero
+      'FINANCIERO_CAJA_VER', 'FINANCIERO_CAJA_GESTIONAR',
+      'CAJA_MAYOR_OPERAR',
+      'MONEDAS_GESTIONAR',
+      'BANCOS_VER', 'BANCOS_GESTIONAR',
+      // Sistema (no sensible)
+      'EMPRESA_CONFIGURAR',
+      'IMPRESORAS_GESTIONAR',
+      'DISPOSITIVOS_GESTIONAR',
+      // NOTA: NO se asigna USUARIOS_GESTIONAR, SISTEMA_BD_CONFIGURAR,
+      // SISTEMA_MODO_CONFIGURAR, SISTEMA_BACKUP, SISTEMA_PERMISO_GESTIONAR,
+      // SISTEMA_ROL_GESTIONAR. Esos quedan exclusivos del ADMINISTRADOR.
     ],
   },
   {
     descripcion: 'CAJERO',
     permisos: [
       'HOME_DASHBOARD_VER', 'VENTAS_DASHBOARD_VER', 'CAJA_MAYOR_DASHBOARD_VER',
+      'VENTAS_PDV', 'VENTAS_HISTORICO_VER',
+      'PRODUCTOS_VER',
+      'CLIENTES_VER', 'CLIENTES_GESTIONAR', // crear cliente al cobrar venta a credito
+      'FINANCIERO_CAJA_VER',
       'CPC_COBRAR',
       'RRHH_ASISTENCIA_REGISTRAR',
     ],
@@ -450,32 +514,55 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
     descripcion: 'MOZO',
     permisos: [
       'HOME_DASHBOARD_VER',
+      'VENTAS_PDV', // atender mesas y tomar comandas
       'RRHH_ASISTENCIA_REGISTRAR',
     ],
   },
 ];
 
+/**
+ * Crea roles plantilla y sincroniza sus permisos. Idempotente: si el rol no
+ * existe se crea con todos los permisos del catalogo. Si ya existe, solo se
+ * AGREGAN los permisos faltantes (nunca se quitan los que el usuario haya
+ * personalizado). Esto permite agregar permisos nuevos a roles existentes en
+ * instalaciones desplegadas sin perder customizaciones.
+ */
 async function seedRolesPlantilla(dataSource: DataSource): Promise<void> {
   const roleRepo = dataSource.getRepository(Role);
   const permissionRepo = dataSource.getRepository(Permission);
   const rolePermissionRepo = dataSource.getRepository(RolePermission);
 
   for (const plantilla of ROLES_PLANTILLA) {
-    const existing = await roleRepo.findOne({ where: { descripcion: plantilla.descripcion } });
-    if (existing) {
-      console.log(`  Rol ${plantilla.descripcion}: ya existe, skipping.`);
-      continue;
+    let role = await roleRepo.findOne({ where: { descripcion: plantilla.descripcion } });
+    const isNew = !role;
+    if (!role) {
+      role = await roleRepo.save(roleRepo.create({ descripcion: plantilla.descripcion, activo: true }));
     }
 
-    const role = await roleRepo.save(roleRepo.create({ descripcion: plantilla.descripcion, activo: true }));
+    // Codigos ya asignados al rol (evita query repetitivo dentro del loop).
+    const existingRps = await rolePermissionRepo.find({
+      where: { role: { id: role.id } },
+      relations: ['permission'],
+    });
+    const existingCodes = new Set(existingRps.map((rp) => rp.permission?.codigo).filter(Boolean) as string[]);
 
-    let assigned = 0;
+    let added = 0;
+    let missing = 0;
     for (const codigo of plantilla.permisos) {
+      if (existingCodes.has(codigo)) continue;
       const perm = await permissionRepo.findOne({ where: { codigo } });
-      if (!perm) continue;
+      if (!perm) {
+        missing++;
+        continue;
+      }
       await rolePermissionRepo.save(rolePermissionRepo.create({ role, permission: perm }));
-      assigned++;
+      added++;
     }
-    console.log(`  Rol ${plantilla.descripcion}: creado con ${assigned}/${plantilla.permisos.length} permisos.`);
+
+    if (isNew) {
+      console.log(`  Rol ${plantilla.descripcion}: creado con ${added}/${plantilla.permisos.length} permisos${missing ? ` (${missing} no encontrados)` : ''}.`);
+    } else if (added > 0) {
+      console.log(`  Rol ${plantilla.descripcion}: ${added} permiso(s) nuevos agregados (sync idempotente).`);
+    }
   }
 }

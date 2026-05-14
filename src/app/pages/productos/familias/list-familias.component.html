@@ -35,7 +35,7 @@
             <span>Limpiar</span>
           </button>
           <span class="spacer"></span>
-          <button mat-raised-button color="accent" (click)="openCreateDialog()" matTooltip="Crear nueva familia">
+          <button *appHasPermission="'CATEGORIAS_GESTIONAR'" mat-raised-button color="accent" (click)="openCreateDialog()" matTooltip="Crear nueva familia">
             <mat-icon>add</mat-icon>
             <span>Nueva familia</span>
           </button>
@@ -78,17 +78,17 @@
                     <mat-icon>more_vert</mat-icon>
                   </button>
                   <mat-menu #menu="matMenu">
-                    <button mat-menu-item (click)="openEditDialog(familia)">
+                    <button *appHasPermission="'CATEGORIAS_GESTIONAR'" mat-menu-item (click)="openEditDialog(familia)">
                       <mat-icon>edit</mat-icon>
                       <span>Editar familia</span>
                     </button>
-                    <button mat-menu-item (click)="toggleStatus(familia)">
+                    <button *appHasPermission="'CATEGORIAS_GESTIONAR'" mat-menu-item (click)="toggleStatus(familia)">
                       <mat-icon [class]="familia.activo ? 'icon-danger' : 'icon-success'">
                         {{ familia.activo ? 'visibility_off' : 'visibility' }}
                       </mat-icon>
                       <span>{{ familia.activo ? 'Desactivar familia' : 'Activar familia' }}</span>
                     </button>
-                    <button mat-menu-item (click)="deleteFamilia(familia)">
+                    <button *appHasPermission="'CATEGORIAS_GESTIONAR'" mat-menu-item (click)="deleteFamilia(familia)">
                       <mat-icon class="icon-danger">delete</mat-icon>
                       <span>Eliminar familia</span>
                     </button>
@@ -104,7 +104,7 @@
           <div *ngIf="dataSource.data.length === 0 && !isLoading" class="no-data">
             <mat-icon>category</mat-icon>
             <p>No hay familias que coincidan con el filtro</p>
-            <button mat-raised-button color="primary" (click)="openCreateDialog()">
+            <button *appHasPermission="'CATEGORIAS_GESTIONAR'" mat-raised-button color="primary" (click)="openCreateDialog()">
               CREAR PRIMERA FAMILIA
             </button>
           </div>

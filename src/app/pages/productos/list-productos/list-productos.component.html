@@ -7,7 +7,7 @@
     </div>
 
     <div class="actions-section">
-      <button mat-raised-button color="primary" (click)="createNewProducto()">
+      <button *appHasPermission="'PRODUCTOS_GESTIONAR'" mat-raised-button color="primary" (click)="createNewProducto()">
         <mat-icon>add</mat-icon>
         Nuevo Producto
       </button>
@@ -174,11 +174,11 @@
               <mat-icon>visibility</mat-icon>
               <span>Ver detalles</span>
             </button>
-            <button mat-menu-item (click)="editProducto(producto)">
+            <button *appHasPermission="'PRODUCTOS_GESTIONAR'" mat-menu-item (click)="editProducto(producto)">
               <mat-icon>edit</mat-icon>
               <span>Editar</span>
             </button>
-            <button mat-menu-item (click)="deleteProducto(producto)">
+            <button *appHasPermission="'PRODUCTOS_GESTIONAR'" mat-menu-item (click)="deleteProducto(producto)">
               <mat-icon>delete</mat-icon>
               <span>Eliminar</span>
             </button>
@@ -195,7 +195,7 @@
       <mat-icon>inventory</mat-icon>
       <h3>No hay productos</h3>
       <p>Comienza creando tu primer producto</p>
-      <button mat-raised-button color="primary" (click)="createNewProducto()">
+      <button *appHasPermission="'PRODUCTOS_GESTIONAR'" mat-raised-button color="primary" (click)="createNewProducto()">
         <mat-icon>add</mat-icon>
         Crear Primer Producto
       </button>

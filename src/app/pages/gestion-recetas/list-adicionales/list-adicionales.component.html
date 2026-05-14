@@ -47,7 +47,8 @@
           Filtrar
         </button>
 
-        <button mat-raised-button
+        <button *appHasPermission="'ADICIONALES_GESTIONAR'"
+                mat-raised-button
                 color="accent"
                 (click)="openCreateDialog()"
                 [disabled]="loading">
@@ -123,7 +124,7 @@
                   <mat-icon>more_vert</mat-icon>
                 </button>
                 <mat-menu #menu="matMenu">
-                  <button mat-menu-item (click)="editAdicional(adicional)">
+                  <button *appHasPermission="'ADICIONALES_GESTIONAR'" mat-menu-item (click)="editAdicional(adicional)">
                     <mat-icon>edit</mat-icon>
                     <span>Editar</span>
                   </button>
@@ -131,7 +132,7 @@
                     <mat-icon>restaurant_menu</mat-icon>
                     <span>Ver Receta</span>
                   </button>
-                  <button mat-menu-item (click)="deleteAdicional(adicional)">
+                  <button *appHasPermission="'ADICIONALES_GESTIONAR'" mat-menu-item (click)="deleteAdicional(adicional)">
                     <mat-icon>delete</mat-icon>
                     <span>Eliminar</span>
                   </button>
@@ -149,7 +150,8 @@
           <mat-icon>add_circle_outline</mat-icon>
           <h3>No hay adicionales</h3>
           <p>No se encontraron adicionales con los filtros aplicados</p>
-          <button mat-raised-button
+          <button *appHasPermission="'ADICIONALES_GESTIONAR'"
+                  mat-raised-button
                   color="primary"
                   (click)="openCreateDialog()">
             <mat-icon>add</mat-icon>

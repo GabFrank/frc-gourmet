@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { DataSource } from 'typeorm';
 import { DatabaseService } from '../../src/app/database/database.service';
+import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { ensurePermission } from '../utils/auth.utils';
 import {
   BackupConfig,
   BackupMetadata,
@@ -131,7 +133,10 @@ export function startAutoBackupScheduler(userDataPath: string): void {
   scheduleAutoBackup(userDataPath);
 }
 
-export function registerBackupHandlers(_dataSource: DataSource) {
+export function registerBackupHandlers(
+  dataSource: DataSource,
+  getCurrentUser: () => Usuario | null
+) {
   const userDataPath = app.getPath('userData');
 
   ipcMain.handle('backup-get-info', async () => {
@@ -158,6 +163,7 @@ export function registerBackupHandlers(_dataSource: DataSource) {
 
   ipcMain.handle('backup-create', async (_e, opts: { includeImages?: boolean; customDir?: string; notes?: string }) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_BACKUP');
       return await createBackupInternal({
         userDataPath,
         isAutomatic: false,
@@ -173,6 +179,7 @@ export function registerBackupHandlers(_dataSource: DataSource) {
 
   ipcMain.handle('backup-create-and-export', async (_e, opts: { includeImages?: boolean; notes?: string }) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_BACKUP');
       const includeImages = !!opts?.includeImages;
       const defaultName = buildBackupFileName({ withImages: includeImages, isAutomatic: false });
       const filters = includeImages
@@ -240,6 +247,7 @@ export function registerBackupHandlers(_dataSource: DataSource) {
 
   ipcMain.handle('backup-delete', async (_e, fullPath: string) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_BACKUP');
       if (!fullPath || !fs.existsSync(fullPath)) {
         return { success: false, message: 'Archivo no encontrado' };
       }
@@ -314,6 +322,7 @@ export function registerBackupHandlers(_dataSource: DataSource) {
 
   ipcMain.handle('backup-restore', async (_e, opts: { filePath: string }) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_BACKUP');
       if (!opts?.filePath || !fs.existsSync(opts.filePath)) {
         return { success: false, message: 'Archivo no encontrado' };
       }

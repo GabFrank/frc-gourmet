@@ -40,7 +40,7 @@ const ALWAYS_LOCAL_CHANNELS = new Set<string>([
   'get-printers',
   // User session local (no JWT — el current-user se setea local tras login)
   'getCurrentUser',
-  'setCurrentUser',
+  'restoreSession',
   // Config local (cambian el modo del cliente, no del server)
   'app-mode-get',
   'app-mode-save',
@@ -1166,8 +1166,11 @@ contextBridge.exposeInMainWorld('api', {
   getCurrentUser: async (): Promise<Usuario | null> => {
     return await ipcRenderer.invoke('getCurrentUser');
   },
-  setCurrentUser: async (usuario: Usuario | null): Promise<void> => {
-    return await ipcRenderer.invoke('setCurrentUser', usuario);
+  restoreSession: async (
+    sessionId: number,
+    token: string
+  ): Promise<{ success: boolean; usuario?: Usuario; message?: string }> => {
+    return await ipcRenderer.invoke('restoreSession', { sessionId, token });
   },
 
   // Printer operations
@@ -1205,6 +1208,13 @@ contextBridge.exposeInMainWorld('api', {
   },
   deleteUsuario: async (usuarioId: number): Promise<{ success: boolean }> => {
     return await ipcRenderer.invoke('delete-usuario', usuarioId);
+  },
+  changePassword: async (
+    usuarioId: number,
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; usuario?: Usuario; message?: string }> => {
+    return await ipcRenderer.invoke('change-password', { usuarioId, currentPassword, newPassword });
   },
   getUsuariosPaginated: async (page: number, pageSize: number, filters?: { nickname?: string; nombrePersona?: string; activo?: string | boolean }): Promise<{ items: Usuario[], total: number }> => {
     console.log('Preload.ts sending filters:', JSON.stringify(filters));

@@ -1,6 +1,9 @@
 import { app, ipcMain } from 'electron';
+import { DataSource } from 'typeorm';
 import { readAppSettings, updateAppSettings, AppMode, NetworkSettings } from '../utils/app-settings.utils';
 import { setCurrentDevice } from '../utils/current-device.utils';
+import { ensurePermission } from '../utils/auth.utils';
+import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 
 export interface AppModeDto {
   mode: AppMode;
@@ -16,7 +19,10 @@ export interface AppModeOpResult {
 
 const VALID_MODES = new Set<AppMode>(['standalone', 'server', 'client']);
 
-export function registerAppModeHandlers() {
+export function registerAppModeHandlers(
+  dataSource?: DataSource,
+  getCurrentUser?: () => Usuario | null,
+) {
   ipcMain.handle('app-mode-get', async (): Promise<AppModeDto> => {
     const settings = readAppSettings(app.getPath('userData'));
     return {
@@ -27,6 +33,15 @@ export function registerAppModeHandlers() {
   });
 
   ipcMain.handle('app-mode-save', async (_e, payload: AppModeDto): Promise<AppModeOpResult> => {
+    // P0-1: si hay usuario logueado, exigir permiso. Setup inicial sin
+    // sesion pasa libre (igual que db-config).
+    if (dataSource && getCurrentUser && getCurrentUser() != null) {
+      try {
+        await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_MODO_CONFIGURAR');
+      } catch (err: any) {
+        return { success: false, message: err?.message || 'NO AUTORIZADO' };
+      }
+    }
     if (!payload || !VALID_MODES.has(payload.mode)) {
       return { success: false, message: 'Modo invalido (debe ser standalone | server | client).' };
     }

@@ -75,6 +75,7 @@ interface ElectronAPI {
   getUsuario: (usuarioId: number) => Promise<Usuario>;
   createUsuario: (usuarioData: any) => Promise<Usuario>;
   updateUsuario: (usuarioId: number, usuarioData: any) => Promise<any>;
+  changePassword: (usuarioId: number, currentPassword: string, newPassword: string) => Promise<{ success: boolean; usuario?: Usuario; message?: string }>;
   deleteUsuario: (usuarioId: number) => Promise<any>;
   // Role operations
   getRoles: () => Promise<Role[]>;
@@ -107,7 +108,7 @@ interface ElectronAPI {
   printTestPage: (printerId: number) => Promise<any>;
   on: (channel: string, callback: (data: any) => void) => void;
   getCurrentUser: () => Promise<Usuario | null>;
-  setCurrentUser: (usuario: Usuario | null) => void;
+  restoreSession: (sessionId: number, token: string) => Promise<{ success: boolean; usuario?: Usuario; message?: string }>;
   getUsuariosPaginated: (page: number, pageSize: number, filters?: { nickname?: string; nombrePersona?: string; activo?: string | boolean }) => Promise<{items: Usuario[], total: number}>;
   // Auth operations
   login: (loginData: {nickname: string, password: string, deviceInfo: DeviceInfo}) => Promise<LoginResult>;
@@ -1039,10 +1040,19 @@ export class RepositoryIpcService extends RepositoryService {
     return this.currentUserSubject.value?.id;
   }
 
-  // Set the current user
+  // Set the current user (Angular state local).
+  // P0-2: ya no toca el main process; el currentUser del main se setea
+  // en el handler `login` (post-verify password) y se limpia en `logout`.
+  // Para recuperar la sesion tras un reload, usar `restoreSession(...)`.
   setCurrentUser(usuario: Usuario | null): void {
     this.currentUserSubject.next(usuario);
-    this.api.setCurrentUser(usuario);
+  }
+
+  // Pedir al main que restaure la sesion: el main verifica JWT + sesion
+  // activa en BD y setea el currentUser desde la fila de BD (no desde
+  // el payload del cliente).
+  restoreSession(sessionId: number, token: string): Observable<{ success: boolean; usuario?: Usuario; message?: string }> {
+    return from(this.api.restoreSession(sessionId, token));
   }
 
   // Persona methods
@@ -1088,6 +1098,10 @@ export class RepositoryIpcService extends RepositoryService {
 
   deleteUsuario(usuarioId: number): Observable<any> {
     return from(this.api.deleteUsuario(usuarioId));
+  }
+
+  changePassword(usuarioId: number, currentPassword: string, newPassword: string): Observable<{ success: boolean; usuario?: Usuario; message?: string }> {
+    return from(this.api.changePassword(usuarioId, currentPassword, newPassword));
   }
 
   // Role methods

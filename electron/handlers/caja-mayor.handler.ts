@@ -23,6 +23,7 @@ import { TipoOperacionFinanciera, DiferenciaDestinoTipo } from '../../src/app/da
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { esIngreso, actualizarSaldoCajaMayor } from './caja-mayor-utils';
+import { ensurePermission } from '../utils/auth.utils';
 
 // Alias local para mantener firma legacy de actualizarSaldo
 const actualizarSaldo = actualizarSaldoCajaMayor;
@@ -59,6 +60,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-caja-mayor', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(CajaMayor);
       const entity = repo.create({
         ...data,
@@ -75,6 +77,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('update-caja-mayor', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(CajaMayor);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Caja Mayor ID ${id} not found`);
@@ -89,6 +92,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('cerrar-caja-mayor', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(CajaMayor);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Caja Mayor ID ${id} not found`);
@@ -119,6 +123,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('recalcular-saldos', async (_event: any, cajaMayorId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -255,6 +260,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('create-caja-mayor-movimiento', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -294,6 +300,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('anular-caja-mayor-movimiento', async (_event: any, id: number, motivo: string) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -437,6 +444,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-gasto-categoria', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
       const repo = dataSource.getRepository(GastoCategoria);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -449,6 +457,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('update-gasto-categoria', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
       const repo = dataSource.getRepository(GastoCategoria);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`GastoCategoria ID ${id} not found`);
@@ -463,6 +472,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('delete-gasto-categoria', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
       const repo = dataSource.getRepository(GastoCategoria);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`GastoCategoria ID ${id} not found`);
@@ -531,6 +541,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
   // Crear gasto: transaccional (Gasto + GastoDetalles + CajaMayorMovimientos + actualizar saldos)
   // data.detalles = [{ monedaId, formaPagoId, monto, observacion? }]
   ipcMain.handle('create-gasto', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -603,6 +614,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('anular-gasto', async (_event: any, id: number, motivo: string) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -671,6 +683,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   // Editar gasto: revertir movimientos viejos, actualizar gasto+detalles, crear movimientos nuevos
   ipcMain.handle('edit-gasto', async (_event: any, gastoId: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -756,6 +769,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   // Editar movimiento suelto (ajustes): revertir viejo + crear nuevo
   ipcMain.handle('edit-caja-mayor-movimiento', async (_event: any, movId: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -869,6 +883,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
   // hasta que sea verificado en caja mayor); sin destino queda como FLOTANTE.
   ipcMain.handle('create-retiro-caja', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
       const repo = dataSource.getRepository(RetiroCaja);
       const { detalles, ...retiroData } = data;
 
@@ -898,6 +913,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   // Ingresar retiro flotante a una caja mayor
   ipcMain.handle('ingresar-retiro-caja', async (_event: any, retiroId: number, cajaMayorId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -978,6 +994,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-entrada-varia-categoria', async (_event, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
       const repo = dataSource.getRepository(EntradaVariaCategoria);
       const entity = repo.create({ ...data, nombre: data.nombre?.toUpperCase() });
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -990,6 +1007,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('update-entrada-varia-categoria', async (_event, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
       const repo = dataSource.getRepository(EntradaVariaCategoria);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`EntradaVariaCategoria ${id} no encontrada`);
@@ -1006,6 +1024,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('delete-entrada-varia-categoria', async (_event, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
       const repo = dataSource.getRepository(EntradaVariaCategoria);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`EntradaVariaCategoria ${id} no encontrada`);
@@ -1072,6 +1091,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
   // 1. Caja Mayor: crea EntradaVaria + CajaMayorMovimiento INGRESO_ENTRADA_VARIA + actualiza saldo CM
   // 2. Cuenta Bancaria: crea EntradaVaria + suma a saldo de cuenta bancaria
   ipcMain.handle('create-entrada-varia', async (_event, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1136,6 +1156,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('anular-entrada-varia', async (_event, id: number, motivo: string) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1230,6 +1251,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-operacion-financiera-categoria', async (_event, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
       const repo = dataSource.getRepository(OperacionFinancieraCategoria);
       const entity = repo.create({ ...data, nombre: data.nombre?.toUpperCase() });
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -1242,6 +1264,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('update-operacion-financiera-categoria', async (_event, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
       const repo = dataSource.getRepository(OperacionFinancieraCategoria);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`OperacionFinancieraCategoria ${id} no encontrada`);
@@ -1258,6 +1281,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('delete-operacion-financiera-categoria', async (_event, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
       const repo = dataSource.getRepository(OperacionFinancieraCategoria);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`OperacionFinancieraCategoria ${id} no encontrada`);
@@ -1335,6 +1359,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
   // Crear operacion financiera transaccional con form dinamico segun tipo:
   // CAMBIO_DIVISA, DEPOSITO_BANCARIO, RETIRO_BANCARIO, TRANSFERENCIA_ENTRE_CAJAS
   ipcMain.handle('create-operacion-financiera', async (_event, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1527,6 +1552,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('anular-operacion-financiera', async (_event, id: number, motivo: string) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();

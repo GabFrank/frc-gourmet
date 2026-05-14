@@ -4,6 +4,7 @@ import { ConfiguracionRrhh } from '../../src/app/database/entities/rrhh/configur
 import { ConfiguracionRrhhTipo } from '../../src/app/database/entities/rrhh/configuracion-rrhh-tipo.enum';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { ensurePermission } from '../utils/auth.utils';
 
 interface SeedItem {
   clave: string;
@@ -103,6 +104,7 @@ export function registerConfiguracionRrhhHandlers(
 
   ipcMain.handle('create-configuracion-rrhh', async (_event, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
       const repo = dataSource.getRepository(ConfiguracionRrhh);
       const entity = repo.create({
         clave: (data.clave || '').toUpperCase(),
@@ -121,6 +123,7 @@ export function registerConfiguracionRrhhHandlers(
 
   ipcMain.handle('update-configuracion-rrhh', async (_event, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
       const repo = dataSource.getRepository(ConfiguracionRrhh);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`ConfiguracionRrhh ${id} no encontrado`);
@@ -138,6 +141,7 @@ export function registerConfiguracionRrhhHandlers(
 
   ipcMain.handle('delete-configuracion-rrhh', async (_event, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
       const repo = dataSource.getRepository(ConfiguracionRrhh);
       await repo.delete(id);
       return { success: true };

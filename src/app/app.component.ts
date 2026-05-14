@@ -89,6 +89,7 @@ import { UpdateChannelDialogComponent } from './shared/components/update-channel
 import { EmpresaService } from './shared/services/empresa.service';
 import { ConfigurarEmpresaComponent } from './pages/sistema/configurar-empresa/configurar-empresa.component';
 import { resolveAppUrl } from './shared/utils/image-url.util';
+import { HasPermissionDirective, HasAnyPermissionDirective } from './shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-root',
@@ -112,6 +113,8 @@ import { resolveAppUrl } from './shared/utils/image-url.util';
     MatTooltipModule,
     MatSnackBarModule,
     TabContainerComponent,
+    HasPermissionDirective,
+    HasAnyPermissionDirective,
   ],
 })
 export class AppComponent implements OnInit, OnDestroy, AfterViewInit {

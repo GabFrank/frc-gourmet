@@ -14,6 +14,7 @@ import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { dbQuery } from '../utils/db-query';
+import { ensurePermission } from '../utils/auth.utils';
 
 // Incrementa el numero de cheque (soporta sufijos no numericos: extrae digitos finales)
 function siguienteNumeroCheque(actual: string): string {
@@ -128,6 +129,7 @@ export function registerBankingHandlers(
 
   ipcMain.handle('create-cuenta-bancaria', async (_event, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
       const repo = dataSource.getRepository(CuentaBancaria);
       const entity = repo.create({
         ...data,
@@ -148,6 +150,7 @@ export function registerBankingHandlers(
 
   ipcMain.handle('update-cuenta-bancaria', async (_event, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
       const repo = dataSource.getRepository(CuentaBancaria);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`CuentaBancaria ${id} no encontrada`);
@@ -170,6 +173,7 @@ export function registerBankingHandlers(
 
   ipcMain.handle('delete-cuenta-bancaria', async (_event, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
       const repo = dataSource.getRepository(CuentaBancaria);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`CuentaBancaria ${id} no encontrada`);
@@ -213,6 +217,7 @@ export function registerBankingHandlers(
 
   ipcMain.handle('create-maquina-pos', async (_event, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
       const repo = dataSource.getRepository(MaquinaPos);
       const entity = repo.create({
         ...data,
@@ -230,6 +235,7 @@ export function registerBankingHandlers(
 
   ipcMain.handle('update-maquina-pos', async (_event, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
       const repo = dataSource.getRepository(MaquinaPos);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`MaquinaPos ${id} no encontrada`);
@@ -249,6 +255,7 @@ export function registerBankingHandlers(
 
   ipcMain.handle('delete-maquina-pos', async (_event, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
       const repo = dataSource.getRepository(MaquinaPos);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`MaquinaPos ${id} no encontrada`);
@@ -322,6 +329,7 @@ export function registerBankingHandlers(
   // No actualiza saldo bancario hasta que sea acreditada (auto o verificada)
   ipcMain.handle('create-acreditacion-pos', async (_event, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
       const repo = dataSource.getRepository(AcreditacionPos);
       const maquinaRepo = dataSource.getRepository(MaquinaPos);
 
@@ -375,6 +383,7 @@ export function registerBankingHandlers(
   // Si difiere del esperado → CON_DIFERENCIA y se ajusta saldo bancario.
   // Si coincide → VERIFICADO y se suma saldo (si aun no estaba acreditado).
   ipcMain.handle('verificar-acreditacion-pos', async (_event, id: number, montoAcreditado: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -440,6 +449,7 @@ export function registerBankingHandlers(
   // No tiene comision, no genera AcreditacionPos.
   ipcMain.handle('acreditar-transferencia-bancaria', async (_event, payload: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
       const cuentaBancariaId = payload.cuentaBancariaId;
       const monto = Number(payload.monto);
       if (!cuentaBancariaId || monto <= 0) {
@@ -641,6 +651,7 @@ export function registerBankingHandlers(
 
   // Crear movimiento manual de cuenta bancaria (entrada/salida con motivo)
   ipcMain.handle('create-movimiento-bancario', async (_event, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -732,6 +743,7 @@ export function registerBankingHandlers(
 
   ipcMain.handle('create-chequera', async (_event, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
       const repo = dataSource.getRepository(Chequera);
       const entity = repo.create({
         ...data,
@@ -752,6 +764,7 @@ export function registerBankingHandlers(
 
   ipcMain.handle('update-chequera', async (_event, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
       const repo = dataSource.getRepository(Chequera);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Chequera ${id} no encontrada`);
@@ -772,6 +785,7 @@ export function registerBankingHandlers(
 
   ipcMain.handle('delete-chequera', async (_event, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
       const repo = dataSource.getRepository(Chequera);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Chequera ${id} no encontrada`);
@@ -840,6 +854,7 @@ export function registerBankingHandlers(
   // - No diferido (a la vista): descuenta saldo cuenta bancaria + genera EGRESO_CHEQUE en caja mayor.
   // - Avanza el siguienteNumero de la chequera.
   ipcMain.handle('emitir-cheque', async (_event, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -930,6 +945,7 @@ export function registerBankingHandlers(
 
   // Cobrar cheque diferido: descuenta saldo real de cuenta + libera saldoReservado
   ipcMain.handle('cobrar-cheque', async (_event, id: number, data?: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -992,6 +1008,7 @@ export function registerBankingHandlers(
 
   // Anular cheque: libera saldo reservado si era diferido. Si ya estaba cobrado, no se permite.
   ipcMain.handle('anular-cheque', async (_event, id: number, motivo: string) => {
+    await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();

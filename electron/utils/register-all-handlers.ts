@@ -52,6 +52,7 @@ import { registerDashboardFinancieroHandlers } from '../handlers/dashboard-finan
 import { registerDashboardCajaMayorHandlers } from '../handlers/dashboard-caja-mayor.handler';
 import { registerBackupHandlers } from '../handlers/backup.handler';
 import { registerFacturaImportHandlers } from '../handlers/factura-import.handler';
+import { registerEmpresaHandlers } from '../handlers/empresa.handler';
 import { registerDbConfigHandlers } from '../handlers/db-config.handler';
 import { registerAppModeHandlers } from '../handlers/app-mode.handler';
 
@@ -64,7 +65,7 @@ export interface RegisterAllOptions {
 export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   const { dataSource, getCurrentUser, setCurrentUser } = opts;
 
-  registerPrinterHandlers(dataSource);
+  registerPrinterHandlers(dataSource, getCurrentUser);
   registerPersonasHandlers(dataSource, getCurrentUser);
   registerAuthHandlers(dataSource, getCurrentUser, setCurrentUser);
   registerImageHandlers(dataSource);
@@ -103,8 +104,9 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerDashboardProductosHandlers(dataSource, getCurrentUser);
   registerDashboardFinancieroHandlers(dataSource, getCurrentUser);
   registerDashboardCajaMayorHandlers(dataSource, getCurrentUser);
-  registerBackupHandlers(dataSource);
-  registerDbConfigHandlers();
-  registerAppModeHandlers();
+  registerBackupHandlers(dataSource, getCurrentUser);
+  registerDbConfigHandlers(dataSource, getCurrentUser);
+  registerAppModeHandlers(dataSource, getCurrentUser);
   registerFacturaImportHandlers(dataSource, getCurrentUser);
+  registerEmpresaHandlers(dataSource, getCurrentUser);
 }

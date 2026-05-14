@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { Empresa } from '../../src/app/database/entities/sistema/empresa.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { ensurePermission } from '../utils/auth.utils';
 
 /**
  * Normaliza un string a UPPERCASE + trim; devuelve null si queda vacio o
@@ -48,6 +49,7 @@ export function registerEmpresaHandlers(
   });
 
   ipcMain.handle('update-empresa', async (_event, data: Partial<Empresa>): Promise<Empresa> => {
+    await ensurePermission(dataSource, getCurrentUser, 'EMPRESA_CONFIGURAR');
     const repo = dataSource.getRepository(Empresa);
     const currentUser = getCurrentUser();
     const existing = await getOrCreateEmpresa(dataSource, currentUser);

@@ -138,7 +138,7 @@ async function main() {
     driver: 'sqlite',
   });
   registerAuthRoutes(fastify, dataSource);
-  registerRpcRoute(fastify);
+  registerRpcRoute(fastify, dataSource);
   registerFileRoutes(fastify, dataSource);
 
   await fastify.listen({ port: 7070, host: '0.0.0.0' });
