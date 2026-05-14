@@ -23,6 +23,7 @@ import { firstValueFrom } from 'rxjs';
 import { CreateEditUsuarioComponent } from './create-edit-usuario.component';
 import { GenericSearchDialogComponent } from '../../../shared/components/generic-search-dialog/generic-search-dialog.component';
 import { ResetPasswordDialogComponent, ResetPasswordDialogData } from './reset-password-dialog/reset-password-dialog.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-usuarios',
@@ -45,7 +46,8 @@ import { ResetPasswordDialogComponent, ResetPasswordDialogData } from './reset-p
     MatSnackBarModule,
     MatDialogModule,
     CreateEditUsuarioComponent,
-    GenericSearchDialogComponent
+    GenericSearchDialogComponent,
+    HasPermissionDirective,
   ],
   templateUrl: './list-usuarios.component.html',
   styleUrls: ['./list-usuarios.component.scss']

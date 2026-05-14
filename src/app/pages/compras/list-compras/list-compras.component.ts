@@ -27,6 +27,7 @@ import { CompraDetalleComponent } from '../compra-detalle/compra-detalle.compone
 import { RevisarFacturaComponent } from '../revisar-factura/revisar-factura.component';
 import { FacturaImportService } from 'src/app/services/factura-import.service';
 import { TableToolbarComponent } from 'src/app/shared/components/table-toolbar/table-toolbar.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-compras',
@@ -57,6 +58,7 @@ import { TableToolbarComponent } from 'src/app/shared/components/table-toolbar/t
     DatePipe,
     DecimalPipe,
     TableToolbarComponent,
+    HasPermissionDirective,
   ]
 })
 export class ListComprasComponent implements OnInit {

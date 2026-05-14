@@ -10,6 +10,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { RepositoryService } from '../../../database/repository.service';
 import { CreateEditSaborDialogComponent } from '../dialogs/create-edit-sabor-dialog/create-edit-sabor-dialog.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-sabores',
@@ -21,7 +22,8 @@ import { CreateEditSaborDialogComponent } from '../dialogs/create-edit-sabor-dia
     MatProgressSpinnerModule,
     MatToolbarModule,
     MatButtonModule,
-    MatIconModule
+    MatIconModule,
+    HasPermissionDirective,
   ],
   templateUrl: './list-sabores.component.html',
   styleUrls: ['./list-sabores.component.scss']

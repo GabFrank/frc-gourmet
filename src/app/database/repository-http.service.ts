@@ -86,6 +86,9 @@ export class RepositoryHttpService extends RepositoryService {
   setCurrentUser(usuario: Usuario | null): void {
     throw new Error(`RepositoryHttpService.setCurrentUser() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`);
   }
+  restoreSession(sessionId: number, token: string): Observable<{ success: boolean; usuario?: Usuario; message?: string }> {
+    return throwError(() => new Error(`RepositoryHttpService.restoreSession() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getPersonas(): Observable<Persona[]> {
     return throwError(() => new Error(`RepositoryHttpService.getPersonas() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
@@ -115,6 +118,9 @@ export class RepositoryHttpService extends RepositoryService {
   }
   deleteUsuario(usuarioId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.deleteUsuario() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  changePassword(usuarioId: number, currentPassword: string, newPassword: string): Observable<{ success: boolean; usuario?: Usuario; message?: string }> {
+    return throwError(() => new Error(`RepositoryHttpService.changePassword() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getRoles(): Observable<Role[]> {
     return throwError(() => new Error(`RepositoryHttpService.getRoles() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;

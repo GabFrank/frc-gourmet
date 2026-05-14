@@ -25,6 +25,7 @@ import { Producto } from '../../../database/entities/productos/producto.entity';
 import { ProductoTipo } from '../../../database/entities/productos/producto-tipo.enum';
 import { GestionarProductoComponent } from '../gestionar-producto/gestionar-producto.component';
 import { thumbUrl, resolveAppUrl } from 'src/app/shared/utils/image-url.util';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-productos',
@@ -47,6 +48,7 @@ import { thumbUrl, resolveAppUrl } from 'src/app/shared/utils/image-url.util';
     MatTooltipModule,
     MatSlideToggleModule,
     FormsModule,
+    HasPermissionDirective,
   ]
 })
 export class ListProductosComponent implements OnInit {

@@ -172,7 +172,7 @@ function initializeDatabase() {
       installHandlerRegistry();
 
       // Register all IPC handlers *after* the database is ready
-      registerPrinterHandlers(dataSource);
+      registerPrinterHandlers(dataSource, getCurrentUser);
       registerPersonasHandlers(dataSource, getCurrentUser);
       registerAuthHandlers(dataSource, getCurrentUser, setCurrentUser);
       registerImageHandlers(dataSource);
@@ -228,13 +228,13 @@ function initializeDatabase() {
       startAcreditacionesScheduler(dataSource, 5);
 
       // Backup & Restore handlers
-      registerBackupHandlers(dataSource);
+      registerBackupHandlers(dataSource, getCurrentUser);
 
       // F1: Configuracion de BD (sqlite path / postgres)
-      registerDbConfigHandlers();
+      registerDbConfigHandlers(dataSource, getCurrentUser);
 
       // F4.2: Modo de operacion (standalone / server / cliente)
-      registerAppModeHandlers();
+      registerAppModeHandlers(dataSource, getCurrentUser);
 
       // Importacion de facturas con OCR + IA
       registerFacturaImportHandlers(dataSource, getCurrentUser);

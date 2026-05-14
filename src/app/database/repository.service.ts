@@ -90,6 +90,7 @@ export abstract class RepositoryService {
   abstract getCurrentUser(): Observable<Usuario | null>;
   abstract getCurrentUserId(): number | undefined;
   abstract setCurrentUser(usuario: Usuario | null): void;
+  abstract restoreSession(sessionId: number, token: string): Observable<{ success: boolean; usuario?: Usuario; message?: string }>;
   abstract getPersonas(): Observable<Persona[]>;
   abstract getPersona(personaId: number): Observable<Persona>;
   abstract createPersona(personaData: Partial<Persona>): Observable<Persona>;
@@ -100,6 +101,7 @@ export abstract class RepositoryService {
   abstract createUsuario(usuarioData: Partial<Usuario>): Observable<Usuario>;
   abstract updateUsuario(usuarioId: number, usuarioData: Partial<Usuario>): Observable<any>;
   abstract deleteUsuario(usuarioId: number): Observable<any>;
+  abstract changePassword(usuarioId: number, currentPassword: string, newPassword: string): Observable<{ success: boolean; usuario?: Usuario; message?: string }>;
   abstract getRoles(): Observable<Role[]>;
   abstract getRole(roleId: number): Observable<Role>;
   abstract createRole(roleData: Partial<Role>): Observable<Role>;

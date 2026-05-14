@@ -74,8 +74,10 @@ export async function startServer(opts: ServerOptions): Promise<FastifyInstance>
   // Auth (login + refresh, no requieren JWT previo)
   registerAuthRoutes(fastify, opts.dataSource);
 
-  // RPC (requiere JWT — el middleware se aplica via onRequest hook)
-  registerRpcRoute(fastify);
+  // RPC (requiere JWT — el middleware se aplica via onRequest hook).
+  // dataSource es necesario para resolver el Usuario del JWT y poblar el
+  // AsyncLocalStorage que usa `checkPermission` (P0-1).
+  registerRpcRoute(fastify, opts.dataSource);
 
   // Files (requiere JWT)
   registerFileRoutes(fastify, opts.dataSource);

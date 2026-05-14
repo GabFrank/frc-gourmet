@@ -5,12 +5,12 @@
                      [filtersVisible]="showFiltros"
                      (refresh)="loadData()"
                      (toggleFilters)="toggleFiltros()">
-    <button mat-stroked-button color="accent" (click)="importarConIA()" [disabled]="importing" matTooltip="Importar factura desde imagen/PDF con IA">
+    <button *appHasPermission="'COMPRAS_IMPORTAR_FACTURA'" mat-stroked-button color="accent" (click)="importarConIA()" [disabled]="importing" matTooltip="Importar factura desde imagen/PDF con IA">
       <mat-icon>auto_awesome</mat-icon>
       <span *ngIf="!importing">Importar con IA</span>
       <mat-spinner *ngIf="importing" diameter="18"></mat-spinner>
     </button>
-    <button mat-flat-button color="primary" (click)="nuevaCompra()">
+    <button *appHasPermission="'COMPRAS_GESTIONAR'" mat-flat-button color="primary" (click)="nuevaCompra()">
       <mat-icon>add</mat-icon>
       Nueva compra
     </button>
@@ -170,11 +170,11 @@
               <mat-icon>visibility</mat-icon>
               <span>Ver detalle</span>
             </button>
-            <button mat-menu-item (click)="editarBorrador(c)" [disabled]="c.estado !== 'ABIERTO'">
+            <button *appHasPermission="'COMPRAS_GESTIONAR'" mat-menu-item (click)="editarBorrador(c)" [disabled]="c.estado !== 'ABIERTO'">
               <mat-icon>edit</mat-icon>
               <span>Editar borrador</span>
             </button>
-            <button mat-menu-item (click)="anular(c)" [disabled]="c.estado === 'CANCELADO'">
+            <button *appHasPermission="'COMPRAS_GESTIONAR'" mat-menu-item (click)="anular(c)" [disabled]="c.estado === 'CANCELADO'">
               <mat-icon>block</mat-icon>
               <span>Anular</span>
             </button>

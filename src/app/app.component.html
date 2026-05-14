@@ -86,7 +86,7 @@
 
       <mat-nav-list>
         <!-- Dashboard item - Simple list item with proper alignment -->
-        <a mat-list-item (click)="openHomeTab()" class="nav-list-item">
+        <a *appHasPermission="'HOME_DASHBOARD_VER'" mat-list-item (click)="openHomeTab()" class="nav-list-item">
           <div class="menu-item-content" [ngClass]="{'centered': !isMenuExpanded}">
             <mat-icon class="nav-icon">dashboard</mat-icon>
             <span class="nav-title" *ngIf="isMenuExpanded">Dashboard</span>
@@ -94,7 +94,8 @@
         </a>
 
         <!-- Ventas Menu   -->
-        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel"
+        <mat-expansion-panel *appHasAnyPermission="['VENTAS_DASHBOARD_VER','VENTAS_PDV','VENTAS_HISTORICO_VER']"
+                            class="mat-elevation-z0 nav-expansion-panel"
                             [expanded]="isMenuSectionExpanded('ventas')"
                             [hideToggle]="!isMenuExpanded">
           <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'ventas')">
@@ -107,7 +108,7 @@
           </mat-expansion-panel-header>
           <!-- open venta dashboard instead of pdv -->
           <div class="submenu-container">
-            <a mat-list-item (click)="openVentasDashTab()">
+            <a *appHasPermission="'VENTAS_DASHBOARD_VER'" mat-list-item (click)="openVentasDashTab()">
               <mat-icon matListItemIcon>dashboard</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Dashboard</span>
             </a>
@@ -115,7 +116,8 @@
         </mat-expansion-panel>
 
         <!-- Recursos Humanos Menu -->
-        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel"
+        <mat-expansion-panel *appHasAnyPermission="['RRHH_DASHBOARD_VER','RRHH_NOTIFICACIONES_VER','RRHH_REPORTE_GENERAR','PERSONAS_VER','USUARIOS_GESTIONAR','CLIENTES_VER','RRHH_FUNCIONARIO_VER','RRHH_ASISTENCIA_REGISTRAR','RRHH_ASISTENCIA_JUSTIFICAR','RRHH_PENALIZACION_REGISTRAR','RRHH_VALE_CREAR','RRHH_PRESTAMO_OTORGAR','RRHH_LIQUIDACION_GENERAR','RRHH_BONO_OTORGAR','RRHH_CONFIG_EDITAR','SISTEMA_PERMISO_GESTIONAR','SISTEMA_ROL_GESTIONAR']"
+                            class="mat-elevation-z0 nav-expansion-panel"
                             [expanded]="isMenuSectionExpanded('rrhh')"
                             [hideToggle]="!isMenuExpanded">
           <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'rrhh')">
@@ -127,87 +129,87 @@
             </mat-panel-title>
           </mat-expansion-panel-header>
           <div class="submenu-container">
-            <a mat-list-item (click)="openRrhhDashTab()">
+            <a *appHasPermission="'RRHH_DASHBOARD_VER'" mat-list-item (click)="openRrhhDashTab()">
               <mat-icon matListItemIcon>dashboard</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Dashboard RRHH</span>
             </a>
-            <a mat-list-item (click)="openNotificacionesRrhhTab()">
+            <a *appHasPermission="'RRHH_NOTIFICACIONES_VER'" mat-list-item (click)="openNotificacionesRrhhTab()">
               <mat-icon matListItemIcon [matBadge]="notificacionesNoLeidas > 0 ? notificacionesNoLeidas : null" matBadgeColor="warn" matBadgeSize="small">notifications</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Notificaciones</span>
             </a>
-            <a mat-list-item (click)="openReportesRrhhTab()">
+            <a *appHasPermission="'RRHH_REPORTE_GENERAR'" mat-list-item (click)="openReportesRrhhTab()">
               <mat-icon matListItemIcon>assessment</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Reportes RRHH</span>
             </a>
-            <a mat-list-item (click)="openPersonasTab()">
+            <a *appHasPermission="'PERSONAS_VER'" mat-list-item (click)="openPersonasTab()">
               <mat-icon matListItemIcon>person</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Personas</span>
             </a>
-            <a mat-list-item (click)="openUsuariosTab()">
+            <a *appHasPermission="'USUARIOS_GESTIONAR'" mat-list-item (click)="openUsuariosTab()">
               <mat-icon matListItemIcon>account_circle</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Usuarios</span>
             </a>
-            <a mat-list-item (click)="openClientesTab()">
+            <a *appHasPermission="'CLIENTES_VER'" mat-list-item (click)="openClientesTab()">
               <mat-icon matListItemIcon>business</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Clientes</span>
             </a>
-            <a mat-list-item (click)="openCargosTab()">
+            <a *appHasPermission="'RRHH_FUNCIONARIO_VER'" mat-list-item (click)="openCargosTab()">
               <mat-icon matListItemIcon>work</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Cargos</span>
             </a>
-            <a mat-list-item (click)="openFuncionariosTab()">
+            <a *appHasPermission="'RRHH_FUNCIONARIO_VER'" mat-list-item (click)="openFuncionariosTab()">
               <mat-icon matListItemIcon>badge</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Funcionarios</span>
             </a>
-            <a mat-list-item (click)="openTurnosTab()">
+            <a *appHasPermission="'RRHH_FUNCIONARIO_VER'" mat-list-item (click)="openTurnosTab()">
               <mat-icon matListItemIcon>schedule</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Turnos</span>
             </a>
-            <a mat-list-item (click)="openAsistenciasTab()">
+            <a *appHasPermission="'RRHH_ASISTENCIA_REGISTRAR'" mat-list-item (click)="openAsistenciasTab()">
               <mat-icon matListItemIcon>fact_check</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Asistencias</span>
             </a>
-            <a mat-list-item (click)="openPenalizacionesTab()">
+            <a *appHasPermission="'RRHH_PENALIZACION_REGISTRAR'" mat-list-item (click)="openPenalizacionesTab()">
               <mat-icon matListItemIcon>gavel</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Penalizaciones</span>
             </a>
-            <a mat-list-item (click)="openHorasExtraTab()">
+            <a *appHasPermission="'RRHH_ASISTENCIA_JUSTIFICAR'" mat-list-item (click)="openHorasExtraTab()">
               <mat-icon matListItemIcon>more_time</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Horas extra</span>
             </a>
-            <a mat-list-item (click)="openValesTab()">
+            <a *appHasPermission="'RRHH_VALE_CREAR'" mat-list-item (click)="openValesTab()">
               <mat-icon matListItemIcon>receipt_long</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Vales</span>
             </a>
-            <a mat-list-item (click)="openMotivosValeTab()">
+            <a *appHasPermission="'RRHH_VALE_CREAR'" mat-list-item (click)="openMotivosValeTab()">
               <mat-icon matListItemIcon>label</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Motivos de vale</span>
             </a>
-            <a mat-list-item (click)="openPrestamosFuncionariosTab()">
+            <a *appHasPermission="'RRHH_PRESTAMO_OTORGAR'" mat-list-item (click)="openPrestamosFuncionariosTab()">
               <mat-icon matListItemIcon>account_balance</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Prestamos</span>
             </a>
-            <a mat-list-item (click)="openLiquidacionesSueldoTab()">
+            <a *appHasPermission="'RRHH_LIQUIDACION_GENERAR'" mat-list-item (click)="openLiquidacionesSueldoTab()">
               <mat-icon matListItemIcon>request_quote</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Liquidaciones</span>
             </a>
-            <a mat-list-item (click)="openBonosTab()">
+            <a *appHasPermission="'RRHH_BONO_OTORGAR'" mat-list-item (click)="openBonosTab()">
               <mat-icon matListItemIcon>card_giftcard</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Bonos</span>
             </a>
-            <a mat-list-item (click)="openAguinaldosTab()">
+            <a *appHasPermission="'RRHH_LIQUIDACION_GENERAR'" mat-list-item (click)="openAguinaldosTab()">
               <mat-icon matListItemIcon>star</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Aguinaldos</span>
             </a>
-            <a mat-list-item (click)="openFeriadosTab()">
+            <a *appHasPermission="'RRHH_CONFIG_EDITAR'" mat-list-item (click)="openFeriadosTab()">
               <mat-icon matListItemIcon>celebration</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Feriados</span>
             </a>
-            <a mat-list-item (click)="openListPermisosTab()">
+            <a *appHasPermission="'SISTEMA_PERMISO_GESTIONAR'" mat-list-item (click)="openListPermisosTab()">
               <mat-icon matListItemIcon>verified_user</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Permisos</span>
             </a>
-            <a mat-list-item (click)="openConfiguracionRrhhTab()">
+            <a *appHasPermission="'RRHH_CONFIG_EDITAR'" mat-list-item (click)="openConfiguracionRrhhTab()">
               <mat-icon matListItemIcon>tune</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Config RRHH</span>
             </a>
@@ -215,7 +217,8 @@
         </mat-expansion-panel>
 
         <!-- Comisiones Menu -->
-        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel"
+        <mat-expansion-panel *appHasAnyPermission="['COMISION_REGLA_VER','COMISION_EQUIPO_GESTIONAR','COMISION_LIQUIDACION_GENERAR']"
+                            class="mat-elevation-z0 nav-expansion-panel"
                             [expanded]="isMenuSectionExpanded('comisiones')"
                             [hideToggle]="!isMenuExpanded">
           <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'comisiones')">
@@ -227,15 +230,15 @@
             </mat-panel-title>
           </mat-expansion-panel-header>
           <div class="submenu-container">
-            <a mat-list-item (click)="openReglasComisionTab()">
+            <a *appHasPermission="'COMISION_REGLA_VER'" mat-list-item (click)="openReglasComisionTab()">
               <mat-icon matListItemIcon>rule</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Reglas</span>
             </a>
-            <a mat-list-item (click)="openEquiposComisionTab()">
+            <a *appHasPermission="'COMISION_EQUIPO_GESTIONAR'" mat-list-item (click)="openEquiposComisionTab()">
               <mat-icon matListItemIcon>group</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Equipos</span>
             </a>
-            <a mat-list-item (click)="openLiquidacionesComisionTab()">
+            <a *appHasPermission="'COMISION_LIQUIDACION_GENERAR'" mat-list-item (click)="openLiquidacionesComisionTab()">
               <mat-icon matListItemIcon>receipt</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Liquidaciones</span>
             </a>
@@ -243,7 +246,8 @@
         </mat-expansion-panel>
 
         <!-- Productos Menu -->
-        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel"
+        <mat-expansion-panel *appHasAnyPermission="['PRODUCTOS_DASHBOARD_VER','PRODUCTOS_VER','CATEGORIAS_GESTIONAR','RECETAS_VER','SABORES_VER','ADICIONALES_VER','INGREDIENTES_VER','STOCK_MOVIMIENTO_VER']"
+                            class="mat-elevation-z0 nav-expansion-panel"
                             [expanded]="isMenuSectionExpanded('productos')"
                             [hideToggle]="!isMenuExpanded">
           <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'productos')">
@@ -255,35 +259,35 @@
             </mat-panel-title>
           </mat-expansion-panel-header>
           <div class="submenu-container">
-            <a mat-list-item (click)="openProductoDashboardTab()">
+            <a *appHasPermission="'PRODUCTOS_DASHBOARD_VER'" mat-list-item (click)="openProductoDashboardTab()">
               <mat-icon matListItemIcon>dashboard</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Dashboard</span>
             </a>
-            <a mat-list-item (click)="openCategoriasTab()">
+            <a *appHasPermission="'CATEGORIAS_GESTIONAR'" mat-list-item (click)="openCategoriasTab()">
               <mat-icon matListItemIcon>category</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Categorías</span>
             </a>
-            <a mat-list-item (click)="openProductosTab()">
+            <a *appHasPermission="'PRODUCTOS_VER'" mat-list-item (click)="openProductosTab()">
               <mat-icon matListItemIcon>restaurant</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Productos</span>
             </a>
-            <a mat-list-item (click)="openRecetasTab()">
+            <a *appHasPermission="'RECETAS_VER'" mat-list-item (click)="openRecetasTab()">
               <mat-icon matListItemIcon>menu_book</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Recetas</span>
             </a>
-            <a mat-list-item (click)="openSaboresTab()">
+            <a *appHasPermission="'SABORES_VER'" mat-list-item (click)="openSaboresTab()">
               <mat-icon matListItemIcon>auto_awesome</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Gestión de Sabores</span>
             </a>
-            <a mat-list-item (click)="openAdicionalesTab()">
+            <a *appHasPermission="'ADICIONALES_VER'" mat-list-item (click)="openAdicionalesTab()">
               <mat-icon matListItemIcon>add_circle</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Adicionales</span>
             </a>
-            <a mat-list-item (click)="openIngredientesTab()">
+            <a *appHasPermission="'INGREDIENTES_VER'" mat-list-item (click)="openIngredientesTab()">
               <mat-icon matListItemIcon>egg</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Ingredientes</span>
             </a>
-            <a mat-list-item (click)="openMovimientosStockTab()">
+            <a *appHasPermission="'STOCK_MOVIMIENTO_VER'" mat-list-item (click)="openMovimientosStockTab()">
               <mat-icon matListItemIcon>inventory</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Movimientos de Stock</span>
             </a>
@@ -291,7 +295,8 @@
         </mat-expansion-panel>
 
         <!-- Compras Menu -->
-        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel"
+        <mat-expansion-panel *appHasAnyPermission="['COMPRAS_DASHBOARD_VER','COMPRAS_VER','COMPRAS_IMPORTAR_FACTURA']"
+                            class="mat-elevation-z0 nav-expansion-panel"
                             [expanded]="isMenuSectionExpanded('compras')"
                             [hideToggle]="!isMenuExpanded">
           <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'compras')">
@@ -303,15 +308,15 @@
             </mat-panel-title>
           </mat-expansion-panel-header>
           <div class="submenu-container">
-            <a mat-list-item (click)="openComprasDashTab()">
+            <a *appHasPermission="'COMPRAS_DASHBOARD_VER'" mat-list-item (click)="openComprasDashTab()">
               <mat-icon matListItemIcon>dashboard</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Dashboard</span>
             </a>
-            <a mat-list-item (click)="openComprasTab()">
+            <a *appHasPermission="'COMPRAS_VER'" mat-list-item (click)="openComprasTab()">
               <mat-icon matListItemIcon>shopping_cart</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Compras</span>
             </a>
-            <a mat-list-item (click)="openFacturaImportsTab()">
+            <a *appHasPermission="'COMPRAS_IMPORTAR_FACTURA'" mat-list-item (click)="openFacturaImportsTab()">
               <mat-icon matListItemIcon>auto_awesome</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Importaciones IA</span>
             </a>
@@ -319,7 +324,8 @@
         </mat-expansion-panel>
 
         <!-- Financiero Menu -->
-        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel"
+        <mat-expansion-panel *appHasAnyPermission="['FINANCIERO_DASHBOARD_VER','FINANCIERO_CAJA_VER','MONEDAS_GESTIONAR','CAJA_MAYOR_DASHBOARD_VER','CPC_GESTIONAR']"
+                            class="mat-elevation-z0 nav-expansion-panel"
                             [expanded]="isMenuSectionExpanded('financiero')"
                             [hideToggle]="!isMenuExpanded">
           <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'financiero')">
@@ -331,27 +337,27 @@
             </mat-panel-title>
           </mat-expansion-panel-header>
           <div class="submenu-container">
-            <a mat-list-item (click)="openFinancieroDashTab()">
+            <a *appHasPermission="'FINANCIERO_DASHBOARD_VER'" mat-list-item (click)="openFinancieroDashTab()">
               <mat-icon matListItemIcon>dashboard</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Dashboard</span>
             </a>
-            <a mat-list-item (click)="openCajasTab()">
+            <a *appHasPermission="'FINANCIERO_CAJA_VER'" mat-list-item (click)="openCajasTab()">
               <mat-icon matListItemIcon>point_of_sale</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Cajas</span>
             </a>
-            <a mat-list-item (click)="openMonedasTab()">
+            <a *appHasPermission="'MONEDAS_GESTIONAR'" mat-list-item (click)="openMonedasTab()">
               <mat-icon matListItemIcon>monetization_on</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Monedas</span>
             </a>
-            <a mat-list-item (click)="openTipoPrecioTab()">
+            <a *appHasPermission="'PRODUCTOS_GESTIONAR'" mat-list-item (click)="openTipoPrecioTab()">
               <mat-icon matListItemIcon>sell</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Tipos de Precio</span>
             </a>
-            <a mat-list-item (click)="openCajaMayorTab()">
+            <a *appHasPermission="'CAJA_MAYOR_DASHBOARD_VER'" mat-list-item (click)="openCajaMayorTab()">
               <mat-icon matListItemIcon>account_balance</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Caja Mayor</span>
             </a>
-            <a mat-list-item (click)="openCuentasPorCobrarTab()">
+            <a *appHasPermission="'CPC_GESTIONAR'" mat-list-item (click)="openCuentasPorCobrarTab()">
               <mat-icon matListItemIcon>request_quote</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Cuentas por Cobrar</span>
             </a>
@@ -361,7 +367,10 @@
         <mat-divider></mat-divider>
 
         <!-- Settings Menu - Convert to expansion panel -->
-        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel" [expanded]="isMenuSectionExpanded('config')" [hideToggle]="!isMenuExpanded">
+        <mat-expansion-panel *appHasAnyPermission="['EMPRESA_CONFIGURAR','IMPRESORAS_GESTIONAR','DISPOSITIVOS_GESTIONAR','SISTEMA_BACKUP','SISTEMA_CONFIGURAR_IA','SISTEMA_BD_CONFIGURAR','SISTEMA_MODO_CONFIGURAR']"
+                            class="mat-elevation-z0 nav-expansion-panel"
+                            [expanded]="isMenuSectionExpanded('config')"
+                            [hideToggle]="!isMenuExpanded">
           <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'config')">
             <mat-panel-title>
               <div class="menu-item-content" [ngClass]="{'centered': !isMenuExpanded}">
@@ -371,31 +380,31 @@
             </mat-panel-title>
           </mat-expansion-panel-header>
           <div class="submenu-container">
-            <a mat-list-item (click)="openConfigurarEmpresaTab()">
+            <a *appHasPermission="'EMPRESA_CONFIGURAR'" mat-list-item (click)="openConfigurarEmpresaTab()">
               <mat-icon matListItemIcon>business</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Datos de la Empresa</span>
             </a>
-            <a mat-list-item (click)="openPrinterSettings()">
+            <a *appHasPermission="'IMPRESORAS_GESTIONAR'" mat-list-item (click)="openPrinterSettings()">
               <mat-icon matListItemIcon>print</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Impresoras</span>
             </a>
-            <a mat-list-item (click)="openDispositivosTab()">
+            <a *appHasPermission="'DISPOSITIVOS_GESTIONAR'" mat-list-item (click)="openDispositivosTab()">
               <mat-icon matListItemIcon>devices</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Dispositivos y puntos de venta</span>
             </a>
-            <a mat-list-item (click)="openBackupRestoreTab()">
+            <a *appHasPermission="'SISTEMA_BACKUP'" mat-list-item (click)="openBackupRestoreTab()">
               <mat-icon matListItemIcon>backup</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Backup y Restauración</span>
             </a>
-            <a mat-list-item (click)="openIaConfigTab()">
+            <a *appHasPermission="'SISTEMA_CONFIGURAR_IA'" mat-list-item (click)="openIaConfigTab()">
               <mat-icon matListItemIcon>auto_awesome</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Configurar IA</span>
             </a>
-            <a mat-list-item (click)="openDbConfigTab()">
+            <a *appHasPermission="'SISTEMA_BD_CONFIGURAR'" mat-list-item (click)="openDbConfigTab()">
               <mat-icon matListItemIcon>storage</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Configurar BD</span>
             </a>
-            <a mat-list-item (click)="openModeConfigTab()">
+            <a *appHasPermission="'SISTEMA_MODO_CONFIGURAR'" mat-list-item (click)="openModeConfigTab()">
               <mat-icon matListItemIcon>hub</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Modo de operacion</span>
             </a>

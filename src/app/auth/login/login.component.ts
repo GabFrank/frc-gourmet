@@ -11,8 +11,11 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatDialog } from '@angular/material/dialog';
 import { AuthService } from '../../services/auth.service';
 import { trigger, transition, style, animate, query, stagger } from '@angular/animations';
+import { firstValueFrom } from 'rxjs';
+import { ForceChangePasswordDialogComponent } from '../force-change-password-dialog/force-change-password-dialog.component';
 
 @Component({
   selector: 'app-login',
@@ -72,7 +75,8 @@ export class LoginComponent implements OnInit {
     private fb: FormBuilder,
     private authService: AuthService,
     private router: Router,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private dialog: MatDialog
   ) {
     this.loginForm = this.fb.group({
       nickname: ['', [Validators.required]],
@@ -131,14 +135,38 @@ export class LoginComponent implements OnInit {
       const result = await this.authService.login(nickname, password);
       
       if (result.success) {
-        // Display welcome animation
-        this.snackBar.open(`¡Bienvenido, ${result.usuario?.persona?.nombre || nickname}!`, 'Cerrar', {
-          duration: 3000,
-          panelClass: 'success-snackbar'
-        });
-        
-        // Navigate to home page
-        this.router.navigate(['/']);
+        // P0-3: si el usuario tiene la flag `mustChangePassword` (admin con
+        // password default, o forzado manualmente), abrimos un dialog
+        // bloqueante que no se puede cerrar por afuera. Hasta que el
+        // cambio se concrete (o el usuario elija cerrar sesion), no
+        // entramos al dashboard.
+        if (result.usuario?.mustChangePassword && result.usuario.id != null) {
+          const ref = this.dialog.open(ForceChangePasswordDialogComponent, {
+            disableClose: true,
+            width: '480px',
+            data: { usuarioId: result.usuario.id, nickname: result.usuario.nickname },
+          });
+          const outcome = await firstValueFrom(ref.afterClosed());
+          if (outcome === 'changed') {
+            this.snackBar.open(`¡Bienvenido, ${result.usuario?.persona?.nombre || nickname}!`, 'Cerrar', {
+              duration: 3000,
+              panelClass: 'success-snackbar',
+            });
+            this.router.navigate(['/']);
+          } else {
+            // El usuario eligio cerrar sesion antes de cambiar la pass.
+            await this.authService.logout(false);
+            this.snackBar.open('DEBE CAMBIAR LA CONTRASEÑA PARA CONTINUAR', 'Cerrar', {
+              duration: 4000,
+            });
+          }
+        } else {
+          this.snackBar.open(`¡Bienvenido, ${result.usuario?.persona?.nombre || nickname}!`, 'Cerrar', {
+            duration: 3000,
+            panelClass: 'success-snackbar',
+          });
+          this.router.navigate(['/']);
+        }
       } else {
         this.snackBar.open(result.message || 'Credenciales incorrectas', 'Cerrar', {
           duration: 5000,

@@ -18,6 +18,7 @@ import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.ent
 import { Not, IsNull } from 'typeorm';
 import { DeepPartial } from 'typeorm';
 import { Reserva } from '../../src/app/database/entities/ventas/reserva.entity';
+import { ensurePermission } from '../utils/auth.utils';
 import { PdvMesa, PdvMesaEstado } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { Comanda, ComandaEstado } from '../../src/app/database/entities/ventas/comanda.entity';
 // ComandaItem kept for future kitchen integration
@@ -252,6 +253,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   // --- Cerrar todas las ventas abiertas de una mesa ---
   ipcMain.handle('cerrarVentasAbiertasMesa', async (_event: any, mesaId: number, estado: string) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Venta);
       const ventasAbiertas = await repo.find({
         where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA },
@@ -639,6 +641,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updateVenta', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Venta);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta ID ${id} not found`);
@@ -653,6 +656,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deleteVenta', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Venta);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta ID ${id} not found`);

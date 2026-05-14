@@ -167,12 +167,47 @@ export function registerAuthHandlers(
     return getCurrentUser();
   });
 
-  // Potentially dangerous: Allows renderer to set main process state.
-  // Consider if this is truly necessary or if state should only flow from main to renderer.
-  ipcMain.handle('setCurrentUser', async (_event: any, usuario: Usuario | null) => {
-     console.warn('Directly setting current user from renderer. Ensure this is intended.');
-     setCurrentUser(usuario);
-     return { success: true };
+  // P0-2: reemplaza el viejo `setCurrentUser` (que aceptaba cualquier
+  // payload del renderer y permitia spoofing trivial desde DevTools).
+  // Ahora el renderer solo puede pedir "restaurar mi sesion" enviando
+  // sessionId + JWT; el main verifica el token, valida que la sesion
+  // este activa en BD, y setea currentUser desde la fila de BD —
+  // jamas desde lo que mando el cliente.
+  ipcMain.handle('restoreSession', async (_event: any, payload: { sessionId: number; token: string }) => {
+    try {
+      if (!payload || typeof payload.sessionId !== 'number' || !payload.token) {
+        return { success: false, message: 'PAYLOAD INVALIDO' };
+      }
+
+      let decoded: any;
+      try {
+        decoded = jwt.verify(payload.token, await getJwtSecret());
+      } catch {
+        return { success: false, message: 'TOKEN INVALIDO O EXPIRADO' };
+      }
+
+      const sessionRepository = dataSource.getRepository(LoginSession);
+      const session = await sessionRepository.findOne({
+        where: { id: payload.sessionId, is_active: true },
+        relations: ['usuario', 'usuario.persona'],
+      });
+      if (!session || !session.usuario) {
+        return { success: false, message: 'SESION NO ENCONTRADA O INACTIVA' };
+      }
+
+      if (decoded.id !== session.usuario.id) {
+        return { success: false, message: 'TOKEN NO COINCIDE CON LA SESION' };
+      }
+      if (!session.usuario.activo) {
+        return { success: false, message: 'USUARIO INACTIVO' };
+      }
+
+      setCurrentUser(session.usuario);
+      return { success: true, usuario: session.usuario };
+    } catch (error) {
+      console.error('restoreSession error:', error);
+      return { success: false, message: 'ERROR INTERNO' };
+    }
   });
 
-} 
+}

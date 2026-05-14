@@ -22,6 +22,7 @@ import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
+import { ensurePermission } from '../utils/auth.utils';
 
 // ===== Helpers internos =====
 
@@ -524,6 +525,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   //   pagarAhora?: boolean,                     // solo si credito = false: indica retornar cuotaId para abrir dialog de pago
   // }
   ipcMain.handle('finalizar-compra', async (_event: any, id: number, payload: any = {}) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const qr = dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
@@ -662,6 +664,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
 
   // Anula una compra. Si estaba ABIERTO solo marca CANCELADO. Si estaba FINALIZADO revierte stock+caja+CPP.
   ipcMain.handle('anular-compra', async (_event: any, id: number, motivo: string) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const qr = dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();

@@ -2,7 +2,7 @@
   <mat-toolbar color="primary">
     <span>Gestión de Sabores</span>
     <span class="toolbar-spacer"></span>
-    <button mat-fab extended (click)="crearSabor()">
+    <button *appHasPermission="'SABORES_GESTIONAR'" mat-fab extended (click)="crearSabor()">
       <mat-icon>add</mat-icon>
       Nuevo Sabor
     </button>
@@ -25,7 +25,7 @@
                 <span matListItemTitle>{{ sabor }}</span>
                 <span matListItemLine>Gestione las variaciones de este sabor</span>
                 <div class="list-item-actions">
-                  <button mat-icon-button (click)="editarSabor(sabor)" matTooltip="Editar Sabor">
+                  <button *appHasPermission="'SABORES_GESTIONAR'" mat-icon-button (click)="editarSabor(sabor)" matTooltip="Editar Sabor">
                     <mat-icon>edit</mat-icon>
                   </button>
                 </div>

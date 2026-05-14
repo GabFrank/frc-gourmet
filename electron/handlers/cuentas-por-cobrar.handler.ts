@@ -21,6 +21,7 @@ import { Pago } from '../../src/app/database/entities/compras/pago.entity';
 import { PagoEstado } from '../../src/app/database/entities/compras/estado.enum';
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
 import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
+import { ensurePermission } from '../utils/auth.utils';
 
 function calcularEstadoCuota(monto: number, montoCobrado: number): CuentaPorCobrarCuotaEstado {
   if (montoCobrado >= monto) return CuentaPorCobrarCuotaEstado.COBRADO;
@@ -74,6 +75,7 @@ export function registerCuentasPorCobrarHandlers(
   });
 
   ipcMain.handle('create-cuenta-por-cobrar', async (_event, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CPC_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -163,6 +165,7 @@ export function registerCuentasPorCobrarHandlers(
 
   ipcMain.handle('update-cuenta-por-cobrar', async (_event, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CPC_GESTIONAR');
       const repo = dataSource.getRepository(CuentaPorCobrar);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`CuentaPorCobrar ${id} no encontrada`);
@@ -181,6 +184,7 @@ export function registerCuentasPorCobrarHandlers(
   });
 
   ipcMain.handle('cancelar-cuenta-por-cobrar', async (_event, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CPC_CANCELAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -253,6 +257,7 @@ export function registerCuentasPorCobrarHandlers(
 
   // COBRAR cuota de CPC (transaccional, espejo de pagar-cpp-cuota)
   ipcMain.handle('cobrar-cpc-cuota', async (_event, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CPC_COBRAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -372,6 +377,7 @@ export function registerCuentasPorCobrarHandlers(
   });
 
   ipcMain.handle('anular-cobro-cpc-cuota', async (_event, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CPC_CANCELAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -480,6 +486,7 @@ export function registerCuentasPorCobrarHandlers(
 
   ipcMain.handle('recalcular-saldo-cliente', async (_event, clienteId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CPC_GESTIONAR');
       const movRepo = dataSource.getRepository(MovimientoCliente);
       const clienteRepo = dataSource.getRepository(Cliente);
 

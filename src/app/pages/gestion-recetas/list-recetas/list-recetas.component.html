@@ -7,11 +7,11 @@
     </div>
 
     <div class="actions-section">
-      <button mat-raised-button color="primary" (click)="createNewReceta()">
+      <button *appHasPermission="'RECETAS_GESTIONAR'" mat-raised-button color="primary" (click)="createNewReceta()">
         <mat-icon>add</mat-icon>
         Nueva Receta
       </button>
-      <button mat-raised-button color="accent" (click)="recalculateRecipeCosts()" [disabled]="loading">
+      <button *appHasPermission="'RECETAS_GESTIONAR'" mat-raised-button color="accent" (click)="recalculateRecipeCosts()" [disabled]="loading">
         <mat-icon>refresh</mat-icon>
         Recalcular Costos
       </button>
@@ -84,11 +84,11 @@
               <mat-icon>visibility</mat-icon>
               <span>Ver detalles</span>
             </button>
-            <button mat-menu-item (click)="editReceta(receta)">
+            <button *appHasPermission="'RECETAS_GESTIONAR'" mat-menu-item (click)="editReceta(receta)">
               <mat-icon>edit</mat-icon>
               <span>Editar</span>
             </button>
-            <button mat-menu-item (click)="deleteReceta(receta)">
+            <button *appHasPermission="'RECETAS_GESTIONAR'" mat-menu-item (click)="deleteReceta(receta)">
               <mat-icon>delete</mat-icon>
               <span>Eliminar</span>
             </button>
@@ -105,7 +105,7 @@
       <mat-icon>restaurant</mat-icon>
       <h3>No hay recetas</h3>
       <p>Comienza creando tu primera receta</p>
-      <button mat-raised-button color="primary" (click)="createNewReceta()">
+      <button *appHasPermission="'RECETAS_GESTIONAR'" mat-raised-button color="primary" (click)="createNewReceta()">
         <mat-icon>add</mat-icon>
         Crear Primera Receta
       </button>

@@ -13,6 +13,7 @@ import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { ensurePermission } from '../utils/auth.utils';
 
 export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Remove this line - get the current user in each handler instead
@@ -386,6 +387,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('create-dispositivo', async (_event: IpcMainInvokeEvent, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'DISPOSITIVOS_GESTIONAR');
       const repo = dataSource.getRepository(Dispositivo);
        // Add validation for unique name/MAC here if needed
       const entity = repo.create(data);
@@ -399,6 +401,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-dispositivo', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'DISPOSITIVOS_GESTIONAR');
       const repo = dataSource.getRepository(Dispositivo);
       // Add validation for unique name/MAC (excluding self) here if needed
       const entity = await repo.findOneBy({ id });
@@ -415,6 +418,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('delete-dispositivo', async (_event: IpcMainInvokeEvent, id: number) => {
     // Note: Hard delete. Consider dependencies (Caja)
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'DISPOSITIVOS_GESTIONAR');
       const repo = dataSource.getRepository(Dispositivo);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Dispositivo ID ${id} not found`);
@@ -468,6 +472,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   });
 
   ipcMain.handle('create-caja', async (_event: IpcMainInvokeEvent, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
     try {
       const repo = dataSource.getRepository(Caja);
       const entity = repo.create(data);
@@ -481,6 +486,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-caja', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(Caja);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Caja ID ${id} not found`);
@@ -648,6 +654,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   });
 
   ipcMain.handle('create-moneda-cambio', async (_event: IpcMainInvokeEvent, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
     try {
       const repo = dataSource.getRepository(MonedaCambio);
       const entity = repo.create(data);

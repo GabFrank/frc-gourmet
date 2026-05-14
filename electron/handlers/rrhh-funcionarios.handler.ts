@@ -10,6 +10,7 @@ import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
+import { ensurePermission } from '../utils/auth.utils';
 
 export function registerRrhhFuncionariosHandlers(
   dataSource: DataSource,
@@ -37,6 +38,7 @@ export function registerRrhhFuncionariosHandlers(
   });
 
   ipcMain.handle('create-cargo', async (_event, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     try {
       const repo = dataSource.getRepository(Cargo);
       const entity = repo.create({
@@ -54,6 +56,7 @@ export function registerRrhhFuncionariosHandlers(
   });
 
   ipcMain.handle('update-cargo', async (_event, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     try {
       const repo = dataSource.getRepository(Cargo);
       const existing = await repo.findOne({ where: { id } });
@@ -71,6 +74,7 @@ export function registerRrhhFuncionariosHandlers(
   });
 
   ipcMain.handle('delete-cargo', async (_event, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     try {
       const repo = dataSource.getRepository(Cargo);
       // Soft delete: marcar inactivo
@@ -128,6 +132,7 @@ export function registerRrhhFuncionariosHandlers(
   });
 
   ipcMain.handle('create-funcionario', async (_event, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_FUNCIONARIO_EDITAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -203,6 +208,7 @@ export function registerRrhhFuncionariosHandlers(
 
   ipcMain.handle('update-funcionario', async (_event, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_FUNCIONARIO_EDITAR');
       const repo = dataSource.getRepository(Funcionario);
       const existing = await repo.findOne({ where: { id }, relations: ['persona', 'cargo', 'monedaSalario', 'usuario'] });
       if (!existing) throw new Error(`Funcionario ${id} no encontrado`);

@@ -7,7 +7,8 @@ import { UsuarioRole } from '../../src/app/database/entities/personas/usuario-ro
 import { TipoCliente } from '../../src/app/database/entities/personas/tipo-cliente.entity';
 import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
 import { setEntityUserTracking } from '../utils/entity.utils'; // Import the utility function
-import { hashPassword } from '../utils/password.utils';
+import { hashPassword, verifyPassword } from '../utils/password.utils';
+import { ensurePermission } from '../utils/auth.utils';
 
 export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
 
@@ -36,6 +37,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('create-persona', async (_event: any, personaData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PERSONAS_GESTIONAR');
       const personaRepository = dataSource.getRepository(Persona);
       const currentUser = getCurrentUser();
 
@@ -66,6 +68,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('update-persona', async (_event: any, personaId: number, personaData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PERSONAS_GESTIONAR');
       const personaRepository = dataSource.getRepository(Persona);
       const currentUser = getCurrentUser();
       const persona = await personaRepository.findOne({
@@ -103,6 +106,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('delete-persona', async (_event: any, personaId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PERSONAS_GESTIONAR');
       const personaRepository = dataSource.getRepository(Persona);
       const currentUser = getCurrentUser();
       const persona = await personaRepository.findOne({
@@ -153,6 +157,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('create-usuario', async (_event: any, usuarioData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'USUARIOS_GESTIONAR');
       const usuarioRepository = dataSource.getRepository(Usuario);
       const personaRepository = dataSource.getRepository(Persona);
       const currentUser = getCurrentUser();
@@ -208,6 +213,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('update-usuario', async (_event: any, usuarioId: number, usuarioData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'USUARIOS_GESTIONAR');
       const usuarioRepository = dataSource.getRepository(Usuario);
       const personaRepository = dataSource.getRepository(Persona);
       const currentUser = getCurrentUser();
@@ -269,8 +275,69 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
     }
   });
 
+  /**
+   * P0-3: cambio de password de un usuario. Verifica la password actual
+   * (excepto cuando el usuario tiene `mustChangePassword=true`, donde
+   * solo se exige saber la default — pero igual la pedimos para que
+   * sea explicito y no quede un endpoint de set-arbitrary-password).
+   * Setea `mustChangePassword=false` tras el cambio.
+   *
+   * Authoritative: el usuarioId DEBE coincidir con el currentUser. No
+   * permitimos cambiar la password de otro usuario por este endpoint —
+   * para eso esta el flujo administrativo update-usuario.
+   */
+  ipcMain.handle('change-password', async (
+    _event: any,
+    payload: { usuarioId: number; currentPassword: string; newPassword: string }
+  ) => {
+    try {
+      if (!payload || typeof payload.usuarioId !== 'number') {
+        return { success: false, message: 'PAYLOAD INVALIDO' };
+      }
+      if (!payload.currentPassword || !payload.newPassword) {
+        return { success: false, message: 'PASSWORD REQUERIDA' };
+      }
+      if (payload.newPassword.length < 6) {
+        return { success: false, message: 'LA NUEVA PASSWORD DEBE TENER AL MENOS 6 CARACTERES' };
+      }
+      if (payload.newPassword === payload.currentPassword) {
+        return { success: false, message: 'LA NUEVA PASSWORD DEBE SER DISTINTA A LA ACTUAL' };
+      }
+
+      const currentUser = getCurrentUser();
+      if (!currentUser || currentUser.id !== payload.usuarioId) {
+        return { success: false, message: 'NO AUTORIZADO' };
+      }
+
+      const usuarioRepository = dataSource.getRepository(Usuario);
+      const usuario = await usuarioRepository.findOne({ where: { id: payload.usuarioId } });
+      if (!usuario || !usuario.activo) {
+        return { success: false, message: 'USUARIO NO ENCONTRADO O INACTIVO' };
+      }
+
+      const ok = await verifyPassword(payload.currentPassword, usuario.password);
+      if (!ok) {
+        return { success: false, message: 'CONTRASEÑA ACTUAL INCORRECTA' };
+      }
+
+      usuario.password = await hashPassword(payload.newPassword);
+      usuario.mustChangePassword = false;
+      await setEntityUserTracking(dataSource, usuario, currentUser.id, true);
+      const updated = await usuarioRepository.save(usuario);
+
+      return { success: true, usuario: { ...updated, password: undefined } };
+    } catch (error) {
+      console.error('change-password error:', error);
+      return {
+        success: false,
+        message: 'ERROR INTERNO AL CAMBIAR LA CONTRASEÑA',
+      };
+    }
+  });
+
   ipcMain.handle('delete-usuario', async (_event: any, usuarioId: number) => {
     try {
+        await ensurePermission(dataSource, getCurrentUser, 'USUARIOS_GESTIONAR');
         const usuarioRepository = dataSource.getRepository(Usuario);
         const currentUser = getCurrentUser();
         const usuario = await usuarioRepository.findOneBy({ id: usuarioId });
@@ -346,6 +413,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('create-role', async (_event: any, roleData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'USUARIOS_GESTIONAR');
       const roleRepository = dataSource.getRepository(Role);
       const currentUser = getCurrentUser();
       const role = roleRepository.create({
@@ -363,6 +431,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('update-role', async (_event: any, roleId: number, roleData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'USUARIOS_GESTIONAR');
       const roleRepository = dataSource.getRepository(Role);
       const currentUser = getCurrentUser();
       const role = await roleRepository.findOneBy({ id: roleId });
@@ -387,6 +456,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('delete-role', async (_event: any, roleId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'USUARIOS_GESTIONAR');
       const roleRepository = dataSource.getRepository(Role);
       const currentUser = getCurrentUser();
       const role = await roleRepository.findOneBy({ id: roleId });
@@ -490,6 +560,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('create-tipo-cliente', async (_event: any, tipoClienteData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CLIENTES_GESTIONAR');
       const tipoClienteRepository = dataSource.getRepository(TipoCliente);
        const currentUser = getCurrentUser();
       const tipoCliente = tipoClienteRepository.create({
@@ -510,6 +581,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('update-tipo-cliente', async (_event: any, tipoClienteId: number, tipoClienteData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CLIENTES_GESTIONAR');
       const tipoClienteRepository = dataSource.getRepository(TipoCliente);
        const currentUser = getCurrentUser();
        const tipoCliente = await tipoClienteRepository.findOneBy({ id: tipoClienteId });
@@ -532,6 +604,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('delete-tipo-cliente', async (_event: any, tipoClienteId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CLIENTES_GESTIONAR');
       const tipoClienteRepository = dataSource.getRepository(TipoCliente);
        const currentUser = getCurrentUser();
        const tipoCliente = await tipoClienteRepository.findOneBy({ id: tipoClienteId });
@@ -609,6 +682,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('create-cliente', async (_event: any, clienteData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CLIENTES_GESTIONAR');
       const clienteRepository = dataSource.getRepository(Cliente);
       const personaRepository = dataSource.getRepository(Persona);
       const tipoClienteRepository = dataSource.getRepository(TipoCliente);
@@ -648,6 +722,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('update-cliente', async (_event: any, clienteId: number, clienteData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CLIENTES_GESTIONAR');
       const clienteRepository = dataSource.getRepository(Cliente);
       const personaRepository = dataSource.getRepository(Persona);
       const tipoClienteRepository = dataSource.getRepository(TipoCliente);
@@ -690,6 +765,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('delete-cliente', async (_event: any, clienteId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'CLIENTES_GESTIONAR');
       const clienteRepository = dataSource.getRepository(Cliente);
       const currentUser = getCurrentUser();
       const cliente = await clienteRepository.findOneBy({ id: clienteId });

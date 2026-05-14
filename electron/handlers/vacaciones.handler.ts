@@ -9,6 +9,7 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { getConfigNumber } from './configuracion-rrhh.handler';
+import { ensurePermission } from '../utils/auth.utils';
 
 function diffDias(d1: Date, d2: Date): number {
   const ms = d2.getTime() - d1.getTime();
@@ -51,6 +52,7 @@ export function registerVacacionesHandlers(
   });
 
   ipcMain.handle('generar-vacaciones-funcionario', async (_e, funcionarioId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VACACION_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -106,6 +108,7 @@ export function registerVacacionesHandlers(
   });
 
   ipcMain.handle('programar-vacacion-periodo', async (_e, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VACACION_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -153,6 +156,7 @@ export function registerVacacionesHandlers(
   });
 
   ipcMain.handle('marcar-periodo-gozado', async (_e, periodoId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VACACION_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -221,6 +225,7 @@ export function registerVacacionesHandlers(
   });
 
   ipcMain.handle('cancelar-vacacion-periodo', async (_e, periodoId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VACACION_GESTIONAR');
     const repo = dataSource.getRepository(VacacionPeriodo);
     const periodo = await repo.findOne({ where: { id: periodoId } });
     if (!periodo) throw new Error(`Periodo ${periodoId} no encontrado`);
