@@ -29,11 +29,14 @@ return { type: 'sqlite', database: dbPath, ...shared };
 - La app CREA el archivo si no existe.
 
 ### Postgres
-- DB NO la crea la app — el operador hace `CREATE DATABASE frc_gourmet` antes (psql / TablePlus / pgAdmin).
-- App-settings persisten en `userData/app-settings.json`. Password va a **keytar** (no al JSON).
-- Cambiar driver desde UI: *Sistema → Configuración BD* → completar conexión → "Probar conexión" → Guardar → reinicio.
-- Al primer arranque con Postgres y DB vacía: corre `BaselinePostgres` + incrementales + seeds. Listo para login `admin/admin`.
+- **La app SÍ crea la BD + el rol/usuario** automáticamente. El handler `db-config-init-postgres` (en `electron/handlers/db-config.handler.ts`) se conecta con el superusuario a la DB `postgres` del sistema y corre `CREATE ROLE` + `CREATE DATABASE OWNER` + `GRANT ALL PRIVILEGES`. Idempotente: si ya existen, no falla; si el rol existe, actualiza la password. Las credenciales del superusuario NO se persisten — solo viven en RAM durante la llamada.
+- **Único pre-requisito del operador:** instalar el servidor Postgres (installer GUI de EnterpriseDB en Windows, paquete nativo en Linux, o Docker). No hace falta tocar pgAdmin ni correr `CREATE DATABASE` manualmente.
+- App-settings persisten en `userData/app-settings.json`. Password del rol target va a **keytar** (no al JSON). La del superusuario NO se guarda.
+- Cambiar driver desde UI: *Sistema → Configuración BD* → completar superuser + target → botón **"Inicializar BD"** (crea rol+BD) → **"Probar conexión"** → **"Guardar"** → reinicio.
+- Al primer arranque con Postgres y BD recién creada: corre `BaselinePostgres` + incrementales + seeds. Listo para login `admin/admin`.
 - Setup completo en PC nueva → [../workflows/setup-pc-nueva.md](../workflows/setup-pc-nueva.md).
+
+**⚠️ Gotcha del bundle:** `pg` (driver Node.js) debe estar en `dependencies` (NO en `optionalDependencies`). El workflow de release usa `npm ci --omit=optional` para evitar compilar `canvas` transitivo de `pdfjs-dist`; si `pg` está en optional, queda fuera del bundle del `.exe` y la app empaquetada tira `"postgres package has not been found"` al intentar conectar. Fix histórico: PR #24 / v1.1.1. Más detalle → [../conventions/pitfalls-typeorm-electron.md](../conventions/pitfalls-typeorm-electron.md).
 
 ### Postgres compat (gotchas frecuentes)
 - Helper `dbQuery(qr, sqlLite, sqlPg)` cuando el SQL difiere.

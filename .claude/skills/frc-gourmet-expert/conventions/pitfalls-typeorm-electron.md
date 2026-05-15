@@ -2,6 +2,22 @@
 
 Bugs sutiles ya encontrados en este proyecto. Evitar repetir.
 
+## Bundle Electron: drivers nativos NO van a `optionalDependencies`
+
+El workflow `release.yml` corre `npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund` para evitar compilar `canvas` (transitivo de `pdfjs-dist`, requiere headers nativos de Cairo que no hay en runners). Pero `--omit=optional` omite **todas** las optional, incluidas las propias del `package.json`.
+
+**Síntoma del bug histórico (v1.1.0):** `pg` estaba en `optionalDependencies` → al instalar el `.exe` empaquetado en un PC con Postgres y configurar la conexión, la app tiraba **"postgres package has not been found"**. La función SI funcionaba en `npm start` (dev), porque ahí los optional sí se instalan. Solo se reveló en el primer deploy real a un cliente.
+
+**Regla:** todo paquete runtime que la app pueda llegar a usar va a `dependencies`, NO a `optionalDependencies`. `@types/*` van a `devDependencies` (no se bundlean). Las únicas optional aceptables son las que de verdad son opcionales para el funcionamiento (raras en este proyecto).
+
+**Validación:** después de empaquetar el `.exe`, revisar que el módulo esté presente en el bundle:
+```bash
+# Linux/macOS — extraer asar y buscar el módulo
+npx asar list release/win-unpacked/resources/app.asar | grep "node_modules/pg/"
+```
+
+Fix histórico: PR #24 movió `pg` a `dependencies`, salió en v1.1.1.
+
 ## TypeORM: usar `null` explícito para nulear columnas
 
 Asignar `undefined` a un campo nullable **NO** genera `UPDATE`:
