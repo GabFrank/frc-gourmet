@@ -125,9 +125,16 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
   // "publisher names do not match" porque el package.json:nsis.publisherName
   // esta seteado pero el binario no esta firmado. El deploy es interno (LAN),
   // la confianza viene del GitHub Release controlado, no de la firma.
+  //
+  // OJO: en electron-updater 6.x esto NO es un boolean. La propiedad es una
+  // FUNCION `(publisherNames: string[], path: string) => Promise<string | null>`
+  // donde retornar `null` significa "OK, sin error". Asignar `false` no
+  // desactiva nada (queda la funcion default que corre PowerShell y choca con
+  // Execution Policy en sistemas restringidos).
+  //
   // Para activar verificacion real: configurar SIGNPATH_API_TOKEN + remover
   // esta linea. Ver workflows/release-y-deploy.md.
-  autoUpdater.verifyUpdateCodeSignature = false;
+  autoUpdater.verifyUpdateCodeSignature = () => Promise.resolve(null);
 
   autoUpdater.on('checking-for-update', () => {
     sendStatus(mainWindow, 'checking');
