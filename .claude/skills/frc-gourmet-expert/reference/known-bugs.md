@@ -98,33 +98,22 @@ Corre en `main.ts:125` cada arranque. Es **idempotente** — la próxima vez no 
 
 ## Seguridad ⚠️
 
-### Passwords en texto plano
+Esta sección quedó **mayormente obsoleta** tras los sweeps F0 y P0. Revisar el commit history antes de afirmar que algo de acá sigue roto.
 
-**Donde:** `auth.handler.ts:35` (`password === usuario.password`).
+### ✅ RESUELTO — Passwords en texto plano (F0, PR #14)
+Hash con bcrypt en `electron/utils/password.utils.ts`. `hashPassword()`/`verifyPassword()` usados en auth handler + seed admin + cambio de password.
 
-**Riesgo:** alto en producción. Aceptable solo en local single-user.
+### ✅ RESUELTO — JWT secret hardcoded (F0, PR #14)
+JWT secret se persiste en **keytar** (no en código ni env). Se genera al primer arranque si no existe. Usado por Fastify JWT plugin en el server modo F3.
 
-**Fix pendiente:** bcrypt o argon2.
+### ✅ RESUELTO — Validación de permisos solo en frontend (P0-1, PR #22)
+`checkPermission()`/`ensurePermission()` en `electron/utils/auth.utils.ts` se invoca al inicio de los handlers IPC que mutan datos sensibles (~178 handlers cubiertos al 2026-05-13). Cache de permisos por usuario con TTL 30s. El renderer ya no es frontera real — el backend valida.
 
-### JWT secret hardcoded
+### ✅ RESUELTO — Admin `admin/admin` post-instalación (P0-3, PR #22)
+Columna `must_change_password` en `Usuario`. Seed marca el admin default. Dialog bloqueante `force-change-password-dialog` post-login obliga a cambiar antes de cargar el dashboard.
 
-**Donde:** `auth.handler.ts:9` (`JWT_SECRET = 'frc-gourmet-secret-key'`).
-
-**Fix pendiente:** mover a env var.
-
-### Validación de permisos solo en frontend
-
-**Riesgo:** un usuario malicioso con DevTools puede invocar `window.api.deleteFuncionario(id)` saltándose el `*ngIf="permService.has('CODIGO')"` del componente.
-
-**Fix pendiente:** middleware de permisos en cada handler sensible.
-
-### Renderer puede setCurrentUser
-
-**Donde:** `auth.handler.ts:159+` (`setCurrentUser` IPC).
-
-**Riesgo:** spoofing. Hay `console.warn` señalando el riesgo, pero el handler no rechaza.
-
-**Fix pendiente:** validar token JWT en cada `setCurrentUser` o eliminar el handler IPC y derivar del login.
+### Renderer puede setCurrentUser (parcialmente cubierto)
+`setCurrentUser` IPC sigue existiendo. P0-1 mitiga porque cada handler revalida permisos contra el usuario actual (si un atacante intenta spoofear, los permisos del rol spoofeado tienen que coincidir). Pero un usuario autenticado con rol bajo podría "ascenderse" si conoce el id de un admin. **Fix pendiente:** validar contra token JWT en cada `setCurrentUser` o eliminar el handler y derivar del login.
 
 ## Performance
 

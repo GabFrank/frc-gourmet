@@ -20,66 +20,75 @@ Listo. No requiere acción extra del operador.
 
 ## Caso B — Postgres nativo
 
-> **La app NO crea la base de datos en Postgres.** El operador debe hacer `CREATE DATABASE` antes.
+> **La app crea automáticamente el rol/usuario y la BD.** El operador solo instala Postgres y le da las credenciales del superusuario.
 
-### B.1 — Pre-requisitos en el servidor Postgres
+### B.1 — Pre-requisito: instalar Postgres en el servidor
 
-```sql
--- Conectado como superuser (postgres):
-CREATE USER frc_user WITH PASSWORD 'tu-password-seguro';
-CREATE DATABASE frc_gourmet OWNER frc_user;
-GRANT ALL PRIVILEGES ON DATABASE frc_gourmet TO frc_user;
+- **Windows:** descargar el installer de EnterpriseDB desde `postgresql.org/download/windows` (Postgres 16, x86-64). Wizard normal:
+  - Dejar todos los componentes (PostgreSQL Server, pgAdmin, Command Line Tools)
+  - Anotar la **password del superusuario `postgres`** (la app la va a pedir, no se guarda)
+  - Puerto `5432`, locale default
+- **Linux:** `apt install postgresql` / `dnf install postgresql-server` / Docker.
+- **macOS dev:** `brew install postgresql@16` o Postgres.app.
 
--- Opcional: schema custom (si se quiere aislar dentro de una DB compartida)
-\c frc_gourmet
-CREATE SCHEMA frc AUTHORIZATION frc_user;
-```
-
-Verificar conectividad desde el PC donde correrá la app:
-
+Verificar que esté escuchando:
 ```bash
-psql -h <host> -p 5432 -U frc_user -d frc_gourmet -c '\dt'
+# Linux/macOS
+pg_isready -h localhost -p 5432
+
+# Windows PowerShell
+Get-Service postgresql*
 ```
 
-### B.2 — Configurar el driver en la app
+NO hace falta crear nada en pgAdmin ni correr `CREATE DATABASE`. La app lo hace.
+
+### B.2 — Configurar Postgres desde la app
 
 1. Abrir la app — arranca en SQLite default (por `DEFAULT_APP_SETTINGS`).
-2. Login con `admin/admin`.
-3. Ir a **Sistema → Configuración BD** (el menú).
-4. Cambiar tipo a `Postgres` y completar:
-   - Host: `localhost` o IP del servidor
-   - Port: `5432`
-   - Database: `frc_gourmet`
-   - Username: `frc_user`
-   - Password: la que se eligió arriba
-   - Schema: vacío (o `frc` si se creó schema custom)
-   - SSL: según servidor
-5. Botón **Probar conexión** — debe devolver "Conexion OK." (corre `SELECT 1`).
-6. Botón **Guardar** — persiste en `app-settings.json` y password en **keytar**.
-7. Botón **Reiniciar app** — `app.relaunch() + app.exit(0)`.
+2. Login con `admin/admin` (al ser primer arranque la P0-3 va a pedirte cambiar la password antes de entrar — ponele una nueva).
+3. Ir a **Sistema → Configuración BD**.
+4. Cambiar tipo a **Postgres** y completar:
+   - **Host:** `localhost` (o IP del PC donde corre Postgres)
+   - **Port:** `5432`
+   - **Superuser:** `postgres` / password = la del installer (NO se guarda, solo se usa para crear)
+   - **Target database:** `frc_gourmet` (la que la app va a crear)
+   - **Target username:** `frc_user` (el rol que la app va a crear)
+   - **Target password:** elegir una (se guarda en keytar)
+   - **Schema:** vacío
+   - **SSL:** según servidor (default off en LAN)
+5. Botón **"Inicializar BD"** — el handler `db-config-init-postgres` se conecta como superuser y hace `CREATE ROLE` + `CREATE DATABASE` + `GRANT`. Idempotente: si ya existe, no falla.
+6. Botón **"Probar conexión"** — corre `SELECT 1` con el target user → debe devolver "Conexion OK."
+7. Botón **"Guardar"** — persiste config en `app-settings.json` y password del target en **keytar**. La password del superuser NO se guarda.
+8. Botón **"Reiniciar app"** — `app.relaunch() + app.exit(0)`.
 
 ### B.3 — Primer arranque con Postgres
 
 Al reiniciar:
 1. `readAppSettings` ve `database.type === 'postgres'`.
-2. `DatabaseService.initialize` arma `DataSourceOptions` con `type: 'postgres'`, lee password de keytar.
-3. Conecta. La DB tiene 0 tablas.
+2. `DatabaseService.initialize` arma `DataSourceOptions` con `type: 'postgres'`, lee password del target de keytar.
+3. Conecta. La DB tiene 0 tablas (fue creada por `init-postgres` pero está vacía).
 4. `getMigrations('postgres')` devuelve `BaselinePostgres` + incrementales.
-5. `runMigrations` crea estructura completa.
+5. `runMigrations` crea estructura completa (~150 tablas).
 6. Handlers + seeds corren idénticos a SQLite — todo `dataSource.getRepository(...)` queda transparente.
-7. Login `admin/admin` funciona porque el seed corrió.
+7. Login `admin/admin` funciona porque el seed corrió. La P0-3 va a forzar cambio de password también acá.
 
 ### B.4 — Verificación
 
+Desde pgAdmin o `psql -h localhost -U frc_user -d frc_gourmet`:
 ```sql
-\c frc_gourmet
-\dt                       -- ~150 tablas
+\dt                                     -- ~150 tablas
 SELECT count(*) FROM permisos;          -- ~48
-SELECT count(*) FROM monedas;           -- 3
+SELECT count(*) FROM monedas;           -- 3 (PYG, USD, BRL)
 SELECT nickname FROM usuarios;          -- 'admin'
 SELECT descripcion FROM roles;          -- ADMINISTRADOR, GERENTE, CAJERO, MOZO
 SELECT count(*) FROM feriados;          -- 10 (año en curso)
 ```
+
+### B.5 — Troubleshooting
+
+**Error "postgres package has not been found"** al probar conexión → el bundle del `.exe` no incluye el driver `pg`. Solo afecta builds previos al fix de PR #24 / v1.1.1. Solución: actualizar la app (auto-update toma el latest stable). Detalle → [../conventions/pitfalls-typeorm-electron.md](../conventions/pitfalls-typeorm-electron.md).
+
+**Error "password authentication failed for user postgres"** → la password del superusuario no es la que pusiste en el installer. En Windows, si te olvidaste: editar `pg_hba.conf` para poner `trust` temporalmente, reiniciar servicio, conectar sin password, hacer `ALTER USER postgres WITH PASSWORD 'nueva'`, volver `pg_hba.conf` a `scram-sha-256`.
 
 ## Caso C — Cliente/servidor (F4 mode)
 
@@ -104,7 +113,7 @@ Para LAN con 1 servidor + N clientes:
 - ❌ NO usar `synchronize: true` en producción ni en setup nuevo. Las migrations son la fuente de verdad.
 - ❌ NO copiar `frc-gourmet.db` de una PC a Postgres a mano. Si hay datos previos en SQLite, exportar/importar vía backup/restore (botón en *Sistema → Backup*).
 - ❌ NO seedear datos del cliente al setup (bancos, POS reales, comisiones). Los carga el cliente desde la UI con sus datos.
-- ❌ NO dejar `admin/admin` en producción. TODO: forzar cambio en primer login.
+- ❌ NO dejar `admin/admin` en producción. (P0-3 ya lo fuerza: dialog bloqueante al primer login).
 
 ## Tras el seed automático, el cliente DEBE cargar manualmente
 
