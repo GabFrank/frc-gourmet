@@ -3175,6 +3175,9 @@ contextBridge.exposeInMainWorld('api', {
   createVale: async (data: any): Promise<any> => {
     return await ipcRenderer.invoke('create-vale', data);
   },
+  crearValeConfirmado: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('crear-vale-confirmado', data);
+  },
   confirmarVale: async (id: number, payload: any): Promise<any> => {
     return await ipcRenderer.invoke('confirmar-vale', id, payload);
   },

@@ -18,9 +18,10 @@ import { CreateEditGastoDialogComponent } from '../gastos/create-edit-gasto/crea
 import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financieras/create-operacion-financiera/create-operacion-financiera-dialog.component';
 import { EmitirChequeDialogComponent } from '../cheques/emitir-cheque/emitir-cheque-dialog.component';
 import { PagarComprasDialogComponent } from '../pagar-compras-dialog/pagar-compras-dialog.component';
+import { CreateEditValeDialogComponent } from 'src/app/pages/rrhh/vales/create-edit-vale-dialog.component';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
-type EgresoTipo = 'GASTO' | 'AJUSTE' | 'OPERACION_FINANCIERA' | 'EMITIR_CHEQUE' | 'PAGAR_COMPRAS' | null;
+type EgresoTipo = 'GASTO' | 'AJUSTE' | 'OPERACION_FINANCIERA' | 'EMITIR_CHEQUE' | 'PAGAR_COMPRAS' | 'REGISTRAR_VALE' | null;
 
 @Component({
   selector: 'app-registrar-egreso-dialog',
@@ -81,6 +82,13 @@ export class RegistrarEgresoDialogComponent implements OnInit {
       descripcion: 'Emitir cheque propio (a la vista o diferido)',
       icono: 'request_quote',
       color: '#0d47a1',
+    },
+    {
+      tipo: 'REGISTRAR_VALE' as EgresoTipo,
+      titulo: 'Registrar Vale',
+      descripcion: 'Vale / adelanto a funcionario (confirma y egresa de Caja Mayor al toque)',
+      icono: 'receipt_long',
+      color: '#2e7d32',
     },
     {
       tipo: 'AJUSTE' as EgresoTipo,
@@ -167,6 +175,15 @@ export class RegistrarEgresoDialogComponent implements OnInit {
         width: '900px',
         maxWidth: '95vw',
         data: { cajaMayorId: this.cajaMayorId },
+      });
+      return;
+    }
+    if (tipo === 'REGISTRAR_VALE') {
+      this.dialogRef?.close(false);
+      this.dialog.open(CreateEditValeDialogComponent, {
+        width: '760px',
+        maxWidth: '95vw',
+        data: { cajaMayorId: this.cajaMayorId, modoConfirmar: true },
       });
       return;
     }
