@@ -155,6 +155,20 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   isMacOS = false;
   private windowStateUnsub: (() => void) | null = null;
 
+  // Datos enriquecidos del header.
+  appVersion = '';
+  /** standalone | server | client — del wizard de modo de operación. */
+  appMode: 'standalone' | 'server' | 'client' = 'standalone';
+  /** Reloj actualizado cada 1s. */
+  currentTime: Date = new Date();
+  private clockInterval: any = null;
+  /** Cotizaciones del día (compra/venta de mercado de nortecambios). */
+  cotizacionUsd: { compra: number; venta: number } | null = null;
+  cotizacionBrl: { compra: number; venta: number } | null = null;
+  cotizacionTimestamp: Date | null = null;
+  cotizacionError = false;
+  private cotizacionInterval: any = null;
+
   @ViewChild('drawer') sidenav!: MatSidenav;
 
   isHandset$: Observable<boolean> = this.breakpointObserver
@@ -291,6 +305,48 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     // Window controls custom titlebar: leer plataforma + estado inicial y
     // suscribirse a cambios maximize/unmaximize emitidos desde main.ts.
     this.initWindowControls();
+
+    // Datos enriquecidos del header: version, modo de operación,
+    // reloj cada 1s, cotizaciones del día con refresh cada 5 min.
+    this.initHeaderEnriched();
+  }
+
+  private initHeaderEnriched(): void {
+    const api: any = (window as any).api;
+    this.appVersion = api?.getAppVersion?.() || '';
+    this.appMode = api?.getAppMode?.() || 'standalone';
+    // Reloj: tick cada 1s. ngZone.runOutsideAngular para no disparar CD
+    // global cada segundo; el binding se actualiza al asignar dentro de
+    // ngZone.run en cada tick.
+    this.ngZone.runOutsideAngular(() => {
+      this.clockInterval = setInterval(() => {
+        this.ngZone.run(() => { this.currentTime = new Date(); });
+      }, 1000);
+    });
+    // Cotización: cargar al startup + refresh cada 5 min. El scrapper hace
+    // un par de requests HTTPS contra nortecambios; si falla, marcamos error
+    // y dejamos el último valor visible (mejor que vaciar la UI).
+    this.refreshCotizacion();
+    this.cotizacionInterval = setInterval(() => this.refreshCotizacion(), 5 * 60 * 1000);
+  }
+
+  private async refreshCotizacion(): Promise<void> {
+    try {
+      const res: any = await firstValueFrom(this.repo.getCotizacionMercado());
+      if (!res?.success || !res?.monedas) {
+        this.cotizacionError = true;
+        return;
+      }
+      const usd = res.monedas['DOLAR'] || res.monedas['USD'] || null;
+      const brl = res.monedas['REAL'] || res.monedas['BRL'] || null;
+      if (usd) this.cotizacionUsd = { compra: Number(usd.compraMercado), venta: Number(usd.ventaMercado) };
+      if (brl) this.cotizacionBrl = { compra: Number(brl.compraMercado), venta: Number(brl.ventaMercado) };
+      this.cotizacionTimestamp = res.obtenidoEn ? new Date(res.obtenidoEn) : new Date();
+      this.cotizacionError = false;
+    } catch (e) {
+      console.warn('[header] No se pudo obtener cotización mercado', e);
+      this.cotizacionError = true;
+    }
   }
 
   private async initWindowControls(): Promise<void> {
@@ -341,6 +397,12 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (this.windowStateUnsub) {
       this.windowStateUnsub();
+    }
+    if (this.clockInterval) {
+      clearInterval(this.clockInterval);
+    }
+    if (this.cotizacionInterval) {
+      clearInterval(this.cotizacionInterval);
     }
   }
 

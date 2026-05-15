@@ -447,6 +447,11 @@ app.on('ready', () => {
     if (typeof earlySettings.deviceId === 'number') {
       process.env['FRC_DEVICE_ID'] = String(earlySettings.deviceId);
     }
+    // Exponer version de la app al preload — para mostrarla en el header
+    // como subtitle ("FRC Gourmet vX.Y.Z"). app.getVersion() lee package.json
+    // (en build empaquetada lee el del .asar). En dev queda el "1.0.0" del
+    // repo, que tambien es util para confirmar visualmente que estas en dev.
+    process.env['FRC_APP_VERSION'] = app.getVersion();
     console.log(`[main] early FRC_APP_MODE=${earlySettings.mode} (preload heredara este valor)`);
   } catch (e) {
     console.warn('[main] no se pudo leer app-settings temprano:', e);

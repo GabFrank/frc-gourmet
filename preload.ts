@@ -1084,6 +1084,13 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('window:state-changed', listener);
   },
 
+  /**
+   * Version de la app (semver). Leida sync desde env var seteada por main.ts
+   * antes del spawn del renderer. En empaquetada refleja la version del
+   * release; en dev refleja la del package.json del repo.
+   */
+  getAppVersion: (): string => process.env['FRC_APP_VERSION'] || '0.0.0',
+
   // F2/F4: app-mode resolver para que el RepositoryService factory decida
   // entre IpcService (standalone/server) y HttpService (cliente).
   // Esto NO va por IPC porque tiene que ser sincrónico (factory de Angular DI
