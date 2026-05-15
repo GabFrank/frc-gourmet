@@ -85,6 +85,31 @@ Tanto `develop` como `master` tienen branch protection con required status check
 
 Config legacy `update-config.json` se migra automáticamente a `app-settings.json:update` al primer arranque.
 
+### ⚠️ Builds unsigned + `publisherName` — verificación de firma
+
+`package.json:nsis.publisherName="FRC Sistemas Informaticos"` está seteado pero los `.exe` **no están firmados** (no hay SignPath ni CSC configurados). Por default `electron-updater` corre `Get-AuthenticodeSignature` (PowerShell) para verificar que el binario nuevo coincida con ese publisher, y rechaza el unsigned con error tipo *"publisher names do not match"* o *"no se puede ejecutar este script en el sistema actual"* (Execution Policy de PowerShell).
+
+**Fix aplicado en `electron/utils/auto-updater.ts`:**
+```typescript
+// En electron-updater 6.x esto NO es boolean — es una FUNCION
+//   (publisherNames: string[], path: string) => Promise<string | null>
+// donde retornar `null` significa "OK, sin error".
+autoUpdater.verifyUpdateCodeSignature = () => Promise.resolve(null);
+```
+
+Asignarle `false` **NO desactiva nada** en v6.x (queda la función default). Histórico: v1.1.1 intentó con `= false` y siguió fallando, v1.3.0 cambió a la función-que-retorna-null y recién ahí v1.4.0 se auto-actualizó por primera vez sin intervención manual. Si en el futuro se configura SignPath, quitar esta línea para reactivar la verificación real.
+
+### Historial de validación
+
+| Versión | Hito |
+|---|---|
+| `v1.1.0` | Primer release stable. Detectado bug `pg` en bundle. |
+| `v1.1.1` | Fix `pg`. Detectado bug auto-update por firma. Intento de fix con `= false`. |
+| `v1.1.2` | Re-publicación del fix `pg`. El fix de auto-update seguía sin funcionar. |
+| `v1.2.0` | Asignación de roles desde edit-usuario. Auto-update seguía rechazando. |
+| `v1.3.0` | **Fix correcto de auto-update** (función en vez de boolean) + window controls custom en toolbar. Última reinstalación manual requerida. |
+| `v1.4.0` | **Primer auto-update end-to-end validado en producción.** Header enriquecido (cotizaciones + reloj + version). |
+
 ## Flujo de deploy a un local real (LAN, Windows)
 
 Asume **1 PC servidor + N PCs cliente** dentro del local.
