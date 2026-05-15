@@ -120,6 +120,15 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
   autoUpdater.allowPrerelease = cfg.channel !== 'stable';
   autoUpdater.logger = console;
 
+  // Apps unsigned (sin SignPath ni CSC): desactivar verificacion de firma del
+  // installer descargado. Sin esto, electron-updater rechaza el .exe con
+  // "publisher names do not match" porque el package.json:nsis.publisherName
+  // esta seteado pero el binario no esta firmado. El deploy es interno (LAN),
+  // la confianza viene del GitHub Release controlado, no de la firma.
+  // Para activar verificacion real: configurar SIGNPATH_API_TOKEN + remover
+  // esta linea. Ver workflows/release-y-deploy.md.
+  autoUpdater.verifyUpdateCodeSignature = false;
+
   autoUpdater.on('checking-for-update', () => {
     sendStatus(mainWindow, 'checking');
   });
