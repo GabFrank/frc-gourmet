@@ -268,6 +268,73 @@
   flex: 1 1 auto;
 }
 
+// =============================================================================
+// Custom titlebar drag region + window controls (Win/Linux con frame:false).
+// =============================================================================
+// El toolbar entero es draggable (mover ventana arrastrándolo). Los elementos
+// interactivos internos se marcan no-drag para preservar click/keyboard.
+.drag-region {
+  -webkit-app-region: drag;
+  user-select: none;
+
+  button,
+  .user-button,
+  .empresa-logo,
+  input,
+  a {
+    -webkit-app-region: no-drag;
+  }
+}
+
+// Botones de minimizar/maximizar/cerrar — estilo plano sin border-radius,
+// estilo Windows. Alto = alto del toolbar para que llenen visualmente.
+.window-controls {
+  display: inline-flex;
+  align-items: stretch;
+  height: 64px;
+  margin-left: 8px;
+  -webkit-app-region: no-drag;
+
+  .window-ctrl-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 100%;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    padding: 0;
+
+    .mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+      line-height: 18px;
+    }
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+    }
+    &:active {
+      background-color: rgba(255, 255, 255, 0.25);
+    }
+  }
+
+  // Botón de cerrar — rojo al hover, convención universal de window controls.
+  .window-ctrl-close {
+    &:hover {
+      background-color: #e81123; // rojo Windows estándar
+      color: #fff;
+    }
+    &:active {
+      background-color: #c50e1f;
+    }
+  }
+}
+
 .empresa-logo {
   height: 36px;
   max-width: 56px;

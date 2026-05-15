@@ -1,7 +1,10 @@
 <!-- Only show application content when authenticated -->
 <ng-container *ngIf="isAuthenticated; else loginRouter">
   <!-- App header - moved outside of sidenav container -->
-  <mat-toolbar color="primary" class="app-toolbar">
+  <!-- class "drag-region" hace que el toolbar sea draggable (mover ventana
+       arrastrándolo, como las barras nativas). Los botones internos se
+       marcan "no-drag" en CSS para que sigan siendo clickeables. -->
+  <mat-toolbar color="primary" class="app-toolbar drag-region">
     <button
       type="button"
       aria-label="Toggle sidenav"
@@ -61,6 +64,29 @@
         <span>Cerrar Sesión</span>
       </button>
     </mat-menu>
+
+    <!-- Window controls (custom titlebar). Solo Win/Linux — en macOS los
+         semáforos nativos quedan visibles (titleBarStyle:hiddenInset). -->
+    <div class="window-controls" *ngIf="!isMacOS">
+      <button type="button" class="window-ctrl-btn"
+              (click)="minimizeWindow()"
+              aria-label="Minimizar"
+              matTooltip="Minimizar">
+        <mat-icon>remove</mat-icon>
+      </button>
+      <button type="button" class="window-ctrl-btn"
+              (click)="toggleMaximize()"
+              [attr.aria-label]="isWindowMaximized ? 'Restaurar' : 'Maximizar'"
+              [matTooltip]="isWindowMaximized ? 'Restaurar' : 'Maximizar'">
+        <mat-icon>{{ isWindowMaximized ? 'filter_none' : 'crop_square' }}</mat-icon>
+      </button>
+      <button type="button" class="window-ctrl-btn window-ctrl-close"
+              (click)="closeWindow()"
+              aria-label="Cerrar"
+              matTooltip="Cerrar">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
   </mat-toolbar>
 
   <!-- Sidenav container - now below the header -->
