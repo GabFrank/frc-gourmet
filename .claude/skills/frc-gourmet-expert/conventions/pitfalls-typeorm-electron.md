@@ -2,6 +2,40 @@
 
 Bugs sutiles ya encontrados en este proyecto. Evitar repetir.
 
+## electron-updater 6.x: `verifyUpdateCodeSignature` es FUNCION, no boolean
+
+Para builds unsigned (sin SignPath/CSC) hay que desactivar la verificación de firma del instalador descargado, sino `electron-updater` lo rechaza con *"publisher names do not match"* (especialmente si `package.json:nsis.publisherName` está seteado).
+
+**❌ NO funciona** en electron-updater 6.x (la propiedad cambió de tipo; asignarle `false` queda ignorado y se mantiene la función default que invoca PowerShell `Get-AuthenticodeSignature`, choca con ExecutionPolicy):
+```typescript
+autoUpdater.verifyUpdateCodeSignature = false;
+```
+
+**✅ Sí funciona** — asignar una función que retorna `null` (= "verificación OK"):
+```typescript
+autoUpdater.verifyUpdateCodeSignature = () => Promise.resolve(null);
+```
+
+Source: `node_modules/electron-updater/out/NsisUpdater.js:19` documenta la firma `(publisherNames: string[], path: string) => Promise<string | null>`.
+
+**Historial doloroso**: v1.1.1 → v1.1.2 → v1.2.0 → v1.3.0 — el fix se "aplicó" 3 veces sin tomar efecto antes de descubrir que la propiedad era función. v1.3.0 fue la primera versión que se auto-actualizó sin intervención manual (validado end-to-end con v1.4.0).
+
+## Bundle Electron: drivers nativos NO van a `optionalDependencies`
+
+El workflow `release.yml` corre `npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund` para evitar compilar `canvas` (transitivo de `pdfjs-dist`, requiere headers nativos de Cairo que no hay en runners). Pero `--omit=optional` omite **todas** las optional, incluidas las propias del `package.json`.
+
+**Síntoma del bug histórico (v1.1.0):** `pg` estaba en `optionalDependencies` → al instalar el `.exe` empaquetado en un PC con Postgres y configurar la conexión, la app tiraba **"postgres package has not been found"**. La función SI funcionaba en `npm start` (dev), porque ahí los optional sí se instalan. Solo se reveló en el primer deploy real a un cliente.
+
+**Regla:** todo paquete runtime que la app pueda llegar a usar va a `dependencies`, NO a `optionalDependencies`. `@types/*` van a `devDependencies` (no se bundlean). Las únicas optional aceptables son las que de verdad son opcionales para el funcionamiento (raras en este proyecto).
+
+**Validación:** después de empaquetar el `.exe`, revisar que el módulo esté presente en el bundle:
+```bash
+# Linux/macOS — extraer asar y buscar el módulo
+npx asar list release/win-unpacked/resources/app.asar | grep "node_modules/pg/"
+```
+
+Fix histórico: PR #24 movió `pg` a `dependencies`, salió en v1.1.1.
+
 ## TypeORM: usar `null` explícito para nulear columnas
 
 Asignar `undefined` a un campo nullable **NO** genera `UPDATE`:

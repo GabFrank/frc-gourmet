@@ -115,6 +115,88 @@ export function registerValesHandlers(
     return await repo.save(entity);
   });
 
+  // Crea un vale y lo confirma en una sola transaccion (egreso directo desde Caja Mayor)
+  ipcMain.handle('crear-vale-confirmado', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VALE_CREAR');
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VALE_CONFIRMAR');
+
+    if (!data?.funcionarioId) throw new Error('Funcionario requerido');
+    if (!data?.monedaId) throw new Error('Moneda requerida');
+    if (!data?.cajaMayorId) throw new Error('Caja Mayor requerida');
+    if (!data?.formaPagoId) throw new Error('Forma de pago requerida');
+    const monto = Number(data.monto);
+    if (!monto || monto <= 0) throw new Error('Monto invalido');
+
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const funcionario = await queryRunner.manager.findOne(Funcionario, {
+        where: { id: data.funcionarioId },
+        relations: ['persona'],
+      });
+      if (!funcionario) throw new Error(`Funcionario ${data.funcionarioId} no encontrado`);
+      const moneda = await queryRunner.manager.findOne(Moneda, { where: { id: data.monedaId } });
+      if (!moneda) throw new Error(`Moneda ${data.monedaId} no encontrada`);
+      const cajaMayor = await queryRunner.manager.findOne(CajaMayor, { where: { id: data.cajaMayorId } });
+      if (!cajaMayor) throw new Error(`Caja Mayor ${data.cajaMayorId} no encontrada`);
+      const formaPago = await queryRunner.manager.findOne(FormasPago, { where: { id: data.formaPagoId } });
+      if (!formaPago) throw new Error(`Forma de pago ${data.formaPagoId} no encontrada`);
+
+      const userId = getCurrentUser()?.id;
+      const userEntity = userId
+        ? await queryRunner.manager.findOne(Usuario, { where: { id: userId } })
+        : null;
+
+      const vale = queryRunner.manager.create(Vale, {
+        funcionario,
+        motivo: data.motivoId ? { id: data.motivoId } as any : undefined,
+        monto,
+        fecha: parseLocalDate(data.fecha) || new Date(),
+        descripcion: data.descripcion,
+        cajaMayor,
+        moneda,
+        formaPago,
+        estado: ValeEstado.CONFIRMADO,
+        esAdelanto: data.esAdelanto === true,
+        comprobanteUrl: data.comprobanteUrl,
+        autorizadoPor: userEntity || undefined,
+      });
+      await setEntityUserTracking(dataSource, vale, userId, false);
+      const valeSaved = await queryRunner.manager.save(Vale, vale);
+
+      const obs = `VALE #${valeSaved.id} - ${funcionario.persona?.nombre || ''} ${funcionario.persona?.apellido || ''}`.trim();
+      const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
+        cajaMayor: { id: cajaMayor.id } as any,
+        tipoMovimiento: TipoMovimiento.EGRESO_VALE,
+        moneda: { id: moneda.id } as any,
+        formaPago: { id: formaPago.id } as any,
+        monto,
+        fecha: new Date(),
+        observacion: obs,
+        valeId: valeSaved.id,
+        responsable: userEntity || undefined,
+      });
+      await setEntityUserTracking(dataSource, movimiento, userId, false);
+      const movSaved = await queryRunner.manager.save(CajaMayorMovimiento, movimiento);
+
+      await actualizarSaldoCajaMayor(queryRunner, cajaMayor.id, moneda.id, formaPago.id, monto, TipoMovimiento.EGRESO_VALE);
+
+      valeSaved.movimientoId = movSaved.id;
+      await setEntityUserTracking(dataSource, valeSaved, userId, true);
+      await queryRunner.manager.save(Vale, valeSaved);
+
+      await queryRunner.commitTransaction();
+      return valeSaved;
+    } catch (e) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error crear-vale-confirmado:', e);
+      throw e;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
   ipcMain.handle('confirmar-vale', async (_e, id: number, payload: any) => {
     await ensurePermission(dataSource, getCurrentUser, 'RRHH_VALE_CONFIRMAR');
     const queryRunner = dataSource.createQueryRunner();

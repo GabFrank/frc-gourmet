@@ -19,7 +19,8 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 - **Modos de operación (F4.2):** `standalone` (default, todo local), `server` (este PC expone Fastify en `/api/*` + sirve clientes), `client` (todas las llamadas a un server remoto vía HTTP). Configurable desde *Sistema → Modo de operación*. Settings unificadas en `userData/app-settings.json`.
 - **Navegación:** sistema de **tabs dinámicas** vía `TabsService`. La única ruta del Router de Angular es `/login`. Todo lo demás se abre como tab.
 - **IPC en 4 capas:** Entity → Handler (`electron/handlers/*`) → Preload (`preload.ts`) → `RepositoryService` (Angular, devuelve Observables). En `mode=client`, preload monkey-patchea `ipcRenderer.invoke` para rutear a HTTP `/api/rpc`.
-- **DB file:** SQLite default = `frc-gourmet.db` en `app.getPath('userData')`. Postgres = DB pre-creada en servidor nativo/Docker (NO la crea la app — el usuario hace `CREATE DATABASE`).
+- **DB file:** SQLite default = `frc-gourmet.db` en `app.getPath('userData')`. **Postgres: la app SÍ crea la BD + el rol/usuario** — el handler `db-config-init-postgres` se conecta con el superusuario, hace `CREATE ROLE` + `CREATE DATABASE` + `GRANT` (idempotente). El operador solo instala Postgres y da las credenciales del superusuario; NO necesita pgAdmin ni `CREATE DATABASE` manual. Detalles → [workflows/setup-pc-nueva.md](workflows/setup-pc-nueva.md).
+- **Release y deploy:** `semantic-release` + GitHub Actions. Push a `master` → canal `stable`, `release/beta` → `beta`, `develop` → `alpha`. Cada push dispara `release.yml` → tag + GitHub Release + instaladores Windows NSIS / Linux AppImage. La app trae **auto-update** (`electron-updater`). La branch de releases es **`master`** (NO `main` — `origin/main` está obsoleta). Detalles → [workflows/release-y-deploy.md](workflows/release-y-deploy.md).
 - **Custom protocols Electron:** `app://profile-images/<file>` y `app://producto-images/<file>` sirven archivos desde `userData/`. En `mode=client` proxean por `/api/files/by-url`.
 - **Idioma de la app:** español. Strings se guardan en **UPPERCASE** en BD.
 - **Moneda:** Paraguay primero (PYG, sin decimales) + USD/BRL. Conversión vía `MonedaCambio.compraLocal`.
@@ -45,7 +46,8 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | TypeORM, BaseModel, dual driver (SQLite/Postgres), migrations, ubicación del .db | [architecture/database.md](architecture/database.md) |
 | **Seeds del sistema** (admin, permisos, catálogos base, roles plantilla, feriados PY) | [architecture/seed-system.md](architecture/seed-system.md) |
 | **Modo cliente/servidor** (F4 standalone/server/client, Fastify, HTTP routing, device_id) | [architecture/cliente-servidor.md](architecture/cliente-servidor.md) |
-| **Setup en PC nueva / Postgres** (crear DB, configurar, modos, primer login) | [workflows/setup-pc-nueva.md](workflows/setup-pc-nueva.md) |
+| **Setup en PC nueva / Postgres** (la app crea la DB, configurar, modos, primer login) | [workflows/setup-pc-nueva.md](workflows/setup-pc-nueva.md) |
+| **Release y deploy** (semantic-release, canales, GitHub Actions, auto-update, deploy a un local real) | [workflows/release-y-deploy.md](workflows/release-y-deploy.md) |
 | `main.ts`, ciclo de vida Electron, custom protocols | [architecture/electron-bootstrap.md](architecture/electron-bootstrap.md) |
 | Tabs, sidenav, layout principal, ThemeService | [architecture/frontend-shell.md](architecture/frontend-shell.md) |
 | Login, sesiones, roles, permisos, `getCurrentUser` | [architecture/auth-permissions.md](architecture/auth-permissions.md) |
@@ -105,41 +107,25 @@ Estas las debo respetar SIEMPRE, sin que el usuario las repita:
 
 ---
 
-## 4. Estado actual del repo (snapshot 2026-05-12)
+## 4. Estado actual del repo (snapshot 2026-05-15)
 
 > Esta sección puede quedar desactualizada. Si el usuario pregunta por estado actual, **revisar `git log` y memorias antes de responder**.
 
-- **Última feature en branch propio:** **Clientes módulo completo F1 + F2 + venta a crédito** — F1 CRUD reescrito con autocomplete persona, botón "+ Nuevo persona/tipo" inline, validador cross-field tributa→ruc, soft delete. F2 cliente-detalle con padrón dashboards (4 stat-chips, 2 charts, CPC abiertas, historial paginado con filtros + export Excel/PDF, últimas ventas). Persona ahora puede crearse solo con nombre (documento opcional, validado contextualmente en cliente con crédito / funcionario / facturación). Venta a crédito directa desde PdV: botón "Cobrar a crédito" en cobrar-venta-dialog + dialog que configura cuotas/frecuencia/fecha → handler atómico `cobrar-venta-credito` que cierra venta CONCLUIDA con FormaPago "CUENTA CORRIENTE" + crea CPC + CARGO + actualiza saldo. Cobro desde Caja Mayor: botón "Cobrar a cliente" en caja-mayor-detalle → mini-dialog buscador de CPC ACTIVAS → cobrar-cuota-dialog (con caja/moneda/forma pre-seleccionadas). Fix Postgres: `pg.types.setTypeParser(1700)` en main.ts para que NUMERIC venga como `number` (evita concatenación de strings en sumas). Branch `feat/clientes-full`. Detalles → [domains/personas-clientes.md](domains/personas-clientes.md).
-- **Refactor de dashboards** — padrón unificado para los 7 dashboards (Home, Ventas, Compras, Productos, Financiero, Caja Mayor, RRHH). SCSS partial común + 5 componentes shared (`<app-dash-*>`) + 5 handlers KPI nuevos por dominio + 6 permisos `XXX_DASHBOARD_VER`. Branch `feat/dashboards-padron-unificado`, commit `2a061d8`. Detalles → [domains/dashboards.md](domains/dashboards.md). **Pendiente: merge a main + activar chequeo de permisos en frontend (PermissionService existe pero no se usa).**
-- **Importación de facturas con OCR + IA** (GPT-4o vision) — extrae proveedor + items + teléfono, hace matching por aliases + Levenshtein, crea Compra borrador. Aprende de cada confirmación. Tab dedicado de revisión, dialogs inline para crear proveedor/producto. Pantalla `Sistema → Configurar IA` con probador. Lista de Importaciones IA con reprocesar/descartar. **Producto** ahora tiene campo `iva` (0/5/10, default 10) y `registroCompleto` (boolean para chip "Parcial" en list-productos). `Producto.subfamilia` es nullable. Detalles → [domains/importacion-facturas-ocr.md](domains/importacion-facturas-ocr.md).
-- **Backup/Restore + Reset BD + Seed admin** (commit `607a880`).
-- **Compras MVP** con flujo de pago unificado vía CPP (commit `c2e0a70`).
-- **RRHH** completado hasta Fase 8 (dashboard, notificaciones, reportes con exports).
-- **Ventas/PdV** muy avanzado (cobro multi-pago, delivery, mesas, comandas, atajos, multi-sabor, descuento de stock automático).
-- **Productos** con refactor de variaciones completado (RecetaPresentacion sustituye al multiplicador).
-- **Refactor en paralelo activo:** branch `refactor/sweep-currency-ngmodel-fechas` (otro agente trabajando) — aplicar `appCurrencyInput` directive a dialogs/componentes. **No mezclar con otros refactors.**
-- **Pendientes mayores:** UI de Promociones, Producción, Reservas avanzadas, autocompletes en selects largos, migración ngModel→Reactive Forms, sweep de fechas timezone-safe, completar permisos `COMPRAS_IMPORTAR_FACTURA`/`SISTEMA_CONFIGURAR_IA`/`*_DASHBOARD_VER` en sidenav y `app.component.ts` (creados pero no chequeados), TODO scan de pre-selecciones (memoria `project_todo_preselecciones`), Clientes F3 (Loyalty/Tags/Direcciones) y F4 (cumpleaños/import/reportes).
-## 4. Estado actual del repo (snapshot 2026-05-11)
-
-> Esta sección puede quedar desactualizada. Si el usuario pregunta por estado actual, **revisar `git log` y memorias antes de responder**.
-
-- **Branches de larga duración:** `develop` (working), `main` (releases). Todo lo mergeado al 2026-05-11 está en develop.
-- **Migrado: cliente/servidor completo (F1–F5) MERGED en `develop`.** 
-  - F1 dual driver SQLite+Postgres con migrations (synchronize off).
-  - F2 Repository abstract + factory por mode (IPC vs HTTP).
-  - F3 Fastify server skeleton + handler registry global + RPC router + JWT auth.
-  - F4 modo standalone/server/client en `app-settings.json`, wizard UI, file proxy `/api/files/by-url` (mode=client).
-  - F5 multi-tenant `device_id` en entities clave, wizard device picker, filtros UI por dispositivo.
-- **Seed system actualizado 2026-05-11** (esta misma sesión) — limpieza de seeds con datos placeholder (CuentaBancaria, MaquinaPos, MonedaCambio quitados); agregados Familia/Subfamilia GENERAL, Turnos, Feriados PY, Observaciones, Roles plantilla (GERENTE/CAJERO/MOZO). Detalles → [architecture/seed-system.md](architecture/seed-system.md).
-- **UX sweep 2026-05-11:** autocompletes (Producto/Persona/Cliente/Funcionario), TableToolbarComponent shared, fixes parseLocalDate. PR #18 mergeado.
+- **Branches de larga duración:** `develop` (working) y **`master`** (releases). `origin/main` está obsoleta (`gone`). El skill viejo decía "main (releases)" — ignorar, es `master`.
+- **Primer release stable publicado: `v1.1.0` (2026-05-15)**. Sucesión rápida hasta `v1.4.0` el mismo día por dos bugs detectados en el primer deploy real: `pg` faltante en bundle (fix v1.1.1) y `verifyUpdateCodeSignature` que en electron-updater 6.x es función no boolean (fix v1.3.0). **Primer auto-update end-to-end validado en producción: v1.3.0 → v1.4.0.** Ver [conventions/pitfalls-typeorm-electron.md](conventions/pitfalls-typeorm-electron.md) y [workflows/release-y-deploy.md](workflows/release-y-deploy.md) sección "Historial de validación".
+- **Toolbar con titlebar custom + datos enriquecidos (v1.3.0 + v1.4.0):** `BrowserWindow({ frame: false })` en Win/Linux con controles min/max/close custom en `app.component`, `titleBarStyle: 'hiddenInset'` en macOS para mantener semáforos nativos. Header muestra subtitle "FRC Gourmet v{appVersion}", chip de modo (Servidor/Cliente), cotizaciones USD/BRL del scrapper de nortecambios (refresh 5min) y reloj en vivo (1s, fuera de NgZone). **Toda la toolbar es draggable** (`-webkit-app-region: drag`); botones/inputs/links marcados `no-drag`. Si tocás la toolbar, respetá esto.
+- **Asignar roles a usuario existente (v1.2.0):** UI en `create-edit-usuario` con multi-select que calcula diff y llama `assignRoleToUsuario` / `removeRoleFromUsuario` (recibe `usuarioRole.id`, NO `role.id`).
+- **Cliente/servidor F1–F5 MERGED** — dual driver SQLite+Postgres con migrations (`synchronize: false`), Repository abstract+factory IPC/HTTP, Fastify server con handler registry global + RPC router + JWT, modos standalone/server/client en `app-settings.json` con wizard, multi-tenant `device_id`.
+- **Seguridad P0 MERGED (PR #22, 2026-05-14)** — `checkPermission`/`ensurePermission` en ~178 handlers IPC sensibles (P0-1), cambio de password forzado en primer login con `must_change_password` + dialog bloqueante (P0-3), `*appHasPermission` directiva, smoke E2E de permisos.
+- **Empresa MERGED (PR #21)** — datos de empresa + branding visual + logo en header.
+- **Clientes módulo completo MERGED (PR #20)** — CRUD F1, F2 cliente-detalle con padrón dashboards, venta a crédito desde PdV (`cobrar-venta-credito` atómico), cobro de CPC desde Caja Mayor, fix `pg.types.setTypeParser(1700)` para NUMERIC.
+- **Onboarding + cotización mercado MERGED (PR #19)**, **UX sweep (PR #18)**, **F4 images E2E fix (PR #17)**.
 - **Dashboards padrón unificado MERGED** — 7 dashboards con SCSS partial común + 5 componentes shared (`<app-dash-*>`) + 5 handlers KPI por dominio + 6 permisos `XXX_DASHBOARD_VER`. **Pendiente: activar `PermissionService` en frontend** (existe pero no se usa para chequear permisos).
-- **Importación de facturas con OCR + IA** (GPT-4o vision) — extrae proveedor + items + teléfono, matching por aliases + Levenshtein, crea Compra borrador. Aprende de cada confirmación. Tab dedicado, dialogs inline. Pantalla `Sistema → Configurar IA`. `Producto` con campo `iva` (0/5/10) + `registroCompleto`. `Producto.subfamilia` nullable. Detalles → [domains/importacion-facturas-ocr.md](domains/importacion-facturas-ocr.md).
-- **Backup/Restore + Reset BD** + seed admin.
-- **Compras MVP** con pago unificado vía CPP.
-- **RRHH** hasta Fase 8 (dashboard, notificaciones, reportes exports).
-- **Ventas/PdV** muy avanzado (cobro multi-pago, delivery, mesas, comandas, atajos, multi-sabor, descuento de stock).
-- **Productos** con refactor variaciones (RecetaPresentacion).
-- **Pendientes mayores:** UI Promociones, Producción, Reservas avanzadas; completar migración ngModel→Reactive Forms; chequear permisos en sidenav y `app.component.ts`; forzar cambio de password admin en primer login; F6 Mobile (fuera de scope).
+- **Importación de facturas con OCR + IA** (GPT-4o vision), **Backup/Restore + Reset BD** + seed admin, **Compras MVP** con pago unificado vía CPP, **RRHH** hasta Fase 8, **Ventas/PdV** avanzado, **Productos** con refactor variaciones (RecetaPresentacion).
+- **Seed system actualizado** — limpieza de seeds con datos placeholder (CuentaBancaria, MaquinaPos, MonedaCambio quitados); agregados Familia/Subfamilia GENERAL, Turnos, Feriados PY, Observaciones, Roles plantilla (GERENTE/CAJERO/MOZO). Detalles → [architecture/seed-system.md](architecture/seed-system.md).
+- **Branch protection:** develop y master requieren checks `Lint + Build (ubuntu-latest)` y `Lint + Build (windows-latest)` antes de mergear. No requieren reviews.
+- **Repo en GitHub se llama `frc-gourmet`** — el directorio local es `frc-gourmet-legacy` pero el remoto se renombró y mantiene redirect.
+- **Pendientes mayores:** UI Promociones, Producción, Reservas avanzadas; completar migración ngModel→Reactive Forms; chequear permisos en sidenav y `app.component.ts`; F6 Mobile (fuera de scope).
 
 Detalles → [workflows/todos-pendientes.md](workflows/todos-pendientes.md).
 

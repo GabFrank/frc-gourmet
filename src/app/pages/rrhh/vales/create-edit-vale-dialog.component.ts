@@ -1,7 +1,7 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -13,6 +13,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
 
 @Component({
   selector: 'app-create-edit-vale-dialog',
@@ -32,7 +33,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
     MatSnackBarModule,
   ],
   template: `
-    <h2 mat-dialog-title>Crear vale / adelanto</h2>
+    <h2 mat-dialog-title>{{ modoConfirmar ? 'Registrar egreso por vale' : 'Crear vale / adelanto' }}</h2>
     <mat-dialog-content class="dialog-content">
       <div *ngIf="loading" class="spinner"><mat-progress-spinner mode="indeterminate" diameter="40"></mat-progress-spinner></div>
       <form [formGroup]="form" *ngIf="!loading" class="form">
@@ -73,17 +74,17 @@ import { RepositoryService } from 'src/app/database/repository.service';
         </mat-form-field>
 
         <mat-form-field appearance="outline">
-          <mat-label>Caja Mayor (opcional)</mat-label>
+          <mat-label>{{ modoConfirmar ? 'Caja Mayor' : 'Caja Mayor (opcional)' }}</mat-label>
           <mat-select formControlName="cajaMayorId">
-            <mat-option [value]="null">-- Definir luego --</mat-option>
+            <mat-option *ngIf="!modoConfirmar" [value]="null">-- Definir luego --</mat-option>
             <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{ c.nombre }}</mat-option>
           </mat-select>
         </mat-form-field>
 
         <mat-form-field appearance="outline">
-          <mat-label>Forma de pago (opcional)</mat-label>
+          <mat-label>{{ modoConfirmar ? 'Forma de pago' : 'Forma de pago (opcional)' }}</mat-label>
           <mat-select formControlName="formaPagoId">
-            <mat-option [value]="null">-- Definir luego --</mat-option>
+            <mat-option *ngIf="!modoConfirmar" [value]="null">-- Definir luego --</mat-option>
             <mat-option *ngFor="let f of formasPago" [value]="f.id">{{ f.descripcion || f.nombre }}</mat-option>
           </mat-select>
         </mat-form-field>
@@ -101,7 +102,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
     <mat-dialog-actions align="end">
       <button mat-button (click)="cancel()" [disabled]="saving">Cancelar</button>
       <button mat-flat-button color="primary" (click)="submit()" [disabled]="form.invalid || saving">
-        Crear (estado SOLICITADO)
+        {{ modoConfirmar ? 'Registrar egreso (CONFIRMADO)' : 'Crear (estado SOLICITADO)' }}
       </button>
     </mat-dialog-actions>
   `,
@@ -121,6 +122,7 @@ export class CreateEditValeDialogComponent implements OnInit {
   monedas: any[] = [];
   cajasMayor: any[] = [];
   formasPago: any[] = [];
+  modoConfirmar = false;
 
   constructor(
     private dialogRef: MatDialogRef<CreateEditValeDialogComponent>,
@@ -128,15 +130,17 @@ export class CreateEditValeDialogComponent implements OnInit {
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
     private snackBar: MatSnackBar,
+    private dialog: MatDialog,
   ) {
+    this.modoConfirmar = !!data?.modoConfirmar;
     this.form = this.fb.group({
       funcionarioId: [null, Validators.required],
       motivoId: [null],
       monto: [0, [Validators.required, Validators.min(1)]],
       fecha: [new Date(), Validators.required],
       monedaId: [null, Validators.required],
-      cajaMayorId: [null],
-      formaPagoId: [null],
+      cajaMayorId: [null, this.modoConfirmar ? Validators.required : null],
+      formaPagoId: [null, this.modoConfirmar ? Validators.required : null],
       descripcion: [''],
       esAdelanto: [false],
     });
@@ -157,6 +161,9 @@ export class CreateEditValeDialogComponent implements OnInit {
       this.monedas = monedas || [];
       this.cajasMayor = (cajasMayor || []).filter((c: any) => c.estado === 'ABIERTA' || c.estado === 'ACTIVA');
       this.formasPago = formasPago || [];
+      if (this.modoConfirmar && this.data?.cajaMayorId) {
+        this.form.patchValue({ cajaMayorId: this.data.cajaMayorId });
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -168,16 +175,47 @@ export class CreateEditValeDialogComponent implements OnInit {
 
   async submit(): Promise<void> {
     if (this.form.invalid) return;
+    const value = this.form.value;
+
+    if (this.modoConfirmar) {
+      const ok = await this.confirmarSaldoSiNegativo(value.cajaMayorId, value.monedaId, value.formaPagoId, Number(value.monto));
+      if (!ok) return;
+    }
+
     this.saving = true;
     try {
-      await firstValueFrom(this.repositoryService.createVale(this.form.value));
-      this.snackBar.open('Vale creado en estado SOLICITADO', 'Cerrar', { duration: 3000 });
+      if (this.modoConfirmar) {
+        await firstValueFrom(this.repositoryService.crearValeConfirmado(value));
+        this.snackBar.open('Vale registrado y egreso aplicado en Caja Mayor', 'Cerrar', { duration: 3000 });
+      } else {
+        await firstValueFrom(this.repositoryService.createVale(value));
+        this.snackBar.open('Vale creado en estado SOLICITADO', 'Cerrar', { duration: 3000 });
+      }
       this.dialogRef.close({ saved: true });
     } catch (e) {
       console.error(e);
-      this.snackBar.open('Error al crear vale', 'Cerrar', { duration: 3500 });
+      this.snackBar.open('Error al registrar vale', 'Cerrar', { duration: 3500 });
     } finally {
       this.saving = false;
+    }
+  }
+
+  private async confirmarSaldoSiNegativo(cajaMayorId: number, monedaId: number, formaPagoId: number, monto: number): Promise<boolean> {
+    try {
+      const saldos: any[] = await firstValueFrom(this.repositoryService.getCajaMayorSaldos(cajaMayorId));
+      const s = (saldos || []).find(x => x.moneda?.id === monedaId && x.formaPago?.id === formaPagoId);
+      const saldoActual = s ? Number(s.saldo) : 0;
+      const moneda = this.monedas.find(m => m.id === monedaId);
+      const fp = this.formasPago.find(p => p.id === formaPagoId);
+      return confirmarSaldosNegativos(this.dialog, [{
+        label: `${moneda?.denominacion || ''} / ${fp?.nombre || fp?.descripcion || ''}`,
+        saldoActual,
+        monto,
+        monedaSimbolo: moneda?.simbolo || '',
+      }]);
+    } catch (e) {
+      console.error('Error verificando saldo:', e);
+      return true;
     }
   }
 }

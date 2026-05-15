@@ -730,6 +730,7 @@ export abstract class RepositoryService {
   abstract getVales(filtros?: any): Observable<any[]>;
   abstract getValesPendientesDescuento(funcionarioId: number): Observable<any[]>;
   abstract createVale(data: any): Observable<any>;
+  abstract crearValeConfirmado(data: any): Observable<any>;
   abstract confirmarVale(id: number, payload: any): Observable<any>;
   abstract anularVale(id: number, motivo: string): Observable<any>;
   abstract marcarValeDescontado(id: number, liquidacionId: number): Observable<any>;
