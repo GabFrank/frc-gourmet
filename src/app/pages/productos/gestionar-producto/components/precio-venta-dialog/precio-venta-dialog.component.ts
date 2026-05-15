@@ -107,7 +107,18 @@ export class PrecioVentaDialogComponent implements OnInit {
       activo: [true]
     });
 
+    this.precioForm.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
+
     // ✅ NUEVO: El formulario se inicializará con valores por defecto después de cargar los datos
+  }
+
+  decimalesMoneda = 0;
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.precioForm?.get('monedaId')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   ngOnInit(): void {

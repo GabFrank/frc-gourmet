@@ -18,7 +18,9 @@ import { Compra } from '../../src/app/database/entities/compras/compra.entity';
 import { CompraDetalle } from '../../src/app/database/entities/compras/compra-detalle.entity';
 import { CompraEstado } from '../../src/app/database/entities/compras/estado.enum';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 import { readIaConfig, writeIaConfig, IaConfig, DEFAULT_IA_CONFIG } from '../utils/ia-config.utils';
+import { ensurePermission } from '../utils/auth.utils';
 import {
   buildVisionDataUrl,
   callOpenAiVision,
@@ -62,6 +64,7 @@ export function registerFacturaImportHandlers(
   });
 
   ipcMain.handle('ia-config-set', async (_e, partial: Partial<IaConfig>) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_IMPORTAR_FACTURA');
     const current = await readIaConfig(app.getPath('userData'));
     const next: IaConfig = { ...current };
     if (partial.modelo !== undefined) next.modelo = partial.modelo || DEFAULT_IA_CONFIG.modelo;
@@ -86,6 +89,7 @@ export function registerFacturaImportHandlers(
   });
 
   ipcMain.handle('ia-prompt-set-adiciones', async (_e, payload: { adiciones: string[] }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_IMPORTAR_FACTURA');
     const cfg = await setAdiciones(dataSource, payload?.adiciones || []);
     return {
       success: true,
@@ -129,6 +133,7 @@ export function registerFacturaImportHandlers(
   });
 
   ipcMain.handle('ia-prompt-sugerencia-aprobar', async (_e, payload: { id: number }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_IMPORTAR_FACTURA');
     const userId = getCurrentUser()?.id;
     const repo = dataSource.getRepository(IaPromptSugerencia);
     const sug = await repo.findOne({ where: { id: payload.id } });
@@ -147,6 +152,7 @@ export function registerFacturaImportHandlers(
   });
 
   ipcMain.handle('ia-prompt-sugerencia-rechazar', async (_e, payload: { id: number; motivo?: string }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_IMPORTAR_FACTURA');
     const userId = getCurrentUser()?.id;
     const repo = dataSource.getRepository(IaPromptSugerencia);
     const sug = await repo.findOne({ where: { id: payload.id } });
@@ -159,6 +165,7 @@ export function registerFacturaImportHandlers(
   });
 
   ipcMain.handle('ia-prompt-sugerencia-delete', async (_e, payload: { id: number }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_IMPORTAR_FACTURA');
     const repo = dataSource.getRepository(IaPromptSugerencia);
     const sug = await repo.findOne({ where: { id: payload.id } });
     if (!sug) return { success: false, error: 'Sugerencia no encontrada.' };
@@ -208,6 +215,7 @@ export function registerFacturaImportHandlers(
   });
 
   ipcMain.handle('factura-import-process', async (_e, payload: { filePath: string }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_IMPORTAR_FACTURA');
     const userDataPath = app.getPath('userData');
     const userId = getCurrentUser()?.id;
     const cfg = await readIaConfig(userDataPath);
@@ -291,6 +299,7 @@ export function registerFacturaImportHandlers(
   });
 
   ipcMain.handle('factura-import-reprocess', async (_e, payload: { documentoId: number }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_IMPORTAR_FACTURA');
     const userDataPath = app.getPath('userData');
     const userId = getCurrentUser()?.id;
     const cfg = await readIaConfig(userDataPath);
@@ -374,6 +383,7 @@ export function registerFacturaImportHandlers(
   });
 
   ipcMain.handle('factura-import-descartar', async (_e, payload: { documentoId: number }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_IMPORTAR_FACTURA');
     const userId = getCurrentUser()?.id;
     const repo = dataSource.getRepository(DocumentoCompraImportado);
     const doc = await repo.findOne({ where: { id: payload.documentoId } });
@@ -463,6 +473,7 @@ export function registerFacturaImportHandlers(
     }>;
     aliasProveedor: { textoOcr: string; rucOcr: string | null; proveedorId: number };
   }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_IMPORTAR_FACTURA');
     const userId = getCurrentUser()?.id;
     const qr = dataSource.createQueryRunner();
     await qr.connect();
@@ -482,7 +493,7 @@ export function registerFacturaImportHandlers(
         activo: true,
         numeroNota: dc.numeroNota ? String(dc.numeroNota).toUpperCase() : null,
         tipoBoleta: dc.tipoBoleta || null,
-        fechaCompra: dc.fechaCompra ? new Date(dc.fechaCompra) : new Date(),
+        fechaCompra: parseLocalDate(dc.fechaCompra) || new Date(),
         credito: !!dc.credito,
         plazoDias: dc.plazoDias ?? null,
         proveedor: { id: payload.aliasProveedor.proveedorId } as any,

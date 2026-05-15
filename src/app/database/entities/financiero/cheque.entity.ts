@@ -29,13 +29,13 @@ export class Cheque extends BaseModel {
   @JoinColumn({ name: 'proveedor_id' })
   proveedor?: any;
 
-  @Column({ name: 'fecha_emision', type: 'datetime' })
+  @Column({ name: 'fecha_emision' })
   fechaEmision!: Date;
 
-  @Column({ name: 'fecha_pago', type: 'datetime', nullable: true })
+  @Column({ name: 'fecha_pago', nullable: true })
   fechaPago?: Date;
 
-  @Column({ name: 'fecha_cobro', type: 'datetime', nullable: true })
+  @Column({ name: 'fecha_cobro', nullable: true })
   fechaCobro?: Date;
 
   @Column({

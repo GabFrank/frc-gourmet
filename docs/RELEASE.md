@@ -284,3 +284,53 @@ Manifest del canal:
 ## Historial de versiones
 
 Auto-generado en `CHANGELOG.md` por semantic-release. No editar a mano.
+
+---
+
+## Code signing Windows (SignPath Foundation)
+
+**Estado:** integracion lista en `release.yml`, pendiente aprobacion del programa OSS.
+
+Sin firma, el `.exe` produce SmartScreen warning ("Windows protegio tu PC"). SignPath Foundation firma gratis a proyectos OSS en GitHub publico — perfecto para este repo. Una vez aprobados y con suficiente reputacion (~unas decenas de instalaciones), el warning desaparece.
+
+### Pasos a hacer una vez (tu, no Claude)
+
+1. **Aplicar al programa OSS** en https://signpath.org/products/foundation
+   - Repo publico requerido (este repo lo es).
+   - Esperar aprobacion (~1-2 semanas).
+2. **Crear proyecto + signing policy** en SignPath una vez aprobado.
+3. **Configurar 4 secrets en GitHub** (`Settings → Secrets and variables → Actions`):
+   - `SIGNPATH_API_TOKEN` — token de API generado en SignPath
+   - `SIGNPATH_ORG_ID` — ID de la organizacion
+   - `SIGNPATH_PROJECT_SLUG` — slug del proyecto (ej. `frc-gourmet`)
+   - `SIGNPATH_POLICY_SLUG` — slug de la signing policy (ej. `release`)
+
+Una vez que esos 4 secrets esten configurados, el step `Detect SignPath availability` del workflow detecta `enabled=true` y bifurca el flujo:
+
+```
+Path A (sin SignPath):
+  Build app → electron-builder --publish always
+
+Path B (con SignPath, solo Windows):
+  Build app → electron-builder --publish never (sin firmar)
+            → upload-artifact "unsigned-exe"
+            → SignPath/github-action-submit-signing-request@v1
+            → scripts/regenerate-updater-manifest.js (recalcula sha512)
+            → gh release upload (assets firmados)
+```
+
+Linux siempre va por Path A. Windows usa Path B solo cuando los secrets estan presentes; sino fallback a Path A unsigned.
+
+### Por que el script regenera el manifest
+
+`electron-builder` produce `latest.yml` con sha512 + size del `.exe`. Si firmamos el `.exe` despues, el hash cambia y `electron-updater` rechaza la update con "checksum mismatch". `scripts/regenerate-updater-manifest.js` recalcula el sha512 contra el binario firmado y reescribe el yml.
+
+### Fallback si SignPath OSS no aprueba
+
+Plan B documentado en `docs/plan-cliente-servidor.md` decision #5: **Azure Trusted Signing** (~$10/mes), integracion via Action equivalente. Reemplazar el step `Sign Windows installer with SignPath` por el de Azure; el resto del flujo se mantiene.
+
+### Probar el path de SignPath localmente
+
+No se puede — SignPath corre solo en cloud. Lo que SI se puede probar local:
+- `npm run electron:build` para validar que el `.exe` se genera.
+- `node scripts/regenerate-updater-manifest.js` con un `release/latest.yml` ya generado para verificar que el script no rompe el formato.

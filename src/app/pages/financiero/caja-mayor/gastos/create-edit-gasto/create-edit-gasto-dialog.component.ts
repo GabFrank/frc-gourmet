@@ -1,6 +1,7 @@
 import { Component, OnInit, Optional, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormGroup, FormBuilder, Validators, FormControl } from '@angular/forms';
+import { AdjuntosListComponent } from 'src/app/shared/components/adjuntos-list/adjuntos-list.component';
 import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA, MatDialog } from '@angular/material/dialog';
 import { confirmarSaldosNegativos, SaldoNegativoCheck } from 'src/app/shared/utils/saldo-negativo-confirm';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -19,6 +20,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 interface DetalleRow {
   monedaId: number;
@@ -52,6 +54,8 @@ interface DetalleRow {
     MatAutocompleteModule,
     MatTooltipModule,
     MatDividerModule,
+    CurrencyInputDirective,
+    AdjuntosListComponent,
   ]
 })
 export class CreateEditGastoDialogComponent implements OnInit {
@@ -60,6 +64,7 @@ export class CreateEditGastoDialogComponent implements OnInit {
   categoriaFilter = new FormControl('');
   proveedorFilter = new FormControl('');
   saving = false;
+  decimalesMoneda = 0;
 
   gastoCategorias: any[] = [];
   categoriasFiltradas: any[] = [];
@@ -75,6 +80,8 @@ export class CreateEditGastoDialogComponent implements OnInit {
   cajaMayorFijo = false;
   isEditing = false;
   gastoId: number | null = null;
+  /** True una vez que se creo o edito al menos una vez en esta sesion del dialog. */
+  private touched = false;
 
   // Tabla de detalles de pago
   detalles: DetalleRow[] = [];
@@ -113,6 +120,8 @@ export class CreateEditGastoDialogComponent implements OnInit {
       formaPagoId: [null, Validators.required],
       monto: [null, [Validators.required, Validators.min(0.01)]],
     });
+
+    this.detalleForm.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
 
     this.categoriaFilter.valueChanges.subscribe(val => {
       this.filtrarCategorias(val || '');
@@ -344,11 +353,18 @@ export class CreateEditGastoDialogComponent implements OnInit {
       if (this.isEditing && this.gastoId) {
         await firstValueFrom(this.repositoryService.editGasto(this.gastoId, gastoData));
         this.snackBar.open('Gasto actualizado correctamente', 'Cerrar', { duration: 3000 });
+        this.touched = true;
+        this.form.markAsPristine();
+        // En edit, mantener el dialog abierto: el usuario puede seguir adjuntando archivos.
       } else {
-        await firstValueFrom(this.repositoryService.createGasto(gastoData));
-        this.snackBar.open('Gasto registrado correctamente', 'Cerrar', { duration: 3000 });
+        const saved: any = await firstValueFrom(this.repositoryService.createGasto(gastoData));
+        this.snackBar.open('Gasto registrado. Ya podés adjuntar comprobantes.', 'Cerrar', { duration: 3000 });
+        // Pasar a modo edit para habilitar la seccion de adjuntos sin cerrar.
+        this.gastoId = saved?.id ?? null;
+        this.isEditing = !!this.gastoId;
+        this.touched = true;
+        this.form.markAsPristine();
       }
-      this.dialogRef?.close(true);
     } catch (error) {
       console.error('Error saving gasto:', error);
       this.snackBar.open('Error al guardar gasto', 'Cerrar', { duration: 3000 });
@@ -358,7 +374,21 @@ export class CreateEditGastoDialogComponent implements OnInit {
   }
 
   onCancel(): void {
-    this.dialogRef?.close(false);
+    // Devolvemos `touched` para que la lista refresque si hubo create/edit en esta sesion.
+    this.dialogRef?.close(this.touched);
+  }
+
+  onAdjuntosChanged(): void {
+    // Si solo se modificaron adjuntos, igual hay que refrescar la lista al cerrar
+    // para reflejar contadores/badges.
+    this.touched = true;
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.detalleForm?.get('monedaId')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   // Verifica saldos previo a guardar el gasto. Para edit, descuenta los detalles

@@ -12,10 +12,12 @@ import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 interface CobrarCuotaDialogData {
   cuota: any;
   contextoLabel?: string;
+  cajaMayorId?: number;
 }
 
 @Component({
@@ -34,6 +36,7 @@ interface CobrarCuotaDialogData {
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatDividerModule,
+    CurrencyInputDirective,
   ]
 })
 export class CobrarCuotaDialogComponent implements OnInit {
@@ -43,6 +46,7 @@ export class CobrarCuotaDialogComponent implements OnInit {
   cuota: any = null;
   contextoLabel = '';
   restante = 0;
+  decimalesMoneda = 0;
 
   cajasMayor: any[] = [];
   monedas: any[] = [];
@@ -71,6 +75,15 @@ export class CobrarCuotaDialogComponent implements OnInit {
     });
 
     this.loadLookups();
+    this.form.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.form?.get('monedaId')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    let dec: any = m?.decimales;
+    if (dec == null) dec = this.cuota?.cuentaPorCobrar?.moneda?.decimales;
+    this.decimalesMoneda = Number.isFinite(Number(dec)) ? Number(dec) : 0;
   }
 
   async loadLookups(): Promise<void> {
@@ -83,7 +96,34 @@ export class CobrarCuotaDialogComponent implements OnInit {
       this.cajasMayor = (cajas || []).filter((c: any) => c.estado === 'ABIERTA');
       this.monedas = monedas || [];
       this.formasPago = (formas || []).filter((f: any) => f.movimentaCaja);
+      this.applyPreSelecciones();
+      this.recalcDecimalesMoneda();
     } catch (e) { console.error(e); }
+  }
+
+  private applyPreSelecciones(): void {
+    // Caja Mayor: respeta data.cajaMayorId, sino única abierta.
+    if (!this.form.get('cajaMayorId')?.value) {
+      const targetCaja = this.data?.cajaMayorId
+        ? this.cajasMayor.find(c => c.id === this.data!.cajaMayorId)
+        : (this.cajasMayor.length === 1 ? this.cajasMayor[0] : null);
+      if (targetCaja) this.form.patchValue({ cajaMayorId: targetCaja.id });
+    }
+    // Moneda: la de la CPC si existe, sino la principal, sino la única.
+    if (!this.form.get('monedaId')?.value) {
+      const monedaCpc = this.cuota?.cuentaPorCobrar?.moneda?.id;
+      const principal = this.monedas.find((m: any) => m.principal);
+      const targetMoneda = (monedaCpc && this.monedas.find((m: any) => m.id === monedaCpc))
+        || principal
+        || (this.monedas.length === 1 ? this.monedas[0] : null);
+      if (targetMoneda) this.form.patchValue({ monedaId: targetMoneda.id });
+    }
+    // Forma de pago: la principal, sino la única.
+    if (!this.form.get('formaPagoId')?.value) {
+      const principalFp = this.formasPago.find((f: any) => f.principal);
+      const targetFp = principalFp || (this.formasPago.length === 1 ? this.formasPago[0] : null);
+      if (targetFp) this.form.patchValue({ formaPagoId: targetFp.id });
+    }
   }
 
   async onSubmit(): Promise<void> {

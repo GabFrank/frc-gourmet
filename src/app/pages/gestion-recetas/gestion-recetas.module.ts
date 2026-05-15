@@ -41,6 +41,7 @@ import { ListAdicionalesComponent } from './list-adicionales/list-adicionales.co
 import { PaginatedDropdownComponent } from '../../shared/components/paginated-dropdown/paginated-dropdown.component';
 import { ConfirmarAgregarIngredienteDialogComponent } from './dialogs/confirmar-agregar-ingrediente-dialog/confirmar-agregar-ingrediente-dialog.component';
 import { GestionarIngredienteMultiVariacionDialogComponent } from './dialogs/gestionar-ingrediente-multi-variacion-dialog/gestionar-ingrediente-multi-variacion-dialog.component';
+import { HasPermissionDirective } from '../../shared/directives/has-permission.directive';
 
 @NgModule({
   declarations: [
@@ -85,7 +86,8 @@ import { GestionarIngredienteMultiVariacionDialogComponent } from './dialogs/ges
     MatListModule,
     MatBadgeModule,
     MatMenuModule,
-    MatProgressBarModule
+    MatProgressBarModule,
+    HasPermissionDirective,
   ],
   providers: [CurrencyPipe]
 })

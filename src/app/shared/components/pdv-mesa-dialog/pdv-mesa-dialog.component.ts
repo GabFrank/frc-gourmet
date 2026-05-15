@@ -263,11 +263,38 @@ export class PdvMesaDialogComponent implements OnInit, OnDestroy {
       });
   }
   
-  // Method to create batch mesas with provided data from dialog
-  createBatchMesas(batchData: any): void {
+  // Method to create batch mesas with provided data from dialog.
+  // El BatchMesaFormDialog devuelve un objeto resumido {quantity, cantidad_personas,
+  // sector_id, startingNumber}; el handler IPC espera un array de mesas concretas.
+  // Hacemos el unroll aca antes de llamarlo.
+  createBatchMesas(batchData: {
+    quantity: number;
+    cantidad_personas: number;
+    sector_id: number | null;
+    startingNumber: number;
+  }): void {
+    if (!batchData || !batchData.quantity || batchData.quantity < 1) {
+      this.snackBar.open('Cantidad inválida para creación en lote', 'Cerrar', { duration: 3000 });
+      return;
+    }
     this.submitting = true;
-    
-    (window as any).api.createBatchPdvMesas(batchData)
+
+    const mesas: Partial<PdvMesaEntity>[] = [];
+    for (let i = 0; i < batchData.quantity; i++) {
+      const numero = (batchData.startingNumber || 1) + i;
+      const mesa: any = {
+        numero,
+        cantidad_personas: batchData.cantidad_personas || 4,
+        activo: true,
+        reservado: false,
+      };
+      if (batchData.sector_id) {
+        mesa.sector = { id: batchData.sector_id };
+      }
+      mesas.push(mesa);
+    }
+
+    (window as any).api.createBatchPdvMesas(mesas)
       .then((response: PdvMesaEntity[]) => {
         this.mesas = [...this.mesas, ...response];
         this.applyFilters();

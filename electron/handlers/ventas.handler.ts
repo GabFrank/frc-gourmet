@@ -12,11 +12,13 @@ import { PdvCategoria } from '../../src/app/database/entities/ventas/pdv-categor
 import { PdvCategoriaItem } from '../../src/app/database/entities/ventas/pdv-categoria-item.entity';
 import { PdvItemProducto } from '../../src/app/database/entities/ventas/pdv-item-producto.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
 import { Not, IsNull } from 'typeorm';
 import { DeepPartial } from 'typeorm';
 import { Reserva } from '../../src/app/database/entities/ventas/reserva.entity';
+import { ensurePermission } from '../utils/auth.utils';
 import { PdvMesa, PdvMesaEstado } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { Comanda, ComandaEstado } from '../../src/app/database/entities/ventas/comanda.entity';
 // ComandaItem kept for future kitchen integration
@@ -41,6 +43,7 @@ import { Adicional } from '../../src/app/database/entities/productos/adicional.e
 import { TipoModificacionIngrediente } from '../../src/app/database/entities/ventas/venta-item-ingrediente-modificacion.entity';
 import { EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
 import { VentaItemSabor } from '../../src/app/database/entities/ventas/venta-item-sabor.entity';
+import { dbQuery } from '../utils/db-query';
 
 export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Remove this line - get the current user in each handler instead
@@ -250,6 +253,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   // --- Cerrar todas las ventas abiertas de una mesa ---
   ipcMain.handle('cerrarVentasAbiertasMesa', async (_event: any, mesaId: number, estado: string) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Venta);
       const ventasAbiertas = await repo.find({
         where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA },
@@ -330,8 +334,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('createVenta', async (_event: any, data: any) => {
     try {
       const repo = dataSource.getRepository(Venta);
-      const entity = repo.create(data);
+      const entity: any = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
+      // F5 paso 3: si el caller no especifico dispositivo, resolverlo del
+      // request context (JWT en cliente HTTP, current-device en IPC local).
+      if (!data?.dispositivo && !data?.dispositivo_id) {
+        const deviceId = resolveRequestDeviceId(_event);
+        if (deviceId != null) entity.dispositivo = { id: deviceId };
+      }
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating venta:', error);
@@ -444,6 +454,11 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           .setParameter('mozoId', filtros.mozoId);
       }
 
+      // F5 paso 4: filtro por dispositivo de origen (multi-PC en LAN).
+      if (filtros?.dispositivoId) {
+        qb.andWhere('venta.dispositivo_id = :ventaDispositivoId', { ventaDispositivoId: filtros.dispositivoId });
+      }
+
       qb.orderBy('venta.createdAt', 'DESC');
 
       // Paginación
@@ -486,7 +501,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // Conteo apertura por moneda
       const conteoApertura: any[] = [];
       if (caja.conteoApertura?.id) {
-        const rows = await dataSource.query(`
+        const rows = await dbQuery(dataSource, `
           SELECT mb.moneda_id, m.simbolo, m.denominacion, SUM(cd.cantidad * mb.valor) as total
           FROM conteos_detalles cd
           JOIN monedas_billetes mb ON cd.moneda_billete_id = mb.id
@@ -502,7 +517,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // Conteo cierre por moneda
       const conteoCierre: any[] = [];
       if (caja.conteoCierre?.id) {
-        const rows = await dataSource.query(`
+        const rows = await dbQuery(dataSource, `
           SELECT mb.moneda_id, m.simbolo, m.denominacion, SUM(cd.cantidad * mb.valor) as total
           FROM conteos_detalles cd
           JOIN monedas_billetes mb ON cd.moneda_billete_id = mb.id
@@ -605,7 +620,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   // Total ventas de una caja en moneda principal (liviano, para la lista)
   ipcMain.handle('getVentasTotalByCaja', async (_event: any, cajaId: number) => {
     try {
-      const result = await dataSource.query(`
+      const result = await dbQuery(dataSource, `
         SELECT
           COUNT(DISTINCT v.id) as cantidadVentas,
           COALESCE(SUM(CASE WHEN pd.tipo = 'PAGO' THEN pd.valor ELSE 0 END), 0)
@@ -626,6 +641,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updateVenta', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Venta);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta ID ${id} not found`);
@@ -640,6 +656,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deleteVenta', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Venta);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta ID ${id} not found`);
@@ -1557,8 +1574,13 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('createComanda', async (_event: any, data: any) => {
     try {
       const repo = dataSource.getRepository(Comanda);
-      const entity = repo.create({ ...data, estado: ComandaEstado.DISPONIBLE });
+      const entity: any = repo.create({ ...data, estado: ComandaEstado.DISPONIBLE });
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
+      // F5 paso 3: propagar device_id del request context si no vino explicito.
+      if (!data?.dispositivo && !data?.dispositivo_id) {
+        const deviceId = resolveRequestDeviceId(_event);
+        if (deviceId != null) entity.dispositivo = { id: deviceId };
+      }
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating Comanda:', error);

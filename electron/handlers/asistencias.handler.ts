@@ -9,7 +9,9 @@ import { PenalizacionTipo } from '../../src/app/database/entities/rrhh/penalizac
 import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 import { getConfigBoolean, getConfigNumber } from './configuracion-rrhh.handler';
+import { ensurePermission } from '../utils/auth.utils';
 
 function diffMinutos(horaA: string | undefined, horaB: string | undefined): number {
   if (!horaA || !horaB) return 0;
@@ -54,7 +56,7 @@ async function crearAsistenciaInterno(
     const asistencia = repo.create({
       funcionario,
       turno: turno || undefined,
-      fecha: data.fecha,
+      fecha: parseLocalDate(data.fecha)!,
       horaEntrada: data.horaEntrada,
       horaSalida: data.horaSalida,
       estado,
@@ -80,7 +82,7 @@ async function crearAsistenciaInterno(
           tipo: PenalizacionTipo.TARDANZA,
           descripcion: `Tardanza ${minutosTardanza} min (${data.fecha})`,
           monto,
-          fecha: data.fecha,
+          fecha: parseLocalDate(data.fecha)!,
           registradoPor: userEntity || undefined,
           autoGenerada: true,
         });
@@ -118,6 +120,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('create-turno', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     const repo = dataSource.getRepository(Turno);
     const entity = repo.create({
       nombre: (data.nombre || '').toUpperCase(),
@@ -132,6 +135,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('update-turno', async (_e, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     const repo = dataSource.getRepository(Turno);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Turno ${id} no encontrado`);
@@ -146,6 +150,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('delete-turno', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     const repo = dataSource.getRepository(Turno);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) return { success: false };
@@ -171,13 +176,13 @@ export function registerAsistenciasHandlers(
         .andWhere('ft.fecha_hasta IS NULL')
         .getOne();
       if (activo) {
-        activo.fechaHasta = data.fechaDesde ?? new Date();
+        activo.fechaHasta = parseLocalDate(data.fechaDesde) ?? new Date();
         await repo.save(activo);
       }
       const entity = repo.create({
         funcionario,
         turno,
-        fechaDesde: data.fechaDesde ?? new Date(),
+        fechaDesde: parseLocalDate(data.fechaDesde) ?? new Date(),
       });
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       const saved = await repo.save(entity);
@@ -211,11 +216,12 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('update-funcionario-turno', async (_e, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_ASISTENCIA_REGISTRAR');
     const repo = dataSource.getRepository(FuncionarioTurno);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Asignacion de turno ${id} no encontrada`);
-    if (data.fechaDesde !== undefined) existing.fechaDesde = data.fechaDesde;
-    if (data.fechaHasta !== undefined) existing.fechaHasta = data.fechaHasta;
+    if (data.fechaDesde !== undefined) existing.fechaDesde = parseLocalDate(data.fechaDesde)!;
+    if (data.fechaHasta !== undefined) existing.fechaHasta = parseLocalDate(data.fechaHasta);
     await setEntityUserTracking(dataSource, existing, getCurrentUser()?.id, true);
     return await repo.save(existing);
   });
@@ -247,6 +253,7 @@ export function registerAsistenciasHandlers(
 
   ipcMain.handle('create-asistencia', async (_e, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_ASISTENCIA_REGISTRAR');
       return await crearAsistenciaInterno(dataSource, getCurrentUser, data);
     } catch (e) {
       console.error('Error create-asistencia:', e);
@@ -255,6 +262,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('update-asistencia', async (_e, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_ASISTENCIA_REGISTRAR');
     const repo = dataSource.getRepository(Asistencia);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Asistencia ${id} no encontrada`);
@@ -270,6 +278,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('justificar-asistencia', async (_e, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_ASISTENCIA_JUSTIFICAR');
     const repo = dataSource.getRepository(Asistencia);
     const existing = await repo.findOne({ where: { id }, relations: ['funcionario'] });
     if (!existing) throw new Error(`Asistencia ${id} no encontrada`);
@@ -326,6 +335,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('create-penalizacion', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_PENALIZACION_REGISTRAR');
     const repo = dataSource.getRepository(Penalizacion);
     const funcionario = await dataSource.getRepository(Funcionario).findOne({ where: { id: data.funcionarioId } });
     if (!funcionario) throw new Error(`Funcionario ${data.funcionarioId} no encontrado`);
@@ -334,7 +344,7 @@ export function registerAsistenciasHandlers(
       tipo: data.tipo,
       descripcion: data.descripcion,
       monto: data.monto,
-      fecha: data.fecha,
+      fecha: parseLocalDate(data.fecha)!,
       autoGenerada: false,
       anulada: false,
     });
@@ -343,6 +353,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('update-penalizacion', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_PENALIZACION_REGISTRAR');
     const repo = dataSource.getRepository(Penalizacion);
     const existing = await repo.findOne({ where: { id: data.id } });
     if (!existing) throw new Error(`Penalizacion ${data.id} no encontrada`);
@@ -350,12 +361,13 @@ export function registerAsistenciasHandlers(
     if (data.tipo !== undefined) existing.tipo = data.tipo;
     if (data.descripcion !== undefined) existing.descripcion = data.descripcion;
     if (data.monto !== undefined) existing.monto = data.monto;
-    if (data.fecha !== undefined) existing.fecha = data.fecha;
+    if (data.fecha !== undefined) existing.fecha = parseLocalDate(data.fecha)!;
     await setEntityUserTracking(dataSource, existing, getCurrentUser()?.id, true);
     return await repo.save(existing);
   });
 
   ipcMain.handle('anular-penalizacion', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_PENALIZACION_REGISTRAR');
     const repo = dataSource.getRepository(Penalizacion);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Penalizacion ${id} no encontrada`);

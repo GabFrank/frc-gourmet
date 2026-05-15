@@ -4,15 +4,37 @@
     <mat-progress-spinner mode="indeterminate" diameter="40"></mat-progress-spinner>
   </div>
   <form [formGroup]="form" *ngIf="!loading" class="form-grid">
-    <mat-form-field appearance="outline" class="full">
-      <mat-label>Persona</mat-label>
-      <mat-select formControlName="personaId">
-        <mat-option *ngFor="let p of personas" [value]="p.id">
-          {{ p.nombre }} {{ p.apellido || '' }}
-          <span *ngIf="p.documento"> - {{ p.documento }}</span>
-        </mat-option>
-      </mat-select>
-    </mat-form-field>
+    <div class="persona-row full">
+      <mat-form-field appearance="outline" class="persona-field">
+        <mat-label>Persona</mat-label>
+        <input matInput
+               [formControl]="personaControl"
+               [matAutocomplete]="autoPersona"
+               placeholder="Escriba para buscar..."
+               required>
+        <button *ngIf="selectedPersona && !isEditing" mat-icon-button matSuffix type="button" (click)="clearPersona()">
+          <mat-icon>close</mat-icon>
+        </button>
+        <mat-icon *ngIf="!selectedPersona" matSuffix>person_search</mat-icon>
+        <mat-autocomplete #autoPersona="matAutocomplete"
+                          [displayWith]="displayPersona"
+                          (optionSelected)="onPersonaSelected($event.option.value)">
+          <mat-option *ngFor="let p of filteredPersonas" [value]="p">
+            {{ p.nombre }} {{ p.apellido || '' }}
+            <span *ngIf="p.documento"> - {{ p.documento }}</span>
+          </mat-option>
+        </mat-autocomplete>
+      </mat-form-field>
+      <button *ngIf="!isEditing"
+              mat-stroked-button
+              type="button"
+              class="btn-nueva-persona"
+              (click)="crearNuevaPersona()"
+              matTooltip="Crear una nueva persona">
+        <mat-icon>person_add</mat-icon>
+        Nueva persona
+      </button>
+    </div>
 
     <mat-form-field appearance="outline">
       <mat-label>Codigo interno</mat-label>
@@ -45,13 +67,23 @@
       </mat-select>
     </mat-form-field>
 
-    <mat-form-field appearance="outline">
-      <mat-label>Usuario (login) opcional</mat-label>
-      <mat-select formControlName="usuarioId">
-        <mat-option [value]="null">-- Sin usuario --</mat-option>
-        <mat-option *ngFor="let u of usuarios" [value]="u.id">{{ u.nickname }}</mat-option>
-      </mat-select>
-    </mat-form-field>
+    <div class="usuario-row">
+      <mat-form-field appearance="outline" class="usuario-field">
+        <mat-label>Usuario (login) opcional</mat-label>
+        <mat-select formControlName="usuarioId">
+          <mat-option [value]="null">-- Sin usuario --</mat-option>
+          <mat-option *ngFor="let u of usuarios" [value]="u.id">{{ u.nickname }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <button mat-stroked-button
+              type="button"
+              class="btn-nuevo-usuario"
+              (click)="crearNuevoUsuario()"
+              matTooltip="Crear un usuario nuevo con password temporal">
+        <mat-icon>person_add</mat-icon>
+        Nuevo
+      </button>
+    </div>
 
     <mat-slide-toggle formControlName="esJornalero">Es jornalero</mat-slide-toggle>
 

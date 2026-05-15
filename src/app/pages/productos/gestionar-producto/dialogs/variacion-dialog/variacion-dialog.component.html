@@ -119,11 +119,11 @@
               <mat-label>Precio de Venta</mat-label>
               <input
                 matInput
-                type="number"
+                type="text"
+                inputmode="decimal"
                 formControlName="precio_ajuste"
-                step="0.01"
-                min="0"
-                placeholder="0.00">
+                placeholder="0"
+                appCurrencyInput [decimals]="decimalesMoneda">
               <span matTextPrefix>$&nbsp;</span>
               <mat-icon matSuffix>attach_money</mat-icon>
               <mat-hint>Precio específico para esta variación</mat-hint>

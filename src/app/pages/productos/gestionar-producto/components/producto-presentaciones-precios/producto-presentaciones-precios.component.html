@@ -50,6 +50,22 @@
           </mat-checkbox>
         </div>
 
+        <div class="form-row presentacion-image-row">
+          <div class="presentacion-image-uploader">
+            <h4>Imagen de la presentación</h4>
+            <app-file-upload
+              accept="image/*"
+              carpeta="producto-images"
+              [currentUrl]="presentacionForm.get('imageUrl')?.value"
+              [maxSizeMB]="5"
+              label="Subir imagen"
+              hint="Opcional. JPG, PNG hasta 5MB. Si vacío, se usará la imagen del producto."
+              (uploaded)="onPresentacionImagenUploaded($event)"
+              (removed)="onPresentacionImagenRemoved()">
+            </app-file-upload>
+          </div>
+        </div>
+
         <div class="form-actions">
           <button 
             mat-raised-button 
@@ -137,6 +153,11 @@
           <th mat-header-cell *matHeaderCellDef>Presentación</th>
           <td mat-cell *matCellDef="let presentacion">
             <div class="presentacion-info">
+              <div class="presentacion-thumb" *ngIf="presentacion.imageUrl">
+                <img [src]="thumbForPresentacion(presentacion.imageUrl)"
+                     (error)="onThumbErrorPres($event, presentacion.imageUrl)" alt="" />
+              </div>
+              <div class="presentacion-thumb placeholder" *ngIf="!presentacion.imageUrl"></div>
               <span class="presentacion-nombre">
                 {{ presentacion.nombre }}
               </span>

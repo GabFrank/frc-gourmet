@@ -2,11 +2,12 @@ import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { LoginSession } from '../../src/app/database/entities/auth/login-session.entity';
+import { Dispositivo } from '../../src/app/database/entities/financiero/dispositivo.entity';
 import * as jwt from 'jsonwebtoken';
+import { verifyPassword } from '../utils/password.utils';
+import { getJwtSecret } from '../utils/jwt-secret.utils';
+import { setCurrentDevice } from '../utils/current-device.utils';
 
-
-// JWT Secret and Expiration - Consider moving to environment variables or a config file
-const JWT_SECRET = 'frc-gourmet-secret-key';
 const TOKEN_EXPIRATION = '7d';
 
 export function registerAuthHandlers(
@@ -17,7 +18,7 @@ export function registerAuthHandlers(
 
   ipcMain.handle('login', async (_event: any, loginData: any) => {
     try {
-      const { nickname, password, deviceInfo } = loginData;
+      const { nickname, password, deviceInfo, deviceId } = loginData;
       const userRepository = dataSource.getRepository(Usuario);
       const sessionRepository = dataSource.getRepository(LoginSession);
 
@@ -31,16 +32,14 @@ export function registerAuthHandlers(
         return { success: false, message: 'Usuario no encontrado o inactivo' };
       }
 
-      // Basic password check (replace with bcrypt in production)
-      const passwordValid = password === usuario.password;
+      const passwordValid = await verifyPassword(password, usuario.password);
       if (!passwordValid) {
         return { success: false, message: 'Contraseña incorrecta' };
       }
 
-      // Generate JWT
       const token = jwt.sign(
         { id: usuario.id, nickname: usuario.nickname },
-        JWT_SECRET,
+        await getJwtSecret(),
         { expiresIn: TOKEN_EXPIRATION }
       );
 
@@ -59,6 +58,20 @@ export function registerAuthHandlers(
 
       // Set the current user globally in the main process
       setCurrentUser(usuario);
+
+      // F5 paso 3: tambien actualizar currentDevice si el login trajo deviceId
+      // (modo standalone donde el usuario eligio dispositivo en la wizard, o
+      // server donde el operador esta loggeando en ese PC). Si no vino, se
+      // mantiene el que ya esta seteado al boot desde app-settings.
+      if (typeof deviceId === 'number') {
+        try {
+          const dispRepo = dataSource.getRepository(Dispositivo);
+          const disp = await dispRepo.findOne({ where: { id: deviceId } });
+          if (disp && disp.activo) setCurrentDevice({ id: disp.id });
+        } catch (e) {
+          console.warn('[login] no se pudo resolver deviceId:', e);
+        }
+      }
 
       return {
         success: true,
@@ -86,7 +99,7 @@ export function registerAuthHandlers(
         return { success: false, message: 'USUARIO NO ENCONTRADO O INACTIVO' };
       }
 
-      const passwordValid = data.password === usuario.password;
+      const passwordValid = await verifyPassword(data.password, usuario.password);
       if (!passwordValid) {
         return { success: false, message: 'CONTRASEÑA INCORRECTA' };
       }
@@ -154,12 +167,47 @@ export function registerAuthHandlers(
     return getCurrentUser();
   });
 
-  // Potentially dangerous: Allows renderer to set main process state.
-  // Consider if this is truly necessary or if state should only flow from main to renderer.
-  ipcMain.handle('setCurrentUser', async (_event: any, usuario: Usuario | null) => {
-     console.warn('Directly setting current user from renderer. Ensure this is intended.');
-     setCurrentUser(usuario);
-     return { success: true };
+  // P0-2: reemplaza el viejo `setCurrentUser` (que aceptaba cualquier
+  // payload del renderer y permitia spoofing trivial desde DevTools).
+  // Ahora el renderer solo puede pedir "restaurar mi sesion" enviando
+  // sessionId + JWT; el main verifica el token, valida que la sesion
+  // este activa en BD, y setea currentUser desde la fila de BD —
+  // jamas desde lo que mando el cliente.
+  ipcMain.handle('restoreSession', async (_event: any, payload: { sessionId: number; token: string }) => {
+    try {
+      if (!payload || typeof payload.sessionId !== 'number' || !payload.token) {
+        return { success: false, message: 'PAYLOAD INVALIDO' };
+      }
+
+      let decoded: any;
+      try {
+        decoded = jwt.verify(payload.token, await getJwtSecret());
+      } catch {
+        return { success: false, message: 'TOKEN INVALIDO O EXPIRADO' };
+      }
+
+      const sessionRepository = dataSource.getRepository(LoginSession);
+      const session = await sessionRepository.findOne({
+        where: { id: payload.sessionId, is_active: true },
+        relations: ['usuario', 'usuario.persona'],
+      });
+      if (!session || !session.usuario) {
+        return { success: false, message: 'SESION NO ENCONTRADA O INACTIVA' };
+      }
+
+      if (decoded.id !== session.usuario.id) {
+        return { success: false, message: 'TOKEN NO COINCIDE CON LA SESION' };
+      }
+      if (!session.usuario.activo) {
+        return { success: false, message: 'USUARIO INACTIVO' };
+      }
+
+      setCurrentUser(session.usuario);
+      return { success: true, usuario: session.usuario };
+    } catch (error) {
+      console.error('restoreSession error:', error);
+      return { success: false, message: 'ERROR INTERNO' };
+    }
   });
 
-} 
+}

@@ -10,6 +10,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 @Component({
   selector: 'app-create-edit-cuenta-bancaria-dialog',
@@ -26,6 +27,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
     MatButtonModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    CurrencyInputDirective,
   ]
 })
 export class CreateEditCuentaBancariaDialogComponent implements OnInit {
@@ -35,6 +37,7 @@ export class CreateEditCuentaBancariaDialogComponent implements OnInit {
   cuentaId: number | null = null;
   monedas: any[] = [];
   tipoCuentaOptions = ['CORRIENTE', 'AHORRO'];
+  decimalesMoneda = 0;
 
   constructor(
     private fb: FormBuilder,
@@ -61,12 +64,21 @@ export class CreateEditCuentaBancariaDialogComponent implements OnInit {
     });
 
     this.loadLookups();
+    this.form.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.form?.get('monedaId')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   async loadLookups(): Promise<void> {
     try {
       const monedas = await firstValueFrom(this.repositoryService.getMonedas());
       this.monedas = monedas || [];
+      this.recalcDecimalesMoneda();
       if (this.isEditing && this.cuentaId) {
         const cuenta = await firstValueFrom(this.repositoryService.getCuentaBancaria(this.cuentaId));
         if (cuenta) {

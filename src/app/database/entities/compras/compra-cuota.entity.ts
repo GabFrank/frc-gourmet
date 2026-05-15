@@ -29,6 +29,6 @@ export class CompraCuota extends BaseModel {
   })
   estado!: CuotaEstado;
 
-  @Column({ type: 'datetime', name: 'fecha_pago', nullable: true })
+  @Column({ name: 'fecha_pago', nullable: true })
   fechaPago?: Date;
 }

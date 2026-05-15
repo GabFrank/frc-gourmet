@@ -1,0 +1,119 @@
+.configurar-empresa-container {
+  padding: 16px 24px;
+  max-width: 1080px;
+  margin: 0 auto;
+
+  h2 {
+    margin: 0 0 8px 0;
+    color: var(--text-primary);
+  }
+
+  .info-text {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+
+  .loading-container {
+    display: flex;
+    justify-content: center;
+    padding: 48px;
+  }
+
+  .empresa-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .form-card {
+    padding: 16px;
+    background: var(--surface);
+
+    mat-card-title {
+      font-size: 16px;
+      margin-bottom: 12px;
+      color: var(--text-primary);
+    }
+  }
+
+  .form-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+
+    .col-1 { flex: 1 1 240px; }
+    .col-2 { flex: 2 1 320px; }
+  }
+
+  .logo-row {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .logo-preview {
+    width: 96px;
+    height: 96px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color, rgba(127, 127, 127, 0.2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+
+    // Tablero de ajedrez para indicar transparencia (estandar Figma/Photoshop).
+    // Cuando hay imagen, este fondo se ve "alrededor" si el logo no llena los
+    // 96x96 — y a traves de los pixeles transparentes.
+    background-color: #ffffff;
+    background-image:
+      linear-gradient(45deg, rgba(0, 0, 0, 0.08) 25%, transparent 25%),
+      linear-gradient(-45deg, rgba(0, 0, 0, 0.08) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, rgba(0, 0, 0, 0.08) 75%),
+      linear-gradient(-45deg, transparent 75%, rgba(0, 0, 0, 0.08) 75%);
+    background-size: 12px 12px;
+    background-position: 0 0, 0 6px, 6px -6px, -6px 0px;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    // Si no hay imagen, fondo neutro de superficie y el icono encima.
+    &.empty {
+      background-image: none;
+      background-color: var(--surface-variant);
+
+      mat-icon {
+        font-size: 48px;
+        width: 48px;
+        height: 48px;
+        color: var(--text-secondary);
+        opacity: 0.5;
+      }
+    }
+  }
+
+  .logo-actions {
+    flex: 1 1 240px;
+    min-width: 240px;
+  }
+
+  .actions-row {
+    display: flex;
+    gap: 12px;
+    padding: 8px 0 24px 0;
+    position: sticky;
+    bottom: 0;
+    background: var(--background);
+    z-index: 1;
+
+    button {
+      mat-icon { margin-right: 4px; }
+      mat-spinner { display: inline-block; margin-right: 8px; }
+    }
+  }
+}

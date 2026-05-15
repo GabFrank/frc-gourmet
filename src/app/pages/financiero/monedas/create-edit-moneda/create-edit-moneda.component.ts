@@ -15,6 +15,7 @@ import { RepositoryService } from '../../../../database/repository.service';
 import { Moneda } from '../../../../database/entities/financiero/moneda.entity';
 import { firstValueFrom } from 'rxjs';
 import { catchError } from 'rxjs/operators';
+import { AppUrlPipe } from '../../../../shared/pipes/app-url.pipe';
 
 interface CountryData {
   flags?: {
@@ -38,7 +39,8 @@ interface CountryData {
     MatSlideToggleModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
-    MatDialogModule
+    MatDialogModule,
+    AppUrlPipe,
   ],
   templateUrl: './create-edit-moneda.component.html',
   styleUrls: ['./create-edit-moneda.component.scss']

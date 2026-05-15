@@ -18,6 +18,7 @@ import { Presentacion } from '../../src/app/database/entities/productos/presenta
 import { TipoPrecio } from '../../src/app/database/entities/financiero/tipo-precio.entity';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { Like, IsNull, Not } from 'typeorm';
+import { ensurePermission } from '../utils/auth.utils';
 
 export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
 
@@ -384,6 +385,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('create-receta', async (_event: any, recetaData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
       const recetaRepository = dataSource.getRepository(Receta);
       const currentUser = getCurrentUser();
 
@@ -408,6 +410,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('update-receta', async (_event: any, recetaId: number, recetaData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
       const recetaRepository = dataSource.getRepository(Receta);
       const currentUser = getCurrentUser();
 
@@ -470,6 +473,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('delete-receta', async (_event: any, recetaId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
       const recetaRepository = dataSource.getRepository(Receta);
       const productoRepository = dataSource.getRepository(Producto);
       const recetaIngredienteRepository = dataSource.getRepository(RecetaIngrediente);
@@ -597,6 +601,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
     ipcMain.handle('create-receta-ingrediente', async (_event: any, recetaIngredienteData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'INGREDIENTES_GESTIONAR');
       // ✅ DEBUG: Log de los datos recibidos
       console.log('🔍 [create-receta-ingrediente] Datos recibidos:', {
         cantidad: recetaIngredienteData.cantidad,
@@ -681,6 +686,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('update-receta-ingrediente', async (_event: any, recetaIngredienteId: number, recetaIngredienteData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'INGREDIENTES_GESTIONAR');
       const recetaIngredienteRepository = dataSource.getRepository(RecetaIngrediente);
       const currentUser = getCurrentUser();
 
@@ -727,6 +733,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('delete-receta-ingrediente', async (_event: any, recetaIngredienteId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'INGREDIENTES_GESTIONAR');
       const recetaIngredienteRepository = dataSource.getRepository(RecetaIngrediente);
       const currentUser = getCurrentUser();
       const recetaIngrediente = await recetaIngredienteRepository.findOne({
@@ -1036,6 +1043,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('create-adicional', async (_event: any, adicionalData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'ADICIONALES_GESTIONAR');
       const adicionalRepository = dataSource.getRepository(Adicional);
       const currentUser = getCurrentUser();
 
@@ -1057,6 +1065,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('update-adicional', async (_event: any, adicionalId: number, adicionalData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'ADICIONALES_GESTIONAR');
       const adicionalRepository = dataSource.getRepository(Adicional);
       const currentUser = getCurrentUser();
 
@@ -1089,6 +1098,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('delete-adicional', async (_event: any, adicionalId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'ADICIONALES_GESTIONAR');
       const adicionalRepository = dataSource.getRepository(Adicional);
       const currentUser = getCurrentUser();
       const adicional = await adicionalRepository.findOne({ where: { id: adicionalId } });
@@ -1477,7 +1487,8 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
     });
   });
 
-  ipcMain.handle('create-sabor', async (_e: IpcMainInvokeEvent, saborData: { nombre: string; categoria: string; descripcion?: string; productoId: number; }) => {
+  ipcMain.handle('create-sabor', async (_e: IpcMainInvokeEvent, saborData: { nombre: string; categoria: string; descripcion?: string; productoId: number; imageUrl?: string; }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'SABORES_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1492,7 +1503,8 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         categoria: saborData.categoria.toUpperCase(),
         descripcion: saborData.descripcion?.toUpperCase(),
         producto: { id: saborData.productoId },
-        activo: true
+        activo: true,
+        imageUrl: saborData.imageUrl || undefined
       });
       const saborGuardado = await saborRepo.save(sabor);
 
@@ -1521,18 +1533,32 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
     }
   });
 
-  ipcMain.handle('update-sabor', async (_e: IpcMainInvokeEvent, id: number, saborData: Partial<Sabor>) => {
+  ipcMain.handle('update-sabor', async (_e: IpcMainInvokeEvent, id: number, saborData: Partial<Sabor> & { imageUrl?: string | null }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'SABORES_GESTIONAR');
     const repo = dataSource.getRepository(Sabor);
+
+    // Si llega imageUrl distinta, borrar archivo viejo
+    if (saborData.imageUrl !== undefined) {
+      const existing = await repo.findOne({ where: { id } });
+      const oldUrl = existing?.imageUrl;
+      const newUrl = saborData.imageUrl || undefined;
+      if (oldUrl && oldUrl !== newUrl) {
+        const { deleteImageByUrl } = require('../utils/image-resize.utils');
+        deleteImageByUrl(oldUrl);
+      }
+    }
+
     await repo.update(id, {
       ...saborData,
       nombre: saborData.nombre?.toUpperCase(),
       categoria: saborData.categoria?.toUpperCase(),
       descripcion: saborData.descripcion?.toUpperCase()
-    });
+    } as any);
     return await repo.findOne({ where: { id } });
   });
 
   ipcMain.handle('delete-sabor', async (_e: IpcMainInvokeEvent, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'SABORES_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1543,16 +1569,16 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         relations: ['receta', 'receta.ingredientes']
       });
 
-      // Eliminar variaciones y sus recetas asociadas
+      // 1) Eliminar primero todas las variaciones (FK a receta).
+      const recetaIds = new Set<number>();
       for (const variacion of variaciones) {
-        if (variacion.receta) {
-          // Eliminar ingredientes de la receta
-          await queryRunner.manager.getRepository(RecetaIngrediente).delete({ receta: { id: variacion.receta.id } });
-          // Eliminar la receta
-          await queryRunner.manager.getRepository(Receta).delete({ id: variacion.receta.id });
-        }
-        // Eliminar la variación
+        if (variacion.receta?.id) recetaIds.add(variacion.receta.id);
         await queryRunner.manager.getRepository(RecetaPresentacion).delete({ id: variacion.id });
+      }
+      // 2) Después borrar recetas (deduplicadas) y sus ingredientes — varias variaciones pueden compartir la misma receta.
+      for (const recetaId of recetaIds) {
+        await queryRunner.manager.getRepository(RecetaIngrediente).delete({ receta: { id: recetaId } });
+        await queryRunner.manager.getRepository(Receta).delete({ id: recetaId });
       }
 
       // Eliminar el sabor
@@ -1668,7 +1694,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       .leftJoinAndSelect('adicionalesVinculados.adicional', 'adicional')
       .where('sabor.producto_id = :productoId', { productoId })
       .andWhere('rp.presentacion_id = :presentacionId', { presentacionId })
-      .andWhere('rp.activo = 1')
+      .andWhere('rp.activo = true')
       .orderBy('sabor.nombre', 'ASC')
       .getMany();
 

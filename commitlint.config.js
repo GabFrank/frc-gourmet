@@ -21,6 +21,12 @@ module.exports = {
   rules: {
     'subject-case': [0],
     'header-max-length': [2, 'always', 100],
+    // El body de los commits frecuentemente incluye bullets largos, snippets
+    // de codigo, paths absolutos y URLs. El default de 100 chars dispara
+    // falsos positivos contra el estilo de log que ya usamos. Footer queda
+    // libre porque puede llevar URLs o co-authored-by largos.
+    'body-max-line-length': [0],
+    'footer-max-line-length': [0],
     'type-enum': [
       2,
       'always',

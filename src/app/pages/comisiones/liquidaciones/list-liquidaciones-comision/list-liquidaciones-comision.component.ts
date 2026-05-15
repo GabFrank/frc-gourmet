@@ -1,7 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatTableModule } from '@angular/material/table';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -19,6 +20,7 @@ import { LiquidacionComisionDetalleComponent } from '../liquidacion-comision-det
 import { GenerarLiquidacionDialogComponent } from '../generar-liquidacion-dialog/generar-liquidacion-dialog.component';
 import { GenerarLiquidacionesMesDialogComponent } from '../generar-liquidaciones-mes-dialog/generar-liquidaciones-mes-dialog.component';
 import { AgregarItemManualDialogComponent } from '../agregar-item-manual-dialog/agregar-item-manual-dialog.component';
+import { TableToolbarComponent } from 'src/app/shared/components/table-toolbar/table-toolbar.component';
 
 @Component({
   selector: 'app-list-liquidaciones-comision',
@@ -26,7 +28,9 @@ import { AgregarItemManualDialogComponent } from '../agregar-item-manual-dialog/
   imports: [
     CommonModule,
     FormsModule,
+    ReactiveFormsModule,
     MatTableModule,
+    MatAutocompleteModule,
     MatButtonModule,
     MatIconModule,
     MatMenuModule,
@@ -37,6 +41,7 @@ import { AgregarItemManualDialogComponent } from '../agregar-item-manual-dialog/
     MatSelectModule,
     MatSnackBarModule,
     MatDialogModule,
+    TableToolbarComponent,
   ],
   templateUrl: './list-liquidaciones-comision.component.html',
   styleUrls: ['./list-liquidaciones-comision.component.scss'],
@@ -45,6 +50,9 @@ export class ListLiquidacionesComisionComponent implements OnInit {
   liquidaciones: any[] = [];
   loading = false;
   funcionarios: any[] = [];
+  filteredFuncionarios: any[] = [];
+  funcionarioControl = new FormControl<any | string | null>(null);
+  selectedFuncionario: any | null = null;
   displayedColumns = ['funcionario', 'periodo', 'totalCalculado', 'estado', 'acciones'];
 
   filtroFuncionarioId: number | null = null;
@@ -60,8 +68,46 @@ export class ListLiquidacionesComisionComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.repo.getFuncionarios({}).subscribe({ next: (f) => this.funcionarios = f });
+    this.repo.getFuncionarios({}).subscribe({
+      next: (f) => {
+        this.funcionarios = f;
+        this.filteredFuncionarios = this.funcionarios.slice(0, 50);
+      },
+    });
+    this.funcionarioControl.valueChanges.subscribe(value => {
+      if (typeof value === 'string') {
+        const filter = value.toUpperCase();
+        this.filteredFuncionarios = this.funcionarios
+          .filter(f => this.funcionarioLabel(f).toUpperCase().includes(filter))
+          .slice(0, 50);
+        if (this.selectedFuncionario && this.funcionarioLabel(this.selectedFuncionario).toUpperCase() !== filter) {
+          this.selectedFuncionario = null;
+          this.filtroFuncionarioId = null;
+        }
+      } else {
+        this.filteredFuncionarios = this.funcionarios.slice(0, 50);
+      }
+    });
     this.cargar();
+  }
+
+  funcionarioLabel(f: any): string {
+    if (!f) return '';
+    return `${f.persona?.nombre || ''} ${f.persona?.apellido || ''}`.trim();
+  }
+
+  displayFuncionario = (f: any): string => (f && typeof f === 'object') ? this.funcionarioLabel(f) : '';
+
+  onFuncionarioSelected(funcionario: any): void {
+    this.selectedFuncionario = funcionario;
+    this.filtroFuncionarioId = funcionario.id;
+  }
+
+  clearFuncionario(): void {
+    this.selectedFuncionario = null;
+    this.funcionarioControl.setValue('');
+    this.filtroFuncionarioId = null;
+    this.filteredFuncionarios = this.funcionarios.slice(0, 50);
   }
 
   cargar(): void {
@@ -78,7 +124,7 @@ export class ListLiquidacionesComisionComponent implements OnInit {
 
   aplicarFiltro(): void { this.cargar(); }
   limpiarFiltro(): void {
-    this.filtroFuncionarioId = null;
+    this.clearFuncionario();
     this.filtroPeriodo = '';
     this.filtroEstado = '';
     this.cargar();

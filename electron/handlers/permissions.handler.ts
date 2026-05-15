@@ -63,6 +63,54 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'PRODUCTOS_DASHBOARD_VER', descripcion: 'Ver dashboard de Productos con KPIs', modulo: 'PRODUCTOS' },
   { codigo: 'FINANCIERO_DASHBOARD_VER', descripcion: 'Ver dashboard Financiero con KPIs', modulo: 'FINANCIERO' },
   { codigo: 'CAJA_MAYOR_DASHBOARD_VER', descripcion: 'Ver dashboard de Caja Mayor con KPIs', modulo: 'FINANCIERO' },
+
+  // Productos / Recetas / Stock
+  { codigo: 'PRODUCTOS_VER', descripcion: 'Ver lista de productos', modulo: 'PRODUCTOS' },
+  { codigo: 'PRODUCTOS_GESTIONAR', descripcion: 'Crear/editar/eliminar productos', modulo: 'PRODUCTOS' },
+  { codigo: 'CATEGORIAS_GESTIONAR', descripcion: 'Gestionar familias/subfamilias de productos', modulo: 'PRODUCTOS' },
+  { codigo: 'RECETAS_VER', descripcion: 'Ver recetas', modulo: 'PRODUCTOS' },
+  { codigo: 'RECETAS_GESTIONAR', descripcion: 'Crear/editar/eliminar recetas', modulo: 'PRODUCTOS' },
+  { codigo: 'INGREDIENTES_VER', descripcion: 'Ver ingredientes', modulo: 'PRODUCTOS' },
+  { codigo: 'INGREDIENTES_GESTIONAR', descripcion: 'Crear/editar/eliminar ingredientes', modulo: 'PRODUCTOS' },
+  { codigo: 'ADICIONALES_VER', descripcion: 'Ver adicionales', modulo: 'PRODUCTOS' },
+  { codigo: 'ADICIONALES_GESTIONAR', descripcion: 'Crear/editar/eliminar adicionales', modulo: 'PRODUCTOS' },
+  { codigo: 'SABORES_VER', descripcion: 'Ver sabores (multi-sabor pizza)', modulo: 'PRODUCTOS' },
+  { codigo: 'SABORES_GESTIONAR', descripcion: 'Crear/editar/eliminar sabores', modulo: 'PRODUCTOS' },
+  { codigo: 'STOCK_MOVIMIENTO_VER', descripcion: 'Ver movimientos de stock', modulo: 'PRODUCTOS' },
+  { codigo: 'STOCK_MOVIMIENTO_REGISTRAR', descripcion: 'Registrar movimientos de stock manuales', modulo: 'PRODUCTOS' },
+
+  // Ventas
+  { codigo: 'VENTAS_PDV', descripcion: 'Operar punto de venta (PdV/mesas/comandas)', modulo: 'VENTAS' },
+  { codigo: 'VENTAS_HISTORICO_VER', descripcion: 'Ver historico de ventas concluidas', modulo: 'VENTAS' },
+
+  // Compras / Proveedores
+  { codigo: 'COMPRAS_VER', descripcion: 'Ver lista de compras', modulo: 'COMPRAS' },
+  { codigo: 'COMPRAS_GESTIONAR', descripcion: 'Crear/editar/anular compras', modulo: 'COMPRAS' },
+  { codigo: 'PROVEEDORES_VER', descripcion: 'Ver proveedores', modulo: 'COMPRAS' },
+  { codigo: 'PROVEEDORES_GESTIONAR', descripcion: 'Crear/editar/eliminar proveedores', modulo: 'COMPRAS' },
+
+  // Personas / Clientes / Usuarios
+  { codigo: 'PERSONAS_VER', descripcion: 'Ver lista de personas', modulo: 'RRHH' },
+  { codigo: 'PERSONAS_GESTIONAR', descripcion: 'Crear/editar/eliminar personas', modulo: 'RRHH' },
+  { codigo: 'CLIENTES_VER', descripcion: 'Ver lista de clientes', modulo: 'RRHH' },
+  { codigo: 'CLIENTES_GESTIONAR', descripcion: 'Crear/editar/eliminar clientes', modulo: 'RRHH' },
+  { codigo: 'USUARIOS_GESTIONAR', descripcion: 'Crear/editar/eliminar usuarios y asignar roles', modulo: 'SISTEMA' },
+
+  // Financiero
+  { codigo: 'FINANCIERO_CAJA_VER', descripcion: 'Ver cajas y conteos', modulo: 'FINANCIERO' },
+  { codigo: 'FINANCIERO_CAJA_GESTIONAR', descripcion: 'Crear/editar/cerrar cajas y conteos', modulo: 'FINANCIERO' },
+  { codigo: 'CAJA_MAYOR_OPERAR', descripcion: 'Registrar movimientos/gastos/retiros en caja mayor', modulo: 'FINANCIERO' },
+  { codigo: 'MONEDAS_GESTIONAR', descripcion: 'Gestionar monedas y cotizaciones', modulo: 'FINANCIERO' },
+  { codigo: 'BANCOS_VER', descripcion: 'Ver cuentas bancarias, cheques y POS', modulo: 'FINANCIERO' },
+  { codigo: 'BANCOS_GESTIONAR', descripcion: 'Gestionar cuentas bancarias, cheques y POS', modulo: 'FINANCIERO' },
+
+  // Sistema / Configuracion
+  { codigo: 'EMPRESA_CONFIGURAR', descripcion: 'Configurar datos de la empresa (nombre, RUC, logo, timbrado)', modulo: 'SISTEMA' },
+  { codigo: 'IMPRESORAS_GESTIONAR', descripcion: 'Gestionar impresoras del sistema', modulo: 'SISTEMA' },
+  { codigo: 'DISPOSITIVOS_GESTIONAR', descripcion: 'Gestionar dispositivos y puntos de venta', modulo: 'SISTEMA' },
+  { codigo: 'SISTEMA_BACKUP', descripcion: 'Crear y restaurar backups de la base de datos', modulo: 'SISTEMA' },
+  { codigo: 'SISTEMA_BD_CONFIGURAR', descripcion: 'Configurar base de datos (SQLite/Postgres)', modulo: 'SISTEMA' },
+  { codigo: 'SISTEMA_MODO_CONFIGURAR', descripcion: 'Configurar modo de operacion (standalone/server/client)', modulo: 'SISTEMA' },
 ];
 
 export async function seedPermissions(dataSource: DataSource) {

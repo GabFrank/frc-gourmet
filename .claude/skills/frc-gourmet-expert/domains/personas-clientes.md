@@ -13,7 +13,7 @@
 | `sexo` | enum SexoEnum | MASCULINO, FEMENINO, OTRO |
 | `estadoCivil` | enum | SOLTERO, CASADO, UNION_LIBRE, DIVORCIADO, VIUDO |
 | `tipoDocumento` | enum DocumentoTipo | CI, RUC, CPF, PASAPORTE (default CI) |
-| `documento` | string nullable | Valor del documento |
+| `documento` | string nullable | Valor del documento — **opcional**. Solo se valida contextualmente en alta de funcionario, cliente con crédito, o facturación legal. El form lo permite vacío y guarda `null`. |
 | `tipoPersona` | enum PersonaTipo | FISICA (default), JURIDICA |
 | `imageUrl` | nullable | `app://profile-images/<file>` |
 | `activo` | boolean | Soft delete |
@@ -112,9 +112,43 @@ Política de tipo aplica como default a todos los clientes de ese tipo.
 ## Búsqueda especializada de clientes
 
 `personas.handler.ts`:
+- `get-clientes(filters?)`: filtros opcionales `{ nombre, ruc, tipoClienteId, activo, conCredito }` — usa queryBuilder con LIKE UPPER en `persona.nombre + apellido + cliente.razon_social` y joins relevantes. Backward-compat: sin filtros devuelve todo.
 - `buscar-cliente-por-telefono(telefono)`: 1 cliente o null.
 - `buscar-clientes-por-telefono(telefono)`: max 15, ordenado por nombre. Usado por autocomplete en `crear-delivery-dialog`.
 - `crear-cliente-rapido({ telefono, nombre?, direccion? })`: crea Persona + Cliente con datos mínimos. Útil cuando llega un delivery de cliente nuevo.
+
+## Estado de cuenta del cliente (F2)
+
+`movimientos-cliente.handler.ts`:
+- `get-cliente-estado-cuenta(clienteId)`: cliente + saldoActual + cuotasVencidas + KPIs del mes + CPC abiertas (con cuotas y moneda) + últimas 10 ventas concluidas. Hace todo en queries paralelas.
+- `get-movimientos-cliente-stats(clienteId)`: agregados por mes (12 últimos, inicializados a 0 para chart continuo) y composición por tipo (CARGO/PAGO/AJUSTE_POSITIVO/AJUSTE_NEGATIVO). Para los charts de `cliente-detalle`.
+- `get-movimientos-cliente(clienteId, filtros?)`: paginado con filtros `{ fechaInicio, fechaFin, tipo, page, pageSize }`.
+- `recalcular-saldo-cliente(clienteId)` (en `cuentas-por-cobrar.handler.ts`): suma todos los movimientos del cliente y sobreescribe `saldoActual`. Safety net expuesto en mat-menu del detalle.
+
+## Venta a crédito (PdV → CPC)
+
+Flujo end-to-end implementado 2026-05-12:
+1. **PdV → "Cobrar a crédito"** (botón naranja en `cobrar-venta-dialog`, habilitado solo si la venta tiene cliente con `credito=true` y saldo pendiente > 0). Tooltip indica la razón si está deshabilitado.
+2. **Dialog `cobrar-credito-dialog`** configura cantidad de cuotas, frecuencia (mensual/quincenal/semanal), fecha inicio, descripción. Muestra saldo proyectado color-coded y vista previa de cuotas en vivo. Si saldo proyectado excede límite, pide confirmación adicional.
+3. **Handler `cobrar-venta-credito`** (en `cuentas-por-cobrar.handler.ts`, atómico):
+   - Valida cliente con crédito habilitado y límite (devuelve `requiereConfirmacion` si excede).
+   - **Get-or-create FormaPago "CUENTA CORRIENTE"** (`movimentaCaja: false`, orden 99) si no existe.
+   - Cierra venta CONCLUIDA con esa forma de pago + `fechaCierre = now`.
+   - Crea/reutiliza `Pago` (PAGADO) + nuevo `PagoDetalle` con la forma "CUENTA CORRIENTE" y monto.
+   - Crea `CuentaPorCobrar` tipo `CREDITO_VENTA` con N cuotas según frecuencia.
+   - Crea `MovimientoCliente` CARGO con `ventaId + cuentaPorCobrarId` → actualiza `cliente.saldoActual`.
+
+## Cobro de CPC desde Caja Mayor
+
+Dialog rápido `cobrar-cpc-rapido-dialog` (en `caja-mayor/cuentas-por-cobrar/`):
+- Acceso: botón **"Cobrar a cliente"** en `caja-mayor-detalle` (al lado de Registrar Ingreso/Egreso, solo si caja ABIERTA).
+- Autocomplete sobre todas las CPC ACTIVAS (label compuesto: cliente + venta + pendiente + moneda).
+- Al elegir, muestra resumen + tabla de cuotas con estado. Cada cuota pendiente/parcial tiene botón "Cobrar" que abre el `cobrar-cuota-dialog` existente con `cajaMayorId` ya pre-seteado.
+- `cobrar-cuota-dialog` aplica pre-selecciones automáticas: caja (de `data.cajaMayorId` o única abierta), moneda (la de la CPC > principal > única), forma de pago (principal > única).
+
+## Cliente asignable desde cobrar-venta-dialog
+
+Header del dialog tiene autocomplete de Cliente + botón "Nuevo cliente" (reusa `CreateEditClienteDialogComponent`). Al elegir/cambiar, llama `updateVenta({ cliente })` y refresca el flag `canCobrarCredito`. Chip verde si el cliente tiene crédito habilitado.
 
 ## DashboardShortcut (personalización)
 

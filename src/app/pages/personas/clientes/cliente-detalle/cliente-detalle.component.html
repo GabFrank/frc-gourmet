@@ -1,62 +1,247 @@
-<div class="page-container">
+<div class="cliente-detalle-container">
+  <!-- Header -->
   <div class="page-header">
-    <h2>Cliente: {{clienteNombre()}}</h2>
+    <div class="header-info">
+      <h2>{{ clienteNombreStr }}</h2>
+      <div class="subtitle" *ngIf="clienteSubtitulo">{{ clienteSubtitulo }}</div>
+    </div>
+    <div class="header-actions">
+      <button mat-icon-button [matMenuTriggerFor]="menu" matTooltip="Más opciones" *ngIf="cliente">
+        <mat-icon>more_vert</mat-icon>
+      </button>
+      <mat-menu #menu="matMenu">
+        <button mat-menu-item (click)="recalcularSaldo()" [disabled]="recalculando">
+          <mat-icon>calculate</mat-icon>
+          <span>Recalcular saldo</span>
+        </button>
+        <button mat-menu-item (click)="loadAll()">
+          <mat-icon>refresh</mat-icon>
+          <span>Refrescar</span>
+        </button>
+      </mat-menu>
+    </div>
   </div>
 
   <div *ngIf="loading" class="spinner-container">
     <mat-spinner diameter="40"></mat-spinner>
   </div>
 
-  <div *ngIf="!loading">
-    <div class="saldo-cards">
-      <mat-card class="saldo-card">
+  <ng-container *ngIf="!loading && cliente">
+    <!-- KPIs -->
+    <div class="stats-row">
+      <app-dash-stat-chip
+        icon="account_balance_wallet"
+        [value]="(saldoActual | number:'1.0-2') || '0'"
+        label="Saldo deudor"
+        [color]="saldoActual > 0 ? 'warning' : 'success'">
+      </app-dash-stat-chip>
+
+      <app-dash-stat-chip
+        icon="credit_card"
+        [value]="(limiteCredito | number:'1.0-2') || '0'"
+        [label]="cliente.credito ? 'Límite de crédito' : 'Sin crédito'"
+        [color]="cliente.credito ? 'primary' : 'info'">
+      </app-dash-stat-chip>
+
+      <app-dash-stat-chip
+        icon="speed"
+        [value]="pctUsoLabel"
+        label="Uso del crédito"
+        [color]="pctUsoColor">
+      </app-dash-stat-chip>
+
+      <app-dash-stat-chip
+        icon="warning"
+        [value]="cuotasVencidas"
+        label="Cuotas vencidas"
+        [color]="cuotasVencidas > 0 ? 'error' : 'success'">
+      </app-dash-stat-chip>
+    </div>
+
+    <!-- Charts -->
+    <app-dash-section-header icon="trending_up" title="Actividad financiera"></app-dash-section-header>
+    <div class="charts-row">
+      <app-dash-chart-card
+        title="Movimientos por mes (últimos 12)"
+        icon="show_chart"
+        chartType="line"
+        [chartData]="chartMesData"
+        [chartOptions]="chartMesOptions"
+        [height]="260">
+      </app-dash-chart-card>
+
+      <app-dash-chart-card
+        title="Composición (todos los tiempos)"
+        icon="pie_chart"
+        chartType="doughnut"
+        [chartData]="chartCompData"
+        [chartOptions]="chartCompOptions"
+        [height]="260">
+      </app-dash-chart-card>
+    </div>
+
+    <!-- CPC abiertas -->
+    <app-dash-section-header
+      icon="receipt_long"
+      title="Cuentas por cobrar abiertas"
+      [badge]="cpcAbiertas.length || null">
+    </app-dash-section-header>
+    <div class="cpc-grid" *ngIf="cpcAbiertas.length; else cpcEmpty">
+      <mat-card *ngFor="let cpc of cpcAbiertas" class="cpc-card">
         <mat-card-content>
-          <div class="saldo-label">Saldo Deudor</div>
-          <div class="saldo-value" [class.positivo]="saldoActual > 0">{{saldoActual | number:'1.0-2'}}</div>
-          <div class="saldo-sub">deuda acumulada del cliente</div>
-        </mat-card-content>
-      </mat-card>
-      <mat-card class="saldo-card warn" *ngIf="cuotasVencidas > 0">
-        <mat-card-content>
-          <div class="saldo-label">Cuotas Vencidas</div>
-          <div class="saldo-value warn">{{cuotasVencidas}}</div>
-          <div class="saldo-sub">cuotas pendientes y vencidas</div>
+          <div class="cpc-header">
+            <span class="cpc-tipo">{{ cpc.tipo }}</span>
+            <span class="cpc-fecha">{{ cpc.fechaInicio | date:'dd/MM/yyyy' }}</span>
+          </div>
+          <div class="cpc-monto">
+            <div class="label">Pendiente</div>
+            <div class="value">{{ cpc._montoPendiente | number:'1.0-2' }}</div>
+          </div>
+          <div class="cpc-info">
+            <div>Total: <strong>{{ cpc.montoTotal | number:'1.0-2' }}</strong></div>
+            <div>Cobrado: <strong>{{ cpc.montoCobrado | number:'1.0-2' }}</strong></div>
+            <div>Cuotas pendientes: <strong>{{ cpc._pendientes }}</strong> / {{ cpc.cantidadCuotas }}</div>
+            <div *ngIf="cpc._proxima">
+              Próximo venc.: <strong>{{ (cpc._proxima.fechaVencimiento || cpc._proxima.fecha_vencimiento) | date:'dd/MM/yyyy' }}</strong>
+            </div>
+          </div>
+          <button mat-stroked-button color="primary" type="button"
+                  [disabled]="!cpc._proxima"
+                  (click)="abrirCobrarCuota(cpc._proxima, cpc)">
+            <mat-icon>payments</mat-icon>
+            Cobrar próxima cuota
+          </button>
         </mat-card-content>
       </mat-card>
     </div>
+    <ng-template #cpcEmpty>
+      <div class="empty-block">No hay cuentas por cobrar abiertas.</div>
+    </ng-template>
 
-    <h3>Movimientos del Cliente</h3>
-    <mat-card>
-      <table mat-table [dataSource]="movimientos" class="full-width">
-        <ng-container matColumnDef="fecha">
-          <th mat-header-cell *matHeaderCellDef>Fecha</th>
-          <td mat-cell *matCellDef="let m">{{m.fecha | date:'dd/MM/yyyy HH:mm'}}</td>
-        </ng-container>
-        <ng-container matColumnDef="tipo">
-          <th mat-header-cell *matHeaderCellDef>Tipo</th>
-          <td mat-cell *matCellDef="let m">
-            <span class="tipo-badge" [attr.data-tipo]="tipoColor(m.tipo)">{{m.tipo}}</span>
-          </td>
-        </ng-container>
-        <ng-container matColumnDef="monto">
-          <th mat-header-cell *matHeaderCellDef>Monto</th>
-          <td mat-cell *matCellDef="let m">{{m.monto | number:'1.0-2'}}</td>
-        </ng-container>
-        <ng-container matColumnDef="observacion">
-          <th mat-header-cell *matHeaderCellDef>Observación</th>
-          <td mat-cell *matCellDef="let m">{{m.observacion || '-'}}</td>
-        </ng-container>
-        <tr mat-header-row *matHeaderRowDef="movColumns"></tr>
-        <tr mat-row *matRowDef="let row; columns: movColumns;"></tr>
-      </table>
-      <div *ngIf="movimientos.length === 0" class="empty-state">Sin movimientos registrados</div>
-      <mat-paginator
-        [length]="totalMovimientos"
-        [pageSize]="pageSize"
-        [pageIndex]="pageIndex"
-        [pageSizeOptions]="[20, 50, 100]"
-        (page)="onPageChange($event)"
-        showFirstLastButtons></mat-paginator>
+    <!-- Historial de movimientos -->
+    <app-dash-section-header icon="history" title="Historial de movimientos"></app-dash-section-header>
+    <mat-card class="historial-card">
+      <mat-card-content>
+        <form [formGroup]="filterForm" class="mov-filters">
+          <mat-form-field appearance="outline">
+            <mat-label>Desde</mat-label>
+            <input matInput [matDatepicker]="pickerInicio" formControlName="fechaInicio">
+            <mat-datepicker-toggle matSuffix [for]="pickerInicio"></mat-datepicker-toggle>
+            <mat-datepicker #pickerInicio></mat-datepicker>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Hasta</mat-label>
+            <input matInput [matDatepicker]="pickerFin" formControlName="fechaFin">
+            <mat-datepicker-toggle matSuffix [for]="pickerFin"></mat-datepicker-toggle>
+            <mat-datepicker #pickerFin></mat-datepicker>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Tipo</mat-label>
+            <mat-select formControlName="tipo">
+              <mat-option value="">Todos</mat-option>
+              <mat-option value="CARGO">Cargo</mat-option>
+              <mat-option value="PAGO">Pago</mat-option>
+              <mat-option value="AJUSTE_POSITIVO">Ajuste +</mat-option>
+              <mat-option value="AJUSTE_NEGATIVO">Ajuste −</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <div class="mov-filter-actions">
+            <button mat-raised-button color="primary" type="button" (click)="buscarMovs()">
+              <mat-icon>search</mat-icon> Buscar
+            </button>
+            <button mat-button type="button" (click)="limpiarFiltros()">
+              <mat-icon>clear</mat-icon> Limpiar
+            </button>
+            <button mat-stroked-button type="button" [matMenuTriggerFor]="exportMenu" [disabled]="!movimientos.length">
+              <mat-icon>file_download</mat-icon> Exportar
+            </button>
+            <mat-menu #exportMenu="matMenu">
+              <button mat-menu-item (click)="exportarHistorial('excel')">
+                <mat-icon>table_view</mat-icon> Excel
+              </button>
+              <button mat-menu-item (click)="exportarHistorial('pdf')">
+                <mat-icon>picture_as_pdf</mat-icon> PDF
+              </button>
+            </mat-menu>
+          </div>
+        </form>
+
+        <div class="loading-shade" *ngIf="loadingMovs">
+          <mat-spinner diameter="32"></mat-spinner>
+        </div>
+
+        <table mat-table [dataSource]="movimientos" class="mov-table">
+          <ng-container matColumnDef="fecha">
+            <th mat-header-cell *matHeaderCellDef>Fecha</th>
+            <td mat-cell *matCellDef="let m">{{ m.fecha | date:'dd/MM/yyyy HH:mm' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="tipo">
+            <th mat-header-cell *matHeaderCellDef>Tipo</th>
+            <td mat-cell *matCellDef="let m">
+              <span class="tipo-badge" [ngClass]="m._tipoClass">{{ m.tipo }}</span>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="monto">
+            <th mat-header-cell *matHeaderCellDef>Monto</th>
+            <td mat-cell *matCellDef="let m">{{ m.monto | number:'1.0-2' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="origen">
+            <th mat-header-cell *matHeaderCellDef>Origen</th>
+            <td mat-cell *matCellDef="let m">{{ m._origen }}</td>
+          </ng-container>
+          <ng-container matColumnDef="observacion">
+            <th mat-header-cell *matHeaderCellDef>Observación</th>
+            <td mat-cell *matCellDef="let m">{{ m.observacion || '—' }}</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="movColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: movColumns;"></tr>
+          <tr *matNoDataRow>
+            <td [attr.colspan]="movColumns.length" class="empty-row">Sin movimientos para los filtros aplicados.</td>
+          </tr>
+        </table>
+
+        <mat-paginator
+          [length]="totalMovimientos"
+          [pageSize]="pageSize"
+          [pageIndex]="pageIndex"
+          [pageSizeOptions]="[20, 50, 100]"
+          (page)="onPageChange($event)"
+          showFirstLastButtons>
+        </mat-paginator>
+      </mat-card-content>
     </mat-card>
-  </div>
+
+    <!-- Últimas ventas -->
+    <app-dash-section-header
+      icon="point_of_sale"
+      title="Últimas ventas"
+      [badge]="ultimasVentas.length || null">
+    </app-dash-section-header>
+    <mat-card>
+      <mat-card-content>
+        <table mat-table [dataSource]="ultimasVentas" class="ventas-table" *ngIf="ultimasVentas.length; else ventasEmpty">
+          <ng-container matColumnDef="fecha">
+            <th mat-header-cell *matHeaderCellDef>Fecha</th>
+            <td mat-cell *matCellDef="let v">{{ (v.fechaCierre || v.createdAt) | date:'dd/MM/yyyy HH:mm' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="total">
+            <th mat-header-cell *matHeaderCellDef>Total</th>
+            <td mat-cell *matCellDef="let v">{{ v.total | number:'1.0-2' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="formaPago">
+            <th mat-header-cell *matHeaderCellDef>Forma de pago</th>
+            <td mat-cell *matCellDef="let v">{{ v._formaPagoLabel }}</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="ventasColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: ventasColumns;"></tr>
+        </table>
+        <ng-template #ventasEmpty>
+          <div class="empty-block">Aún no hay ventas registradas.</div>
+        </ng-template>
+      </mat-card-content>
+    </mat-card>
+  </ng-container>
 </div>

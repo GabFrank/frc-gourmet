@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { CompraEstado } from '../../src/app/database/entities/compras/estado.enum';
 import { CuotaEstado, CuentaPorPagarEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { dbQuery } from '../utils/db-query';
 
 export function registerDashboardComprasHandlers(
   dataSource: DataSource,
@@ -18,7 +19,7 @@ export function registerDashboardComprasHandlers(
       const en7dias = new Date(now); en7dias.setDate(en7dias.getDate() + 7);
 
       // 1. Compras del mes
-      const totalMesRows: any[] = await dataSource.query(`
+      const totalMesRows: any[] = await dbQuery(dataSource, `
         SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
         FROM compras
         WHERE estado IN (?, ?)
@@ -28,7 +29,7 @@ export function registerDashboardComprasHandlers(
       const totalMesPYG = Number(totalMesRows?.[0]?.suma || 0);
 
       // 2. CPP por vencer (proximos 7 dias)
-      const cppPorVencerRows: any[] = await dataSource.query(`
+      const cppPorVencerRows: any[] = await dbQuery(dataSource, `
         SELECT COUNT(*) as cnt, COALESCE(SUM(monto - monto_pagado), 0) as suma
         FROM cuentas_por_pagar_cuotas
         WHERE estado IN (?, ?)
@@ -38,7 +39,7 @@ export function registerDashboardComprasHandlers(
 
       // 3. CPP vencidas (fecha_vencimiento < today)
       const hoyStr = now.toISOString().slice(0, 10);
-      const cppVencidasRows: any[] = await dataSource.query(`
+      const cppVencidasRows: any[] = await dbQuery(dataSource, `
         SELECT COUNT(*) as cnt, COALESCE(SUM(monto - monto_pagado), 0) as suma
         FROM cuentas_por_pagar_cuotas
         WHERE estado IN (?, ?)
@@ -47,7 +48,7 @@ export function registerDashboardComprasHandlers(
       const totalCppVencidoPYG = Number(cppVencidasRows?.[0]?.suma || 0);
 
       // 4. Top proveedores del mes
-      const topRows: any[] = await dataSource.query(`
+      const topRows: any[] = await dbQuery(dataSource, `
         SELECT pr.id, COALESCE(pr.razon_social, pr.nombre) as nombre,
                COUNT(c.id) as cnt,
                COALESCE(SUM(c.total), 0) as total
@@ -69,7 +70,7 @@ export function registerDashboardComprasHandlers(
 
       // 5. Proximos vencimientos (siguientes 14 dias, todos los CPP activos)
       const en14 = new Date(now); en14.setDate(en14.getDate() + 14);
-      const venRows: any[] = await dataSource.query(`
+      const venRows: any[] = await dbQuery(dataSource, `
         SELECT c.id, c.fecha_vencimiento, c.monto, c.monto_pagado,
                cpp.descripcion, COALESCE(pr.razon_social, pr.nombre) as proveedor
         FROM cuentas_por_pagar_cuotas c
@@ -106,7 +107,7 @@ export function registerDashboardComprasHandlers(
       for (let i = 5; i >= 0; i--) {
         const d = new Date(refDate.getFullYear(), refDate.getMonth() - i, 1);
         const f = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
-        const rows: any[] = await dataSource.query(`
+        const rows: any[] = await dbQuery(dataSource, `
           SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
           FROM compras
           WHERE estado IN (?, ?)

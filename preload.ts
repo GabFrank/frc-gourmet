@@ -2,6 +2,159 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { EstadoVentaItem } from './src/app/database/entities/ventas/venta-item.entity';
 
+// =====================================================================
+// F4: invokeRouter — sustituye ipcRenderer.invoke en mode === 'client'.
+//
+// En modo standalone/server: pasa directo al ipcRenderer.invoke local.
+// En modo cliente: hace fetch contra el server HTTP (POST /api/rpc),
+// con auto-refresh del JWT al recibir 401, y especial-casing para
+// los channels de auth (login/logout) que van a /api/auth/*.
+//
+// Channel allowlist `ALWAYS_LOCAL_CHANNELS`: handlers que siempre van
+// por IPC aunque estemos en cliente (impresoras locales, file dialogs,
+// system info — operaciones que el cliente debe ejecutar en su propia
+// maquina, no en el server).
+// =====================================================================
+
+const APP_MODE = (process.env['FRC_APP_MODE'] as 'standalone' | 'server' | 'client') || 'standalone';
+const SERVER_URL = process.env['FRC_SERVER_URL'] || '';
+// F5 paso 3: deviceId del cliente, set por main.ts via app-settings.json.
+// Se inyecta en /api/auth/login + /api/auth/refresh asi el server lo firma
+// en el JWT y los handlers de creacion lo persisten. Null si la wizard aun
+// no lo configuro — el server lo dejara null (columna nullable).
+const CLIENT_DEVICE_ID: number | null = (() => {
+  const raw = process.env['FRC_DEVICE_ID'];
+  if (!raw) return null;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+})();
+
+// IMPORTANTE: guardar la referencia original ANTES de monkey-patchear
+// (sino: invokeRouter -> ipcRenderer.invoke (== invokeRouter) -> recursion infinita)
+const _originalInvoke = ipcRenderer.invoke.bind(ipcRenderer);
+
+const ALWAYS_LOCAL_CHANNELS = new Set<string>([
+  // Impresoras / hardware local del cliente
+  'print-receipt',
+  'print-test-page',
+  'get-printers',
+  // User session local (no JWT — el current-user se setea local tras login)
+  'getCurrentUser',
+  'restoreSession',
+  // Config local (cambian el modo del cliente, no del server)
+  'app-mode-get',
+  'app-mode-save',
+  'app-mode-test-server',
+  'db-config-get',
+  'db-config-save',
+  'db-config-test-connection',
+  'db-config-restart-app',
+  'db-config-init-postgres',
+  // Backup local
+  'backup-list',
+  'backup-create',
+  'backup-restore',
+  // Logs locales
+  'log-error',
+]);
+
+let accessToken: string | null = null;
+let refreshToken: string | null = null;
+
+async function httpFetch(path: string, body: any, withAuth = true): Promise<any> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (withAuth && accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+  const url = `${SERVER_URL}${path}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    const err: any = new Error(`HTTP ${res.status}: ${txt}`);
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+}
+
+async function refreshAccessIfPossible(): Promise<boolean> {
+  if (!refreshToken) return false;
+  try {
+    // F5 paso 3: reenvio deviceId para que el JWT nuevo lo siga llevando.
+    const body: any = { refreshToken };
+    if (CLIENT_DEVICE_ID != null) body.deviceId = CLIENT_DEVICE_ID;
+    const data = await httpFetch('/api/auth/refresh', body, false);
+    accessToken = data.accessToken;
+    refreshToken = data.refreshToken || refreshToken;
+    return true;
+  } catch {
+    accessToken = null;
+    refreshToken = null;
+    return false;
+  }
+}
+
+async function invokeRouter(channel: string, ...args: any[]): Promise<any> {
+  // Local channels o cualquier modo no-cliente → IPC directo (referencia
+  // original, no la reemplazada — sino recursion infinita)
+  if (APP_MODE !== 'client' || ALWAYS_LOCAL_CHANNELS.has(channel)) {
+    return _originalInvoke(channel, ...args);
+  }
+
+  // Login special case
+  if (channel === 'login') {
+    const loginData = { ...(args[0] || {}) };
+    // F5 paso 3: agregar deviceId al body si el cliente lo tiene configurado.
+    if (CLIENT_DEVICE_ID != null && loginData.deviceId == null) {
+      loginData.deviceId = CLIENT_DEVICE_ID;
+    }
+    const data = await httpFetch('/api/auth/login', loginData, false);
+    accessToken = data.accessToken;
+    refreshToken = data.refreshToken;
+    // El renderer espera el shape de la IPC (success/usuario/token/sessionId/message)
+    return {
+      success: data.success,
+      usuario: data.usuario,
+      token: data.accessToken,
+      sessionId: data.sessionId,
+      message: 'Inicio de sesion exitoso',
+    };
+  }
+  // Logout special case
+  if (channel === 'logout' || channel === 'logout-session') {
+    try { await httpFetch('/api/auth/logout', { refreshToken }, false); } catch {}
+    accessToken = null;
+    refreshToken = null;
+    return true;
+  }
+
+  // RPC genérico
+  const doRpc = async () => httpFetch('/api/rpc', { method: channel, params: args }, true);
+  try {
+    const data = await doRpc();
+    return data.result;
+  } catch (err: any) {
+    if (err?.status === 401 && refreshToken) {
+      const ok = await refreshAccessIfPossible();
+      if (ok) {
+        const data = await doRpc();
+        return data.result;
+      }
+    }
+    throw err;
+  }
+}
+
+// Replace ipcRenderer.invoke con invokeRouter en cliente, transparente al resto.
+if (APP_MODE === 'client') {
+  console.log(`[preload] mode=client → invokeRouter via HTTP @ ${SERVER_URL}`);
+  (ipcRenderer as any).invoke = invokeRouter;
+} else {
+  console.log(`[preload] mode=${APP_MODE} → IPC directo`);
+}
+
 // Define types for our API
 interface Category {
   id: number;
@@ -914,6 +1067,40 @@ interface ObservacionProducto {
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('api', {
+  // F2/F4: app-mode resolver para que el RepositoryService factory decida
+  // entre IpcService (standalone/server) y HttpService (cliente).
+  // Esto NO va por IPC porque tiene que ser sincrónico (factory de Angular DI
+  // se ejecuta en boot). Se resuelve en preload via env vars que main.ts
+  // setea antes que el renderer cargue.
+  getAppMode: (): 'standalone' | 'server' | 'client' => {
+    const mode = process.env['FRC_APP_MODE'];
+    if (mode === 'client' || mode === 'server') return mode;
+    return 'standalone';
+  },
+  // F4: URL del server cuando mode === 'client'. Para que el HttpService
+  // sepa contra dónde apuntar.
+  getServerUrl: (): string | null => {
+    return process.env['FRC_SERVER_URL'] || null;
+  },
+  // F5 paso 3: deviceId configurado en este PC (snapshot del boot). El
+  // wizard de modo lo guarda en app-settings.json y main.ts lo expone.
+  getDeviceId: (): number | null => {
+    const raw = process.env['FRC_DEVICE_ID'];
+    if (!raw) return null;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  },
+  /**
+   * F4 image URL switch: en mode=client, las imagenes `app://producto-images/x`
+   * no se pueden resolver localmente (el cliente no tiene los archivos). El
+   * helper Angular usa este token para construir
+   * `${SERVER_URL}/api/files/by-url?url=...&token=...` y que el `<img src>`
+   * lo cargue del server. Si aun no hay sesion, devuelve null.
+   */
+  getAccessToken: (): string | null => {
+    return accessToken;
+  },
+
   // Database operations
   getCategories: async (): Promise<Category[]> => {
     return await ipcRenderer.invoke('get-categories');
@@ -979,8 +1166,11 @@ contextBridge.exposeInMainWorld('api', {
   getCurrentUser: async (): Promise<Usuario | null> => {
     return await ipcRenderer.invoke('getCurrentUser');
   },
-  setCurrentUser: async (usuario: Usuario | null): Promise<void> => {
-    return await ipcRenderer.invoke('setCurrentUser', usuario);
+  restoreSession: async (
+    sessionId: number,
+    token: string
+  ): Promise<{ success: boolean; usuario?: Usuario; message?: string }> => {
+    return await ipcRenderer.invoke('restoreSession', { sessionId, token });
   },
 
   // Printer operations
@@ -1018,6 +1208,13 @@ contextBridge.exposeInMainWorld('api', {
   },
   deleteUsuario: async (usuarioId: number): Promise<{ success: boolean }> => {
     return await ipcRenderer.invoke('delete-usuario', usuarioId);
+  },
+  changePassword: async (
+    usuarioId: number,
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; usuario?: Usuario; message?: string }> => {
+    return await ipcRenderer.invoke('change-password', { usuarioId, currentPassword, newPassword });
   },
   getUsuariosPaginated: async (page: number, pageSize: number, filters?: { nickname?: string; nombrePersona?: string; activo?: string | boolean }): Promise<{ items: Usuario[], total: number }> => {
     console.log('Preload.ts sending filters:', JSON.stringify(filters));
@@ -1070,8 +1267,14 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // Cliente operations
-  getClientes: async (): Promise<Cliente[]> => {
-    return await ipcRenderer.invoke('get-clientes');
+  getClientes: async (filters?: {
+    nombre?: string;
+    ruc?: string;
+    tipoClienteId?: number;
+    activo?: boolean;
+    conCredito?: boolean;
+  }): Promise<Cliente[]> => {
+    return await ipcRenderer.invoke('get-clientes', filters);
   },
   getCliente: async (clienteId: number): Promise<Cliente> => {
     return await ipcRenderer.invoke('get-cliente', clienteId);
@@ -1092,6 +1295,34 @@ contextBridge.exposeInMainWorld('api', {
   },
   deleteProfileImage: async (imageUrl: string): Promise<{ success: boolean }> => {
     return await ipcRenderer.invoke('delete-profile-image', imageUrl);
+  },
+
+  // === Generic files API (sirve cualquier carpeta `userData/<X>/`) ===
+  saveFile: async (input: { carpeta: string; base64: string; fileName: string; generateThumbnails?: boolean }): Promise<any> => {
+    return await ipcRenderer.invoke('save-file', input);
+  },
+  deleteFile: async (url: string): Promise<{ ok: boolean }> => {
+    return await ipcRenderer.invoke('delete-file', { url });
+  },
+  readFileBase64: async (url: string): Promise<{ base64: string; mimeType: string }> => {
+    return await ipcRenderer.invoke('read-file-base64', { url });
+  },
+  openFileWithSystem: async (url: string): Promise<{ ok: boolean; error?: string }> => {
+    return await ipcRenderer.invoke('open-file-with-system', { url });
+  },
+
+  // === Adjuntos polimorficos ===
+  getAdjuntos: async (params: { entidadTipo: string; entidadId: number }): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-adjuntos', params);
+  },
+  createAdjunto: async (data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('create-adjunto', data);
+  },
+  updateAdjunto: async (id: number, data: { tipo?: string; observacion?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('update-adjunto', id, data);
+  },
+  deleteAdjunto: async (id: number): Promise<{ success: boolean; message?: string }> => {
+    return await ipcRenderer.invoke('delete-adjunto', id);
   },
 
   // Utility functions
@@ -2559,6 +2790,27 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('delete-dashboard-shortcut', id);
   },
 
+  // Onboarding tasks (lista guiada en Home)
+  getOnboardingStatus: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-onboarding-status');
+  },
+  markOnboardingTask: async (payload: { taskKey: string; action: 'MANUAL' | 'SKIPPED' | 'RESET' }): Promise<any> => {
+    return await ipcRenderer.invoke('mark-onboarding-task', payload);
+  },
+
+  // Empresa (singleton: datos legales/branding/fiscales)
+  getEmpresa: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-empresa');
+  },
+  updateEmpresa: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-empresa', data);
+  },
+
+  // Scraping de cotizaciones de mercado (on-demand)
+  getCotizacionMercado: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-cotizacion-mercado');
+  },
+
   // =============================================
   // Fase 4: Entradas Varias
   // =============================================
@@ -3146,6 +3398,15 @@ contextBridge.exposeInMainWorld('api', {
   getSaldoCliente: async (clienteId: number): Promise<any> => {
     return await ipcRenderer.invoke('get-saldo-cliente', clienteId);
   },
+  getClienteEstadoCuenta: async (clienteId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cliente-estado-cuenta', clienteId);
+  },
+  getMovimientosClienteStats: async (clienteId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-movimientos-cliente-stats', clienteId);
+  },
+  cobrarVentaCredito: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('cobrar-venta-credito', payload);
+  },
 
   // === Notificaciones RRHH (Fase 8) ===
   getNotificacionesRrhh: async (filtros?: any): Promise<any[]> => {
@@ -3278,6 +3539,34 @@ contextBridge.exposeInMainWorld('api', {
   },
   backupClearImages: async (opts: { confirmation: string }): Promise<any> => {
     return await ipcRenderer.invoke('backup-clear-images', opts);
+  },
+
+  // ================== DB CONFIG (F1) ==================
+  dbConfigGet: async (): Promise<any> => {
+    return await ipcRenderer.invoke('db-config-get');
+  },
+  dbConfigSave: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('db-config-save', payload);
+  },
+  dbConfigTestConnection: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('db-config-test-connection', payload);
+  },
+  dbConfigRestartApp: async (): Promise<any> => {
+    return await ipcRenderer.invoke('db-config-restart-app');
+  },
+  dbConfigInitPostgres: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('db-config-init-postgres', payload);
+  },
+
+  // ================== APP MODE (F4.2) ==================
+  appModeGet: async (): Promise<any> => {
+    return await ipcRenderer.invoke('app-mode-get');
+  },
+  appModeSave: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('app-mode-save', payload);
+  },
+  appModeTestServer: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('app-mode-test-server', payload);
   },
 
   // ================== IA CONFIG ==================

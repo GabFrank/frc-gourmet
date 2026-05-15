@@ -1,0 +1,147 @@
+<div class="mode-config-page">
+  <mat-card>
+    <mat-card-header>
+      <mat-card-title>Modo de operacion</mat-card-title>
+      <mat-card-subtitle>
+        Standalone (todo local), Servidor (esta PC expone API HTTP) o Cliente (consume API de otro servidor).
+        Los cambios requieren reiniciar la app.
+      </mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      <div *ngIf="loading" class="loading-row">
+        <mat-spinner diameter="32"></mat-spinner>
+        <span>Cargando...</span>
+      </div>
+
+      <ng-container *ngIf="!loading">
+        <mat-radio-group [(ngModel)]="mode" (change)="onModeChange()" class="mode-group">
+          <mat-radio-button value="standalone" class="mode-option">
+            <div class="mode-content">
+              <div class="mode-title">
+                <mat-icon>computer</mat-icon>
+                <strong>Standalone</strong>
+                <span class="badge" *ngIf="initialMode === 'standalone'">Actual</span>
+              </div>
+              <div class="mode-desc">
+                Todo en esta PC (BD local + UI). Recomendado si usas la app en una sola maquina.
+              </div>
+            </div>
+          </mat-radio-button>
+
+          <mat-radio-button value="server" class="mode-option">
+            <div class="mode-content">
+              <div class="mode-title">
+                <mat-icon>dns</mat-icon>
+                <strong>Servidor</strong>
+                <span class="badge" *ngIf="initialMode === 'server'">Actual</span>
+              </div>
+              <div class="mode-desc">
+                Esta PC tiene la BD y expone una API HTTP. Otros clientes en la LAN se conectan a ella.
+                La UI local sigue funcionando como en standalone.
+              </div>
+              <div class="mode-detail" *ngIf="mode === 'server'">
+                <mat-form-field appearance="outline">
+                  <mat-label>Puerto del servidor</mat-label>
+                  <input matInput type="number" [(ngModel)]="serverPort" min="1" max="65535" />
+                  <mat-icon matSuffix matTooltip="Puerto donde Fastify expone la API. Default 7070.">info</mat-icon>
+                </mat-form-field>
+                <p class="hint">
+                  Fastify escucha en <code>0.0.0.0:{{ serverPort || 7070 }}</code>.
+                  Asegurate de abrir el puerto en firewall/router si los clientes son remotos.
+                </p>
+              </div>
+            </div>
+          </mat-radio-button>
+
+          <mat-radio-button value="client" class="mode-option">
+            <div class="mode-content">
+              <div class="mode-title">
+                <mat-icon>cloud</mat-icon>
+                <strong>Cliente</strong>
+                <span class="badge" *ngIf="initialMode === 'client'">Actual</span>
+              </div>
+              <div class="mode-desc">
+                Esta PC NO tiene BD local. Toda la informacion se consume via HTTP de un servidor remoto.
+              </div>
+              <div class="mode-detail" *ngIf="mode === 'client'">
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>URL del servidor</mat-label>
+                  <input matInput [(ngModel)]="serverUrl" placeholder="http://192.168.1.10:7070" />
+                  <mat-icon matSuffix matTooltip="Incluir http:// y puerto. Sin barra final.">info</mat-icon>
+                </mat-form-field>
+                <button mat-stroked-button (click)="test()" [disabled]="testing || saving" class="test-btn">
+                  <mat-icon>compare_arrows</mat-icon>
+                  <span>Probar conexion</span>
+                  <mat-spinner *ngIf="testing" diameter="16" class="inline-spinner"></mat-spinner>
+                </button>
+                <div *ngIf="testResult" class="test-result" [class.ok]="testResult.ok" [class.err]="!testResult.ok">
+                  <mat-icon>{{ testResult.ok ? 'check_circle' : 'error' }}</mat-icon>
+                  <span>{{ testResult.msg }}</span>
+                </div>
+              </div>
+            </div>
+          </mat-radio-button>
+        </mat-radio-group>
+
+        <!-- F5 paso 3: device picker — aplicable a los 3 modos -->
+        <div class="device-section">
+          <div class="section-title">
+            <mat-icon>devices</mat-icon>
+            <strong>Dispositivo asignado a este PC</strong>
+            <mat-icon matTooltip="Opcional. Identifica fisicamente esta PC en la BD. Se persiste en ventas, compras, conteos y comandas creadas desde este equipo. En modo cliente se envia en el login para que el server lo firme en el JWT.">help_outline</mat-icon>
+          </div>
+
+          <div class="device-row">
+            <mat-form-field appearance="outline" class="device-select">
+              <mat-label>Dispositivo</mat-label>
+              <mat-select [(ngModel)]="deviceId" [disabled]="loadingDispositivos">
+                <mat-option [value]="null">— Sin asignar —</mat-option>
+                <mat-option *ngFor="let d of dispositivos" [value]="d.id">
+                  {{ d.nombre }} <span class="device-id-hint">(ID {{ d.id }})</span>
+                </mat-option>
+              </mat-select>
+              <mat-spinner *ngIf="loadingDispositivos" matSuffix diameter="16"></mat-spinner>
+            </mat-form-field>
+
+            <button mat-stroked-button (click)="loadDispositivos()" [disabled]="loadingDispositivos" class="refresh-btn"
+                    matTooltip="Recargar lista de dispositivos">
+              <mat-icon>refresh</mat-icon>
+            </button>
+          </div>
+
+          <p class="hint" *ngIf="!dispositivosError && dispositivos.length === 0 && !loadingDispositivos">
+            <ng-container *ngIf="initialMode !== 'client'">
+              No hay dispositivos disponibles. Cargalos desde
+              <strong>Financiero → Dispositivos</strong> y volve aca.
+            </ng-container>
+            <ng-container *ngIf="initialMode === 'client'">
+              No se pudieron cargar dispositivos del server. Verifica la sesion activa o que haya
+              dispositivos cargados en el server remoto.
+            </ng-container>
+          </p>
+
+          <p class="hint err" *ngIf="dispositivosError">
+            <mat-icon>error_outline</mat-icon>
+            No se pudo cargar la lista: {{ dispositivosError }}
+          </p>
+
+          <p class="hint" *ngIf="mode === 'client'">
+            <mat-icon>info</mat-icon>
+            En cliente, este ID se envia en el login al server y queda firmado en el JWT.
+            El server lo persiste en ventas/compras/conteos creadas desde esta PC.
+          </p>
+        </div>
+
+        <div class="actions">
+          <button mat-raised-button color="primary" (click)="saveAndRestart()"
+                  [disabled]="testing || saving">
+            <mat-icon>restart_alt</mat-icon>
+            <span>Guardar y reiniciar</span>
+            <mat-spinner *ngIf="saving" diameter="16" class="inline-spinner"></mat-spinner>
+          </button>
+        </div>
+      </ng-container>
+    </mat-card-content>
+  </mat-card>
+</div>

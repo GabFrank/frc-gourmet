@@ -13,6 +13,12 @@ import { Dispositivo } from '../../src/app/database/entities/financiero/disposit
 import { Sector } from '../../src/app/database/entities/ventas/sector.entity';
 import { Cargo } from '../../src/app/database/entities/rrhh/cargo.entity';
 import { MotivoVale } from '../../src/app/database/entities/rrhh/motivo-vale.entity';
+import { Familia } from '../../src/app/database/entities/productos/familia.entity';
+import { Subfamilia } from '../../src/app/database/entities/productos/subfamilia.entity';
+import { Observacion } from '../../src/app/database/entities/productos/observacion.entity';
+import { Turno } from '../../src/app/database/entities/rrhh/turno.entity';
+import { Feriado } from '../../src/app/database/entities/rrhh/feriado.entity';
+import { hashPassword, verifyPassword } from './password.utils';
 
 /**
  * Seed de datos minimos del sistema para que la app sea operable post-reset.
@@ -25,7 +31,9 @@ export async function seedSystemData(dataSource: DataSource): Promise<void> {
   console.log('Checking if system seed data is needed...');
   try {
     await seedAdminUserAndRole(dataSource);
+    await markDefaultAdminMustChangePassword(dataSource);
     await syncAdminPermissions(dataSource);
+    await seedRolesPlantilla(dataSource);
     await seedTipoCliente(dataSource);
     await seedTipoPrecio(dataSource);
     await seedMonedasBilletes(dataSource);
@@ -33,6 +41,10 @@ export async function seedSystemData(dataSource: DataSource): Promise<void> {
     await seedSectorDefault(dataSource);
     await seedCargosBasicos(dataSource);
     await seedMotivosVale(dataSource);
+    await seedFamiliaSubfamiliaDefault(dataSource);
+    await seedTurnosDefault(dataSource);
+    await seedFeriadosNacionalesPY(dataSource);
+    await seedObservacionesBasicas(dataSource);
     console.log('System seed data check complete.');
   } catch (error) {
     console.error('Error during system seed:', error);
@@ -69,6 +81,29 @@ async function syncAdminPermissions(dataSource: DataSource): Promise<void> {
   }
 }
 
+/**
+ * P0-3 bootstrap idempotente: para instalaciones que YA tenian un admin
+ * con password default ('admin') antes de esta feature, marcamos la
+ * columna `mustChangePassword=true` para que en su proximo login se
+ * fuerce el cambio. Se evalua con verifyPassword en vez de comparar
+ * hashes — bcrypt tiene salt distinto por hash. Idempotente: solo
+ * actualiza si esta en false y el password matchea 'admin'.
+ */
+async function markDefaultAdminMustChangePassword(dataSource: DataSource): Promise<void> {
+  try {
+    const usuarioRepo = dataSource.getRepository(Usuario);
+    const admin = await usuarioRepo.findOne({ where: { nickname: 'admin' } });
+    if (!admin || admin.mustChangePassword || !admin.activo) return;
+    const stillDefault = await verifyPassword('admin', admin.password);
+    if (!stillDefault) return;
+    admin.mustChangePassword = true;
+    await usuarioRepo.save(admin);
+    console.log('  Admin existente con password default detectado: mustChangePassword marcado en true.');
+  } catch (e) {
+    console.warn('  markDefaultAdminMustChangePassword skipped:', e);
+  }
+}
+
 // ===================== ADMIN USER + ROLE + PERMISOS =====================
 async function seedAdminUserAndRole(dataSource: DataSource): Promise<void> {
   const usuarioRepo = dataSource.getRepository(Usuario);
@@ -94,8 +129,11 @@ async function seedAdminUserAndRole(dataSource: DataSource): Promise<void> {
   const usuario = usuarioRepo.create({
     persona: savedPersona,
     nickname: 'admin',
-    password: 'admin',
+    password: await hashPassword('admin'),
     activo: true,
+    // P0-3: fuerza cambio de password en el primer login para no dejar
+    // la instalacion con admin/admin operativa.
+    mustChangePassword: true,
   });
   await usuarioRepo.save(usuario);
 
@@ -134,8 +172,6 @@ async function seedTipoCliente(dataSource: DataSource): Promise<void> {
 
   const tipos = [
     { descripcion: 'CONSUMIDOR FINAL', activo: true, credito: false, descuento: false, porcentaje_descuento: 0 },
-    { descripcion: 'CLIENTE FRECUENTE', activo: true, credito: false, descuento: true, porcentaje_descuento: 5 },
-    { descripcion: 'CLIENTE CORPORATIVO', activo: true, credito: true, descuento: true, porcentaje_descuento: 10 },
   ];
 
   for (const data of tipos) {
@@ -156,8 +192,6 @@ async function seedTipoPrecio(dataSource: DataSource): Promise<void> {
 
   const tipos = [
     { descripcion: 'PRECIO NORMAL', autorizacion: false, activo: true },
-    { descripcion: 'PRECIO DELIVERY', autorizacion: false, activo: true },
-    { descripcion: 'PRECIO MAYORISTA', autorizacion: true, activo: true },
   ];
 
   for (const data of tipos) {
@@ -240,8 +274,6 @@ async function seedSectorDefault(dataSource: DataSource): Promise<void> {
 
   const sectores = [
     { nombre: 'SALON', activo: true },
-    { nombre: 'TERRAZA', activo: true },
-    { nombre: 'BARRA', activo: true },
   ];
 
   for (const data of sectores) {
@@ -298,4 +330,239 @@ async function seedMotivosVale(dataSource: DataSource): Promise<void> {
     await repo.save(entity);
   }
   console.log(`  MotivoVale: ${motivos.length} creados.`);
+}
+
+// ===================== FAMILIA / SUBFAMILIA DEFAULT =====================
+async function seedFamiliaSubfamiliaDefault(dataSource: DataSource): Promise<void> {
+  const famRepo = dataSource.getRepository(Familia);
+  const count = await famRepo.count();
+  if (count > 0) {
+    console.log(`  Familia: ${count} ya existen, skipping.`);
+    return;
+  }
+
+  const familia = await famRepo.save(famRepo.create({ nombre: 'GENERAL', activo: true }));
+
+  const subRepo = dataSource.getRepository(Subfamilia);
+  await subRepo.save(subRepo.create({ nombre: 'GENERAL', activo: true, familia }));
+
+  console.log('  Familia/Subfamilia: 1 default "GENERAL" creada.');
+}
+
+// ===================== TURNOS DEFAULT =====================
+async function seedTurnosDefault(dataSource: DataSource): Promise<void> {
+  const repo = dataSource.getRepository(Turno);
+  const count = await repo.count();
+  if (count > 0) {
+    console.log(`  Turno: ${count} ya existen, skipping.`);
+    return;
+  }
+
+  const turnos = [
+    { nombre: 'MAÑANA', horaEntrada: '06:00', horaSalida: '14:00', toleranciaTardanzaMinutos: 5, activo: true },
+    { nombre: 'TARDE', horaEntrada: '14:00', horaSalida: '22:00', toleranciaTardanzaMinutos: 5, activo: true },
+    { nombre: 'NOCHE', horaEntrada: '22:00', horaSalida: '06:00', toleranciaTardanzaMinutos: 5, activo: true },
+  ];
+
+  for (const data of turnos) {
+    const entity = repo.create(data as any);
+    await repo.save(entity);
+  }
+  console.log(`  Turno: ${turnos.length} creados.`);
+}
+
+// ===================== FERIADOS NACIONALES PY =====================
+// Sembramos feriados fijos del anio en curso. Los movibles (Jueves/Viernes Santo)
+// requieren calculo de Pascua y los carga el usuario manualmente.
+// Idempotente por fecha (unique).
+async function seedFeriadosNacionalesPY(dataSource: DataSource): Promise<void> {
+  const repo = dataSource.getRepository(Feriado);
+  const count = await repo.count();
+  if (count > 0) {
+    console.log(`  Feriado: ${count} ya existen, skipping.`);
+    return;
+  }
+
+  const year = new Date().getFullYear();
+  const fijos: Array<{ mes: number; dia: number; descripcion: string }> = [
+    { mes: 1, dia: 1, descripcion: 'AÑO NUEVO' },
+    { mes: 3, dia: 1, descripcion: 'DIA DE LOS HEROES' },
+    { mes: 5, dia: 1, descripcion: 'DIA DEL TRABAJADOR' },
+    { mes: 5, dia: 14, descripcion: 'DIA DE LA INDEPENDENCIA' },
+    { mes: 5, dia: 15, descripcion: 'DIA DE LA INDEPENDENCIA' },
+    { mes: 6, dia: 12, descripcion: 'PAZ DEL CHACO' },
+    { mes: 8, dia: 15, descripcion: 'FUNDACION DE ASUNCION' },
+    { mes: 9, dia: 29, descripcion: 'BATALLA DE BOQUERON' },
+    { mes: 12, dia: 8, descripcion: 'VIRGEN DE CAACUPE' },
+    { mes: 12, dia: 25, descripcion: 'NAVIDAD' },
+  ];
+
+  for (const f of fijos) {
+    const entity = repo.create({
+      fecha: new Date(year, f.mes - 1, f.dia),
+      descripcion: f.descripcion,
+      esNacional: true,
+      recargoPorcentaje: 100,
+      activo: true,
+    });
+    await repo.save(entity);
+  }
+  console.log(`  Feriado: ${fijos.length} feriados nacionales PY ${year} creados.`);
+}
+
+// ===================== OBSERVACIONES BASICAS =====================
+async function seedObservacionesBasicas(dataSource: DataSource): Promise<void> {
+  const repo = dataSource.getRepository(Observacion);
+  const count = await repo.count();
+  if (count > 0) {
+    console.log(`  Observacion: ${count} ya existen, skipping.`);
+    return;
+  }
+
+  const observaciones = [
+    'PARA LLEVAR',
+    'PARA COMER AQUI',
+    'SIN HIELO',
+    'SIN CEBOLLA',
+    'SIN TOMATE',
+    'SIN SAL',
+    'POCO COCIDO',
+    'TERMINO MEDIO',
+    'BIEN COCIDO',
+    'SIN PICANTE',
+    'EXTRA PICANTE',
+  ];
+
+  for (const descripcion of observaciones) {
+    const entity = repo.create({ descripcion, activo: true });
+    await repo.save(entity);
+  }
+  console.log(`  Observacion: ${observaciones.length} creadas.`);
+}
+
+// ===================== ROLES PLANTILLA =====================
+// Crea roles plantilla con permisos curados si no existen. Idempotente por
+// descripcion: si el rol ya existe (creado por usuario), NO toca sus permisos.
+const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
+  {
+    descripcion: 'GERENTE',
+    permisos: [
+      // Dashboards
+      'HOME_DASHBOARD_VER',
+      'VENTAS_DASHBOARD_VER', 'COMPRAS_DASHBOARD_VER', 'PRODUCTOS_DASHBOARD_VER',
+      'FINANCIERO_DASHBOARD_VER', 'CAJA_MAYOR_DASHBOARD_VER', 'RRHH_DASHBOARD_VER',
+      // RRHH
+      'RRHH_FUNCIONARIO_VER', 'RRHH_FUNCIONARIO_EDITAR',
+      'RRHH_ASISTENCIA_REGISTRAR', 'RRHH_ASISTENCIA_JUSTIFICAR',
+      'RRHH_VALE_CREAR', 'RRHH_VALE_CONFIRMAR',
+      'RRHH_PRESTAMO_OTORGAR',
+      'RRHH_LIQUIDACION_GENERAR', 'RRHH_LIQUIDACION_APROBAR', 'RRHH_LIQUIDACION_PAGAR',
+      'RRHH_VACACION_GESTIONAR', 'RRHH_LIQUIDACION_FINAL_GENERAR',
+      'RRHH_PENALIZACION_REGISTRAR', 'RRHH_BONO_OTORGAR',
+      'RRHH_REPORTE_GENERAR', 'RRHH_NOTIFICACIONES_VER',
+      'RRHH_CONFIG_EDITAR',
+      // Comisiones
+      'COMISION_REGLA_VER', 'COMISION_REGLA_GESTIONAR', 'COMISION_REGLA_EDITAR',
+      'COMISION_LIQUIDACION_GENERAR', 'COMISION_LIQUIDACION_APROBAR',
+      'COMISION_EQUIPO_GESTIONAR',
+      // CPC + Compras
+      'CPC_GESTIONAR', 'CPC_COBRAR', 'CPC_CANCELAR',
+      'COMPRAS_IMPORTAR_FACTURA',
+      // Productos / Recetas / Stock
+      'PRODUCTOS_VER', 'PRODUCTOS_GESTIONAR',
+      'CATEGORIAS_GESTIONAR',
+      'RECETAS_VER', 'RECETAS_GESTIONAR',
+      'INGREDIENTES_VER', 'INGREDIENTES_GESTIONAR',
+      'ADICIONALES_VER', 'ADICIONALES_GESTIONAR',
+      'SABORES_VER', 'SABORES_GESTIONAR',
+      'STOCK_MOVIMIENTO_VER', 'STOCK_MOVIMIENTO_REGISTRAR',
+      // Ventas
+      'VENTAS_PDV', 'VENTAS_HISTORICO_VER',
+      // Compras + Proveedores
+      'COMPRAS_VER', 'COMPRAS_GESTIONAR',
+      'PROVEEDORES_VER', 'PROVEEDORES_GESTIONAR',
+      // Personas / Clientes
+      'PERSONAS_VER', 'PERSONAS_GESTIONAR',
+      'CLIENTES_VER', 'CLIENTES_GESTIONAR',
+      // Financiero
+      'FINANCIERO_CAJA_VER', 'FINANCIERO_CAJA_GESTIONAR',
+      'CAJA_MAYOR_OPERAR',
+      'MONEDAS_GESTIONAR',
+      'BANCOS_VER', 'BANCOS_GESTIONAR',
+      // Sistema (no sensible)
+      'EMPRESA_CONFIGURAR',
+      'IMPRESORAS_GESTIONAR',
+      'DISPOSITIVOS_GESTIONAR',
+      // NOTA: NO se asigna USUARIOS_GESTIONAR, SISTEMA_BD_CONFIGURAR,
+      // SISTEMA_MODO_CONFIGURAR, SISTEMA_BACKUP, SISTEMA_PERMISO_GESTIONAR,
+      // SISTEMA_ROL_GESTIONAR. Esos quedan exclusivos del ADMINISTRADOR.
+    ],
+  },
+  {
+    descripcion: 'CAJERO',
+    permisos: [
+      'HOME_DASHBOARD_VER', 'VENTAS_DASHBOARD_VER', 'CAJA_MAYOR_DASHBOARD_VER',
+      'VENTAS_PDV', 'VENTAS_HISTORICO_VER',
+      'PRODUCTOS_VER',
+      'CLIENTES_VER', 'CLIENTES_GESTIONAR', // crear cliente al cobrar venta a credito
+      'FINANCIERO_CAJA_VER',
+      'CPC_COBRAR',
+      'RRHH_ASISTENCIA_REGISTRAR',
+    ],
+  },
+  {
+    descripcion: 'MOZO',
+    permisos: [
+      'HOME_DASHBOARD_VER',
+      'VENTAS_PDV', // atender mesas y tomar comandas
+      'RRHH_ASISTENCIA_REGISTRAR',
+    ],
+  },
+];
+
+/**
+ * Crea roles plantilla y sincroniza sus permisos. Idempotente: si el rol no
+ * existe se crea con todos los permisos del catalogo. Si ya existe, solo se
+ * AGREGAN los permisos faltantes (nunca se quitan los que el usuario haya
+ * personalizado). Esto permite agregar permisos nuevos a roles existentes en
+ * instalaciones desplegadas sin perder customizaciones.
+ */
+async function seedRolesPlantilla(dataSource: DataSource): Promise<void> {
+  const roleRepo = dataSource.getRepository(Role);
+  const permissionRepo = dataSource.getRepository(Permission);
+  const rolePermissionRepo = dataSource.getRepository(RolePermission);
+
+  for (const plantilla of ROLES_PLANTILLA) {
+    let role = await roleRepo.findOne({ where: { descripcion: plantilla.descripcion } });
+    const isNew = !role;
+    if (!role) {
+      role = await roleRepo.save(roleRepo.create({ descripcion: plantilla.descripcion, activo: true }));
+    }
+
+    // Codigos ya asignados al rol (evita query repetitivo dentro del loop).
+    const existingRps = await rolePermissionRepo.find({
+      where: { role: { id: role.id } },
+      relations: ['permission'],
+    });
+    const existingCodes = new Set(existingRps.map((rp) => rp.permission?.codigo).filter(Boolean) as string[]);
+
+    let added = 0;
+    let missing = 0;
+    for (const codigo of plantilla.permisos) {
+      if (existingCodes.has(codigo)) continue;
+      const perm = await permissionRepo.findOne({ where: { codigo } });
+      if (!perm) {
+        missing++;
+        continue;
+      }
+      await rolePermissionRepo.save(rolePermissionRepo.create({ role, permission: perm }));
+      added++;
+    }
+
+    if (isNew) {
+      console.log(`  Rol ${plantilla.descripcion}: creado con ${added}/${plantilla.permisos.length} permisos${missing ? ` (${missing} no encontrados)` : ''}.`);
+    } else if (added > 0) {
+      console.log(`  Rol ${plantilla.descripcion}: ${added} permiso(s) nuevos agregados (sync idempotente).`);
+    }
+  }
 }

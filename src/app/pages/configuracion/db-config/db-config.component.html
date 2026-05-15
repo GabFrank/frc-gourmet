@@ -1,0 +1,123 @@
+<div class="db-config-page">
+  <mat-card>
+    <mat-card-header>
+      <mat-card-title>Configuracion de base de datos</mat-card-title>
+      <mat-card-subtitle>
+        SQLite local (default) o Postgres externo. Cambios requieren reiniciar la app.
+      </mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      <div *ngIf="loading" class="loading-row">
+        <mat-spinner diameter="32"></mat-spinner>
+        <span>Cargando configuracion...</span>
+      </div>
+
+      <ng-container *ngIf="!loading">
+        <mat-tab-group [selectedIndex]="selectedTab === 'sqlite' ? 0 : 1" (selectedIndexChange)="onTabChange($event)">
+          <!-- ============== SQLite ============== -->
+          <mat-tab label="SQLite">
+            <div class="tab-body">
+              <p class="hint">
+                Backend simple, archivo local. Recomendado para 1 sola PC. La BD se llama
+                <code>frc-gourmet.db</code>.
+              </p>
+
+              <mat-slide-toggle [(ngModel)]="sqlitePathDefault">
+                Usar path default ([userData]/frc-gourmet.db)
+              </mat-slide-toggle>
+
+              <mat-form-field appearance="outline" class="full-width" *ngIf="!sqlitePathDefault">
+                <mat-label>Path absoluto del archivo .db</mat-label>
+                <input matInput [(ngModel)]="sqliteCustomPath" placeholder="/ruta/absoluta/frc-gourmet.db" />
+                <mat-icon matSuffix matTooltip="Si el archivo no existe sera creado.">info</mat-icon>
+              </mat-form-field>
+            </div>
+          </mat-tab>
+
+          <!-- ============== Postgres ============== -->
+          <mat-tab label="Postgres">
+            <div class="tab-body">
+              <p class="hint">
+                Backend cliente-servidor. Recomendado para varias PCs en LAN o cuando la BD crece (>1GB / >10k pedidos diarios).
+                <br />
+                <strong>Importante:</strong> en builds de produccion <code>pg</code> no esta empaquetado por default
+                (release.yml usa <code>--omit=optional</code>). Si activas Postgres en prod necesitas instalar el driver
+                manualmente o re-buildar la app.
+              </p>
+
+              <div class="form-grid">
+                <mat-form-field appearance="outline">
+                  <mat-label>Host</mat-label>
+                  <input matInput [(ngModel)]="pgHost" placeholder="localhost" />
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Puerto</mat-label>
+                  <input matInput type="number" [(ngModel)]="pgPort" placeholder="5432" />
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Database</mat-label>
+                  <input matInput [(ngModel)]="pgDatabase" placeholder="frc_gourmet" />
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Schema (opcional)</mat-label>
+                  <input matInput [(ngModel)]="pgSchema" placeholder="public" />
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Username</mat-label>
+                  <input matInput [(ngModel)]="pgUsername" placeholder="postgres" />
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Password</mat-label>
+                  <input matInput type="password" [(ngModel)]="pgPassword"
+                         [placeholder]="pgPasswordHasStored ? 'Dejar vacio para mantener actual' : ''" />
+                  <mat-icon matSuffix matTooltip="Persistido en keytar (sistema operativo), no en JSON.">lock</mat-icon>
+                </mat-form-field>
+              </div>
+
+              <mat-slide-toggle [(ngModel)]="pgSsl">SSL (rejectUnauthorized=false)</mat-slide-toggle>
+
+              <div class="init-postgres-row">
+                <button mat-stroked-button (click)="initPostgres()" [disabled]="initializing || testing || saving">
+                  <mat-icon>build_circle</mat-icon>
+                  <span>Inicializar Postgres (crear DB + usuario)</span>
+                  <mat-spinner *ngIf="initializing" diameter="16" class="inline-spinner"></mat-spinner>
+                </button>
+                <span class="hint inline">Util cuando Postgres no tiene aun la DB ni el usuario. Pide credenciales del superuser temporalmente.</span>
+              </div>
+
+              <div *ngIf="initResult" class="test-result" [class.ok]="initResult.ok" [class.err]="!initResult.ok">
+                <mat-icon>{{ initResult.ok ? 'check_circle' : 'error' }}</mat-icon>
+                <span>{{ initResult.msg }}</span>
+              </div>
+            </div>
+          </mat-tab>
+        </mat-tab-group>
+
+        <div class="actions">
+          <button mat-stroked-button (click)="test()" [disabled]="testing || saving || initializing">
+            <mat-icon>compare_arrows</mat-icon>
+            <span>Probar conexion</span>
+            <mat-spinner *ngIf="testing" diameter="16" class="inline-spinner"></mat-spinner>
+          </button>
+
+          <button mat-raised-button color="primary" (click)="saveAndRestart()" [disabled]="testing || saving || initializing">
+            <mat-icon>restart_alt</mat-icon>
+            <span>Guardar y reiniciar</span>
+            <mat-spinner *ngIf="saving" diameter="16" class="inline-spinner"></mat-spinner>
+          </button>
+        </div>
+
+        <div *ngIf="testResult" class="test-result" [class.ok]="testResult.ok" [class.err]="!testResult.ok">
+          <mat-icon>{{ testResult.ok ? 'check_circle' : 'error' }}</mat-icon>
+          <span>{{ testResult.msg }}</span>
+        </div>
+      </ng-container>
+    </mat-card-content>
+  </mat-card>
+</div>

@@ -33,10 +33,10 @@ export class NotificacionRrhh extends BaseModel {
   @JoinColumn({ name: 'usuario_destino_id' })
   usuarioDestino?: Usuario;
 
-  @Column({ name: 'fecha_generada', type: 'datetime' })
+  @Column({ name: 'fecha_generada' })
   fechaGenerada!: Date;
 
-  @Column({ name: 'fecha_leida', type: 'datetime', nullable: true })
+  @Column({ name: 'fecha_leida', nullable: true })
   fechaLeida?: Date;
 
   @Column({ name: 'accion_url', nullable: true })

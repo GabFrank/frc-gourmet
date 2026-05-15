@@ -42,7 +42,7 @@
           </mat-form-field>
 
           <div class="flag-preview" *ngIf="previewFlagUrl">
-            <img [src]="previewFlagUrl" alt="Flag preview" class="flag-image" />
+            <img [src]="previewFlagUrl | appUrl" alt="Flag preview" class="flag-image" />
           </div>
 
           <div class="loading-flag" *ngIf="loadingFlag">

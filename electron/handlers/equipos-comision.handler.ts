@@ -11,6 +11,8 @@ import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.en
 import { TipoReglaComision, LiquidacionComisionEstado } from '../../src/app/database/entities/rrhh/regla-comision-enums';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
+import { ensurePermission } from '../utils/auth.utils';
 
 function getPeriodoBounds(periodo: string): { fechaInicio: Date; fechaFin: Date } {
   const [yStr, mStr] = periodo.split('-');
@@ -56,6 +58,7 @@ export function registerEquiposComisionHandlers(
   });
 
   ipcMain.handle('create-equipo-comision', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_EQUIPO_GESTIONAR');
     const userId = getCurrentUser()?.id;
     const repo = dataSource.getRepository(EquipoComision);
     const equipo = repo.create({
@@ -68,6 +71,7 @@ export function registerEquiposComisionHandlers(
   });
 
   ipcMain.handle('update-equipo-comision', async (_e, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_EQUIPO_GESTIONAR');
     const userId = getCurrentUser()?.id;
     const repo = dataSource.getRepository(EquipoComision);
     const equipo = await repo.findOne({ where: { id } });
@@ -80,6 +84,7 @@ export function registerEquiposComisionHandlers(
   });
 
   ipcMain.handle('delete-equipo-comision', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_EQUIPO_GESTIONAR');
     await dataSource.getRepository(EquipoComision).delete(id);
     return { success: true };
   });
@@ -87,6 +92,7 @@ export function registerEquiposComisionHandlers(
   // ===================== MIEMBROS =====================
 
   ipcMain.handle('agregar-miembro-equipo', async (_e, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_EQUIPO_GESTIONAR');
     const { equipoId, funcionarioId, porcentajeReparto } = payload;
     const userId = getCurrentUser()?.id;
 
@@ -110,11 +116,13 @@ export function registerEquiposComisionHandlers(
   });
 
   ipcMain.handle('eliminar-miembro-equipo', async (_e, miembroId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_EQUIPO_GESTIONAR');
     await dataSource.getRepository(EquipoComisionMiembro).delete(miembroId);
     return { success: true };
   });
 
   ipcMain.handle('actualizar-porcentaje-miembro', async (_e, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_EQUIPO_GESTIONAR');
     const { miembroId, porcentaje } = payload;
     const userId = getCurrentUser()?.id;
     const repo = dataSource.getRepository(EquipoComisionMiembro);
@@ -140,6 +148,7 @@ export function registerEquiposComisionHandlers(
   // ===================== REGLAS DE EQUIPO =====================
 
   ipcMain.handle('asignar-regla-equipo', async (_e, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_EQUIPO_GESTIONAR');
     const { equipoId, reglaId, fechaDesde, fechaHasta } = payload;
     const userId = getCurrentUser()?.id;
 
@@ -154,8 +163,8 @@ export function registerEquiposComisionHandlers(
     const asig = repo.create({
       equipo: { id: equipoId } as any,
       reglaComision: { id: reglaId } as any,
-      fechaDesde,
-      fechaHasta,
+      fechaDesde: parseLocalDate(fechaDesde)!,
+      fechaHasta: parseLocalDate(fechaHasta),
       activo: true,
     });
     await setEntityUserTracking(dataSource, asig, userId, false);

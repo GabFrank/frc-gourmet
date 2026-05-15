@@ -71,6 +71,44 @@ import { PrecioVentaDialogComponent } from './pages/productos/gestionar-producto
 // Gestion Recetas Module
 import { GestionRecetasModule } from './pages/gestion-recetas/gestion-recetas.module';
 
+// Shared directives standalone
+import { CurrencyInputDirective } from './shared/directives/currency-input.directive';
+// F2 cliente/servidor: abstract RepositoryService + impls
+import { RepositoryService } from './database/repository.service';
+import { RepositoryIpcService } from './database/repository-ipc.service';
+import { RepositoryHttpService } from './database/repository-http.service';
+
+/**
+ * F2 + F4.1: factory que decide la impl del repositorio en runtime.
+ *
+ * Decision F4.1: en TODOS los modos (incluido cliente) se usa
+ * `RepositoryIpcService`. El preload.ts monkey-patchea `ipcRenderer.invoke`
+ * en mode=client para routear via HTTP transparente, asi que el componente
+ * Angular sigue llamando `window.api.foo()` sin saber si es local o remoto.
+ *
+ * `RepositoryHttpService` quedo en el repo como skeleton historico para
+ * documentar la opcion alternativa (impl directa cliente -> server sin
+ * pasar por preload). En la practica no se usa.
+ */
+function repositoryFactory(
+  ipc: RepositoryIpcService,
+  _http: RepositoryHttpService,
+): RepositoryService {
+  let mode: string = 'standalone';
+  try {
+    const api = (window as any).api;
+    if (api && typeof api.getAppMode === 'function') {
+      mode = api.getAppMode() || 'standalone';
+    }
+  } catch {
+    /* default standalone */
+  }
+  console.log(`[RepositoryService] mode=${mode} → IpcService (preload routea HTTP si es cliente)`);
+  return ipc;
+}
+// Standalone shared components used in non-standalone declarations
+import { FileUploadComponent } from './shared/components/file-upload/file-upload.component';
+
 @NgModule({
   imports: [
     BrowserModule,
@@ -113,7 +151,9 @@ import { GestionRecetasModule } from './pages/gestion-recetas/gestion-recetas.mo
     MatProgressBarModule,
     AppRoutingModule,
     TabContainerComponent,
-    GestionRecetasModule
+    GestionRecetasModule,
+    CurrencyInputDirective,
+    FileUploadComponent,
   ],
   declarations: [
     // No declarations since all components are standalone
@@ -144,7 +184,13 @@ import { GestionRecetasModule } from './pages/gestion-recetas/gestion-recetas.mo
         subscriptSizing: 'dynamic'
       }
     },
-    { provide: MatPaginatorIntl, useClass: PaginatorIntlEs }
+    { provide: MatPaginatorIntl, useClass: PaginatorIntlEs },
+    // F2: factory decide impl segun app-mode. Default standalone → IPC.
+    {
+      provide: RepositoryService,
+      useFactory: repositoryFactory,
+      deps: [RepositoryIpcService, RepositoryHttpService],
+    },
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA]
 })

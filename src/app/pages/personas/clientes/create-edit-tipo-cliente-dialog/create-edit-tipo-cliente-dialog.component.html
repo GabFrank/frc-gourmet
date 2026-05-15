@@ -1,0 +1,25 @@
+<h2 mat-dialog-title>{{ isEditing ? 'Editar' : 'Nuevo' }} tipo de cliente</h2>
+<mat-dialog-content class="dialog-content">
+  <form [formGroup]="form" class="form-grid">
+    <mat-form-field appearance="outline" class="full">
+      <mat-label>Descripción</mat-label>
+      <input matInput formControlName="descripcion" required maxlength="60">
+    </mat-form-field>
+
+    <mat-slide-toggle formControlName="credito">Permite crédito</mat-slide-toggle>
+    <mat-slide-toggle formControlName="descuento">Aplica descuento</mat-slide-toggle>
+
+    <mat-form-field appearance="outline" *ngIf="form.get('descuento')?.value">
+      <mat-label>% Descuento</mat-label>
+      <input matInput type="number" min="0" max="100" formControlName="porcentaje_descuento">
+    </mat-form-field>
+
+    <mat-slide-toggle formControlName="activo">Activo</mat-slide-toggle>
+  </form>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()" [disabled]="saving">Cancelar</button>
+  <button mat-flat-button color="primary" (click)="submit()" [disabled]="form.invalid || saving">
+    {{ isEditing ? 'Actualizar' : 'Crear' }}
+  </button>
+</mat-dialog-actions>

@@ -58,26 +58,21 @@
         </mat-error>
       </mat-form-field>
 
-      <!-- Documento fields -->
+      <!-- Documento fields (opcional) -->
       <div class="row-fields">
         <mat-form-field appearance="outline" class="half-width">
-          <mat-label>Tipo de Documento*</mat-label>
-          <mat-select formControlName="tipoDocumento" required>
+          <mat-label>Tipo de Documento</mat-label>
+          <mat-select formControlName="tipoDocumento">
             <mat-option *ngFor="let tipo of documentoTipos" [value]="tipo">
               {{ tipo }}
             </mat-option>
           </mat-select>
-          <mat-error *ngIf="personaForm.get('tipoDocumento')?.hasError('required')">
-            El tipo de documento es obligatorio
-          </mat-error>
         </mat-form-field>
-        
+
         <mat-form-field appearance="outline" class="half-width">
-          <mat-label>Documento*</mat-label>
-          <input matInput formControlName="documento" placeholder="Ingrese el documento" required>
-          <mat-error *ngIf="personaForm.get('documento')?.hasError('required')">
-            El documento es obligatorio
-          </mat-error>
+          <mat-label>Documento</mat-label>
+          <input matInput formControlName="documento" placeholder="Opcional">
+          <mat-hint>Requerido para funcionarios, clientes con crédito o facturación legal</mat-hint>
         </mat-form-field>
       </div>
       

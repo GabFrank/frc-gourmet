@@ -880,34 +880,21 @@ export class PdvComponent implements OnInit, OnDestroy {
     this.filteredMonedas.forEach(moneda => {
       if (moneda.id === this.principalMoneda?.id) return; // Skip principal
 
-      // Find exchange rate from principal to this currency
-      const exchangeRate = this.exchangeRates.find(rate =>
-        rate.monedaOrigen.id === this.principalMoneda?.id &&
-        rate.monedaDestino.id === moneda.id
+      // Tasa: cantidad de PRINCIPAL que vale 1 unidad de OTRA. Aceptamos un solo
+      // sentido en BD ("USD->PYG: 7500" significa 1 USD = 7500 Gs), porque
+      // PYG->X = totalPYG / 7500 funciona en ambos sentidos del registro.
+      const rateRecord = this.exchangeRates.find(rate =>
+        (rate.monedaOrigen?.id === this.principalMoneda?.id && rate.monedaDestino?.id === moneda.id) ||
+        (rate.monedaOrigen?.id === moneda.id && rate.monedaDestino?.id === this.principalMoneda?.id)
       );
 
-      if (exchangeRate) {
-        // Convert total from principal to this currency
-        const total = totalInPrincipal / exchangeRate.compraLocal;
-
-        // Add to the list
-        this.monedasWithTotals.push({
-          moneda: moneda,
-          total: total
-        });
-
-        // Initialize saldos for this currency
+      if (rateRecord && rateRecord.compraLocal) {
+        const total = totalInPrincipal / rateRecord.compraLocal;
+        this.monedasWithTotals.push({ moneda: moneda, total });
         this.saldos.set(moneda.id!, total);
       } else {
-        console.warn(`No exchange rate found from ${this.principalMoneda?.denominacion} to ${moneda.denominacion}`);
-
-        // No exchange rate found, set total to 0
-        this.monedasWithTotals.push({
-          moneda: moneda,
-          total: 0
-        });
-
-        // Initialize saldos for this currency
+        console.warn(`No exchange rate found between ${this.principalMoneda?.denominacion} and ${moneda.denominacion}`);
+        this.monedasWithTotals.push({ moneda: moneda, total: 0 });
         this.saldos.set(moneda.id!, 0);
       }
     });

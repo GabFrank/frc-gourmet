@@ -11,7 +11,9 @@ import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caj
 import { CajaMoneda } from '../../src/app/database/entities/financiero/caja-moneda.entity';
 import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { ensurePermission } from '../utils/auth.utils';
 
 export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Remove this line - get the current user in each handler instead
@@ -255,8 +257,13 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('create-conteo', async (_event: IpcMainInvokeEvent, data: any) => {
     try {
       const repo = dataSource.getRepository(Conteo);
-      const entity = repo.create(data);
+      const entity: any = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
+      // F5 paso 3: propagar device_id del request context si no vino explicito.
+      if (!data?.dispositivo && !data?.dispositivo_id) {
+        const deviceId = resolveRequestDeviceId(_event);
+        if (deviceId != null) entity.dispositivo = { id: deviceId };
+      }
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating conteo:', error);
@@ -380,6 +387,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('create-dispositivo', async (_event: IpcMainInvokeEvent, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'DISPOSITIVOS_GESTIONAR');
       const repo = dataSource.getRepository(Dispositivo);
        // Add validation for unique name/MAC here if needed
       const entity = repo.create(data);
@@ -393,6 +401,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-dispositivo', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'DISPOSITIVOS_GESTIONAR');
       const repo = dataSource.getRepository(Dispositivo);
       // Add validation for unique name/MAC (excluding self) here if needed
       const entity = await repo.findOneBy({ id });
@@ -409,6 +418,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('delete-dispositivo', async (_event: IpcMainInvokeEvent, id: number) => {
     // Note: Hard delete. Consider dependencies (Caja)
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'DISPOSITIVOS_GESTIONAR');
       const repo = dataSource.getRepository(Dispositivo);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Dispositivo ID ${id} not found`);
@@ -462,6 +472,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   });
 
   ipcMain.handle('create-caja', async (_event: IpcMainInvokeEvent, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
     try {
       const repo = dataSource.getRepository(Caja);
       const entity = repo.create(data);
@@ -475,6 +486,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-caja', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(Caja);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Caja ID ${id} not found`);
@@ -642,6 +654,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   });
 
   ipcMain.handle('create-moneda-cambio', async (_event: IpcMainInvokeEvent, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
     try {
       const repo = dataSource.getRepository(MonedaCambio);
       const entity = repo.create(data);

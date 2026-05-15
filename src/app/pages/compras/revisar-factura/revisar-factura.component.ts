@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -37,6 +37,15 @@ interface ProductoLite {
   score?: number;
 }
 
+interface ProveedorLite {
+  id: number;
+  nombre: string;
+  /** True si vino como sugerencia del matcher OCR. */
+  sugerido?: boolean;
+  /** Score 0..1 si vino del matcher. */
+  score?: number;
+}
+
 interface ItemVm extends MatchItem {
   chipLabel: string;
   chipClass: string;
@@ -60,6 +69,7 @@ interface ItemVm extends MatchItem {
   imports: [
     CommonModule,
     FormsModule,
+    ReactiveFormsModule,
     MatAutocompleteModule,
     MatButtonModule,
     MatCardModule,
@@ -98,6 +108,9 @@ export class RevisarFacturaComponent implements OnInit {
   archivoEsPdf = false;
 
   proveedoresAll: any[] = [];
+  proveedoresFiltrados: ProveedorLite[] = [];
+  proveedorControl = new FormControl<ProveedorLite | string | null>(null);
+  selectedProveedor: ProveedorLite | null = null;
   monedas: any[] = [];
   productosAll: ProductoLite[] = [];
 
@@ -179,6 +192,16 @@ export class RevisarFacturaComponent implements OnInit {
       this.recalcDecimalesMoneda();
 
       this.proveedorIdSeleccionado = this.matchResult.proveedor.match?.id || null;
+      this.setupProveedorAutocomplete();
+      // Pre-poblar el control con el proveedor matcheado (si lo hay)
+      if (this.proveedorIdSeleccionado) {
+        const pre = this.proveedoresAll.find(p => p.id === this.proveedorIdSeleccionado);
+        if (pre) {
+          this.selectedProveedor = { id: pre.id, nombre: pre.nombre };
+          this.proveedorControl.setValue(this.selectedProveedor, { emitEvent: false });
+        }
+      }
+      this.proveedoresFiltrados = this.proveedoresFiltradosBase();
       this.numeroNota = this.matchResult.documento.numeroNota || '';
       this.tipoBoleta = this.matchResult.documento.tipo || 'COMUN';
       if (this.matchResult.documento.fecha) {
@@ -312,6 +335,60 @@ export class RevisarFacturaComponent implements OnInit {
     }
   }
 
+  /**
+   * Lista base del autocomplete de proveedor: candidatos del matcher arriba (sugeridos) +
+   * el resto. Limitada a 50 para perf. Mismo patrón que productosFiltradosBase.
+   */
+  private proveedoresFiltradosBase(query?: string): ProveedorLite[] {
+    const q = (query || '').trim().toUpperCase();
+    const candidatos = this.matchResult?.proveedor?.candidatos || [];
+    const sugeridosIds = new Set<number>(candidatos.map((c: any) => c.id));
+    const sugeridos: ProveedorLite[] = candidatos.map((c: any) => ({
+      id: c.id,
+      nombre: c.nombre,
+      sugerido: true,
+      score: c.score,
+    }));
+    const resto: ProveedorLite[] = this.proveedoresAll
+      .filter(p => !sugeridosIds.has(p.id))
+      .map(p => ({ id: p.id, nombre: p.nombre }));
+    if (!q) return [...sugeridos, ...resto].slice(0, 50);
+    const filtSug = sugeridos.filter(p => p.nombre.toUpperCase().includes(q));
+    const filtResto = resto.filter(p => p.nombre.toUpperCase().includes(q));
+    return [...filtSug, ...filtResto].slice(0, 50);
+  }
+
+  private setupProveedorAutocomplete(): void {
+    this.proveedorControl.valueChanges.subscribe(value => {
+      if (typeof value === 'string') {
+        this.proveedoresFiltrados = this.proveedoresFiltradosBase(value);
+        if (this.selectedProveedor && (this.selectedProveedor.nombre || '').toUpperCase() !== value.toUpperCase()) {
+          this.selectedProveedor = null;
+          this.proveedorIdSeleccionado = null;
+          this.proveedorValidado = false;
+        }
+      } else {
+        this.proveedoresFiltrados = this.proveedoresFiltradosBase();
+      }
+    });
+  }
+
+  displayProveedor = (p: ProveedorLite | null): string => (p && typeof p === 'object') ? (p.nombre || '') : '';
+
+  onProveedorSelected(proveedor: ProveedorLite): void {
+    this.selectedProveedor = proveedor;
+    this.proveedorIdSeleccionado = proveedor.id;
+    this.proveedorValidado = true;
+  }
+
+  clearProveedor(): void {
+    this.selectedProveedor = null;
+    this.proveedorControl.setValue('');
+    this.proveedorIdSeleccionado = null;
+    this.proveedorValidado = false;
+    this.proveedoresFiltrados = this.proveedoresFiltradosBase();
+  }
+
   abrirVerFactura(): void {
     if (!this.previewImgUrl || this.previewImgError) return;
     this.dialog.open(VerFacturaDialogComponent, {
@@ -340,6 +417,10 @@ export class RevisarFacturaComponent implements OnInit {
       if (nuevo) {
         this.proveedoresAll = [nuevo, ...this.proveedoresAll];
         this.proveedorIdSeleccionado = nuevo.id;
+        this.selectedProveedor = { id: nuevo.id, nombre: nuevo.nombre };
+        this.proveedorValidado = true;
+        this.proveedorControl.setValue(this.selectedProveedor, { emitEvent: false });
+        this.proveedoresFiltrados = this.proveedoresFiltradosBase();
         this.snackBar.open('Proveedor creado.', 'Cerrar', { duration: 2500 });
       }
     });

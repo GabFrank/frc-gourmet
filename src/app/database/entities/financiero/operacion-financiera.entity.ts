@@ -18,7 +18,7 @@ export class OperacionFinanciera extends BaseModel {
   @Column({ type: 'varchar', length: 255 })
   descripcion!: string;
 
-  @Column({ type: 'datetime' })
+  @Column()
   fecha!: Date;
 
   // ===================== ORIGEN =====================

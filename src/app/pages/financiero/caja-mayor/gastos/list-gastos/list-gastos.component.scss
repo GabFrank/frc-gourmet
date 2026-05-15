@@ -18,21 +18,20 @@
     padding: 16px;
 
     .filter-form {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 12px;
-      align-items: flex-end;
+      align-items: end;
 
       mat-form-field {
-        flex: 1;
-        min-width: 180px;
+        width: 100%;
       }
 
       .filter-actions {
         display: flex;
         gap: 8px;
         align-items: center;
-        margin-bottom: 22px;
+        padding-bottom: 22px;
       }
     }
   }

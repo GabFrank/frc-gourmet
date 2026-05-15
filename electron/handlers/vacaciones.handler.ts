@@ -7,7 +7,9 @@ import { AsistenciaEstado } from '../../src/app/database/entities/rrhh/asistenci
 import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 import { getConfigNumber } from './configuracion-rrhh.handler';
+import { ensurePermission } from '../utils/auth.utils';
 
 function diffDias(d1: Date, d2: Date): number {
   const ms = d2.getTime() - d1.getTime();
@@ -50,6 +52,7 @@ export function registerVacacionesHandlers(
   });
 
   ipcMain.handle('generar-vacaciones-funcionario', async (_e, funcionarioId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VACACION_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -105,6 +108,7 @@ export function registerVacacionesHandlers(
   });
 
   ipcMain.handle('programar-vacacion-periodo', async (_e, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VACACION_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -115,8 +119,8 @@ export function registerVacacionesHandlers(
       const vacacion = await vacRepo.findOne({ where: { id: vacacionId } });
       if (!vacacion) throw new Error(`Vacacion ${vacacionId} no encontrada`);
 
-      const desde = new Date(fechaDesde);
-      const hasta = new Date(fechaHasta);
+      const desde = parseLocalDate(fechaDesde) || new Date();
+      const hasta = parseLocalDate(fechaHasta) || new Date();
       const dias = diffDias(desde, hasta) + 1;
       if (dias <= 0) throw new Error('Rango de fechas invalido');
       if (vacacion.diasGozados + dias > vacacion.diasGenerados) {
@@ -152,6 +156,7 @@ export function registerVacacionesHandlers(
   });
 
   ipcMain.handle('marcar-periodo-gozado', async (_e, periodoId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VACACION_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -171,8 +176,8 @@ export function registerVacacionesHandlers(
 
       // Generar asistencias VACACION para los dias del rango si no existen
       if (!periodo.asistenciasGeneradas) {
-        const desde = new Date(periodo.fechaDesde);
-        const hasta = new Date(periodo.fechaHasta);
+        const desde = parseLocalDate(periodo.fechaDesde) || new Date();
+        const hasta = parseLocalDate(periodo.fechaHasta) || new Date();
         for (let d = new Date(desde); d <= hasta; d.setDate(d.getDate() + 1)) {
           const fechaIso = d.toISOString().slice(0, 10);
           const existing = await asisRepo.findOne({
@@ -220,6 +225,7 @@ export function registerVacacionesHandlers(
   });
 
   ipcMain.handle('cancelar-vacacion-periodo', async (_e, periodoId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VACACION_GESTIONAR');
     const repo = dataSource.getRepository(VacacionPeriodo);
     const periodo = await repo.findOne({ where: { id: periodoId } });
     if (!periodo) throw new Error(`Periodo ${periodoId} no encontrado`);

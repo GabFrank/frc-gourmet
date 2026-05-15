@@ -18,21 +18,13 @@ import { CuentaPorPagar } from '../../src/app/database/entities/financiero/cuent
 import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
 import { CuentaPorPagarTipo, CuentaPorPagarEstado, CuotaEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { resolveRequestDeviceId } from '../utils/current-device.utils';
+import { parseLocalDate } from '../utils/date.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
+import { ensurePermission } from '../utils/auth.utils';
 
 // ===== Helpers internos =====
-
-// Parsea 'YYYY-MM-DD' como Date en zona local (evita el shift por UTC).
-// `new Date('2026-05-04')` interpreta como UTC midnight, que en UTC-3 cae el dia anterior.
-function parseLocalDate(s: any): Date | undefined {
-  if (!s) return undefined;
-  if (s instanceof Date) return s;
-  const str = String(s);
-  const m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return new Date(str);
-}
 
 // Stock actual en unidad base = SUMA(movimientos activos) con signo segun tipo
 async function getStockActualUnidadBase(qr: any, productoId: number): Promise<number> {
@@ -40,7 +32,7 @@ async function getStockActualUnidadBase(qr: any, productoId: number): Promise<nu
     .getRepository(StockMovimiento)
     .createQueryBuilder('m')
     .where('m.producto_id = :pid', { pid: productoId })
-    .andWhere('m.activo = 1')
+    .andWhere('m.activo = true')
     .getMany();
   let total = 0;
   for (const m of movs) {
@@ -69,7 +61,7 @@ async function getCostoActivoActual(qr: any, productoId: number): Promise<number
     .getRepository(PrecioCosto)
     .createQueryBuilder('pc')
     .where('pc.producto_id = :pid', { pid: productoId })
-    .andWhere('pc.activo = 1')
+    .andWhere('pc.activo = true')
     .orderBy('pc.id', 'DESC')
     .getOne();
   return pc ? Number(pc.valor) : null;
@@ -105,7 +97,7 @@ async function aplicarCostoPromedioPonderado(
     .createQueryBuilder()
     .update(PrecioCosto)
     .set({ activo: false })
-    .where('producto_id = :pid AND activo = 1', { pid: productoId })
+    .where('producto_id = :pid AND activo = true', { pid: productoId })
     .execute();
 
   // Crear nuevo costo activo
@@ -167,8 +159,10 @@ async function generarCuotasMensualesCPP(
 ): Promise<void> {
   const cuotaRepo = qr.manager.getRepository(CuentaPorPagarCuota);
   const montoCuota = +(montoTotal / cantidadCuotas).toFixed(2);
+  // Defensive: fechaInicio puede venir como string si proviene de compra.fechaCompra leida de BD (columna 'date')
+  const fechaInicioDate = parseLocalDate(fechaInicio) || new Date();
   for (let i = 0; i < cantidadCuotas; i++) {
-    const venc = new Date(fechaInicio);
+    const venc = new Date(fechaInicioDate);
     venc.setMonth(venc.getMonth() + i);
     const monto = (i === cantidadCuotas - 1)
       ? +(montoTotal - montoCuota * (cantidadCuotas - 1)).toFixed(2)
@@ -268,6 +262,8 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     }
     if (params.fechaDesde) qb.andWhere('c.fechaCompra >= :fd', { fd: params.fechaDesde });
     if (params.fechaHasta) qb.andWhere('c.fechaCompra <= :fh', { fh: params.fechaHasta });
+    // F5 paso 4: filtro por dispositivo de origen
+    if (params.dispositivoId) qb.andWhere('c.dispositivo_id = :compraDispId', { compraDispId: params.dispositivoId });
     if (params.search) {
       qb.andWhere(new Brackets(b => {
         b.where('LOWER(c.numeroNota) LIKE :q', { q: `%${String(params.search).toLowerCase()}%` })
@@ -369,6 +365,8 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     await qr.startTransaction();
     try {
       const userId = getCurrentUser()?.id;
+      // F5 paso 3: device tracking
+      const deviceId = resolveRequestDeviceId(_event);
       const compra = qr.manager.create(Compra, {
         estado: CompraEstado.ABIERTO,
         isRecepcionMercaderia: data.isRecepcionMercaderia ?? false,
@@ -382,6 +380,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
         compraCategoria: data.compraCategoriaId ? { id: data.compraCategoriaId } as any : null,
         moneda: { id: data.monedaId } as any,
         formaPago: data.formaPagoId ? { id: data.formaPagoId } as any : null,
+        dispositivo: deviceId != null ? ({ id: deviceId } as any) : null,
         total: 0,
       });
       await setEntityUserTracking(dataSource, compra, userId, false);
@@ -526,6 +525,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   //   pagarAhora?: boolean,                     // solo si credito = false: indica retornar cuotaId para abrir dialog de pago
   // }
   ipcMain.handle('finalizar-compra', async (_event: any, id: number, payload: any = {}) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const qr = dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
@@ -664,6 +664,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
 
   // Anula una compra. Si estaba ABIERTO solo marca CANCELADO. Si estaba FINALIZADO revierte stock+caja+CPP.
   ipcMain.handle('anular-compra', async (_event: any, id: number, motivo: string) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const qr = dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
@@ -786,8 +787,13 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   ipcMain.handle('createCompra', async (_event: any, data: any) => {
     const repo = dataSource.getRepository(Compra);
     const { detalles, ...rest } = data;
-    const entity = repo.create(rest);
+    const entity: any = repo.create(rest);
     await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
+    // F5 paso 3: propagar device_id del request context si no vino explicito.
+    if (!rest?.dispositivo && !rest?.dispositivo_id) {
+      const deviceId = resolveRequestDeviceId(_event);
+      if (deviceId != null) entity.dispositivo = { id: deviceId };
+    }
     return await repo.save(entity);
   });
 
@@ -900,12 +906,12 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       .leftJoinAndSelect('pp.producto', 'prod')
       .leftJoin('pp.proveedor', 'pv')
       .where('pv.id = :proveedorId', { proveedorId })
-      .andWhere('pp.activo = 1')
+      .andWhere('pp.activo = true')
       .orderBy('pp.ultimaCompraFecha', 'DESC')
       .addOrderBy('pp.id', 'DESC');
 
     if (search) {
-      qb.andWhere('prod.nombre LIKE :s', { s: `%${search}%` });
+      qb.andWhere('UPPER(prod.nombre) LIKE UPPER(:s)', { s: `%${search}%` });
     }
     qb.skip(page * pageSize).take(pageSize);
     const [items, total] = await qb.getManyAndCount();

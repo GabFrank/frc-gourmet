@@ -1,7 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
-import { ReactiveFormsModule, FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormBuilder, FormControl, FormGroup, FormArray, Validators } from '@angular/forms';
 import { MatTableModule } from '@angular/material/table';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -46,6 +47,7 @@ interface ItemSeed {
     CommonModule,
     ReactiveFormsModule,
     MatTableModule,
+    MatAutocompleteModule,
     MatButtonModule,
     MatIconModule,
     MatFormFieldModule,
@@ -81,6 +83,9 @@ export class CreateEditCompraComponent implements OnInit {
   productoIdHistorico: number | null = null;
 
   proveedores: any[] = [];
+  filteredProveedores: any[] = [];
+  proveedorControl = new FormControl<any | string | null>(null);
+  selectedProveedor: any | null = null;
   categorias: any[] = [];
   monedas: any[] = [];
   formasPago: any[] = [];
@@ -160,13 +165,56 @@ export class CreateEditCompraComponent implements OnInit {
         firstValueFrom(this.repo.getFormasPago()),
       ]);
       this.proveedores = (provs as any[]) || [];
+      this.filteredProveedores = this.proveedores.slice(0, 50);
+      this.setupProveedorAutocomplete();
       this.categorias = (cats as any[]) || [];
       this.monedas = (monedas as any[]) || [];
       this.formasPago = (fps as any[]) || [];
       this.recalcDecimalesMoneda();
+
+      // Si ya hay un proveedorId seteado (ej. edit mode cargado antes), pre-poblar el autocomplete
+      const currentProveedorId = this.form.get('proveedorId')?.value;
+      if (currentProveedorId) {
+        const prov = this.proveedores.find(p => p.id === currentProveedorId);
+        if (prov) {
+          this.selectedProveedor = prov;
+          this.proveedorControl.setValue(prov, { emitEvent: false });
+        }
+      }
     } catch (e) {
       console.error('Error cargando catalogos', e);
     }
+  }
+
+  private setupProveedorAutocomplete(): void {
+    this.proveedorControl.valueChanges.subscribe(value => {
+      if (typeof value === 'string') {
+        const filter = value.toUpperCase();
+        this.filteredProveedores = this.proveedores
+          .filter(p => (p.nombre || '').toUpperCase().includes(filter))
+          .slice(0, 50);
+        if (this.selectedProveedor && (this.selectedProveedor.nombre || '').toUpperCase() !== filter) {
+          this.selectedProveedor = null;
+          this.form.patchValue({ proveedorId: null });
+        }
+      } else {
+        this.filteredProveedores = this.proveedores.slice(0, 50);
+      }
+    });
+  }
+
+  displayProveedor = (p: any): string => (p && typeof p === 'object') ? (p.nombre || '') : '';
+
+  onProveedorSelected(proveedor: any): void {
+    this.selectedProveedor = proveedor;
+    this.form.patchValue({ proveedorId: proveedor.id });
+  }
+
+  clearProveedor(): void {
+    this.selectedProveedor = null;
+    this.proveedorControl.setValue('');
+    this.form.patchValue({ proveedorId: null });
+    this.filteredProveedores = this.proveedores.slice(0, 50);
   }
 
   async loadCompra(id: number): Promise<void> {
@@ -184,6 +232,13 @@ export class CreateEditCompraComponent implements OnInit {
         tipoBoleta: compra.tipoBoleta || 'COMUN',
         credito: !!compra.credito,
       });
+
+      // Pre-poblar autocomplete de proveedor
+      if (compra.proveedor) {
+        const provEnLista = this.proveedores.find(p => p.id === compra.proveedor.id) || compra.proveedor;
+        this.selectedProveedor = provEnLista;
+        this.proveedorControl.setValue(provEnLista, { emitEvent: false });
+      }
 
       this.itemsArray.clear({ emitEvent: false });
       for (const det of (compra.detalles || [])) {

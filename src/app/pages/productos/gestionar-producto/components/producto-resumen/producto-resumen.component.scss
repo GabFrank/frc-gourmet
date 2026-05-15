@@ -28,9 +28,35 @@ mat-card-content {
 .carousel-container {
     position: relative;
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     margin-bottom: 8px;
+}
+
+.carousel-label {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--mat-secondary-text-color, rgba(255,255,255,0.6));
+    text-align: center;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.placeholder-image {
+    background: var(--mat-divider-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--mat-secondary-text-color, rgba(255,255,255,0.4));
+
+    mat-icon {
+        font-size: 36px;
+        width: 36px;
+        height: 36px;
+    }
 }
 
 .product-image {

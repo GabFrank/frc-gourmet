@@ -119,9 +119,14 @@ export class ListGastosComponent implements OnInit {
     });
   }
 
-  verDetalle(gasto: any): void {
-    // Open detail view - could be dialog or expanded row
-    this.snackBar.open('Detalle del gasto #' + gasto.id, 'Cerrar', { duration: 3000 });
+  abrirGasto(gasto: any): void {
+    const dialogRef = this.dialog.open(CreateEditGastoDialogComponent, {
+      width: '700px',
+      data: { gastoId: gasto.id },
+    });
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) this.loadData();
+    });
   }
 
   async anularGasto(gasto: any): Promise<void> {

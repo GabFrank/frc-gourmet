@@ -1,0 +1,223 @@
+.list-clientes-container {
+  display: block;
+  padding: 20px;
+  box-sizing: border-box;
+
+  .filter-card {
+    margin-bottom: 16px;
+
+    mat-card-header {
+      margin-bottom: 16px;
+    }
+
+    .filter-form {
+      display: block;
+
+      .filter-fields {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+        align-items: start;
+        margin-bottom: 16px;
+
+        mat-form-field {
+          width: 100%;
+        }
+      }
+
+      .filter-actions {
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+
+        .left-actions,
+        .right-actions {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+        }
+
+        @media (max-width: 768px) {
+          flex-direction: column;
+          align-items: stretch;
+
+          .left-actions,
+          .right-actions {
+            justify-content: flex-start;
+          }
+        }
+      }
+    }
+  }
+
+  .table-container {
+    position: relative;
+    min-height: 200px;
+
+    .loading-shade {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.7);
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .table-scroll-container {
+      overflow-x: auto;
+      margin-bottom: 16px;
+
+      table {
+        width: 100%;
+
+        th, td {
+          text-align: center;
+        }
+
+        .mat-column-nombre {
+          text-align: left;
+        }
+
+        .cell-stack {
+          display: flex;
+          flex-direction: column;
+          line-height: 1.2;
+
+          .primary {
+            font-weight: 500;
+          }
+
+          .muted {
+            font-size: 12px;
+            opacity: 0.65;
+          }
+        }
+
+        .muted {
+          opacity: 0.55;
+        }
+
+        .pct-badge {
+          padding: 3px 8px;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 500;
+          display: inline-block;
+          min-width: 56px;
+          text-align: center;
+        }
+
+        .pct-badge.pct-ok {
+          background-color: rgba(76, 175, 80, 0.18);
+          color: #2e7d32;
+        }
+        .pct-badge.pct-warn {
+          background-color: rgba(255, 193, 7, 0.22);
+          color: #b58100;
+        }
+        .pct-badge.pct-high {
+          background-color: rgba(255, 152, 0, 0.22);
+          color: #c46100;
+        }
+        .pct-badge.pct-over {
+          background-color: rgba(244, 67, 54, 0.22);
+          color: #c62828;
+        }
+        .pct-badge.pct-na {
+          background-color: rgba(3, 169, 244, 0.18);
+          color: #0277bd;
+        }
+
+        .status-badge {
+          padding: 3px 8px;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 500;
+
+          &.st-active {
+            background-color: rgba(76, 175, 80, 0.18);
+            color: #2e7d32;
+          }
+          &.st-inactive {
+            background-color: rgba(244, 67, 54, 0.18);
+            color: #c62828;
+          }
+        }
+
+        .inactive-row td {
+          opacity: 0.65;
+        }
+
+        .empty-row {
+          text-align: center;
+          padding: 24px;
+          font-style: italic;
+          opacity: 0.65;
+        }
+
+        .mat-column-acciones {
+          width: 64px;
+          text-align: center;
+        }
+
+        .mat-column-saldo,
+        .mat-column-limite {
+          width: 120px;
+        }
+
+        .mat-column-pctUso,
+        .mat-column-estado {
+          width: 110px;
+        }
+      }
+    }
+
+    .paginator-container {
+      margin-top: 8px;
+    }
+  }
+}
+
+:host-context(.dark-theme) {
+  .list-clientes-container {
+    .table-container {
+      .loading-shade {
+        background: rgba(33, 33, 33, 0.7);
+      }
+
+      .table-scroll-container table {
+        .pct-badge.pct-ok {
+          background-color: rgba(76, 175, 80, 0.28);
+          color: #81c784;
+        }
+        .pct-badge.pct-warn {
+          background-color: rgba(255, 193, 7, 0.28);
+          color: #ffd54f;
+        }
+        .pct-badge.pct-high {
+          background-color: rgba(255, 152, 0, 0.32);
+          color: #ffb74d;
+        }
+        .pct-badge.pct-over {
+          background-color: rgba(244, 67, 54, 0.32);
+          color: #ff8a80;
+        }
+        .pct-badge.pct-na {
+          background-color: rgba(3, 169, 244, 0.28);
+          color: #4fc3f7;
+        }
+
+        .status-badge.st-active {
+          background-color: rgba(76, 175, 80, 0.28);
+          color: #81c784;
+        }
+        .status-badge.st-inactive {
+          background-color: rgba(244, 67, 54, 0.28);
+          color: #ff8a80;
+        }
+      }
+    }
+  }
+}

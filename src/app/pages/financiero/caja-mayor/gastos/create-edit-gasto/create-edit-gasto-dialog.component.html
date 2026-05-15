@@ -1,4 +1,4 @@
-<h2 mat-dialog-title>{{isEditing ? 'Editar Gasto' : 'Nuevo Gasto'}}</h2>
+<h2 mat-dialog-title>{{isEditing ? (gastoId ? 'Editar Gasto #' + gastoId : 'Editar Gasto') : 'Nuevo Gasto'}}</h2>
 
 <mat-dialog-content>
   <form [formGroup]="form" class="form-container">
@@ -99,7 +99,7 @@
 
       <mat-form-field appearance="outline" class="det-field-monto">
         <mat-label>Monto</mat-label>
-        <input matInput type="number" formControlName="monto" min="0.01">
+        <input matInput type="text" inputmode="decimal" formControlName="monto" appCurrencyInput [decimals]="decimalesMoneda">
       </mat-form-field>
 
       <button mat-mini-fab color="primary"
@@ -173,12 +173,23 @@
       </mat-form-field>
     </div>
   </form>
+
+  <div class="adjuntos-section">
+    <app-adjuntos-list
+      entidadTipo="GASTO"
+      [entidadId]="gastoId"
+      [tiposDisponibles]="['COMPROBANTE', 'FACTURA', 'RECIBO', 'OTRO']"
+      title="Comprobantes y adjuntos"
+      (changed)="onAdjuntosChanged()">
+    </app-adjuntos-list>
+  </div>
 </mat-dialog-content>
 
 <mat-dialog-actions align="end">
-  <button mat-button (click)="onCancel()" [disabled]="saving">Cancelar</button>
-  <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="form.invalid || detalles.length === 0 || saving">
+  <button mat-button (click)="onCancel()" [disabled]="saving">{{ isEditing ? 'Cerrar' : 'Cancelar' }}</button>
+  <button mat-raised-button color="primary" (click)="onSubmit()"
+          [disabled]="form.invalid || detalles.length === 0 || saving || (isEditing && form.pristine)">
     <mat-spinner *ngIf="saving" diameter="20" class="inline-spinner"></mat-spinner>
-    <span *ngIf="!saving">{{isEditing ? 'Guardar' : 'Registrar'}}</span>
+    <span *ngIf="!saving">{{isEditing ? 'Guardar cambios' : 'Registrar'}}</span>
   </button>
 </mat-dialog-actions>

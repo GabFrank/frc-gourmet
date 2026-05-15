@@ -30,8 +30,28 @@
   font-size: 16px;
   margin-top: 16px;
   margin-bottom: 12px;
-  color: rgba(0, 0, 0, 0.87);
+  color: var(--text-primary, rgba(0, 0, 0, 0.87));
   font-weight: 500;
+}
+
+.cotizacion-mercado-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+
+  .section-title {
+    margin: 0;
+  }
+
+  .btn-cotizacion {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
 }
 
 @media screen and (max-width: 600px) {

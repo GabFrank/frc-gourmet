@@ -39,4 +39,9 @@ export class Comanda extends BaseModel {
 
   @Column({ default: true })
   activo!: boolean;
+
+  // F5: device tracking — dispositivo donde se origino la comanda.
+  @ManyToOne('Dispositivo', { nullable: true })
+  @JoinColumn({ name: 'dispositivo_id' })
+  dispositivo?: any;
 }

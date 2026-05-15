@@ -1,0 +1,60 @@
+<div class="adjuntos-container">
+  <div class="adjuntos-header">
+    <h4 class="adjuntos-title">{{ title }} <span class="adjuntos-count" *ngIf="adjuntos.length">({{ adjuntos.length }})</span></h4>
+  </div>
+
+  <div class="adjuntos-empty" *ngIf="!loading && adjuntos.length === 0">
+    <mat-icon>folder_open</mat-icon>
+    <span>Sin archivos adjuntos</span>
+  </div>
+
+  <div class="adjuntos-list" *ngIf="adjuntos.length > 0">
+    <div class="adjunto-item" *ngFor="let a of adjuntos">
+      <div class="adjunto-thumb" *ngIf="thumbFor(a)">
+        <img [src]="thumbFor(a)" alt="" />
+      </div>
+      <mat-icon class="adjunto-icon" *ngIf="!thumbFor(a)">{{ iconFor(a) }}</mat-icon>
+
+      <div class="adjunto-meta">
+        <div class="adjunto-name" [matTooltip]="a.nombreArchivo">{{ a.nombreArchivo }}</div>
+        <div class="adjunto-info">
+          <span class="adjunto-tipo">{{ a.tipo }}</span>
+          <span class="adjunto-size" *ngIf="a.tamanoBytes">· {{ formatSize(a.tamanoBytes) }}</span>
+        </div>
+      </div>
+
+      <div class="adjunto-actions">
+        <button mat-icon-button (click)="ver(a)" matTooltip="Ver">
+          <mat-icon>visibility</mat-icon>
+        </button>
+        <button mat-icon-button color="warn" (click)="eliminar(a)" *ngIf="!readonly" matTooltip="Eliminar">
+          <mat-icon>delete</mat-icon>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="adjuntos-upload" *ngIf="!readonly && entidadId">
+    <div class="upload-tipo-row" *ngIf="tiposDisponibles.length > 1">
+      <label>Tipo:</label>
+      <mat-select [(ngModel)]="tipoNuevoAdjunto">
+        <mat-option *ngFor="let t of tiposDisponibles" [value]="t">{{ t }}</mat-option>
+      </mat-select>
+    </div>
+
+    <app-file-upload
+      accept="image/*,application/pdf"
+      [carpeta]="carpeta"
+      [maxSizeMB]="10"
+      [showPreview]="false"
+      label="Agregar adjunto"
+      hint="Imagen, PDF, hasta 10MB"
+      (uploaded)="onUploaded($event)">
+    </app-file-upload>
+  </div>
+
+  <div class="adjuntos-blocked" *ngIf="!entidadId && !readonly">
+    <mat-icon>info</mat-icon>
+    <span>Guardá el registro para poder adjuntar archivos.</span>
+  </div>
+</div>

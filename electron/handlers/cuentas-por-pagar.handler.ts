@@ -14,7 +14,9 @@ import { CajaMayorSaldo } from '../../src/app/database/entities/financiero/caja-
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { ensurePermission } from '../utils/auth.utils';
 
 // Helper: actualiza/crea saldo cajaMayor restando un monto (para egresos de cuotas)
 async function descontarSaldoCajaMayor(
@@ -211,6 +213,7 @@ export function registerCuentasPorPagarHandlers(
 
   ipcMain.handle('create-compra-categoria', async (_event, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
       const repo = dataSource.getRepository(CompraCategoria);
       const entity = repo.create({
         nombre: data.nombre?.toUpperCase(),
@@ -229,6 +232,7 @@ export function registerCuentasPorPagarHandlers(
 
   ipcMain.handle('update-compra-categoria', async (_event, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
       const repo = dataSource.getRepository(CompraCategoria);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`CompraCategoria ${id} no encontrada`);
@@ -248,6 +252,7 @@ export function registerCuentasPorPagarHandlers(
 
   ipcMain.handle('delete-compra-categoria', async (_event, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
       const repo = dataSource.getRepository(CompraCategoria);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`CompraCategoria ${id} no encontrada`);
@@ -278,6 +283,7 @@ export function registerCuentasPorPagarHandlers(
 
   // Crea o reemplaza el set de cuotas de una compra
   ipcMain.handle('set-compra-cuotas', async (_event, compraId: number, cuotas: any[]) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -321,6 +327,7 @@ export function registerCuentasPorPagarHandlers(
   // Si fuente=CAJA_MAYOR: crea CajaMayorMovimiento EGRESO_CUOTA_COMPRA y descuenta saldo.
   // Si fuente=CUENTA_BANCARIA: descuenta saldo bancario.
   ipcMain.handle('pagar-compra-cuota', async (_event, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -423,7 +430,7 @@ export function registerCuentasPorPagarHandlers(
       // Excluye CPPs originadas en compras al contado (compra.credito = false). Las compras a credito
       // o las CPPs sin compra (prestamos, etc.) siguen apareciendo. Default: false (lista todo).
       if (filtros?.excluirContadoCompras === true) {
-        qb.andWhere('(cpp.compra_id IS NULL OR compra.credito = 1)');
+        qb.andWhere('(cpp.compra_id IS NULL OR compra.credito = true)');
       }
 
       if (filtros?.pageSize != null) {
@@ -455,6 +462,7 @@ export function registerCuentasPorPagarHandlers(
 
   // Crea CuentaPorPagar + auto-genera cuotas (mensuales por defecto)
   ipcMain.handle('create-cuenta-por-pagar', async (_event, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -463,7 +471,7 @@ export function registerCuentasPorPagarHandlers(
       const cuotaRepo = queryRunner.manager.getRepository(CuentaPorPagarCuota);
 
       const cantidadCuotas = Math.max(1, Number(data.cantidadCuotas) || 1);
-      const fechaInicio = data.fechaInicio ? new Date(data.fechaInicio) : new Date();
+      const fechaInicio = parseLocalDate(data.fechaInicio) || new Date();
       const montoTotal = Number(data.montoTotal);
       const montoCuota = +(montoTotal / cantidadCuotas).toFixed(2);
 
@@ -546,6 +554,7 @@ export function registerCuentasPorPagarHandlers(
 
   ipcMain.handle('update-cuenta-por-pagar', async (_event, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
       const repo = dataSource.getRepository(CuentaPorPagar);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`CuentaPorPagar ${id} no encontrada`);
@@ -564,6 +573,7 @@ export function registerCuentasPorPagarHandlers(
 
   ipcMain.handle('cancelar-cuenta-por-pagar', async (_event, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
       const repo = dataSource.getRepository(CuentaPorPagar);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`CuentaPorPagar ${id} no encontrada`);
@@ -592,6 +602,7 @@ export function registerCuentasPorPagarHandlers(
 
   // Pagar cuota de cuenta por pagar (1 cuota). Wrapper sobre `aplicarPagoCpoCuota`.
   ipcMain.handle('pagar-cpp-cuota', async (_event, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -616,6 +627,7 @@ export function registerCuentasPorPagarHandlers(
   //   cajaMayorId?, monedaId?, formaPagoId?, cuentaBancariaId?
   // }
   ipcMain.handle('pagar-cuotas-compras-lote', async (_event, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -744,6 +756,7 @@ export function registerCuentasPorPagarHandlers(
 
   // Anular cuota pendiente (sin pago) — descuenta el saldo no pagado del CPP
   ipcMain.handle('cancelar-cpp-cuota', async (_event, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();

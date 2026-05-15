@@ -17,6 +17,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { confirmarSaldosNegativos, SaldoNegativoCheck } from 'src/app/shared/utils/saldo-negativo-confirm';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 @Component({
   selector: 'app-create-operacion-financiera-dialog',
@@ -29,11 +30,14 @@ import { confirmarSaldosNegativos, SaldoNegativoCheck } from 'src/app/shared/uti
     MatSelectModule, MatDatepickerModule, MatNativeDateModule,
     MatProgressSpinnerModule, MatSnackBarModule, MatDividerModule,
     MatTabsModule, MatTooltipModule,
+    CurrencyInputDirective,
   ]
 })
 export class CreateOperacionFinancieraDialogComponent implements OnInit {
   form!: FormGroup;
   saving = false;
+  decimalesOrigen = 0;
+  decimalesDestino = 0;
 
   tipoOperacion = 'CAMBIO_DIVISA';
   tiposOperacion = [
@@ -117,14 +121,29 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
       const cb = this.cuentasBancarias.find(c => c.id === id);
       if (cb?.moneda?.id) {
         this.form.get('monedaOrigenId')?.setValue(cb.moneda.id, { emitEvent: false });
+        this.recalcDecimales();
       }
     });
     this.form.get('cuentaBancariaDestinoId')?.valueChanges.subscribe((id: number) => {
       const cb = this.cuentasBancarias.find(c => c.id === id);
       if (cb?.moneda?.id) {
         this.form.get('monedaDestinoId')?.setValue(cb.moneda.id, { emitEvent: false });
+        this.recalcDecimales();
       }
     });
+    this.form.get('monedaOrigenId')?.valueChanges.subscribe(() => this.recalcDecimales());
+    this.form.get('monedaDestinoId')?.valueChanges.subscribe(() => this.recalcDecimales());
+  }
+
+  private recalcDecimales(): void {
+    const origenId = this.form?.get('monedaOrigenId')?.value;
+    const destinoId = this.form?.get('monedaDestinoId')?.value;
+    const mo = this.monedas.find((x: any) => x.id === origenId);
+    const md = this.monedas.find((x: any) => x.id === destinoId);
+    const decO = Number(mo?.decimales);
+    const decD = Number(md?.decimales);
+    this.decimalesOrigen = Number.isFinite(decO) ? decO : 0;
+    this.decimalesDestino = Number.isFinite(decD) ? decD : 0;
   }
 
   // Devuelve la moneda fija si la origen/destino esta atada a una cuenta bancaria
@@ -236,6 +255,7 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
       this.formasPago = formasPago || [];
       this.cajasMayor = (cajasMayor || []).filter((cm: any) => cm.estado === 'ABIERTA');
       this.cuentasBancarias = (cuentasBancarias || []).filter((cb: any) => cb.activo);
+      this.recalcDecimales();
     } catch (error) {
       console.error('Error loading options:', error);
       this.snackBar.open('Error al cargar opciones', 'Cerrar', { duration: 3000 });

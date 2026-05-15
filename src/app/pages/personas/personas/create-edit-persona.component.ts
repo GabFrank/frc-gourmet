@@ -12,6 +12,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { RepositoryService } from '../../../database/repository.service';
+import { resolveAppUrl } from '../../../shared/utils/image-url.util';
 import { Persona } from '../../../database/entities/personas/persona.entity';
 import { DocumentoTipo } from '../../../database/entities/personas/documento-tipo.enum';
 import { PersonaTipo } from '../../../database/entities/personas/persona-tipo.enum';
@@ -68,8 +69,8 @@ export class CreateEditPersonaComponent implements OnInit {
       fechaNacimiento: [null],
       sexo: [null],
       estadoCivil: [null],
-      tipoDocumento: [DocumentoTipo.CI, [Validators.required]],
-      documento: ['', [Validators.required]],
+      tipoDocumento: [DocumentoTipo.CI],
+      documento: [''],
       tipoPersona: [PersonaTipo.FISICA, [Validators.required]],
       activo: [true],
       imageUrl: ['']
@@ -180,18 +181,14 @@ export class CreateEditPersonaComponent implements OnInit {
     if (!imageUrl) {
       return 'assets/default-profile.png'; // Fallback image
     }
-    
+
     // If it's already a proper URL or data URL, use it directly
     if (imageUrl.startsWith('data:') || imageUrl.startsWith('http')) {
       return imageUrl;
     }
-    
-    // For our app protocol URLs, return as is - the protocol handler will resolve it
-    if (imageUrl.startsWith('app://')) {
-      return imageUrl;
-    }
 
-    return imageUrl;
+    // F4 image URL switch: en mode=client `app://` proxea via /api/files/by-url.
+    return resolveAppUrl(imageUrl) || imageUrl;
   }
 
   async onSubmit(): Promise<void> {
@@ -214,7 +211,8 @@ export class CreateEditPersonaComponent implements OnInit {
       fechaNacimiento: formData.fechaNacimiento || null,
       sexo: formData.sexo || null,
       estadoCivil: formData.estadoCivil || null,
-      documento: formData.documento?.toUpperCase() || '',
+      documento: formData.documento?.trim() ? formData.documento.toUpperCase() : null,
+      tipoDocumento: formData.tipoDocumento || DocumentoTipo.CI,
       // Don't set imageUrl here, we'll set it based on the conditions below
       imageUrl: undefined
     };

@@ -2,8 +2,13 @@ import { ipcMain } from 'electron';
 import { DataSource, Not } from 'typeorm';
 import { Printer } from '../../src/app/database/entities/printer.entity';
 import { generateTestPageContent, printPosReceipt } from '../utils/printer.utils';
+import { ensurePermission } from '../utils/auth.utils';
+import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 
-export function registerPrinterHandlers(dataSource: DataSource) {
+export function registerPrinterHandlers(
+  dataSource: DataSource,
+  getCurrentUser?: () => Usuario | null,
+) {
 
   // IPC handler for getting all printers
   ipcMain.handle('get-printers', async () => {
@@ -19,6 +24,7 @@ export function registerPrinterHandlers(dataSource: DataSource) {
 
   // IPC handler for adding a printer
   ipcMain.handle('add-printer', async (_event: any, printer: any) => {
+    if (getCurrentUser) await ensurePermission(dataSource, getCurrentUser, 'IMPRESORAS_GESTIONAR');
     try {
       const printerRepository = dataSource.getRepository(Printer);
 
@@ -51,6 +57,7 @@ export function registerPrinterHandlers(dataSource: DataSource) {
 
   // IPC handler for updating a printer
   ipcMain.handle('update-printer', async (_event: any, printerId: number, printer: any) => {
+    if (getCurrentUser) await ensurePermission(dataSource, getCurrentUser, 'IMPRESORAS_GESTIONAR');
     try {
       const printerRepository = dataSource.getRepository(Printer);
 
@@ -89,6 +96,7 @@ export function registerPrinterHandlers(dataSource: DataSource) {
 
   // IPC handler for deleting a printer
   ipcMain.handle('delete-printer', async (_event: any, printerId: number) => {
+    if (getCurrentUser) await ensurePermission(dataSource, getCurrentUser, 'IMPRESORAS_GESTIONAR');
     try {
       const printerRepository = dataSource.getRepository(Printer);
 

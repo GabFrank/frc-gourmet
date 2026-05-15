@@ -79,6 +79,17 @@
         <mat-option value="SIN_DESCUENTO">SIN DESCUENTO</mat-option>
       </mat-select>
     </mat-form-field>
+
+    <!-- Dispositivo (F5 paso 4) -->
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>DISPOSITIVO</mat-label>
+      <mat-select [(value)]="dispositivoId">
+        <mat-option [value]="null">TODOS</mat-option>
+        <mat-option *ngFor="let d of dispositivos" [value]="d.id">
+          {{ d.nombre }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
   </div>
 </mat-dialog-content>
 

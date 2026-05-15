@@ -21,10 +21,14 @@ import { DatabaseService } from './src/app/database/database.service';
 import { Usuario } from './src/app/database/entities/personas/usuario.entity';
 
 // Import the new handler registration functions
+import { installHandlerRegistry, handlerRegistryCount } from './electron/utils/handler-registry';
+import { startServer, stopServer } from './electron/server/server';
 import { registerPrinterHandlers } from './electron/handlers/printers.handler';
 import { registerPersonasHandlers } from './electron/handlers/personas.handler';
 import { registerAuthHandlers } from './electron/handlers/auth.handler';
 import { registerImageHandlers } from './electron/handlers/images.handler';
+import { registerFilesHandlers } from './electron/handlers/files.handler';
+import { registerAdjuntosHandlers } from './electron/handlers/adjuntos.handler';
 import { registerProductosHandlers } from './electron/handlers/productos.handler';
 import { registerFinancieroHandlers } from './electron/handlers/financiero.handler';
 import { registerComprasHandlers } from './electron/handlers/compras.handler';
@@ -35,6 +39,9 @@ import { registerCajaMayorHandlers } from './electron/handlers/caja-mayor.handle
 import { registerBankingHandlers, startAcreditacionesScheduler } from './electron/handlers/banking.handler';
 import { registerCuentasPorPagarHandlers } from './electron/handlers/cuentas-por-pagar.handler';
 import { registerDashboardShortcutsHandlers } from './electron/handlers/dashboard-shortcuts.handler';
+import { registerOnboardingHandlers } from './electron/handlers/onboarding.handler';
+import { registerEmpresaHandlers } from './electron/handlers/empresa.handler';
+import { registerCotizacionMercadoHandlers } from './electron/handlers/cotizacion-mercado.handler';
 import { registerPermissionsHandlers, seedPermissions } from './electron/handlers/permissions.handler';
 import { registerConfiguracionRrhhHandlers, seedConfiguracionRrhh } from './electron/handlers/configuracion-rrhh.handler';
 import { registerRrhhFuncionariosHandlers } from './electron/handlers/rrhh-funcionarios.handler';
@@ -51,7 +58,16 @@ import { registerEquiposComisionHandlers } from './electron/handlers/equipos-com
 import { registerCuentasPorCobrarHandlers } from './electron/handlers/cuentas-por-cobrar.handler';
 import { registerMovimientosClienteHandlers } from './electron/handlers/movimientos-cliente.handler';
 import { seedInitialData } from './electron/utils/seed-data';
+import { runBootstrapMigrations } from './electron/utils/db-migrations-bootstrap';
 import { seedSystemData } from './electron/utils/seed-system';
+import { migratePlaintextPasswords } from './electron/utils/migrate-passwords';
+import { readAppSettings } from './electron/utils/app-settings.utils';
+import { setCurrentDevice } from './electron/utils/current-device.utils';
+import { Dispositivo } from './src/app/database/entities/financiero/dispositivo.entity';
+import { getDbPassword } from './electron/utils/db-password.utils';
+import type { DbConnectionOverride } from './src/app/database/database.config';
+import { registerDbConfigHandlers } from './electron/handlers/db-config.handler';
+import { registerAppModeHandlers } from './electron/handlers/app-mode.handler';
 // RRHH Fase 8 - Dashboard, Notificaciones, Reportes
 import { registerNotificacionesRrhhHandlers, generarNotificacionesRrhh } from './electron/handlers/notificaciones-rrhh.handler';
 import { registerDashboardRrhhHandlers } from './electron/handlers/dashboard-rrhh.handler';
@@ -90,20 +106,78 @@ function setCurrentUser(user: Usuario | null): void {
   currentUser = user;
 }
 
+async function buildDbOverride(userDataPath: string): Promise<DbConnectionOverride | undefined> {
+  const settings = readAppSettings(userDataPath);
+  const db = settings.database;
+  if (db.type === 'postgres') {
+    const password = await getDbPassword();
+    // Postgres devuelve NUMERIC/DECIMAL como string por default (preserva precisión).
+    // Para el caso de uso de esta app (montos PYG/USD/BRL con max 2 decimales y
+    // valores muy por debajo de 10^15) no necesitamos esa precisión y sí necesitamos
+    // que las operaciones aritméticas en el frontend funcionen sin coerciones manuales
+    // (decimal + decimal terminaba concatenando strings y mostrando vacío en PdV).
+    // Forzamos parseFloat en OID 1700 (numeric). OID 20 (int8/bigint) lo dejamos como
+    // está por seguridad — no se usa para montos.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const pgLib = require('pg');
+      pgLib.types.setTypeParser(1700, (v: string) => v == null ? null : parseFloat(v));
+    } catch (e) {
+      console.warn('[DB] No se pudo registrar pg.types numeric parser:', e);
+    }
+    return {
+      type: 'postgres',
+      host: db.host,
+      port: db.port,
+      database: db.database,
+      username: db.username,
+      password,
+      schema: db.schema,
+      ssl: db.ssl,
+    };
+  }
+  // sqlite con path opcional
+  if (db.path && db.path !== 'default') {
+    return { type: 'sqlite', sqlitePath: db.path };
+  }
+  return undefined; // sqlite default, mantiene comportamiento legacy
+}
+
 function initializeDatabase() {
   // Get user data path
   const userDataPath = app.getPath('userData');
 
   // Initialize database service
   dbService = DatabaseService.getInstance();
-  dbService.initialize(userDataPath)
-    .then((dataSource) => {
+  buildDbOverride(userDataPath)
+    .then((override) => dbService!.initialize(userDataPath, override))
+    .then(async (dataSource) => {
       console.log('Database initialized successfully');
+
+      // Bootstrap-time SQL fixes (idempotentes) que synchronize:true no aplica solo.
+      // Ej: drop de UNIQUE residual cuando una relacion cambio de OneToOne a ManyToOne.
+      await runBootstrapMigrations(dataSource);
+
+      // F0: hashear passwords plaintext con bcrypt (idempotente). Antes de auth handlers.
+      try {
+        await migratePlaintextPasswords(dataSource);
+      } catch (e) {
+        console.error('[migrate-passwords] error:', e);
+      }
+
+      // F3 paso 2: monkey-patch ipcMain.handle para que cada handler que
+      // se registre abajo quede tambien copiado en handlerRegistry.
+      // Necesario para que el server HTTP de F3 pueda routear /api/rpc al
+      // mismo handler sin reescribir nada.
+      installHandlerRegistry();
+
       // Register all IPC handlers *after* the database is ready
-      registerPrinterHandlers(dataSource);
+      registerPrinterHandlers(dataSource, getCurrentUser);
       registerPersonasHandlers(dataSource, getCurrentUser);
       registerAuthHandlers(dataSource, getCurrentUser, setCurrentUser);
       registerImageHandlers(dataSource);
+      registerFilesHandlers(); // generic file IPCs (save/delete/read/open)
+      registerAdjuntosHandlers(dataSource, getCurrentUser); // CRUD generico de adjuntos polimorficos
       registerProductosHandlers(dataSource, getCurrentUser);
       registerFinancieroHandlers(dataSource, getCurrentUser);
       registerComprasHandlers(dataSource, getCurrentUser);
@@ -114,6 +188,9 @@ function initializeDatabase() {
       registerBankingHandlers(dataSource, getCurrentUser); // CuentasBancarias + MaquinasPos + Acreditaciones
       registerCuentasPorPagarHandlers(dataSource, getCurrentUser); // CompraCategoria + CompraCuota + CuentaPorPagar
       registerDashboardShortcutsHandlers(dataSource, getCurrentUser); // Dashboard Shortcuts personalizables
+      registerOnboardingHandlers(dataSource, getCurrentUser); // Onboarding tasks (lista guiada en Home)
+      registerEmpresaHandlers(dataSource, getCurrentUser); // Empresa singleton (datos + branding + fiscal)
+      registerCotizacionMercadoHandlers(); // Scraping de cotizaciones de mercado on-demand
       registerPermissionsHandlers(dataSource, getCurrentUser); // RRHH: Permission + RolePermission
       registerConfiguracionRrhhHandlers(dataSource, getCurrentUser); // RRHH: ConfiguracionRrhh (parametros legales)
       registerRrhhFuncionariosHandlers(dataSource, getCurrentUser); // RRHH Fase 1: Cargos + Funcionarios + Historicos
@@ -141,6 +218,8 @@ function initializeDatabase() {
       registerDashboardFinancieroHandlers(dataSource, getCurrentUser);
       registerDashboardCajaMayorHandlers(dataSource, getCurrentUser);
 
+      console.log(`[F3] handlerRegistry: ${handlerRegistryCount()} channels registrados (disponibles via IPC + futuro /api/rpc).`);
+
       // Startup migration: populate vendedor_id from created_by for historic ventas
       dataSource.query(`UPDATE ventas SET vendedor_id = created_by WHERE vendedor_id IS NULL AND created_by IS NOT NULL`)
         .catch((e: any) => console.warn('Migration vendedor_id:', e.message));
@@ -149,7 +228,13 @@ function initializeDatabase() {
       startAcreditacionesScheduler(dataSource, 5);
 
       // Backup & Restore handlers
-      registerBackupHandlers(dataSource);
+      registerBackupHandlers(dataSource, getCurrentUser);
+
+      // F1: Configuracion de BD (sqlite path / postgres)
+      registerDbConfigHandlers(dataSource, getCurrentUser);
+
+      // F4.2: Modo de operacion (standalone / server / cliente)
+      registerAppModeHandlers(dataSource, getCurrentUser);
 
       // Importacion de facturas con OCR + IA
       registerFacturaImportHandlers(dataSource, getCurrentUser);
@@ -167,6 +252,56 @@ function initializeDatabase() {
           console.error('Error en seeds iniciales:', e);
         }
       })();
+
+      // F4: exponer mode al renderer via process.env (preload los lee).
+      // Sirve para que el factory `repositoryFactory()` en app.module decida
+      // qué impl del repository inyectar al boot del Angular.
+      const settings = readAppSettings(app.getPath('userData'));
+      process.env['FRC_APP_MODE'] = settings.mode;
+      if (settings.mode === 'client' && settings.network?.serverUrl) {
+        process.env['FRC_SERVER_URL'] = settings.network.serverUrl;
+      }
+
+      // F5 paso 3: cargar el Dispositivo configurado localmente (si existe)
+      // y exponerlo para que los handlers de creacion lo persistan en
+      // ventas/compras/conteos/comandas. Solo aplica al path IPC local —
+      // el path HTTP recibe device_id via JWT claim.
+      if (typeof settings.deviceId === 'number') {
+        try {
+          const disp = await dataSource.getRepository(Dispositivo).findOne({
+            where: { id: settings.deviceId },
+          });
+          if (disp && disp.activo) {
+            setCurrentDevice({ id: disp.id });
+            // Tambien exponer al renderer/preload (modo cliente lo envia en
+            // login + refresh para que el server lo firme en el JWT).
+            process.env['FRC_DEVICE_ID'] = String(disp.id);
+            console.log(`[F5] currentDevice cargado: id=${disp.id} (${disp.nombre || '?'})`);
+          } else {
+            console.warn(`[F5] deviceId=${settings.deviceId} no encontrado o inactivo en BD.`);
+          }
+        } catch (e) {
+          console.warn('[F5] error cargando currentDevice:', e);
+        }
+      }
+
+      // F3: arrancar Fastify HTTP server si mode === 'server'
+      if (settings.mode === 'server') {
+        const port = settings.network?.serverPort || 7070;
+        const driver: 'sqlite' | 'postgres' = settings.database.type;
+        const appVersion = (() => {
+          try { return require('./package.json').version || '0.0.0'; } catch { return '0.0.0'; }
+        })();
+        // schemaVersion = nombre de la baseline activa (queda inmutable post-arranque)
+        const schemaVersion = driver === 'postgres'
+          ? 'BaselinePostgres1778380893207'
+          : 'Baseline1778378410416';
+        startServer({
+          port, appVersion, schemaVersion, driver, dataSource,
+        }).catch((e) => console.error('[server] Error al arrancar Fastify:', e));
+      } else {
+        console.log(`[server] Modo '${settings.mode}', no se arranca Fastify.`);
+      }
 
       // Auto-backup scheduler (lee config persistida; idempotente si está deshabilitado)
       startAutoBackupScheduler(app.getPath('userData'));
@@ -218,123 +353,72 @@ function createWindow(): void {
     win = null;
   });
 
-  // Register the app:// protocol for serving local files
-  // This part remains here
+  // app:// protocol — registered once in app.on('ready') below.
+}
+
+// Single, generic handler for app:// URLs. Maps `app://<carpeta>/<file>` to
+// `userData/<carpeta>/<file>`. Falls back to the app folder for legacy URLs
+// that point to bundled assets.
+function registerAppProtocol(): void {
+  if (protocol.isProtocolRegistered && protocol.isProtocolRegistered('app')) {
+    return;
+  }
   protocol.registerFileProtocol('app', (request: { url: string }, callback: (response: any) => void) => {
-    const urlPath = request.url.substring(6); // Remove 'app://'
+    const urlPath = request.url.replace(/^app:\/\//, '');
+    const userDataPath = app.getPath('userData');
+    const userDataResolved = path.normalize(path.join(userDataPath, urlPath));
 
-    // Handle profile images
-    if (urlPath.startsWith('profile-images/')) {
-      const fileName = urlPath.replace('profile-images/', '');
-      const imagesDir = path.join(app.getPath('userData'), 'profile-images');
-      if (!fs.existsSync(imagesDir)) {
-        fs.mkdirSync(imagesDir, { recursive: true });
+    // Ensure the parent dir exists for known buckets so first-write doesn't fail
+    // before any file is requested. Cheap and idempotent.
+    const knownBuckets = ['profile-images', 'producto-images', 'factura-imports', 'funcionario-documentos', 'adjuntos', 'logos'];
+    for (const bucket of knownBuckets) {
+      if (urlPath.startsWith(bucket + '/')) {
+        const bucketDir = path.join(userDataPath, bucket);
+        if (!fs.existsSync(bucketDir)) fs.mkdirSync(bucketDir, { recursive: true });
+        break;
       }
-      callback({ path: path.join(imagesDir, fileName) });
+    }
+
+    if (fs.existsSync(userDataResolved)) {
+      callback({ path: userDataResolved });
       return;
     }
 
-    // Handle product images
-    if (urlPath.startsWith('producto-images/')) {
-      const fileName = urlPath.replace('producto-images/', '');
-      const imagesDir = path.join(app.getPath('userData'), 'producto-images');
-      if (!fs.existsSync(imagesDir)) {
-        fs.mkdirSync(imagesDir, { recursive: true });
-      }
-      const imagePath = path.join(imagesDir, fileName);
-      // console.log('Serving product image from:', imagePath); // Optional logging
-      callback({ path: imagePath });
+    // Fallback: app folder (bundled assets)
+    const appResolved = path.normalize(path.join(app.getAppPath(), urlPath));
+    if (fs.existsSync(appResolved)) {
+      callback({ path: appResolved });
       return;
     }
 
-    // Handle factura imports (PDFs/images de facturas OCR)
-    if (urlPath.startsWith('factura-imports/')) {
-      const fileName = urlPath.replace('factura-imports/', '');
-      const dir = path.join(app.getPath('userData'), 'factura-imports');
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      callback({ path: path.join(dir, fileName) });
-      return;
-    }
-
-    // Handle other app:// URLs - check in app folder first
-    let normalizedPath = path.normalize(`${app.getAppPath()}/${urlPath}`);
-    if (fs.existsSync(normalizedPath)) {
-      callback({ path: normalizedPath });
-    } else {
-      // Try user data directory as fallback
-      const userDataPath = app.getPath('userData');
-      normalizedPath = path.normalize(`${userDataPath}/${urlPath}`);
-      if (fs.existsSync(normalizedPath)) {
-        callback({ path: normalizedPath });
-      } else {
-        console.error(`File not found: ${normalizedPath}`);
-        callback({ error: -2 /* ENOENT */ });
-      }
-    }
+    // Not found — return userData path so the renderer gets a clear ENOENT
+    callback({ path: userDataResolved });
   });
 }
 
 // Initialize the database when the app is ready
 app.on('ready', () => {
-  // The protocol registration needs to happen before createWindow in 'ready'
-  // Ensure it only happens once
-  if (!protocol.isProtocolRegistered('app')) {
-      protocol.registerFileProtocol('app', (request: { url: string }, callback: (response: any) => void) => {
-        const urlPath = request.url.substring(6); // Remove 'app://'
+  registerAppProtocol();
 
-        // Handle profile images
-        if (urlPath.startsWith('profile-images/')) {
-          const fileName = urlPath.replace('profile-images/', '');
-          const imagesDir = path.join(app.getPath('userData'), 'profile-images');
-          if (!fs.existsSync(imagesDir)) {
-            fs.mkdirSync(imagesDir, { recursive: true });
-          }
-          callback({ path: path.join(imagesDir, fileName) });
-          return;
-        }
-
-        // Handle product images
-        if (urlPath.startsWith('producto-images/')) {
-          const fileName = urlPath.replace('producto-images/', '');
-          const imagesDir = path.join(app.getPath('userData'), 'producto-images');
-          if (!fs.existsSync(imagesDir)) {
-            fs.mkdirSync(imagesDir, { recursive: true });
-          }
-          const imagePath = path.join(imagesDir, fileName);
-          // console.log('Serving product image from:', imagePath);
-          callback({ path: imagePath });
-          return;
-        }
-
-        // Handle factura imports (PDFs/images de facturas OCR)
-        if (urlPath.startsWith('factura-imports/')) {
-          const fileName = urlPath.replace('factura-imports/', '');
-          const dir = path.join(app.getPath('userData'), 'factura-imports');
-          if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-          }
-          callback({ path: path.join(dir, fileName) });
-          return;
-        }
-
-        // Handle other app:// URLs - check in app folder first
-        let normalizedPath = path.normalize(`${app.getAppPath()}/${urlPath}`);
-        if (fs.existsSync(normalizedPath)) {
-          callback({ path: normalizedPath });
-        } else {
-          // Try user data directory as fallback
-          const userDataPath = app.getPath('userData');
-          normalizedPath = path.normalize(`${userDataPath}/${urlPath}`);
-          if (fs.existsSync(normalizedPath)) {
-            callback({ path: normalizedPath });
-          } else {
-            console.error(`File not found: ${normalizedPath}`);
-            callback({ error: -2 /* ENOENT */ });
-          }
-        }
-      });
+  // F4: setear env vars de mode/serverUrl ANTES de createWindow para que el
+  // preload los lea al cargar (el renderer hereda process.env del main al
+  // momento del spawn). initializeDatabase() corre async y los setea muy
+  // tarde — para entonces el preload ya leyo defaults.
+  try {
+    const earlySettings = readAppSettings(app.getPath('userData'));
+    process.env['FRC_APP_MODE'] = earlySettings.mode;
+    if (earlySettings.mode === 'client' && earlySettings.network?.serverUrl) {
+      process.env['FRC_SERVER_URL'] = earlySettings.network.serverUrl;
+    }
+    // F5 paso 3: tambien exponer el deviceId al preload para que lo inyecte
+    // en login + refresh (modo cliente). Lectura sync para que el renderer
+    // herede el valor al spawn — initializeDatabase() corre async, no llega.
+    if (typeof earlySettings.deviceId === 'number') {
+      process.env['FRC_DEVICE_ID'] = String(earlySettings.deviceId);
+    }
+    console.log(`[main] early FRC_APP_MODE=${earlySettings.mode} (preload heredara este valor)`);
+  } catch (e) {
+    console.warn('[main] no se pudo leer app-settings temprano:', e);
   }
 
   initializeDatabase();
@@ -345,12 +429,20 @@ app.on('ready', () => {
 app.on('window-all-closed', () => {
   // On macOS specific behavior
   if (process.platform !== 'darwin') {
+    // Stop Fastify server (idempotente — si nunca arranco no hace nada)
+    stopServer().catch(() => {});
     // Close the database connection
     if (dbService) {
       dbService.close();
     }
     app.quit();
   }
+});
+
+app.on('before-quit', () => {
+  // Stop server explicitly antes de quit (cubrira el caso macOS donde el handler
+  // de window-all-closed no termina la app)
+  stopServer().catch(() => {});
 });
 
 app.on('activate', () => {

@@ -24,7 +24,7 @@
 
     <mat-form-field appearance="outline">
       <mat-label>Monto</mat-label>
-      <input matInput type="number" formControlName="monto" required>
+      <input matInput type="text" inputmode="decimal" formControlName="monto" required appCurrencyInput [decimals]="decimalesMoneda">
       <span matSuffix>{{cuentaBancaria?.moneda?.simbolo}}</span>
     </mat-form-field>
 

@@ -1,4 +1,4 @@
-import { Entity, Column, ManyToOne, JoinColumn, OneToMany, Index, OneToOne } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, OneToMany, Index } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import { Receta } from './receta.entity';
 import { Presentacion } from './presentacion.entity';
@@ -24,7 +24,8 @@ export class RecetaPresentacion extends BaseModel {
   activo!: boolean;
 
   // Relationships
-  @OneToOne(() => Receta, { nullable: false, cascade: true, eager: true })
+  // ManyToOne: varias variaciones (una por presentación del sabor) comparten la misma receta base.
+  @ManyToOne(() => Receta, { nullable: false, eager: true })
   @JoinColumn({ name: 'receta_id' })
   receta!: Receta;
 

@@ -2,6 +2,7 @@ import { ipcMain, IpcMainInvokeEvent } from 'electron';
 import { DataSource } from 'typeorm';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { ensurePermission } from '../utils/auth.utils';
 
 // Import all productos entities
 import { Familia } from '../../src/app/database/entities/productos/familia.entity';
@@ -90,6 +91,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('create-familia', async (_event: any, familiaData: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CATEGORIAS_GESTIONAR');
     try {
       const familiaRepository = dataSource.getRepository(Familia);
       const currentUser = getCurrentUser();
@@ -109,6 +111,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('update-familia', async (_event: any, familiaId: number, familiaData: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CATEGORIAS_GESTIONAR');
     try {
       const familiaRepository = dataSource.getRepository(Familia);
       const currentUser = getCurrentUser();
@@ -131,6 +134,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('delete-familia', async (_event: any, familiaId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CATEGORIAS_GESTIONAR');
     try {
       const familiaRepository = dataSource.getRepository(Familia);
       const currentUser = getCurrentUser();
@@ -194,6 +198,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('create-subfamilia', async (_event: any, subfamiliaData: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CATEGORIAS_GESTIONAR');
     try {
       const subfamiliaRepository = dataSource.getRepository(Subfamilia);
       const familiaRepository = dataSource.getRepository(Familia);
@@ -220,6 +225,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('update-subfamilia', async (_event: any, subfamiliaId: number, subfamiliaData: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CATEGORIAS_GESTIONAR');
     try {
       const subfamiliaRepository = dataSource.getRepository(Subfamilia);
       const familiaRepository = dataSource.getRepository(Familia);
@@ -257,6 +263,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('delete-subfamilia', async (_event: any, subfamiliaId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CATEGORIAS_GESTIONAR');
     try {
       const subfamiliaRepository = dataSource.getRepository(Subfamilia);
       const currentUser = getCurrentUser();
@@ -385,7 +392,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const productoRepository = dataSource.getRepository(Producto);
       return await productoRepository.findOne({
         where: { id: productoId },
-        relations: ['subfamilia', 'subfamilia.familia', 'receta', 'presentaciones', 'preciosCosto']
+        relations: ['subfamilia', 'subfamilia.familia', 'receta', 'presentaciones', 'preciosCosto', 'sabores']
       });
     } catch (error) {
       console.error('Error getting producto:', error);
@@ -394,6 +401,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('create-producto', async (_event: any, productoData: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
     try {
       const productoRepository = dataSource.getRepository(Producto);
       const subfamiliaRepository = dataSource.getRepository(Subfamilia);
@@ -432,6 +440,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         stockMinimo: productoData.stockMinimo,
         stockMaximo: productoData.stockMaximo,
         registroCompleto: productoData.registroCompleto !== undefined ? productoData.registroCompleto : true,
+        imageUrl: productoData.imageUrl || undefined,
       });
 
       await setEntityUserTracking(dataSource, producto, currentUser?.id, false);
@@ -444,6 +453,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('update-producto', async (_event: any, productoId: number, productoData: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
     try {
       const productoRepository = dataSource.getRepository(Producto);
       const subfamiliaRepository = dataSource.getRepository(Subfamilia);
@@ -485,6 +495,17 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
       // Estado de registro (parcial vs completo)
       if (productoData.registroCompleto !== undefined) producto.registroCompleto = productoData.registroCompleto;
+
+      // Imagen — al cambiar URL, eliminar archivo viejo del filesystem.
+      if (productoData.imageUrl !== undefined) {
+        const oldUrl = producto.imageUrl;
+        const newUrl = productoData.imageUrl || undefined;
+        if (oldUrl && oldUrl !== newUrl) {
+          const { deleteImageByUrl } = require('../utils/image-resize.utils');
+          deleteImageByUrl(oldUrl);
+        }
+        producto.imageUrl = newUrl;
+      }
 
       // Actualizar subfamilia si se proporciona
       if (productoData.subfamiliaId !== undefined) {
@@ -580,6 +601,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('create-presentacion', async (_event: any, presentacionData: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
     try {
       const presentacionRepository = dataSource.getRepository(Presentacion);
       const productoRepository = dataSource.getRepository(Producto);
@@ -608,7 +630,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         cantidad: presentacionData.cantidad,
         principal: presentacionData.principal,
         producto: producto,
-        activo: presentacionData.activo !== undefined ? presentacionData.activo : true
+        activo: presentacionData.activo !== undefined ? presentacionData.activo : true,
+        imageUrl: presentacionData.imageUrl || undefined
       });
 
       await setEntityUserTracking(dataSource, presentacion, currentUser?.id, false);
@@ -621,6 +644,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('update-presentacion', async (_event: any, presentacionId: number, presentacionData: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
     try {
       const presentacionRepository = dataSource.getRepository(Presentacion);
       const currentUser = getCurrentUser();
@@ -654,6 +678,15 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       }
       if (presentacionData.activo !== undefined) {
         presentacion.activo = presentacionData.activo;
+      }
+      if (presentacionData.imageUrl !== undefined) {
+        const oldUrl = presentacion.imageUrl;
+        const newUrl = presentacionData.imageUrl || undefined;
+        if (oldUrl && oldUrl !== newUrl) {
+          const { deleteImageByUrl } = require('../utils/image-resize.utils');
+          deleteImageByUrl(oldUrl);
+        }
+        presentacion.imageUrl = newUrl;
       }
 
       await setEntityUserTracking(dataSource, presentacion, currentUser?.id, true);

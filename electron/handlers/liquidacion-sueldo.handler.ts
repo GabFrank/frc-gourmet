@@ -23,8 +23,10 @@ import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { getConfigNumber } from './configuracion-rrhh.handler';
+import { ensurePermission } from '../utils/auth.utils';
 
 const SEED_CONCEPTOS: Array<{ codigo: string; descripcion: string; esHaber: boolean; esCalculadoAuto: boolean }> = [
   { codigo: 'SALARIO_BASE', descripcion: 'Salario base', esHaber: true, esCalculadoAuto: true },
@@ -457,6 +459,7 @@ export function registerLiquidacionSueldoHandlers(
   });
 
   ipcMain.handle('aprobar-liquidacion-sueldo', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_LIQUIDACION_APROBAR');
     const repo = dataSource.getRepository(LiquidacionSueldo);
     const liq = await repo.findOne({ where: { id } });
     if (!liq) throw new Error(`Liquidacion ${id} no encontrada`);
@@ -473,6 +476,7 @@ export function registerLiquidacionSueldoHandlers(
   });
 
   ipcMain.handle('volver-borrador-liquidacion-sueldo', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_LIQUIDACION_APROBAR');
     const repo = dataSource.getRepository(LiquidacionSueldo);
     const liq = await repo.findOne({ where: { id } });
     if (!liq) throw new Error(`Liquidacion ${id} no encontrada`);
@@ -485,6 +489,7 @@ export function registerLiquidacionSueldoHandlers(
   });
 
   ipcMain.handle('pagar-liquidacion-sueldo', async (_e, id: number, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_LIQUIDACION_PAGAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -620,6 +625,7 @@ export function registerLiquidacionSueldoHandlers(
   });
 
   ipcMain.handle('anular-liquidacion-sueldo', async (_e, id: number, motivo: string) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_LIQUIDACION_PAGAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -787,7 +793,7 @@ export function registerLiquidacionSueldoHandlers(
       funcionario,
       tipo: data.tipo,
       monto: data.monto,
-      fecha: data.fecha,
+      fecha: parseLocalDate(data.fecha)!,
       motivo: data.motivo,
       esRecurrente: data.esRecurrente === true,
       frecuencia: data.frecuencia,

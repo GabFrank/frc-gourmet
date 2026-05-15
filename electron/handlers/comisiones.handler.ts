@@ -18,6 +18,8 @@ import {
 } from '../../src/app/database/entities/rrhh/regla-comision-enums';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { parseLocalDate } from '../utils/date.utils';
+import { ensurePermission } from '../utils/auth.utils';
 
 function getPeriodoBounds(periodo: string): { fechaInicio: Date; fechaFin: Date } {
   const [yStr, mStr] = periodo.split('-');
@@ -276,6 +278,7 @@ export function registerComisionesHandlers(
   });
 
   ipcMain.handle('create-regla-comision', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_REGLA_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -292,8 +295,8 @@ export function registerComisionesHandlers(
         metaMontoLocal: data.metaMontoLocal,
         modoValidacion: data.modoValidacion || ModoValidacionComision.TODO_O_NADA,
         recurrencia: data.recurrencia,
-        fechaInicio: data.fechaInicio,
-        fechaFin: data.fechaFin,
+        fechaInicio: parseLocalDate(data.fechaInicio),
+        fechaFin: parseLocalDate(data.fechaFin),
         esEquipo: data.esEquipo || false,
         activo: data.activo !== undefined ? data.activo : true,
       });
@@ -338,6 +341,7 @@ export function registerComisionesHandlers(
   });
 
   ipcMain.handle('update-regla-comision', async (_e, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_REGLA_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -356,8 +360,8 @@ export function registerComisionesHandlers(
       if (data.metaMontoLocal !== undefined) regla.metaMontoLocal = data.metaMontoLocal;
       if (data.modoValidacion !== undefined) regla.modoValidacion = data.modoValidacion;
       if (data.recurrencia !== undefined) regla.recurrencia = data.recurrencia;
-      if (data.fechaInicio !== undefined) regla.fechaInicio = data.fechaInicio;
-      if (data.fechaFin !== undefined) regla.fechaFin = data.fechaFin;
+      if (data.fechaInicio !== undefined) regla.fechaInicio = parseLocalDate(data.fechaInicio);
+      if (data.fechaFin !== undefined) regla.fechaFin = parseLocalDate(data.fechaFin);
       if (data.esEquipo !== undefined) regla.esEquipo = data.esEquipo;
       if (data.activo !== undefined) regla.activo = data.activo;
 
@@ -406,6 +410,7 @@ export function registerComisionesHandlers(
   });
 
   ipcMain.handle('delete-regla-comision', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_REGLA_GESTIONAR');
     await dataSource.getRepository(ReglaComision).delete(id);
     return { success: true };
   });
@@ -420,6 +425,7 @@ export function registerComisionesHandlers(
   });
 
   ipcMain.handle('asignar-funcionario-regla', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_REGLA_GESTIONAR');
     const { funcionarioId, reglaId, fechaDesde, fechaHasta } = data;
     const userId = getCurrentUser()?.id;
 
@@ -480,6 +486,7 @@ export function registerComisionesHandlers(
   });
 
   ipcMain.handle('generar-liquidacion-comision', async (_e, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_LIQUIDACION_GENERAR');
     const { funcionarioId, periodo } = payload;
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -593,6 +600,7 @@ export function registerComisionesHandlers(
   });
 
   ipcMain.handle('generar-liquidaciones-comision-mes', async (_e, periodo: string) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_LIQUIDACION_GENERAR');
     // Buscar todos los funcionarios con reglas activas
     const asignaciones = await dataSource.getRepository(FuncionarioReglaComision).find({
       where: { activo: true } as any,
@@ -615,6 +623,7 @@ export function registerComisionesHandlers(
   });
 
   ipcMain.handle('aprobar-liquidacion-comision', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_LIQUIDACION_APROBAR');
     const repo = dataSource.getRepository(LiquidacionComision);
     const liq = await repo.findOne({ where: { id } });
     if (!liq) throw new Error(`Liquidacion comision ${id} no encontrada`);

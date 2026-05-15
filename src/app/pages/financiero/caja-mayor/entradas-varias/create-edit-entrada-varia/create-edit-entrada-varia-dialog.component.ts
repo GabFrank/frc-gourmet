@@ -15,6 +15,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatRadioModule } from '@angular/material/radio';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 type DestinoTipo = 'CAJA_MAYOR' | 'CUENTA_BANCARIA';
 
@@ -28,11 +29,13 @@ type DestinoTipo = 'CAJA_MAYOR' | 'CUENTA_BANCARIA';
     MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule,
     MatSelectModule, MatDatepickerModule, MatNativeDateModule,
     MatProgressSpinnerModule, MatSnackBarModule, MatDividerModule, MatRadioModule,
+    CurrencyInputDirective,
   ]
 })
 export class CreateEditEntradaVariaDialogComponent implements OnInit {
   form!: FormGroup;
   saving = false;
+  decimalesMoneda = 0;
 
   categorias: any[] = [];
   monedas: any[] = [];
@@ -79,8 +82,18 @@ export class CreateEditEntradaVariaDialogComponent implements OnInit {
       const cb = this.cuentasBancarias.find(c => c.id === id);
       if (cb?.moneda?.id) {
         this.form.get('monedaId')?.setValue(cb.moneda.id, { emitEvent: false });
+        this.recalcDecimalesMoneda();
       }
     });
+
+    this.form.get('monedaId')?.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.form?.get('monedaId')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   applyValidators(tipo: DestinoTipo): void {
