@@ -148,6 +148,13 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   updateDownloaded = false;
   private updateStatusSub: Subscription | null = null;
 
+  // Window controls (custom titlebar). En macOS los semáforos nativos
+  // quedan a la izquierda por `titleBarStyle:hiddenInset` en main.ts, así
+  // que ocultamos los controles custom para no duplicar.
+  isWindowMaximized = false;
+  isMacOS = false;
+  private windowStateUnsub: (() => void) | null = null;
+
   @ViewChild('drawer') sidenav!: MatSidenav;
 
   isHandset$: Observable<boolean> = this.breakpointObserver
@@ -280,6 +287,40 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
         this.updateDownloaded = false;
       }
     });
+
+    // Window controls custom titlebar: leer plataforma + estado inicial y
+    // suscribirse a cambios maximize/unmaximize emitidos desde main.ts.
+    this.initWindowControls();
+  }
+
+  private async initWindowControls(): Promise<void> {
+    const api: any = (window as any).api;
+    if (!api?.windowPlatform) return; // dev sin preload o fallback
+    try {
+      const platform: string = await api.windowPlatform();
+      this.isMacOS = platform === 'darwin';
+      this.isWindowMaximized = await api.windowIsMaximized();
+      this.windowStateUnsub = api.onWindowStateChanged?.((state: { isMaximized: boolean }) => {
+        this.ngZone.run(() => { this.isWindowMaximized = !!state?.isMaximized; });
+      }) || null;
+    } catch (e) {
+      console.warn('[app] No se pudieron inicializar window controls:', e);
+    }
+  }
+
+  /** Minimiza la ventana. */
+  minimizeWindow(): void {
+    (window as any).api?.windowMinimize?.();
+  }
+
+  /** Alterna maximizado/restaurado. */
+  toggleMaximize(): void {
+    (window as any).api?.windowMaximizeToggle?.();
+  }
+
+  /** Cierra la ventana (dispara el flujo normal de cierre de Electron). */
+  closeWindow(): void {
+    (window as any).api?.windowClose?.();
   }
 
   ngAfterViewInit(): void {
@@ -297,6 +338,9 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (this.empresaSub) {
       this.empresaSub.unsubscribe();
+    }
+    if (this.windowStateUnsub) {
+      this.windowStateUnsub();
     }
   }
 

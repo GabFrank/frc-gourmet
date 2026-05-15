@@ -1067,6 +1067,23 @@ interface ObservacionProducto {
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('api', {
+  // Controles de ventana (custom titlebar — frame:false en Win/Linux).
+  // Llaman a los handlers IPC `window:*` registrados en main.ts.
+  windowMinimize: () => ipcRenderer.invoke('window:minimize'),
+  windowMaximizeToggle: () => ipcRenderer.invoke('window:maximize-toggle'),
+  windowClose: () => ipcRenderer.invoke('window:close'),
+  windowIsMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:is-maximized'),
+  windowPlatform: (): Promise<NodeJS.Platform> => ipcRenderer.invoke('window:platform'),
+  /**
+   * Suscribe a cambios de maximize/unmaximize. Devuelve un unsubscribe.
+   * El handler recibe `{ isMaximized: boolean }` enviado por main.ts.
+   */
+  onWindowStateChanged: (handler: (state: { isMaximized: boolean }) => void) => {
+    const listener = (_event: any, state: { isMaximized: boolean }) => handler(state);
+    ipcRenderer.on('window:state-changed', listener);
+    return () => ipcRenderer.removeListener('window:state-changed', listener);
+  },
+
   // F2/F4: app-mode resolver para que el RepositoryService factory decida
   // entre IpcService (standalone/server) y HttpService (cliente).
   // Esto NO va por IPC porque tiene que ser sincrónico (factory de Angular DI

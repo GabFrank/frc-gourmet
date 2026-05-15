@@ -1,5 +1,5 @@
 // Use ES Module import syntax
-import { app, BrowserWindow, protocol } from 'electron';
+import { app, BrowserWindow, protocol, ipcMain } from 'electron';
 import * as path from 'path';
 import * as url from 'url';
 import * as fs from 'fs';
@@ -317,16 +317,47 @@ function initializeDatabase() {
 
 function createWindow(): void {
   // Create the browser window.
+  // En Win/Linux usamos frame:false para tener controles de ventana custom
+  // (minimizar/maximizar/cerrar) integrados al toolbar de la app, estilo
+  // VSCode/Slack/Discord. En macOS dejamos titleBarStyle:'hiddenInset' para
+  // mantener los semáforos nativos en su posición esperada por el usuario
+  // y ocultar los controles custom desde el renderer.
+  const isMac = process.platform === 'darwin';
   win = new BrowserWindow({
     width: 1200,
     height: 800,
+    show: false, // mostramos manualmente tras maximizar para evitar flicker
+    frame: isMac ? true : false,
+    titleBarStyle: isMac ? 'hiddenInset' : 'default',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
-    },
-    fullscreen: true
+    }
   });
+  win.maximize();
+  win.show();
+
+  // Emitir cambios de estado maximize/unmaximize al renderer para que el
+  // toolbar pueda alternar entre el icono "maximize" y "restore".
+  win.on('maximize', () => {
+    win?.webContents.send('window:state-changed', { isMaximized: true });
+  });
+  win.on('unmaximize', () => {
+    win?.webContents.send('window:state-changed', { isMaximized: false });
+  });
+
+  // Handlers IPC de control de ventana (consumidos desde el toolbar Angular).
+  ipcMain.handle('window:minimize', () => { win?.minimize(); });
+  ipcMain.handle('window:maximize-toggle', () => {
+    if (!win) return false;
+    if (win.isMaximized()) { win.unmaximize(); return false; }
+    win.maximize();
+    return true;
+  });
+  ipcMain.handle('window:close', () => { win?.close(); });
+  ipcMain.handle('window:is-maximized', () => win?.isMaximized() ?? false);
+  ipcMain.handle('window:platform', () => process.platform);
 
   // Load the app
   if (process.argv.indexOf('--serve') !== -1) {
