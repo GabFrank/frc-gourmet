@@ -343,9 +343,108 @@
   margin-right: 10px;
 }
 
+.empresa-titulos {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.1;
+}
+
 .empresa-nombre {
   font-weight: 500;
   letter-spacing: 0.2px;
+}
+
+.empresa-subtitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  letter-spacing: 0.3px;
+  opacity: 0.75;
+  margin-top: 1px;
+  text-transform: none;
+}
+
+// Chip mostrando el modo (Server/Cliente). Standalone no se muestra.
+.mode-chip {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  line-height: 1.4;
+  background: rgba(255, 255, 255, 0.18);
+
+  &.mode-server { background: rgba(76, 175, 80, 0.35); }
+  &.mode-client { background: rgba(33, 150, 243, 0.35); }
+}
+
+// Cluster central: cotizaciones + reloj. Se oculta en pantallas chicas.
+.header-info {
+  display: flex;
+  align-items: stretch;
+  gap: 18px;
+  height: 48px;
+  padding: 0 4px;
+
+  .info-block {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0 10px;
+    border-left: 1px solid rgba(255, 255, 255, 0.18);
+    min-width: 0;
+
+    &:first-child { border-left: 0; }
+  }
+
+  .cotizaciones {
+    .info-row {
+      display: flex;
+      gap: 8px;
+      font-size: 11px;
+      line-height: 1.4;
+      white-space: nowrap;
+    }
+    .info-label {
+      font-weight: 600;
+      opacity: 0.75;
+      min-width: 28px;
+    }
+    .info-value {
+      font-variant-numeric: tabular-nums;
+    }
+    &.error .info-value {
+      opacity: 0.5;
+    }
+  }
+
+  .clock {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    .clock-time {
+      font-size: 16px;
+      font-weight: 500;
+      line-height: 1.15;
+    }
+    .clock-date {
+      font-size: 10.5px;
+      opacity: 0.75;
+      text-transform: capitalize;
+      letter-spacing: 0.3px;
+    }
+  }
+}
+
+// En pantallas chicas (< 1200px) ocultamos las cotizaciones para no romper
+// el layout — el reloj queda solo. Bajo 980 ocultamos todo el cluster.
+@media (max-width: 1200px) {
+  .header-info .cotizaciones { display: none; }
+}
+@media (max-width: 980px) {
+  .header-info { display: none; }
 }
 
 // Botón con nombre del usuario activo
