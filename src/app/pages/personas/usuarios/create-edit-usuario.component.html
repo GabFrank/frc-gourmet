@@ -52,6 +52,20 @@
         </div>
       </div>
 
+      <!-- Roles (multi-select) -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Roles</mat-label>
+        <mat-select formControlName="roleIds" multiple>
+          <mat-option *ngFor="let role of roles" [value]="role.id">
+            {{ role.descripcion }}
+          </mat-option>
+        </mat-select>
+        <mat-hint *ngIf="roles.length === 0">Cargando roles...</mat-hint>
+        <mat-hint *ngIf="roles.length > 0">
+          Los roles determinan los permisos del usuario.
+        </mat-hint>
+      </mat-form-field>
+
       <!-- Active checkbox -->
       <div class="checkbox-container">
         <mat-checkbox formControlName="activo" color="primary">
