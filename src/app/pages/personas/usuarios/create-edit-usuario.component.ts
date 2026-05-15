@@ -7,10 +7,13 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { RepositoryService } from '../../../database/repository.service';
 import { Usuario } from '../../../database/entities/personas/usuario.entity';
 import { Persona } from '../../../database/entities/personas/persona.entity';
+import { Role } from '../../../database/entities/personas/role.entity';
+import { UsuarioRole } from '../../../database/entities/personas/usuario-role.entity';
 import { firstValueFrom } from 'rxjs';
 import { MatIconModule } from '@angular/material/icon';
 import { GenericSearchDialogComponent, GenericSearchConfig } from '../../../shared/components/generic-search-dialog/generic-search-dialog.component';
@@ -28,6 +31,7 @@ import { GenericSearchDialogComponent, GenericSearchConfig } from '../../../shar
     MatCheckboxModule,
     MatIconModule,
     MatProgressSpinnerModule,
+    MatSnackBarModule,
     ReactiveFormsModule
   ],
   templateUrl: './create-edit-usuario.component.html',
@@ -40,6 +44,16 @@ export class CreateEditUsuarioComponent implements OnInit {
   personas: Persona[] = [];
   hidePassword = true;
 
+  /** Roles disponibles (todos los activos). */
+  roles: Role[] = [];
+
+  /**
+   * Roles que el usuario tiene ASIGNADOS al cargar (solo en modo edición).
+   * Necesitamos guardar el UsuarioRole completo porque `removeRoleFromUsuario`
+   * recibe el `usuarioRoleId` (id de la fila pivot), NO el roleId.
+   */
+  private currentUsuarioRoles: UsuarioRole[] = [];
+
   // Selected persona for display
   selectedPersona: Persona | null = null;
 
@@ -51,19 +65,21 @@ export class CreateEditUsuarioComponent implements OnInit {
     },
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private snackBar: MatSnackBar,
   ) {
     this.usuarioForm = this.fb.group({
       nickname: ['', [Validators.required]],
       password: ['', this.data.usuario ? [] : [Validators.required, Validators.minLength(4)]],
       activo: [true],
-      persona_id: [null]
+      persona_id: [null],
+      roleIds: [[] as number[]],
     });
 
     this.isEditing = !!this.data.usuario;
   }
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
     // No need to load all personas since we'll search them as needed
 
     if (this.isEditing && this.data.usuario) {
@@ -88,6 +104,34 @@ export class CreateEditUsuarioComponent implements OnInit {
         // Generate a suggested nickname based on persona's name or document
         nickname: this.generateSuggestedNickname(this.data.preselectedPersona)
       });
+    }
+
+    // Cargar roles + (si edita) los roles asignados al usuario
+    await this.loadRoles();
+  }
+
+  /**
+   * Carga roles disponibles + (si está editando) los UsuarioRole actuales
+   * y patchea el form con los roleIds para que el multi-select se preseleccione.
+   */
+  private async loadRoles(): Promise<void> {
+    try {
+      const allRoles = await firstValueFrom(this.repositoryService.getRoles());
+      this.roles = (allRoles || []).filter((r) => (r as any).activo !== false);
+
+      if (this.isEditing && this.data.usuario?.id != null) {
+        const userRoles = await firstValueFrom(
+          this.repositoryService.getUsuarioRoles(this.data.usuario.id)
+        );
+        this.currentUsuarioRoles = userRoles || [];
+        const currentRoleIds = this.currentUsuarioRoles
+          .map((ur) => ur.role?.id)
+          .filter((id): id is number => id != null);
+        this.usuarioForm.patchValue({ roleIds: currentRoleIds });
+      }
+    } catch (e) {
+      console.error('Error cargando roles', e);
+      this.snackBar.open('No se pudieron cargar los roles.', 'OK', { duration: 4000 });
     }
   }
 
@@ -176,6 +220,49 @@ export class CreateEditUsuarioComponent implements OnInit {
     });
   }
 
+  /**
+   * Aplica los cambios de roles tras crear/actualizar el usuario.
+   * - En modo crear: asigna todos los roles seleccionados.
+   * - En modo edición: calcula diff vs currentUsuarioRoles y asigna/quita.
+   * No es transaccional (los handlers son por-fila), pero los errores
+   * individuales se reportan al final como un solo aviso.
+   */
+  private async syncRoles(usuarioId: number, selectedRoleIds: number[]): Promise<string[]> {
+    const errors: string[] = [];
+    const selectedSet = new Set<number>(selectedRoleIds);
+
+    // Quitar los que ya no están seleccionados (solo en edición tendremos currentUsuarioRoles)
+    for (const ur of this.currentUsuarioRoles) {
+      const roleId = ur.role?.id;
+      if (roleId != null && !selectedSet.has(roleId) && ur.id != null) {
+        try {
+          await firstValueFrom(this.repositoryService.removeRoleFromUsuario(ur.id));
+        } catch (e) {
+          console.warn(`No se pudo quitar el rol ${roleId} del usuario ${usuarioId}`, e);
+          errors.push(`quitar rol ${ur.role?.descripcion || roleId}`);
+        }
+      }
+    }
+
+    // Agregar los nuevos (que no estaban antes)
+    const currentRoleIds = new Set<number>(
+      this.currentUsuarioRoles.map((ur) => ur.role?.id).filter((id): id is number => id != null),
+    );
+    for (const roleId of selectedRoleIds) {
+      if (!currentRoleIds.has(roleId)) {
+        try {
+          await firstValueFrom(this.repositoryService.assignRoleToUsuario(usuarioId, roleId));
+        } catch (e) {
+          console.warn(`No se pudo asignar rol ${roleId} al usuario ${usuarioId}`, e);
+          const roleDesc = this.roles.find((r) => r.id === roleId)?.descripcion || roleId;
+          errors.push(`asignar rol ${roleDesc}`);
+        }
+      }
+    }
+
+    return errors;
+  }
+
   async save(): Promise<void> {
     if (this.usuarioForm.invalid) {
       return;
@@ -183,6 +270,9 @@ export class CreateEditUsuarioComponent implements OnInit {
 
     this.isLoading = true;
     const formData = { ...this.usuarioForm.value };
+    const selectedRoleIds: number[] = formData.roleIds || [];
+    // roleIds NO es campo de la entidad Usuario — no se envía al update/create.
+    delete formData.roleIds;
 
     // Convert string form controls to uppercase
     if (formData.nickname) {
@@ -194,17 +284,39 @@ export class CreateEditUsuarioComponent implements OnInit {
     }
 
     try {
+      let usuarioId: number | undefined;
+      let savedUsuario: any;
+      let action: 'create' | 'update';
+
       if (this.isEditing && this.data.usuario) {
         // Don't send empty password when updating
         if (!formData.password) {
           delete formData.password;
         }
-        const updatedUsuario = await firstValueFrom(this.repositoryService.updateUsuario(this.data.usuario.id!, formData));
-        this.dialogRef.close({ success: true, action: 'update', usuario: updatedUsuario });
+        savedUsuario = await firstValueFrom(this.repositoryService.updateUsuario(this.data.usuario.id!, formData));
+        usuarioId = this.data.usuario.id;
+        action = 'update';
       } else {
-        const newUsuario = await firstValueFrom(this.repositoryService.createUsuario(formData));
-        this.dialogRef.close({ success: true, action: 'create', usuario: newUsuario });
+        savedUsuario = await firstValueFrom(this.repositoryService.createUsuario(formData));
+        usuarioId = (savedUsuario as any)?.id;
+        action = 'create';
       }
+
+      // Sincronizar roles (asignar/quitar según diff)
+      let roleErrors: string[] = [];
+      if (usuarioId != null) {
+        roleErrors = await this.syncRoles(usuarioId, selectedRoleIds);
+      }
+
+      if (roleErrors.length > 0) {
+        this.snackBar.open(
+          `Usuario guardado, pero hubo problemas al ${roleErrors.join(', ')}.`,
+          'OK',
+          { duration: 5000 },
+        );
+      }
+
+      this.dialogRef.close({ success: true, action, usuario: savedUsuario });
     } catch (error) {
       console.error('Error saving usuario:', error);
       this.dialogRef.close({ success: false, error });
