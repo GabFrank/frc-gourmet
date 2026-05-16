@@ -109,6 +109,7 @@ Asignarle `false` **NO desactiva nada** en v6.x (queda la función default). His
 | `v1.2.0` | Asignación de roles desde edit-usuario. Auto-update seguía rechazando. |
 | `v1.3.0` | **Fix correcto de auto-update** (función en vez de boolean) + window controls custom en toolbar. Última reinstalación manual requerida. |
 | `v1.4.0` | **Primer auto-update end-to-end validado en producción.** Header enriquecido (cotizaciones + reloj + version). |
+| `v1.5.0` | **Auto-update totalmente funcional** — segundo update consecutivo sin intervención manual (v1.4.0 → v1.5.0). Feature: registrar vale como egreso directo desde Caja Mayor. A partir de acá, considerar el flujo de auto-update como estable; cualquier regresión es bug a investigar, no comportamiento esperado. |
 
 ## Flujo de deploy a un local real (LAN, Windows)
 

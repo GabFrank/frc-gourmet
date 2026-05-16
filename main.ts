@@ -88,6 +88,7 @@ import { initAutoUpdater } from './electron/utils/auto-updater';
 // Unificado en recetas.handler: sabores y variaciones
 
 let win: BrowserWindow | null;
+let splashWin: BrowserWindow | null = null;
 let dbService: DatabaseService;
 
 // Remove JWT constants as they are moved
@@ -315,7 +316,63 @@ function initializeDatabase() {
     });
 }
 
+// Resuelve el icono de la app. En Win/Linux preferimos PNG; en Mac, .icns.
+// Usado tanto para la BrowserWindow (taskbar en Win/Linux) como para
+// app.dock.setIcon() en macOS (dock).
+function resolveAppIconPath(): string | undefined {
+  const candidates = process.platform === 'darwin'
+    ? [path.join(__dirname, 'build', 'icon.icns'), path.join(__dirname, 'build', 'icons', '512x512.png')]
+    : [path.join(__dirname, 'build', 'icons', '512x512.png'), path.join(__dirname, 'build', 'icon.png')];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return undefined;
+}
+
+function createSplashWindow(): void {
+  // Splash frameless transparente que se muestra mientras Angular carga.
+  // Se cierra cuando la main window dispara 'did-finish-load'.
+  const iconPath = resolveAppIconPath();
+  splashWin = new BrowserWindow({
+    width: 520,
+    height: 360,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    movable: true,
+    skipTaskbar: true,
+    show: false,
+    icon: iconPath,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+  // splash.html vive en src/assets en dev y en dist/frc-gourmet/assets en prod
+  const devSplash = path.join(__dirname, 'src', 'assets', 'splash.html');
+  const prodSplash = path.join(__dirname, 'dist', 'frc-gourmet', 'assets', 'splash.html');
+  const splashPath = fs.existsSync(prodSplash) ? prodSplash : devSplash;
+  splashWin.loadFile(splashPath).catch((e) => console.warn('[splash] load failed:', e));
+  splashWin.once('ready-to-show', () => splashWin?.show());
+  splashWin.on('closed', () => { splashWin = null; });
+}
+
+function closeSplashIfOpen(): void {
+  try {
+    if (splashWin && !splashWin.isDestroyed()) {
+      splashWin.close();
+    }
+  } catch (e) {
+    console.warn('[splash] close failed:', e);
+  }
+  splashWin = null;
+}
+
 function createWindow(): void {
+  // Splash primero — visible mientras Angular hace bootstrap.
+  createSplashWindow();
+
   // Create the browser window.
   // En Win/Linux usamos frame:false para tener controles de ventana custom
   // (minimizar/maximizar/cerrar) integrados al toolbar de la app, estilo
@@ -323,20 +380,35 @@ function createWindow(): void {
   // mantener los semáforos nativos en su posición esperada por el usuario
   // y ocultar los controles custom desde el renderer.
   const isMac = process.platform === 'darwin';
+  const iconPath = resolveAppIconPath();
   win = new BrowserWindow({
     width: 1200,
     height: 800,
-    show: false, // mostramos manualmente tras maximizar para evitar flicker
+    show: false, // se muestra cuando termina did-finish-load (cerrando el splash)
     frame: isMac ? true : false,
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
+    icon: iconPath,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     }
   });
+  // En Mac el icon de BrowserWindow no afecta el dock; hay que setearlo aparte.
+  if (isMac && iconPath && app.dock) {
+    try { app.dock.setIcon(iconPath); } catch (e) { console.warn('[icon] dock.setIcon failed:', e); }
+  }
   win.maximize();
-  win.show();
+  // El show() se difiere hasta did-finish-load para no pisar el splash.
+  win.webContents.once('did-finish-load', () => {
+    closeSplashIfOpen();
+    win?.show();
+  });
+  // Fallback de seguridad: si did-finish-load no llega en 8s, mostramos igual.
+  setTimeout(() => {
+    if (splashWin) closeSplashIfOpen();
+    if (win && !win.isVisible()) win.show();
+  }, 8000);
 
   // Emitir cambios de estado maximize/unmaximize al renderer para que el
   // toolbar pueda alternar entre el icono "maximize" y "restore".

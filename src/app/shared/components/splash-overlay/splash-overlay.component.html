@@ -1,0 +1,13 @@
+<div class="splash-overlay" [class.dark]="isDarkTheme">
+  <div class="splash-content">
+    <img
+      class="splash-logo"
+      [src]="isDarkTheme ? 'assets/images/logo/logo-dark-lg.png' : 'assets/images/logo/logo-light-lg.png'"
+      alt="FRC Gourmet" />
+    <div class="splash-greeting" *ngIf="greeting || userName">
+      <span *ngIf="greeting">{{ greeting }}</span>
+      <span *ngIf="userName" class="splash-username">{{ userName }}</span>
+    </div>
+    <mat-spinner diameter="36" strokeWidth="3" class="splash-spinner"></mat-spinner>
+  </div>
+</div>
