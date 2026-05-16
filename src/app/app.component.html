@@ -1,3 +1,10 @@
+<!-- Splash overlay post-login: aparece ~1.6s al pasar de no-auth -> auth -->
+<app-splash-overlay
+  *ngIf="showSplash"
+  [greeting]="splashGreeting"
+  [userName]="userDisplayName">
+</app-splash-overlay>
+
 <!-- Only show application content when authenticated -->
 <ng-container *ngIf="isAuthenticated; else loginRouter">
   <!-- App header - moved outside of sidenav container -->
@@ -129,6 +136,14 @@
         [attr.role]="(isHandset$ | async) ? 'dialog' : 'navigation'"
         [mode]="(isHandset$ | async) ? 'over' : 'side'"
         [opened]="(isHandset$ | async) === false">
+      <!-- Brand logo (solo cuando el menú está expandido) -->
+      <div class="sidenav-brand" *ngIf="isMenuExpanded">
+        <img
+          class="sidenav-brand-logo"
+          [src]="isDarkTheme ? 'assets/images/logo/logo-dark-sm.png' : 'assets/images/logo/logo-light-sm.png'"
+          alt="FRC Gourmet" />
+      </div>
+
       <!-- User profile header instead of app name -->
       <div class="user-profile-header">
         <div class="user-avatar">
