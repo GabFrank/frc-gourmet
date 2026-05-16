@@ -852,6 +852,7 @@ interface ElectronAPI {
   getVales: (filtros?: any) => Promise<any[]>;
   getValesPendientesDescuento: (funcionarioId: number) => Promise<any[]>;
   createVale: (data: any) => Promise<any>;
+  crearValeConfirmado: (data: any) => Promise<any>;
   confirmarVale: (id: number, payload: any) => Promise<any>;
   anularVale: (id: number, motivo: string) => Promise<any>;
   marcarValeDescontado: (id: number, liquidacionId: number) => Promise<any>;
@@ -3462,6 +3463,9 @@ export class RepositoryIpcService extends RepositoryService {
   }
   createVale(data: any): Observable<any> {
     return from(this.api.createVale(data));
+  }
+  crearValeConfirmado(data: any): Observable<any> {
+    return from(this.api.crearValeConfirmado(data));
   }
   confirmarVale(id: number, payload: any): Observable<any> {
     return from(this.api.confirmarVale(id, payload));

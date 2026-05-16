@@ -1878,6 +1878,9 @@ export class RepositoryHttpService extends RepositoryService {
   createVale(data: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.createVale() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  crearValeConfirmado(data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.crearValeConfirmado() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   confirmarVale(id: number, payload: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.confirmarVale() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

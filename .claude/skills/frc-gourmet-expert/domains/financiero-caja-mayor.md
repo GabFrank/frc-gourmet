@@ -349,7 +349,7 @@ Nunca ambas a la vez.
 - `create-edit-caja-mayor/` — CRUD.
 - `caja-mayor-detalle/` — vista operativa.
 - `registrar-ingreso-dialog/` — entrada varia o retiro caja.
-- `registrar-egreso-dialog/` — gasto, compra, vale, etc.
+- `registrar-egreso-dialog/` — gasto, compra, vale (card "Registrar Vale" → handler atómico `crear-vale-confirmado`, v1.5.0), etc.
 - `edit-movimiento-dialog/` — editar/anular movimiento.
 - `configurar-caja-mayor-dialog/` — qué FPs y cuentas mostrar (M:M).
 - `pagar-compras-dialog/` — pago multi-cuota CPP.
