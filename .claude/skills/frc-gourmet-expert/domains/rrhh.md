@@ -269,6 +269,21 @@ Vale {
 4. `vale.estado = CONFIRMADO`, `movimiento_id = saved.id`.
 5. Commit.
 
+### Crear vale ya confirmado desde Caja Mayor (atajo, v1.5.0)
+
+`vales.handler.ts:119+` — handler `crear-vale-confirmado`. Para registrar un vale como **egreso directo** sin pasar por el flujo SOLICITADO → CONFIRMADO. Disparado desde la card **"Registrar Vale"** en `registrar-egreso-dialog` de Caja Mayor.
+
+Una sola transacción:
+1. Valida funcionario + moneda + cajaMayor + formaPago (todos obligatorios) + monto > 0.
+2. Crea `Vale` directamente con `estado = CONFIRMADO`, `autorizadoPor = currentUser`.
+3. Crea `CajaMayorMovimiento` EGRESO_VALE con `valeId` apuntando.
+4. `actualizarSaldoCajaMayor(...)` resta saldo.
+5. `vale.movimientoId = movimiento.id` y guarda.
+
+Permisos requeridos: `RRHH_VALE_CREAR` **+** `RRHH_VALE_CONFIRMAR` (doble check).
+
+UI: `create-edit-vale-dialog` en modo `mode = 'confirmar'` con caja preseleccionada. Caja Mayor y Forma de Pago vuelven obligatorias en ese modo.
+
 ### Anular vale
 
 `vales.handler.ts:177+`:
