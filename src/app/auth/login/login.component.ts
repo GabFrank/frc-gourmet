@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
@@ -13,8 +13,9 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatDialog } from '@angular/material/dialog';
 import { AuthService } from '../../services/auth.service';
+import { ThemeService } from '../../services/theme.service';
 import { trigger, transition, style, animate, query, stagger } from '@angular/animations';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subscription } from 'rxjs';
 import { ForceChangePasswordDialogComponent } from '../force-change-password-dialog/force-change-password-dialog.component';
 
 @Component({
@@ -54,7 +55,7 @@ import { ForceChangePasswordDialogComponent } from '../force-change-password-dia
     ])
   ]
 })
-export class LoginComponent implements OnInit {
+export class LoginComponent implements OnInit, OnDestroy {
   loginForm: FormGroup;
   isLoggingIn: boolean = false;
   hidePassword: boolean = true;
@@ -70,13 +71,16 @@ export class LoginComponent implements OnInit {
   currentYear: number = new Date().getFullYear();
   timeGreeting: string;
   rememberMe: boolean = false;
+  isDarkTheme = false;
+  private themeSub?: Subscription;
 
   constructor(
     private fb: FormBuilder,
     private authService: AuthService,
     private router: Router,
     private snackBar: MatSnackBar,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private themeService: ThemeService
   ) {
     this.loginForm = this.fb.group({
       nickname: ['', [Validators.required]],
@@ -103,7 +107,7 @@ export class LoginComponent implements OnInit {
     if (this.authService.isLoggedIn) {
       this.router.navigate(['/']);
     }
-    
+
     // Check for saved username
     const savedNickname = localStorage.getItem('saved_nickname');
     if (savedNickname) {
@@ -113,6 +117,15 @@ export class LoginComponent implements OnInit {
       });
       this.rememberMe = true;
     }
+
+    // Logo según tema: blanco sobre dark, negro sobre light
+    this.themeSub = this.themeService.isDarkTheme().subscribe(isDark => {
+      this.isDarkTheme = isDark;
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.themeSub?.unsubscribe();
   }
 
   async onSubmit(): Promise<void> {

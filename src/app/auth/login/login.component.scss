@@ -31,10 +31,16 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--mat-app-text-color, #1a1a1a);
   padding: 40px;
   position: relative;
   overflow: hidden;
+  background: linear-gradient(135deg, rgba(229, 9, 20, 0.08) 0%, rgba(229, 9, 20, 0.02) 100%);
+}
+
+:host-context(.dark-theme) .left-panel {
+  color: #ffffff;
+  background: linear-gradient(135deg, rgba(229, 9, 20, 0.22) 0%, rgba(20, 20, 20, 0.55) 100%);
 }
 
 .left-panel::before {
@@ -60,9 +66,10 @@
 }
 
 .logo-image {
-  height: 80px;
+  height: 96px;
+  max-width: 100%;
   object-fit: contain;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.18));
 }
 
 .welcome-title {
