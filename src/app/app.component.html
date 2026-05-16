@@ -426,7 +426,7 @@
         <mat-divider></mat-divider>
 
         <!-- Settings Menu - Convert to expansion panel -->
-        <mat-expansion-panel *appHasAnyPermission="['EMPRESA_CONFIGURAR','IMPRESORAS_GESTIONAR','DISPOSITIVOS_GESTIONAR','SISTEMA_BACKUP','SISTEMA_CONFIGURAR_IA','SISTEMA_BD_CONFIGURAR','SISTEMA_MODO_CONFIGURAR']"
+        <mat-expansion-panel *appHasAnyPermission="['EMPRESA_CONFIGURAR','IMPRESORAS_GESTIONAR','SECTORES_IMPRESORAS_CONFIGURAR','DISPOSITIVOS_GESTIONAR','SISTEMA_BACKUP','SISTEMA_CONFIGURAR_IA','SISTEMA_BD_CONFIGURAR','SISTEMA_MODO_CONFIGURAR']"
                             class="mat-elevation-z0 nav-expansion-panel"
                             [expanded]="isMenuSectionExpanded('config')"
                             [hideToggle]="!isMenuExpanded">
@@ -446,6 +446,10 @@
             <a *appHasPermission="'IMPRESORAS_GESTIONAR'" mat-list-item (click)="openPrinterSettings()">
               <mat-icon matListItemIcon>print</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Impresoras</span>
+            </a>
+            <a *appHasPermission="'SECTORES_IMPRESORAS_CONFIGURAR'" mat-list-item (click)="openSectoresImpresorasSettings()">
+              <mat-icon matListItemIcon>device_hub</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Sectores e impresoras</span>
             </a>
             <a *appHasPermission="'DISPOSITIVOS_GESTIONAR'" mat-list-item (click)="openDispositivosTab()">
               <mat-icon matListItemIcon>devices</mat-icon>

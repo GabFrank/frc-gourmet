@@ -29,6 +29,8 @@ import { registerAuthHandlers } from './electron/handlers/auth.handler';
 import { registerImageHandlers } from './electron/handlers/images.handler';
 import { registerFilesHandlers } from './electron/handlers/files.handler';
 import { registerAdjuntosHandlers } from './electron/handlers/adjuntos.handler';
+import { registerDocumentosTicketsHandlers } from './electron/handlers/documentos-tickets.handler';
+import { registerSectoresImpresorasHandlers } from './electron/handlers/sectores-impresoras.handler';
 import { registerProductosHandlers } from './electron/handlers/productos.handler';
 import { registerFinancieroHandlers } from './electron/handlers/financiero.handler';
 import { registerComprasHandlers } from './electron/handlers/compras.handler';
@@ -178,6 +180,8 @@ function initializeDatabase() {
       registerImageHandlers(dataSource);
       registerFilesHandlers(); // generic file IPCs (save/delete/read/open)
       registerAdjuntosHandlers(dataSource, getCurrentUser); // CRUD generico de adjuntos polimorficos
+      registerDocumentosTicketsHandlers(dataSource, getCurrentUser); // Tickets termicos (comanda multi-sector, venta, recibos, vales, etc.)
+      registerSectoresImpresorasHandlers(dataSource, getCurrentUser); // M2M Sector↔Printer con rol (COMANDA/TICKET_VENTA/PRECUENTA)
       registerProductosHandlers(dataSource, getCurrentUser);
       registerFinancieroHandlers(dataSource, getCurrentUser);
       registerComprasHandlers(dataSource, getCurrentUser);

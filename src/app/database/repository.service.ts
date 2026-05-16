@@ -138,7 +138,8 @@ export abstract class RepositoryService {
   abstract deleteFile(url: string): Observable<{ ok: boolean }>;
   abstract readFileBase64(url: string): Observable<{ base64: string; mimeType: string }>;
   abstract openFileWithSystem(url: string): Observable<{ ok: boolean; error?: string }>;
-  abstract getAdjuntos(params: { entidadTipo: string; entidadId: number }): Observable<any[]>;
+  abstract getAdjuntos(params: { entidadTipo: string; entidadId: number; tipo?: string }): Observable<any[]>;
+  abstract getAdjuntoById(id: number): Observable<any>;
   abstract createAdjunto(data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }): Observable<any>;
   abstract updateAdjunto(id: number, data: { tipo?: string; observacion?: string }): Observable<any>;
   abstract deleteAdjunto(id: number): Observable<{ success: boolean; message?: string }>;

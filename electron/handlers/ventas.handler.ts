@@ -21,8 +21,8 @@ import { Reserva } from '../../src/app/database/entities/ventas/reserva.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { PdvMesa, PdvMesaEstado } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { Comanda, ComandaEstado } from '../../src/app/database/entities/ventas/comanda.entity';
-// ComandaItem kept for future kitchen integration
-// import { ComandaItem } from '../../src/app/database/entities/ventas/comanda-item.entity';
+import { ComandaItem } from '../../src/app/database/entities/ventas/comanda-item.entity';
+import { printComandaInternal, printVentaTicketInternal } from './documentos-tickets.handler';
 import { Sector } from '../../src/app/database/entities/ventas/sector.entity';
 import { PdvAtajoGrupo } from '../../src/app/database/entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from '../../src/app/database/entities/ventas/pdv-atajo-item.entity';
@@ -645,9 +645,29 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(Venta);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta ID ${id} not found`);
+
+      const estadoAnterior = entity.estado;
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+
+      // ─── Hook E2.3: auto-imprimir ticket cuando la venta pasa a CONCLUIDA
+      // Fire-and-forget. NUNCA bloquea ni revierte la transición de estado.
+      if (estadoAnterior !== VentaEstado.CONCLUIDA && saved.estado === VentaEstado.CONCLUIDA) {
+        try {
+          const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+          if (pdvConfig?.autoImprimirTicketVenta) {
+            setImmediate(() => {
+              printVentaTicketInternal(dataSource, id)
+                .catch(e => console.warn('[updateVenta] auto-print ticket falló:', e));
+            });
+          }
+        } catch (e) {
+          console.warn('[updateVenta] hook auto-imprimir ticket falló:', e);
+        }
+      }
+
+      return saved;
     } catch (error) {
       console.error(`Error updating venta ID ${id}:`, error);
       throw error;
@@ -732,7 +752,25 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(VentaItem);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+
+      // ─── Hook E2.2: crear ComandaItem y auto-imprimir comanda ──────────
+      // Si la venta tiene una Comanda asociada, replicamos el VentaItem como
+      // ComandaItem (PENDIENTE) y disparamos `printComandaInternal` en
+      // background si `pdv_config.autoImprimirComanda=true`. Si la venta no
+      // tiene comanda, no se hace nada (PdV venta directa sin cocina).
+      try {
+        const savedAny = saved as any;
+        const ventaId = savedAny.venta?.id ?? savedAny.venta_id ?? savedAny.ventaId;
+        if (ventaId) {
+          await ensureComandaItemAndAutoPrint(dataSource, savedAny.id ?? (saved as any).id, ventaId);
+        }
+      } catch (e) {
+        // Hook NUNCA bloquea la creación del item. Solo log.
+        console.warn('[createVentaItem] hook auto-imprimir comanda falló:', e);
+      }
+
+      return saved;
     } catch (error) {
       console.error('Error creating venta item:', error);
       throw error;
@@ -2598,5 +2636,65 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       console.error(`Error deleting VentaItemSabores for item ${ventaItemId}:`, error);
       throw error;
     }
+  });
+}
+
+/**
+ * Hook auto-impresión de comanda (E2.2).
+ *
+ * Se ejecuta tras `createVentaItem`. Si la Venta tiene una Comanda asociada,
+ * replica el VentaItem como `ComandaItem` (PENDIENTE) — patrón "cocina"
+ * separada de la venta. Luego, si `pdv_config.autoImprimirComanda=true`,
+ * dispara `printComandaInternal` en background (setImmediate) — el item ya
+ * fue guardado y la respuesta al frontend NO espera la impresión.
+ *
+ * Si la venta no tiene Comanda → es una venta directa sin cocina, no se hace nada.
+ *
+ * Si la impresión falla (impresora apagada, sin sector configurado, etc.) →
+ * se loguea y la venta sigue normal. El item queda con `impreso=false` y se
+ * puede reimprimir manualmente desde el PdV.
+ */
+async function ensureComandaItemAndAutoPrint(
+  dataSource: DataSource,
+  ventaItemId: number,
+  ventaId: number,
+): Promise<void> {
+  // 1. Buscar la venta con su comanda
+  const venta = await dataSource.getRepository(Venta).findOne({
+    where: { id: ventaId },
+    relations: ['comanda'],
+  });
+  if (!venta?.comanda?.id) return;  // Venta directa sin cocina — nada que hacer
+
+  const comandaId = venta.comanda.id;
+
+  // 2. Crear ComandaItem si aún no existe para este VentaItem
+  const ciRepo = dataSource.getRepository(ComandaItem);
+  const existente = await ciRepo.findOne({
+    where: { ventaItem: { id: ventaItemId } as any, comanda: { id: comandaId } as any },
+  });
+  if (!existente) {
+    const ci = ciRepo.create({
+      comanda: { id: comandaId } as any,
+      ventaItem: { id: ventaItemId } as any,
+      activo: true,
+      impreso: false,
+    } as any);
+    await ciRepo.save(ci);
+  }
+
+  // 3. Disparar impresión si está habilitada
+  const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+  if (!pdvConfig?.autoImprimirComanda) return;
+
+  setImmediate(() => {
+    printComandaInternal(dataSource, comandaId, { soloItemsNoImpresos: true })
+      .then(res => {
+        if (!res.ok) {
+          console.warn(`[auto-print comanda ${comandaId}] errores parciales:`,
+            res.errors.map(e => e.message).join('; '));
+        }
+      })
+      .catch(e => console.error(`[auto-print comanda ${comandaId}] excepción:`, e));
   });
 } 

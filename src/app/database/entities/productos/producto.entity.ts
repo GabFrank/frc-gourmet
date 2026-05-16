@@ -81,4 +81,11 @@ export class Producto extends BaseModel {
   // Recetas base asociadas (una por sabor para productos con variaciones)
   @OneToMany('Receta', 'productoVariacion')
   recetas?: Receta[];
+
+  // Sectores en los que se imprime la comanda. M2M con `ProductoSector` —
+  // permite que un producto se imprima en múltiples impresoras al mismo
+  // tiempo (cocina + control gerencial, por ejemplo). Ver
+  // `producto-sector.entity.ts` para la justificación del modelo.
+  @OneToMany('ProductoSector', 'producto')
+  sectores?: any[];
 }

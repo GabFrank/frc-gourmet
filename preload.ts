@@ -1091,6 +1091,19 @@ contextBridge.exposeInMainWorld('api', {
    */
   getAppVersion: (): string => process.env['FRC_APP_VERSION'] || '0.0.0',
 
+  /**
+   * Invocación IPC genérica — usada por `DocumentoService` para llamar
+   * handlers `export-*-pdf` / `print-*` / `create-adjunto` / `get-adjuntos` /
+   * etc. sin tener que declarar un wrapper específico por cada handler en
+   * `preload.ts` + `RepositoryService` (serían ~50+ wrappers idénticos).
+   *
+   * **Seguridad:** la autorización REAL vive en el backend (`ensurePermission`
+   * dentro de cada handler). El preload solo es transport. En `mode=client`
+   * el `ipcRenderer.invoke` está monkey-patcheado a `invokeRouter`, así que
+   * esta función rutea por HTTP automáticamente.
+   */
+  callIpc: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
+
   // F2/F4: app-mode resolver para que el RepositoryService factory decida
   // entre IpcService (standalone/server) y HttpService (cliente).
   // Esto NO va por IPC porque tiene que ser sincrónico (factory de Angular DI
@@ -1336,8 +1349,11 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // === Adjuntos polimorficos ===
-  getAdjuntos: async (params: { entidadTipo: string; entidadId: number }): Promise<any[]> => {
+  getAdjuntos: async (params: { entidadTipo: string; entidadId: number; tipo?: string }): Promise<any[]> => {
     return await ipcRenderer.invoke('get-adjuntos', params);
+  },
+  getAdjuntoById: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-adjunto-by-id', id);
   },
   createAdjunto: async (data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }): Promise<any> => {
     return await ipcRenderer.invoke('create-adjunto', data);
@@ -3676,6 +3692,21 @@ contextBridge.exposeInMainWorld('api', {
     const listener = (_event: any, data: { status: string; payload: any }) => handler(data.status, data.payload);
     ipcRenderer.on('auto-update:status', listener);
     return () => ipcRenderer.removeListener('auto-update:status', listener);
+  },
+
+  /**
+   * Suscribe a eventos de impresora emitidos por backgrounds del backend
+   * (hooks auto-imprimir, fallos parciales de comandas multi-sector).
+   * El handler recibe el payload {level, handler, entityRef?, printed?,
+   * errors?, message?}. Devuelve un unsubscribe.
+   *
+   * Llamar UNA VEZ a nivel global de la app (ej. AppComponent ngOnInit) —
+   * no por componente.
+   */
+  onPrinterEvent: (handler: (payload: any) => void): (() => void) => {
+    const listener = (_event: any, data: any) => handler(data);
+    ipcRenderer.on('printer-events', listener);
+    return () => ipcRenderer.removeListener('printer-events', listener);
   },
 
 });
