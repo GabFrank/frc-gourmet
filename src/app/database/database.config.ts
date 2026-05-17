@@ -190,6 +190,7 @@ import { AddEmpresa1778500000000 } from './migrations/1778500000000-AddEmpresa';
 import { AddMustChangePasswordToUsuario1778600000000 } from './migrations/1778600000000-AddMustChangePasswordToUsuario';
 import { AddSistemaDocumentos1779000000000 } from './migrations/1779000000000-AddSistemaDocumentos';
 import { AddRequiereComandaToProducto1779100000000 } from './migrations/1779100000000-AddRequiereComandaToProducto';
+import { AddPrinterTicketToDispositivo1779200000000 } from './migrations/1779200000000-AddPrinterTicketToDispositivo';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -475,6 +476,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddMustChangePasswordToUsuario1778600000000,
     AddSistemaDocumentos1779000000000,
     AddRequiereComandaToProducto1779100000000,
+    AddPrinterTicketToDispositivo1779200000000,
   ];
 }
 

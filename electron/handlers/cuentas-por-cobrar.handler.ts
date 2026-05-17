@@ -22,6 +22,8 @@ import { PagoEstado } from '../../src/app/database/entities/compras/estado.enum'
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
 import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
 import { ensurePermission } from '../utils/auth.utils';
+import { printVentaTicketInternal, printPagareCpcTicketInternal } from './documentos-tickets.handler';
+import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
 
 function calcularEstadoCuota(monto: number, montoCobrado: number): CuentaPorCobrarCuotaEstado {
   if (montoCobrado >= monto) return CuentaPorCobrarCuotaEstado.COBRADO;
@@ -676,6 +678,26 @@ export function registerCuentasPorCobrarHandlers(
       await queryRunner.manager.save(Cliente, cliente);
 
       await queryRunner.commitTransaction();
+
+      // ─── Auto-imprimir ticket de venta + pagaré (fire-and-forget) ─────
+      // El handler `cobrar-venta-credito` no pasa por `updateVenta`, así
+      // que el hook de auto-print del ticket no se dispara. Lo invocamos
+      // explícitamente acá, igual que el flujo de cobro normal.
+      setImmediate(async () => {
+        try {
+          const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+          if (pdvConfig?.autoImprimirTicketVenta) {
+            await printVentaTicketInternal(dataSource, venta.id);
+          }
+          // Pagaré siempre — es requerido para venta a crédito. Pequeña
+          // pausa para que el ticket salga primero en la térmica.
+          await new Promise(r => setTimeout(r, 600));
+          await printPagareCpcTicketInternal(dataSource, cpcSaved.id);
+        } catch (e: any) {
+          console.warn('[cobrar-venta-credito] auto-print:', e?.message || e);
+        }
+      });
+
       return { success: true, ventaId: venta.id, cpcId: cpcSaved.id };
     } catch (error) {
       await queryRunner.rollbackTransaction();

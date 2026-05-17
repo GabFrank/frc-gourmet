@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { app } from 'electron';
 import { sendLprJob, parseLprAddress } from './lpr.utils';
+import { printerWidthToChars } from './ticket.utils';
 
 // Helper function to generate test page content
 export function generateTestPageContent(printer: any): string {
@@ -96,7 +97,7 @@ export async function printPosReceipt(printer: any, content: string): Promise<bo
       options: {
         timeout: 5000 // Network timeout
       },
-      width: printer.width || 48, // Character width (e.g., 48 for 80mm, 32 for 58mm)
+      width: printerWidthToChars(printer.width), // mm físicos → chars (58mm→32, 80mm→48)
       characterSet: characterSet,
       removeSpecialCharacters: false, // Keep special characters if needed
       // lineCharacter: "=", // Optional: Custom line character
@@ -106,7 +107,7 @@ export async function printPosReceipt(printer: any, content: string): Promise<bo
     if (printer.connectionType === 'lpr') {
       thermalPrinter.alignCenter();
       thermalPrinter.println(content);
-      thermalPrinter.cut();
+      thermalPrinter.cut({ verticalTabAmount: 0 });
       thermalPrinter.beep();
       const buffer = (thermalPrinter as any).getBuffer?.() as Buffer | undefined;
       if (!buffer || buffer.length === 0) {
@@ -141,7 +142,7 @@ export async function printPosReceipt(printer: any, content: string): Promise<bo
 
     thermalPrinter.alignCenter();
     thermalPrinter.println(content); // Use println for adding newline
-    thermalPrinter.cut();
+    thermalPrinter.cut({ verticalTabAmount: 0 });
     thermalPrinter.beep(); // Optional: beep after printing
 
     await thermalPrinter.execute();

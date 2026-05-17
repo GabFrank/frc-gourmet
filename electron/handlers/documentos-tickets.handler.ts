@@ -32,12 +32,13 @@ import { ProductoSector } from '../../src/app/database/entities/productos/produc
 import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
+import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import {
   TicketSpec, TicketLine,
   ticketText, ticketSeparador, ticketBlank, ticketKv, ticketColumns,
   ticketLineasFirma, ticketHeaderEmpresa,
   ticketFmtMonto, ticketFmtFecha, ticketFmtFechaHora,
-  printTicketSpec,
+  printTicketSpec, printerWidthToChars, monedaSimboloAscii,
 } from '../utils/ticket.utils';
 import { broadcastPrinterEvent, PrinterEventPayload } from '../utils/printer-events.utils';
 
@@ -48,23 +49,39 @@ type GetCurrentUser = () => Usuario | null;
 // ============================================================
 
 /**
- * Busca la impresora a usar según rol — primero rol explícito en SectorImpresora,
- * sino la Printer global con `rol=X` (E1.10-11), sino la `isDefault=true`.
+ * Busca la impresora a usar según rol. Orden de prioridad:
  *
- * `sectorId` opcional: si lo pasás, prioriza la M2M `SectorImpresora` para ese
- * sector. Si no, va directo al fallback global.
+ * 1. `printerId` explícito (si vino) gana.
+ * 2. `dispositivoId` + rol TICKET_VENTA o PRECUENTA → `Dispositivo.printerTicket`
+ *    (impresora local del PdV). Es lo más común para multi-caja.
+ * 3. `sectorId` específico → M2M `SectorImpresora` para ese sector + rol.
+ * 4. Fallback global: `Printer.rol = X`.
+ * 5. Última opción: `Printer.isDefault = true`.
  */
 async function getPrinterByRol(
   dataSource: DataSource,
   rol: SectorImpresoraRol | string,
-  opts: { sectorId?: number; printerId?: number } = {},
+  opts: { sectorId?: number; printerId?: number; dispositivoId?: number } = {},
 ): Promise<Printer | null> {
-  // Si vino printerId explícito, gana
+  // 1. Si vino printerId explícito, gana
   if (opts.printerId) {
     return await dataSource.getRepository(Printer).findOneBy({ id: opts.printerId });
   }
 
-  // Sector específico → M2M
+  // 2. Dispositivo + rol de tickets → impresora local del PdV
+  const esRolTicket = rol === SectorImpresoraRol.TICKET_VENTA || rol === SectorImpresoraRol.PRECUENTA
+    || rol === 'TICKET_VENTA' || rol === 'PRECUENTA';
+  if (opts.dispositivoId && esRolTicket) {
+    const { Dispositivo } = require('../../src/app/database/entities/financiero/dispositivo.entity');
+    const disp = await dataSource.getRepository(Dispositivo).findOne({
+      where: { id: opts.dispositivoId },
+      relations: ['printerTicket'],
+    });
+    const p = (disp as any)?.printerTicket;
+    if (p?.id) return p;
+  }
+
+  // 3. Sector específico → M2M
   if (opts.sectorId) {
     const sis = await dataSource.getRepository(SectorImpresora).find({
       where: { sector: { id: opts.sectorId } as any, rol: rol as any, activo: true },
@@ -74,11 +91,11 @@ async function getPrinterByRol(
     if (printers.length > 0) return printers[0];
   }
 
-  // Fallback global por rol
+  // 4. Fallback global por rol
   const byRol = await dataSource.getRepository(Printer).findOne({ where: { rol: rol as any } });
   if (byRol) return byRol;
 
-  // Última opción: impresora default del sistema
+  // 5. Última opción: impresora default del sistema
   return await dataSource.getRepository(Printer).findOne({ where: { isDefault: true } });
 }
 
@@ -332,7 +349,7 @@ export async function printComandaInternal(
   for (const job of jobsByPrinter.values()) {
     if (job.items.length === 0) continue;
 
-    const width = job.printer.width || 48;
+    const width = printerWidthToChars(job.printer.width);
     const headerLines: TicketLine[] = await ticketHeaderEmpresa(dataSource, width);
     const sectorNombre = await getSectorNombre(dataSource, job.sectorId);
 
@@ -432,29 +449,35 @@ async function getSectorNombre(dataSource: DataSource, sectorId: number): Promis
 export async function printVentaTicketInternal(
   dataSource: DataSource,
   ventaId: number,
-  opts: { printerId?: number; isPrecuenta?: boolean } = {},
+  opts: { printerId?: number; isPrecuenta?: boolean; dispositivoId?: number } = {},
 ): Promise<ImpresionResultado> {
   const errors: ImpresionResultado['errors'] = [];
 
   const venta = await dataSource.getRepository(Venta).findOne({
     where: { id: ventaId },
-    relations: ['cliente', 'cliente.persona', 'mesa', 'formaPago'],
+    relations: ['cliente', 'cliente.persona', 'mesa', 'formaPago', 'dispositivo'],
   });
   if (!venta) {
     return { ok: false, printed: [], errors: [{ message: `Venta ${ventaId} no encontrada` }] };
   }
+
+  // Resolver dispositivoId: opts gana, sino el de la venta
+  const dispositivoId = opts.dispositivoId ?? (venta as any).dispositivo?.id;
 
   const items = await dataSource.getRepository(VentaItem).find({
     where: { venta: { id: ventaId } as any },
     relations: ['producto', 'presentacion'],
   });
 
-  const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, { printerId: opts.printerId });
+  const rolTicket = opts.isPrecuenta ? SectorImpresoraRol.PRECUENTA : SectorImpresoraRol.TICKET_VENTA;
+  const printer = await getPrinterByRol(dataSource, rolTicket, { printerId: opts.printerId, dispositivoId })
+    // Fallback: si pidió PRECUENTA y no hay, intentar con TICKET_VENTA
+    || (opts.isPrecuenta ? await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, { printerId: opts.printerId, dispositivoId }) : null);
   if (!printer) {
     return { ok: false, printed: [], errors: [{ message: 'No hay impresora configurada para tickets de venta' }] };
   }
 
-  const width = printer.width || 48;
+  const width = printerWidthToChars(printer.width);
   const headerLines = await ticketHeaderEmpresa(dataSource, width, { showTimbrado: !opts.isPrecuenta });
 
   const titulo = opts.isPrecuenta ? 'PRE-CUENTA' : 'COMPROBANTE DE VENTA';
@@ -508,7 +531,6 @@ export async function printVentaTicketInternal(
   } else {
     lines.push(ticketText('GRACIAS POR SU COMPRA', { align: 'C', bold: true }));
   }
-  lines.push(ticketBlank(2));
 
   const spec: TicketSpec = { printerWidth: width, lines, cutAtEnd: true };
   const res = await printTicketSpec(printer, spec);
@@ -556,7 +578,7 @@ async function printReciboCobroCuotaInternal(
     return { ok: false, printed: [], errors: [{ message: 'No hay impresora configurada' }] };
   }
 
-  const width = printer.width || 48;
+  const width = printerWidthToChars(printer.width);
   const headerLines = await ticketHeaderEmpresa(dataSource, width);
 
   const cliente = (cuota.cuentaPorCobrar as any)?.cliente;
@@ -576,7 +598,6 @@ async function printReciboCobroCuotaInternal(
   ];
   if (opts.formaPago) lines.push(ticketKv('FORMA PAGO', opts.formaPago));
   lines.push(...ticketLineasFirma(width, 'FIRMA CLIENTE'));
-  lines.push(ticketBlank(2));
 
   const spec: TicketSpec = { printerWidth: width, lines };
   const res = await printTicketSpec(printer, spec);
@@ -616,7 +637,11 @@ export function registerDocumentosTicketsHandlers(
     printerId?: number;
   }) => {
     await ensurePermission(dataSource, getCurrentUser, ['VENTAS_PDV', 'DOCUMENTOS_REIMPRIMIR_TICKET_VENTA']);
-    return await printVentaTicketInternal(dataSource, params.ventaId, { printerId: params.printerId });
+    const dispositivoId = resolveRequestDeviceId(_event) ?? undefined;
+    return await printVentaTicketInternal(dataSource, params.ventaId, {
+      printerId: params.printerId,
+      dispositivoId,
+    });
   });
 
   // ─── PRE-CUENTA ─────────────────────────────────────────────────────────
@@ -625,9 +650,11 @@ export function registerDocumentosTicketsHandlers(
     printerId?: number;
   }) => {
     await ensurePermission(dataSource, getCurrentUser, ['VENTAS_PDV', 'DOCUMENTOS_IMPRIMIR_TICKET']);
+    const dispositivoId = resolveRequestDeviceId(_event) ?? undefined;
     return await printVentaTicketInternal(dataSource, params.ventaId, {
       printerId: params.printerId,
       isPrecuenta: true,
+      dispositivoId,
     });
   });
 
@@ -705,6 +732,20 @@ export function registerDocumentosTicketsHandlers(
     });
   });
 
+  // ─── PAGARÉ CPC (venta a crédito) ───────────────────────────────────────
+  // Ticket para que el cliente firme tras aprobar la venta a crédito.
+  ipcMain.handle('print-pagare-cpc-ticket', async (_event, params: {
+    cpcId: number;
+    printerId?: number;
+  }) => {
+    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_PDV', 'DOCUMENTOS_IMPRIMIR_TICKET']);
+    const dispositivoId = resolveRequestDeviceId(_event) ?? undefined;
+    return await printPagareCpcTicketInternal(dataSource, params.cpcId, {
+      printerId: params.printerId,
+      dispositivoId,
+    });
+  });
+
   // ─── ETIQUETA DELIVERY ──────────────────────────────────────────────────
   ipcMain.handle('print-etiqueta-delivery', async (_event, params: {
     deliveryId: number;
@@ -716,7 +757,7 @@ export function registerDocumentosTicketsHandlers(
     await ensurePermission(dataSource, getCurrentUser, ['VENTAS_PDV', 'DOCUMENTOS_IMPRIMIR_TICKET']);
     const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, { printerId: params.printerId });
     if (!printer) return { ok: false, printed: [], errors: [{ message: 'Sin impresora' }] };
-    const width = printer.width || 48;
+    const width = printerWidthToChars(printer.width);
     const lines: TicketLine[] = [
       ticketText(`DELIVERY #${params.deliveryId}`, { align: 'C', bold: true, size: 'tall' }),
       ticketSeparador('-'),
@@ -725,7 +766,6 @@ export function registerDocumentosTicketsHandlers(
       ticketBlank(),
       ticketText('DIRECCIÓN:', { bold: true }),
       ticketText((params.direccion || '—').toUpperCase()),
-      ticketBlank(2),
     ];
     const res = await printTicketSpec(printer, { printerWidth: width, lines });
     return res.ok
@@ -765,7 +805,7 @@ export function registerDocumentosTicketsHandlers(
     await ensurePermission(dataSource, getCurrentUser, ['FINANCIERO_CAJA_VER', 'DOCUMENTOS_IMPRIMIR_TICKET']);
     const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, { printerId: params.printerId });
     if (!printer) return { ok: false, printed: [], errors: [{ message: 'Sin impresora' }] };
-    const width = printer.width || 48;
+    const width = printerWidthToChars(printer.width);
     const headerLines = await ticketHeaderEmpresa(dataSource, width);
     const lines: TicketLine[] = [
       ...headerLines,
@@ -778,7 +818,6 @@ export function registerDocumentosTicketsHandlers(
       ticketKv('TOTAL CONTADO', `Gs. ${ticketFmtMonto(params.total ?? 0)}`, true),
       ticketKv('DIFERENCIA', `Gs. ${ticketFmtMonto(params.diferencia ?? 0)}`),
       ...ticketLineasFirma(width, 'FIRMA RESPONSABLE'),
-      ticketBlank(2),
     ];
     const res = await printTicketSpec(printer, { printerWidth: width, lines });
     return res.ok
@@ -803,13 +842,88 @@ interface ReciboGenericoOpts {
   printerId?: number;
 }
 
+/**
+ * Imprime un pagaré para venta a crédito. Reusable como función (llamado
+ * también desde `cobrar-venta-credito` para auto-print tras finalizar venta).
+ */
+export async function printPagareCpcTicketInternal(
+  dataSource: DataSource,
+  cpcId: number,
+  opts: { printerId?: number; dispositivoId?: number } = {},
+): Promise<ImpresionResultado> {
+  const { CuentaPorCobrar } = require('../../src/app/database/entities/financiero/cuenta-por-cobrar.entity');
+  const cpc = await dataSource.getRepository(CuentaPorCobrar).findOne({
+    where: { id: cpcId },
+    relations: ['cliente', 'cliente.persona', 'moneda', 'cuotas'],
+  });
+  if (!cpc) return { ok: false, printed: [], errors: [{ message: `CPC ${cpcId} no encontrada` }] };
+
+  const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, {
+    printerId: opts.printerId,
+    dispositivoId: opts.dispositivoId,
+  });
+  if (!printer) return { ok: false, printed: [], errors: [{ message: 'Sin impresora TICKET_VENTA' }] };
+
+  const width = printerWidthToChars(printer.width);
+  const headerLines = await ticketHeaderEmpresa(dataSource, width);
+
+  const cliente: any = (cpc as any).cliente;
+  const clienteNombre = (cliente?.razon_social || cliente?.persona?.nombre || '—').toUpperCase();
+  const clienteDoc = (cliente?.ruc || cliente?.persona?.documento || '—').toUpperCase();
+  const monedaSimbolo = monedaSimboloAscii((cpc as any).moneda);
+  const fechaInicio = ticketFmtFecha((cpc as any).fechaInicio);
+  const cuotas: any[] = ((cpc as any).cuotas || []).sort((a: any, b: any) => (a.numero || a.numeroCuota || 0) - (b.numero || b.numeroCuota || 0));
+
+  const lines: TicketLine[] = [
+    ...headerLines,
+    ticketSeparador('='),
+    ticketText('PAGARE', { align: 'C', bold: true, size: 'tall' }),
+    ticketText(`CPC N${ String.fromCharCode(248) } ${cpc.id}`, { align: 'C' }),
+    ticketText(ticketFmtFechaHora(new Date()), { align: 'C' }),
+    ticketSeparador('-'),
+    ticketKv('CLIENTE', clienteNombre),
+    ticketKv('DOCUMENTO', clienteDoc),
+    ticketKv('MONTO TOTAL', `${monedaSimbolo} ${ticketFmtMonto(Number((cpc as any).montoTotal || 0))}`, true),
+    ticketKv('CUOTAS', String((cpc as any).cantidadCuotas || cuotas.length)),
+    ticketKv('FECHA INICIO', fechaInicio),
+    ticketSeparador('-'),
+    ticketText('DETALLE DE CUOTAS:', { bold: true }),
+  ];
+
+  for (const c of cuotas) {
+    lines.push(ticketColumns([
+      { text: `${c.numero || c.numeroCuota || ''}`, width: 4, align: 'L' },
+      { text: ticketFmtFecha(c.fechaVencimiento), width: 12, align: 'L' },
+      { text: `${monedaSimbolo} ${ticketFmtMonto(Number(c.monto || 0))}`, width: Math.max(8, width - 16), align: 'R' },
+    ]));
+  }
+
+  lines.push(ticketSeparador('-'));
+  lines.push(ticketText(
+    'Por el presente PAGARE me obligo a pagar al beneficiario las cuotas detalladas en las fechas indicadas, sin protesto. La falta de pago de cualquier cuota faculta al cobro inmediato del saldo total.',
+    { align: 'L' }
+  ));
+  // Sección de firma con nombre del cliente debajo. Padding inferior
+  // para que el corte de papel no recorte el texto.
+  lines.push(ticketBlank(3));
+  lines.push(ticketText('_'.repeat(Math.min(width - 2, 32)), { align: 'C' }));
+  lines.push(ticketText(clienteNombre, { align: 'C', bold: true }));
+  lines.push(ticketText('FIRMA DEL CLIENTE', { align: 'C' }));
+  lines.push(ticketBlank(2));
+
+  const res = await printTicketSpec(printer, { printerWidth: width, lines, cutAtEnd: true });
+  return res.ok
+    ? { ok: true, printed: [{ itemId: cpcId, sectorId: null, printerId: printer.id, printerName: printer.name }], errors: [] }
+    : { ok: false, printed: [], errors: [{ printerId: printer.id, message: res.error || 'Error' }] };
+}
+
 async function printReciboGenericoInternal(
   dataSource: DataSource,
   opts: ReciboGenericoOpts,
 ): Promise<ImpresionResultado> {
   const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, { printerId: opts.printerId });
   if (!printer) return { ok: false, printed: [], errors: [{ message: 'Sin impresora' }] };
-  const width = printer.width || 48;
+  const width = printerWidthToChars(printer.width);
   const headerLines = await ticketHeaderEmpresa(dataSource, width);
 
   const lines: TicketLine[] = [
@@ -824,7 +938,6 @@ async function printReciboGenericoInternal(
   ];
   if (opts.formaPago) lines.push(ticketKv('FORMA PAGO', opts.formaPago));
   lines.push(...ticketLineasFirma(width, opts.firmaLabel));
-  lines.push(ticketBlank(2));
 
   const res = await printTicketSpec(printer, { printerWidth: width, lines });
   return res.ok

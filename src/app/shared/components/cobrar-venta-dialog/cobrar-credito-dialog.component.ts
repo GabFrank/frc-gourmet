@@ -166,6 +166,8 @@ export class CobrarCreditoDialogComponent implements OnInit {
         return;
       }
       this.snackBar.open('Venta a crédito registrada', 'Cerrar', { duration: 2500 });
+      // El backend dispara automáticamente la impresión del ticket de venta
+      // y el pagaré (cobrar-venta-credito → auto-print con setImmediate).
       this.dialogRef.close({ success: true, ventaId: res?.ventaId, cpcId: res?.cpcId });
     } catch (e: any) {
       console.error('Error cobrarVentaCredito:', e);

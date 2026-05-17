@@ -162,6 +162,58 @@ export function ticketTotales(items: { label: string; monto: string; bold?: bool
 // ============================================================
 
 /**
+ * Mapea el campo `printer.width` (interpretado como **mm físicos**, según
+ * el label "Width (mm)" de la UI) al número de caracteres por línea que
+ * usan los templates ESC/POS.
+ *
+ * Convención estándar para impresoras térmicas (Font A, default):
+ *   - 58mm → 32 chars
+ *   - 80mm → 48 chars
+ *   - 76mm → 42 chars (raro)
+ *
+ * Si el valor recibido ya está en rango de chars (>=20 y <=80), se asume
+ * que el usuario puso chars directos y se respeta — pero la convención
+ * de la UI es mm.
+ */
+export function printerWidthToChars(width?: number | null): number {
+  const w = Number(width || 0);
+  if (!w || w <= 0) return 48; // default
+  if (w >= 75 && w <= 85) return 48;   // 80mm
+  if (w >= 70 && w < 75) return 42;    // 76mm raro
+  if (w >= 50 && w < 70) return 32;    // 58mm
+  if (w < 50) return 32;               // < 58mm asume 58mm safe default
+  // > 85: probable que el usuario haya puesto chars directo
+  return Math.min(64, Math.max(20, w));
+}
+
+/**
+ * Devuelve un símbolo de moneda **ASCII-safe** para imprimir en térmicas
+ * con character sets limitados (PC437, PC850, etc. que no incluyen ₲, R$).
+ *
+ * Convención:
+ *   - PYG / Guaraní → "Gs."
+ *   - USD / Dolar   → "$"
+ *   - BRL / Real    → "R$"
+ *   - cualquier otro → el código de moneda (3 letras) en mayúsculas.
+ *
+ * Recibe la entity Moneda (con campos `simbolo`, `codigo`, `nombre`).
+ * Nunca devuelve caracteres Unicode no-ASCII para evitar el bug del "?".
+ */
+export function monedaSimboloAscii(moneda?: any): string {
+  if (!moneda) return 'Gs.';
+  const codigo = String(moneda.codigo || '').toUpperCase();
+  switch (codigo) {
+    case 'PYG': return 'Gs.';
+    case 'USD': return '$';
+    case 'BRL': return 'R$';
+    case 'ARS': return '$';
+    case 'EUR': return 'EUR';
+    default:
+      return codigo || String(moneda.nombre || 'Gs.').toUpperCase().slice(0, 6);
+  }
+}
+
+/**
  * Crea un `ThermalPrinter` desde una row `Printer` de BD.
  */
 function buildThermalPrinter(printer: any): ThermalPrinter {
@@ -183,7 +235,7 @@ function buildThermalPrinter(printer: any): ThermalPrinter {
     type: getPrinterType(printer.type) as PrinterTypes,
     interface: interfaceConfig,
     options: { timeout: 5000 },
-    width: printer.width || 48,
+    width: printerWidthToChars(printer.width),
     characterSet: (printer.characterSet ? getCharacterSet(printer.characterSet) : CharacterSet.PC437_USA) as CharacterSet,
     removeSpecialCharacters: false,
   });
@@ -248,7 +300,7 @@ async function applyLine(tp: ThermalPrinter, line: TicketLine, width: number): P
       break;
     }
     case 'cut': {
-      tp.cut();
+      tp.cut({ verticalTabAmount: 0 });
       break;
     }
     case 'qr': {
@@ -303,7 +355,7 @@ export async function printTicketSpec(
     }
 
     const tp = buildThermalPrinter(printer);
-    const width = printer.width || 48;
+    const width = printerWidthToChars(printer.width);
 
     // LPR: armamos buffer ESC/POS en memoria y lo enviamos por LPR a la
     // cola compartida de un servidor LPD remoto (típicamente Windows con
@@ -312,7 +364,7 @@ export async function printTicketSpec(
       for (const line of spec.lines) {
         await applyLine(tp, line, width);
       }
-      if (spec.cutAtEnd !== false) tp.cut();
+      if (spec.cutAtEnd !== false) tp.cut({ verticalTabAmount: 0 });
       if (spec.beepAtEnd) tp.beep();
       const buffer = (tp as any).getBuffer?.() as Buffer | undefined;
       if (!buffer || buffer.length === 0) {
@@ -337,7 +389,7 @@ export async function printTicketSpec(
     for (const line of spec.lines) {
       await applyLine(tp, line, width);
     }
-    if (spec.cutAtEnd !== false) tp.cut();
+    if (spec.cutAtEnd !== false) tp.cut({ verticalTabAmount: 0 });
     if (spec.beepAtEnd) tp.beep();
 
     await tp.execute();
