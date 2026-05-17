@@ -4,6 +4,7 @@ import { Observable, Subject, combineLatest } from 'rxjs';
 import { takeUntil, map } from 'rxjs/operators';
 import { Familia } from 'src/app/database/entities/productos/familia.entity';
 import { Subfamilia } from 'src/app/database/entities/productos/subfamilia.entity';
+import { Sector } from 'src/app/database/entities/ventas/sector.entity';
 import { ProductoTipo } from 'src/app/database/entities/productos/producto-tipo.enum';
 import { GestionarProductoService } from '../../services/gestionar-producto.service';
 import { RepositoryService } from 'src/app/database/repository.service';
@@ -43,6 +44,9 @@ export class ProductoInformacionGeneralComponent implements OnInit, OnDestroy {
   
   // Propiedad computada para el estado activo
   estadoActivo = false;
+
+  // Lista de sectores para el multi-select de impresión de comanda
+  sectores: Sector[] = [];
   
   // Propiedad computada para el estado del formulario
   formularioInvalido = false;
@@ -139,6 +143,14 @@ export class ProductoInformacionGeneralComponent implements OnInit, OnDestroy {
 
     // Inicializar estados
     this.actualizarEstadoFormulario();
+
+    // Cargar sectores para el multi-select de impresión de comanda
+    this.repositoryService.getSectoresActivos()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (sectores) => { this.sectores = sectores || []; },
+        error: (err) => { console.warn('No se pudieron cargar sectores:', err?.message || err); }
+      });
   }
 
   ngOnDestroy(): void {

@@ -1,0 +1,134 @@
+<div class="header">
+  <h2 mat-dialog-title>
+    <mat-icon>print</mat-icon>
+    Sectores e impresoras
+  </h2>
+  <span class="hint">
+    Definí qué impresora recibe las comandas, tickets y pre-cuentas de cada sector.
+    Una misma impresora puede repetirse con roles distintos.
+  </span>
+</div>
+
+<mat-dialog-content>
+  <!-- Formulario alta/edición -->
+  <mat-card class="form-card">
+    <mat-card-content>
+      <form [formGroup]="form" (ngSubmit)="guardar()" class="form-row">
+
+        <mat-form-field appearance="outline" class="field-sector">
+          <mat-label>Sector</mat-label>
+          <mat-select formControlName="sectorId" required>
+            <mat-option *ngFor="let s of sectores" [value]="s.id">{{ s.nombre }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="field-rol">
+          <mat-label>Rol</mat-label>
+          <mat-select formControlName="rol" required>
+            <mat-option *ngFor="let r of roles" [value]="r.value">{{ r.label }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="field-printer">
+          <mat-label>Impresora</mat-label>
+          <mat-select formControlName="printerId" required>
+            <mat-option *ngFor="let p of printers" [value]="p.id">{{ p.name }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="field-obs">
+          <mat-label>Observación</mat-label>
+          <input matInput formControlName="observacion" maxlength="200">
+        </mat-form-field>
+
+        <mat-slide-toggle formControlName="activo" class="field-activo">Activo</mat-slide-toggle>
+
+        <div class="form-actions">
+          <button mat-button type="button" *ngIf="editingId" (click)="resetForm()">
+            Cancelar
+          </button>
+          <button mat-flat-button color="primary" type="submit" [disabled]="form.invalid || saving">
+            <mat-spinner *ngIf="saving" diameter="16"></mat-spinner>
+            <span *ngIf="!saving">
+              <mat-icon>{{ editingId ? 'save' : 'add' }}</mat-icon>
+              {{ editingId ? 'Actualizar' : 'Agregar' }}
+            </span>
+          </button>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Tabla de asignaciones -->
+  <div class="table-wrapper">
+    <mat-spinner *ngIf="loading" diameter="40" class="loading-spinner"></mat-spinner>
+
+    <table mat-table [dataSource]="rows" *ngIf="!loading" class="full-width">
+      <ng-container matColumnDef="sector">
+        <th mat-header-cell *matHeaderCellDef>Sector</th>
+        <td mat-cell *matCellDef="let row">{{ row.sector.nombre }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="rol">
+        <th mat-header-cell *matHeaderCellDef>Rol</th>
+        <td mat-cell *matCellDef="let row">
+          <mat-chip-set>
+            <mat-chip>{{ rolLabel(row.rol) }}</mat-chip>
+          </mat-chip-set>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="printer">
+        <th mat-header-cell *matHeaderCellDef>Impresora</th>
+        <td mat-cell *matCellDef="let row">
+          <mat-icon class="inline-icon">print</mat-icon>
+          {{ row.printer.name }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="activo">
+        <th mat-header-cell *matHeaderCellDef>Activo</th>
+        <td mat-cell *matCellDef="let row">
+          <mat-slide-toggle [checked]="row.activo" (change)="toggleActivo(row)"></mat-slide-toggle>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="observacion">
+        <th mat-header-cell *matHeaderCellDef>Observación</th>
+        <td mat-cell *matCellDef="let row" class="obs-cell">{{ row.observacion || '—' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let row">
+          <button mat-icon-button [matMenuTriggerFor]="menu">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #menu="matMenu">
+            <button mat-menu-item (click)="editar(row)">
+              <mat-icon>edit</mat-icon>
+              <span>Editar</span>
+            </button>
+            <button mat-menu-item (click)="eliminar(row)">
+              <mat-icon>delete</mat-icon>
+              <span>Eliminar</span>
+            </button>
+          </mat-menu>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+    </table>
+
+    <div *ngIf="!loading && rows.length === 0" class="empty-state">
+      <mat-icon>print_disabled</mat-icon>
+      <p>No hay asignaciones configuradas todavía.</p>
+      <p class="empty-hint">Agregá la primera arriba: elegí un sector, un rol y la impresora correspondiente.</p>
+    </div>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-stroked-button (click)="cerrar()">Cerrar</button>
+</mat-dialog-actions>

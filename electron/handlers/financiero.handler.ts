@@ -368,7 +368,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('get-dispositivos', async () => {
     try {
       const repo = dataSource.getRepository(Dispositivo);
-      return await repo.find({ order: { nombre: 'ASC' } });
+      return await repo.find({ order: { nombre: 'ASC' }, relations: ['printerTicket'] });
     } catch (error) {
       console.error('Error getting dispositivos:', error);
       throw error;
@@ -378,7 +378,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('get-dispositivo', async (_event: IpcMainInvokeEvent, id: number) => {
     try {
       const repo = dataSource.getRepository(Dispositivo);
-      return await repo.findOneBy({ id });
+      return await repo.findOne({ where: { id }, relations: ['printerTicket'] });
     } catch (error) {
       console.error(`Error getting dispositivo ${id}:`, error);
       throw error;
@@ -389,8 +389,13 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
     try {
       await ensurePermission(dataSource, getCurrentUser, 'DISPOSITIVOS_GESTIONAR');
       const repo = dataSource.getRepository(Dispositivo);
-       // Add validation for unique name/MAC here if needed
-      const entity = repo.create(data);
+      // Mapeo: printerTicketId (UI) → printerTicket FK
+      const { printerTicketId, ...rest } = data || {};
+      const payload: any = { ...rest };
+      if (printerTicketId !== undefined) {
+        payload.printerTicket = printerTicketId ? { id: printerTicketId } : null;
+      }
+      const entity = repo.create(payload);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
     } catch (error) {
@@ -403,10 +408,15 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
     try {
       await ensurePermission(dataSource, getCurrentUser, 'DISPOSITIVOS_GESTIONAR');
       const repo = dataSource.getRepository(Dispositivo);
-      // Add validation for unique name/MAC (excluding self) here if needed
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Dispositivo ID ${id} not found`);
-      repo.merge(entity, data);
+      // Mapeo: printerTicketId (UI) → printerTicket FK
+      const { printerTicketId, ...rest } = data || {};
+      const merged: any = { ...rest };
+      if (printerTicketId !== undefined) {
+        merged.printerTicket = printerTicketId ? { id: printerTicketId } : null;
+      }
+      repo.merge(entity, merged);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       return await repo.save(entity);
     } catch (error) {

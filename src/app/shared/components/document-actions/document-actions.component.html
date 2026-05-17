@@ -1,0 +1,102 @@
+<!-- Variant: icon (solo ícono) — usado en celdas de tabla -->
+<button
+  *ngIf="variant === 'icon'"
+  mat-icon-button
+  [matMenuTriggerFor]="menu"
+  [disabled]="disabled || loading"
+  [color]="color"
+  [matTooltip]="label"
+>
+  <mat-spinner *ngIf="loading" diameter="20"></mat-spinner>
+  <mat-icon *ngIf="!loading">{{ icon }}</mat-icon>
+</button>
+
+<!-- Variant: stroked (default) -->
+<button
+  *ngIf="variant === 'stroked'"
+  mat-stroked-button
+  [matMenuTriggerFor]="menu"
+  [disabled]="disabled || loading"
+  [color]="color"
+>
+  <mat-spinner *ngIf="loading" diameter="18"></mat-spinner>
+  <mat-icon *ngIf="!loading">{{ icon }}</mat-icon>
+  <span>{{ label }}</span>
+  <mat-icon class="trailing-arrow">arrow_drop_down</mat-icon>
+</button>
+
+<!-- Variant: flat -->
+<button
+  *ngIf="variant === 'flat'"
+  mat-button
+  [matMenuTriggerFor]="menu"
+  [disabled]="disabled || loading"
+  [color]="color"
+>
+  <mat-spinner *ngIf="loading" diameter="18"></mat-spinner>
+  <mat-icon *ngIf="!loading">{{ icon }}</mat-icon>
+  <span>{{ label }}</span>
+  <mat-icon class="trailing-arrow">arrow_drop_down</mat-icon>
+</button>
+
+<!-- Variant: raised -->
+<button
+  *ngIf="variant === 'raised'"
+  mat-raised-button
+  [matMenuTriggerFor]="menu"
+  [disabled]="disabled || loading"
+  [color]="color"
+>
+  <mat-spinner *ngIf="loading" diameter="18"></mat-spinner>
+  <mat-icon *ngIf="!loading">{{ icon }}</mat-icon>
+  <span>{{ label }}</span>
+  <mat-icon class="trailing-arrow">arrow_drop_down</mat-icon>
+</button>
+
+<mat-menu #menu="matMenu" class="document-actions-menu">
+
+  <!-- Descargar PDF -->
+  <button mat-menu-item *ngIf="showPdf" (click)="onDescargarPdf()">
+    <mat-icon>picture_as_pdf</mat-icon>
+    <span>{{ persistirComoAdjunto ? 'Generar PDF y adjuntar' : 'Descargar PDF' }}</span>
+  </button>
+
+  <!-- Abrir en visor (preview Blob) -->
+  <button mat-menu-item *ngIf="showPdf" (click)="onAbrirEnVisor()">
+    <mat-icon>visibility</mat-icon>
+    <span>Abrir en visor</span>
+  </button>
+
+  <!-- Descargar Excel -->
+  <button mat-menu-item *ngIf="showExcel" (click)="onDescargarExcel()">
+    <mat-icon>table_chart</mat-icon>
+    <span>Descargar Excel</span>
+  </button>
+
+  <!-- Separador antes del ticket si hay PDFs -->
+  <mat-divider *ngIf="(showPdf || showExcel) && showTicket"></mat-divider>
+
+  <!-- Imprimir ticket térmico -->
+  <button mat-menu-item *ngIf="showTicket" (click)="onImprimirTicket()">
+    <mat-icon>print</mat-icon>
+    <span>Imprimir ticket</span>
+  </button>
+
+  <!-- Separador antes de adjuntar -->
+  <mat-divider *ngIf="(showPdf || showExcel || showTicket) && showAdjuntar"></mat-divider>
+
+  <!-- Adjuntar firmado escaneado -->
+  <button mat-menu-item *ngIf="showAdjuntar" (click)="onSeleccionarArchivo()">
+    <mat-icon>upload_file</mat-icon>
+    <span>Adjuntar firmado escaneado</span>
+  </button>
+</mat-menu>
+
+<!-- Input file oculto para subir adjunto firmado -->
+<input
+  #fileInput
+  type="file"
+  [accept]="acceptFirmado"
+  (change)="onFileSelected($event)"
+  style="display: none;"
+/>

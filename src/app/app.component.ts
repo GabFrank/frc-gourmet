@@ -27,6 +27,7 @@ import { MatExpansionModule } from '@angular/material/expansion';
 import { ThemeService } from './services/theme.service';
 import { MatDialog } from '@angular/material/dialog';
 import { PrinterSettingsComponent } from './components/printer-settings/printer-settings.component';
+import { SectoresImpresorasSettingsComponent } from './components/sectores-impresoras-settings/sectores-impresoras-settings.component';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { TabsService } from './services/tabs.service';
@@ -85,6 +86,7 @@ import { ListNotificacionesRrhhComponent } from './pages/rrhh/notificaciones/lis
 import { ReportesRrhhPageComponent } from './pages/rrhh/reportes/reportes-rrhh-page.component';
 import { RepositoryService } from './database/repository.service';
 import { UpdateService } from './services/update.service';
+import { PrinterEventsService } from './services/printer-events.service';
 import { UpdateChannelDialogComponent } from './shared/components/update-channel-dialog/update-channel-dialog.component';
 import { EmpresaService } from './shared/services/empresa.service';
 import { ConfigurarEmpresaComponent } from './pages/sistema/configurar-empresa/configurar-empresa.component';
@@ -200,6 +202,9 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     private repo: RepositoryService,
     private updateService: UpdateService,
     private empresaService: EmpresaService,
+    // E2.4: solo inyectar para arrancar el listener global de eventos de
+    // impresora — el servicio se auto-suscribe en su constructor.
+    private _printerEvents: PrinterEventsService,
   ) {
     // Suscribirse al servicio de empresa para mantener el nombre + logo del
     // toolbar sincronizados con cualquier update (login, guardar en
@@ -564,6 +569,14 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   openPrinterSettings(): void {
     this.dialog.open(PrinterSettingsComponent, {
       width: '800px',
+      maxHeight: '90vh',
+    });
+    this.closeMenu();
+  }
+
+  openSectoresImpresorasSettings(): void {
+    this.dialog.open(SectoresImpresorasSettingsComponent, {
+      width: '1000px',
       maxHeight: '90vh',
     });
     this.closeMenu();

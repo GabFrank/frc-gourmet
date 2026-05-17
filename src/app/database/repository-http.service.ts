@@ -230,8 +230,11 @@ export class RepositoryHttpService extends RepositoryService {
   openFileWithSystem(url: string): Observable<{ ok: boolean; error?: string }> {
     return throwError(() => new Error(`RepositoryHttpService.openFileWithSystem() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  getAdjuntos(params: { entidadTipo: string; entidadId: number }): Observable<any[]> {
+  getAdjuntos(params: { entidadTipo: string; entidadId: number; tipo?: string }): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getAdjuntos() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getAdjuntoById(id: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getAdjuntoById() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   createAdjunto(data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.createAdjunto() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;

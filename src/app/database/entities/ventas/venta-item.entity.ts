@@ -126,4 +126,20 @@ export class VentaItem extends BaseModel {
   @ManyToOne(() => Usuario, { nullable: true })
   @JoinColumn({ name: 'vendedor_id' })
   vendedor?: Usuario;
-} 
+
+  // ─── Impresión de comanda de cocina (sistema documentos) ────────────────
+  // `impreso` queda en true SOLO cuando todas las impresiones del item se
+  // completaron (todos sus sectores recibieron el ticket). Para detalle
+  // por-sector ver `impresiones`.
+  @Column({ default: false })
+  impreso!: boolean;
+
+  @Column({ nullable: true, name: 'fecha_impresion' })
+  fechaImpresion?: Date;
+
+  // JSON serializado: `[{sectorId, printerId, ts, ok, error?}]` con el log
+  // de cada intento de impresión. Permite reimprimir solo lo que falló por
+  // sector y auditar quién imprimió qué cuándo.
+  @Column({ type: 'text', nullable: true })
+  impresiones?: string;
+}

@@ -179,6 +179,8 @@ import { Reserva } from './entities/ventas/reserva.entity';
 import { Comanda } from './entities/ventas/comanda.entity';
 import { ComandaItem } from './entities/ventas/comanda-item.entity';
 import { Sector } from './entities/ventas/sector.entity';
+import { SectorImpresora } from './entities/ventas/sector-impresora.entity';
+import { ProductoSector } from './entities/productos/producto-sector.entity';
 // Migrations
 import { Baseline1778378410416 } from './migrations/1778378410416-Baseline';
 import { BaselinePostgres1778380893207 } from './migrations/1778380893207-BaselinePostgres';
@@ -186,6 +188,9 @@ import { AddDispositivoIdToTrackedEntities1778390000000 } from './migrations/177
 import { AddOnboardingTaskOverrides1778400000000 } from './migrations/1778400000000-AddOnboardingTaskOverrides';
 import { AddEmpresa1778500000000 } from './migrations/1778500000000-AddEmpresa';
 import { AddMustChangePasswordToUsuario1778600000000 } from './migrations/1778600000000-AddMustChangePasswordToUsuario';
+import { AddSistemaDocumentos1779000000000 } from './migrations/1779000000000-AddSistemaDocumentos';
+import { AddRequiereComandaToProducto1779100000000 } from './migrations/1779100000000-AddRequiereComandaToProducto';
+import { AddPrinterTicketToDispositivo1779200000000 } from './migrations/1779200000000-AddPrinterTicketToDispositivo';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -425,6 +430,8 @@ function getEntitiesList(): any[] {
       Comanda,
       ComandaItem,
       Sector,
+      SectorImpresora,
+      ProductoSector,
       // Atajo (accesos rápidos) entities
       PdvAtajoGrupo,
       PdvAtajoItem,
@@ -467,6 +474,9 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddOnboardingTaskOverrides1778400000000,
     AddEmpresa1778500000000,
     AddMustChangePasswordToUsuario1778600000000,
+    AddSistemaDocumentos1779000000000,
+    AddRequiereComandaToProducto1779100000000,
+    AddPrinterTicketToDispositivo1779200000000,
   ];
 }
 

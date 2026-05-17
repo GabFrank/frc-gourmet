@@ -53,6 +53,7 @@ export class PrinterSettingsComponent implements OnInit {
   
   connectionTypes = [
     { value: 'network', displayName: 'Network/IP' },
+    { value: 'lpr', displayName: 'LPR/LPD (Windows compartida)' },
     { value: 'usb', displayName: 'USB' },
     { value: 'bluetooth', displayName: 'Bluetooth' }
   ];
@@ -104,8 +105,17 @@ export class PrinterSettingsComponent implements OnInit {
     this.updatePortValidation(form, connectionType);
     
     // Listen for connection type changes to update port validation
-    form.get('connectionType')?.valueChanges.subscribe(type => {
+    form.get('connectionType')?.valueChanges.subscribe((type: string | null) => {
       this.updatePortValidation(form, type);
+      // Sugerir puerto default según el tipo de conexión
+      const portCtrl = form.get('port');
+      if (portCtrl) {
+        if (type === 'lpr' && (!portCtrl.value || portCtrl.value === 9100)) {
+          portCtrl.setValue(515);
+        } else if (type === 'network' && (!portCtrl.value || portCtrl.value === 515)) {
+          portCtrl.setValue(9100);
+        }
+      }
     });
     
     return form;
@@ -119,8 +129,8 @@ export class PrinterSettingsComponent implements OnInit {
     
     if (!portControl) return;
     
-    if (connectionType === 'network') {
-      // Network printers require a valid port
+    if (connectionType === 'network' || connectionType === 'lpr') {
+      // Network y LPR requieren puerto válido (network=9100, lpr=515 por default)
       portControl.setValidators([Validators.required, Validators.min(1), Validators.max(65535)]);
     } else {
       // USB and Bluetooth don't need a port

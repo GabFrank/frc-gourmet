@@ -425,10 +425,23 @@ export class GestionarProductoService {
           esComprable: producto.esComprable,
           controlaStock: producto.controlaStock,
           esIngrediente: producto.esIngrediente,
+          requiereComanda: (producto as any).requiereComanda !== false,
+          sectorIds: [], // se carga abajo con get-producto-sectores
           stockMinimo: producto.stockMinimo,
           stockMaximo: producto.stockMaximo,
           imageUrl: (producto as any).imageUrl ?? null
         });
+
+        // Cargar M2M producto_sectores (handler IPC nuevo del sistema documentos)
+        const api: any = (window as any).api;
+        if (api?.callIpc) {
+          api.callIpc('get-producto-sectores', producto.id)
+            .then((rows: any[]) => {
+              const ids = (rows || []).map(r => r.sector?.id).filter((x: any) => x != null);
+              this.informacionPrincipalForm.get('sectorIds')?.setValue(ids, { emitEvent: false });
+            })
+            .catch((err: any) => console.warn('No se pudo cargar producto_sectores:', err?.message || err));
+        }
 
         // Cargar subfamilias si hay familia seleccionada
         if (producto.subfamilia?.familia?.id) {
@@ -481,6 +494,8 @@ export class GestionarProductoService {
         esComprable: [true],
         controlaStock: [true],
         esIngrediente: [false],
+        requiereComanda: [true],
+        sectorIds: [[]],
         stockMinimo: [null, [Validators.min(0)]],
         stockMaximo: [null, [Validators.min(0)]],
         imageUrl: [null]
@@ -740,15 +755,25 @@ export class GestionarProductoService {
       esComprable: productoData.esComprable,
       controlaStock: productoData.controlaStock,
       esIngrediente: productoData.esIngrediente,
+      requiereComanda: productoData.requiereComanda !== false,
       stockMinimo: productoData.stockMinimo,
       stockMaximo: productoData.stockMaximo,
       subfamiliaId: productoData.subfamiliaId,
       imageUrl: productoData.imageUrl ?? null
     };
 
+    const sectorIds: number[] = Array.isArray(productoData.sectorIds) ? productoData.sectorIds : [];
+    const syncSectores = (productoId: number) => {
+      const api: any = (window as any).api;
+      if (!api?.callIpc) return Promise.resolve();
+      return api.callIpc('set-producto-sectores', productoId, sectorIds)
+        .catch((err: any) => console.warn('No se pudo guardar producto_sectores:', err?.message || err));
+    };
+
     if (this._isEditMode.value) {
       this.repository.updateProducto(this._productoId.value!, normalizedData).subscribe({
-        next: (response) => {
+        next: async (response) => {
+          await syncSectores(this._productoId.value!);
           // Mostrar mensaje de éxito
           this.snackBar.open('Producto actualizado correctamente', 'CERRAR', {
             duration: 3000,
@@ -773,7 +798,8 @@ export class GestionarProductoService {
       });
     } else {
       this.repository.createProducto(normalizedData).subscribe({
-        next: (res: any) => {
+        next: async (res: any) => {
+          await syncSectores(res.id);
           // Mostrar mensaje de éxito
           this.snackBar.open('Producto creado correctamente', 'CERRAR', {
             duration: 3000,

@@ -126,7 +126,8 @@ interface ElectronAPI {
   openFileWithSystem: (url: string) => Promise<{ ok: boolean; error?: string }>;
 
   // Adjuntos polimorficos
-  getAdjuntos: (params: { entidadTipo: string; entidadId: number }) => Promise<any[]>;
+  getAdjuntos: (params: { entidadTipo: string; entidadId: number; tipo?: string }) => Promise<any[]>;
+  getAdjuntoById: (id: number) => Promise<any>;
   createAdjunto: (data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }) => Promise<any>;
   updateAdjunto: (id: number, data: { tipo?: string; observacion?: string }) => Promise<any>;
   deleteAdjunto: (id: number) => Promise<{ success: boolean; message?: string }>;
@@ -1322,8 +1323,11 @@ export class RepositoryIpcService extends RepositoryService {
   }
 
   // ===================== ADJUNTOS POLIMORFICOS =====================
-  getAdjuntos(params: { entidadTipo: string; entidadId: number }): Observable<any[]> {
+  getAdjuntos(params: { entidadTipo: string; entidadId: number; tipo?: string }): Observable<any[]> {
     return from(this.api.getAdjuntos(params));
+  }
+  getAdjuntoById(id: number): Observable<any> {
+    return from(this.api.getAdjuntoById(id));
   }
   createAdjunto(data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }): Observable<any> {
     return from(this.api.createAdjunto(data));
