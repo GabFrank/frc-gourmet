@@ -91,6 +91,7 @@ import { ConfigurarEmpresaComponent } from './pages/sistema/configurar-empresa/c
 import { resolveAppUrl } from './shared/utils/image-url.util';
 import { HasPermissionDirective, HasAnyPermissionDirective } from './shared/directives/has-permission.directive';
 import { SplashOverlayComponent } from './shared/components/splash-overlay/splash-overlay.component';
+import { UserAvatarComponent } from './shared/components/user-avatar/user-avatar.component';
 
 @Component({
   selector: 'app-root',
@@ -117,6 +118,7 @@ import { SplashOverlayComponent } from './shared/components/splash-overlay/splas
     HasPermissionDirective,
     HasAnyPermissionDirective,
     SplashOverlayComponent,
+    UserAvatarComponent,
   ],
 })
 export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
