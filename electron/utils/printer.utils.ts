@@ -3,6 +3,7 @@ import { exec } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import { app } from 'electron';
+import { sendLprJob, parseLprAddress } from './lpr.utils';
 
 // Helper function to generate test page content
 export function generateTestPageContent(printer: any): string {
@@ -75,6 +76,10 @@ export async function printPosReceipt(printer: any, content: string): Promise<bo
       interfaceConfig = printer.address; // For USB/Serial, address is usually the path
     } else if (printer.connectionType === 'bluetooth') {
       interfaceConfig = `bt:${printer.address}`;
+    } else if (printer.connectionType === 'lpr') {
+      // Dummy interface — el ThermalPrinter solo se usa para acumular bytes
+      // en buffer; el envío real va por LPR más abajo.
+      interfaceConfig = 'tcp://127.0.0.1:1';
     } else {
       console.warn(`Unsupported printer connection type: ${printer.connectionType}. Using address directly.`);
       interfaceConfig = printer.address; // Fallback, might not work
@@ -96,6 +101,37 @@ export async function printPosReceipt(printer: any, content: string): Promise<bo
       removeSpecialCharacters: false, // Keep special characters if needed
       // lineCharacter: "=", // Optional: Custom line character
     });
+
+    // LPR: armar buffer ESC/POS y enviarlo vía LPR (no usa execute()).
+    if (printer.connectionType === 'lpr') {
+      thermalPrinter.alignCenter();
+      thermalPrinter.println(content);
+      thermalPrinter.cut();
+      thermalPrinter.beep();
+      const buffer = (thermalPrinter as any).getBuffer?.() as Buffer | undefined;
+      if (!buffer || buffer.length === 0) {
+        console.error('LPR: buffer ESC/POS vacío');
+        return false;
+      }
+      const { host, port, queue } = parseLprAddress(printer.address || '');
+      if (!host) {
+        console.error('LPR: address sin host');
+        return false;
+      }
+      const res = await sendLprJob(buffer, {
+        host,
+        port: port || printer.port || 515,
+        queue,
+        jobName: 'frc-test-page',
+        timeoutMs: 5000,
+      });
+      if (!res.ok) {
+        console.error('LPR error:', res.error);
+        return false;
+      }
+      console.log('LPR test page sent OK');
+      return true;
+    }
 
     const isConnected = await thermalPrinter.isPrinterConnected();
     if (!isConnected) {

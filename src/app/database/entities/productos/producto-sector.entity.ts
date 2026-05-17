@@ -16,9 +16,13 @@ import { Sector } from '../ventas/sector.entity';
  * - "WHISKY" → BAR (preparación) + GERENCIA (control de high-ticket)
  * - Solo "GASEOSA" → BAR (un solo sector)
  *
- * Si un producto no tiene ningún `ProductoSector` declarado, la comanda
- * se rutea al sector default del Dispositivo/Caja. Si no hay tampoco eso,
- * cae en "SIN SECTOR" (warning).
+ * Si un producto no tiene ningún `ProductoSector` declarado:
+ * - `producto.requiereComanda = false` → se ignora silenciosamente.
+ * - `producto.requiereComanda = true` → warning visible en errors al
+ *   intentar imprimir.
+ *
+ * NO existe fallback al sector de la mesa/comanda — el routing es 100%
+ * por producto.
  */
 @Entity('producto_sectores')
 @Unique(['producto', 'sector'])

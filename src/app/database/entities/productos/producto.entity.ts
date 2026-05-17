@@ -33,6 +33,9 @@ export class Producto extends BaseModel {
   @Column({ type: 'boolean', default: false, comment: 'Indica si el producto puede ser usado como ingrediente en recetas.' })
   esIngrediente!: boolean;
 
+  @Column({ type: 'boolean', default: true, name: 'requiere_comanda', comment: 'Si false, el producto NO genera ticket de comanda al ticketear en PdV. Para servicio, propina, descuento, etc.' })
+  requiereComanda!: boolean;
+
   // IVA del producto en porcentaje (0, 5, 10). Pensado para futura facturación electrónica (SIFEN).
   @Column({ type: 'int', default: 10 })
   iva!: number;

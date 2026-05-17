@@ -24,10 +24,8 @@
 import { ipcMain } from 'electron';
 import type { DataSource } from 'typeorm';
 import { In as TIn } from 'typeorm';
-import { Comanda } from '../../src/app/database/entities/ventas/comanda.entity';
-import { ComandaItem } from '../../src/app/database/entities/ventas/comanda-item.entity';
 import { Venta } from '../../src/app/database/entities/ventas/venta.entity';
-import { VentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
+import { VentaItem, EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
 import { Printer } from '../../src/app/database/entities/printer.entity';
 import { SectorImpresora, SectorImpresoraRol } from '../../src/app/database/entities/ventas/sector-impresora.entity';
 import { ProductoSector } from '../../src/app/database/entities/productos/producto-sector.entity';
@@ -85,21 +83,21 @@ async function getPrinterByRol(
 }
 
 /**
- * Append a `impresiones` JSON un registro de intento de impresión. Si todos
- * los sectores del item ya están impresos, marca `impreso=true`.
+ * Append a `impresiones` JSON un registro de intento de impresión sobre un
+ * VentaItem. Si todos los sectores esperados del item ya están impresos OK,
+ * marca `impreso=true`.
  *
  * `expectedSectores` = lista de sector_id a los que el item debería ir
- * (calculada al inicio del flujo de comanda). Si NULL/empty, marca impreso
- * con un solo registro exitoso (impresión a impresora default sin sector).
+ * (calculada al inicio del flujo). Si NULL/empty, con un registro OK alcanza.
  */
 async function registrarImpresion(
   dataSource: DataSource,
-  itemId: number,
+  ventaItemId: number,
   registro: { sectorId?: number | null; printerId?: number; ok: boolean; error?: string },
   expectedSectores: number[] | null = null,
 ): Promise<void> {
-  const repo = dataSource.getRepository(ComandaItem);
-  const item = await repo.findOneBy({ id: itemId });
+  const repo = dataSource.getRepository(VentaItem);
+  const item = await repo.findOneBy({ id: ventaItemId });
   if (!item) return;
 
   const log: any[] = item.impresiones ? safeParseJson(item.impresiones) : [];
@@ -112,7 +110,6 @@ async function registrarImpresion(
   });
   item.impresiones = JSON.stringify(log);
 
-  // Determinar si todos los sectores esperados ya tienen impresión OK
   if (registro.ok) {
     item.fechaImpresion = new Date();
     if (expectedSectores && expectedSectores.length > 0) {
@@ -122,7 +119,6 @@ async function registrarImpresion(
       const todosImpresos = expectedSectores.every(sid => impresosOk.has(sid));
       if (todosImpresos) item.impreso = true;
     } else {
-      // Sin sectores esperados → con un registro OK alcanza
       item.impreso = true;
     }
   }
@@ -143,6 +139,7 @@ export interface PrintComandaOpts {
   soloItemsNoImpresos?: boolean;  // default true — omite items ya impresos
   sectorIdFilter?: number;        // si se pasa, solo enruta a ese sector (reimpresión selectiva)
   forceReprint?: boolean;         // ignora `impreso=true` y reimprime todo
+  retryFailed?: boolean;          // worker de retry: incluye también items con intentos fallidos previos (no solo nunca intentados)
 }
 
 export interface ImpresionResultado {
@@ -161,55 +158,88 @@ export interface ImpresionResultado {
 }
 
 /**
- * Imprime la(s) comanda(s) de una `Comanda` enrutando cada item a las
- * impresoras de TODOS sus sectores (multi-sector M2M `producto_sectores`).
+ * Imprime los tickets de cocina ("comandas") para una `Venta`, enrutando
+ * cada `VentaItem` a las impresoras de TODOS los sectores configurados en
+ * el producto (M2M `producto_sectores`).
+ *
+ * **Pre-condición**: la venta debe tener `mesa` o `comanda` asignada.
+ * Ambos disparan impresión; son flujos PdV independientes.
+ *
+ * Reglas:
+ * - `producto.requiereComanda = false` → item ignorado silenciosamente
+ *   (servicio, propina, descuento, etc.).
+ * - `producto.requiereComanda = true` + sin sectores configurados → warning
+ *   visible en `errors` ("producto X requiere comanda pero no tiene sector").
+ * - Routing 100% por M2M `producto_sectores`. La mesa/comanda solo decide
+ *   SI imprimir (no DÓNDE).
  *
  * Reusable como función — el hook auto-imprimir en `ventas.handler.ts` la
  * invoca directamente sin pasar por IPC.
  */
 export async function printComandaInternal(
   dataSource: DataSource,
-  comandaId: number,
+  ventaId: number,
   opts: PrintComandaOpts = {},
 ): Promise<ImpresionResultado> {
   const printed: ImpresionResultado['printed'] = [];
   const errors: ImpresionResultado['errors'] = [];
 
-  const comanda = await dataSource.getRepository(Comanda).findOne({
-    where: { id: comandaId },
-    relations: ['pdv_mesa', 'sector'],
+  const venta = await dataSource.getRepository(Venta).findOne({
+    where: { id: ventaId },
+    relations: ['mesa', 'comanda'],
   });
-  if (!comanda) {
-    return { ok: false, printed, errors: [{ message: `Comanda ${comandaId} no encontrada` }] };
+  if (!venta) {
+    return { ok: false, printed, errors: [{ message: `Venta ${ventaId} no encontrada` }] };
+  }
+  const mesa: any = (venta as any).mesa;
+  const comanda: any = (venta as any).comanda;
+  if (!mesa?.id && !comanda?.id) {
+    // Venta sin mesa ni comanda → no aplica ticket de cocina.
+    return { ok: true, printed, errors };
   }
 
-  // 1. Cargar items con producto
-  const ciRepo = dataSource.getRepository(ComandaItem);
-  const items = await ciRepo.find({
-    where: { comanda: { id: comandaId } as any, activo: true },
-    relations: ['ventaItem', 'ventaItem.producto', 'ventaItem.presentacion'],
+  // 1. Cargar VentaItems activos con producto
+  const viRepo = dataSource.getRepository(VentaItem);
+  const items = await viRepo.find({
+    where: { venta: { id: ventaId } as any, estado: EstadoVentaItem.ACTIVO },
+    relations: ['producto', 'presentacion'],
   });
   if (items.length === 0) {
     return { ok: true, printed, errors };
   }
 
-  // Filtrar por estado de impresión
+  // Filtrar por estado de impresión + requiereComanda.
+  // - forceReprint=true → todos los items
+  // - soloItemsNoImpresos=true + retryFailed=true (worker) → todos los `!impreso`
+  //   (incluye fallidos previos, para auto-retry cuando vuelve la impresora)
+  // - soloItemsNoImpresos=true (hook auto-print, default) → SOLO items
+  //   "nunca intentados" (sin entrada en `impresiones`). Evita duplicados en
+  //   cocina cuando se agrega un item nuevo y hay fallidos previos.
+  // - soloItemsNoImpresos=false → todos los `!impreso` (reimpresión solicitada).
   const soloPendientes = opts.soloItemsNoImpresos !== false && !opts.forceReprint;
-  const itemsAImprimir = soloPendientes ? items.filter(i => !i.impreso) : items;
+  const baseSet = opts.forceReprint
+    ? items
+    : soloPendientes
+      ? (opts.retryFailed
+          ? items.filter(i => !i.impreso)
+          : items.filter(i => !i.impreso && !(i.impresiones && safeParseJson(i.impresiones).length > 0)))
+      : items.filter(i => !i.impreso);
+  const itemsAImprimir = baseSet
+    .filter(i => (i as any).producto?.requiereComanda !== false);
   if (itemsAImprimir.length === 0) {
     return { ok: true, printed, errors };
   }
 
   // 2. Cargar M2M producto_sectores para todos los producto_id involucrados
   const productoIds = Array.from(new Set(
-    itemsAImprimir.map(i => i.ventaItem?.producto?.id).filter((x): x is number => !!x),
+    itemsAImprimir.map(i => (i as any).producto?.id).filter((x): x is number => !!x),
   ));
 
   const productoSectoresMap = new Map<number, { sectorId: number; prioridad: number }[]>();
   if (productoIds.length > 0) {
     const psRows = await dataSource.getRepository(ProductoSector).find({
       where: { producto: { id: TIn(productoIds) } as any, activo: true },
-      relations: ['sector'],
+      relations: ['sector', 'producto'],
     });
     for (const ps of psRows) {
       const pid = (ps as any).producto?.id ?? (ps as any).productoId;
@@ -220,18 +250,13 @@ export async function printComandaInternal(
     }
   }
 
-  // Fallback: si un producto no tiene sectores configurados, usar el sector de la comanda
-  const sectorComandaId = (comanda.sector as any)?.id ?? null;
-
   // 3. Resolver M2M sectores_impresoras para todos los sectores involucrados
   const allSectores = new Set<number>();
   for (const item of itemsAImprimir) {
-    const pid = item.ventaItem?.producto?.id;
+    const pid = (item as any).producto?.id;
     const sectores = pid ? productoSectoresMap.get(pid) : null;
     if (sectores && sectores.length > 0) {
       sectores.forEach(s => allSectores.add(s.sectorId));
-    } else if (sectorComandaId) {
-      allSectores.add(sectorComandaId);
     }
   }
 
@@ -260,19 +285,17 @@ export async function printComandaInternal(
   }
 
   // 4. Por cada printer, juntar los items que le tocan
-  type Job = { printer: Printer; sectorId: number; items: { item: ComandaItem; expectedSectores: number[] }[] };
+  type Job = { printer: Printer; sectorId: number; items: { item: VentaItem; expectedSectores: number[] }[] };
   const jobsByPrinter = new Map<string, Job>(); // key = `${printerId}|${sectorId}`
 
   for (const item of itemsAImprimir) {
-    const pid = item.ventaItem?.producto?.id;
-    let sectoresItem: number[] = [];
-    if (pid && productoSectoresMap.has(pid)) {
-      sectoresItem = productoSectoresMap.get(pid)!.sort((a, b) => a.prioridad - b.prioridad).map(s => s.sectorId);
-    } else if (sectorComandaId) {
-      sectoresItem = [sectorComandaId];
-    }
+    const pid = (item as any).producto?.id;
+    const sectoresItem: number[] = (pid && productoSectoresMap.has(pid))
+      ? productoSectoresMap.get(pid)!.sort((a, b) => a.prioridad - b.prioridad).map(s => s.sectorId)
+      : [];
     if (sectoresItem.length === 0) {
-      errors.push({ message: `Item ${item.id} sin sector — producto no tiene producto_sectores y la comanda no tiene sector asignado` });
+      const nombre = (item as any).producto?.nombre || `id=${pid}`;
+      errors.push({ message: `Producto "${nombre}" requiere comanda pero no tiene sectores configurados` });
       continue;
     }
 
@@ -301,6 +324,10 @@ export async function printComandaInternal(
     return { ok: errors.length === 0, printed, errors };
   }
 
+  const refMesa = mesa?.numero ? `MESA ${mesa.numero}` : null;
+  const refComanda = comanda?.codigo || (comanda?.numero ? `#${comanda.numero}` : null);
+  const refStr = refMesa || (refComanda ? `COMANDA ${refComanda}` : 'PARA LLEVAR');
+
   // 5. Por cada job: construir spec, imprimir, registrar
   for (const job of jobsByPrinter.values()) {
     if (job.items.length === 0) continue;
@@ -308,7 +335,6 @@ export async function printComandaInternal(
     const width = job.printer.width || 48;
     const headerLines: TicketLine[] = await ticketHeaderEmpresa(dataSource, width);
     const sectorNombre = await getSectorNombre(dataSource, job.sectorId);
-    const mesaTxt = (comanda.pdv_mesa as any)?.numero ? `MESA ${(comanda.pdv_mesa as any).numero}` : 'PARA LLEVAR';
 
     const lines: TicketLine[] = [
       ...headerLines,
@@ -316,21 +342,18 @@ export async function printComandaInternal(
       ticketText(`** COMANDA - ${sectorNombre} **`, { align: 'C', bold: true }),
       ticketText(ticketFmtFechaHora(new Date()), { align: 'C' }),
       ticketSeparador('-'),
-      ticketKv('MESA', mesaTxt),
-      ticketKv('COMANDA', `${comanda.codigo || `#${comanda.numero}`}`),
-      ticketSeparador('-'),
     ];
+    if (refMesa) lines.push(ticketKv('MESA', refMesa.replace('MESA ', '')));
+    if (refComanda) lines.push(ticketKv('COMANDA', refComanda));
+    lines.push(ticketKv('VENTA', `#${ventaId}`));
+    lines.push(ticketSeparador('-'));
 
     for (const j of job.items) {
-      const it = j.item;
-      const v = it.ventaItem;
-      const nombre = (v?.producto?.nombre || 'PRODUCTO').toUpperCase();
-      const qty = Number(v?.cantidad || 1);
+      const v = j.item;
+      const nombre = ((v as any).producto?.nombre || 'PRODUCTO').toUpperCase();
+      const qty = Number(v.cantidad || 1);
       lines.push(ticketText(`${qty}  ${nombre}`, { bold: true }));
-      if (it.observacion) {
-        lines.push(ticketText(`   * ${it.observacion}`, { size: 'normal' }));
-      }
-      if (v?.ensambladoDescripcion) {
+      if (v.ensambladoDescripcion) {
         lines.push(ticketText(`   ${v.ensambladoDescripcion}`, { size: 'normal' }));
       }
     }
@@ -383,12 +406,12 @@ export async function printComandaInternal(
     broadcastPrinterEvent({
       level: printed.length > 0 ? 'warning' : 'error',
       handler: 'print-comanda',
-      entityRef: { tipo: 'COMANDA', id: comandaId },
+      entityRef: { tipo: 'VENTA', id: ventaId },
       printed: printed.length,
       errors,
       message: printed.length > 0
-        ? `Comanda parcial: ${printed.length} OK, ${errors.length} con error`
-        : `Comanda no se imprimió (${errors.length} error${errors.length > 1 ? 'es' : ''})`,
+        ? `Comanda parcial (${refStr}): ${printed.length} OK, ${errors.length} con error`
+        : `Comanda no se imprimió (${refStr}): ${errors.length} error${errors.length > 1 ? 'es' : ''}`,
     });
   }
 
@@ -571,15 +594,16 @@ export function registerDocumentosTicketsHandlers(
   getCurrentUser: GetCurrentUser,
 ) {
 
-  // ─── COMANDA ────────────────────────────────────────────────────────────
+  // ─── COMANDA (ticket de cocina) ─────────────────────────────────────────
+  // Recibe `ventaId`. La venta debe tener mesa o comanda asignada.
   ipcMain.handle('print-comanda', async (_event, params: {
-    comandaId: number;
+    ventaId: number;
     soloItemsNoImpresos?: boolean;
     sectorIdFilter?: number;
     forceReprint?: boolean;
   }) => {
     await ensurePermission(dataSource, getCurrentUser, ['VENTAS_PDV', 'DOCUMENTOS_IMPRIMIR_TICKET']);
-    return await printComandaInternal(dataSource, params.comandaId, {
+    return await printComandaInternal(dataSource, params.ventaId, {
       soloItemsNoImpresos: params.soloItemsNoImpresos,
       sectorIdFilter: params.sectorIdFilter,
       forceReprint: params.forceReprint,

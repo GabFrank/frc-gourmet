@@ -9,8 +9,10 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * 2. Tabla `producto_sectores` — M2M Producto↔Sector. **Multi-sector por
  *    producto** (requerimiento explícito) — un mismo producto puede imprimirse
  *    en las impresoras de varios sectores al mismo tiempo.
- * 3. `comanda_items` + `impreso`, `fecha_impresion`, `impresiones` (JSON
- *    serializado del log por-sector).
+ * 3. `venta_items` + `impreso`, `fecha_impresion`, `impresiones` (JSON
+ *    serializado del log por-sector). El VentaItem es la unidad de
+ *    impresión — el sistema dispara comandas para cualquier venta que
+ *    tenga `mesa_id` o `comanda_id` asignado.
  * 4. `pdv_config` + `auto_imprimir_comanda`, `auto_imprimir_ticket_venta`,
  *    `imprimir_precuenta_al_solicitar`.
  * 5. `printers` + `rol` (fallback global cuando no se quiere pasar por M2M
@@ -115,15 +117,18 @@ export class AddSistemaDocumentos1779000000000 implements MigrationInterface {
       await queryRunner.query(`CREATE INDEX "IDX_producto_sectores_sector" ON "producto_sectores" ("sector_id")`);
     }
 
-    // ── 3. comanda_items + impresión ──────────────────────────────────────
+    // ── 3. venta_items + impresión ────────────────────────────────────────
+    // Los VentaItems son la unidad de impresión (la venta puede tener mesa
+    // o comanda; ambos disparan el ticket). Antes vivía en comanda_items
+    // por un mal modelo del feature original.
     if (isPg) {
-      await queryRunner.query(`ALTER TABLE "comanda_items" ADD COLUMN "impreso" boolean NOT NULL DEFAULT false`);
-      await queryRunner.query(`ALTER TABLE "comanda_items" ADD COLUMN "fecha_impresion" TIMESTAMP NULL`);
-      await queryRunner.query(`ALTER TABLE "comanda_items" ADD COLUMN "impresiones" text NULL`);
+      await queryRunner.query(`ALTER TABLE "venta_items" ADD COLUMN "impreso" boolean NOT NULL DEFAULT false`);
+      await queryRunner.query(`ALTER TABLE "venta_items" ADD COLUMN "fecha_impresion" TIMESTAMP NULL`);
+      await queryRunner.query(`ALTER TABLE "venta_items" ADD COLUMN "impresiones" text NULL`);
     } else {
-      await queryRunner.query(`ALTER TABLE "comanda_items" ADD COLUMN "impreso" boolean NOT NULL DEFAULT 0`);
-      await queryRunner.query(`ALTER TABLE "comanda_items" ADD COLUMN "fecha_impresion" datetime NULL`);
-      await queryRunner.query(`ALTER TABLE "comanda_items" ADD COLUMN "impresiones" text NULL`);
+      await queryRunner.query(`ALTER TABLE "venta_items" ADD COLUMN "impreso" boolean NOT NULL DEFAULT 0`);
+      await queryRunner.query(`ALTER TABLE "venta_items" ADD COLUMN "fecha_impresion" datetime NULL`);
+      await queryRunner.query(`ALTER TABLE "venta_items" ADD COLUMN "impresiones" text NULL`);
     }
 
     // ── 4. pdv_config + flags auto-impresión ──────────────────────────────
@@ -150,18 +155,18 @@ export class AddSistemaDocumentos1779000000000 implements MigrationInterface {
       await queryRunner.query(`ALTER TABLE "pdv_config" DROP COLUMN IF EXISTS "imprimir_precuenta_al_solicitar"`);
       await queryRunner.query(`ALTER TABLE "pdv_config" DROP COLUMN IF EXISTS "auto_imprimir_ticket_venta"`);
       await queryRunner.query(`ALTER TABLE "pdv_config" DROP COLUMN IF EXISTS "auto_imprimir_comanda"`);
-      await queryRunner.query(`ALTER TABLE "comanda_items" DROP COLUMN IF EXISTS "impresiones"`);
-      await queryRunner.query(`ALTER TABLE "comanda_items" DROP COLUMN IF EXISTS "fecha_impresion"`);
-      await queryRunner.query(`ALTER TABLE "comanda_items" DROP COLUMN IF EXISTS "impreso"`);
+      await queryRunner.query(`ALTER TABLE "venta_items" DROP COLUMN IF EXISTS "impresiones"`);
+      await queryRunner.query(`ALTER TABLE "venta_items" DROP COLUMN IF EXISTS "fecha_impresion"`);
+      await queryRunner.query(`ALTER TABLE "venta_items" DROP COLUMN IF EXISTS "impreso"`);
     } else {
       // SQLite >= 3.35 soporta DROP COLUMN
       await queryRunner.query(`ALTER TABLE "printers" DROP COLUMN "rol"`);
       await queryRunner.query(`ALTER TABLE "pdv_config" DROP COLUMN "imprimir_precuenta_al_solicitar"`);
       await queryRunner.query(`ALTER TABLE "pdv_config" DROP COLUMN "auto_imprimir_ticket_venta"`);
       await queryRunner.query(`ALTER TABLE "pdv_config" DROP COLUMN "auto_imprimir_comanda"`);
-      await queryRunner.query(`ALTER TABLE "comanda_items" DROP COLUMN "impresiones"`);
-      await queryRunner.query(`ALTER TABLE "comanda_items" DROP COLUMN "fecha_impresion"`);
-      await queryRunner.query(`ALTER TABLE "comanda_items" DROP COLUMN "impreso"`);
+      await queryRunner.query(`ALTER TABLE "venta_items" DROP COLUMN "impresiones"`);
+      await queryRunner.query(`ALTER TABLE "venta_items" DROP COLUMN "fecha_impresion"`);
+      await queryRunner.query(`ALTER TABLE "venta_items" DROP COLUMN "impreso"`);
     }
 
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_producto_sectores_sector"`);

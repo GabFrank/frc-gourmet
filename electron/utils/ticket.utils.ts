@@ -27,6 +27,7 @@ import { app } from 'electron';
 import { DataSource } from 'typeorm';
 import { Empresa } from '../../src/app/database/entities/sistema/empresa.entity';
 import { getPrinterType, getCharacterSet } from './printer.utils';
+import { sendLprJob, parseLprAddress } from './lpr.utils';
 
 // ============================================================
 // SPEC
@@ -169,6 +170,11 @@ function buildThermalPrinter(printer: any): ThermalPrinter {
     interfaceConfig = `tcp://${printer.address}:${printer.port || 9100}`;
   } else if (printer.connectionType === 'bluetooth') {
     interfaceConfig = `bt:${printer.address}`;
+  } else if (printer.connectionType === 'lpr') {
+    // Dummy interface: solo se usa el ThermalPrinter para acumular bytes
+    // en su buffer interno y extraerlos con getBuffer() — nunca se llama
+    // a isPrinterConnected() ni execute() en este branch.
+    interfaceConfig = 'tcp://127.0.0.1:1';
   } else {
     interfaceConfig = printer.address;
   }
@@ -297,12 +303,37 @@ export async function printTicketSpec(
     }
 
     const tp = buildThermalPrinter(printer);
+    const width = printer.width || 48;
+
+    // LPR: armamos buffer ESC/POS en memoria y lo enviamos por LPR a la
+    // cola compartida de un servidor LPD remoto (típicamente Windows con
+    // "Servicios de impresión LPD" habilitado).
+    if (printer.connectionType === 'lpr') {
+      for (const line of spec.lines) {
+        await applyLine(tp, line, width);
+      }
+      if (spec.cutAtEnd !== false) tp.cut();
+      if (spec.beepAtEnd) tp.beep();
+      const buffer = (tp as any).getBuffer?.() as Buffer | undefined;
+      if (!buffer || buffer.length === 0) {
+        return { ok: false, error: 'No se pudo armar el buffer ESC/POS para LPR' };
+      }
+      const { host, port, queue } = parseLprAddress(printer.address || '');
+      if (!host) return { ok: false, error: 'Impresora LPR sin host configurado en address' };
+      return await sendLprJob(buffer, {
+        host,
+        port: port || printer.port || 515,
+        queue,
+        jobName: `frc-ticket-${Date.now()}`,
+        timeoutMs: 5000,
+      });
+    }
+
     const connected = await tp.isPrinterConnected();
     if (!connected) {
       return { ok: false, error: `Impresora "${printer.name}" no responde (${printer.address})` };
     }
 
-    const width = printer.width || 48;
     for (const line of spec.lines) {
       await applyLine(tp, line, width);
     }

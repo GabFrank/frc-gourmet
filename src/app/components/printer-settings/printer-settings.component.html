@@ -55,19 +55,24 @@
           <div class="form-row">
             <mat-form-field appearance="outline" class="form-field-half">
               <mat-label>Address</mat-label>
-              <input matInput formControlName="address" 
-                    [placeholder]="printerForm.get('connectionType')?.value === 'network' ? 'IP Address (e.g. 192.168.1.100)' : 
-                                 printerForm.get('connectionType')?.value === 'usb' ? 'Device Path' : 'MAC Address'" 
+              <input matInput formControlName="address"
+                    [placeholder]="printerForm.get('connectionType')?.value === 'network' ? 'IP Address (e.g. 192.168.1.100)' :
+                                 printerForm.get('connectionType')?.value === 'lpr' ? 'IP/QueueName (ej: 192.168.1.50/Cocina)' :
+                                 printerForm.get('connectionType')?.value === 'usb' ? 'Device Path' : 'MAC Address'"
                     required>
+              <mat-hint *ngIf="printerForm.get('connectionType')?.value === 'lpr'">
+                Formato: IP del servidor LPD + "/" + nombre del recurso compartido en Windows
+              </mat-hint>
               <mat-error *ngIf="printerForm.get('address')?.hasError('required')">
                 Address is required
               </mat-error>
             </mat-form-field>
 
-            <mat-form-field appearance="outline" class="form-field-half" 
-                          *ngIf="printerForm.get('connectionType')?.value === 'network'">
+            <mat-form-field appearance="outline" class="form-field-half"
+                          *ngIf="printerForm.get('connectionType')?.value === 'network' || printerForm.get('connectionType')?.value === 'lpr'">
               <mat-label>Port</mat-label>
-              <input matInput type="number" formControlName="port" placeholder="9100">
+              <input matInput type="number" formControlName="port"
+                    [placeholder]="printerForm.get('connectionType')?.value === 'lpr' ? '515' : '9100'">
               <mat-error *ngIf="printerForm.get('port')?.hasError('min')">
                 Port must be at least 1
               </mat-error>

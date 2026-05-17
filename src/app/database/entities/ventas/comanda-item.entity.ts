@@ -35,22 +35,4 @@ export class ComandaItem extends BaseModel {
 
   @Column({ default: true })
   activo!: boolean;
-
-  // ─── Impresión de comanda (multi-sector) ────────────────────────────────
-  // `impreso` queda en true SOLO cuando todas las impresiones del item se
-  // completan (todos sus sectores recibieron el ticket). Para detalle
-  // por-sector ver `impresiones`.
-  @Column({ default: false })
-  impreso!: boolean;
-
-  @Column({ type: 'datetime', nullable: true, name: 'fecha_impresion' })
-  fechaImpresion?: Date;
-
-  // JSON serializado: `[{sectorId, printerId, ts, ok, error?}]` con el log
-  // de cada intento de impresión. Permite reimprimir solo lo que falló por
-  // sector y auditar quién imprimió qué cuándo. Usamos `text` por compat
-  // dual-driver (en Postgres podría ser jsonb pero el handler ya parsea con
-  // JSON.parse — overkill).
-  @Column({ type: 'text', nullable: true })
-  impresiones?: string;
 }
