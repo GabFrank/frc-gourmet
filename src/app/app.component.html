@@ -1,3 +1,10 @@
+<!-- Splash overlay post-login: aparece ~1.6s al pasar de no-auth -> auth -->
+<app-splash-overlay
+  *ngIf="showSplash"
+  [greeting]="splashGreeting"
+  [userName]="userDisplayName">
+</app-splash-overlay>
+
 <!-- Only show application content when authenticated -->
 <ng-container *ngIf="isAuthenticated; else loginRouter">
   <!-- App header - moved outside of sidenav container -->
@@ -64,13 +71,21 @@
 
     <!-- Usuario activo: nombre + dropdown con tema, actualizaciones, perfil y logout -->
     <button mat-button [matMenuTriggerFor]="userMenu" class="user-button">
-      <mat-icon>account_circle</mat-icon>
+      <app-user-avatar
+        [imageUrl]="currentUser?.persona?.imageUrl"
+        [name]="userDisplayName"
+        [size]="28">
+      </app-user-avatar>
       <span class="user-label">{{ userDisplayName }}</span>
       <mat-icon>arrow_drop_down</mat-icon>
     </button>
     <mat-menu #userMenu="matMenu">
       <button mat-menu-item disabled>
-        <mat-icon>person</mat-icon>
+        <app-user-avatar
+          [imageUrl]="currentUser?.persona?.imageUrl"
+          [name]="userDisplayName"
+          [size]="24">
+        </app-user-avatar>
         <span>{{ userDisplayName }}</span>
       </button>
       <mat-divider></mat-divider>
@@ -129,11 +144,22 @@
         [attr.role]="(isHandset$ | async) ? 'dialog' : 'navigation'"
         [mode]="(isHandset$ | async) ? 'over' : 'side'"
         [opened]="(isHandset$ | async) === false">
+      <!-- Brand logo (solo cuando el menú está expandido) -->
+      <div class="sidenav-brand" *ngIf="isMenuExpanded">
+        <img
+          class="sidenav-brand-logo"
+          [src]="isDarkTheme ? 'assets/images/logo/logo-dark-sm.png' : 'assets/images/logo/logo-light-sm.png'"
+          alt="FRC Gourmet" />
+      </div>
+
       <!-- User profile header instead of app name -->
       <div class="user-profile-header">
         <div class="user-avatar">
-          <!-- Default avatar until we implement image upload -->
-          <mat-icon class="avatar-icon">account_circle</mat-icon>
+          <app-user-avatar
+            [imageUrl]="currentUser?.persona?.imageUrl"
+            [name]="userDisplayName"
+            [size]="isMenuExpanded ? 64 : 36">
+          </app-user-avatar>
         </div>
         <div class="user-info" *ngIf="isMenuExpanded">
           <div class="user-name">{{ currentUser?.persona?.nombre || 'Usuario' }}</div>

@@ -92,6 +92,8 @@ import { EmpresaService } from './shared/services/empresa.service';
 import { ConfigurarEmpresaComponent } from './pages/sistema/configurar-empresa/configurar-empresa.component';
 import { resolveAppUrl } from './shared/utils/image-url.util';
 import { HasPermissionDirective, HasAnyPermissionDirective } from './shared/directives/has-permission.directive';
+import { SplashOverlayComponent } from './shared/components/splash-overlay/splash-overlay.component';
+import { UserAvatarComponent } from './shared/components/user-avatar/user-avatar.component';
 
 @Component({
   selector: 'app-root',
@@ -117,6 +119,8 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from './shared/dire
     TabContainerComponent,
     HasPermissionDirective,
     HasAnyPermissionDirective,
+    SplashOverlayComponent,
+    UserAvatarComponent,
   ],
 })
 export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
@@ -130,6 +134,11 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Authentication state
   isAuthenticated = false;
+  // Splash overlay (post-login): se muestra ~1.6s al pasar de no-auth a auth
+  showSplash = false;
+  splashGreeting: string | null = null;
+  private splashTimer: any = null;
+  private prevAuthenticated = false;
   currentUser: Usuario | null = null;
   lastLoginTime: Date | null = null;
   /** Label visible en el toolbar (nombre persona o nickname). Computado al cambiar currentUser. */
@@ -210,6 +219,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
 
     // Subscribe to authentication state changes
     this.authService.currentUser$.subscribe((user) => {
+      const wasAuthenticated = this.prevAuthenticated;
       this.isAuthenticated = !!user;
       this.currentUser = user;
       this.userDisplayName = this.buildUserDisplayName(user);
@@ -232,7 +242,30 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
         // If user is logged in and on login page, navigate to home
         this.router.navigate(['/']);
       }
+
+      // Splash post-login: solo en transición no-auth -> auth
+      if (!wasAuthenticated && this.isAuthenticated) {
+        this.triggerPostLoginSplash();
+      }
+      this.prevAuthenticated = this.isAuthenticated;
     });
+  }
+
+  private triggerPostLoginSplash(): void {
+    this.splashGreeting = this.computeGreeting();
+    this.showSplash = true;
+    if (this.splashTimer) clearTimeout(this.splashTimer);
+    this.splashTimer = setTimeout(() => {
+      this.showSplash = false;
+      this.splashTimer = null;
+    }, 1600);
+  }
+
+  private computeGreeting(): string {
+    const h = new Date().getHours();
+    if (h < 12) return 'Buenos días,';
+    if (h < 19) return 'Buenas tardes,';
+    return 'Buenas noches,';
   }
 
   async fetchLastLoginTime(usuarioId: number): Promise<void> {
@@ -408,6 +441,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (this.cotizacionInterval) {
       clearInterval(this.cotizacionInterval);
+    }
+    if (this.splashTimer) {
+      clearTimeout(this.splashTimer);
+      this.splashTimer = null;
     }
   }
 
