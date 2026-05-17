@@ -1,0 +1,24 @@
+<div class="user-avatar-wrap" [style.width.px]="size" [style.height.px]="size">
+  <!-- Thumb 96px primero; si falla, intentamos el original (legacy sin .thumb.jpg) -->
+  <img
+    *ngIf="!imageFailed && !triedOriginal && resolvedThumb"
+    class="user-avatar-img"
+    [src]="resolvedThumb"
+    [alt]="name || 'Avatar'"
+    (error)="onThumbError()" />
+  <img
+    *ngIf="!imageFailed && triedOriginal && resolvedOriginal"
+    class="user-avatar-img"
+    [src]="resolvedOriginal"
+    [alt]="name || 'Avatar'"
+    (error)="onOriginalError()" />
+  <mat-icon
+    *ngIf="imageFailed || !resolvedThumb"
+    class="user-avatar-icon"
+    [style.font-size.px]="size"
+    [style.width.px]="size"
+    [style.height.px]="size"
+    [style.line-height.px]="size">
+    account_circle
+  </mat-icon>
+</div>

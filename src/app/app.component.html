@@ -71,13 +71,21 @@
 
     <!-- Usuario activo: nombre + dropdown con tema, actualizaciones, perfil y logout -->
     <button mat-button [matMenuTriggerFor]="userMenu" class="user-button">
-      <mat-icon>account_circle</mat-icon>
+      <app-user-avatar
+        [imageUrl]="currentUser?.persona?.imageUrl"
+        [name]="userDisplayName"
+        [size]="28">
+      </app-user-avatar>
       <span class="user-label">{{ userDisplayName }}</span>
       <mat-icon>arrow_drop_down</mat-icon>
     </button>
     <mat-menu #userMenu="matMenu">
       <button mat-menu-item disabled>
-        <mat-icon>person</mat-icon>
+        <app-user-avatar
+          [imageUrl]="currentUser?.persona?.imageUrl"
+          [name]="userDisplayName"
+          [size]="24">
+        </app-user-avatar>
         <span>{{ userDisplayName }}</span>
       </button>
       <mat-divider></mat-divider>
@@ -147,8 +155,11 @@
       <!-- User profile header instead of app name -->
       <div class="user-profile-header">
         <div class="user-avatar">
-          <!-- Default avatar until we implement image upload -->
-          <mat-icon class="avatar-icon">account_circle</mat-icon>
+          <app-user-avatar
+            [imageUrl]="currentUser?.persona?.imageUrl"
+            [name]="userDisplayName"
+            [size]="isMenuExpanded ? 64 : 36">
+          </app-user-avatar>
         </div>
         <div class="user-info" *ngIf="isMenuExpanded">
           <div class="user-name">{{ currentUser?.persona?.nombre || 'Usuario' }}</div>
