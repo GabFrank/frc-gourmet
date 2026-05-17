@@ -470,8 +470,8 @@
 .user-button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px;
+  gap: 10px;
+  padding: 0 10px;
   text-transform: none;
   color: inherit;
   height: 40px;
@@ -485,6 +485,13 @@
     font-weight: 500;
     font-size: 0.875rem;
   }
+}
+
+// Avatar dentro de un mat-menu-item (caso: item disabled con nombre del user).
+// mat-menu-item por default mete el espacio via margin-right en mat-icon, no en
+// custom components, asi que lo emulamos a mano.
+.mat-mdc-menu-item app-user-avatar {
+  margin-right: 12px;
 }
 
 .theme-toggle {
