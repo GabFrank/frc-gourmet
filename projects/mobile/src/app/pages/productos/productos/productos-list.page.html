@@ -1,0 +1,28 @@
+<div class="crud-page">
+  <div class="crud-filterbar">
+    <mat-form-field appearance="outline" class="crud-search">
+      <mat-label>Buscar producto</mat-label>
+      <input matInput [formControl]="busqueda" (keyup.enter)="aplicarFiltro()" />
+      <button *ngIf="busqueda.value" matSuffix mat-icon-button (click)="limpiarFiltro()" aria-label="Limpiar">
+        <mat-icon>close</mat-icon>
+      </button>
+    </mat-form-field>
+    <button mat-flat-button color="primary" class="crud-filter-btn" (click)="aplicarFiltro()">Filtrar</button>
+  </div>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <div class="crud-list" *ngIf="!loading && !error">
+    <mat-card *ngFor="let p of items" class="crud-card" appearance="outlined">
+      <div class="crud-card-body">
+        <div class="crud-card-main">
+          <span class="crud-name">{{ p.nombre }}</span>
+          <span class="crud-sub">{{ p.tipo }}</span>
+        </div>
+        <span class="crud-chip" [class.off]="!p.activo">{{ p.activo ? 'Activo' : 'Inactivo' }}</span>
+      </div>
+    </mat-card>
+    <p *ngIf="items.length === 0" class="crud-empty">No hay productos.</p>
+  </div>
+</div>

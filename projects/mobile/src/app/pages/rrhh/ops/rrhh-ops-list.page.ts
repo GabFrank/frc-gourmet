@@ -68,6 +68,12 @@ export class RrhhOpsListPage implements OnInit {
         return this.repo.getBonos();
       case 'aguinaldos':
         return this.repo.getAguinaldos();
+      case 'reglas-comision':
+        return this.repo.getReglasComision();
+      case 'equipos-comision':
+        return this.repo.getEquiposComision();
+      case 'liquidaciones-comision':
+        return this.repo.getLiquidacionesComision();
       default:
         return null;
     }
@@ -79,11 +85,12 @@ export class RrhhOpsListPage implements OnInit {
     const fechaRaw = x?.fecha || x?.fechaCreacion || x?.periodo || x?.createdAt;
     const fecha = fechaRaw ? String(fechaRaw).slice(0, 10) : '';
     const motivo = x?.motivo?.nombre || x?.motivoVale?.nombre || x?.tipo || x?.concepto || x?.descripcion || '';
+    const porcentaje = x?.porcentaje != null ? `${x.porcentaje}%` : '';
     const monto = x?.monto ?? x?.montoNeto ?? x?.montoTotal ?? x?.total ?? x?.importe ?? null;
     return {
       id: x?.id,
-      titulo: nombre || x?.descripcion || `#${x?.id}`,
-      subtitulo: [fecha, motivo].filter(Boolean).join(' · '),
+      titulo: nombre || x?.nombre || x?.descripcion || `#${x?.id}`,
+      subtitulo: [fecha, motivo, porcentaje].filter(Boolean).join(' · '),
       monto: monto != null ? Number(monto) : null,
       estado: x?.estado,
     };

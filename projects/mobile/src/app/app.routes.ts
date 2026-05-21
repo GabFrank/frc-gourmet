@@ -18,6 +18,7 @@ const RRHH_ITEMS: SectionItem[] = [
   { label: 'Penalizaciones', icon: 'gavel', path: '/rrhh/penalizaciones', enabled: true },
   { label: 'Bonos', icon: 'card_giftcard', path: '/rrhh/bonos', enabled: true },
   { label: 'Aguinaldos', icon: 'star', path: '/rrhh/aguinaldos', enabled: true },
+  { label: 'Permisos', icon: 'verified_user', path: '/rrhh/permisos', enabled: true },
 ];
 
 /** Sub-módulos de Productos. */
@@ -25,7 +26,7 @@ const PRODUCTOS_ITEMS: SectionItem[] = [
   { label: 'Familias', icon: 'category', path: '/productos/familias', enabled: true },
   { label: 'Subfamilias', icon: 'account_tree', path: '/productos/subfamilias', enabled: true },
   { label: 'Adicionales', icon: 'add_circle', path: '/productos/adicionales', enabled: true },
-  { label: 'Productos', icon: 'restaurant', path: '/productos/lista', enabled: false },
+  { label: 'Productos', icon: 'restaurant', path: '/productos/lista', enabled: true },
   { label: 'Recetas', icon: 'menu_book', path: '/productos/recetas', enabled: false },
   { label: 'Sabores', icon: 'auto_awesome', path: '/productos/sabores', enabled: false },
 ];
@@ -45,6 +46,9 @@ const FINANCIERO_ITEMS: SectionItem[] = [
   { label: 'Categorías de gasto', icon: 'sell', path: '/financiero/gasto-categorias', enabled: true },
   { label: 'Monedas', icon: 'monetization_on', path: '/financiero/monedas', enabled: false },
   { label: 'Caja Mayor', icon: 'account_balance', path: '/financiero/caja-mayor', enabled: false },
+  { label: 'Reglas de comisión', icon: 'percent', path: '/financiero/comisiones-reglas', enabled: true },
+  { label: 'Equipos de comisión', icon: 'groups', path: '/financiero/comisiones-equipos', enabled: true },
+  { label: 'Liq. de comisión', icon: 'receipt', path: '/financiero/comisiones-liquidaciones', enabled: true },
 ];
 
 /**
@@ -290,6 +294,11 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/rrhh/ops/rrhh-ops-list.page').then((m) => m.RrhhOpsListPage),
       },
       {
+        path: 'rrhh/permisos',
+        data: { title: 'Permisos' },
+        loadComponent: () => import('./pages/rrhh/permisos/permisos-list.page').then((m) => m.PermisosListPage),
+      },
+      {
         path: 'financiero',
         pathMatch: 'full',
         data: { title: 'Financiero', items: FINANCIERO_ITEMS },
@@ -309,6 +318,21 @@ export const routes: Routes = [
         path: 'financiero/cxc',
         data: { title: 'Cuentas por Cobrar' },
         loadComponent: () => import('./pages/financiero/cxc/cxc-list.page').then((m) => m.CxcListPage),
+      },
+      {
+        path: 'financiero/comisiones-reglas',
+        data: { title: 'Reglas de comisión', source: 'reglas-comision' },
+        loadComponent: () => import('./pages/rrhh/ops/rrhh-ops-list.page').then((m) => m.RrhhOpsListPage),
+      },
+      {
+        path: 'financiero/comisiones-equipos',
+        data: { title: 'Equipos de comisión', source: 'equipos-comision' },
+        loadComponent: () => import('./pages/rrhh/ops/rrhh-ops-list.page').then((m) => m.RrhhOpsListPage),
+      },
+      {
+        path: 'financiero/comisiones-liquidaciones',
+        data: { title: 'Liq. de comisión', source: 'liquidaciones-comision' },
+        loadComponent: () => import('./pages/rrhh/ops/rrhh-ops-list.page').then((m) => m.RrhhOpsListPage),
       },
       {
         path: 'compras',
@@ -351,6 +375,11 @@ export const routes: Routes = [
         path: 'productos/adicionales',
         data: { title: 'Adicionales' },
         loadComponent: () => import('./pages/productos/adicionales/adicionales-list.page').then((m) => m.AdicionalesListPage),
+      },
+      {
+        path: 'productos/lista',
+        data: { title: 'Productos' },
+        loadComponent: () => import('./pages/productos/productos/productos-list.page').then((m) => m.ProductosListPage),
       },
     ],
   },
