@@ -32,10 +32,13 @@ Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acció
 - ✅ Commit F1
 - ⏳ Validación E2E real (login contra server) → requiere `mode=server` levantado por el usuario
 
-### F2 — Infra server
-- ⬜ `@fastify/static` sirviendo `/app` → `dist/mobile`
-- ⛔ TLS del mesh (necesita datos headscale del usuario)
-- ⬜ Commit F2
+### F2 — Infra server 🟦 (servir PWA ✅ · TLS ⛔)
+- ✅ `@fastify/static` sirviendo `dist/mobile` en **`/`** (raíz, no `/app` — evita base-href) + SPA fallback
+- ✅ `staticRoot` en `ServerOptions`; `main.ts` pasa `path.join(__dirname,'dist/mobile')`
+- ✅ `dist/mobile/**` agregado a `asarUnpack` (compat `@fastify/static` con asar en prod)
+- ✅ Electron tsc OK · Commit F2 (parte servir)
+- ⛔ **TLS del mesh** — necesita datos de tu headscale (`tailscale serve`/cert vs Caddy/CA privada)
+- ⏳ Validación: con `mode=server` + `ng build mobile`, abrir `http://<server>:7070/` desde otro dispositivo
 
 ### F3 — Shell mobile + imágenes
 - ⬜ Navegación mobile (bottom-nav / drawer)
@@ -104,3 +107,10 @@ Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acció
   `MobileAppModeService` (devuelve `mode:'client'`). La clase original (con `window.api`) nunca se
   construye. `AuthService` en client-mode restaura sesión desde localStorage (no llama restoreSession).
 - 2026-05-20 — Para regenerar el mapa de canales tras tocar `preload.ts`: `npm run generate:mobile-api`.
+- 2026-05-20 — **F2 servir PWA:** se sirve en la **raíz `/`** del Fastify (no `/app`) porque el server
+  solo atiende clientes remotos (el operador del PC usa el desktop local con `loadFile`). Raíz ⇒ base-href
+  default `/` sin cambios. La API queda en `/api/*` (rutas específicas matchean antes que el estático).
+  SPA fallback vía `setNotFoundHandler` (GET no-/api → index.html). `@fastify/static@6` (compat fastify 4.10).
+- 2026-05-20 — Para servir bajo un subpath en el futuro habría que buildear el mobile con `--base-href /sub/`.
+- 2026-05-20 — Prod packaging: `dist/mobile/**` en `asarUnpack` para que `@fastify/static` lea archivos
+  reales (asar + `send` puede fallar). Validar al primer `electron:build` con mobile incluido.
