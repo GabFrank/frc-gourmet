@@ -10,23 +10,4 @@
       <span>{{ a.label }}</span>
     </a>
   </section>
-
-  <mat-card class="demo-card" appearance="outlined">
-    <mat-card-header>
-      <mat-card-title>Monedas</mat-card-title>
-      <mat-card-subtitle>Conexión con el servidor</mat-card-subtitle>
-    </mat-card-header>
-    <mat-card-content>
-      <p *ngIf="loading" class="muted">Cargando…</p>
-      <p *ngIf="error" class="error">{{ error }}</p>
-      <ul class="list" *ngIf="!loading && !error">
-        <li *ngFor="let m of monedas" class="item">
-          <span class="item-main">{{ m.denominacion }}</span>
-          <span class="item-tag">{{ m.simbolo }}</span>
-          <mat-icon class="item-star" *ngIf="m.principal">star</mat-icon>
-        </li>
-        <li *ngIf="monedas.length === 0" class="muted">Sin monedas</li>
-      </ul>
-    </mat-card-content>
-  </mat-card>
 </div>
