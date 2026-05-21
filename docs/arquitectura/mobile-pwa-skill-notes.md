@@ -40,11 +40,16 @@ Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acció
 - ⛔ **TLS del mesh** — necesita datos de tu headscale (`tailscale serve`/cert vs Caddy/CA privada)
 - ⏳ Validación: con `mode=server` + `ng build mobile`, abrir `http://<server>:7070/` desde otro dispositivo
 
-### F3 — Shell mobile + imágenes
-- ⬜ Navegación mobile (bottom-nav / drawer)
-- ⬜ Theming dark/light
-- ⬜ Resolución de imágenes vía `/api/files` (fetch→blobURL)
-- ⬜ Commit F3
+### F3 — Shell mobile + theming ✅ (imágenes diferidas a la 1ª ola que las use)
+- ✅ `ShellComponent` responsive: nav-rail en tablet/desktop, bottom-nav en teléfono (BreakpointObserver)
+- ✅ Toolbar con título dinámico (route data) + theme toggle + menú usuario/logout
+- ✅ Theme Material (paleta FRC rojo, density 0 touch) dark/light vía `ThemeService` (`body.dark-theme`)
+- ✅ `OfflineBannerComponent` global (estado sin conexión)
+- ✅ `PlaceholderPage` data-driven para secciones pendientes; HomePage dashboard con accesos rápidos
+- ✅ Rutas con shell como layout + hijos (Inicio/RRHH/Financiero/Compras/Productos)
+- ✅ Build dev + prod OK (prod 882 KB raw / 176 KB gz)
+- ⏳ Resolución de imágenes vía `/api/files` (fetch→blobURL) → se hace en la 1ª ola que muestre imágenes
+- ✅ Commit F3
 
 ### F4..Fn — Olas administrativas
 - ⬜ Ola 1 RRHH · ⬜ Ola 2 Financiero · ⬜ Ola 3 Compras · ⬜ Ola 4 Productos · ⬜ Ola 5 Clientes/Comisiones
@@ -74,7 +79,16 @@ Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acció
   **no** reutiliza UI del desktop.
 
 ### B.4 Reglas/convenciones nuevas detectadas (candidatas a memoria + skill)
-- (se irá llenando: patrones UI mobile elegidos, librerías, breakpoints tablet/phone, etc.)
+- **UI mobile = 100% nueva** (no se reutiliza nada del desktop), Material 15 con density 0 (touch),
+  paleta FRC (rojo primario). Componentes standalone + lazy routes.
+- **Navegación:** Angular Router (NO TabsService). Shell responsive: nav-rail ≥768px / bottom-nav <768px
+  (`BreakpointObserver.observe('(max-width: 767px)')`). Destinos en `core/shell/nav.ts`.
+- **Theming:** reusa `ThemeService` (togglea `body.dark-theme`) + `theme-variables.scss` (CSS vars). Mobile
+  define su propio theme Material en `projects/mobile/src/styles.scss` (density 0, no -3 del desktop).
+- **Título de página:** vía `route.data.title` leído por el shell en NavigationEnd.
+- **Offline:** `ConnectionService` (envuelve `online$` que flipea el transporte) + `OfflineBannerComponent`.
+- **Estructura de carpetas mobile:** `core/` (data, shell, guards, services, components), `pages/` (features),
+  `@frc/shared-core` para lo compartido.
 
 ---
 

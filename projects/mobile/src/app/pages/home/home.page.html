@@ -1,27 +1,32 @@
-<main class="home">
-  <header class="topbar">
-    <div>
-      <h1 class="brand">FRC Gourmet</h1>
-      <p class="user" *ngIf="user">Sesión: {{ user.nickname }}</p>
-    </div>
-    <button class="logout" (click)="logout()">Salir</button>
+<div class="home">
+  <header class="greeting">
+    <h2>Hola{{ user ? ', ' + user.nickname : '' }}</h2>
+    <p>Panel administrativo</p>
   </header>
 
-  <p class="offline" *ngIf="(online$ | async) === false">Sin conexión con el servidor</p>
-
-  <section class="card">
-    <h2 class="section-title">Monedas (smoke test /api/rpc)</h2>
-
-    <p *ngIf="loading" class="muted">Cargando…</p>
-    <p *ngIf="error" class="error">{{ error }}</p>
-
-    <ul class="list" *ngIf="!loading && !error">
-      <li *ngFor="let m of monedas" class="item">
-        <span class="item-main">{{ m.denominacion }}</span>
-        <span class="item-tag">{{ m.simbolo }}</span>
-        <span class="item-badge" *ngIf="m.principal">principal</span>
-      </li>
-      <li *ngIf="monedas.length === 0" class="muted">Sin monedas</li>
-    </ul>
+  <section class="quick">
+    <a *ngFor="let a of accesos" class="quick-card" [routerLink]="a.path">
+      <mat-icon>{{ a.icon }}</mat-icon>
+      <span>{{ a.label }}</span>
+    </a>
   </section>
-</main>
+
+  <mat-card class="demo-card" appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Monedas</mat-card-title>
+      <mat-card-subtitle>Conexión con el servidor</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <p *ngIf="loading" class="muted">Cargando…</p>
+      <p *ngIf="error" class="error">{{ error }}</p>
+      <ul class="list" *ngIf="!loading && !error">
+        <li *ngFor="let m of monedas" class="item">
+          <span class="item-main">{{ m.denominacion }}</span>
+          <span class="item-tag">{{ m.simbolo }}</span>
+          <mat-icon class="item-star" *ngIf="m.principal">star</mat-icon>
+        </li>
+        <li *ngIf="monedas.length === 0" class="muted">Sin monedas</li>
+      </ul>
+    </mat-card-content>
+  </mat-card>
+</div>
