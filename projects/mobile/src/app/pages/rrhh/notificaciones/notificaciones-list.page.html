@@ -1,0 +1,20 @@
+<div class="crud-page">
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <div class="crud-list" *ngIf="!loading && !error">
+    <mat-card *ngFor="let n of items" class="crud-card" appearance="outlined">
+      <div class="crud-card-body">
+        <div class="crud-card-main">
+          <span class="crud-name">{{ n.titulo }}</span>
+          <span class="crud-sub">{{ n.mensaje }}</span>
+          <span class="crud-sub" *ngIf="n.fecha">{{ n.fecha }}</span>
+        </div>
+        <span class="crud-chip" [class.warn]="!n.leida" [class.off]="n.leida">
+          {{ n.leida ? 'Leída' : 'Nueva' }}
+        </span>
+      </div>
+    </mat-card>
+    <p *ngIf="items.length === 0" class="crud-empty">No hay notificaciones.</p>
+  </div>
+</div>

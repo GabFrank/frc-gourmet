@@ -21,6 +21,7 @@ const RRHH_ITEMS: SectionItem[] = [
   { label: 'Asistencias', icon: 'fact_check', path: '/rrhh/asistencias', enabled: true },
   { label: 'Horas extra', icon: 'more_time', path: '/rrhh/horas-extra', enabled: true },
   { label: 'Permisos', icon: 'verified_user', path: '/rrhh/permisos', enabled: true },
+  { label: 'Notificaciones', icon: 'notifications', path: '/rrhh/notificaciones', enabled: true },
 ];
 
 /** Sub-módulos de Productos. */
@@ -309,6 +310,11 @@ export const routes: Routes = [
         path: 'rrhh/permisos',
         data: { title: 'Permisos' },
         loadComponent: () => import('./pages/rrhh/permisos/permisos-list.page').then((m) => m.PermisosListPage),
+      },
+      {
+        path: 'rrhh/notificaciones',
+        data: { title: 'Notificaciones' },
+        loadComponent: () => import('./pages/rrhh/notificaciones/notificaciones-list.page').then((m) => m.NotificacionesListPage),
       },
       {
         path: 'financiero',
