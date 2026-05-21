@@ -1,0 +1,52 @@
+<div class="crud-edit">
+  <mat-toolbar color="primary" class="crud-edit-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="crud-edit-title">{{ esNuevo ? 'Nuevo cliente' : 'Editar cliente' }}</span>
+    <span class="crud-spacer"></span>
+    <button mat-button (click)="guardar()" [disabled]="saving">Guardar</button>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
+
+  <form class="crud-form" [formGroup]="form" (ngSubmit)="guardar()">
+    <mat-form-field appearance="outline">
+      <mat-label>Persona</mat-label>
+      <mat-select formControlName="personaId">
+        <mat-option *ngFor="let p of personas" [value]="p.id">{{ p.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.personaId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Tipo de cliente</mat-label>
+      <mat-select formControlName="tipoClienteId">
+        <mat-option *ngFor="let t of tiposCliente" [value]="t.id">{{ t.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.tipoClienteId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>RUC</mat-label>
+      <input matInput formControlName="ruc" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Razón social</mat-label>
+      <input matInput formControlName="razon_social" autocapitalize="characters" />
+    </mat-form-field>
+
+    <mat-slide-toggle formControlName="tributa" color="primary">Tributa</mat-slide-toggle>
+    <mat-slide-toggle formControlName="credito" color="primary">Permite crédito</mat-slide-toggle>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Límite de crédito</mat-label>
+      <input matInput type="number" inputmode="numeric" formControlName="limite_credito" />
+    </mat-form-field>
+
+    <mat-slide-toggle formControlName="activo" color="primary">Activo</mat-slide-toggle>
+
+    <button type="submit" mat-flat-button color="primary" class="crud-save-btn" [disabled]="saving">
+      {{ saving ? 'Guardando…' : 'Guardar' }}
+    </button>
+  </form>
+</div>

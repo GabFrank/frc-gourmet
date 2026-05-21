@@ -10,6 +10,8 @@ const RRHH_ITEMS: SectionItem[] = [
   { label: 'Feriados', icon: 'celebration', path: '/rrhh/feriados', enabled: true },
   { label: 'Funcionarios', icon: 'badge', path: '/rrhh/funcionarios', enabled: false },
   { label: 'Personas', icon: 'person', path: '/rrhh/personas', enabled: true },
+  { label: 'Clientes', icon: 'business', path: '/rrhh/clientes', enabled: true },
+  { label: 'Tipos de cliente', icon: 'loyalty', path: '/rrhh/tipos-cliente', enabled: true },
   { label: 'Usuarios', icon: 'account_circle', path: '/rrhh/usuarios', enabled: false },
   { label: 'Vales', icon: 'receipt_long', path: '/rrhh/vales', enabled: false },
   { label: 'Liquidaciones', icon: 'request_quote', path: '/rrhh/liquidaciones', enabled: false },
@@ -105,6 +107,26 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/rrhh/personas/persona-edit.page').then((m) => m.PersonaEditPage),
   },
   {
+    path: 'rrhh/tipos-cliente/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/rrhh/tipos-cliente/tipo-cliente-edit.page').then((m) => m.TipoClienteEditPage),
+  },
+  {
+    path: 'rrhh/tipos-cliente/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/rrhh/tipos-cliente/tipo-cliente-edit.page').then((m) => m.TipoClienteEditPage),
+  },
+  {
+    path: 'rrhh/clientes/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/rrhh/clientes/cliente-edit.page').then((m) => m.ClienteEditPage),
+  },
+  {
+    path: 'rrhh/clientes/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/rrhh/clientes/cliente-edit.page').then((m) => m.ClienteEditPage),
+  },
+  {
     path: 'productos/familias/nuevo',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/productos/familias/familia-edit.page').then((m) => m.FamiliaEditPage),
@@ -197,6 +219,16 @@ export const routes: Routes = [
         path: 'rrhh/personas',
         data: { title: 'Personas' },
         loadComponent: () => import('./pages/rrhh/personas/personas-list.page').then((m) => m.PersonasListPage),
+      },
+      {
+        path: 'rrhh/clientes',
+        data: { title: 'Clientes' },
+        loadComponent: () => import('./pages/rrhh/clientes/clientes-list.page').then((m) => m.ClientesListPage),
+      },
+      {
+        path: 'rrhh/tipos-cliente',
+        data: { title: 'Tipos de cliente' },
+        loadComponent: () => import('./pages/rrhh/tipos-cliente/tipos-cliente-list.page').then((m) => m.TiposClienteListPage),
       },
       {
         path: 'financiero',
