@@ -66,7 +66,11 @@ Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acció
 - 🟦 **Ola 4 Productos** (catálogos): **Familias**, **Subfamilias** (FK-select → Familia), **Adicionales**.
   Sección Productos activada. Permisos `CATEGORIAS_GESTIONAR` / `ADICIONALES_GESTIONAR`. UPPERCASE en componente
   (estos handlers NO uppercasean). Establece el **patrón FK-select** (cargar `getFamilias` + `mat-select`).
-- ⬜ Ola 1 resto RRHH · ⬜ Ola 2 Financiero · ⬜ Ola 3 Compras · ⬜ Ola 4 resto Productos · ⬜ Ola 5 Clientes/Comisiones
+- 🟦 **Ola 3 Compras**: Categorías de compra (`COMPRAS_GESTIONAR`). Sección Compras activada.
+- 🟦 **Ola 2 Financiero**: Categorías de gasto (`CAJA_MAYOR_OPERAR`). Sección Financiero activada.
+  (NOTA: `Moneda` NO tiene handler create → descartada; Cajas/Caja Mayor pendientes, más complejos.)
+- **Las 4 secciones del bottom-nav ya tienen contenido real** (RRHH×4, Productos×3, Compras×1, Financiero×1).
+- ⬜ Ola 1 resto RRHH (Personas/Usuarios/Funcionarios/Vales...) · ⬜ resto Financiero/Compras/Productos · ⬜ Clientes/Comisiones
 
 > **LECCIÓN:** verificar que exista el **handler de escritura** (`create-X`/`update-X`/`delete-X` en
 > `electron/handlers/`), no solo el método abstracto del repo. Ej: `Moneda` declara createMoneda en el

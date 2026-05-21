@@ -25,6 +25,22 @@ const PRODUCTOS_ITEMS: SectionItem[] = [
   { label: 'Sabores', icon: 'auto_awesome', path: '/productos/sabores', enabled: false },
 ];
 
+/** Sub-módulos de Compras. */
+const COMPRAS_ITEMS: SectionItem[] = [
+  { label: 'Categorías de compra', icon: 'sell', path: '/compras/categorias', enabled: true },
+  { label: 'Compras', icon: 'shopping_cart', path: '/compras/lista', enabled: false },
+  { label: 'Importaciones IA', icon: 'auto_awesome', path: '/compras/importaciones', enabled: false },
+];
+
+/** Sub-módulos de Financiero. */
+const FINANCIERO_ITEMS: SectionItem[] = [
+  { label: 'Categorías de gasto', icon: 'sell', path: '/financiero/gasto-categorias', enabled: true },
+  { label: 'Cajas', icon: 'point_of_sale', path: '/financiero/cajas', enabled: false },
+  { label: 'Monedas', icon: 'monetization_on', path: '/financiero/monedas', enabled: false },
+  { label: 'Caja Mayor', icon: 'account_balance', path: '/financiero/caja-mayor', enabled: false },
+  { label: 'Cuentas por Cobrar', icon: 'request_quote', path: '/financiero/cxc', enabled: false },
+];
+
 /**
  * Rutas de la PWA mobile. Navegación con Router (no TabsService).
  * - Formularios full-screen (alta/edición) → rutas top-level, ANTES del shell.
@@ -108,6 +124,26 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./pages/productos/adicionales/adicional-edit.page').then((m) => m.AdicionalEditPage),
   },
+  {
+    path: 'compras/categorias/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/compras/categorias/compra-categoria-edit.page').then((m) => m.CompraCategoriaEditPage),
+  },
+  {
+    path: 'compras/categorias/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/compras/categorias/compra-categoria-edit.page').then((m) => m.CompraCategoriaEditPage),
+  },
+  {
+    path: 'financiero/gasto-categorias/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/gasto-categorias/gasto-categoria-edit.page').then((m) => m.GastoCategoriaEditPage),
+  },
+  {
+    path: 'financiero/gasto-categorias/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/gasto-categorias/gasto-categoria-edit.page').then((m) => m.GastoCategoriaEditPage),
+  },
 
   // --- Shell autenticado (listados / índices) ---
   {
@@ -149,13 +185,25 @@ export const routes: Routes = [
       },
       {
         path: 'financiero',
-        data: { title: 'Financiero', icon: 'payments' },
-        loadComponent: () => import('./pages/placeholder/placeholder.page').then((m) => m.PlaceholderPage),
+        pathMatch: 'full',
+        data: { title: 'Financiero', items: FINANCIERO_ITEMS },
+        loadComponent: () => import('./pages/section-index/section-index.page').then((m) => m.SectionIndexPage),
+      },
+      {
+        path: 'financiero/gasto-categorias',
+        data: { title: 'Categorías de gasto' },
+        loadComponent: () => import('./pages/financiero/gasto-categorias/gasto-categorias-list.page').then((m) => m.GastoCategoriasListPage),
       },
       {
         path: 'compras',
-        data: { title: 'Compras', icon: 'shopping_cart' },
-        loadComponent: () => import('./pages/placeholder/placeholder.page').then((m) => m.PlaceholderPage),
+        pathMatch: 'full',
+        data: { title: 'Compras', items: COMPRAS_ITEMS },
+        loadComponent: () => import('./pages/section-index/section-index.page').then((m) => m.SectionIndexPage),
+      },
+      {
+        path: 'compras/categorias',
+        data: { title: 'Categorías de compra' },
+        loadComponent: () => import('./pages/compras/categorias/compra-categorias-list.page').then((m) => m.CompraCategoriasListPage),
       },
       {
         path: 'productos',
