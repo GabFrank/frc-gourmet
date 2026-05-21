@@ -46,6 +46,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | TypeORM, BaseModel, dual driver (SQLite/Postgres), migrations, ubicación del .db | [architecture/database.md](architecture/database.md) |
 | **Seeds del sistema** (admin, permisos, catálogos base, roles plantilla, feriados PY) | [architecture/seed-system.md](architecture/seed-system.md) |
 | **Modo cliente/servidor** (F4 standalone/server/client, Fastify, HTTP routing, device_id) | [architecture/cliente-servidor.md](architecture/cliente-servidor.md) |
+| **Cliente Mobile (PWA)** (`projects/mobile`, shim HTTP→/api/rpc, shell mobile, cobertura admin) | [architecture/mobile-pwa.md](architecture/mobile-pwa.md) |
 | **Setup en PC nueva / Postgres** (la app crea la DB, configurar, modos, primer login) | [workflows/setup-pc-nueva.md](workflows/setup-pc-nueva.md) |
 | **Release y deploy** (semantic-release, canales, GitHub Actions, auto-update, deploy a un local real) | [workflows/release-y-deploy.md](workflows/release-y-deploy.md) |
 | `main.ts`, ciclo de vida Electron, custom protocols | [architecture/electron-bootstrap.md](architecture/electron-bootstrap.md) |
@@ -126,7 +127,7 @@ Estas las debo respetar SIEMPRE, sin que el usuario las repita:
 - **Seed system actualizado** — limpieza de seeds con datos placeholder (CuentaBancaria, MaquinaPos, MonedaCambio quitados); agregados Familia/Subfamilia GENERAL, Turnos, Feriados PY, Observaciones, Roles plantilla (GERENTE/CAJERO/MOZO). Detalles → [architecture/seed-system.md](architecture/seed-system.md).
 - **Branch protection:** develop y master requieren checks `Lint + Build (ubuntu-latest)` y `Lint + Build (windows-latest)` antes de mergear. No requieren reviews.
 - **Repo en GitHub se llama `frc-gourmet`** — el directorio local es `frc-gourmet-legacy` pero el remoto se renombró y mantiene redirect.
-- **Pendientes mayores:** UI Promociones, Producción, Reservas avanzadas; completar migración ngModel→Reactive Forms; chequear permisos en sidenav y `app.component.ts`; F6 Mobile (fuera de scope).
+- **Pendientes mayores:** UI Promociones, Producción, Reservas avanzadas; completar migración ngModel→Reactive Forms; chequear permisos en sidenav y `app.component.ts`. **Cliente Mobile PWA: EN CURSO** (branch `feat/mobile-pwa-cliente`, MVP administrativo construido) → ver [architecture/mobile-pwa.md](architecture/mobile-pwa.md).
 
 Detalles → [workflows/todos-pendientes.md](workflows/todos-pendientes.md).
 

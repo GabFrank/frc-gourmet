@@ -25,8 +25,8 @@ Settings unificadas en `userData/app-settings.json`. Password DB en **keytar** (
 ### F2 — Repository abstract + factory
 - `repository.service.ts` se renombró a `repository-ipc.service.ts` (impl IPC original).
 - Se creó `repository.service.ts` como **abstract class canónica** generada desde la impl.
-- Se creó `repository-http.service.ts` (impl HTTP para `mode=client`).
-- DI provider `repositoryFactory()` en `AppModule` elige impl según `process.env.FRC_APP_MODE` (que setea `main.ts`).
+- Se creó `repository-http.service.ts` (impl HTTP para `mode=client`). **⚠️ Quedó como SKELETON (sus métodos tiran "no implementado") y NO se usa.** El `mode=client` del desktop usa el monkey-patch de `ipcRenderer.invoke` (F4.1), no esta clase. La **PWA mobile** sí necesitó transporte HTTP real → lo resolvió con un shim sobre `window.api` reutilizando `RepositoryIpcService` (ver [mobile-pwa.md](mobile-pwa.md)).
+- DI provider `repositoryFactory()` en `AppModule` elige impl según `process.env.FRC_APP_MODE` (que setea `main.ts`); en la práctica devuelve siempre `RepositoryIpcService` y el preload routea HTTP en cliente.
 
 ### F3 — Server skeleton + RPC router
 - F3.1: Fastify server en `electron/server/` con endpoints `/api/version`, `/api/health`.
@@ -71,7 +71,7 @@ Memoria: `reference_smoke_server_e2e.md`.
 
 Todo F1–F5 está mergeado en `develop`. Pendiente:
 - Testing E2E F4 images con cliente real.
-- F6 Mobile (fuera de scope actual).
+- F6 Mobile: **EN CURSO** — cliente PWA (`projects/mobile`) construido sobre este server. Ver [mobile-pwa.md](mobile-pwa.md).
 - Activar `PermissionService` en frontend (existe pero no se usa para chequear permisos).
 
 Memoria: `project_proxima_sesion_post_f5.md`, `project_cliente_servidor_f4.md`.
