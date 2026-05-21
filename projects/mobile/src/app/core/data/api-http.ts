@@ -15,6 +15,7 @@
  */
 import { API_CHANNEL_MAP } from './api-channel-map.generated';
 import { setOnline } from './connection-state';
+import { sessionExpired$ } from './auth-events';
 
 const ACCESS_KEY = 'frc_mobile_access_token';
 const REFRESH_KEY = 'frc_mobile_refresh_token';
@@ -135,9 +136,12 @@ async function invokeRouter(channel: string, ...args: any[]): Promise<any> {
     return await doRpc();
   } catch (err) {
     const e = err as HttpError;
-    if (e.status === 401 && refreshToken) {
-      const ok = await refreshAccessIfPossible();
+    if (e.status === 401) {
+      const ok = refreshToken ? await refreshAccessIfPossible() : false;
       if (ok) return await doRpc();
+      // 401 sin refresh posible → sesión expirada: notificar para logout+login.
+      storeTokens(null, null);
+      sessionExpired$.next();
     }
     throw err;
   }
