@@ -12,7 +12,7 @@ const RRHH_ITEMS: SectionItem[] = [
   { label: 'Personas', icon: 'person', path: '/rrhh/personas', enabled: true },
   { label: 'Clientes', icon: 'business', path: '/rrhh/clientes', enabled: true },
   { label: 'Tipos de cliente', icon: 'loyalty', path: '/rrhh/tipos-cliente', enabled: true },
-  { label: 'Usuarios', icon: 'account_circle', path: '/rrhh/usuarios', enabled: false },
+  { label: 'Usuarios', icon: 'account_circle', path: '/rrhh/usuarios', enabled: true },
   { label: 'Vales', icon: 'receipt_long', path: '/rrhh/vales', enabled: false },
   { label: 'Liquidaciones', icon: 'request_quote', path: '/rrhh/liquidaciones', enabled: false },
 ];
@@ -127,6 +127,16 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/rrhh/clientes/cliente-edit.page').then((m) => m.ClienteEditPage),
   },
   {
+    path: 'rrhh/usuarios/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/rrhh/usuarios/usuario-edit.page').then((m) => m.UsuarioEditPage),
+  },
+  {
+    path: 'rrhh/usuarios/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/rrhh/usuarios/usuario-edit.page').then((m) => m.UsuarioEditPage),
+  },
+  {
     path: 'productos/familias/nuevo',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/productos/familias/familia-edit.page').then((m) => m.FamiliaEditPage),
@@ -229,6 +239,11 @@ export const routes: Routes = [
         path: 'rrhh/tipos-cliente',
         data: { title: 'Tipos de cliente' },
         loadComponent: () => import('./pages/rrhh/tipos-cliente/tipos-cliente-list.page').then((m) => m.TiposClienteListPage),
+      },
+      {
+        path: 'rrhh/usuarios',
+        data: { title: 'Usuarios' },
+        loadComponent: () => import('./pages/rrhh/usuarios/usuarios-list.page').then((m) => m.UsuariosListPage),
       },
       {
         path: 'financiero',
