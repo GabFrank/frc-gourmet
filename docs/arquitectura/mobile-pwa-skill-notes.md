@@ -34,6 +34,11 @@ Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acció
   SQLite tmp, admin/admin): health, version (705 handlers), `POST /api/auth/login` devuelve
   `{accessToken, refreshToken, sessionId, usuario}` (exacto lo que espera el shim), `POST /api/rpc`
   con Bearer → `{result}` 200, sin Bearer → 401. **El shim HTTP coincide 100% con el server real.**
+- ✅ **Validación del camino de ESCRITURA (2026-05-21):** `create-permission` (write no-gateado con objeto
+  param) → `{result:{...}}` persistido con `createdBy`; `get-permissions` lo devuelve. `create-cargo`
+  (gateado, admin sin permisos) → **403 `PERMISO REQUERIDO: RRHH_CONFIG_EDITAR`** (enforcement OK, la UI lo
+  detecta con `/PERMISO/`). ⇒ con un usuario con permisos reales, las altas/ediciones funcionarán.
+- ✅ **Build desktop sin regresión (2026-05-21):** `ng build frc-gourmet` verde tras toda la iniciativa.
 
 ### F2 — Infra server 🟦 (servir PWA ✅ · TLS ⛔)
 - ✅ `@fastify/static` sirviendo `dist/mobile` en **`/`** (raíz, no `/app` — evita base-href) + SPA fallback
