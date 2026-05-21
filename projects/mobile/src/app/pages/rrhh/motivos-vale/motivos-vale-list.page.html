@@ -1,0 +1,39 @@
+<div class="crud-page">
+  <div class="crud-filterbar">
+    <mat-form-field appearance="outline" class="crud-search">
+      <mat-label>Buscar motivo</mat-label>
+      <input matInput [formControl]="busqueda" (keyup.enter)="aplicarFiltro()" />
+      <button *ngIf="busqueda.value" matSuffix mat-icon-button (click)="limpiarFiltro()" aria-label="Limpiar">
+        <mat-icon>close</mat-icon>
+      </button>
+    </mat-form-field>
+    <button mat-flat-button color="primary" class="crud-filter-btn" (click)="aplicarFiltro()">Filtrar</button>
+  </div>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <div class="crud-list" *ngIf="!loading && !error">
+    <mat-card *ngFor="let m of items" class="crud-card" appearance="outlined">
+      <div class="crud-card-body">
+        <div class="crud-card-main">
+          <span class="crud-name">{{ m.nombre }}</span>
+          <span class="crud-sub" *ngIf="m.descripcion">{{ m.descripcion }}</span>
+        </div>
+        <span class="crud-chip" [class.off]="!m.activo">{{ m.activo ? 'Activo' : 'Inactivo' }}</span>
+        <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+          <mat-icon>more_vert</mat-icon>
+        </button>
+        <mat-menu #menu="matMenu">
+          <a mat-menu-item [routerLink]="['/rrhh/motivos-vale', m.id]"><mat-icon>edit</mat-icon><span>Editar</span></a>
+          <button mat-menu-item *ngIf="canEdit" (click)="eliminar(m)"><mat-icon color="warn">delete</mat-icon><span>Eliminar</span></button>
+        </mat-menu>
+      </div>
+    </mat-card>
+    <p *ngIf="items.length === 0" class="crud-empty">No hay motivos.</p>
+  </div>
+
+  <a *ngIf="canEdit" class="crud-fab" mat-fab color="primary" routerLink="/rrhh/motivos-vale/nuevo" aria-label="Nuevo">
+    <mat-icon>add</mat-icon>
+  </a>
+</div>

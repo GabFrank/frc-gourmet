@@ -1,0 +1,143 @@
+/* Clases CRUD reutilizables para las pantallas administrativas mobile.
+   Permiten escalar los listados/formularios sin duplicar SCSS por componente.
+   Usar estas clases en los templates; los componentes solo agregan ajustes propios. */
+
+.crud-page {
+  position: relative;
+  padding: 12px 16px 96px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.crud-filterbar {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+
+  .crud-search {
+    flex: 1;
+  }
+
+  .crud-filter-btn {
+    margin-top: 4px;
+    height: 40px;
+  }
+}
+
+.crud-error {
+  color: var(--error-color);
+}
+
+.crud-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.crud-card {
+  border-radius: 12px;
+}
+
+.crud-card-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 8px 12px 14px;
+}
+
+.crud-card-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.crud-name {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.crud-sub {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crud-chip {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--success-color) 16%, transparent);
+  color: var(--success-color);
+
+  &.off {
+    background: color-mix(in srgb, var(--text-secondary) 16%, transparent);
+    color: var(--text-secondary);
+  }
+}
+
+.crud-empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 32px 0;
+}
+
+.crud-fab {
+  position: fixed;
+  right: 20px;
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  z-index: 20;
+}
+
+/* --- Formulario full-screen --- */
+.crud-edit {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: var(--surface-variant);
+}
+
+.crud-edit-bar {
+  padding-top: env(safe-area-inset-top);
+  height: calc(56px + env(safe-area-inset-top));
+
+  .crud-edit-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  .crud-spacer {
+    flex: 1 1 auto;
+  }
+}
+
+.crud-form {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px 16px max(20px, env(safe-area-inset-bottom));
+  max-width: 600px;
+  width: 100%;
+  margin: 0 auto;
+
+  mat-form-field {
+    width: 100%;
+  }
+
+  mat-slide-toggle {
+    margin: 8px 4px;
+  }
+
+  .crud-save-btn {
+    margin-top: 16px;
+    height: 48px;
+  }
+}

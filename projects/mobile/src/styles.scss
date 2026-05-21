@@ -3,6 +3,7 @@
    + variables CSS de tema (dark/light) reutilizadas del desktop. */
 @use '@angular/material' as mat;
 @import '../../../src/styles/theme-variables.scss';
+@import './styles/crud';
 
 @include mat.core();
 
