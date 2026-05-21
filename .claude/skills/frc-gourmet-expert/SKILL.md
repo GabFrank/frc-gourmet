@@ -77,7 +77,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | Catálogo de enums clave | [reference/enums-index.md](reference/enums-index.md) |
 | Bugs conocidos sin resolver | [reference/known-bugs.md](reference/known-bugs.md) |
 
-**Manual de usuario** (capítulos 0–19) en [`manual-usuario/`](manual-usuario/) — para usuarios finales, no desarrolladores.
+**Manual de usuario** (capítulos 0–19) en [`manual-usuario/`](manual-usuario/) — para usuarios finales, no desarrolladores. **Manual de la app mobile (PWA)** aparte en [`manual-usuario/mobile/`](manual-usuario/mobile/README.md) — cubre el cliente web mobile/tablet (alcance administrativo CRUD).
 
 ---
 
