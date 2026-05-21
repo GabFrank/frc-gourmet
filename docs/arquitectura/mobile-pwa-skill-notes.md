@@ -63,7 +63,14 @@ Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acció
   - permisos: `get-cargos` abierto; create/update/delete requieren `RRHH_CONFIG_EDITAR`
   - **El resto de RRHH y las olas 2-5 replican este patrón.**
 - ⏳ **GATE antes de producir en masa:** validar E2E el patrón (login + Cargos CRUD) contra el server real.
-- ⬜ Ola 1 resto RRHH · ⬜ Ola 2 Financiero · ⬜ Ola 3 Compras · ⬜ Ola 4 Productos · ⬜ Ola 5 Clientes/Comisiones
+- 🟦 **Ola 4 Productos** (catálogos): **Familias**, **Subfamilias** (FK-select → Familia), **Adicionales**.
+  Sección Productos activada. Permisos `CATEGORIAS_GESTIONAR` / `ADICIONALES_GESTIONAR`. UPPERCASE en componente
+  (estos handlers NO uppercasean). Establece el **patrón FK-select** (cargar `getFamilias` + `mat-select`).
+- ⬜ Ola 1 resto RRHH · ⬜ Ola 2 Financiero · ⬜ Ola 3 Compras · ⬜ Ola 4 resto Productos · ⬜ Ola 5 Clientes/Comisiones
+
+> **LECCIÓN:** verificar que exista el **handler de escritura** (`create-X`/`update-X`/`delete-X` en
+> `electron/handlers/`), no solo el método abstracto del repo. Ej: `Moneda` declara createMoneda en el
+> repo pero **no hay handler `create-moneda`** → calzaría 404. Confirmar antes de construir el CRUD.
 
 ### Patrón CRUD a replicar (referencia para nuevas pantallas)
 1. **Lista** (hijo del shell): `getX()` → cards; búsqueda con botón Filtrar (sin live); acciones en

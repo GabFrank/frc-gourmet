@@ -15,6 +15,16 @@ const RRHH_ITEMS: SectionItem[] = [
   { label: 'Liquidaciones', icon: 'request_quote', path: '/rrhh/liquidaciones', enabled: false },
 ];
 
+/** Sub-módulos de Productos. */
+const PRODUCTOS_ITEMS: SectionItem[] = [
+  { label: 'Familias', icon: 'category', path: '/productos/familias', enabled: true },
+  { label: 'Subfamilias', icon: 'account_tree', path: '/productos/subfamilias', enabled: true },
+  { label: 'Adicionales', icon: 'add_circle', path: '/productos/adicionales', enabled: true },
+  { label: 'Productos', icon: 'restaurant', path: '/productos/lista', enabled: false },
+  { label: 'Recetas', icon: 'menu_book', path: '/productos/recetas', enabled: false },
+  { label: 'Sabores', icon: 'auto_awesome', path: '/productos/sabores', enabled: false },
+];
+
 /**
  * Rutas de la PWA mobile. Navegación con Router (no TabsService).
  * - Formularios full-screen (alta/edición) → rutas top-level, ANTES del shell.
@@ -68,6 +78,36 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./pages/rrhh/feriados/feriado-edit.page').then((m) => m.FeriadoEditPage),
   },
+  {
+    path: 'productos/familias/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/productos/familias/familia-edit.page').then((m) => m.FamiliaEditPage),
+  },
+  {
+    path: 'productos/familias/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/productos/familias/familia-edit.page').then((m) => m.FamiliaEditPage),
+  },
+  {
+    path: 'productos/subfamilias/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/productos/subfamilias/subfamilia-edit.page').then((m) => m.SubfamiliaEditPage),
+  },
+  {
+    path: 'productos/subfamilias/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/productos/subfamilias/subfamilia-edit.page').then((m) => m.SubfamiliaEditPage),
+  },
+  {
+    path: 'productos/adicionales/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/productos/adicionales/adicional-edit.page').then((m) => m.AdicionalEditPage),
+  },
+  {
+    path: 'productos/adicionales/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/productos/adicionales/adicional-edit.page').then((m) => m.AdicionalEditPage),
+  },
 
   // --- Shell autenticado (listados / índices) ---
   {
@@ -119,8 +159,24 @@ export const routes: Routes = [
       },
       {
         path: 'productos',
-        data: { title: 'Productos', icon: 'inventory_2' },
-        loadComponent: () => import('./pages/placeholder/placeholder.page').then((m) => m.PlaceholderPage),
+        pathMatch: 'full',
+        data: { title: 'Productos', items: PRODUCTOS_ITEMS },
+        loadComponent: () => import('./pages/section-index/section-index.page').then((m) => m.SectionIndexPage),
+      },
+      {
+        path: 'productos/familias',
+        data: { title: 'Familias' },
+        loadComponent: () => import('./pages/productos/familias/familias-list.page').then((m) => m.FamiliasListPage),
+      },
+      {
+        path: 'productos/subfamilias',
+        data: { title: 'Subfamilias' },
+        loadComponent: () => import('./pages/productos/subfamilias/subfamilias-list.page').then((m) => m.SubfamiliasListPage),
+      },
+      {
+        path: 'productos/adicionales',
+        data: { title: 'Adicionales' },
+        loadComponent: () => import('./pages/productos/adicionales/adicionales-list.page').then((m) => m.AdicionalesListPage),
       },
     ],
   },
