@@ -18,6 +18,8 @@ const RRHH_ITEMS: SectionItem[] = [
   { label: 'Penalizaciones', icon: 'gavel', path: '/rrhh/penalizaciones', enabled: true },
   { label: 'Bonos', icon: 'card_giftcard', path: '/rrhh/bonos', enabled: true },
   { label: 'Aguinaldos', icon: 'star', path: '/rrhh/aguinaldos', enabled: true },
+  { label: 'Asistencias', icon: 'fact_check', path: '/rrhh/asistencias', enabled: true },
+  { label: 'Horas extra', icon: 'more_time', path: '/rrhh/horas-extra', enabled: true },
   { label: 'Permisos', icon: 'verified_user', path: '/rrhh/permisos', enabled: true },
 ];
 
@@ -291,6 +293,16 @@ export const routes: Routes = [
       {
         path: 'rrhh/aguinaldos',
         data: { title: 'Aguinaldos', source: 'aguinaldos' },
+        loadComponent: () => import('./pages/rrhh/ops/rrhh-ops-list.page').then((m) => m.RrhhOpsListPage),
+      },
+      {
+        path: 'rrhh/asistencias',
+        data: { title: 'Asistencias', source: 'asistencias' },
+        loadComponent: () => import('./pages/rrhh/ops/rrhh-ops-list.page').then((m) => m.RrhhOpsListPage),
+      },
+      {
+        path: 'rrhh/horas-extra',
+        data: { title: 'Horas extra', source: 'horas-extra' },
         loadComponent: () => import('./pages/rrhh/ops/rrhh-ops-list.page').then((m) => m.RrhhOpsListPage),
       },
       {

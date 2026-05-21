@@ -74,6 +74,10 @@ export class RrhhOpsListPage implements OnInit {
         return this.repo.getEquiposComision();
       case 'liquidaciones-comision':
         return this.repo.getLiquidacionesComision();
+      case 'asistencias':
+        return this.repo.getAsistencias();
+      case 'horas-extra':
+        return this.repo.getHorasExtra();
       default:
         return null;
     }
