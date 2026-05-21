@@ -1,0 +1,17 @@
+<div class="crud-page">
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <div class="crud-list" *ngIf="!loading && !error">
+    <mat-card *ngFor="let c of items" class="crud-card" appearance="outlined">
+      <div class="crud-card-body">
+        <div class="crud-card-main">
+          <span class="crud-name">{{ c.dispositivo?.nombre || ('Caja #' + c.id) }}</span>
+          <span class="crud-sub" *ngIf="c.fechaApertura">Apertura: {{ c.fechaApertura | date: 'dd/MM/yyyy HH:mm' }}</span>
+        </div>
+        <span class="crud-chip" [class.off]="c.estadoClase === 'off'" [class.warn]="c.estadoClase === 'warn'">{{ c.estado }}</span>
+      </div>
+    </mat-card>
+    <p *ngIf="items.length === 0" class="crud-empty">No hay cajas.</p>
+  </div>
+</div>

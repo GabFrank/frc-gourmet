@@ -29,18 +29,19 @@ const PRODUCTOS_ITEMS: SectionItem[] = [
 
 /** Sub-módulos de Compras. */
 const COMPRAS_ITEMS: SectionItem[] = [
+  { label: 'Compras', icon: 'shopping_cart', path: '/compras/lista', enabled: true },
+  { label: 'Proveedores', icon: 'local_shipping', path: '/compras/proveedores', enabled: true },
   { label: 'Categorías de compra', icon: 'sell', path: '/compras/categorias', enabled: true },
-  { label: 'Compras', icon: 'shopping_cart', path: '/compras/lista', enabled: false },
   { label: 'Importaciones IA', icon: 'auto_awesome', path: '/compras/importaciones', enabled: false },
 ];
 
 /** Sub-módulos de Financiero. */
 const FINANCIERO_ITEMS: SectionItem[] = [
+  { label: 'Cajas', icon: 'point_of_sale', path: '/financiero/cajas', enabled: true },
+  { label: 'Cuentas por Cobrar', icon: 'request_quote', path: '/financiero/cxc', enabled: true },
   { label: 'Categorías de gasto', icon: 'sell', path: '/financiero/gasto-categorias', enabled: true },
-  { label: 'Cajas', icon: 'point_of_sale', path: '/financiero/cajas', enabled: false },
   { label: 'Monedas', icon: 'monetization_on', path: '/financiero/monedas', enabled: false },
   { label: 'Caja Mayor', icon: 'account_balance', path: '/financiero/caja-mayor', enabled: false },
-  { label: 'Cuentas por Cobrar', icon: 'request_quote', path: '/financiero/cxc', enabled: false },
 ];
 
 /**
@@ -272,6 +273,16 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/financiero/gasto-categorias/gasto-categorias-list.page').then((m) => m.GastoCategoriasListPage),
       },
       {
+        path: 'financiero/cajas',
+        data: { title: 'Cajas' },
+        loadComponent: () => import('./pages/financiero/cajas/cajas-list.page').then((m) => m.CajasListPage),
+      },
+      {
+        path: 'financiero/cxc',
+        data: { title: 'Cuentas por Cobrar' },
+        loadComponent: () => import('./pages/financiero/cxc/cxc-list.page').then((m) => m.CxcListPage),
+      },
+      {
         path: 'compras',
         pathMatch: 'full',
         data: { title: 'Compras', items: COMPRAS_ITEMS },
@@ -281,6 +292,16 @@ export const routes: Routes = [
         path: 'compras/categorias',
         data: { title: 'Categorías de compra' },
         loadComponent: () => import('./pages/compras/categorias/compra-categorias-list.page').then((m) => m.CompraCategoriasListPage),
+      },
+      {
+        path: 'compras/lista',
+        data: { title: 'Compras' },
+        loadComponent: () => import('./pages/compras/compras/compras-list.page').then((m) => m.ComprasListPage),
+      },
+      {
+        path: 'compras/proveedores',
+        data: { title: 'Proveedores' },
+        loadComponent: () => import('./pages/compras/proveedores/proveedores-list.page').then((m) => m.ProveedoresListPage),
       },
       {
         path: 'productos',

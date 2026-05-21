@@ -80,6 +80,11 @@
     background: color-mix(in srgb, var(--text-secondary) 16%, transparent);
     color: var(--text-secondary);
   }
+
+  &.warn {
+    background: color-mix(in srgb, var(--warning-color) 16%, transparent);
+    color: var(--warning-color);
+  }
 }
 
 .crud-empty {
