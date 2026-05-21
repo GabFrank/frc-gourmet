@@ -1,0 +1,62 @@
+:host {
+  display: block;
+}
+
+.home {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px;
+  background: var(--surface-variant);
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 20px var(--shadow-color);
+  text-align: center;
+}
+
+.brand {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
+.subtitle {
+  margin: 4px 0 16px;
+  color: var(--text-secondary);
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--info-color);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.probe {
+  margin-top: 20px;
+  text-align: left;
+}
+
+.probe-label {
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.probe-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-primary);
+}

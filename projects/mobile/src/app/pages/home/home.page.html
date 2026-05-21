@@ -1,0 +1,14 @@
+<main class="home">
+  <section class="card">
+    <h1 class="brand">FRC Gourmet</h1>
+    <p class="subtitle">Cliente mobile (PWA)</p>
+    <span class="badge">{{ version }}</span>
+
+    <div class="probe">
+      <p class="probe-label">shared-core OK · enum PersonaTipo:</p>
+      <ul class="probe-list">
+        <li *ngFor="let t of tiposPersona">{{ t }}</li>
+      </ul>
+    </div>
+  </section>
+</main>

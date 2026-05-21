@@ -10,15 +10,15 @@
 
 Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acción manual del usuario)
 
-### F0 — Cimientos
+### F0 — Cimientos ✅
 - ✅ Branch `feat/mobile-pwa-cliente` creada
 - ✅ Plan persistido (`docs/arquitectura/mobile-pwa-plan.md`)
 - ✅ Este doc de notas creado
-- ⬜ `projects/mobile` (application) scaffold
-- ⬜ Path-alias `@frc/shared-core` + barrel public-api
-- ⬜ PWA shell mínimo que compila
-- ⬜ `npm run build` desktop sigue verde + build mobile OK
-- ⬜ Commit F0
+- ✅ `projects/mobile` (application) scaffold — standalone bootstrap, sin NgModule
+- ✅ Path-alias `@frc/shared-core` + barrel `src/app/shared-core/public-api.ts`
+- ✅ PWA shell mínimo (HomePage lazy standalone) que inyecta `ThemeService` y usa enum compartido
+- ✅ Build mobile dev OK + desktop dev OK (sin regresión)
+- ✅ Commit F0
 
 ### F1 — Capa de datos + auth
 - ⬜ Script generador `api-http.generated.ts` (parsea `preload.ts`)
@@ -73,4 +73,15 @@ Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acció
 
 ## C. Decisiones técnicas tomadas durante la ejecución (bitácora)
 
-- (fecha) — decisión — motivo.
+- 2026-05-20 — `projects/mobile` se generó con `ng g application` (no soporta `--standalone` en
+  Angular CLI 15.2) y se convirtió a **standalone bootstrap** a mano (borrados `app.module.ts`,
+  `app-routing.module.ts`; `main.ts` usa `bootstrapApplication` + `provideRouter` + `provideHttpClient`).
+- 2026-05-20 — `withComponentInputBinding` es de Angular 16; en 15.2 NO existe. Usar `provideRouter(routes)` pelado.
+- 2026-05-20 — El build mobile **requiere `"types": ["node"]`** en `projects/mobile/tsconfig.app.json`
+  porque los `.d.ts` de `typeorm` (que llegan vía las entities del repo abstracto) referencian
+  `Buffer`/`fs`/`stream`/`events`. Son type-only ⇒ no se bundlean en runtime. Mismo criterio que el desktop.
+- 2026-05-20 — Compartir código se hace por **path-alias** en root `tsconfig.json`
+  (`@frc/shared-core` → `src/app/shared-core/public-api`), NO moviendo archivos todavía. El desktop
+  queda intacto (no importa el alias). El barrel solo re-exporta código browser-safe.
+- 2026-05-20 — El pre-commit de husky **solo** typechequea `tsconfig.electron.json` (no toca el
+  proyecto mobile). Validar el mobile siempre con `npx ng build mobile` a mano.

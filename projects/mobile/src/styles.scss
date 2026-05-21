@@ -1,0 +1,19 @@
+/* Estilos globales de la PWA mobile.
+   Reutiliza las variables de tema del desktop (browser-safe, solo CSS vars).
+   El sistema de temas Material mobile-first se arma en F3. */
+@import '../../../src/styles/theme-variables.scss';
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: Roboto, 'Helvetica Neue', sans-serif;
+  background: var(--surface-variant);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
