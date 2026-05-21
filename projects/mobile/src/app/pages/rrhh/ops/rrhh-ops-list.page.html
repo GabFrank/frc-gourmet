@@ -8,7 +8,7 @@
         <div class="crud-card-main">
           <span class="crud-name">{{ it.titulo }}</span>
           <span class="crud-sub" *ngIf="it.subtitulo">{{ it.subtitulo }}</span>
-          <span class="crud-sub" *ngIf="it.monto != null">Monto: {{ it.monto | number: '1.0-2' }}</span>
+          <span class="crud-sub" *ngIf="it.monto !== null">Monto: {{ it.monto | number: '1.0-2' }}</span>
         </div>
         <span class="crud-chip warn" *ngIf="it.estado">{{ it.estado }}</span>
       </div>
