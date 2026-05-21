@@ -1,0 +1,18 @@
+<div class="crud-page">
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <div class="crud-list" *ngIf="!loading && !error">
+    <mat-card *ngFor="let it of items" class="crud-card" appearance="outlined">
+      <div class="crud-card-body">
+        <div class="crud-card-main">
+          <span class="crud-name">{{ it.titulo }}</span>
+          <span class="crud-sub" *ngIf="it.subtitulo">{{ it.subtitulo }}</span>
+          <span class="crud-sub" *ngIf="it.monto != null">Monto: {{ it.monto | number: '1.0-2' }}</span>
+        </div>
+        <span class="crud-chip warn" *ngIf="it.estado">{{ it.estado }}</span>
+      </div>
+    </mat-card>
+    <p *ngIf="items.length === 0" class="crud-empty">Sin registros.</p>
+  </div>
+</div>

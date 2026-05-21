@@ -13,8 +13,11 @@ const RRHH_ITEMS: SectionItem[] = [
   { label: 'Clientes', icon: 'business', path: '/rrhh/clientes', enabled: true },
   { label: 'Tipos de cliente', icon: 'loyalty', path: '/rrhh/tipos-cliente', enabled: true },
   { label: 'Usuarios', icon: 'account_circle', path: '/rrhh/usuarios', enabled: true },
-  { label: 'Vales', icon: 'receipt_long', path: '/rrhh/vales', enabled: false },
-  { label: 'Liquidaciones', icon: 'request_quote', path: '/rrhh/liquidaciones', enabled: false },
+  { label: 'Vales', icon: 'receipt_long', path: '/rrhh/vales', enabled: true },
+  { label: 'Liquidaciones', icon: 'request_quote', path: '/rrhh/liquidaciones', enabled: true },
+  { label: 'Penalizaciones', icon: 'gavel', path: '/rrhh/penalizaciones', enabled: true },
+  { label: 'Bonos', icon: 'card_giftcard', path: '/rrhh/bonos', enabled: true },
+  { label: 'Aguinaldos', icon: 'star', path: '/rrhh/aguinaldos', enabled: true },
 ];
 
 /** Sub-módulos de Productos. */
@@ -260,6 +263,31 @@ export const routes: Routes = [
         path: 'rrhh/funcionarios',
         data: { title: 'Funcionarios' },
         loadComponent: () => import('./pages/rrhh/funcionarios/funcionarios-list.page').then((m) => m.FuncionariosListPage),
+      },
+      {
+        path: 'rrhh/vales',
+        data: { title: 'Vales', source: 'vales' },
+        loadComponent: () => import('./pages/rrhh/ops/rrhh-ops-list.page').then((m) => m.RrhhOpsListPage),
+      },
+      {
+        path: 'rrhh/liquidaciones',
+        data: { title: 'Liquidaciones', source: 'liquidaciones' },
+        loadComponent: () => import('./pages/rrhh/ops/rrhh-ops-list.page').then((m) => m.RrhhOpsListPage),
+      },
+      {
+        path: 'rrhh/penalizaciones',
+        data: { title: 'Penalizaciones', source: 'penalizaciones' },
+        loadComponent: () => import('./pages/rrhh/ops/rrhh-ops-list.page').then((m) => m.RrhhOpsListPage),
+      },
+      {
+        path: 'rrhh/bonos',
+        data: { title: 'Bonos', source: 'bonos' },
+        loadComponent: () => import('./pages/rrhh/ops/rrhh-ops-list.page').then((m) => m.RrhhOpsListPage),
+      },
+      {
+        path: 'rrhh/aguinaldos',
+        data: { title: 'Aguinaldos', source: 'aguinaldos' },
+        loadComponent: () => import('./pages/rrhh/ops/rrhh-ops-list.page').then((m) => m.RrhhOpsListPage),
       },
       {
         path: 'financiero',
