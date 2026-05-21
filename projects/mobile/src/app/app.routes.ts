@@ -1,16 +1,43 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import type { SectionItem } from './pages/section-index/section-index.page';
+
+/** Sub-módulos de RRHH (se van habilitando por ola). */
+const RRHH_ITEMS: SectionItem[] = [
+  { label: 'Cargos', icon: 'work', path: '/rrhh/cargos', enabled: true },
+  { label: 'Funcionarios', icon: 'badge', path: '/rrhh/funcionarios', enabled: false },
+  { label: 'Personas', icon: 'person', path: '/rrhh/personas', enabled: false },
+  { label: 'Usuarios', icon: 'account_circle', path: '/rrhh/usuarios', enabled: false },
+  { label: 'Vales', icon: 'receipt_long', path: '/rrhh/vales', enabled: false },
+  { label: 'Turnos', icon: 'schedule', path: '/rrhh/turnos', enabled: false },
+  { label: 'Liquidaciones', icon: 'request_quote', path: '/rrhh/liquidaciones', enabled: false },
+];
 
 /**
- * Rutas de la PWA mobile. Navegación basada en Router (NO en el TabsService del
- * desktop). El `ShellComponent` es el layout autenticado; las secciones cuelgan
- * como hijos. Las olas administrativas van reemplazando los PlaceholderPage.
+ * Rutas de la PWA mobile. Navegación con Router (no TabsService).
+ * - Formularios full-screen (alta/edición) → rutas top-level, ANTES del shell.
+ * - Listados/índices → hijos del ShellComponent (con bottom-nav / nav-rail).
+ * Las olas administrativas van habilitando sub-módulos.
  */
 export const routes: Routes = [
   {
     path: 'login',
     loadComponent: () => import('./pages/login/login.page').then((m) => m.LoginPage),
   },
+
+  // --- Formularios full-screen (fuera del shell) ---
+  {
+    path: 'rrhh/cargos/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/rrhh/cargos/cargo-edit.page').then((m) => m.CargoEditPage),
+  },
+  {
+    path: 'rrhh/cargos/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/rrhh/cargos/cargo-edit.page').then((m) => m.CargoEditPage),
+  },
+
+  // --- Shell autenticado (listados / índices) ---
   {
     path: '',
     canActivate: [authGuard],
@@ -24,8 +51,14 @@ export const routes: Routes = [
       },
       {
         path: 'rrhh',
-        data: { title: 'Recursos Humanos', icon: 'groups' },
-        loadComponent: () => import('./pages/placeholder/placeholder.page').then((m) => m.PlaceholderPage),
+        pathMatch: 'full',
+        data: { title: 'Recursos Humanos', items: RRHH_ITEMS },
+        loadComponent: () => import('./pages/section-index/section-index.page').then((m) => m.SectionIndexPage),
+      },
+      {
+        path: 'rrhh/cargos',
+        data: { title: 'Cargos' },
+        loadComponent: () => import('./pages/rrhh/cargos/cargos-list.page').then((m) => m.CargosListPage),
       },
       {
         path: 'financiero',

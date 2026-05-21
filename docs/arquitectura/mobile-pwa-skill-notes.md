@@ -52,7 +52,25 @@ Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acció
 - ✅ Commit F3
 
 ### F4..Fn — Olas administrativas
-- ⬜ Ola 1 RRHH · ⬜ Ola 2 Financiero · ⬜ Ola 3 Compras · ⬜ Ola 4 Productos · ⬜ Ola 5 Clientes/Comisiones
+- 🟦 **Ola 1 RRHH** — patrón CRUD EJEMPLAR establecido con **Cargos** (lista + form full-screen):
+  - `ConfirmDialogComponent` reutilizable (MatDialog)
+  - `SectionIndexPage` genérico data-driven (índice de sub-módulos por dominio)
+  - `CargosListPage` (búsqueda+Filtrar, cards, mat-menu acciones, FAB, permisos reactivos)
+  - `CargoEditPage` (Reactive Forms, form full-screen con toolbar back+guardar)
+  - permisos: `get-cargos` abierto; create/update/delete requieren `RRHH_CONFIG_EDITAR`
+  - **El resto de RRHH y las olas 2-5 replican este patrón.**
+- ⏳ **GATE antes de producir en masa:** validar E2E el patrón (login + Cargos CRUD) contra el server real.
+- ⬜ Ola 1 resto RRHH · ⬜ Ola 2 Financiero · ⬜ Ola 3 Compras · ⬜ Ola 4 Productos · ⬜ Ola 5 Clientes/Comisiones
+
+### Patrón CRUD a replicar (referencia para nuevas pantallas)
+1. **Lista** (hijo del shell): `getX()` → cards; búsqueda con botón Filtrar (sin live); acciones en
+   `mat-menu` (`more_vert`); FAB crear; `canEdit` reactivo desde `PermissionService.codigos$`.
+2. **Form** (ruta top-level full-screen, ANTES del shell): Reactive Forms; toolbar back+guardar;
+   `getX(id)` patch en edición; `createX`/`updateX`; snackbar; `location.back()`.
+3. **Eliminar:** `ConfirmDialogComponent` → `deleteX` → recargar.
+4. **Permisos:** grepear el código real del handler (`ensurePermission`), nunca inventar.
+5. **UPPERCASE:** lo aplica el handler; no duplicar en el componente salvo necesidad.
+6. **Sección:** registrar el sub-módulo en el `SectionIndexPage` del dominio (`enabled:true`) + rutas.
 
 ---
 
