@@ -1,14 +1,27 @@
 <main class="home">
-  <section class="card">
-    <h1 class="brand">FRC Gourmet</h1>
-    <p class="subtitle">Cliente mobile (PWA)</p>
-    <span class="badge">{{ version }}</span>
-
-    <div class="probe">
-      <p class="probe-label">shared-core OK · enum PersonaTipo:</p>
-      <ul class="probe-list">
-        <li *ngFor="let t of tiposPersona">{{ t }}</li>
-      </ul>
+  <header class="topbar">
+    <div>
+      <h1 class="brand">FRC Gourmet</h1>
+      <p class="user" *ngIf="user">Sesión: {{ user.nickname }}</p>
     </div>
+    <button class="logout" (click)="logout()">Salir</button>
+  </header>
+
+  <p class="offline" *ngIf="(online$ | async) === false">Sin conexión con el servidor</p>
+
+  <section class="card">
+    <h2 class="section-title">Monedas (smoke test /api/rpc)</h2>
+
+    <p *ngIf="loading" class="muted">Cargando…</p>
+    <p *ngIf="error" class="error">{{ error }}</p>
+
+    <ul class="list" *ngIf="!loading && !error">
+      <li *ngFor="let m of monedas" class="item">
+        <span class="item-main">{{ m.denominacion }}</span>
+        <span class="item-tag">{{ m.simbolo }}</span>
+        <span class="item-badge" *ngIf="m.principal">principal</span>
+      </li>
+      <li *ngIf="monedas.length === 0" class="muted">Sin monedas</li>
+    </ul>
   </section>
 </main>

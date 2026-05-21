@@ -158,7 +158,11 @@
             ],
             "scripts": [],
             "allowedCommonJsDependencies": [
-              "typeorm"
+              "typeorm",
+              "react-native-sqlite-storage",
+              "debug",
+              "buffer",
+              "sha.js"
             ]
           },
           "configurations": {

@@ -4,59 +4,104 @@
 
 .home {
   min-height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: max(16px, env(safe-area-inset-top)) 16px;
+  padding: max(12px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
   background: var(--surface-variant);
+  color: var(--text-primary);
 }
 
-.card {
-  width: 100%;
-  max-width: 420px;
-  background: var(--surface);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 4px 20px var(--shadow-color);
-  text-align: center;
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
 }
 
 .brand {
   margin: 0;
-  font-size: 1.75rem;
+  font-size: 1.3rem;
   font-weight: 600;
 }
 
-.subtitle {
-  margin: 4px 0 16px;
+.user {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
   color: var(--text-secondary);
 }
 
-.badge {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: var(--info-color);
+.logout {
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--error-color);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.offline {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--warning-color);
   color: #fff;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 2px 12px var(--shadow-color);
+}
+
+.section-title {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+
+.item-main {
+  flex: 1;
   font-weight: 500;
 }
 
-.probe {
-  margin-top: 20px;
-  text-align: left;
-}
-
-.probe-label {
-  margin: 0 0 8px;
+.item-tag {
   color: var(--text-secondary);
-  font-size: 0.85rem;
 }
 
-.probe-list {
-  margin: 0;
-  padding-left: 18px;
-  color: var(--text-primary);
+.item-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--success-color);
+  color: #fff;
+  font-size: 0.7rem;
+}
+
+.muted {
+  color: var(--text-secondary);
+}
+
+.error {
+  color: var(--error-color);
 }

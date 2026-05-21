@@ -1,0 +1,88 @@
+:host {
+  display: block;
+}
+
+.login {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  background: var(--surface-variant);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 28px 24px;
+  box-shadow: 0 4px 24px var(--shadow-color);
+}
+
+.brand {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.subtitle {
+  margin: -8px 0 8px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.field input {
+  height: 48px;
+  padding: 0 14px;
+  font-size: 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--info-color);
+}
+
+.error {
+  margin: 0;
+  color: var(--error-color);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.submit {
+  height: 50px;
+  border: none;
+  border-radius: 10px;
+  background: var(--error-color); /* primary del branding (rojo FRC) */
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

@@ -1,11 +1,12 @@
-import { Component, inject } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ThemeService, PersonaTipo } from '@frc/shared-core';
+import { AuthService, RepositoryService, Moneda, Usuario } from '@frc/shared-core';
+import { ConnectionService } from '../../core/data/connection.service';
 
 /**
- * Placeholder de F0: prueba el cableado de `@frc/shared-core` (DI de un servicio
- * browser-safe + uso de un enum de dominio) y que el build mobile compila.
- * Se reemplaza por el shell real en F3.
+ * Landing protegida — smoke test de F1: lee el usuario logueado y lista monedas
+ * vía `RepositoryService.getMonedas()` → `POST /api/rpc`. Prueba el camino
+ * completo login + RPC. Se reemplaza por el dashboard real en F3+.
  */
 @Component({
   selector: 'app-home',
@@ -14,12 +15,32 @@ import { ThemeService, PersonaTipo } from '@frc/shared-core';
   templateUrl: './home.page.html',
   styleUrls: ['./home.page.scss'],
 })
-export class HomePage {
-  // Smoke test de DI: el servicio compartido se resuelve en el contexto browser.
-  private readonly theme = inject(ThemeService);
+export class HomePage implements OnInit {
+  private readonly auth = inject(AuthService);
+  private readonly repo = inject(RepositoryService);
+  private readonly connection = inject(ConnectionService);
 
-  // Smoke test de enum compartido (valor en runtime, no solo tipo).
-  readonly tiposPersona = Object.values(PersonaTipo);
+  readonly online$ = this.connection.online$;
+  readonly user: Usuario | null = this.auth.currentUser;
 
-  readonly version = 'F0 — cimientos';
+  monedas: Moneda[] = [];
+  loading = true;
+  error: string | null = null;
+
+  ngOnInit(): void {
+    this.repo.getMonedas().subscribe({
+      next: (monedas) => {
+        this.monedas = monedas;
+        this.loading = false;
+      },
+      error: () => {
+        this.error = 'No se pudieron cargar los datos del servidor';
+        this.loading = false;
+      },
+    });
+  }
+
+  logout(): void {
+    void this.auth.logout();
+  }
 }

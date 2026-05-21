@@ -20,13 +20,17 @@ Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acció
 - ✅ Build mobile dev OK + desktop dev OK (sin regresión)
 - ✅ Commit F0
 
-### F1 — Capa de datos + auth
-- ⬜ Script generador `api-http.generated.ts` (parsea `preload.ts`)
-- ⬜ Transporte RPC HTTP (Bearer + refresh 401 + cola)
-- ⬜ Reuso de la lógica del repositorio sobre el shim
-- ⬜ Login HTTP (`/api/auth/login` + refresh)
-- ⬜ Estado global "sin conexión"
-- ⬜ Commit F1
+### F1 — Capa de datos + auth ✅ (código; E2E runtime depende de server del usuario)
+- ✅ Generador `scripts/generate-mobile-api-map.js` → `api-channel-map.generated.ts` (742 métodos)
+- ✅ Transporte RPC HTTP `api-http.ts` (Proxy `window.api` + Bearer + refresh 401 + tokens en localStorage)
+- ✅ Reuso de `RepositoryIpcService` como repo HTTP (vía el shim `window.api`)
+- ✅ Login HTTP (`/api/auth/login` + refresh + logout) adaptado al shape del renderer
+- ✅ Estado "sin conexión" (`connection-state.ts` + `ConnectionService`)
+- ✅ AuthService/PermissionService reusados; `MobileAppModeService` (modo siempre 'client')
+- ✅ Login page (Reactive Forms) + authGuard + HomePage smoke (lista monedas vía RPC)
+- ✅ Build mobile dev + prod OK (prod 660 KB raw / 156 KB transferido)
+- ✅ Commit F1
+- ⏳ Validación E2E real (login contra server) → requiere `mode=server` levantado por el usuario
 
 ### F2 — Infra server
 - ⬜ `@fastify/static` sirviendo `/app` → `dist/mobile`
@@ -85,3 +89,18 @@ Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acció
   queda intacto (no importa el alias). El barrel solo re-exporta código browser-safe.
 - 2026-05-20 — El pre-commit de husky **solo** typechequea `tsconfig.electron.json` (no toca el
   proyecto mobile). Validar el mobile siempre con `npx ng build mobile` a mano.
+- 2026-05-20 — **Diseño del data layer mobile (F1):** se reusa `RepositoryIpcService` tal cual; el
+  truco es que `installApiHttp()` setea un `window.api` (Proxy) ANTES del bootstrap. El Proxy mapea
+  `método → canal` (mapa generado de preload.ts) → `POST /api/rpc {method, params}`. login/logout van
+  a `/api/auth/*`. Refresh JWT automático en 401. Tokens en localStorage (persisten reload, a
+  diferencia del preload que los tiene en memoria). Same-origin por defecto (Fastify sirve PWA+API).
+- 2026-05-20 — `getCurrentUser/setCurrentUser/getCurrentUserId` de `RepositoryIpcService` usan un
+  `BehaviorSubject` interno (no `window.api`) ⇒ funcionan en mobile sin tocar el shim.
+- 2026-05-20 — **typeorm runtime se bundlea en mobile** porque `RepositoryIpcService` importa enums
+  que viven en archivos `*.entity.ts` (con `@Entity`). En dev infla vendor (~4MB) pero en **prod se
+  tree-shakea** (total 660 KB raw / 156 KB gz). Deuda futura: separar enums de las entities para no
+  arrastrar typeorm al browser.
+- 2026-05-20 — `AppModeService` se exporta del barrel SOLO como token DI; mobile lo reemplaza con
+  `MobileAppModeService` (devuelve `mode:'client'`). La clase original (con `window.api`) nunca se
+  construye. `AuthService` en client-mode restaura sesión desde localStorage (no llama restoreSession).
+- 2026-05-20 — Para regenerar el mapa de canales tras tocar `preload.ts`: `npm run generate:mobile-api`.

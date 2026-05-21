@@ -43,6 +43,7 @@
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/app/database/datasource.ts",
     "migration:show": "typeorm-ts-node-commonjs migration:show -d src/app/database/datasource.ts",
     "icons": "node scripts/generate-icons.js",
+    "generate:mobile-api": "node scripts/generate-mobile-api-map.js",
     "prepare": "husky || true"
   },
   "private": true,
