@@ -30,7 +30,10 @@ Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acció
 - ✅ Login page (Reactive Forms) + authGuard + HomePage smoke (lista monedas vía RPC)
 - ✅ Build mobile dev + prod OK (prod 660 KB raw / 156 KB transferido)
 - ✅ Commit F1
-- ⏳ Validación E2E real (login contra server) → requiere `mode=server` levantado por el usuario
+- ✅ **Validación E2E del contrato (2026-05-21)** vía `scripts/test-server-standalone.ts` (Fastify real,
+  SQLite tmp, admin/admin): health, version (705 handlers), `POST /api/auth/login` devuelve
+  `{accessToken, refreshToken, sessionId, usuario}` (exacto lo que espera el shim), `POST /api/rpc`
+  con Bearer → `{result}` 200, sin Bearer → 401. **El shim HTTP coincide 100% con el server real.**
 
 ### F2 — Infra server 🟦 (servir PWA ✅ · TLS ⛔)
 - ✅ `@fastify/static` sirviendo `dist/mobile` en **`/`** (raíz, no `/app` — evita base-href) + SPA fallback
@@ -139,6 +142,15 @@ Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acció
   `MobileAppModeService` (devuelve `mode:'client'`). La clase original (con `window.api`) nunca se
   construye. `AuthService` en client-mode restaura sesión desde localStorage (no llama restoreSession).
 - 2026-05-20 — Para regenerar el mapa de canales tras tocar `preload.ts`: `npm run generate:mobile-api`.
+- 2026-05-21 — **Cómo validar F1 sin tocar la app del usuario:** `npx ts-node --project tsconfig.typeorm.json
+  scripts/test-server-standalone.ts` levanta Fastify real en :7070 con SQLite tmp + admin/admin (no toca
+  Postgres ni `app-settings.json`). Curl health/version/login/rpc. Para curl al puerto: usar
+  `dangerouslyDisableSandbox` en Bash.
+- 2026-05-21 — **app-settings.json** vive en `~/Library/Application Support/frc-gourmet/`. El modo
+  (standalone/server/client) se cambia ahí (`"mode"`). El server start usa `settings.network?.serverPort
+  || 7070`. **El harness BLOQUEA editar este archivo (fuera del repo)** — para ponerlo en server hay que
+  hacerlo desde la UI (Sistema → Modo de operación) o con autorización explícita del usuario.
+- 2026-05-21 — DB real del usuario: **Postgres** (`frc_gourmet@localhost`, user `franco`), deviceId 2.
 - 2026-05-20 — **F2 servir PWA:** se sirve en la **raíz `/`** del Fastify (no `/app`) porque el server
   solo atiende clientes remotos (el operador del PC usa el desktop local con `loadFile`). Raíz ⇒ base-href
   default `/` sin cambios. La API queda en `/api/*` (rutas específicas matchean antes que el estático).
