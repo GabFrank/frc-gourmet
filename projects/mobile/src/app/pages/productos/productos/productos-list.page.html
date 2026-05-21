@@ -16,6 +16,7 @@
   <div class="crud-list" *ngIf="!loading && !error">
     <mat-card *ngFor="let p of items" class="crud-card" appearance="outlined">
       <div class="crud-card-body">
+        <img class="crud-thumb" *ngIf="p.imageUrl | appImage as src" [src]="src" alt="" />
         <div class="crud-card-main">
           <span class="crud-name">{{ p.nombre }}</span>
           <span class="crud-sub">{{ p.tipo }}</span>

@@ -8,12 +8,14 @@ import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { RepositoryService } from '@frc/shared-core';
+import { AppImagePipe } from '../../../core/pipes/app-image.pipe';
 
 interface ProductoVM {
   id: number;
   nombre: string;
   tipo: string;
   activo: boolean;
+  imageUrl?: string;
 }
 
 /** Vista (solo lectura) de Productos. La gestión completa (precios/presentaciones) es en escritorio. */
@@ -22,7 +24,7 @@ interface ProductoVM {
   standalone: true,
   imports: [
     CommonModule, ReactiveFormsModule, MatCardModule, MatIconModule,
-    MatFormFieldModule, MatInputModule, MatButtonModule, MatProgressBarModule,
+    MatFormFieldModule, MatInputModule, MatButtonModule, MatProgressBarModule, AppImagePipe,
   ],
   templateUrl: './productos-list.page.html',
 })

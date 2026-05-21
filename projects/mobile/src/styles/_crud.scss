@@ -46,6 +46,19 @@
   padding: 12px 8px 12px 14px;
 }
 
+.crud-thumb {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--surface-variant);
+}
+
+.crud-thumb--round {
+  border-radius: 50%;
+}
+
 .crud-card-main {
   flex: 1;
   min-width: 0;

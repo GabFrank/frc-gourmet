@@ -14,6 +14,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService, PermissionService } from '@frc/shared-core';
 import { ConfirmDialogComponent, ConfirmData } from '../../../core/components/confirm-dialog.component';
+import { AppImagePipe } from '../../../core/pipes/app-image.pipe';
 
 interface PersonaVM {
   id: number;
@@ -22,6 +23,7 @@ interface PersonaVM {
   documento?: string;
   tipoPersona: string;
   activo: boolean;
+  imageUrl?: string;
 }
 
 /** Lista de Personas (RRHH). Permiso PERSONAS_GESTIONAR. */
@@ -31,7 +33,7 @@ interface PersonaVM {
   imports: [
     CommonModule, RouterModule, ReactiveFormsModule, MatCardModule, MatIconModule,
     MatButtonModule, MatMenuModule, MatFormFieldModule, MatInputModule,
-    MatProgressBarModule, MatDialogModule, MatSnackBarModule,
+    MatProgressBarModule, MatDialogModule, MatSnackBarModule, AppImagePipe,
   ],
   templateUrl: './personas-list.page.html',
 })
