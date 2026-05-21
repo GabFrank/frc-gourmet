@@ -8,7 +8,7 @@ const RRHH_ITEMS: SectionItem[] = [
   { label: 'Turnos', icon: 'schedule', path: '/rrhh/turnos', enabled: true },
   { label: 'Motivos de vale', icon: 'label', path: '/rrhh/motivos-vale', enabled: true },
   { label: 'Feriados', icon: 'celebration', path: '/rrhh/feriados', enabled: true },
-  { label: 'Funcionarios', icon: 'badge', path: '/rrhh/funcionarios', enabled: false },
+  { label: 'Funcionarios', icon: 'badge', path: '/rrhh/funcionarios', enabled: true },
   { label: 'Personas', icon: 'person', path: '/rrhh/personas', enabled: true },
   { label: 'Clientes', icon: 'business', path: '/rrhh/clientes', enabled: true },
   { label: 'Tipos de cliente', icon: 'loyalty', path: '/rrhh/tipos-cliente', enabled: true },
@@ -137,6 +137,16 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/rrhh/usuarios/usuario-edit.page').then((m) => m.UsuarioEditPage),
   },
   {
+    path: 'rrhh/funcionarios/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/rrhh/funcionarios/funcionario-edit.page').then((m) => m.FuncionarioEditPage),
+  },
+  {
+    path: 'rrhh/funcionarios/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/rrhh/funcionarios/funcionario-edit.page').then((m) => m.FuncionarioEditPage),
+  },
+  {
     path: 'productos/familias/nuevo',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/productos/familias/familia-edit.page').then((m) => m.FamiliaEditPage),
@@ -244,6 +254,11 @@ export const routes: Routes = [
         path: 'rrhh/usuarios',
         data: { title: 'Usuarios' },
         loadComponent: () => import('./pages/rrhh/usuarios/usuarios-list.page').then((m) => m.UsuariosListPage),
+      },
+      {
+        path: 'rrhh/funcionarios',
+        data: { title: 'Funcionarios' },
+        loadComponent: () => import('./pages/rrhh/funcionarios/funcionarios-list.page').then((m) => m.FuncionariosListPage),
       },
       {
         path: 'financiero',

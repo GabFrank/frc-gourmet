@@ -1,0 +1,73 @@
+<div class="crud-edit">
+  <mat-toolbar color="primary" class="crud-edit-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="crud-edit-title">{{ esNuevo ? 'Nuevo funcionario' : 'Editar funcionario' }}</span>
+    <span class="crud-spacer"></span>
+    <button mat-button (click)="guardar()" [disabled]="saving">Guardar</button>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
+
+  <form class="crud-form" [formGroup]="form" (ngSubmit)="guardar()">
+    <p *ngIf="!esNuevo" class="crud-sub">Cargo, salario y moneda se cambian desde sus flujos específicos (no editables aquí).</p>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Persona</mat-label>
+      <mat-select formControlName="personaId">
+        <mat-option *ngFor="let p of personas" [value]="p.id">{{ p.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.personaId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Cargo</mat-label>
+      <mat-select formControlName="cargoId">
+        <mat-option *ngFor="let c of cargos" [value]="c.id">{{ c.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.cargoId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Moneda del salario</mat-label>
+      <mat-select formControlName="monedaSalarioId">
+        <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.monedaSalarioId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Fecha de ingreso</mat-label>
+      <input matInput type="date" formControlName="fechaIngreso" />
+      <mat-error *ngIf="form.controls.fechaIngreso.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Salario base</mat-label>
+      <input matInput type="number" inputmode="numeric" formControlName="salarioBase" />
+      <mat-error *ngIf="form.controls.salarioBase.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Código interno</mat-label>
+      <input matInput formControlName="codigoInterno" autocapitalize="characters" />
+    </mat-form-field>
+
+    <mat-slide-toggle formControlName="esJornalero" color="primary">Es jornalero</mat-slide-toggle>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Valor del jornal</mat-label>
+      <input matInput type="number" inputmode="numeric" formControlName="valorJornal" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Observación</mat-label>
+      <textarea matInput formControlName="observacion" rows="2"></textarea>
+    </mat-form-field>
+
+    <mat-slide-toggle formControlName="activo" color="primary">Activo</mat-slide-toggle>
+
+    <button type="submit" mat-flat-button color="primary" class="crud-save-btn" [disabled]="saving">
+      {{ saving ? 'Guardando…' : 'Guardar' }}
+    </button>
+  </form>
+</div>
