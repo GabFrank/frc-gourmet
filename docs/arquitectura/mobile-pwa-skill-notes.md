@@ -76,17 +76,22 @@ Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acció
 > `electron/handlers/`), no solo el método abstracto del repo. Ej: `Moneda` declara createMoneda en el
 > repo pero **no hay handler `create-moneda`** → calzaría 404. Confirmar antes de construir el CRUD.
 
-### Worklist desatendido (2026-05-21, "no parar hasta terminar")
+### Worklist desatendido (2026-05-21, "no parar hasta terminar") — COMPLETADO el grueso
 Estrategia: **CRUD completo** donde el handler de escritura existe y el form es manejable; **lista/vista**
 donde el alta es un workflow complejo (no construir a ciegas). Commit por batch.
-- [x] RRHH: Personas (CRUD) DONE · [ ] Usuarios (CRUD + password/roles), Funcionarios (CRUD, FK), Permisos (CRUD)
-- [ ] RRHH ops (lista/vista): Vales, Penalizaciones, Horas extra, Bonos, Aguinaldos, Préstamos, Asistencias, Liquidaciones, Notificaciones
-- [ ] Clientes: TipoCliente (CRUD), Clientes (CRUD)
-- [ ] Financiero: Cajas (lista/vista), Caja Mayor (lista), CxC (lista), Cuentas bancarias (CRUD si simple)
-- [ ] Compras: Proveedores (CRUD si simple), Compras (lista/vista)
-- [ ] Productos: Sabores (CRUD), Productos (lista/vista), Recetas (vista)
-- [ ] Comisiones: Reglas/Equipos/Liquidaciones (lista/vista)
-- Acciones manuales del usuario (no bloquean lo demás): TLS headscale, mode=server real, testing visual.
+- [x] RRHH CRUD: Personas, Usuarios (password+roles diff), Funcionarios (create full/edit parcial), + Cargos/Turnos/MotivosVale/Feriados
+- [x] RRHH vistas: Vales, Liquidaciones, Penalizaciones, Bonos, Aguinaldos, Asistencias, Horas extra, Permisos
+- [x] Clientes: TipoCliente (CRUD), Clientes (CRUD doble FK)
+- [x] Financiero: Categorías de gasto (CRUD), Cajas (vista), CxC (vista)
+- [x] Compras: Categorías de compra (CRUD), Compras (vista), Proveedores (vista)
+- [x] Productos: Familias/Subfamilias/Adicionales (CRUD), Productos (vista)
+- [x] Comisiones: Reglas/Equipos/Liquidaciones (vista, bajo Financiero)
+- **Diferido (complejo/sin handler, requiere sesión atendida):** Sabores/Recetas (variaciones), Caja Mayor
+  (requiere cajaMayorId), Monedas (sin handler create), Notificaciones (shape distinto), Préstamos,
+  Config RRHH, Reportes, y los workflows de escritura (confirmar vale, generar liquidación, cambiar
+  cargo/salario de funcionario, cobrar/pagar).
+- Acciones manuales del usuario: TLS headscale, mode=server real, testing visual, validar handlers de
+  escritura en runtime (la validación E2E cubrió login+RPC; las altas concretas se prueban con tu server).
 
 ### Patrón CRUD a replicar (referencia para nuevas pantallas)
 1. **Lista** (hijo del shell): `getX()` → cards; búsqueda con botón Filtrar (sin live); acciones en
