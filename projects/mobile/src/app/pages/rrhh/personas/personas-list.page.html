@@ -1,0 +1,39 @@
+<div class="crud-page">
+  <div class="crud-filterbar">
+    <mat-form-field appearance="outline" class="crud-search">
+      <mat-label>Buscar (nombre / documento)</mat-label>
+      <input matInput [formControl]="busqueda" (keyup.enter)="aplicarFiltro()" />
+      <button *ngIf="busqueda.value" matSuffix mat-icon-button (click)="limpiarFiltro()" aria-label="Limpiar">
+        <mat-icon>close</mat-icon>
+      </button>
+    </mat-form-field>
+    <button mat-flat-button color="primary" class="crud-filter-btn" (click)="aplicarFiltro()">Filtrar</button>
+  </div>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <div class="crud-list" *ngIf="!loading && !error">
+    <mat-card *ngFor="let p of items" class="crud-card" appearance="outlined">
+      <div class="crud-card-body">
+        <div class="crud-card-main">
+          <span class="crud-name">{{ p.nombre }} {{ p.apellido }}</span>
+          <span class="crud-sub" *ngIf="p.documento">{{ p.tipoPersona }} · {{ p.documento }}</span>
+        </div>
+        <span class="crud-chip" [class.off]="!p.activo">{{ p.activo ? 'Activa' : 'Inactiva' }}</span>
+        <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+          <mat-icon>more_vert</mat-icon>
+        </button>
+        <mat-menu #menu="matMenu">
+          <a mat-menu-item [routerLink]="['/rrhh/personas', p.id]"><mat-icon>edit</mat-icon><span>Editar</span></a>
+          <button mat-menu-item *ngIf="canEdit" (click)="eliminar(p)"><mat-icon color="warn">delete</mat-icon><span>Eliminar</span></button>
+        </mat-menu>
+      </div>
+    </mat-card>
+    <p *ngIf="items.length === 0" class="crud-empty">No hay personas.</p>
+  </div>
+
+  <a *ngIf="canEdit" class="crud-fab" mat-fab color="primary" routerLink="/rrhh/personas/nuevo" aria-label="Nueva">
+    <mat-icon>add</mat-icon>
+  </a>
+</div>

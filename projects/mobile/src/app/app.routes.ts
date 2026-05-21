@@ -9,7 +9,7 @@ const RRHH_ITEMS: SectionItem[] = [
   { label: 'Motivos de vale', icon: 'label', path: '/rrhh/motivos-vale', enabled: true },
   { label: 'Feriados', icon: 'celebration', path: '/rrhh/feriados', enabled: true },
   { label: 'Funcionarios', icon: 'badge', path: '/rrhh/funcionarios', enabled: false },
-  { label: 'Personas', icon: 'person', path: '/rrhh/personas', enabled: false },
+  { label: 'Personas', icon: 'person', path: '/rrhh/personas', enabled: true },
   { label: 'Usuarios', icon: 'account_circle', path: '/rrhh/usuarios', enabled: false },
   { label: 'Vales', icon: 'receipt_long', path: '/rrhh/vales', enabled: false },
   { label: 'Liquidaciones', icon: 'request_quote', path: '/rrhh/liquidaciones', enabled: false },
@@ -93,6 +93,16 @@ export const routes: Routes = [
     path: 'rrhh/feriados/:id',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/rrhh/feriados/feriado-edit.page').then((m) => m.FeriadoEditPage),
+  },
+  {
+    path: 'rrhh/personas/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/rrhh/personas/persona-edit.page').then((m) => m.PersonaEditPage),
+  },
+  {
+    path: 'rrhh/personas/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/rrhh/personas/persona-edit.page').then((m) => m.PersonaEditPage),
   },
   {
     path: 'productos/familias/nuevo',
@@ -182,6 +192,11 @@ export const routes: Routes = [
         path: 'rrhh/feriados',
         data: { title: 'Feriados' },
         loadComponent: () => import('./pages/rrhh/feriados/feriados-list.page').then((m) => m.FeriadosListPage),
+      },
+      {
+        path: 'rrhh/personas',
+        data: { title: 'Personas' },
+        loadComponent: () => import('./pages/rrhh/personas/personas-list.page').then((m) => m.PersonasListPage),
       },
       {
         path: 'financiero',

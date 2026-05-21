@@ -76,6 +76,18 @@ Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acció
 > `electron/handlers/`), no solo el método abstracto del repo. Ej: `Moneda` declara createMoneda en el
 > repo pero **no hay handler `create-moneda`** → calzaría 404. Confirmar antes de construir el CRUD.
 
+### Worklist desatendido (2026-05-21, "no parar hasta terminar")
+Estrategia: **CRUD completo** donde el handler de escritura existe y el form es manejable; **lista/vista**
+donde el alta es un workflow complejo (no construir a ciegas). Commit por batch.
+- [x] RRHH: Personas (CRUD) DONE · [ ] Usuarios (CRUD + password/roles), Funcionarios (CRUD, FK), Permisos (CRUD)
+- [ ] RRHH ops (lista/vista): Vales, Penalizaciones, Horas extra, Bonos, Aguinaldos, Préstamos, Asistencias, Liquidaciones, Notificaciones
+- [ ] Clientes: TipoCliente (CRUD), Clientes (CRUD)
+- [ ] Financiero: Cajas (lista/vista), Caja Mayor (lista), CxC (lista), Cuentas bancarias (CRUD si simple)
+- [ ] Compras: Proveedores (CRUD si simple), Compras (lista/vista)
+- [ ] Productos: Sabores (CRUD), Productos (lista/vista), Recetas (vista)
+- [ ] Comisiones: Reglas/Equipos/Liquidaciones (lista/vista)
+- Acciones manuales del usuario (no bloquean lo demás): TLS headscale, mode=server real, testing visual.
+
 ### Patrón CRUD a replicar (referencia para nuevas pantallas)
 1. **Lista** (hijo del shell): `getX()` → cards; búsqueda con botón Filtrar (sin live); acciones en
    `mat-menu` (`more_vert`); FAB crear; `canEdit` reactivo desde `PermissionService.codigos$`.
