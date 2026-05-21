@@ -1,6 +1,10 @@
 # Plan: Cliente web mobile (PWA) — FRC Gourmet
 
 > Estado vivo. Última actualización: 2026-05-20. Branch: `feat/mobile-pwa-cliente`.
+>
+> **Progreso:** F0 ✅ · F1 ✅ · F2 🟦 (servir ✅ / TLS ⛔ usuario) · F3 ✅ · Ola 1 RRHH 🟦 (Cargos ejemplar ✅).
+> Tracker detallado en [`mobile-pwa-skill-notes.md`](./mobile-pwa-skill-notes.md). **GATE:** validar E2E contra
+> server real antes de producir en masa el resto de pantallas.
 > Documento hermano de seguimiento de skill: [`mobile-pwa-skill-notes.md`](./mobile-pwa-skill-notes.md).
 
 ## Objetivo
