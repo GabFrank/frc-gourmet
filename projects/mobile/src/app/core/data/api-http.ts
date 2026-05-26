@@ -103,7 +103,22 @@ async function invokeRouter(channel: string, ...args: any[]): Promise<any> {
   if (channel === 'login') {
     const loginData = { ...((args[0] as Record<string, unknown>) || {}) };
     if (deviceId != null && loginData['deviceId'] == null) loginData['deviceId'] = deviceId;
-    const data = await httpFetch('/api/auth/login', loginData, false);
+    let data: any;
+    try {
+      data = await httpFetch('/api/auth/login', loginData, false);
+    } catch (err) {
+      // El server responde 401 ante credenciales inválidas (usuario inexistente,
+      // inactivo o contraseña incorrecta). httpFetch lanza; lo traducimos a un
+      // mensaje claro en vez de dejar que el AuthService muestre "Error en el servidor".
+      const e = err as HttpError;
+      const message =
+        e.status === 401
+          ? 'Usuario o contraseña incorrectos'
+          : e.status === 0
+            ? 'No se pudo conectar con el servidor'
+            : 'Error en el servidor. Intente nuevamente más tarde.';
+      return { success: false, message };
+    }
     if (data.success) {
       storeTokens(data.accessToken, data.refreshToken);
     }
