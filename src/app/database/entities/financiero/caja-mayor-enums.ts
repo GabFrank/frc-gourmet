@@ -52,3 +52,16 @@ export enum RetiroCajaEstado {
   VINCULADO_PENDIENTE = 'VINCULADO_PENDIENTE',
   INGRESADO = 'INGRESADO'
 }
+
+/**
+ * Destino del egreso de un Gasto.
+ * - CAJA_MAYOR (default): el gasto descuenta el saldo de la caja mayor en el
+ *   bucket (moneda × forma de pago) del detalle. Caso histórico/cash-like.
+ * - CUENTA_BANCARIA: el gasto debita directamente `cuenta_bancaria.saldo`. NO
+ *   genera movimiento en caja mayor. La columna `caja_mayor_id` queda igual
+ *   (metadata "desde qué caja se registró"), pero sin impacto en saldos.
+ */
+export enum GastoDestinoTipo {
+  CAJA_MAYOR = 'CAJA_MAYOR',
+  CUENTA_BANCARIA = 'CUENTA_BANCARIA'
+}

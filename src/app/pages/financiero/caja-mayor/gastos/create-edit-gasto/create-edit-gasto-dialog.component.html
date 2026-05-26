@@ -3,6 +3,23 @@
 <mat-dialog-content>
   <form [formGroup]="form" class="form-container">
 
+    <!-- Destino del egreso: caja mayor o cuenta bancaria -->
+    <div class="destino-row">
+      <span class="destino-label">Destino del egreso:</span>
+      <mat-button-toggle-group formControlName="destinoTipo" [disabled]="isEditing">
+        <mat-button-toggle value="CAJA_MAYOR">
+          <mat-icon>account_balance_wallet</mat-icon> Caja Mayor
+        </mat-button-toggle>
+        <mat-button-toggle value="CUENTA_BANCARIA" [disabled]="cuentasBancarias.length === 0">
+          <mat-icon>account_balance</mat-icon> Cuenta bancaria
+        </mat-button-toggle>
+      </mat-button-toggle-group>
+    </div>
+    <p class="destino-hint" *ngIf="esBanco">
+      Debita directo el saldo de la cuenta bancaria, sin movimiento en caja mayor.
+      <ng-container *ngIf="isEditing"> Este gasto se editó como bancario; para cambiar el destino, anulalo y creá uno nuevo.</ng-container>
+    </p>
+
     <!-- Categoria con autocomplete -->
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>Categoria</mat-label>
@@ -79,7 +96,8 @@
 
     <mat-divider></mat-divider>
 
-    <!-- Seccion de pagos / detalles -->
+    <!-- Seccion de pagos / detalles (modo CAJA_MAYOR) -->
+    <ng-container *ngIf="!esBanco">
     <h3 class="section-title">Detalle de Pago</h3>
 
     <div class="detalle-form-row" [formGroup]="detalleForm">
@@ -149,6 +167,36 @@
         <strong>{{t.simbolo}} {{t.total | number:'1.0-2'}}</strong>
       </span>
     </div>
+    </ng-container>
+
+    <!-- Pago via cuenta bancaria (modo CUENTA_BANCARIA): single-row -->
+    <ng-container *ngIf="esBanco">
+      <h3 class="section-title">Pago desde cuenta bancaria</h3>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="flex-field">
+          <mat-label>Cuenta bancaria</mat-label>
+          <mat-select formControlName="cuentaBancariaId" (selectionChange)="onCuentaBancariaSelected($event.value)">
+            <mat-option *ngFor="let c of cuentasBancarias" [value]="c.id">
+              {{ c.banco ? c.banco + ' · ' : '' }}{{ c.nombre }} ({{ c.moneda?.simbolo }})
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="form.get('cuentaBancariaId')?.hasError('required')">Requerido</mat-error>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="flex-field">
+          <mat-label>Monto</mat-label>
+          <input matInput type="number" inputmode="decimal" formControlName="montoBanco" min="0.01" step="any">
+          <mat-error *ngIf="form.get('montoBanco')?.hasError('required')">Requerido</mat-error>
+          <mat-error *ngIf="form.get('montoBanco')?.hasError('min')">Debe ser mayor a 0</mat-error>
+        </mat-form-field>
+      </div>
+      <p class="bank-moneda-hint" *ngIf="form.get('monedaBancoId')?.value as monedaId">
+        Moneda:
+        <ng-container *ngFor="let m of monedas">
+          <strong *ngIf="m.id === monedaId">{{ m.simbolo }} {{ m.denominacion }}</strong>
+        </ng-container>
+        (tomada de la cuenta bancaria).
+      </p>
+    </ng-container>
 
     <mat-divider></mat-divider>
 
@@ -188,7 +236,7 @@
 <mat-dialog-actions align="end">
   <button mat-button (click)="onCancel()" [disabled]="saving">{{ isEditing ? 'Cerrar' : 'Cancelar' }}</button>
   <button mat-raised-button color="primary" (click)="onSubmit()"
-          [disabled]="form.invalid || detalles.length === 0 || saving || (isEditing && form.pristine)">
+          [disabled]="form.invalid || (!esBanco && detalles.length === 0) || saving || (isEditing && form.pristine)">
     <mat-spinner *ngIf="saving" diameter="20" class="inline-spinner"></mat-spinner>
     <span *ngIf="!saving">{{isEditing ? 'Guardar cambios' : 'Registrar'}}</span>
   </button>

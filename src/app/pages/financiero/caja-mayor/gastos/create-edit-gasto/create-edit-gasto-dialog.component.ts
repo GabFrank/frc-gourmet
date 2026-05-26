@@ -18,6 +18,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
@@ -54,6 +55,7 @@ interface DetalleRow {
     MatAutocompleteModule,
     MatTooltipModule,
     MatDividerModule,
+    MatButtonToggleModule,
     CurrencyInputDirective,
     AdjuntosListComponent,
   ]
@@ -71,6 +73,7 @@ export class CreateEditGastoDialogComponent implements OnInit {
   monedas: any[] = [];
   formasPago: any[] = [];
   cajasMayor: any[] = [];
+  cuentasBancarias: any[] = [];
   proveedores: any[] = [];
   proveedoresFiltrados: any[] = [];
   tipoBoletaOptions = ['LEGAL', 'COMUN', 'OTRO', 'SIN_COMPROBANTE'];
@@ -113,7 +116,17 @@ export class CreateEditGastoDialogComponent implements OnInit {
       esRecurrente: [false],
       frecuencia: [null],
       proximoVencimiento: [null],
+      // Destino del egreso: CAJA_MAYOR (legacy, default) o CUENTA_BANCARIA.
+      destinoTipo: ['CAJA_MAYOR', Validators.required],
+      // Solo para destinoTipo === 'CUENTA_BANCARIA' (single-row simplificado):
+      cuentaBancariaId: [null],
+      montoBanco: [null],
+      monedaBancoId: [null],
     });
+
+    // Validadores condicionales según destino.
+    this.form.get('destinoTipo')!.valueChanges.subscribe((d) => this.aplicarValidadoresDestino(d));
+    this.aplicarValidadoresDestino(this.form.value.destinoTipo);
 
     this.detalleForm = this.fb.group({
       monedaId: [null, Validators.required],
@@ -136,12 +149,13 @@ export class CreateEditGastoDialogComponent implements OnInit {
 
   async loadLookups(): Promise<void> {
     try {
-      const [categorias, monedas, formasPago, cajasMayor, proveedores] = await Promise.all([
+      const [categorias, monedas, formasPago, cajasMayor, proveedores, cuentasBancarias] = await Promise.all([
         firstValueFrom(this.repositoryService.getGastoCategorias()),
         firstValueFrom(this.repositoryService.getMonedas()),
         firstValueFrom(this.repositoryService.getFormasPago()),
         firstValueFrom(this.repositoryService.getCajasMayor()),
         firstValueFrom(this.repositoryService.getProveedores()),
+        firstValueFrom(this.repositoryService.getCuentasBancarias()),
       ]);
 
       this.gastoCategorias = (categorias || []).filter((c: any) => c.activo !== false);
@@ -151,6 +165,7 @@ export class CreateEditGastoDialogComponent implements OnInit {
       this.cajasMayor = (cajasMayor || []).filter((c: any) => c.estado === 'ABIERTA');
       this.proveedores = proveedores || [];
       this.proveedoresFiltrados = [];
+      this.cuentasBancarias = (cuentasBancarias || []).filter((c: any) => c.activo !== false && c.moneda?.id);
 
       // Si estamos editando, cargar el gasto
       if (this.isEditing && this.gastoId) {
@@ -162,11 +177,50 @@ export class CreateEditGastoDialogComponent implements OnInit {
     }
   }
 
+  get esBanco(): boolean {
+    return this.form?.value?.destinoTipo === 'CUENTA_BANCARIA';
+  }
+
+  private aplicarValidadoresDestino(destino: 'CAJA_MAYOR' | 'CUENTA_BANCARIA'): void {
+    const cajaCtrl = this.form.get('cajaMayorId')!;
+    const cbCtrl = this.form.get('cuentaBancariaId')!;
+    const montoCtrl = this.form.get('montoBanco')!;
+    const monedaCtrl = this.form.get('monedaBancoId')!;
+    if (destino === 'CUENTA_BANCARIA') {
+      cbCtrl.setValidators([Validators.required]);
+      montoCtrl.setValidators([Validators.required, Validators.min(0.01)]);
+      monedaCtrl.setValidators([Validators.required]);
+      // En banco, cajaMayorId es metadata opcional (queda lo que esté).
+      cajaCtrl.clearValidators();
+    } else {
+      cajaCtrl.setValidators([Validators.required]);
+      cbCtrl.clearValidators();
+      montoCtrl.clearValidators();
+      monedaCtrl.clearValidators();
+      cbCtrl.setValue(null, { emitEvent: false });
+      montoCtrl.setValue(null, { emitEvent: false });
+      monedaCtrl.setValue(null, { emitEvent: false });
+    }
+    cajaCtrl.updateValueAndValidity({ emitEvent: false });
+    cbCtrl.updateValueAndValidity({ emitEvent: false });
+    montoCtrl.updateValueAndValidity({ emitEvent: false });
+    monedaCtrl.updateValueAndValidity({ emitEvent: false });
+  }
+
+  /** Al elegir una cuenta bancaria, la moneda del gasto se fuerza a la de la cuenta. */
+  onCuentaBancariaSelected(cuentaId: number): void {
+    const c = this.cuentasBancarias.find((x) => x.id === cuentaId);
+    if (c?.moneda?.id) {
+      this.form.patchValue({ monedaBancoId: c.moneda.id }, { emitEvent: false });
+    }
+  }
+
   private async loadGasto(gastoId: number): Promise<void> {
     try {
       const gasto = await firstValueFrom(this.repositoryService.getGasto(gastoId));
       if (!gasto) return;
 
+      const destino = (gasto.destinoTipo as any) || 'CAJA_MAYOR';
       this.form.patchValue({
         gastoCategoriaId: gasto.gastoCategoria?.id,
         descripcion: gasto.descripcion,
@@ -178,6 +232,10 @@ export class CreateEditGastoDialogComponent implements OnInit {
         esRecurrente: gasto.esRecurrente || false,
         frecuencia: gasto.frecuencia || null,
         proximoVencimiento: gasto.proximoVencimiento ? new Date(gasto.proximoVencimiento) : null,
+        destinoTipo: destino,
+        cuentaBancariaId: gasto.cuentaBancaria?.id || null,
+        montoBanco: destino === 'CUENTA_BANCARIA' ? Number(gasto.monto) : null,
+        monedaBancoId: destino === 'CUENTA_BANCARIA' ? (gasto.moneda?.id || null) : null,
       });
 
       this.esRecurrente = gasto.esRecurrente || false;
@@ -319,23 +377,27 @@ export class CreateEditGastoDialogComponent implements OnInit {
   }
 
   async onSubmit(): Promise<void> {
-    if (this.form.invalid || this.detalles.length === 0) return;
+    if (this.form.invalid) return;
+    // Caja mayor exige al menos un detalle; banco usa monto/moneda top-level.
+    if (!this.esBanco && this.detalles.length === 0) return;
 
-    // Saldos negativos: validar tanto en create como en edit (en edit ya
-    // factorizamos la reversion de los detalles previos del mismo gasto).
-    const cajaMayorId = this.form.value.cajaMayorId;
-    if (cajaMayorId) {
-      const ok = await this.confirmarSaldoSiNegativo(cajaMayorId);
-      if (!ok) return;
+    // Saldos negativos: solo aplica en modo CAJA_MAYOR (en banco el handler
+    // valida contra el saldo bancario; podríamos sumar el chequeo después).
+    if (!this.esBanco) {
+      const cajaMayorId = this.form.value.cajaMayorId;
+      if (cajaMayorId) {
+        const ok = await this.confirmarSaldoSiNegativo(cajaMayorId);
+        if (!ok) return;
+      }
     }
 
     this.saving = true;
     try {
       const f = this.form.value;
-      const gastoData = {
+      const base: any = {
         gastoCategoria: { id: f.gastoCategoriaId },
         descripcion: f.descripcion?.toUpperCase(),
-        cajaMayor: { id: f.cajaMayorId },
+        cajaMayor: { id: f.cajaMayorId },  // metadata: desde qué caja se registró
         fecha: f.fecha,
         proveedor: f.proveedorId ? { id: f.proveedorId } : null,
         numeroComprobante: f.numeroComprobante?.toUpperCase() || null,
@@ -343,12 +405,23 @@ export class CreateEditGastoDialogComponent implements OnInit {
         esRecurrente: f.esRecurrente || false,
         frecuencia: f.esRecurrente ? f.frecuencia : null,
         proximoVencimiento: f.esRecurrente ? f.proximoVencimiento : null,
-        detalles: this.detalles.map(d => ({
-          monedaId: d.monedaId,
-          formaPagoId: d.formaPagoId,
-          monto: d.monto,
-        })),
+        destinoTipo: f.destinoTipo,
       };
+      const gastoData = this.esBanco
+        ? {
+            ...base,
+            cuentaBancaria: { id: f.cuentaBancariaId },
+            monto: Number(f.montoBanco),
+            monedaId: f.monedaBancoId,
+          }
+        : {
+            ...base,
+            detalles: this.detalles.map(d => ({
+              monedaId: d.monedaId,
+              formaPagoId: d.formaPagoId,
+              monto: d.monto,
+            })),
+          };
 
       if (this.isEditing && this.gastoId) {
         await firstValueFrom(this.repositoryService.editGasto(this.gastoId, gastoData));
