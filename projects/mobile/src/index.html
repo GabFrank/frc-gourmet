@@ -13,8 +13,39 @@
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500&display=swap" rel="stylesheet">
+  <style>
+    /* Bootstrap loader: visible mientras Angular descarga el bundle. Angular
+       reemplaza <app-root> entero al hidratar, asi que esto desaparece solo.
+       Si el JS no carga (sin red, 404 de bundle, etc.), el usuario ve esto
+       en lugar de una pantalla completamente en blanco. */
+    html, body { margin: 0; height: 100%; background: #fafafa; color: #333;
+      font-family: Roboto, system-ui, -apple-system, sans-serif; }
+    .boot {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px;
+    }
+    .boot__brand { font-weight: 600; font-size: 1.1rem; color: #f44336; }
+    .boot__spinner {
+      width: 32px; height: 32px; border-radius: 50%;
+      border: 3px solid rgba(244, 67, 54, 0.2);
+      border-top-color: #f44336;
+      animation: boot-spin 0.9s linear infinite;
+    }
+    .boot__hint { font-size: 0.85rem; color: #888; max-width: 280px; text-align: center; }
+    @keyframes boot-spin { to { transform: rotate(360deg); } }
+    @media (prefers-color-scheme: dark) {
+      html, body { background: #303030; color: #e0e0e0; }
+      .boot__hint { color: #aaa; }
+    }
+  </style>
 </head>
 <body class="mat-typography">
-  <app-root></app-root>
+  <app-root>
+    <div class="boot" id="bootLoader">
+      <div class="boot__brand">FRC Gourmet</div>
+      <div class="boot__spinner"></div>
+      <div class="boot__hint">Cargando…</div>
+    </div>
+  </app-root>
 </body>
 </html>

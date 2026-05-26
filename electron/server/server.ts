@@ -101,9 +101,22 @@ export async function startServer(opts: ServerOptions): Promise<FastifyInstance>
       prefix: '/',
       wildcard: false,
       index: ['index.html'],
+      // Politica de cache: index.html NUNCA se cachea (es la fuente de verdad
+      // de los hashes de los bundles; si el navegador la cachea, tras un
+      // rebuild pediria bundles con hash viejo y daria 404 -> pantalla en
+      // blanco). Los demas archivos llevan hash en el nombre -> seguros para
+      // cachear agresivo (`immutable`).
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        } else {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
     });
     fastify.setNotFoundHandler((request, reply) => {
       if (request.method === 'GET' && !request.url.startsWith('/api')) {
+        reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
         return (reply as any).sendFile('index.html');
       }
       reply.code(404);
