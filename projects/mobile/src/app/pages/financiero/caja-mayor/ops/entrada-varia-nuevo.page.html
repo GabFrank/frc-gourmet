@@ -11,10 +11,24 @@
   <form class="crud-form" [formGroup]="form" (ngSubmit)="guardar()" *ngIf="!loading">
     <mat-form-field appearance="outline">
       <mat-label>Categoría</mat-label>
-      <mat-select formControlName="entradaVariaCategoriaId">
-        <mat-option *ngFor="let c of categorias" [value]="c.id">{{ c.label }}</mat-option>
-      </mat-select>
-      <mat-error *ngIf="form.controls.entradaVariaCategoriaId.hasError('required')">Requerido</mat-error>
+      <input
+        matInput
+        [formControl]="categoriaInput"
+        [matAutocomplete]="catAuto"
+        placeholder="Buscar categoría…"
+        (blur)="form.controls.entradaVariaCategoriaId.markAsTouched()"
+      />
+      <mat-icon matSuffix>search</mat-icon>
+      <mat-autocomplete
+        #catAuto="matAutocomplete"
+        [displayWith]="displayCategoria"
+        (optionSelected)="onCategoriaSelected($event.option.value)"
+      >
+        <mat-option *ngFor="let c of categoriasFiltradas" [value]="c">{{ c.label }}</mat-option>
+      </mat-autocomplete>
+      <mat-error *ngIf="form.controls.entradaVariaCategoriaId.hasError('required') && form.controls.entradaVariaCategoriaId.touched">
+        Seleccioná una categoría de la lista
+      </mat-error>
       <mat-hint *ngIf="categorias.length === 0">No hay categorías. Creá una desde el escritorio.</mat-hint>
     </mat-form-field>
 
