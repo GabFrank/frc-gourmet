@@ -44,8 +44,63 @@
     <div class="boot" id="bootLoader">
       <div class="boot__brand">FRC Gourmet</div>
       <div class="boot__spinner"></div>
-      <div class="boot__hint">Cargando…</div>
+      <div class="boot__hint" id="bootHint">Cargando…</div>
     </div>
   </app-root>
+  <script>
+    // Auto-recovery: la PWA no debería quedar "infinitamente en loading".
+    // Dos escudos:
+    //  1) Timeout del bootloader: si Angular no reemplazó <app-root> en ~12s,
+    //     ofrecemos al usuario recargar con cache-bust (típico cuando el
+    //     navegador tiene cacheado un index.html viejo que apunta a bundles
+    //     con hashes que ya no existen tras un rebuild).
+    //  2) ChunkLoadError: si Angular booteó pero al navegar a una ruta el
+    //     bundle lazy 404ea (mismo síntoma), recargamos solos con cache-bust.
+    //     Guard via sessionStorage para no entrar en loop si el server está
+    //     realmente caído.
+    (function () {
+      var KEY = 'frc_mobile_chunk_reload';
+      function cacheBust() {
+        var u = new URL(location.href);
+        u.searchParams.set('_', String(Date.now()));
+        location.href = u.toString();
+      }
+      // 1) Timeout
+      setTimeout(function () {
+        var loader = document.getElementById('bootLoader');
+        if (!loader || !document.body.contains(loader)) return; // Angular hidrató: ok
+        loader.innerHTML =
+          '<div class="boot__brand">FRC Gourmet</div>' +
+          '<div class="boot__hint">No se pudo cargar la app.<br>Es posible que tu navegador tenga una versión vieja en caché.</div>' +
+          '<button id="bootReload" style="margin-top:6px;padding:10px 18px;background:#f44336;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Recargar limpiando caché</button>';
+        var btn = document.getElementById('bootReload');
+        if (btn) btn.addEventListener('click', cacheBust);
+      }, 12000);
+      // 2) ChunkLoadError
+      window.addEventListener('error', function (e) {
+        var msg = (e && (e.message || (e.error && e.error.message))) || '';
+        if (/Loading chunk\s+\S+\s+failed|ChunkLoadError/i.test(msg)) {
+          if (!sessionStorage.getItem(KEY)) {
+            sessionStorage.setItem(KEY, '1');
+            cacheBust();
+          }
+        }
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        var msg = (e && e.reason && (e.reason.message || String(e.reason))) || '';
+        if (/Loading chunk\s+\S+\s+failed|ChunkLoadError/i.test(msg)) {
+          if (!sessionStorage.getItem(KEY)) {
+            sessionStorage.setItem(KEY, '1');
+            cacheBust();
+          }
+        }
+      });
+      // Al booteo OK, limpiamos el flag para que un siguiente fallo real
+      // pueda auto-recovery también.
+      window.addEventListener('load', function () {
+        setTimeout(function () { sessionStorage.removeItem(KEY); }, 5000);
+      });
+    })();
+  </script>
 </body>
 </html>
