@@ -10,9 +10,9 @@
   <p *ngIf="error" class="crud-error cm-pad">{{ error }}</p>
 
   <div class="cm-content" *ngIf="!loading && !error">
-    <!-- Saldos -->
+    <!-- Saldo en caja (efectivo, según config de la caja) -->
     <section class="cm-section">
-      <h3 class="cm-section-title">Saldos</h3>
+      <h3 class="cm-section-title">Saldo en caja</h3>
       <div class="cm-saldos-grid">
         <div class="cm-saldo-card" *ngFor="let s of saldos">
           <div class="cm-saldo-head">
@@ -24,7 +24,21 @@
             <span>{{ s.simbolo }} {{ d.monto | number: '1.0-' + s.decimales }}</span>
           </div>
         </div>
-        <p *ngIf="saldos.length === 0" class="crud-empty">Sin saldos registrados.</p>
+        <p *ngIf="saldos.length === 0" class="crud-empty">Sin saldo en caja.</p>
+      </div>
+    </section>
+
+    <!-- Cuentas bancarias visibles (saldo independiente, vive en cuentas_bancarias) -->
+    <section class="cm-section" *ngIf="cuentasBancariasCards.length">
+      <h3 class="cm-section-title">Cuentas bancarias</h3>
+      <div class="cm-saldos-grid">
+        <div class="cm-saldo-card cm-banco-card" *ngFor="let cb of cuentasBancariasCards">
+          <div class="cm-saldo-head">
+            <span class="cm-saldo-total">{{ cb.simbolo }} {{ cb.saldo | number: '1.0-' + cb.decimales }}</span>
+            <mat-icon class="cm-banco-icon">account_balance</mat-icon>
+          </div>
+          <div class="cm-banco-titulo">{{ cb.titulo }}</div>
+        </div>
       </div>
     </section>
 

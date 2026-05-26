@@ -54,6 +54,14 @@ interface SaldoMonedaVM {
   detalle: { formaPago: string; monto: number }[];
 }
 
+interface CuentaBancariaCardVM {
+  id: number;
+  titulo: string;       // "BNF · BANCO NACIONAL DE FOMENTO"
+  simbolo: string;
+  decimales: number;
+  saldo: number;
+}
+
 interface MovimientoVM {
   id: number;
   tipoLabel: string;
@@ -114,6 +122,9 @@ export class CajaMayorDetallePage implements OnInit {
   canOperar = false;
 
   saldos: SaldoMonedaVM[] = [];
+  cuentasBancariasCards: CuentaBancariaCardVM[] = [];
+  /** ids de formas de pago visibles según la config de la caja. null = mostrar todas (no hay config). */
+  private formaPagoVisibleIds: Set<number> | null = null;
   movimientos: MovimientoVM[] = [];
   total = 0;
   page = 0;
@@ -139,7 +150,9 @@ export class CajaMayorDetallePage implements OnInit {
           this.nombre = c.nombre || `Caja Mayor #${this.id}`;
           this.abierta = (c.estado || '').toUpperCase().includes('ABIERT');
         }
-        this.cargarSaldos();
+        // Cargamos primero la config (filtra FPs/CBs visibles), después los
+        // saldos y las cuentas en función de ella.
+        this.cargarConfigYSaldos();
         this.recargarMovimientos();
         this.loading = false;
       },
@@ -150,10 +163,51 @@ export class CajaMayorDetallePage implements OnInit {
     });
   }
 
-  private cargarSaldos(): void {
+  /**
+   * Replica el modelo del escritorio: el "saldo en caja" solo muestra las
+   * formas de pago que la configuración haya marcado (típicamente EFECTIVO);
+   * las cuentas bancarias visibles salen en cards aparte (saldo independiente
+   * en `cuenta_bancaria.saldo`, NO mezclado con los buckets del caja mayor).
+   * Si la caja no tiene configuración, fallback al comportamiento legacy: se
+   * muestran TODAS las FPs como saldos y no se muestran cuentas bancarias.
+   */
+  private cargarConfigYSaldos(): void {
+    this.repo.getCajaMayorConfiguracion(this.id).subscribe({
+      next: (cfg: any) => this.aplicarConfig(cfg),
+      error: () => this.aplicarConfig(null),
+    });
+  }
+
+  private aplicarConfig(cfg: any): void {
+    const fps = cfg?.formasPagoVisibles || [];
+    this.formaPagoVisibleIds = cfg ? new Set<number>(fps.map((f: any) => f.id)) : null;
+
+    // Cargar saldos crudos y filtrar según la config.
     this.repo.getCajaMayorSaldos(this.id).subscribe({
       next: (data: any[]) => (this.saldos = this.agruparSaldos(data || [])),
       error: () => (this.saldos = []),
+    });
+
+    // Cargar cuentas bancarias visibles (saldo en vivo desde cuentas_bancarias).
+    const visibles: any[] = cfg?.cuentasBancariasVisibles || [];
+    if (!visibles.length) {
+      this.cuentasBancariasCards = [];
+      return;
+    }
+    const idsVisibles = new Set<number>(visibles.map((c: any) => c.id));
+    this.repo.getCuentasBancarias().subscribe({
+      next: (cuentas: any[]) => {
+        this.cuentasBancariasCards = (cuentas || [])
+          .filter((c: any) => idsVisibles.has(c.id))
+          .map((c: any) => ({
+            id: c.id,
+            titulo: `${c.banco ? c.banco + ' · ' : ''}${c.nombre}`,
+            simbolo: c.moneda?.simbolo || '',
+            decimales: c.moneda?.decimales ?? 0,
+            saldo: Number(c.saldo) || 0,
+          }));
+      },
+      error: () => (this.cuentasBancariasCards = []),
     });
   }
 
@@ -162,6 +216,11 @@ export class CajaMayorDetallePage implements OnInit {
     for (const s of rows) {
       const m = s.moneda;
       if (!m) continue;
+      const fpId = s.formaPago?.id;
+      // Respetar la config: si hay lista de FPs visibles, ocultar los demás
+      // (los buckets no visibles existen internamente pero no son "saldo en caja"
+      // operativamente — el resto vive en cuentas bancarias).
+      if (this.formaPagoVisibleIds && fpId != null && !this.formaPagoVisibleIds.has(fpId)) continue;
       const vm: SaldoMonedaVM = map.get(m.id) ?? {
         simbolo: m.simbolo || '',
         denominacion: m.denominacion || '',
@@ -279,7 +338,9 @@ export class CajaMayorDetallePage implements OnInit {
     try {
       await firstValueFrom(op$);
       this.snack.open('Movimiento anulado', 'OK', { duration: 2500 });
-      this.cargarSaldos();
+      // Refrescar tanto saldos de caja como cards de cuentas bancarias
+      // (la anulación bancaria revierte cb.saldo).
+      this.cargarConfigYSaldos();
       this.recargarMovimientos();
     } catch (e) {
       const raw = String((e as Error)?.message || '');

@@ -119,6 +119,16 @@
   padding: 2px 0;
 }
 
+.cm-banco-card .cm-banco-icon {
+  color: var(--info-color);
+}
+
+.cm-banco-titulo {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
 /* Movimientos */
 .cm-mov-head {
   display: flex;

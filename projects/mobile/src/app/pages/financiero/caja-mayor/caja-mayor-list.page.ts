@@ -57,11 +57,15 @@ export class CajaMayorListPage implements OnInit {
   private toVM(c: any): CajaMayorVM {
     const estado = (c.estado || '').toUpperCase();
     const abierta = estado.includes('ABIERT');
-    // Sumar saldos por moneda (a través de las formas de pago).
+    // Sumar saldos por moneda — pero SOLO los buckets de formas de pago que
+    // mueven caja (EFECTIVO y similares). El resto son contabilidades internas;
+    // el detalle real de bank-like vive en cuentas bancarias (visibles en el
+    // detalle de cada caja).
     const porMoneda = new Map<number, SaldoMoneda>();
     for (const s of c.saldos || []) {
       const m = s.moneda;
       if (!m) continue;
+      if (s.formaPago && s.formaPago.movimentaCaja === false) continue;
       const acc = porMoneda.get(m.id) ?? { simbolo: m.simbolo || '', monto: 0, decimales: m.decimales ?? 0 };
       acc.monto += Number(s.saldo) || 0;
       porMoneda.set(m.id, acc);
