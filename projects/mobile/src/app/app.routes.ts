@@ -48,7 +48,7 @@ const FINANCIERO_ITEMS: SectionItem[] = [
   { label: 'Cuentas por Cobrar', icon: 'request_quote', path: '/financiero/cxc', enabled: true },
   { label: 'Categorías de gasto', icon: 'sell', path: '/financiero/gasto-categorias', enabled: true },
   { label: 'Monedas', icon: 'monetization_on', path: '/financiero/monedas', enabled: false },
-  { label: 'Caja Mayor', icon: 'account_balance', path: '/financiero/caja-mayor', enabled: false },
+  { label: 'Caja Mayor', icon: 'account_balance', path: '/financiero/caja-mayor', enabled: true },
   { label: 'Reglas de comisión', icon: 'percent', path: '/financiero/comisiones-reglas', enabled: true },
   { label: 'Equipos de comisión', icon: 'groups', path: '/financiero/comisiones-equipos', enabled: true },
   { label: 'Liq. de comisión', icon: 'receipt', path: '/financiero/comisiones-liquidaciones', enabled: true },
@@ -207,6 +207,23 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./pages/financiero/gasto-categorias/gasto-categoria-edit.page').then((m) => m.GastoCategoriaEditPage),
   },
+  // Operaciones de Caja Mayor (formularios full-screen). Rutas más profundas que
+  // el detalle (financiero/caja-mayor/:id), declaradas antes del shell.
+  {
+    path: 'financiero/caja-mayor/:id/gasto',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/caja-mayor/ops/gasto-nuevo.page').then((m) => m.GastoNuevoPage),
+  },
+  {
+    path: 'financiero/caja-mayor/:id/entrada-varia',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/caja-mayor/ops/entrada-varia-nuevo.page').then((m) => m.EntradaVariaNuevoPage),
+  },
+  {
+    path: 'financiero/caja-mayor/:id/ajuste/:signo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/caja-mayor/ops/ajuste-nuevo.page').then((m) => m.AjusteNuevoPage),
+  },
 
   // --- Shell autenticado (listados / índices) ---
   {
@@ -336,6 +353,16 @@ export const routes: Routes = [
         path: 'financiero/cxc',
         data: { title: 'Cuentas por Cobrar' },
         loadComponent: () => import('./pages/financiero/cxc/cxc-list.page').then((m) => m.CxcListPage),
+      },
+      {
+        path: 'financiero/caja-mayor',
+        data: { title: 'Caja Mayor' },
+        loadComponent: () => import('./pages/financiero/caja-mayor/caja-mayor-list.page').then((m) => m.CajaMayorListPage),
+      },
+      {
+        path: 'financiero/caja-mayor/:id',
+        data: { title: 'Caja Mayor' },
+        loadComponent: () => import('./pages/financiero/caja-mayor/caja-mayor-detalle.page').then((m) => m.CajaMayorDetallePage),
       },
       {
         path: 'financiero/comisiones-reglas',

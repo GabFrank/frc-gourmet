@@ -1,0 +1,30 @@
+<div class="crud-page">
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <div class="crud-list" *ngIf="!loading && !error">
+    <a
+      *ngFor="let c of items"
+      class="crud-card cm-card"
+      mat-ripple
+      [routerLink]="['/financiero/caja-mayor', c.id]"
+    >
+      <div class="crud-card-body">
+        <div class="crud-card-main">
+          <span class="crud-name">{{ c.nombre }}</span>
+          <span class="crud-sub" *ngIf="c.responsable">Responsable: {{ c.responsable }}</span>
+          <div class="cm-saldos" *ngIf="c.saldos.length">
+            <span class="cm-saldo" *ngFor="let s of c.saldos">
+              {{ s.simbolo }} {{ s.monto | number: '1.0-' + s.decimales }}
+            </span>
+          </div>
+          <span class="crud-sub muted" *ngIf="!c.saldos.length">Sin saldos registrados</span>
+        </div>
+        <span class="crud-chip" [class.off]="!c.abierta">{{ c.estado }}</span>
+        <mat-icon class="cm-chevron">chevron_right</mat-icon>
+      </div>
+    </a>
+
+    <p *ngIf="items.length === 0" class="crud-empty">No hay cajas mayor.</p>
+  </div>
+</div>

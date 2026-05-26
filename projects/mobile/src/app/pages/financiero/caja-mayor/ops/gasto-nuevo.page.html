@@ -1,0 +1,54 @@
+<div class="crud-edit">
+  <mat-toolbar color="primary" class="crud-edit-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="crud-edit-title">Nuevo gasto</span>
+    <span class="crud-spacer"></span>
+    <button mat-button (click)="guardar()" [disabled]="saving || loading">Guardar</button>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
+
+  <form class="crud-form" [formGroup]="form" (ngSubmit)="guardar()" *ngIf="!loading">
+    <mat-form-field appearance="outline">
+      <mat-label>Categoría</mat-label>
+      <mat-select formControlName="gastoCategoriaId">
+        <mat-option *ngFor="let c of categorias" [value]="c.id">{{ c.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.gastoCategoriaId.hasError('required')">Requerido</mat-error>
+      <mat-hint *ngIf="categorias.length === 0">No hay categorías. Creá una en Categorías de gasto.</mat-hint>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Descripción</mat-label>
+      <input matInput formControlName="descripcion" autocapitalize="characters" />
+      <mat-error *ngIf="form.controls.descripcion.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Monto</mat-label>
+      <input matInput type="number" inputmode="decimal" formControlName="monto" min="0.01" step="any" />
+      <mat-error *ngIf="form.controls.monto.hasError('required')">Requerido</mat-error>
+      <mat-error *ngIf="form.controls.monto.hasError('min')">Debe ser mayor a 0</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Moneda</mat-label>
+      <mat-select formControlName="monedaId">
+        <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.monedaId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Forma de pago</mat-label>
+      <mat-select formControlName="formaPagoId">
+        <mat-option *ngFor="let f of formasPago" [value]="f.id">{{ f.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.formaPagoId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <button type="submit" mat-flat-button color="primary" class="crud-save-btn" [disabled]="saving">
+      {{ saving ? 'Guardando…' : 'Guardar gasto' }}
+    </button>
+  </form>
+</div>

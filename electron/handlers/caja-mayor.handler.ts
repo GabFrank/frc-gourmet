@@ -23,7 +23,7 @@ import { TipoOperacionFinanciera, DiferenciaDestinoTipo } from '../../src/app/da
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { esIngreso, actualizarSaldoCajaMayor } from './caja-mayor-utils';
-import { ensurePermission } from '../utils/auth.utils';
+import { ensurePermission, getEffectiveUser } from '../utils/auth.utils';
 
 // Alias local para mantener firma legacy de actualizarSaldo
 const actualizarSaldo = actualizarSaldoCajaMayor;
@@ -270,7 +270,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         fecha: data.fecha || new Date(),
       });
 
-      const currentUser = getCurrentUser();
+      const currentUser = getEffectiveUser(getCurrentUser);
       if (currentUser) {
         movimiento.responsable = currentUser;
       }
@@ -381,7 +381,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         referenciaAnulacion: original,
       });
 
-      const currentUser = getCurrentUser();
+      const currentUser = getEffectiveUser(getCurrentUser);
       if (currentUser) {
         contraMovimiento.responsable = currentUser;
       }
@@ -565,7 +565,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       const savedGasto = await queryRunner.manager.save(Gasto, gasto);
 
       // 2. Crear detalles + movimientos por cada detalle
-      const currentUser = getCurrentUser();
+      const currentUser = getEffectiveUser(getCurrentUser);
       for (const det of detalles || []) {
         const monedaId = det.monedaId;
         const formaPagoId = det.formaPagoId;
@@ -652,7 +652,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           referenciaAnulacion: movOriginal,
         });
 
-        const currentUser = getCurrentUser();
+        const currentUser = getEffectiveUser(getCurrentUser);
         if (currentUser) {
           contraMovimiento.responsable = currentUser;
         }
@@ -728,7 +728,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       await queryRunner.manager.save(Gasto, gasto);
 
       // 5. Crear nuevos detalles y movimientos
-      const currentUser = getCurrentUser();
+      const currentUser = getEffectiveUser(getCurrentUser);
       for (const det of detalles || []) {
         const detalle = queryRunner.manager.create(GastoDetalle, {
           gasto: gasto,
@@ -930,7 +930,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       retiro.cajaMayor = { id: cajaMayorId } as any;
       retiro.estado = RetiroCajaEstado.INGRESADO;
       retiro.fechaIngreso = new Date();
-      const currentUser = getCurrentUser();
+      const currentUser = getEffectiveUser(getCurrentUser);
       if (currentUser) {
         retiro.responsableIngreso = currentUser;
       }
@@ -1120,7 +1120,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
       if (destinoTipo === 'CAJA_MAYOR') {
         if (!cajaMayorId) throw new Error('cajaMayorId requerido para destino CAJA_MAYOR');
-        const currentUser = getCurrentUser();
+        const currentUser = getEffectiveUser(getCurrentUser);
         const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
           cajaMayor: { id: cajaMayorId },
           tipoMovimiento: TipoMovimiento.INGRESO_ENTRADA_VARIA,
@@ -1191,7 +1191,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
             entradaVariaId: id,
             referenciaAnulacion: movOriginal,
           });
-          const currentUser = getCurrentUser();
+          const currentUser = getEffectiveUser(getCurrentUser);
           if (currentUser) contra.responsable = currentUser;
           await setEntityUserTracking(dataSource, contra, currentUser?.id, false);
           await queryRunner.manager.save(CajaMayorMovimiento, contra);
@@ -1365,7 +1365,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     await queryRunner.startTransaction();
     try {
       const tipoOp = data.tipoOperacion as TipoOperacionFinanciera;
-      const currentUser = getCurrentUser();
+      const currentUser = getEffectiveUser(getCurrentUser);
 
       const op = queryRunner.manager.create(OperacionFinanciera, {
         tipoOperacion: tipoOp,
@@ -1575,7 +1575,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         relations: ['cajaMayor', 'moneda', 'formaPago'],
       });
 
-      const currentUser = getCurrentUser();
+      const currentUser = getEffectiveUser(getCurrentUser);
       for (const mov of movs) {
         if (mov.tipoMovimiento === TipoMovimiento.ANULACION) continue;
 
