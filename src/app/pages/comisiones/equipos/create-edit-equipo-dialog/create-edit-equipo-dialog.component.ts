@@ -99,7 +99,12 @@ export class CreateEditEquipoDialogComponent implements OnInit {
         this.filteredFuncionarios = this.funcionarios.slice(0, 50);
       }
     });
-    this.repo.getReglasComision({ activo: true }).subscribe({ next: (r) => this.reglasEquipo = r.filter((reg: any) => reg.esEquipo) });
+    // Solo las reglas de tipo EQUIPO_PORCENTAJE pueden asignarse a un equipo
+    // (es lo que valida el handler asignar-regla-equipo). Filtrar por esEquipo
+    // dejaba el selector vacio cuando la regla no tenia ese flag seteado.
+    this.repo.getReglasComision({ activo: true }).subscribe({
+      next: (r) => this.reglasEquipo = (r || []).filter((reg: any) => reg.tipo === 'EQUIPO_PORCENTAJE'),
+    });
 
     if (this.isEdit && eq?.id) {
       this.cargarDetalleEquipo(eq.id);
