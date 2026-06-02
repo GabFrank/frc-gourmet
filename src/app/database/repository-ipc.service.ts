@@ -950,6 +950,8 @@ interface ElectronAPI {
   registrarCobroConsolidado: (payload: any) => Promise<any>;
   getCobrosConsolidados: (filtros?: any) => Promise<any[]>;
   getCobroConsolidado: (id: number) => Promise<any>;
+  exportCobroConsolidadoPreviewPdf: (convenioId: number) => Promise<any>;
+  exportReciboCobroConsolidadoPdf: (cobroConsolidadoId: number) => Promise<any>;
   getClienteEstadoCuenta: (clienteId: number) => Promise<any>;
   getMovimientosClienteStats: (clienteId: number) => Promise<any>;
   cobrarVentaCredito: (payload: any) => Promise<any>;
@@ -3728,6 +3730,12 @@ export class RepositoryIpcService extends RepositoryService {
   }
   getCobroConsolidado(id: number): Observable<any> {
     return from(this.api.getCobroConsolidado(id));
+  }
+  exportCobroConsolidadoPreviewPdf(convenioId: number): Observable<any> {
+    return from(this.api.exportCobroConsolidadoPreviewPdf(convenioId));
+  }
+  exportReciboCobroConsolidadoPdf(cobroConsolidadoId: number): Observable<any> {
+    return from(this.api.exportReciboCobroConsolidadoPdf(cobroConsolidadoId));
   }
 
   getClienteEstadoCuenta(clienteId: number): Observable<any> {

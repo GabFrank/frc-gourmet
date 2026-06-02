@@ -2085,6 +2085,12 @@ export class RepositoryHttpService extends RepositoryService {
   getCobroConsolidado(_id: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getCobroConsolidado() no esta implementado todavia.`)) as any;
   }
+  exportCobroConsolidadoPreviewPdf(_convenioId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.exportCobroConsolidadoPreviewPdf() no esta implementado todavia.`)) as any;
+  }
+  exportReciboCobroConsolidadoPdf(_cobroConsolidadoId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.exportReciboCobroConsolidadoPdf() no esta implementado todavia.`)) as any;
+  }
   getCuentasPorCobrar(filtros?: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getCuentasPorCobrar() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

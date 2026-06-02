@@ -816,6 +816,8 @@ export abstract class RepositoryService {
   abstract registrarCobroConsolidado(payload: any): Observable<any>;
   abstract getCobrosConsolidados(filtros?: any): Observable<any[]>;
   abstract getCobroConsolidado(id: number): Observable<any>;
+  abstract exportCobroConsolidadoPreviewPdf(convenioId: number): Observable<any>;
+  abstract exportReciboCobroConsolidadoPdf(cobroConsolidadoId: number): Observable<any>;
   abstract getNotificacionesRrhh(filtros?: any): Observable<any[]>;
   abstract marcarNotificacionLeida(id: number): Observable<any>;
   abstract marcarTodasNotificacionesLeidas(usuarioId?: number): Observable<any>;

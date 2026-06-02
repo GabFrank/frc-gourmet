@@ -3465,6 +3465,12 @@ contextBridge.exposeInMainWorld('api', {
   getCobroConsolidado: async (id: number): Promise<any> => {
     return await ipcRenderer.invoke('get-cobro-consolidado', id);
   },
+  exportCobroConsolidadoPreviewPdf: async (convenioId: number): Promise<any> => {
+    return await ipcRenderer.invoke('export-cobro-consolidado-preview-pdf', convenioId);
+  },
+  exportReciboCobroConsolidadoPdf: async (cobroConsolidadoId: number): Promise<any> => {
+    return await ipcRenderer.invoke('export-recibo-cobro-consolidado-pdf', cobroConsolidadoId);
+  },
 
   // === Movimientos Cliente (Fase 7) ===
   getMovimientosCliente: async (clienteId: number, filtros?: any): Promise<any> => {

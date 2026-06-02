@@ -20,6 +20,49 @@ import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { ensurePermission } from '../utils/auth.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import {
+  buildPdfBase64,
+  pdfHeaderEmpresa,
+  pdfTablaMontos,
+  pdfFmtFecha,
+  pdfFmtMonto,
+  pdfFooterPaginado,
+  renderReciboDoc,
+} from '../utils/pdf.utils';
+
+/** Deuda cobrable por cliente del convenio + total. Reusado por el handler de
+ * preview y por el PDF del reporte. */
+async function computeCobroPreview(dataSource: DataSource, convenioId: number): Promise<any> {
+  const convenio = await dataSource.getRepository(Convenio).findOne({
+    where: { id: convenioId },
+    relations: ['clientes', 'clientes.persona'],
+  });
+  if (!convenio) throw new Error(`Convenio ${convenioId} no encontrado`);
+
+  const clientes: any[] = [];
+  let total = 0;
+  for (const cli of convenio.clientes || []) {
+    const cuotas = await getCuotasCobrablesCliente(dataSource.manager, cli.id);
+    const deuda = +cuotas
+      .reduce((s, c: any) => s + (Number(c.monto) - Number(c.montoCobrado)), 0)
+      .toFixed(2);
+    total += deuda;
+    clientes.push({
+      id: cli.id,
+      nombre: nombreCliente(cli),
+      documento: cli.ruc || cli.persona?.documento || null,
+      cantidadCuotas: cuotas.length,
+      deuda,
+    });
+  }
+  clientes.sort((a, b) => b.deuda - a.deuda);
+  return {
+    convenio: { id: convenio.id, nombre: convenio.nombre, ruc: convenio.ruc, contacto: convenio.contacto },
+    clientes,
+    total: +total.toFixed(2),
+    cantidadConDeuda: clientes.filter((c) => c.deuda > 0).length,
+  };
+}
 
 const up = (s?: string | null) => (s ? String(s).toUpperCase() : s);
 
@@ -154,35 +197,81 @@ export function registerConveniosHandlers(
 
   /** Vista previa: deuda cobrable por cliente del convenio + total. */
   ipcMain.handle('get-cobro-consolidado-preview', async (_e, convenioId: number) => {
-    const convenio = await dataSource.getRepository(Convenio).findOne({
-      where: { id: convenioId },
-      relations: ['clientes', 'clientes.persona'],
-    });
-    if (!convenio) throw new Error(`Convenio ${convenioId} no encontrado`);
+    return await computeCobroPreview(dataSource, convenioId);
+  });
 
-    const clientes: any[] = [];
-    let total = 0;
-    for (const cli of convenio.clientes || []) {
-      const cuotas = await getCuotasCobrablesCliente(dataSource.manager, cli.id);
-      const deuda = +cuotas
-        .reduce((s, c: any) => s + (Number(c.monto) - Number(c.montoCobrado)), 0)
-        .toFixed(2);
-      total += deuda;
-      clientes.push({
-        id: cli.id,
-        nombre: nombreCliente(cli),
-        documento: cli.ruc || cli.persona?.documento || null,
-        cantidadCuotas: cuotas.length,
-        deuda,
-      });
-    }
-    clientes.sort((a, b) => b.deuda - a.deuda);
-    return {
-      convenio: { id: convenio.id, nombre: convenio.nombre, ruc: convenio.ruc, contacto: convenio.contacto },
-      clientes,
-      total: +total.toFixed(2),
-      cantidadConDeuda: clientes.filter((c) => c.deuda > 0).length,
+  /** PDF del reporte de cobro consolidado (total + clientes + deuda de cada uno). */
+  ipcMain.handle('export-cobro-consolidado-preview-pdf', async (_e, convenioId: number) => {
+    const preview = await computeCobroPreview(dataSource, convenioId);
+    const empresaHeader = await pdfHeaderEmpresa(dataSource, { showLogo: true });
+    const filas = preview.clientes
+      .filter((c: any) => c.deuda > 0)
+      .map((c: any) => [c.nombre, c.documento || '—', String(c.cantidadCuotas), pdfFmtMonto(c.deuda)]);
+
+    const docDef = {
+      pageSize: 'A4',
+      pageMargins: [40, 40, 40, 50],
+      content: [
+        empresaHeader,
+        { text: 'REPORTE DE COBRO CONSOLIDADO', style: 'h1' },
+        { text: preview.convenio.nombre, style: 'h2', alignment: 'center' },
+        { text: ' ' },
+        {
+          columns: [
+            { text: `Convenio: ${preview.convenio.nombre}` },
+            { text: `Fecha: ${pdfFmtFecha(new Date())}`, alignment: 'right' },
+          ],
+          margin: [0, 0, 0, 8],
+        },
+        pdfTablaMontos(
+          ['CLIENTE', 'DOCUMENTO', 'CUOTAS', 'DEUDA'],
+          filas,
+          { montoCols: [3], totalLabel: 'TOTAL A COBRAR', totalValue: preview.total, totalCol: 3 },
+        ),
+      ],
+      footer: pdfFooterPaginado(),
     };
+    const base64 = await buildPdfBase64(docDef);
+    return { filename: `cobro-consolidado-${preview.convenio.nombre.replace(/\s+/g, '_')}.pdf`, base64, mimeType: 'application/pdf' };
+  });
+
+  /** PDF con un recibo por cliente del cobro consolidado ya registrado. */
+  ipcMain.handle('export-recibo-cobro-consolidado-pdf', async (_e, cobroConsolidadoId: number) => {
+    const cobro = await dataSource.getRepository(CobroConsolidado).findOne({
+      where: { id: cobroConsolidadoId },
+      relations: ['convenio', 'detalles', 'detalles.cliente', 'detalles.cliente.persona'],
+    });
+    if (!cobro) throw new Error(`Cobro consolidado ${cobroConsolidadoId} no encontrado`);
+    const empresaHeader = await pdfHeaderEmpresa(dataSource, { showLogo: true });
+
+    const content: any[] = [];
+    (cobro.detalles || []).forEach((det: any, idx: number) => {
+      const recibo = renderReciboDoc({
+        empresaHeader,
+        tipo: 'COBRO',
+        numeroDocumento: `${cobro.id}-${det.id}`,
+        fecha: cobro.fecha,
+        contraparte: {
+          rol: 'Cliente',
+          nombre: nombreCliente(det.cliente),
+          documento: det.cliente?.ruc || det.cliente?.persona?.documento || undefined,
+        },
+        montoTotal: Number(det.montoCobrado),
+        moneda: 'PYG',
+        detalle: `pago de deuda — convenio ${cobro.convenio?.nombre || ''}`,
+      });
+      if (idx > 0) content.push({ text: '', pageBreak: 'before' });
+      content.push(...recibo.content);
+    });
+
+    const docDef = {
+      pageSize: 'A4',
+      pageMargins: [40, 40, 40, 50],
+      content,
+      footer: pdfFooterPaginado(),
+    };
+    const base64 = await buildPdfBase64(docDef);
+    return { filename: `recibos-cobro-consolidado-${cobro.id}.pdf`, base64, mimeType: 'application/pdf' };
   });
 
   /**
