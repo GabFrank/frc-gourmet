@@ -513,32 +513,42 @@ export function registerCuentasPorPagarHandlers(
         await queryRunner.manager.save(CuentaPorPagarCuota, cuota);
       }
 
-      // Si es PRESTAMO_FUNCIONARIO y se especifico fuente de desembolso, generar EGRESO en Caja Mayor
-      if (entity.tipo === CuentaPorPagarTipo.PRESTAMO_FUNCIONARIO && data.cajaMayorId) {
-        const cajaMayorId = Number(data.cajaMayorId);
-        const monedaIdMov = Number(data.monedaId);
-        const formaPagoId = Number(data.formaPagoId);
-        if (!cajaMayorId || !monedaIdMov || !formaPagoId) {
-          throw new Error('Para PRESTAMO_FUNCIONARIO se requiere cajaMayorId, monedaId y formaPagoId');
+      // Si es PRESTAMO_FUNCIONARIO, desembolsar segun la fuente elegida.
+      if (entity.tipo === CuentaPorPagarTipo.PRESTAMO_FUNCIONARIO) {
+        if (data.cuentaBancariaId) {
+          // Desembolso desde cuenta bancaria: debita el saldo, sin movimiento de caja.
+          const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
+          const cb = await cbRepo.findOne({ where: { id: Number(data.cuentaBancariaId) } });
+          if (!cb) throw new Error('Cuenta bancaria no encontrada');
+          cb.saldo = Number(cb.saldo) - montoTotal;
+          await queryRunner.manager.save(CuentaBancaria, cb);
+        } else if (data.cajaMayorId) {
+          // Desembolso desde Caja Mayor: genera EGRESO y descuenta saldo.
+          const cajaMayorId = Number(data.cajaMayorId);
+          const monedaIdMov = Number(data.monedaId);
+          const formaPagoId = Number(data.formaPagoId);
+          if (!cajaMayorId || !monedaIdMov || !formaPagoId) {
+            throw new Error('Para PRESTAMO_FUNCIONARIO se requiere cajaMayorId, monedaId y formaPagoId');
+          }
+          const userIdMov = getCurrentUser()?.id;
+          const userEntity = userIdMov
+            ? await queryRunner.manager.findOne(Usuario, { where: { id: userIdMov } })
+            : null;
+          const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
+            cajaMayor: { id: cajaMayorId } as any,
+            tipoMovimiento: TipoMovimiento.EGRESO_DESEMBOLSO_PRESTAMO_FUNCIONARIO,
+            moneda: { id: monedaIdMov } as any,
+            formaPago: { id: formaPagoId } as any,
+            monto: montoTotal,
+            fecha: new Date(),
+            observacion: `DESEMBOLSO PRESTAMO FUNCIONARIO #${cppSaved.id} - ${entity.descripcion}`,
+            cuentaPorPagarId: cppSaved.id,
+            responsable: userEntity || undefined,
+          });
+          await setEntityUserTracking(dataSource, movimiento, userIdMov, false);
+          await queryRunner.manager.save(CajaMayorMovimiento, movimiento);
+          await descontarSaldoCajaMayor(queryRunner, cajaMayorId, monedaIdMov, formaPagoId, montoTotal);
         }
-        const userIdMov = getCurrentUser()?.id;
-        const userEntity = userIdMov
-          ? await queryRunner.manager.findOne(Usuario, { where: { id: userIdMov } })
-          : null;
-        const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
-          cajaMayor: { id: cajaMayorId } as any,
-          tipoMovimiento: TipoMovimiento.EGRESO_DESEMBOLSO_PRESTAMO_FUNCIONARIO,
-          moneda: { id: monedaIdMov } as any,
-          formaPago: { id: formaPagoId } as any,
-          monto: montoTotal,
-          fecha: new Date(),
-          observacion: `DESEMBOLSO PRESTAMO FUNCIONARIO #${cppSaved.id} - ${entity.descripcion}`,
-          cuentaPorPagarId: cppSaved.id,
-          responsable: userEntity || undefined,
-        });
-        await setEntityUserTracking(dataSource, movimiento, userIdMov, false);
-        await queryRunner.manager.save(CajaMayorMovimiento, movimiento);
-        await descontarSaldoCajaMayor(queryRunner, cajaMayorId, monedaIdMov, formaPagoId, montoTotal);
       }
 
       await queryRunner.commitTransaction();
