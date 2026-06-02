@@ -3434,6 +3434,38 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('recalcular-saldo-cliente', clienteId);
   },
 
+  // Convenios + cobro consolidado
+  getConvenios: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-convenios', filtros);
+  },
+  getConvenio: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-convenio', id);
+  },
+  createConvenio: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-convenio', data);
+  },
+  updateConvenio: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-convenio', id, data);
+  },
+  deleteConvenio: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-convenio', id);
+  },
+  setConvenioClientes: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('set-convenio-clientes', payload);
+  },
+  getCobroConsolidadoPreview: async (convenioId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cobro-consolidado-preview', convenioId);
+  },
+  registrarCobroConsolidado: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('registrar-cobro-consolidado', payload);
+  },
+  getCobrosConsolidados: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-cobros-consolidados', filtros);
+  },
+  getCobroConsolidado: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cobro-consolidado', id);
+  },
+
   // === Movimientos Cliente (Fase 7) ===
   getMovimientosCliente: async (clienteId: number, filtros?: any): Promise<any> => {
     return await ipcRenderer.invoke('get-movimientos-cliente', clienteId, filtros);

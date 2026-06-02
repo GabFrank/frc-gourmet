@@ -940,6 +940,16 @@ interface ElectronAPI {
   cobrarCpcCuota: (payload: any) => Promise<any>;
   anularCobroCpcCuota: (payload: any) => Promise<any>;
   recalcularSaldoCliente: (clienteId: number) => Promise<any>;
+  getConvenios: (filtros?: any) => Promise<any[]>;
+  getConvenio: (id: number) => Promise<any>;
+  createConvenio: (data: any) => Promise<any>;
+  updateConvenio: (id: number, data: any) => Promise<any>;
+  deleteConvenio: (id: number) => Promise<any>;
+  setConvenioClientes: (payload: any) => Promise<any>;
+  getCobroConsolidadoPreview: (convenioId: number) => Promise<any>;
+  registrarCobroConsolidado: (payload: any) => Promise<any>;
+  getCobrosConsolidados: (filtros?: any) => Promise<any[]>;
+  getCobroConsolidado: (id: number) => Promise<any>;
   getClienteEstadoCuenta: (clienteId: number) => Promise<any>;
   getMovimientosClienteStats: (clienteId: number) => Promise<any>;
   cobrarVentaCredito: (payload: any) => Promise<any>;
@@ -3687,6 +3697,37 @@ export class RepositoryIpcService extends RepositoryService {
   }
   recalcularSaldoCliente(clienteId: number): Observable<any> {
     return from(this.api.recalcularSaldoCliente(clienteId));
+  }
+
+  getConvenios(filtros?: any): Observable<any[]> {
+    return from(this.api.getConvenios(filtros));
+  }
+  getConvenio(id: number): Observable<any> {
+    return from(this.api.getConvenio(id));
+  }
+  createConvenio(data: any): Observable<any> {
+    return from(this.api.createConvenio(data));
+  }
+  updateConvenio(id: number, data: any): Observable<any> {
+    return from(this.api.updateConvenio(id, data));
+  }
+  deleteConvenio(id: number): Observable<any> {
+    return from(this.api.deleteConvenio(id));
+  }
+  setConvenioClientes(payload: any): Observable<any> {
+    return from(this.api.setConvenioClientes(payload));
+  }
+  getCobroConsolidadoPreview(convenioId: number): Observable<any> {
+    return from(this.api.getCobroConsolidadoPreview(convenioId));
+  }
+  registrarCobroConsolidado(payload: any): Observable<any> {
+    return from(this.api.registrarCobroConsolidado(payload));
+  }
+  getCobrosConsolidados(filtros?: any): Observable<any[]> {
+    return from(this.api.getCobrosConsolidados(filtros));
+  }
+  getCobroConsolidado(id: number): Observable<any> {
+    return from(this.api.getCobroConsolidado(id));
   }
 
   getClienteEstadoCuenta(clienteId: number): Observable<any> {

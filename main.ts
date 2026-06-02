@@ -60,6 +60,7 @@ import { registerComisionesHandlers } from './electron/handlers/comisiones.handl
 import { registerEquiposComisionHandlers } from './electron/handlers/equipos-comision.handler';
 import { registerCuentasPorCobrarHandlers } from './electron/handlers/cuentas-por-cobrar.handler';
 import { registerMovimientosClienteHandlers } from './electron/handlers/movimientos-cliente.handler';
+import { registerConveniosHandlers } from './electron/handlers/convenios.handler';
 import { seedInitialData } from './electron/utils/seed-data';
 import { runBootstrapMigrations } from './electron/utils/db-migrations-bootstrap';
 import { seedSystemData } from './electron/utils/seed-system';
@@ -213,6 +214,7 @@ function initializeDatabase() {
       registerEquiposComisionHandlers(dataSource, getCurrentUser); // RRHH Fase 6: Equipos de comision
       registerCuentasPorCobrarHandlers(dataSource, getCurrentUser); // Fase 7: CuentasPorCobrar
       registerMovimientosClienteHandlers(dataSource, getCurrentUser); // Fase 7: MovimientosCliente
+      registerConveniosHandlers(dataSource, getCurrentUser); // Convenios + cobro consolidado
       // RRHH Fase 8
       registerNotificacionesRrhhHandlers(dataSource, getCurrentUser); // Notificaciones RRHH
       registerDashboardRrhhHandlers(dataSource, getCurrentUser); // Dashboard KPIs RRHH
