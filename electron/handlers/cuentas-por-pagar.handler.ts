@@ -703,24 +703,26 @@ export function registerCuentasPorPagarHandlers(
       if (filtros?.monedaId) qb.andWhere('mon.id = :mid', { mid: filtros.monedaId });
       if (filtros?.fechaVencHasta) qb.andWhere('cuota.fechaVencimiento <= :fh', { fh: filtros.fechaVencHasta });
 
+      // NOTA: aliases quoteados. Postgres pliega identificadores sin comillas a
+      // minuscula (cppId -> cppid), rompiendo el acceso por propiedad en getRawMany.
       qb.select([
-        'cuota.id AS id',
-        'cpp.id AS cppId',
-        'compra.id AS compraId',
-        'compra.numero_nota AS compraNumeroNota',
-        'compra.fecha_compra AS compraFechaCompra',
-        'compra.credito AS compraCredito',
-        'cuota.numero AS numero',
-        'cpp.cantidadCuotas AS cantidadCuotas',
-        'cuota.fechaVencimiento AS fechaVencimiento',
-        'cuota.monto AS monto',
-        'cuota.montoPagado AS montoPagado',
-        'cuota.estado AS estado',
-        'pv.id AS proveedorId',
-        'pv.nombre AS proveedorNombre',
-        'mon.id AS monedaId',
-        'mon.simbolo AS monedaSimbolo',
-        'mon.denominacion AS monedaDenominacion',
+        'cuota.id AS "id"',
+        'cpp.id AS "cppId"',
+        'compra.id AS "compraId"',
+        'compra.numero_nota AS "compraNumeroNota"',
+        'compra.fecha_compra AS "compraFechaCompra"',
+        'compra.credito AS "compraCredito"',
+        'cuota.numero AS "numero"',
+        'cpp.cantidadCuotas AS "cantidadCuotas"',
+        'cuota.fechaVencimiento AS "fechaVencimiento"',
+        'cuota.monto AS "monto"',
+        'cuota.montoPagado AS "montoPagado"',
+        'cuota.estado AS "estado"',
+        'pv.id AS "proveedorId"',
+        'pv.nombre AS "proveedorNombre"',
+        'mon.id AS "monedaId"',
+        'mon.simbolo AS "monedaSimbolo"',
+        'mon.denominacion AS "monedaDenominacion"',
       ])
         .orderBy('pv.nombre', 'ASC')
         .addOrderBy('cuota.fechaVencimiento', 'ASC')
