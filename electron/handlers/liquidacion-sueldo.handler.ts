@@ -9,6 +9,7 @@ import { LiquidacionSueldoEstado } from '../../src/app/database/entities/rrhh/li
 import { LiquidacionItemTipo } from '../../src/app/database/entities/rrhh/liquidacion-item-tipo.enum';
 import { Bono } from '../../src/app/database/entities/rrhh/bono.entity';
 import { Aguinaldo, AguinaldoEstado } from '../../src/app/database/entities/rrhh/aguinaldo.entity';
+import { VacacionVenta, VacacionVentaEstado } from '../../src/app/database/entities/rrhh/vacacion-venta.entity';
 import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.entity';
 import { Vale } from '../../src/app/database/entities/rrhh/vale.entity';
 import { ValeEstado } from '../../src/app/database/entities/rrhh/vale-estado.enum';
@@ -364,6 +365,20 @@ export function registerLiquidacionSueldoHandlers(
         );
       }
 
+      // 10) Ventas de vacaciones pendientes (pago al funcionario como HABER)
+      const ventaVacRepo = queryRunner.manager.getRepository(VacacionVenta);
+      const ventasVacPend = await ventaVacRepo.createQueryBuilder('vv')
+        .leftJoin('vv.vacacion', 'vac')
+        .leftJoin('vac.funcionario', 'vf')
+        .where('vf.id = :fid', { fid: funcionarioId })
+        .andWhere('vv.estado = :est', { est: VacacionVentaEstado.PENDIENTE })
+        .getMany();
+      for (const vv of ventasVacPend) {
+        if (Number(vv.monto) > 0) {
+          await crearItem('VACACION_VENTA', `Venta de ${vv.dias} dia(s) de vacaciones`, Number(vv.monto), LiquidacionItemTipo.HABER, vv.id, 'VACACION_VENTA');
+        }
+      }
+
       // Recalcular totales
       const allItems = await itemRepo.find({ where: { liquidacion: { id: liq.id } as any } });
       const tot = await recalcularTotales(allItems);
@@ -607,6 +622,23 @@ export function registerLiquidacionSueldoHandlers(
         }
       }
 
+      // Marcar ventas de vacaciones como PAGADO
+      const ventaVacIds = items
+        .filter((i) => i.referenciaTipo === 'VACACION_VENTA' && i.referenciaId)
+        .map((i) => i.referenciaId!) as number[];
+      if (ventaVacIds.length) {
+        const vvRepo = queryRunner.manager.getRepository(VacacionVenta);
+        for (const vvId of ventaVacIds) {
+          const vv = await vvRepo.findOne({ where: { id: vvId } });
+          if (vv && vv.estado === VacacionVentaEstado.PENDIENTE) {
+            vv.estado = VacacionVentaEstado.PAGADO;
+            vv.liquidacionId = liq.id;
+            await setEntityUserTracking(dataSource, vv, userId, true);
+            await vvRepo.save(vv);
+          }
+        }
+      }
+
       liq.estado = LiquidacionSueldoEstado.PAGADA;
       liq.fechaPago = new Date();
       liq.movimientoId = movSaved.id;
@@ -720,6 +752,23 @@ export function registerLiquidacionSueldoHandlers(
               liqCom.estado = LiquidacionComisionEstado.APROBADA;
               await setEntityUserTracking(dataSource, liqCom, userId, true);
               await liqComRepo.save(liqCom);
+            }
+          }
+        }
+
+        // Ventas de vacaciones: PAGADO -> PENDIENTE (vuelven a estar por cobrar)
+        const ventaVacIds = items
+          .filter((i) => i.referenciaTipo === 'VACACION_VENTA' && i.referenciaId)
+          .map((i) => i.referenciaId!) as number[];
+        if (ventaVacIds.length) {
+          const vvRepo = queryRunner.manager.getRepository(VacacionVenta);
+          for (const vvId of ventaVacIds) {
+            const vv = await vvRepo.findOne({ where: { id: vvId } });
+            if (vv && vv.estado === VacacionVentaEstado.PAGADO && vv.liquidacionId === liq.id) {
+              vv.estado = VacacionVentaEstado.PENDIENTE;
+              (vv as any).liquidacionId = null;
+              await setEntityUserTracking(dataSource, vv, userId, true);
+              await vvRepo.save(vv);
             }
           }
         }

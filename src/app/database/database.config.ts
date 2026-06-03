@@ -38,6 +38,7 @@ import { Bono } from './entities/rrhh/bono.entity';
 import { Aguinaldo } from './entities/rrhh/aguinaldo.entity';
 import { Vacacion } from './entities/rrhh/vacacion.entity';
 import { VacacionPeriodo } from './entities/rrhh/vacacion-periodo.entity';
+import { VacacionVenta } from './entities/rrhh/vacacion-venta.entity';
 import { LiquidacionFinal } from './entities/rrhh/liquidacion-final.entity';
 import { LiquidacionFinalItem } from './entities/rrhh/liquidacion-final-item.entity';
 // RRHH Fase 6 - Comisiones
@@ -191,6 +192,7 @@ import { AddMustChangePasswordToUsuario1778600000000 } from './migrations/177860
 import { AddSistemaDocumentos1779000000000 } from './migrations/1779000000000-AddSistemaDocumentos';
 import { AddRequiereComandaToProducto1779100000000 } from './migrations/1779100000000-AddRequiereComandaToProducto';
 import { AddPrinterTicketToDispositivo1779200000000 } from './migrations/1779200000000-AddPrinterTicketToDispositivo';
+import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVacacionVentas';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -305,6 +307,7 @@ function getEntitiesList(): any[] {
       Aguinaldo,
       Vacacion,
       VacacionPeriodo,
+      VacacionVenta,
       LiquidacionFinal,
       LiquidacionFinalItem,
       // RRHH Fase 6 - Comisiones
@@ -477,6 +480,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddSistemaDocumentos1779000000000,
     AddRequiereComandaToProducto1779100000000,
     AddPrinterTicketToDispositivo1779200000000,
+    AddVacacionVentas1779600000000,
   ];
 }
 
