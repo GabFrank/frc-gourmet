@@ -889,6 +889,8 @@ interface ElectronAPI {
   programarVacacionPeriodo: (payload: any) => Promise<any>;
   marcarPeriodoGozado: (periodoId: number) => Promise<any>;
   cancelarVacacionPeriodo: (periodoId: number) => Promise<any>;
+  venderDiasVacacion: (payload: any) => Promise<any>;
+  anularVentaVacacion: (ventaId: number) => Promise<any>;
 
   // RRHH - Liquidacion final
   getLiquidacionesFinal: (filtros?: any) => Promise<any[]>;
@@ -3554,6 +3556,12 @@ export class RepositoryIpcService extends RepositoryService {
   }
   cancelarVacacionPeriodo(periodoId: number): Observable<any> {
     return from(this.api.cancelarVacacionPeriodo(periodoId));
+  }
+  venderDiasVacacion(payload: any): Observable<any> {
+    return from(this.api.venderDiasVacacion(payload));
+  }
+  anularVentaVacacion(ventaId: number): Observable<any> {
+    return from(this.api.anularVentaVacacion(ventaId));
   }
 
   // ===================== RRHH: LIQUIDACION FINAL =====================

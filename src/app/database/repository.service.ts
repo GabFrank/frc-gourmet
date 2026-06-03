@@ -758,6 +758,8 @@ export abstract class RepositoryService {
   abstract programarVacacionPeriodo(payload: any): Observable<any>;
   abstract marcarPeriodoGozado(periodoId: number): Observable<any>;
   abstract cancelarVacacionPeriodo(periodoId: number): Observable<any>;
+  abstract venderDiasVacacion(payload: any): Observable<any>;
+  abstract anularVentaVacacion(ventaId: number): Observable<any>;
   abstract getLiquidacionesFinal(filtros?: any): Observable<any[]>;
   abstract getLiquidacionFinal(id: number): Observable<any>;
   abstract generarLiquidacionFinal(payload: any): Observable<any>;

@@ -76,6 +76,7 @@ import { ListPrestamosFuncionariosComponent } from './pages/rrhh/prestamos-funci
 import { ListLiquidacionesSueldoComponent } from './pages/rrhh/liquidaciones-sueldo/list/list-liquidaciones-sueldo.component';
 import { ListBonosComponent } from './pages/rrhh/bonos/list-bonos.component';
 import { ListAguinaldosComponent } from './pages/rrhh/aguinaldos/list-aguinaldos.component';
+import { ListVacacionesComponent } from './pages/rrhh/vacaciones/list-vacaciones.component';
 // Comisiones (Fase 6)
 import { ListReglasComisionComponent } from './pages/comisiones/reglas/list-reglas-comision/list-reglas-comision.component';
 import { ListEquiposComisionComponent } from './pages/comisiones/equipos/list-equipos-comision/list-equipos-comision.component';
@@ -774,6 +775,11 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
 
   openBonosTab() {
     this.tabsService.openTab('Bonos', ListBonosComponent, { source: 'navigation' }, 'bonos-tab', true);
+    this.closeMenu();
+  }
+
+  openVacacionesTab() {
+    this.tabsService.openTab('Vacaciones', ListVacacionesComponent, { source: 'navigation' }, 'vacaciones-tab', true);
     this.closeMenu();
   }
 

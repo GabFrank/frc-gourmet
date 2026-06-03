@@ -3292,6 +3292,12 @@ contextBridge.exposeInMainWorld('api', {
   cancelarVacacionPeriodo: async (periodoId: number): Promise<any> => {
     return await ipcRenderer.invoke('cancelar-vacacion-periodo', periodoId);
   },
+  venderDiasVacacion: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('vender-dias-vacacion', payload);
+  },
+  anularVentaVacacion: async (ventaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('anular-venta-vacacion', ventaId);
+  },
 
   // =============================================
   // RRHH - Liquidacion final
