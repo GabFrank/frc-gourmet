@@ -121,8 +121,8 @@
                     <mat-icon>trending_up</mat-icon>
                   </div>
                   <div class="cost-info">
-                    <span class="cost-label">Margen ({{ margenGanancia }}%)</span>
-                    <span class="cost-value">{{ (precioSugerido - costoTotalReceta) | number:'1.0-2' }}</span>
+                    <span class="cost-label">Ganancia</span>
+                    <span class="cost-value">{{ gananciaSugerida | number:'1.0-2' }}</span>
                   </div>
                 </mat-card-content>
               </mat-card>
@@ -133,7 +133,7 @@
                     <mat-icon>price_check</mat-icon>
                   </div>
                   <div class="cost-info">
-                    <span class="cost-label">Precio Sugerido</span>
+                    <span class="cost-label">Precio Sugerido (costo {{ porcentajeCosto | number:'1.0-2' }}%)</span>
                     <span class="cost-value">{{ precioSugerido | number:'1.0-2' }}</span>
                   </div>
                 </mat-card-content>

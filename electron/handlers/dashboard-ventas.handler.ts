@@ -25,6 +25,36 @@ function rangoToFechas(rango: Rango): { desde: Date; hasta: Date } {
   return { desde, hasta };
 }
 
+// El "total" real de una venta NO vive en la columna ventas.total (no poblada),
+// sino en pagos_detalles (PAGO - VUELTO). Estos helpers calculan el monto cobrado
+// en la moneda principal, igual que getVentasTotalByCaja / getResumenCaja.
+async function getMonedaPrincipalId(dataSource: DataSource): Promise<number> {
+  const rows: any[] = await dbQuery(
+    dataSource,
+    `SELECT id FROM monedas WHERE principal = true LIMIT 1`,
+    [],
+  );
+  return Number(rows?.[0]?.id || 0);
+}
+
+async function sumaVentasRango(
+  dataSource: DataSource,
+  monedaPrincipalId: number,
+  desdeISO: string,
+  hastaISO: string,
+): Promise<{ cnt: number; suma: number }> {
+  const rows: any[] = await dbQuery(dataSource, `
+    SELECT COUNT(DISTINCT v.id) as cnt,
+           COALESCE(SUM(CASE WHEN pd.tipo = 'PAGO' THEN pd.valor ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN pd.tipo = 'VUELTO' THEN pd.valor ELSE 0 END), 0) as suma
+    FROM ventas v
+    LEFT JOIN pagos p ON v.pago_id = p.id
+    LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.moneda_id = ?
+    WHERE v.estado = ? AND v.created_at >= ? AND v.created_at <= ?
+  `, [monedaPrincipalId, VentaEstado.CONCLUIDA, desdeISO, hastaISO]);
+  return { cnt: Number(rows?.[0]?.cnt || 0), suma: Number(rows?.[0]?.suma || 0) };
+}
+
 export function registerDashboardVentasHandlers(
   dataSource: DataSource,
   _getCurrentUser: () => Usuario | null,
@@ -37,16 +67,12 @@ export function registerDashboardVentasHandlers(
       const hoyFin = new Date();
       hoyFin.setHours(23, 59, 59, 999);
 
-      // 1. Ventas hoy + total hoy
-      const ventasHoyRows: any[] = await dbQuery(dataSource, `
-        SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
-        FROM ventas
-        WHERE estado = ?
-          AND created_at >= ?
-          AND created_at <= ?
-      `, [VentaEstado.CONCLUIDA, hoyInicio.toISOString(), hoyFin.toISOString()]);
-      const ventasHoy = Number(ventasHoyRows?.[0]?.cnt || 0);
-      const totalHoyPYG = Number(ventasHoyRows?.[0]?.suma || 0);
+      const monedaPrincipalId = await getMonedaPrincipalId(dataSource);
+
+      // 1. Ventas hoy + total hoy (monto cobrado en moneda principal)
+      const { cnt: ventasHoy, suma: totalHoyPYG } = await sumaVentasRango(
+        dataSource, monedaPrincipalId, hoyInicio.toISOString(), hoyFin.toISOString(),
+      );
       const ticketPromedio = ventasHoy > 0 ? Math.round(totalHoyPYG / ventasHoy) : 0;
 
       // 2. Mesas
@@ -85,11 +111,16 @@ export function registerDashboardVentasHandlers(
         const min = totalMin % 60;
         const horasAbierto = `${horas}h ${min}m`;
 
-        // Ventas + monto de la caja
+        // Ventas + monto de la caja (monto cobrado en moneda principal)
         const cajaTotalsRows: any[] = await dbQuery(dataSource, `
-          SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
-          FROM ventas WHERE caja_id = ? AND estado = ?
-        `, [caja.id, VentaEstado.CONCLUIDA]);
+          SELECT COUNT(DISTINCT v.id) as cnt,
+                 COALESCE(SUM(CASE WHEN pd.tipo = 'PAGO' THEN pd.valor ELSE 0 END), 0)
+               - COALESCE(SUM(CASE WHEN pd.tipo = 'VUELTO' THEN pd.valor ELSE 0 END), 0) as suma
+          FROM ventas v
+          LEFT JOIN pagos p ON v.pago_id = p.id
+          LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.moneda_id = ?
+          WHERE v.caja_id = ? AND v.estado = ?
+        `, [monedaPrincipalId, caja.id, VentaEstado.CONCLUIDA]);
         const cantidadVentas = Number(cajaTotalsRows?.[0]?.cnt || 0);
         const ventaTotal = Number(cajaTotalsRows?.[0]?.suma || 0);
 
@@ -166,6 +197,7 @@ async function buildVentasPorPeriodo(
   const ventas: number[] = [];
   const cantidades: number[] = [];
 
+  const monedaPrincipalId = await getMonedaPrincipalId(dataSource);
   const now = new Date();
   if (rango === 'today' || rango === 'week') {
     const diasNombre = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
@@ -174,14 +206,10 @@ async function buildVentasPorPeriodo(
       d.setDate(d.getDate() - i);
       d.setHours(0, 0, 0, 0);
       const f = new Date(d); f.setHours(23, 59, 59, 999);
-      const rows: any[] = await dbQuery(dataSource, `
-        SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
-        FROM ventas
-        WHERE estado = ? AND created_at >= ? AND created_at <= ?
-      `, [VentaEstado.CONCLUIDA, d.toISOString(), f.toISOString()]);
+      const r = await sumaVentasRango(dataSource, monedaPrincipalId, d.toISOString(), f.toISOString());
       labels.push(diasNombre[d.getDay()]);
-      ventas.push(Number(rows?.[0]?.suma || 0));
-      cantidades.push(Number(rows?.[0]?.cnt || 0));
+      ventas.push(r.suma);
+      cantidades.push(r.cnt);
     }
   } else if (rango === 'month') {
     for (let i = 29; i >= 0; i--) {
@@ -189,13 +217,10 @@ async function buildVentasPorPeriodo(
       d.setDate(d.getDate() - i);
       d.setHours(0, 0, 0, 0);
       const f = new Date(d); f.setHours(23, 59, 59, 999);
-      const rows: any[] = await dbQuery(dataSource, `
-        SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
-        FROM ventas WHERE estado = ? AND created_at >= ? AND created_at <= ?
-      `, [VentaEstado.CONCLUIDA, d.toISOString(), f.toISOString()]);
+      const r = await sumaVentasRango(dataSource, monedaPrincipalId, d.toISOString(), f.toISOString());
       labels.push(`${d.getDate()}`);
-      ventas.push(Number(rows?.[0]?.suma || 0));
-      cantidades.push(Number(rows?.[0]?.cnt || 0));
+      ventas.push(r.suma);
+      cantidades.push(r.cnt);
     }
   } else if (rango === '3months') {
     for (let i = 11; i >= 0; i--) {
@@ -203,26 +228,20 @@ async function buildVentasPorPeriodo(
       d.setDate(d.getDate() - (i * 7) - 6);
       d.setHours(0, 0, 0, 0);
       const f = new Date(d); f.setDate(f.getDate() + 6); f.setHours(23, 59, 59, 999);
-      const rows: any[] = await dbQuery(dataSource, `
-        SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
-        FROM ventas WHERE estado = ? AND created_at >= ? AND created_at <= ?
-      `, [VentaEstado.CONCLUIDA, d.toISOString(), f.toISOString()]);
+      const r = await sumaVentasRango(dataSource, monedaPrincipalId, d.toISOString(), f.toISOString());
       labels.push(`S${12 - i}`);
-      ventas.push(Number(rows?.[0]?.suma || 0));
-      cantidades.push(Number(rows?.[0]?.cnt || 0));
+      ventas.push(r.suma);
+      cantidades.push(r.cnt);
     }
   } else { // 6months
     const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const f = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
-      const rows: any[] = await dbQuery(dataSource, `
-        SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
-        FROM ventas WHERE estado = ? AND created_at >= ? AND created_at <= ?
-      `, [VentaEstado.CONCLUIDA, d.toISOString(), f.toISOString()]);
+      const r = await sumaVentasRango(dataSource, monedaPrincipalId, d.toISOString(), f.toISOString());
       labels.push(meses[d.getMonth()]);
-      ventas.push(Number(rows?.[0]?.suma || 0));
-      cantidades.push(Number(rows?.[0]?.cnt || 0));
+      ventas.push(r.suma);
+      cantidades.push(r.cnt);
     }
   }
 

@@ -501,8 +501,8 @@ export function registerBankingHandlers(
 
       // 2. Cheques (egresos cuando son cobrados)
       const chequeRows = await dbQuery(dataSource, 
-        `SELECT id, monto, estado, fecha_cobro AS fechaCobro, fecha_emision AS fechaEmision,
-                numero_cheque AS numeroCheque, beneficiario, es_diferido AS esDiferido
+        `SELECT id, monto, estado, fecha_cobro AS "fechaCobro", fecha_emision AS "fechaEmision",
+                numero_cheque AS "numeroCheque", beneficiario, es_diferido AS "esDiferido"
          FROM cheques WHERE cuenta_bancaria_id = ?`,
         [cuentaBancariaId],
       );
@@ -525,9 +525,9 @@ export function registerBankingHandlers(
 
       // 3. Acreditaciones POS (ingresos cuando se acreditan)
       const acredRows = await dbQuery(dataSource, 
-        `SELECT a.id, a.monto_acreditado AS montoAcreditado, a.monto_esperado AS montoEsperado,
-                a.fecha_acreditacion_real AS fechaReal, a.fecha_transaccion AS fechaTrans,
-                a.estado, mp.nombre AS maquinaNombre
+        `SELECT a.id, a.monto_acreditado AS "montoAcreditado", a.monto_esperado AS "montoEsperado",
+                a.fecha_acreditacion_real AS "fechaReal", a.fecha_transaccion AS "fechaTrans",
+                a.estado, mp.nombre AS "maquinaNombre"
          FROM acreditaciones_pos a
          LEFT JOIN maquinas_pos mp ON a.maquina_pos_id = mp.id
          WHERE a.cuenta_bancaria_id = ?`,
@@ -552,9 +552,9 @@ export function registerBankingHandlers(
 
       // 4. Operaciones financieras (DEPOSITO_BANCARIO destino, RETIRO_BANCARIO origen)
       const opRows = await dbQuery(dataSource, 
-        `SELECT id, tipo_operacion AS tipoOp, descripcion, fecha,
-                monto_origen AS montoOrigen, monto_destino AS montoDestino,
-                cuenta_bancaria_origen_id AS cbOrigenId, cuenta_bancaria_destino_id AS cbDestinoId,
+        `SELECT id, tipo_operacion AS "tipoOp", descripcion, fecha,
+                monto_origen AS "montoOrigen", monto_destino AS "montoDestino",
+                cuenta_bancaria_origen_id AS "cbOrigenId", cuenta_bancaria_destino_id AS "cbDestinoId",
                 anulado
          FROM operaciones_financieras
          WHERE (cuenta_bancaria_origen_id = ? OR cuenta_bancaria_destino_id = ?) AND anulado = false`,
@@ -593,7 +593,7 @@ export function registerBankingHandlers(
       // 5. Entradas Varias con destino cuenta bancaria
       const evRows = await dbQuery(dataSource, 
         `SELECT ev.id, ev.descripcion, ev.fecha, ev.monto, ev.anulado,
-                cat.nombre AS catNombre
+                cat.nombre AS "catNombre"
          FROM entradas_varias ev
          LEFT JOIN entradas_varias_categorias cat ON ev.entrada_varia_categoria_id = cat.id
          WHERE ev.cuenta_bancaria_id = ? AND ev.anulado = false`,

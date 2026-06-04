@@ -228,7 +228,7 @@ export class ListComprasComponent implements OnInit {
     this.tabsService.openTab(
       'Nueva compra',
       CreateEditCompraComponent,
-      { mode: 'create' },
+      { mode: 'create', onSaved: () => this.loadData() },
       `nueva-compra-${Date.now()}`,
       true,
     );
@@ -276,7 +276,7 @@ export class ListComprasComponent implements OnInit {
     this.tabsService.openTab(
       `Compra #${compra.id} (borrador)`,
       CreateEditCompraComponent,
-      { mode: 'edit', compraId: compra.id },
+      { mode: 'edit', compraId: compra.id, onSaved: () => this.loadData() },
       `editar-compra-${compra.id}`,
       true,
     );

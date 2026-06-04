@@ -223,7 +223,7 @@ export class CreateEditPdvCategoriasComponent implements OnInit {
       if (this.data.type === 'producto') {
         requests.push(firstValueFrom(this.repositoryService.getProductosWithFilters({
           activo: 'true',
-          page: 1,
+          page: 0,
           pageSize: 5000,
         })).then(res => {
           this.productos = (res?.items || []) as Producto[];

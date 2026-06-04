@@ -27,6 +27,7 @@ import { RegistrarIngresoDialogComponent } from '../registrar-ingreso-dialog/reg
 import { CobrarCpcRapidoDialogComponent } from '../cuentas-por-cobrar/cobrar-cpc-rapido-dialog/cobrar-cpc-rapido-dialog.component';
 import { RegistrarEgresoDialogComponent } from '../registrar-egreso-dialog/registrar-egreso-dialog.component';
 import { CreateEditGastoDialogComponent } from '../gastos/create-edit-gasto/create-edit-gasto-dialog.component';
+import { CreateEditValeDialogComponent } from '../../../rrhh/vales/create-edit-vale-dialog.component';
 import { EditMovimientoDialogComponent } from '../edit-movimiento-dialog/edit-movimiento-dialog.component';
 import { CreateEditEntradaVariaDialogComponent } from '../entradas-varias/create-edit-entrada-varia/create-edit-entrada-varia-dialog.component';
 import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financieras/create-operacion-financiera/create-operacion-financiera-dialog.component';
@@ -566,6 +567,7 @@ export class CajaMayorDetalleComponent implements OnInit {
           CreateOperacionFinancieraDialogComponent,
           EmitirChequeDialogComponent,
           PagarComprasDialogComponent,
+          CreateEditValeDialogComponent,
         ]);
       }
     });

@@ -86,14 +86,14 @@ async function evaluarReglaParaFuncionario(
     .createQueryBuilder('venta_items', 'vi')
     .innerJoin('ventas', 'v', 'vi.venta_id = v.id')
     .select([
-      'vi.id as vi_id',
-      'vi.cantidad as cantidad',
-      'vi.precio_venta_unitario as precioUnitario',
-      'vi.descuento_unitario as descuentoUnitario',
-      'vi.precio_adicionales as precioAdicionales',
-      'vi.producto_id as productoId',
-      'v.id as ventaId',
-      'v.total as ventaTotal',
+      'vi.id as "vi_id"',
+      'vi.cantidad as "cantidad"',
+      'vi.precio_venta_unitario as "precioUnitario"',
+      'vi.descuento_unitario as "descuentoUnitario"',
+      'vi.precio_adicionales as "precioAdicionales"',
+      'vi.producto_id as "productoId"',
+      'v.id as "ventaId"',
+      'v.total as "ventaTotal"',
     ])
     .where('v.estado = :estado', { estado: 'CONCLUIDA' })
     .andWhere(`(date(v.fecha_cierre) >= :fd OR date(v.created_at) >= :fd)`)

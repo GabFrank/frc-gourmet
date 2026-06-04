@@ -131,8 +131,8 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
         this.recalcDecimales();
       }
     });
-    this.form.get('monedaOrigenId')?.valueChanges.subscribe(() => this.recalcDecimales());
-    this.form.get('monedaDestinoId')?.valueChanges.subscribe(() => this.recalcDecimales());
+    this.form.get('monedaOrigenId')?.valueChanges.subscribe(() => { this.recalcDecimales(); this.recalcularMontoDestino(); });
+    this.form.get('monedaDestinoId')?.valueChanges.subscribe(() => { this.recalcDecimales(); this.recalcularMontoDestino(); });
   }
 
   private recalcDecimales(): void {
@@ -170,7 +170,19 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
     if (this.tipoOperacion === 'CAMBIO_DIVISA') {
       const cotiz = Number(this.form.get('cotizacion')?.value);
       if (monto > 0 && cotiz > 0) {
-        const dest = +(monto * cotiz).toFixed(2);
+        // La cotizacion se expresa en moneda principal (ej. Gs) por 1 unidad de
+        // la divisa extranjera. Por eso: si el ORIGEN es la principal se DIVIDE
+        // (Gs -> divisa: 600.000 / 6.000 = 100); si el DESTINO es la principal se
+        // MULTIPLICA (divisa -> Gs: 100 * 6.000 = 600.000).
+        const monedaOrigen = this.monedas.find((m: any) => m.id === this.form.get('monedaOrigenId')?.value);
+        const monedaDestino = this.monedas.find((m: any) => m.id === this.form.get('monedaDestinoId')?.value);
+        let dest: number;
+        if (monedaOrigen?.principal && !monedaDestino?.principal) {
+          dest = +(monto / cotiz).toFixed(2);
+        } else {
+          // destino principal, o divisa->divisa (cotizacion como factor directo)
+          dest = +(monto * cotiz).toFixed(2);
+        }
         this.form.get('montoDestino')?.setValue(dest, { emitEvent: false });
       }
     } else {

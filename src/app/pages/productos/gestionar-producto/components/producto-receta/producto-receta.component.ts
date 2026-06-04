@@ -36,10 +36,14 @@ export class ProductoRecetaComponent implements OnInit, OnDestroy {
   loading = false;
   recetaLoading = false;
 
-  // Propiedades computadas para performance
+  // Propiedades computadas para performance.
+  // El costo representa un % del PRECIO FINAL (no un markup sobre el costo).
+  // precioSugerido = costo / (porcentajeCosto/100). Configurable via
+  // ConfiguracionRrhh 'PORCENTAJE_COSTO_SUGERIDO' (default 35%).
   costoTotalReceta = 0;
-  margenGanancia = 30; // 30% por defecto
+  porcentajeCosto = 35;
   precioSugerido = 0;
+  gananciaSugerida = 0;
 
   // Propiedades computadas para ingredientes (evitar llamadas en template)
   ingredientesParaMostrar: Array<{
@@ -75,6 +79,7 @@ export class ProductoRecetaComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.cargarPorcentajeCosto();
     // Suscribirse a cambios del producto
     this.productoId$.pipe(takeUntil(this.destroy$)).subscribe(productoId => {
       if (productoId) {
@@ -83,6 +88,25 @@ export class ProductoRecetaComponent implements OnInit, OnDestroy {
         this.resetData();
       }
     });
+  }
+
+  /**
+   * Carga el porcentaje del precio final que representa el costo (configurable).
+   * Default 35% si no esta seteado.
+   */
+  private cargarPorcentajeCosto(): void {
+    this.repositoryService.getConfiguracionRrhh('PORCENTAJE_COSTO_SUGERIDO')
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (cfg: any) => {
+          const n = parseFloat(cfg?.valor);
+          if (!isNaN(n) && n > 0) {
+            this.porcentajeCosto = n;
+            this.calcularCostos();
+          }
+        },
+        error: () => { /* usa el default 35 */ },
+      });
   }
 
   ngOnDestroy(): void {
@@ -219,11 +243,14 @@ export class ProductoRecetaComponent implements OnInit, OnDestroy {
    */
   private calcularCostos(): void {
     this.costoTotalReceta = this.ingredientes.reduce((total, ingrediente) => {
-      return total + (ingrediente.costoTotal || 0);
+      return total + (Number(ingrediente.costoTotal) || 0);
     }, 0);
 
-    // Calcular precio sugerido con margen de ganancia
-    this.precioSugerido = this.costoTotalReceta / (1 - (this.margenGanancia / 100));
+    // El costo debe representar `porcentajeCosto`% del precio final, por lo que
+    // precio sugerido = costo / (porcentajeCosto/100). Ej: costo 1000 al 35% => 2857.
+    const ratio = (this.porcentajeCosto || 35) / 100;
+    this.precioSugerido = ratio > 0 ? this.costoTotalReceta / ratio : 0;
+    this.gananciaSugerida = this.precioSugerido - this.costoTotalReceta;
   }
 
   /**
@@ -240,6 +267,7 @@ export class ProductoRecetaComponent implements OnInit, OnDestroy {
     this.hayAdicionales = false;
     this.costoTotalReceta = 0;
     this.precioSugerido = 0;
+    this.gananciaSugerida = 0;
   }
 
   /**
