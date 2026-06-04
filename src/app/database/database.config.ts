@@ -10,6 +10,7 @@ import { Role } from './entities/personas/role.entity';
 import { UsuarioRole } from './entities/personas/usuario-role.entity';
 import { TipoCliente } from './entities/personas/tipo-cliente.entity';
 import { Cliente } from './entities/personas/cliente.entity';
+import { Convenio } from './entities/personas/convenio.entity';
 import { Permission } from './entities/personas/permission.entity';
 import { RolePermission } from './entities/personas/role-permission.entity';
 import { LoginSession } from './entities/auth/login-session.entity';
@@ -123,6 +124,8 @@ import { CuentaPorPagarCuota } from './entities/financiero/cuenta-por-pagar-cuot
 // CuentasPorCobrar + MovimientosCliente (Fase 7)
 import { CuentaPorCobrar } from './entities/financiero/cuenta-por-cobrar.entity';
 import { CuentaPorCobrarCuota } from './entities/financiero/cuenta-por-cobrar-cuota.entity';
+import { CobroConsolidado } from './entities/financiero/cobro-consolidado.entity';
+import { CobroConsolidadoDetalle } from './entities/financiero/cobro-consolidado-detalle.entity';
 import { MovimientoCliente } from './entities/financiero/movimiento-cliente.entity';
 
 // Entradas Varias + Operaciones Financieras (caja mayor)
@@ -192,6 +195,7 @@ import { AddSistemaDocumentos1779000000000 } from './migrations/1779000000000-Ad
 import { AddRequiereComandaToProducto1779100000000 } from './migrations/1779100000000-AddRequiereComandaToProducto';
 import { AddPrinterTicketToDispositivo1779200000000 } from './migrations/1779200000000-AddPrinterTicketToDispositivo';
 import { AddCuentaBancariaToLiquidacionSueldo1779400000000 } from './migrations/1779400000000-AddCuentaBancariaToLiquidacionSueldo';
+import { AddConveniosCobroConsolidado1779500000000 } from './migrations/1779500000000-AddConveniosCobroConsolidado';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -278,6 +282,7 @@ function getEntitiesList(): any[] {
       UsuarioRole,
       TipoCliente,
       Cliente,
+      Convenio,
       Permission,
       RolePermission,
       LoginSession,
@@ -353,6 +358,8 @@ function getEntitiesList(): any[] {
       // CuentasPorCobrar + MovimientosCliente (Fase 7)
       CuentaPorCobrar,
       CuentaPorCobrarCuota,
+      CobroConsolidado,
+      CobroConsolidadoDetalle,
       MovimientoCliente,
       // Entradas Varias + Operaciones Financieras + Chequeras + Cheques
       EntradaVariaCategoria,
@@ -479,6 +486,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddRequiereComandaToProducto1779100000000,
     AddPrinterTicketToDispositivo1779200000000,
     AddCuentaBancariaToLiquidacionSueldo1779400000000,
+    AddConveniosCobroConsolidado1779500000000,
   ];
 }
 

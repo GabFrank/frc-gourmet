@@ -1,7 +1,8 @@
-import { Column, Entity, ManyToOne, JoinColumn } from 'typeorm';
+import { Column, Entity, ManyToOne, JoinColumn, ManyToMany, JoinTable } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import { Persona } from './persona.entity';
 import { TipoCliente } from './tipo-cliente.entity';
+import { Convenio } from './convenio.entity';
 
 /**
  * Entity representing a client with business-related attributes
@@ -36,4 +37,16 @@ export class Cliente extends BaseModel {
 
   @Column({ type: 'decimal', precision: 18, scale: 2, default: 0, name: 'saldo_actual' })
   saldoActual!: number;
-} 
+
+  // Convenios a los que pertenece el cliente (ej. funcionario de una empresa con
+  // acuerdo). Lado dueno del M2M.
+  @ManyToMany(() => Convenio, (convenio: Convenio) => convenio.clientes, {
+    createForeignKeyConstraints: false,
+  })
+  @JoinTable({
+    name: 'cliente_convenios',
+    joinColumn: { name: 'cliente_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'convenio_id', referencedColumnName: 'id' },
+  })
+  convenios?: Convenio[];
+}

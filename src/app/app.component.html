@@ -238,6 +238,10 @@
               <mat-icon matListItemIcon>business</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Clientes</span>
             </a>
+            <a *appHasPermission="'CLIENTES_VER'" mat-list-item (click)="openConveniosTab()">
+              <mat-icon matListItemIcon>handshake</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Convenios</span>
+            </a>
             <a *appHasPermission="'RRHH_FUNCIONARIO_VER'" mat-list-item (click)="openCargosTab()">
               <mat-icon matListItemIcon>work</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Cargos</span>
