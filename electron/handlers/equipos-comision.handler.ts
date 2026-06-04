@@ -232,8 +232,8 @@ export function registerEquiposComisionHandlers(
         let qb = dataSource.createQueryBuilder('venta_items', 'vi')
           .innerJoin('ventas', 'v', 'vi.venta_id = v.id')
           .select([
-            'SUM(vi.cantidad) as totalUnidades',
-            `SUM((vi.precio_venta_unitario - vi.descuento_unitario) * vi.cantidad + vi.precio_adicionales) as totalMonto`,
+            'SUM(vi.cantidad) as "totalUnidades"',
+            `SUM((vi.precio_venta_unitario - vi.descuento_unitario) * vi.cantidad + vi.precio_adicionales) as "totalMonto"`,
           ])
           .where('v.estado = :estado', { estado: 'CONCLUIDA' })
           .andWhere(`(date(v.fecha_cierre) >= :fd OR date(v.created_at) >= :fd)`)

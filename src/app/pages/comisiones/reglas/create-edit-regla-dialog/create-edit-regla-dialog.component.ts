@@ -108,7 +108,7 @@ export class CreateEditReglaDialogComponent implements OnInit {
     // Cargar lista de productos (con paginado, solo activos)
     this.repo.getProductosWithFilters({
       activo: 'true',
-      page: 1,
+      page: 0,
       pageSize: 5000,
     }).subscribe({
       next: (res: any) => {

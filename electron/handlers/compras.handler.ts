@@ -288,13 +288,13 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
         .leftJoin('cpp.cuotas', 'cuota')
         .where('cpp.compra_id IN (:...ids)', { ids: compraIds })
         .select([
-          'cpp.compra_id AS compraId',
-          'cpp.cantidadCuotas AS cantidadCuotas',
-          'COUNT(cuota.id) AS totalCuotas',
-          "SUM(CASE WHEN cuota.estado = 'PAGADA' THEN 1 ELSE 0 END) AS cuotasPagadas",
-          "SUM(CASE WHEN cuota.estado = 'PARCIAL' THEN 1 ELSE 0 END) AS cuotasParciales",
-          'cpp.montoTotal AS montoTotal',
-          'cpp.montoPagado AS montoPagado',
+          'cpp.compra_id AS "compraId"',
+          'cpp.cantidadCuotas AS "cantidadCuotas"',
+          'COUNT(cuota.id) AS "totalCuotas"',
+          "SUM(CASE WHEN cuota.estado = 'PAGADA' THEN 1 ELSE 0 END) AS \"cuotasPagadas\"",
+          "SUM(CASE WHEN cuota.estado = 'PARCIAL' THEN 1 ELSE 0 END) AS \"cuotasParciales\"",
+          'cpp.montoTotal AS "montoTotal"',
+          'cpp.montoPagado AS "montoPagado"',
         ])
         .groupBy('cpp.compra_id')
         .addGroupBy('cpp.cantidadCuotas')
@@ -928,11 +928,11 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
           .where('cd.compra_id IN (:...compraIds)', { compraIds })
           .andWhere('cd.producto_id IN (:...productoIds)', { productoIds })
           .select([
-            'cd.compra_id AS compraId',
-            'cd.producto_id AS productoId',
-            'cd.costoUnitarioPresentacion AS costoUnitarioPresentacion',
-            'pres.nombre AS presentacionNombre',
-            'pres.cantidad AS presentacionCantidad',
+            'cd.compra_id AS "compraId"',
+            'cd.producto_id AS "productoId"',
+            'cd.costoUnitarioPresentacion AS "costoUnitarioPresentacion"',
+            'pres.nombre AS "presentacionNombre"',
+            'pres.cantidad AS "presentacionCantidad"',
           ])
           .getRawMany();
       }
@@ -978,16 +978,16 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       .where('cd.producto_id = :productoId', { productoId })
       .andWhere('c.estado = :estado', { estado: CompraEstado.FINALIZADO })
       .select([
-        'cd.id AS id',
-        'c.id AS compraId',
-        'c.fechaCompra AS fechaCompra',
-        'pv.nombre AS proveedorNombre',
-        'mon.simbolo AS monedaSimbolo',
-        'cd.cantidad AS cantidad',
-        'cd.cantidadUnidadBase AS cantidadUnidadBase',
-        'cd.costoUnitarioPresentacion AS costoUnitario',
-        'pres.nombre AS presentacionNombre',
-        'pres.cantidad AS presentacionCantidad',
+        'cd.id AS "id"',
+        'c.id AS "compraId"',
+        'c.fechaCompra AS "fechaCompra"',
+        'pv.nombre AS "proveedorNombre"',
+        'mon.simbolo AS "monedaSimbolo"',
+        'cd.cantidad AS "cantidad"',
+        'cd.cantidadUnidadBase AS "cantidadUnidadBase"',
+        'cd.costoUnitarioPresentacion AS "costoUnitario"',
+        'pres.nombre AS "presentacionNombre"',
+        'pres.cantidad AS "presentacionCantidad"',
       ])
       .orderBy('c.fechaCompra', 'DESC')
       .addOrderBy('c.id', 'DESC')
@@ -1030,9 +1030,9 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
         .orderBy('c.fechaCompra', 'DESC')
         .addOrderBy('c.id', 'DESC')
         .select([
-          'cd.costoUnitarioPresentacion AS costo',
-          'pres.cantidad AS presFactor',
-          'c.fechaCompra AS fecha',
+          'cd.costoUnitarioPresentacion AS "costo"',
+          'pres.cantidad AS "presFactor"',
+          'c.fechaCompra AS "fecha"',
         ])
         .limit(1)
         .getRawOne();
@@ -1057,9 +1057,9 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       .orderBy('c.fechaCompra', 'DESC')
       .addOrderBy('c.id', 'DESC')
       .select([
-        'cd.costoUnitarioPresentacion AS costo',
-        'pres.cantidad AS presFactor',
-        'c.fechaCompra AS fecha',
+        'cd.costoUnitarioPresentacion AS "costo"',
+        'pres.cantidad AS "presFactor"',
+        'c.fechaCompra AS "fecha"',
       ])
       .limit(1)
       .getRawOne();

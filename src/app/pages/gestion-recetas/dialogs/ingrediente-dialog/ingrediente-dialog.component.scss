@@ -294,7 +294,14 @@
   --error-color: #f44336;
 }
 
-// Dark theme support
+// Dark theme support — la app togglea dark via body.dark-theme, no solo OS.
+:host-context(.dark-theme),
+:host-context([data-theme="dark"]) {
+  --border-color: #424242;
+  --surface-color: #303030;
+  --text-color: #ffffff;
+  --text-secondary-color: #b0b0b0;
+}
 @media (prefers-color-scheme: dark) {
   :host {
     --border-color: #424242;

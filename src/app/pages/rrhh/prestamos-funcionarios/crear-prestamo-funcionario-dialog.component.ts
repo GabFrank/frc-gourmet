@@ -6,6 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -24,6 +25,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    MatButtonToggleModule,
     MatDatepickerModule,
     MatNativeDateModule,
     MatProgressSpinnerModule,
@@ -64,24 +66,42 @@ import { RepositoryService } from 'src/app/database/repository.service';
 
         <div class="separator full">Origen del desembolso</div>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Caja Mayor</mat-label>
-          <mat-select formControlName="cajaMayorId">
-            <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{ c.nombre }}</mat-option>
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field appearance="outline">
-          <mat-label>Moneda</mat-label>
-          <mat-select formControlName="monedaId">
-            <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field appearance="outline">
-          <mat-label>Forma de pago</mat-label>
-          <mat-select formControlName="formaPagoId">
-            <mat-option *ngFor="let f of formasPago" [value]="f.id">{{ f.descripcion || f.nombre }}</mat-option>
-          </mat-select>
-        </mat-form-field>
+        <mat-button-toggle-group formControlName="fuente" class="full toggle">
+          <mat-button-toggle value="CAJA_MAYOR">Caja Mayor</mat-button-toggle>
+          <mat-button-toggle value="CUENTA_BANCARIA">Cuenta bancaria</mat-button-toggle>
+        </mat-button-toggle-group>
+
+        <ng-container *ngIf="form.get('fuente')?.value === 'CAJA_MAYOR'">
+          <mat-form-field appearance="outline">
+            <mat-label>Caja Mayor</mat-label>
+            <mat-select formControlName="cajaMayorId">
+              <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{ c.nombre }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Moneda</mat-label>
+            <mat-select formControlName="monedaId">
+              <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Forma de pago</mat-label>
+            <mat-select formControlName="formaPagoId">
+              <mat-option *ngFor="let f of formasPago" [value]="f.id">{{ f.descripcion || f.nombre }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </ng-container>
+
+        <ng-container *ngIf="form.get('fuente')?.value === 'CUENTA_BANCARIA'">
+          <mat-form-field appearance="outline" class="full">
+            <mat-label>Cuenta bancaria</mat-label>
+            <mat-select formControlName="cuentaBancariaId">
+              <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">
+                {{ cb.nombre }} ({{ cb.moneda?.denominacion || cb.moneda?.simbolo }})
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+        </ng-container>
 
         <mat-form-field appearance="outline" class="full">
           <mat-label>Observacion</mat-label>
@@ -102,6 +122,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
     .form { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; min-width: 720px; }
     .full { grid-column: 1 / -1; }
     .separator { font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; opacity: 0.65; padding: 4px 0; border-bottom: 1px solid rgba(128,128,128,0.25); margin: 4px 0 0; }
+    .toggle { margin: 4px 0; }
   `],
 })
 export class CrearPrestamoFuncionarioDialogComponent implements OnInit {
@@ -112,6 +133,7 @@ export class CrearPrestamoFuncionarioDialogComponent implements OnInit {
   monedas: any[] = [];
   cajasMayor: any[] = [];
   formasPago: any[] = [];
+  cuentasBancarias: any[] = [];
 
   constructor(
     private dialogRef: MatDialogRef<CrearPrestamoFuncionarioDialogComponent>,
@@ -126,8 +148,10 @@ export class CrearPrestamoFuncionarioDialogComponent implements OnInit {
       cantidadCuotas: [6, [Validators.required, Validators.min(1)]],
       monedaId: [null, Validators.required],
       fechaInicio: [new Date(), Validators.required],
-      cajaMayorId: [null, Validators.required],
-      formaPagoId: [null, Validators.required],
+      fuente: ['CAJA_MAYOR', Validators.required],
+      cajaMayorId: [null],
+      formaPagoId: [null],
+      cuentaBancariaId: [null],
       observacion: [''],
     });
   }
@@ -135,21 +159,50 @@ export class CrearPrestamoFuncionarioDialogComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     this.loading = true;
     try {
-      const [funcs, monedas, cajas, formas] = await Promise.all([
+      const [funcs, monedas, cajas, formas, cuentas] = await Promise.all([
         firstValueFrom(this.repositoryService.getFuncionarios({ soloActivos: true })),
         firstValueFrom(this.repositoryService.getMonedas()),
         firstValueFrom(this.repositoryService.getCajasMayor()),
         firstValueFrom(this.repositoryService.getFormasPago()),
+        firstValueFrom(this.repositoryService.getCuentasBancarias()),
       ]);
       this.funcionarios = funcs || [];
       this.monedas = monedas || [];
       this.cajasMayor = (cajas || []).filter((c: any) => c.estado === 'ABIERTA');
       this.formasPago = formas || [];
+      this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
     } catch (e) {
       console.error(e);
     } finally {
       this.loading = false;
     }
+
+    this.form.get('fuente')!.valueChanges.subscribe(() => this.aplicarValidadoresFuente());
+    // Al elegir cuenta bancaria, la moneda del prestamo se alinea con la de la cuenta.
+    this.form.get('cuentaBancariaId')!.valueChanges.subscribe((cbId) => {
+      const cb = this.cuentasBancarias.find((c) => c.id === cbId);
+      if (cb?.moneda?.id) this.form.get('monedaId')!.setValue(cb.moneda.id, { emitEvent: false });
+    });
+    this.aplicarValidadoresFuente();
+  }
+
+  private aplicarValidadoresFuente(): void {
+    const fuente = this.form.get('fuente')!.value;
+    const cm = this.form.get('cajaMayorId')!;
+    const fp = this.form.get('formaPagoId')!;
+    const cb = this.form.get('cuentaBancariaId')!;
+    if (fuente === 'CAJA_MAYOR') {
+      cm.setValidators([Validators.required]);
+      fp.setValidators([Validators.required]);
+      cb.clearValidators();
+    } else {
+      cm.clearValidators();
+      fp.clearValidators();
+      cb.setValidators([Validators.required]);
+    }
+    cm.updateValueAndValidity({ emitEvent: false });
+    fp.updateValueAndValidity({ emitEvent: false });
+    cb.updateValueAndValidity({ emitEvent: false });
   }
 
   cancel(): void { this.dialogRef.close(); }
@@ -158,10 +211,24 @@ export class CrearPrestamoFuncionarioDialogComponent implements OnInit {
     if (this.form.invalid) return;
     this.saving = true;
     try {
-      await firstValueFrom(this.repositoryService.createCuentaPorPagar({
-        ...this.form.value,
+      const v = this.form.value;
+      const payload: any = {
+        funcionarioId: v.funcionarioId,
+        descripcion: v.descripcion,
+        montoTotal: v.montoTotal,
+        cantidadCuotas: v.cantidadCuotas,
+        monedaId: v.monedaId,
+        fechaInicio: v.fechaInicio,
+        observacion: v.observacion,
         tipo: 'PRESTAMO_FUNCIONARIO',
-      }));
+      };
+      if (v.fuente === 'CUENTA_BANCARIA') {
+        payload.cuentaBancariaId = v.cuentaBancariaId;
+      } else {
+        payload.cajaMayorId = v.cajaMayorId;
+        payload.formaPagoId = v.formaPagoId;
+      }
+      await firstValueFrom(this.repositoryService.createCuentaPorPagar(payload));
       this.snackBar.open('Prestamo creado con cuotas mensuales', 'Cerrar', { duration: 3000 });
       this.dialogRef.close({ saved: true });
     } catch (e) {
