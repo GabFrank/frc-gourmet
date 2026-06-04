@@ -300,8 +300,13 @@ export function registerVacacionesHandlers(
       const disponibles = Number(vacacion.diasGenerados) - Number(vacacion.diasGozados) - vendidos;
       if (dias > disponibles) throw new Error(`Solo hay ${disponibles} dia(s) disponibles para vender`);
 
+      // Monto: si viene del front (valor negociado) se usa ese; si no, se calcula
+      // como dias x salario diario (salarioBase / 30).
       const salarioBase = Number((vacacion.funcionario as any)?.salarioBase || 0);
-      const monto = +((salarioBase / 30) * dias).toFixed(2);
+      const montoManual = Number(payload.monto);
+      const monto = montoManual > 0
+        ? +montoManual.toFixed(2)
+        : +((salarioBase / 30) * dias).toFixed(2);
 
       const userId = getCurrentUser()?.id;
       const venta = queryRunner.manager.create(VacacionVenta, {

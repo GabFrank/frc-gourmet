@@ -48,6 +48,7 @@ export class VacacionDetalleDialogComponent implements OnInit {
 
   mostrarProgramar = false;
   mostrarVender = false;
+  montoSugerido = 0;
   programarForm: FormGroup;
   venderForm: FormGroup;
 
@@ -69,7 +70,14 @@ export class VacacionDetalleDialogComponent implements OnInit {
     });
     this.venderForm = this.fb.group({
       dias: [1, [Validators.required, Validators.min(1)]],
+      monto: [0, [Validators.required, Validators.min(1)]],
       observacion: [''],
+    });
+    // El monto se sugiere (dias x salario diario) pero es editable: muchas veces
+    // se negocia un valor mayor o menor.
+    this.venderForm.get('dias')!.valueChanges.subscribe(() => {
+      this.montoSugerido = this.montoVentaEstimado;
+      this.venderForm.get('monto')!.setValue(this.montoSugerido, { emitEvent: false });
     });
   }
 
@@ -79,6 +87,9 @@ export class VacacionDetalleDialogComponent implements OnInit {
     this.loading = true;
     try {
       this.vacacion = await firstValueFrom(this.repo.getVacacion(this.data.vacacionId));
+      // Sugerir el monto de venta segun el salario diario (editable).
+      this.montoSugerido = this.montoVentaEstimado;
+      this.venderForm.get('monto')!.setValue(this.montoSugerido, { emitEvent: false });
     } catch (e: any) {
       this.snackBar.open('Error al cargar: ' + (e?.message || ''), 'Cerrar', { duration: 4000 });
     } finally {
@@ -149,11 +160,12 @@ export class VacacionDetalleDialogComponent implements OnInit {
       await firstValueFrom(this.repo.venderDiasVacacion({
         vacacionId: this.data.vacacionId,
         dias,
+        monto: Number(this.venderForm.get('monto')?.value) || undefined,
         observacion: this.venderForm.get('observacion')?.value,
       }));
       this.snackBar.open('Venta de dias registrada (se pagara en la liquidacion)', 'Cerrar', { duration: 3500 });
       this.mostrarVender = false;
-      this.venderForm.reset({ dias: 1, observacion: '' });
+      this.venderForm.reset({ dias: 1, monto: 0, observacion: '' });
       this.changed = true;
       await this.cargar();
     } catch (e: any) {

@@ -38,9 +38,8 @@
   flex-wrap: wrap;
 }
 .vd-grow { flex: 1 1 180px; }
-.vd-narrow { width: 130px; }
-.vd-estimado { font-weight: 600; white-space: nowrap; }
-.vd-estimado small { font-weight: 400; color: var(--text-secondary); }
+.vd-narrow { width: 150px; }
+.vd-nota { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 
 .vd-section-title { font-weight: 600; margin: 14px 0 6px; }
 
