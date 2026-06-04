@@ -68,6 +68,12 @@ export class Vale extends BaseModel {
   @Column({ name: 'movimiento_id', type: 'int', nullable: true })
   movimientoId?: number;
 
+  // Si el vale se egresó desde una cuenta bancaria (en vez de Caja Mayor), se
+  // guarda aquí para poder revertir el débito al anular. Mutuamente excluyente
+  // con cajaMayor/movimientoId.
+  @Column({ name: 'cuenta_bancaria_id', type: 'int', nullable: true })
+  cuentaBancariaId?: number;
+
   @ManyToOne(() => Usuario, { nullable: true })
   @JoinColumn({ name: 'autorizado_por_id' })
   autorizadoPor?: Usuario;

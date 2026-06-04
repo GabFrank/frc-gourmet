@@ -45,6 +45,26 @@
       <mat-error>La caja mayor es requerida</mat-error>
     </mat-form-field>
 
+    <!-- Fuente del egreso: efectivo en caja mayor o débito a cuenta bancaria -->
+    <mat-button-toggle-group formControlName="fuente" class="full-width fuente-toggle">
+      <mat-button-toggle value="CAJA_MAYOR">
+        <mat-icon>point_of_sale</mat-icon> Caja Mayor
+      </mat-button-toggle>
+      <mat-button-toggle value="CUENTA_BANCARIA">
+        <mat-icon>account_balance</mat-icon> Cuenta Bancaria
+      </mat-button-toggle>
+    </mat-button-toggle-group>
+
+    <mat-form-field appearance="outline" class="full-width" *ngIf="form.get('fuente')?.value === 'CUENTA_BANCARIA'">
+      <mat-label>Cuenta Bancaria</mat-label>
+      <mat-select formControlName="cuentaBancariaId">
+        <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">
+          {{cb.nombre}}<span *ngIf="cb.banco"> - {{cb.banco}}</span>
+        </mat-option>
+      </mat-select>
+      <mat-error>La cuenta bancaria es requerida</mat-error>
+    </mat-form-field>
+
     <div class="form-row">
       <mat-form-field appearance="outline" class="flex-field">
         <mat-label>Proveedor (opcional)</mat-label>

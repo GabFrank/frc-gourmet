@@ -33,6 +33,12 @@ export class Gasto extends BaseModel {
   @JoinColumn({ name: 'caja_mayor_id' })
   cajaMayor!: any;
 
+  // Si el gasto se pagó desde una cuenta bancaria (en vez de Caja Mayor), se
+  // guarda aquí para revertir el débito al anular. Cuando está seteada, NO se
+  // generan movimientos de Caja Mayor.
+  @Column({ name: 'cuenta_bancaria_id', type: 'int', nullable: true })
+  cuentaBancariaId?: number;
+
   @Column({ name: 'es_recurrente', default: false })
   esRecurrente!: boolean;
 

@@ -198,6 +198,7 @@ import { AddPrinterTicketToDispositivo1779200000000 } from './migrations/1779200
 import { AddCuentaBancariaToLiquidacionSueldo1779400000000 } from './migrations/1779400000000-AddCuentaBancariaToLiquidacionSueldo';
 import { AddConveniosCobroConsolidado1779500000000 } from './migrations/1779500000000-AddConveniosCobroConsolidado';
 import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVacacionVentas';
+import { AddCuentaBancariaToPagosCobros1779700000000 } from './migrations/1779700000000-AddCuentaBancariaToPagosCobros';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -491,6 +492,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddCuentaBancariaToLiquidacionSueldo1779400000000,
     AddConveniosCobroConsolidado1779500000000,
     AddVacacionVentas1779600000000,
+    AddCuentaBancariaToPagosCobros1779700000000,
   ];
 }
 

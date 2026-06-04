@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -45,6 +46,7 @@ interface DetalleRow {
     MatButtonModule,
     MatIconModule,
     MatSelectModule,
+    MatButtonToggleModule,
     MatDatepickerModule,
     MatNativeDateModule,
     MatProgressSpinnerModule,
@@ -71,6 +73,7 @@ export class CreateEditGastoDialogComponent implements OnInit {
   monedas: any[] = [];
   formasPago: any[] = [];
   cajasMayor: any[] = [];
+  cuentasBancarias: any[] = [];
   proveedores: any[] = [];
   proveedoresFiltrados: any[] = [];
   tipoBoletaOptions = ['LEGAL', 'COMUN', 'OTRO', 'SIN_COMPROBANTE'];
@@ -105,7 +108,9 @@ export class CreateEditGastoDialogComponent implements OnInit {
     this.form = this.fb.group({
       gastoCategoriaId: [null, Validators.required],
       descripcion: ['', Validators.required],
+      fuente: ['CAJA_MAYOR', Validators.required],
       cajaMayorId: [this.data?.cajaMayorId || null, Validators.required],
+      cuentaBancariaId: [null],
       fecha: [new Date(), Validators.required],
       proveedorId: [null],
       numeroComprobante: [''],
@@ -114,6 +119,7 @@ export class CreateEditGastoDialogComponent implements OnInit {
       frecuencia: [null],
       proximoVencimiento: [null],
     });
+    this.form.get('fuente')!.valueChanges.subscribe(() => this.aplicarValidadoresFuente());
 
     this.detalleForm = this.fb.group({
       monedaId: [null, Validators.required],
@@ -136,12 +142,13 @@ export class CreateEditGastoDialogComponent implements OnInit {
 
   async loadLookups(): Promise<void> {
     try {
-      const [categorias, monedas, formasPago, cajasMayor, proveedores] = await Promise.all([
+      const [categorias, monedas, formasPago, cajasMayor, proveedores, cuentas] = await Promise.all([
         firstValueFrom(this.repositoryService.getGastoCategorias()),
         firstValueFrom(this.repositoryService.getMonedas()),
         firstValueFrom(this.repositoryService.getFormasPago()),
         firstValueFrom(this.repositoryService.getCajasMayor()),
         firstValueFrom(this.repositoryService.getProveedores()),
+        firstValueFrom(this.repositoryService.getCuentasBancarias()),
       ]);
 
       this.gastoCategorias = (categorias || []).filter((c: any) => c.activo !== false);
@@ -149,6 +156,7 @@ export class CreateEditGastoDialogComponent implements OnInit {
       this.monedas = monedas || [];
       this.formasPago = formasPago || [];
       this.cajasMayor = (cajasMayor || []).filter((c: any) => c.estado === 'ABIERTA');
+      this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
       this.proveedores = proveedores || [];
       this.proveedoresFiltrados = [];
 
@@ -178,6 +186,8 @@ export class CreateEditGastoDialogComponent implements OnInit {
         esRecurrente: gasto.esRecurrente || false,
         frecuencia: gasto.frecuencia || null,
         proximoVencimiento: gasto.proximoVencimiento ? new Date(gasto.proximoVencimiento) : null,
+        fuente: gasto.cuentaBancariaId ? 'CUENTA_BANCARIA' : 'CAJA_MAYOR',
+        cuentaBancariaId: gasto.cuentaBancariaId || null,
       });
 
       this.esRecurrente = gasto.esRecurrente || false;
@@ -278,6 +288,16 @@ export class CreateEditGastoDialogComponent implements OnInit {
     }
   }
 
+  private aplicarValidadoresFuente(): void {
+    // cajaMayorId se mantiene requerido siempre (es el contexto/caja del gasto y
+    // la columna es NOT NULL); en banco además se exige la cuenta bancaria.
+    const esBanco = this.form.get('fuente')!.value === 'CUENTA_BANCARIA';
+    const cb = this.form.get('cuentaBancariaId')!;
+    if (esBanco) cb.setValidators([Validators.required]);
+    else cb.clearValidators();
+    cb.updateValueAndValidity({ emitEvent: false });
+  }
+
   // --- Detalles de pago ---
 
   agregarDetalle(): void {
@@ -321,10 +341,11 @@ export class CreateEditGastoDialogComponent implements OnInit {
   async onSubmit(): Promise<void> {
     if (this.form.invalid || this.detalles.length === 0) return;
 
-    // Saldos negativos: validar tanto en create como en edit (en edit ya
-    // factorizamos la reversion de los detalles previos del mismo gasto).
+    const esBanco = this.form.value.fuente === 'CUENTA_BANCARIA';
+
+    // Saldos negativos: solo aplica a Caja Mayor (en banco se debita la cuenta).
     const cajaMayorId = this.form.value.cajaMayorId;
-    if (cajaMayorId) {
+    if (!esBanco && cajaMayorId) {
       const ok = await this.confirmarSaldoSiNegativo(cajaMayorId);
       if (!ok) return;
     }
@@ -336,6 +357,8 @@ export class CreateEditGastoDialogComponent implements OnInit {
         gastoCategoria: { id: f.gastoCategoriaId },
         descripcion: f.descripcion?.toUpperCase(),
         cajaMayor: { id: f.cajaMayorId },
+        fuente: f.fuente,
+        cuentaBancariaId: esBanco ? f.cuentaBancariaId : null,
         fecha: f.fecha,
         proveedor: f.proveedorId ? { id: f.proveedorId } : null,
         numeroComprobante: f.numeroComprobante?.toUpperCase() || null,

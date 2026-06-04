@@ -18,6 +18,14 @@
   width: 100%;
 }
 
+.fuente-toggle {
+  margin-bottom: 12px;
+
+  .mat-button-toggle {
+    flex: 1;
+  }
+}
+
 .cat-padre {
   color: rgba(0,0,0,0.5);
   font-size: 13px;

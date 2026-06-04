@@ -6,6 +6,7 @@ import { MotivoVale } from '../../src/app/database/entities/rrhh/motivo-vale.ent
 import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.entity';
 import { CajaMayor } from '../../src/app/database/entities/financiero/caja-mayor.entity';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
+import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
@@ -120,10 +121,15 @@ export function registerValesHandlers(
     await ensurePermission(dataSource, getCurrentUser, 'RRHH_VALE_CREAR');
     await ensurePermission(dataSource, getCurrentUser, 'RRHH_VALE_CONFIRMAR');
 
+    const esBanco = data?.fuente === 'CUENTA_BANCARIA';
     if (!data?.funcionarioId) throw new Error('Funcionario requerido');
     if (!data?.monedaId) throw new Error('Moneda requerida');
-    if (!data?.cajaMayorId) throw new Error('Caja Mayor requerida');
-    if (!data?.formaPagoId) throw new Error('Forma de pago requerida');
+    if (esBanco) {
+      if (!data?.cuentaBancariaId) throw new Error('Cuenta bancaria requerida');
+    } else {
+      if (!data?.cajaMayorId) throw new Error('Caja Mayor requerida');
+      if (!data?.formaPagoId) throw new Error('Forma de pago requerida');
+    }
     const monto = Number(data.monto);
     if (!monto || monto <= 0) throw new Error('Monto invalido');
 
@@ -138,15 +144,49 @@ export function registerValesHandlers(
       if (!funcionario) throw new Error(`Funcionario ${data.funcionarioId} no encontrado`);
       const moneda = await queryRunner.manager.findOne(Moneda, { where: { id: data.monedaId } });
       if (!moneda) throw new Error(`Moneda ${data.monedaId} no encontrada`);
-      const cajaMayor = await queryRunner.manager.findOne(CajaMayor, { where: { id: data.cajaMayorId } });
-      if (!cajaMayor) throw new Error(`Caja Mayor ${data.cajaMayorId} no encontrada`);
-      const formaPago = await queryRunner.manager.findOne(FormasPago, { where: { id: data.formaPagoId } });
-      if (!formaPago) throw new Error(`Forma de pago ${data.formaPagoId} no encontrada`);
 
       const userId = getCurrentUser()?.id;
       const userEntity = userId
         ? await queryRunner.manager.findOne(Usuario, { where: { id: userId } })
         : null;
+
+      if (esBanco) {
+        // Egreso del vale desde una cuenta bancaria: debita el saldo, sin
+        // movimiento de Caja Mayor.
+        const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: data.cuentaBancariaId } });
+        if (!cb) throw new Error(`Cuenta bancaria ${data.cuentaBancariaId} no encontrada`);
+        const cajaMayor = data.cajaMayorId
+          ? await queryRunner.manager.findOne(CajaMayor, { where: { id: data.cajaMayorId } })
+          : null;
+
+        const vale = queryRunner.manager.create(Vale, {
+          funcionario,
+          motivo: data.motivoId ? { id: data.motivoId } as any : undefined,
+          monto,
+          fecha: parseLocalDate(data.fecha) || new Date(),
+          descripcion: data.descripcion,
+          cajaMayor: cajaMayor || undefined,
+          moneda,
+          estado: ValeEstado.CONFIRMADO,
+          esAdelanto: data.esAdelanto === true,
+          comprobanteUrl: data.comprobanteUrl,
+          cuentaBancariaId: cb.id,
+          autorizadoPor: userEntity || undefined,
+        });
+        await setEntityUserTracking(dataSource, vale, userId, false);
+        const valeSaved = await queryRunner.manager.save(Vale, vale);
+
+        cb.saldo = Number(cb.saldo) - monto;
+        await queryRunner.manager.save(CuentaBancaria, cb);
+
+        await queryRunner.commitTransaction();
+        return valeSaved;
+      }
+
+      const cajaMayor = await queryRunner.manager.findOne(CajaMayor, { where: { id: data.cajaMayorId } });
+      if (!cajaMayor) throw new Error(`Caja Mayor ${data.cajaMayorId} no encontrada`);
+      const formaPago = await queryRunner.manager.findOne(FormasPago, { where: { id: data.formaPagoId } });
+      if (!formaPago) throw new Error(`Forma de pago ${data.formaPagoId} no encontrada`);
 
       const vale = queryRunner.manager.create(Vale, {
         funcionario,
@@ -213,18 +253,42 @@ export function registerValesHandlers(
         throw new Error(`Vale en estado ${vale.estado}, no se puede confirmar`);
       }
 
-      // Permitir override de cajaMayor/forma pago al confirmar
-      const cajaMayorId = payload?.cajaMayorId || vale.cajaMayor?.id;
+      const esBanco = payload?.fuente === 'CUENTA_BANCARIA';
       const monedaId = payload?.monedaId || vale.moneda?.id;
-      const formaPagoId = payload?.formaPagoId || vale.formaPago?.id;
-      if (!cajaMayorId || !monedaId || !formaPagoId) {
-        throw new Error('Faltan datos para confirmar el vale (caja mayor, moneda, forma de pago)');
-      }
 
       const userId = getCurrentUser()?.id;
       const userEntity = userId
         ? await queryRunner.manager.findOne(Usuario, { where: { id: userId } })
         : null;
+
+      if (esBanco) {
+        // Egreso del vale desde cuenta bancaria: debita el saldo, sin caja mayor.
+        const cuentaBancariaId = payload?.cuentaBancariaId;
+        if (!cuentaBancariaId || !monedaId) {
+          throw new Error('Faltan datos para confirmar el vale (cuenta bancaria, moneda)');
+        }
+        const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: cuentaBancariaId } });
+        if (!cb) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
+        cb.saldo = Number(cb.saldo) - Number(vale.monto);
+        await queryRunner.manager.save(CuentaBancaria, cb);
+
+        vale.estado = ValeEstado.CONFIRMADO;
+        vale.cuentaBancariaId = cb.id;
+        vale.moneda = { id: monedaId } as any;
+        vale.autorizadoPor = userEntity || undefined;
+        await setEntityUserTracking(dataSource, vale, userId, true);
+        await valeRepo.save(vale);
+
+        await queryRunner.commitTransaction();
+        return vale;
+      }
+
+      // Permitir override de cajaMayor/forma pago al confirmar
+      const cajaMayorId = payload?.cajaMayorId || vale.cajaMayor?.id;
+      const formaPagoId = payload?.formaPagoId || vale.formaPago?.id;
+      if (!cajaMayorId || !monedaId || !formaPagoId) {
+        throw new Error('Faltan datos para confirmar el vale (caja mayor, moneda, forma de pago)');
+      }
 
       const obs = `VALE #${vale.id} - ${vale.funcionario.persona?.nombre || ''} ${vale.funcionario.persona?.apellido || ''}`.trim();
       const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
@@ -278,7 +342,16 @@ export function registerValesHandlers(
         ? await queryRunner.manager.findOne(Usuario, { where: { id: userId } })
         : null;
 
-      // Si fue confirmado, generar contra-movimiento
+      // Si fue confirmado desde cuenta bancaria, revertir el débito bancario.
+      if (vale.estado === ValeEstado.CONFIRMADO && vale.cuentaBancariaId) {
+        const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: vale.cuentaBancariaId } });
+        if (cb) {
+          cb.saldo = Number(cb.saldo) + Number(vale.monto);
+          await queryRunner.manager.save(CuentaBancaria, cb);
+        }
+      }
+
+      // Si fue confirmado desde caja mayor, generar contra-movimiento
       if (vale.estado === ValeEstado.CONFIRMADO && vale.movimientoId) {
         const movOriginal = await queryRunner.manager.findOne(CajaMayorMovimiento, {
           where: { id: vale.movimientoId },
