@@ -1959,6 +1959,12 @@ export class RepositoryHttpService extends RepositoryService {
   cancelarVacacionPeriodo(periodoId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.cancelarVacacionPeriodo() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  venderDiasVacacion(_payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.venderDiasVacacion() no esta implementado todavia.`)) as any;
+  }
+  anularVentaVacacion(_ventaId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.anularVentaVacacion() no esta implementado todavia.`)) as any;
+  }
   getLiquidacionesFinal(filtros?: any): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getLiquidacionesFinal() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

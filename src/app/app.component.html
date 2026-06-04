@@ -290,6 +290,10 @@
               <mat-icon matListItemIcon>star</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Aguinaldos</span>
             </a>
+            <a *appHasPermission="'RRHH_VACACION_GESTIONAR'" mat-list-item (click)="openVacacionesTab()">
+              <mat-icon matListItemIcon>beach_access</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Vacaciones</span>
+            </a>
             <a *appHasPermission="'RRHH_CONFIG_EDITAR'" mat-list-item (click)="openFeriadosTab()">
               <mat-icon matListItemIcon>celebration</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Feriados</span>
