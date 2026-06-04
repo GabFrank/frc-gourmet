@@ -71,6 +71,8 @@ interface ItemSeed {
 export class CreateEditCompraComponent implements OnInit {
   mode: 'create' | 'edit' = 'create';
   compraId?: number;
+  /** Callback opcional para que la lista de compras se refresque al crear/finalizar. */
+  onSaved?: () => void;
   estadoActual: string = 'ABIERTO';
 
   form!: FormGroup;
@@ -154,6 +156,7 @@ export class CreateEditCompraComponent implements OnInit {
     if (!d) return;
     if (d.mode) this.mode = d.mode;
     if (d.compraId) this.compraId = d.compraId;
+    if (typeof d.onSaved === 'function') this.onSaved = d.onSaved;
   }
 
   async loadCatalogos(): Promise<void> {
@@ -482,9 +485,11 @@ export class CreateEditCompraComponent implements OnInit {
         this.mode = 'edit';
         this.compraId = created.id;
         this.estadoActual = created.estado;
+        this.onSaved?.();
       } else if (this.compraId) {
         await firstValueFrom(this.repo.updateCompraBorrador(this.compraId, payload));
         this.snackBar.open('Borrador actualizado', 'Cerrar', { duration: 3000 });
+        this.onSaved?.();
       }
     } catch (e: any) {
       this.snackBar.open(this.extraerError(e), 'Cerrar', { duration: 8000, panelClass: 'error-snackbar' });
@@ -538,6 +543,7 @@ export class CreateEditCompraComponent implements OnInit {
         await firstValueFrom(payRef.afterClosed());
       }
 
+      this.onSaved?.();
       const currentIdx = this.tabsService.currentIndex;
       if (currentIdx >= 0) this.tabsService.removeTab(currentIdx);
     } catch (e: any) {

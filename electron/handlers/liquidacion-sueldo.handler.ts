@@ -22,6 +22,7 @@ import { CuotaEstado } from '../../src/app/database/entities/financiero/cuentas-
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
+import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
@@ -518,33 +519,48 @@ export function registerLiquidacionSueldoHandlers(
       if (!liq) throw new Error(`Liquidacion ${id} no encontrada`);
       if (liq.estado !== LiquidacionSueldoEstado.APROBADA) throw new Error('Solo APROBADA puede ser pagada');
 
-      const cajaMayorId = payload?.cajaMayorId;
-      const monedaId = payload?.monedaId || liq.monedaPago?.id;
-      const formaPagoId = payload?.formaPagoId;
-      if (!cajaMayorId || !monedaId || !formaPagoId) throw new Error('Faltan datos para el pago');
-
+      const fuente = payload?.fuente || 'CAJA_MAYOR';
       const userId = getCurrentUser()?.id;
       const userEntity = userId
         ? await queryRunner.manager.findOne(Usuario, { where: { id: userId } })
         : null;
-
       const monto = Number(liq.totalNeto);
-      const obs = `LIQUIDACION ${liq.periodo} - ${liq.funcionario.persona?.nombre || ''} ${liq.funcionario.persona?.apellido || ''}`.trim();
-      const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
-        cajaMayor: { id: cajaMayorId } as any,
-        tipoMovimiento: TipoMovimiento.EGRESO_SALARIO,
-        moneda: { id: monedaId } as any,
-        formaPago: { id: formaPagoId } as any,
-        monto,
-        fecha: new Date(),
-        observacion: obs,
-        liquidacionSueldoId: liq.id,
-        responsable: userEntity || undefined,
-      });
-      await setEntityUserTracking(dataSource, movimiento, userId, false);
-      const movSaved = await queryRunner.manager.save(CajaMayorMovimiento, movimiento);
+      let movId: number | null = null;
 
-      await actualizarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, monto, TipoMovimiento.EGRESO_SALARIO);
+      if (fuente === 'CUENTA_BANCARIA') {
+        // Pago desde cuenta bancaria: debita el saldo, sin movimiento de Caja Mayor.
+        const cuentaBancariaId = payload?.cuentaBancariaId;
+        if (!cuentaBancariaId) throw new Error('Falta cuentaBancariaId');
+        const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
+        const cb = await cbRepo.findOne({ where: { id: cuentaBancariaId } });
+        if (!cb) throw new Error('Cuenta bancaria no encontrada');
+        cb.saldo = Number(cb.saldo) - monto;
+        await queryRunner.manager.save(CuentaBancaria, cb);
+        liq.cuentaBancariaId = cuentaBancariaId;
+      } else {
+        const cajaMayorId = payload?.cajaMayorId;
+        const monedaId = payload?.monedaId || liq.monedaPago?.id;
+        const formaPagoId = payload?.formaPagoId;
+        if (!cajaMayorId || !monedaId || !formaPagoId) throw new Error('Faltan datos para el pago');
+
+        const obs = `LIQUIDACION ${liq.periodo} - ${liq.funcionario.persona?.nombre || ''} ${liq.funcionario.persona?.apellido || ''}`.trim();
+        const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
+          cajaMayor: { id: cajaMayorId } as any,
+          tipoMovimiento: TipoMovimiento.EGRESO_SALARIO,
+          moneda: { id: monedaId } as any,
+          formaPago: { id: formaPagoId } as any,
+          monto,
+          fecha: new Date(),
+          observacion: obs,
+          liquidacionSueldoId: liq.id,
+          responsable: userEntity || undefined,
+        });
+        await setEntityUserTracking(dataSource, movimiento, userId, false);
+        const movSaved = await queryRunner.manager.save(CajaMayorMovimiento, movimiento);
+        movId = movSaved.id;
+
+        await actualizarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, monto, TipoMovimiento.EGRESO_SALARIO);
+      }
 
       // Marcar vales asociados como DESCONTADO
       const items = await itemRepo.find({ where: { liquidacion: { id: liq.id } as any } });
@@ -641,7 +657,7 @@ export function registerLiquidacionSueldoHandlers(
 
       liq.estado = LiquidacionSueldoEstado.PAGADA;
       liq.fechaPago = new Date();
-      liq.movimientoId = movSaved.id;
+      if (movId) liq.movimientoId = movId;
       await setEntityUserTracking(dataSource, liq, userId, true);
       await liqRepo.save(liq);
 
@@ -800,6 +816,16 @@ export function registerLiquidacionSueldoHandlers(
               await queryRunner.manager.save(CajaMayorMovimiento, contra);
               await actualizarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, Number(movOriginal.monto), TipoMovimiento.AJUSTE_POSITIVO);
             }
+          }
+        }
+
+        // Si el pago fue desde una cuenta bancaria, revertir el saldo debitado.
+        if (liq.cuentaBancariaId) {
+          const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
+          const cb = await cbRepo.findOne({ where: { id: liq.cuentaBancariaId } });
+          if (cb) {
+            cb.saldo = Number(cb.saldo) + Number(liq.totalNeto);
+            await queryRunner.manager.save(CuentaBancaria, cb);
           }
         }
       }

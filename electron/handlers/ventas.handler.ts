@@ -625,10 +625,10 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       const result = await dbQuery(dataSource, `
         SELECT
-          COUNT(DISTINCT v.id) as cantidadVentas,
+          COUNT(DISTINCT v.id) as "cantidadVentas",
           COALESCE(SUM(CASE WHEN pd.tipo = 'PAGO' THEN pd.valor ELSE 0 END), 0)
-          - COALESCE(SUM(CASE WHEN pd.tipo = 'VUELTO' THEN pd.valor ELSE 0 END), 0) as totalVentas,
-          pd.moneda_id as monedaId
+          - COALESCE(SUM(CASE WHEN pd.tipo = 'VUELTO' THEN pd.valor ELSE 0 END), 0) as "totalVentas",
+          pd.moneda_id as "monedaId"
         FROM ventas v
         LEFT JOIN pagos p ON v.pago_id = p.id
         LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id

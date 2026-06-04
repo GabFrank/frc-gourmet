@@ -37,6 +37,7 @@ import { HomeComponent } from './pages/home/home.component';
 import { RrhhDashComponent } from './pages/personas/rrhhDash/rrhh-dash.component';
 import { ListUsuariosComponent } from './pages/personas/usuarios/list-usuarios.component';
 import { ListClientesComponent } from './pages/personas/clientes/list-clientes.component';
+import { ListConveniosComponent } from './pages/personas/convenios/list-convenios.component';
 import { AuthService } from './services/auth.service';
 import { Usuario } from './database/entities/personas/usuario.entity';
 import { LoginSession } from './database/entities/auth/login-session.entity';
@@ -832,6 +833,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       ListClientesComponent,
       { source: 'navigation' },
       'clientes-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openConveniosTab() {
+    this.tabsService.openTab(
+      'Convenios',
+      ListConveniosComponent,
+      { source: 'navigation' },
+      'convenios-tab',
       true
     );
     this.closeMenu();

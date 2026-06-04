@@ -30,6 +30,78 @@ const actualizarSaldo = actualizarSaldoCajaMayor;
 
 export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
 
+  // Anula una operacion financiera completa DENTRO de una transaccion ya abierta:
+  // marca la OperacionFinanciera como anulada, revierte TODOS sus movimientos de
+  // caja (ej. los dos lados de un cambio de divisa) y revierte el saldo bancario
+  // cuando aplica (deposito/retiro). Reusado por anular-operacion-financiera y por
+  // anular-caja-mayor-movimiento (cuando el movimiento pertenece a una operacion).
+  const anularOperacionFinancieraTx = async (
+    queryRunner: any,
+    opId: number,
+    motivo: string,
+    currentUser: Usuario | null,
+  ): Promise<void> => {
+    const opRepo = queryRunner.manager.getRepository(OperacionFinanciera);
+    const op = await opRepo.findOne({
+      where: { id: opId },
+      relations: ['cuentaBancariaOrigen', 'cuentaBancariaDestino'],
+    });
+    if (!op) throw new Error(`OperacionFinanciera ${opId} no encontrada`);
+    if (op.anulado) throw new Error('La operacion ya esta anulada');
+
+    op.anulado = true;
+    await setEntityUserTracking(dataSource, op, currentUser?.id, true);
+    await queryRunner.manager.save(OperacionFinanciera, op);
+
+    const movRepo = queryRunner.manager.getRepository(CajaMayorMovimiento);
+    const movs = await movRepo.find({
+      where: { operacionFinancieraId: opId },
+      relations: ['cajaMayor', 'moneda', 'formaPago'],
+    });
+
+    for (const mov of movs) {
+      if (mov.tipoMovimiento === TipoMovimiento.ANULACION) continue;
+      // No re-anular un movimiento que ya tiene su contra-movimiento.
+      const yaAnulado = await movRepo.findOne({ where: { referenciaAnulacion: { id: mov.id } as any } });
+      if (yaAnulado) continue;
+
+      const contra = queryRunner.manager.create(CajaMayorMovimiento, {
+        cajaMayor: mov.cajaMayor,
+        tipoMovimiento: TipoMovimiento.ANULACION,
+        moneda: mov.moneda,
+        formaPago: mov.formaPago,
+        monto: mov.monto,
+        fecha: new Date(),
+        observacion: `ANULACION OP. FIN. #${opId}: ${motivo}`.toUpperCase(),
+        operacionFinancieraId: opId,
+        referenciaAnulacion: mov,
+      });
+      if (currentUser) contra.responsable = currentUser;
+      await setEntityUserTracking(dataSource, contra, currentUser?.id, false);
+      await queryRunner.manager.save(CajaMayorMovimiento, contra);
+
+      const tipoContrario = esIngreso(mov.tipoMovimiento)
+        ? TipoMovimiento.AJUSTE_NEGATIVO
+        : TipoMovimiento.AJUSTE_POSITIVO;
+      await actualizarSaldo(queryRunner, mov.cajaMayor.id, mov.moneda.id, mov.formaPago.id, Number(mov.monto), tipoContrario);
+    }
+
+    const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
+    if (op.tipoOperacion === TipoOperacionFinanciera.DEPOSITO_BANCARIO && op.cuentaBancariaDestino) {
+      const cb = await cbRepo.findOne({ where: { id: op.cuentaBancariaDestino.id } });
+      if (cb) {
+        cb.saldo = Number(cb.saldo) - Number(op.montoDestino || 0);
+        await queryRunner.manager.save(CuentaBancaria, cb);
+      }
+    } else if (op.tipoOperacion === TipoOperacionFinanciera.RETIRO_BANCARIO && op.cuentaBancariaOrigen) {
+      const cb = await cbRepo.findOne({ where: { id: op.cuentaBancariaOrigen.id } });
+      if (cb) {
+        cb.saldo = Number(cb.saldo) + Number(op.montoOrigen || 0);
+        await queryRunner.manager.save(CuentaBancaria, cb);
+      }
+    }
+  };
+
   // ===================== CAJA MAYOR CRUD =====================
 
   ipcMain.handle('get-cajas-mayor', async () => {
@@ -359,6 +431,15 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           `Este movimiento corresponde a la compra #${original.compraId}. ` +
           `Anular desde el modulo de Compras (revierte stock, costo y caja).`
         );
+      }
+
+      // Operacion financiera (ej. cambio de divisa): crea 2 movimientos vinculados
+      // por el mismo operacionFinancieraId. Anular UNO debe anular la operacion
+      // completa (ambos lados + saldo bancario si aplica), no solo este movimiento.
+      if (original.operacionFinancieraId) {
+        await anularOperacionFinancieraTx(queryRunner, original.operacionFinancieraId, motivo, getCurrentUser());
+        await queryRunner.commitTransaction();
+        return { success: true };
       }
 
       // Verificar si ya fue anulado previamente
@@ -1557,63 +1638,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      const opRepo = queryRunner.manager.getRepository(OperacionFinanciera);
-      const op = await opRepo.findOne({
-        where: { id },
-        relations: ['cuentaBancariaOrigen', 'cuentaBancariaDestino'],
-      });
-      if (!op) throw new Error(`OperacionFinanciera ${id} no encontrada`);
-      if (op.anulado) throw new Error('La operacion ya esta anulada');
-
-      op.anulado = true;
-      await setEntityUserTracking(dataSource, op, getCurrentUser()?.id, true);
-      await queryRunner.manager.save(OperacionFinanciera, op);
-
-      const movRepo = queryRunner.manager.getRepository(CajaMayorMovimiento);
-      const movs = await movRepo.find({
-        where: { operacionFinancieraId: id },
-        relations: ['cajaMayor', 'moneda', 'formaPago'],
-      });
-
-      const currentUser = getCurrentUser();
-      for (const mov of movs) {
-        if (mov.tipoMovimiento === TipoMovimiento.ANULACION) continue;
-
-        const contra = queryRunner.manager.create(CajaMayorMovimiento, {
-          cajaMayor: mov.cajaMayor,
-          tipoMovimiento: TipoMovimiento.ANULACION,
-          moneda: mov.moneda,
-          formaPago: mov.formaPago,
-          monto: mov.monto,
-          fecha: new Date(),
-          observacion: `ANULACION OP. FIN. #${id}: ${motivo}`.toUpperCase(),
-          operacionFinancieraId: id,
-          referenciaAnulacion: mov,
-        });
-        if (currentUser) contra.responsable = currentUser;
-        await setEntityUserTracking(dataSource, contra, currentUser?.id, false);
-        await queryRunner.manager.save(CajaMayorMovimiento, contra);
-
-        const tipoContrario = esIngreso(mov.tipoMovimiento)
-          ? TipoMovimiento.AJUSTE_NEGATIVO
-          : TipoMovimiento.AJUSTE_POSITIVO;
-        await actualizarSaldo(queryRunner, mov.cajaMayor.id, mov.moneda.id, mov.formaPago.id, Number(mov.monto), tipoContrario);
-      }
-
-      const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
-      if (op.tipoOperacion === TipoOperacionFinanciera.DEPOSITO_BANCARIO && op.cuentaBancariaDestino) {
-        const cb = await cbRepo.findOne({ where: { id: op.cuentaBancariaDestino.id } });
-        if (cb) {
-          cb.saldo = Number(cb.saldo) - Number(op.montoDestino || 0);
-          await queryRunner.manager.save(CuentaBancaria, cb);
-        }
-      } else if (op.tipoOperacion === TipoOperacionFinanciera.RETIRO_BANCARIO && op.cuentaBancariaOrigen) {
-        const cb = await cbRepo.findOne({ where: { id: op.cuentaBancariaOrigen.id } });
-        if (cb) {
-          cb.saldo = Number(cb.saldo) + Number(op.montoOrigen || 0);
-          await queryRunner.manager.save(CuentaBancaria, cb);
-        }
-      }
+      await anularOperacionFinancieraTx(queryRunner, id, motivo, getCurrentUser());
 
       await queryRunner.commitTransaction();
       return { success: true };
