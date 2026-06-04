@@ -7,7 +7,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
-import { MatListModule } from '@angular/material/list';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
@@ -27,7 +27,7 @@ interface ClienteItem { id: number; nombre: string; documento?: string; }
     MatFormFieldModule,
     MatInputModule,
     MatAutocompleteModule,
-    MatListModule,
+    MatTooltipModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
   ],
@@ -40,20 +40,36 @@ interface ClienteItem { id: number; nombre: string; documento?: string; }
         <mat-form-field appearance="outline" class="full">
           <mat-label>Agregar cliente</mat-label>
           <input matInput [formControl]="buscar" [matAutocomplete]="auto" placeholder="Buscar por nombre o documento" />
+          <mat-icon matSuffix>person_add</mat-icon>
           <mat-autocomplete #auto="matAutocomplete" [displayWith]="displayNada" (optionSelected)="agregar($event.option.value)">
-            <mat-option *ngFor="let c of filtrados" [value]="c">{{ c.nombre }} <small *ngIf="c.documento">· {{ c.documento }}</small></mat-option>
+            <mat-option *ngFor="let c of filtrados" [value]="c">
+              {{ c.nombre }} <small *ngIf="c.documento">· {{ c.documento }}</small>
+            </mat-option>
           </mat-autocomplete>
         </mat-form-field>
 
-        <div class="hint">{{ seleccionados.length }} cliente(s) en el convenio</div>
-        <mat-list class="lista">
-          <mat-list-item *ngFor="let c of seleccionados">
-            <span matListItemTitle>{{ c.nombre }}</span>
-            <span matListItemLine *ngIf="c.documento">{{ c.documento }}</span>
-            <button mat-icon-button color="warn" (click)="quitar(c)"><mat-icon>close</mat-icon></button>
-          </mat-list-item>
+        <div class="lista-head">
+          <span class="hint">{{ seleccionados.length }} cliente(s) en el convenio</span>
+          <mat-form-field appearance="outline" class="filtro" *ngIf="seleccionados.length > 5" subscriptSizing="dynamic">
+            <mat-icon matPrefix>search</mat-icon>
+            <input matInput [formControl]="filtroSel" placeholder="Filtrar lista" />
+            <button mat-icon-button matSuffix *ngIf="filtroSel.value" (click)="filtroSel.setValue('')"><mat-icon>close</mat-icon></button>
+          </mat-form-field>
+        </div>
+
+        <div class="lista">
+          <div class="lista-row" *ngFor="let c of seleccionadosVisibles">
+            <div class="lista-info">
+              <span class="lista-nombre">{{ c.nombre }}</span>
+              <span class="lista-doc" *ngIf="c.documento">{{ c.documento }}</span>
+            </div>
+            <button mat-icon-button color="warn" (click)="quitar(c)" matTooltip="Quitar del convenio">
+              <mat-icon>delete_outline</mat-icon>
+            </button>
+          </div>
           <div *ngIf="!seleccionados.length" class="vacio">Aun no hay clientes asignados.</div>
-        </mat-list>
+          <div *ngIf="seleccionados.length && !seleccionadosVisibles.length" class="vacio">Sin coincidencias.</div>
+        </div>
       </div>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
@@ -63,20 +79,35 @@ interface ClienteItem { id: number; nombre: string; documento?: string; }
   `,
   styles: [`
     .spinner { display: flex; justify-content: center; padding: 24px; }
-    .full { width: 100%; min-width: 480px; }
-    .hint { font-size: 12px; opacity: 0.7; margin: 4px 0; }
-    .lista { max-height: 320px; overflow: auto; border: 1px solid var(--border-color); border-radius: 8px; }
-    .lista mat-list-item button { margin-left: auto; }
-    .vacio { padding: 16px; text-align: center; opacity: 0.6; font-size: 13px; }
+    .full { width: 100%; min-width: 520px; }
+    .lista-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 8px; }
+    .hint { font-size: 12px; opacity: 0.7; white-space: nowrap; }
+    .filtro { width: 220px; }
+    .lista {
+      max-height: 340px; overflow: auto;
+      border: 1px solid var(--border-color); border-radius: 8px;
+    }
+    .lista-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px 6px 14px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .lista-row:last-child { border-bottom: none; }
+    .lista-info { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+    .lista-nombre { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lista-doc { font-size: 12px; color: var(--text-secondary); }
+    .vacio { padding: 18px; text-align: center; opacity: 0.6; font-size: 13px; }
   `],
 })
 export class AsignarClientesDialogComponent implements OnInit {
   loading = true;
   saving = false;
   buscar = new FormControl('');
+  filtroSel = new FormControl('');
   todos: ClienteItem[] = [];
   filtrados: ClienteItem[] = [];
   seleccionados: ClienteItem[] = [];
+  seleccionadosVisibles: ClienteItem[] = [];
   displayNada = () => '';
 
   constructor(
@@ -95,12 +126,14 @@ export class AsignarClientesDialogComponent implements OnInit {
       this.todos = ((clientes as any[]) || []).map((c) => this.toItem(c));
       this.seleccionados = ((convenio?.clientes as any[]) || []).map((c) => this.toItem(c));
       this.aplicarFiltro('');
+      this.aplicarFiltroSel();
     } catch (e: any) {
       this.snackBar.open('Error al cargar clientes', 'Cerrar', { duration: 4000 });
     } finally {
       this.loading = false;
     }
     this.buscar.valueChanges.subscribe((v) => this.aplicarFiltro(typeof v === 'string' ? v : ''));
+    this.filtroSel.valueChanges.subscribe(() => this.aplicarFiltroSel());
   }
 
   private toItem(c: any): ClienteItem {
@@ -120,15 +153,24 @@ export class AsignarClientesDialogComponent implements OnInit {
       .slice(0, 50);
   }
 
+  private aplicarFiltroSel(): void {
+    const t = (this.filtroSel.value || '').toUpperCase();
+    this.seleccionadosVisibles = !t
+      ? [...this.seleccionados]
+      : this.seleccionados.filter((c) => c.nombre.toUpperCase().includes(t) || (c.documento || '').toUpperCase().includes(t));
+  }
+
   agregar(c: ClienteItem): void {
     if (!this.seleccionados.some((s) => s.id === c.id)) this.seleccionados = [...this.seleccionados, c];
     this.buscar.setValue('');
     this.aplicarFiltro('');
+    this.aplicarFiltroSel();
   }
 
   quitar(c: ClienteItem): void {
     this.seleccionados = this.seleccionados.filter((s) => s.id !== c.id);
     this.aplicarFiltro('');
+    this.aplicarFiltroSel();
   }
 
   cancel(): void { this.dialogRef.close(); }
