@@ -26,9 +26,63 @@ import {
   pdfTablaMontos,
   pdfFmtFecha,
   pdfFmtMonto,
+  pdfFmtMontoMoneda,
+  pdfTextoEnLetras,
   pdfFooterPaginado,
-  renderReciboDoc,
 } from '../utils/pdf.utils';
+import { Empresa } from '../../src/app/database/entities/sistema/empresa.entity';
+
+/** Linea de corte punteada (para separar/recortar recibos en una hoja). */
+function lineaCorte(): any {
+  return {
+    margin: [0, 6, 0, 6],
+    columns: [
+      { text: '✂', width: 12, fontSize: 9, color: '#888' },
+      { canvas: [{ type: 'line', x1: 0, y1: 6, x2: 503, y2: 6, dash: { length: 4 }, lineWidth: 0.7, lineColor: '#888' }] },
+    ],
+  };
+}
+
+/** Recibo compacto (varios entran en una A4). */
+function reciboCompacto(empresaNombre: string, cobro: any, det: any, nombreCli: string): any {
+  const monto = Number(det.montoCobrado);
+  const doc = det.cliente?.ruc || det.cliente?.persona?.documento;
+  return {
+    stack: [
+      {
+        columns: [
+          { text: empresaNombre, bold: true, fontSize: 11 },
+          { text: `RECIBO DE COBRO N° ${cobro.id}-${det.id}`, alignment: 'right', fontSize: 10, bold: true },
+        ],
+      },
+      {
+        columns: [
+          { text: `Fecha: ${pdfFmtFecha(cobro.fecha)}`, fontSize: 9 },
+          { text: `Convenio: ${cobro.convenio?.nombre || ''}`, alignment: 'right', fontSize: 9 },
+        ],
+        margin: [0, 2, 0, 2],
+      },
+      { text: `Cliente: ${nombreCli}${doc ? '  ·  Doc: ' + doc : ''}`, fontSize: 9 },
+      {
+        text: `Recibí la suma de ${pdfFmtMontoMoneda(monto, 'PYG')} (${pdfTextoEnLetras(monto, 'PYG')}) en concepto de pago de deuda.`,
+        fontSize: 9,
+        margin: [0, 3, 0, 10],
+      },
+      {
+        columns: [
+          { text: '' },
+          {
+            width: 170,
+            stack: [
+              { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 170, y2: 0, lineWidth: 0.5 }] },
+              { text: 'Firma del cobrador', alignment: 'center', fontSize: 8, margin: [0, 2, 0, 0] },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
 
 /** Deuda cobrable por cliente del convenio + total. Reusado por el handler de
  * preview y por el PDF del reporte. */
@@ -242,33 +296,23 @@ export function registerConveniosHandlers(
       relations: ['convenio', 'detalles', 'detalles.cliente', 'detalles.cliente.persona'],
     });
     if (!cobro) throw new Error(`Cobro consolidado ${cobroConsolidadoId} no encontrado`);
-    const empresaHeader = await pdfHeaderEmpresa(dataSource, { showLogo: true });
+    const empresa = await dataSource.getRepository(Empresa).findOne({ where: {} });
+    const empresaNombre = (empresa?.razonSocial || empresa?.nombre || 'EMPRESA').toUpperCase();
 
+    // Recibos compactos: 3 por hoja A4, separados por linea de corte punteada.
+    const POR_HOJA = 3;
     const content: any[] = [];
     (cobro.detalles || []).forEach((det: any, idx: number) => {
-      const recibo = renderReciboDoc({
-        empresaHeader,
-        tipo: 'COBRO',
-        numeroDocumento: `${cobro.id}-${det.id}`,
-        fecha: cobro.fecha,
-        contraparte: {
-          rol: 'Cliente',
-          nombre: nombreCliente(det.cliente),
-          documento: det.cliente?.ruc || det.cliente?.persona?.documento || undefined,
-        },
-        montoTotal: Number(det.montoCobrado),
-        moneda: 'PYG',
-        detalle: `pago de deuda — convenio ${cobro.convenio?.nombre || ''}`,
-      });
-      if (idx > 0) content.push({ text: '', pageBreak: 'before' });
-      content.push(...recibo.content);
+      const bloque = reciboCompacto(empresaNombre, cobro, det, nombreCliente(det.cliente));
+      if (idx > 0 && idx % POR_HOJA === 0) bloque.pageBreak = 'before';
+      content.push(bloque);
+      content.push(lineaCorte());
     });
 
     const docDef = {
       pageSize: 'A4',
-      pageMargins: [40, 40, 40, 50],
+      pageMargins: [40, 28, 40, 28],
       content,
-      footer: pdfFooterPaginado(),
     };
     const base64 = await buildPdfBase64(docDef);
     return { filename: `recibos-cobro-consolidado-${cobro.id}.pdf`, base64, mimeType: 'application/pdf' };
