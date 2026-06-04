@@ -124,6 +124,7 @@ interface ElectronAPI {
   deleteFile: (url: string) => Promise<{ ok: boolean }>;
   readFileBase64: (url: string) => Promise<{ base64: string; mimeType: string }>;
   openFileWithSystem: (url: string) => Promise<{ ok: boolean; error?: string }>;
+  openBase64File: (base64: string, fileName: string) => Promise<{ ok: boolean; error?: string }>;
 
   // Adjuntos polimorficos
   getAdjuntos: (params: { entidadTipo: string; entidadId: number; tipo?: string }) => Promise<any[]>;
@@ -1334,6 +1335,9 @@ export class RepositoryIpcService extends RepositoryService {
   }
   openFileWithSystem(url: string): Observable<{ ok: boolean; error?: string }> {
     return from(this.api.openFileWithSystem(url));
+  }
+  openBase64File(base64: string, fileName: string): Observable<{ ok: boolean; error?: string }> {
+    return from(this.api.openBase64File(base64, fileName));
   }
 
   // ===================== ADJUNTOS POLIMORFICOS =====================

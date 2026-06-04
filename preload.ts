@@ -1347,6 +1347,9 @@ contextBridge.exposeInMainWorld('api', {
   openFileWithSystem: async (url: string): Promise<{ ok: boolean; error?: string }> => {
     return await ipcRenderer.invoke('open-file-with-system', { url });
   },
+  openBase64File: async (base64: string, fileName: string): Promise<{ ok: boolean; error?: string }> => {
+    return await ipcRenderer.invoke('open-base64-file', { base64, fileName });
+  },
 
   // === Adjuntos polimorficos ===
   getAdjuntos: async (params: { entidadTipo: string; entidadId: number; tipo?: string }): Promise<any[]> => {

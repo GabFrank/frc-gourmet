@@ -197,8 +197,8 @@
             <mat-icon>{{showFiltros ? 'expand_less' : 'filter_list'}}</mat-icon>
             Filtros
           </button>
-          <button mat-icon-button (click)="loadMovimientos()" [disabled]="loadingMovimientos" matTooltip="Actualizar tabla">
-            <mat-icon [class.spinning]="loadingMovimientos">refresh</mat-icon>
+          <button mat-icon-button (click)="loadData()" [disabled]="loading || loadingMovimientos" matTooltip="Actualizar movimientos y saldos">
+            <mat-icon [class.spinning]="loading || loadingMovimientos">refresh</mat-icon>
           </button>
         </div>
       </mat-card-header>

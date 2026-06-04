@@ -56,6 +56,9 @@ export class Vale extends BaseModel {
   })
   estado!: ValeEstado;
 
+  // El default de creación lo define el formulario (esAdelanto=true). El default
+  // de columna se deja en false para no requerir migración de schema; siempre se
+  // envía un valor explícito al crear un vale.
   @Column({ name: 'es_adelanto', default: false })
   esAdelanto!: boolean;
 

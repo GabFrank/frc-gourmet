@@ -101,7 +101,7 @@ export class CreateEditReglaDialogComponent implements OnInit {
       recurrencia: [r?.recurrencia || RecurrenciaComision.INDEFINIDA, Validators.required],
       fechaInicio: [r?.fechaInicio ? new Date(r.fechaInicio) : null],
       fechaFin: [r?.fechaFin ? new Date(r.fechaFin) : null],
-      esEquipo: [r?.esEquipo || false],
+      // esEquipo ya no se edita manualmente: se deriva del tipo (EQUIPO_PORCENTAJE) al guardar.
       activo: [r?.activo !== undefined ? r.activo : true],
     });
 
@@ -180,6 +180,9 @@ export class CreateEditReglaDialogComponent implements OnInit {
     try {
       const payload = {
         ...this.form.value,
+        // esEquipo se deriva siempre del tipo para mantener consistencia con el
+        // filtro de reglas asignables a un equipo (tipo === EQUIPO_PORCENTAJE).
+        esEquipo: this.tipoActual === TipoReglaComision.EQUIPO_PORCENTAJE,
         productoIds: this.productoIds,
         requisitos: this.requisitos,
       };

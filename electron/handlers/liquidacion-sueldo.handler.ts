@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { Between, DataSource } from 'typeorm';
+import { Between, DataSource, Not } from 'typeorm';
 import { LiquidacionSueldo } from '../../src/app/database/entities/rrhh/liquidacion-sueldo.entity';
 import { LiquidacionItem } from '../../src/app/database/entities/rrhh/liquidacion-item.entity';
 import { LiquidacionConcepto } from '../../src/app/database/entities/rrhh/liquidacion-concepto.entity';
@@ -164,11 +164,14 @@ export function registerLiquidacionSueldoHandlers(
       const itemRepo = queryRunner.manager.getRepository(LiquidacionItem);
       const conceptoRepo = queryRunner.manager.getRepository(LiquidacionConcepto);
 
-      // Buscar liquidacion existente
+      // Buscar liquidacion existente del periodo, EXCLUYENDO las ANULADAS:
+      // una liquidacion anulada quedó histórica y no debe reutilizarse; en ese
+      // caso generamos un borrador nuevo.
       let liq = await liqRepo.findOne({
         where: {
           funcionario: { id: funcionarioId } as any,
           periodo,
+          estado: Not(LiquidacionSueldoEstado.ANULADA),
         },
       });
 

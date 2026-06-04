@@ -16,6 +16,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '../../../../database/repository.service';
 import { ConfirmationDialogComponent } from '../../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { DocumentoService } from '../../../../services/documento.service';
 
 @Component({
   selector: 'app-cobro-consolidado',
@@ -65,6 +66,7 @@ export class CobroConsolidadoComponent {
     private repo: RepositoryService,
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
+    private documentoService: DocumentoService,
   ) {
     this.form = this.fb.group({
       fuente: ['CAJA_MAYOR', Validators.required],
@@ -133,7 +135,7 @@ export class CobroConsolidadoComponent {
     this.exportando = true;
     try {
       const res = await firstValueFrom(this.repo.exportCobroConsolidadoPreviewPdf(this.convenioId));
-      this.descargar(res);
+      this.documentoService.abrirEnVisor(res);
     } catch (e: any) {
       this.snackBar.open('Error al exportar: ' + (e?.message || ''), 'Cerrar', { duration: 5000 });
     } finally {
@@ -179,22 +181,9 @@ export class CobroConsolidadoComponent {
   async descargarRecibos(cobroId: number): Promise<void> {
     try {
       const res = await firstValueFrom(this.repo.exportReciboCobroConsolidadoPdf(cobroId));
-      this.descargar(res);
+      this.documentoService.abrirEnVisor(res);
     } catch (e: any) {
       this.snackBar.open('Error al generar recibos: ' + (e?.message || ''), 'Cerrar', { duration: 5000 });
     }
-  }
-
-  private descargar(res: { filename: string; base64: string; mimeType: string }): void {
-    const bytes = atob(res.base64);
-    const arr = new Uint8Array(bytes.length);
-    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-    const blob = new Blob([arr], { type: res.mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = res.filename;
-    a.click();
-    URL.revokeObjectURL(url);
   }
 }

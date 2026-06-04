@@ -142,7 +142,7 @@ export class CreateEditValeDialogComponent implements OnInit {
       cajaMayorId: [null, this.modoConfirmar ? Validators.required : null],
       formaPagoId: [null, this.modoConfirmar ? Validators.required : null],
       descripcion: [''],
-      esAdelanto: [false],
+      esAdelanto: [true],
     });
   }
 

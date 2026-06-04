@@ -44,6 +44,27 @@ export function registerVacacionesHandlers(
     return map;
   }
 
+  // Días comprometidos en periodos no gozados ni cancelados (PROGRAMADA / EN_CURSO).
+  // Estos días ya están reservados aunque todavía no figuren en diasGozados, así que
+  // deben descontarse de los disponibles para no permitir sobre-comprometer.
+  async function programadosPorVacacion(vacacionIds: number[]): Promise<Map<number, number>> {
+    const map = new Map<number, number>();
+    if (!vacacionIds.length) return map;
+    const rows = await dataSource.getRepository(VacacionPeriodo)
+      .createQueryBuilder('vp')
+      .leftJoin('vp.vacacion', 'vac')
+      .select('vac.id', 'vacacionId')
+      .addSelect('COALESCE(SUM(vp.diasUsados), 0)', 'dias')
+      .where('vac.id IN (:...ids)', { ids: vacacionIds })
+      .andWhere('vp.estado IN (:...estados)', {
+        estados: [VacacionPeriodoEstado.PROGRAMADA, VacacionPeriodoEstado.EN_CURSO],
+      })
+      .groupBy('vac.id')
+      .getRawMany();
+    for (const r of rows) map.set(Number(r.vacacionId), Number(r.dias) || 0);
+    return map;
+  }
+
   ipcMain.handle('get-vacaciones', async (_e, filtros: any) => {
     const repo = dataSource.getRepository(Vacacion);
     const qb = repo.createQueryBuilder('v')
@@ -53,13 +74,17 @@ export function registerVacacionesHandlers(
     if (filtros?.funcionarioId) qb.andWhere('f.id = :fid', { fid: filtros.funcionarioId });
     if (filtros?.anio) qb.andWhere('v.anio_servicio = :a', { a: filtros.anio });
     const vacaciones = await qb.getMany();
-    const vendidos = await vendidosPorVacacion(vacaciones.map((v) => v.id));
+    const ids = vacaciones.map((v) => v.id);
+    const vendidos = await vendidosPorVacacion(ids);
+    const programados = await programadosPorVacacion(ids);
     return vacaciones.map((v) => {
       const diasVendidos = vendidos.get(v.id) || 0;
+      const diasProgramados = programados.get(v.id) || 0;
       return {
         ...v,
         diasVendidos,
-        diasDisponibles: Number(v.diasGenerados) - Number(v.diasGozados) - diasVendidos,
+        diasProgramados,
+        diasDisponibles: Number(v.diasGenerados) - Number(v.diasGozados) - diasVendidos - diasProgramados,
       };
     });
   });
@@ -82,12 +107,16 @@ export function registerVacacionesHandlers(
     const diasVendidos = ventas
       .filter((vt) => vt.estado !== VacacionVentaEstado.ANULADO)
       .reduce((s, vt) => s + Number(vt.dias), 0);
+    const diasProgramados = periodos
+      .filter((pe) => pe.estado === VacacionPeriodoEstado.PROGRAMADA || pe.estado === VacacionPeriodoEstado.EN_CURSO)
+      .reduce((s, pe) => s + Number(pe.diasUsados), 0);
     return {
       ...v,
       periodos,
       ventas,
       diasVendidos,
-      diasDisponibles: Number(v.diasGenerados) - Number(v.diasGozados) - diasVendidos,
+      diasProgramados,
+      diasDisponibles: Number(v.diasGenerados) - Number(v.diasGozados) - diasVendidos - diasProgramados,
     };
   });
 
@@ -163,10 +192,14 @@ export function registerVacacionesHandlers(
       const hasta = parseLocalDate(fechaHasta) || new Date();
       const dias = diffDias(desde, hasta) + 1;
       if (dias <= 0) throw new Error('Rango de fechas invalido');
-      // Días disponibles = generados - gozados - vendidos (no anulados).
+      // Días disponibles = generados - gozados - vendidos (no anulados) - programados (no gozados/cancelados).
       const ventas = await queryRunner.manager.getRepository(VacacionVenta).find({ where: { vacacion: { id: vacacionId } as any } });
       const vendidos = ventas.filter((vt) => vt.estado !== VacacionVentaEstado.ANULADO).reduce((s, vt) => s + Number(vt.dias), 0);
-      if (Number(vacacion.diasGozados) + vendidos + dias > Number(vacacion.diasGenerados)) {
+      const periodosExistentes = await queryRunner.manager.getRepository(VacacionPeriodo).find({ where: { vacacion: { id: vacacionId } as any } });
+      const programados = periodosExistentes
+        .filter((pe) => pe.estado === VacacionPeriodoEstado.PROGRAMADA || pe.estado === VacacionPeriodoEstado.EN_CURSO)
+        .reduce((s, pe) => s + Number(pe.diasUsados), 0);
+      if (Number(vacacion.diasGozados) + vendidos + programados + dias > Number(vacacion.diasGenerados)) {
         throw new Error('Excede dias disponibles');
       }
 

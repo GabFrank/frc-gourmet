@@ -214,6 +214,11 @@ export function registerRrhhFuncionariosHandlers(
       if (!existing) throw new Error(`Funcionario ${id} no encontrado`);
 
       if (data.codigoInterno !== undefined) existing.codigoInterno = data.codigoInterno ? String(data.codigoInterno).toUpperCase() : undefined;
+      // Corrección de fecha de ingreso (dato crítico; la UI exige confirmación explícita antes de enviarla).
+      if (data.fechaIngreso !== undefined && data.fechaIngreso !== null) {
+        const nuevaFecha = parseLocalDate(data.fechaIngreso);
+        if (nuevaFecha) existing.fechaIngreso = nuevaFecha;
+      }
       if (data.esJornalero !== undefined) existing.esJornalero = data.esJornalero;
       if (data.valorJornal !== undefined) existing.valorJornal = data.valorJornal;
       if (data.ipsActivo !== undefined) existing.ipsActivo = data.ipsActivo;
