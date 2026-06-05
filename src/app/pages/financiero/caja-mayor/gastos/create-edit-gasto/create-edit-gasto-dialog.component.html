@@ -59,11 +59,20 @@
       <mat-label>Cuenta Bancaria</mat-label>
       <mat-select formControlName="cuentaBancariaId">
         <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">
-          {{cb.nombre}}<span *ngIf="cb.banco"> - {{cb.banco}}</span>
+          {{cb.nombre}}<span *ngIf="cb.banco"> - {{cb.banco}}</span><span *ngIf="cb.moneda"> ({{cb.moneda.simbolo}})</span>
         </mat-option>
       </mat-select>
       <mat-error>La cuenta bancaria es requerida</mat-error>
     </mat-form-field>
+
+    <div *ngIf="requiereCotiz" class="cotiz-row">
+      <mat-form-field appearance="outline">
+        <mat-label>Cotización</mat-label>
+        <input matInput type="number" formControlName="cotizacion" step="any">
+        <mat-hint>Moneda principal por 1 {{ monedaCuentaSimbolo }}</mat-hint>
+      </mat-form-field>
+      <div class="convertido">Se debitará: <b>{{ montoConvertido | number:'1.0-2' }} {{ monedaCuentaSimbolo }}</b></div>
+    </div>
 
     <div class="form-row">
       <mat-form-field appearance="outline" class="flex-field">

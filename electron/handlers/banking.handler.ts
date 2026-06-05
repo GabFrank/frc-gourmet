@@ -616,7 +616,8 @@ export function registerBankingHandlers(
 
       // 6. Gastos pagados desde esta cuenta bancaria (egresos)
       const gastoRows = await dbQuery(dataSource,
-        `SELECT g.id, g.descripcion, g.fecha, g.created_at AS "createdAt", g.monto,
+        `SELECT g.id, g.descripcion, g.fecha, g.created_at AS "createdAt",
+                COALESCE(g.monto_cuenta_bancaria, g.monto) AS monto,
                 g.numero_comprobante AS "numeroComprobante", cat.nombre AS "catNombre"
          FROM gastos g
          LEFT JOIN gastos_categorias cat ON g.gasto_categoria_id = cat.id
@@ -640,7 +641,8 @@ export function registerBankingHandlers(
 
       // 7. Vales egresados desde esta cuenta bancaria (egresos)
       const valeRows = await dbQuery(dataSource,
-        `SELECT v.id, v.descripcion, v.fecha, v.created_at AS "createdAt", v.monto,
+        `SELECT v.id, v.descripcion, v.fecha, v.created_at AS "createdAt",
+                COALESCE(v.monto_cuenta_bancaria, v.monto) AS monto,
                 p.nombre AS "nombre", p.apellido AS "apellido"
          FROM vales v
          LEFT JOIN funcionarios f ON v.funcionario_id = f.id
@@ -668,7 +670,7 @@ export function registerBankingHandlers(
       //    los AJUSTE_NEGATIVO (anulaciones de cobro) figuran como egresos para
       //    que el neto coincida con el saldo.
       const cobroRows = await dbQuery(dataSource,
-        `SELECT mc.id, mc.fecha, mc.monto, mc.tipo, mc.observacion
+        `SELECT mc.id, mc.fecha, COALESCE(mc.monto_cuenta_bancaria, mc.monto) AS monto, mc.tipo, mc.observacion
          FROM movimientos_cliente mc
          WHERE mc.cuenta_bancaria_id = ? AND mc.tipo IN ('PAGO', 'AJUSTE_NEGATIVO')`,
         [cuentaBancariaId],

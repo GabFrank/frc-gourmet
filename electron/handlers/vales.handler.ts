@@ -159,6 +159,8 @@ export function registerValesHandlers(
           ? await queryRunner.manager.findOne(CajaMayor, { where: { id: data.cajaMayorId } })
           : null;
 
+        // Monto efectivamente debitado en la moneda de la cuenta (si difiere, viene convertido).
+        const montoBanco = Number(data.montoCuentaBancaria) > 0 ? Number(data.montoCuentaBancaria) : monto;
         const vale = queryRunner.manager.create(Vale, {
           funcionario,
           motivo: data.motivoId ? { id: data.motivoId } as any : undefined,
@@ -171,12 +173,14 @@ export function registerValesHandlers(
           esAdelanto: data.esAdelanto === true,
           comprobanteUrl: data.comprobanteUrl,
           cuentaBancariaId: cb.id,
+          montoCuentaBancaria: montoBanco,
+          cotizacion: data.cotizacion ? Number(data.cotizacion) : undefined,
           autorizadoPor: userEntity || undefined,
         });
         await setEntityUserTracking(dataSource, vale, userId, false);
         const valeSaved = await queryRunner.manager.save(Vale, vale);
 
-        cb.saldo = Number(cb.saldo) - monto;
+        cb.saldo = Number(cb.saldo) - montoBanco;
         await queryRunner.manager.save(CuentaBancaria, cb);
 
         await queryRunner.commitTransaction();
@@ -269,11 +273,14 @@ export function registerValesHandlers(
         }
         const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: cuentaBancariaId } });
         if (!cb) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
-        cb.saldo = Number(cb.saldo) - Number(vale.monto);
+        const montoBanco = Number(payload?.montoCuentaBancaria) > 0 ? Number(payload.montoCuentaBancaria) : Number(vale.monto);
+        cb.saldo = Number(cb.saldo) - montoBanco;
         await queryRunner.manager.save(CuentaBancaria, cb);
 
         vale.estado = ValeEstado.CONFIRMADO;
         vale.cuentaBancariaId = cb.id;
+        vale.montoCuentaBancaria = montoBanco;
+        vale.cotizacion = payload?.cotizacion ? Number(payload.cotizacion) : undefined;
         vale.moneda = { id: monedaId } as any;
         vale.autorizadoPor = userEntity || undefined;
         await setEntityUserTracking(dataSource, vale, userId, true);
@@ -342,11 +349,13 @@ export function registerValesHandlers(
         ? await queryRunner.manager.findOne(Usuario, { where: { id: userId } })
         : null;
 
-      // Si fue confirmado desde cuenta bancaria, revertir el débito bancario.
+      // Si fue confirmado desde cuenta bancaria, revertir el débito bancario
+      // (en la moneda de la cuenta).
       if (vale.estado === ValeEstado.CONFIRMADO && vale.cuentaBancariaId) {
         const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: vale.cuentaBancariaId } });
         if (cb) {
-          cb.saldo = Number(cb.saldo) + Number(vale.monto);
+          const montoBanco = Number(vale.montoCuentaBancaria) > 0 ? Number(vale.montoCuentaBancaria) : Number(vale.monto);
+          cb.saldo = Number(cb.saldo) + montoBanco;
           await queryRunner.manager.save(CuentaBancaria, cb);
         }
       }

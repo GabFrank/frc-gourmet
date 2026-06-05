@@ -26,6 +26,16 @@
   }
 }
 
+.cotiz-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+
+  mat-form-field { flex: 0 0 200px; }
+  .convertido { color: var(--primary-color, #1565c0); font-size: 14px; }
+}
+
 .cat-padre {
   color: rgba(0,0,0,0.5);
   font-size: 13px;

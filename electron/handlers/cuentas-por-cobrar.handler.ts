@@ -272,6 +272,9 @@ export function registerCuentasPorCobrarHandlers(
       const monedaId: number = payload.monedaId;
       const formaPagoId: number = payload.formaPagoId;
       const cuentaBancariaId: number = payload.cuentaBancariaId;
+      // Monto acreditado en la moneda de la cuenta (si difiere, viene convertido).
+      const montoBanco: number = Number(payload.montoCuentaBancaria) > 0 ? Number(payload.montoCuentaBancaria) : montoCobrar;
+      const cotizacionPago: number | null = payload.cotizacion ? Number(payload.cotizacion) : null;
       const observacion: string = (payload.observacion || '').toUpperCase();
       const fecha: Date = payload.fecha ? new Date(payload.fecha) : new Date();
       const cu = getCurrentUser();
@@ -340,7 +343,7 @@ export function registerCuentasPorCobrarHandlers(
       if (esBanco) {
         const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: cuentaBancariaId } });
         if (!cb) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
-        cb.saldo = +(Number(cb.saldo) + montoCobrar).toFixed(2);
+        cb.saldo = +(Number(cb.saldo) + montoBanco).toFixed(2);
         await queryRunner.manager.save(CuentaBancaria, cb);
       } else {
         const movCM = queryRunner.manager.create(CajaMayorMovimiento, {
@@ -378,6 +381,8 @@ export function registerCuentasPorCobrarHandlers(
         cuentaPorCobrarCuotaId: cuota.id,
         cajaMayorMovimientoId: savedMovCMId,
         cuentaBancariaId: esBanco ? cuentaBancariaId : undefined,
+        montoCuentaBancaria: esBanco ? montoBanco : undefined,
+        cotizacion: esBanco && cotizacionPago ? cotizacionPago : undefined,
         observacion: obsBase,
         registradoPor: cu || undefined,
       });
@@ -426,11 +431,13 @@ export function registerCuentasPorCobrarHandlers(
         order: { id: 'DESC' },
       });
       if (ultimoPago?.cuentaBancariaId) {
-        // Reversión bancaria: debita la cuenta y revierte cuota/cpc/cliente.
+        // Reversión bancaria: debita la cuenta (en SU moneda) y revierte cuota/cpc/cliente
+        // por el monto del cobro (en la moneda de la CPC).
         const montoAnuladoBanco = Number(ultimoPago.monto);
+        const montoBancoRevertir = Number(ultimoPago.montoCuentaBancaria) > 0 ? Number(ultimoPago.montoCuentaBancaria) : montoAnuladoBanco;
         const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: ultimoPago.cuentaBancariaId } });
         if (cb) {
-          cb.saldo = +(Number(cb.saldo) - montoAnuladoBanco).toFixed(2);
+          cb.saldo = +(Number(cb.saldo) - montoBancoRevertir).toFixed(2);
           await queryRunner.manager.save(CuentaBancaria, cb);
         }
 

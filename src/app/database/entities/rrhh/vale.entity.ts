@@ -74,6 +74,14 @@ export class Vale extends BaseModel {
   @Column({ name: 'cuenta_bancaria_id', type: 'int', nullable: true })
   cuentaBancariaId?: number;
 
+  // Monto efectivamente debitado en la moneda de la cuenta bancaria (cuando la
+  // cuenta está en otra moneda que el vale). La anulación revierte ESTE monto.
+  @Column({ name: 'monto_cuenta_bancaria', type: 'decimal', precision: 18, scale: 2, nullable: true })
+  montoCuentaBancaria?: number;
+
+  @Column({ name: 'cotizacion', type: 'decimal', precision: 18, scale: 6, nullable: true })
+  cotizacion?: number;
+
   @ManyToOne(() => Usuario, { nullable: true })
   @JoinColumn({ name: 'autorizado_por_id' })
   autorizadoPor?: Usuario;

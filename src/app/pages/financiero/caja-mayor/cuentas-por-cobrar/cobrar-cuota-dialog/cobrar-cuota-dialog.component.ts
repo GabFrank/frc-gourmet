@@ -14,6 +14,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
+import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/app/shared/utils/conversion-moneda';
 
 interface CobrarCuotaDialogData {
   cuota: any;
@@ -56,6 +57,12 @@ export class CobrarCuotaDialogComponent implements OnInit {
   formasPagoEfectivo: any[] = [];
   cuentasBancarias: any[] = [];
 
+  // Cotización cross-moneda (cuando la cuenta destino está en otra moneda que la CPC)
+  requiereCotiz = false;
+  montoConvertido = 0;
+  monedaCuentaSimbolo = '';
+  private cotizMercado: any = null;
+
   constructor(
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
@@ -77,12 +84,57 @@ export class CobrarCuotaDialogComponent implements OnInit {
       monedaId: [null, Validators.required],
       formaPagoId: [null, Validators.required],
       cuentaBancariaId: [null],
+      cotizacion: [null],
       observacion: [''],
     });
 
     this.loadLookups();
     this.form.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
     this.form.get('fuente')!.valueChanges.subscribe(() => this.aplicarValidadoresFuente());
+    this.form.get('cuentaBancariaId')!.valueChanges.subscribe(() => this.recalcularCotizacion());
+    this.form.get('cotizacion')!.valueChanges.subscribe(() => this.recalcularConvertido());
+    this.form.get('montoCobrar')!.valueChanges.subscribe(() => this.recalcularConvertido());
+  }
+
+  /** Moneda de la CPC (objeto desde la lista cargada, con flag principal). */
+  private get monedaCpc(): any {
+    const id = this.cuota?.cuentaPorCobrar?.moneda?.id;
+    return this.monedas.find((m: any) => m.id === id) || this.cuota?.cuentaPorCobrar?.moneda || null;
+  }
+
+  /** Recalcula si hace falta cotización (cuenta en otra moneda) y precarga la de mercado. */
+  private recalcularCotizacion(): void {
+    const cuenta = this.cuentasBancarias.find((c: any) => c.id === this.form.get('cuentaBancariaId')!.value);
+    const cuentaMoneda = cuenta?.moneda;
+    this.requiereCotiz = this.form.get('fuente')!.value === 'CUENTA_BANCARIA'
+      && requiereCotizacion(this.monedaCpc, cuentaMoneda);
+    this.monedaCuentaSimbolo = cuentaMoneda?.simbolo || '';
+    const cotizCtrl = this.form.get('cotizacion')!;
+    if (this.requiereCotiz) {
+      cotizCtrl.setValidators([Validators.required, Validators.min(0.000001)]);
+      if (!cotizCtrl.value) {
+        // La divisa es la moneda no-principal; ingreso → usar tasa de COMPRA.
+        const divisa = this.monedaCpc?.principal ? cuentaMoneda : this.monedaCpc;
+        const tasa = cotizacionMercadoPara(this.cotizMercado, divisa?.denominacion, 'COMPRA');
+        if (tasa) cotizCtrl.setValue(tasa, { emitEvent: false });
+      }
+    } else {
+      cotizCtrl.clearValidators();
+      cotizCtrl.setValue(null, { emitEvent: false });
+    }
+    cotizCtrl.updateValueAndValidity({ emitEvent: false });
+    this.recalcularConvertido();
+  }
+
+  private recalcularConvertido(): void {
+    if (!this.requiereCotiz) { this.montoConvertido = 0; return; }
+    const cuenta = this.cuentasBancarias.find((c: any) => c.id === this.form.get('cuentaBancariaId')!.value);
+    this.montoConvertido = convertirMonto(
+      Number(this.form.get('montoCobrar')!.value),
+      this.monedaCpc,
+      cuenta?.moneda,
+      Number(this.form.get('cotizacion')!.value),
+    );
   }
 
   /** CAJA_MAYOR: ingreso en efectivo a la caja; CUENTA_BANCARIA: acredita la cuenta. */
@@ -107,6 +159,7 @@ export class CobrarCuotaDialogComponent implements OnInit {
     mon.updateValueAndValidity({ emitEvent: false });
     fp.updateValueAndValidity({ emitEvent: false });
     cb.updateValueAndValidity({ emitEvent: false });
+    this.recalcularCotizacion();
   }
 
   private recalcDecimalesMoneda(): void {
@@ -132,6 +185,11 @@ export class CobrarCuotaDialogComponent implements OnInit {
       this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
       this.applyPreSelecciones();
       this.recalcDecimalesMoneda();
+      // Cotización de mercado del día (para precargar cuando la cuenta está en otra moneda).
+      this.repositoryService.getCotizacionMercado().subscribe({
+        next: (r) => { this.cotizMercado = r; },
+        error: () => { this.cotizMercado = null; },
+      });
     } catch (e) { console.error(e); }
   }
 
@@ -195,6 +253,8 @@ export class CobrarCuotaDialogComponent implements OnInit {
         monedaId: esBanco ? null : f.monedaId,
         formaPagoId: esBanco ? null : f.formaPagoId,
         cuentaBancariaId: esBanco ? f.cuentaBancariaId : null,
+        montoCuentaBancaria: this.requiereCotiz ? this.montoConvertido : null,
+        cotizacion: this.requiereCotiz ? f.cotizacion : null,
         observacion: f.observacion || null,
       }));
       this.snackBar.open('Cobro registrado', 'Cerrar', { duration: 3000 });

@@ -39,6 +39,14 @@ export class Gasto extends BaseModel {
   @Column({ name: 'cuenta_bancaria_id', type: 'int', nullable: true })
   cuentaBancariaId?: number;
 
+  // Monto efectivamente debitado en la moneda de la cuenta (cuando difiere de la
+  // moneda del gasto). La anulación revierte ESTE monto.
+  @Column({ name: 'monto_cuenta_bancaria', type: 'decimal', precision: 18, scale: 2, nullable: true })
+  montoCuentaBancaria?: number;
+
+  @Column({ name: 'cotizacion', type: 'decimal', precision: 18, scale: 6, nullable: true })
+  cotizacion?: number;
+
   @Column({ name: 'es_recurrente', default: false })
   esRecurrente!: boolean;
 

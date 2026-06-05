@@ -22,6 +22,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
+import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/app/shared/utils/conversion-moneda';
 
 interface DetalleRow {
   monedaId: number;
@@ -75,6 +76,11 @@ export class CreateEditGastoDialogComponent implements OnInit {
   cajasMayor: any[] = [];
   cuentasBancarias: any[] = [];
   proveedores: any[] = [];
+
+  requiereCotiz = false;
+  montoConvertido = 0;
+  monedaCuentaSimbolo = '';
+  private cotizMercado: any = null;
   proveedoresFiltrados: any[] = [];
   tipoBoletaOptions = ['LEGAL', 'COMUN', 'OTRO', 'SIN_COMPROBANTE'];
   frecuenciaOptions = ['DIARIO', 'SEMANAL', 'QUINCENAL', 'MENSUAL', 'BIMESTRAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL'];
@@ -111,6 +117,7 @@ export class CreateEditGastoDialogComponent implements OnInit {
       fuente: ['CAJA_MAYOR', Validators.required],
       cajaMayorId: [this.data?.cajaMayorId || null, Validators.required],
       cuentaBancariaId: [null],
+      cotizacion: [null],
       fecha: [new Date(), Validators.required],
       proveedorId: [null],
       numeroComprobante: [''],
@@ -120,6 +127,8 @@ export class CreateEditGastoDialogComponent implements OnInit {
       proximoVencimiento: [null],
     });
     this.form.get('fuente')!.valueChanges.subscribe(() => this.aplicarValidadoresFuente());
+    this.form.get('cuentaBancariaId')!.valueChanges.subscribe(() => this.recalcularCotizacion());
+    this.form.get('cotizacion')!.valueChanges.subscribe(() => this.recalcularConvertido());
 
     this.detalleForm = this.fb.group({
       monedaId: [null, Validators.required],
@@ -159,6 +168,10 @@ export class CreateEditGastoDialogComponent implements OnInit {
       this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
       this.proveedores = proveedores || [];
       this.proveedoresFiltrados = [];
+      this.repositoryService.getCotizacionMercado().subscribe({
+        next: (r) => { this.cotizMercado = r; },
+        error: () => { this.cotizMercado = null; },
+      });
 
       // Si estamos editando, cargar el gasto
       if (this.isEditing && this.gastoId) {
@@ -296,6 +309,47 @@ export class CreateEditGastoDialogComponent implements OnInit {
     if (esBanco) cb.setValidators([Validators.required]);
     else cb.clearValidators();
     cb.updateValueAndValidity({ emitEvent: false });
+    this.recalcularCotizacion();
+  }
+
+  /** Suma de los detalles (moneda de la operación = la del primer detalle). */
+  private get montoTotalDetalles(): number {
+    return this.detalles.reduce((s, d) => s + Number(d.monto), 0);
+  }
+
+  recalcularCotizacion(): void {
+    const opMoneda = this.monedas.find((m: any) => m.id === this.detalles[0]?.monedaId);
+    const cuenta = this.cuentasBancarias.find((c: any) => c.id === this.form.get('cuentaBancariaId')!.value);
+    const cuentaMoneda = cuenta?.moneda;
+    this.requiereCotiz = this.form.get('fuente')!.value === 'CUENTA_BANCARIA'
+      && requiereCotizacion(opMoneda, cuentaMoneda);
+    this.monedaCuentaSimbolo = cuentaMoneda?.simbolo || '';
+    const cotizCtrl = this.form.get('cotizacion')!;
+    if (this.requiereCotiz) {
+      cotizCtrl.setValidators([Validators.required, Validators.min(0.000001)]);
+      if (!cotizCtrl.value) {
+        const divisa = opMoneda?.principal ? cuentaMoneda : opMoneda;
+        const tasa = cotizacionMercadoPara(this.cotizMercado, divisa?.denominacion, 'VENTA');
+        if (tasa) cotizCtrl.setValue(tasa, { emitEvent: false });
+      }
+    } else {
+      cotizCtrl.clearValidators();
+      cotizCtrl.setValue(null, { emitEvent: false });
+    }
+    cotizCtrl.updateValueAndValidity({ emitEvent: false });
+    this.recalcularConvertido();
+  }
+
+  recalcularConvertido(): void {
+    if (!this.requiereCotiz) { this.montoConvertido = 0; return; }
+    const opMoneda = this.monedas.find((m: any) => m.id === this.detalles[0]?.monedaId);
+    const cuenta = this.cuentasBancarias.find((c: any) => c.id === this.form.get('cuentaBancariaId')!.value);
+    this.montoConvertido = convertirMonto(
+      this.montoTotalDetalles,
+      opMoneda,
+      cuenta?.moneda,
+      Number(this.form.get('cotizacion')!.value),
+    );
   }
 
   // --- Detalles de pago ---
@@ -336,6 +390,7 @@ export class CreateEditGastoDialogComponent implements OnInit {
       }
     }
     this.totalesPorMoneda = Array.from(map.values());
+    this.recalcularCotizacion();
   }
 
   async onSubmit(): Promise<void> {
@@ -359,6 +414,8 @@ export class CreateEditGastoDialogComponent implements OnInit {
         cajaMayor: { id: f.cajaMayorId },
         fuente: f.fuente,
         cuentaBancariaId: esBanco ? f.cuentaBancariaId : null,
+        montoCuentaBancaria: esBanco && this.requiereCotiz ? this.montoConvertido : null,
+        cotizacion: esBanco && this.requiereCotiz ? f.cotizacion : null,
         fecha: f.fecha,
         proveedor: f.proveedorId ? { id: f.proveedorId } : null,
         numeroComprobante: f.numeroComprobante?.toUpperCase() || null,
