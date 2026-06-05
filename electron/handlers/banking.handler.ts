@@ -616,8 +616,8 @@ export function registerBankingHandlers(
 
       // 6. Gastos pagados desde esta cuenta bancaria (egresos)
       const gastoRows = await dbQuery(dataSource,
-        `SELECT g.id, g.descripcion, g.fecha, g.monto, g.numero_comprobante AS "numeroComprobante",
-                cat.nombre AS "catNombre"
+        `SELECT g.id, g.descripcion, g.fecha, g.created_at AS "createdAt", g.monto,
+                g.numero_comprobante AS "numeroComprobante", cat.nombre AS "catNombre"
          FROM gastos g
          LEFT JOIN gastos_categorias cat ON g.gasto_categoria_id = cat.id
          WHERE g.cuenta_bancaria_id = ? AND g.estado <> 'CANCELADO'`,
@@ -625,7 +625,7 @@ export function registerBankingHandlers(
       );
       for (const g of gastoRows) {
         items.push({
-          fecha: g.fecha,
+          fecha: g.createdAt || g.fecha,
           tipo: 'GASTO',
           monto: Number(g.monto),
           esIngreso: false,
@@ -640,7 +640,7 @@ export function registerBankingHandlers(
 
       // 7. Vales egresados desde esta cuenta bancaria (egresos)
       const valeRows = await dbQuery(dataSource,
-        `SELECT v.id, v.descripcion, v.fecha, v.monto,
+        `SELECT v.id, v.descripcion, v.fecha, v.created_at AS "createdAt", v.monto,
                 p.nombre AS "nombre", p.apellido AS "apellido"
          FROM vales v
          LEFT JOIN funcionarios f ON v.funcionario_id = f.id
@@ -651,7 +651,7 @@ export function registerBankingHandlers(
       for (const v of valeRows) {
         const func = `${v.nombre || ''} ${v.apellido || ''}`.trim();
         items.push({
-          fecha: v.fecha,
+          fecha: v.createdAt || v.fecha,
           tipo: 'VALE',
           monto: Number(v.monto),
           esIngreso: false,
