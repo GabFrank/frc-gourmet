@@ -7,6 +7,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
@@ -37,13 +38,18 @@ import { MovimientosCuentaBancariaDialogComponent } from '../bancos/movimientos-
 import { TabsService } from 'src/app/services/tabs.service';
 
 interface MovimientoConsolidado {
+  fuente: 'CAJA' | 'BANCO';
+  fuenteLabel: string;        // 'CAJA MAYOR' | nombre de cuenta (ej. 'STONE')
+  fuenteCuentaId?: number;    // id de cuenta bancaria (filas de banco); undefined si CAJA
   fecha: Date;
   tipoMovimiento: string;
   tipoLabel: string;
   tipoIsIngreso: boolean;
-  detalles: { monedaSimbolo: string; formaPagoNombre: string; monto: number }[];
+  detalles: { monedaSimbolo: string; formaPagoNombre?: string; monto: number }[];
   responsableNombre: string;
   observacion: string;
+  anulado: boolean;
+  origen: string;             // 'GASTO'|'VALE'|'COBRO_CLIENTE'|... ('' para caja)
   gastoId?: number;
   retiroCajaId?: number;
   movimientoIds: number[];
@@ -71,6 +77,7 @@ interface MovimientoConsolidado {
     MatButtonModule,
     MatIconModule,
     MatChipsModule,
+    MatButtonToggleModule,
     MatProgressSpinnerModule,
     MatDialogModule,
     MatSnackBarModule,
@@ -117,7 +124,10 @@ export class CajaMayorDetalleComponent implements OnInit {
   movimientosConsolidados: MovimientoConsolidado[] = [];
   loading = false;
   loadingMovimientos = false;
-  movimientosColumns = ['fecha', 'tipoMovimiento', 'detalles', 'observacion', 'responsable', 'actions'];
+  movimientosColumns = ['fuente', 'fecha', 'tipoMovimiento', 'detalles', 'observacion', 'responsable', 'actions'];
+
+  // Filtro de fuente del panel consolidado: 'TODO' | 'CAJA' | 'BANCO' | '<accountId>'
+  fuenteFilter: string = 'TODO';
 
   // Paginacion
   pageSize = 15;
@@ -189,6 +199,7 @@ export class CajaMayorDetalleComponent implements OnInit {
       tipoMovimiento: [null],
       proveedorId: [null],
       responsableId: [null],
+      esIngreso: [null], // null = todos, true = ingresos, false = egresos
     });
 
     this.loadLookups();
@@ -360,15 +371,22 @@ export class CajaMayorDetalleComponent implements OnInit {
         hasta.setHours(23, 59, 59, 999);
         filtros.fechaHasta = hasta;
       }
-      if (f.tipoMovimiento) filtros.tipoMovimiento = f.tipoMovimiento;
       if (f.proveedorId) filtros.proveedorId = f.proveedorId;
       if (f.responsableId) filtros.responsableId = f.responsableId;
+      if (f.esIngreso !== null && f.esIngreso !== undefined && f.esIngreso !== '') {
+        filtros.esIngreso = f.esIngreso === true || f.esIngreso === 'true';
+      }
       if (this.verAnulaciones) filtros.incluirAnulaciones = true;
 
-      const result: any = await firstValueFrom(this.repositoryService.getCajaMayorMovimientos(this.cajaMayor.id, filtros));
-      const items = result?.items || [];
+      // Fuente y alcance de cuentas bancarias visibles para esta caja
+      filtros.fuente = this.fuenteFilter;
+      filtros.cuentasBancariasIds = this.cuentasBancariasCards.map((c) => c.id);
+
+      const result: any = await firstValueFrom(
+        this.repositoryService.getCajaMayorMovimientosConsolidados(this.cajaMayor.id, filtros),
+      );
+      this.movimientosConsolidados = result?.items || [];
       this.total = result?.total || 0;
-      this.movimientosConsolidados = this.consolidarMovimientos(items);
     } catch (error) {
       console.error('Error loading movimientos:', error);
       this.snackBar.open('Error al cargar movimientos', 'Cerrar', { duration: 3000 });
@@ -434,65 +452,18 @@ export class CajaMayorDetalleComponent implements OnInit {
     return Array.from(map.values());
   }
 
-  private consolidarMovimientos(movimientos: any[]): MovimientoConsolidado[] {
-    const grupos = new Map<string, MovimientoConsolidado>();
-    // Ordenar ascendente para que el movimiento original venga antes que su anulacion
-    const ordenados = [...movimientos].sort(
-      (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime(),
-    );
+  // Cambio del toggle de fuente (Todo / Caja / Banco / cuenta puntual)
+  onFuenteChange(fuente: string): void {
+    this.fuenteFilter = fuente;
+    this.pageIndex = 0;
+    if (this.paginator) this.paginator.firstPage();
+    this.loadMovimientos();
+  }
 
-    for (const mov of ordenados) {
-      const gastoId = mov.gasto?.id;
-      const retiroCajaId = mov.retiroCaja?.id;
-      const isAnulacion = mov.tipoMovimiento === 'ANULACION';
-      const contraDeId = mov.referenciaAnulacion?.id;
-      const key = gastoId ? `gasto-${gastoId}` :
-                  retiroCajaId ? `retiro-${retiroCajaId}` :
-                  `mov-${mov.id}`;
-
-      // Si es anulacion vinculada a un gasto/retiro existente: solo marcar el grupo
-      if (isAnulacion && (gastoId || retiroCajaId) && grupos.has(key)) {
-        const grupo = grupos.get(key)!;
-        grupo.esAnulacion = true;
-        grupo.movimientoIds.push(mov.id);
-        continue;
-      }
-
-      const detalle = {
-        monedaSimbolo: mov.moneda?.simbolo || '-',
-        formaPagoNombre: mov.formaPago?.nombre || '-',
-        monto: Number(mov.monto),
-      };
-
-      if (grupos.has(key)) {
-        const grupo = grupos.get(key)!;
-        grupo.detalles.push(detalle);
-        grupo.movimientoIds.push(mov.id);
-      } else {
-        const tipo: string = mov.tipoMovimiento || '';
-        const esIngreso = tipo.startsWith('INGRESO') || tipo.startsWith('AJUSTE_POS') || tipo === 'TRANSFERENCIA_ENTRADA';
-        grupos.set(key, {
-          fecha: mov.fecha,
-          tipoMovimiento: tipo,
-          tipoLabel: this.tipoLabel(tipo),
-          tipoIsIngreso: esIngreso,
-          detalles: [detalle],
-          responsableNombre: mov.responsable?.persona?.nombre || mov.responsable?.nickname || '-',
-          observacion: mov.observacion || '-',
-          gastoId,
-          retiroCajaId,
-          movimientoIds: [mov.id],
-          esAnulacion: isAnulacion || !!contraDeId,
-          anulacion: mov.anulacion || null,
-          contraDeId: contraDeId || undefined,
-        });
-      }
-    }
-
-    // Mostrar mas recientes primero
-    return Array.from(grupos.values()).sort(
-      (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
-    );
+  // Abre el detalle de la cuenta bancaria de una fila de banco (solo lectura)
+  verMovimientoBanco(row: MovimientoConsolidado): void {
+    if (!row?.fuenteCuentaId) return;
+    this.abrirMovimientosCuentaBancaria({ id: row.fuenteCuentaId, nombre: row.fuenteLabel });
   }
 
   abrirMovimientosCuentaBancaria(cb: any): void {
@@ -602,7 +573,7 @@ export class CajaMayorDetalleComponent implements OnInit {
       // Editar movimiento suelto (ajuste)
       const detalle = mov.detalles[0];
       const moneda = this.findMonedaBySimbolo(detalle?.monedaSimbolo);
-      const formaPago = this.findFormaPagoByNombre(detalle?.formaPagoNombre);
+      const formaPago = this.findFormaPagoByNombre(detalle?.formaPagoNombre || '');
 
       const dialogRef = this.dialog.open(EditMovimientoDialogComponent, {
         width: '450px',
@@ -695,7 +666,7 @@ export class CajaMayorDetalleComponent implements OnInit {
           map.set(key, {
             simbolo: d.monedaSimbolo,
             denominacion: '',
-            fp: d.formaPagoNombre,
+            fp: d.formaPagoNombre || '',
             monto: Number(d.monto),
           });
         }

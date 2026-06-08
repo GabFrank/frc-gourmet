@@ -24,6 +24,7 @@ import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { esIngreso, actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { ensurePermission } from '../utils/auth.utils';
+import { getMovimientosBancariosUnificados } from '../utils/movimientos-bancarios';
 
 // Alias local para mantener firma legacy de actualizarSaldo
 const actualizarSaldo = actualizarSaldoCajaMayor;
@@ -327,6 +328,243 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       return items;
     } catch (error) {
       console.error(`Error getting movimientos for caja mayor ${cajaMayorId}:`, error);
+      throw error;
+    }
+  });
+
+  // ===================== MOVIMIENTOS CONSOLIDADOS (CAJA + BANCOS) =====================
+
+  // Etiquetas humanizadas para el panel financiero consolidado.
+  const tipoLabelCaja: Record<string, string> = {
+    INGRESO_RETIRO_CAJA: 'Retiro de Caja (entrada)',
+    INGRESO_CIERRE_CAJA: 'Cierre de Caja',
+    INGRESO_ENTRADA_VARIA: 'Entrada Varia',
+    INGRESO_OPERACION_FINANCIERA: 'Operacion Financiera (entrada)',
+    INGRESO_RETIRO_BANCO: 'Retiro de Banco',
+    INGRESO_COBRO_CUOTA_PRESTAMO_FUNCIONARIO: 'Cobro cuota prestamo func.',
+    INGRESO_COBRO_CUENTA_POR_COBRAR: 'Cobro cuenta por cobrar',
+    TRANSFERENCIA_ENTRADA: 'Transferencia (entrada)',
+    AJUSTE_POSITIVO: 'Ajuste (+)',
+    EGRESO_GASTO: 'Gasto',
+    EGRESO_COMPRA: 'Compra',
+    EGRESO_CUOTA_COMPRA: 'Cuota compra',
+    EGRESO_CUOTA_PRESTAMO: 'Cuota prestamo',
+    EGRESO_VALE: 'Vale',
+    EGRESO_SALARIO: 'Salario',
+    EGRESO_CHEQUE: 'Cheque',
+    EGRESO_OPERACION_FINANCIERA: 'Operacion Financiera (salida)',
+    EGRESO_DEPOSITO_BANCO: 'Deposito a Banco',
+    EGRESO_CAJA_INICIAL: 'Caja Inicial (salida)',
+    EGRESO_DESEMBOLSO_PRESTAMO_FUNCIONARIO: 'Desembolso prestamo func.',
+    TRANSFERENCIA_SALIDA: 'Transferencia (salida)',
+    AJUSTE_NEGATIVO: 'Ajuste (-)',
+    ANULACION: 'Anulacion',
+  };
+  const tipoLabelBanco: Record<string, string> = {
+    MANUAL: 'Ajuste manual',
+    ENTRADA_MANUAL: 'Entrada manual',
+    SALIDA_MANUAL: 'Salida manual',
+    AJUSTE_POSITIVO: 'Ajuste (+)',
+    AJUSTE_NEGATIVO: 'Ajuste (-)',
+    CHEQUE_COBRADO: 'Cheque cobrado',
+    DEPOSITO: 'Deposito bancario',
+    RETIRO: 'Retiro bancario',
+    ENTRADA_VARIA: 'Entrada Varia',
+    GASTO: 'Gasto',
+    VALE: 'Vale',
+    COBRO_CLIENTE: 'Cobro cliente',
+  };
+
+  // Agrupa los CajaMayorMovimiento crudos en filas unificadas (un gasto/retiro con
+  // varias monedas/formas de pago colapsa a una fila con N detalles). Portado de
+  // consolidarMovimientos() del componente.
+  const consolidarCaja = (movimientos: any[]): any[] => {
+    const grupos = new Map<string, any>();
+    const ordenados = [...movimientos].sort(
+      (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime(),
+    );
+    for (const mov of ordenados) {
+      const gastoId = mov.gasto?.id;
+      const retiroCajaId = mov.retiroCaja?.id;
+      const isAnulacion = mov.tipoMovimiento === 'ANULACION';
+      const contraDeId = mov.referenciaAnulacion?.id;
+      const key = gastoId ? `gasto-${gastoId}` :
+                  retiroCajaId ? `retiro-${retiroCajaId}` :
+                  `mov-${mov.id}`;
+
+      if (isAnulacion && (gastoId || retiroCajaId) && grupos.has(key)) {
+        const grupo = grupos.get(key);
+        grupo.esAnulacion = true;
+        grupo.movimientoIds.push(mov.id);
+        continue;
+      }
+
+      const detalle = {
+        monedaSimbolo: mov.moneda?.simbolo || '-',
+        formaPagoNombre: mov.formaPago?.nombre || '-',
+        monto: Number(mov.monto),
+      };
+
+      if (grupos.has(key)) {
+        const grupo = grupos.get(key);
+        grupo.detalles.push(detalle);
+        grupo.movimientoIds.push(mov.id);
+      } else {
+        const tipo: string = mov.tipoMovimiento || '';
+        const ingreso = tipo.startsWith('INGRESO') || tipo.startsWith('AJUSTE_POS') || tipo === 'TRANSFERENCIA_ENTRADA';
+        grupos.set(key, {
+          fuente: 'CAJA',
+          fuenteLabel: 'CAJA MAYOR',
+          fuenteCuentaId: undefined,
+          fecha: mov.fecha,
+          tipoMovimiento: tipo,
+          tipoLabel: tipoLabelCaja[tipo] || tipo,
+          tipoIsIngreso: ingreso,
+          detalles: [detalle],
+          responsableNombre: mov.responsable?.persona?.nombre || mov.responsable?.nickname || '-',
+          observacion: mov.observacion || '-',
+          anulado: !!mov.anulacion,
+          origen: '',
+          gastoId,
+          retiroCajaId,
+          movimientoIds: [mov.id],
+          esAnulacion: isAnulacion || !!contraDeId,
+          anulacion: mov.anulacion || null,
+          contraDeId: contraDeId || undefined,
+        });
+      }
+    }
+    return Array.from(grupos.values());
+  };
+
+  ipcMain.handle('get-movimientos-caja-mayor-consolidados', async (_event: any, cajaMayorId: number, filtros?: any) => {
+    try {
+      const fuente: string = filtros?.fuente || 'TODO'; // 'TODO' | 'CAJA' | 'BANCO' | '<accountId>'
+      const cuentasVisibles: number[] = (filtros?.cuentasBancariasIds || []).map((n: any) => Number(n));
+      const incluirCaja = fuente === 'TODO' || fuente === 'CAJA';
+      const fuenteEsCuenta = fuente !== 'TODO' && fuente !== 'CAJA' && fuente !== 'BANCO';
+      const incluirBanco = fuente === 'TODO' || fuente === 'BANCO' || fuenteEsCuenta;
+
+      let unificados: any[] = [];
+
+      // ---- Rama caja ----
+      if (incluirCaja) {
+        const repo = dataSource.getRepository(CajaMayorMovimiento);
+        const qb = repo.createQueryBuilder('mov')
+          .leftJoinAndSelect('mov.moneda', 'moneda')
+          .leftJoinAndSelect('mov.formaPago', 'formaPago')
+          .leftJoinAndSelect('mov.responsable', 'responsable')
+          .leftJoinAndSelect('responsable.persona', 'persona')
+          .leftJoinAndSelect('mov.gasto', 'gasto')
+          .leftJoinAndSelect('gasto.proveedor', 'proveedor')
+          .leftJoinAndSelect('mov.retiroCaja', 'retiroCaja')
+          .leftJoinAndSelect('mov.referenciaAnulacion', 'referenciaAnulacion')
+          .where('mov.caja_mayor_id = :cajaMayorId', { cajaMayorId })
+          .orderBy('mov.fecha', 'DESC')
+          .addOrderBy('mov.id', 'DESC');
+        if (filtros?.fechaDesde) qb.andWhere('mov.fecha >= :fechaDesde', { fechaDesde: filtros.fechaDesde });
+        if (filtros?.fechaHasta) qb.andWhere('mov.fecha <= :fechaHasta', { fechaHasta: filtros.fechaHasta });
+        if (filtros?.responsableId) qb.andWhere('mov.responsable_id = :responsableId', { responsableId: filtros.responsableId });
+        if (filtros?.proveedorId) qb.andWhere('gasto.proveedor_id = :proveedorId', { proveedorId: filtros.proveedorId });
+        if (!filtros?.incluirAnulaciones) qb.andWhere('mov.referencia_anulacion_id IS NULL');
+
+        const cajaItems = await qb.getMany();
+
+        // Decorar con info de anulacion
+        if (cajaItems.length) {
+          const ids = cajaItems.map((m: any) => m.id);
+          const anulaciones = await repo.createQueryBuilder('a')
+            .leftJoinAndSelect('a.responsable', 'r')
+            .leftJoinAndSelect('r.persona', 'p')
+            .loadRelationIdAndMap('a.referenciaAnulacionId', 'a.referenciaAnulacion')
+            .where('a.referencia_anulacion_id IN (:...ids)', { ids })
+            .getMany();
+          const byOrigId = new Map<number, any>();
+          for (const a of anulaciones) {
+            const origId = (a as any).referenciaAnulacionId;
+            if (!origId) continue;
+            byOrigId.set(origId, {
+              id: a.id,
+              fecha: a.fecha,
+              motivo: ((a as any).observacion || '').replace(/^ANULACION:\s*/i, '').trim(),
+              responsableNombre: (a as any).responsable?.persona?.nombre || (a as any).responsable?.nickname || null,
+            });
+          }
+          for (const m of cajaItems) (m as any).anulacion = byOrigId.get(m.id) || null;
+        }
+
+        // Mapear a la forma esperada por consolidarCaja (gasto/retiro/referenciaAnulacion como objetos)
+        const mapped = cajaItems.map((m: any) => ({
+          id: m.id,
+          fecha: m.fecha,
+          tipoMovimiento: m.tipoMovimiento,
+          monto: m.monto,
+          moneda: m.moneda,
+          formaPago: m.formaPago,
+          responsable: m.responsable,
+          observacion: m.observacion,
+          gasto: m.gasto,
+          retiroCaja: m.retiroCaja,
+          referenciaAnulacion: m.referenciaAnulacion,
+          anulacion: (m as any).anulacion,
+        }));
+        unificados = unificados.concat(consolidarCaja(mapped));
+      }
+
+      // ---- Rama banco ----
+      if (incluirBanco) {
+        const accountIds = fuenteEsCuenta ? [Number(fuente)] : cuentasVisibles;
+        if (accountIds.length > 0) {
+          const bancoItems = await getMovimientosBancariosUnificados(dataSource, accountIds, {
+            excludePos: true,
+            stampFuente: true,
+            fechaDesde: filtros?.fechaDesde,
+            fechaHasta: filtros?.fechaHasta,
+          });
+          for (const b of bancoItems) {
+            unificados.push({
+              fuente: 'BANCO',
+              fuenteLabel: b.fuenteLabel || 'BANCO',
+              fuenteCuentaId: b.fuenteCuentaId,
+              fecha: b.fecha,
+              tipoMovimiento: b.tipo,
+              tipoLabel: tipoLabelBanco[b.tipo] || b.tipo,
+              tipoIsIngreso: b.esIngreso,
+              detalles: [{ monedaSimbolo: b.monedaSimbolo || '', formaPagoNombre: undefined, monto: Number(b.monto) }],
+              responsableNombre: b.responsable || '-',
+              observacion: b.descripcion || '-',
+              anulado: !!b.anulado,
+              origen: b.origen,
+              movimientoIds: [b.id],
+              esAnulacion: false,
+              anulacion: null,
+              contraDeId: undefined,
+            });
+          }
+        }
+      }
+
+      // ---- Filtros transversales ----
+      if (filtros?.esIngreso !== undefined && filtros?.esIngreso !== null) {
+        unificados = unificados.filter((i) => i.tipoIsIngreso === filtros.esIngreso);
+      }
+      if (filtros?.origen) {
+        unificados = unificados.filter((i) => i.origen === filtros.origen);
+      }
+
+      // Orden por fecha desc
+      unificados.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+      // Paginacion
+      const total = unificados.length;
+      if (filtros?.pageSize != null) {
+        const pageSize = Number(filtros.pageSize) || 15;
+        const page = Math.max(0, Number(filtros.page) || 0);
+        return { items: unificados.slice(page * pageSize, (page + 1) * pageSize), total };
+      }
+      return { items: unificados, total };
+    } catch (error) {
+      console.error(`Error getting movimientos consolidados for caja mayor ${cajaMayorId}:`, error);
       throw error;
     }
   });

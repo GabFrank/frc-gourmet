@@ -1398,6 +1398,10 @@ export class RepositoryHttpService extends RepositoryService {
   getCajaMayorMovimientos(cajaMayorId: number, filtros?: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getCajaMayorMovimientos() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+
+  getCajaMayorMovimientosConsolidados(cajaMayorId: number, filtros?: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getCajaMayorMovimientosConsolidados() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   createCajaMayorMovimiento(data: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.createCajaMayorMovimiento() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
