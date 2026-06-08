@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { from, Observable, of, switchMap, tap } from 'rxjs';
+import { RepositoryService } from '../database/repository.service';
 
 /**
  * Resultado standard de un handler `export-*-pdf` / `export-*-excel` / etc.
@@ -42,6 +43,8 @@ export interface ImpresionResultado {
 @Injectable({ providedIn: 'root' })
 export class DocumentoService {
 
+  constructor(private repository: RepositoryService) {}
+
   private get api(): any {
     return (window as any).api;
   }
@@ -55,7 +58,7 @@ export class DocumentoService {
    * en base64. El handler debe retornar `{filename, base64, mimeType}`.
    */
   generar(handlerName: string, params?: any): Observable<DocumentoGenerado> {
-    return from(this.api.callIpc(handlerName, params));
+    return from(this.api.callIpc(handlerName, params) as Promise<DocumentoGenerado>);
   }
 
   // ============================================================
@@ -84,24 +87,19 @@ export class DocumentoService {
   // ============================================================
 
   /**
-   * Abre el PDF/imagen en una ventana nueva del propio Electron usando un
-   * Blob URL. Para PDFs el visor nativo de Chromium-Electron es suficiente
-   * para preview.
+   * Abre el documento en el visor por defecto del sistema (en Electron escribe
+   * un archivo temporal y lo abre con `shell.openPath` → visor real del SO;
+   * en modo web/PWA abre el PDF en una pestaña nueva del navegador).
    *
-   * Si querés el visor custom (`DocumentViewerDialogComponent`), usar
-   * `guardarYAbrir` que primero guarda el archivo y abre el visor con la
-   * `app://` URL — sólo para firmables que de todos modos se persisten.
+   * El ruteo correcto por modo lo resuelve `RepositoryService` (impl IPC vs
+   * HTTP). Si la apertura falla (p. ej. popup bloqueado o sin visor), cae a
+   * descarga para no dejar al usuario sin el archivo.
    */
   abrirEnVisor(doc: DocumentoGenerado): void {
-    const blob = this.base64ToBlob(doc.base64, doc.mimeType);
-    const url = URL.createObjectURL(blob);
-    const win = window.open(url, '_blank');
-    if (!win) {
-      // popup bloqueado — fallback a descarga
-      this.descargar(doc);
-    }
-    // No revocamos la URL aquí: la pestaña/ventana la usa hasta que el usuario cierra.
-    // En la práctica, dejarla viva por algunos segundos basta para que se cargue.
+    this.repository.openBase64File(doc.base64, doc.filename).subscribe({
+      next: (res) => { if (!res?.ok) this.descargar(doc); },
+      error: () => this.descargar(doc),
+    });
   }
 
   // ============================================================
@@ -211,7 +209,7 @@ export class DocumentoService {
    * toast si hay errores.
    */
   imprimirTicket(handlerName: string, params: any): Observable<ImpresionResultado> {
-    return from(this.api.callIpc(handlerName, params));
+    return from(this.api.callIpc(handlerName, params) as Promise<ImpresionResultado>);
   }
 
   // ============================================================

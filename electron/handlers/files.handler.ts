@@ -187,4 +187,24 @@ export function registerFilesHandlers(): void {
     if (error) return { ok: false, error };
     return { ok: true };
   });
+
+  // Abre un archivo generado en memoria (base64) en el visor por defecto del SO.
+  // Lo escribe a userData/temp/ y lo abre con shell.openPath. Usado para abrir
+  // PDFs/reportes recién generados sin que el usuario tenga que buscarlos.
+  ipcMain.handle('open-base64-file', async (_event, input: { base64: string; fileName: string }): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      if (!input?.base64) return { ok: false, error: 'sin contenido' };
+      const dir = path.join(app.getPath('userData'), 'temp');
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      // Sanitizar nombre y garantizar unicidad (timestamp) para no pisar visores abiertos.
+      const safeName = (input.fileName || 'documento.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
+      const absPath = path.join(dir, `${Date.now()}_${safeName}`);
+      fs.writeFileSync(absPath, Buffer.from(input.base64, 'base64'));
+      const error = await shell.openPath(absPath);
+      if (error) return { ok: false, error };
+      return { ok: true };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || String(e) };
+    }
+  });
 }

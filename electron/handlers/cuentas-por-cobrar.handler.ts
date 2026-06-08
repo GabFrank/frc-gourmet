@@ -11,6 +11,7 @@ import {
   MovimientoClienteTipo,
 } from '../../src/app/database/entities/financiero/cuentas-por-cobrar-enums';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
+import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
@@ -266,14 +267,21 @@ export function registerCuentasPorCobrarHandlers(
     try {
       const cuotaId: number = payload.cuotaId;
       const montoCobrar: number = Number(payload.montoCobrar);
+      const esBanco: boolean = payload.fuente === 'CUENTA_BANCARIA';
       const cajaMayorId: number = payload.cajaMayorId;
       const monedaId: number = payload.monedaId;
       const formaPagoId: number = payload.formaPagoId;
+      const cuentaBancariaId: number = payload.cuentaBancariaId;
+      // Monto acreditado en la moneda de la cuenta (si difiere, viene convertido).
+      const montoBanco: number = Number(payload.montoCuentaBancaria) > 0 ? Number(payload.montoCuentaBancaria) : montoCobrar;
+      const cotizacionPago: number | null = payload.cotizacion ? Number(payload.cotizacion) : null;
       const observacion: string = (payload.observacion || '').toUpperCase();
       const fecha: Date = payload.fecha ? new Date(payload.fecha) : new Date();
       const cu = getCurrentUser();
 
-      if (!cajaMayorId || !monedaId || !formaPagoId) {
+      if (esBanco) {
+        if (!cuentaBancariaId) throw new Error('Falta la cuenta bancaria para el cobro');
+      } else if (!cajaMayorId || !monedaId || !formaPagoId) {
         throw new Error('Faltan datos para cobro desde caja mayor');
       }
 
@@ -327,24 +335,35 @@ export function registerCuentasPorCobrarHandlers(
       const cliente = clienteId ? await clienteRepo.findOne({ where: { id: clienteId }, relations: ['persona'] }) : null;
       const clienteLabel = cliente?.razon_social || cliente?.persona?.nombre || `CLIENTE #${clienteId}`;
 
-      // Crear movimiento en CajaMayor
       const obsBase = `COBRO #${cuota.numero} - CPC #${cpc.id} - ${clienteLabel}`;
-      const movCM = queryRunner.manager.create(CajaMayorMovimiento, {
-        cajaMayor: { id: cajaMayorId } as any,
-        tipoMovimiento: TipoMovimiento.INGRESO_COBRO_CLIENTE,
-        moneda: { id: monedaId } as any,
-        formaPago: { id: formaPagoId } as any,
-        monto: montoCobrar,
-        fecha,
-        observacion: observacion ? `${obsBase} — ${observacion}` : obsBase,
-        cuentaPorCobrarCuotaId: cuota.id,
-        responsable: cu || undefined,
-      } as any);
-      await setEntityUserTracking(dataSource, movCM, cu?.id, false);
-      const savedMovCM = await queryRunner.manager.save(CajaMayorMovimiento, movCM);
 
-      // Actualizar saldo caja mayor
-      await actualizarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, montoCobrar, TipoMovimiento.INGRESO_COBRO_CLIENTE);
+      // Registrar el ingreso: si es por banco, acredita la cuenta y NO genera
+      // movimiento de Caja Mayor; si es caja mayor, crea el movimiento de caja.
+      let savedMovCMId: number | undefined;
+      if (esBanco) {
+        const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: cuentaBancariaId } });
+        if (!cb) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
+        cb.saldo = +(Number(cb.saldo) + montoBanco).toFixed(2);
+        await queryRunner.manager.save(CuentaBancaria, cb);
+      } else {
+        const movCM = queryRunner.manager.create(CajaMayorMovimiento, {
+          cajaMayor: { id: cajaMayorId } as any,
+          tipoMovimiento: TipoMovimiento.INGRESO_COBRO_CLIENTE,
+          moneda: { id: monedaId } as any,
+          formaPago: { id: formaPagoId } as any,
+          monto: montoCobrar,
+          fecha,
+          observacion: observacion ? `${obsBase} — ${observacion}` : obsBase,
+          cuentaPorCobrarCuotaId: cuota.id,
+          responsable: cu || undefined,
+        } as any);
+        await setEntityUserTracking(dataSource, movCM, cu?.id, false);
+        const savedMovCM = await queryRunner.manager.save(CajaMayorMovimiento, movCM);
+        savedMovCMId = savedMovCM.id;
+
+        // Actualizar saldo caja mayor
+        await actualizarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, montoCobrar, TipoMovimiento.INGRESO_COBRO_CLIENTE);
+      }
 
       // Actualizar saldoActual del cliente (cobro reduce la deuda)
       if (cliente) {
@@ -360,7 +379,10 @@ export function registerCuentasPorCobrarHandlers(
         fecha,
         cuentaPorCobrarId: cpc.id,
         cuentaPorCobrarCuotaId: cuota.id,
-        cajaMayorMovimientoId: savedMovCM.id,
+        cajaMayorMovimientoId: savedMovCMId,
+        cuentaBancariaId: esBanco ? cuentaBancariaId : undefined,
+        montoCuentaBancaria: esBanco ? montoBanco : undefined,
+        cotizacion: esBanco && cotizacionPago ? cotizacionPago : undefined,
         observacion: obsBase,
         registradoPor: cu || undefined,
       });
@@ -403,6 +425,62 @@ export function registerCuentasPorCobrarHandlers(
       const montoCobrado = Number(cuota.montoCobrado);
       if (montoCobrado <= 0) throw new Error('La cuota no tiene cobros que anular');
 
+      // Detectar si el último cobro fue acreditado a una cuenta bancaria.
+      const ultimoPago = await movClienteRepo.findOne({
+        where: { cuentaPorCobrarCuotaId: cuotaId, tipo: MovimientoClienteTipo.PAGO },
+        order: { id: 'DESC' },
+      });
+      if (ultimoPago?.cuentaBancariaId) {
+        // Reversión bancaria: debita la cuenta (en SU moneda) y revierte cuota/cpc/cliente
+        // por el monto del cobro (en la moneda de la CPC).
+        const montoAnuladoBanco = Number(ultimoPago.monto);
+        const montoBancoRevertir = Number(ultimoPago.montoCuentaBancaria) > 0 ? Number(ultimoPago.montoCuentaBancaria) : montoAnuladoBanco;
+        const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: ultimoPago.cuentaBancariaId } });
+        if (cb) {
+          cb.saldo = +(Number(cb.saldo) - montoBancoRevertir).toFixed(2);
+          await queryRunner.manager.save(CuentaBancaria, cb);
+        }
+
+        cuota.montoCobrado = +(Math.max(0, Number(cuota.montoCobrado) - montoAnuladoBanco)).toFixed(2);
+        cuota.estado = calcularEstadoCuota(Number(cuota.monto), Number(cuota.montoCobrado));
+        if (cuota.montoCobrado <= 0) cuota.fechaCobro = null as any;
+        await setEntityUserTracking(dataSource, cuota, cu?.id, true);
+        await queryRunner.manager.save(CuentaPorCobrarCuota, cuota);
+
+        const cpcB = await cpcRepo.findOne({ where: { id: cuota.cuentaPorCobrar.id }, relations: ['cliente'] });
+        if (cpcB) {
+          cpcB.montoCobrado = +(Math.max(0, Number(cpcB.montoCobrado) - montoAnuladoBanco)).toFixed(2);
+          if (cpcB.estado === CuentaPorCobrarEstado.COBRADO) cpcB.estado = CuentaPorCobrarEstado.ACTIVO;
+          await setEntityUserTracking(dataSource, cpcB, cu?.id, true);
+          await queryRunner.manager.save(CuentaPorCobrar, cpcB);
+
+          const clienteIdB = cpcB.cliente?.id;
+          if (clienteIdB) {
+            const clienteB = await clienteRepo.findOne({ where: { id: clienteIdB } });
+            if (clienteB) {
+              clienteB.saldoActual = +(Number(clienteB.saldoActual) + montoAnuladoBanco).toFixed(2);
+              await queryRunner.manager.save(Cliente, clienteB);
+            }
+            const movAjusteB = movClienteRepo.create({
+              cliente: { id: clienteIdB } as any,
+              tipo: MovimientoClienteTipo.AJUSTE_NEGATIVO,
+              monto: montoAnuladoBanco,
+              fecha: new Date(),
+              cuentaPorCobrarId: cpcB.id,
+              cuentaPorCobrarCuotaId: cuotaId,
+              cuentaBancariaId: ultimoPago.cuentaBancariaId,
+              observacion: `ANULACION COBRO CPC #${cpcB.id} CUOTA #${cuota.numero} (BANCO) - ${motivo}`,
+              registradoPor: cu || undefined,
+            });
+            await setEntityUserTracking(dataSource, movAjusteB, cu?.id, false);
+            await queryRunner.manager.save(MovimientoCliente, movAjusteB);
+          }
+        }
+
+        await queryRunner.commitTransaction();
+        return { success: true };
+      }
+
       // Buscar el último movimiento de caja mayor vinculado a esta cuota
       const ultimoMovCM = await movCMRepo.findOne({
         where: { cuentaPorCobrarCuotaId: cuotaId },
@@ -437,7 +515,7 @@ export function registerCuentasPorCobrarHandlers(
       const montoAnulado = Number(ultimoMovCM.monto);
       cuota.montoCobrado = +(Math.max(0, Number(cuota.montoCobrado) - montoAnulado)).toFixed(2);
       cuota.estado = calcularEstadoCuota(Number(cuota.monto), Number(cuota.montoCobrado));
-      cuota.fechaCobro = undefined;
+      if (cuota.montoCobrado <= 0) cuota.fechaCobro = null as any;
       await setEntityUserTracking(dataSource, cuota, cu?.id, true);
       await queryRunner.manager.save(CuentaPorCobrarCuota, cuota);
 

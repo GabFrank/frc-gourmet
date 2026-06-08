@@ -19,6 +19,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
   selector: 'app-create-edit-funcionario-dialog',
@@ -48,6 +49,9 @@ export class CreateEditFuncionarioDialogComponent implements OnInit {
   isEditing = false;
   loading = false;
   saving = false;
+  // Fecha de ingreso: en edición arranca bloqueada (es un dato crítico que afecta
+  // antigüedad y vacaciones); se desbloquea con confirmación explícita.
+  fechaIngresoBloqueada = false;
   form!: FormGroup;
   personas: any[] = [];
   cargos: any[] = [];
@@ -130,6 +134,7 @@ export class CreateEditFuncionarioDialogComponent implements OnInit {
         this.form.get('personaId')?.disable();
         this.form.get('cargoId')?.disable();
         this.form.get('fechaIngreso')?.disable();
+        this.fechaIngresoBloqueada = true;
         this.form.get('salarioBase')?.disable();
         this.form.get('monedaSalarioId')?.disable();
         this.personaControl.disable({ emitEvent: false });
@@ -241,6 +246,23 @@ export class CreateEditFuncionarioDialogComponent implements OnInit {
     }
   }
 
+  /** Desbloquea la fecha de ingreso tras confirmación: es un dato crítico que
+   * recalcula antigüedad, vacaciones y aguinaldos. */
+  async desbloquearFechaIngreso(): Promise<void> {
+    const ref = this.dialog.open(ConfirmationDialogComponent, {
+      width: '440px',
+      data: {
+        title: 'Corregir fecha de ingreso',
+        message: 'La fecha de ingreso afecta la antigüedad, el cálculo de vacaciones y aguinaldos. '
+          + 'Solo corríjala si fue cargada por error.\n\n¿Desea habilitar su edición?',
+      },
+    });
+    const ok = await firstValueFrom(ref.afterClosed());
+    if (!ok) return;
+    this.fechaIngresoBloqueada = false;
+    this.form.get('fechaIngreso')?.enable();
+  }
+
   cancel(): void {
     this.dialogRef.close();
   }
@@ -261,6 +283,8 @@ export class CreateEditFuncionarioDialogComponent implements OnInit {
           cuentaBancariaPropia: v.cuentaBancariaPropia,
           observacion: v.observacion,
           activo: v.activo,
+          // Solo se envía si el usuario la desbloqueó y corrigió explícitamente.
+          ...(this.fechaIngresoBloqueada ? {} : { fechaIngreso: v.fechaIngreso }),
         }));
         this.snackBar.open('Funcionario actualizado', 'Cerrar', { duration: 2500 });
       } else {

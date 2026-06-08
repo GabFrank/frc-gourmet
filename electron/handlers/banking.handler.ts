@@ -614,6 +614,83 @@ export function registerBankingHandlers(
         });
       }
 
+      // 6. Gastos pagados desde esta cuenta bancaria (egresos)
+      const gastoRows = await dbQuery(dataSource,
+        `SELECT g.id, g.descripcion, g.fecha, g.created_at AS "createdAt",
+                COALESCE(g.monto_cuenta_bancaria, g.monto) AS monto,
+                g.numero_comprobante AS "numeroComprobante", cat.nombre AS "catNombre"
+         FROM gastos g
+         LEFT JOIN gastos_categorias cat ON g.gasto_categoria_id = cat.id
+         WHERE g.cuenta_bancaria_id = ? AND g.estado <> 'CANCELADO'`,
+        [cuentaBancariaId],
+      );
+      for (const g of gastoRows) {
+        items.push({
+          fecha: g.createdAt || g.fecha,
+          tipo: 'GASTO',
+          monto: Number(g.monto),
+          esIngreso: false,
+          descripcion: `${g.catNombre ? g.catNombre + ': ' : ''}${g.descripcion || ''}`.trim(),
+          numeroComprobante: g.numeroComprobante || null,
+          responsable: '-',
+          origen: 'GASTO',
+          id: g.id,
+          anulado: false,
+        });
+      }
+
+      // 7. Vales egresados desde esta cuenta bancaria (egresos)
+      const valeRows = await dbQuery(dataSource,
+        `SELECT v.id, v.descripcion, v.fecha, v.created_at AS "createdAt",
+                COALESCE(v.monto_cuenta_bancaria, v.monto) AS monto,
+                p.nombre AS "nombre", p.apellido AS "apellido"
+         FROM vales v
+         LEFT JOIN funcionarios f ON v.funcionario_id = f.id
+         LEFT JOIN personas p ON f.persona_id = p.id
+         WHERE v.cuenta_bancaria_id = ? AND v.estado <> 'ANULADO'`,
+        [cuentaBancariaId],
+      );
+      for (const v of valeRows) {
+        const func = `${v.nombre || ''} ${v.apellido || ''}`.trim();
+        items.push({
+          fecha: v.createdAt || v.fecha,
+          tipo: 'VALE',
+          monto: Number(v.monto),
+          esIngreso: false,
+          descripcion: `Vale${func ? ' - ' + func : ''}${v.descripcion ? ': ' + v.descripcion : ''}`,
+          numeroComprobante: null,
+          responsable: '-',
+          origen: 'VALE',
+          id: v.id,
+          anulado: false,
+        });
+      }
+
+      // 8. Cobros de cuotas CPC acreditados a esta cuenta bancaria (ingresos);
+      //    los AJUSTE_NEGATIVO (anulaciones de cobro) figuran como egresos para
+      //    que el neto coincida con el saldo.
+      const cobroRows = await dbQuery(dataSource,
+        `SELECT mc.id, mc.fecha, COALESCE(mc.monto_cuenta_bancaria, mc.monto) AS monto, mc.tipo, mc.observacion
+         FROM movimientos_cliente mc
+         WHERE mc.cuenta_bancaria_id = ? AND mc.tipo IN ('PAGO', 'AJUSTE_NEGATIVO')`,
+        [cuentaBancariaId],
+      );
+      for (const mc of cobroRows) {
+        const esPago = mc.tipo === 'PAGO';
+        items.push({
+          fecha: mc.fecha,
+          tipo: 'COBRO_CLIENTE',
+          monto: Number(mc.monto),
+          esIngreso: esPago,
+          descripcion: mc.observacion || (esPago ? 'Cobro cliente' : 'Anulación cobro cliente'),
+          numeroComprobante: null,
+          responsable: '-',
+          origen: 'COBRO_CLIENTE',
+          id: mc.id,
+          anulado: false,
+        });
+      }
+
       // Filtros locales: fechas (sobre items unificados)
       let filtered = items;
       if (filtros?.fechaDesde) {

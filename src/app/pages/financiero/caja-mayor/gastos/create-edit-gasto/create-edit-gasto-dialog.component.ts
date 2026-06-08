@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -21,6 +22,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
+import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/app/shared/utils/conversion-moneda';
 
 interface DetalleRow {
   monedaId: number;
@@ -45,6 +47,7 @@ interface DetalleRow {
     MatButtonModule,
     MatIconModule,
     MatSelectModule,
+    MatButtonToggleModule,
     MatDatepickerModule,
     MatNativeDateModule,
     MatProgressSpinnerModule,
@@ -71,7 +74,13 @@ export class CreateEditGastoDialogComponent implements OnInit {
   monedas: any[] = [];
   formasPago: any[] = [];
   cajasMayor: any[] = [];
+  cuentasBancarias: any[] = [];
   proveedores: any[] = [];
+
+  requiereCotiz = false;
+  montoConvertido = 0;
+  monedaCuentaSimbolo = '';
+  private cotizMercado: any = null;
   proveedoresFiltrados: any[] = [];
   tipoBoletaOptions = ['LEGAL', 'COMUN', 'OTRO', 'SIN_COMPROBANTE'];
   frecuenciaOptions = ['DIARIO', 'SEMANAL', 'QUINCENAL', 'MENSUAL', 'BIMESTRAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL'];
@@ -105,7 +114,10 @@ export class CreateEditGastoDialogComponent implements OnInit {
     this.form = this.fb.group({
       gastoCategoriaId: [null, Validators.required],
       descripcion: ['', Validators.required],
+      fuente: ['CAJA_MAYOR', Validators.required],
       cajaMayorId: [this.data?.cajaMayorId || null, Validators.required],
+      cuentaBancariaId: [null],
+      cotizacion: [null],
       fecha: [new Date(), Validators.required],
       proveedorId: [null],
       numeroComprobante: [''],
@@ -114,6 +126,9 @@ export class CreateEditGastoDialogComponent implements OnInit {
       frecuencia: [null],
       proximoVencimiento: [null],
     });
+    this.form.get('fuente')!.valueChanges.subscribe(() => this.aplicarValidadoresFuente());
+    this.form.get('cuentaBancariaId')!.valueChanges.subscribe(() => this.recalcularCotizacion());
+    this.form.get('cotizacion')!.valueChanges.subscribe(() => this.recalcularConvertido());
 
     this.detalleForm = this.fb.group({
       monedaId: [null, Validators.required],
@@ -136,12 +151,13 @@ export class CreateEditGastoDialogComponent implements OnInit {
 
   async loadLookups(): Promise<void> {
     try {
-      const [categorias, monedas, formasPago, cajasMayor, proveedores] = await Promise.all([
+      const [categorias, monedas, formasPago, cajasMayor, proveedores, cuentas] = await Promise.all([
         firstValueFrom(this.repositoryService.getGastoCategorias()),
         firstValueFrom(this.repositoryService.getMonedas()),
         firstValueFrom(this.repositoryService.getFormasPago()),
         firstValueFrom(this.repositoryService.getCajasMayor()),
         firstValueFrom(this.repositoryService.getProveedores()),
+        firstValueFrom(this.repositoryService.getCuentasBancarias()),
       ]);
 
       this.gastoCategorias = (categorias || []).filter((c: any) => c.activo !== false);
@@ -149,8 +165,13 @@ export class CreateEditGastoDialogComponent implements OnInit {
       this.monedas = monedas || [];
       this.formasPago = formasPago || [];
       this.cajasMayor = (cajasMayor || []).filter((c: any) => c.estado === 'ABIERTA');
+      this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
       this.proveedores = proveedores || [];
       this.proveedoresFiltrados = [];
+      this.repositoryService.getCotizacionMercado().subscribe({
+        next: (r) => { this.cotizMercado = r; },
+        error: () => { this.cotizMercado = null; },
+      });
 
       // Si estamos editando, cargar el gasto
       if (this.isEditing && this.gastoId) {
@@ -178,6 +199,8 @@ export class CreateEditGastoDialogComponent implements OnInit {
         esRecurrente: gasto.esRecurrente || false,
         frecuencia: gasto.frecuencia || null,
         proximoVencimiento: gasto.proximoVencimiento ? new Date(gasto.proximoVencimiento) : null,
+        fuente: gasto.cuentaBancariaId ? 'CUENTA_BANCARIA' : 'CAJA_MAYOR',
+        cuentaBancariaId: gasto.cuentaBancariaId || null,
       });
 
       this.esRecurrente = gasto.esRecurrente || false;
@@ -278,6 +301,57 @@ export class CreateEditGastoDialogComponent implements OnInit {
     }
   }
 
+  private aplicarValidadoresFuente(): void {
+    // cajaMayorId se mantiene requerido siempre (es el contexto/caja del gasto y
+    // la columna es NOT NULL); en banco además se exige la cuenta bancaria.
+    const esBanco = this.form.get('fuente')!.value === 'CUENTA_BANCARIA';
+    const cb = this.form.get('cuentaBancariaId')!;
+    if (esBanco) cb.setValidators([Validators.required]);
+    else cb.clearValidators();
+    cb.updateValueAndValidity({ emitEvent: false });
+    this.recalcularCotizacion();
+  }
+
+  /** Suma de los detalles (moneda de la operación = la del primer detalle). */
+  private get montoTotalDetalles(): number {
+    return this.detalles.reduce((s, d) => s + Number(d.monto), 0);
+  }
+
+  recalcularCotizacion(): void {
+    const opMoneda = this.monedas.find((m: any) => m.id === this.detalles[0]?.monedaId);
+    const cuenta = this.cuentasBancarias.find((c: any) => c.id === this.form.get('cuentaBancariaId')!.value);
+    const cuentaMoneda = cuenta?.moneda;
+    this.requiereCotiz = this.form.get('fuente')!.value === 'CUENTA_BANCARIA'
+      && requiereCotizacion(opMoneda, cuentaMoneda);
+    this.monedaCuentaSimbolo = cuentaMoneda?.simbolo || '';
+    const cotizCtrl = this.form.get('cotizacion')!;
+    if (this.requiereCotiz) {
+      cotizCtrl.setValidators([Validators.required, Validators.min(0.000001)]);
+      if (!cotizCtrl.value) {
+        const divisa = opMoneda?.principal ? cuentaMoneda : opMoneda;
+        const tasa = cotizacionMercadoPara(this.cotizMercado, divisa?.denominacion, 'VENTA');
+        if (tasa) cotizCtrl.setValue(tasa, { emitEvent: false });
+      }
+    } else {
+      cotizCtrl.clearValidators();
+      cotizCtrl.setValue(null, { emitEvent: false });
+    }
+    cotizCtrl.updateValueAndValidity({ emitEvent: false });
+    this.recalcularConvertido();
+  }
+
+  recalcularConvertido(): void {
+    if (!this.requiereCotiz) { this.montoConvertido = 0; return; }
+    const opMoneda = this.monedas.find((m: any) => m.id === this.detalles[0]?.monedaId);
+    const cuenta = this.cuentasBancarias.find((c: any) => c.id === this.form.get('cuentaBancariaId')!.value);
+    this.montoConvertido = convertirMonto(
+      this.montoTotalDetalles,
+      opMoneda,
+      cuenta?.moneda,
+      Number(this.form.get('cotizacion')!.value),
+    );
+  }
+
   // --- Detalles de pago ---
 
   agregarDetalle(): void {
@@ -316,15 +390,17 @@ export class CreateEditGastoDialogComponent implements OnInit {
       }
     }
     this.totalesPorMoneda = Array.from(map.values());
+    this.recalcularCotizacion();
   }
 
   async onSubmit(): Promise<void> {
     if (this.form.invalid || this.detalles.length === 0) return;
 
-    // Saldos negativos: validar tanto en create como en edit (en edit ya
-    // factorizamos la reversion de los detalles previos del mismo gasto).
+    const esBanco = this.form.value.fuente === 'CUENTA_BANCARIA';
+
+    // Saldos negativos: solo aplica a Caja Mayor (en banco se debita la cuenta).
     const cajaMayorId = this.form.value.cajaMayorId;
-    if (cajaMayorId) {
+    if (!esBanco && cajaMayorId) {
       const ok = await this.confirmarSaldoSiNegativo(cajaMayorId);
       if (!ok) return;
     }
@@ -336,6 +412,10 @@ export class CreateEditGastoDialogComponent implements OnInit {
         gastoCategoria: { id: f.gastoCategoriaId },
         descripcion: f.descripcion?.toUpperCase(),
         cajaMayor: { id: f.cajaMayorId },
+        fuente: f.fuente,
+        cuentaBancariaId: esBanco ? f.cuentaBancariaId : null,
+        montoCuentaBancaria: esBanco && this.requiereCotiz ? this.montoConvertido : null,
+        cotizacion: esBanco && this.requiereCotiz ? f.cotizacion : null,
         fecha: f.fecha,
         proveedor: f.proveedorId ? { id: f.proveedorId } : null,
         numeroComprobante: f.numeroComprobante?.toUpperCase() || null,

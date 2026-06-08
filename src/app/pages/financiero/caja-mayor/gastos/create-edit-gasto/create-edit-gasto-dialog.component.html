@@ -45,6 +45,35 @@
       <mat-error>La caja mayor es requerida</mat-error>
     </mat-form-field>
 
+    <!-- Fuente del egreso: efectivo en caja mayor o débito a cuenta bancaria -->
+    <mat-button-toggle-group formControlName="fuente" class="full-width fuente-toggle">
+      <mat-button-toggle value="CAJA_MAYOR">
+        <mat-icon>point_of_sale</mat-icon> Caja Mayor
+      </mat-button-toggle>
+      <mat-button-toggle value="CUENTA_BANCARIA">
+        <mat-icon>account_balance</mat-icon> Cuenta Bancaria
+      </mat-button-toggle>
+    </mat-button-toggle-group>
+
+    <mat-form-field appearance="outline" class="full-width" *ngIf="form.get('fuente')?.value === 'CUENTA_BANCARIA'">
+      <mat-label>Cuenta Bancaria</mat-label>
+      <mat-select formControlName="cuentaBancariaId">
+        <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">
+          {{cb.nombre}}<span *ngIf="cb.banco"> - {{cb.banco}}</span><span *ngIf="cb.moneda"> ({{cb.moneda.simbolo}})</span>
+        </mat-option>
+      </mat-select>
+      <mat-error>La cuenta bancaria es requerida</mat-error>
+    </mat-form-field>
+
+    <div *ngIf="requiereCotiz" class="cotiz-row">
+      <mat-form-field appearance="outline">
+        <mat-label>Cotización</mat-label>
+        <input matInput type="number" formControlName="cotizacion" step="any">
+        <mat-hint>Moneda principal por 1 {{ monedaCuentaSimbolo }}</mat-hint>
+      </mat-form-field>
+      <div class="convertido">Se debitará: <b>{{ montoConvertido | number:'1.0-2' }} {{ monedaCuentaSimbolo }}</b></div>
+    </div>
+
     <div class="form-row">
       <mat-form-field appearance="outline" class="flex-field">
         <mat-label>Proveedor (opcional)</mat-label>

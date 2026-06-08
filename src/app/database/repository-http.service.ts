@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Observable, throwError } from 'rxjs';
+import { Observable, throwError, of } from 'rxjs';
 import { RepositoryService, LoginResult, ClienteFilters } from './repository.service';
 import { Printer } from './entities/printer.entity';
 import { Persona } from './entities/personas/persona.entity';
@@ -229,6 +229,24 @@ export class RepositoryHttpService extends RepositoryService {
   }
   openFileWithSystem(url: string): Observable<{ ok: boolean; error?: string }> {
     return throwError(() => new Error(`RepositoryHttpService.openFileWithSystem() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  openBase64File(base64: string, fileName: string): Observable<{ ok: boolean; error?: string }> {
+    // En modo web/PWA no hay shell del SO: abrimos el PDF en una nueva pestaña
+    // (visor del navegador) a partir de un blob URL.
+    try {
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, '_blank');
+      if (!win) {
+        URL.revokeObjectURL(url);
+        return of({ ok: false, error: 'El navegador bloqueó la apertura de la ventana' });
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return of({ ok: true });
+    } catch (e: any) {
+      return of({ ok: false, error: e?.message || String(e) });
+    }
   }
   getAdjuntos(params: { entidadTipo: string; entidadId: number; tipo?: string }): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getAdjuntos() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;

@@ -8,6 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { MatDividerModule } from '@angular/material/divider';
@@ -34,6 +35,7 @@ type IngresoTipo = 'AJUSTE' | 'RETIRO_CAJA' | 'ENTRADA_VARIA' | 'OPERACION_FINAN
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    MatButtonToggleModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatDividerModule,
@@ -45,6 +47,8 @@ export class RegistrarIngresoDialogComponent implements OnInit {
   ajusteForm!: FormGroup;
   monedas: any[] = [];
   formasPago: any[] = [];
+  formasPagoEfectivo: any[] = [];
+  cuentasBancarias: any[] = [];
   retirosFlotantes: any[] = [];
   retirosVinculadosPendientes: any[] = [];
   cajasMayorAbiertas: any[] = [];
@@ -96,13 +100,44 @@ export class RegistrarIngresoDialogComponent implements OnInit {
   ngOnInit(): void {
     this.cajaMayorId = this.data?.cajaMayorId || 0;
     this.ajusteForm = this.fb.group({
+      fuente: ['CAJA_MAYOR', Validators.required],
       moneda: [null, Validators.required],
       formaPago: [null, Validators.required],
+      cuentaBancariaId: [null],
       monto: [null, [Validators.required, Validators.min(0.01)]],
       motivo: ['', Validators.required],
     });
     this.ajusteForm.get('moneda')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
+    this.ajusteForm.get('fuente')!.valueChanges.subscribe(() => this.aplicarValidadoresFuente());
     this.loadData();
+  }
+
+  /** En CAJA_MAYOR se opera solo con efectivo; en CUENTA_BANCARIA se elige la cuenta
+   * y no aplica forma de pago/moneda (queda la moneda de la cuenta). */
+  private aplicarValidadoresFuente(): void {
+    const fuente = this.ajusteForm.get('fuente')!.value;
+    const moneda = this.ajusteForm.get('moneda')!;
+    const formaPago = this.ajusteForm.get('formaPago')!;
+    const cb = this.ajusteForm.get('cuentaBancariaId')!;
+    if (fuente === 'CUENTA_BANCARIA') {
+      moneda.clearValidators();
+      formaPago.clearValidators();
+      cb.setValidators([Validators.required]);
+    } else {
+      moneda.setValidators([Validators.required]);
+      formaPago.setValidators([Validators.required]);
+      cb.clearValidators();
+      this.preseleccionarEfectivo();
+    }
+    moneda.updateValueAndValidity({ emitEvent: false });
+    formaPago.updateValueAndValidity({ emitEvent: false });
+    cb.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private preseleccionarEfectivo(): void {
+    if (this.formasPagoEfectivo.length === 1) {
+      this.ajusteForm.get('formaPago')!.setValue(this.formasPagoEfectivo[0].id, { emitEvent: false });
+    }
   }
 
   private recalcDecimalesMoneda(): void {
@@ -115,14 +150,18 @@ export class RegistrarIngresoDialogComponent implements OnInit {
   async loadData(): Promise<void> {
     this.loading = true;
     try {
-      const [monedas, formasPago, flotantes, vinculados] = await Promise.all([
+      const [monedas, formasPago, cuentas, flotantes, vinculados] = await Promise.all([
         firstValueFrom(this.repositoryService.getMonedas()),
         firstValueFrom(this.repositoryService.getFormasPago()),
+        firstValueFrom(this.repositoryService.getCuentasBancarias()),
         firstValueFrom(this.repositoryService.getRetirosCaja({ estado: 'FLOTANTE' })),
         firstValueFrom(this.repositoryService.getRetirosCaja({ estado: 'VINCULADO_PENDIENTE' })),
       ]);
       this.monedas = monedas || [];
       this.formasPago = formasPago || [];
+      this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
+      this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
+      this.preseleccionarEfectivo();
       this.retirosFlotantes = flotantes || [];
       // Solo los vinculados a la caja mayor actual
       this.retirosVinculadosPendientes = (vinculados || []).filter(
@@ -170,14 +209,25 @@ export class RegistrarIngresoDialogComponent implements OnInit {
     this.saving = true;
     try {
       const form = this.ajusteForm.value;
-      await firstValueFrom(this.repositoryService.createCajaMayorMovimiento({
-        cajaMayor: { id: this.cajaMayorId },
-        tipoMovimiento: 'AJUSTE_POSITIVO',
-        moneda: { id: form.moneda },
-        formaPago: { id: form.formaPago },
-        monto: form.monto,
-        observacion: form.motivo.toUpperCase(),
-      }));
+      if (form.fuente === 'CUENTA_BANCARIA') {
+        await firstValueFrom(this.repositoryService.createMovimientoBancario({
+          cuentaBancariaId: form.cuentaBancariaId,
+          tipoMovimiento: 'ENTRADA_MANUAL',
+          monto: form.monto,
+          fecha: new Date(),
+          observacion: form.motivo.toUpperCase(),
+          numeroComprobante: null,
+        }));
+      } else {
+        await firstValueFrom(this.repositoryService.createCajaMayorMovimiento({
+          cajaMayor: { id: this.cajaMayorId },
+          tipoMovimiento: 'AJUSTE_POSITIVO',
+          moneda: { id: form.moneda },
+          formaPago: { id: form.formaPago },
+          monto: form.monto,
+          observacion: form.motivo.toUpperCase(),
+        }));
+      }
       this.snackBar.open('Ingreso registrado correctamente', 'Cerrar', { duration: 3000 });
       this.dialogRef?.close(true);
     } catch (error) {

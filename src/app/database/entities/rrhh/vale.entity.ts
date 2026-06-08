@@ -56,6 +56,9 @@ export class Vale extends BaseModel {
   })
   estado!: ValeEstado;
 
+  // El default de creación lo define el formulario (esAdelanto=true). El default
+  // de columna se deja en false para no requerir migración de schema; siempre se
+  // envía un valor explícito al crear un vale.
   @Column({ name: 'es_adelanto', default: false })
   esAdelanto!: boolean;
 
@@ -64,6 +67,20 @@ export class Vale extends BaseModel {
 
   @Column({ name: 'movimiento_id', type: 'int', nullable: true })
   movimientoId?: number;
+
+  // Si el vale se egresó desde una cuenta bancaria (en vez de Caja Mayor), se
+  // guarda aquí para poder revertir el débito al anular. Mutuamente excluyente
+  // con cajaMayor/movimientoId.
+  @Column({ name: 'cuenta_bancaria_id', type: 'int', nullable: true })
+  cuentaBancariaId?: number;
+
+  // Monto efectivamente debitado en la moneda de la cuenta bancaria (cuando la
+  // cuenta está en otra moneda que el vale). La anulación revierte ESTE monto.
+  @Column({ name: 'monto_cuenta_bancaria', type: 'decimal', precision: 18, scale: 2, nullable: true })
+  montoCuentaBancaria?: number;
+
+  @Column({ name: 'cotizacion', type: 'decimal', precision: 18, scale: 6, nullable: true })
+  cotizacion?: number;
 
   @ManyToOne(() => Usuario, { nullable: true })
   @JoinColumn({ name: 'autorizado_por_id' })

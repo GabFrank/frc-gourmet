@@ -9,6 +9,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { MatDividerModule } from '@angular/material/divider';
@@ -38,6 +39,7 @@ type EgresoTipo = 'GASTO' | 'AJUSTE' | 'OPERACION_FINANCIERA' | 'EMITIR_CHEQUE' 
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    MatButtonToggleModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatDividerModule,
@@ -49,6 +51,8 @@ export class RegistrarEgresoDialogComponent implements OnInit {
   ajusteForm!: FormGroup;
   monedas: any[] = [];
   formasPago: any[] = [];
+  formasPagoEfectivo: any[] = [];
+  cuentasBancarias: any[] = [];
   saving = false;
   loading = true;
   cajaMayorId: number = 0;
@@ -111,13 +115,43 @@ export class RegistrarEgresoDialogComponent implements OnInit {
   ngOnInit(): void {
     this.cajaMayorId = this.data?.cajaMayorId || 0;
     this.ajusteForm = this.fb.group({
+      fuente: ['CAJA_MAYOR', Validators.required],
       moneda: [null, Validators.required],
       formaPago: [null, Validators.required],
+      cuentaBancariaId: [null],
       monto: [null, [Validators.required, Validators.min(0.01)]],
       motivo: ['', Validators.required],
     });
     this.ajusteForm.get('moneda')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
+    this.ajusteForm.get('fuente')!.valueChanges.subscribe(() => this.aplicarValidadoresFuente());
     this.loadData();
+  }
+
+  /** En CAJA_MAYOR se opera solo con efectivo; en CUENTA_BANCARIA se elige la cuenta. */
+  private aplicarValidadoresFuente(): void {
+    const fuente = this.ajusteForm.get('fuente')!.value;
+    const moneda = this.ajusteForm.get('moneda')!;
+    const formaPago = this.ajusteForm.get('formaPago')!;
+    const cb = this.ajusteForm.get('cuentaBancariaId')!;
+    if (fuente === 'CUENTA_BANCARIA') {
+      moneda.clearValidators();
+      formaPago.clearValidators();
+      cb.setValidators([Validators.required]);
+    } else {
+      moneda.setValidators([Validators.required]);
+      formaPago.setValidators([Validators.required]);
+      cb.clearValidators();
+      this.preseleccionarEfectivo();
+    }
+    moneda.updateValueAndValidity({ emitEvent: false });
+    formaPago.updateValueAndValidity({ emitEvent: false });
+    cb.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private preseleccionarEfectivo(): void {
+    if (this.formasPagoEfectivo.length === 1) {
+      this.ajusteForm.get('formaPago')!.setValue(this.formasPagoEfectivo[0].id, { emitEvent: false });
+    }
   }
 
   private recalcDecimalesMoneda(): void {
@@ -130,12 +164,16 @@ export class RegistrarEgresoDialogComponent implements OnInit {
   async loadData(): Promise<void> {
     this.loading = true;
     try {
-      const [monedas, formasPago] = await Promise.all([
+      const [monedas, formasPago, cuentas] = await Promise.all([
         firstValueFrom(this.repositoryService.getMonedas()),
         firstValueFrom(this.repositoryService.getFormasPago()),
+        firstValueFrom(this.repositoryService.getCuentasBancarias()),
       ]);
       this.monedas = monedas || [];
       this.formasPago = formasPago || [];
+      this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
+      this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
+      this.preseleccionarEfectivo();
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -199,21 +237,35 @@ export class RegistrarEgresoDialogComponent implements OnInit {
 
     const form = this.ajusteForm.value;
     const monto = Number(form.monto);
+    const esBanco = form.fuente === 'CUENTA_BANCARIA';
 
-    // Saldo negativo: pre-validar y confirmar
-    const ok = await this.confirmarSaldoSiNegativo(form.moneda, form.formaPago, monto);
-    if (!ok) return;
+    // Saldo negativo: pre-validar y confirmar (solo aplica a caja mayor en efectivo).
+    if (!esBanco) {
+      const ok = await this.confirmarSaldoSiNegativo(form.moneda, form.formaPago, monto);
+      if (!ok) return;
+    }
 
     this.saving = true;
     try {
-      await firstValueFrom(this.repositoryService.createCajaMayorMovimiento({
-        cajaMayor: { id: this.cajaMayorId },
-        tipoMovimiento: 'AJUSTE_NEGATIVO',
-        moneda: { id: form.moneda },
-        formaPago: { id: form.formaPago },
-        monto,
-        observacion: form.motivo.toUpperCase(),
-      }));
+      if (esBanco) {
+        await firstValueFrom(this.repositoryService.createMovimientoBancario({
+          cuentaBancariaId: form.cuentaBancariaId,
+          tipoMovimiento: 'SALIDA_MANUAL',
+          monto,
+          fecha: new Date(),
+          observacion: form.motivo.toUpperCase(),
+          numeroComprobante: null,
+        }));
+      } else {
+        await firstValueFrom(this.repositoryService.createCajaMayorMovimiento({
+          cajaMayor: { id: this.cajaMayorId },
+          tipoMovimiento: 'AJUSTE_NEGATIVO',
+          moneda: { id: form.moneda },
+          formaPago: { id: form.formaPago },
+          monto,
+          observacion: form.motivo.toUpperCase(),
+        }));
+      }
       this.snackBar.open('Egreso registrado correctamente', 'Cerrar', { duration: 3000 });
       this.dialogRef?.close(true);
     } catch (error) {
