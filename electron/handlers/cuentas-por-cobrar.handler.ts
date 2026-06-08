@@ -443,7 +443,7 @@ export function registerCuentasPorCobrarHandlers(
 
         cuota.montoCobrado = +(Math.max(0, Number(cuota.montoCobrado) - montoAnuladoBanco)).toFixed(2);
         cuota.estado = calcularEstadoCuota(Number(cuota.monto), Number(cuota.montoCobrado));
-        cuota.fechaCobro = undefined;
+        if (cuota.montoCobrado <= 0) cuota.fechaCobro = null as any;
         await setEntityUserTracking(dataSource, cuota, cu?.id, true);
         await queryRunner.manager.save(CuentaPorCobrarCuota, cuota);
 
@@ -515,7 +515,7 @@ export function registerCuentasPorCobrarHandlers(
       const montoAnulado = Number(ultimoMovCM.monto);
       cuota.montoCobrado = +(Math.max(0, Number(cuota.montoCobrado) - montoAnulado)).toFixed(2);
       cuota.estado = calcularEstadoCuota(Number(cuota.monto), Number(cuota.montoCobrado));
-      cuota.fechaCobro = undefined;
+      if (cuota.montoCobrado <= 0) cuota.fechaCobro = null as any;
       await setEntityUserTracking(dataSource, cuota, cu?.id, true);
       await queryRunner.manager.save(CuentaPorCobrarCuota, cuota);
 
