@@ -430,10 +430,11 @@ export function registerCuentasPorPagarHandlers(
       // Cuentas por Pagar = deudas a proveedores. Los prestamos a funcionarios son
       // "a cobrar" y viven en su propia pantalla (RRHH); se excluyen de esta lista.
       if (filtros?.excluirPrestamosFuncionario) qb.andWhere('cpp.tipo <> :tpfx', { tpfx: CuentaPorPagarTipo.PRESTAMO_FUNCIONARIO });
-      // Excluye CPPs originadas en compras al contado (compra.credito = false). Las compras a credito
-      // o las CPPs sin compra (prestamos, etc.) siguen apareciendo. Default: false (lista todo).
+      // Oculta solo las compras al contado YA pagadas/canceladas (tickets diarios liquidados).
+      // Las compras al contado PENDIENTES de pago (estado ACTIVO) si son deuda real y se muestran,
+      // igual que las a credito y las CPPs sin compra (prestamos, etc.). Default: false (lista todo).
       if (filtros?.excluirContadoCompras === true) {
-        qb.andWhere('(cpp.compra_id IS NULL OR compra.credito = true)');
+        qb.andWhere("(cpp.compra_id IS NULL OR compra.credito = true OR cpp.estado = 'ACTIVO')");
       }
 
       if (filtros?.pageSize != null) {
