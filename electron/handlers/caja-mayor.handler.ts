@@ -2038,6 +2038,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         .addSelect('cuota.monto', 'monto')
         .addSelect('cuota.montoPagado', 'montoPagado')
         .where("cuota.estado IN ('PENDIENTE', 'PARCIAL')")
+        // CPP = deudas a proveedores; los prestamos a funcionarios son "a cobrar".
+        .andWhere("cpp.tipo <> 'PRESTAMO_FUNCIONARIO'")
         .getRawMany();
 
       const grupos = new Map<number, {
