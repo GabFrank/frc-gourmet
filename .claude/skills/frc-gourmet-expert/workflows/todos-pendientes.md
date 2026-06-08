@@ -12,6 +12,30 @@ Snapshot **2026-05-06**. Verificar `git log` y memorias antes de afirmar que alg
 
 ## Acciones inmediatas
 
+- [ ] **Onboarding task "Agregar una impresora"** — Agregar entry al catálogo `electron/handlers/onboarding-tasks.config.ts` para que la pantalla inicial guíe a configurar al menos una impresora:
+  ```ts
+  {
+    key: 'IMPRESORAS',
+    titulo: 'Agregar una impresora',
+    descripcion: 'Para imprimir comandas de cocina, tickets de venta y pre-cuentas. Soporta network, USB o LPR (compartida desde otra PC Windows).',
+    icono: 'print',
+    actionTabKey: 'IMPRESORAS',  // verificar que el TabsService tenga ese key, o usar dialog directo
+    detect: async (ds) => ({ count: await ds.getRepository(Printer).count({ where: { activo: true } }) }),
+  }
+  ```
+  Idealmente complementado con segunda tarea opcional "Configurar sectores de impresión" (M2M `sectores_impresoras`) y tercera "Asignar sector a productos" (M2M `producto_sectores`), pero esas dependen de la primera. Ver patrón en `MAQUINAS_POS` / `CUENTAS_BANCARIAS` del mismo archivo.
+- [ ] **Wizard guiado de configuración LPR (Impresora compartida Windows)** — En `printer-settings.component`, cuando el usuario elige `connectionType=lpr`, abrir un dialog modal con instrucciones paso a paso para configurar la PC Windows servidor:
+  1. Activar feature "Servidor LPD" en *Características de Windows*.
+  2. Instalar impresora con driver **Generic / Text Only**.
+  3. Compartir con un *Share name* sin espacios.
+  4. Firewall: regla entrante TCP 515 en perfiles privada y pública.
+  5. ⚠️ **Agregar ACE `ANONYMOUS LOGON`** con permiso "Imprimir" en *Seguridad* de la impresora. **Sin esto LPDSVC rechaza con código 1 cualquier conexión remota** aunque acepte loopback local (perdimos 30 min de debug por esto, ver [[feedback-windows-lpd-anonymous-logon]]).
+  6. Anotar la IP de esa PC y el share name → formato address en la app: `IP/ShareName`.
+
+  Incluir botón **"Probar conexión"** que dispare un handshake LPR (`\x02<queue>\n` → leer 1 byte) antes de guardar. Mapeo de errores legibles:
+  - `código 1 (\x01)` → "El servidor LPD rechazó la cola. Verificá que la impresora esté compartida con ese nombre y que `ANONYMOUS LOGON` tenga permiso de imprimir (paso 5)".
+  - `timeout / connection refused` → "No se puede conectar al puerto 515. Verificá firewall y que el servicio LPD esté corriendo (paso 1+4)".
+  - `ACK 0x00` → "Cola accesible, podés guardar".
 - [ ] **Adjuntos polimórficos release 2** — Aplicar entity `Adjunto` (ya declarada) a: gastos, vales, préstamos a funcionario, CPP/CPP_CUOTA, CPC/CPC_CUOTA, cheques, retiros, operaciones financieras, movimientos bancarios, acreditaciones POS, comprobantes de venta, asistencias, compras manuales (sin OCR). Crear handlers `get-adjuntos`, `create-adjunto`, `delete-adjunto` polimórficos. Componente `<app-adjuntos-list>` shared para mostrar adjuntos por entidad+id con upload + visor.
 - [ ] **Imagen en Presentación + Sabor** — columnas `imageUrl` ya existen en BD. Falta UI: thumbnail clickeable en cada presentacion del producto (dialog con `<app-file-upload>`), idem en `create-edit-sabor-dialog`. Dejar fallback al `producto.imageUrl` si la presentacion no tiene la suya.
 - [ ] **Migrar `create-edit-persona` a `<app-file-upload>`** — actualmente usa `<input type=file>` artesanal con `save-profile-image` legacy. Reemplazar por shared `<app-file-upload carpeta="profile-images">` mantiene los mismos URLs `app://profile-images/<file>` sin migración de datos. Beneficia: thumbnails automáticos, preview consistente.
