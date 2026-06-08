@@ -631,6 +631,7 @@ interface ElectronAPI {
   getCajaMayorSaldos: (cajaMayorId: number) => Promise<any[]>;
   recalcularSaldos: (cajaMayorId: number) => Promise<any>;
   getCajaMayorMovimientos: (cajaMayorId: number, filtros?: any) => Promise<any>;
+  getCajaMayorMovimientosConsolidados: (cajaMayorId: number, filtros?: any) => Promise<any>;
   createCajaMayorMovimiento: (data: any) => Promise<any>;
   anularCajaMayorMovimiento: (id: number, motivo: string) => Promise<any>;
   getCajaMayorConfiguracion: (cajaMayorId: number) => Promise<any>;
@@ -2932,6 +2933,10 @@ export class RepositoryIpcService extends RepositoryService {
   // Caja Mayor Movimientos
   getCajaMayorMovimientos(cajaMayorId: number, filtros?: any): Observable<any> {
     return from(this.api.getCajaMayorMovimientos(cajaMayorId, filtros));
+  }
+
+  getCajaMayorMovimientosConsolidados(cajaMayorId: number, filtros?: any): Observable<any> {
+    return from(this.api.getCajaMayorMovimientosConsolidados(cajaMayorId, filtros));
   }
   createCajaMayorMovimiento(data: any): Observable<any> {
     return from(this.api.createCajaMayorMovimiento(data));

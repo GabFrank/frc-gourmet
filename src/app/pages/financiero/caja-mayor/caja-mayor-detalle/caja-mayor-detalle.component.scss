@@ -255,6 +255,51 @@
     white-space: nowrap;
   }
 
+  // Barra del toggle de fuente (panel consolidado)
+  .fuente-bar {
+    padding: 8px 16px 0;
+
+    .fuente-toggle {
+      flex-wrap: wrap;
+
+      .mat-icon {
+        font-size: 18px;
+        height: 18px;
+        width: 18px;
+        margin-right: 2px;
+        vertical-align: middle;
+      }
+    }
+  }
+
+  // Chip de fuente (caja vs banco) en la tabla de movimientos
+  .chip.chip-fuente {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 14px;
+    background: rgba(0, 0, 0, 0.06);
+    color: rgba(0, 0, 0, 0.75);
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+    white-space: nowrap;
+
+    .mat-icon {
+      font-size: 16px;
+      height: 16px;
+      width: 16px;
+    }
+
+    &.chip-fuente-banco {
+      background: rgba(21, 101, 192, 0.1);
+      color: var(--primary-color, #1565c0);
+      border-color: rgba(21, 101, 192, 0.3);
+    }
+  }
+
   // Card de cuenta bancaria clickeable
   .cb-clickable {
     cursor: pointer;
@@ -535,6 +580,18 @@
     background: rgba(255, 255, 255, 0.08);
     color: rgba(255, 255, 255, 0.85);
     border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  .chip.chip-fuente {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.85);
+    border-color: rgba(255, 255, 255, 0.15);
+
+    &.chip-fuente-banco {
+      background: rgba(100, 181, 246, 0.16);
+      color: #90caf9;
+      border-color: rgba(100, 181, 246, 0.35);
+    }
   }
 
   .cb-clickable:hover {

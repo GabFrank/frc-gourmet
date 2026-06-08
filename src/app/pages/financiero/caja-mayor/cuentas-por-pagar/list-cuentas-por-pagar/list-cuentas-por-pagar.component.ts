@@ -58,7 +58,9 @@ export class ListCuentasPorPagarComponent implements OnInit {
   showFiltros = false;
   filtrosForm!: FormGroup;
   estadoOptions = ['ACTIVO', 'PAGADO', 'CANCELADO'];
-  tipoOptions = ['COMPRA', 'PRESTAMO', 'PRESTAMO_FUNCIONARIO', 'OTRO'];
+  // CPP = deudas a proveedores. PRESTAMO_FUNCIONARIO es "a cobrar" y se gestiona
+  // en su propia pantalla (RRHH), por eso no figura como tipo seleccionable aqui.
+  tipoOptions = ['COMPRA', 'PRESTAMO', 'OTRO'];
 
   displayedColumns = ['descripcion', 'tipo', 'beneficiario', 'montoTotal', 'montoPagado', 'restante', 'cuotas', 'estado', 'actions'];
 
@@ -85,6 +87,8 @@ export class ListCuentasPorPagarComponent implements OnInit {
     try {
       const f = this.filtrosForm.value;
       const filtros: any = { page: this.pageIndex, pageSize: this.pageSize };
+      // CPP = deudas a proveedores; excluir prestamos a funcionarios (a cobrar).
+      filtros.excluirPrestamosFuncionario = true;
       if (f.estado) filtros.estado = f.estado;
       if (f.tipo) filtros.tipo = f.tipo;
       // Por defecto, ocultar las CPP de compras al contado para no contaminar la lista

@@ -561,6 +561,7 @@ export abstract class RepositoryService {
   abstract getCajaMayorSaldos(cajaMayorId: number): Observable<any[]>;
   abstract recalcularSaldos(cajaMayorId: number): Observable<any>;
   abstract getCajaMayorMovimientos(cajaMayorId: number, filtros?: any): Observable<any>;
+  abstract getCajaMayorMovimientosConsolidados(cajaMayorId: number, filtros?: any): Observable<any>;
   abstract createCajaMayorMovimiento(data: any): Observable<any>;
   abstract anularCajaMayorMovimiento(id: number, motivo: string): Observable<any>;
   abstract getCajaMayorConfiguracion(cajaMayorId: number): Observable<any>;

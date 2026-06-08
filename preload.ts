@@ -2608,6 +2608,9 @@ contextBridge.exposeInMainWorld('api', {
   getCajaMayorMovimientos: async (cajaMayorId: number, filtros?: any): Promise<any> => {
     return await ipcRenderer.invoke('get-caja-mayor-movimientos', cajaMayorId, filtros);
   },
+  getCajaMayorMovimientosConsolidados: async (cajaMayorId: number, filtros?: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-movimientos-caja-mayor-consolidados', cajaMayorId, filtros);
+  },
   createCajaMayorMovimiento: async (data: any): Promise<any> => {
     return await ipcRenderer.invoke('create-caja-mayor-movimiento', data);
   },
