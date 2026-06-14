@@ -157,6 +157,21 @@ export interface PrintComandaOpts {
   sectorIdFilter?: number;        // si se pasa, solo enruta a ese sector (reimpresión selectiva)
   forceReprint?: boolean;         // ignora `impreso=true` y reimprime todo
   retryFailed?: boolean;          // worker de retry: incluye también items con intentos fallidos previos (no solo nunca intentados)
+  silent?: boolean;               // no emitir toast al renderer aunque haya errores (lo usa el worker de retry para no spamear)
+}
+
+/**
+ * Tope de reintentos fallidos por item en el worker de auto-retry. Cuenta las
+ * entradas con `ok=false` en `impresiones`. Con el worker corriendo cada 5s,
+ * ~180 fallos ≈ 15 min de reintentos para un item de un solo sector (menos si
+ * tiene varios sectores). Pasado el tope, el worker deja de reintentar ese item
+ * (el usuario igual puede forzar la reimpresión manual con forceReprint).
+ */
+const MAX_COMANDA_FAILED_RETRIES = 180;
+
+/** Cantidad de intentos fallidos (ok=false) registrados para un item. */
+function contarIntentosFallidos(item: { impresiones?: string | null }): number {
+  return safeParseJson(item.impresiones || '[]').filter((e: any) => !e.ok).length;
 }
 
 export interface ImpresionResultado {
@@ -238,7 +253,7 @@ export async function printComandaInternal(
     ? items
     : soloPendientes
       ? (opts.retryFailed
-          ? items.filter(i => !i.impreso)
+          ? items.filter(i => !i.impreso && contarIntentosFallidos(i) < MAX_COMANDA_FAILED_RETRIES)
           : items.filter(i => !i.impreso && !(i.impresiones && safeParseJson(i.impresiones).length > 0)))
       : items.filter(i => !i.impreso);
   const itemsAImprimir = baseSet
@@ -418,8 +433,9 @@ export async function printComandaInternal(
     errors,
   };
 
-  // Notificar al renderer (toast en PdV). Solo si hubo errores o nada se imprimió.
-  if (errors.length > 0) {
+  // Notificar al renderer (toast en PdV). Solo si hubo errores o nada se imprimió,
+  // y nunca cuando el llamador pide `silent` (worker de retry, para no spamear).
+  if (errors.length > 0 && !opts.silent) {
     broadcastPrinterEvent({
       level: printed.length > 0 ? 'warning' : 'error',
       handler: 'print-comanda',
