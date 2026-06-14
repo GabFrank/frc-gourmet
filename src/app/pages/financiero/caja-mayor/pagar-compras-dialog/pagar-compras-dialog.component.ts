@@ -18,6 +18,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
+import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
 
 interface PagarComprasDialogData {
   cajaMayorId?: number;
@@ -184,18 +185,20 @@ export class PagarComprasDialogComponent implements OnInit {
     }
   }
 
-  // Defaults sensatos: si solo hay 1 caja abierta, seteala. Si hay PYG, seteala. Forma pago efectivo.
+  // Defaults sensatos: única caja abierta, moneda principal/única, forma pago principal/efectivo/única.
   private applyDefaultFuente(): void {
     if (this.cajasMayor.length === 1 && !this.form.value.cajaMayorId) {
       this.form.patchValue({ cajaMayorId: this.cajasMayor[0].id });
     }
-    if (this.monedas.length > 0 && !this.form.value.monedaId) {
-      const principal = this.monedas.find((m: any) => m.principal) || this.monedas[0];
-      this.form.patchValue({ monedaId: principal.id });
+    if (!this.form.value.monedaId) {
+      const m = preselectSingleOrPrincipal(this.monedas) || this.monedas[0];
+      if (m) this.form.patchValue({ monedaId: m.id });
     }
-    if (this.formasPago.length > 0 && !this.form.value.formaPagoId) {
-      const efectivo = this.formasPago.find((f: any) => /EFECTIVO/i.test(f.nombre || '')) || this.formasPago[0];
-      this.form.patchValue({ formaPagoId: efectivo.id });
+    if (!this.form.value.formaPagoId) {
+      const fp = preselectSingleOrPrincipal(this.formasPago)
+        || this.formasPago.find((f: any) => /EFECTIVO/i.test(f.nombre || ''))
+        || this.formasPago[0];
+      if (fp) this.form.patchValue({ formaPagoId: fp.id });
     }
   }
 

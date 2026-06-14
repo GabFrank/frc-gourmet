@@ -21,6 +21,7 @@ import { EmitirChequeDialogComponent } from '../cheques/emitir-cheque/emitir-che
 import { PagarComprasDialogComponent } from '../pagar-compras-dialog/pagar-compras-dialog.component';
 import { CreateEditValeDialogComponent } from 'src/app/pages/rrhh/vales/create-edit-vale-dialog.component';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
+import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
 
 type EgresoTipo = 'GASTO' | 'AJUSTE' | 'OPERACION_FINANCIERA' | 'EMITIR_CHEQUE' | 'PAGAR_COMPRAS' | 'REGISTRAR_VALE' | null;
 
@@ -148,10 +149,21 @@ export class RegistrarEgresoDialogComponent implements OnInit {
     cb.updateValueAndValidity({ emitEvent: false });
   }
 
-  private preseleccionarEfectivo(): void {
-    if (this.formasPagoEfectivo.length === 1) {
-      this.ajusteForm.get('formaPago')!.setValue(this.formasPagoEfectivo[0].id, { emitEvent: false });
+  /** Pre-selecciona moneda principal/única y forma de pago efectivo principal/única (solo si están vacías). */
+  private preseleccionar(): void {
+    const monedaCtrl = this.ajusteForm.get('moneda')!;
+    if (!monedaCtrl.value) {
+      const m = preselectSingleOrPrincipal(this.monedas);
+      if (m) monedaCtrl.setValue(m.id, { emitEvent: false });
     }
+    this.preseleccionarEfectivo();
+  }
+
+  private preseleccionarEfectivo(): void {
+    const fpCtrl = this.ajusteForm.get('formaPago')!;
+    if (fpCtrl.value) return;
+    const fp = preselectSingleOrPrincipal(this.formasPagoEfectivo);
+    if (fp) fpCtrl.setValue(fp.id, { emitEvent: false });
   }
 
   private recalcDecimalesMoneda(): void {
@@ -173,7 +185,7 @@ export class RegistrarEgresoDialogComponent implements OnInit {
       this.formasPago = formasPago || [];
       this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
       this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
-      this.preseleccionarEfectivo();
+      this.preseleccionar();
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {

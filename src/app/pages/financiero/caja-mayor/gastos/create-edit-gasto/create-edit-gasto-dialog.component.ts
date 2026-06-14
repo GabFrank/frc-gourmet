@@ -23,6 +23,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/app/shared/utils/conversion-moneda';
+import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
 
 interface DetalleRow {
   monedaId: number;
@@ -176,6 +177,8 @@ export class CreateEditGastoDialogComponent implements OnInit {
       // Si estamos editando, cargar el gasto
       if (this.isEditing && this.gastoId) {
         await this.loadGasto(this.gastoId);
+      } else {
+        this.aplicarPreselecciones();
       }
     } catch (error) {
       console.error('Error loading lookups:', error);
@@ -372,6 +375,29 @@ export class CreateEditGastoDialogComponent implements OnInit {
 
     this.recalcularTotales();
     this.detalleForm.reset();
+    this.preseleccionarDetalle();
+  }
+
+  /** Pre-selecciona única caja abierta (si no vino fija) y la primera línea de detalle. */
+  private aplicarPreselecciones(): void {
+    if (!this.cajaMayorFijo && !this.form.get('cajaMayorId')?.value && this.cajasMayor.length === 1) {
+      this.form.patchValue({ cajaMayorId: this.cajasMayor[0].id });
+    }
+    this.preseleccionarDetalle();
+  }
+
+  /** Pre-selecciona moneda principal/única y forma de pago efectivo/principal/única en la línea de detalle. */
+  private preseleccionarDetalle(): void {
+    if (!this.detalleForm.get('monedaId')?.value) {
+      const m = preselectSingleOrPrincipal(this.monedas);
+      if (m) this.detalleForm.get('monedaId')?.setValue(m.id, { emitEvent: false });
+    }
+    if (!this.detalleForm.get('formaPagoId')?.value) {
+      const efectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
+      const fp = preselectSingleOrPrincipal(efectivo) || preselectSingleOrPrincipal(this.formasPago);
+      if (fp) this.detalleForm.get('formaPagoId')?.setValue(fp.id, { emitEvent: false });
+    }
+    this.recalcDecimalesMoneda();
   }
 
   eliminarDetalle(index: number): void {
