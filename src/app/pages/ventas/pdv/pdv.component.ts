@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -200,7 +200,8 @@ export class PdvComponent implements OnInit, OnDestroy {
     private fb: FormBuilder,
     private authService: AuthService,
     private tabsService: TabsService,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private elementRef: ElementRef
   ) {
     // Initialize form
     this.searchForm = this.fb.group({
@@ -2223,6 +2224,11 @@ export class PdvComponent implements OnInit, OnDestroy {
   onKeyDown(event: KeyboardEvent): void {
     // No disparar si hay un diálogo abierto
     if (this.dialog.openDialogs.length > 0) return;
+    // No disparar si la pestaña del PdV no está visible. El listener es a nivel
+    // `document`, así que sin este guard los atajos F1-F5 se filtrarían a otras
+    // pestañas (ej. al anular una compra). Las pestañas inactivas se ocultan con
+    // `display:none`, por lo que un host oculto tiene `offsetParent === null`.
+    if (!this.elementRef.nativeElement?.offsetParent) return;
 
     switch (event.key) {
       case 'F1':
