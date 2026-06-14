@@ -12,8 +12,8 @@
       <mat-card-header>
         <mat-card-title>{{ editingPrinterId ? 'Editar impresora' : 'Agregar impresora' }}</mat-card-title>
         <div class="header-actions">
-          <button mat-raised-button color="accent" type="button" (click)="setupCupsPrinter('ticket-58mm')" *ngIf="!editingPrinterId">
-            <mat-icon>print</mat-icon> Configurar impresora CUPS
+          <button mat-button color="primary" type="button" class="cups-button" (click)="setupCupsPrinter('ticket-58mm')" *ngIf="!editingPrinterId">
+            Configurar impresora CUPS
           </button>
         </div>
       </mat-card-header>
