@@ -2005,6 +2005,34 @@ export class PdvComponent implements OnInit, OnDestroy {
       });
   }
 
+  /**
+   * Reimprime la comanda (ticket de cocina) de la venta activa. Usa
+   * `forceReprint: true` para reenviar TODOS los items a sus sectores, incluso
+   * los que ya fueron impresos antes (a diferencia del envío automático que solo
+   * manda los pendientes). Útil cuando un ticket se traba/pierde en cocina.
+   */
+  reimprimirComanda(): void {
+    if (!this.hasActiveVenta) return;
+    const venta = this.ventaRapidaActual || this.selectedComanda?.venta || this.selectedMesa?.venta;
+    if (!venta?.id) return;
+
+    const api: any = (window as any).api;
+    if (!api?.callIpc) return;
+    api.callIpc('print-comanda', { ventaId: venta.id, forceReprint: true })
+      .then((res: any) => {
+        if (res?.ok) {
+          this.snackBar.open('Comanda reenviada a cocina', 'CERRAR', { duration: 2500 });
+        } else {
+          const msg = res?.errors?.[0]?.message || 'No se pudo reimprimir la comanda';
+          this.snackBar.open(msg, 'CERRAR', { duration: 4000, panelClass: ['error-snackbar'] });
+        }
+      })
+      .catch((err: any) => {
+        console.error('Error reimprimir comanda:', err);
+        this.snackBar.open('Error al reimprimir la comanda', 'CERRAR', { duration: 4000, panelClass: ['error-snackbar'] });
+      });
+  }
+
   moverItems(): void {
     if (!this.hasActiveVenta || !this.hasActiveItems) return;
 
