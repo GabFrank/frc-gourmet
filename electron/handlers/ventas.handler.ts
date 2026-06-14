@@ -2698,6 +2698,11 @@ async function autoPrintComandaIfNeeded(
  * Caso de uso: impresora apagada en el momento del envío original →
  * el item queda pendiente, este worker lo reintenta cada 5s hasta que la
  * impresora vuelva online.
+ *
+ * El worker llama con `silent: true` para NO emitir toasts en cada ciclo
+ * (el envío original ya notificó una vez). Además hay un tope de reintentos
+ * fallidos por item (`MAX_COMANDA_FAILED_RETRIES`) para no reintentar
+ * indefinidamente cuando no hay impresora.
  */
 const RETRY_INTERVAL_MS = 5_000;
 let _retryComandaInterval: NodeJS.Timeout | null = null;
@@ -2729,6 +2734,7 @@ async function retryPendingComandas(dataSource: DataSource): Promise<void> {
         const res = await printComandaInternal(dataSource, ventaId, {
           soloItemsNoImpresos: true,
           retryFailed: true,
+          silent: true,
         });
         if (res.printed.length > 0) {
           console.log(`[retry-comanda venta=${ventaId}] reimpreso ${res.printed.length} item(s) tras retry`);
