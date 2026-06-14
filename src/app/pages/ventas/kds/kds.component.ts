@@ -92,11 +92,19 @@ export class KdsComponent implements OnInit, OnDestroy {
 
   private rawRows: KdsRow[] = [];
   private offComandaEvent?: () => void;
+  private eventSource?: EventSource;
   private pollTimer?: any;
   private tickTimer?: any;
   private reloadDebounce?: any;
 
   private readonly LS_KEY = 'kds.sectores';
+
+  // Modo web (servido a Google TV): sin window.api → datos por HTTP /api/rpc y
+  // eventos por SSE. En Electron (tab o cliente) se usa IPC. token/server se
+  // leen de la query (?token=&server=) o localStorage.
+  private get esWeb(): boolean { return !((window as any).api?.callIpc); }
+  private webToken = '';
+  private webBase = '';
 
   constructor(
     private repo: RepositoryService,
@@ -104,15 +112,25 @@ export class KdsComponent implements OnInit, OnDestroy {
   ) {}
 
   async ngOnInit(): Promise<void> {
+    // Modo web: leer token/server de la query o localStorage
+    if (this.esWeb) {
+      const params = new URLSearchParams(window.location.search);
+      this.webToken = params.get('token') || localStorage.getItem('kds.token') || '';
+      this.webBase = params.get('server') || localStorage.getItem('kds.server') || '';
+      if (this.webToken) localStorage.setItem('kds.token', this.webToken);
+      if (this.webBase) localStorage.setItem('kds.server', this.webBase);
+    }
+
     // 1. Sectores activos + selección persistida
     try {
-      const secs: any[] = await firstValueFrom(this.repo.getSectoresActivos());
+      const secs: any[] = this.esWeb
+        ? ((await this.invokeData('getSectoresActivos')) || [])
+        : ((await firstValueFrom(this.repo.getSectoresActivos())) || []);
       this.sectores = secs || [];
     } catch { this.sectores = []; }
     // Pantallas configuradas (Fase 2). Si hay una elegida, aplica sus sectores.
     try {
-      const api: any = (window as any).api;
-      this.pantallas = api?.callIpc ? (await api.callIpc('get-kds-pantallas')) || [] : [];
+      this.pantallas = (await this.invokeData('get-kds-pantallas')) || [];
     } catch { this.pantallas = []; }
 
     const savedPantalla = this.leerPantallaId();
@@ -128,12 +146,8 @@ export class KdsComponent implements OnInit, OnDestroy {
     // 2. Carga inicial
     await this.loadComandas();
 
-    // 3. Tiempo real: evento IPC (debounced reload) + poll de respaldo
-    const api: any = (window as any).api;
-    if (api?.onComandaEvent) {
-      this.offComandaEvent = api.onComandaEvent(() => this.scheduleReload());
-      this.conectado = true;
-    }
+    // 3. Tiempo real: IPC (Electron) o SSE (web) + poll de respaldo
+    this.conectarEventos();
     this.pollTimer = setInterval(() => this.loadComandas(), 12_000);
 
     // 4. Tick de 1s para refrescar timers/semáforo sin recargar datos
@@ -142,9 +156,53 @@ export class KdsComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     if (this.offComandaEvent) this.offComandaEvent();
+    if (this.eventSource) this.eventSource.close();
     if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.tickTimer) clearInterval(this.tickTimer);
     if (this.reloadDebounce) clearTimeout(this.reloadDebounce);
+  }
+
+  /** Conecta el canal de tiempo real según el transporte disponible. */
+  private conectarEventos(): void {
+    const api: any = (window as any).api;
+    if (api?.onComandaEvent) {
+      this.offComandaEvent = api.onComandaEvent(() => this.scheduleReload());
+      this.conectado = true;
+      return;
+    }
+    // Web: SSE
+    try {
+      const secs = this.selectedSectorIds.join(',');
+      const url = `${this.webBase}/api/kds/stream?token=${encodeURIComponent(this.webToken)}&sectores=${secs}`;
+      this.eventSource = new EventSource(url);
+      this.eventSource.onmessage = () => this.scheduleReload();
+      this.eventSource.onopen = () => { this.conectado = true; };
+      this.eventSource.onerror = () => { this.conectado = false; };
+    } catch (e) {
+      console.warn('[KDS] SSE no disponible:', e);
+    }
+  }
+
+  /**
+   * Invoca un handler del backend. En Electron usa `window.api.callIpc` (que en
+   * modo cliente ya viaja por RPC). En navegador puro (Google TV) usa fetch a
+   * `/api/rpc` con el token. Devuelve el resultado o null.
+   */
+  private async invokeData(method: string, ...params: any[]): Promise<any> {
+    const api: any = (window as any).api;
+    if (api?.callIpc) {
+      return await api.callIpc(method, ...params);
+    }
+    const res = await fetch(`${this.webBase}/api/rpc`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(this.webToken ? { Authorization: `Bearer ${this.webToken}` } : {}),
+      },
+      body: JSON.stringify({ method, params }),
+    });
+    if (!res.ok) throw new Error(`RPC ${method} → ${res.status}`);
+    return await res.json();
   }
 
   setData(_d: any): void { /* hook tab/standalone */ }
@@ -203,10 +261,8 @@ export class KdsComponent implements OnInit, OnDestroy {
   }
 
   async loadComandas(): Promise<void> {
-    const api: any = (window as any).api;
-    if (!api?.callIpc) return;
     try {
-      const rows: KdsRow[] = await api.callIpc('get-kds-comandas', {
+      const rows: KdsRow[] = await this.invokeData('get-kds-comandas', {
         sectorIds: this.selectedSectorIds,
       });
       this.rawRows = rows || [];
@@ -323,10 +379,8 @@ export class KdsComponent implements OnInit, OnDestroy {
   }
 
   private async invocar(channel: string, id: number, reload = true): Promise<void> {
-    const api: any = (window as any).api;
-    if (!api?.callIpc) return;
     try {
-      await api.callIpc(channel, id);
+      await this.invokeData(channel, id);
       if (reload) await this.loadComandas();
     } catch (e) {
       console.warn(`[KDS] ${channel} falló:`, e);
