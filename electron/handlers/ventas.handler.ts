@@ -673,6 +673,19 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         }
       }
 
+      // ─── KDS: al cerrar/cancelar la venta, sacar sus items de las pantallas ─
+      try {
+        if (estadoAnterior !== saved.estado) {
+          if (saved.estado === VentaEstado.CONCLUIDA) {
+            await finalizarComandaItems(dataSource, { ventaItem: { venta: { id } } as any, activo: true }, ComandaItemEstado.ENTREGADO, getCurrentUser()?.id);
+          } else if (saved.estado === VentaEstado.CANCELADA) {
+            await finalizarComandaItems(dataSource, { ventaItem: { venta: { id } } as any, activo: true }, ComandaItemEstado.CANCELADO, getCurrentUser()?.id);
+          }
+        }
+      } catch (e) {
+        console.warn('[updateVenta] hook KDS cerrar comanda-items falló:', e);
+      }
+
       return saved;
     } catch (error) {
       console.error(`Error updating venta ID ${id}:`, error);
@@ -798,7 +811,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+
+      // KDS: si el item se canceló, cancelar sus ComandaItems para sacarlos de cocina.
+      try {
+        if ((saved as any).estado === EstadoVentaItem.CANCELADO) {
+          await finalizarComandaItems(dataSource, { ventaItem: { id } as any, activo: true }, ComandaItemEstado.CANCELADO, getCurrentUser()?.id);
+        }
+      } catch (e) { console.warn('[updateVentaItem] KDS cancelar comanda-items falló:', e); }
+
+      return saved;
     } catch (error) {
       console.error(`Error updating venta item ID ${id}:`, error);
       throw error;
@@ -811,6 +833,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(VentaItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
+      // KDS: borrar ComandaItems del item antes para no dejar FK huérfana.
+      try {
+        await dataSource.getRepository(ComandaItem)
+          .createQueryBuilder()
+          .delete()
+          .where('venta_item_id = :id', { id })
+          .execute();
+      } catch (e) { console.warn('[deleteVentaItem] KDS limpiar comanda-items falló:', e); }
       await repo.remove(entity);
       return true;
     } catch (error) {
@@ -2762,6 +2792,37 @@ async function crearComandaItemsSiCorresponde(
       ventaId: venta.id,
       sectorId: sector.id,
       estado: ComandaItemEstado.PENDIENTE,
+    });
+  }
+}
+
+/**
+ * Cierra/transiciona en masa los ComandaItems activos que matchean `where`
+ * (por venta-item o por venta) a `nuevoEstado` — usado cuando se cancela un
+ * item, se elimina, o la venta se concluye/cancela, para que no queden colgados
+ * en las pantallas KDS. No re-toca los ya ENTREGADO/CANCELADO.
+ */
+async function finalizarComandaItems(
+  dataSource: DataSource,
+  where: any,
+  nuevoEstado: ComandaItemEstado,
+  usuarioId: number | undefined,
+): Promise<void> {
+  const repo = dataSource.getRepository(ComandaItem);
+  const items = await repo.find({ where, relations: ['sector', 'ventaItem', 'ventaItem.venta'] });
+  for (const ci of items) {
+    if (ci.estado === ComandaItemEstado.CANCELADO || ci.estado === ComandaItemEstado.ENTREGADO) continue;
+    ci.estado = nuevoEstado;
+    if (nuevoEstado === ComandaItemEstado.LISTO && !ci.fechaListo) ci.fechaListo = new Date();
+    if (nuevoEstado === ComandaItemEstado.CANCELADO) ci.activo = false;
+    await setEntityUserTracking(dataSource, ci, usuarioId, true);
+    const saved = await repo.save(ci);
+    broadcastComandaEvent({
+      tipo: nuevoEstado === ComandaItemEstado.CANCELADO ? 'CANCELADO' : 'ESTADO',
+      comandaItemId: saved.id,
+      ventaId: (ci as any).ventaItem?.venta?.id ?? null,
+      sectorId: (ci as any).sector?.id ?? null,
+      estado: nuevoEstado,
     });
   }
 }
