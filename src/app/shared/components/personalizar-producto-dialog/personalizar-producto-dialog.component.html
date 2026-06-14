@@ -99,7 +99,7 @@
         <!-- Observación libre -->
         <mat-form-field appearance="outline" class="obs-libre-field">
           <mat-label>OBSERVACION LIBRE</mat-label>
-          <input matInput [(ngModel)]="observacionLibre" placeholder="Ej: sin sal, bien cocido..." />
+          <input matInput [formControl]="observacionLibreControl" placeholder="Ej: sin sal, bien cocido..." />
         </mat-form-field>
       </div>
     </div>

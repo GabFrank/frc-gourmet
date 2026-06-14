@@ -132,7 +132,7 @@
             <mat-form-field appearance="outline" class="search-field">
               <mat-label>Buscar adicionales</mat-label>
               <input matInput
-                     [(ngModel)]="searchTerm"
+                     [formControl]="searchControl"
                      (keyup.enter)="applyFilter()"
                      placeholder="Buscar por nombre...">
               <mat-icon matSuffix>search</mat-icon>
@@ -140,7 +140,7 @@
 
             <mat-form-field appearance="outline" class="filter-field">
               <mat-label>Estado</mat-label>
-              <mat-select [(ngModel)]="activeFilter" (selectionChange)="onFilterChange()">
+              <mat-select [formControl]="activeFilterControl" (selectionChange)="onFilterChange()">
                 <mat-option value="all">Todos</mat-option>
                 <mat-option value="active">Activos</mat-option>
                 <mat-option value="inactive">Inactivos</mat-option>
