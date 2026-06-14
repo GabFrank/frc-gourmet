@@ -182,6 +182,7 @@ import { PdvMesa } from './entities/ventas/pdv-mesa.entity';
 import { Reserva } from './entities/ventas/reserva.entity';
 import { Comanda } from './entities/ventas/comanda.entity';
 import { ComandaItem } from './entities/ventas/comanda-item.entity';
+import { KdsPantalla } from './entities/ventas/kds-pantalla.entity';
 import { Sector } from './entities/ventas/sector.entity';
 import { SectorImpresora } from './entities/ventas/sector-impresora.entity';
 import { ProductoSector } from './entities/productos/producto-sector.entity';
@@ -201,6 +202,7 @@ import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVa
 import { AddCuentaBancariaToPagosCobros1779700000000 } from './migrations/1779700000000-AddCuentaBancariaToPagosCobros';
 import { AddCotizacionBancariaToPagosCobros1779800000000 } from './migrations/1779800000000-AddCotizacionBancariaToPagosCobros';
 import { AddKdsToComandaItem1780000000000 } from './migrations/1780000000000-AddKdsToComandaItem';
+import { AddKdsPantalla1780100000000 } from './migrations/1780100000000-AddKdsPantalla';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -443,6 +445,7 @@ function getEntitiesList(): any[] {
       Reserva,
       Comanda,
       ComandaItem,
+      KdsPantalla,
       Sector,
       SectorImpresora,
       ProductoSector,
@@ -497,6 +500,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddCuentaBancariaToPagosCobros1779700000000,
     AddCotizacionBancariaToPagosCobros1779800000000,
     AddKdsToComandaItem1780000000000,
+    AddKdsPantalla1780100000000,
   ];
 }
 

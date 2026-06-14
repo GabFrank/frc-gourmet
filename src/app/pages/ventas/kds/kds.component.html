@@ -9,6 +9,11 @@
       </span>
     </div>
 
+    <select *ngIf="pantallas.length > 0" class="kds-pantalla-select" (change)="onPantallaChange($event)">
+      <option value="" [selected]="pantallaId === null">Personalizado</option>
+      <option *ngFor="let p of pantallas" [value]="p.id" [selected]="p.id === pantallaId">{{ p.nombre }}</option>
+    </select>
+
     <div class="kds-sectores">
       <span *ngFor="let s of sectorChips"
             class="kds-sector-chip"

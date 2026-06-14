@@ -77,6 +77,8 @@ export class KdsComponent implements OnInit, OnDestroy {
   sectores: any[] = [];
   sectorChips: { id: number; nombre: string; activo: boolean }[] = [];
   selectedSectorIds: number[] = [];
+  pantallas: any[] = [];
+  pantallaId: number | null = null;
   tickets: KdsTicket[] = [];
   allDay = false;
   allDayResumen: { nombre: string; total: number }[] = [];
@@ -107,8 +109,20 @@ export class KdsComponent implements OnInit, OnDestroy {
       const secs: any[] = await firstValueFrom(this.repo.getSectoresActivos());
       this.sectores = secs || [];
     } catch { this.sectores = []; }
-    const saved = this.leerSeleccion();
-    this.selectedSectorIds = saved.length > 0 ? saved : this.sectores.map(s => s.id);
+    // Pantallas configuradas (Fase 2). Si hay una elegida, aplica sus sectores.
+    try {
+      const api: any = (window as any).api;
+      this.pantallas = api?.callIpc ? (await api.callIpc('get-kds-pantallas')) || [] : [];
+    } catch { this.pantallas = []; }
+
+    const savedPantalla = this.leerPantallaId();
+    const pantalla = savedPantalla ? this.pantallas.find(p => p.id === savedPantalla) : null;
+    if (pantalla) {
+      this.aplicarPantallaObj(pantalla);
+    } else {
+      const saved = this.leerSeleccion();
+      this.selectedSectorIds = saved.length > 0 ? saved : this.sectores.map(s => s.id);
+    }
     this.rebuildSectorChips();
 
     // 2. Carga inicial
@@ -145,6 +159,42 @@ export class KdsComponent implements OnInit, OnDestroy {
 
   private guardarSeleccion(): void {
     try { localStorage.setItem(this.LS_KEY, JSON.stringify(this.selectedSectorIds)); } catch { /* noop */ }
+  }
+
+  private leerPantallaId(): number | null {
+    try { const v = localStorage.getItem('kds.pantallaId'); return v ? Number(v) : null; } catch { return null; }
+  }
+
+  private aplicarPantallaObj(p: any): void {
+    this.pantallaId = p.id;
+    let secs: number[] = [];
+    try { const arr = p.sectores ? JSON.parse(p.sectores) : []; secs = Array.isArray(arr) ? arr.map(Number) : []; } catch { secs = []; }
+    this.selectedSectorIds = secs.length > 0 ? secs : this.sectores.map(s => s.id);
+    if (p.umbralAmarillo) this.umbralAmarillo = p.umbralAmarillo;
+    if (p.umbralRojo) this.umbralRojo = p.umbralRojo;
+  }
+
+  onPantallaChange(ev: Event): void {
+    const v = (ev.target as HTMLSelectElement).value;
+    this.seleccionarPantalla(v ? Number(v) : null);
+  }
+
+  /** El usuario elige qué pantalla es esta TV (o "Personalizado"). */
+  seleccionarPantalla(id: number | null): void {
+    this.pantallaId = id;
+    try {
+      if (id) localStorage.setItem('kds.pantallaId', String(id));
+      else localStorage.removeItem('kds.pantallaId');
+    } catch { /* noop */ }
+    const p = id ? this.pantallas.find(x => x.id === id) : null;
+    if (p) {
+      this.aplicarPantallaObj(p);
+    } else {
+      const saved = this.leerSeleccion();
+      this.selectedSectorIds = saved.length > 0 ? saved : this.sectores.map(s => s.id);
+    }
+    this.rebuildSectorChips();
+    this.loadComandas();
   }
 
   private scheduleReload(): void {

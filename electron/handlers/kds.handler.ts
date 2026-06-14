@@ -17,6 +17,7 @@
 import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { ComandaItem, ComandaItemEstado } from '../../src/app/database/entities/ventas/comanda-item.entity';
+import { KdsPantalla } from '../../src/app/database/entities/ventas/kds-pantalla.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
@@ -161,4 +162,55 @@ export function registerKdsHandlers(
     const anterior = idx > 0 ? FLUJO[idx - 1] : ci.estado;
     return await transicionar(dataSource, getCurrentUser, comandaItemId, anterior);
   });
+
+  // ─── ABM de pantallas KDS (config) ──────────────────────────────────────
+  ipcMain.handle('get-kds-pantallas', async () => {
+    await ensurePermission(dataSource, getCurrentUser, ['COMANDAS_KDS_VER', 'VENTAS_PDV']);
+    return await dataSource.getRepository(KdsPantalla).find({ order: { nombre: 'ASC' } });
+  });
+
+  ipcMain.handle('get-kds-pantalla', async (_event, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, ['COMANDAS_KDS_VER', 'VENTAS_PDV']);
+    return await dataSource.getRepository(KdsPantalla).findOne({ where: { id } });
+  });
+
+  ipcMain.handle('create-kds-pantalla', async (_event, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMANDAS_KDS_CONFIGURAR');
+    const repo = dataSource.getRepository(KdsPantalla);
+    const entity = repo.create(normalizarPantalla(data));
+    await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
+    return await repo.save(entity);
+  });
+
+  ipcMain.handle('update-kds-pantalla', async (_event, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMANDAS_KDS_CONFIGURAR');
+    const repo = dataSource.getRepository(KdsPantalla);
+    const entity = await repo.findOne({ where: { id } });
+    if (!entity) throw new Error(`Pantalla KDS ${id} no encontrada`);
+    repo.merge(entity, normalizarPantalla(data));
+    await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
+    return await repo.save(entity);
+  });
+
+  ipcMain.handle('delete-kds-pantalla', async (_event, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMANDAS_KDS_CONFIGURAR');
+    const repo = dataSource.getRepository(KdsPantalla);
+    const entity = await repo.findOne({ where: { id } });
+    if (!entity) return false;
+    await repo.remove(entity);
+    return true;
+  });
+}
+
+/**
+ * Normaliza el payload de pantalla: `sectores` puede llegar como array de ids
+ * (del front) → se guarda como JSON string. nombre en MAYÚSCULAS.
+ */
+function normalizarPantalla(data: any): any {
+  const out: any = { ...data };
+  if (Array.isArray(data?.sectores)) {
+    out.sectores = JSON.stringify(data.sectores.map((n: any) => Number(n)).filter((n: number) => !!n));
+  }
+  if (typeof data?.nombre === 'string') out.nombre = data.nombre.toUpperCase();
+  return out;
 }
