@@ -42,6 +42,7 @@ import { PaginatedDropdownComponent } from '../../shared/components/paginated-dr
 import { ConfirmarAgregarIngredienteDialogComponent } from './dialogs/confirmar-agregar-ingrediente-dialog/confirmar-agregar-ingrediente-dialog.component';
 import { GestionarIngredienteMultiVariacionDialogComponent } from './dialogs/gestionar-ingrediente-multi-variacion-dialog/gestionar-ingrediente-multi-variacion-dialog.component';
 import { HasPermissionDirective } from '../../shared/directives/has-permission.directive';
+import { CurrencyInputDirective } from '../../shared/directives/currency-input.directive';
 
 @NgModule({
   declarations: [
@@ -88,6 +89,7 @@ import { HasPermissionDirective } from '../../shared/directives/has-permission.d
     MatMenuModule,
     MatProgressBarModule,
     HasPermissionDirective,
+    CurrencyInputDirective,
   ],
   providers: [CurrencyPipe]
 })

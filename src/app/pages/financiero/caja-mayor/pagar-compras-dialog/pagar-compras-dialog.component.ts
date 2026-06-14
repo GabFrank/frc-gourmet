@@ -19,6 +19,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
 import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 interface PagarComprasDialogData {
   cajaMayorId?: number;
@@ -46,6 +47,8 @@ interface CuotaRow {
   monedaDenominacion: string | null;
   selected: boolean;
   montoAPagar: number;
+  /** Decimales segun la moneda de la cuota (PYG=0, USD/BRL=2). Para appCurrencyInput. */
+  decimales: number;
 }
 
 @Component({
@@ -73,6 +76,7 @@ interface CuotaRow {
     MatDividerModule,
     DecimalPipe,
     DatePipe,
+    CurrencyInputDirective,
   ],
 })
 export class PagarComprasDialogComponent implements OnInit {
@@ -159,10 +163,19 @@ export class PagarComprasDialogComponent implements OnInit {
 
       const preIds = new Set<number>(this.data?.cuotaIdsPreseleccionadas || []);
 
+      // Mapa moneda(id)→decimales para configurar appCurrencyInput por fila (cada cuota
+      // puede estar en una moneda distinta: PYG=0, USD/BRL=2).
+      const decimalesPorMonedaId = new Map<number, number>();
+      for (const m of this.monedas) {
+        const dec = Number(m?.decimales);
+        decimalesPorMonedaId.set(m.id, Number.isFinite(dec) ? dec : 0);
+      }
+
       this.cuotas = ((items as any[]) || []).map((it: any): CuotaRow => ({
         ...it,
         selected: preIds.has(Number(it.id)),
         montoAPagar: Number(it.saldoPendiente) || 0,
+        decimales: decimalesPorMonedaId.get(Number(it.monedaId)) ?? 0,
       }));
 
       // Build proveedores list (unique)

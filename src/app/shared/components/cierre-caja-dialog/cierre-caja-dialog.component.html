@@ -39,10 +39,12 @@
         <mat-label>TOTAL CONTADO</mat-label>
         <input
           matInput
-          type="number"
+          type="text"
+          inputmode="decimal"
+          appCurrencyInput
+          [decimals]="mc.moneda.decimales"
           [(ngModel)]="mc.totalContado"
           (ngModelChange)="onContadoChange(mc)"
-          min="0"
         />
       </mat-form-field>
       <div class="conteo-row diferencia-row" [class.sobrante]="mc.diferencia > 0" [class.faltante]="mc.diferencia < 0">

@@ -16,6 +16,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '../../../../database/repository.service';
 import { ConfirmationDialogComponent } from '../../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { CurrencyInputDirective } from '../../../../shared/directives/currency-input.directive';
 
 @Component({
   selector: 'app-vacacion-detalle-dialog',
@@ -36,6 +37,7 @@ import { ConfirmationDialogComponent } from '../../../../shared/components/confi
     MatProgressSpinnerModule,
     MatTooltipModule,
     MatSnackBarModule,
+    CurrencyInputDirective,
   ],
   templateUrl: './vacacion-detalle-dialog.component.html',
   styleUrls: ['./vacacion-detalle-dialog.component.scss'],
