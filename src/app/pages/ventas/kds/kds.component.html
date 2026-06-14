@@ -1,0 +1,79 @@
+<div class="kds-root">
+  <!-- Barra superior -->
+  <header class="kds-header">
+    <div class="kds-title">
+      <mat-icon>restaurant</mat-icon>
+      <span>KDS — Cocina</span>
+      <span class="kds-conn" [class.on]="conectado" [matTooltip]="conectado ? 'En vivo' : 'Sin conexión en vivo (poll)'">
+        <mat-icon>{{ conectado ? 'wifi' : 'wifi_off' }}</mat-icon>
+      </span>
+    </div>
+
+    <div class="kds-sectores">
+      <span *ngFor="let s of sectorChips"
+            class="kds-sector-chip"
+            [class.activo]="s.activo"
+            (click)="toggleSector(s.id)">
+        {{ s.nombre }}
+      </span>
+    </div>
+
+    <div class="kds-actions">
+      <span class="kds-numpad" *ngIf="numpadBuffer">#{{ numpadBuffer }}</span>
+      <mat-slide-toggle [checked]="allDay" (change)="toggleAllDay()" color="primary">All-day</mat-slide-toggle>
+    </div>
+  </header>
+
+  <!-- Vista all-day: resumen agregado de lo que falta preparar -->
+  <section *ngIf="allDay" class="kds-allday">
+    <div class="kds-allday-empty" *ngIf="allDayResumen.length === 0">Nada pendiente.</div>
+    <div class="kds-allday-row" *ngFor="let r of allDayResumen; trackBy: trackResumen">
+      <span class="kds-allday-qty">{{ r.total }}</span>
+      <span class="kds-allday-name">{{ r.nombre }}</span>
+    </div>
+  </section>
+
+  <!-- Tablero de tickets -->
+  <section *ngIf="!allDay" class="kds-board">
+    <div *ngIf="tickets.length === 0" class="kds-empty">
+      <mat-icon>check_circle</mat-icon>
+      <p>Sin comandas pendientes</p>
+    </div>
+
+    <article *ngFor="let t of tickets; trackBy: trackTicket"
+             class="kds-ticket"
+             [ngClass]="'sem-' + t.semaforo"
+             [class.listo]="t.todoListo">
+      <div class="kds-ticket-head">
+        <span class="kds-ticket-num">{{ t.numero }}</span>
+        <span class="kds-ticket-ref">{{ t.ref }}</span>
+        <span class="kds-ticket-time">
+          <mat-icon>schedule</mat-icon>{{ t.minutos }}'
+        </span>
+      </div>
+
+      <ul class="kds-items">
+        <li *ngFor="let it of t.items; trackBy: trackItem"
+            class="kds-item"
+            [ngClass]="'st-' + it.estado"
+            (click)="avanzarItem(it)"
+            (contextmenu)="recallItem(it, $event)"
+            [matTooltip]="'Clic: avanzar · Clic derecho: deshacer'">
+          <span class="kds-item-qty">{{ it.cantidad }}</span>
+          <span class="kds-item-body">
+            <span class="kds-item-name">{{ it.productoNombre }}</span>
+            <span class="kds-item-obs" *ngIf="it.ensamblado">{{ it.ensamblado }}</span>
+            <span class="kds-item-obs" *ngIf="it.observacion">{{ it.observacion }}</span>
+          </span>
+          <mat-icon class="kds-item-state">
+            {{ it.estado === 'LISTO' ? 'check_circle' : it.estado === 'EN_PREPARACION' ? 'local_fire_department' : 'radio_button_unchecked' }}
+          </mat-icon>
+        </li>
+      </ul>
+
+      <button mat-flat-button class="kds-bump" (click)="bumpTicket(t)">
+        <mat-icon>done_all</mat-icon> Avanzar todo
+      </button>
+    </article>
+  </section>
+</div>

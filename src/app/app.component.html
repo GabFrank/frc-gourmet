@@ -197,6 +197,10 @@
               <mat-icon matListItemIcon>dashboard</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Dashboard</span>
             </a>
+            <a *appHasPermission="'COMANDAS_KDS_VER'" mat-list-item (click)="openKdsTab()">
+              <mat-icon matListItemIcon>restaurant</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">KDS — Cocina</span>
+            </a>
           </div>
         </mat-expansion-panel>
 
