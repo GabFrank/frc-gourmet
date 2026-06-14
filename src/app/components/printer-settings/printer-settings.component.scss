@@ -1,19 +1,22 @@
 .printer-settings-container {
   padding: 16px;
   min-width: 700px;
-  max-height: 80vh;
-  overflow-y: auto;
-  
+
   @media (max-width: 768px) {
     min-width: auto;
     width: 100%;
   }
 }
 
+// El scroll lo maneja mat-dialog-content (evita doble scrollbar)
+[mat-dialog-content] {
+  max-height: 70vh;
+}
+
 .settings-subtitle {
   margin-top: -12px;
   margin-bottom: 20px;
-  color: rgba(0, 0, 0, 0.6);
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
@@ -25,18 +28,22 @@
 
 mat-card {
   margin-bottom: 24px;
-  
+
   mat-card-content {
     padding: 16px 0;
   }
-  
+
   mat-card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    
+
     .header-actions {
       margin-left: auto;
+
+      .cups-button {
+        white-space: nowrap;
+      }
     }
   }
 }
@@ -45,7 +52,7 @@ mat-card {
   display: flex;
   gap: 16px;
   margin-bottom: 16px;
-  
+
   @media (max-width: 599px) {
     flex-direction: column;
     gap: 0;
@@ -58,7 +65,7 @@ mat-card {
 
 .form-field-half {
   flex: 1;
-  
+
   @media (max-width: 599px) {
     width: 100%;
   }
@@ -66,7 +73,7 @@ mat-card {
 
 .form-field-third {
   flex: 1;
-  
+
   @media (max-width: 599px) {
     width: 100%;
   }
@@ -85,27 +92,37 @@ mat-card {
 
 .printers-table {
   width: 100%;
-  
+
+  th,
+  td {
+    vertical-align: middle;
+    padding: 8px 12px;
+  }
+
   .mat-column-name {
     min-width: 120px;
   }
-  
+
+  .mat-column-type {
+    min-width: 110px;
+  }
+
+  .mat-column-connectionType {
+    min-width: 160px;
+  }
+
   .mat-column-address {
     min-width: 150px;
   }
-  
+
   .mat-column-isDefault {
-    width: 80px;
+    width: 110px;
     text-align: center;
   }
-  
+
   .mat-column-actions {
-    width: 140px;
+    width: 90px;
     text-align: right;
-    
-    button {
-      margin-left: 4px;
-    }
   }
 }
 
@@ -115,23 +132,16 @@ mat-card {
   align-items: center;
   justify-content: center;
   padding: 32px;
-  color: rgba(0, 0, 0, 0.54);
-  
+  color: var(--text-secondary);
+
   mat-icon {
     font-size: 48px;
     width: 48px;
     height: 48px;
     margin-bottom: 16px;
   }
-  
+
   p {
     font-size: 16px;
   }
 }
-
-// Dark theme support
-:host-context(.dark-theme) {
-  .no-printers {
-    color: rgba(255, 255, 255, 0.7);
-  }
-} 
