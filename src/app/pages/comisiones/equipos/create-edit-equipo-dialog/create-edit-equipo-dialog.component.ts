@@ -1,6 +1,6 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, FormControl, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -20,7 +20,6 @@ import { RepositoryService } from 'src/app/database/repository.service';
   standalone: true,
   imports: [
     CommonModule,
-    FormsModule,
     ReactiveFormsModule,
     MatDialogModule,
     MatAutocompleteModule,
@@ -54,10 +53,10 @@ export class CreateEditEquipoDialogComponent implements OnInit {
 
   // Nueva asignación de miembro
   newMiembroFuncionario: any | null = null;
-  newMiembroPorcentaje = 0;
+  newMiembroPorcentajeControl = new FormControl<number>(0, { nonNullable: true });
 
   // Nueva asignación de regla
-  newReglaId: number | null = null;
+  newReglaIdControl = new FormControl<number | null>(null);
   newReglaFechaDesde: Date = new Date();
 
   // Suma porcentajes
@@ -167,11 +166,11 @@ export class CreateEditEquipoDialogComponent implements OnInit {
       await firstValueFrom(this.repo.agregarMiembroEquipo({
         equipoId: this.data.equipo.id,
         funcionarioId: this.newMiembroFuncionario.id,
-        porcentajeReparto: this.newMiembroPorcentaje,
+        porcentajeReparto: this.newMiembroPorcentajeControl.value,
       }));
       this.newMiembroFuncionario = null;
       this.funcionarioControl.setValue('');
-      this.newMiembroPorcentaje = 0;
+      this.newMiembroPorcentajeControl.setValue(0);
       this.cargarDetalleEquipo(this.data.equipo.id);
     } catch (e: any) {
       this.snackBar.open('Error: ' + e.message, 'OK', { duration: 5000 });
@@ -188,14 +187,15 @@ export class CreateEditEquipoDialogComponent implements OnInit {
   }
 
   async agregarRegla(): Promise<void> {
-    if (!this.newReglaId || !this.data.equipo?.id) return;
+    const reglaId = this.newReglaIdControl.value;
+    if (!reglaId || !this.data.equipo?.id) return;
     try {
       await firstValueFrom(this.repo.asignarReglaEquipo({
         equipoId: this.data.equipo.id,
-        reglaId: this.newReglaId,
+        reglaId: reglaId,
         fechaDesde: this.newReglaFechaDesde?.toISOString().slice(0, 10),
       }));
-      this.newReglaId = null;
+      this.newReglaIdControl.setValue(null);
       this.cargarDetalleEquipo(this.data.equipo.id);
     } catch (e: any) {
       this.snackBar.open('Error: ' + e.message, 'OK', { duration: 5000 });

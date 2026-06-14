@@ -20,6 +20,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 @Component({
   selector: 'app-create-edit-funcionario-dialog',
@@ -41,6 +42,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
     MatNativeDateModule,
     MatSnackBarModule,
     MatTooltipModule,
+    CurrencyInputDirective,
   ],
   templateUrl: './create-edit-funcionario-dialog.component.html',
   styleUrls: ['./create-edit-funcionario-dialog.component.scss'],
@@ -57,6 +59,9 @@ export class CreateEditFuncionarioDialogComponent implements OnInit {
   cargos: any[] = [];
   monedas: any[] = [];
   usuarios: any[] = [];
+
+  /** Decimales segun la moneda de salario seleccionada (PYG=0, USD/BRL=2). Para appCurrencyInput. */
+  decimalesMoneda = 0;
 
   // Autocomplete de Persona
   personaControl = new FormControl<any | string | null>({ value: null, disabled: false });
@@ -106,6 +111,10 @@ export class CreateEditFuncionarioDialogComponent implements OnInit {
       this.filteredPersonas = this.personas.slice(0, 50);
       this.setupPersonaAutocomplete();
 
+      // Mantener actualizados los decimales del input monetario segun la moneda elegida
+      this.form.get('monedaSalarioId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
+      this.recalcDecimalesMoneda();
+
       if (this.isEditing && this.data.funcionario) {
         const f = this.data.funcionario;
         this.form.patchValue({
@@ -152,6 +161,13 @@ export class CreateEditFuncionarioDialogComponent implements OnInit {
     const apellido = p.apellido ? ` ${p.apellido}` : '';
     const documento = p.documento ? ` - ${p.documento}` : '';
     return `${p.nombre || ''}${apellido}${documento}`.trim();
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.form?.get('monedaSalarioId')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   private setupPersonaAutocomplete(): void {

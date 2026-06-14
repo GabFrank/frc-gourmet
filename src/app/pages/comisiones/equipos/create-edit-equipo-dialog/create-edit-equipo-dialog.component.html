@@ -40,7 +40,7 @@
           </mat-form-field>
           <mat-form-field appearance="outline">
             <mat-label>% Reparto</mat-label>
-            <input matInput type="number" [(ngModel)]="newMiembroPorcentaje" min="0" max="100">
+            <input matInput type="number" [formControl]="newMiembroPorcentajeControl" min="0" max="100">
           </mat-form-field>
           <button mat-flat-button color="primary" (click)="agregarMiembro()"><mat-icon>add</mat-icon></button>
         </div>
@@ -71,7 +71,7 @@
         <div class="add-row">
           <mat-form-field appearance="outline" class="flex1">
             <mat-label>Regla EQUIPO_PORCENTAJE</mat-label>
-            <mat-select [(ngModel)]="newReglaId">
+            <mat-select [formControl]="newReglaIdControl">
               <mat-option *ngFor="let r of reglasEquipo" [value]="r.id">{{ r.nombre }}</mat-option>
             </mat-select>
           </mat-form-field>

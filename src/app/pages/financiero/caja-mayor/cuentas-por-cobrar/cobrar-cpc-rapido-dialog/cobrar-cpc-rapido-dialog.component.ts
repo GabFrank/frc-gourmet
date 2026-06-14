@@ -89,6 +89,11 @@ export class CobrarCpcRapidoDialogComponent implements OnInit {
       this.cpcs = rows.map((c: any) => this.toRow(c));
       this.filteredCpcs = this.cpcs.slice(0, 50);
       this.setupSearch();
+      // Pre-selección: si hay una sola CPC activa, cargarla directamente.
+      if (this.cpcs.length === 1) {
+        this.searchControl.setValue(this.cpcs[0], { emitEvent: false });
+        await this.onCpcSelected(this.cpcs[0]);
+      }
     } catch (e) {
       console.error('Error cargando CPCs activas:', e);
       this.snackBar.open('Error al cargar cuentas por cobrar', 'Cerrar', { duration: 3000 });

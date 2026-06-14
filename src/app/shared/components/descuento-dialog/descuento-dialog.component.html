@@ -26,7 +26,7 @@
 
     <mat-form-field appearance="outline" *ngIf="tipoDescuento === 'monto'" style="width: 100%">
       <mat-label>MONTO DE DESCUENTO</mat-label>
-      <input matInput type="number" formControlName="monto" min="0" />
+      <input matInput type="text" inputmode="decimal" formControlName="monto" appCurrencyInput [decimals]="decimalesMoneda" />
     </mat-form-field>
 
     <mat-form-field appearance="outline" style="width: 100%">

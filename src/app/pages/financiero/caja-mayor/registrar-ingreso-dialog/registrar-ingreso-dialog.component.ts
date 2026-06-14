@@ -17,6 +17,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
 import { CreateEditEntradaVariaDialogComponent } from '../entradas-varias/create-edit-entrada-varia/create-edit-entrada-varia-dialog.component';
 import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financieras/create-operacion-financiera/create-operacion-financiera-dialog.component';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
+import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
 
 type IngresoTipo = 'AJUSTE' | 'RETIRO_CAJA' | 'ENTRADA_VARIA' | 'OPERACION_FINANCIERA' | null;
 
@@ -134,10 +135,21 @@ export class RegistrarIngresoDialogComponent implements OnInit {
     cb.updateValueAndValidity({ emitEvent: false });
   }
 
-  private preseleccionarEfectivo(): void {
-    if (this.formasPagoEfectivo.length === 1) {
-      this.ajusteForm.get('formaPago')!.setValue(this.formasPagoEfectivo[0].id, { emitEvent: false });
+  /** Pre-selecciona moneda principal/única y forma de pago efectivo principal/única (solo si están vacías). */
+  private preseleccionar(): void {
+    const monedaCtrl = this.ajusteForm.get('moneda')!;
+    if (!monedaCtrl.value) {
+      const m = preselectSingleOrPrincipal(this.monedas);
+      if (m) monedaCtrl.setValue(m.id, { emitEvent: false });
     }
+    this.preseleccionarEfectivo();
+  }
+
+  private preseleccionarEfectivo(): void {
+    const fpCtrl = this.ajusteForm.get('formaPago')!;
+    if (fpCtrl.value) return;
+    const fp = preselectSingleOrPrincipal(this.formasPagoEfectivo);
+    if (fp) fpCtrl.setValue(fp.id, { emitEvent: false });
   }
 
   private recalcDecimalesMoneda(): void {
@@ -161,7 +173,7 @@ export class RegistrarIngresoDialogComponent implements OnInit {
       this.formasPago = formasPago || [];
       this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
       this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
-      this.preseleccionarEfectivo();
+      this.preseleccionar();
       this.retirosFlotantes = flotantes || [];
       // Solo los vinculados a la caja mayor actual
       this.retirosVinculadosPendientes = (vinculados || []).filter(

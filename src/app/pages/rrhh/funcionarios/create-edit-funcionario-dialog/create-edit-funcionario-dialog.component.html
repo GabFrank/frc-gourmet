@@ -62,7 +62,7 @@
 
     <mat-form-field appearance="outline">
       <mat-label>Salario base</mat-label>
-      <input matInput type="number" formControlName="salarioBase" />
+      <input matInput type="text" inputmode="decimal" formControlName="salarioBase" appCurrencyInput [decimals]="decimalesMoneda" />
     </mat-form-field>
 
     <mat-form-field appearance="outline">
@@ -94,7 +94,7 @@
 
     <mat-form-field appearance="outline">
       <mat-label>Valor jornal</mat-label>
-      <input matInput type="number" formControlName="valorJornal" />
+      <input matInput type="text" inputmode="decimal" formControlName="valorJornal" appCurrencyInput [decimals]="decimalesMoneda" />
     </mat-form-field>
 
     <mat-slide-toggle formControlName="ipsActivo">Aporta IPS</mat-slide-toggle>
