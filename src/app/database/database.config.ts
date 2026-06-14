@@ -200,6 +200,7 @@ import { AddConveniosCobroConsolidado1779500000000 } from './migrations/17795000
 import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVacacionVentas';
 import { AddCuentaBancariaToPagosCobros1779700000000 } from './migrations/1779700000000-AddCuentaBancariaToPagosCobros';
 import { AddCotizacionBancariaToPagosCobros1779800000000 } from './migrations/1779800000000-AddCotizacionBancariaToPagosCobros';
+import { AddKdsToComandaItem1780000000000 } from './migrations/1780000000000-AddKdsToComandaItem';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -495,6 +496,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddVacacionVentas1779600000000,
     AddCuentaBancariaToPagosCobros1779700000000,
     AddCotizacionBancariaToPagosCobros1779800000000,
+    AddKdsToComandaItem1780000000000,
   ];
 }
 
