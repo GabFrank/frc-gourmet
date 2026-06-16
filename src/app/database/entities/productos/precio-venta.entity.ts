@@ -50,6 +50,18 @@ export class PrecioVenta extends BaseModel {
   @Column({ type: 'int', default: 0 })
   prioridad!: number;
 
+  // --- Buffet por peso (cuando el producto es BUFFET_POR_PESO) ---
+  // `valor` se interpreta como precio por kilo. Estos topes son schedule-aware
+  // (van en PrecioVenta), así el "libre" de almuerzo puede diferir del de cena.
+
+  // Cobro mínimo por plato (independiente del peso). null = sin mínimo.
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true, name: 'precio_minimo' })
+  precioMinimo?: number;
+
+  // Tope "buffet libre": a partir de este monto se cobra fijo. null = sin tope.
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true, name: 'precio_maximo' })
+  precioMaximo?: number;
+
   // Relationships
   @ManyToOne('Presentacion', { nullable: true })
   @JoinColumn({ name: 'presentacion_id' })

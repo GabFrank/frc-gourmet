@@ -64,6 +64,9 @@
               <mat-option [value]="ProductoTipo.COMBO">
                 {{ ProductoTipo.COMBO }}
               </mat-option>
+              <mat-option [value]="ProductoTipo.BUFFET_POR_PESO">
+                {{ ProductoTipo.BUFFET_POR_PESO }}
+              </mat-option>
             </mat-select>
             <mat-error>El tipo de producto es requerido.</mat-error>
           </mat-form-field>
@@ -137,6 +140,28 @@
               El stock máximo debe ser mayor que el stock mínimo
             </mat-error>
           </mat-form-field>
+        </div>
+
+        <!-- Campos de Buffet por peso -->
+        <div class="form-row" *ngIf="informacionPrincipalForm.get('tipo')?.value === ProductoTipo.BUFFET_POR_PESO">
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Tara del plato (g)</mat-label>
+            <input matInput type="number" formControlName="taraGramos" min="0" step="0.001" placeholder="0">
+            <span matSuffix>g</span>
+            <mat-hint>Peso del plato que se descuenta al pesar</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Peso mínimo (g)</mat-label>
+            <input matInput type="number" formControlName="pesoMinimoGramos" min="0" step="0.001" placeholder="0">
+            <span matSuffix>g</span>
+            <mat-hint>Si pesa menos, se cobra el mínimo del precio</mat-hint>
+          </mat-form-field>
+
+          <mat-slide-toggle formControlName="descuentaPorReceta" color="primary" class="toggle-item">
+            Descontar stock por receta
+            <mat-icon class="stock-info-icon" matTooltip="OFF (recomendado): descuenta el propio buffet por kilo (cargar vía Producción). ON: descuenta ingredientes por receta." matTooltipPosition="above">info_outline</mat-icon>
+          </mat-slide-toggle>
         </div>
 
         <!-- Imagen principal del producto -->

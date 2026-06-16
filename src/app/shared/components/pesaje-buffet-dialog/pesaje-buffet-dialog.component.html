@@ -1,0 +1,68 @@
+<div class="pesaje-dialog">
+  <h2 mat-dialog-title class="pesaje-title">
+    <mat-icon>scale</mat-icon>
+    Pesaje — {{ data.producto?.nombre }}
+  </h2>
+
+  <mat-dialog-content class="pesaje-content">
+    <div class="precio-kg">
+      <span class="label">Precio por kilo</span>
+      <span class="value">{{ precioPorKg | number:'1.0-2' }}</span>
+    </div>
+
+    <mat-form-field appearance="outline" class="peso-field">
+      <mat-label>Peso bruto (g)</mat-label>
+      <input
+        matInput
+        type="number"
+        min="0"
+        inputmode="decimal"
+        [(ngModel)]="pesoBruto"
+        (ngModelChange)="onPesoChange()"
+        autofocus
+        placeholder="0" />
+      <span matSuffix>g</span>
+    </mat-form-field>
+
+    <div class="detalle">
+      <div class="row">
+        <span>Tara (plato)</span>
+        <span>{{ tara | number:'1.0-3' }} g</span>
+      </div>
+      <div class="row neto">
+        <span>Peso neto</span>
+        <span>{{ resultado.pesoNetoGramos | number:'1.0-3' }} g
+          ({{ resultado.cantidadKg | number:'1.0-3' }} kg)</span>
+      </div>
+      <div class="row">
+        <span>Subtotal</span>
+        <span>{{ resultado.subtotal | number:'1.0-2' }}</span>
+      </div>
+    </div>
+
+    <div class="estado" *ngIf="resultado.aplicoLibre">
+      <mat-icon>all_inclusive</mat-icon>
+      <span>BUFFET LIBRE — se aplicó el tope</span>
+    </div>
+    <div class="estado minimo" *ngIf="bajoMinimo">
+      <mat-icon>info</mat-icon>
+      <span>Por debajo del peso mínimo — se cobra el mínimo</span>
+    </div>
+
+    <div class="total">
+      <span class="label">TOTAL</span>
+      <span class="value">{{ resultado.total | number:'1.0-2' }}</span>
+    </div>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end" class="pesaje-actions">
+    <button mat-button (click)="cancelar()">
+      <mat-icon>close</mat-icon>
+      CANCELAR
+    </button>
+    <button mat-raised-button color="primary" (click)="agregar()" [disabled]="!puedeAgregar">
+      <mat-icon>add_shopping_cart</mat-icon>
+      AGREGAR
+    </button>
+  </mat-dialog-actions>
+</div>

@@ -162,6 +162,25 @@
             </div>
           </div>
 
+          <!-- Buffet por peso (opcional): el valor de arriba se interpreta como precio por kilo -->
+          <div class="form-row">
+            <mat-form-field appearance="outline" class="form-field">
+              <mat-label>Cobro mínimo (buffet)</mat-label>
+              <input matInput type="text" inputmode="decimal" formControlName="precioMinimo"
+                     appCurrencyInput [decimals]="decimalesMoneda" placeholder="Opcional">
+              <mat-icon matSuffix>south</mat-icon>
+              <mat-hint>Si el plato pesa poco, se cobra este mínimo</mat-hint>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="form-field">
+              <mat-label>Tope "buffet libre"</mat-label>
+              <input matInput type="text" inputmode="decimal" formControlName="precioMaximo"
+                     appCurrencyInput [decimals]="decimalesMoneda" placeholder="Opcional">
+              <mat-icon matSuffix>all_inclusive</mat-icon>
+              <mat-hint>A partir de este monto se cobra fijo</mat-hint>
+            </mat-form-field>
+          </div>
+
           <!-- Third Row: Save/Update Button -->
           <div class="form-row form-actions">
             <div class="actions-container">

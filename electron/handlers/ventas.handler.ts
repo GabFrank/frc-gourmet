@@ -1908,6 +1908,9 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           case ProductoTipo.COMBO:
             await processCombo(item, pending, 0);
             break;
+          case ProductoTipo.BUFFET_POR_PESO:
+            await processBuffetPorPeso(item, pending);
+            break;
         }
       }
 
@@ -1959,6 +1962,30 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           cantidad *= Number(item.presentacion.cantidad);
         }
         out.push({ productoId: item.producto.id, cantidad, ventaItemId: item.id });
+      }
+
+      async function processBuffetPorPeso(item: VentaItem, out: PendingMovement[]): Promise<void> {
+        // Modo híbrido: si el producto está marcado para descontar por receta,
+        // se prorratean ingredientes (Fase 5). Por defecto (opaco), se descuenta
+        // el propio producto buffet por kilo neto — su stock se carga vía
+        // Producción (PRODUCCION_ENTRADA). El desperdicio = producido - vendido.
+        const producto = await productoRepo.findOne({
+          where: { id: item.producto.id },
+          relations: ['receta'],
+        });
+        if (producto?.descuentaPorReceta && producto?.receta?.id) {
+          const receta = await recetaRepo.findOne({ where: { id: producto.receta.id } });
+          if (receta) {
+            await processReceta(receta, item, out);
+            return;
+          }
+        }
+        if (!item.producto.controlaStock) return;
+        // pesoNeto está en gramos; cantidad ya viene en kg neto (las dos coinciden).
+        const netoKg =
+          item.pesoNeto != null ? Number(item.pesoNeto) / 1000 : Number(item.cantidad);
+        if (!netoKg || netoKg <= 0) return;
+        out.push({ productoId: item.producto.id, cantidad: netoKg, ventaItemId: item.id });
       }
 
       async function processElaboradoSinVariacion(item: VentaItem, out: PendingMovement[]): Promise<void> {

@@ -427,6 +427,9 @@ export class GestionarProductoService {
           esIngrediente: producto.esIngrediente,
           stockMinimo: producto.stockMinimo,
           stockMaximo: producto.stockMaximo,
+          taraGramos: (producto as any).taraGramos ?? null,
+          pesoMinimoGramos: (producto as any).pesoMinimoGramos ?? null,
+          descuentaPorReceta: (producto as any).descuentaPorReceta ?? false,
           imageUrl: (producto as any).imageUrl ?? null
         });
 
@@ -483,7 +486,11 @@ export class GestionarProductoService {
         esIngrediente: [false],
         stockMinimo: [null, [Validators.min(0)]],
         stockMaximo: [null, [Validators.min(0)]],
-        imageUrl: [null]
+        imageUrl: [null],
+        // Buffet por peso (solo BUFFET_POR_PESO)
+        taraGramos: [null, [Validators.min(0)]],
+        pesoMinimoGramos: [null, [Validators.min(0)]],
+        descuentaPorReceta: [false]
       }, { validators: this.stockRangeValidator }),
       presentaciones: this.fb.array([]),
       precios: this.fb.group({
@@ -644,6 +651,12 @@ export class GestionarProductoService {
         esComprable: false,
         controlaStock: false,
         esIngrediente: false
+      },
+      [ProductoTipo.BUFFET_POR_PESO]: {
+        esVendible: true,
+        esComprable: false,
+        controlaStock: true,
+        esIngrediente: false
       }
     };
 
@@ -682,6 +695,12 @@ export class GestionarProductoService {
         esIngredienteHabilitado: true
       },
       [ProductoTipo.COMBO]: {
+        esVendibleHabilitado: true,
+        esComprableHabilitado: false,
+        controlaStockHabilitado: true,
+        esIngredienteHabilitado: false
+      },
+      [ProductoTipo.BUFFET_POR_PESO]: {
         esVendibleHabilitado: true,
         esComprableHabilitado: false,
         controlaStockHabilitado: true,
@@ -742,6 +761,9 @@ export class GestionarProductoService {
       esIngrediente: productoData.esIngrediente,
       stockMinimo: productoData.stockMinimo,
       stockMaximo: productoData.stockMaximo,
+      taraGramos: productoData.taraGramos ?? null,
+      pesoMinimoGramos: productoData.pesoMinimoGramos ?? null,
+      descuentaPorReceta: productoData.descuentaPorReceta ?? false,
       subfamiliaId: productoData.subfamiliaId,
       imageUrl: productoData.imageUrl ?? null
     };

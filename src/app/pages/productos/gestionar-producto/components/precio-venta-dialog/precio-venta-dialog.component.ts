@@ -111,7 +111,10 @@ export class PrecioVentaDialogComponent implements OnInit {
       horaFin: [''],
       fechaInicio: [null],
       fechaFin: [null],
-      prioridad: [0]
+      prioridad: [0],
+      // Buffet por peso (opcional): tope "libre" y cobro mínimo
+      precioMinimo: [null],
+      precioMaximo: [null]
     });
 
     this.precioForm.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
@@ -302,6 +305,8 @@ export class PrecioVentaDialogComponent implements OnInit {
       tipoPrecioId: precio.tipoPrecio?.id,
       principal: precio.principal,
       activo: precio.activo,
+      precioMinimo: precio.precioMinimo ?? null,
+      precioMaximo: precio.precioMaximo ?? null,
       diasSemana: dias,
       horaInicio: precio.horaInicio || '',
       horaFin: precio.horaFin || '',
@@ -334,6 +339,14 @@ export class PrecioVentaDialogComponent implements OnInit {
       precioData.fechaInicio = this.toIsoDate(precioData.fechaInicio);
       precioData.fechaFin = this.toIsoDate(precioData.fechaFin);
       precioData.prioridad = precioData.prioridad ?? 0;
+      precioData.precioMinimo =
+        precioData.precioMinimo === '' || precioData.precioMinimo == null
+          ? null
+          : Number(precioData.precioMinimo);
+      precioData.precioMaximo =
+        precioData.precioMaximo === '' || precioData.precioMaximo == null
+          ? null
+          : Number(precioData.precioMaximo);
 
       // ✅ NUEVO: Manejar cualquier tipo de entidad
       if (this.data.entityId) {
@@ -609,7 +622,9 @@ export class PrecioVentaDialogComponent implements OnInit {
       horaFin: '',
       fechaInicio: null,
       fechaFin: null,
-      prioridad: 0
+      prioridad: 0,
+      precioMinimo: null,
+      precioMaximo: null
     });
     this.mostrarProgramacion = false;
 

@@ -44,6 +44,21 @@ export class Producto extends BaseModel {
   @Column({ type: 'decimal', precision: 10, scale: 3, nullable: true, comment: 'Stock máximo para control' })
   stockMaximo?: number;
 
+  // --- Campos de Buffet por peso (solo BUFFET_POR_PESO) ---
+  // Peso del plato/recipiente a descontar del peso bruto (en gramos).
+  @Column({ type: 'decimal', precision: 10, scale: 3, nullable: true, name: 'tara_gramos', comment: 'Peso del plato a descontar (gramos)' })
+  taraGramos?: number;
+
+  // Peso neto mínimo para cobrar (gramos). Si el plato pesa menos, se cobra
+  // igual el precio mínimo (decisión del negocio).
+  @Column({ type: 'decimal', precision: 10, scale: 3, nullable: true, name: 'peso_minimo_gramos', comment: 'Peso mínimo para cobrar (gramos)' })
+  pesoMinimoGramos?: number;
+
+  // Gancho híbrido: si true, la venta descuenta ingredientes prorrateados por
+  // receta en vez del propio producto buffet. Default false (stock por producción).
+  @Column({ type: 'boolean', default: false, name: 'descuenta_por_receta', comment: 'Buffet: descontar stock por receta en vez del propio producto' })
+  descuentaPorReceta!: boolean;
+
   // Indica si el registro está completo (precios, recetas, clasificación final).
   // Productos creados desde importación OCR/IA arrancan en false hasta que el usuario completa.
   @Column({ type: 'boolean', default: true, name: 'registro_completo' })

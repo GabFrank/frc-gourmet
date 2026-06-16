@@ -10,7 +10,7 @@ import {
   resolverPrecioVigente,
   tieneProgramacion,
   PrecioVigenciaLike,
-} from './precio-vigencia.util';
+} from '../../src/app/shared/utils/precio-vigencia.util';
 
 let pass = 0;
 let fail = 0;

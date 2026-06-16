@@ -55,6 +55,8 @@ import { DeliveryDialogComponent, DeliveryDialogData } from 'src/app/shared/comp
 import { Delivery } from 'src/app/database/entities/ventas/delivery.entity';
 import { PersonalizarProductoDialogComponent, PersonalizarProductoDialogResult } from 'src/app/shared/components/personalizar-producto-dialog/personalizar-producto-dialog.component';
 import { SeleccionarVariacionDialogComponent, SeleccionarVariacionDialogData, SeleccionarVariacionDialogResult } from 'src/app/shared/components/seleccionar-variacion-dialog/seleccionar-variacion-dialog.component';
+import { PesajeBuffetDialogComponent, PesajeBuffetDialogResult } from 'src/app/shared/components/pesaje-buffet-dialog/pesaje-buffet-dialog.component';
+import { resolverPrecioVigente } from 'src/app/shared/utils/precio-vigencia.util';
 import { ProductoTipo } from 'src/app/database/entities/productos/producto-tipo.enum';
 import { AbrirComandaDialogComponent, AbrirComandaDialogData, AbrirComandaDialogResult } from 'src/app/shared/components/abrir-comanda-dialog/abrir-comanda-dialog.component';
 import { Comanda, ComandaEstado } from 'src/app/database/entities/ventas/comanda.entity';
@@ -1102,6 +1104,16 @@ export class PdvComponent implements OnInit, OnDestroy {
       cantidad = Math.max(1, Math.round(cantidad));
     }
 
+    // Si es BUFFET_POR_PESO, abrir diálogo de pesaje (cobro por kilo).
+    if (producto.tipo === ProductoTipo.BUFFET_POR_PESO) {
+      try {
+        await this.addBuffetPorPesoItem(producto, presentacion, precioVenta);
+      } catch (error) {
+        console.error('Error en flujo de buffet por peso:', error);
+      }
+      return;
+    }
+
     // Si es ELABORADO_CON_VARIACION, abrir diálogo de selección de variaciones
     if (producto.tipo === ProductoTipo.ELABORADO_CON_VARIACION) {
       try {
@@ -1186,6 +1198,86 @@ export class PdvComponent implements OnInit, OnDestroy {
     } catch (error) {
       console.error('Error al agregar producto:', error);
     }
+  }
+
+  private async addBuffetPorPesoItem(
+    producto: Producto,
+    presentacion: Presentacion,
+    precioVenta?: PrecioVenta,
+  ): Promise<void> {
+    // Resolver el precio vigente (precios programados por día/horario).
+    let precioResuelto: PrecioVenta | undefined = precioVenta;
+    if (presentacion?.id) {
+      try {
+        const precios = await firstValueFrom(
+          this.repositoryService.getPreciosVentaByPresentacion(presentacion.id, true),
+        );
+        const vigente = resolverPrecioVigente(precios || []);
+        if (vigente) {
+          precioResuelto = vigente as PrecioVenta;
+        }
+      } catch (e) {
+        console.warn('No se pudieron cargar precios para resolver vigencia:', e);
+      }
+    }
+    if (!precioResuelto) {
+      console.error('No hay precio de venta para el producto buffet');
+      return;
+    }
+
+    const dialogRef = this.dialog.open(PesajeBuffetDialogComponent, {
+      width: '460px',
+      data: {
+        producto,
+        presentacion,
+        precioVenta: precioResuelto,
+        decimalesMoneda: (precioResuelto.moneda as any)?.decimales ?? 0,
+      },
+      disableClose: true,
+    });
+    const result: PesajeBuffetDialogResult | null = await firstValueFrom(dialogRef.afterClosed());
+    if (!result) return; // Cancelado
+
+    // Asegurar mesa/comanda/venta rápida.
+    if (!this.selectedMesa && !this.ventaRapidaActual && !this.selectedComanda) {
+      await this.showMesaSelectionDialog();
+      if (!this.selectedMesa && !this.selectedComanda) return;
+    }
+
+    const venta = await this.getVenta();
+
+    const newVentaItem = new VentaItem();
+    newVentaItem.presentacion = presentacion;
+    // cantidad = kg neto; precioVentaUnitario = precio/kg efectivo (incluye tope/mínimo)
+    // para que el cálculo universal (unitario * cantidad) dé el total correcto.
+    newVentaItem.cantidad = result.cantidadKg;
+    newVentaItem.precioVentaUnitario = result.precioVentaUnitarioEfectivo;
+    newVentaItem.precioCostoUnitario = await this.findPrecioCosto(producto);
+    newVentaItem.venta = venta;
+    newVentaItem.precioVentaPresentacion = precioResuelto;
+    newVentaItem.producto = producto;
+    newVentaItem.precioAdicionales = 0;
+    // Datos de peso (el peso real se persiste siempre, aunque aplique el tope).
+    newVentaItem.pesoBruto = result.pesoBrutoGramos;
+    newVentaItem.pesoTara = result.pesoTaraGramos;
+    newVentaItem.pesoNeto = result.pesoNetoGramos;
+    newVentaItem.precioPorKg = result.precioPorKg;
+    newVentaItem.aplicoLibre = result.aplicoLibre;
+
+    try {
+      const savedItem = await firstValueFrom(this.repositoryService.createVentaItem(newVentaItem));
+      savedItem.producto = producto;
+      savedItem.presentacion = presentacion;
+      savedItem.precioVentaPresentacion = precioResuelto;
+      savedItem.precioAdicionales = 0;
+      const auxList = this.ventaItemsDataSource.data;
+      auxList.push(savedItem);
+      this.ventaItemsDataSource.data = auxList;
+    } catch (error) {
+      console.error('Error al guardar el item de buffet:', error);
+    }
+
+    this.calculateTotals();
   }
 
   private async openSeleccionarVariacionDialog(producto: Producto, cantidad: number): Promise<SeleccionarVariacionDialogResult | null> {

@@ -439,6 +439,10 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         esIngrediente: productoData.esIngrediente !== undefined ? productoData.esIngrediente : false,
         stockMinimo: productoData.stockMinimo,
         stockMaximo: productoData.stockMaximo,
+        // Buffet por peso
+        taraGramos: productoData.taraGramos ?? null,
+        pesoMinimoGramos: productoData.pesoMinimoGramos ?? null,
+        descuentaPorReceta: productoData.descuentaPorReceta !== undefined ? productoData.descuentaPorReceta : false,
         registroCompleto: productoData.registroCompleto !== undefined ? productoData.registroCompleto : true,
         imageUrl: productoData.imageUrl || undefined,
       });
@@ -483,6 +487,14 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       // Actualizar campos de control de stock
       if (productoData.stockMinimo !== undefined) producto.stockMinimo = productoData.stockMinimo;
       if (productoData.stockMaximo !== undefined) producto.stockMaximo = productoData.stockMaximo;
+
+      // Buffet por peso
+      if (productoData.taraGramos !== undefined)
+        (producto as any).taraGramos = productoData.taraGramos ?? null;
+      if (productoData.pesoMinimoGramos !== undefined)
+        (producto as any).pesoMinimoGramos = productoData.pesoMinimoGramos ?? null;
+      if (productoData.descuentaPorReceta !== undefined)
+        producto.descuentaPorReceta = productoData.descuentaPorReceta;
 
       // IVA con validacion
       if (productoData.iva !== undefined) {
@@ -1696,6 +1708,9 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         fechaInicio: precioVentaData.fechaInicio || null,
         fechaFin: precioVentaData.fechaFin || null,
         prioridad: precioVentaData.prioridad ?? 0,
+        // Buffet por peso: tope/mínimo (cuando aplica)
+        precioMinimo: precioVentaData.precioMinimo ?? null,
+        precioMaximo: precioVentaData.precioMaximo ?? null,
         moneda: moneda,
         tipoPrecio: tipoPrecio,
         ...(presentacion && { presentacion }),
@@ -1746,6 +1761,10 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         (precioVenta as any).fechaFin = precioVentaData.fechaFin || null;
       if (precioVentaData.prioridad !== undefined)
         precioVenta.prioridad = precioVentaData.prioridad ?? 0;
+      if (precioVentaData.precioMinimo !== undefined)
+        (precioVenta as any).precioMinimo = precioVentaData.precioMinimo ?? null;
+      if (precioVentaData.precioMaximo !== undefined)
+        (precioVenta as any).precioMaximo = precioVentaData.precioMaximo ?? null;
 
       // Handle principal flag
       if (precioVentaData.principal !== undefined) {
