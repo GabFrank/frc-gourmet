@@ -449,6 +449,8 @@ interface ElectronAPI {
   createProducto: (productoData: any) => Promise<Producto>;
   updateProducto: (productoId: number, productoData: any) => Promise<any>;
   deleteProducto: (productoId: number) => Promise<any>;
+  crearProduccion: (data: any) => Promise<any>;
+  getProducciones: (filtros?: any) => Promise<any[]>;
   // Presentacion methods
   getPresentaciones: () => Promise<Presentacion[]>;
   getPresentacionesByProducto: (productoId: number, page?: number, pageSize?: number, filtroActivo?: string) => Promise<any>;
@@ -2392,6 +2394,14 @@ export class RepositoryIpcService extends RepositoryService {
 
   deleteProducto(productoId: number): Observable<any> {
     return from(this.api.deleteProducto(productoId));
+  }
+
+  crearProduccion(data: any): Observable<any> {
+    return from(this.api.crearProduccion(data));
+  }
+
+  getProducciones(filtros?: any): Observable<any[]> {
+    return from(this.api.getProducciones(filtros));
   }
 
   // Presentacion methods

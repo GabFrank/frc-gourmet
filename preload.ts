@@ -2196,6 +2196,14 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('delete-producto', productoId);
   },
 
+  // Producción (buffet)
+  crearProduccion: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('crear-produccion', data);
+  },
+  getProducciones: async (filtros: any = {}): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-producciones', filtros);
+  },
+
   // Presentacion methods
   getPresentaciones: async (): Promise<Presentacion[]> => {
     return await ipcRenderer.invoke('get-presentaciones');

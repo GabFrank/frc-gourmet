@@ -993,6 +993,12 @@ export class RepositoryHttpService extends RepositoryService {
   deleteProducto(productoId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.deleteProducto() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  crearProduccion(data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.crearProduccion() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getProducciones(filtros?: any): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getProducciones() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getPresentaciones(): Observable<Presentacion[]> {
     return throwError(() => new Error(`RepositoryHttpService.getPresentaciones() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

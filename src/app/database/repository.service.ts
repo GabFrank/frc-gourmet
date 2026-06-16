@@ -403,6 +403,9 @@ export abstract class RepositoryService {
   abstract createProducto(productoData: Partial<Producto>): Observable<Producto>;
   abstract updateProducto(productoId: number, productoData: Partial<Producto>): Observable<any>;
   abstract deleteProducto(productoId: number): Observable<any>;
+  // Producción de buffet (cargar cubas)
+  abstract crearProduccion(data: any): Observable<any>;
+  abstract getProducciones(filtros?: any): Observable<any[]>;
   abstract getPresentaciones(): Observable<Presentacion[]>;
   abstract getPresentacionesByProducto(productoId: number, page?: number, pageSize?: number, filtroActivo?: string): Observable<any>;
   abstract getPresentacion(presentacionId: number): Observable<any>;

@@ -1,0 +1,26 @@
+.produccion-dialog {
+  min-width: 380px;
+  max-width: 480px;
+
+  .produccion-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .hint {
+    color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+    font-size: 0.9rem;
+    margin: 0 0 12px;
+  }
+
+  .produccion-form {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    .full {
+      width: 100%;
+    }
+  }
+}
