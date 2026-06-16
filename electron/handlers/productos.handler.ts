@@ -1689,6 +1689,13 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         valor: precioVentaData.valor,
         principal: precioVentaData.principal || false,
         activo: precioVentaData.activo !== undefined ? precioVentaData.activo : true,
+        // Programación de vigencia (precios por día/horario)
+        diasSemana: precioVentaData.diasSemana || null,
+        horaInicio: precioVentaData.horaInicio || null,
+        horaFin: precioVentaData.horaFin || null,
+        fechaInicio: precioVentaData.fechaInicio || null,
+        fechaFin: precioVentaData.fechaFin || null,
+        prioridad: precioVentaData.prioridad ?? 0,
         moneda: moneda,
         tipoPrecio: tipoPrecio,
         ...(presentacion && { presentacion }),
@@ -1724,6 +1731,21 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       // Update fields
       if (precioVentaData.valor !== undefined) precioVenta.valor = precioVentaData.valor;
       if (precioVentaData.activo !== undefined) precioVenta.activo = precioVentaData.activo;
+
+      // Programación de vigencia. Se nulea con `null` explícito (no undefined,
+      // que TypeORM ignora) cuando llega cadena/valor vacío.
+      if (precioVentaData.diasSemana !== undefined)
+        (precioVenta as any).diasSemana = precioVentaData.diasSemana || null;
+      if (precioVentaData.horaInicio !== undefined)
+        (precioVenta as any).horaInicio = precioVentaData.horaInicio || null;
+      if (precioVentaData.horaFin !== undefined)
+        (precioVenta as any).horaFin = precioVentaData.horaFin || null;
+      if (precioVentaData.fechaInicio !== undefined)
+        (precioVenta as any).fechaInicio = precioVentaData.fechaInicio || null;
+      if (precioVentaData.fechaFin !== undefined)
+        (precioVenta as any).fechaFin = precioVentaData.fechaFin || null;
+      if (precioVentaData.prioridad !== undefined)
+        precioVenta.prioridad = precioVentaData.prioridad ?? 0;
 
       // Handle principal flag
       if (precioVentaData.principal !== undefined) {

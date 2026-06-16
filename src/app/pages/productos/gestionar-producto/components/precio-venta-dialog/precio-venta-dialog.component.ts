@@ -104,7 +104,14 @@ export class PrecioVentaDialogComponent implements OnInit {
       monedaId: ['', Validators.required],
       tipoPrecioId: ['', Validators.required],
       principal: [false],
-      activo: [true]
+      activo: [true],
+      // Programación de vigencia (precios por día/horario)
+      diasSemana: [[] as number[]],
+      horaInicio: [''],
+      horaFin: [''],
+      fechaInicio: [null],
+      fechaFin: [null],
+      prioridad: [0]
     });
 
     this.precioForm.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
@@ -114,11 +121,36 @@ export class PrecioVentaDialogComponent implements OnInit {
 
   decimalesMoneda = 0;
 
+  // Opciones de días para el selector de vigencia (1=Lun … 7=Dom).
+  diasOpciones: { value: number; label: string }[] = [
+    { value: 1, label: 'LUN' },
+    { value: 2, label: 'MAR' },
+    { value: 3, label: 'MIE' },
+    { value: 4, label: 'JUE' },
+    { value: 5, label: 'VIE' },
+    { value: 6, label: 'SAB' },
+    { value: 7, label: 'DOM' }
+  ];
+
+  // Mostrar/ocultar la sección de programación de vigencia (colapsable).
+  mostrarProgramacion = false;
+
   private recalcDecimalesMoneda(): void {
     const id = this.precioForm?.get('monedaId')?.value;
     const m = this.monedas.find((x: any) => x.id === id);
     const dec = Number(m?.decimales);
     this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
+  }
+
+  // Convierte un Date (o string) a 'YYYY-MM-DD' en zona local, o null.
+  private toIsoDate(value: any): string | null {
+    if (!value) return null;
+    const dte = value instanceof Date ? value : new Date(value);
+    if (isNaN(dte.getTime())) return null;
+    const y = dte.getFullYear();
+    const m = String(dte.getMonth() + 1).padStart(2, '0');
+    const d = String(dte.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
 
   ngOnInit(): void {
@@ -260,13 +292,26 @@ export class PrecioVentaDialogComponent implements OnInit {
   editPrecio(precio: PrecioVenta): void {
     this.isAddingPrecio = false;
     this.editingPrecioId = precio.id!;
+    const dias = (precio.diasSemana || '')
+      .split(',')
+      .map((s: string) => Number(s.trim()))
+      .filter((n: number) => !Number.isNaN(n));
     this.precioForm.patchValue({
       valor: precio.valor,
       monedaId: precio.moneda?.id,
       tipoPrecioId: precio.tipoPrecio?.id,
       principal: precio.principal,
-      activo: precio.activo
+      activo: precio.activo,
+      diasSemana: dias,
+      horaInicio: precio.horaInicio || '',
+      horaFin: precio.horaFin || '',
+      fechaInicio: this.toIsoDate(precio.fechaInicio),
+      fechaFin: this.toIsoDate(precio.fechaFin),
+      prioridad: precio.prioridad ?? 0
     });
+    this.mostrarProgramacion = !!(
+      dias.length || precio.horaInicio || precio.horaFin || precio.fechaInicio || precio.fechaFin
+    );
   }
 
   // Save precio (create or update)
@@ -277,6 +322,18 @@ export class PrecioVentaDialogComponent implements OnInit {
       const precioData = {
         ...this.precioForm.value
       };
+
+      // Vigencia: días (array) → CSV; normalizar vacíos a null; fechas a
+      // 'YYYY-MM-DD' local (evita corrimiento UTC).
+      const diasArr: number[] = Array.isArray(precioData.diasSemana) ? precioData.diasSemana : [];
+      precioData.diasSemana = diasArr.length
+        ? diasArr.slice().sort((a, b) => a - b).join(',')
+        : null;
+      precioData.horaInicio = precioData.horaInicio || null;
+      precioData.horaFin = precioData.horaFin || null;
+      precioData.fechaInicio = this.toIsoDate(precioData.fechaInicio);
+      precioData.fechaFin = this.toIsoDate(precioData.fechaFin);
+      precioData.prioridad = precioData.prioridad ?? 0;
 
       // ✅ NUEVO: Manejar cualquier tipo de entidad
       if (this.data.entityId) {
@@ -546,8 +603,15 @@ export class PrecioVentaDialogComponent implements OnInit {
       monedaId: defaultMonedaId,
       tipoPrecioId: defaultTipoPrecioId,
       principal: false,
-      activo: true
+      activo: true,
+      diasSemana: [],
+      horaInicio: '',
+      horaFin: '',
+      fechaInicio: null,
+      fechaFin: null,
+      prioridad: 0
     });
+    this.mostrarProgramacion = false;
 
     // ✅ NUEVO: Marcar todos los campos como no tocados y no sucios
     this.precioForm.markAsUntouched();

@@ -186,6 +186,7 @@ import { AddDispositivoIdToTrackedEntities1778390000000 } from './migrations/177
 import { AddOnboardingTaskOverrides1778400000000 } from './migrations/1778400000000-AddOnboardingTaskOverrides';
 import { AddEmpresa1778500000000 } from './migrations/1778500000000-AddEmpresa';
 import { AddMustChangePasswordToUsuario1778600000000 } from './migrations/1778600000000-AddMustChangePasswordToUsuario';
+import { AddPrecioVentaVigencia1778700000000 } from './migrations/1778700000000-AddPrecioVentaVigencia';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -467,6 +468,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddOnboardingTaskOverrides1778400000000,
     AddEmpresa1778500000000,
     AddMustChangePasswordToUsuario1778600000000,
+    AddPrecioVentaVigencia1778700000000,
   ];
 }
 
