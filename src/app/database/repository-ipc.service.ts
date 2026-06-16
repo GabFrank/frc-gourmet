@@ -267,6 +267,7 @@ interface ElectronAPI {
   // Venta operations
   getVentas: () => Promise<Venta[]>;
   getVentasByDateRange: (desde: string, hasta: string, filtros?: any) => Promise<{ data: Venta[], total: number }>;
+  getBuffetMetricas: (filtros?: any) => Promise<any>;
   getVentasByEstado: (estado: VentaEstado) => Promise<Venta[]>;
   getVentasByCaja: (cajaId: number) => Promise<Venta[]>;
   getResumenCaja: (cajaId: number) => Promise<any>;
@@ -1822,6 +1823,10 @@ export class RepositoryIpcService extends RepositoryService {
 
   getVentasByDateRange(desde: string, hasta: string, filtros?: any): Observable<{ data: Venta[], total: number }> {
     return from(this.api.getVentasByDateRange(desde, hasta, filtros));
+  }
+
+  getBuffetMetricas(filtros?: any): Observable<any> {
+    return from(this.api.getBuffetMetricas(filtros));
   }
 
   getVentasByEstado(estado: VentaEstado): Observable<Venta[]> {

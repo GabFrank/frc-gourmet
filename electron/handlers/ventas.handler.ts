@@ -39,6 +39,8 @@ import { RecetaPresentacion } from '../../src/app/database/entities/productos/re
 import { StockMovimiento, StockMovimientoTipo, StockMovimientoTipoReferencia } from '../../src/app/database/entities/productos/stock-movimiento.entity';
 import { Combo } from '../../src/app/database/entities/productos/combo.entity';
 import { ComboProducto } from '../../src/app/database/entities/productos/combo-producto.entity';
+import { Produccion } from '../../src/app/database/entities/productos/produccion.entity';
+import { resumirMetricasBuffet, BuffetItemMetrica } from '../../src/app/shared/utils/buffet-metricas.util';
 import { Adicional } from '../../src/app/database/entities/productos/adicional.entity';
 import { TipoModificacionIngrediente } from '../../src/app/database/entities/ventas/venta-item-ingrediente-modificacion.entity';
 import { EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
@@ -48,6 +50,48 @@ import { dbQuery } from '../utils/db-query';
 export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Remove this line - get the current user in each handler instead
   // const currentUser = getCurrentUser(); // Get user for tracking
+
+  // --- Métricas de buffet por peso (dashboard) ---
+  ipcMain.handle('get-buffet-metricas', async (_event: any, filtros: any = {}) => {
+    try {
+      const desde = filtros?.desde ? new Date(filtros.desde) : null;
+      const hasta = filtros?.hasta ? new Date(filtros.hasta) : null;
+
+      const viRepo = dataSource.getRepository(VentaItem);
+      const qb = viRepo.createQueryBuilder('vi')
+        .innerJoinAndSelect('vi.venta', 'venta')
+        .innerJoinAndSelect('vi.producto', 'producto')
+        .where('producto.tipo = :tipo', { tipo: ProductoTipo.BUFFET_POR_PESO })
+        .andWhere('vi.estado = :estado', { estado: 'ACTIVO' })
+        .andWhere('venta.estado = :vestado', { vestado: VentaEstado.CONCLUIDA });
+      if (desde) qb.andWhere('venta.fechaCierre >= :desde', { desde });
+      if (hasta) qb.andWhere('venta.fechaCierre <= :hasta', { hasta });
+      const items = await qb.getMany();
+
+      const metricaItems: BuffetItemMetrica[] = items.map((it: any) => ({
+        pesoNetoGramos: Number(it.pesoNeto) || 0,
+        total: (Number(it.precioVentaUnitario) || 0) * (Number(it.cantidad) || 0),
+        costo: (Number(it.precioCostoUnitario) || 0) * (Number(it.cantidad) || 0),
+        aplicoLibre: !!it.aplicoLibre,
+        ventaId: it.venta?.id,
+      }));
+
+      const prodRepo = dataSource.getRepository(Produccion);
+      const pqb = prodRepo.createQueryBuilder('p').where('p.activo = :a', { a: true });
+      if (desde) pqb.andWhere('p.fecha >= :desde', { desde });
+      if (hasta) pqb.andWhere('p.fecha <= :hasta', { hasta });
+      const producciones = await pqb.getMany();
+      const kgProducidos = producciones.reduce(
+        (s: number, p: any) => s + (Number(p.cantidadProducida) || 0),
+        0,
+      );
+
+      return resumirMetricasBuffet(metricaItems, kgProducidos);
+    } catch (error) {
+      console.error('Error get-buffet-metricas:', error);
+      throw error;
+    }
+  });
 
   // --- PrecioDelivery Handlers ---
   ipcMain.handle('getPreciosDelivery', async () => {

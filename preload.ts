@@ -1718,6 +1718,9 @@ contextBridge.exposeInMainWorld('api', {
   getVentas: async (): Promise<Venta[]> => {
     return await ipcRenderer.invoke('getVentas');
   },
+  getBuffetMetricas: async (filtros?: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-buffet-metricas', filtros);
+  },
   getVentasByDateRange: async (desde: string, hasta: string, filtros?: any): Promise<Venta[]> => {
     return await ipcRenderer.invoke('getVentasByDateRange', desde, hasta, filtros);
   },

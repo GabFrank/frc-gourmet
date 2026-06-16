@@ -578,6 +578,10 @@ export class RepositoryHttpService extends RepositoryService {
   getVentasByDateRange(desde: string, hasta: string, filtros?: any): Observable<{ data: Venta[], total: number }> {
     return throwError(() => new Error(`RepositoryHttpService.getVentasByDateRange() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+
+  getBuffetMetricas(filtros?: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getBuffetMetricas() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getVentasByEstado(estado: VentaEstado): Observable<Venta[]> {
     return throwError(() => new Error(`RepositoryHttpService.getVentasByEstado() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

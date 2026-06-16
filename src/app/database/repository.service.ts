@@ -254,6 +254,7 @@ export abstract class RepositoryService {
   abstract cerrarVentasAbiertasMesa(mesaId: number, estado: string): Observable<number>;
   abstract getVentas(): Observable<Venta[]>;
   abstract getVentasByDateRange(desde: string, hasta: string, filtros?: any): Observable<{ data: Venta[], total: number }>;
+  abstract getBuffetMetricas(filtros?: any): Observable<any>;
   abstract getVentasByEstado(estado: VentaEstado): Observable<Venta[]>;
   abstract getVentasByCaja(cajaId: number): Observable<Venta[]>;
   abstract getResumenCaja(cajaId: number): Observable<any>;
