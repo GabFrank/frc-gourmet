@@ -157,12 +157,29 @@ Dashboard con el padrón unificado (`<app-dash-*>`):
 
 | Fase | Contenido | Estado |
 |---|---|---|
-| 0 | Precios programados por día/horario en `PrecioVenta` | — |
-| 1 | Tipo buffet + peso en `VentaItem` + pesaje manual + tope/mínimo/tara + stock | — |
-| 2 | Parseo EAN-13 de balanza en el PdV | — |
-| 3 | UI de producción de buffet (reusa entidades) + costeo | — |
-| 4 | Dashboard de métricas del buffet | — |
-| 5 | (Futuro) integración serial + modo receta proporcional | — |
+| 0 | Precios programados por día/horario en `PrecioVenta` | ✅ Implementada |
+| 1 | Tipo buffet + peso en `VentaItem` + pesaje manual + tope/mínimo/tara + stock | ✅ Implementada |
+| 2 | Parseo EAN-13 de balanza en el PdV | ✅ Implementada |
+| 3 | UI de producción de buffet (reusa entidades) + costeo | ✅ Implementada |
+| 4 | Dashboard de métricas del buffet | ✅ Implementada |
+| 5 | (Futuro) integración serial + modo receta proporcional | ⏳ Pendiente |
+
+> Las utils puras viven en `src/app/shared/utils/` (`precio-vigencia`,
+> `buffet-peso`, `balanza-ean13`, `produccion-buffet`, `buffet-metricas`) para
+> ser reutilizadas por Angular y Electron. Sus tests autónomos están en
+> `electron/utils/*.util.spec.ts` (se corren con ts-node, fuera de karma).
+
+### Fase 5 — Pendiente (futuro)
+
+- **Integración serial directa de balanza** (Toledo Prix `PRT1` / Filizola /
+  Urano): driver por modelo que lee el peso en vivo por serial/USB y lo inyecta
+  en el `pesaje-buffet-dialog`. Hoy se cubre con ingreso manual + etiqueta EAN-13.
+- **Modo receta proporcional** (`Producto.descuentaPorReceta = true`): que la
+  venta descuente ingredientes prorrateados por receta en vez del propio
+  producto buffet. El gancho ya existe en `procesarStockVenta`; falta el escalado
+  fino por `pesoNeto` relativo al rendimiento de la receta.
+- **UI de configuración de balanza** en el diálogo de PdvConfig (hoy los campos
+  `balanza_*` usan defaults sensatos: prefijo `2`, modo `PESO`, factor `1`).
 
 Cada fase: cambio de entity → **migración aditiva portable** registrada en
 `database.config.ts:getMigrations()` → handler (con `ensurePermission`) →
@@ -173,11 +190,25 @@ Cada fase: cambio de entity → **migración aditiva portable** registrada en
 
 ## 9. Verificación
 
-- **Autónoma** (en esta branch): `npm run build` (compilación Angular + Electron
-  tsc) y tests de lógica pura en `electron/utils/*.spec` corridos con ts-node.
+- **Autónoma (hecha)**: `npm run build` (Angular + Electron tsc) pasa sin
+  errores tras cada fase. Tests de lógica pura (74 en total) en verde:
+  - `precio-vigencia.util` — 19
+  - `buffet-peso.util` — 20
+  - `balanza-ean13.util` — 14
+  - `produccion-buffet.util` — 6
+  - `buffet-metricas.util` — 15
+
+  Correr todos:
+  ```bash
+  OPTS='{"module":"commonjs","moduleResolution":"node","target":"es2020","esModuleInterop":true,"ignoreDeprecations":"6.0"}'
+  for f in precio-vigencia buffet-peso balanza-ean13 produccion-buffet buffet-metricas; do
+    TS_NODE_COMPILER_OPTIONS="$OPTS" npx ts-node --transpile-only --skip-project electron/utils/$f.util.spec.ts
+  done
+  ```
 - **Manual (pendiente, en PC)**: alta de producto buffet, pesaje en PdV, tope
-  libre, cobro mínimo, descuento de stock, producción, dashboards. Verificar en
-  dark y light theme.
+  libre, cobro mínimo, descuento de stock, producción, dashboard, precios
+  programados. Verificar en dark y light theme. Las migraciones corren solas al
+  abrir la app (con backup previo).
 
 ---
 
