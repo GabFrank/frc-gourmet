@@ -16,6 +16,8 @@ export interface PesajeBuffetDialogData {
   presentacion: Presentacion;
   precioVenta: PrecioVenta; // valor = precio por kg; precioMinimo/precioMaximo opcionales
   decimalesMoneda?: number;
+  // Peso bruto prellenado (ej: leído de etiqueta EAN-13 de balanza).
+  pesoInicialGramos?: number;
 }
 
 export interface PesajeBuffetDialogResult {
@@ -75,6 +77,9 @@ export class PesajeBuffetDialogComponent implements OnInit {
     this.precioMinimo = data.precioVenta?.precioMinimo ?? null;
     this.precioMaximo = data.precioVenta?.precioMaximo ?? null;
     this.decimalesMoneda = data.decimalesMoneda ?? 0;
+    if (data.pesoInicialGramos && data.pesoInicialGramos > 0) {
+      this.pesoBruto = data.pesoInicialGramos;
+    }
   }
 
   ngOnInit(): void {

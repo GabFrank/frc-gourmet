@@ -57,6 +57,7 @@ import { PersonalizarProductoDialogComponent, PersonalizarProductoDialogResult }
 import { SeleccionarVariacionDialogComponent, SeleccionarVariacionDialogData, SeleccionarVariacionDialogResult } from 'src/app/shared/components/seleccionar-variacion-dialog/seleccionar-variacion-dialog.component';
 import { PesajeBuffetDialogComponent, PesajeBuffetDialogResult } from 'src/app/shared/components/pesaje-buffet-dialog/pesaje-buffet-dialog.component';
 import { resolverPrecioVigente } from 'src/app/shared/utils/precio-vigencia.util';
+import { parseEtiquetaBalanza } from 'src/app/shared/utils/balanza-ean13.util';
 import { ProductoTipo } from 'src/app/database/entities/productos/producto-tipo.enum';
 import { AbrirComandaDialogComponent, AbrirComandaDialogData, AbrirComandaDialogResult } from 'src/app/shared/components/abrir-comanda-dialog/abrir-comanda-dialog.component';
 import { Comanda, ComandaEstado } from 'src/app/database/entities/ventas/comanda.entity';
@@ -1204,6 +1205,7 @@ export class PdvComponent implements OnInit, OnDestroy {
     producto: Producto,
     presentacion: Presentacion,
     precioVenta?: PrecioVenta,
+    pesoInicialGramos?: number,
   ): Promise<void> {
     // Resolver el precio vigente (precios programados por día/horario).
     let precioResuelto: PrecioVenta | undefined = precioVenta;
@@ -1232,6 +1234,7 @@ export class PdvComponent implements OnInit, OnDestroy {
         presentacion,
         precioVenta: precioResuelto,
         decimalesMoneda: (precioResuelto.moneda as any)?.decimales ?? 0,
+        pesoInicialGramos,
       },
       disableClose: true,
     });
@@ -2341,10 +2344,42 @@ export class PdvComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Detecta y procesa una etiqueta EAN-13 de balanza (buffet por peso).
+   * @returns true si la consumió (no abrir el buscador normal).
+   */
+  private async tryHandleBalanzaScan(searchTerm: string): Promise<boolean> {
+    const parsed = parseEtiquetaBalanza(searchTerm, {
+      prefijo: this.pdvConfig?.balanzaPrefijo || '2',
+      modo: (this.pdvConfig?.balanzaModo as 'PESO' | 'PRECIO') || 'PESO',
+      factorPeso: Number(this.pdvConfig?.balanzaFactorPeso) || 1,
+    });
+    if (!parsed) return false;
+
+    let res: any = null;
+    try {
+      res = await firstValueFrom(this.repositoryService.searchProductosByCodigo(parsed.codigoProducto));
+    } catch (e) {
+      console.warn('Error resolviendo etiqueta de balanza:', e);
+    }
+    if (!res?.producto || res.producto.tipo !== ProductoTipo.BUFFET_POR_PESO) {
+      // No es un producto de buffet → dejar que el flujo normal lo maneje.
+      return false;
+    }
+    this.searchForm.get('searchTerm')?.setValue('');
+    await this.addBuffetPorPesoItem(res.producto, res.presentacion, undefined, parsed.pesoGramos);
+    return true;
+  }
+
   // Search products using dialog
-  openProductSearchDialog(): void {
+  async openProductSearchDialog(): Promise<void> {
     console.log('opening product search dialog');
     const searchTerm = this.searchForm.get('searchTerm')?.value?.trim() || '';
+
+    // Etiqueta de balanza (buffet por peso): resolver sin abrir el buscador.
+    if (searchTerm && (await this.tryHandleBalanzaScan(searchTerm))) {
+      return;
+    }
 
     const dialogRef = this.dialog.open(ProductoSearchDialogComponent, {
       width: '70%',

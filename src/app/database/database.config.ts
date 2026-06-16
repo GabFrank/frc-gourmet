@@ -188,6 +188,7 @@ import { AddEmpresa1778500000000 } from './migrations/1778500000000-AddEmpresa';
 import { AddMustChangePasswordToUsuario1778600000000 } from './migrations/1778600000000-AddMustChangePasswordToUsuario';
 import { AddPrecioVentaVigencia1778700000000 } from './migrations/1778700000000-AddPrecioVentaVigencia';
 import { AddBuffetPorPeso1778800000000 } from './migrations/1778800000000-AddBuffetPorPeso';
+import { AddBalanzaConfigToPdvConfig1778900000000 } from './migrations/1778900000000-AddBalanzaConfigToPdvConfig';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -471,6 +472,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddMustChangePasswordToUsuario1778600000000,
     AddPrecioVentaVigencia1778700000000,
     AddBuffetPorPeso1778800000000,
+    AddBalanzaConfigToPdvConfig1778900000000,
   ];
 }
 
