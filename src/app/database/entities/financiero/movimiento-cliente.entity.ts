@@ -34,6 +34,20 @@ export class MovimientoCliente extends BaseModel {
   @Column({ name: 'caja_mayor_movimiento_id', type: 'int', nullable: true })
   cajaMayorMovimientoId?: number;
 
+  // Si el cobro se acreditó a una cuenta bancaria (en vez de Caja Mayor), se
+  // guarda aquí para revertir el saldo al anular. Cuando está seteada, no hay
+  // cajaMayorMovimientoId asociado al cobro.
+  @Column({ name: 'cuenta_bancaria_id', type: 'int', nullable: true })
+  cuentaBancariaId?: number;
+
+  // Monto efectivamente acreditado en la moneda de la cuenta (cuando difiere de
+  // la moneda del cobro). La anulación revierte ESTE monto.
+  @Column({ name: 'monto_cuenta_bancaria', type: 'decimal', precision: 18, scale: 2, nullable: true })
+  montoCuentaBancaria?: number;
+
+  @Column({ name: 'cotizacion', type: 'decimal', precision: 18, scale: 6, nullable: true })
+  cotizacion?: number;
+
   @Column({ type: 'text', nullable: true })
   observacion?: string;
 

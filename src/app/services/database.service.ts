@@ -26,7 +26,17 @@ declare global {
       deletePrinter(printerId: number): Promise<{ success: boolean }>;
       printReceipt(orderId: number, printerId: number): Promise<{ success: boolean }>;
       printTestPage(printerId: number): Promise<{ success: boolean }>;
-      
+
+      /** IPC genérico — usado por DocumentoService para handlers export/print/adjunto. */
+      callIpc(channel: string, ...args: any[]): Promise<any>;
+
+      /**
+       * Eventos de impresora emitidos por backgrounds del backend. El handler
+       * recibe `{level, handler, entityRef?, printed?, errors?, message?}`.
+       * Devuelve unsubscribe.
+       */
+      onPrinterEvent(handler: (payload: any) => void): () => void;
+
       on(channel: string, callback: (data: any) => void): void;
     };
   }

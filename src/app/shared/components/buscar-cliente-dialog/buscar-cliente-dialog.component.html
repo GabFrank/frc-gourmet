@@ -7,7 +7,7 @@
   <div style="display: flex; gap: 8px; margin-bottom: 12px">
     <mat-form-field appearance="outline" style="flex: 1">
       <mat-label>BUSCAR POR NOMBRE, RUC O TELÉFONO</mat-label>
-      <input matInput [(ngModel)]="searchTerm" placeholder="Escriba para buscar..." />
+      <input matInput [formControl]="searchControl" placeholder="Escriba para buscar..." />
     </mat-form-field>
     <button mat-raised-button color="primary" (click)="filtrar()" style="height: 56px">
       <mat-icon>search</mat-icon>

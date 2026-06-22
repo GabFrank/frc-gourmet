@@ -139,6 +139,27 @@
           </mat-form-field>
         </div>
 
+        <!-- Impresión de comanda -->
+        <div class="toggles-container">
+          <mat-slide-toggle
+            formControlName="requiereComanda"
+            color="primary"
+            class="toggle-item">
+            Requiere comanda
+            <mat-icon class="stock-info-icon" matTooltip="Si está apagado, el producto NO genera ticket de comanda al ticketear en PdV (ej: servicio mesa, propina, descuento)." matTooltipPosition="above">info_outline</mat-icon>
+          </mat-slide-toggle>
+        </div>
+
+        <div class="form-row" *ngIf="informacionPrincipalForm.get('requiereComanda')?.value">
+          <mat-form-field appearance="outline" class="form-field" style="flex: 1;">
+            <mat-label>Sectores donde se imprime</mat-label>
+            <mat-select formControlName="sectorIds" multiple>
+              <mat-option *ngFor="let s of sectores" [value]="s.id">{{ s.nombre }}</mat-option>
+            </mat-select>
+            <mat-hint>Se imprime la comanda en TODAS las impresoras configuradas de cada sector elegido</mat-hint>
+          </mat-form-field>
+        </div>
+
         <!-- Imagen principal del producto -->
         <div class="form-row imagen-row">
           <div class="imagen-section">

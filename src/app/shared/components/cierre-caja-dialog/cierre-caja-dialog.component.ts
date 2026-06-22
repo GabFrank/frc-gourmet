@@ -11,6 +11,7 @@ import { MatTableModule } from '@angular/material/table';
 import { firstValueFrom } from 'rxjs';
 
 import { RepositoryService } from '../../../database/repository.service';
+import { CurrencyInputDirective } from '../../directives/currency-input.directive';
 import { Caja, CajaEstado } from '../../../database/entities/financiero/caja.entity';
 import { Moneda } from '../../../database/entities/financiero/moneda.entity';
 import { Venta, VentaEstado } from '../../../database/entities/ventas/venta.entity';
@@ -44,6 +45,7 @@ interface MonedaConteo {
     MatInputModule,
     MatDividerModule,
     MatTableModule,
+    CurrencyInputDirective,
   ],
 })
 export class CierreCajaDialogComponent implements OnInit {

@@ -1,0 +1,107 @@
+:host {
+  display: block;
+  min-width: 900px;
+}
+
+.header {
+  h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+  }
+  .hint {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-secondary, rgba(0,0,0,0.6));
+    margin-top: 4px;
+    margin-bottom: 12px;
+  }
+}
+
+mat-dialog-content {
+  max-height: 75vh;
+}
+
+.form-card {
+  margin-bottom: 16px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1.2fr 1.2fr 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+
+  mat-form-field {
+    width: 100%;
+  }
+
+  .field-activo {
+    align-self: center;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+
+    button mat-icon {
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+
+    mat-spinner {
+      margin-right: 8px;
+    }
+  }
+}
+
+.table-wrapper {
+  position: relative;
+  min-height: 100px;
+
+  .loading-spinner {
+    position: absolute;
+    top: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
+
+table.full-width {
+  width: 100%;
+}
+
+.inline-icon {
+  vertical-align: middle;
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  margin-right: 4px;
+}
+
+.obs-cell {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-secondary, rgba(0,0,0,0.6));
+
+  mat-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    opacity: 0.5;
+  }
+
+  .empty-hint {
+    font-size: 0.85rem;
+    margin-top: 4px;
+  }
+}

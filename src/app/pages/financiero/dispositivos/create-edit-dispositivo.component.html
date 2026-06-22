@@ -34,6 +34,16 @@
         </mat-error>
       </mat-form-field>
 
+      <!-- Impresora local para tickets de venta y pre-cuentas -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Impresora para tickets (opcional)</mat-label>
+        <mat-select formControlName="printerTicketId">
+          <mat-option [value]="null">— Sin impresora local (usar fallback global) —</mat-option>
+          <mat-option *ngFor="let p of printers" [value]="p.id">{{ p.name }}</mat-option>
+        </mat-select>
+        <mat-hint>Si se elige, los tickets de venta y pre-cuentas se imprimen en esta impresora local en lugar del fallback global por rol.</mat-hint>
+      </mat-form-field>
+
       <div class="checkbox-section">
         <h3>Características del Dispositivo</h3>
 

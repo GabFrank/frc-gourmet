@@ -1,5 +1,6 @@
-import { Column, Entity, OneToMany } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { BaseModel } from '../base.entity';
+import { Printer } from '../printer.entity';
 
 /**
  * Entity representing a hardware device
@@ -26,6 +27,16 @@ export class Dispositivo extends BaseModel {
 
   @Column({ default: true })
   activo!: boolean;
+
+  /**
+   * Impresora local del dispositivo para tickets de venta y pre-cuentas.
+   * Si está seteada, `getPrinterByRol(TICKET_VENTA, deviceId)` la prioriza
+   * sobre el fallback global (M2M sectores_impresoras + Printer.rol).
+   * Para multi-caja real donde cada PdV imprime en su propia térmica.
+   */
+  @ManyToOne(() => Printer, { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'printer_ticket_id' })
+  printerTicket?: Printer;
 
   @OneToMany('Caja', 'dispositivo')
   cajas!: any[];

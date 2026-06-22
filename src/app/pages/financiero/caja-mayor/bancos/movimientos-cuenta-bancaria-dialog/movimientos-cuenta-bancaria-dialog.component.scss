@@ -4,6 +4,7 @@
 }
 
 .dialog-container {
+  box-sizing: border-box;
   padding: 12px 4px;
   min-width: 90vw;
   max-width: 1300px;
@@ -14,6 +15,7 @@
     max-width: none;
     width: 100%;
     padding: 16px 20px;
+    overflow-x: hidden;
   }
 
   .header {

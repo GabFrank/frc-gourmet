@@ -36,11 +36,12 @@
               <mat-form-field appearance="outline" class="half-width">
                 <mat-label>Precio Base</mat-label>
                 <input matInput
-                       type="number"
+                       type="text"
+                       inputmode="decimal"
                        formControlName="precioBase"
-                       placeholder="0.00"
-                       step="0.01"
-                       min="0"
+                       placeholder="0"
+                       appCurrencyInput
+                       [decimals]="0"
                        required>
                 <mat-error *ngIf="adicionalForm.get('precioBase')?.hasError('required')">
                   El precio es requerido
@@ -131,7 +132,7 @@
             <mat-form-field appearance="outline" class="search-field">
               <mat-label>Buscar adicionales</mat-label>
               <input matInput
-                     [(ngModel)]="searchTerm"
+                     [formControl]="searchControl"
                      (keyup.enter)="applyFilter()"
                      placeholder="Buscar por nombre...">
               <mat-icon matSuffix>search</mat-icon>
@@ -139,7 +140,7 @@
 
             <mat-form-field appearance="outline" class="filter-field">
               <mat-label>Estado</mat-label>
-              <mat-select [(ngModel)]="activeFilter" (selectionChange)="onFilterChange()">
+              <mat-select [formControl]="activeFilterControl" (selectionChange)="onFilterChange()">
                 <mat-option value="all">Todos</mat-option>
                 <mat-option value="active">Activos</mat-option>
                 <mat-option value="inactive">Inactivos</mat-option>

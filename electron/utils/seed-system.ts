@@ -492,7 +492,15 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       // Sistema (no sensible)
       'EMPRESA_CONFIGURAR',
       'IMPRESORAS_GESTIONAR',
+      'SECTORES_IMPRESORAS_CONFIGURAR',
       'DISPOSITIVOS_GESTIONAR',
+      // Documentos (PDFs firmables, tickets térmicos, adjuntos)
+      'DOCUMENTOS_GENERAR_PDF',
+      'DOCUMENTOS_IMPRIMIR_TICKET',
+      'DOCUMENTOS_REIMPRIMIR_COMANDA',
+      'DOCUMENTOS_REIMPRIMIR_TICKET_VENTA',
+      'DOCUMENTOS_ADJUNTAR',
+      'DOCUMENTOS_ADJUNTOS_ELIMINAR',
       // NOTA: NO se asigna USUARIOS_GESTIONAR, SISTEMA_BD_CONFIGURAR,
       // SISTEMA_MODO_CONFIGURAR, SISTEMA_BACKUP, SISTEMA_PERMISO_GESTIONAR,
       // SISTEMA_ROL_GESTIONAR. Esos quedan exclusivos del ADMINISTRADOR.
@@ -508,6 +516,10 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       'FINANCIERO_CAJA_VER',
       'CPC_COBRAR',
       'RRHH_ASISTENCIA_REGISTRAR',
+      // Tickets de venta y comanda — el cajero imprime y reimprime su trabajo
+      'DOCUMENTOS_IMPRIMIR_TICKET',
+      'DOCUMENTOS_REIMPRIMIR_COMANDA',
+      'DOCUMENTOS_REIMPRIMIR_TICKET_VENTA',
     ],
   },
   {
@@ -516,6 +528,9 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       'HOME_DASHBOARD_VER',
       'VENTAS_PDV', // atender mesas y tomar comandas
       'RRHH_ASISTENCIA_REGISTRAR',
+      // El mozo dispara y reimprime comandas al agregar items en mesas
+      'DOCUMENTOS_IMPRIMIR_TICKET',
+      'DOCUMENTOS_REIMPRIMIR_COMANDA',
     ],
   },
 ];

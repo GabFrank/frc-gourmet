@@ -51,4 +51,20 @@ export class PdvConfig extends BaseModel {
 
   @Column({ name: 'pizza_estrategia_precio', type: 'varchar', length: 50, default: 'MAYOR_PRECIO' })
   pizzaEstrategiaPrecio!: string; // MAYOR_PRECIO | PROMEDIO
-} 
+
+  // ─── Impresión automática ───────────────────────────────────────────────
+  // Flags que controlan los hooks de auto-impresión en `ventas.handler.ts`.
+  // Si false, el cajero/mozo dispara la impresión manualmente desde la UI.
+
+  /** Al agregar items a la comanda → imprimir automáticamente a impresoras del sector. */
+  @Column({ name: 'auto_imprimir_comanda', default: true })
+  autoImprimirComanda!: boolean;
+
+  /** Al cobrar venta (CONCLUIDA) → imprimir ticket de venta automáticamente. */
+  @Column({ name: 'auto_imprimir_ticket_venta', default: true })
+  autoImprimirTicketVenta!: boolean;
+
+  /** Botón "Pre-cuenta" del PdV imprime sin confirmación intermedia. */
+  @Column({ name: 'imprimir_precuenta_al_solicitar', default: true })
+  imprimirPrecuentaAlSolicitar!: boolean;
+}

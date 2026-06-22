@@ -37,6 +37,8 @@ const SEED_CONFIG: SeedItem[] = [
   { clave: 'PENALIZACION_MONTO_TARDANZA', valor: '0', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Monto fijo (PYG) de la penalizacion automatica por tardanza. Si es 0, se genera la penalizacion sin descuento monetario' },
   { clave: 'PENALIZACION_MONTO_POR_MINUTO_TARDANZA', valor: '0', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Monto (PYG) por minuto de tardanza, sumado al fijo. Si es 0, no se aplica' },
   { clave: 'DIA_CIERRE_MES', valor: '30', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Dia del mes en que se cierra el periodo de liquidacion' },
+  // Productos / recetas
+  { clave: 'PORCENTAJE_COSTO_SUGERIDO', valor: '35', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Porcentaje del precio final que representa el costo, para sugerir precio en recetas. Ej: 35 => el costo es 35% del precio, precio sugerido = costo / 0.35' },
 ];
 
 export async function seedConfiguracionRrhh(dataSource: DataSource) {

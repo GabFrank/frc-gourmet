@@ -1,6 +1,6 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -28,7 +28,6 @@ const REDONDEO_BASE = 500;
   standalone: true,
   imports: [
     CommonModule,
-    FormsModule,
     ReactiveFormsModule,
     MatDialogModule,
     MatButtonModule,
@@ -47,12 +46,14 @@ export class EditVentaItemDialogComponent implements OnInit {
   redondeoArriba = 0;
   redondeoAbajo = 0;
   redondeoSeleccionado: 'arriba' | 'abajo' | 'exacto' = 'exacto';
+  // Control reactivo; `modoDescuento` se mantiene sincronizado para los *ngIf del template
+  modoDescuentoControl = new FormControl<'monto' | 'porcentaje'>('monto', { nonNullable: true });
   modoDescuento: 'monto' | 'porcentaje' = 'monto';
   porcentajesRapidos = [5, 10, 15, 20, 25, 50];
 
   observaciones: Observacion[] = [];
   selectedObservacionIds: Set<number> = new Set();
-  observacionLibre = '';
+  observacionLibreControl = new FormControl('', { nonNullable: true });
 
   constructor(
     public dialogRef: MatDialogRef<EditVentaItemDialogComponent>,
@@ -77,6 +78,10 @@ export class EditVentaItemDialogComponent implements OnInit {
       }
     }
 
+    this.modoDescuentoControl.valueChanges.subscribe(value => {
+      this.modoDescuento = value;
+    });
+
     this.recalcular();
     this.form.valueChanges.subscribe(() => this.recalcular());
 
@@ -95,7 +100,7 @@ export class EditVentaItemDialogComponent implements OnInit {
         this.selectedObservacionIds.add(a.observacion.id);
       }
       if (a.observacionLibre) {
-        this.observacionLibre = a.observacionLibre;
+        this.observacionLibreControl.setValue(a.observacionLibre);
       }
     });
   }
@@ -178,7 +183,7 @@ export class EditVentaItemDialogComponent implements OnInit {
         cantidad: this.form.get('cantidad')?.value,
         descuentoUnitario: this.form.get('descuentoUnitario')?.value,
         observacionIds: Array.from(this.selectedObservacionIds),
-        observacionLibre: this.observacionLibre.toUpperCase() || null,
+        observacionLibre: this.observacionLibreControl.value.toUpperCase() || null,
       });
     }
   }

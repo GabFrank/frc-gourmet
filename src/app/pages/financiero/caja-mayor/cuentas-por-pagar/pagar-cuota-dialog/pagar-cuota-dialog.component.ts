@@ -14,6 +14,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
+import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
 
 interface PagarCuotaDialogData {
   cuotaTipo: 'COMPRA' | 'CPP';
@@ -161,7 +162,27 @@ export class PagarCuotaDialogComponent implements OnInit {
       this.cuentasBancarias = (cuentas || []).filter((c: any) => c.activo !== false);
       this.monedas = monedas || [];
       this.formasPago = (formas || []).filter((f: any) => f.movimentaCaja);
+      this.aplicarPreselecciones();
+      this.recalcDecimalesMoneda();
     } catch (e) { console.error(e); }
+  }
+
+  /** Pre-selecciona única caja abierta, moneda de la cuota (sino principal/única) y forma de pago efectivo/principal/única. */
+  private aplicarPreselecciones(): void {
+    if (!this.form.get('cajaMayorId')?.value && this.cajasMayor.length === 1) {
+      this.form.patchValue({ cajaMayorId: this.cajasMayor[0].id });
+    }
+    if (!this.form.get('monedaId')?.value) {
+      const monedaCuotaId = this.cuota?.cuentaPorPagar?.moneda?.id ?? this.cuota?.compra?.moneda?.id;
+      const target = (monedaCuotaId && this.monedas.find((m: any) => m.id === monedaCuotaId))
+        || preselectSingleOrPrincipal(this.monedas);
+      if (target) this.form.patchValue({ monedaId: target.id });
+    }
+    if (!this.form.get('formaPagoId')?.value) {
+      const efectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
+      const fp = preselectSingleOrPrincipal(efectivo) || preselectSingleOrPrincipal(this.formasPago);
+      if (fp) this.form.patchValue({ formaPagoId: fp.id });
+    }
   }
 
   async onSubmit(): Promise<void> {

@@ -1,5 +1,5 @@
 import { Component, Inject, OnInit } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialog } from '@angular/material/dialog';
 import { RepositoryService } from '../../../../database/repository.service';
 import { Adicional } from '../../../../database/entities/productos/adicional.entity';
@@ -40,8 +40,8 @@ export class CreateEditAdicionalDialogComponent implements OnInit {
   totalItems = 0;
   currentPage = 0;
   pageSize = 10;
-  searchTerm = '';
-  activeFilter: 'all' | 'active' | 'inactive' = 'all';
+  searchControl = new FormControl('', { nonNullable: true });
+  activeFilterControl = new FormControl<'all' | 'active' | 'inactive'>('all', { nonNullable: true });
 
   // ✅ NUEVAS PROPIEDADES: Para gestión de recetas con PaginatedDropdown
   recetasDisponibles: Receta[] = [];
@@ -125,9 +125,10 @@ export class CreateEditAdicionalDialogComponent implements OnInit {
     this.adicionalesLoading = true;
 
     try {
+      const activeFilter = this.activeFilterControl.value;
       const filters = {
-        search: this.searchTerm,
-        activo: this.activeFilter === 'all' ? null : this.activeFilter === 'active',
+        search: this.searchControl.value,
+        activo: activeFilter === 'all' ? null : activeFilter === 'active',
         page: this.currentPage,
         pageSize: this.pageSize
       };

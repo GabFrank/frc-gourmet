@@ -9,6 +9,7 @@ import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/materia
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
+import { MatSelectModule } from '@angular/material/select';
 import { Dispositivo } from 'src/app/database/entities/financiero/dispositivo.entity';
 import { RepositoryService } from 'src/app/database/repository.service';
 
@@ -29,7 +30,8 @@ interface DialogData {
     MatProgressSpinnerModule,
     MatDialogModule,
     MatSnackBarModule,
-    MatIconModule
+    MatIconModule,
+    MatSelectModule
   ],
   templateUrl: './create-edit-dispositivo.component.html',
   styleUrls: ['./create-edit-dispositivo.component.scss']
@@ -42,6 +44,7 @@ export class CreateEditDispositivoComponent implements OnInit {
   loadingMacAddress = false;
   nameError: string | null = null;
   macError: string | null = null;
+  printers: any[] = [];
 
   constructor(
     private dialogRef: MatDialogRef<CreateEditDispositivoComponent>,
@@ -58,12 +61,20 @@ export class CreateEditDispositivoComponent implements OnInit {
       isCaja: [false],
       isTouch: [false],
       isMobile: [false],
-      activo: [true]
+      activo: [true],
+      printerTicketId: [null]
     });
   }
 
   ngOnInit(): void {
     this.isEditMode = !!this.data.dispositivo;
+
+    // Cargar lista de impresoras disponibles
+    const api: any = (window as any).api;
+    if (api?.getPrinters) {
+      api.getPrinters().then((list: any[]) => { this.printers = list || []; })
+        .catch((e: any) => console.warn('No se pudieron cargar impresoras:', e?.message || e));
+    }
 
     // If in edit mode, populate the form with the data
     if (this.isEditMode && this.data.dispositivo) {
@@ -89,7 +100,8 @@ export class CreateEditDispositivoComponent implements OnInit {
       isCaja: dispositivo.isCaja,
       isTouch: dispositivo.isTouch,
       isMobile: dispositivo.isMobile,
-      activo: dispositivo.activo
+      activo: dispositivo.activo,
+      printerTicketId: (dispositivo as any).printerTicket?.id ?? null
     });
   }
 

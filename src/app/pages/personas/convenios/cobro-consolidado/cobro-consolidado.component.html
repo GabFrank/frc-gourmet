@@ -1,0 +1,153 @@
+<div class="cc-wrap">
+  <div *ngIf="loading" class="cc-spinner">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+
+  <ng-container *ngIf="!loading && preview">
+    <!-- Resumen -->
+    <mat-card class="cc-card">
+      <div class="cc-header">
+        <div>
+          <div class="cc-titulo">{{ preview.convenio?.nombre }}</div>
+          <div class="cc-sub" *ngIf="preview.convenio?.contacto">{{ preview.convenio?.contacto }}</div>
+        </div>
+        <div class="cc-total">
+          <span class="cc-total-label">Total a cobrar</span>
+          <span class="cc-total-value">{{ preview.total | number:'1.0-2' }}</span>
+          <span class="cc-total-sub">{{ preview.cantidadConDeuda }} cliente(s) con deuda</span>
+        </div>
+      </div>
+      <div class="cc-actions">
+        <button mat-stroked-button (click)="exportarReporte()" [disabled]="exportando">
+          <mat-icon>picture_as_pdf</mat-icon> Exportar reporte PDF
+        </button>
+        <button mat-flat-button color="primary"
+                (click)="mostrarFormCobro = !mostrarFormCobro"
+                [disabled]="preview.total <= 0">
+          <mat-icon>payments</mat-icon> Registrar cobro
+        </button>
+      </div>
+    </mat-card>
+
+    <!-- Form de cobro -->
+    <mat-card class="cc-card" *ngIf="mostrarFormCobro">
+      <div class="cc-section-title">Registrar cobro consolidado</div>
+      <form [formGroup]="form" class="cc-form">
+        <mat-button-toggle-group formControlName="fuente" class="cc-toggle">
+          <mat-button-toggle value="CAJA_MAYOR">Caja Mayor</mat-button-toggle>
+          <mat-button-toggle value="CUENTA_BANCARIA">Cuenta bancaria</mat-button-toggle>
+        </mat-button-toggle-group>
+
+        <ng-container *ngIf="form.get('fuente')?.value === 'CAJA_MAYOR'">
+          <mat-form-field appearance="outline">
+            <mat-label>Caja Mayor</mat-label>
+            <mat-select formControlName="cajaMayorId">
+              <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{ c.nombre }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Moneda</mat-label>
+            <mat-select formControlName="monedaId">
+              <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Forma de pago</mat-label>
+            <mat-select formControlName="formaPagoId">
+              <mat-option *ngFor="let f of formasPago" [value]="f.id">{{ f.descripcion || f.nombre }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </ng-container>
+
+        <ng-container *ngIf="form.get('fuente')?.value === 'CUENTA_BANCARIA'">
+          <mat-form-field appearance="outline" class="cc-full">
+            <mat-label>Cuenta bancaria</mat-label>
+            <mat-select formControlName="cuentaBancariaId">
+              <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">
+                {{ cb.nombre }} ({{ cb.moneda?.denominacion || cb.moneda?.simbolo }})
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+        </ng-container>
+
+        <mat-form-field appearance="outline" class="cc-full">
+          <mat-label>Observacion</mat-label>
+          <input matInput formControlName="observacion" />
+        </mat-form-field>
+
+        <div class="cc-form-actions">
+          <button mat-button (click)="mostrarFormCobro = false" [disabled]="registrando">Cancelar</button>
+          <button mat-flat-button color="primary" (click)="registrar()"
+                  [disabled]="form.invalid || registrando || preview.total <= 0">
+            Confirmar y generar recibos
+          </button>
+        </div>
+      </form>
+    </mat-card>
+
+    <!-- Tabla de deudas -->
+    <mat-card class="cc-card">
+      <div class="cc-section-title">Deuda por cliente</div>
+      <div class="cc-table-wrap">
+        <table mat-table [dataSource]="preview.clientes" class="cc-table">
+          <ng-container matColumnDef="nombre">
+            <th mat-header-cell *matHeaderCellDef>Cliente</th>
+            <td mat-cell *matCellDef="let c">{{ c.nombre }}</td>
+          </ng-container>
+          <ng-container matColumnDef="documento">
+            <th mat-header-cell *matHeaderCellDef>Documento</th>
+            <td mat-cell *matCellDef="let c">{{ c.documento || '—' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="cuotas">
+            <th mat-header-cell *matHeaderCellDef class="num">Cuotas</th>
+            <td mat-cell *matCellDef="let c" class="num">{{ c.cantidadCuotas }}</td>
+          </ng-container>
+          <ng-container matColumnDef="deuda">
+            <th mat-header-cell *matHeaderCellDef class="num">Deuda</th>
+            <td mat-cell *matCellDef="let c" class="num">{{ c.deuda | number:'1.0-2' }}</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="colsDeuda; sticky: true"></tr>
+          <tr mat-row *matRowDef="let row; columns: colsDeuda;" [class.cc-sin-deuda]="row.deuda <= 0"></tr>
+        </table>
+      </div>
+    </mat-card>
+
+    <!-- Historial -->
+    <mat-card class="cc-card" *ngIf="historial.length">
+      <div class="cc-section-title">Cobros registrados</div>
+      <div class="cc-table-wrap">
+        <table mat-table [dataSource]="historial" class="cc-table">
+          <ng-container matColumnDef="fecha">
+            <th mat-header-cell *matHeaderCellDef>Fecha</th>
+            <td mat-cell *matCellDef="let h">{{ h.fecha | date:'dd/MM/yyyy HH:mm' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="monto">
+            <th mat-header-cell *matHeaderCellDef class="num">Monto</th>
+            <td mat-cell *matCellDef="let h" class="num">{{ h.montoTotal | number:'1.0-2' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="clientes">
+            <th mat-header-cell *matHeaderCellDef class="num">Clientes</th>
+            <td mat-cell *matCellDef="let h" class="num">{{ h.cantidadClientes }}</td>
+          </ng-container>
+          <ng-container matColumnDef="estado">
+            <th mat-header-cell *matHeaderCellDef>Estado</th>
+            <td mat-cell *matCellDef="let h">{{ h.estado }}</td>
+          </ng-container>
+          <ng-container matColumnDef="acciones">
+            <th mat-header-cell *matHeaderCellDef></th>
+            <td mat-cell *matCellDef="let h">
+              <button mat-icon-button [matMenuTriggerFor]="menu"><mat-icon>more_vert</mat-icon></button>
+              <mat-menu #menu="matMenu">
+                <button mat-menu-item (click)="descargarRecibos(h.id)">
+                  <mat-icon>receipt_long</mat-icon> Descargar recibos PDF
+                </button>
+              </mat-menu>
+            </td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="colsHistorial; sticky: true"></tr>
+          <tr mat-row *matRowDef="let row; columns: colsHistorial;"></tr>
+        </table>
+      </div>
+    </mat-card>
+  </ng-container>
+</div>

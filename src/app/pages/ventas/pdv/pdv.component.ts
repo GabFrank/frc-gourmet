@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -13,6 +13,7 @@ import { MatGridListModule } from '@angular/material/grid-list';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { FormControl, FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { Observable, of, firstValueFrom, async } from 'rxjs';
 import { debounceTime, distinctUntilChanged, map, startWith, switchMap } from 'rxjs/operators';
@@ -198,7 +199,9 @@ export class PdvComponent implements OnInit, OnDestroy {
     private dialog: MatDialog,
     private fb: FormBuilder,
     private authService: AuthService,
-    private tabsService: TabsService
+    private tabsService: TabsService,
+    private snackBar: MatSnackBar,
+    private elementRef: ElementRef
   ) {
     // Initialize form
     this.searchForm = this.fb.group({
@@ -1983,39 +1986,52 @@ export class PdvComponent implements OnInit, OnDestroy {
   imprimirPreCuenta(): void {
     if (!this.hasActiveVenta) return;
     const venta = this.ventaRapidaActual || this.selectedComanda?.venta || this.selectedMesa?.venta;
-    if (!venta) return;
+    if (!venta?.id) return;
 
-    const items = this.ventaItemsDataSource.data.filter(i => i.estado === EstadoVentaItem.ACTIVO);
-    const total = items.reduce((sum, i) => sum + (i.precioVentaUnitario + (i.precioAdicionales || 0) - (i.descuentoUnitario || 0)) * i.cantidad, 0);
-    const mesaNum = this.selectedMesa?.numero || 'V. RÁPIDA';
+    // Dispara impresion vía LPR/network/etc en la impresora con rol TICKET_VENTA.
+    const api: any = (window as any).api;
+    if (!api?.callIpc) return;
+    api.callIpc('print-precuenta', { ventaId: venta.id })
+      .then((res: any) => {
+        if (res?.ok) {
+          this.snackBar.open('Pre-cuenta enviada a impresión', 'CERRAR', { duration: 2500 });
+        } else {
+          const msg = res?.errors?.[0]?.message || 'No se pudo imprimir la pre-cuenta';
+          this.snackBar.open(msg, 'CERRAR', { duration: 4000, panelClass: ['error-snackbar'] });
+        }
+      })
+      .catch((err: any) => {
+        console.error('Error imprimir pre-cuenta:', err);
+        this.snackBar.open('Error al imprimir pre-cuenta', 'CERRAR', { duration: 4000, panelClass: ['error-snackbar'] });
+      });
+  }
 
-    // Por ahora mostrar en diálogo (futuro: enviar a impresora)
-    const lineas = items.map(i =>
-      `${i.producto?.nombre || 'PRODUCTO'} x${i.cantidad} - ${((i.precioVentaUnitario + (i.precioAdicionales || 0) - (i.descuentoUnitario || 0)) * i.cantidad).toLocaleString('es-PY')}`
-    );
+  /**
+   * Reimprime la comanda (ticket de cocina) de la venta activa. Usa
+   * `forceReprint: true` para reenviar TODOS los items a sus sectores, incluso
+   * los que ya fueron impresos antes (a diferencia del envío automático que solo
+   * manda los pendientes). Útil cuando un ticket se traba/pierde en cocina.
+   */
+  reimprimirComanda(): void {
+    if (!this.hasActiveVenta) return;
+    const venta = this.ventaRapidaActual || this.selectedComanda?.venta || this.selectedMesa?.venta;
+    if (!venta?.id) return;
 
-    const contenido = [
-      `========== PRE-CUENTA ==========`,
-      `Mesa: ${mesaNum}`,
-      `Fecha: ${new Date().toLocaleString('es-PY')}`,
-      `--------------------------------`,
-      ...lineas,
-      `--------------------------------`,
-      `TOTAL: ${this.principalMoneda?.simbolo} ${total.toLocaleString('es-PY')}`,
-      `================================`,
-      `*** ESTE NO ES UN COMPROBANTE ***`,
-    ].join('\n');
-
-    // Abrir diálogo simple con la pre-cuenta
-    this.dialog.open(ConfirmationDialogComponent, {
-      width: '400px',
-      data: {
-        title: 'PRE-CUENTA',
-        message: contenido,
-        confirmText: 'CERRAR',
-        showCancel: false,
-      },
-    });
+    const api: any = (window as any).api;
+    if (!api?.callIpc) return;
+    api.callIpc('print-comanda', { ventaId: venta.id, forceReprint: true })
+      .then((res: any) => {
+        if (res?.ok) {
+          this.snackBar.open('Comanda reenviada a cocina', 'CERRAR', { duration: 2500 });
+        } else {
+          const msg = res?.errors?.[0]?.message || 'No se pudo reimprimir la comanda';
+          this.snackBar.open(msg, 'CERRAR', { duration: 4000, panelClass: ['error-snackbar'] });
+        }
+      })
+      .catch((err: any) => {
+        console.error('Error reimprimir comanda:', err);
+        this.snackBar.open('Error al reimprimir la comanda', 'CERRAR', { duration: 4000, panelClass: ['error-snackbar'] });
+      });
   }
 
   moverItems(): void {
@@ -2208,6 +2224,11 @@ export class PdvComponent implements OnInit, OnDestroy {
   onKeyDown(event: KeyboardEvent): void {
     // No disparar si hay un diálogo abierto
     if (this.dialog.openDialogs.length > 0) return;
+    // No disparar si la pestaña del PdV no está visible. El listener es a nivel
+    // `document`, así que sin este guard los atajos F1-F5 se filtrarían a otras
+    // pestañas (ej. al anular una compra). Las pestañas inactivas se ocultan con
+    // `display:none`, por lo que un host oculto tiene `offsetParent === null`.
+    if (!this.elementRef.nativeElement?.offsetParent) return;
 
     switch (event.key) {
       case 'F1':

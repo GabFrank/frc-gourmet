@@ -197,11 +197,25 @@
             <mat-icon>{{showFiltros ? 'expand_less' : 'filter_list'}}</mat-icon>
             Filtros
           </button>
-          <button mat-icon-button (click)="loadMovimientos()" [disabled]="loadingMovimientos" matTooltip="Actualizar tabla">
-            <mat-icon [class.spinning]="loadingMovimientos">refresh</mat-icon>
+          <button mat-icon-button (click)="loadData()" [disabled]="loading || loadingMovimientos" matTooltip="Actualizar movimientos y saldos">
+            <mat-icon [class.spinning]="loading || loadingMovimientos">refresh</mat-icon>
           </button>
         </div>
       </mat-card-header>
+
+      <!-- Toggle de fuente: panel financiero consolidado (caja + bancos) -->
+      <div class="fuente-bar">
+        <mat-button-toggle-group class="fuente-toggle" [value]="fuenteFilter" (change)="onFuenteChange($event.value)">
+          <mat-button-toggle value="TODO"><mat-icon>all_inclusive</mat-icon> Todo</mat-button-toggle>
+          <mat-button-toggle value="CAJA"><mat-icon>point_of_sale</mat-icon> Caja</mat-button-toggle>
+          <mat-button-toggle value="BANCO" *ngIf="cuentasBancariasCards.length > 0">
+            <mat-icon>account_balance</mat-icon> Banco
+          </mat-button-toggle>
+          <mat-button-toggle *ngFor="let cb of cuentasBancariasCards" [value]="cb.id.toString()">
+            {{cb.nombre}}
+          </mat-button-toggle>
+        </mat-button-toggle-group>
+      </div>
 
       <!-- Barra de filtros compacta -->
       <div class="filtros-bar" *ngIf="showFiltros" [formGroup]="filtrosForm">
@@ -220,10 +234,11 @@
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="f-field f-tipo">
-          <mat-label>Tipo</mat-label>
-          <mat-select formControlName="tipoMovimiento">
+          <mat-label>Movimiento</mat-label>
+          <mat-select formControlName="esIngreso">
             <mat-option [value]="null">Todos</mat-option>
-            <mat-option *ngFor="let t of tipoMovimientoOptions" [value]="t">{{t}}</mat-option>
+            <mat-option [value]="true">Ingresos</mat-option>
+            <mat-option [value]="false">Egresos</mat-option>
           </mat-select>
         </mat-form-field>
 
@@ -268,6 +283,17 @@
           <mat-spinner diameter="28"></mat-spinner>
         </div>
         <table mat-table [dataSource]="movimientosConsolidados" class="full-width" *ngIf="movimientosConsolidados.length > 0">
+          <ng-container matColumnDef="fuente">
+            <th mat-header-cell *matHeaderCellDef>Fuente</th>
+            <td mat-cell *matCellDef="let row">
+              <span class="chip chip-fuente" [class.chip-fuente-banco]="row.fuente === 'BANCO'"
+                    [matTooltip]="row.fuente === 'BANCO' ? 'Cuenta bancaria' : 'Caja mayor (efectivo)'">
+                <mat-icon>{{row.fuente === 'BANCO' ? 'account_balance' : 'point_of_sale'}}</mat-icon>
+                {{row.fuenteLabel}}
+              </span>
+            </td>
+          </ng-container>
+
           <ng-container matColumnDef="fecha">
             <th mat-header-cell *matHeaderCellDef>Fecha</th>
             <td mat-cell *matCellDef="let row">{{row.fecha | date:'dd/MM/yyyy HH:mm'}}</td>
@@ -285,9 +311,9 @@
           <ng-container matColumnDef="detalles">
             <th mat-header-cell *matHeaderCellDef>Detalle</th>
             <td mat-cell *matCellDef="let row">
-              <div *ngFor="let d of row.detalles" class="detalle-line" [class.tachado]="row.anulacion">
+              <div *ngFor="let d of row.detalles" class="detalle-line" [class.tachado]="row.anulado">
                 <span class="det-monto">{{d.monedaSimbolo}} {{d.monto | number:'1.0-2'}}</span>
-                <span class="det-fp">{{d.formaPagoNombre}}</span>
+                <span class="det-fp" *ngIf="d.formaPagoNombre">{{d.formaPagoNombre}}</span>
               </div>
             </td>
           </ng-container>
@@ -301,10 +327,14 @@
             <th mat-header-cell *matHeaderCellDef>Observacion</th>
             <td mat-cell *matCellDef="let row">
               <div class="obs-cell">
-                <span [class.tachado]="row.anulacion" class="obs-text">{{row.observacion}}</span>
+                <span [class.tachado]="row.anulado" class="obs-text">{{row.observacion}}</span>
                 <span *ngIf="row.anulacion"
                       class="chip-anulado"
                       [matTooltip]="'Anulado el ' + (row.anulacion.fecha | date:'dd/MM/yyyy HH:mm') + (row.anulacion.motivo ? ' • Motivo: ' + row.anulacion.motivo : '') + (row.anulacion.responsableNombre ? ' • Por: ' + row.anulacion.responsableNombre : '')">
+                  <mat-icon>block</mat-icon>
+                  ANULADO
+                </span>
+                <span *ngIf="row.anulado && !row.anulacion" class="chip-anulado">
                   <mat-icon>block</mat-icon>
                   ANULADO
                 </span>
@@ -319,7 +349,7 @@
           <ng-container matColumnDef="actions">
             <th mat-header-cell *matHeaderCellDef></th>
             <td mat-cell *matCellDef="let row">
-              <button mat-icon-button [matMenuTriggerFor]="movMenu" *ngIf="!row.esAnulacion && !row.anulacion && !row.contraDeId && cajaMayor?.estado === 'ABIERTA'">
+              <button mat-icon-button [matMenuTriggerFor]="movMenu" *ngIf="row.fuente === 'CAJA' && !row.esAnulacion && !row.anulacion && !row.contraDeId && cajaMayor?.estado === 'ABIERTA'">
                 <mat-icon>more_vert</mat-icon>
               </button>
               <mat-menu #movMenu="matMenu">
@@ -332,6 +362,10 @@
                   <span>Anular</span>
                 </button>
               </mat-menu>
+              <button mat-icon-button *ngIf="row.fuente === 'BANCO'" (click)="verMovimientoBanco(row)"
+                      matTooltip="Ver movimientos de la cuenta">
+                <mat-icon>open_in_new</mat-icon>
+              </button>
             </td>
           </ng-container>
 

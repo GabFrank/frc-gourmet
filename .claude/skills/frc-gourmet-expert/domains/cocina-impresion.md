@@ -22,11 +22,47 @@ Sistema de impresoras configurables (epson / star / thermal genérica) con node-
 
 ## Configuración por conexión
 
-| Conexión | address |
-|---|---|
-| network | `IP:port` (resuelto a `tcp://<IP>:<port||9100>`) |
-| usb | path device (`/dev/usb/lp0` Linux, `\\.\COM3` Windows). Si en macOS y address contiene `'ticket-'` → usa `lp` command (CUPS) |
-| bluetooth | `bt:<MAC>` |
+| Conexión | address | Driver real |
+|---|---|---|
+| `network` | `IP` + campo `port` (default 9100) | TCP raw vía `node-thermal-printer` (`tcp://<IP>:<port>`) |
+| `lpr` | `IP/QueueName` + campo `port` (default 515) | Cliente LPR propio (RFC 1179) en `electron/utils/lpr.utils.ts`. Usa `node-thermal-printer` solo para armar el buffer ESC/POS en memoria, después envía vía LPR. Pensado para impresoras USB compartidas en otra PC Windows. |
+| `usb` | path device (`/dev/usb/lp0` Linux, `\\.\COM3` Windows). Si en macOS y address contiene `'ticket-'` → usa `lp` command (CUPS local) | `node-thermal-printer` con path directo |
+| `bluetooth` | `bt:<MAC>` | `node-thermal-printer` |
+
+### LPR (RFC 1179) — impresora USB compartida en otra PC Windows
+
+Para el caso "impresora USB conectada a una PC Windows que comparte por LAN sin hardware extra", usamos el cliente LPR propio que implementa el protocolo nativo de Windows (Servicios de impresión LPD).
+
+**Wire format** (lo que mandamos al server LPD):
+1. `\x02<queue>\n` → espera ACK `\x00`
+2. `\x02<ctrlSize> cfA<jobId><hostname>\n` → ACK → control file body + `\x00` → ACK
+3. `\x03<dataSize> dfA<jobId><hostname>\n` → ACK → bytes ESC/POS + `\x00` → ACK
+
+**Control file BSD format** (lo emite `sendLprJob`):
+```
+H<hostname>
+P<user>
+J<jobname>
+ldfA<jobId><hostname>
+UdfA<jobId><hostname>
+N<jobname>
+```
+
+**Setup en la PC Windows que tiene la impresora USB** (orden crítico):
+
+1. **Activar feature LPD**: *Panel de control → Activar/desactivar características Windows → Servicios de impresión y documentos → ✅ Servidor LPD*. Reinicia el Spooler automáticamente.
+2. **Agregar la impresora** localmente en Windows. **Driver recomendado: "Generic / Text Only"** (Fabricante: Genérico) para que los bytes ESC/POS pasen raw al USB sin interpretación del spooler.
+3. **Compartir** la impresora con un *Share name* sin espacios, ej: `Cocina`, `Barra`, `Parrila`. Ese share name es el **queue name** que va después del `/` en el campo `address` de la app.
+4. **Firewall**: regla entrante TCP 515 permitida en **ambos perfiles** (privada y pública).
+5. ⚠️ **Crítico**: agregar `ANONYMOUS LOGON` con permiso "Imprimir" al ACE de la impresora compartida (*click derecho → Propiedades → Seguridad → Agregar → "ANONYMOUS LOGON" → Imprimir*). **Sin este paso, LPDSVC rechaza con código `\x01` cualquier petición remota** aunque acepte loopback local. Detalles → [[feedback-windows-lpd-anonymous-logon]].
+
+**Verificación** desde otra máquina:
+```bash
+printf '\x02barra\n' | nc -w 3 <ip-windows> 515 | xxd
+# Esperado: 00 (ACK). Si retorna 01, falta el ACE ANONYMOUS LOGON.
+```
+
+**No requiere** el servicio LPR/cliente de Windows del lado de la app — solo el lado servidor LPD donde está la impresora.
 
 ## Handlers
 
@@ -148,10 +184,12 @@ Idealmente se enrutaría a estación específica (cocina caliente, fría, parril
 
 ## Pendientes (TODO)
 
+- [ ] **Botón "Reimprimir comanda"** en el PdV / detalle de venta. Llama a `print-comanda` con `{ventaId, forceReprint: true}` (o `{soloItemsNoImpresos: false}` para incluir solo no-impresos). Con badge visible si hay items con `impreso=false` después de un intento fallido — esos quedan a la espera de reimpresión manual (no se auto-reintentan al agregar el siguiente item, para evitar duplicados en cocina).
+- [ ] **Wizard de configuración LPR** (UI). Al crear/editar una impresora con `connectionType=lpr`, mostrar un diálogo con los pasos para configurar la PC Windows que tiene la impresora USB compartida: activar feature LPD, instalar driver Generic/Text Only, compartir con share name sin espacios, firewall TCP 515, **agregar ACE ANONYMOUS LOGON** (este paso es el más fácil de olvidar y deja LPDSVC rechazando todo). Incluir un botón "Probar conexión" que haga el handshake `\x02<queue>\n` antes de guardar, con mensaje de error específico (`código 1 → falta ACE ANONYMOUS LOGON`, `timeout → firewall/puerto`, etc.).
 - [ ] Auto-impresión al cobrar venta (handler `procesarStockVenta` ya se llama post-cobro; agregar `imprimirTicket(ventaId, printerId)`).
-- [ ] Auto-impresión de comanda al agregar items.
+- [x] Auto-impresión de comanda al agregar items — implementado en `ventas.handler.ts:autoPrintComandaIfNeeded` con gate por `venta.mesa || venta.comanda` + `PdvConfig.autoImprimirComanda`. Routing por M2M `producto_sectores` → `sectores_impresoras`. Tracking en `venta_items.impreso`/`fecha_impresion`/`impresiones` (JSON log por sector).
+- [x] Relación Producto → Sector(es) → Impresora(s) — M2M `producto_sectores` + `sectores_impresoras` + flag `Producto.requiereComanda`. UI en `gestionar-producto` (multi-select) y `Configuración → Sectores e impresoras`.
 - [ ] Templates ESC/POS por tipo de impresora.
-- [ ] Relación `Producto → Printer` para enrutar comandas a estaciones.
 - [ ] Kitchen Display Screen (KDS) para alternativa digital.
 - [ ] Recibos de liquidación RRHH PDF (campo `comprobante_url` ya existe).
 - [ ] Resumen de cierre de caja imprimible.

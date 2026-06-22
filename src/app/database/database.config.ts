@@ -10,6 +10,7 @@ import { Role } from './entities/personas/role.entity';
 import { UsuarioRole } from './entities/personas/usuario-role.entity';
 import { TipoCliente } from './entities/personas/tipo-cliente.entity';
 import { Cliente } from './entities/personas/cliente.entity';
+import { Convenio } from './entities/personas/convenio.entity';
 import { Permission } from './entities/personas/permission.entity';
 import { RolePermission } from './entities/personas/role-permission.entity';
 import { LoginSession } from './entities/auth/login-session.entity';
@@ -38,6 +39,7 @@ import { Bono } from './entities/rrhh/bono.entity';
 import { Aguinaldo } from './entities/rrhh/aguinaldo.entity';
 import { Vacacion } from './entities/rrhh/vacacion.entity';
 import { VacacionPeriodo } from './entities/rrhh/vacacion-periodo.entity';
+import { VacacionVenta } from './entities/rrhh/vacacion-venta.entity';
 import { LiquidacionFinal } from './entities/rrhh/liquidacion-final.entity';
 import { LiquidacionFinalItem } from './entities/rrhh/liquidacion-final-item.entity';
 // RRHH Fase 6 - Comisiones
@@ -123,6 +125,8 @@ import { CuentaPorPagarCuota } from './entities/financiero/cuenta-por-pagar-cuot
 // CuentasPorCobrar + MovimientosCliente (Fase 7)
 import { CuentaPorCobrar } from './entities/financiero/cuenta-por-cobrar.entity';
 import { CuentaPorCobrarCuota } from './entities/financiero/cuenta-por-cobrar-cuota.entity';
+import { CobroConsolidado } from './entities/financiero/cobro-consolidado.entity';
+import { CobroConsolidadoDetalle } from './entities/financiero/cobro-consolidado-detalle.entity';
 import { MovimientoCliente } from './entities/financiero/movimiento-cliente.entity';
 
 // Entradas Varias + Operaciones Financieras (caja mayor)
@@ -179,6 +183,8 @@ import { Reserva } from './entities/ventas/reserva.entity';
 import { Comanda } from './entities/ventas/comanda.entity';
 import { ComandaItem } from './entities/ventas/comanda-item.entity';
 import { Sector } from './entities/ventas/sector.entity';
+import { SectorImpresora } from './entities/ventas/sector-impresora.entity';
+import { ProductoSector } from './entities/productos/producto-sector.entity';
 // Migrations
 import { Baseline1778378410416 } from './migrations/1778378410416-Baseline';
 import { BaselinePostgres1778380893207 } from './migrations/1778380893207-BaselinePostgres';
@@ -186,6 +192,14 @@ import { AddDispositivoIdToTrackedEntities1778390000000 } from './migrations/177
 import { AddOnboardingTaskOverrides1778400000000 } from './migrations/1778400000000-AddOnboardingTaskOverrides';
 import { AddEmpresa1778500000000 } from './migrations/1778500000000-AddEmpresa';
 import { AddMustChangePasswordToUsuario1778600000000 } from './migrations/1778600000000-AddMustChangePasswordToUsuario';
+import { AddSistemaDocumentos1779000000000 } from './migrations/1779000000000-AddSistemaDocumentos';
+import { AddRequiereComandaToProducto1779100000000 } from './migrations/1779100000000-AddRequiereComandaToProducto';
+import { AddPrinterTicketToDispositivo1779200000000 } from './migrations/1779200000000-AddPrinterTicketToDispositivo';
+import { AddCuentaBancariaToLiquidacionSueldo1779400000000 } from './migrations/1779400000000-AddCuentaBancariaToLiquidacionSueldo';
+import { AddConveniosCobroConsolidado1779500000000 } from './migrations/1779500000000-AddConveniosCobroConsolidado';
+import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVacacionVentas';
+import { AddCuentaBancariaToPagosCobros1779700000000 } from './migrations/1779700000000-AddCuentaBancariaToPagosCobros';
+import { AddCotizacionBancariaToPagosCobros1779800000000 } from './migrations/1779800000000-AddCotizacionBancariaToPagosCobros';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -272,6 +286,7 @@ function getEntitiesList(): any[] {
       UsuarioRole,
       TipoCliente,
       Cliente,
+      Convenio,
       Permission,
       RolePermission,
       LoginSession,
@@ -300,6 +315,7 @@ function getEntitiesList(): any[] {
       Aguinaldo,
       Vacacion,
       VacacionPeriodo,
+      VacacionVenta,
       LiquidacionFinal,
       LiquidacionFinalItem,
       // RRHH Fase 6 - Comisiones
@@ -347,6 +363,8 @@ function getEntitiesList(): any[] {
       // CuentasPorCobrar + MovimientosCliente (Fase 7)
       CuentaPorCobrar,
       CuentaPorCobrarCuota,
+      CobroConsolidado,
+      CobroConsolidadoDetalle,
       MovimientoCliente,
       // Entradas Varias + Operaciones Financieras + Chequeras + Cheques
       EntradaVariaCategoria,
@@ -425,6 +443,8 @@ function getEntitiesList(): any[] {
       Comanda,
       ComandaItem,
       Sector,
+      SectorImpresora,
+      ProductoSector,
       // Atajo (accesos rápidos) entities
       PdvAtajoGrupo,
       PdvAtajoItem,
@@ -467,6 +487,14 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddOnboardingTaskOverrides1778400000000,
     AddEmpresa1778500000000,
     AddMustChangePasswordToUsuario1778600000000,
+    AddSistemaDocumentos1779000000000,
+    AddRequiereComandaToProducto1779100000000,
+    AddPrinterTicketToDispositivo1779200000000,
+    AddCuentaBancariaToLiquidacionSueldo1779400000000,
+    AddConveniosCobroConsolidado1779500000000,
+    AddVacacionVentas1779600000000,
+    AddCuentaBancariaToPagosCobros1779700000000,
+    AddCotizacionBancariaToPagosCobros1779800000000,
   ];
 }
 

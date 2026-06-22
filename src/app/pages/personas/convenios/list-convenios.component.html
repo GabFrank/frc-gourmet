@@ -1,0 +1,60 @@
+<div class="lc-wrap">
+  <div class="lc-toolbar">
+    <div class="lc-title">
+      <mat-icon>handshake</mat-icon>
+      <span>Convenios</span>
+    </div>
+    <button mat-flat-button color="primary" (click)="nuevo()">
+      <mat-icon>add</mat-icon> Nuevo convenio
+    </button>
+  </div>
+
+  <div *ngIf="loading" class="lc-spinner"><mat-spinner diameter="40"></mat-spinner></div>
+
+  <div class="lc-table-wrap" *ngIf="!loading">
+    <table mat-table [dataSource]="convenios" class="lc-table">
+      <ng-container matColumnDef="nombre">
+        <th mat-header-cell *matHeaderCellDef>Nombre</th>
+        <td mat-cell *matCellDef="let c">
+          <div class="lc-nombre">{{ c.nombre }}</div>
+          <div class="lc-desc" *ngIf="c.descripcion">{{ c.descripcion }}</div>
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="contacto">
+        <th mat-header-cell *matHeaderCellDef>Contacto / RUC</th>
+        <td mat-cell *matCellDef="let c">{{ c.contacto || c.ruc || '—' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="clientes">
+        <th mat-header-cell *matHeaderCellDef class="num">Clientes</th>
+        <td mat-cell *matCellDef="let c" class="num">{{ c.cantidadClientes }}</td>
+      </ng-container>
+      <ng-container matColumnDef="deuda">
+        <th mat-header-cell *matHeaderCellDef class="num">Deuda total</th>
+        <td mat-cell *matCellDef="let c" class="num">{{ c.deudaTotal | number:'1.0-2' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="estado">
+        <th mat-header-cell *matHeaderCellDef>Estado</th>
+        <td mat-cell *matCellDef="let c">
+          <span class="lc-badge" [class.lc-badge-on]="c.activo" [class.lc-badge-off]="!c.activo">
+            {{ c.activo ? 'Activo' : 'Inactivo' }}
+          </span>
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="acciones">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let c">
+          <button mat-icon-button [matMenuTriggerFor]="menu"><mat-icon>more_vert</mat-icon></button>
+          <mat-menu #menu="matMenu">
+            <button mat-menu-item (click)="cobroConsolidado(c)"><mat-icon>payments</mat-icon> Cobro consolidado</button>
+            <button mat-menu-item (click)="asignarClientes(c)"><mat-icon>group_add</mat-icon> Asignar clientes</button>
+            <button mat-menu-item (click)="editar(c)"><mat-icon>edit</mat-icon> Editar</button>
+            <button mat-menu-item (click)="eliminar(c)"><mat-icon>block</mat-icon> Desactivar</button>
+          </mat-menu>
+        </td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+    <div *ngIf="!convenios.length" class="lc-empty">No hay convenios. Crea el primero con "Nuevo convenio".</div>
+  </div>
+</div>

@@ -81,6 +81,11 @@ export class LiquidacionSueldo extends BaseModel {
   @Column({ name: 'movimiento_id', type: 'int', nullable: true })
   movimientoId?: number;
 
+  // Si el pago se hizo desde una cuenta bancaria (en vez de Caja Mayor), se
+  // guarda aqui para poder revertir el saldo al anular la liquidacion.
+  @Column({ name: 'cuenta_bancaria_id', type: 'int', nullable: true })
+  cuentaBancariaId?: number;
+
   @Column({ nullable: true })
   observacion?: string;
 

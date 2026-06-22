@@ -15,6 +15,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
+import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
 
 interface DetalleRow {
   monedaId: number;
@@ -111,6 +112,7 @@ export class CreateRetiroCajaDialogComponent implements OnInit {
       this.monedas = monedas || [];
       this.formasPagoEfectivo = (formasPago || []).filter((fp: any) => fp.movimentaCaja === true);
       this.cajasMayor = (cajasMayor || []).filter((c: any) => c.estado === 'ABIERTA');
+      this.preseleccionarDetalle();
     } catch (error) {
       console.error('Error loading data:', error);
       this.snackBar.open('Error al cargar datos', 'Cerrar', { duration: 3000 });
@@ -137,6 +139,20 @@ export class CreateRetiroCajaDialogComponent implements OnInit {
 
     this.recalcularTotales();
     this.detalleForm.reset();
+    this.preseleccionarDetalle();
+  }
+
+  /** Pre-selecciona moneda principal/única y forma de pago única en la línea de detalle. */
+  private preseleccionarDetalle(): void {
+    if (!this.detalleForm.get('monedaId')?.value) {
+      const m = preselectSingleOrPrincipal(this.monedas);
+      if (m) this.detalleForm.get('monedaId')?.setValue(m.id, { emitEvent: false });
+    }
+    if (!this.detalleForm.get('formaPagoId')?.value) {
+      const fp = preselectSingleOrPrincipal(this.formasPagoEfectivo);
+      if (fp) this.detalleForm.get('formaPagoId')?.setValue(fp.id, { emitEvent: false });
+    }
+    this.recalcDecimalesMoneda();
   }
 
   eliminarDetalle(index: number): void {
