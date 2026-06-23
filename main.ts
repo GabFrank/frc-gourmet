@@ -308,7 +308,20 @@ function initializeDatabase() {
           ? 'BaselinePostgres1778380893207'
           : 'Baseline1778378410416';
         // F2 (mobile PWA): servir el bundle de projects/mobile (dist/mobile) si existe.
-        const staticRoot = path.join(__dirname, 'dist', 'mobile');
+        // En el paquete (asar) los archivos quedan en app.asar.unpacked (ver
+        // asarUnpack en package.json), así que resolvemos esa ruta para que
+        // @fastify/static los sirva sin tocar el archivo asar.
+        let staticRoot = path.join(__dirname, 'dist', 'mobile');
+        if (
+          staticRoot.includes(`app.asar${path.sep}`) &&
+          !staticRoot.includes('app.asar.unpacked')
+        ) {
+          const unpacked = staticRoot.replace(
+            `app.asar${path.sep}`,
+            `app.asar.unpacked${path.sep}`,
+          );
+          if (fs.existsSync(unpacked)) staticRoot = unpacked;
+        }
         startServer({
           port, appVersion, schemaVersion, driver, dataSource, staticRoot,
         }).catch((e) => console.error('[server] Error al arrancar Fastify:', e));
