@@ -301,7 +301,7 @@ export class TomarPedidoPage implements OnInit {
         recetaPresentacion: { id: sel.recetaPresentacionPrincipalId },
         ensambladoDescripcion: sel.ensambladoDescripcion,
         cantidadSabores: sel.sabores.length,
-        precioAdicionales: 0,
+        precioAdicionales: sel.precioAdicionalTotal,
         estado: 'ACTIVO',
       };
       if (sel.precioVentaPresentacionId) {
@@ -312,7 +312,7 @@ export class TomarPedidoPage implements OnInit {
       const itemId = item?.id;
       if (itemId) {
         for (const s of sel.sabores) {
-          await firstValueFrom(
+          const savedSabor: any = await firstValueFrom(
             this.repo.createVentaItemSabor({
               ventaItemId: itemId,
               recetaPresentacionId: s.recetaPresentacionId,
@@ -321,11 +321,43 @@ export class TomarPedidoPage implements OnInit {
               costoReferencia: s.costoReferencia,
             }),
           );
+          // Personalización por-sabor: adicionales/observaciones con FK ventaItemSabor.
+          const saborId = savedSabor?.id;
+          for (const ad of s.adicionales) {
+            await firstValueFrom(
+              this.repo.createVentaItemAdicional({
+                ventaItem: { id: itemId },
+                adicional: { id: ad.id },
+                precioCobrado: ad.precio,
+                cantidad: 1,
+                ...(saborId ? { ventaItemSabor: { id: saborId } } : {}),
+              }),
+            );
+          }
+          for (const obsId of s.observaciones) {
+            await firstValueFrom(
+              this.repo.createVentaItemObservacion({
+                ventaItem: { id: itemId },
+                observacion: { id: obsId },
+                ...(saborId ? { ventaItemSabor: { id: saborId } } : {}),
+              }),
+            );
+          }
+          if (s.observacionLibre) {
+            await firstValueFrom(
+              this.repo.createVentaItemObservacion({
+                ventaItem: { id: itemId },
+                observacionLibre: s.observacionLibre,
+                ...(saborId ? { ventaItemSabor: { id: saborId } } : {}),
+              }),
+            );
+          }
         }
       }
 
-      this.pedido.unshift({ nombre: sel.ensambladoDescripcion, cantidad: sel.cantidad, precio: sel.precioCalculado });
-      this.totalPedido += sel.precioCalculado * sel.cantidad;
+      const precioLineaVar = sel.precioCalculado + sel.precioAdicionalTotal;
+      this.pedido.unshift({ nombre: sel.ensambladoDescripcion, cantidad: sel.cantidad, precio: precioLineaVar });
+      this.totalPedido += precioLineaVar * sel.cantidad;
       this.snack.open(`Agregado: ${sel.cantidad} × ${p.nombre}`, undefined, { duration: 1200 });
     } catch {
       this.snack.open('No se pudo agregar la variación', 'CERRAR', { duration: 4000 });

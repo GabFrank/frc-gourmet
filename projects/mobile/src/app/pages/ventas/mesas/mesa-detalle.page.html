@@ -3,6 +3,17 @@
     <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
     <span class="mesa-bar-title">{{ titulo }}</span>
     <span class="mesa-spacer"></span>
+    <button
+      *ngIf="ventaId"
+      mat-icon-button
+      (click)="imprimirPreCuenta()"
+      aria-label="Imprimir pre-cuenta"
+    >
+      <mat-icon>receipt_long</mat-icon>
+    </button>
+    <button *ngIf="ventaId" mat-icon-button (click)="transferir()" aria-label="Transferir mesa">
+      <mat-icon>swap_horiz</mat-icon>
+    </button>
     <span class="crud-chip" [class.off]="!ocupada">{{ estado }}</span>
   </mat-toolbar>
 
