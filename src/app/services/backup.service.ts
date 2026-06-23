@@ -29,9 +29,13 @@ export interface BackupListResult {
   items: BackupItem[];
 }
 
+export type BackupMode = 'interval' | 'daily';
+
 export interface BackupConfig {
   autoBackupEnabled: boolean;
+  mode: BackupMode;
   intervalHours: number;
+  dailyTime?: string | null;
   retentionCount: number;
   customBackupDir?: string;
   includeImages: boolean;
