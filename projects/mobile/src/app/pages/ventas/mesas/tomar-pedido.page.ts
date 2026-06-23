@@ -10,8 +10,10 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatRippleModule } from '@angular/material/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { AuthService, RepositoryService } from '@frc/shared-core';
+import { AgregarItemDialogComponent } from './agregar-item-dialog.component';
 
 interface ProductoVM {
   id: number;
@@ -61,6 +63,7 @@ export class TomarPedidoPage implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly location = inject(Location);
   private readonly snack = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
 
   mesaId = 0;
   titulo = 'Tomar pedido';
@@ -174,6 +177,18 @@ export class TomarPedidoPage implements OnInit {
       this.snack.open('El producto no tiene precio/presentación configurado', 'CERRAR', { duration: 4000 });
       return;
     }
+
+    // Elegir cantidad antes de agregar.
+    const cantidad = await firstValueFrom(
+      this.dialog
+        .open(AgregarItemDialogComponent, {
+          data: { nombre: p.nombre, precioUnitario: p.precio },
+          width: '320px',
+        })
+        .afterClosed(),
+    );
+    if (!cantidad || cantidad < 1) return;
+
     this.guardando = true;
     const ventaId = await this.ensureVenta();
     if (!ventaId) {
@@ -185,7 +200,7 @@ export class TomarPedidoPage implements OnInit {
         this.repo.createVentaItem({
           producto: { id: p.id },
           presentacion: { id: p.presentacionId },
-          cantidad: 1,
+          cantidad,
           precioVentaUnitario: p.precio,
           precioCostoUnitario: p.costo,
           venta: { id: ventaId },
@@ -194,9 +209,9 @@ export class TomarPedidoPage implements OnInit {
           estado: 'ACTIVO',
         } as any),
       );
-      this.pedido.unshift({ nombre: p.nombre, cantidad: 1, precio: p.precio });
-      this.totalPedido += p.precio;
-      this.snack.open(`Agregado: ${p.nombre}`, undefined, { duration: 1200 });
+      this.pedido.unshift({ nombre: p.nombre, cantidad, precio: p.precio });
+      this.totalPedido += p.precio * cantidad;
+      this.snack.open(`Agregado: ${cantidad} × ${p.nombre}`, undefined, { duration: 1200 });
     } catch {
       this.snack.open('No se pudo agregar el producto', 'CERRAR', { duration: 4000 });
     } finally {
