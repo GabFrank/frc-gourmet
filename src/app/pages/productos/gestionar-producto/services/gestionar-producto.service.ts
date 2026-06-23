@@ -223,10 +223,12 @@ export class GestionarProductoService {
     // Presentaciones son relevantes para:
     // - RETAIL y RETAIL_INGREDIENTE (unidades de compra/venta)
     // - ELABORADO_CON_VARIACION (tamaños necesarios para generar variaciones)
+    // - BUFFET_POR_PESO (la presentación lleva el precio por kilo + tope/mínimo)
     return (
       tipo === ProductoTipo.RETAIL ||
       tipo === ProductoTipo.RETAIL_INGREDIENTE ||
-      tipo === ProductoTipo.ELABORADO_CON_VARIACION
+      tipo === ProductoTipo.ELABORADO_CON_VARIACION ||
+      tipo === ProductoTipo.BUFFET_POR_PESO
     );
   }
 
@@ -244,8 +246,8 @@ export class GestionarProductoService {
     // - ELABORADO_CON_VARIACION: Los precios se gestionan por variación en "Recetas"
     // - COMBO: Necesita pestaña exclusiva (precios del combo)
 
-    if (tipo === ProductoTipo.RETAIL) {
-      return false; // Los precios se manejan en "Presentaciones y Precios"
+    if (tipo === ProductoTipo.RETAIL || tipo === ProductoTipo.BUFFET_POR_PESO) {
+      return false; // El precio (por kilo) se maneja en "Presentaciones y Precios"
     }
 
     if (tipo === ProductoTipo.RETAIL_INGREDIENTE) {
@@ -302,9 +304,14 @@ export class GestionarProductoService {
   isRecetaTabVisible(): boolean {
     const tipo = this.informacionPrincipalForm.get('tipo')?.value;
 
-    // Recetas visibles solo para productos elaborados sin variación
-    // Para ELABORADO_CON_VARIACION la receta se gestiona desde la pestaña "Sabores" → "Gestionar Receta"
-    return tipo === ProductoTipo.ELABORADO_SIN_VARIACION;
+    // Recetas visibles para elaborados sin variación y para buffet por peso
+    // (el buffet usa la receta como "pool" para descontar insumos en Producción
+    // y calcular el costo por kilo). Para ELABORADO_CON_VARIACION la receta se
+    // gestiona desde la pestaña "Sabores" → "Gestionar Receta".
+    return (
+      tipo === ProductoTipo.ELABORADO_SIN_VARIACION ||
+      tipo === ProductoTipo.BUFFET_POR_PESO
+    );
   }
 
   /**

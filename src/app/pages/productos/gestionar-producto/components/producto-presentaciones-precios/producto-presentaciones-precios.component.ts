@@ -381,6 +381,9 @@ export class ProductoPresentacionesPreciosComponent implements OnInit, OnDestroy
       this.shouldShowPreciosVenta = this.esVendible;
     } else if (this.productoType === ProductoTipo.RETAIL) {
       this.shouldShowPreciosVenta = true;
+    } else if (this.productoType === ProductoTipo.BUFFET_POR_PESO) {
+      // Buffet: el precio por kilo (+ tope/mínimo) se gestiona en la presentación.
+      this.shouldShowPreciosVenta = true;
     } else {
       this.shouldShowPreciosVenta = false;
     }
