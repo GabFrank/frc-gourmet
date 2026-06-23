@@ -56,6 +56,8 @@ import { ListAdicionalesComponent } from './pages/gestion-recetas/list-adicional
 import { ListProductosComponent } from './pages/productos/list-productos/list-productos.component';
 import { ListSaboresComponent } from './pages/gestion-sabores/list-sabores/list-sabores.component';
 import { VentasDashboardComponent } from './pages/ventas/dashboard/ventas-dashboard.component';
+import { KdsComponent } from './pages/ventas/kds/kds.component';
+import { ListKdsPantallasComponent } from './pages/ventas/kds/list-kds-pantallas/list-kds-pantallas.component';
 import { CajaMayorDashboardComponent } from './pages/financiero/caja-mayor/dashboard/caja-mayor-dashboard.component';
 import { ListCuentasPorCobrarComponent } from './pages/financiero/caja-mayor/cuentas-por-cobrar/list-cuentas-por-cobrar/list-cuentas-por-cobrar.component';
 import { ListPermisosComponent } from './pages/personalizacion/permisos/list-permisos/list-permisos.component';
@@ -1024,6 +1026,28 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       VentasDashboardComponent,
       { source: 'navigation' },
       'ventas-dashboard-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openKdsTab() {
+    this.tabsService.openTab(
+      'KDS — Cocina',
+      KdsComponent,
+      { source: 'navigation' },
+      'kds-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openKdsPantallasTab() {
+    this.tabsService.openTab(
+      'Pantallas KDS',
+      ListKdsPantallasComponent,
+      { source: 'navigation' },
+      'kds-pantallas-tab',
       true
     );
     this.closeMenu();

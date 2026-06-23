@@ -3762,4 +3762,15 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('printer-events', listener);
   },
 
+  /**
+   * KDS: suscribe al canal `comanda-item-updates` (emitido desde
+   * `electron/utils/comanda-events.utils.ts`). Devuelve función para desuscribir.
+   * Lo usa el KDS para refrescar las pantallas en vivo sin polling.
+   */
+  onComandaEvent: (handler: (payload: any) => void): (() => void) => {
+    const listener = (_event: any, data: any) => handler(data);
+    ipcRenderer.on('comanda-item-updates', listener);
+    return () => ipcRenderer.removeListener('comanda-item-updates', listener);
+  },
+
 });

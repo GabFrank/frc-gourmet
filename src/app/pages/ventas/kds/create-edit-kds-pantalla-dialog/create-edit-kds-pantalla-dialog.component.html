@@ -1,0 +1,44 @@
+<h2 mat-dialog-title>{{ esEdicion ? 'Editar pantalla KDS' : 'Nueva pantalla KDS' }}</h2>
+
+<mat-dialog-content [formGroup]="form">
+  <div class="form-row">
+    <mat-form-field appearance="outline" style="width: 100%;">
+      <mat-label>Nombre</mat-label>
+      <input matInput formControlName="nombre" placeholder="Ej: COCINA, BAR, EXPO" required>
+      <mat-error *ngIf="form.get('nombre')?.hasError('required')">El nombre es requerido</mat-error>
+    </mat-form-field>
+  </div>
+
+  <div class="form-row">
+    <mat-form-field appearance="outline" style="width: 100%;">
+      <mat-label>Sectores que muestra</mat-label>
+      <mat-select formControlName="sectorIds" multiple>
+        <mat-option *ngFor="let s of data.sectores" [value]="s.id">{{ s.nombre }}</mat-option>
+      </mat-select>
+      <mat-hint>Si no elegís ninguno, muestra todos los sectores</mat-hint>
+    </mat-form-field>
+  </div>
+
+  <div class="form-row" style="display: flex; gap: 16px;">
+    <mat-form-field appearance="outline" style="flex: 1;">
+      <mat-label>Umbral amarillo (min)</mat-label>
+      <input matInput type="number" formControlName="umbralAmarillo" min="1">
+    </mat-form-field>
+    <mat-form-field appearance="outline" style="flex: 1;">
+      <mat-label>Umbral rojo (min)</mat-label>
+      <input matInput type="number" formControlName="umbralRojo" min="1">
+    </mat-form-field>
+  </div>
+
+  <div class="form-row" style="display: flex; gap: 24px; margin-top: 8px;">
+    <mat-slide-toggle formControlName="sonidoNuevo" color="primary">Sonido al llegar pedido</mat-slide-toggle>
+    <mat-slide-toggle formControlName="activo" color="primary">Activa</mat-slide-toggle>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancelar()">Cancelar</button>
+  <button mat-flat-button color="primary" (click)="guardar()" [disabled]="form.invalid">
+    {{ esEdicion ? 'Guardar' : 'Crear' }}
+  </button>
+</mat-dialog-actions>
