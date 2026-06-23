@@ -54,6 +54,11 @@ const FINANCIERO_ITEMS: SectionItem[] = [
   { label: 'Liq. de comisión', icon: 'receipt', path: '/financiero/comisiones-liquidaciones', enabled: true },
 ];
 
+/** Sub-módulos de Ventas (módulo meseros). */
+const VENTAS_ITEMS: SectionItem[] = [
+  { label: 'Mesas', icon: 'table_restaurant', path: '/ventas/mesas', enabled: true },
+];
+
 /**
  * Rutas de la PWA mobile. Navegación con Router (no TabsService).
  * - Formularios full-screen (alta/edición) → rutas top-level, ANTES del shell.
@@ -67,6 +72,11 @@ export const routes: Routes = [
   },
 
   // --- Formularios full-screen (fuera del shell) ---
+  {
+    path: 'ventas/mesas/:id/pedido',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/ventas/mesas/tomar-pedido.page').then((m) => m.TomarPedidoPage),
+  },
   {
     path: 'rrhh/cargos/nuevo',
     canActivate: [authGuard],
@@ -363,6 +373,23 @@ export const routes: Routes = [
         path: 'financiero/caja-mayor/:id',
         data: { title: 'Caja Mayor' },
         loadComponent: () => import('./pages/financiero/caja-mayor/caja-mayor-detalle.page').then((m) => m.CajaMayorDetallePage),
+      },
+      // --- Ventas (módulo meseros) ---
+      {
+        path: 'ventas',
+        pathMatch: 'full',
+        data: { title: 'Ventas', items: VENTAS_ITEMS },
+        loadComponent: () => import('./pages/section-index/section-index.page').then((m) => m.SectionIndexPage),
+      },
+      {
+        path: 'ventas/mesas',
+        data: { title: 'Mesas' },
+        loadComponent: () => import('./pages/ventas/mesas/mesas-list.page').then((m) => m.MesasListPage),
+      },
+      {
+        path: 'ventas/mesas/:id',
+        data: { title: 'Detalle de mesa' },
+        loadComponent: () => import('./pages/ventas/mesas/mesa-detalle.page').then((m) => m.MesaDetallePage),
       },
       {
         path: 'financiero/comisiones-reglas',

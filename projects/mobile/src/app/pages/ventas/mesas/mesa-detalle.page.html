@@ -1,0 +1,56 @@
+<div class="mesa-detalle">
+  <mat-toolbar color="primary" class="mesa-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="mesa-bar-title">{{ titulo }}</span>
+    <span class="mesa-spacer"></span>
+    <span class="crud-chip" [class.off]="!ocupada">{{ estado }}</span>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error mesa-pad">{{ error }}</p>
+
+  <div class="mesa-content" *ngIf="!loading && !error">
+    <p class="mesa-sub" *ngIf="sectorNombre">{{ sectorNombre }}</p>
+
+    <ng-container *ngIf="ocupada; else libre">
+      <section class="mesa-cuenta" *ngIf="items.length; else sinItems">
+        <div class="mesa-item" *ngFor="let it of items">
+          <div class="mesa-item-main">
+            <span class="mesa-item-desc">{{ it.descripcion }}</span>
+            <span class="mesa-item-detalle" *ngIf="it.detalle">{{ it.detalle }}</span>
+            <span class="mesa-item-calc">{{ it.cantidad | number:'1.0-2' }} × {{ it.unitario | number:'1.0-2' }}</span>
+          </div>
+          <span class="mesa-item-total">{{ it.total | number:'1.0-2' }}</span>
+        </div>
+      </section>
+
+      <ng-template #sinItems>
+        <p class="crud-empty">La cuenta no tiene items todavía.</p>
+      </ng-template>
+
+      <div class="mesa-total" *ngIf="items.length">
+        <span>Total</span>
+        <span class="mesa-total-valor">{{ total | number:'1.0-2' }}</span>
+      </div>
+    </ng-container>
+
+    <ng-template #libre>
+      <div class="crud-empty mesa-libre">
+        <mat-icon>check_circle</mat-icon>
+        <span>Mesa libre — sin cuenta abierta.</span>
+      </div>
+    </ng-template>
+  </div>
+
+  <!-- Tomar pedido: abre/usa la cuenta de la mesa y agrega productos -->
+  <a
+    *ngIf="!loading && !error"
+    class="mesa-fab"
+    mat-fab
+    color="primary"
+    [routerLink]="['/ventas/mesas', mesaId, 'pedido']"
+    aria-label="Tomar pedido"
+  >
+    <mat-icon>restaurant</mat-icon>
+  </a>
+</div>

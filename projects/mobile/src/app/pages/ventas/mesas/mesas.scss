@@ -1,0 +1,234 @@
+/* Módulo meseros — mesas (lista) y detalle de cuenta. Reutiliza las clases
+   globales `crud-*`; acá solo lo específico. Colores via variables de tema. */
+
+/* ---- Lista ---- */
+.mesas-filtros {
+  padding: 8px 12px 0;
+}
+
+.mesas-resumen {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+  font-size: 0.9rem;
+}
+
+.mesas-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+}
+
+.mesas-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 0 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mesas-chip {
+  flex: 0 0 auto;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
+  background: var(--surface, #fff);
+  color: var(--text-primary, rgba(0, 0, 0, 0.87));
+  border-radius: 16px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  cursor: pointer;
+
+  &.sel {
+    background: var(--primary, #1976d2);
+    border-color: var(--primary, #1976d2);
+    color: #fff;
+  }
+}
+
+.crud-chevron {
+  color: var(--text-secondary, rgba(0, 0, 0, 0.4));
+  align-self: center;
+}
+
+.muted {
+  color: var(--text-secondary, rgba(0, 0, 0, 0.5));
+}
+
+/* ---- Detalle ---- */
+.mesa-detalle {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.mesa-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.mesa-bar-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.mesa-spacer {
+  flex: 1 1 auto;
+}
+
+.mesa-pad {
+  padding: 12px 16px;
+}
+
+.mesa-content {
+  padding: 12px 16px 96px;
+}
+
+.mesa-sub {
+  margin: 0 0 12px;
+  color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+}
+
+.mesa-cuenta {
+  display: flex;
+  flex-direction: column;
+}
+
+.mesa-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+}
+
+.mesa-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mesa-item-desc {
+  font-weight: 600;
+  color: var(--text-primary, rgba(0, 0, 0, 0.87));
+}
+
+.mesa-item-detalle,
+.mesa-item-calc {
+  font-size: 0.85rem;
+  color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+}
+
+.mesa-item-total {
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text-primary, rgba(0, 0, 0, 0.87));
+}
+
+.mesa-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 2px solid var(--border-color, rgba(0, 0, 0, 0.12));
+  font-weight: 600;
+}
+
+.mesa-total-valor {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary, #1976d2);
+}
+
+.mesa-libre {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 16px;
+  color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+
+  mat-icon {
+    color: var(--success-color, #2e7d32);
+    font-size: 40px;
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* ---- Tomar pedido (M2) ---- */
+.pedido-content {
+  padding: 12px 16px 180px;
+}
+
+.pedido-buscar {
+  .pedido-search-field {
+    width: 100%;
+  }
+}
+
+.pedido-prod {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: var(--card-background, #fff);
+  cursor: pointer;
+
+  &[disabled] {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.pedido-add {
+  align-self: center;
+  color: var(--primary, #1976d2);
+}
+
+.pedido-resumen {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 40dvh;
+  overflow-y: auto;
+  background: var(--surface, #fff);
+  border-top: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
+  padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
+  box-shadow: 0 -2px 8px var(--shadow-color, rgba(0, 0, 0, 0.12));
+}
+
+.pedido-resumen-head {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.pedido-resumen-total {
+  color: var(--primary, #1976d2);
+}
+
+.pedido-resumen-linea {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+  padding: 2px 0;
+}
+
+.mesa-fab {
+  position: fixed;
+  right: 18px;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  z-index: 5;
+}
