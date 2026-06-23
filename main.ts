@@ -37,6 +37,7 @@ import { registerFinancieroHandlers } from './electron/handlers/financiero.handl
 import { registerComprasHandlers } from './electron/handlers/compras.handler';
 import { registerSystemHandlers } from './electron/handlers/system.handler';
 import { registerVentasHandlers } from './electron/handlers/ventas.handler';
+import { registerKdsHandlers } from './electron/handlers/kds.handler';
 import { registerRecetasHandlers } from './electron/handlers/recetas.handler';
 import { registerCajaMayorHandlers } from './electron/handlers/caja-mayor.handler';
 import { registerBankingHandlers, startAcreditacionesScheduler } from './electron/handlers/banking.handler';
@@ -191,6 +192,7 @@ function initializeDatabase() {
       registerComprasHandlers(dataSource, getCurrentUser);
       registerSystemHandlers(); // system handler doesn't need dataSource or user
       registerVentasHandlers(dataSource, getCurrentUser); // Register ventas handlers
+      registerKdsHandlers(dataSource, getCurrentUser); // KDS: comandas en pantalla de cocina (estado por sector)
       registerRecetasHandlers(dataSource, getCurrentUser); // Recetas + Sabores + Variaciones (unificado)
       registerCajaMayorHandlers(dataSource, getCurrentUser); // Caja Mayor + Gastos + Retiros
       registerBankingHandlers(dataSource, getCurrentUser); // CuentasBancarias + MaquinasPos + Acreditaciones

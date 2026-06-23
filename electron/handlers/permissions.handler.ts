@@ -120,6 +120,11 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'DOCUMENTOS_REIMPRIMIR_TICKET_VENTA', descripcion: 'Reimprimir ticket de venta desde historial', modulo: 'DOCUMENTOS' },
   { codigo: 'DOCUMENTOS_ADJUNTAR', descripcion: 'Adjuntar archivos (escaneados firmados, comprobantes) a entidades', modulo: 'DOCUMENTOS' },
   { codigo: 'DOCUMENTOS_ADJUNTOS_ELIMINAR', descripcion: 'Eliminar adjuntos de entidades', modulo: 'DOCUMENTOS' },
+
+  // KDS (Kitchen Display System)
+  { codigo: 'COMANDAS_KDS_VER', descripcion: 'Ver pantallas KDS (comandas de cocina por sector)', modulo: 'VENTAS' },
+  { codigo: 'COMANDAS_KDS_OPERAR', descripcion: 'Operar el KDS: marcar items en preparación/listo/entregado', modulo: 'VENTAS' },
+  { codigo: 'COMANDAS_KDS_CONFIGURAR', descripcion: 'Configurar pantallas KDS (qué sectores muestra cada una)', modulo: 'VENTAS' },
 ];
 
 export async function seedPermissions(dataSource: DataSource) {
