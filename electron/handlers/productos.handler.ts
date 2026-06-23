@@ -20,7 +20,8 @@ import { EnsambladoPizza } from '../../src/app/database/entities/productos/ensam
 import { EnsambladoPizzaSabor } from '../../src/app/database/entities/productos/ensamblado-pizza-sabor.entity';
 import { Produccion } from '../../src/app/database/entities/productos/produccion.entity';
 import { ProduccionIngrediente } from '../../src/app/database/entities/productos/produccion-ingrediente.entity';
-import { StockMovimiento } from '../../src/app/database/entities/productos/stock-movimiento.entity';
+import { StockMovimiento, StockMovimientoTipo, StockMovimientoTipoReferencia } from '../../src/app/database/entities/productos/stock-movimiento.entity';
+import { escalarProduccion } from '../../src/app/shared/utils/produccion-buffet.util';
 import { Combo } from '../../src/app/database/entities/productos/combo.entity';
 import { ComboProducto } from '../../src/app/database/entities/productos/combo-producto.entity';
 import { Promocion } from '../../src/app/database/entities/productos/promocion.entity';
@@ -440,6 +441,10 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         esIngrediente: productoData.esIngrediente !== undefined ? productoData.esIngrediente : false,
         stockMinimo: productoData.stockMinimo,
         stockMaximo: productoData.stockMaximo,
+        // Buffet por peso
+        taraGramos: productoData.taraGramos ?? null,
+        pesoMinimoGramos: productoData.pesoMinimoGramos ?? null,
+        descuentaPorReceta: productoData.descuentaPorReceta !== undefined ? productoData.descuentaPorReceta : false,
         registroCompleto: productoData.registroCompleto !== undefined ? productoData.registroCompleto : true,
         imageUrl: productoData.imageUrl || undefined,
       });
@@ -484,6 +489,14 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       // Actualizar campos de control de stock
       if (productoData.stockMinimo !== undefined) producto.stockMinimo = productoData.stockMinimo;
       if (productoData.stockMaximo !== undefined) producto.stockMaximo = productoData.stockMaximo;
+
+      // Buffet por peso
+      if (productoData.taraGramos !== undefined)
+        (producto as any).taraGramos = productoData.taraGramos ?? null;
+      if (productoData.pesoMinimoGramos !== undefined)
+        (producto as any).pesoMinimoGramos = productoData.pesoMinimoGramos ?? null;
+      if (productoData.descuentaPorReceta !== undefined)
+        producto.descuentaPorReceta = productoData.descuentaPorReceta;
 
       // IVA con validacion
       if (productoData.iva !== undefined) {
@@ -1416,6 +1429,136 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   // --- Helper Methods ---
+  // --- Producción de buffet (cargar las cubas) ---
+  // Atómico: crea Produccion + ProduccionIngrediente[] + StockMovimiento
+  // PRODUCCION_SALIDA por cada insumo (escalado por receta) + PRODUCCION_ENTRADA
+  // del producto buffet. Así el stock del buffet = producido - vendido.
+  ipcMain.handle('crear-produccion', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
+    const currentUser = getCurrentUser();
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const productoId = data.productoId;
+      const cantidadProducida = Number(data.cantidadProducida) || 0;
+      if (!productoId || cantidadProducida <= 0) {
+        throw new Error('Producto y cantidad producida son obligatorios');
+      }
+
+      const producto = await queryRunner.manager.findOne(Producto, {
+        where: { id: productoId },
+        relations: ['receta'],
+      });
+      if (!producto) throw new Error('Producto no encontrado');
+
+      const recetaId = producto.receta?.id;
+      let receta: Receta | null = null;
+      let ingredientesReceta: RecetaIngrediente[] = [];
+      if (recetaId) {
+        receta = await queryRunner.manager.findOne(Receta, { where: { id: recetaId } });
+        ingredientesReceta = await queryRunner.manager.find(RecetaIngrediente, {
+          where: { receta: { id: recetaId }, activo: true },
+          relations: ['producto'],
+        });
+      }
+
+      // Crear cabecera de producción.
+      const produccion = queryRunner.manager.create(Produccion, {
+        fecha: data.fecha ? new Date(data.fecha) : new Date(),
+        cantidadProducida,
+        unidad: (data.unidad || producto.unidadBase || receta?.unidadRendimiento || 'KILOGRAMO').toString().toUpperCase(),
+        observaciones: data.observaciones ? String(data.observaciones).toUpperCase() : undefined,
+        receta: receta ?? undefined,
+        usuario: currentUser ?? undefined,
+      } as any);
+      const savedProduccion = await queryRunner.manager.save(Produccion, produccion);
+
+      // Escalar insumos y descontar stock (PRODUCCION_SALIDA).
+      const ingsCalc = escalarProduccion(
+        ingredientesReceta.map((ri) => ({
+          ingredienteId: (ri as any).producto?.id,
+          cantidad: Number(ri.cantidad),
+          unidad: ri.unidad,
+          porcentajeAprovechamiento: Number(ri.porcentajeAprovechamiento),
+        })).filter((x) => !!x.ingredienteId),
+        Number(receta?.rendimiento) || 1,
+        cantidadProducida,
+      );
+
+      for (const ing of ingsCalc) {
+        const pi = queryRunner.manager.create(ProduccionIngrediente, {
+          cantidadUsada: ing.cantidadUsada,
+          unidad: ing.unidad,
+          produccion: savedProduccion,
+          ingrediente: { id: ing.ingredienteId } as any,
+        } as any);
+        await queryRunner.manager.save(ProduccionIngrediente, pi);
+
+        const movSalida = queryRunner.manager.create(StockMovimiento, {
+          cantidad: ing.cantidadUsada,
+          tipo: StockMovimientoTipo.PRODUCCION_SALIDA,
+          referencia: savedProduccion.id,
+          tipoReferencia: StockMovimientoTipoReferencia.PRODUCCION,
+          fecha: new Date(),
+          activo: true,
+          producto: { id: ing.ingredienteId } as any,
+          observaciones: `PRODUCCION #${savedProduccion.id} - INSUMO`,
+        } as any);
+        if (currentUser) {
+          (movSalida as any).createdBy = currentUser;
+          (movSalida as any).updatedBy = currentUser;
+        }
+        await queryRunner.manager.save(StockMovimiento, movSalida);
+      }
+
+      // Entrada del producto buffet terminado (en su unidad base).
+      const movEntrada = queryRunner.manager.create(StockMovimiento, {
+        cantidad: cantidadProducida,
+        tipo: StockMovimientoTipo.PRODUCCION_ENTRADA,
+        referencia: savedProduccion.id,
+        tipoReferencia: StockMovimientoTipoReferencia.PRODUCCION,
+        fecha: new Date(),
+        activo: true,
+        producto: { id: producto.id } as any,
+        observaciones: `PRODUCCION #${savedProduccion.id} - BUFFET`,
+      } as any);
+      if (currentUser) {
+        (movEntrada as any).createdBy = currentUser;
+        (movEntrada as any).updatedBy = currentUser;
+      }
+      await queryRunner.manager.save(StockMovimiento, movEntrada);
+
+      await queryRunner.commitTransaction();
+      return { success: true, produccionId: savedProduccion.id, insumos: ingsCalc.length };
+    } catch (error: any) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error creando produccion:', error);
+      return { success: false, message: error?.message || 'Error al crear producción' };
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  ipcMain.handle('get-producciones', async (_event: any, filtros: any = {}) => {
+    try {
+      const repo = dataSource.getRepository(Produccion);
+      const qb = repo.createQueryBuilder('p')
+        .leftJoinAndSelect('p.receta', 'receta')
+        .leftJoinAndSelect('p.ingredientes', 'ingredientes')
+        .where('p.activo = :activo', { activo: true })
+        .orderBy('p.fecha', 'DESC')
+        .addOrderBy('p.id', 'DESC');
+      if (filtros?.recetaId) {
+        qb.andWhere('receta.id = :recetaId', { recetaId: filtros.recetaId });
+      }
+      return await qb.getMany();
+    } catch (error) {
+      console.error('Error obteniendo producciones:', error);
+      throw error;
+    }
+  });
+
   ipcMain.handle('search-productos-by-codigo', async (_event: any, codigo: string) => {
     try {
       const codigoBarraRepository = dataSource.getRepository(CodigoBarra);
@@ -1690,6 +1833,16 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         valor: precioVentaData.valor,
         principal: precioVentaData.principal || false,
         activo: precioVentaData.activo !== undefined ? precioVentaData.activo : true,
+        // Programación de vigencia (precios por día/horario)
+        diasSemana: precioVentaData.diasSemana || null,
+        horaInicio: precioVentaData.horaInicio || null,
+        horaFin: precioVentaData.horaFin || null,
+        fechaInicio: precioVentaData.fechaInicio || null,
+        fechaFin: precioVentaData.fechaFin || null,
+        prioridad: precioVentaData.prioridad ?? 0,
+        // Buffet por peso: tope/mínimo (cuando aplica)
+        precioMinimo: precioVentaData.precioMinimo ?? null,
+        precioMaximo: precioVentaData.precioMaximo ?? null,
         moneda: moneda,
         tipoPrecio: tipoPrecio,
         ...(presentacion && { presentacion }),
@@ -1725,6 +1878,25 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       // Update fields
       if (precioVentaData.valor !== undefined) precioVenta.valor = precioVentaData.valor;
       if (precioVentaData.activo !== undefined) precioVenta.activo = precioVentaData.activo;
+
+      // Programación de vigencia. Se nulea con `null` explícito (no undefined,
+      // que TypeORM ignora) cuando llega cadena/valor vacío.
+      if (precioVentaData.diasSemana !== undefined)
+        (precioVenta as any).diasSemana = precioVentaData.diasSemana || null;
+      if (precioVentaData.horaInicio !== undefined)
+        (precioVenta as any).horaInicio = precioVentaData.horaInicio || null;
+      if (precioVentaData.horaFin !== undefined)
+        (precioVenta as any).horaFin = precioVentaData.horaFin || null;
+      if (precioVentaData.fechaInicio !== undefined)
+        (precioVenta as any).fechaInicio = precioVentaData.fechaInicio || null;
+      if (precioVentaData.fechaFin !== undefined)
+        (precioVenta as any).fechaFin = precioVentaData.fechaFin || null;
+      if (precioVentaData.prioridad !== undefined)
+        precioVenta.prioridad = precioVentaData.prioridad ?? 0;
+      if (precioVentaData.precioMinimo !== undefined)
+        (precioVenta as any).precioMinimo = precioVentaData.precioMinimo ?? null;
+      if (precioVentaData.precioMaximo !== undefined)
+        (precioVenta as any).precioMaximo = precioVentaData.precioMaximo ?? null;
 
       // Handle principal flag
       if (precioVentaData.principal !== undefined) {

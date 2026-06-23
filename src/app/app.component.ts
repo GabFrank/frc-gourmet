@@ -56,6 +56,7 @@ import { ListAdicionalesComponent } from './pages/gestion-recetas/list-adicional
 import { ListProductosComponent } from './pages/productos/list-productos/list-productos.component';
 import { ListSaboresComponent } from './pages/gestion-sabores/list-sabores/list-sabores.component';
 import { VentasDashboardComponent } from './pages/ventas/dashboard/ventas-dashboard.component';
+import { BuffetDashboardComponent } from './pages/ventas/buffet-dashboard/buffet-dashboard.component';
 import { CajaMayorDashboardComponent } from './pages/financiero/caja-mayor/dashboard/caja-mayor-dashboard.component';
 import { ListCuentasPorCobrarComponent } from './pages/financiero/caja-mayor/cuentas-por-cobrar/list-cuentas-por-cobrar/list-cuentas-por-cobrar.component';
 import { ListPermisosComponent } from './pages/personalizacion/permisos/list-permisos/list-permisos.component';
@@ -1024,6 +1025,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       VentasDashboardComponent,
       { source: 'navigation' },
       'ventas-dashboard-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openBuffetDashTab() {
+    this.tabsService.openTab(
+      'Buffet por kilo',
+      BuffetDashboardComponent,
+      { source: 'navigation' },
+      'buffet-dashboard-tab',
       true
     );
     this.closeMenu();

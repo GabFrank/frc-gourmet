@@ -95,6 +95,92 @@
             </div>
           </div>
 
+          <!-- Programación de vigencia (precio por día/horario) -->
+          <div class="form-row">
+            <mat-checkbox [checked]="mostrarProgramacion" (change)="mostrarProgramacion = $event.checked" color="primary">
+              <span class="checkbox-label">
+                <mat-icon>schedule</mat-icon>
+                Programar por día/horario
+              </span>
+            </mat-checkbox>
+            <mat-hint class="checkbox-hint">
+              Opcional. Ej: almuerzo, cena, viernes premium, feriados. Sin programación, el precio es base.
+            </mat-hint>
+          </div>
+
+          <div *ngIf="mostrarProgramacion">
+            <div class="form-row">
+              <!-- Días de semana -->
+              <mat-form-field appearance="outline" class="form-field">
+                <mat-label>Días de la semana</mat-label>
+                <mat-select formControlName="diasSemana" multiple>
+                  <mat-option *ngFor="let dia of diasOpciones" [value]="dia.value">
+                    {{ dia.label }}
+                  </mat-option>
+                </mat-select>
+                <mat-icon matSuffix>event</mat-icon>
+                <mat-hint>Vacío = todos los días</mat-hint>
+              </mat-form-field>
+
+              <!-- Hora inicio -->
+              <mat-form-field appearance="outline" class="form-field">
+                <mat-label>Hora desde</mat-label>
+                <input matInput type="time" formControlName="horaInicio">
+                <mat-icon matSuffix>schedule</mat-icon>
+              </mat-form-field>
+
+              <!-- Hora fin -->
+              <mat-form-field appearance="outline" class="form-field">
+                <mat-label>Hora hasta</mat-label>
+                <input matInput type="time" formControlName="horaFin">
+                <mat-icon matSuffix>schedule</mat-icon>
+              </mat-form-field>
+            </div>
+
+            <div class="form-row">
+              <!-- Fecha inicio -->
+              <mat-form-field appearance="outline" class="form-field">
+                <mat-label>Fecha desde</mat-label>
+                <input matInput type="date" formControlName="fechaInicio">
+                <mat-icon matSuffix>calendar_today</mat-icon>
+              </mat-form-field>
+
+              <!-- Fecha fin -->
+              <mat-form-field appearance="outline" class="form-field">
+                <mat-label>Fecha hasta</mat-label>
+                <input matInput type="date" formControlName="fechaFin">
+                <mat-icon matSuffix>calendar_today</mat-icon>
+              </mat-form-field>
+
+              <!-- Prioridad -->
+              <mat-form-field appearance="outline" class="form-field">
+                <mat-label>Prioridad</mat-label>
+                <input matInput type="number" formControlName="prioridad" min="0">
+                <mat-icon matSuffix>low_priority</mat-icon>
+                <mat-hint>Mayor gana ante solape</mat-hint>
+              </mat-form-field>
+            </div>
+          </div>
+
+          <!-- Buffet por peso (opcional): el valor de arriba se interpreta como precio por kilo -->
+          <div class="form-row">
+            <mat-form-field appearance="outline" class="form-field">
+              <mat-label>Cobro mínimo (buffet)</mat-label>
+              <input matInput type="text" inputmode="decimal" formControlName="precioMinimo"
+                     appCurrencyInput [decimals]="decimalesMoneda" placeholder="Opcional">
+              <mat-icon matSuffix>south</mat-icon>
+              <mat-hint>Si el plato pesa poco, se cobra este mínimo</mat-hint>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="form-field">
+              <mat-label>Tope "buffet libre"</mat-label>
+              <input matInput type="text" inputmode="decimal" formControlName="precioMaximo"
+                     appCurrencyInput [decimals]="decimalesMoneda" placeholder="Opcional">
+              <mat-icon matSuffix>all_inclusive</mat-icon>
+              <mat-hint>A partir de este monto se cobra fijo</mat-hint>
+            </mat-form-field>
+          </div>
+
           <!-- Third Row: Save/Update Button -->
           <div class="form-row form-actions">
             <div class="actions-container">

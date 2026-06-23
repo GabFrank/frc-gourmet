@@ -256,6 +256,7 @@ export abstract class RepositoryService {
   abstract cerrarVentasAbiertasMesa(mesaId: number, estado: string): Observable<number>;
   abstract getVentas(): Observable<Venta[]>;
   abstract getVentasByDateRange(desde: string, hasta: string, filtros?: any): Observable<{ data: Venta[], total: number }>;
+  abstract getBuffetMetricas(filtros?: any): Observable<any>;
   abstract getVentasByEstado(estado: VentaEstado): Observable<Venta[]>;
   abstract getVentasByCaja(cajaId: number): Observable<Venta[]>;
   abstract getResumenCaja(cajaId: number): Observable<any>;
@@ -405,6 +406,9 @@ export abstract class RepositoryService {
   abstract createProducto(productoData: Partial<Producto>): Observable<Producto>;
   abstract updateProducto(productoId: number, productoData: Partial<Producto>): Observable<any>;
   abstract deleteProducto(productoId: number): Observable<any>;
+  // Producción de buffet (cargar cubas)
+  abstract crearProduccion(data: any): Observable<any>;
+  abstract getProducciones(filtros?: any): Observable<any[]>;
   abstract getPresentaciones(): Observable<Presentacion[]>;
   abstract getPresentacionesByProducto(productoId: number, page?: number, pageSize?: number, filtroActivo?: string): Observable<any>;
   abstract getPresentacion(presentacionId: number): Observable<any>;

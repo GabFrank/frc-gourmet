@@ -1,0 +1,56 @@
+<div class="buffet-dashboard">
+  <app-dash-section-header icon="scale" title="Métricas de Buffet por peso">
+  </app-dash-section-header>
+
+  <!-- Filtros (sin live filtering: botón explícito) -->
+  <div class="filtros">
+    <mat-form-field appearance="outline">
+      <mat-label>Desde</mat-label>
+      <input matInput type="date" [(ngModel)]="desde" name="desde">
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Hasta</mat-label>
+      <input matInput type="date" [(ngModel)]="hasta" name="hasta">
+    </mat-form-field>
+    <button mat-raised-button color="primary" (click)="cargar()" [disabled]="loading">
+      <mat-icon>filter_alt</mat-icon>
+      Filtrar
+    </button>
+  </div>
+
+  <div class="spinner" *ngIf="loading">
+    <mat-progress-spinner mode="indeterminate" diameter="40"></mat-progress-spinner>
+  </div>
+
+  <div class="chips" *ngIf="!loading && metricas">
+    <app-dash-stat-chip icon="scale" color="primary"
+      [value]="(metricas.kgVendidos | number:'1.0-3') + ' kg'" label="Kg vendidos">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip icon="inventory" color="info"
+      [value]="(metricas.kgProducidos | number:'1.0-3') + ' kg'" label="Kg producidos">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip icon="delete_sweep" color="warning"
+      [value]="(metricas.desperdicioKg | number:'1.0-3') + ' kg'" label="Desperdicio (prod. - vend.)">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip icon="monitor_weight" color="primary"
+      [value]="(metricas.pesoMedioGramosPorVenta | number:'1.0-0') + ' g'" label="Peso medio por venta">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip icon="point_of_sale" color="success"
+      [value]="(metricas.ingresoTotal | number:'1.0-2') || ''" label="Ingreso total">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip icon="percent" [color]="metricas.cmvPorcentaje > 42 ? 'error' : 'success'"
+      [value]="(metricas.cmvPorcentaje | number:'1.0-1') + '%'" label="CMV del buffet">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip icon="all_inclusive" color="info"
+      [value]="(metricas.porcentajeLibre | number:'1.0-1') + '%'" label="% tickets 'libre'">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip icon="receipt_long" color="primary"
+      [value]="metricas.cantidadVentas" label="Ventas con buffet">
+    </app-dash-stat-chip>
+  </div>
+
+  <div class="empty" *ngIf="!loading && metricas && metricas.cantidadItems === 0">
+    <mat-icon>info</mat-icon>
+    <span>Sin ventas de buffet en el período seleccionado.</span>
+  </div>
+</div>

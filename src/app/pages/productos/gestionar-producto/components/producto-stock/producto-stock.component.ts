@@ -7,9 +7,11 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatPaginator, PageEvent } from '@angular/material/paginator';
 import { StockMovimiento, StockMovimientoTipo, StockMovimientoTipoReferencia } from 'src/app/database/entities/productos/stock-movimiento.entity';
 import { Producto } from 'src/app/database/entities/productos/producto.entity';
+import { ProductoTipo } from 'src/app/database/entities/productos/producto-tipo.enum';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { GestionarProductoService } from '../../services/gestionar-producto.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { ProduccionBuffetDialogComponent } from 'src/app/shared/components/produccion-buffet-dialog/produccion-buffet-dialog.component';
 
 @Component({
   selector: 'app-producto-stock',
@@ -47,6 +49,7 @@ export class ProductoStockComponent implements OnInit, OnDestroy {
   // Enums para uso en template
   readonly StockMovimientoTipo = StockMovimientoTipo;
   readonly StockMovimientoTipoReferencia = StockMovimientoTipoReferencia;
+  readonly ProductoTipo = ProductoTipo;
   
   // Propiedades computadas para evitar llamadas directas en template
   stockActual = 0;
@@ -159,6 +162,21 @@ export class ProductoStockComponent implements OnInit, OnDestroy {
   /**
    * Carga los movimientos de stock del producto
    */
+  abrirProduccionDialog(): void {
+    if (!this.producto) return;
+    const ref = this.dialog.open(ProduccionBuffetDialogComponent, {
+      width: '480px',
+      data: { producto: this.producto },
+      disableClose: true,
+    });
+    ref.afterClosed().subscribe((ok: boolean) => {
+      if (ok && this.producto?.id) {
+        this.loadProducto(this.producto.id);
+        this.loadStockMovimientos(this.producto.id, this.currentPage, this.pageSize);
+      }
+    });
+  }
+
   private loadStockMovimientos(productoId: number, page = 0, pageSize = 10): void {
     this.isLoading = true;
     this.repository.getStockMovimientosByProducto(productoId).subscribe({
