@@ -13,7 +13,11 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { AuthService, RepositoryService } from '@frc/shared-core';
-import { AgregarItemDialogComponent } from './agregar-item-dialog.component';
+import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
+import {
+  SeleccionarVariacionDialogComponent,
+  SeleccionarVariacionResult,
+} from './seleccionar-variacion-dialog.component';
 
 interface ProductoVM {
   id: number;
@@ -24,6 +28,8 @@ interface ProductoVM {
   precioId?: number;
   precio: number;
   costo: number;
+  recetaId?: number | null;
+  esVariacion: boolean;
 }
 
 interface PedidoLinea {
@@ -33,12 +39,13 @@ interface PedidoLinea {
 }
 
 /**
- * M2 (slice 1) — Tomar pedido: abrir/usar la venta ABIERTA de la mesa y agregar
- * productos SIMPLES (RETAIL / ELABORADO_SIN_VARIACION). Al crear el venta-item,
+ * M2 — Tomar pedido: abrir/usar la venta ABIERTA de la mesa y agregar productos
+ * SIMPLES (RETAIL / ELABORADO_SIN_VARIACION) eligiendo cantidad, adicionales (de
+ * la receta) y observaciones (del producto + nota libre). Al crear el venta-item
  * el backend dispara la impresión de comanda automáticamente (fire-and-forget).
  *
- * Variaciones (pizza/sabores), adicionales, observaciones y combos llegan en
- * iteraciones siguientes (M2.x).
+ * Productos ELABORADO_CON_VARIACION (pizza) abren un diálogo aparte para elegir
+ * tamaño + sabores. Combos y personalización por-sabor llegan más adelante.
  */
 @Component({
   selector: 'app-tomar-pedido',
@@ -135,17 +142,20 @@ export class TomarPedidoPage implements OnInit {
 
   private toProductoVM(p: any): ProductoVM {
     const tipo = p.tipo;
-    const soportado =
+    const esVariacion = tipo === 'ELABORADO_CON_VARIACION';
+    const esSimple =
       tipo === 'RETAIL' || tipo === 'RETAIL_INGREDIENTE' || tipo === 'ELABORADO_SIN_VARIACION';
     return {
       id: p.id,
       nombre: p.nombre,
       tipo,
-      soportado,
+      soportado: esSimple || esVariacion,
+      esVariacion,
       presentacionId: p.principalPresentacion?.id,
       precioId: p.principalPrecio?.id,
       precio: Number(p.principalPrecio?.valor) || 0,
       costo: Number(p.receta?.costoCalculado) || 0,
+      recetaId: p.receta?.id ?? null,
     };
   }
 
@@ -173,21 +183,31 @@ export class TomarPedidoPage implements OnInit {
 
   async agregar(p: ProductoVM): Promise<void> {
     if (!p.soportado || this.guardando) return;
+    if (p.esVariacion) {
+      await this.agregarVariacion(p);
+      return;
+    }
     if (!p.presentacionId || !p.precioId) {
       this.snack.open('El producto no tiene precio/presentación configurado', 'CERRAR', { duration: 4000 });
       return;
     }
 
-    // Elegir cantidad antes de agregar.
-    const cantidad = await firstValueFrom(
+    // Elegir cantidad + adicionales + observaciones antes de agregar.
+    const sel = await firstValueFrom(
       this.dialog
         .open(AgregarItemDialogComponent, {
-          data: { nombre: p.nombre, precioUnitario: p.precio },
-          width: '320px',
+          data: {
+            productoId: p.id,
+            nombre: p.nombre,
+            precioUnitario: p.precio,
+            recetaId: p.recetaId,
+          },
+          width: '340px',
+          maxHeight: '85vh',
         })
         .afterClosed(),
-    );
-    if (!cantidad || cantidad < 1) return;
+    ) as AgregarItemResult | undefined;
+    if (!sel || sel.cantidad < 1) return;
 
     this.guardando = true;
     const ventaId = await this.ensureVenta();
@@ -196,24 +216,119 @@ export class TomarPedidoPage implements OnInit {
       return;
     }
     try {
-      await firstValueFrom(
+      const item: any = await firstValueFrom(
         this.repo.createVentaItem({
           producto: { id: p.id },
           presentacion: { id: p.presentacionId },
-          cantidad,
+          cantidad: sel.cantidad,
           precioVentaUnitario: p.precio,
           precioCostoUnitario: p.costo,
           venta: { id: ventaId },
           precioVentaPresentacion: { id: p.precioId },
-          precioAdicionales: 0,
+          precioAdicionales: sel.precioAdicionalTotal,
           estado: 'ACTIVO',
         } as any),
       );
-      this.pedido.unshift({ nombre: p.nombre, cantidad, precio: p.precio });
-      this.totalPedido += p.precio * cantidad;
-      this.snack.open(`Agregado: ${cantidad} × ${p.nombre}`, undefined, { duration: 1200 });
+
+      // Adicionales y observaciones se crean tras el item (necesitan su id).
+      const itemId = item?.id;
+      if (itemId) {
+        for (const ad of sel.adicionales) {
+          await firstValueFrom(
+            this.repo.createVentaItemAdicional({
+              ventaItem: { id: itemId },
+              adicional: { id: ad.id },
+              precioCobrado: ad.precio,
+              cantidad: 1,
+            }),
+          );
+        }
+        for (const obsId of sel.observaciones) {
+          await firstValueFrom(
+            this.repo.createVentaItemObservacion({
+              ventaItem: { id: itemId },
+              observacion: { id: obsId },
+            }),
+          );
+        }
+        if (sel.observacionLibre) {
+          await firstValueFrom(
+            this.repo.createVentaItemObservacion({
+              ventaItem: { id: itemId },
+              observacionLibre: sel.observacionLibre,
+            }),
+          );
+        }
+      }
+
+      const precioLinea = p.precio + sel.precioAdicionalTotal;
+      this.pedido.unshift({ nombre: p.nombre, cantidad: sel.cantidad, precio: precioLinea });
+      this.totalPedido += precioLinea * sel.cantidad;
+      this.snack.open(`Agregado: ${sel.cantidad} × ${p.nombre}`, undefined, { duration: 1200 });
     } catch {
       this.snack.open('No se pudo agregar el producto', 'CERRAR', { duration: 4000 });
+    } finally {
+      this.guardando = false;
+    }
+  }
+
+  private async agregarVariacion(p: ProductoVM): Promise<void> {
+    const sel = (await firstValueFrom(
+      this.dialog
+        .open(SeleccionarVariacionDialogComponent, {
+          data: { productoId: p.id, nombre: p.nombre },
+          width: '360px',
+          maxHeight: '85vh',
+        })
+        .afterClosed(),
+    )) as SeleccionarVariacionResult | undefined;
+    if (!sel || sel.sabores.length === 0) return;
+
+    this.guardando = true;
+    const ventaId = await this.ensureVenta();
+    if (!ventaId) {
+      this.guardando = false;
+      return;
+    }
+    try {
+      const itemData: any = {
+        producto: { id: p.id },
+        presentacion: { id: sel.presentacionId },
+        cantidad: sel.cantidad,
+        precioVentaUnitario: sel.precioCalculado,
+        precioCostoUnitario: sel.costoCalculado,
+        venta: { id: ventaId },
+        recetaPresentacion: { id: sel.recetaPresentacionPrincipalId },
+        ensambladoDescripcion: sel.ensambladoDescripcion,
+        cantidadSabores: sel.sabores.length,
+        precioAdicionales: 0,
+        estado: 'ACTIVO',
+      };
+      if (sel.precioVentaPresentacionId) {
+        itemData.precioVentaPresentacion = { id: sel.precioVentaPresentacionId };
+      }
+      const item: any = await firstValueFrom(this.repo.createVentaItem(itemData));
+
+      const itemId = item?.id;
+      if (itemId) {
+        for (const s of sel.sabores) {
+          await firstValueFrom(
+            this.repo.createVentaItemSabor({
+              ventaItemId: itemId,
+              recetaPresentacionId: s.recetaPresentacionId,
+              proporcion: s.proporcion,
+              precioReferencia: s.precioReferencia,
+              costoReferencia: s.costoReferencia,
+            }),
+          );
+        }
+      }
+
+      this.pedido.unshift({ nombre: sel.ensambladoDescripcion, cantidad: sel.cantidad, precio: sel.precioCalculado });
+      this.totalPedido += sel.precioCalculado * sel.cantidad;
+      this.snack.open(`Agregado: ${sel.cantidad} × ${p.nombre}`, undefined, { duration: 1200 });
+    } catch {
+      this.snack.open('No se pudo agregar la variación', 'CERRAR', { duration: 4000 });
     } finally {
       this.guardando = false;
     }
