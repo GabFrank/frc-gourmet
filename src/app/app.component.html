@@ -201,6 +201,14 @@
               <mat-icon matListItemIcon>scale</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Buffet por kilo</span>
             </a>
+            <a *appHasPermission="'COMANDAS_KDS_VER'" mat-list-item (click)="openKdsTab()">
+              <mat-icon matListItemIcon>restaurant</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">KDS — Cocina</span>
+            </a>
+            <a *appHasPermission="'COMANDAS_KDS_CONFIGURAR'" mat-list-item (click)="openKdsPantallasTab()">
+              <mat-icon matListItemIcon>tv</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Pantallas KDS</span>
+            </a>
           </div>
         </mat-expansion-panel>
 
