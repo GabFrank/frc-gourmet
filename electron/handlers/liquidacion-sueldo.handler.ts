@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { Between, DataSource } from 'typeorm';
+import { Between, DataSource, Not } from 'typeorm';
 import { LiquidacionSueldo } from '../../src/app/database/entities/rrhh/liquidacion-sueldo.entity';
 import { LiquidacionItem } from '../../src/app/database/entities/rrhh/liquidacion-item.entity';
 import { LiquidacionConcepto } from '../../src/app/database/entities/rrhh/liquidacion-concepto.entity';
@@ -9,6 +9,7 @@ import { LiquidacionSueldoEstado } from '../../src/app/database/entities/rrhh/li
 import { LiquidacionItemTipo } from '../../src/app/database/entities/rrhh/liquidacion-item-tipo.enum';
 import { Bono } from '../../src/app/database/entities/rrhh/bono.entity';
 import { Aguinaldo, AguinaldoEstado } from '../../src/app/database/entities/rrhh/aguinaldo.entity';
+import { VacacionVenta, VacacionVentaEstado } from '../../src/app/database/entities/rrhh/vacacion-venta.entity';
 import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.entity';
 import { Vale } from '../../src/app/database/entities/rrhh/vale.entity';
 import { ValeEstado } from '../../src/app/database/entities/rrhh/vale-estado.enum';
@@ -21,6 +22,7 @@ import { CuotaEstado } from '../../src/app/database/entities/financiero/cuentas-
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
+import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
@@ -162,11 +164,14 @@ export function registerLiquidacionSueldoHandlers(
       const itemRepo = queryRunner.manager.getRepository(LiquidacionItem);
       const conceptoRepo = queryRunner.manager.getRepository(LiquidacionConcepto);
 
-      // Buscar liquidacion existente
+      // Buscar liquidacion existente del periodo, EXCLUYENDO las ANULADAS:
+      // una liquidacion anulada quedó histórica y no debe reutilizarse; en ese
+      // caso generamos un borrador nuevo.
       let liq = await liqRepo.findOne({
         where: {
           funcionario: { id: funcionarioId } as any,
           periodo,
+          estado: Not(LiquidacionSueldoEstado.ANULADA),
         },
       });
 
@@ -364,6 +369,20 @@ export function registerLiquidacionSueldoHandlers(
         );
       }
 
+      // 10) Ventas de vacaciones pendientes (pago al funcionario como HABER)
+      const ventaVacRepo = queryRunner.manager.getRepository(VacacionVenta);
+      const ventasVacPend = await ventaVacRepo.createQueryBuilder('vv')
+        .leftJoin('vv.vacacion', 'vac')
+        .leftJoin('vac.funcionario', 'vf')
+        .where('vf.id = :fid', { fid: funcionarioId })
+        .andWhere('vv.estado = :est', { est: VacacionVentaEstado.PENDIENTE })
+        .getMany();
+      for (const vv of ventasVacPend) {
+        if (Number(vv.monto) > 0) {
+          await crearItem('VACACION_VENTA', `Venta de ${vv.dias} dia(s) de vacaciones`, Number(vv.monto), LiquidacionItemTipo.HABER, vv.id, 'VACACION_VENTA');
+        }
+      }
+
       // Recalcular totales
       const allItems = await itemRepo.find({ where: { liquidacion: { id: liq.id } as any } });
       const tot = await recalcularTotales(allItems);
@@ -503,33 +522,48 @@ export function registerLiquidacionSueldoHandlers(
       if (!liq) throw new Error(`Liquidacion ${id} no encontrada`);
       if (liq.estado !== LiquidacionSueldoEstado.APROBADA) throw new Error('Solo APROBADA puede ser pagada');
 
-      const cajaMayorId = payload?.cajaMayorId;
-      const monedaId = payload?.monedaId || liq.monedaPago?.id;
-      const formaPagoId = payload?.formaPagoId;
-      if (!cajaMayorId || !monedaId || !formaPagoId) throw new Error('Faltan datos para el pago');
-
+      const fuente = payload?.fuente || 'CAJA_MAYOR';
       const userId = getCurrentUser()?.id;
       const userEntity = userId
         ? await queryRunner.manager.findOne(Usuario, { where: { id: userId } })
         : null;
-
       const monto = Number(liq.totalNeto);
-      const obs = `LIQUIDACION ${liq.periodo} - ${liq.funcionario.persona?.nombre || ''} ${liq.funcionario.persona?.apellido || ''}`.trim();
-      const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
-        cajaMayor: { id: cajaMayorId } as any,
-        tipoMovimiento: TipoMovimiento.EGRESO_SALARIO,
-        moneda: { id: monedaId } as any,
-        formaPago: { id: formaPagoId } as any,
-        monto,
-        fecha: new Date(),
-        observacion: obs,
-        liquidacionSueldoId: liq.id,
-        responsable: userEntity || undefined,
-      });
-      await setEntityUserTracking(dataSource, movimiento, userId, false);
-      const movSaved = await queryRunner.manager.save(CajaMayorMovimiento, movimiento);
+      let movId: number | null = null;
 
-      await actualizarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, monto, TipoMovimiento.EGRESO_SALARIO);
+      if (fuente === 'CUENTA_BANCARIA') {
+        // Pago desde cuenta bancaria: debita el saldo, sin movimiento de Caja Mayor.
+        const cuentaBancariaId = payload?.cuentaBancariaId;
+        if (!cuentaBancariaId) throw new Error('Falta cuentaBancariaId');
+        const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
+        const cb = await cbRepo.findOne({ where: { id: cuentaBancariaId } });
+        if (!cb) throw new Error('Cuenta bancaria no encontrada');
+        cb.saldo = Number(cb.saldo) - monto;
+        await queryRunner.manager.save(CuentaBancaria, cb);
+        liq.cuentaBancariaId = cuentaBancariaId;
+      } else {
+        const cajaMayorId = payload?.cajaMayorId;
+        const monedaId = payload?.monedaId || liq.monedaPago?.id;
+        const formaPagoId = payload?.formaPagoId;
+        if (!cajaMayorId || !monedaId || !formaPagoId) throw new Error('Faltan datos para el pago');
+
+        const obs = `LIQUIDACION ${liq.periodo} - ${liq.funcionario.persona?.nombre || ''} ${liq.funcionario.persona?.apellido || ''}`.trim();
+        const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
+          cajaMayor: { id: cajaMayorId } as any,
+          tipoMovimiento: TipoMovimiento.EGRESO_SALARIO,
+          moneda: { id: monedaId } as any,
+          formaPago: { id: formaPagoId } as any,
+          monto,
+          fecha: new Date(),
+          observacion: obs,
+          liquidacionSueldoId: liq.id,
+          responsable: userEntity || undefined,
+        });
+        await setEntityUserTracking(dataSource, movimiento, userId, false);
+        const movSaved = await queryRunner.manager.save(CajaMayorMovimiento, movimiento);
+        movId = movSaved.id;
+
+        await actualizarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, monto, TipoMovimiento.EGRESO_SALARIO);
+      }
 
       // Marcar vales asociados como DESCONTADO
       const items = await itemRepo.find({ where: { liquidacion: { id: liq.id } as any } });
@@ -607,9 +641,26 @@ export function registerLiquidacionSueldoHandlers(
         }
       }
 
+      // Marcar ventas de vacaciones como PAGADO
+      const ventaVacIds = items
+        .filter((i) => i.referenciaTipo === 'VACACION_VENTA' && i.referenciaId)
+        .map((i) => i.referenciaId!) as number[];
+      if (ventaVacIds.length) {
+        const vvRepo = queryRunner.manager.getRepository(VacacionVenta);
+        for (const vvId of ventaVacIds) {
+          const vv = await vvRepo.findOne({ where: { id: vvId } });
+          if (vv && vv.estado === VacacionVentaEstado.PENDIENTE) {
+            vv.estado = VacacionVentaEstado.PAGADO;
+            vv.liquidacionId = liq.id;
+            await setEntityUserTracking(dataSource, vv, userId, true);
+            await vvRepo.save(vv);
+          }
+        }
+      }
+
       liq.estado = LiquidacionSueldoEstado.PAGADA;
       liq.fechaPago = new Date();
-      liq.movimientoId = movSaved.id;
+      if (movId) liq.movimientoId = movId;
       await setEntityUserTracking(dataSource, liq, userId, true);
       await liqRepo.save(liq);
 
@@ -724,6 +775,23 @@ export function registerLiquidacionSueldoHandlers(
           }
         }
 
+        // Ventas de vacaciones: PAGADO -> PENDIENTE (vuelven a estar por cobrar)
+        const ventaVacIds = items
+          .filter((i) => i.referenciaTipo === 'VACACION_VENTA' && i.referenciaId)
+          .map((i) => i.referenciaId!) as number[];
+        if (ventaVacIds.length) {
+          const vvRepo = queryRunner.manager.getRepository(VacacionVenta);
+          for (const vvId of ventaVacIds) {
+            const vv = await vvRepo.findOne({ where: { id: vvId } });
+            if (vv && vv.estado === VacacionVentaEstado.PAGADO && vv.liquidacionId === liq.id) {
+              vv.estado = VacacionVentaEstado.PENDIENTE;
+              (vv as any).liquidacionId = null;
+              await setEntityUserTracking(dataSource, vv, userId, true);
+              await vvRepo.save(vv);
+            }
+          }
+        }
+
         // Contra-movimiento en Caja Mayor por el total neto pagado
         if (liq.movimientoId) {
           const movOriginal = await queryRunner.manager.findOne(CajaMayorMovimiento, {
@@ -751,6 +819,16 @@ export function registerLiquidacionSueldoHandlers(
               await queryRunner.manager.save(CajaMayorMovimiento, contra);
               await actualizarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, Number(movOriginal.monto), TipoMovimiento.AJUSTE_POSITIVO);
             }
+          }
+        }
+
+        // Si el pago fue desde una cuenta bancaria, revertir el saldo debitado.
+        if (liq.cuentaBancariaId) {
+          const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
+          const cb = await cbRepo.findOne({ where: { id: liq.cuentaBancariaId } });
+          if (cb) {
+            cb.saldo = Number(cb.saldo) + Number(liq.totalNeto);
+            await queryRunner.manager.save(CuentaBancaria, cb);
           }
         }
       }

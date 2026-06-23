@@ -138,7 +138,9 @@ export abstract class RepositoryService {
   abstract deleteFile(url: string): Observable<{ ok: boolean }>;
   abstract readFileBase64(url: string): Observable<{ base64: string; mimeType: string }>;
   abstract openFileWithSystem(url: string): Observable<{ ok: boolean; error?: string }>;
-  abstract getAdjuntos(params: { entidadTipo: string; entidadId: number }): Observable<any[]>;
+  abstract openBase64File(base64: string, fileName: string): Observable<{ ok: boolean; error?: string }>;
+  abstract getAdjuntos(params: { entidadTipo: string; entidadId: number; tipo?: string }): Observable<any[]>;
+  abstract getAdjuntoById(id: number): Observable<any>;
   abstract createAdjunto(data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }): Observable<any>;
   abstract updateAdjunto(id: number, data: { tipo?: string; observacion?: string }): Observable<any>;
   abstract deleteAdjunto(id: number): Observable<{ success: boolean; message?: string }>;
@@ -563,6 +565,7 @@ export abstract class RepositoryService {
   abstract getCajaMayorSaldos(cajaMayorId: number): Observable<any[]>;
   abstract recalcularSaldos(cajaMayorId: number): Observable<any>;
   abstract getCajaMayorMovimientos(cajaMayorId: number, filtros?: any): Observable<any>;
+  abstract getCajaMayorMovimientosConsolidados(cajaMayorId: number, filtros?: any): Observable<any>;
   abstract createCajaMayorMovimiento(data: any): Observable<any>;
   abstract anularCajaMayorMovimiento(id: number, motivo: string): Observable<any>;
   abstract getCajaMayorConfiguracion(cajaMayorId: number): Observable<any>;
@@ -761,6 +764,8 @@ export abstract class RepositoryService {
   abstract programarVacacionPeriodo(payload: any): Observable<any>;
   abstract marcarPeriodoGozado(periodoId: number): Observable<any>;
   abstract cancelarVacacionPeriodo(periodoId: number): Observable<any>;
+  abstract venderDiasVacacion(payload: any): Observable<any>;
+  abstract anularVentaVacacion(ventaId: number): Observable<any>;
   abstract getLiquidacionesFinal(filtros?: any): Observable<any[]>;
   abstract getLiquidacionFinal(id: number): Observable<any>;
   abstract generarLiquidacionFinal(payload: any): Observable<any>;
@@ -807,6 +812,20 @@ export abstract class RepositoryService {
   abstract getClienteEstadoCuenta(clienteId: number): Observable<any>;
   abstract getMovimientosClienteStats(clienteId: number): Observable<any>;
   abstract cobrarVentaCredito(payload: any): Observable<any>;
+
+  // Convenios + cobro consolidado
+  abstract getConvenios(filtros?: any): Observable<any[]>;
+  abstract getConvenio(id: number): Observable<any>;
+  abstract createConvenio(data: any): Observable<any>;
+  abstract updateConvenio(id: number, data: any): Observable<any>;
+  abstract deleteConvenio(id: number): Observable<any>;
+  abstract setConvenioClientes(payload: any): Observable<any>;
+  abstract getCobroConsolidadoPreview(convenioId: number): Observable<any>;
+  abstract registrarCobroConsolidado(payload: any): Observable<any>;
+  abstract getCobrosConsolidados(filtros?: any): Observable<any[]>;
+  abstract getCobroConsolidado(id: number): Observable<any>;
+  abstract exportCobroConsolidadoPreviewPdf(convenioId: number): Observable<any>;
+  abstract exportReciboCobroConsolidadoPdf(cobroConsolidadoId: number): Observable<any>;
   abstract getNotificacionesRrhh(filtros?: any): Observable<any[]>;
   abstract marcarNotificacionLeida(id: number): Observable<any>;
   abstract marcarTodasNotificacionesLeidas(usuarioId?: number): Observable<any>;

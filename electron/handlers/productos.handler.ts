@@ -331,9 +331,10 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         whereConditions.tipo = filters.tipo;
       }
 
-      // Filtro por estado activo
+      // Filtro por estado activo. Acepta tanto 'active'/'inactive' como
+      // 'true'/'false' (distintos callers usan una u otra convencion).
       if (filters.activo && filters.activo !== 'all') {
-        whereConditions.activo = filters.activo === 'active';
+        whereConditions.activo = filters.activo === 'active' || filters.activo === 'true';
       }
 
       // Filtro por esVendible

@@ -14,6 +14,7 @@ import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { dbQuery } from '../utils/db-query';
+import { getMovimientosBancariosUnificados } from '../utils/movimientos-bancarios';
 import { ensurePermission } from '../utils/auth.utils';
 
 // Incrementa el numero de cheque (soporta sufijos no numericos: extrae digitos finales)
@@ -473,149 +474,14 @@ export function registerBankingHandlers(
   // unificando MovimientosBancarios manuales + Cheques + AcreditacionesPos + OperacionesFinancieras + EntradasVarias
   ipcMain.handle('get-movimientos-cuenta-bancaria', async (_event, cuentaBancariaId: number, filtros?: any) => {
     try {
-      const items: any[] = [];
-
-      // 1. Movimientos manuales
-      const mbRepo = dataSource.getRepository(MovimientoBancario);
-      const mbQb = mbRepo.createQueryBuilder('mb')
-        .leftJoinAndSelect('mb.responsable', 'responsable')
-        .leftJoinAndSelect('responsable.persona', 'persona')
-        .where('mb.cuenta_bancaria_id = :id', { id: cuentaBancariaId });
-      if (filtros?.fechaDesde) mbQb.andWhere('mb.fecha >= :fd', { fd: filtros.fechaDesde });
-      if (filtros?.fechaHasta) mbQb.andWhere('mb.fecha <= :fh', { fh: filtros.fechaHasta });
-      const movs = await mbQb.getMany();
-      for (const m of movs) {
-        items.push({
-          fecha: m.fecha,
-          tipo: m.tipoMovimiento,
-          monto: Number(m.monto),
-          esIngreso: m.tipoMovimiento === MovimientoBancarioTipo.ENTRADA_MANUAL || m.tipoMovimiento === MovimientoBancarioTipo.AJUSTE_POSITIVO,
-          descripcion: m.observacion || '-',
-          numeroComprobante: m.numeroComprobante,
-          responsable: m.responsable?.persona?.nombre || m.responsable?.nickname || '-',
-          origen: 'MANUAL',
-          id: m.id,
-          anulado: m.anulado,
-        });
-      }
-
-      // 2. Cheques (egresos cuando son cobrados)
-      const chequeRows = await dbQuery(dataSource, 
-        `SELECT id, monto, estado, fecha_cobro AS fechaCobro, fecha_emision AS fechaEmision,
-                numero_cheque AS numeroCheque, beneficiario, es_diferido AS esDiferido
-         FROM cheques WHERE cuenta_bancaria_id = ?`,
-        [cuentaBancariaId],
-      );
-      for (const ch of chequeRows) {
-        if (ch.estado === 'COBRADO') {
-          items.push({
-            fecha: ch.fechaCobro || ch.fechaEmision,
-            tipo: 'CHEQUE_COBRADO',
-            monto: Number(ch.monto),
-            esIngreso: false,
-            descripcion: `Cheque #${ch.numeroCheque} - ${ch.beneficiario || 'AL PORTADOR'}`,
-            numeroComprobante: ch.numeroCheque,
-            responsable: '-',
-            origen: 'CHEQUE',
-            id: ch.id,
-            anulado: false,
-          });
-        }
-      }
-
-      // 3. Acreditaciones POS (ingresos cuando se acreditan)
-      const acredRows = await dbQuery(dataSource, 
-        `SELECT a.id, a.monto_acreditado AS montoAcreditado, a.monto_esperado AS montoEsperado,
-                a.fecha_acreditacion_real AS fechaReal, a.fecha_transaccion AS fechaTrans,
-                a.estado, mp.nombre AS maquinaNombre
-         FROM acreditaciones_pos a
-         LEFT JOIN maquinas_pos mp ON a.maquina_pos_id = mp.id
-         WHERE a.cuenta_bancaria_id = ?`,
-        [cuentaBancariaId],
-      );
-      for (const a of acredRows) {
-        if (a.estado === 'ACREDITADO_AUTO' || a.estado === 'VERIFICADO' || a.estado === 'CON_DIFERENCIA') {
-          items.push({
-            fecha: a.fechaReal || a.fechaTrans,
-            tipo: 'ACREDITACION_POS',
-            monto: Number(a.montoAcreditado || a.montoEsperado),
-            esIngreso: true,
-            descripcion: `Acreditacion POS - ${a.maquinaNombre || ''}`,
-            numeroComprobante: null,
-            responsable: '-',
-            origen: 'POS',
-            id: a.id,
-            anulado: false,
-          });
-        }
-      }
-
-      // 4. Operaciones financieras (DEPOSITO_BANCARIO destino, RETIRO_BANCARIO origen)
-      const opRows = await dbQuery(dataSource, 
-        `SELECT id, tipo_operacion AS tipoOp, descripcion, fecha,
-                monto_origen AS montoOrigen, monto_destino AS montoDestino,
-                cuenta_bancaria_origen_id AS cbOrigenId, cuenta_bancaria_destino_id AS cbDestinoId,
-                anulado
-         FROM operaciones_financieras
-         WHERE (cuenta_bancaria_origen_id = ? OR cuenta_bancaria_destino_id = ?) AND anulado = false`,
-        [cuentaBancariaId, cuentaBancariaId],
-      );
-      for (const op of opRows) {
-        if (op.tipoOp === 'DEPOSITO_BANCARIO' && op.cbDestinoId === cuentaBancariaId) {
-          items.push({
-            fecha: op.fecha,
-            tipo: 'DEPOSITO',
-            monto: Number(op.montoDestino),
-            esIngreso: true,
-            descripcion: op.descripcion || 'Deposito bancario',
-            numeroComprobante: null,
-            responsable: '-',
-            origen: 'OP_FIN',
-            id: op.id,
-            anulado: false,
-          });
-        } else if (op.tipoOp === 'RETIRO_BANCARIO' && op.cbOrigenId === cuentaBancariaId) {
-          items.push({
-            fecha: op.fecha,
-            tipo: 'RETIRO',
-            monto: Number(op.montoOrigen),
-            esIngreso: false,
-            descripcion: op.descripcion || 'Retiro bancario',
-            numeroComprobante: null,
-            responsable: '-',
-            origen: 'OP_FIN',
-            id: op.id,
-            anulado: false,
-          });
-        }
-      }
-
-      // 5. Entradas Varias con destino cuenta bancaria
-      const evRows = await dbQuery(dataSource, 
-        `SELECT ev.id, ev.descripcion, ev.fecha, ev.monto, ev.anulado,
-                cat.nombre AS catNombre
-         FROM entradas_varias ev
-         LEFT JOIN entradas_varias_categorias cat ON ev.entrada_varia_categoria_id = cat.id
-         WHERE ev.cuenta_bancaria_id = ? AND ev.anulado = false`,
-        [cuentaBancariaId],
-      );
-      for (const ev of evRows) {
-        items.push({
-          fecha: ev.fecha,
-          tipo: 'ENTRADA_VARIA',
-          monto: Number(ev.monto),
-          esIngreso: true,
-          descripcion: `${ev.catNombre || ''}: ${ev.descripcion}`,
-          numeroComprobante: null,
-          responsable: '-',
-          origen: 'ENTRADA_VARIA',
-          id: ev.id,
-          anulado: !!ev.anulado,
-        });
-      }
+      // Junta las 8 fuentes para esta cuenta (sin exclusiones, comportamiento original)
+      const items = await getMovimientosBancariosUnificados(dataSource, [cuentaBancariaId], {
+        fechaDesde: filtros?.fechaDesde,
+        fechaHasta: filtros?.fechaHasta,
+      });
 
       // Filtros locales: fechas (sobre items unificados)
-      let filtered = items;
+      let filtered: any[] = items;
       if (filtros?.fechaDesde) {
         const desde = new Date(filtros.fechaDesde);
         filtered = filtered.filter(i => new Date(i.fecha) >= desde);

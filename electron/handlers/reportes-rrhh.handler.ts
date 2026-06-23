@@ -12,56 +12,13 @@ import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.en
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { LiquidacionItemTipo } from '../../src/app/database/entities/rrhh/liquidacion-item-tipo.enum';
 import { LiquidacionItem } from '../../src/app/database/entities/rrhh/liquidacion-item.entity';
-
-// @ts-ignore
-const pdfMake = require('pdfmake/build/pdfmake');
-try {
-  // @ts-ignore
-  require('pdfmake/build/vfs_fonts');
-} catch (_e) { /* VFS optional */ }
-
-// @ts-ignore
-import * as ExcelJS from 'exceljs';
+import { buildPdfBase64, buildExcelBase64 } from '../utils/pdf.utils';
 
 // ---- Helpers ----
 function getNombreFuncionario(f: any): string {
   if (!f) return 'N/A';
   const p = f.persona;
   return p ? `${p.nombre} ${p.apellido || ''}`.trim().toUpperCase() : `FUNCIONARIO ${f.id}`;
-}
-
-function excelColLetra(idx: number): string {
-  let s = '';
-  while (idx >= 0) {
-    s = String.fromCharCode((idx % 26) + 65) + s;
-    idx = Math.floor(idx / 26) - 1;
-  }
-  return s;
-}
-
-async function buildExcelBase64(headers: string[], rows: any[][]): Promise<string> {
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Reporte');
-  ws.addRow(headers);
-  ws.getRow(1).font = { bold: true };
-  for (const row of rows) {
-    ws.addRow(row);
-  }
-  const buf = await wb.xlsx.writeBuffer();
-  return Buffer.from(buf).toString('base64');
-}
-
-async function buildPdfBase64(docDef: any): Promise<string> {
-  return new Promise((resolve, reject) => {
-    try {
-      const doc = pdfMake.createPdf(docDef);
-      doc.getBuffer((buf: Buffer) => {
-        resolve(Buffer.from(buf).toString('base64'));
-      });
-    } catch (e) {
-      reject(e);
-    }
-  });
 }
 
 // ---- Handler Registration ----

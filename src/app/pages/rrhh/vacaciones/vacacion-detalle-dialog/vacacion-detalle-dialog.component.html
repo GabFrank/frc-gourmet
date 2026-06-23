@@ -1,0 +1,134 @@
+<h2 mat-dialog-title>Vacaciones — año de servicio {{ vacacion?.anioServicio }}</h2>
+<mat-dialog-content>
+  <div *ngIf="loading" class="vd-spinner"><mat-spinner diameter="32"></mat-spinner></div>
+
+  <ng-container *ngIf="!loading && vacacion">
+    <div class="vd-sub">{{ nombreFuncionario() }}</div>
+
+    <!-- Resumen -->
+    <div class="vd-kpis">
+      <div class="vd-kpi"><span>Generados</span><strong>{{ vacacion.diasGenerados }}</strong></div>
+      <div class="vd-kpi"><span>Gozados</span><strong>{{ vacacion.diasGozados }}</strong></div>
+      <div class="vd-kpi"><span>Vendidos</span><strong>{{ vacacion.diasVendidos }}</strong></div>
+      <div class="vd-kpi vd-kpi-hl"><span>Disponibles</span><strong>{{ vacacion.diasDisponibles }}</strong></div>
+    </div>
+
+    <div class="vd-actions">
+      <button mat-stroked-button (click)="mostrarProgramar = !mostrarProgramar" [disabled]="vacacion.diasDisponibles <= 0">
+        <mat-icon>event_available</mat-icon> Programar periodo
+      </button>
+      <button mat-stroked-button (click)="mostrarVender = !mostrarVender" [disabled]="vacacion.diasDisponibles <= 0">
+        <mat-icon>sell</mat-icon> Vender dias
+      </button>
+    </div>
+
+    <!-- Form programar -->
+    <div class="vd-form" *ngIf="mostrarProgramar">
+      <form [formGroup]="programarForm" class="vd-form-row">
+        <mat-form-field appearance="outline">
+          <mat-label>Desde</mat-label>
+          <input matInput [matDatepicker]="d1" formControlName="fechaDesde" />
+          <mat-datepicker-toggle matSuffix [for]="d1"></mat-datepicker-toggle>
+          <mat-datepicker #d1></mat-datepicker>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Hasta</mat-label>
+          <input matInput [matDatepicker]="d2" formControlName="fechaHasta" />
+          <mat-datepicker-toggle matSuffix [for]="d2"></mat-datepicker-toggle>
+          <mat-datepicker #d2></mat-datepicker>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="vd-grow">
+          <mat-label>Observacion</mat-label>
+          <input matInput formControlName="observacion" />
+        </mat-form-field>
+        <button mat-flat-button color="primary" (click)="programar()" [disabled]="programarForm.invalid || saving">Programar</button>
+      </form>
+    </div>
+
+    <!-- Form vender -->
+    <div class="vd-form" *ngIf="mostrarVender">
+      <form [formGroup]="venderForm" class="vd-form-row">
+        <mat-form-field appearance="outline" class="vd-narrow">
+          <mat-label>Dias a vender</mat-label>
+          <input matInput type="number" formControlName="dias" min="1" [max]="vacacion.diasDisponibles" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="vd-narrow">
+          <mat-label>Monto (editable)</mat-label>
+          <input matInput type="text" inputmode="decimal" formControlName="monto" appCurrencyInput [decimals]="0" />
+          <mat-hint>Sugerido: {{ montoSugerido | number:'1.0-0' }}</mat-hint>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="vd-grow">
+          <mat-label>Observacion</mat-label>
+          <input matInput formControlName="observacion" />
+        </mat-form-field>
+        <button mat-flat-button color="primary" (click)="vender()" [disabled]="venderForm.invalid || saving">Vender</button>
+      </form>
+      <div class="vd-nota">El monto se paga en la próxima liquidación. Se sugiere días × salario diario, pero podés ingresar el valor negociado.</div>
+    </div>
+
+    <!-- Periodos -->
+    <div class="vd-section-title">Periodos</div>
+    <table mat-table [dataSource]="vacacion.periodos || []" class="vd-table">
+      <ng-container matColumnDef="rango">
+        <th mat-header-cell *matHeaderCellDef>Rango</th>
+        <td mat-cell *matCellDef="let p">{{ p.fechaDesde }} → {{ p.fechaHasta }}</td>
+      </ng-container>
+      <ng-container matColumnDef="dias">
+        <th mat-header-cell *matHeaderCellDef class="num">Dias</th>
+        <td mat-cell *matCellDef="let p" class="num">{{ p.diasUsados }}</td>
+      </ng-container>
+      <ng-container matColumnDef="estado">
+        <th mat-header-cell *matHeaderCellDef>Estado</th>
+        <td mat-cell *matCellDef="let p">{{ p.estado }}</td>
+      </ng-container>
+      <ng-container matColumnDef="acciones">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let p">
+          <button mat-icon-button [matMenuTriggerFor]="pm" *ngIf="p.estado === 'PROGRAMADA'"><mat-icon>more_vert</mat-icon></button>
+          <mat-menu #pm="matMenu">
+            <button mat-menu-item (click)="gozar(p)"><mat-icon>check_circle</mat-icon> Marcar gozado</button>
+            <button mat-menu-item (click)="cancelar(p)"><mat-icon>cancel</mat-icon> Cancelar</button>
+          </mat-menu>
+        </td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="colsPeriodos"></tr>
+      <tr mat-row *matRowDef="let row; columns: colsPeriodos;"></tr>
+    </table>
+    <div *ngIf="!(vacacion.periodos || []).length" class="vd-empty">Sin periodos programados.</div>
+
+    <!-- Ventas -->
+    <div class="vd-section-title">Ventas de dias</div>
+    <table mat-table [dataSource]="vacacion.ventas || []" class="vd-table">
+      <ng-container matColumnDef="fecha">
+        <th mat-header-cell *matHeaderCellDef>Fecha</th>
+        <td mat-cell *matCellDef="let vt">{{ vt.fecha | date:'dd/MM/yyyy' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="dias">
+        <th mat-header-cell *matHeaderCellDef class="num">Dias</th>
+        <td mat-cell *matCellDef="let vt" class="num">{{ vt.dias }}</td>
+      </ng-container>
+      <ng-container matColumnDef="monto">
+        <th mat-header-cell *matHeaderCellDef class="num">Monto</th>
+        <td mat-cell *matCellDef="let vt" class="num">{{ vt.monto | number:'1.0-2' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="estado">
+        <th mat-header-cell *matHeaderCellDef>Estado</th>
+        <td mat-cell *matCellDef="let vt">{{ vt.estado }}</td>
+      </ng-container>
+      <ng-container matColumnDef="acciones">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let vt">
+          <button mat-icon-button (click)="anularVenta(vt)" *ngIf="vt.estado === 'PENDIENTE'" matTooltip="Anular venta">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="colsVentas"></tr>
+      <tr mat-row *matRowDef="let row; columns: colsVentas;"></tr>
+    </table>
+    <div *ngIf="!(vacacion.ventas || []).length" class="vd-empty">Sin ventas de dias.</div>
+  </ng-container>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cerrar()">Cerrar</button>
+</mat-dialog-actions>

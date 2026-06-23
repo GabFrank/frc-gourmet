@@ -21,9 +21,11 @@ import { Reserva } from '../../src/app/database/entities/ventas/reserva.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { PdvMesa, PdvMesaEstado } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { Comanda, ComandaEstado } from '../../src/app/database/entities/ventas/comanda.entity';
-// ComandaItem kept for future kitchen integration
-// import { ComandaItem } from '../../src/app/database/entities/ventas/comanda-item.entity';
+import { printComandaInternal, printVentaTicketInternal } from './documentos-tickets.handler';
 import { Sector } from '../../src/app/database/entities/ventas/sector.entity';
+import { ComandaItem, ComandaItemEstado } from '../../src/app/database/entities/ventas/comanda-item.entity';
+import { ProductoSector } from '../../src/app/database/entities/productos/producto-sector.entity';
+import { broadcastComandaEvent } from '../utils/comanda-events.utils';
 import { PdvAtajoGrupo } from '../../src/app/database/entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from '../../src/app/database/entities/ventas/pdv-atajo-item.entity';
 import { PdvAtajoGrupoItem } from '../../src/app/database/entities/ventas/pdv-atajo-grupo-item.entity';
@@ -50,6 +52,10 @@ import { dbQuery } from '../utils/db-query';
 export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Remove this line - get the current user in each handler instead
   // const currentUser = getCurrentUser(); // Get user for tracking
+
+  // Arrancar worker de retry de comandas (cada 5s reintenta items con
+  // `impreso=false` y al menos un intento previo, en ventas ABIERTAS).
+  startRetryComandaWorker(dataSource);
 
   // --- Métricas de buffet por peso (dashboard) ---
   ipcMain.handle('get-buffet-metricas', async (_event: any, filtros: any = {}) => {
@@ -666,10 +672,10 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       const result = await dbQuery(dataSource, `
         SELECT
-          COUNT(DISTINCT v.id) as cantidadVentas,
+          COUNT(DISTINCT v.id) as "cantidadVentas",
           COALESCE(SUM(CASE WHEN pd.tipo = 'PAGO' THEN pd.valor ELSE 0 END), 0)
-          - COALESCE(SUM(CASE WHEN pd.tipo = 'VUELTO' THEN pd.valor ELSE 0 END), 0) as totalVentas,
-          pd.moneda_id as monedaId
+          - COALESCE(SUM(CASE WHEN pd.tipo = 'VUELTO' THEN pd.valor ELSE 0 END), 0) as "totalVentas",
+          pd.moneda_id as "monedaId"
         FROM ventas v
         LEFT JOIN pagos p ON v.pago_id = p.id
         LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id
@@ -689,9 +695,42 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(Venta);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta ID ${id} not found`);
+
+      const estadoAnterior = entity.estado;
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+
+      // ─── Hook E2.3: auto-imprimir ticket cuando la venta pasa a CONCLUIDA
+      // Fire-and-forget. NUNCA bloquea ni revierte la transición de estado.
+      if (estadoAnterior !== VentaEstado.CONCLUIDA && saved.estado === VentaEstado.CONCLUIDA) {
+        try {
+          const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+          if (pdvConfig?.autoImprimirTicketVenta) {
+            setImmediate(() => {
+              printVentaTicketInternal(dataSource, id)
+                .catch(e => console.warn('[updateVenta] auto-print ticket falló:', e));
+            });
+          }
+        } catch (e) {
+          console.warn('[updateVenta] hook auto-imprimir ticket falló:', e);
+        }
+      }
+
+      // ─── KDS: al cerrar/cancelar la venta, sacar sus items de las pantallas ─
+      try {
+        if (estadoAnterior !== saved.estado) {
+          if (saved.estado === VentaEstado.CONCLUIDA) {
+            await finalizarComandaItems(dataSource, { ventaItem: { venta: { id } } as any, activo: true }, ComandaItemEstado.ENTREGADO, getCurrentUser()?.id);
+          } else if (saved.estado === VentaEstado.CANCELADA) {
+            await finalizarComandaItems(dataSource, { ventaItem: { venta: { id } } as any, activo: true }, ComandaItemEstado.CANCELADO, getCurrentUser()?.id);
+          }
+        }
+      } catch (e) {
+        console.warn('[updateVenta] hook KDS cerrar comanda-items falló:', e);
+      }
+
+      return saved;
     } catch (error) {
       console.error(`Error updating venta ID ${id}:`, error);
       throw error;
@@ -776,7 +815,33 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(VentaItem);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+
+      // ─── Hook auto-imprimir ticket de cocina ────────────────────────────
+      // Si la venta tiene mesa o comanda y `pdv_config.autoImprimirComanda=true`,
+      // dispara `printComandaInternal` en background. NO bloquea la creación
+      // del item. La unidad de impresión es el VentaItem (no ComandaItem).
+      try {
+        const savedAny = saved as any;
+        const ventaId = savedAny.venta?.id ?? savedAny.venta_id ?? savedAny.ventaId;
+        if (ventaId) {
+          await autoPrintComandaIfNeeded(dataSource, ventaId);
+        }
+      } catch (e) {
+        // Hook NUNCA bloquea la creación del item. Solo log.
+        console.warn('[createVentaItem] hook auto-imprimir comanda falló:', e);
+      }
+
+      // ─── Hook KDS: crear ComandaItems (uno por sector) para el item ─────
+      // Independiente de la impresión física: el KDS funciona aunque
+      // autoImprimirComanda esté en false. Nunca bloquea la creación.
+      try {
+        await crearComandaItemsSiCorresponde(dataSource, (saved as any).id);
+      } catch (e) {
+        console.warn('[createVentaItem] hook KDS comanda-items falló:', e);
+      }
+
+      return saved;
     } catch (error) {
       console.error('Error creating venta item:', error);
       throw error;
@@ -790,7 +855,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+
+      // KDS: si el item se canceló, cancelar sus ComandaItems para sacarlos de cocina.
+      try {
+        if ((saved as any).estado === EstadoVentaItem.CANCELADO) {
+          await finalizarComandaItems(dataSource, { ventaItem: { id } as any, activo: true }, ComandaItemEstado.CANCELADO, getCurrentUser()?.id);
+        }
+      } catch (e) { console.warn('[updateVentaItem] KDS cancelar comanda-items falló:', e); }
+
+      return saved;
     } catch (error) {
       console.error(`Error updating venta item ID ${id}:`, error);
       throw error;
@@ -803,6 +877,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(VentaItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
+      // KDS: borrar ComandaItems del item antes para no dejar FK huérfana.
+      try {
+        await dataSource.getRepository(ComandaItem)
+          .createQueryBuilder()
+          .delete()
+          .where('venta_item_id = :id', { id })
+          .execute();
+      } catch (e) { console.warn('[deleteVentaItem] KDS limpiar comanda-items falló:', e); }
       await repo.remove(entity);
       return true;
     } catch (error) {
@@ -2670,4 +2752,225 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       throw error;
     }
   });
-} 
+}
+
+/**
+ * Hook auto-impresión de comanda (ticket de cocina).
+ *
+ * Se ejecuta tras `createVentaItem`. Si la Venta tiene **mesa o comanda**
+ * asignada Y `pdv_config.autoImprimirComanda=true`, dispara
+ * `printComandaInternal` en background (setImmediate) — el item ya fue
+ * guardado y la respuesta al frontend NO espera la impresión.
+ *
+ * Si la venta no tiene ni mesa ni comanda → venta directa de mostrador
+ * (futuro), no se hace nada.
+ *
+ * Si la impresión falla (impresora apagada, sin sector configurado, etc.)
+ * → se loguea, la venta sigue normal. El `VentaItem` queda con
+ * `impreso=false` y se puede reimprimir manualmente desde PdV.
+ */
+async function autoPrintComandaIfNeeded(
+  dataSource: DataSource,
+  ventaId: number,
+): Promise<void> {
+  // 1. Buscar la venta con mesa+comanda
+  const venta = await dataSource.getRepository(Venta).findOne({
+    where: { id: ventaId },
+    relations: ['mesa', 'comanda'],
+  });
+  if (!venta) return;
+  const tieneMesa = !!(venta as any).mesa?.id;
+  const tieneComanda = !!(venta as any).comanda?.id;
+  if (!tieneMesa && !tieneComanda) return; // Venta directa sin cocina
+
+  // 2. Verificar config global
+  const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+  if (!pdvConfig?.autoImprimirComanda) return;
+
+  // 3. Disparar en background
+  setImmediate(() => {
+    printComandaInternal(dataSource, ventaId, { soloItemsNoImpresos: true })
+      .then(res => {
+        if (!res.ok) {
+          console.warn(`[auto-print comanda venta=${ventaId}] errores parciales:`,
+            res.errors.map(e => e.message).join('; '));
+        }
+      })
+      .catch(e => console.error(`[auto-print comanda venta=${ventaId}] excepción:`, e));
+  });
+}
+
+/**
+ * Hook KDS — crea los `ComandaItem` (uno por sector) de un `VentaItem` recién
+ * agregado, para que aparezca en las pantallas de cocina.
+ *
+ * Mismas pre-condiciones que la impresión de comanda:
+ * - La venta debe tener mesa o comanda (si no, es venta de mostrador sin cocina).
+ * - El producto debe tener `requiereComanda !== false`.
+ * - El ruteo es por la M2M `producto_sectores`: un `ComandaItem` por sector
+ *   activo, con estado de preparación independiente.
+ *
+ * Idempotente: si ya existe un ComandaItem activo para (ventaItem, sector) no
+ * lo duplica (cubre reintentos / doble-fire). Emite evento por cada item creado.
+ */
+async function crearComandaItemsSiCorresponde(
+  dataSource: DataSource,
+  ventaItemId: number,
+): Promise<void> {
+  if (!ventaItemId) return;
+
+  const item = await dataSource.getRepository(VentaItem).findOne({
+    where: { id: ventaItemId },
+    relations: ['venta', 'venta.mesa', 'venta.comanda', 'producto'],
+  });
+  if (!item) return;
+
+  const venta: any = (item as any).venta;
+  const producto: any = (item as any).producto;
+  if (!venta?.id) return;
+  if (!venta.mesa?.id && !venta.comanda?.id) return; // venta de mostrador
+  if (!producto?.id || producto.requiereComanda === false) return;
+
+  // Sectores destino (M2M producto_sectores, activos, por prioridad)
+  const ps = await dataSource.getRepository(ProductoSector).find({
+    where: { producto: { id: producto.id } as any, activo: true },
+    relations: ['sector'],
+    order: { prioridad: 'ASC' },
+  });
+  const sectores = ps.map(p => (p as any).sector).filter((s: any) => s?.id && s.activo !== false);
+  if (sectores.length === 0) return; // sin sector → no aplica KDS
+
+  const ciRepo = dataSource.getRepository(ComandaItem);
+  for (const sector of sectores) {
+    // Idempotencia: no duplicar (ventaItem, sector) activos
+    const existe = await ciRepo.findOne({
+      where: { ventaItem: { id: ventaItemId } as any, sector: { id: sector.id } as any, activo: true },
+    });
+    if (existe) continue;
+
+    const ci = ciRepo.create({
+      ventaItem: { id: ventaItemId } as any,
+      comanda: venta.comanda?.id ? ({ id: venta.comanda.id } as any) : null,
+      sector: { id: sector.id } as any,
+      estado: ComandaItemEstado.PENDIENTE,
+      observacion: (item as any).ensambladoDescripcion || null,
+      activo: true,
+    });
+    const saved = await ciRepo.save(ci);
+    broadcastComandaEvent({
+      tipo: 'CREADO',
+      comandaItemId: (saved as any).id,
+      ventaId: venta.id,
+      sectorId: sector.id,
+      estado: ComandaItemEstado.PENDIENTE,
+    });
+  }
+}
+
+/**
+ * Cierra/transiciona en masa los ComandaItems activos que matchean `where`
+ * (por venta-item o por venta) a `nuevoEstado` — usado cuando se cancela un
+ * item, se elimina, o la venta se concluye/cancela, para que no queden colgados
+ * en las pantallas KDS. No re-toca los ya ENTREGADO/CANCELADO.
+ */
+async function finalizarComandaItems(
+  dataSource: DataSource,
+  where: any,
+  nuevoEstado: ComandaItemEstado,
+  usuarioId: number | undefined,
+): Promise<void> {
+  const repo = dataSource.getRepository(ComandaItem);
+  const items = await repo.find({ where, relations: ['sector', 'ventaItem', 'ventaItem.venta'] });
+  for (const ci of items) {
+    if (ci.estado === ComandaItemEstado.CANCELADO || ci.estado === ComandaItemEstado.ENTREGADO) continue;
+    ci.estado = nuevoEstado;
+    if (nuevoEstado === ComandaItemEstado.LISTO && !ci.fechaListo) ci.fechaListo = new Date();
+    if (nuevoEstado === ComandaItemEstado.CANCELADO) ci.activo = false;
+    await setEntityUserTracking(dataSource, ci, usuarioId, true);
+    const saved = await repo.save(ci);
+    broadcastComandaEvent({
+      tipo: nuevoEstado === ComandaItemEstado.CANCELADO ? 'CANCELADO' : 'ESTADO',
+      comandaItemId: saved.id,
+      ventaId: (ci as any).ventaItem?.venta?.id ?? null,
+      sectorId: (ci as any).sector?.id ?? null,
+      estado: nuevoEstado,
+    });
+  }
+}
+
+/**
+ * Worker de auto-retry de comandas (cada 5s).
+ *
+ * Para cada venta ABIERTA que tenga al menos un `VentaItem` con
+ * `impreso=false` y al menos un intento previo de impresión, reintenta
+ * imprimir con `retryFailed=true`. El pre-flight del cliente LPR detecta
+ * si la impresora sigue offline y aborta rápido sin generar ruido.
+ *
+ * Caso de uso: impresora apagada en el momento del envío original →
+ * el item queda pendiente, este worker lo reintenta cada 5s hasta que la
+ * impresora vuelva online.
+ *
+ * El worker llama con `silent: true` para NO emitir toasts en cada ciclo
+ * (el envío original ya notificó una vez). Además hay un tope de reintentos
+ * fallidos por item (`MAX_COMANDA_FAILED_RETRIES`) para no reintentar
+ * indefinidamente cuando no hay impresora.
+ */
+const RETRY_INTERVAL_MS = 5_000;
+let _retryComandaInterval: NodeJS.Timeout | null = null;
+let _retryComandaRunning = false;
+
+async function retryPendingComandas(dataSource: DataSource): Promise<void> {
+  if (_retryComandaRunning) return;
+  _retryComandaRunning = true;
+  try {
+    const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+    if (!pdvConfig?.autoImprimirComanda) return;
+
+    // Buscar IDs de ventas ABIERTAS con al menos 1 item pendiente con
+    // intento previo (impresiones IS NOT NULL y JSON no vacío)
+    const rows = await dataSource.getRepository(VentaItem)
+      .createQueryBuilder('vi')
+      .innerJoin('vi.venta', 'venta')
+      .select('DISTINCT venta.id', 'venta_id')
+      .where('vi.impreso = false')
+      .andWhere('vi.impresiones IS NOT NULL')
+      .andWhere(`LENGTH(vi.impresiones) > 2`)
+      .andWhere('venta.estado = :estado', { estado: VentaEstado.ABIERTA })
+      .getRawMany();
+
+    for (const row of rows) {
+      const ventaId = Number((row as any).venta_id);
+      if (!ventaId) continue;
+      try {
+        const res = await printComandaInternal(dataSource, ventaId, {
+          soloItemsNoImpresos: true,
+          retryFailed: true,
+          silent: true,
+        });
+        if (res.printed.length > 0) {
+          console.log(`[retry-comanda venta=${ventaId}] reimpreso ${res.printed.length} item(s) tras retry`);
+        }
+      } catch (e: any) {
+        console.warn(`[retry-comanda venta=${ventaId}] excepción:`, e?.message || e);
+      }
+    }
+  } catch (e: any) {
+    console.warn('[retry-comanda] excepción worker:', e?.message || e);
+  } finally {
+    _retryComandaRunning = false;
+  }
+}
+
+export function startRetryComandaWorker(dataSource: DataSource): void {
+  if (_retryComandaInterval) return; // ya iniciado
+  _retryComandaInterval = setInterval(() => {
+    retryPendingComandas(dataSource).catch(() => { /* ya logueado */ });
+  }, RETRY_INTERVAL_MS);
+}
+
+export function stopRetryComandaWorker(): void {
+  if (_retryComandaInterval) {
+    clearInterval(_retryComandaInterval);
+    _retryComandaInterval = null;
+  }
+}

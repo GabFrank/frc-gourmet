@@ -1,6 +1,6 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -60,7 +60,7 @@ interface AdicionalPorCategoria {
   standalone: true,
   imports: [
     CommonModule,
-    FormsModule,
+    ReactiveFormsModule,
     MatDialogModule,
     MatButtonModule,
     MatIconModule,
@@ -99,7 +99,7 @@ export class PersonalizarProductoDialogComponent implements OnInit {
   swapSelections: Map<number, RecetaIngredienteIntercambiable> = new Map();
   selectedAdicionales: Map<number, RecetaAdicionalVinculacion> = new Map();
   selectedObservacionIds: Set<number> = new Set();
-  observacionLibre = '';
+  observacionLibreControl = new FormControl('', { nonNullable: true });
 
   // Totales pre-computados
   totalAdicionales = 0;
@@ -236,7 +236,7 @@ export class PersonalizarProductoDialogComponent implements OnInit {
 
     // Observación libre
     if (this.data.observacionLibre) {
-      this.observacionLibre = this.data.observacionLibre;
+      this.observacionLibreControl.setValue(this.data.observacionLibre);
     }
   }
 
@@ -380,7 +380,7 @@ export class PersonalizarProductoDialogComponent implements OnInit {
       ingredientesIntercambiados,
       adicionalesSeleccionados,
       observacionIds: Array.from(this.selectedObservacionIds),
-      observacionLibre: this.observacionLibre?.trim().toUpperCase() || null,
+      observacionLibre: this.observacionLibreControl.value?.trim().toUpperCase() || null,
       precioAdicionalTotal: this.totalAdicionales,
     };
 

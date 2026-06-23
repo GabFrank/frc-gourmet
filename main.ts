@@ -29,11 +29,15 @@ import { registerAuthHandlers } from './electron/handlers/auth.handler';
 import { registerImageHandlers } from './electron/handlers/images.handler';
 import { registerFilesHandlers } from './electron/handlers/files.handler';
 import { registerAdjuntosHandlers } from './electron/handlers/adjuntos.handler';
+import { registerDocumentosTicketsHandlers } from './electron/handlers/documentos-tickets.handler';
+import { registerSectoresImpresorasHandlers } from './electron/handlers/sectores-impresoras.handler';
+import { registerProductoSectoresHandlers } from './electron/handlers/producto-sectores.handler';
 import { registerProductosHandlers } from './electron/handlers/productos.handler';
 import { registerFinancieroHandlers } from './electron/handlers/financiero.handler';
 import { registerComprasHandlers } from './electron/handlers/compras.handler';
 import { registerSystemHandlers } from './electron/handlers/system.handler';
 import { registerVentasHandlers } from './electron/handlers/ventas.handler';
+import { registerKdsHandlers } from './electron/handlers/kds.handler';
 import { registerRecetasHandlers } from './electron/handlers/recetas.handler';
 import { registerCajaMayorHandlers } from './electron/handlers/caja-mayor.handler';
 import { registerBankingHandlers, startAcreditacionesScheduler } from './electron/handlers/banking.handler';
@@ -57,6 +61,7 @@ import { registerComisionesHandlers } from './electron/handlers/comisiones.handl
 import { registerEquiposComisionHandlers } from './electron/handlers/equipos-comision.handler';
 import { registerCuentasPorCobrarHandlers } from './electron/handlers/cuentas-por-cobrar.handler';
 import { registerMovimientosClienteHandlers } from './electron/handlers/movimientos-cliente.handler';
+import { registerConveniosHandlers } from './electron/handlers/convenios.handler';
 import { seedInitialData } from './electron/utils/seed-data';
 import { runBootstrapMigrations } from './electron/utils/db-migrations-bootstrap';
 import { seedSystemData } from './electron/utils/seed-system';
@@ -179,11 +184,15 @@ function initializeDatabase() {
       registerImageHandlers(dataSource);
       registerFilesHandlers(); // generic file IPCs (save/delete/read/open)
       registerAdjuntosHandlers(dataSource, getCurrentUser); // CRUD generico de adjuntos polimorficos
+      registerDocumentosTicketsHandlers(dataSource, getCurrentUser); // Tickets termicos (comanda multi-sector, venta, recibos, vales, etc.)
+      registerSectoresImpresorasHandlers(dataSource, getCurrentUser); // M2M Sector↔Printer con rol (COMANDA/TICKET_VENTA/PRECUENTA)
+      registerProductoSectoresHandlers(dataSource, getCurrentUser); // M2M Producto↔Sector (routing comanda por producto)
       registerProductosHandlers(dataSource, getCurrentUser);
       registerFinancieroHandlers(dataSource, getCurrentUser);
       registerComprasHandlers(dataSource, getCurrentUser);
       registerSystemHandlers(); // system handler doesn't need dataSource or user
       registerVentasHandlers(dataSource, getCurrentUser); // Register ventas handlers
+      registerKdsHandlers(dataSource, getCurrentUser); // KDS: comandas en pantalla de cocina (estado por sector)
       registerRecetasHandlers(dataSource, getCurrentUser); // Recetas + Sabores + Variaciones (unificado)
       registerCajaMayorHandlers(dataSource, getCurrentUser); // Caja Mayor + Gastos + Retiros
       registerBankingHandlers(dataSource, getCurrentUser); // CuentasBancarias + MaquinasPos + Acreditaciones
@@ -207,6 +216,7 @@ function initializeDatabase() {
       registerEquiposComisionHandlers(dataSource, getCurrentUser); // RRHH Fase 6: Equipos de comision
       registerCuentasPorCobrarHandlers(dataSource, getCurrentUser); // Fase 7: CuentasPorCobrar
       registerMovimientosClienteHandlers(dataSource, getCurrentUser); // Fase 7: MovimientosCliente
+      registerConveniosHandlers(dataSource, getCurrentUser); // Convenios + cobro consolidado
       // RRHH Fase 8
       registerNotificacionesRrhhHandlers(dataSource, getCurrentUser); // Notificaciones RRHH
       registerDashboardRrhhHandlers(dataSource, getCurrentUser); // Dashboard KPIs RRHH

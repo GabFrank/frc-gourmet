@@ -1,6 +1,6 @@
 import { Component, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -20,7 +20,7 @@ export interface CancelarVentaDialogData {
   standalone: true,
   imports: [
     CommonModule,
-    FormsModule,
+    ReactiveFormsModule,
     MatDialogModule,
     MatButtonModule,
     MatIconModule,
@@ -29,7 +29,11 @@ export interface CancelarVentaDialogData {
   ],
 })
 export class CancelarVentaDialogComponent {
-  motivo = '';
+  // Validators.pattern \S exige al menos un caracter no-espacio, equivalente a !motivo.trim()
+  motivoControl = new FormControl('', {
+    nonNullable: true,
+    validators: [Validators.required, Validators.pattern(/\S/)],
+  });
 
   constructor(
     public dialogRef: MatDialogRef<CancelarVentaDialogComponent>,
@@ -37,7 +41,7 @@ export class CancelarVentaDialogComponent {
   ) {}
 
   confirmar(): void {
-    this.dialogRef.close({ confirmed: true, motivo: this.motivo.toUpperCase() });
+    this.dialogRef.close({ confirmed: true, motivo: this.motivoControl.value.toUpperCase() });
   }
 
   cancelar(): void {

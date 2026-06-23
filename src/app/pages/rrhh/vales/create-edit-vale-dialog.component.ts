@@ -6,6 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
@@ -14,6 +15,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
+import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/app/shared/utils/conversion-moneda';
 
 @Component({
   selector: 'app-create-edit-vale-dialog',
@@ -26,6 +28,7 @@ import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-co
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    MatButtonToggleModule,
     MatDatepickerModule,
     MatNativeDateModule,
     MatSlideToggleModule,
@@ -73,7 +76,12 @@ import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-co
           </mat-select>
         </mat-form-field>
 
-        <mat-form-field appearance="outline">
+        <mat-button-toggle-group *ngIf="modoConfirmar" formControlName="fuente" class="full fuente-toggle">
+          <mat-button-toggle value="CAJA_MAYOR">Caja Mayor (efectivo)</mat-button-toggle>
+          <mat-button-toggle value="CUENTA_BANCARIA">Cuenta Bancaria</mat-button-toggle>
+        </mat-button-toggle-group>
+
+        <mat-form-field appearance="outline" *ngIf="!modoConfirmar || form.get('fuente')?.value === 'CAJA_MAYOR'">
           <mat-label>{{ modoConfirmar ? 'Caja Mayor' : 'Caja Mayor (opcional)' }}</mat-label>
           <mat-select formControlName="cajaMayorId">
             <mat-option *ngIf="!modoConfirmar" [value]="null">-- Definir luego --</mat-option>
@@ -81,13 +89,29 @@ import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-co
           </mat-select>
         </mat-form-field>
 
-        <mat-form-field appearance="outline">
+        <mat-form-field appearance="outline" *ngIf="!modoConfirmar || form.get('fuente')?.value === 'CAJA_MAYOR'">
           <mat-label>{{ modoConfirmar ? 'Forma de pago' : 'Forma de pago (opcional)' }}</mat-label>
           <mat-select formControlName="formaPagoId">
             <mat-option *ngIf="!modoConfirmar" [value]="null">-- Definir luego --</mat-option>
-            <mat-option *ngFor="let f of formasPago" [value]="f.id">{{ f.descripcion || f.nombre }}</mat-option>
+            <mat-option *ngFor="let f of (modoConfirmar ? formasPagoEfectivo : formasPago)" [value]="f.id">{{ f.descripcion || f.nombre }}</mat-option>
           </mat-select>
         </mat-form-field>
+
+        <mat-form-field appearance="outline" *ngIf="modoConfirmar && form.get('fuente')?.value === 'CUENTA_BANCARIA'">
+          <mat-label>Cuenta Bancaria</mat-label>
+          <mat-select formControlName="cuentaBancariaId">
+            <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">{{ cb.nombre }} <span *ngIf="cb.banco">- {{ cb.banco }}</span><span *ngIf="cb.moneda"> ({{ cb.moneda.simbolo }})</span></mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <ng-container *ngIf="requiereCotiz">
+          <mat-form-field appearance="outline">
+            <mat-label>Cotización</mat-label>
+            <input matInput type="number" formControlName="cotizacion" step="any">
+            <mat-hint>Moneda principal por 1 {{ monedaCuentaSimbolo }}</mat-hint>
+          </mat-form-field>
+          <div class="full convertido">Se debitará: <b>{{ montoConvertido | number:'1.0-2' }} {{ monedaCuentaSimbolo }}</b></div>
+        </ng-container>
 
         <mat-form-field appearance="outline" class="full">
           <mat-label>Descripcion</mat-label>
@@ -111,6 +135,8 @@ import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-co
     .spinner { display: flex; justify-content: center; padding: 24px; }
     .form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: center; }
     .full { grid-column: 1 / -1; }
+    .fuente-toggle .mat-button-toggle { flex: 1; }
+    .convertido { color: #1565c0; font-size: 14px; align-self: center; }
   `],
 })
 export class CreateEditValeDialogComponent implements OnInit {
@@ -122,7 +148,14 @@ export class CreateEditValeDialogComponent implements OnInit {
   monedas: any[] = [];
   cajasMayor: any[] = [];
   formasPago: any[] = [];
+  formasPagoEfectivo: any[] = [];
+  cuentasBancarias: any[] = [];
   modoConfirmar = false;
+
+  requiereCotiz = false;
+  montoConvertido = 0;
+  monedaCuentaSimbolo = '';
+  private cotizMercado: any = null;
 
   constructor(
     private dialogRef: MatDialogRef<CreateEditValeDialogComponent>,
@@ -139,30 +172,112 @@ export class CreateEditValeDialogComponent implements OnInit {
       monto: [0, [Validators.required, Validators.min(1)]],
       fecha: [new Date(), Validators.required],
       monedaId: [null, Validators.required],
+      fuente: ['CAJA_MAYOR'],
       cajaMayorId: [null, this.modoConfirmar ? Validators.required : null],
       formaPagoId: [null, this.modoConfirmar ? Validators.required : null],
+      cuentaBancariaId: [null],
+      cotizacion: [null],
       descripcion: [''],
-      esAdelanto: [false],
+      esAdelanto: [true],
     });
+    if (this.modoConfirmar) {
+      this.form.get('fuente')!.valueChanges.subscribe(() => this.aplicarValidadoresFuente());
+      this.form.get('cuentaBancariaId')!.valueChanges.subscribe(() => this.recalcularCotizacion());
+      this.form.get('monedaId')!.valueChanges.subscribe(() => this.recalcularCotizacion());
+      this.form.get('cotizacion')!.valueChanges.subscribe(() => this.recalcularConvertido());
+      this.form.get('monto')!.valueChanges.subscribe(() => this.recalcularConvertido());
+    }
+  }
+
+  private recalcularCotizacion(): void {
+    const monedaVale = this.monedas.find((m: any) => m.id === this.form.get('monedaId')!.value);
+    const cuenta = this.cuentasBancarias.find((c: any) => c.id === this.form.get('cuentaBancariaId')!.value);
+    const cuentaMoneda = cuenta?.moneda;
+    this.requiereCotiz = this.form.get('fuente')!.value === 'CUENTA_BANCARIA'
+      && requiereCotizacion(monedaVale, cuentaMoneda);
+    this.monedaCuentaSimbolo = cuentaMoneda?.simbolo || '';
+    const cotizCtrl = this.form.get('cotizacion')!;
+    if (this.requiereCotiz) {
+      cotizCtrl.setValidators([Validators.required, Validators.min(0.000001)]);
+      if (!cotizCtrl.value) {
+        const divisa = monedaVale?.principal ? cuentaMoneda : monedaVale;
+        const tasa = cotizacionMercadoPara(this.cotizMercado, divisa?.denominacion, 'VENTA');
+        if (tasa) cotizCtrl.setValue(tasa, { emitEvent: false });
+      }
+    } else {
+      cotizCtrl.clearValidators();
+      cotizCtrl.setValue(null, { emitEvent: false });
+    }
+    cotizCtrl.updateValueAndValidity({ emitEvent: false });
+    this.recalcularConvertido();
+  }
+
+  private recalcularConvertido(): void {
+    if (!this.requiereCotiz) { this.montoConvertido = 0; return; }
+    const monedaVale = this.monedas.find((m: any) => m.id === this.form.get('monedaId')!.value);
+    const cuenta = this.cuentasBancarias.find((c: any) => c.id === this.form.get('cuentaBancariaId')!.value);
+    this.montoConvertido = convertirMonto(
+      Number(this.form.get('monto')!.value),
+      monedaVale,
+      cuenta?.moneda,
+      Number(this.form.get('cotizacion')!.value),
+    );
+  }
+
+  /** Solo aplica al confirmar el egreso: CAJA_MAYOR usa caja+efectivo,
+   * CUENTA_BANCARIA usa la cuenta. */
+  private aplicarValidadoresFuente(): void {
+    const esBanco = this.form.get('fuente')!.value === 'CUENTA_BANCARIA';
+    const caja = this.form.get('cajaMayorId')!;
+    const fp = this.form.get('formaPagoId')!;
+    const cb = this.form.get('cuentaBancariaId')!;
+    if (esBanco) {
+      caja.clearValidators();
+      fp.clearValidators();
+      cb.setValidators([Validators.required]);
+    } else {
+      caja.setValidators([Validators.required]);
+      fp.setValidators([Validators.required]);
+      cb.clearValidators();
+      this.preseleccionarEfectivo();
+    }
+    caja.updateValueAndValidity({ emitEvent: false });
+    fp.updateValueAndValidity({ emitEvent: false });
+    cb.updateValueAndValidity({ emitEvent: false });
+    this.recalcularCotizacion();
+  }
+
+  private preseleccionarEfectivo(): void {
+    if (this.formasPagoEfectivo.length === 1) {
+      this.form.get('formaPagoId')!.setValue(this.formasPagoEfectivo[0].id, { emitEvent: false });
+    }
   }
 
   async ngOnInit(): Promise<void> {
     this.loading = true;
     try {
-      const [funcs, motivos, monedas, cajasMayor, formasPago] = await Promise.all([
+      const [funcs, motivos, monedas, cajasMayor, formasPago, cuentas] = await Promise.all([
         firstValueFrom(this.repositoryService.getFuncionarios({ soloActivos: true })),
         firstValueFrom(this.repositoryService.getMotivosVale()),
         firstValueFrom(this.repositoryService.getMonedas()),
         firstValueFrom(this.repositoryService.getCajasMayor()),
         firstValueFrom(this.repositoryService.getFormasPago()),
+        firstValueFrom(this.repositoryService.getCuentasBancarias()),
       ]);
       this.funcionarios = funcs || [];
       this.motivos = (motivos || []).filter((m: any) => m.activo);
       this.monedas = monedas || [];
       this.cajasMayor = (cajasMayor || []).filter((c: any) => c.estado === 'ABIERTA' || c.estado === 'ACTIVA');
       this.formasPago = formasPago || [];
-      if (this.modoConfirmar && this.data?.cajaMayorId) {
-        this.form.patchValue({ cajaMayorId: this.data.cajaMayorId });
+      this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
+      this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
+      if (this.modoConfirmar) {
+        this.preseleccionarEfectivo();
+        if (this.data?.cajaMayorId) this.form.patchValue({ cajaMayorId: this.data.cajaMayorId });
+        this.repositoryService.getCotizacionMercado().subscribe({
+          next: (r) => { this.cotizMercado = r; },
+          error: () => { this.cotizMercado = null; },
+        });
       }
     } catch (e) {
       console.error(e);
@@ -177,7 +292,7 @@ export class CreateEditValeDialogComponent implements OnInit {
     if (this.form.invalid) return;
     const value = this.form.value;
 
-    if (this.modoConfirmar) {
+    if (this.modoConfirmar && value.fuente !== 'CUENTA_BANCARIA') {
       const ok = await this.confirmarSaldoSiNegativo(value.cajaMayorId, value.monedaId, value.formaPagoId, Number(value.monto));
       if (!ok) return;
     }
@@ -185,7 +300,10 @@ export class CreateEditValeDialogComponent implements OnInit {
     this.saving = true;
     try {
       if (this.modoConfirmar) {
-        await firstValueFrom(this.repositoryService.crearValeConfirmado(value));
+        await firstValueFrom(this.repositoryService.crearValeConfirmado({
+          ...value,
+          montoCuentaBancaria: this.requiereCotiz ? this.montoConvertido : null,
+        }));
         this.snackBar.open('Vale registrado y egreso aplicado en Caja Mayor', 'Cerrar', { duration: 3000 });
       } else {
         await firstValueFrom(this.repositoryService.createVale(value));

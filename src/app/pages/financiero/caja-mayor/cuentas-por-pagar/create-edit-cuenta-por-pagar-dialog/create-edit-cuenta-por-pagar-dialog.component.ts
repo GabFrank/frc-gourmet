@@ -15,6 +15,7 @@ import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
+import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
 
 @Component({
   selector: 'app-create-edit-cuenta-por-pagar-dialog',
@@ -89,6 +90,11 @@ export class CreateEditCuentaPorPagarDialogComponent implements OnInit {
       this.proveedores = proveedores || [];
       this.filteredProveedores = this.proveedores.slice(0, 50);
       this.setupProveedorAutocomplete();
+      // Pre-seleccionar moneda principal/única (solo si está vacía).
+      if (!this.form.get('monedaId')?.value) {
+        const m = preselectSingleOrPrincipal(this.monedas);
+        if (m) this.form.patchValue({ monedaId: m.id });
+      }
       this.recalcDecimalesMoneda();
     } catch (e) { console.error(e); }
   }

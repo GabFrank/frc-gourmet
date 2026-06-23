@@ -107,10 +107,24 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   // Sistema / Configuracion
   { codigo: 'EMPRESA_CONFIGURAR', descripcion: 'Configurar datos de la empresa (nombre, RUC, logo, timbrado)', modulo: 'SISTEMA' },
   { codigo: 'IMPRESORAS_GESTIONAR', descripcion: 'Gestionar impresoras del sistema', modulo: 'SISTEMA' },
+  { codigo: 'SECTORES_IMPRESORAS_CONFIGURAR', descripcion: 'Asignar impresoras a sectores (M2M con rol comanda/ticket/precuenta)', modulo: 'SISTEMA' },
   { codigo: 'DISPOSITIVOS_GESTIONAR', descripcion: 'Gestionar dispositivos y puntos de venta', modulo: 'SISTEMA' },
   { codigo: 'SISTEMA_BACKUP', descripcion: 'Crear y restaurar backups de la base de datos', modulo: 'SISTEMA' },
   { codigo: 'SISTEMA_BD_CONFIGURAR', descripcion: 'Configurar base de datos (SQLite/Postgres)', modulo: 'SISTEMA' },
   { codigo: 'SISTEMA_MODO_CONFIGURAR', descripcion: 'Configurar modo de operacion (standalone/server/client)', modulo: 'SISTEMA' },
+
+  // Documentos (PDFs A4 firmables, tickets térmicos, adjuntos)
+  { codigo: 'DOCUMENTOS_GENERAR_PDF', descripcion: 'Generar PDFs A4 (pagarés, recibos, liquidaciones, reportes operativos)', modulo: 'DOCUMENTOS' },
+  { codigo: 'DOCUMENTOS_IMPRIMIR_TICKET', descripcion: 'Imprimir tickets térmicos (venta, comanda, pre-cuenta)', modulo: 'DOCUMENTOS' },
+  { codigo: 'DOCUMENTOS_REIMPRIMIR_COMANDA', descripcion: 'Reimprimir comanda (total o por sector) cuando falla impresora', modulo: 'DOCUMENTOS' },
+  { codigo: 'DOCUMENTOS_REIMPRIMIR_TICKET_VENTA', descripcion: 'Reimprimir ticket de venta desde historial', modulo: 'DOCUMENTOS' },
+  { codigo: 'DOCUMENTOS_ADJUNTAR', descripcion: 'Adjuntar archivos (escaneados firmados, comprobantes) a entidades', modulo: 'DOCUMENTOS' },
+  { codigo: 'DOCUMENTOS_ADJUNTOS_ELIMINAR', descripcion: 'Eliminar adjuntos de entidades', modulo: 'DOCUMENTOS' },
+
+  // KDS (Kitchen Display System)
+  { codigo: 'COMANDAS_KDS_VER', descripcion: 'Ver pantallas KDS (comandas de cocina por sector)', modulo: 'VENTAS' },
+  { codigo: 'COMANDAS_KDS_OPERAR', descripcion: 'Operar el KDS: marcar items en preparación/listo/entregado', modulo: 'VENTAS' },
+  { codigo: 'COMANDAS_KDS_CONFIGURAR', descripcion: 'Configurar pantallas KDS (qué sectores muestra cada una)', modulo: 'VENTAS' },
 ];
 
 export async function seedPermissions(dataSource: DataSource) {

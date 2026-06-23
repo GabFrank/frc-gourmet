@@ -27,6 +27,7 @@ import { MatExpansionModule } from '@angular/material/expansion';
 import { ThemeService } from './services/theme.service';
 import { MatDialog } from '@angular/material/dialog';
 import { PrinterSettingsComponent } from './components/printer-settings/printer-settings.component';
+import { SectoresImpresorasSettingsComponent } from './components/sectores-impresoras-settings/sectores-impresoras-settings.component';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { TabsService } from './services/tabs.service';
@@ -36,6 +37,7 @@ import { HomeComponent } from './pages/home/home.component';
 import { RrhhDashComponent } from './pages/personas/rrhhDash/rrhh-dash.component';
 import { ListUsuariosComponent } from './pages/personas/usuarios/list-usuarios.component';
 import { ListClientesComponent } from './pages/personas/clientes/list-clientes.component';
+import { ListConveniosComponent } from './pages/personas/convenios/list-convenios.component';
 import { AuthService } from './services/auth.service';
 import { Usuario } from './database/entities/personas/usuario.entity';
 import { LoginSession } from './database/entities/auth/login-session.entity';
@@ -55,6 +57,8 @@ import { ListProductosComponent } from './pages/productos/list-productos/list-pr
 import { ListSaboresComponent } from './pages/gestion-sabores/list-sabores/list-sabores.component';
 import { VentasDashboardComponent } from './pages/ventas/dashboard/ventas-dashboard.component';
 import { BuffetDashboardComponent } from './pages/ventas/buffet-dashboard/buffet-dashboard.component';
+import { KdsComponent } from './pages/ventas/kds/kds.component';
+import { ListKdsPantallasComponent } from './pages/ventas/kds/list-kds-pantallas/list-kds-pantallas.component';
 import { CajaMayorDashboardComponent } from './pages/financiero/caja-mayor/dashboard/caja-mayor-dashboard.component';
 import { ListCuentasPorCobrarComponent } from './pages/financiero/caja-mayor/cuentas-por-cobrar/list-cuentas-por-cobrar/list-cuentas-por-cobrar.component';
 import { ListPermisosComponent } from './pages/personalizacion/permisos/list-permisos/list-permisos.component';
@@ -76,6 +80,7 @@ import { ListPrestamosFuncionariosComponent } from './pages/rrhh/prestamos-funci
 import { ListLiquidacionesSueldoComponent } from './pages/rrhh/liquidaciones-sueldo/list/list-liquidaciones-sueldo.component';
 import { ListBonosComponent } from './pages/rrhh/bonos/list-bonos.component';
 import { ListAguinaldosComponent } from './pages/rrhh/aguinaldos/list-aguinaldos.component';
+import { ListVacacionesComponent } from './pages/rrhh/vacaciones/list-vacaciones.component';
 // Comisiones (Fase 6)
 import { ListReglasComisionComponent } from './pages/comisiones/reglas/list-reglas-comision/list-reglas-comision.component';
 import { ListEquiposComisionComponent } from './pages/comisiones/equipos/list-equipos-comision/list-equipos-comision.component';
@@ -86,6 +91,7 @@ import { ListNotificacionesRrhhComponent } from './pages/rrhh/notificaciones/lis
 import { ReportesRrhhPageComponent } from './pages/rrhh/reportes/reportes-rrhh-page.component';
 import { RepositoryService } from './database/repository.service';
 import { UpdateService } from './services/update.service';
+import { PrinterEventsService } from './services/printer-events.service';
 import { UpdateChannelDialogComponent } from './shared/components/update-channel-dialog/update-channel-dialog.component';
 import { EmpresaService } from './shared/services/empresa.service';
 import { ConfigurarEmpresaComponent } from './pages/sistema/configurar-empresa/configurar-empresa.component';
@@ -201,6 +207,9 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     private repo: RepositoryService,
     private updateService: UpdateService,
     private empresaService: EmpresaService,
+    // E2.4: solo inyectar para arrancar el listener global de eventos de
+    // impresora — el servicio se auto-suscribe en su constructor.
+    private _printerEvents: PrinterEventsService,
   ) {
     // Suscribirse al servicio de empresa para mantener el nombre + logo del
     // toolbar sincronizados con cualquier update (login, guardar en
@@ -570,6 +579,14 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     this.closeMenu();
   }
 
+  openSectoresImpresorasSettings(): void {
+    this.dialog.open(SectoresImpresorasSettingsComponent, {
+      width: '1000px',
+      maxHeight: '90vh',
+    });
+    this.closeMenu();
+  }
+
   // Tab navigation methods
   openHomeTab() {
     this.tabsService.openTab(
@@ -765,6 +782,11 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     this.closeMenu();
   }
 
+  openVacacionesTab() {
+    this.tabsService.openTab('Vacaciones', ListVacacionesComponent, { source: 'navigation' }, 'vacaciones-tab', true);
+    this.closeMenu();
+  }
+
   openAguinaldosTab() {
     this.tabsService.openTab('Aguinaldos', ListAguinaldosComponent, { source: 'navigation' }, 'aguinaldos-tab', true);
     this.closeMenu();
@@ -814,6 +836,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       ListClientesComponent,
       { source: 'navigation' },
       'clientes-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openConveniosTab() {
+    this.tabsService.openTab(
+      'Convenios',
+      ListConveniosComponent,
+      { source: 'navigation' },
+      'convenios-tab',
       true
     );
     this.closeMenu();
@@ -1005,6 +1038,28 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       BuffetDashboardComponent,
       { source: 'navigation' },
       'buffet-dashboard-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openKdsTab() {
+    this.tabsService.openTab(
+      'KDS — Cocina',
+      KdsComponent,
+      { source: 'navigation' },
+      'kds-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openKdsPantallasTab() {
+    this.tabsService.openTab(
+      'Pantallas KDS',
+      ListKdsPantallasComponent,
+      { source: 'navigation' },
+      'kds-pantallas-tab',
       true
     );
     this.closeMenu();

@@ -167,7 +167,7 @@ export class RevisarFacturaComponent implements OnInit {
         firstValueFrom(this.repo.getProductosWithFilters({
           activo: 'true',
           esComprable: 'true',
-          page: 1,
+          page: 0,
           pageSize: 5000,
         })),
       ]);

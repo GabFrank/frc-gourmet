@@ -970,13 +970,23 @@
         color="primary"
         class="bottom-button"
         [disabled]="!hasActiveVenta"
-        (click)="imprimirPreCuenta()"
+        [matMenuTriggerFor]="imprimirMenu"
         data-testid="pdv-btn-imprimir"
         matTooltip="Imprimir (F5)"
       >
         <mat-icon>print</mat-icon>
         <span>IMPRIMIR</span>
       </button>
+      <mat-menu #imprimirMenu="matMenu">
+        <button mat-menu-item (click)="imprimirPreCuenta()">
+          <mat-icon>receipt_long</mat-icon>
+          <span>Pre-cuenta (F5)</span>
+        </button>
+        <button mat-menu-item (click)="reimprimirComanda()">
+          <mat-icon>restaurant</mat-icon>
+          <span>Reimprimir comanda</span>
+        </button>
+      </mat-menu>
       <button
         mat-raised-button
         color="primary"

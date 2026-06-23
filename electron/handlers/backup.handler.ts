@@ -20,16 +20,19 @@ import {
   isDbFile,
   isFrcBakFile,
   listBackupsInDir,
+  nextDailyRunAt,
   packFrcBak,
   readBackupConfig,
   readFrcBakManifest,
   rmDirRecursive,
+  shouldRunDailyBackup,
   unpackFrcBak,
   validateSqliteFile,
   writeBackupConfig,
 } from '../utils/backup-utils';
 
 let autoBackupInterval: NodeJS.Timeout | null = null;
+let autoBackupTimeout: NodeJS.Timeout | null = null;
 let nextAutoBackupAt: Date | null = null;
 
 interface CreateBackupResult {
@@ -92,41 +95,79 @@ async function createBackupInternal(opts: {
   }
 }
 
-function scheduleAutoBackup(userDataPath: string): void {
+function clearAutoBackupTimers(): void {
   if (autoBackupInterval) {
     clearInterval(autoBackupInterval);
     autoBackupInterval = null;
-    nextAutoBackupAt = null;
   }
+  if (autoBackupTimeout) {
+    clearTimeout(autoBackupTimeout);
+    autoBackupTimeout = null;
+  }
+  nextAutoBackupAt = null;
+}
+
+/** Crea un backup automático y persiste lastAutoBackupAt + aplica retención. */
+async function runAutoBackup(userDataPath: string, notes: string): Promise<void> {
+  const cfg = readBackupConfig(userDataPath);
+  if (!cfg.autoBackupEnabled) return;
+  const result = await createBackupInternal({
+    userDataPath,
+    isAutomatic: true,
+    includeImages: cfg.includeImages,
+    customDir: cfg.customBackupDir,
+    notes,
+  });
+  if (result.success) {
+    cfg.lastAutoBackupAt = new Date().toISOString();
+    writeBackupConfig(userDataPath, cfg);
+    applyRetention(getBackupDir(userDataPath, cfg.customBackupDir), cfg.retentionCount);
+  } else {
+    console.warn('[auto-backup] no se creó backup:', result.message);
+  }
+}
+
+/** Programa (recursivamente) el próximo backup diario a la hora correspondiente. */
+function scheduleNextDaily(userDataPath: string): void {
+  if (autoBackupTimeout) {
+    clearTimeout(autoBackupTimeout);
+    autoBackupTimeout = null;
+  }
+  const cfg = readBackupConfig(userDataPath);
+  if (!cfg.autoBackupEnabled || cfg.mode !== 'daily') return;
+  const next = nextDailyRunAt(new Date(), cfg.dailyTime);
+  nextAutoBackupAt = next;
+  const delay = Math.max(1000, next.getTime() - Date.now());
+  autoBackupTimeout = setTimeout(() => {
+    runAutoBackup(userDataPath, 'Backup automático diario programado')
+      .catch((e) => console.error('Error en auto-backup diario:', e))
+      .finally(() => scheduleNextDaily(userDataPath));
+  }, delay);
+}
+
+function scheduleAutoBackup(userDataPath: string): void {
+  clearAutoBackupTimers();
   const config = readBackupConfig(userDataPath);
   if (!config.autoBackupEnabled) return;
-  const intervalMs = Math.max(1, config.intervalHours) * 60 * 60 * 1000;
 
-  const tick = async () => {
-    try {
-      const cfg = readBackupConfig(userDataPath);
-      if (!cfg.autoBackupEnabled) return;
-      const result = await createBackupInternal({
-        userDataPath,
-        isAutomatic: true,
-        includeImages: cfg.includeImages,
-        customDir: cfg.customBackupDir,
-        notes: 'Backup automático programado',
-      });
-      if (result.success) {
-        cfg.lastAutoBackupAt = new Date().toISOString();
-        writeBackupConfig(userDataPath, cfg);
-        const targetDir = getBackupDir(userDataPath, cfg.customBackupDir);
-        applyRetention(targetDir, cfg.retentionCount);
-      }
-      nextAutoBackupAt = new Date(Date.now() + intervalMs);
-    } catch (e) {
-      console.error('Error en auto-backup tick:', e);
-    }
-  };
+  if (config.mode === 'interval') {
+    const intervalMs = Math.max(1, config.intervalHours) * 60 * 60 * 1000;
+    nextAutoBackupAt = new Date(Date.now() + intervalMs);
+    autoBackupInterval = setInterval(() => {
+      runAutoBackup(userDataPath, 'Backup automático programado (intervalo)')
+        .then(() => { nextAutoBackupAt = new Date(Date.now() + intervalMs); })
+        .catch((e) => console.error('Error en auto-backup tick:', e));
+    }, intervalMs);
+    return;
+  }
 
-  nextAutoBackupAt = new Date(Date.now() + intervalMs);
-  autoBackupInterval = setInterval(() => { tick(); }, intervalMs);
+  // mode === 'daily': catch-up al iniciar si quedó un backup pendiente
+  // (PC apagada a la hora programada o primer arranque del día).
+  if (shouldRunDailyBackup(new Date(), config.lastAutoBackupAt, config.dailyTime)) {
+    runAutoBackup(userDataPath, 'Backup automático diario (catch-up al iniciar)')
+      .catch((e) => console.error('Error en auto-backup catch-up:', e));
+  }
+  scheduleNextDaily(userDataPath);
 }
 
 export function startAutoBackupScheduler(userDataPath: string): void {
@@ -397,8 +438,12 @@ export function registerBackupHandlers(
     try {
       const current = readBackupConfig(userDataPath);
       const next: BackupConfig = { ...current, ...partial };
+      if (next.mode !== 'interval' && next.mode !== 'daily') next.mode = 'daily';
       if (next.intervalHours < 1) next.intervalHours = 1;
       if (next.retentionCount < 0) next.retentionCount = 0;
+      // Normaliza dailyTime: vacío/null/invalido => undefined (backup al abrir cada día).
+      const t = next.dailyTime ? /^(\d{1,2}):(\d{2})$/.exec(next.dailyTime.trim()) : null;
+      next.dailyTime = t ? next.dailyTime!.trim() : undefined;
       writeBackupConfig(userDataPath, next);
       scheduleAutoBackup(userDataPath);
       return {

@@ -160,6 +160,8 @@
       "electron/**/*.js.map",
       "src/app/database/**/*.js",
       "src/app/database/**/*.js.map",
+      "src/app/shared/**/*.js",
+      "src/app/shared/**/*.js.map",
       "package.json",
       "node_modules/**/*"
     ],

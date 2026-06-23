@@ -11,7 +11,7 @@
     <mat-label>MOTIVO DE CANCELACIÓN (obligatorio)</mat-label>
     <textarea
       matInput
-      [(ngModel)]="motivo"
+      [formControl]="motivoControl"
       rows="3"
       placeholder="Ingrese el motivo de la cancelación..."
     ></textarea>
@@ -23,7 +23,7 @@
   <button
     mat-raised-button
     color="warn"
-    [disabled]="!motivo.trim()"
+    [disabled]="motivoControl.invalid"
     (click)="confirmar()"
   >
     <mat-icon>cancel</mat-icon>

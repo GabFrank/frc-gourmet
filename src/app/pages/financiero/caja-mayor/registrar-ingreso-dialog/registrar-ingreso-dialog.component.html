@@ -28,20 +28,40 @@
     </button>
     <h3>Ajuste de Saldo (Ingreso)</h3>
     <form [formGroup]="ajusteForm" class="ajuste-form">
-      <mat-form-field appearance="outline" class="full-width">
-        <mat-label>Moneda</mat-label>
-        <mat-select formControlName="moneda">
-          <mat-option *ngFor="let m of monedas" [value]="m.id">
-            {{m.simbolo}} - {{m.denominacion}}
-          </mat-option>
-        </mat-select>
-      </mat-form-field>
+      <mat-button-toggle-group formControlName="fuente" class="full-width fuente-toggle">
+        <mat-button-toggle value="CAJA_MAYOR">
+          <mat-icon>point_of_sale</mat-icon> Caja Mayor (efectivo)
+        </mat-button-toggle>
+        <mat-button-toggle value="CUENTA_BANCARIA">
+          <mat-icon>account_balance</mat-icon> Cuenta Bancaria
+        </mat-button-toggle>
+      </mat-button-toggle-group>
 
-      <mat-form-field appearance="outline" class="full-width">
-        <mat-label>Forma de Pago</mat-label>
-        <mat-select formControlName="formaPago">
-          <mat-option *ngFor="let fp of formasPago" [value]="fp.id">
-            {{fp.nombre}}
+      <ng-container *ngIf="ajusteForm.get('fuente')?.value === 'CAJA_MAYOR'">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Moneda</mat-label>
+          <mat-select formControlName="moneda">
+            <mat-option *ngFor="let m of monedas" [value]="m.id">
+              {{m.simbolo}} - {{m.denominacion}}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Forma de Pago</mat-label>
+          <mat-select formControlName="formaPago">
+            <mat-option *ngFor="let fp of formasPagoEfectivo" [value]="fp.id">
+              {{fp.nombre}}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+      </ng-container>
+
+      <mat-form-field *ngIf="ajusteForm.get('fuente')?.value === 'CUENTA_BANCARIA'" appearance="outline" class="full-width">
+        <mat-label>Cuenta Bancaria</mat-label>
+        <mat-select formControlName="cuentaBancariaId">
+          <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">
+            {{cb.nombre}} <span *ngIf="cb.banco">- {{cb.banco}}</span>
           </mat-option>
         </mat-select>
       </mat-form-field>

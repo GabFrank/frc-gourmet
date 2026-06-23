@@ -16,6 +16,7 @@ import { MatRadioModule } from '@angular/material/radio';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
+import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
 
 type DestinoTipo = 'CAJA_MAYOR' | 'CUENTA_BANCARIA';
 
@@ -135,10 +136,28 @@ export class CreateEditEntradaVariaDialogComponent implements OnInit {
       this.formasPago = formasPago || [];
       this.cajasMayor = (cajasMayor || []).filter((cm: any) => cm.estado === 'ABIERTA');
       this.cuentasBancarias = (cuentasBancarias || []).filter((cb: any) => cb.activo);
+      this.aplicarPreselecciones();
     } catch (error) {
       console.error('Error loading options:', error);
       this.snackBar.open('Error al cargar opciones', 'Cerrar', { duration: 3000 });
     }
+  }
+
+  /** Pre-selecciona moneda principal/única, forma de pago efectivo/principal/única y única caja abierta. */
+  private aplicarPreselecciones(): void {
+    if (!this.form.get('monedaId')?.value) {
+      const m = preselectSingleOrPrincipal(this.monedas);
+      if (m) this.form.get('monedaId')?.setValue(m.id, { emitEvent: false });
+    }
+    if (!this.form.get('formaPagoId')?.value) {
+      const efectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
+      const fp = preselectSingleOrPrincipal(efectivo) || preselectSingleOrPrincipal(this.formasPago);
+      if (fp) this.form.get('formaPagoId')?.setValue(fp.id, { emitEvent: false });
+    }
+    if (!this.form.get('cajaMayorId')?.value && this.cajasMayor.length === 1) {
+      this.form.get('cajaMayorId')?.setValue(this.cajasMayor[0].id, { emitEvent: false });
+    }
+    this.recalcDecimalesMoneda();
   }
 
   async save(): Promise<void> {

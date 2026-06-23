@@ -1091,6 +1091,19 @@ contextBridge.exposeInMainWorld('api', {
    */
   getAppVersion: (): string => process.env['FRC_APP_VERSION'] || '0.0.0',
 
+  /**
+   * Invocación IPC genérica — usada por `DocumentoService` para llamar
+   * handlers `export-*-pdf` / `print-*` / `create-adjunto` / `get-adjuntos` /
+   * etc. sin tener que declarar un wrapper específico por cada handler en
+   * `preload.ts` + `RepositoryService` (serían ~50+ wrappers idénticos).
+   *
+   * **Seguridad:** la autorización REAL vive en el backend (`ensurePermission`
+   * dentro de cada handler). El preload solo es transport. En `mode=client`
+   * el `ipcRenderer.invoke` está monkey-patcheado a `invokeRouter`, así que
+   * esta función rutea por HTTP automáticamente.
+   */
+  callIpc: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
+
   // F2/F4: app-mode resolver para que el RepositoryService factory decida
   // entre IpcService (standalone/server) y HttpService (cliente).
   // Esto NO va por IPC porque tiene que ser sincrónico (factory de Angular DI
@@ -1334,10 +1347,16 @@ contextBridge.exposeInMainWorld('api', {
   openFileWithSystem: async (url: string): Promise<{ ok: boolean; error?: string }> => {
     return await ipcRenderer.invoke('open-file-with-system', { url });
   },
+  openBase64File: async (base64: string, fileName: string): Promise<{ ok: boolean; error?: string }> => {
+    return await ipcRenderer.invoke('open-base64-file', { base64, fileName });
+  },
 
   // === Adjuntos polimorficos ===
-  getAdjuntos: async (params: { entidadTipo: string; entidadId: number }): Promise<any[]> => {
+  getAdjuntos: async (params: { entidadTipo: string; entidadId: number; tipo?: string }): Promise<any[]> => {
     return await ipcRenderer.invoke('get-adjuntos', params);
+  },
+  getAdjuntoById: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-adjunto-by-id', id);
   },
   createAdjunto: async (data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }): Promise<any> => {
     return await ipcRenderer.invoke('create-adjunto', data);
@@ -2600,6 +2619,9 @@ contextBridge.exposeInMainWorld('api', {
   getCajaMayorMovimientos: async (cajaMayorId: number, filtros?: any): Promise<any> => {
     return await ipcRenderer.invoke('get-caja-mayor-movimientos', cajaMayorId, filtros);
   },
+  getCajaMayorMovimientosConsolidados: async (cajaMayorId: number, filtros?: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-movimientos-caja-mayor-consolidados', cajaMayorId, filtros);
+  },
   createCajaMayorMovimiento: async (data: any): Promise<any> => {
     return await ipcRenderer.invoke('create-caja-mayor-movimiento', data);
   },
@@ -3287,6 +3309,12 @@ contextBridge.exposeInMainWorld('api', {
   cancelarVacacionPeriodo: async (periodoId: number): Promise<any> => {
     return await ipcRenderer.invoke('cancelar-vacacion-periodo', periodoId);
   },
+  venderDiasVacacion: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('vender-dias-vacacion', payload);
+  },
+  anularVentaVacacion: async (ventaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('anular-venta-vacacion', ventaId);
+  },
 
   // =============================================
   // RRHH - Liquidacion final
@@ -3427,6 +3455,44 @@ contextBridge.exposeInMainWorld('api', {
   },
   recalcularSaldoCliente: async (clienteId: number): Promise<any> => {
     return await ipcRenderer.invoke('recalcular-saldo-cliente', clienteId);
+  },
+
+  // Convenios + cobro consolidado
+  getConvenios: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-convenios', filtros);
+  },
+  getConvenio: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-convenio', id);
+  },
+  createConvenio: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-convenio', data);
+  },
+  updateConvenio: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-convenio', id, data);
+  },
+  deleteConvenio: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-convenio', id);
+  },
+  setConvenioClientes: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('set-convenio-clientes', payload);
+  },
+  getCobroConsolidadoPreview: async (convenioId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cobro-consolidado-preview', convenioId);
+  },
+  registrarCobroConsolidado: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('registrar-cobro-consolidado', payload);
+  },
+  getCobrosConsolidados: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-cobros-consolidados', filtros);
+  },
+  getCobroConsolidado: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cobro-consolidado', id);
+  },
+  exportCobroConsolidadoPreviewPdf: async (convenioId: number): Promise<any> => {
+    return await ipcRenderer.invoke('export-cobro-consolidado-preview-pdf', convenioId);
+  },
+  exportReciboCobroConsolidadoPdf: async (cobroConsolidadoId: number): Promise<any> => {
+    return await ipcRenderer.invoke('export-recibo-cobro-consolidado-pdf', cobroConsolidadoId);
   },
 
   // === Movimientos Cliente (Fase 7) ===
@@ -3690,6 +3756,32 @@ contextBridge.exposeInMainWorld('api', {
     const listener = (_event: any, data: { status: string; payload: any }) => handler(data.status, data.payload);
     ipcRenderer.on('auto-update:status', listener);
     return () => ipcRenderer.removeListener('auto-update:status', listener);
+  },
+
+  /**
+   * Suscribe a eventos de impresora emitidos por backgrounds del backend
+   * (hooks auto-imprimir, fallos parciales de comandas multi-sector).
+   * El handler recibe el payload {level, handler, entityRef?, printed?,
+   * errors?, message?}. Devuelve un unsubscribe.
+   *
+   * Llamar UNA VEZ a nivel global de la app (ej. AppComponent ngOnInit) —
+   * no por componente.
+   */
+  onPrinterEvent: (handler: (payload: any) => void): (() => void) => {
+    const listener = (_event: any, data: any) => handler(data);
+    ipcRenderer.on('printer-events', listener);
+    return () => ipcRenderer.removeListener('printer-events', listener);
+  },
+
+  /**
+   * KDS: suscribe al canal `comanda-item-updates` (emitido desde
+   * `electron/utils/comanda-events.utils.ts`). Devuelve función para desuscribir.
+   * Lo usa el KDS para refrescar las pantallas en vivo sin polling.
+   */
+  onComandaEvent: (handler: (payload: any) => void): (() => void) => {
+    const listener = (_event: any, data: any) => handler(data);
+    ipcRenderer.on('comanda-item-updates', listener);
+    return () => ipcRenderer.removeListener('comanda-item-updates', listener);
   },
 
 });

@@ -20,7 +20,7 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
-import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { PromptDialogComponent, PromptDialogData } from 'src/app/shared/components/prompt-dialog/prompt-dialog.component';
 import { TabsService } from 'src/app/services/tabs.service';
 import { CreateEditCompraComponent } from '../create-edit-compra/create-edit-compra.component';
 import { CompraDetalleComponent } from '../compra-detalle/compra-detalle.component';
@@ -228,7 +228,7 @@ export class ListComprasComponent implements OnInit {
     this.tabsService.openTab(
       'Nueva compra',
       CreateEditCompraComponent,
-      { mode: 'create' },
+      { mode: 'create', onSaved: () => this.loadData() },
       `nueva-compra-${Date.now()}`,
       true,
     );
@@ -276,7 +276,7 @@ export class ListComprasComponent implements OnInit {
     this.tabsService.openTab(
       `Compra #${compra.id} (borrador)`,
       CreateEditCompraComponent,
-      { mode: 'edit', compraId: compra.id },
+      { mode: 'edit', compraId: compra.id, onSaved: () => this.loadData() },
       `editar-compra-${compra.id}`,
       true,
     );
@@ -293,21 +293,22 @@ export class ListComprasComponent implements OnInit {
   }
 
   async anular(compra: any): Promise<void> {
-    const motivo = window.prompt('Motivo de anulación (opcional):', '') ?? null;
-    if (motivo === null) return;
-    const ref = this.dialog.open(ConfirmationDialogComponent, {
+    const ref = this.dialog.open(PromptDialogComponent, {
       width: '480px',
       data: {
         title: `Anular compra #${compra.id}`,
         message: compra.estado === 'FINALIZADO'
           ? '¿Confirmás la anulación? Se revertirán stock, costo y caja mayor (o se cancelará el CPP). Esta acción es definitiva.'
           : '¿Confirmás la anulación de este borrador?',
-      },
+        label: 'Motivo de anulación (opcional)',
+        confirmText: 'Anular',
+        cancelText: 'Cancelar',
+      } as PromptDialogData,
     });
-    const ok = await firstValueFrom(ref.afterClosed());
-    if (!ok) return;
+    const motivo = await firstValueFrom(ref.afterClosed());
+    if (motivo === undefined) return; // canceló
     try {
-      await firstValueFrom(this.repositoryService.anularCompra(compra.id, motivo));
+      await firstValueFrom(this.repositoryService.anularCompra(compra.id, motivo || null));
       this.snackBar.open('Compra anulada', 'Cerrar', { duration: 3000 });
       this.loadData();
     } catch (e: any) {
