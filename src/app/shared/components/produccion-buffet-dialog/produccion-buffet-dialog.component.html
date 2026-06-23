@@ -1,0 +1,45 @@
+<div class="produccion-dialog">
+  <h2 mat-dialog-title class="produccion-title">
+    <mat-icon>inventory</mat-icon>
+    Registrar producción — {{ data.producto?.nombre }}
+  </h2>
+
+  <mat-progress-bar mode="indeterminate" *ngIf="isSaving"></mat-progress-bar>
+
+  <mat-dialog-content class="produccion-content">
+    <p class="hint">
+      Carga el stock del buffet. Se sumará la cantidad producida y se descontarán
+      los insumos según la receta del producto.
+    </p>
+
+    <form [formGroup]="form" class="produccion-form">
+      <mat-form-field appearance="outline" class="full">
+        <mat-label>Cantidad producida ({{ unidad }})</mat-label>
+        <input matInput type="number" min="0" step="0.001" formControlName="cantidadProducida" autofocus>
+        <span matSuffix>{{ unidad }}</span>
+        <mat-error>Ingrese una cantidad válida</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full">
+        <mat-label>Fecha</mat-label>
+        <input matInput type="date" formControlName="fecha">
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full">
+        <mat-label>Observaciones</mat-label>
+        <textarea matInput rows="2" formControlName="observaciones"></textarea>
+      </mat-form-field>
+    </form>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="cancelar()" [disabled]="isSaving">
+      <mat-icon>close</mat-icon>
+      CANCELAR
+    </button>
+    <button mat-raised-button color="primary" (click)="guardar()" [disabled]="form.invalid || isSaving">
+      <mat-icon>save</mat-icon>
+      REGISTRAR
+    </button>
+  </mat-dialog-actions>
+</div>

@@ -1,0 +1,98 @@
+.pesaje-dialog {
+  min-width: 360px;
+  max-width: 460px;
+
+  .pesaje-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .pesaje-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .precio-kg {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+
+    .value {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-primary, rgba(0, 0, 0, 0.87));
+    }
+  }
+
+  .peso-field {
+    width: 100%;
+
+    input {
+      font-size: 1.6rem;
+      font-weight: 600;
+      text-align: right;
+    }
+  }
+
+  .detalle {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--surface-variant, rgba(0, 0, 0, 0.04));
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9rem;
+      color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+
+      &.neto {
+        font-weight: 600;
+        color: var(--text-primary, rgba(0, 0, 0, 0.87));
+      }
+    }
+  }
+
+  .estado {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-weight: 600;
+    background: var(--warn-container, rgba(255, 152, 0, 0.15));
+    color: var(--warn, #e65100);
+
+    &.minimo {
+      background: var(--info-container, rgba(3, 169, 244, 0.15));
+      color: var(--info, #0277bd);
+    }
+  }
+
+  .total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-top: 8px;
+    border-top: 1px solid var(--divider, rgba(0, 0, 0, 0.12));
+
+    .label {
+      font-weight: 600;
+    }
+
+    .value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--primary, #1976d2);
+    }
+  }
+
+  .pesaje-actions {
+    gap: 8px;
+  }
+}

@@ -61,8 +61,29 @@ export class VentaItem extends BaseModel {
   @JoinColumn({ name: 'presentacion_id' })
   presentacion!: Presentacion;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  // scale 3 para soportar cantidades por peso (kg con precisión de gramos).
+  @Column({ type: 'decimal', precision: 10, scale: 3 })
   cantidad!: number;
+
+  // --- Buffet por peso (solo cuando producto es BUFFET_POR_PESO) ---
+  // El peso real SIEMPRE se persiste, aunque el total quede capado por el tope.
+  @Column({ type: 'decimal', precision: 10, scale: 3, nullable: true, name: 'peso_bruto' })
+  pesoBruto?: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 3, nullable: true, name: 'peso_tara' })
+  pesoTara?: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 3, nullable: true, name: 'peso_neto' })
+  pesoNeto?: number;
+
+  // Precio por kilo real usado (para reporting; precioVentaUnitario puede venir
+  // ajustado al efectivo cuando aplica el tope libre).
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true, name: 'precio_por_kg' })
+  precioPorKg?: number;
+
+  // True si se activó el tope "buffet libre" (señal para métricas).
+  @Column({ type: 'boolean', default: false, name: 'aplico_libre' })
+  aplicoLibre!: boolean;
 
   @Column({ 
     type: 'decimal', 

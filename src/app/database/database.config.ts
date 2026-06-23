@@ -182,6 +182,7 @@ import { PdvMesa } from './entities/ventas/pdv-mesa.entity';
 import { Reserva } from './entities/ventas/reserva.entity';
 import { Comanda } from './entities/ventas/comanda.entity';
 import { ComandaItem } from './entities/ventas/comanda-item.entity';
+import { KdsPantalla } from './entities/ventas/kds-pantalla.entity';
 import { Sector } from './entities/ventas/sector.entity';
 import { SectorImpresora } from './entities/ventas/sector-impresora.entity';
 import { ProductoSector } from './entities/productos/producto-sector.entity';
@@ -192,6 +193,9 @@ import { AddDispositivoIdToTrackedEntities1778390000000 } from './migrations/177
 import { AddOnboardingTaskOverrides1778400000000 } from './migrations/1778400000000-AddOnboardingTaskOverrides';
 import { AddEmpresa1778500000000 } from './migrations/1778500000000-AddEmpresa';
 import { AddMustChangePasswordToUsuario1778600000000 } from './migrations/1778600000000-AddMustChangePasswordToUsuario';
+import { AddPrecioVentaVigencia1778700000000 } from './migrations/1778700000000-AddPrecioVentaVigencia';
+import { AddBuffetPorPeso1778800000000 } from './migrations/1778800000000-AddBuffetPorPeso';
+import { AddBalanzaConfigToPdvConfig1778900000000 } from './migrations/1778900000000-AddBalanzaConfigToPdvConfig';
 import { AddSistemaDocumentos1779000000000 } from './migrations/1779000000000-AddSistemaDocumentos';
 import { AddRequiereComandaToProducto1779100000000 } from './migrations/1779100000000-AddRequiereComandaToProducto';
 import { AddPrinterTicketToDispositivo1779200000000 } from './migrations/1779200000000-AddPrinterTicketToDispositivo';
@@ -200,6 +204,8 @@ import { AddConveniosCobroConsolidado1779500000000 } from './migrations/17795000
 import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVacacionVentas';
 import { AddCuentaBancariaToPagosCobros1779700000000 } from './migrations/1779700000000-AddCuentaBancariaToPagosCobros';
 import { AddCotizacionBancariaToPagosCobros1779800000000 } from './migrations/1779800000000-AddCotizacionBancariaToPagosCobros';
+import { AddKdsToComandaItem1780000000000 } from './migrations/1780000000000-AddKdsToComandaItem';
+import { AddKdsPantalla1780100000000 } from './migrations/1780100000000-AddKdsPantalla';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -442,6 +448,7 @@ function getEntitiesList(): any[] {
       Reserva,
       Comanda,
       ComandaItem,
+      KdsPantalla,
       Sector,
       SectorImpresora,
       ProductoSector,
@@ -487,6 +494,9 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddOnboardingTaskOverrides1778400000000,
     AddEmpresa1778500000000,
     AddMustChangePasswordToUsuario1778600000000,
+    AddPrecioVentaVigencia1778700000000,
+    AddBuffetPorPeso1778800000000,
+    AddBalanzaConfigToPdvConfig1778900000000,
     AddSistemaDocumentos1779000000000,
     AddRequiereComandaToProducto1779100000000,
     AddPrinterTicketToDispositivo1779200000000,
@@ -495,6 +505,8 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddVacacionVentas1779600000000,
     AddCuentaBancariaToPagosCobros1779700000000,
     AddCotizacionBancariaToPagosCobros1779800000000,
+    AddKdsToComandaItem1780000000000,
+    AddKdsPantalla1780100000000,
   ];
 }
 

@@ -67,4 +67,17 @@ export class PdvConfig extends BaseModel {
   /** Botón "Pre-cuenta" del PdV imprime sin confirmación intermedia. */
   @Column({ name: 'imprimir_precuenta_al_solicitar', default: true })
   imprimirPrecuentaAlSolicitar!: boolean;
+
+  // --- Balanza (etiqueta EAN-13 de buffet por peso) ---
+  // Prefijo que identifica una etiqueta de balanza (típicamente '2').
+  @Column({ name: 'balanza_prefijo', type: 'varchar', length: 2, default: '2' })
+  balanzaPrefijo!: string;
+
+  // Qué codifica el valor embebido de la etiqueta: PESO | PRECIO.
+  @Column({ name: 'balanza_modo', type: 'varchar', length: 10, default: 'PESO' })
+  balanzaModo!: string;
+
+  // Factor para convertir el valor embebido a gramos (gramos = valor * factor).
+  @Column({ name: 'balanza_factor_peso', type: 'decimal', precision: 10, scale: 3, default: 1 })
+  balanzaFactorPeso!: number;
 }

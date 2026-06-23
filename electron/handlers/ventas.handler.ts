@@ -23,6 +23,9 @@ import { PdvMesa, PdvMesaEstado } from '../../src/app/database/entities/ventas/p
 import { Comanda, ComandaEstado } from '../../src/app/database/entities/ventas/comanda.entity';
 import { printComandaInternal, printVentaTicketInternal } from './documentos-tickets.handler';
 import { Sector } from '../../src/app/database/entities/ventas/sector.entity';
+import { ComandaItem, ComandaItemEstado } from '../../src/app/database/entities/ventas/comanda-item.entity';
+import { ProductoSector } from '../../src/app/database/entities/productos/producto-sector.entity';
+import { broadcastComandaEvent } from '../utils/comanda-events.utils';
 import { PdvAtajoGrupo } from '../../src/app/database/entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from '../../src/app/database/entities/ventas/pdv-atajo-item.entity';
 import { PdvAtajoGrupoItem } from '../../src/app/database/entities/ventas/pdv-atajo-grupo-item.entity';
@@ -38,6 +41,8 @@ import { RecetaPresentacion } from '../../src/app/database/entities/productos/re
 import { StockMovimiento, StockMovimientoTipo, StockMovimientoTipoReferencia } from '../../src/app/database/entities/productos/stock-movimiento.entity';
 import { Combo } from '../../src/app/database/entities/productos/combo.entity';
 import { ComboProducto } from '../../src/app/database/entities/productos/combo-producto.entity';
+import { Produccion } from '../../src/app/database/entities/productos/produccion.entity';
+import { resumirMetricasBuffet, BuffetItemMetrica } from '../../src/app/shared/utils/buffet-metricas.util';
 import { Adicional } from '../../src/app/database/entities/productos/adicional.entity';
 import { TipoModificacionIngrediente } from '../../src/app/database/entities/ventas/venta-item-ingrediente-modificacion.entity';
 import { EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
@@ -51,6 +56,48 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   // Arrancar worker de retry de comandas (cada 5s reintenta items con
   // `impreso=false` y al menos un intento previo, en ventas ABIERTAS).
   startRetryComandaWorker(dataSource);
+
+  // --- Métricas de buffet por peso (dashboard) ---
+  ipcMain.handle('get-buffet-metricas', async (_event: any, filtros: any = {}) => {
+    try {
+      const desde = filtros?.desde ? new Date(filtros.desde) : null;
+      const hasta = filtros?.hasta ? new Date(filtros.hasta) : null;
+
+      const viRepo = dataSource.getRepository(VentaItem);
+      const qb = viRepo.createQueryBuilder('vi')
+        .innerJoinAndSelect('vi.venta', 'venta')
+        .innerJoinAndSelect('vi.producto', 'producto')
+        .where('producto.tipo = :tipo', { tipo: ProductoTipo.BUFFET_POR_PESO })
+        .andWhere('vi.estado = :estado', { estado: 'ACTIVO' })
+        .andWhere('venta.estado = :vestado', { vestado: VentaEstado.CONCLUIDA });
+      if (desde) qb.andWhere('venta.fechaCierre >= :desde', { desde });
+      if (hasta) qb.andWhere('venta.fechaCierre <= :hasta', { hasta });
+      const items = await qb.getMany();
+
+      const metricaItems: BuffetItemMetrica[] = items.map((it: any) => ({
+        pesoNetoGramos: Number(it.pesoNeto) || 0,
+        total: (Number(it.precioVentaUnitario) || 0) * (Number(it.cantidad) || 0),
+        costo: (Number(it.precioCostoUnitario) || 0) * (Number(it.cantidad) || 0),
+        aplicoLibre: !!it.aplicoLibre,
+        ventaId: it.venta?.id,
+      }));
+
+      const prodRepo = dataSource.getRepository(Produccion);
+      const pqb = prodRepo.createQueryBuilder('p').where('p.activo = :a', { a: true });
+      if (desde) pqb.andWhere('p.fecha >= :desde', { desde });
+      if (hasta) pqb.andWhere('p.fecha <= :hasta', { hasta });
+      const producciones = await pqb.getMany();
+      const kgProducidos = producciones.reduce(
+        (s: number, p: any) => s + (Number(p.cantidadProducida) || 0),
+        0,
+      );
+
+      return resumirMetricasBuffet(metricaItems, kgProducidos);
+    } catch (error) {
+      console.error('Error get-buffet-metricas:', error);
+      throw error;
+    }
+  });
 
   // --- PrecioDelivery Handlers ---
   ipcMain.handle('getPreciosDelivery', async () => {
@@ -670,6 +717,19 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         }
       }
 
+      // ─── KDS: al cerrar/cancelar la venta, sacar sus items de las pantallas ─
+      try {
+        if (estadoAnterior !== saved.estado) {
+          if (saved.estado === VentaEstado.CONCLUIDA) {
+            await finalizarComandaItems(dataSource, { ventaItem: { venta: { id } } as any, activo: true }, ComandaItemEstado.ENTREGADO, getCurrentUser()?.id);
+          } else if (saved.estado === VentaEstado.CANCELADA) {
+            await finalizarComandaItems(dataSource, { ventaItem: { venta: { id } } as any, activo: true }, ComandaItemEstado.CANCELADO, getCurrentUser()?.id);
+          }
+        }
+      } catch (e) {
+        console.warn('[updateVenta] hook KDS cerrar comanda-items falló:', e);
+      }
+
       return saved;
     } catch (error) {
       console.error(`Error updating venta ID ${id}:`, error);
@@ -772,6 +832,15 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         console.warn('[createVentaItem] hook auto-imprimir comanda falló:', e);
       }
 
+      // ─── Hook KDS: crear ComandaItems (uno por sector) para el item ─────
+      // Independiente de la impresión física: el KDS funciona aunque
+      // autoImprimirComanda esté en false. Nunca bloquea la creación.
+      try {
+        await crearComandaItemsSiCorresponde(dataSource, (saved as any).id);
+      } catch (e) {
+        console.warn('[createVentaItem] hook KDS comanda-items falló:', e);
+      }
+
       return saved;
     } catch (error) {
       console.error('Error creating venta item:', error);
@@ -786,7 +855,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+
+      // KDS: si el item se canceló, cancelar sus ComandaItems para sacarlos de cocina.
+      try {
+        if ((saved as any).estado === EstadoVentaItem.CANCELADO) {
+          await finalizarComandaItems(dataSource, { ventaItem: { id } as any, activo: true }, ComandaItemEstado.CANCELADO, getCurrentUser()?.id);
+        }
+      } catch (e) { console.warn('[updateVentaItem] KDS cancelar comanda-items falló:', e); }
+
+      return saved;
     } catch (error) {
       console.error(`Error updating venta item ID ${id}:`, error);
       throw error;
@@ -799,6 +877,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(VentaItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
+      // KDS: borrar ComandaItems del item antes para no dejar FK huérfana.
+      try {
+        await dataSource.getRepository(ComandaItem)
+          .createQueryBuilder()
+          .delete()
+          .where('venta_item_id = :id', { id })
+          .execute();
+      } catch (e) { console.warn('[deleteVentaItem] KDS limpiar comanda-items falló:', e); }
       await repo.remove(entity);
       return true;
     } catch (error) {
@@ -1948,6 +2034,9 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           case ProductoTipo.COMBO:
             await processCombo(item, pending, 0);
             break;
+          case ProductoTipo.BUFFET_POR_PESO:
+            await processBuffetPorPeso(item, pending);
+            break;
         }
       }
 
@@ -1999,6 +2088,30 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           cantidad *= Number(item.presentacion.cantidad);
         }
         out.push({ productoId: item.producto.id, cantidad, ventaItemId: item.id });
+      }
+
+      async function processBuffetPorPeso(item: VentaItem, out: PendingMovement[]): Promise<void> {
+        // Modo híbrido: si el producto está marcado para descontar por receta,
+        // se prorratean ingredientes (Fase 5). Por defecto (opaco), se descuenta
+        // el propio producto buffet por kilo neto — su stock se carga vía
+        // Producción (PRODUCCION_ENTRADA). El desperdicio = producido - vendido.
+        const producto = await productoRepo.findOne({
+          where: { id: item.producto.id },
+          relations: ['receta'],
+        });
+        if (producto?.descuentaPorReceta && producto?.receta?.id) {
+          const receta = await recetaRepo.findOne({ where: { id: producto.receta.id } });
+          if (receta) {
+            await processReceta(receta, item, out);
+            return;
+          }
+        }
+        if (!item.producto.controlaStock) return;
+        // pesoNeto está en gramos; cantidad ya viene en kg neto (las dos coinciden).
+        const netoKg =
+          item.pesoNeto != null ? Number(item.pesoNeto) / 1000 : Number(item.cantidad);
+        if (!netoKg || netoKg <= 0) return;
+        out.push({ productoId: item.producto.id, cantidad: netoKg, ventaItemId: item.id });
       }
 
       async function processElaboradoSinVariacion(item: VentaItem, out: PendingMovement[]): Promise<void> {
@@ -2685,6 +2798,104 @@ async function autoPrintComandaIfNeeded(
       })
       .catch(e => console.error(`[auto-print comanda venta=${ventaId}] excepción:`, e));
   });
+}
+
+/**
+ * Hook KDS — crea los `ComandaItem` (uno por sector) de un `VentaItem` recién
+ * agregado, para que aparezca en las pantallas de cocina.
+ *
+ * Mismas pre-condiciones que la impresión de comanda:
+ * - La venta debe tener mesa o comanda (si no, es venta de mostrador sin cocina).
+ * - El producto debe tener `requiereComanda !== false`.
+ * - El ruteo es por la M2M `producto_sectores`: un `ComandaItem` por sector
+ *   activo, con estado de preparación independiente.
+ *
+ * Idempotente: si ya existe un ComandaItem activo para (ventaItem, sector) no
+ * lo duplica (cubre reintentos / doble-fire). Emite evento por cada item creado.
+ */
+async function crearComandaItemsSiCorresponde(
+  dataSource: DataSource,
+  ventaItemId: number,
+): Promise<void> {
+  if (!ventaItemId) return;
+
+  const item = await dataSource.getRepository(VentaItem).findOne({
+    where: { id: ventaItemId },
+    relations: ['venta', 'venta.mesa', 'venta.comanda', 'producto'],
+  });
+  if (!item) return;
+
+  const venta: any = (item as any).venta;
+  const producto: any = (item as any).producto;
+  if (!venta?.id) return;
+  if (!venta.mesa?.id && !venta.comanda?.id) return; // venta de mostrador
+  if (!producto?.id || producto.requiereComanda === false) return;
+
+  // Sectores destino (M2M producto_sectores, activos, por prioridad)
+  const ps = await dataSource.getRepository(ProductoSector).find({
+    where: { producto: { id: producto.id } as any, activo: true },
+    relations: ['sector'],
+    order: { prioridad: 'ASC' },
+  });
+  const sectores = ps.map(p => (p as any).sector).filter((s: any) => s?.id && s.activo !== false);
+  if (sectores.length === 0) return; // sin sector → no aplica KDS
+
+  const ciRepo = dataSource.getRepository(ComandaItem);
+  for (const sector of sectores) {
+    // Idempotencia: no duplicar (ventaItem, sector) activos
+    const existe = await ciRepo.findOne({
+      where: { ventaItem: { id: ventaItemId } as any, sector: { id: sector.id } as any, activo: true },
+    });
+    if (existe) continue;
+
+    const ci = ciRepo.create({
+      ventaItem: { id: ventaItemId } as any,
+      comanda: venta.comanda?.id ? ({ id: venta.comanda.id } as any) : null,
+      sector: { id: sector.id } as any,
+      estado: ComandaItemEstado.PENDIENTE,
+      observacion: (item as any).ensambladoDescripcion || null,
+      activo: true,
+    });
+    const saved = await ciRepo.save(ci);
+    broadcastComandaEvent({
+      tipo: 'CREADO',
+      comandaItemId: (saved as any).id,
+      ventaId: venta.id,
+      sectorId: sector.id,
+      estado: ComandaItemEstado.PENDIENTE,
+    });
+  }
+}
+
+/**
+ * Cierra/transiciona en masa los ComandaItems activos que matchean `where`
+ * (por venta-item o por venta) a `nuevoEstado` — usado cuando se cancela un
+ * item, se elimina, o la venta se concluye/cancela, para que no queden colgados
+ * en las pantallas KDS. No re-toca los ya ENTREGADO/CANCELADO.
+ */
+async function finalizarComandaItems(
+  dataSource: DataSource,
+  where: any,
+  nuevoEstado: ComandaItemEstado,
+  usuarioId: number | undefined,
+): Promise<void> {
+  const repo = dataSource.getRepository(ComandaItem);
+  const items = await repo.find({ where, relations: ['sector', 'ventaItem', 'ventaItem.venta'] });
+  for (const ci of items) {
+    if (ci.estado === ComandaItemEstado.CANCELADO || ci.estado === ComandaItemEstado.ENTREGADO) continue;
+    ci.estado = nuevoEstado;
+    if (nuevoEstado === ComandaItemEstado.LISTO && !ci.fechaListo) ci.fechaListo = new Date();
+    if (nuevoEstado === ComandaItemEstado.CANCELADO) ci.activo = false;
+    await setEntityUserTracking(dataSource, ci, usuarioId, true);
+    const saved = await repo.save(ci);
+    broadcastComandaEvent({
+      tipo: nuevoEstado === ComandaItemEstado.CANCELADO ? 'CANCELADO' : 'ESTADO',
+      comandaItemId: saved.id,
+      ventaId: (ci as any).ventaItem?.venta?.id ?? null,
+      sectorId: (ci as any).sector?.id ?? null,
+      estado: nuevoEstado,
+    });
+  }
 }
 
 /**
