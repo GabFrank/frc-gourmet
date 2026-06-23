@@ -71,6 +71,11 @@ export class BackupRestoreComponent implements OnInit {
 
   @ViewChild(MatPaginator) paginator?: MatPaginator;
 
+  backupModes = [
+    { value: 'daily', label: 'Diario (recomendado)' },
+    { value: 'interval', label: 'Por intervalo' },
+  ];
+
   intervalOptions = [
     { value: 1, label: 'Cada 1 hora' },
     { value: 6, label: 'Cada 6 horas' },
@@ -81,6 +86,9 @@ export class BackupRestoreComponent implements OnInit {
   ];
 
   retentionOptions = [3, 5, 7, 10, 14, 30];
+
+  /** UI: cuando false, el backup diario corre al abrir la app cada día (sin hora fija). */
+  useFixedTime = false;
 
   constructor(
     private backupService: BackupService,
@@ -107,9 +115,19 @@ export class BackupRestoreComponent implements OnInit {
 
   loadConfig(): void {
     this.backupService.getConfig().subscribe({
-      next: (cfg) => { this.config = cfg; },
+      next: (cfg) => {
+        if (!cfg.mode) cfg.mode = 'daily';
+        this.config = cfg;
+        this.useFixedTime = !!cfg.dailyTime;
+      },
       error: (err) => this.notifyError('Error al obtener configuración', err),
     });
+  }
+
+  onUseFixedTimeChange(): void {
+    if (this.useFixedTime && this.config && !this.config.dailyTime) {
+      this.config.dailyTime = '02:00';
+    }
   }
 
   loadList(): void {
@@ -250,7 +268,9 @@ export class BackupRestoreComponent implements OnInit {
     if (!this.config) return;
     const partial: Partial<BackupConfig> = {
       autoBackupEnabled: this.config.autoBackupEnabled,
+      mode: this.config.mode,
       intervalHours: this.config.intervalHours,
+      dailyTime: this.config.mode === 'daily' && this.useFixedTime ? (this.config.dailyTime || '02:00') : null,
       retentionCount: this.config.retentionCount,
       includeImages: this.config.includeImages,
       customBackupDir: this.config.customBackupDir,

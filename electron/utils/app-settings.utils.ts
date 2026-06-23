@@ -47,9 +47,15 @@ export interface UpdateSettings {
   lastCheckAt?: string;
 }
 
+export type BackupMode = 'interval' | 'daily';
+
 export interface BackupSettings {
   autoBackupEnabled: boolean;
+  /** 'daily' = una vez por día (default); 'interval' = cada N horas desde el arranque. */
+  mode: BackupMode;
   intervalHours: number;
+  /** Hora fija del backup diario 'HH:MM' local. Vacío = al abrir la app cada día. */
+  dailyTime?: string;
   retentionCount: number;
   customBackupDir?: string;
   includeImages: boolean;
@@ -86,6 +92,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   update: { channel: 'stable', autoCheck: true },
   backup: {
     autoBackupEnabled: false,
+    mode: 'daily',
     intervalHours: 24,
     retentionCount: 7,
     includeImages: false,
