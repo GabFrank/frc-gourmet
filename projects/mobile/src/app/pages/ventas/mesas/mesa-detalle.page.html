@@ -21,6 +21,15 @@
             <span class="mesa-item-calc">{{ it.cantidad | number:'1.0-2' }} × {{ it.unitario | number:'1.0-2' }}</span>
           </div>
           <span class="mesa-item-total">{{ it.total | number:'1.0-2' }}</span>
+          <button
+            mat-icon-button
+            class="mesa-item-quitar"
+            [disabled]="quitando"
+            (click)="quitar(it)"
+            aria-label="Quitar ítem"
+          >
+            <mat-icon>delete_outline</mat-icon>
+          </button>
         </div>
       </section>
 

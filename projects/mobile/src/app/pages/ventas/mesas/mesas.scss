@@ -232,3 +232,9 @@
   bottom: calc(18px + env(safe-area-inset-bottom));
   z-index: 5;
 }
+
+.mesa-item-quitar {
+  margin-left: 4px;
+  color: var(--warn-color, #c62828);
+  flex: 0 0 auto;
+}

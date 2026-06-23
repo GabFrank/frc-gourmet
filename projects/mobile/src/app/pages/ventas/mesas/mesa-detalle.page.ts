@@ -5,7 +5,11 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '@frc/shared-core';
+import { ConfirmDialogComponent } from '../../../core/components/confirm-dialog.component';
 
 interface ItemVM {
   id: number;
@@ -17,9 +21,9 @@ interface ItemVM {
 }
 
 /**
- * Detalle de mesa (M1 — solo lectura): muestra la cuenta de la venta ABIERTA
- * de la mesa (items + total). El mozo ve qué se pidió. Tomar pedido / cobrar
- * llegan en fases siguientes.
+ * Detalle de mesa: muestra la cuenta de la venta ABIERTA (items + total), con
+ * acceso a "Tomar pedido" (FAB) y a quitar un ítem (lo cancela, sincronizando
+ * el KDS). Cobrar / pre-cuenta llegan en fases siguientes.
  */
 @Component({
   selector: 'app-mesa-detalle',
@@ -39,8 +43,12 @@ export class MesaDetallePage implements OnInit {
   private readonly repo = inject(RepositoryService);
   private readonly route = inject(ActivatedRoute);
   private readonly location = inject(Location);
+  private readonly dialog = inject(MatDialog);
+  private readonly snack = inject(MatSnackBar);
 
   mesaId = 0;
+  ventaId: number | null = null;
+  quitando = false;
   titulo = 'Mesa';
   sectorNombre?: string;
   ocupada = false;
@@ -66,6 +74,7 @@ export class MesaDetallePage implements OnInit {
         this.titulo = m?.numero != null ? `Mesa ${m.numero}` : 'Mesa';
         this.sectorNombre = m?.sector?.nombre;
         const ventaId = m?.venta?.id;
+        this.ventaId = ventaId ?? null;
         this.ocupada = !!ventaId || m?.estado === 'OCUPADO';
         this.estado = this.ocupada ? 'Ocupada' : 'Libre';
         if (ventaId) {
@@ -113,6 +122,38 @@ export class MesaDetallePage implements OnInit {
       unitario,
       total: unitario * cantidad,
     };
+  }
+
+  async quitar(item: ItemVM): Promise<void> {
+    if (this.quitando) return;
+    const ok = await firstValueFrom(
+      this.dialog
+        .open(ConfirmDialogComponent, {
+          data: {
+            title: 'Quitar ítem',
+            message: `¿Quitar "${item.descripcion}" de la cuenta? Si ya fue enviado a cocina, se cancelará también allí.`,
+            confirmText: 'Quitar',
+            danger: true,
+          },
+          width: '320px',
+        })
+        .afterClosed(),
+    );
+    if (!ok) return;
+
+    this.quitando = true;
+    try {
+      // Cancelar (no borrar): preserva auditoría y cancela los comanda-items del KDS.
+      await firstValueFrom(this.repo.updateVentaItem(item.id, { estado: 'CANCELADO' } as any));
+      this.snack.open('Ítem quitado', undefined, { duration: 1500 });
+      if (this.ventaId) {
+        this.cargarCuenta(this.ventaId);
+      }
+    } catch {
+      this.snack.open('No se pudo quitar el ítem', 'CERRAR', { duration: 4000 });
+    } finally {
+      this.quitando = false;
+    }
   }
 
   volver(): void {
