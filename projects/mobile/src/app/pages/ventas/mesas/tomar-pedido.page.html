@@ -1,0 +1,55 @@
+<div class="mesa-detalle">
+  <mat-toolbar color="primary" class="mesa-bar">
+    <button mat-icon-button (click)="terminar()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="mesa-bar-title">{{ titulo }}</span>
+    <span class="mesa-spacer"></span>
+    <button mat-button (click)="terminar()">Listo</button>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="cargando || buscando || guardando" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error mesa-pad">{{ error }}</p>
+
+  <div class="pedido-content" *ngIf="!cargando && !error">
+    <!-- Buscador (explícito, sin filtrado en vivo) -->
+    <div class="pedido-buscar">
+      <mat-form-field appearance="outline" class="pedido-search-field">
+        <mat-label>Buscar producto</mat-label>
+        <input matInput [(ngModel)]="termino" (keyup.enter)="buscar()" placeholder="Nombre del producto" />
+        <button matSuffix mat-icon-button (click)="buscar()" aria-label="Buscar"><mat-icon>search</mat-icon></button>
+      </mat-form-field>
+    </div>
+
+    <!-- Resultados -->
+    <div class="crud-list">
+      <button
+        *ngFor="let p of resultados"
+        class="crud-card pedido-prod"
+        mat-ripple
+        [disabled]="!p.soportado || guardando"
+        (click)="agregar(p)"
+      >
+        <div class="crud-card-body">
+          <div class="crud-card-main">
+            <span class="crud-name">{{ p.nombre }}</span>
+            <span class="crud-sub">{{ p.precio | number:'1.0-2' }}</span>
+            <span class="crud-sub muted" *ngIf="!p.soportado">No soportado en mobile aún</span>
+          </div>
+          <mat-icon class="pedido-add" *ngIf="p.soportado">add_circle</mat-icon>
+        </div>
+      </button>
+      <p *ngIf="resultados.length === 0" class="crud-empty">Buscá un producto para agregar.</p>
+    </div>
+  </div>
+
+  <!-- Resumen del pedido recién agregado -->
+  <div class="pedido-resumen" *ngIf="pedido.length">
+    <div class="pedido-resumen-head">
+      <span>Agregado en esta sesión ({{ pedido.length }})</span>
+      <span class="pedido-resumen-total">{{ totalPedido | number:'1.0-2' }}</span>
+    </div>
+    <div class="pedido-resumen-linea" *ngFor="let l of pedido">
+      <span>{{ l.cantidad }} × {{ l.nombre }}</span>
+      <span>{{ l.precio | number:'1.0-2' }}</span>
+    </div>
+  </div>
+</div>

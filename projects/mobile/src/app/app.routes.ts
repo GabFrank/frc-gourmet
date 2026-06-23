@@ -73,6 +73,11 @@ export const routes: Routes = [
 
   // --- Formularios full-screen (fuera del shell) ---
   {
+    path: 'ventas/mesas/:id/pedido',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/ventas/mesas/tomar-pedido.page').then((m) => m.TomarPedidoPage),
+  },
+  {
     path: 'rrhh/cargos/nuevo',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/rrhh/cargos/cargo-edit.page').then((m) => m.CargoEditPage),

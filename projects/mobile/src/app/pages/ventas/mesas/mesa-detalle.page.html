@@ -41,4 +41,16 @@
       </div>
     </ng-template>
   </div>
+
+  <!-- Tomar pedido: abre/usa la cuenta de la mesa y agrega productos -->
+  <a
+    *ngIf="!loading && !error"
+    class="mesa-fab"
+    mat-fab
+    color="primary"
+    [routerLink]="['/ventas/mesas', mesaId, 'pedido']"
+    aria-label="Tomar pedido"
+  >
+    <mat-icon>restaurant</mat-icon>
+  </a>
 </div>
