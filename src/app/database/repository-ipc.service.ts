@@ -124,6 +124,7 @@ interface ElectronAPI {
   deleteFile: (url: string) => Promise<{ ok: boolean }>;
   readFileBase64: (url: string) => Promise<{ base64: string; mimeType: string }>;
   openFileWithSystem: (url: string) => Promise<{ ok: boolean; error?: string }>;
+  openBase64File: (base64: string, fileName: string) => Promise<{ ok: boolean; error?: string }>;
 
   // Adjuntos polimorficos
   getAdjuntos: (params: { entidadTipo: string; entidadId: number; tipo?: string }) => Promise<any[]>;
@@ -268,6 +269,7 @@ interface ElectronAPI {
   // Venta operations
   getVentas: () => Promise<Venta[]>;
   getVentasByDateRange: (desde: string, hasta: string, filtros?: any) => Promise<{ data: Venta[], total: number }>;
+  getBuffetMetricas: (filtros?: any) => Promise<any>;
   getVentasByEstado: (estado: VentaEstado) => Promise<Venta[]>;
   getVentasByCaja: (cajaId: number) => Promise<Venta[]>;
   getResumenCaja: (cajaId: number) => Promise<any>;
@@ -450,6 +452,8 @@ interface ElectronAPI {
   createProducto: (productoData: any) => Promise<Producto>;
   updateProducto: (productoId: number, productoData: any) => Promise<any>;
   deleteProducto: (productoId: number) => Promise<any>;
+  crearProduccion: (data: any) => Promise<any>;
+  getProducciones: (filtros?: any) => Promise<any[]>;
   // Presentacion methods
   getPresentaciones: () => Promise<Presentacion[]>;
   getPresentacionesByProducto: (productoId: number, page?: number, pageSize?: number, filtroActivo?: string) => Promise<any>;
@@ -630,6 +634,7 @@ interface ElectronAPI {
   getCajaMayorSaldos: (cajaMayorId: number) => Promise<any[]>;
   recalcularSaldos: (cajaMayorId: number) => Promise<any>;
   getCajaMayorMovimientos: (cajaMayorId: number, filtros?: any) => Promise<any>;
+  getCajaMayorMovimientosConsolidados: (cajaMayorId: number, filtros?: any) => Promise<any>;
   createCajaMayorMovimiento: (data: any) => Promise<any>;
   anularCajaMayorMovimiento: (id: number, motivo: string) => Promise<any>;
   getCajaMayorConfiguracion: (cajaMayorId: number) => Promise<any>;
@@ -889,6 +894,8 @@ interface ElectronAPI {
   programarVacacionPeriodo: (payload: any) => Promise<any>;
   marcarPeriodoGozado: (periodoId: number) => Promise<any>;
   cancelarVacacionPeriodo: (periodoId: number) => Promise<any>;
+  venderDiasVacacion: (payload: any) => Promise<any>;
+  anularVentaVacacion: (ventaId: number) => Promise<any>;
 
   // RRHH - Liquidacion final
   getLiquidacionesFinal: (filtros?: any) => Promise<any[]>;
@@ -940,6 +947,18 @@ interface ElectronAPI {
   cobrarCpcCuota: (payload: any) => Promise<any>;
   anularCobroCpcCuota: (payload: any) => Promise<any>;
   recalcularSaldoCliente: (clienteId: number) => Promise<any>;
+  getConvenios: (filtros?: any) => Promise<any[]>;
+  getConvenio: (id: number) => Promise<any>;
+  createConvenio: (data: any) => Promise<any>;
+  updateConvenio: (id: number, data: any) => Promise<any>;
+  deleteConvenio: (id: number) => Promise<any>;
+  setConvenioClientes: (payload: any) => Promise<any>;
+  getCobroConsolidadoPreview: (convenioId: number) => Promise<any>;
+  registrarCobroConsolidado: (payload: any) => Promise<any>;
+  getCobrosConsolidados: (filtros?: any) => Promise<any[]>;
+  getCobroConsolidado: (id: number) => Promise<any>;
+  exportCobroConsolidadoPreviewPdf: (convenioId: number) => Promise<any>;
+  exportReciboCobroConsolidadoPdf: (cobroConsolidadoId: number) => Promise<any>;
   getClienteEstadoCuenta: (clienteId: number) => Promise<any>;
   getMovimientosClienteStats: (clienteId: number) => Promise<any>;
   cobrarVentaCredito: (payload: any) => Promise<any>;
@@ -1320,6 +1339,9 @@ export class RepositoryIpcService extends RepositoryService {
   }
   openFileWithSystem(url: string): Observable<{ ok: boolean; error?: string }> {
     return from(this.api.openFileWithSystem(url));
+  }
+  openBase64File(base64: string, fileName: string): Observable<{ ok: boolean; error?: string }> {
+    return from(this.api.openBase64File(base64, fileName));
   }
 
   // ===================== ADJUNTOS POLIMORFICOS =====================
@@ -1824,6 +1846,10 @@ export class RepositoryIpcService extends RepositoryService {
 
   getVentasByDateRange(desde: string, hasta: string, filtros?: any): Observable<{ data: Venta[], total: number }> {
     return from(this.api.getVentasByDateRange(desde, hasta, filtros));
+  }
+
+  getBuffetMetricas(filtros?: any): Observable<any> {
+    return from(this.api.getBuffetMetricas(filtros));
   }
 
   getVentasByEstado(estado: VentaEstado): Observable<Venta[]> {
@@ -2398,6 +2424,14 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.deleteProducto(productoId));
   }
 
+  crearProduccion(data: any): Observable<any> {
+    return from(this.api.crearProduccion(data));
+  }
+
+  getProducciones(filtros?: any): Observable<any[]> {
+    return from(this.api.getProducciones(filtros));
+  }
+
   // Presentacion methods
   getPresentaciones(): Observable<Presentacion[]> {
     return from(this.api.getPresentaciones());
@@ -2914,6 +2948,10 @@ export class RepositoryIpcService extends RepositoryService {
   // Caja Mayor Movimientos
   getCajaMayorMovimientos(cajaMayorId: number, filtros?: any): Observable<any> {
     return from(this.api.getCajaMayorMovimientos(cajaMayorId, filtros));
+  }
+
+  getCajaMayorMovimientosConsolidados(cajaMayorId: number, filtros?: any): Observable<any> {
+    return from(this.api.getCajaMayorMovimientosConsolidados(cajaMayorId, filtros));
   }
   createCajaMayorMovimiento(data: any): Observable<any> {
     return from(this.api.createCajaMayorMovimiento(data));
@@ -3555,6 +3593,12 @@ export class RepositoryIpcService extends RepositoryService {
   cancelarVacacionPeriodo(periodoId: number): Observable<any> {
     return from(this.api.cancelarVacacionPeriodo(periodoId));
   }
+  venderDiasVacacion(payload: any): Observable<any> {
+    return from(this.api.venderDiasVacacion(payload));
+  }
+  anularVentaVacacion(ventaId: number): Observable<any> {
+    return from(this.api.anularVentaVacacion(ventaId));
+  }
 
   // ===================== RRHH: LIQUIDACION FINAL =====================
   getLiquidacionesFinal(filtros?: any): Observable<any[]> {
@@ -3687,6 +3731,43 @@ export class RepositoryIpcService extends RepositoryService {
   }
   recalcularSaldoCliente(clienteId: number): Observable<any> {
     return from(this.api.recalcularSaldoCliente(clienteId));
+  }
+
+  getConvenios(filtros?: any): Observable<any[]> {
+    return from(this.api.getConvenios(filtros));
+  }
+  getConvenio(id: number): Observable<any> {
+    return from(this.api.getConvenio(id));
+  }
+  createConvenio(data: any): Observable<any> {
+    return from(this.api.createConvenio(data));
+  }
+  updateConvenio(id: number, data: any): Observable<any> {
+    return from(this.api.updateConvenio(id, data));
+  }
+  deleteConvenio(id: number): Observable<any> {
+    return from(this.api.deleteConvenio(id));
+  }
+  setConvenioClientes(payload: any): Observable<any> {
+    return from(this.api.setConvenioClientes(payload));
+  }
+  getCobroConsolidadoPreview(convenioId: number): Observable<any> {
+    return from(this.api.getCobroConsolidadoPreview(convenioId));
+  }
+  registrarCobroConsolidado(payload: any): Observable<any> {
+    return from(this.api.registrarCobroConsolidado(payload));
+  }
+  getCobrosConsolidados(filtros?: any): Observable<any[]> {
+    return from(this.api.getCobrosConsolidados(filtros));
+  }
+  getCobroConsolidado(id: number): Observable<any> {
+    return from(this.api.getCobroConsolidado(id));
+  }
+  exportCobroConsolidadoPreviewPdf(convenioId: number): Observable<any> {
+    return from(this.api.exportCobroConsolidadoPreviewPdf(convenioId));
+  }
+  exportReciboCobroConsolidadoPdf(cobroConsolidadoId: number): Observable<any> {
+    return from(this.api.exportReciboCobroConsolidadoPdf(cobroConsolidadoId));
   }
 
   getClienteEstadoCuenta(clienteId: number): Observable<any> {

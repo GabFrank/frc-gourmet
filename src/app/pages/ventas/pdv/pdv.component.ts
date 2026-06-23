@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -56,6 +56,9 @@ import { DeliveryDialogComponent, DeliveryDialogData } from 'src/app/shared/comp
 import { Delivery } from 'src/app/database/entities/ventas/delivery.entity';
 import { PersonalizarProductoDialogComponent, PersonalizarProductoDialogResult } from 'src/app/shared/components/personalizar-producto-dialog/personalizar-producto-dialog.component';
 import { SeleccionarVariacionDialogComponent, SeleccionarVariacionDialogData, SeleccionarVariacionDialogResult } from 'src/app/shared/components/seleccionar-variacion-dialog/seleccionar-variacion-dialog.component';
+import { PesajeBuffetDialogComponent, PesajeBuffetDialogResult } from 'src/app/shared/components/pesaje-buffet-dialog/pesaje-buffet-dialog.component';
+import { resolverPrecioVigente } from 'src/app/shared/utils/precio-vigencia.util';
+import { parseEtiquetaBalanza } from 'src/app/shared/utils/balanza-ean13.util';
 import { ProductoTipo } from 'src/app/database/entities/productos/producto-tipo.enum';
 import { AbrirComandaDialogComponent, AbrirComandaDialogData, AbrirComandaDialogResult } from 'src/app/shared/components/abrir-comanda-dialog/abrir-comanda-dialog.component';
 import { Comanda, ComandaEstado } from 'src/app/database/entities/ventas/comanda.entity';
@@ -200,7 +203,8 @@ export class PdvComponent implements OnInit, OnDestroy {
     private fb: FormBuilder,
     private authService: AuthService,
     private tabsService: TabsService,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private elementRef: ElementRef
   ) {
     // Initialize form
     this.searchForm = this.fb.group({
@@ -1104,6 +1108,16 @@ export class PdvComponent implements OnInit, OnDestroy {
       cantidad = Math.max(1, Math.round(cantidad));
     }
 
+    // Si es BUFFET_POR_PESO, abrir diálogo de pesaje (cobro por kilo).
+    if (producto.tipo === ProductoTipo.BUFFET_POR_PESO) {
+      try {
+        await this.addBuffetPorPesoItem(producto, presentacion, precioVenta);
+      } catch (error) {
+        console.error('Error en flujo de buffet por peso:', error);
+      }
+      return;
+    }
+
     // Si es ELABORADO_CON_VARIACION, abrir diálogo de selección de variaciones
     if (producto.tipo === ProductoTipo.ELABORADO_CON_VARIACION) {
       try {
@@ -1188,6 +1202,88 @@ export class PdvComponent implements OnInit, OnDestroy {
     } catch (error) {
       console.error('Error al agregar producto:', error);
     }
+  }
+
+  private async addBuffetPorPesoItem(
+    producto: Producto,
+    presentacion: Presentacion,
+    precioVenta?: PrecioVenta,
+    pesoInicialGramos?: number,
+  ): Promise<void> {
+    // Resolver el precio vigente (precios programados por día/horario).
+    let precioResuelto: PrecioVenta | undefined = precioVenta;
+    if (presentacion?.id) {
+      try {
+        const precios = await firstValueFrom(
+          this.repositoryService.getPreciosVentaByPresentacion(presentacion.id, true),
+        );
+        const vigente = resolverPrecioVigente(precios || []);
+        if (vigente) {
+          precioResuelto = vigente as PrecioVenta;
+        }
+      } catch (e) {
+        console.warn('No se pudieron cargar precios para resolver vigencia:', e);
+      }
+    }
+    if (!precioResuelto) {
+      console.error('No hay precio de venta para el producto buffet');
+      return;
+    }
+
+    const dialogRef = this.dialog.open(PesajeBuffetDialogComponent, {
+      width: '460px',
+      data: {
+        producto,
+        presentacion,
+        precioVenta: precioResuelto,
+        decimalesMoneda: (precioResuelto.moneda as any)?.decimales ?? 0,
+        pesoInicialGramos,
+      },
+      disableClose: true,
+    });
+    const result: PesajeBuffetDialogResult | null = await firstValueFrom(dialogRef.afterClosed());
+    if (!result) return; // Cancelado
+
+    // Asegurar mesa/comanda/venta rápida.
+    if (!this.selectedMesa && !this.ventaRapidaActual && !this.selectedComanda) {
+      await this.showMesaSelectionDialog();
+      if (!this.selectedMesa && !this.selectedComanda) return;
+    }
+
+    const venta = await this.getVenta();
+
+    const newVentaItem = new VentaItem();
+    newVentaItem.presentacion = presentacion;
+    // cantidad = kg neto; precioVentaUnitario = precio/kg efectivo (incluye tope/mínimo)
+    // para que el cálculo universal (unitario * cantidad) dé el total correcto.
+    newVentaItem.cantidad = result.cantidadKg;
+    newVentaItem.precioVentaUnitario = result.precioVentaUnitarioEfectivo;
+    newVentaItem.precioCostoUnitario = await this.findPrecioCosto(producto);
+    newVentaItem.venta = venta;
+    newVentaItem.precioVentaPresentacion = precioResuelto;
+    newVentaItem.producto = producto;
+    newVentaItem.precioAdicionales = 0;
+    // Datos de peso (el peso real se persiste siempre, aunque aplique el tope).
+    newVentaItem.pesoBruto = result.pesoBrutoGramos;
+    newVentaItem.pesoTara = result.pesoTaraGramos;
+    newVentaItem.pesoNeto = result.pesoNetoGramos;
+    newVentaItem.precioPorKg = result.precioPorKg;
+    newVentaItem.aplicoLibre = result.aplicoLibre;
+
+    try {
+      const savedItem = await firstValueFrom(this.repositoryService.createVentaItem(newVentaItem));
+      savedItem.producto = producto;
+      savedItem.presentacion = presentacion;
+      savedItem.precioVentaPresentacion = precioResuelto;
+      savedItem.precioAdicionales = 0;
+      const auxList = this.ventaItemsDataSource.data;
+      auxList.push(savedItem);
+      this.ventaItemsDataSource.data = auxList;
+    } catch (error) {
+      console.error('Error al guardar el item de buffet:', error);
+    }
+
+    this.calculateTotals();
   }
 
   private async openSeleccionarVariacionDialog(producto: Producto, cantidad: number): Promise<SeleccionarVariacionDialogResult | null> {
@@ -2005,6 +2101,34 @@ export class PdvComponent implements OnInit, OnDestroy {
       });
   }
 
+  /**
+   * Reimprime la comanda (ticket de cocina) de la venta activa. Usa
+   * `forceReprint: true` para reenviar TODOS los items a sus sectores, incluso
+   * los que ya fueron impresos antes (a diferencia del envío automático que solo
+   * manda los pendientes). Útil cuando un ticket se traba/pierde en cocina.
+   */
+  reimprimirComanda(): void {
+    if (!this.hasActiveVenta) return;
+    const venta = this.ventaRapidaActual || this.selectedComanda?.venta || this.selectedMesa?.venta;
+    if (!venta?.id) return;
+
+    const api: any = (window as any).api;
+    if (!api?.callIpc) return;
+    api.callIpc('print-comanda', { ventaId: venta.id, forceReprint: true })
+      .then((res: any) => {
+        if (res?.ok) {
+          this.snackBar.open('Comanda reenviada a cocina', 'CERRAR', { duration: 2500 });
+        } else {
+          const msg = res?.errors?.[0]?.message || 'No se pudo reimprimir la comanda';
+          this.snackBar.open(msg, 'CERRAR', { duration: 4000, panelClass: ['error-snackbar'] });
+        }
+      })
+      .catch((err: any) => {
+        console.error('Error reimprimir comanda:', err);
+        this.snackBar.open('Error al reimprimir la comanda', 'CERRAR', { duration: 4000, panelClass: ['error-snackbar'] });
+      });
+  }
+
   moverItems(): void {
     if (!this.hasActiveVenta || !this.hasActiveItems) return;
 
@@ -2195,6 +2319,11 @@ export class PdvComponent implements OnInit, OnDestroy {
   onKeyDown(event: KeyboardEvent): void {
     // No disparar si hay un diálogo abierto
     if (this.dialog.openDialogs.length > 0) return;
+    // No disparar si la pestaña del PdV no está visible. El listener es a nivel
+    // `document`, así que sin este guard los atajos F1-F5 se filtrarían a otras
+    // pestañas (ej. al anular una compra). Las pestañas inactivas se ocultan con
+    // `display:none`, por lo que un host oculto tiene `offsetParent === null`.
+    if (!this.elementRef.nativeElement?.offsetParent) return;
 
     switch (event.key) {
       case 'F1':
@@ -2236,10 +2365,42 @@ export class PdvComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Detecta y procesa una etiqueta EAN-13 de balanza (buffet por peso).
+   * @returns true si la consumió (no abrir el buscador normal).
+   */
+  private async tryHandleBalanzaScan(searchTerm: string): Promise<boolean> {
+    const parsed = parseEtiquetaBalanza(searchTerm, {
+      prefijo: this.pdvConfig?.balanzaPrefijo || '2',
+      modo: (this.pdvConfig?.balanzaModo as 'PESO' | 'PRECIO') || 'PESO',
+      factorPeso: Number(this.pdvConfig?.balanzaFactorPeso) || 1,
+    });
+    if (!parsed) return false;
+
+    let res: any = null;
+    try {
+      res = await firstValueFrom(this.repositoryService.searchProductosByCodigo(parsed.codigoProducto));
+    } catch (e) {
+      console.warn('Error resolviendo etiqueta de balanza:', e);
+    }
+    if (!res?.producto || res.producto.tipo !== ProductoTipo.BUFFET_POR_PESO) {
+      // No es un producto de buffet → dejar que el flujo normal lo maneje.
+      return false;
+    }
+    this.searchForm.get('searchTerm')?.setValue('');
+    await this.addBuffetPorPesoItem(res.producto, res.presentacion, undefined, parsed.pesoGramos);
+    return true;
+  }
+
   // Search products using dialog
-  openProductSearchDialog(): void {
+  async openProductSearchDialog(): Promise<void> {
     console.log('opening product search dialog');
     const searchTerm = this.searchForm.get('searchTerm')?.value?.trim() || '';
+
+    // Etiqueta de balanza (buffet por peso): resolver sin abrir el buscador.
+    if (searchTerm && (await this.tryHandleBalanzaScan(searchTerm))) {
+      return;
+    }
 
     const dialogRef = this.dialog.open(ProductoSearchDialogComponent, {
       width: '70%',

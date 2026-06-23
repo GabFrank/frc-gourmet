@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -18,10 +19,11 @@ import { MatTableModule } from '@angular/material/table';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
-import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
+import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/app/shared/utils/conversion-moneda';
+import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
 
 interface DetalleRow {
   monedaId: number;
@@ -46,6 +48,7 @@ interface DetalleRow {
     MatButtonModule,
     MatIconModule,
     MatSelectModule,
+    MatButtonToggleModule,
     MatDatepickerModule,
     MatNativeDateModule,
     MatProgressSpinnerModule,
@@ -55,7 +58,6 @@ interface DetalleRow {
     MatAutocompleteModule,
     MatTooltipModule,
     MatDividerModule,
-    MatButtonToggleModule,
     CurrencyInputDirective,
     AdjuntosListComponent,
   ]
@@ -75,6 +77,11 @@ export class CreateEditGastoDialogComponent implements OnInit {
   cajasMayor: any[] = [];
   cuentasBancarias: any[] = [];
   proveedores: any[] = [];
+
+  requiereCotiz = false;
+  montoConvertido = 0;
+  monedaCuentaSimbolo = '';
+  private cotizMercado: any = null;
   proveedoresFiltrados: any[] = [];
   tipoBoletaOptions = ['LEGAL', 'COMUN', 'OTRO', 'SIN_COMPROBANTE'];
   frecuenciaOptions = ['DIARIO', 'SEMANAL', 'QUINCENAL', 'MENSUAL', 'BIMESTRAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL'];
@@ -108,7 +115,10 @@ export class CreateEditGastoDialogComponent implements OnInit {
     this.form = this.fb.group({
       gastoCategoriaId: [null, Validators.required],
       descripcion: ['', Validators.required],
+      fuente: ['CAJA_MAYOR', Validators.required],
       cajaMayorId: [this.data?.cajaMayorId || null, Validators.required],
+      cuentaBancariaId: [null],
+      cotizacion: [null],
       fecha: [new Date(), Validators.required],
       proveedorId: [null],
       numeroComprobante: [''],
@@ -116,17 +126,10 @@ export class CreateEditGastoDialogComponent implements OnInit {
       esRecurrente: [false],
       frecuencia: [null],
       proximoVencimiento: [null],
-      // Destino del egreso: CAJA_MAYOR (legacy, default) o CUENTA_BANCARIA.
-      destinoTipo: ['CAJA_MAYOR', Validators.required],
-      // Solo para destinoTipo === 'CUENTA_BANCARIA' (single-row simplificado):
-      cuentaBancariaId: [null],
-      montoBanco: [null],
-      monedaBancoId: [null],
     });
-
-    // Validadores condicionales según destino.
-    this.form.get('destinoTipo')!.valueChanges.subscribe((d) => this.aplicarValidadoresDestino(d));
-    this.aplicarValidadoresDestino(this.form.value.destinoTipo);
+    this.form.get('fuente')!.valueChanges.subscribe(() => this.aplicarValidadoresFuente());
+    this.form.get('cuentaBancariaId')!.valueChanges.subscribe(() => this.recalcularCotizacion());
+    this.form.get('cotizacion')!.valueChanges.subscribe(() => this.recalcularConvertido());
 
     this.detalleForm = this.fb.group({
       monedaId: [null, Validators.required],
@@ -149,7 +152,7 @@ export class CreateEditGastoDialogComponent implements OnInit {
 
   async loadLookups(): Promise<void> {
     try {
-      const [categorias, monedas, formasPago, cajasMayor, proveedores, cuentasBancarias] = await Promise.all([
+      const [categorias, monedas, formasPago, cajasMayor, proveedores, cuentas] = await Promise.all([
         firstValueFrom(this.repositoryService.getGastoCategorias()),
         firstValueFrom(this.repositoryService.getMonedas()),
         firstValueFrom(this.repositoryService.getFormasPago()),
@@ -163,55 +166,23 @@ export class CreateEditGastoDialogComponent implements OnInit {
       this.monedas = monedas || [];
       this.formasPago = formasPago || [];
       this.cajasMayor = (cajasMayor || []).filter((c: any) => c.estado === 'ABIERTA');
+      this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
       this.proveedores = proveedores || [];
       this.proveedoresFiltrados = [];
-      this.cuentasBancarias = (cuentasBancarias || []).filter((c: any) => c.activo !== false && c.moneda?.id);
+      this.repositoryService.getCotizacionMercado().subscribe({
+        next: (r) => { this.cotizMercado = r; },
+        error: () => { this.cotizMercado = null; },
+      });
 
       // Si estamos editando, cargar el gasto
       if (this.isEditing && this.gastoId) {
         await this.loadGasto(this.gastoId);
+      } else {
+        this.aplicarPreselecciones();
       }
     } catch (error) {
       console.error('Error loading lookups:', error);
       this.snackBar.open('Error al cargar datos', 'Cerrar', { duration: 3000 });
-    }
-  }
-
-  get esBanco(): boolean {
-    return this.form?.value?.destinoTipo === 'CUENTA_BANCARIA';
-  }
-
-  private aplicarValidadoresDestino(destino: 'CAJA_MAYOR' | 'CUENTA_BANCARIA'): void {
-    const cajaCtrl = this.form.get('cajaMayorId')!;
-    const cbCtrl = this.form.get('cuentaBancariaId')!;
-    const montoCtrl = this.form.get('montoBanco')!;
-    const monedaCtrl = this.form.get('monedaBancoId')!;
-    if (destino === 'CUENTA_BANCARIA') {
-      cbCtrl.setValidators([Validators.required]);
-      montoCtrl.setValidators([Validators.required, Validators.min(0.01)]);
-      monedaCtrl.setValidators([Validators.required]);
-      // En banco, cajaMayorId es metadata opcional (queda lo que esté).
-      cajaCtrl.clearValidators();
-    } else {
-      cajaCtrl.setValidators([Validators.required]);
-      cbCtrl.clearValidators();
-      montoCtrl.clearValidators();
-      monedaCtrl.clearValidators();
-      cbCtrl.setValue(null, { emitEvent: false });
-      montoCtrl.setValue(null, { emitEvent: false });
-      monedaCtrl.setValue(null, { emitEvent: false });
-    }
-    cajaCtrl.updateValueAndValidity({ emitEvent: false });
-    cbCtrl.updateValueAndValidity({ emitEvent: false });
-    montoCtrl.updateValueAndValidity({ emitEvent: false });
-    monedaCtrl.updateValueAndValidity({ emitEvent: false });
-  }
-
-  /** Al elegir una cuenta bancaria, la moneda del gasto se fuerza a la de la cuenta. */
-  onCuentaBancariaSelected(cuentaId: number): void {
-    const c = this.cuentasBancarias.find((x) => x.id === cuentaId);
-    if (c?.moneda?.id) {
-      this.form.patchValue({ monedaBancoId: c.moneda.id }, { emitEvent: false });
     }
   }
 
@@ -220,7 +191,6 @@ export class CreateEditGastoDialogComponent implements OnInit {
       const gasto = await firstValueFrom(this.repositoryService.getGasto(gastoId));
       if (!gasto) return;
 
-      const destino = (gasto.destinoTipo as any) || 'CAJA_MAYOR';
       this.form.patchValue({
         gastoCategoriaId: gasto.gastoCategoria?.id,
         descripcion: gasto.descripcion,
@@ -232,10 +202,8 @@ export class CreateEditGastoDialogComponent implements OnInit {
         esRecurrente: gasto.esRecurrente || false,
         frecuencia: gasto.frecuencia || null,
         proximoVencimiento: gasto.proximoVencimiento ? new Date(gasto.proximoVencimiento) : null,
-        destinoTipo: destino,
-        cuentaBancariaId: gasto.cuentaBancaria?.id || null,
-        montoBanco: destino === 'CUENTA_BANCARIA' ? Number(gasto.monto) : null,
-        monedaBancoId: destino === 'CUENTA_BANCARIA' ? (gasto.moneda?.id || null) : null,
+        fuente: gasto.cuentaBancariaId ? 'CUENTA_BANCARIA' : 'CAJA_MAYOR',
+        cuentaBancariaId: gasto.cuentaBancariaId || null,
       });
 
       this.esRecurrente = gasto.esRecurrente || false;
@@ -336,6 +304,57 @@ export class CreateEditGastoDialogComponent implements OnInit {
     }
   }
 
+  private aplicarValidadoresFuente(): void {
+    // cajaMayorId se mantiene requerido siempre (es el contexto/caja del gasto y
+    // la columna es NOT NULL); en banco además se exige la cuenta bancaria.
+    const esBanco = this.form.get('fuente')!.value === 'CUENTA_BANCARIA';
+    const cb = this.form.get('cuentaBancariaId')!;
+    if (esBanco) cb.setValidators([Validators.required]);
+    else cb.clearValidators();
+    cb.updateValueAndValidity({ emitEvent: false });
+    this.recalcularCotizacion();
+  }
+
+  /** Suma de los detalles (moneda de la operación = la del primer detalle). */
+  private get montoTotalDetalles(): number {
+    return this.detalles.reduce((s, d) => s + Number(d.monto), 0);
+  }
+
+  recalcularCotizacion(): void {
+    const opMoneda = this.monedas.find((m: any) => m.id === this.detalles[0]?.monedaId);
+    const cuenta = this.cuentasBancarias.find((c: any) => c.id === this.form.get('cuentaBancariaId')!.value);
+    const cuentaMoneda = cuenta?.moneda;
+    this.requiereCotiz = this.form.get('fuente')!.value === 'CUENTA_BANCARIA'
+      && requiereCotizacion(opMoneda, cuentaMoneda);
+    this.monedaCuentaSimbolo = cuentaMoneda?.simbolo || '';
+    const cotizCtrl = this.form.get('cotizacion')!;
+    if (this.requiereCotiz) {
+      cotizCtrl.setValidators([Validators.required, Validators.min(0.000001)]);
+      if (!cotizCtrl.value) {
+        const divisa = opMoneda?.principal ? cuentaMoneda : opMoneda;
+        const tasa = cotizacionMercadoPara(this.cotizMercado, divisa?.denominacion, 'VENTA');
+        if (tasa) cotizCtrl.setValue(tasa, { emitEvent: false });
+      }
+    } else {
+      cotizCtrl.clearValidators();
+      cotizCtrl.setValue(null, { emitEvent: false });
+    }
+    cotizCtrl.updateValueAndValidity({ emitEvent: false });
+    this.recalcularConvertido();
+  }
+
+  recalcularConvertido(): void {
+    if (!this.requiereCotiz) { this.montoConvertido = 0; return; }
+    const opMoneda = this.monedas.find((m: any) => m.id === this.detalles[0]?.monedaId);
+    const cuenta = this.cuentasBancarias.find((c: any) => c.id === this.form.get('cuentaBancariaId')!.value);
+    this.montoConvertido = convertirMonto(
+      this.montoTotalDetalles,
+      opMoneda,
+      cuenta?.moneda,
+      Number(this.form.get('cotizacion')!.value),
+    );
+  }
+
   // --- Detalles de pago ---
 
   agregarDetalle(): void {
@@ -356,6 +375,29 @@ export class CreateEditGastoDialogComponent implements OnInit {
 
     this.recalcularTotales();
     this.detalleForm.reset();
+    this.preseleccionarDetalle();
+  }
+
+  /** Pre-selecciona única caja abierta (si no vino fija) y la primera línea de detalle. */
+  private aplicarPreselecciones(): void {
+    if (!this.cajaMayorFijo && !this.form.get('cajaMayorId')?.value && this.cajasMayor.length === 1) {
+      this.form.patchValue({ cajaMayorId: this.cajasMayor[0].id });
+    }
+    this.preseleccionarDetalle();
+  }
+
+  /** Pre-selecciona moneda principal/única y forma de pago efectivo/principal/única en la línea de detalle. */
+  private preseleccionarDetalle(): void {
+    if (!this.detalleForm.get('monedaId')?.value) {
+      const m = preselectSingleOrPrincipal(this.monedas);
+      if (m) this.detalleForm.get('monedaId')?.setValue(m.id, { emitEvent: false });
+    }
+    if (!this.detalleForm.get('formaPagoId')?.value) {
+      const efectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
+      const fp = preselectSingleOrPrincipal(efectivo) || preselectSingleOrPrincipal(this.formasPago);
+      if (fp) this.detalleForm.get('formaPagoId')?.setValue(fp.id, { emitEvent: false });
+    }
+    this.recalcDecimalesMoneda();
   }
 
   eliminarDetalle(index: number): void {
@@ -374,30 +416,32 @@ export class CreateEditGastoDialogComponent implements OnInit {
       }
     }
     this.totalesPorMoneda = Array.from(map.values());
+    this.recalcularCotizacion();
   }
 
   async onSubmit(): Promise<void> {
-    if (this.form.invalid) return;
-    // Caja mayor exige al menos un detalle; banco usa monto/moneda top-level.
-    if (!this.esBanco && this.detalles.length === 0) return;
+    if (this.form.invalid || this.detalles.length === 0) return;
 
-    // Saldos negativos: solo aplica en modo CAJA_MAYOR (en banco el handler
-    // valida contra el saldo bancario; podríamos sumar el chequeo después).
-    if (!this.esBanco) {
-      const cajaMayorId = this.form.value.cajaMayorId;
-      if (cajaMayorId) {
-        const ok = await this.confirmarSaldoSiNegativo(cajaMayorId);
-        if (!ok) return;
-      }
+    const esBanco = this.form.value.fuente === 'CUENTA_BANCARIA';
+
+    // Saldos negativos: solo aplica a Caja Mayor (en banco se debita la cuenta).
+    const cajaMayorId = this.form.value.cajaMayorId;
+    if (!esBanco && cajaMayorId) {
+      const ok = await this.confirmarSaldoSiNegativo(cajaMayorId);
+      if (!ok) return;
     }
 
     this.saving = true;
     try {
       const f = this.form.value;
-      const base: any = {
+      const gastoData = {
         gastoCategoria: { id: f.gastoCategoriaId },
         descripcion: f.descripcion?.toUpperCase(),
-        cajaMayor: { id: f.cajaMayorId },  // metadata: desde qué caja se registró
+        cajaMayor: { id: f.cajaMayorId },
+        fuente: f.fuente,
+        cuentaBancariaId: esBanco ? f.cuentaBancariaId : null,
+        montoCuentaBancaria: esBanco && this.requiereCotiz ? this.montoConvertido : null,
+        cotizacion: esBanco && this.requiereCotiz ? f.cotizacion : null,
         fecha: f.fecha,
         proveedor: f.proveedorId ? { id: f.proveedorId } : null,
         numeroComprobante: f.numeroComprobante?.toUpperCase() || null,
@@ -405,23 +449,12 @@ export class CreateEditGastoDialogComponent implements OnInit {
         esRecurrente: f.esRecurrente || false,
         frecuencia: f.esRecurrente ? f.frecuencia : null,
         proximoVencimiento: f.esRecurrente ? f.proximoVencimiento : null,
-        destinoTipo: f.destinoTipo,
+        detalles: this.detalles.map(d => ({
+          monedaId: d.monedaId,
+          formaPagoId: d.formaPagoId,
+          monto: d.monto,
+        })),
       };
-      const gastoData = this.esBanco
-        ? {
-            ...base,
-            cuentaBancaria: { id: f.cuentaBancariaId },
-            monto: Number(f.montoBanco),
-            monedaId: f.monedaBancoId,
-          }
-        : {
-            ...base,
-            detalles: this.detalles.map(d => ({
-              monedaId: d.monedaId,
-              formaPagoId: d.formaPagoId,
-              monto: d.monto,
-            })),
-          };
 
       if (this.isEditing && this.gastoId) {
         await firstValueFrom(this.repositoryService.editGasto(this.gastoId, gastoData));

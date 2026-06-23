@@ -15,9 +15,18 @@ export interface BackupMetadata {
   notes?: string;
 }
 
+export type BackupMode = 'interval' | 'daily';
+
 export interface BackupConfig {
   autoBackupEnabled: boolean;
+  /** 'daily' = una vez por día (default); 'interval' = cada N horas desde el arranque. */
+  mode: BackupMode;
   intervalHours: number;
+  /**
+   * Hora fija del backup diario en formato 'HH:MM' (local). Vacío/undefined =
+   * se hace al abrir la app la primera vez de cada día. Solo aplica a mode='daily'.
+   */
+  dailyTime?: string;
   retentionCount: number;
   customBackupDir?: string;
   includeImages: boolean;
@@ -26,7 +35,9 @@ export interface BackupConfig {
 
 export const DEFAULT_BACKUP_CONFIG: BackupConfig = {
   autoBackupEnabled: false,
+  mode: 'daily',
   intervalHours: 24,
+  dailyTime: undefined,
   retentionCount: 7,
   customBackupDir: undefined,
   includeImages: false,
@@ -337,6 +348,60 @@ export function validateSqliteFile(filePath: string): boolean {
   } catch {
     return false;
   }
+}
+
+// ===================== SCHEDULING DIARIO + CATCH-UP =====================
+
+/** Día local en formato YYYY-MM-DD (sin componente horario ni UTC). */
+export function localDayStr(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Parsea 'HH:MM' a {h, m}. Devuelve null si está vacío o es inválido. */
+export function parseDailyTime(time?: string): { h: number; m: number } | null {
+  if (!time) return null;
+  const match = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
+  if (!match) return null;
+  const h = Number(match[1]);
+  const m = Number(match[2]);
+  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return { h, m };
+}
+
+/**
+ * ¿Falta el backup diario? true si el último backup automático NO es de hoy y,
+ * cuando hay hora fija configurada, esa hora ya pasó. Cubre el caso de la PC
+ * apagada a la hora programada: al iniciar la app se detecta el día perdido y
+ * se ejecuta el backup pendiente.
+ */
+export function shouldRunDailyBackup(now: Date, lastAutoBackupAt: string | undefined, dailyTime?: string): boolean {
+  const lastDay = lastAutoBackupAt ? localDayStr(new Date(lastAutoBackupAt)) : null;
+  if (lastDay === localDayStr(now)) return false;
+  const t = parseDailyTime(dailyTime);
+  if (!t) return true; // sin hora fija: primer arranque del día
+  const scheduledToday = new Date(now);
+  scheduledToday.setHours(t.h, t.m, 0, 0);
+  return now.getTime() >= scheduledToday.getTime();
+}
+
+/**
+ * Próxima ejecución del backup diario. Con hora fija: la próxima ocurrencia de
+ * esa hora (hoy si todavía no pasó, sino mañana). Sin hora fija: el próximo
+ * inicio de día local (00:00 de mañana), que cubre la app dejada abierta a
+ * través de la medianoche.
+ */
+export function nextDailyRunAt(now: Date, dailyTime?: string): Date {
+  const t = parseDailyTime(dailyTime);
+  const next = new Date(now);
+  if (t) {
+    next.setHours(t.h, t.m, 0, 0);
+    if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
+  } else {
+    next.setHours(0, 0, 0, 0);
+    next.setDate(next.getDate() + 1);
+  }
+  return next;
 }
 
 export function applyRetention(dir: string, keepCount: number): { deleted: string[] } {

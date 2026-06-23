@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { Vacacion } from '../../src/app/database/entities/rrhh/vacacion.entity';
 import { VacacionPeriodo, VacacionPeriodoEstado } from '../../src/app/database/entities/rrhh/vacacion-periodo.entity';
+import { VacacionVenta, VacacionVentaEstado } from '../../src/app/database/entities/rrhh/vacacion-venta.entity';
 import { Asistencia } from '../../src/app/database/entities/rrhh/asistencia.entity';
 import { AsistenciaEstado } from '../../src/app/database/entities/rrhh/asistencia-estado.enum';
 import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.entity';
@@ -26,6 +27,44 @@ export function registerVacacionesHandlers(
   dataSource: DataSource,
   getCurrentUser: () => Usuario | null,
 ) {
+  // Días vendidos (no anulados) por vacacion. Devuelve un Map<vacacionId, dias>.
+  async function vendidosPorVacacion(vacacionIds: number[]): Promise<Map<number, number>> {
+    const map = new Map<number, number>();
+    if (!vacacionIds.length) return map;
+    const rows = await dataSource.getRepository(VacacionVenta)
+      .createQueryBuilder('vv')
+      .leftJoin('vv.vacacion', 'vac')
+      .select('vac.id', 'vacacionId')
+      .addSelect('COALESCE(SUM(vv.dias), 0)', 'dias')
+      .where('vac.id IN (:...ids)', { ids: vacacionIds })
+      .andWhere('vv.estado != :anulado', { anulado: VacacionVentaEstado.ANULADO })
+      .groupBy('vac.id')
+      .getRawMany();
+    for (const r of rows) map.set(Number(r.vacacionId), Number(r.dias) || 0);
+    return map;
+  }
+
+  // Días comprometidos en periodos no gozados ni cancelados (PROGRAMADA / EN_CURSO).
+  // Estos días ya están reservados aunque todavía no figuren en diasGozados, así que
+  // deben descontarse de los disponibles para no permitir sobre-comprometer.
+  async function programadosPorVacacion(vacacionIds: number[]): Promise<Map<number, number>> {
+    const map = new Map<number, number>();
+    if (!vacacionIds.length) return map;
+    const rows = await dataSource.getRepository(VacacionPeriodo)
+      .createQueryBuilder('vp')
+      .leftJoin('vp.vacacion', 'vac')
+      .select('vac.id', 'vacacionId')
+      .addSelect('COALESCE(SUM(vp.diasUsados), 0)', 'dias')
+      .where('vac.id IN (:...ids)', { ids: vacacionIds })
+      .andWhere('vp.estado IN (:...estados)', {
+        estados: [VacacionPeriodoEstado.PROGRAMADA, VacacionPeriodoEstado.EN_CURSO],
+      })
+      .groupBy('vac.id')
+      .getRawMany();
+    for (const r of rows) map.set(Number(r.vacacionId), Number(r.dias) || 0);
+    return map;
+  }
+
   ipcMain.handle('get-vacaciones', async (_e, filtros: any) => {
     const repo = dataSource.getRepository(Vacacion);
     const qb = repo.createQueryBuilder('v')
@@ -34,7 +73,20 @@ export function registerVacacionesHandlers(
       .orderBy('v.anioServicio', 'DESC');
     if (filtros?.funcionarioId) qb.andWhere('f.id = :fid', { fid: filtros.funcionarioId });
     if (filtros?.anio) qb.andWhere('v.anio_servicio = :a', { a: filtros.anio });
-    return await qb.getMany();
+    const vacaciones = await qb.getMany();
+    const ids = vacaciones.map((v) => v.id);
+    const vendidos = await vendidosPorVacacion(ids);
+    const programados = await programadosPorVacacion(ids);
+    return vacaciones.map((v) => {
+      const diasVendidos = vendidos.get(v.id) || 0;
+      const diasProgramados = programados.get(v.id) || 0;
+      return {
+        ...v,
+        diasVendidos,
+        diasProgramados,
+        diasDisponibles: Number(v.diasGenerados) - Number(v.diasGozados) - diasVendidos - diasProgramados,
+      };
+    });
   });
 
   ipcMain.handle('get-vacacion', async (_e, id: number) => {
@@ -48,7 +100,24 @@ export function registerVacacionesHandlers(
       where: { vacacion: { id } as any },
       order: { fechaDesde: 'DESC' },
     });
-    return { ...v, periodos };
+    const ventas = await dataSource.getRepository(VacacionVenta).find({
+      where: { vacacion: { id } as any },
+      order: { fecha: 'DESC' },
+    });
+    const diasVendidos = ventas
+      .filter((vt) => vt.estado !== VacacionVentaEstado.ANULADO)
+      .reduce((s, vt) => s + Number(vt.dias), 0);
+    const diasProgramados = periodos
+      .filter((pe) => pe.estado === VacacionPeriodoEstado.PROGRAMADA || pe.estado === VacacionPeriodoEstado.EN_CURSO)
+      .reduce((s, pe) => s + Number(pe.diasUsados), 0);
+    return {
+      ...v,
+      periodos,
+      ventas,
+      diasVendidos,
+      diasProgramados,
+      diasDisponibles: Number(v.diasGenerados) - Number(v.diasGozados) - diasVendidos - diasProgramados,
+    };
   });
 
   ipcMain.handle('generar-vacaciones-funcionario', async (_e, funcionarioId: number) => {
@@ -123,7 +192,14 @@ export function registerVacacionesHandlers(
       const hasta = parseLocalDate(fechaHasta) || new Date();
       const dias = diffDias(desde, hasta) + 1;
       if (dias <= 0) throw new Error('Rango de fechas invalido');
-      if (vacacion.diasGozados + dias > vacacion.diasGenerados) {
+      // Días disponibles = generados - gozados - vendidos (no anulados) - programados (no gozados/cancelados).
+      const ventas = await queryRunner.manager.getRepository(VacacionVenta).find({ where: { vacacion: { id: vacacionId } as any } });
+      const vendidos = ventas.filter((vt) => vt.estado !== VacacionVentaEstado.ANULADO).reduce((s, vt) => s + Number(vt.dias), 0);
+      const periodosExistentes = await queryRunner.manager.getRepository(VacacionPeriodo).find({ where: { vacacion: { id: vacacionId } as any } });
+      const programados = periodosExistentes
+        .filter((pe) => pe.estado === VacacionPeriodoEstado.PROGRAMADA || pe.estado === VacacionPeriodoEstado.EN_CURSO)
+        .reduce((s, pe) => s + Number(pe.diasUsados), 0);
+      if (Number(vacacion.diasGozados) + vendidos + programados + dias > Number(vacacion.diasGenerados)) {
         throw new Error('Excede dias disponibles');
       }
 
@@ -233,5 +309,72 @@ export function registerVacacionesHandlers(
     periodo.estado = VacacionPeriodoEstado.CANCELADA;
     await setEntityUserTracking(dataSource, periodo, getCurrentUser()?.id, true);
     return await repo.save(periodo);
+  });
+
+  // Vender días de vacaciones: el funcionario vende días no gozados y se le
+  // pagan (días × salario diario) como HABER en la liquidación de sueldo.
+  ipcMain.handle('vender-dias-vacacion', async (_e, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VACACION_GESTIONAR');
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const vacacionId: number = payload.vacacionId;
+      const dias = Number(payload.dias);
+      if (!dias || dias <= 0) throw new Error('Cantidad de dias invalida');
+
+      const vacacion = await queryRunner.manager.findOne(Vacacion, {
+        where: { id: vacacionId }, relations: ['funcionario'],
+      });
+      if (!vacacion) throw new Error(`Vacacion ${vacacionId} no encontrada`);
+
+      const ventas = await queryRunner.manager.getRepository(VacacionVenta).find({ where: { vacacion: { id: vacacionId } as any } });
+      const vendidos = ventas.filter((vt) => vt.estado !== VacacionVentaEstado.ANULADO).reduce((s, vt) => s + Number(vt.dias), 0);
+      const disponibles = Number(vacacion.diasGenerados) - Number(vacacion.diasGozados) - vendidos;
+      if (dias > disponibles) throw new Error(`Solo hay ${disponibles} dia(s) disponibles para vender`);
+
+      // Monto: si viene del front (valor negociado) se usa ese; si no, se calcula
+      // como dias x salario diario (salarioBase / 30).
+      const salarioBase = Number((vacacion.funcionario as any)?.salarioBase || 0);
+      const montoManual = Number(payload.monto);
+      const monto = montoManual > 0
+        ? +montoManual.toFixed(2)
+        : +((salarioBase / 30) * dias).toFixed(2);
+
+      const userId = getCurrentUser()?.id;
+      const venta = queryRunner.manager.create(VacacionVenta, {
+        vacacion,
+        dias,
+        monto,
+        fecha: new Date(),
+        estado: VacacionVentaEstado.PENDIENTE,
+        observacion: (payload.observacion || '').toUpperCase() || undefined,
+      });
+      await setEntityUserTracking(dataSource, venta, userId, false);
+      const saved = await queryRunner.manager.save(VacacionVenta, venta);
+
+      await queryRunner.commitTransaction();
+      return saved;
+    } catch (e) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error vender-dias-vacacion:', e);
+      throw e;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  ipcMain.handle('anular-venta-vacacion', async (_e, ventaId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VACACION_GESTIONAR');
+    const repo = dataSource.getRepository(VacacionVenta);
+    const venta = await repo.findOne({ where: { id: ventaId } });
+    if (!venta) throw new Error(`Venta de vacaciones ${ventaId} no encontrada`);
+    if (venta.estado === VacacionVentaEstado.PAGADO) {
+      throw new Error('No se puede anular una venta ya pagada en una liquidacion. Anule la liquidacion.');
+    }
+    if (venta.estado === VacacionVentaEstado.ANULADO) throw new Error('La venta ya esta anulada');
+    venta.estado = VacacionVentaEstado.ANULADO;
+    await setEntityUserTracking(dataSource, venta, getCurrentUser()?.id, true);
+    return await repo.save(venta);
   });
 }

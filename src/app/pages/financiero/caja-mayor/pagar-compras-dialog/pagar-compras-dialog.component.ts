@@ -18,6 +18,8 @@ import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
+import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 interface PagarComprasDialogData {
   cajaMayorId?: number;
@@ -45,6 +47,8 @@ interface CuotaRow {
   monedaDenominacion: string | null;
   selected: boolean;
   montoAPagar: number;
+  /** Decimales segun la moneda de la cuota (PYG=0, USD/BRL=2). Para appCurrencyInput. */
+  decimales: number;
 }
 
 @Component({
@@ -72,6 +76,7 @@ interface CuotaRow {
     MatDividerModule,
     DecimalPipe,
     DatePipe,
+    CurrencyInputDirective,
   ],
 })
 export class PagarComprasDialogComponent implements OnInit {
@@ -158,10 +163,19 @@ export class PagarComprasDialogComponent implements OnInit {
 
       const preIds = new Set<number>(this.data?.cuotaIdsPreseleccionadas || []);
 
+      // Mapa moneda(id)→decimales para configurar appCurrencyInput por fila (cada cuota
+      // puede estar en una moneda distinta: PYG=0, USD/BRL=2).
+      const decimalesPorMonedaId = new Map<number, number>();
+      for (const m of this.monedas) {
+        const dec = Number(m?.decimales);
+        decimalesPorMonedaId.set(m.id, Number.isFinite(dec) ? dec : 0);
+      }
+
       this.cuotas = ((items as any[]) || []).map((it: any): CuotaRow => ({
         ...it,
         selected: preIds.has(Number(it.id)),
         montoAPagar: Number(it.saldoPendiente) || 0,
+        decimales: decimalesPorMonedaId.get(Number(it.monedaId)) ?? 0,
       }));
 
       // Build proveedores list (unique)
@@ -184,18 +198,20 @@ export class PagarComprasDialogComponent implements OnInit {
     }
   }
 
-  // Defaults sensatos: si solo hay 1 caja abierta, seteala. Si hay PYG, seteala. Forma pago efectivo.
+  // Defaults sensatos: única caja abierta, moneda principal/única, forma pago principal/efectivo/única.
   private applyDefaultFuente(): void {
     if (this.cajasMayor.length === 1 && !this.form.value.cajaMayorId) {
       this.form.patchValue({ cajaMayorId: this.cajasMayor[0].id });
     }
-    if (this.monedas.length > 0 && !this.form.value.monedaId) {
-      const principal = this.monedas.find((m: any) => m.principal) || this.monedas[0];
-      this.form.patchValue({ monedaId: principal.id });
+    if (!this.form.value.monedaId) {
+      const m = preselectSingleOrPrincipal(this.monedas) || this.monedas[0];
+      if (m) this.form.patchValue({ monedaId: m.id });
     }
-    if (this.formasPago.length > 0 && !this.form.value.formaPagoId) {
-      const efectivo = this.formasPago.find((f: any) => /EFECTIVO/i.test(f.nombre || '')) || this.formasPago[0];
-      this.form.patchValue({ formaPagoId: efectivo.id });
+    if (!this.form.value.formaPagoId) {
+      const fp = preselectSingleOrPrincipal(this.formasPago)
+        || this.formasPago.find((f: any) => /EFECTIVO/i.test(f.nombre || ''))
+        || this.formasPago[0];
+      if (fp) this.form.patchValue({ formaPagoId: fp.id });
     }
   }
 

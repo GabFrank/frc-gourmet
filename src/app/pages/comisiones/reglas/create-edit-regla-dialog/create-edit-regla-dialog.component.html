@@ -70,8 +70,12 @@
             <mat-datepicker #pickerFin></mat-datepicker>
           </mat-form-field>
 
+          <p *ngIf="tipoActual === 'EQUIPO_PORCENTAJE'" class="hint">
+            <mat-icon class="hint-icon">groups</mat-icon>
+            Esta regla es de equipo (tipo EQUIPO_PORCENTAJE) y solo podrá asignarse a equipos de comisión.
+          </p>
+
           <div class="toggles">
-            <mat-slide-toggle formControlName="esEquipo">Es de equipo</mat-slide-toggle>
             <mat-slide-toggle formControlName="activo">Activo</mat-slide-toggle>
           </div>
         </div>

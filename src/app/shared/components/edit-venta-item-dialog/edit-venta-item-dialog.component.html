@@ -21,7 +21,7 @@
     <!-- Descuento -->
     <div class="descuento-section">
       <h3>DESCUENTO</h3>
-      <mat-radio-group [(ngModel)]="modoDescuento" [ngModelOptions]="{standalone: true}" (change)="onModoDescuentoChange()">
+      <mat-radio-group [formControl]="modoDescuentoControl" (change)="onModoDescuentoChange()">
         <mat-radio-button value="monto">MONTO FIJO</mat-radio-button>
         <mat-radio-button value="porcentaje">PORCENTAJE</mat-radio-button>
       </mat-radio-group>
@@ -102,7 +102,7 @@
 
     <mat-form-field appearance="outline" style="width: 100%; margin-top: 12px">
       <mat-label>OBSERVACIÓN LIBRE</mat-label>
-      <input matInput [(ngModel)]="observacionLibre" placeholder="Ej: sin sal, bien cocido..." />
+      <input matInput [formControl]="observacionLibreControl" placeholder="Ej: sin sal, bien cocido..." />
     </mat-form-field>
   </div>
 </mat-dialog-content>

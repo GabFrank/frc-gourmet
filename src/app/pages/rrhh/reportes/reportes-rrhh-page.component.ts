@@ -12,6 +12,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { MatDividerModule } from '@angular/material/divider';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { DocumentoService } from 'src/app/services/documento.service';
 import { firstValueFrom } from 'rxjs';
 
 @Component({
@@ -67,6 +68,7 @@ export class ReportesRrhhPageComponent implements OnInit {
   constructor(
     private repo: RepositoryService,
     private snack: MatSnackBar,
+    private documentoService: DocumentoService,
   ) {}
 
   ngOnInit(): void {
@@ -201,7 +203,7 @@ export class ReportesRrhhPageComponent implements OnInit {
           result = await firstValueFrom(this.repo.exportReporteAguinaldoAnualPdf(this.anioSeleccionado));
           break;
       }
-      if (result) this.descargar(result);
+      if (result) this.documentoService.abrirEnVisor(result);
     } catch (_e) {
       this.snack.open('Error al exportar PDF', 'Cerrar', { duration: 3000 });
     } finally {

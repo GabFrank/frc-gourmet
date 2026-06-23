@@ -1,6 +1,15 @@
 # TODOs pendientes del proyecto
 
-Snapshot **2026-05-06**. Verificar `git log` y memorias antes de afirmar que algo sigue pendiente.
+Snapshot **2026-05-06**, **auditado 2026-06-08** contra el código. Verificar `git log` y memorias antes de afirmar que algo sigue pendiente.
+
+> 📌 **El orden de ataque está en `## Plan de implementación priorizado (P0→P5)` al final.** Lo de arriba es el catálogo detallado.
+
+## Recientemente completado (auditado 2026-06-08)
+
+- [x] **Imagen en Presentación + Sabor** — `app-file-upload` implementado en `producto-presentaciones-precios` y `sabor-dialog`. (Estaba listado como pendiente: era drift.)
+- [x] **Handler producto↔sector** (`producto-sectores.handler.ts`: get/set) — backend listo; solo falta la UI de asignación en `gestionar-producto`.
+- [x] **Validación de permisos en backend** — sweep `ensurePermission` en ~178 handlers (memoria `project_todo_sweep_handlers_auth`).
+- [x] **Caja Mayor Fases 2-4** (Bancos+POS, Compras+CPP/CPC, Cheques+Op.Financieras+Entradas Varias) — la nota vieja "4 fases pendientes" era drift; solo Fase 5 (arqueos+reportes) queda parcial.
 
 ## Recientemente completado (2026-05)
 
@@ -36,7 +45,7 @@ Snapshot **2026-05-06**. Verificar `git log` y memorias antes de afirmar que alg
   - `código 1 (\x01)` → "El servidor LPD rechazó la cola. Verificá que la impresora esté compartida con ese nombre y que `ANONYMOUS LOGON` tenga permiso de imprimir (paso 5)".
   - `timeout / connection refused` → "No se puede conectar al puerto 515. Verificá firewall y que el servicio LPD esté corriendo (paso 1+4)".
   - `ACK 0x00` → "Cola accesible, podés guardar".
-- [ ] **Adjuntos polimórficos release 2** — Aplicar entity `Adjunto` (ya declarada) a: gastos, vales, préstamos a funcionario, CPP/CPP_CUOTA, CPC/CPC_CUOTA, cheques, retiros, operaciones financieras, movimientos bancarios, acreditaciones POS, comprobantes de venta, asistencias, compras manuales (sin OCR). Crear handlers `get-adjuntos`, `create-adjunto`, `delete-adjunto` polimórficos. Componente `<app-adjuntos-list>` shared para mostrar adjuntos por entidad+id con upload + visor.
+- [ ] **Adjuntos polimórficos release 2 — solo falta UI** (auditado 2026-06-08). El **backend ya está**: handler genérico `adjuntos.handler.ts` (`get-adjuntos`/`create-adjunto`/`delete-adjunto`) + permisos para ~18 tipos (`documentos-permissions.config.ts`: GASTO, CPP, CPP_CUOTA, CPC, CPC_CUOTA, CHEQUE, RETIRO_CAJA, ENTRADA_VARIA, OPERACION_FINANCIERA, MOVIMIENTO_BANCARIO, ACREDITACION_POS, COMPRA, VENTA, VALE, PRESTAMO_FUNCIONARIO, LIQUIDACION_SUELDO, LIQUIDACION_FINAL, ASISTENCIA). El componente `<app-adjuntos-list>` está cableado **solo a GASTO**. **Falta:** sumar `<app-adjuntos-list entidadTipo="...">` al resto de los dialogs/detalles.
 - [ ] **Imagen en Presentación + Sabor** — columnas `imageUrl` ya existen en BD. Falta UI: thumbnail clickeable en cada presentacion del producto (dialog con `<app-file-upload>`), idem en `create-edit-sabor-dialog`. Dejar fallback al `producto.imageUrl` si la presentacion no tiene la suya.
 - [ ] **Migrar `create-edit-persona` a `<app-file-upload>`** — actualmente usa `<input type=file>` artesanal con `save-profile-image` legacy. Reemplazar por shared `<app-file-upload carpeta="profile-images">` mantiene los mismos URLs `app://profile-images/<file>` sin migración de datos. Beneficia: thumbnails automáticos, preview consistente.
 - [ ] **Migrar `PdvCategoriaItem.imagen` (base64 → app://)** — hoy guarda base64 directo en BD (anti-patrón). Crear job de migración que: lee cada `imagen` que empieza con `data:image/...`, llama `save-file` con carpeta='producto-images' o nueva 'pdv-images', actualiza la columna con la URL devuelta, y opcionalmente elimina el data URL viejo (o deja la columna apuntando al archivo). Patrón: tab de "Mantenimiento BD" con botón "Migrar imágenes legacy".
@@ -165,7 +174,7 @@ Snapshot **2026-05-06**. Verificar `git log` y memorias antes de afirmar que alg
 
 - [ ] **Hash de contraseñas con bcrypt/argon2**: actualmente texto plano.
 - [ ] **JWT secret en variable de entorno**: actualmente hardcoded `'frc-gourmet-secret-key'` en `auth.handler.ts:9`.
-- [ ] **Validación de permisos en backend**: handlers no validan `getCurrentUser` permisos. Vulnerable a invocación desde DevTools.
+- [x] **Validación de permisos en backend** (HECHO, auditado 2026-06-08): sweep `ensurePermission` en ~178 handlers IPC (memoria `project_todo_sweep_handlers_auth`).
 - [ ] **Idle timeout server-side**: hoy solo `last_activity_time` se actualiza, sin auto-logout.
 - [ ] **Refresh tokens** + invalidación.
 - [ ] **Recuperación de contraseña**.
@@ -190,14 +199,48 @@ Snapshot **2026-05-06**. Verificar `git log` y memorias antes de afirmar que alg
 
 ---
 
-## Cómo priorizar
+## Plan de implementación priorizado (P0→P5)
 
-Orden recomendado (sólo opinión, depende del negocio):
+Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `project_roadmap_prioritizado`). Orden por urgencia × impacto × esfuerzo. Es una propuesta; el negocio puede reordenar. Ataca de arriba hacia abajo.
 
-1. Seguridad básica (hash password + JWT secret env) — gating para producción.
-2. Sweep de fechas (riesgo de corrupción de datos).
-3. Reactive Forms (estabilidad UI).
-4. Visor de documentos (UX RRHH).
-5. UI de Combos / Promociones / Producción (features de producto).
-6. KDS / impresión avanzada (operativa cocina).
-7. Reportes con exports (negocio).
+### P0 — Gating de producción (seguridad) 🔴
+Lo más urgente para un deploy real:
+- **Hash de contraseñas** (bcrypt/argon2) — hoy texto plano.
+- **JWT secret a variable de entorno** — hoy hardcoded en `auth.handler.ts`.
+- (2º orden: idle timeout server-side, bloqueo por intentos fallidos, refresh tokens.)
+- ✅ *Validación de permisos backend ya está hecha (no incluir).*
+
+### P1 — Correctness / riesgo de datos
+- **Sweep fechas timezone-safe** (`parseLocalDate`) en handlers con columnas `date` — parcial, completar los restantes.
+- **Anular compra con dialog** en vez de `window.prompt` (`compra-detalle.component`).
+
+### P2 — Quick wins con backend ya listo (alto valor / bajo esfuerzo)
+- **Botón Reimprimir comanda** (handler `print-comanda` ya soporta `forceReprint`; falta solo la UI).
+- **Auto-impresión al cobrar venta** (campo `autoImprimirTicketVenta` ya existe; falta el `imprimirTicket` post-cobro).
+- **Printer Settings UI**: traducir a español + acciones con mat-menu.
+- **UI producto→sectores** (handler listo; desbloquea pizza mitad-y-mitad cocina+bar).
+- **Onboarding task "Agregar impresora"** + **wizard de configuración LPR** (ver detalle arriba en "Acciones inmediatas").
+
+### P3 — Sweeps de calidad / consistencia
+- **Preselecciones** en dialogs (única opción / principal / última-usada).
+- Sweep **`appCurrencyInput`** global (inputs monetarios locale-aware).
+- **ngModel → Reactive Forms** (~35 archivos).
+- Rollout **`<app-table-toolbar>`** (3/~16 migrados).
+- **Adjuntos UI por entidad** (backend genérico + permisos listos; UI solo en GASTO).
+
+### P4 — Completar features con base existente
+- **Caja Mayor Fase 5**: arqueos/cortes formales + reportes imprimibles.
+- UI de **Combos / Promociones / Producción** (entidades existen, sin UI).
+- **Reportes** Ventas/Compras con exports PDF/Excel.
+- **Compras secundarias**: recepción de mercadería, devoluciones, tab Productos en proveedor-detalle, link CPP→Compra en detalle, C-5 testing E2E.
+- **Visor universal de documentos** (UX RRHH).
+
+### P5 — Features grandes / nuevas
+- **Pago mixto** reutilizable (efectivo+banco, N líneas).
+- **Clientes F3/F4**: loyalty/puntos, direcciones múltiples, cumpleaños, import CSV, reportes avanzados.
+- **KDS** (Kitchen Display Screen) + impresión ESC/POS avanzada.
+- **Reservas** UI completa.
+
+### Continuo (transversal)
+- Testing E2E (Producto→Receta→PdV→Venta→Stock; Compras contado/crédito; multi-moneda).
+- Probar margen/precio sugerido de receta con una receta con ingredientes (implementado, sin probar).

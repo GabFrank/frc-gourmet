@@ -50,6 +50,14 @@
   .full-width {
     width: 100%;
   }
+
+  .fuente-toggle {
+    margin-bottom: 12px;
+
+    .mat-button-toggle {
+      flex: 1;
+    }
+  }
 }
 
 .empty-state {

@@ -1347,6 +1347,9 @@ contextBridge.exposeInMainWorld('api', {
   openFileWithSystem: async (url: string): Promise<{ ok: boolean; error?: string }> => {
     return await ipcRenderer.invoke('open-file-with-system', { url });
   },
+  openBase64File: async (base64: string, fileName: string): Promise<{ ok: boolean; error?: string }> => {
+    return await ipcRenderer.invoke('open-base64-file', { base64, fileName });
+  },
 
   // === Adjuntos polimorficos ===
   getAdjuntos: async (params: { entidadTipo: string; entidadId: number; tipo?: string }): Promise<any[]> => {
@@ -1733,6 +1736,9 @@ contextBridge.exposeInMainWorld('api', {
   // Venta methods
   getVentas: async (): Promise<Venta[]> => {
     return await ipcRenderer.invoke('getVentas');
+  },
+  getBuffetMetricas: async (filtros?: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-buffet-metricas', filtros);
   },
   getVentasByDateRange: async (desde: string, hasta: string, filtros?: any): Promise<Venta[]> => {
     return await ipcRenderer.invoke('getVentasByDateRange', desde, hasta, filtros);
@@ -2212,6 +2218,14 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('delete-producto', productoId);
   },
 
+  // Producción (buffet)
+  crearProduccion: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('crear-produccion', data);
+  },
+  getProducciones: async (filtros: any = {}): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-producciones', filtros);
+  },
+
   // Presentacion methods
   getPresentaciones: async (): Promise<Presentacion[]> => {
     return await ipcRenderer.invoke('get-presentaciones');
@@ -2604,6 +2618,9 @@ contextBridge.exposeInMainWorld('api', {
   // Caja Mayor Movimientos
   getCajaMayorMovimientos: async (cajaMayorId: number, filtros?: any): Promise<any> => {
     return await ipcRenderer.invoke('get-caja-mayor-movimientos', cajaMayorId, filtros);
+  },
+  getCajaMayorMovimientosConsolidados: async (cajaMayorId: number, filtros?: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-movimientos-caja-mayor-consolidados', cajaMayorId, filtros);
   },
   createCajaMayorMovimiento: async (data: any): Promise<any> => {
     return await ipcRenderer.invoke('create-caja-mayor-movimiento', data);
@@ -3292,6 +3309,12 @@ contextBridge.exposeInMainWorld('api', {
   cancelarVacacionPeriodo: async (periodoId: number): Promise<any> => {
     return await ipcRenderer.invoke('cancelar-vacacion-periodo', periodoId);
   },
+  venderDiasVacacion: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('vender-dias-vacacion', payload);
+  },
+  anularVentaVacacion: async (ventaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('anular-venta-vacacion', ventaId);
+  },
 
   // =============================================
   // RRHH - Liquidacion final
@@ -3432,6 +3455,44 @@ contextBridge.exposeInMainWorld('api', {
   },
   recalcularSaldoCliente: async (clienteId: number): Promise<any> => {
     return await ipcRenderer.invoke('recalcular-saldo-cliente', clienteId);
+  },
+
+  // Convenios + cobro consolidado
+  getConvenios: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-convenios', filtros);
+  },
+  getConvenio: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-convenio', id);
+  },
+  createConvenio: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-convenio', data);
+  },
+  updateConvenio: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-convenio', id, data);
+  },
+  deleteConvenio: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-convenio', id);
+  },
+  setConvenioClientes: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('set-convenio-clientes', payload);
+  },
+  getCobroConsolidadoPreview: async (convenioId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cobro-consolidado-preview', convenioId);
+  },
+  registrarCobroConsolidado: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('registrar-cobro-consolidado', payload);
+  },
+  getCobrosConsolidados: async (filtros?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-cobros-consolidados', filtros);
+  },
+  getCobroConsolidado: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cobro-consolidado', id);
+  },
+  exportCobroConsolidadoPreviewPdf: async (convenioId: number): Promise<any> => {
+    return await ipcRenderer.invoke('export-cobro-consolidado-preview-pdf', convenioId);
+  },
+  exportReciboCobroConsolidadoPdf: async (cobroConsolidadoId: number): Promise<any> => {
+    return await ipcRenderer.invoke('export-recibo-cobro-consolidado-pdf', cobroConsolidadoId);
   },
 
   // === Movimientos Cliente (Fase 7) ===
@@ -3710,6 +3771,17 @@ contextBridge.exposeInMainWorld('api', {
     const listener = (_event: any, data: any) => handler(data);
     ipcRenderer.on('printer-events', listener);
     return () => ipcRenderer.removeListener('printer-events', listener);
+  },
+
+  /**
+   * KDS: suscribe al canal `comanda-item-updates` (emitido desde
+   * `electron/utils/comanda-events.utils.ts`). Devuelve función para desuscribir.
+   * Lo usa el KDS para refrescar las pantallas en vivo sin polling.
+   */
+  onComandaEvent: (handler: (payload: any) => void): (() => void) => {
+    const listener = (_event: any, data: any) => handler(data);
+    ipcRenderer.on('comanda-item-updates', listener);
+    return () => ipcRenderer.removeListener('comanda-item-updates', listener);
   },
 
 });

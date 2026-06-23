@@ -25,6 +25,7 @@ import { registerSpecialRoutes } from './special-routes';
 import { registerRpcRoute } from './rpc-router';
 import { registerAuthRoutes } from './auth-routes';
 import { registerFileRoutes } from './file-routes';
+import { registerKdsSseRoutes } from './kds-sse-routes';
 import { registerAuthPlugin } from './auth-middleware';
 
 export interface ServerOptions {
@@ -90,6 +91,9 @@ export async function startServer(opts: ServerOptions): Promise<FastifyInstance>
 
   // Files (requiere JWT)
   registerFileRoutes(fastify, opts.dataSource);
+
+  // KDS: stream SSE para pantallas web en tiempo real (auth por token en query)
+  registerKdsSseRoutes(fastify);
 
   // F2 (mobile PWA): servir el bundle estático de projects/mobile en `/`.
   // Público (sin JWT): index.html/JS/CSS deben cargar antes del login. La API

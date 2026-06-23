@@ -7,6 +7,11 @@
 }
 .info-label { opacity: 0.65; font-size: 12px; }
 .full-width { width: 100%; margin-bottom: 4px; }
+.fuente-toggle { margin-bottom: 12px; .mat-button-toggle { flex: 1; } }
+.cotiz-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  mat-form-field { flex: 0 0 200px; }
+  .convertido { color: var(--primary-color, #1565c0); font-size: 14px; }
+}
 .two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;

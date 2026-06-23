@@ -82,7 +82,7 @@
       <ng-container matColumnDef="actions">
         <th mat-header-cell *matHeaderCellDef></th>
         <td mat-cell *matCellDef="let c">
-          <button mat-icon-button [matMenuTriggerFor]="m" *ngIf="cpc?.estado === 'ACTIVO'">
+          <button mat-icon-button [matMenuTriggerFor]="m" *ngIf="cpc?.estado !== 'CANCELADO'">
             <mat-icon>more_vert</mat-icon>
           </button>
           <mat-menu #m="matMenu">

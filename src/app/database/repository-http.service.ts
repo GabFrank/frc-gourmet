@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Observable, throwError } from 'rxjs';
+import { Observable, throwError, of } from 'rxjs';
 import { RepositoryService, LoginResult, ClienteFilters } from './repository.service';
 import { Printer } from './entities/printer.entity';
 import { Persona } from './entities/personas/persona.entity';
@@ -229,6 +229,24 @@ export class RepositoryHttpService extends RepositoryService {
   }
   openFileWithSystem(url: string): Observable<{ ok: boolean; error?: string }> {
     return throwError(() => new Error(`RepositoryHttpService.openFileWithSystem() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  openBase64File(base64: string, fileName: string): Observable<{ ok: boolean; error?: string }> {
+    // En modo web/PWA no hay shell del SO: abrimos el PDF en una nueva pestaña
+    // (visor del navegador) a partir de un blob URL.
+    try {
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, '_blank');
+      if (!win) {
+        URL.revokeObjectURL(url);
+        return of({ ok: false, error: 'El navegador bloqueó la apertura de la ventana' });
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return of({ ok: true });
+    } catch (e: any) {
+      return of({ ok: false, error: e?.message || String(e) });
+    }
   }
   getAdjuntos(params: { entidadTipo: string; entidadId: number; tipo?: string }): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getAdjuntos() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
@@ -580,6 +598,10 @@ export class RepositoryHttpService extends RepositoryService {
   }
   getVentasByDateRange(desde: string, hasta: string, filtros?: any): Observable<{ data: Venta[], total: number }> {
     return throwError(() => new Error(`RepositoryHttpService.getVentasByDateRange() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+
+  getBuffetMetricas(filtros?: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getBuffetMetricas() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getVentasByEstado(estado: VentaEstado): Observable<Venta[]> {
     return throwError(() => new Error(`RepositoryHttpService.getVentasByEstado() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
@@ -996,6 +1018,12 @@ export class RepositoryHttpService extends RepositoryService {
   deleteProducto(productoId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.deleteProducto() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  crearProduccion(data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.crearProduccion() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getProducciones(filtros?: any): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getProducciones() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getPresentaciones(): Observable<Presentacion[]> {
     return throwError(() => new Error(`RepositoryHttpService.getPresentaciones() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
@@ -1379,6 +1407,10 @@ export class RepositoryHttpService extends RepositoryService {
   }
   getCajaMayorMovimientos(cajaMayorId: number, filtros?: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getCajaMayorMovimientos() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+
+  getCajaMayorMovimientosConsolidados(cajaMayorId: number, filtros?: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getCajaMayorMovimientosConsolidados() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   createCajaMayorMovimiento(data: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.createCajaMayorMovimiento() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
@@ -1959,6 +1991,12 @@ export class RepositoryHttpService extends RepositoryService {
   cancelarVacacionPeriodo(periodoId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.cancelarVacacionPeriodo() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  venderDiasVacacion(_payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.venderDiasVacacion() no esta implementado todavia.`)) as any;
+  }
+  anularVentaVacacion(_ventaId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.anularVentaVacacion() no esta implementado todavia.`)) as any;
+  }
   getLiquidacionesFinal(filtros?: any): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getLiquidacionesFinal() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
@@ -2054,6 +2092,42 @@ export class RepositoryHttpService extends RepositoryService {
   }
   evaluarEquipoPeriodo(payload: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.evaluarEquipoPeriodo() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getConvenios(_filtros?: any): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getConvenios() no esta implementado todavia.`)) as any;
+  }
+  getConvenio(_id: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getConvenio() no esta implementado todavia.`)) as any;
+  }
+  createConvenio(_data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.createConvenio() no esta implementado todavia.`)) as any;
+  }
+  updateConvenio(_id: number, _data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.updateConvenio() no esta implementado todavia.`)) as any;
+  }
+  deleteConvenio(_id: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deleteConvenio() no esta implementado todavia.`)) as any;
+  }
+  setConvenioClientes(_payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.setConvenioClientes() no esta implementado todavia.`)) as any;
+  }
+  getCobroConsolidadoPreview(_convenioId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getCobroConsolidadoPreview() no esta implementado todavia.`)) as any;
+  }
+  registrarCobroConsolidado(_payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.registrarCobroConsolidado() no esta implementado todavia.`)) as any;
+  }
+  getCobrosConsolidados(_filtros?: any): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getCobrosConsolidados() no esta implementado todavia.`)) as any;
+  }
+  getCobroConsolidado(_id: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getCobroConsolidado() no esta implementado todavia.`)) as any;
+  }
+  exportCobroConsolidadoPreviewPdf(_convenioId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.exportCobroConsolidadoPreviewPdf() no esta implementado todavia.`)) as any;
+  }
+  exportReciboCobroConsolidadoPdf(_cobroConsolidadoId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.exportReciboCobroConsolidadoPdf() no esta implementado todavia.`)) as any;
   }
   getCuentasPorCobrar(filtros?: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getCuentasPorCobrar() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;

@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -19,7 +19,7 @@ import { Cliente } from '../../../database/entities/personas/cliente.entity';
   standalone: true,
   imports: [
     CommonModule,
-    FormsModule,
+    ReactiveFormsModule,
     MatDialogModule,
     MatButtonModule,
     MatIconModule,
@@ -31,7 +31,7 @@ import { Cliente } from '../../../database/entities/personas/cliente.entity';
 export class BuscarClienteDialogComponent implements OnInit {
   clientes: Cliente[] = [];
   filteredClientes: Cliente[] = [];
-  searchTerm = '';
+  searchControl = new FormControl('', { nonNullable: true });
   displayedColumns = ['nombre', 'ruc', 'telefono', 'acciones'];
 
   constructor(
@@ -45,7 +45,7 @@ export class BuscarClienteDialogComponent implements OnInit {
   }
 
   filtrar(): void {
-    const term = this.searchTerm.toUpperCase().trim();
+    const term = this.searchControl.value.toUpperCase().trim();
     if (!term) {
       this.filteredClientes = this.clientes;
       return;

@@ -1,0 +1,38 @@
+.buffet-dashboard {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  .filtros {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+
+    mat-form-field {
+      width: 160px;
+    }
+  }
+
+  .spinner {
+    display: flex;
+    justify-content: center;
+    padding: 32px;
+  }
+
+  .chips {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+
+  .empty {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+    padding: 24px;
+    justify-content: center;
+  }
+}

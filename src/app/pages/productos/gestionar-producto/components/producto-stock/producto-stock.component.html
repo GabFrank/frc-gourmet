@@ -5,6 +5,14 @@
     <p class="description">
       Gestiona el stock del producto. Controla inventario, ajustes y movimientos de stock.
     </p>
+    <button
+      *ngIf="producto?.tipo === ProductoTipo.BUFFET_POR_PESO"
+      mat-raised-button
+      color="primary"
+      (click)="abrirProduccionDialog()">
+      <mat-icon>inventory</mat-icon>
+      Registrar producción
+    </button>
   </div>
 
   <!-- Resumen de Stock -->

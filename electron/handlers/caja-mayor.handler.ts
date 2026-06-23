@@ -24,11 +24,84 @@ import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { esIngreso, actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { ensurePermission, getEffectiveUser } from '../utils/auth.utils';
+import { getMovimientosBancariosUnificados } from '../utils/movimientos-bancarios';
 
 // Alias local para mantener firma legacy de actualizarSaldo
 const actualizarSaldo = actualizarSaldoCajaMayor;
 
 export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
+
+  // Anula una operacion financiera completa DENTRO de una transaccion ya abierta:
+  // marca la OperacionFinanciera como anulada, revierte TODOS sus movimientos de
+  // caja (ej. los dos lados de un cambio de divisa) y revierte el saldo bancario
+  // cuando aplica (deposito/retiro). Reusado por anular-operacion-financiera y por
+  // anular-caja-mayor-movimiento (cuando el movimiento pertenece a una operacion).
+  const anularOperacionFinancieraTx = async (
+    queryRunner: any,
+    opId: number,
+    motivo: string,
+    currentUser: Usuario | null,
+  ): Promise<void> => {
+    const opRepo = queryRunner.manager.getRepository(OperacionFinanciera);
+    const op = await opRepo.findOne({
+      where: { id: opId },
+      relations: ['cuentaBancariaOrigen', 'cuentaBancariaDestino'],
+    });
+    if (!op) throw new Error(`OperacionFinanciera ${opId} no encontrada`);
+    if (op.anulado) throw new Error('La operacion ya esta anulada');
+
+    op.anulado = true;
+    await setEntityUserTracking(dataSource, op, currentUser?.id, true);
+    await queryRunner.manager.save(OperacionFinanciera, op);
+
+    const movRepo = queryRunner.manager.getRepository(CajaMayorMovimiento);
+    const movs = await movRepo.find({
+      where: { operacionFinancieraId: opId },
+      relations: ['cajaMayor', 'moneda', 'formaPago'],
+    });
+
+    for (const mov of movs) {
+      if (mov.tipoMovimiento === TipoMovimiento.ANULACION) continue;
+      // No re-anular un movimiento que ya tiene su contra-movimiento.
+      const yaAnulado = await movRepo.findOne({ where: { referenciaAnulacion: { id: mov.id } as any } });
+      if (yaAnulado) continue;
+
+      const contra = queryRunner.manager.create(CajaMayorMovimiento, {
+        cajaMayor: mov.cajaMayor,
+        tipoMovimiento: TipoMovimiento.ANULACION,
+        moneda: mov.moneda,
+        formaPago: mov.formaPago,
+        monto: mov.monto,
+        fecha: new Date(),
+        observacion: `ANULACION OP. FIN. #${opId}: ${motivo}`.toUpperCase(),
+        operacionFinancieraId: opId,
+        referenciaAnulacion: mov,
+      });
+      if (currentUser) contra.responsable = currentUser;
+      await setEntityUserTracking(dataSource, contra, currentUser?.id, false);
+      await queryRunner.manager.save(CajaMayorMovimiento, contra);
+
+      const tipoContrario = esIngreso(mov.tipoMovimiento)
+        ? TipoMovimiento.AJUSTE_NEGATIVO
+        : TipoMovimiento.AJUSTE_POSITIVO;
+      await actualizarSaldo(queryRunner, mov.cajaMayor.id, mov.moneda.id, mov.formaPago.id, Number(mov.monto), tipoContrario);
+    }
+
+    const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
+    if (op.tipoOperacion === TipoOperacionFinanciera.DEPOSITO_BANCARIO && op.cuentaBancariaDestino) {
+      const cb = await cbRepo.findOne({ where: { id: op.cuentaBancariaDestino.id } });
+      if (cb) {
+        cb.saldo = Number(cb.saldo) - Number(op.montoDestino || 0);
+        await queryRunner.manager.save(CuentaBancaria, cb);
+      }
+    } else if (op.tipoOperacion === TipoOperacionFinanciera.RETIRO_BANCARIO && op.cuentaBancariaOrigen) {
+      const cb = await cbRepo.findOne({ where: { id: op.cuentaBancariaOrigen.id } });
+      if (cb) {
+        cb.saldo = Number(cb.saldo) + Number(op.montoOrigen || 0);
+        await queryRunner.manager.save(CuentaBancaria, cb);
+      }
+    }
+  };
 
   // ===================== CAJA MAYOR CRUD =====================
 
@@ -259,6 +332,243 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     }
   });
 
+  // ===================== MOVIMIENTOS CONSOLIDADOS (CAJA + BANCOS) =====================
+
+  // Etiquetas humanizadas para el panel financiero consolidado.
+  const tipoLabelCaja: Record<string, string> = {
+    INGRESO_RETIRO_CAJA: 'Retiro de Caja (entrada)',
+    INGRESO_CIERRE_CAJA: 'Cierre de Caja',
+    INGRESO_ENTRADA_VARIA: 'Entrada Varia',
+    INGRESO_OPERACION_FINANCIERA: 'Operacion Financiera (entrada)',
+    INGRESO_RETIRO_BANCO: 'Retiro de Banco',
+    INGRESO_COBRO_CUOTA_PRESTAMO_FUNCIONARIO: 'Cobro cuota prestamo func.',
+    INGRESO_COBRO_CUENTA_POR_COBRAR: 'Cobro cuenta por cobrar',
+    TRANSFERENCIA_ENTRADA: 'Transferencia (entrada)',
+    AJUSTE_POSITIVO: 'Ajuste (+)',
+    EGRESO_GASTO: 'Gasto',
+    EGRESO_COMPRA: 'Compra',
+    EGRESO_CUOTA_COMPRA: 'Cuota compra',
+    EGRESO_CUOTA_PRESTAMO: 'Cuota prestamo',
+    EGRESO_VALE: 'Vale',
+    EGRESO_SALARIO: 'Salario',
+    EGRESO_CHEQUE: 'Cheque',
+    EGRESO_OPERACION_FINANCIERA: 'Operacion Financiera (salida)',
+    EGRESO_DEPOSITO_BANCO: 'Deposito a Banco',
+    EGRESO_CAJA_INICIAL: 'Caja Inicial (salida)',
+    EGRESO_DESEMBOLSO_PRESTAMO_FUNCIONARIO: 'Desembolso prestamo func.',
+    TRANSFERENCIA_SALIDA: 'Transferencia (salida)',
+    AJUSTE_NEGATIVO: 'Ajuste (-)',
+    ANULACION: 'Anulacion',
+  };
+  const tipoLabelBanco: Record<string, string> = {
+    MANUAL: 'Ajuste manual',
+    ENTRADA_MANUAL: 'Entrada manual',
+    SALIDA_MANUAL: 'Salida manual',
+    AJUSTE_POSITIVO: 'Ajuste (+)',
+    AJUSTE_NEGATIVO: 'Ajuste (-)',
+    CHEQUE_COBRADO: 'Cheque cobrado',
+    DEPOSITO: 'Deposito bancario',
+    RETIRO: 'Retiro bancario',
+    ENTRADA_VARIA: 'Entrada Varia',
+    GASTO: 'Gasto',
+    VALE: 'Vale',
+    COBRO_CLIENTE: 'Cobro cliente',
+  };
+
+  // Agrupa los CajaMayorMovimiento crudos en filas unificadas (un gasto/retiro con
+  // varias monedas/formas de pago colapsa a una fila con N detalles). Portado de
+  // consolidarMovimientos() del componente.
+  const consolidarCaja = (movimientos: any[]): any[] => {
+    const grupos = new Map<string, any>();
+    const ordenados = [...movimientos].sort(
+      (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime(),
+    );
+    for (const mov of ordenados) {
+      const gastoId = mov.gasto?.id;
+      const retiroCajaId = mov.retiroCaja?.id;
+      const isAnulacion = mov.tipoMovimiento === 'ANULACION';
+      const contraDeId = mov.referenciaAnulacion?.id;
+      const key = gastoId ? `gasto-${gastoId}` :
+                  retiroCajaId ? `retiro-${retiroCajaId}` :
+                  `mov-${mov.id}`;
+
+      if (isAnulacion && (gastoId || retiroCajaId) && grupos.has(key)) {
+        const grupo = grupos.get(key);
+        grupo.esAnulacion = true;
+        grupo.movimientoIds.push(mov.id);
+        continue;
+      }
+
+      const detalle = {
+        monedaSimbolo: mov.moneda?.simbolo || '-',
+        formaPagoNombre: mov.formaPago?.nombre || '-',
+        monto: Number(mov.monto),
+      };
+
+      if (grupos.has(key)) {
+        const grupo = grupos.get(key);
+        grupo.detalles.push(detalle);
+        grupo.movimientoIds.push(mov.id);
+      } else {
+        const tipo: string = mov.tipoMovimiento || '';
+        const ingreso = tipo.startsWith('INGRESO') || tipo.startsWith('AJUSTE_POS') || tipo === 'TRANSFERENCIA_ENTRADA';
+        grupos.set(key, {
+          fuente: 'CAJA',
+          fuenteLabel: 'CAJA MAYOR',
+          fuenteCuentaId: undefined,
+          fecha: mov.fecha,
+          tipoMovimiento: tipo,
+          tipoLabel: tipoLabelCaja[tipo] || tipo,
+          tipoIsIngreso: ingreso,
+          detalles: [detalle],
+          responsableNombre: mov.responsable?.persona?.nombre || mov.responsable?.nickname || '-',
+          observacion: mov.observacion || '-',
+          anulado: !!mov.anulacion,
+          origen: '',
+          gastoId,
+          retiroCajaId,
+          movimientoIds: [mov.id],
+          esAnulacion: isAnulacion || !!contraDeId,
+          anulacion: mov.anulacion || null,
+          contraDeId: contraDeId || undefined,
+        });
+      }
+    }
+    return Array.from(grupos.values());
+  };
+
+  ipcMain.handle('get-movimientos-caja-mayor-consolidados', async (_event: any, cajaMayorId: number, filtros?: any) => {
+    try {
+      const fuente: string = filtros?.fuente || 'TODO'; // 'TODO' | 'CAJA' | 'BANCO' | '<accountId>'
+      const cuentasVisibles: number[] = (filtros?.cuentasBancariasIds || []).map((n: any) => Number(n));
+      const incluirCaja = fuente === 'TODO' || fuente === 'CAJA';
+      const fuenteEsCuenta = fuente !== 'TODO' && fuente !== 'CAJA' && fuente !== 'BANCO';
+      const incluirBanco = fuente === 'TODO' || fuente === 'BANCO' || fuenteEsCuenta;
+
+      let unificados: any[] = [];
+
+      // ---- Rama caja ----
+      if (incluirCaja) {
+        const repo = dataSource.getRepository(CajaMayorMovimiento);
+        const qb = repo.createQueryBuilder('mov')
+          .leftJoinAndSelect('mov.moneda', 'moneda')
+          .leftJoinAndSelect('mov.formaPago', 'formaPago')
+          .leftJoinAndSelect('mov.responsable', 'responsable')
+          .leftJoinAndSelect('responsable.persona', 'persona')
+          .leftJoinAndSelect('mov.gasto', 'gasto')
+          .leftJoinAndSelect('gasto.proveedor', 'proveedor')
+          .leftJoinAndSelect('mov.retiroCaja', 'retiroCaja')
+          .leftJoinAndSelect('mov.referenciaAnulacion', 'referenciaAnulacion')
+          .where('mov.caja_mayor_id = :cajaMayorId', { cajaMayorId })
+          .orderBy('mov.fecha', 'DESC')
+          .addOrderBy('mov.id', 'DESC');
+        if (filtros?.fechaDesde) qb.andWhere('mov.fecha >= :fechaDesde', { fechaDesde: filtros.fechaDesde });
+        if (filtros?.fechaHasta) qb.andWhere('mov.fecha <= :fechaHasta', { fechaHasta: filtros.fechaHasta });
+        if (filtros?.responsableId) qb.andWhere('mov.responsable_id = :responsableId', { responsableId: filtros.responsableId });
+        if (filtros?.proveedorId) qb.andWhere('gasto.proveedor_id = :proveedorId', { proveedorId: filtros.proveedorId });
+        if (!filtros?.incluirAnulaciones) qb.andWhere('mov.referencia_anulacion_id IS NULL');
+
+        const cajaItems = await qb.getMany();
+
+        // Decorar con info de anulacion
+        if (cajaItems.length) {
+          const ids = cajaItems.map((m: any) => m.id);
+          const anulaciones = await repo.createQueryBuilder('a')
+            .leftJoinAndSelect('a.responsable', 'r')
+            .leftJoinAndSelect('r.persona', 'p')
+            .loadRelationIdAndMap('a.referenciaAnulacionId', 'a.referenciaAnulacion')
+            .where('a.referencia_anulacion_id IN (:...ids)', { ids })
+            .getMany();
+          const byOrigId = new Map<number, any>();
+          for (const a of anulaciones) {
+            const origId = (a as any).referenciaAnulacionId;
+            if (!origId) continue;
+            byOrigId.set(origId, {
+              id: a.id,
+              fecha: a.fecha,
+              motivo: ((a as any).observacion || '').replace(/^ANULACION:\s*/i, '').trim(),
+              responsableNombre: (a as any).responsable?.persona?.nombre || (a as any).responsable?.nickname || null,
+            });
+          }
+          for (const m of cajaItems) (m as any).anulacion = byOrigId.get(m.id) || null;
+        }
+
+        // Mapear a la forma esperada por consolidarCaja (gasto/retiro/referenciaAnulacion como objetos)
+        const mapped = cajaItems.map((m: any) => ({
+          id: m.id,
+          fecha: m.fecha,
+          tipoMovimiento: m.tipoMovimiento,
+          monto: m.monto,
+          moneda: m.moneda,
+          formaPago: m.formaPago,
+          responsable: m.responsable,
+          observacion: m.observacion,
+          gasto: m.gasto,
+          retiroCaja: m.retiroCaja,
+          referenciaAnulacion: m.referenciaAnulacion,
+          anulacion: (m as any).anulacion,
+        }));
+        unificados = unificados.concat(consolidarCaja(mapped));
+      }
+
+      // ---- Rama banco ----
+      if (incluirBanco) {
+        const accountIds = fuenteEsCuenta ? [Number(fuente)] : cuentasVisibles;
+        if (accountIds.length > 0) {
+          const bancoItems = await getMovimientosBancariosUnificados(dataSource, accountIds, {
+            excludePos: true,
+            stampFuente: true,
+            fechaDesde: filtros?.fechaDesde,
+            fechaHasta: filtros?.fechaHasta,
+          });
+          for (const b of bancoItems) {
+            unificados.push({
+              fuente: 'BANCO',
+              fuenteLabel: b.fuenteLabel || 'BANCO',
+              fuenteCuentaId: b.fuenteCuentaId,
+              fecha: b.fecha,
+              tipoMovimiento: b.tipo,
+              tipoLabel: tipoLabelBanco[b.tipo] || b.tipo,
+              tipoIsIngreso: b.esIngreso,
+              detalles: [{ monedaSimbolo: b.monedaSimbolo || '', formaPagoNombre: undefined, monto: Number(b.monto) }],
+              responsableNombre: b.responsable || '-',
+              observacion: b.descripcion || '-',
+              anulado: !!b.anulado,
+              origen: b.origen,
+              movimientoIds: [b.id],
+              esAnulacion: false,
+              anulacion: null,
+              contraDeId: undefined,
+            });
+          }
+        }
+      }
+
+      // ---- Filtros transversales ----
+      if (filtros?.esIngreso !== undefined && filtros?.esIngreso !== null) {
+        unificados = unificados.filter((i) => i.tipoIsIngreso === filtros.esIngreso);
+      }
+      if (filtros?.origen) {
+        unificados = unificados.filter((i) => i.origen === filtros.origen);
+      }
+
+      // Orden por fecha desc
+      unificados.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+      // Paginacion
+      const total = unificados.length;
+      if (filtros?.pageSize != null) {
+        const pageSize = Number(filtros.pageSize) || 15;
+        const page = Math.max(0, Number(filtros.page) || 0);
+        return { items: unificados.slice(page * pageSize, (page + 1) * pageSize), total };
+      }
+      return { items: unificados, total };
+    } catch (error) {
+      console.error(`Error getting movimientos consolidados for caja mayor ${cajaMayorId}:`, error);
+      throw error;
+    }
+  });
+
   ipcMain.handle('create-caja-mayor-movimiento', async (_event: any, data: any) => {
     await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
     const queryRunner = dataSource.createQueryRunner();
@@ -359,6 +669,15 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           `Este movimiento corresponde a la compra #${original.compraId}. ` +
           `Anular desde el modulo de Compras (revierte stock, costo y caja).`
         );
+      }
+
+      // Operacion financiera (ej. cambio de divisa): crea 2 movimientos vinculados
+      // por el mismo operacionFinancieraId. Anular UNO debe anular la operacion
+      // completa (ambos lados + saldo bancario si aplica), no solo este movimiento.
+      if (original.operacionFinancieraId) {
+        await anularOperacionFinancieraTx(queryRunner, original.operacionFinancieraId, motivo, getCurrentUser());
+        await queryRunner.commitTransaction();
+        return { success: true };
       }
 
       // Verificar si ya fue anulado previamente
@@ -546,9 +865,10 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      const { detalles, ...gastoData } = data;
+      const { detalles, fuente, cuentaBancariaId, montoCuentaBancaria, cotizacion, ...gastoData } = data;
       const cajaMayorId = gastoData.cajaMayor?.id || gastoData.cajaMayor;
       const destinoTipo = (gastoData.destinoTipo as GastoDestinoTipo) || GastoDestinoTipo.CAJA_MAYOR;
+      const esBanco = fuente === 'CUENTA_BANCARIA';
 
       // ===== Rama CUENTA_BANCARIA: debita cuenta_bancaria.saldo, sin caja mayor =====
       if (destinoTipo === GastoDestinoTipo.CUENTA_BANCARIA) {
@@ -584,6 +904,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       // ===== Rama CAJA_MAYOR (default): comportamiento histórico =====
       // Calcular monto total desde detalles
       const montoTotal = (detalles || []).reduce((sum: number, d: any) => sum + Number(d.monto), 0);
+      // Monto debitado en la moneda de la cuenta (si difiere, viene convertido).
+      const montoBanco = Number(montoCuentaBancaria) > 0 ? Number(montoCuentaBancaria) : montoTotal;
 
       // 1. Crear gasto (moneda y formaPago del primer detalle como referencia)
       const primerDetalle = detalles?.[0];
@@ -593,12 +915,16 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         moneda: primerDetalle ? { id: primerDetalle.monedaId } : null,
         formaPago: primerDetalle ? { id: primerDetalle.formaPagoId } : null,
         destinoTipo: GastoDestinoTipo.CAJA_MAYOR,
+        cuentaBancariaId: esBanco ? Number(cuentaBancariaId) : null,
+        montoCuentaBancaria: esBanco ? montoBanco : null,
+        cotizacion: esBanco && cotizacion ? Number(cotizacion) : null,
         estado: GastoEstado.PAGADO,
       });
       await setEntityUserTracking(dataSource, gasto, getCurrentUser()?.id, false);
       const savedGasto = await queryRunner.manager.save(Gasto, gasto);
 
-      // 2. Crear detalles + movimientos por cada detalle
+      // 2. Crear detalles. Si es egreso por banco, debita la cuenta y NO genera
+      // movimientos de Caja Mayor; si es caja mayor, crea un movimiento por detalle.
       const currentUser = getEffectiveUser(getCurrentUser);
       for (const det of detalles || []) {
         const monedaId = det.monedaId;
@@ -613,6 +939,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           observacion: det.observacion || null,
         });
         await queryRunner.manager.save(GastoDetalle, detalle);
+
+        if (esBanco) continue;
 
         // Crear CajaMayorMovimiento por cada detalle
         const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
@@ -634,6 +962,14 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
         // Actualizar saldo
         await actualizarSaldo(queryRunner, cajaMayorId, monedaId, formaPagoId, Number(det.monto), TipoMovimiento.EGRESO_GASTO);
+      }
+
+      // Debitar la cuenta bancaria por el total (egreso por banco)
+      if (esBanco) {
+        const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: Number(cuentaBancariaId) } });
+        if (!cb) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
+        cb.saldo = Number(cb.saldo) - montoBanco;
+        await queryRunner.manager.save(CuentaBancaria, cb);
       }
 
       await queryRunner.commitTransaction();
@@ -665,13 +1001,17 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       await setEntityUserTracking(dataSource, gasto, getCurrentUser()?.id, true);
       await queryRunner.manager.save(Gasto, gasto);
 
-      // Si fue pagado desde cuenta bancaria: revertir el debito y salir.
-      if (gasto.destinoTipo === GastoDestinoTipo.CUENTA_BANCARIA) {
-        if (gasto.cuentaBancaria?.id) {
-          const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
-          const cb = await cbRepo.findOne({ where: { id: gasto.cuentaBancaria.id } });
+      // Si el gasto se pagó desde cuenta bancaria (vía destinoTipo de #46 o vía
+      // cuentaBancariaId de develop): revertir el débito y salir.
+      const gastoEsBanco =
+        gasto.destinoTipo === GastoDestinoTipo.CUENTA_BANCARIA || !!gasto.cuentaBancariaId;
+      if (gastoEsBanco) {
+        const cbId = gasto.cuentaBancaria?.id || gasto.cuentaBancariaId;
+        if (cbId) {
+          const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: cbId } });
           if (cb) {
-            cb.saldo = Number(cb.saldo) + Number(gasto.monto);
+            const montoBanco = Number(gasto.montoCuentaBancaria) > 0 ? Number(gasto.montoCuentaBancaria) : Number(gasto.monto);
+            cb.saldo = Number(cb.saldo) + montoBanco;
             await queryRunner.manager.save(CuentaBancaria, cb);
           }
         }
@@ -755,14 +1095,23 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       const cajaMayorId = gasto.cajaMayor?.id;
       const movRepo = queryRunner.manager.getRepository(CajaMayorMovimiento);
 
-      // 2. Revertir movimientos viejos del gasto
-      const movsViejos = await movRepo.find({
-        where: { gasto: { id: gastoId }, tipoMovimiento: TipoMovimiento.EGRESO_GASTO },
-        relations: ['moneda', 'formaPago'],
-      });
-
-      for (const mov of movsViejos) {
-        await actualizarSaldo(queryRunner, cajaMayorId, mov.moneda.id, mov.formaPago.id, Number(mov.monto), TipoMovimiento.AJUSTE_POSITIVO);
+      // 2. Revertir el egreso viejo: si fue por banco, acreditar la cuenta;
+      // si fue por caja mayor, revertir cada movimiento.
+      if (gasto.cuentaBancariaId) {
+        const cbOld = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: gasto.cuentaBancariaId } });
+        if (cbOld) {
+          const montoBancoOld = Number(gasto.montoCuentaBancaria) > 0 ? Number(gasto.montoCuentaBancaria) : Number(gasto.monto);
+          cbOld.saldo = Number(cbOld.saldo) + montoBancoOld;
+          await queryRunner.manager.save(CuentaBancaria, cbOld);
+        }
+      } else {
+        const movsViejos = await movRepo.find({
+          where: { gasto: { id: gastoId }, tipoMovimiento: TipoMovimiento.EGRESO_GASTO },
+          relations: ['moneda', 'formaPago'],
+        });
+        for (const mov of movsViejos) {
+          await actualizarSaldo(queryRunner, cajaMayorId, mov.moneda.id, mov.formaPago.id, Number(mov.monto), TipoMovimiento.AJUSTE_POSITIVO);
+        }
       }
 
       // 3. Eliminar movimientos y detalles viejos
@@ -770,8 +1119,10 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       await queryRunner.manager.delete(GastoDetalle, { gasto: { id: gastoId } });
 
       // 4. Actualizar gasto
-      const { detalles, ...gastoData } = data;
+      const { detalles, fuente, cuentaBancariaId, montoCuentaBancaria, cotizacion, ...gastoData } = data;
+      const esBanco = fuente === 'CUENTA_BANCARIA';
       const montoTotal = (detalles || []).reduce((sum: number, d: any) => sum + Number(d.monto), 0);
+      const montoBancoNew = Number(montoCuentaBancaria) > 0 ? Number(montoCuentaBancaria) : montoTotal;
       const primerDetalle = detalles?.[0];
 
       queryRunner.manager.merge(Gasto, gasto, {
@@ -779,11 +1130,14 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         monto: montoTotal,
         moneda: primerDetalle ? { id: primerDetalle.monedaId } : null,
         formaPago: primerDetalle ? { id: primerDetalle.formaPagoId } : null,
+        cuentaBancariaId: esBanco ? Number(cuentaBancariaId) : (null as any),
+        montoCuentaBancaria: esBanco ? montoBancoNew : (null as any),
+        cotizacion: esBanco && cotizacion ? Number(cotizacion) : (null as any),
       });
       await setEntityUserTracking(dataSource, gasto, getCurrentUser()?.id, true);
       await queryRunner.manager.save(Gasto, gasto);
 
-      // 5. Crear nuevos detalles y movimientos
+      // 5. Crear nuevos detalles y movimientos (o débito bancario)
       const currentUser = getEffectiveUser(getCurrentUser);
       for (const det of detalles || []) {
         const detalle = queryRunner.manager.create(GastoDetalle, {
@@ -794,6 +1148,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           observacion: det.observacion || null,
         });
         await queryRunner.manager.save(GastoDetalle, detalle);
+
+        if (esBanco) continue;
 
         const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
           cajaMayor: { id: cajaMayorId },
@@ -810,6 +1166,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         await queryRunner.manager.save(CajaMayorMovimiento, movimiento);
 
         await actualizarSaldo(queryRunner, cajaMayorId, det.monedaId, det.formaPagoId, Number(det.monto), TipoMovimiento.EGRESO_GASTO);
+      }
+
+      if (esBanco) {
+        const cbNew = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: Number(cuentaBancariaId) } });
+        if (!cbNew) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
+        cbNew.saldo = Number(cbNew.saldo) - montoBancoNew;
+        await queryRunner.manager.save(CuentaBancaria, cbNew);
       }
 
       await queryRunner.commitTransaction();
@@ -1613,63 +1976,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      const opRepo = queryRunner.manager.getRepository(OperacionFinanciera);
-      const op = await opRepo.findOne({
-        where: { id },
-        relations: ['cuentaBancariaOrigen', 'cuentaBancariaDestino'],
-      });
-      if (!op) throw new Error(`OperacionFinanciera ${id} no encontrada`);
-      if (op.anulado) throw new Error('La operacion ya esta anulada');
-
-      op.anulado = true;
-      await setEntityUserTracking(dataSource, op, getCurrentUser()?.id, true);
-      await queryRunner.manager.save(OperacionFinanciera, op);
-
-      const movRepo = queryRunner.manager.getRepository(CajaMayorMovimiento);
-      const movs = await movRepo.find({
-        where: { operacionFinancieraId: id },
-        relations: ['cajaMayor', 'moneda', 'formaPago'],
-      });
-
-      const currentUser = getEffectiveUser(getCurrentUser);
-      for (const mov of movs) {
-        if (mov.tipoMovimiento === TipoMovimiento.ANULACION) continue;
-
-        const contra = queryRunner.manager.create(CajaMayorMovimiento, {
-          cajaMayor: mov.cajaMayor,
-          tipoMovimiento: TipoMovimiento.ANULACION,
-          moneda: mov.moneda,
-          formaPago: mov.formaPago,
-          monto: mov.monto,
-          fecha: new Date(),
-          observacion: `ANULACION OP. FIN. #${id}: ${motivo}`.toUpperCase(),
-          operacionFinancieraId: id,
-          referenciaAnulacion: mov,
-        });
-        if (currentUser) contra.responsable = currentUser;
-        await setEntityUserTracking(dataSource, contra, currentUser?.id, false);
-        await queryRunner.manager.save(CajaMayorMovimiento, contra);
-
-        const tipoContrario = esIngreso(mov.tipoMovimiento)
-          ? TipoMovimiento.AJUSTE_NEGATIVO
-          : TipoMovimiento.AJUSTE_POSITIVO;
-        await actualizarSaldo(queryRunner, mov.cajaMayor.id, mov.moneda.id, mov.formaPago.id, Number(mov.monto), tipoContrario);
-      }
-
-      const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
-      if (op.tipoOperacion === TipoOperacionFinanciera.DEPOSITO_BANCARIO && op.cuentaBancariaDestino) {
-        const cb = await cbRepo.findOne({ where: { id: op.cuentaBancariaDestino.id } });
-        if (cb) {
-          cb.saldo = Number(cb.saldo) - Number(op.montoDestino || 0);
-          await queryRunner.manager.save(CuentaBancaria, cb);
-        }
-      } else if (op.tipoOperacion === TipoOperacionFinanciera.RETIRO_BANCARIO && op.cuentaBancariaOrigen) {
-        const cb = await cbRepo.findOne({ where: { id: op.cuentaBancariaOrigen.id } });
-        if (cb) {
-          cb.saldo = Number(cb.saldo) + Number(op.montoOrigen || 0);
-          await queryRunner.manager.save(CuentaBancaria, cb);
-        }
-      }
+      await anularOperacionFinancieraTx(queryRunner, id, motivo, getEffectiveUser(getCurrentUser));
 
       await queryRunner.commitTransaction();
       return { success: true };
@@ -1779,6 +2086,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         .addSelect('cuota.monto', 'monto')
         .addSelect('cuota.montoPagado', 'montoPagado')
         .where("cuota.estado IN ('PENDIENTE', 'PARCIAL')")
+        // CPP = deudas a proveedores; los prestamos a funcionarios son "a cobrar".
+        .andWhere("cpp.tipo <> 'PRESTAMO_FUNCIONARIO'")
         .getRawMany();
 
       const grupos = new Map<number, {

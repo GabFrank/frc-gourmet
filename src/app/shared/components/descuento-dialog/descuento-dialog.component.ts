@@ -8,6 +8,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatDividerModule } from '@angular/material/divider';
+import { CurrencyInputDirective } from '../../directives/currency-input.directive';
 
 export interface DescuentoDialogData {
   subtotal: number;
@@ -31,6 +32,7 @@ export interface DescuentoDialogData {
     MatInputModule,
     MatRadioModule,
     MatDividerModule,
+    CurrencyInputDirective,
   ],
 })
 export class DescuentoDialogComponent implements OnInit {
@@ -38,6 +40,8 @@ export class DescuentoDialogComponent implements OnInit {
   tipoDescuento: 'porcentaje' | 'monto' = 'porcentaje';
   totalConDescuento = 0;
   montoDescuento = 0;
+  /** Decimales del monto (venta PdV opera en moneda principal PYG=0). Para appCurrencyInput. */
+  decimalesMoneda = 0;
 
   constructor(
     public dialogRef: MatDialogRef<DescuentoDialogComponent>,

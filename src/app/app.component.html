@@ -197,6 +197,18 @@
               <mat-icon matListItemIcon>dashboard</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Dashboard</span>
             </a>
+            <a *appHasPermission="'VENTAS_DASHBOARD_VER'" mat-list-item (click)="openBuffetDashTab()">
+              <mat-icon matListItemIcon>scale</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Buffet por kilo</span>
+            </a>
+            <a *appHasPermission="'COMANDAS_KDS_VER'" mat-list-item (click)="openKdsTab()">
+              <mat-icon matListItemIcon>restaurant</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">KDS — Cocina</span>
+            </a>
+            <a *appHasPermission="'COMANDAS_KDS_CONFIGURAR'" mat-list-item (click)="openKdsPantallasTab()">
+              <mat-icon matListItemIcon>tv</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Pantallas KDS</span>
+            </a>
           </div>
         </mat-expansion-panel>
 
@@ -237,6 +249,10 @@
             <a *appHasPermission="'CLIENTES_VER'" mat-list-item (click)="openClientesTab()">
               <mat-icon matListItemIcon>business</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Clientes</span>
+            </a>
+            <a *appHasPermission="'CLIENTES_VER'" mat-list-item (click)="openConveniosTab()">
+              <mat-icon matListItemIcon>handshake</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Convenios</span>
             </a>
             <a *appHasPermission="'RRHH_FUNCIONARIO_VER'" mat-list-item (click)="openCargosTab()">
               <mat-icon matListItemIcon>work</mat-icon>
@@ -285,6 +301,10 @@
             <a *appHasPermission="'RRHH_LIQUIDACION_GENERAR'" mat-list-item (click)="openAguinaldosTab()">
               <mat-icon matListItemIcon>star</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Aguinaldos</span>
+            </a>
+            <a *appHasPermission="'RRHH_VACACION_GESTIONAR'" mat-list-item (click)="openVacacionesTab()">
+              <mat-icon matListItemIcon>beach_access</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Vacaciones</span>
             </a>
             <a *appHasPermission="'RRHH_CONFIG_EDITAR'" mat-list-item (click)="openFeriadosTab()">
               <mat-icon matListItemIcon>celebration</mat-icon>

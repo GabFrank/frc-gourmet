@@ -15,6 +15,7 @@ import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
+import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
 
 @Component({
   selector: 'app-create-cuenta-por-cobrar-dialog',
@@ -89,6 +90,12 @@ export class CreateCuentaPorCobrarDialogComponent implements OnInit {
       this.clientes = (clientes as any[] || []).filter((c: any) => c.activo !== false);
       this.filteredClientes = this.clientes.slice(0, 50);
       this.setupClienteAutocomplete();
+
+      // Pre-seleccionar moneda principal/única (solo si está vacía).
+      if (!this.form.get('monedaId')?.value) {
+        const m = preselectSingleOrPrincipal(this.monedas);
+        if (m) this.form.patchValue({ monedaId: m.id });
+      }
 
       // Pre-seleccionar cliente si vino en data
       const preId = this.data?.clienteId;

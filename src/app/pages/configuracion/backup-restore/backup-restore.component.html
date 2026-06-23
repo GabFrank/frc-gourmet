@@ -227,9 +227,9 @@
 
             <div class="form-row">
               <mat-form-field appearance="outline">
-                <mat-label>Intervalo</mat-label>
-                <mat-select [(ngModel)]="config.intervalHours" [disabled]="!config.autoBackupEnabled">
-                  <mat-option *ngFor="let opt of intervalOptions" [value]="opt.value">{{ opt.label }}</mat-option>
+                <mat-label>Modo</mat-label>
+                <mat-select [(ngModel)]="config.mode" [disabled]="!config.autoBackupEnabled">
+                  <mat-option *ngFor="let opt of backupModes" [value]="opt.value">{{ opt.label }}</mat-option>
                 </mat-select>
               </mat-form-field>
 
@@ -240,6 +240,36 @@
                 </mat-select>
                 <mat-hint>Los más viejos se borran automáticamente</mat-hint>
               </mat-form-field>
+            </div>
+
+            <!-- Modo INTERVALO -->
+            <div class="form-row" *ngIf="config.mode === 'interval'">
+              <mat-form-field appearance="outline">
+                <mat-label>Intervalo</mat-label>
+                <mat-select [(ngModel)]="config.intervalHours" [disabled]="!config.autoBackupEnabled">
+                  <mat-option *ngFor="let opt of intervalOptions" [value]="opt.value">{{ opt.label }}</mat-option>
+                </mat-select>
+                <mat-hint>Contado desde que se abre la app</mat-hint>
+              </mat-form-field>
+            </div>
+
+            <!-- Modo DIARIO -->
+            <div class="form-row" *ngIf="config.mode === 'daily'">
+              <mat-slide-toggle [(ngModel)]="useFixedTime" (change)="onUseFixedTimeChange()"
+                                [disabled]="!config.autoBackupEnabled" color="primary">
+                Ejecutar a una hora fija
+              </mat-slide-toggle>
+            </div>
+            <div class="form-row" *ngIf="config.mode === 'daily' && useFixedTime">
+              <mat-form-field appearance="outline">
+                <mat-label>Hora del backup diario</mat-label>
+                <input matInput type="time" [(ngModel)]="config.dailyTime" [disabled]="!config.autoBackupEnabled">
+                <mat-hint>Si la PC está apagada a esa hora, se hace al iniciar la app</mat-hint>
+              </mat-form-field>
+            </div>
+            <div class="form-row hint-text" *ngIf="config.mode === 'daily' && !useFixedTime">
+              <mat-icon class="inline-hint-icon">info</mat-icon>
+              <span>El backup se hace al abrir la app la primera vez de cada día (ideal si la PC se apaga de noche).</span>
             </div>
 
             <div class="form-row">
