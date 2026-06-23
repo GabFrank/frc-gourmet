@@ -13,4 +13,5 @@ export const NAV_ITEMS: NavItem[] = [
   { path: '/financiero', icon: 'payments', label: 'Finanzas' },
   { path: '/compras', icon: 'shopping_cart', label: 'Compras' },
   { path: '/productos', icon: 'inventory_2', label: 'Productos' },
+  { path: '/ventas', icon: 'restaurant', label: 'Ventas' },
 ];
