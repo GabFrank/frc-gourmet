@@ -1737,6 +1737,9 @@ contextBridge.exposeInMainWorld('api', {
   getVentas: async (): Promise<Venta[]> => {
     return await ipcRenderer.invoke('getVentas');
   },
+  getBuffetMetricas: async (filtros?: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-buffet-metricas', filtros);
+  },
   getVentasByDateRange: async (desde: string, hasta: string, filtros?: any): Promise<Venta[]> => {
     return await ipcRenderer.invoke('getVentasByDateRange', desde, hasta, filtros);
   },
@@ -2213,6 +2216,14 @@ contextBridge.exposeInMainWorld('api', {
   },
   deleteProducto: async (productoId: number): Promise<any> => {
     return await ipcRenderer.invoke('delete-producto', productoId);
+  },
+
+  // Producción (buffet)
+  crearProduccion: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('crear-produccion', data);
+  },
+  getProducciones: async (filtros: any = {}): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-producciones', filtros);
   },
 
   // Presentacion methods

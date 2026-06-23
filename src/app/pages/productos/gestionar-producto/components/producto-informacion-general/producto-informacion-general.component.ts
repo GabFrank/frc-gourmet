@@ -322,6 +322,9 @@ export class ProductoInformacionGeneralComponent implements OnInit, OnDestroy {
       case ProductoTipo.COMBO:
         this.stockTooltip = 'ON: Se descuenta el combo como producto. OFF: Se descontaran los productos componentes del combo al vender.';
         break;
+      case ProductoTipo.BUFFET_POR_PESO:
+        this.stockTooltip = 'ON: Se descuenta el propio buffet por kilo vendido (cargar stock vía Producción). El desperdicio = producido - vendido.';
+        break;
       default:
         this.stockTooltip = '';
     }
@@ -372,6 +375,13 @@ export class ProductoInformacionGeneralComponent implements OnInit, OnDestroy {
         ejemplos: ['Pizza + Bebida', 'Hamburguesa + Papas + Bebida', 'Menú Familiar', 'Combo Desayuno'],
         color: 'primary',
         icono: 'group_work'
+      },
+      [ProductoTipo.BUFFET_POR_PESO]: {
+        nombre: 'BUFFET POR PESO',
+        descripcion: 'Producto servido y cobrado por peso (buffet por kilo). El precio se interpreta como precio por kilo; se cobra peso × precio/kg con tope "libre" y mínimo opcionales.',
+        ejemplos: ['Buffet libre', 'Comida por kilo', 'Self-service', 'Ensaladas por peso'],
+        color: 'accent',
+        icono: 'scale'
       },
     };
 

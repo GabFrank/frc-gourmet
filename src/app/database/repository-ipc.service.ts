@@ -269,6 +269,7 @@ interface ElectronAPI {
   // Venta operations
   getVentas: () => Promise<Venta[]>;
   getVentasByDateRange: (desde: string, hasta: string, filtros?: any) => Promise<{ data: Venta[], total: number }>;
+  getBuffetMetricas: (filtros?: any) => Promise<any>;
   getVentasByEstado: (estado: VentaEstado) => Promise<Venta[]>;
   getVentasByCaja: (cajaId: number) => Promise<Venta[]>;
   getResumenCaja: (cajaId: number) => Promise<any>;
@@ -451,6 +452,8 @@ interface ElectronAPI {
   createProducto: (productoData: any) => Promise<Producto>;
   updateProducto: (productoId: number, productoData: any) => Promise<any>;
   deleteProducto: (productoId: number) => Promise<any>;
+  crearProduccion: (data: any) => Promise<any>;
+  getProducciones: (filtros?: any) => Promise<any[]>;
   // Presentacion methods
   getPresentaciones: () => Promise<Presentacion[]>;
   getPresentacionesByProducto: (productoId: number, page?: number, pageSize?: number, filtroActivo?: string) => Promise<any>;
@@ -1845,6 +1848,10 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.getVentasByDateRange(desde, hasta, filtros));
   }
 
+  getBuffetMetricas(filtros?: any): Observable<any> {
+    return from(this.api.getBuffetMetricas(filtros));
+  }
+
   getVentasByEstado(estado: VentaEstado): Observable<Venta[]> {
     return from(this.api.getVentasByEstado(estado));
   }
@@ -2415,6 +2422,14 @@ export class RepositoryIpcService extends RepositoryService {
 
   deleteProducto(productoId: number): Observable<any> {
     return from(this.api.deleteProducto(productoId));
+  }
+
+  crearProduccion(data: any): Observable<any> {
+    return from(this.api.crearProduccion(data));
+  }
+
+  getProducciones(filtros?: any): Observable<any[]> {
+    return from(this.api.getProducciones(filtros));
   }
 
   // Presentacion methods
