@@ -1,0 +1,274 @@
+/* Estilos del módulo Caja Mayor (lista + detalle). Compartido vía styleUrls.
+   Usa variables de tema (sin colores hardcodeados). */
+
+/* ===== Lista de cajas mayor ===== */
+.cm-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+}
+
+.cm-saldos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 4px;
+}
+
+.cm-saldo {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cm-chevron {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+}
+
+/* ===== Detalle ===== */
+.cm-detalle {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: var(--surface-variant);
+}
+
+.cm-bar {
+  padding-top: env(safe-area-inset-top);
+  height: calc(56px + env(safe-area-inset-top));
+
+  .cm-bar-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cm-spacer {
+    flex: 1 1 auto;
+  }
+}
+
+.cm-pad {
+  padding: 12px 16px;
+}
+
+.cm-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px calc(88px + env(safe-area-inset-bottom));
+  max-width: 700px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.cm-section {
+  margin-bottom: 20px;
+}
+
+.cm-section-title {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+/* Saldos */
+.cm-saldos-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cm-saldo-card {
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.cm-saldo-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+
+  .cm-saldo-total {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .cm-saldo-moneda {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+  }
+}
+
+.cm-saldo-detalle {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  padding: 2px 0;
+}
+
+.cm-banco-card .cm-banco-icon {
+  color: var(--info-color);
+}
+
+.cm-banco-titulo {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* Movimientos */
+.cm-mov-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cm-mov-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cm-mov {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 10px 8px 10px 12px;
+
+  &.anulado {
+    opacity: 0.6;
+  }
+
+  &.es-anulacion {
+    background: color-mix(in srgb, var(--text-secondary) 8%, transparent);
+  }
+}
+
+.cm-mov-icon {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--text-secondary) 14%, transparent);
+  color: var(--text-secondary);
+
+  mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+
+  &.in {
+    background: color-mix(in srgb, var(--success-color) 16%, transparent);
+    color: var(--success-color);
+  }
+
+  &.out {
+    background: color-mix(in srgb, var(--error-color) 16%, transparent);
+    color: var(--error-color);
+  }
+}
+
+.cm-mov-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.cm-mov-row1 {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+
+  .cm-mov-tipo {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+  }
+
+  .cm-mov-monto {
+    font-weight: 700;
+    white-space: nowrap;
+    color: var(--text-primary);
+
+    &.in {
+      color: var(--success-color);
+    }
+
+    &.out {
+      color: var(--error-color);
+    }
+  }
+}
+
+.cm-mov-row2 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.cm-mov-obs {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 3px;
+}
+
+.cm-mov-anulado {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 0.76rem;
+  color: var(--warning-color);
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.cm-mas-btn {
+  margin: 8px auto 0;
+  display: block;
+}
+
+/* Barra de acciones inferior */
+.cm-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: var(--card-background);
+  border-top: 1px solid var(--border-color);
+  z-index: 10;
+
+  .cm-action-btn {
+    flex: 1;
+    height: 46px;
+  }
+}

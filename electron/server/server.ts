@@ -17,6 +17,8 @@
 import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
+import { existsSync } from 'fs';
 import { DataSource } from 'typeorm';
 import { handlerRegistryCount } from '../utils/handler-registry';
 import { registerSpecialRoutes } from './special-routes';
@@ -33,6 +35,13 @@ export interface ServerOptions {
   schemaVersion: string;
   driver: 'sqlite' | 'postgres';
   dataSource: DataSource;
+  /**
+   * F2 (mobile PWA): carpeta con el bundle Angular de `projects/mobile`
+   * (`dist/mobile`). Si existe, se sirve estáticamente en `/` para que los
+   * dispositivos remotos abran la PWA desde el mismo server (same-origin con
+   * la API). Si no se pasa o no existe, no se sirve nada estático.
+   */
+  staticRoot?: string;
 }
 
 let instance: FastifyInstance | null = null;
@@ -85,6 +94,42 @@ export async function startServer(opts: ServerOptions): Promise<FastifyInstance>
 
   // KDS: stream SSE para pantallas web en tiempo real (auth por token en query)
   registerKdsSseRoutes(fastify);
+
+  // F2 (mobile PWA): servir el bundle estático de projects/mobile en `/`.
+  // Público (sin JWT): index.html/JS/CSS deben cargar antes del login. La API
+  // (/api/*) sigue protegida por su propio onRequest hook. SPA fallback: las
+  // rutas del Angular Router (GET no-/api) devuelven index.html.
+  if (opts.staticRoot && existsSync(opts.staticRoot)) {
+    await fastify.register(fastifyStatic, {
+      root: opts.staticRoot,
+      prefix: '/',
+      wildcard: false,
+      index: ['index.html'],
+      // Politica de cache: index.html NUNCA se cachea (es la fuente de verdad
+      // de los hashes de los bundles; si el navegador la cachea, tras un
+      // rebuild pediria bundles con hash viejo y daria 404 -> pantalla en
+      // blanco). Los demas archivos llevan hash en el nombre -> seguros para
+      // cachear agresivo (`immutable`).
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        } else {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
+    });
+    fastify.setNotFoundHandler((request, reply) => {
+      if (request.method === 'GET' && !request.url.startsWith('/api')) {
+        reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+        return (reply as any).sendFile('index.html');
+      }
+      reply.code(404);
+      return { error: 'not_found' };
+    });
+    console.log(`[server] PWA mobile servida desde ${opts.staticRoot} en /`);
+  } else {
+    console.log('[server] dist/mobile no encontrado; PWA no se sirve (correr `ng build mobile`).');
+  }
 
   const host = opts.host || '0.0.0.0';
   await fastify.listen({ port: opts.port, host });

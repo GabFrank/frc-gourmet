@@ -43,6 +43,7 @@
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/app/database/datasource.ts",
     "migration:show": "typeorm-ts-node-commonjs migration:show -d src/app/database/datasource.ts",
     "icons": "node scripts/generate-icons.js",
+    "generate:mobile-api": "node scripts/generate-mobile-api-map.js",
     "prepare": "husky || true"
   },
   "private": true,
@@ -61,6 +62,7 @@
     "@fastify/cors": "^8.5.0",
     "@fastify/jwt": "^6.7.1",
     "@fastify/rate-limit": "^7.6.0",
+    "@fastify/static": "^6.12.0",
     "@napi-rs/canvas": "^1.0.0",
     "@types/uuid": "^9.0.7",
     "bcryptjs": "^3.0.3",
@@ -76,17 +78,16 @@
     "node-thermal-printer": "^4.4.4",
     "pdfjs-dist": "^3.11.174",
     "pdfmake": "^0.2.10",
+    "pg": "^8.20.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "7.8.1",
     "sqlite3": "^5.1.6",
     "tslib": "^2.5.0",
     "typeorm": "^0.3.21",
-    "pg": "^8.20.0",
     "uuid": "^9.0.1",
     "zone.js": "~0.12.0"
   },
   "devDependencies": {
-    "@types/pg": "^8.20.0",
     "@angular-builders/custom-webpack": "15.0.0",
     "@angular-devkit/build-angular": "15.2.8",
     "@angular-eslint/builder": "15.2.1",
@@ -112,6 +113,7 @@
     "@types/jasminewd2": "2.0.10",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^18.16.9",
+    "@types/pg": "^8.20.0",
     "@typescript-eslint/eslint-plugin": "5.48.2",
     "@typescript-eslint/parser": "5.48.2",
     "conventional-changelog-cli": "2.2.2",
@@ -169,7 +171,8 @@
     "asarUnpack": [
       "**/node_modules/sqlite3/**",
       "**/node_modules/keytar/**",
-      "**/node_modules/@napi-rs/canvas/**"
+      "**/node_modules/@napi-rs/canvas/**",
+      "dist/mobile/**"
     ],
     "publish": [
       {

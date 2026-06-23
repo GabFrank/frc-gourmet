@@ -1,0 +1,131 @@
+:host {
+  display: block;
+  height: 100dvh;
+}
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding-top: env(safe-area-inset-top);
+  height: calc(56px + env(safe-area-inset-top));
+
+  .title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .spacer {
+    flex: 1 1 auto;
+  }
+}
+
+.menu-user {
+  padding: 8px 16px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.layout {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* --- Nav rail (tablet / desktop) --- */
+.rail {
+  flex: 0 0 88px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 8px;
+  background: var(--surface);
+  border-right: 1px solid var(--border-color);
+  overflow-y: auto;
+
+  .rail-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 6px;
+    border-radius: 12px;
+    text-decoration: none;
+    color: var(--text-secondary);
+    transition: background 0.15s ease;
+
+    mat-icon {
+      font-size: 24px;
+      height: 24px;
+      width: 24px;
+    }
+
+    .rail-label {
+      font-size: 0.7rem;
+      text-align: center;
+    }
+
+    &:hover {
+      background: var(--hover-bg);
+    }
+
+    &.active {
+      color: var(--error-color);
+      background: color-mix(in srgb, var(--error-color) 12%, transparent);
+    }
+  }
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* --- Bottom nav (teléfono) --- */
+.bottomnav {
+  display: flex;
+  justify-content: space-around;
+  align-items: stretch;
+  background: var(--surface);
+  border-top: 1px solid var(--border-color);
+  padding-bottom: env(safe-area-inset-bottom);
+
+  .bottomnav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 8px 0 6px;
+    text-decoration: none;
+    color: var(--text-secondary);
+
+    mat-icon {
+      font-size: 24px;
+      height: 24px;
+      width: 24px;
+    }
+
+    .bottomnav-label {
+      font-size: 0.65rem;
+    }
+
+    &.active {
+      color: var(--error-color);
+    }
+  }
+}

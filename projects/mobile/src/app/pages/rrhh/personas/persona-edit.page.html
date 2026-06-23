@@ -1,0 +1,68 @@
+<div class="crud-edit">
+  <mat-toolbar color="primary" class="crud-edit-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="crud-edit-title">{{ esNuevo ? 'Nueva persona' : 'Editar persona' }}</span>
+    <span class="crud-spacer"></span>
+    <button mat-button (click)="guardar()" [disabled]="saving">Guardar</button>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
+
+  <form class="crud-form" [formGroup]="form" (ngSubmit)="guardar()">
+    <mat-form-field appearance="outline">
+      <mat-label>Nombre</mat-label>
+      <input matInput formControlName="nombre" autocapitalize="characters" />
+      <mat-error *ngIf="form.controls.nombre.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Apellido</mat-label>
+      <input matInput formControlName="apellido" autocapitalize="characters" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Tipo de persona</mat-label>
+      <mat-select formControlName="tipoPersona">
+        <mat-option *ngFor="let t of tiposPersona" [value]="t">{{ t }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Tipo de documento</mat-label>
+      <mat-select formControlName="tipoDocumento">
+        <mat-option *ngFor="let t of tiposDocumento" [value]="t">{{ t }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Documento</mat-label>
+      <input matInput formControlName="documento" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Teléfono</mat-label>
+      <input matInput formControlName="telefono" inputmode="tel" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Email</mat-label>
+      <input matInput formControlName="email" inputmode="email" autocapitalize="none" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Dirección</mat-label>
+      <input matInput formControlName="direccion" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Fecha de nacimiento</mat-label>
+      <input matInput type="date" formControlName="fechaNacimiento" />
+    </mat-form-field>
+
+    <mat-slide-toggle formControlName="activo" color="primary">Activa</mat-slide-toggle>
+
+    <button type="submit" mat-flat-button color="primary" class="crud-save-btn" [disabled]="saving">
+      {{ saving ? 'Guardando…' : 'Guardar' }}
+    </button>
+  </form>
+</div>

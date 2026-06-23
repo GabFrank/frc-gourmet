@@ -307,8 +307,10 @@ function initializeDatabase() {
         const schemaVersion = driver === 'postgres'
           ? 'BaselinePostgres1778380893207'
           : 'Baseline1778378410416';
+        // F2 (mobile PWA): servir el bundle de projects/mobile (dist/mobile) si existe.
+        const staticRoot = path.join(__dirname, 'dist', 'mobile');
         startServer({
-          port, appVersion, schemaVersion, driver, dataSource,
+          port, appVersion, schemaVersion, driver, dataSource, staticRoot,
         }).catch((e) => console.error('[server] Error al arrancar Fastify:', e));
       } else {
         console.log(`[server] Modo '${settings.mode}', no se arranca Fastify.`);

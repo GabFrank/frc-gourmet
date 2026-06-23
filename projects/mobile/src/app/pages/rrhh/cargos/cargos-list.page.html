@@ -1,0 +1,55 @@
+<div class="page">
+  <div class="filterbar">
+    <mat-form-field appearance="outline" class="search">
+      <mat-label>Buscar cargo</mat-label>
+      <input matInput [formControl]="busqueda" (keyup.enter)="aplicarFiltro()" />
+      <button
+        *ngIf="busqueda.value"
+        matSuffix
+        mat-icon-button
+        aria-label="Limpiar"
+        (click)="limpiarFiltro()"
+      >
+        <mat-icon>close</mat-icon>
+      </button>
+    </mat-form-field>
+    <button mat-flat-button color="primary" class="filter-btn" (click)="aplicarFiltro()">
+      Filtrar
+    </button>
+  </div>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="error">{{ error }}</p>
+
+  <div class="list" *ngIf="!loading && !error">
+    <mat-card *ngFor="let c of cargos" class="card" appearance="outlined">
+      <div class="card-body">
+        <div class="card-main">
+          <span class="name">{{ c.nombre }}</span>
+          <span class="sub" *ngIf="c.salarioReferencia">
+            Salario ref.: {{ c.salarioReferencia | number: '1.0-2' }}
+          </span>
+          <span class="sub muted" *ngIf="c.descripcion">{{ c.descripcion }}</span>
+        </div>
+        <span class="chip" [class.off]="!c.activo">{{ c.activo ? 'Activo' : 'Inactivo' }}</span>
+        <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+          <mat-icon>more_vert</mat-icon>
+        </button>
+        <mat-menu #menu="matMenu">
+          <a mat-menu-item [routerLink]="['/rrhh/cargos', c.id]">
+            <mat-icon>edit</mat-icon><span>Editar</span>
+          </a>
+          <button mat-menu-item *ngIf="canEdit" (click)="eliminar(c)">
+            <mat-icon color="warn">delete</mat-icon><span>Eliminar</span>
+          </button>
+        </mat-menu>
+      </div>
+    </mat-card>
+
+    <p *ngIf="cargos.length === 0" class="empty">No hay cargos.</p>
+  </div>
+
+  <a *ngIf="canEdit" class="fab" mat-fab color="primary" routerLink="/rrhh/cargos/nuevo" aria-label="Nuevo cargo">
+    <mat-icon>add</mat-icon>
+  </a>
+</div>

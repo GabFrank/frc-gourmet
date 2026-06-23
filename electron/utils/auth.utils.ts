@@ -65,12 +65,34 @@ export function withRequestUser<T>(user: Usuario, fn: () => T | Promise<T>): T |
 }
 
 /**
+ * Usuario del request HTTP en curso (mode=server), o null si no estamos dentro
+ * de un `withRequestUser(...)` (mode standalone/desktop). Lo usa el
+ * user-tracking (`setEntityUserTracking`) para atribuir created_by/updated_by
+ * al cliente HTTP en vez de al operador global del main process.
+ */
+export function getRequestUser(): Usuario | null {
+  return requestUserContext.getStore() ?? null;
+}
+
+/**
+ * Usuario efectivo de la operación: el del request HTTP (mode=server) si existe,
+ * sino el `getCurrentUser()` global del main process (standalone/desktop).
+ *
+ * Útil para handlers que asignan relaciones de autoría manualmente (ej.
+ * `movimiento.responsable = currentUser`), que NO pasan por
+ * `setEntityUserTracking` y por eso no se beneficiaban del fallback al request.
+ */
+export function getEffectiveUser(getCurrentUser: () => Usuario | null): Usuario | null {
+  return requestUserContext.getStore() ?? getCurrentUser();
+}
+
+/**
  * Devuelve el usuario relevante para autorizacion:
  * - Si estamos dentro de un `withRequestUser(...)` (request HTTP), ese.
  * - Sino, el `getCurrentUser()` global del main process (mode standalone).
  */
 function resolveAuthUser(getCurrentUser: () => Usuario | null): Usuario | null {
-  return requestUserContext.getStore() ?? getCurrentUser();
+  return getEffectiveUser(getCurrentUser);
 }
 
 export async function getUserPermissionCodes(
