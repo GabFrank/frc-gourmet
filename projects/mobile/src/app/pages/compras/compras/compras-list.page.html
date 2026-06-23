@@ -1,0 +1,21 @@
+<div class="crud-page">
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <div class="crud-list" *ngIf="!loading && !error">
+    <mat-card *ngFor="let c of items" class="crud-card" appearance="outlined">
+      <div class="crud-card-body">
+        <div class="crud-card-main">
+          <span class="crud-name">{{ c.proveedor?.nombre || ('Compra #' + c.id) }}</span>
+          <span class="crud-sub">
+            <span *ngIf="c.numeroNota">Nota {{ c.numeroNota }} · </span>
+            <span *ngIf="c.fechaCompra">{{ c.fechaCompra | date: 'dd/MM/yyyy' }} · </span>
+            Total {{ c.total | number: '1.0-2' }}
+          </span>
+        </div>
+        <span class="crud-chip warn">{{ c.estado }}</span>
+      </div>
+    </mat-card>
+    <p *ngIf="items.length === 0" class="crud-empty">No hay compras.</p>
+  </div>
+</div>

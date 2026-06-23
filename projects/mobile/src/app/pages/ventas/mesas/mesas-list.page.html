@@ -1,0 +1,43 @@
+<div class="crud-page">
+  <!-- Filtro por sector (selección discreta, filtra en memoria) -->
+  <div class="mesas-filtros" *ngIf="!loading && !error">
+    <div class="mesas-resumen">
+      <span>{{ ocupadas }}/{{ totalMesas }} ocupadas</span>
+      <button class="mesas-refresh" mat-ripple (click)="recargar()" aria-label="Recargar">
+        <mat-icon>refresh</mat-icon>
+      </button>
+    </div>
+    <div class="mesas-chips">
+      <button class="mesas-chip" mat-ripple [class.sel]="sectorSeleccionado === null"
+              (click)="seleccionarSector(null)">Todos</button>
+      <button class="mesas-chip" mat-ripple *ngFor="let s of sectores"
+              [class.sel]="sectorSeleccionado === s.id"
+              (click)="seleccionarSector(s.id)">{{ s.nombre }}</button>
+    </div>
+  </div>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <div class="crud-list" *ngIf="!loading && !error">
+    <a
+      *ngFor="let m of items"
+      class="crud-card mesa-card"
+      mat-ripple
+      [routerLink]="['/ventas/mesas', m.id]"
+    >
+      <div class="crud-card-body">
+        <div class="crud-card-main">
+          <span class="crud-name">{{ m.nombre }}</span>
+          <span class="crud-sub" *ngIf="m.sectorNombre">{{ m.sectorNombre }}</span>
+          <span class="crud-sub muted" *ngIf="m.capacidad">Cap. {{ m.capacidad }}</span>
+          <span class="crud-sub" *ngIf="m.comandas > 0">{{ m.comandas }} comanda(s)</span>
+        </div>
+        <span class="crud-chip" [class.off]="!m.ocupada">{{ m.estado }}</span>
+        <mat-icon class="crud-chevron">chevron_right</mat-icon>
+      </div>
+    </a>
+
+    <p *ngIf="items.length === 0" class="crud-empty">No hay mesas en este sector.</p>
+  </div>
+</div>

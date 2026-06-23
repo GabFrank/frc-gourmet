@@ -18,12 +18,12 @@ import { OperacionFinanciera } from '../../src/app/database/entities/financiero/
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
 import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
 import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
-import { CajaMayorEstado, TipoMovimiento, GastoEstado, RetiroCajaEstado } from '../../src/app/database/entities/financiero/caja-mayor-enums';
+import { CajaMayorEstado, TipoMovimiento, GastoEstado, GastoDestinoTipo, RetiroCajaEstado } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { TipoOperacionFinanciera, DiferenciaDestinoTipo } from '../../src/app/database/entities/financiero/operaciones-financieras-enums';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { esIngreso, actualizarSaldoCajaMayor } from './caja-mayor-utils';
-import { ensurePermission } from '../utils/auth.utils';
+import { ensurePermission, getEffectiveUser } from '../utils/auth.utils';
 import { getMovimientosBancariosUnificados } from '../utils/movimientos-bancarios';
 
 // Alias local para mantener firma legacy de actualizarSaldo
@@ -580,7 +580,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         fecha: data.fecha || new Date(),
       });
 
-      const currentUser = getCurrentUser();
+      const currentUser = getEffectiveUser(getCurrentUser);
       if (currentUser) {
         movimiento.responsable = currentUser;
       }
@@ -700,7 +700,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         referenciaAnulacion: original,
       });
 
-      const currentUser = getCurrentUser();
+      const currentUser = getEffectiveUser(getCurrentUser);
       if (currentUser) {
         contraMovimiento.responsable = currentUser;
       }
@@ -867,8 +867,41 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     try {
       const { detalles, fuente, cuentaBancariaId, montoCuentaBancaria, cotizacion, ...gastoData } = data;
       const cajaMayorId = gastoData.cajaMayor?.id || gastoData.cajaMayor;
+      const destinoTipo = (gastoData.destinoTipo as GastoDestinoTipo) || GastoDestinoTipo.CAJA_MAYOR;
       const esBanco = fuente === 'CUENTA_BANCARIA';
 
+      // ===== Rama CUENTA_BANCARIA: debita cuenta_bancaria.saldo, sin caja mayor =====
+      if (destinoTipo === GastoDestinoTipo.CUENTA_BANCARIA) {
+        const cuentaBancariaId = gastoData.cuentaBancaria?.id || gastoData.cuentaBancariaId;
+        if (!cuentaBancariaId) throw new Error('cuentaBancariaId requerido para destino CUENTA_BANCARIA');
+        const monto = Number(gastoData.monto);
+        const monedaId = gastoData.moneda?.id || gastoData.monedaId;
+        if (!monedaId) throw new Error('monedaId requerido');
+        if (!(monto > 0)) throw new Error('monto debe ser mayor a 0');
+
+        const gastoBanco = queryRunner.manager.create(Gasto, {
+          ...gastoData,
+          monto,
+          moneda: { id: monedaId },
+          formaPago: null,
+          cuentaBancaria: { id: cuentaBancariaId },
+          destinoTipo: GastoDestinoTipo.CUENTA_BANCARIA,
+          estado: GastoEstado.PAGADO,
+        });
+        await setEntityUserTracking(dataSource, gastoBanco, getCurrentUser()?.id, false);
+        const savedBanco = await queryRunner.manager.save(Gasto, gastoBanco);
+
+        const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
+        const cb = await cbRepo.findOne({ where: { id: cuentaBancariaId } });
+        if (!cb) throw new Error(`CuentaBancaria ${cuentaBancariaId} no encontrada`);
+        cb.saldo = Number(cb.saldo) - monto;
+        await queryRunner.manager.save(CuentaBancaria, cb);
+
+        await queryRunner.commitTransaction();
+        return savedBanco;
+      }
+
+      // ===== Rama CAJA_MAYOR (default): comportamiento histórico =====
       // Calcular monto total desde detalles
       const montoTotal = (detalles || []).reduce((sum: number, d: any) => sum + Number(d.monto), 0);
       // Monto debitado en la moneda de la cuenta (si difiere, viene convertido).
@@ -881,6 +914,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         monto: montoTotal,
         moneda: primerDetalle ? { id: primerDetalle.monedaId } : null,
         formaPago: primerDetalle ? { id: primerDetalle.formaPagoId } : null,
+        destinoTipo: GastoDestinoTipo.CAJA_MAYOR,
         cuentaBancariaId: esBanco ? Number(cuentaBancariaId) : null,
         montoCuentaBancaria: esBanco ? montoBanco : null,
         cotizacion: esBanco && cotizacion ? Number(cotizacion) : null,
@@ -891,7 +925,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
       // 2. Crear detalles. Si es egreso por banco, debita la cuenta y NO genera
       // movimientos de Caja Mayor; si es caja mayor, crea un movimiento por detalle.
-      const currentUser = getCurrentUser();
+      const currentUser = getEffectiveUser(getCurrentUser);
       for (const det of detalles || []) {
         const monedaId = det.monedaId;
         const formaPagoId = det.formaPagoId;
@@ -958,7 +992,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       const gastoRepo = queryRunner.manager.getRepository(Gasto);
       const gasto = await gastoRepo.findOne({
         where: { id },
-        relations: ['cajaMayor', 'moneda', 'formaPago'],
+        relations: ['cajaMayor', 'moneda', 'formaPago', 'cuentaBancaria'],
       });
       if (!gasto) throw new Error(`Gasto ID ${id} not found`);
 
@@ -967,13 +1001,19 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       await setEntityUserTracking(dataSource, gasto, getCurrentUser()?.id, true);
       await queryRunner.manager.save(Gasto, gasto);
 
-      // Si el gasto se pagó desde cuenta bancaria, revertir el débito y salir.
-      if (gasto.cuentaBancariaId) {
-        const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: gasto.cuentaBancariaId } });
-        if (cb) {
-          const montoBanco = Number(gasto.montoCuentaBancaria) > 0 ? Number(gasto.montoCuentaBancaria) : Number(gasto.monto);
-          cb.saldo = Number(cb.saldo) + montoBanco;
-          await queryRunner.manager.save(CuentaBancaria, cb);
+      // Si el gasto se pagó desde cuenta bancaria (vía destinoTipo de #46 o vía
+      // cuentaBancariaId de develop): revertir el débito y salir.
+      const gastoEsBanco =
+        gasto.destinoTipo === GastoDestinoTipo.CUENTA_BANCARIA || !!gasto.cuentaBancariaId;
+      if (gastoEsBanco) {
+        const cbId = gasto.cuentaBancaria?.id || gasto.cuentaBancariaId;
+        if (cbId) {
+          const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: cbId } });
+          if (cb) {
+            const montoBanco = Number(gasto.montoCuentaBancaria) > 0 ? Number(gasto.montoCuentaBancaria) : Number(gasto.monto);
+            cb.saldo = Number(cb.saldo) + montoBanco;
+            await queryRunner.manager.save(CuentaBancaria, cb);
+          }
         }
         await queryRunner.commitTransaction();
         return { success: true };
@@ -1000,7 +1040,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           referenciaAnulacion: movOriginal,
         });
 
-        const currentUser = getCurrentUser();
+        const currentUser = getEffectiveUser(getCurrentUser);
         if (currentUser) {
           contraMovimiento.responsable = currentUser;
         }
@@ -1043,6 +1083,14 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         relations: ['cajaMayor'],
       });
       if (!gasto) throw new Error(`Gasto ID ${gastoId} not found`);
+
+      // La edicion en modo CUENTA_BANCARIA es delicada (cambia montos en
+      // saldo bancario, no en caja mayor). Por ahora exigimos anular + recrear.
+      if (gasto.destinoTipo === GastoDestinoTipo.CUENTA_BANCARIA) {
+        throw new Error(
+          'Los gastos pagados desde cuenta bancaria no se editan: anulá el gasto y creá uno nuevo.',
+        );
+      }
 
       const cajaMayorId = gasto.cajaMayor?.id;
       const movRepo = queryRunner.manager.getRepository(CajaMayorMovimiento);
@@ -1090,7 +1138,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       await queryRunner.manager.save(Gasto, gasto);
 
       // 5. Crear nuevos detalles y movimientos (o débito bancario)
-      const currentUser = getCurrentUser();
+      const currentUser = getEffectiveUser(getCurrentUser);
       for (const det of detalles || []) {
         const detalle = queryRunner.manager.create(GastoDetalle, {
           gasto: gasto,
@@ -1301,7 +1349,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       retiro.cajaMayor = { id: cajaMayorId } as any;
       retiro.estado = RetiroCajaEstado.INGRESADO;
       retiro.fechaIngreso = new Date();
-      const currentUser = getCurrentUser();
+      const currentUser = getEffectiveUser(getCurrentUser);
       if (currentUser) {
         retiro.responsableIngreso = currentUser;
       }
@@ -1491,7 +1539,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
       if (destinoTipo === 'CAJA_MAYOR') {
         if (!cajaMayorId) throw new Error('cajaMayorId requerido para destino CAJA_MAYOR');
-        const currentUser = getCurrentUser();
+        const currentUser = getEffectiveUser(getCurrentUser);
         const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
           cajaMayor: { id: cajaMayorId },
           tipoMovimiento: TipoMovimiento.INGRESO_ENTRADA_VARIA,
@@ -1562,7 +1610,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
             entradaVariaId: id,
             referenciaAnulacion: movOriginal,
           });
-          const currentUser = getCurrentUser();
+          const currentUser = getEffectiveUser(getCurrentUser);
           if (currentUser) contra.responsable = currentUser;
           await setEntityUserTracking(dataSource, contra, currentUser?.id, false);
           await queryRunner.manager.save(CajaMayorMovimiento, contra);
@@ -1736,7 +1784,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     await queryRunner.startTransaction();
     try {
       const tipoOp = data.tipoOperacion as TipoOperacionFinanciera;
-      const currentUser = getCurrentUser();
+      const currentUser = getEffectiveUser(getCurrentUser);
 
       const op = queryRunner.manager.create(OperacionFinanciera, {
         tipoOperacion: tipoOp,
@@ -1928,7 +1976,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      await anularOperacionFinancieraTx(queryRunner, id, motivo, getCurrentUser());
+      await anularOperacionFinancieraTx(queryRunner, id, motivo, getEffectiveUser(getCurrentUser));
 
       await queryRunner.commitTransaction();
       return { success: true };

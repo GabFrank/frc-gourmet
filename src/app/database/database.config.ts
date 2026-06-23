@@ -199,6 +199,7 @@ import { AddBalanzaConfigToPdvConfig1778900000000 } from './migrations/177890000
 import { AddSistemaDocumentos1779000000000 } from './migrations/1779000000000-AddSistemaDocumentos';
 import { AddRequiereComandaToProducto1779100000000 } from './migrations/1779100000000-AddRequiereComandaToProducto';
 import { AddPrinterTicketToDispositivo1779200000000 } from './migrations/1779200000000-AddPrinterTicketToDispositivo';
+import { AddDestinoToGasto1779300000000 } from './migrations/1779300000000-AddDestinoToGasto';
 import { AddCuentaBancariaToLiquidacionSueldo1779400000000 } from './migrations/1779400000000-AddCuentaBancariaToLiquidacionSueldo';
 import { AddConveniosCobroConsolidado1779500000000 } from './migrations/1779500000000-AddConveniosCobroConsolidado';
 import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVacacionVentas';
@@ -500,6 +501,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddSistemaDocumentos1779000000000,
     AddRequiereComandaToProducto1779100000000,
     AddPrinterTicketToDispositivo1779200000000,
+    AddDestinoToGasto1779300000000,
     AddCuentaBancariaToLiquidacionSueldo1779400000000,
     AddConveniosCobroConsolidado1779500000000,
     AddVacacionVentas1779600000000,

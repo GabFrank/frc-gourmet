@@ -1,0 +1,49 @@
+:host {
+  display: block;
+  height: 100dvh;
+}
+
+.edit {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: var(--surface-variant);
+}
+
+.edit-bar {
+  padding-top: env(safe-area-inset-top);
+  height: calc(56px + env(safe-area-inset-top));
+
+  .edit-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+  .spacer {
+    flex: 1 1 auto;
+  }
+}
+
+.form {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px 16px max(20px, env(safe-area-inset-bottom));
+  max-width: 600px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+mat-form-field {
+  width: 100%;
+}
+
+mat-slide-toggle {
+  margin: 8px 4px;
+}
+
+.save-btn {
+  margin-top: 16px;
+  height: 48px;
+}

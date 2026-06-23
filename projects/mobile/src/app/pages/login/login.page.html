@@ -1,0 +1,23 @@
+<main class="login">
+  <form class="login-card" [formGroup]="form" (ngSubmit)="submit()">
+    <h1 class="brand">FRC Gourmet</h1>
+    <p class="subtitle">Iniciar sesión</p>
+
+    <label class="field">
+      <span class="field-label">Usuario</span>
+      <input type="text" formControlName="nickname" autocomplete="username"
+             autocapitalize="none" autocorrect="off" inputmode="text" />
+    </label>
+
+    <label class="field">
+      <span class="field-label">Contraseña</span>
+      <input type="password" formControlName="password" autocomplete="current-password" />
+    </label>
+
+    <p class="error" *ngIf="error">{{ error }}</p>
+
+    <button type="submit" class="submit" [disabled]="loading">
+      {{ loading ? 'Ingresando…' : 'Ingresar' }}
+    </button>
+  </form>
+</main>

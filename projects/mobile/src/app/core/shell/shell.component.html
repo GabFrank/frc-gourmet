@@ -1,0 +1,55 @@
+<div class="shell" [class.is-handset]="isHandset$ | async">
+  <mat-toolbar color="primary" class="topbar">
+    <span class="title">{{ pageTitle }}</span>
+    <span class="spacer"></span>
+    <button mat-icon-button (click)="toggleTheme()" aria-label="Cambiar tema">
+      <mat-icon>{{ (dark$ | async) ? 'light_mode' : 'dark_mode' }}</mat-icon>
+    </button>
+    <button mat-icon-button [matMenuTriggerFor]="userMenu" aria-label="Cuenta">
+      <mat-icon>account_circle</mat-icon>
+    </button>
+    <mat-menu #userMenu="matMenu">
+      <div class="menu-user" *ngIf="user">{{ user.nickname }}</div>
+      <button mat-menu-item (click)="logout()">
+        <mat-icon>logout</mat-icon>
+        <span>Cerrar sesión</span>
+      </button>
+    </mat-menu>
+  </mat-toolbar>
+
+  <div class="layout">
+    <!-- Nav rail (tablet / desktop) -->
+    <nav class="rail" *ngIf="(isHandset$ | async) === false">
+      <a
+        *ngFor="let item of nav"
+        class="rail-item"
+        [routerLink]="item.path"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: !!item.exact }"
+      >
+        <mat-icon>{{ item.icon }}</mat-icon>
+        <span class="rail-label">{{ item.label }}</span>
+      </a>
+    </nav>
+
+    <main class="content">
+      <router-outlet></router-outlet>
+    </main>
+  </div>
+
+  <!-- Bottom nav (teléfono) -->
+  <nav class="bottomnav" *ngIf="isHandset$ | async">
+    <a
+      *ngFor="let item of nav"
+      class="bottomnav-item"
+      [routerLink]="item.path"
+      routerLinkActive="active"
+      [routerLinkActiveOptions]="{ exact: !!item.exact }"
+    >
+      <mat-icon>{{ item.icon }}</mat-icon>
+      <span class="bottomnav-label">{{ item.label }}</span>
+    </a>
+  </nav>
+
+  <app-offline-banner></app-offline-banner>
+</div>

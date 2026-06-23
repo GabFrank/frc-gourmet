@@ -1,6 +1,6 @@
 import { Column, Entity, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { BaseModel } from '../base.entity';
-import { GastoEstado, GastoFrecuencia } from './caja-mayor-enums';
+import { GastoDestinoTipo, GastoEstado, GastoFrecuencia } from './caja-mayor-enums';
 import { TipoBoleta } from '../compras/tipo-boleta.enum';
 
 @Entity('gastos')
@@ -84,4 +84,21 @@ export class Gasto extends BaseModel {
     default: GastoEstado.PENDIENTE
   })
   estado!: GastoEstado;
+
+  /**
+   * Hacia dónde sale el dinero del gasto. Default CAJA_MAYOR mantiene el
+   * comportamiento histórico (movimiento en caja mayor). CUENTA_BANCARIA
+   * debita directo `cuenta_bancaria.saldo` y NO genera movimiento de caja.
+   */
+  @Column({
+    name: 'destino_tipo',
+    type: 'varchar',
+    enum: GastoDestinoTipo,
+    default: GastoDestinoTipo.CAJA_MAYOR,
+  })
+  destinoTipo!: GastoDestinoTipo;
+
+  @ManyToOne('CuentaBancaria', { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'cuenta_bancaria_id' })
+  cuentaBancaria?: any;
 }

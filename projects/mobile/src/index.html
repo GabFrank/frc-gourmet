@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>FRC Gourmet</title>
+  <base href="/">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f44336">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500&display=swap" rel="stylesheet">
+  <style>
+    /* Bootstrap loader: visible mientras Angular descarga el bundle. Angular
+       reemplaza <app-root> entero al hidratar, asi que esto desaparece solo.
+       Si el JS no carga (sin red, 404 de bundle, etc.), el usuario ve esto
+       en lugar de una pantalla completamente en blanco. */
+    html, body { margin: 0; height: 100%; background: #fafafa; color: #333;
+      font-family: Roboto, system-ui, -apple-system, sans-serif; }
+    .boot {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px;
+    }
+    .boot__brand { font-weight: 600; font-size: 1.1rem; color: #f44336; }
+    .boot__spinner {
+      width: 32px; height: 32px; border-radius: 50%;
+      border: 3px solid rgba(244, 67, 54, 0.2);
+      border-top-color: #f44336;
+      animation: boot-spin 0.9s linear infinite;
+    }
+    .boot__hint { font-size: 0.85rem; color: #888; max-width: 280px; text-align: center; }
+    @keyframes boot-spin { to { transform: rotate(360deg); } }
+    @media (prefers-color-scheme: dark) {
+      html, body { background: #303030; color: #e0e0e0; }
+      .boot__hint { color: #aaa; }
+    }
+  </style>
+</head>
+<body class="mat-typography">
+  <app-root>
+    <div class="boot" id="bootLoader">
+      <div class="boot__brand">FRC Gourmet</div>
+      <div class="boot__spinner"></div>
+      <div class="boot__hint" id="bootHint">Cargando…</div>
+    </div>
+  </app-root>
+  <script>
+    // Auto-recovery: la PWA no debería quedar "infinitamente en loading".
+    // Dos escudos:
+    //  1) Timeout del bootloader: si Angular no reemplazó <app-root> en ~12s,
+    //     ofrecemos al usuario recargar con cache-bust (típico cuando el
+    //     navegador tiene cacheado un index.html viejo que apunta a bundles
+    //     con hashes que ya no existen tras un rebuild).
+    //  2) ChunkLoadError: si Angular booteó pero al navegar a una ruta el
+    //     bundle lazy 404ea (mismo síntoma), recargamos solos con cache-bust.
+    //     Guard via sessionStorage para no entrar en loop si el server está
+    //     realmente caído.
+    (function () {
+      var KEY = 'frc_mobile_chunk_reload';
+      function cacheBust() {
+        var u = new URL(location.href);
+        u.searchParams.set('_', String(Date.now()));
+        location.href = u.toString();
+      }
+      // 1) Timeout
+      setTimeout(function () {
+        var loader = document.getElementById('bootLoader');
+        if (!loader || !document.body.contains(loader)) return; // Angular hidrató: ok
+        loader.innerHTML =
+          '<div class="boot__brand">FRC Gourmet</div>' +
+          '<div class="boot__hint">No se pudo cargar la app.<br>Es posible que tu navegador tenga una versión vieja en caché.</div>' +
+          '<button id="bootReload" style="margin-top:6px;padding:10px 18px;background:#f44336;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Recargar limpiando caché</button>';
+        var btn = document.getElementById('bootReload');
+        if (btn) btn.addEventListener('click', cacheBust);
+      }, 12000);
+      // 2) ChunkLoadError
+      window.addEventListener('error', function (e) {
+        var msg = (e && (e.message || (e.error && e.error.message))) || '';
+        if (/Loading chunk\s+\S+\s+failed|ChunkLoadError/i.test(msg)) {
+          if (!sessionStorage.getItem(KEY)) {
+            sessionStorage.setItem(KEY, '1');
+            cacheBust();
+          }
+        }
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        var msg = (e && e.reason && (e.reason.message || String(e.reason))) || '';
+        if (/Loading chunk\s+\S+\s+failed|ChunkLoadError/i.test(msg)) {
+          if (!sessionStorage.getItem(KEY)) {
+            sessionStorage.setItem(KEY, '1');
+            cacheBust();
+          }
+        }
+      });
+      // Al booteo OK, limpiamos el flag para que un siguiente fallo real
+      // pueda auto-recovery también.
+      window.addEventListener('load', function () {
+        setTimeout(function () { sessionStorage.removeItem(KEY); }, 5000);
+      });
+    })();
+  </script>
+</body>
+</html>
