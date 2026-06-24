@@ -189,8 +189,10 @@ export class TomarPedidoPage implements OnInit {
       await this.agregarVariacion(p);
       return;
     }
-    if (!p.presentacionId || !p.precioId) {
-      this.snack.open('El producto no tiene precio/presentación configurado', 'CERRAR', { duration: 4000 });
+    // El precio es obligatorio; la presentación es opcional (los elaborados sin
+    // variación suelen no tener Presentacion — su precio cuelga de la receta).
+    if (!p.precioId) {
+      this.snack.open('El producto no tiene un precio configurado', 'CERRAR', { duration: 4000 });
       return;
     }
 
@@ -221,7 +223,7 @@ export class TomarPedidoPage implements OnInit {
       const item: any = await firstValueFrom(
         this.repo.createVentaItem({
           producto: { id: p.id },
-          presentacion: { id: p.presentacionId },
+          ...(p.presentacionId ? { presentacion: { id: p.presentacionId } } : {}),
           cantidad: sel.cantidad,
           precioVentaUnitario: p.precio,
           precioCostoUnitario: p.costo,
