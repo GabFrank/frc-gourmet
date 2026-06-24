@@ -16,9 +16,12 @@ import {
   MesaDestino,
 } from './transferir-mesa-dialog.component';
 import { ItemInfoDialogComponent } from './item-info-dialog.component';
+import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
 
 interface ItemVM {
   id: number;
+  productoId?: number;
+  precioBase: number;
   descripcion: string;
   detalle?: string;
   cantidad: number;
@@ -163,6 +166,8 @@ export class MesaDetallePage implements OnInit {
       (Number(i.descuentoUnitario) || 0);
     return {
       id: i.id,
+      productoId: i.producto?.id,
+      precioBase: Number(i.precioVentaUnitario) || 0,
       descripcion: i.producto?.nombre || i.ensambladoDescripcion || 'Item',
       detalle: i.presentacion?.nombre,
       cantidad,
@@ -227,6 +232,104 @@ export class MesaDetallePage implements OnInit {
       width: '340px',
       maxHeight: '85vh',
     });
+  }
+
+  async editar(item: ItemVM): Promise<void> {
+    if (item.cancelado || this.quitando) return;
+    // Las variaciones (con sabores) no se editan acá — su personalización es por sabor.
+    if (item.sabores.length > 0) {
+      this.snack.open('Las variaciones no se editan desde acá todavía', 'CERRAR', { duration: 3000 });
+      return;
+    }
+    this.quitando = true;
+    let adicRows: any[] = [];
+    let obsRows: any[] = [];
+    try {
+      const [adic, obs, prod] = await Promise.all([
+        firstValueFrom(this.repo.getVentaItemAdicionales(item.id).pipe(catchError(() => of([] as any[])))),
+        firstValueFrom(this.repo.getObservacionesByVentaItem(item.id).pipe(catchError(() => of([] as any[])))),
+        item.productoId
+          ? firstValueFrom(this.repo.getProducto(item.productoId).pipe(catchError(() => of(null as any))))
+          : Promise.resolve(null),
+      ]);
+      adicRows = (adic as any[]) || [];
+      obsRows = (obs as any[]) || [];
+      const recetaId = (prod as any)?.receta?.id ?? null;
+      const adicionalesPreSel = adicRows
+        .filter((a) => a.activo !== false && a.adicional)
+        .map((a) => a.adicional.id);
+      const observacionesPreSel = obsRows
+        .filter((o) => o.activo !== false && o.observacion)
+        .map((o) => o.observacion.id);
+      const observacionLibreInicial =
+        obsRows.find((o) => o.observacionLibre && !o.observacion)?.observacionLibre || '';
+      this.quitando = false;
+
+      const res = (await firstValueFrom(
+        this.dialog
+          .open(AgregarItemDialogComponent, {
+            data: {
+              productoId: item.productoId,
+              nombre: item.descripcion,
+              precioUnitario: item.precioBase,
+              recetaId,
+              modoEdicion: true,
+              cantidadInicial: item.cantidad,
+              adicionalesPreSel,
+              observacionesPreSel,
+              observacionLibreInicial,
+            },
+            width: '340px',
+            maxHeight: '85vh',
+          })
+          .afterClosed(),
+      )) as AgregarItemResult | 'QUITAR' | undefined;
+
+      if (!res) return;
+      if (res === 'QUITAR') {
+        await this.quitar(item);
+        return;
+      }
+
+      this.quitando = true;
+      // Reconciliar: borrar adicionales/observaciones actuales y recrear según la selección.
+      for (const a of adicRows) await firstValueFrom(this.repo.deleteVentaItemAdicional(a.id));
+      for (const o of obsRows) await firstValueFrom(this.repo.deleteVentaItemObservacion(o.id));
+      for (const a of res.adicionales) {
+        await firstValueFrom(
+          this.repo.createVentaItemAdicional({
+            ventaItem: { id: item.id },
+            adicional: { id: a.id },
+            precioCobrado: a.precio,
+            cantidad: 1,
+          }),
+        );
+      }
+      for (const oid of res.observaciones) {
+        await firstValueFrom(
+          this.repo.createVentaItemObservacion({ ventaItem: { id: item.id }, observacion: { id: oid } }),
+        );
+      }
+      if (res.observacionLibre) {
+        await firstValueFrom(
+          this.repo.createVentaItemObservacion({ ventaItem: { id: item.id }, observacionLibre: res.observacionLibre }),
+        );
+      }
+      await firstValueFrom(
+        this.repo.updateVentaItem(item.id, {
+          cantidad: res.cantidad,
+          precioAdicionales: res.precioAdicionalTotal,
+          modificado: true,
+          horaModificacion: new Date(),
+        } as any),
+      );
+      this.snack.open('Ítem actualizado', undefined, { duration: 1500 });
+      if (this.ventaId) this.cargarCuenta(this.ventaId);
+    } catch {
+      this.snack.open('No se pudo editar el ítem', 'CERRAR', { duration: 4000 });
+    } finally {
+      this.quitando = false;
+    }
   }
 
   async quitar(item: ItemVM): Promise<void> {

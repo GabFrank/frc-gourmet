@@ -44,7 +44,16 @@
               <mat-icon>info_outline</mat-icon>
             </button>
             <button
-              *ngIf="!it.cancelado"
+              *ngIf="!it.cancelado && it.sabores.length === 0"
+              mat-icon-button
+              [disabled]="quitando"
+              (click)="editar(it)"
+              aria-label="Editar ítem"
+            >
+              <mat-icon>edit</mat-icon>
+            </button>
+            <button
+              *ngIf="!it.cancelado && it.sabores.length > 0"
               mat-icon-button
               class="mesa-item-quitar"
               [disabled]="quitando"
