@@ -20,7 +20,7 @@ export class AddVacacionVentas1779600000000 implements MigrationInterface {
       : '';
 
     await queryRunner.query(`
-      CREATE TABLE "vacacion_ventas" (
+      CREATE TABLE IF NOT EXISTS "vacacion_ventas" (
         "id" ${pk},
         "vacacion_id" integer NOT NULL,
         "dias" integer NOT NULL,
@@ -35,7 +35,7 @@ export class AddVacacionVentas1779600000000 implements MigrationInterface {
         "updated_by" integer NULL${fk}
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_vacacion_ventas_vacacion" ON "vacacion_ventas" ("vacacion_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_vacacion_ventas_vacacion" ON "vacacion_ventas" ("vacacion_id")`);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

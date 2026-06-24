@@ -72,14 +72,17 @@ function migrateLegacyUpdateConfig(): void {
 
 function readUpdateConfig(): UpdateConfig {
   migrateLegacyUpdateConfig();
+  // El canal del BINARIO en ejecución manda para prereleases: un .exe alpha/beta
+  // SIEMPRE sigue su propio canal. Antes el canal salía del default 'stable' de
+  // app-settings (que existe apenas se guarda cualquier setting), así que un .exe
+  // alpha quedaba en canal stable y recibía el aviso de update stable. Bug.
+  const inferred = inferChannelFromVersion(app.getVersion());
   try {
     const settings = readAppSettings(app.getPath('userData'));
     const persisted = settings.update;
-    // Si nunca se guardo channel y el JSON no existia, inferir de la version actual.
-    const settingsExist = fs.existsSync(path.join(app.getPath('userData'), 'app-settings.json'));
-    const channel: UpdateChannel = settingsExist
-      ? persisted.channel
-      : inferChannelFromVersion(app.getVersion());
+    // Prerelease (alpha/beta): forzar el canal del binario.
+    // Stable: respetar la elección del usuario (puede optar a beta/alpha por UI).
+    const channel: UpdateChannel = inferred !== 'stable' ? inferred : persisted.channel;
     return {
       channel,
       autoCheck: persisted.autoCheck,
@@ -87,7 +90,7 @@ function readUpdateConfig(): UpdateConfig {
     };
   } catch (e) {
     console.warn('[auto-updater] No se pudo leer settings:', e);
-    return { ...DEFAULT_CONFIG, channel: inferChannelFromVersion(app.getVersion()) };
+    return { ...DEFAULT_CONFIG, channel: inferred };
   }
 }
 
@@ -115,7 +118,10 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
 
   const cfg = readUpdateConfig();
   autoUpdater.channel = toUpdaterChannel(cfg.channel);
-  autoUpdater.autoDownload = true;
+  // autoDownload=false: descargamos manualmente SOLO si el canal de la versión
+  // ofrecida coincide con el suscripto (guard contra cross-channel del provider
+  // de GitHub, que con allowPrerelease puede colar un stable más nuevo por semver).
+  autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = cfg.channel !== 'stable';
   autoUpdater.logger = console;
@@ -141,8 +147,24 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
   });
 
   autoUpdater.on('update-available', (info: UpdateInfo) => {
+    // Guard de canal: ignorar versiones de un canal distinto al suscripto.
+    // Ej: estás en alpha y el provider ofrece un stable más nuevo → no actualizar.
+    const suscripto = readUpdateConfig().channel;
+    const ofrecido = inferChannelFromVersion(info.version);
+    if (ofrecido !== suscripto) {
+      console.log(
+        `[auto-updater] Ignorando update ${info.version}: canal '${ofrecido}' ≠ suscripto '${suscripto}'.`,
+      );
+      sendStatus(mainWindow, 'not-available', info);
+      return;
+    }
     console.log('[auto-updater] Update disponible:', info.version);
     sendStatus(mainWindow, 'available', info);
+    // Descarga manual (autoDownload=false). update-downloaded dispara el diálogo.
+    autoUpdater.downloadUpdate().catch((e: Error) => {
+      console.error('[auto-updater] downloadUpdate falló:', e);
+      sendStatus(mainWindow, 'error', { message: e.message });
+    });
   });
 
   autoUpdater.on('update-not-available', (info: UpdateInfo) => {

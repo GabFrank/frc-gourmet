@@ -32,7 +32,7 @@ export class AddSistemaDocumentos1779000000000 implements MigrationInterface {
     // ── 1. sectores_impresoras (M2M Sector↔Printer + rol) ────────────────
     if (isPg) {
       await queryRunner.query(`
-        CREATE TABLE "sectores_impresoras" (
+        CREATE TABLE IF NOT EXISTS "sectores_impresoras" (
           "id" SERIAL PRIMARY KEY,
           "sector_id" integer NOT NULL,
           "printer_id" integer NOT NULL,
@@ -51,11 +51,11 @@ export class AddSistemaDocumentos1779000000000 implements MigrationInterface {
             FOREIGN KEY ("printer_id") REFERENCES "printers"("id") ON DELETE CASCADE
         )
       `);
-      await queryRunner.query(`CREATE INDEX "IDX_sectores_impresoras_sector" ON "sectores_impresoras" ("sector_id")`);
-      await queryRunner.query(`CREATE INDEX "IDX_sectores_impresoras_printer" ON "sectores_impresoras" ("printer_id")`);
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_sectores_impresoras_sector" ON "sectores_impresoras" ("sector_id")`);
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_sectores_impresoras_printer" ON "sectores_impresoras" ("printer_id")`);
     } else {
       await queryRunner.query(`
-        CREATE TABLE "sectores_impresoras" (
+        CREATE TABLE IF NOT EXISTS "sectores_impresoras" (
           "id" integer PRIMARY KEY AUTOINCREMENT NOT NULL,
           "sector_id" integer NOT NULL,
           "printer_id" integer NOT NULL,
@@ -70,14 +70,14 @@ export class AddSistemaDocumentos1779000000000 implements MigrationInterface {
             UNIQUE ("sector_id", "printer_id", "rol")
         )
       `);
-      await queryRunner.query(`CREATE INDEX "IDX_sectores_impresoras_sector" ON "sectores_impresoras" ("sector_id")`);
-      await queryRunner.query(`CREATE INDEX "IDX_sectores_impresoras_printer" ON "sectores_impresoras" ("printer_id")`);
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_sectores_impresoras_sector" ON "sectores_impresoras" ("sector_id")`);
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_sectores_impresoras_printer" ON "sectores_impresoras" ("printer_id")`);
     }
 
     // ── 2. producto_sectores (M2M Producto↔Sector + prioridad) ───────────
     if (isPg) {
       await queryRunner.query(`
-        CREATE TABLE "producto_sectores" (
+        CREATE TABLE IF NOT EXISTS "producto_sectores" (
           "id" SERIAL PRIMARY KEY,
           "producto_id" integer NOT NULL,
           "sector_id" integer NOT NULL,
@@ -95,11 +95,11 @@ export class AddSistemaDocumentos1779000000000 implements MigrationInterface {
             FOREIGN KEY ("sector_id") REFERENCES "sectores"("id") ON DELETE CASCADE
         )
       `);
-      await queryRunner.query(`CREATE INDEX "IDX_producto_sectores_producto" ON "producto_sectores" ("producto_id")`);
-      await queryRunner.query(`CREATE INDEX "IDX_producto_sectores_sector" ON "producto_sectores" ("sector_id")`);
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_producto_sectores_producto" ON "producto_sectores" ("producto_id")`);
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_producto_sectores_sector" ON "producto_sectores" ("sector_id")`);
     } else {
       await queryRunner.query(`
-        CREATE TABLE "producto_sectores" (
+        CREATE TABLE IF NOT EXISTS "producto_sectores" (
           "id" integer PRIMARY KEY AUTOINCREMENT NOT NULL,
           "producto_id" integer NOT NULL,
           "sector_id" integer NOT NULL,
@@ -113,8 +113,8 @@ export class AddSistemaDocumentos1779000000000 implements MigrationInterface {
             UNIQUE ("producto_id", "sector_id")
         )
       `);
-      await queryRunner.query(`CREATE INDEX "IDX_producto_sectores_producto" ON "producto_sectores" ("producto_id")`);
-      await queryRunner.query(`CREATE INDEX "IDX_producto_sectores_sector" ON "producto_sectores" ("sector_id")`);
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_producto_sectores_producto" ON "producto_sectores" ("producto_id")`);
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_producto_sectores_sector" ON "producto_sectores" ("sector_id")`);
     }
 
     // ── 3. venta_items + impresión ────────────────────────────────────────
