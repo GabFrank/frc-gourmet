@@ -17,11 +17,11 @@ export class AddPrinterTicketToDispositivo1779200000000 implements MigrationInte
   name = 'AddPrinterTicketToDispositivo1779200000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    const isPg = queryRunner.connection.options.type === 'postgres';
-    if (isPg) {
+    try {
       await queryRunner.query(`ALTER TABLE "dispositivos" ADD COLUMN "printer_ticket_id" integer NULL`);
-    } else {
-      await queryRunner.query(`ALTER TABLE "dispositivos" ADD COLUMN "printer_ticket_id" integer NULL`);
+    } catch (e: any) {
+      // Idempotente: si la columna ya existe (DB con drift de synchronize), ignorar.
+      if (!/duplicate column|already exists/i.test(e?.message || '')) throw e;
     }
   }
 

@@ -11,7 +11,7 @@ export class AddKdsPantalla1780100000000 implements MigrationInterface {
     const isPg = queryRunner.connection.options.type === 'postgres';
     if (isPg) {
       await queryRunner.query(`
-        CREATE TABLE "kds_pantallas" (
+        CREATE TABLE IF NOT EXISTS "kds_pantallas" (
           "id" SERIAL PRIMARY KEY,
           "nombre" varchar(100) NOT NULL,
           "sectores" text NULL,
@@ -28,7 +28,7 @@ export class AddKdsPantalla1780100000000 implements MigrationInterface {
       `);
     } else {
       await queryRunner.query(`
-        CREATE TABLE "kds_pantallas" (
+        CREATE TABLE IF NOT EXISTS "kds_pantallas" (
           "id" integer PRIMARY KEY AUTOINCREMENT NOT NULL,
           "nombre" varchar(100) NOT NULL,
           "sectores" text NULL,
