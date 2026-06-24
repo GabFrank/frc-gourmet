@@ -1,5 +1,23 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
+/** Chequeo de columna existente, independiente del driver y del locale. */
+async function hasColumn(
+  queryRunner: QueryRunner,
+  table: string,
+  column: string,
+  isPg: boolean,
+): Promise<boolean> {
+  if (isPg) {
+    const rows = await queryRunner.query(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2`,
+      [table, column],
+    );
+    return rows.length > 0;
+  }
+  const rows = await queryRunner.query(`PRAGMA table_info("${table}")`);
+  return Array.isArray(rows) && rows.some((r: any) => r.name === column);
+}
+
 /**
  * Agrega `printer_ticket_id` a `dispositivos` para que cada PdV pueda
  * tener asignada una impresora local específica para imprimir tickets de
@@ -17,12 +35,9 @@ export class AddPrinterTicketToDispositivo1779200000000 implements MigrationInte
   name = 'AddPrinterTicketToDispositivo1779200000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    try {
-      await queryRunner.query(`ALTER TABLE "dispositivos" ADD COLUMN "printer_ticket_id" integer NULL`);
-    } catch (e: any) {
-      // Idempotente: si la columna ya existe (DB con drift de synchronize), ignorar.
-      if (!/duplicate column|already exists/i.test(e?.message || '')) throw e;
-    }
+    const isPg = queryRunner.connection.options.type === 'postgres';
+    if (await hasColumn(queryRunner, 'dispositivos', 'printer_ticket_id', isPg)) return;
+    await queryRunner.query(`ALTER TABLE "dispositivos" ADD COLUMN "printer_ticket_id" integer NULL`);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

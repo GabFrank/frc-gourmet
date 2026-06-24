@@ -1,5 +1,23 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
+/** Chequeo de columna existente, independiente del driver y del locale. */
+async function hasColumn(
+  queryRunner: QueryRunner,
+  table: string,
+  column: string,
+  isPg: boolean,
+): Promise<boolean> {
+  if (isPg) {
+    const rows = await queryRunner.query(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2`,
+      [table, column],
+    );
+    return rows.length > 0;
+  }
+  const rows = await queryRunner.query(`PRAGMA table_info("${table}")`);
+  return Array.isArray(rows) && rows.some((r: any) => r.name === column);
+}
+
 /**
  * KDS Fase 0 — habilita `comanda_items` como unidad de pantalla de cocina.
  *
@@ -19,16 +37,12 @@ export class AddKdsToComandaItem1780000000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const isPg = queryRunner.connection.options.type === 'postgres';
     const tsType = isPg ? 'TIMESTAMP' : 'datetime';
-    // Idempotente: ignorar si la columna ya existe (DB con drift de synchronize).
-    const addCol = async (sql: string) => {
-      try {
-        await queryRunner.query(sql);
-      } catch (e: any) {
-        if (!/duplicate column|already exists/i.test(e?.message || '')) throw e;
-      }
+    const addCol = async (col: string, type: string) => {
+      if (await hasColumn(queryRunner, 'comanda_items', col, isPg)) return;
+      await queryRunner.query(`ALTER TABLE "comanda_items" ADD COLUMN "${col}" ${type}`);
     };
-    await addCol(`ALTER TABLE "comanda_items" ADD COLUMN "sector_id" integer`);
-    await addCol(`ALTER TABLE "comanda_items" ADD COLUMN "fecha_en_preparacion" ${tsType}`);
+    await addCol('sector_id', 'integer');
+    await addCol('fecha_en_preparacion', tsType);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
