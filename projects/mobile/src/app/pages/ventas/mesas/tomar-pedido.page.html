@@ -14,13 +14,20 @@
     <div class="pedido-buscar">
       <mat-form-field appearance="outline" class="pedido-search-field">
         <mat-label>Buscar producto</mat-label>
-        <input matInput [(ngModel)]="termino" (keyup.enter)="buscar()" placeholder="Nombre del producto" />
+        <input
+          matInput
+          class="input-upper"
+          [ngModel]="termino"
+          (ngModelChange)="onTermino($event)"
+          (keyup.enter)="buscar()"
+          placeholder="NOMBRE DEL PRODUCTO"
+        />
         <button matSuffix mat-icon-button (click)="buscar()" aria-label="Buscar"><mat-icon>search</mat-icon></button>
       </mat-form-field>
     </div>
 
-    <!-- Resultados -->
-    <div class="crud-list">
+    <!-- Resultados de búsqueda -->
+    <div class="crud-list" *ngIf="termino">
       <button
         *ngFor="let p of resultados"
         class="crud-card pedido-prod"
@@ -37,8 +44,65 @@
           <mat-icon class="pedido-add" *ngIf="p.soportado">add_circle</mat-icon>
         </div>
       </button>
-      <p *ngIf="resultados.length === 0" class="crud-empty">Buscá un producto para agregar.</p>
+      <p *ngIf="resultados.length === 0 && !buscando" class="crud-empty">Sin resultados.</p>
     </div>
+
+    <!-- Accesos directos (cuando no hay búsqueda activa) -->
+    <ng-container *ngIf="!termino">
+      <!-- Drill-in: productos de un atajo con varios -->
+      <ng-container *ngIf="atajoProductos.length">
+        <button class="mesas-chip sel atajo-volver" (click)="volverAtajos()">
+          <mat-icon>arrow_back</mat-icon> Atajos
+        </button>
+        <div class="crud-list">
+          <button
+            *ngFor="let p of atajoProductos"
+            class="crud-card pedido-prod"
+            mat-ripple
+            [disabled]="!p.soportado || guardando"
+            (click)="agregar(p)"
+          >
+            <div class="crud-card-body">
+              <div class="crud-card-main">
+                <span class="crud-name">{{ p.nombre }}</span>
+                <span class="crud-sub">{{ p.precio | number:'1.0-2' }}</span>
+              </div>
+              <mat-icon class="pedido-add" *ngIf="p.soportado">add_circle</mat-icon>
+            </div>
+          </button>
+        </div>
+      </ng-container>
+
+      <!-- Grilla de atajos -->
+      <ng-container *ngIf="!atajoProductos.length && grupos.length">
+        <div class="mesas-chips">
+          <button
+            class="mesas-chip"
+            *ngFor="let g of grupos"
+            [class.sel]="grupoSel?.id === g.id"
+            (click)="seleccionarGrupo(g)"
+          >
+            {{ g.nombre }}
+          </button>
+        </div>
+        <div class="atajos-grid">
+          <button
+            *ngFor="let it of (grupoSel?.items || [])"
+            class="atajo-btn"
+            [style.background]="it.colorFondo || null"
+            [style.color]="it.colorTexto || null"
+            [disabled]="guardando"
+            (click)="tocarAtajo(it)"
+          >
+            {{ it.nombre }}
+          </button>
+        </div>
+      </ng-container>
+
+      <p *ngIf="!atajoProductos.length && grupos.length === 0" class="crud-empty">
+        Buscá un producto, o configurá accesos directos en el PdV.
+      </p>
+    </ng-container>
   </div>
 
   <!-- Resumen del pedido recién agregado -->

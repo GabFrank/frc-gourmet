@@ -38,6 +38,19 @@ interface PedidoLinea {
   precio: number;
 }
 
+interface AtajoItemVM {
+  id: number;
+  nombre: string;
+  colorFondo?: string;
+  colorTexto?: string;
+}
+
+interface AtajoGrupoVM {
+  id: number;
+  nombre: string;
+  items: AtajoItemVM[];
+}
+
 /**
  * M2 — Tomar pedido: abrir/usar la venta ABIERTA de la mesa y agregar productos
  * SIMPLES (RETAIL / ELABORADO_SIN_VARIACION) eligiendo cantidad, adicionales (de
@@ -89,9 +102,110 @@ export class TomarPedidoPage implements OnInit {
   totalPedido = 0;
   guardando = false;
 
+  // Accesos directos (como el PdV)
+  grupos: AtajoGrupoVM[] = [];
+  grupoSel: AtajoGrupoVM | null = null;
+  atajoProductos: ProductoVM[] = []; // drill-in: productos de un atajo con varios
+
   ngOnInit(): void {
     this.mesaId = Number(this.route.snapshot.paramMap.get('id'));
     this.cargarContexto();
+    this.cargarAtajos();
+  }
+
+  onTermino(valor: string): void {
+    // Input siempre en MAYÚSCULA (las cadenas se guardan/buscan en upper).
+    this.termino = (valor || '').toUpperCase();
+    if (!this.termino) {
+      this.resultados = [];
+    }
+  }
+
+  private cargarAtajos(): void {
+    this.repo.getPdvAtajoGrupos().subscribe({
+      next: (data: any[]) => {
+        this.grupos = (data || [])
+          .filter((g) => g.activo !== false)
+          .map((g) => ({
+            id: g.id,
+            nombre: g.nombre,
+            items: (g.atajoGrupoItems || [])
+              .map((gi: any) => gi.atajoItem)
+              .filter((it: any) => it && it.activo !== false)
+              .map((it: any) => ({
+                id: it.id,
+                nombre: it.nombre,
+                colorFondo: it.colorFondo || undefined,
+                colorTexto: it.colorTexto || undefined,
+              })),
+          }))
+          .filter((g) => g.items.length > 0);
+        this.grupoSel = this.grupos[0] || null;
+      },
+      error: () => {
+        // Sin atajos: queda solo la búsqueda.
+      },
+    });
+  }
+
+  seleccionarGrupo(g: AtajoGrupoVM): void {
+    this.grupoSel = g;
+    this.atajoProductos = [];
+  }
+
+  volverAtajos(): void {
+    this.atajoProductos = [];
+  }
+
+  tocarAtajo(it: AtajoItemVM): void {
+    if (this.guardando) return;
+    this.repo.getPdvAtajoItemProductos(it.id).subscribe({
+      next: (data: any[]) => {
+        const vms = (data || [])
+          .filter((ap) => ap.activo !== false && ap.producto)
+          .map((ap) => this.toVMFromAtajo(ap));
+        if (vms.length === 1) {
+          this.agregar(vms[0]);
+        } else if (vms.length > 1) {
+          this.atajoProductos = vms;
+        } else {
+          this.snack.open('El atajo no tiene productos', undefined, { duration: 2000 });
+        }
+      },
+      error: () => {
+        this.snack.open('No se pudieron cargar los productos del atajo', 'CERRAR', { duration: 3000 });
+      },
+    });
+  }
+
+  private toVMFromAtajo(ap: any): ProductoVM {
+    const prod = ap.producto;
+    const tipo = prod.tipo;
+    const esVariacion = tipo === 'ELABORADO_CON_VARIACION';
+    const esSimple =
+      tipo === 'RETAIL' || tipo === 'RETAIL_INGREDIENTE' || tipo === 'ELABORADO_SIN_VARIACION';
+    let presObj: any = null;
+    let precioObj: any = null;
+    if (tipo === 'RETAIL' || tipo === 'RETAIL_INGREDIENTE') {
+      const pres = (prod.presentaciones || []).find((p: any) => p.principal) || (prod.presentaciones || [])[0];
+      presObj = pres;
+      precioObj = (pres?.preciosVenta || []).find((pv: any) => pv.principal) || (pres?.preciosVenta || [])[0];
+    } else {
+      precioObj = prod.precioDirecto || null;
+      presObj = (prod.presentaciones || [])[0] || null;
+    }
+    return {
+      id: prod.id,
+      nombre: ap.nombre_alternativo || prod.nombre,
+      tipo,
+      soportado: esSimple || esVariacion,
+      esVariacion,
+      presentacionId: presObj?.id,
+      precioId: precioObj?.id,
+      precio: Number(precioObj?.valor) || 0,
+      costo: Number(prod.receta?.costoCalculado) || 0,
+      recetaId: prod.receta?.id ?? null,
+    };
   }
 
   private cargarContexto(): void {

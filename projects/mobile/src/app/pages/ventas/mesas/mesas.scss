@@ -354,3 +354,39 @@
 .mesa-item.cancelado .mesa-item-total {
   text-decoration: line-through;
 }
+
+/* ---- Tomar pedido: input mayúscula + grilla de atajos ---- */
+.input-upper {
+  text-transform: uppercase;
+}
+
+.atajo-volver {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.atajos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.atajo-btn {
+  min-height: 64px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
+  background: var(--card-background, #fff);
+  color: var(--text-primary, inherit);
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 8px;
+  cursor: pointer;
+  box-shadow: 0 1px 3px var(--shadow-color, rgba(0, 0, 0, 0.1));
+}
+
+.atajo-btn[disabled] {
+  opacity: 0.6;
+}
