@@ -9,8 +9,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatRippleModule } from '@angular/material/core';
-import { MatSnackBar } from '@angular/material/snack-bar';
-import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { AuthService, RepositoryService } from '@frc/shared-core';
 import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
@@ -60,6 +60,8 @@ interface PedidoLinea {
     MatInputModule,
     MatProgressBarModule,
     MatRippleModule,
+    MatDialogModule,
+    MatSnackBarModule,
   ],
   templateUrl: './tomar-pedido.page.html',
   styleUrls: ['./mesas.scss'],

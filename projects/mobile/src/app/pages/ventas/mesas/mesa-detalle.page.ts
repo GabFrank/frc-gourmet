@@ -5,8 +5,8 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '@frc/shared-core';
 import { ConfirmDialogComponent } from '../../../core/components/confirm-dialog.component';
@@ -39,6 +39,8 @@ interface ItemVM {
     MatIconModule,
     MatButtonModule,
     MatProgressBarModule,
+    MatDialogModule,
+    MatSnackBarModule,
   ],
   templateUrl: './mesa-detalle.page.html',
   styleUrls: ['./mesas.scss'],
