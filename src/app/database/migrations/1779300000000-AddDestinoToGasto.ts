@@ -1,5 +1,23 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
+/** Chequeo de columna existente, independiente del driver y del locale. */
+async function hasColumn(
+  queryRunner: QueryRunner,
+  table: string,
+  column: string,
+  isPg: boolean,
+): Promise<boolean> {
+  if (isPg) {
+    const rows = await queryRunner.query(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2`,
+      [table, column],
+    );
+    return rows.length > 0;
+  }
+  const rows = await queryRunner.query(`PRAGMA table_info("${table}")`);
+  return Array.isArray(rows) && rows.some((r: any) => r.name === column);
+}
+
 /**
  * Permite que un Gasto se pague desde una cuenta bancaria (no solo desde la
  * caja mayor). Agrega:
@@ -19,20 +37,16 @@ export class AddDestinoToGasto1779300000000 implements MigrationInterface {
   name = 'AddDestinoToGasto1779300000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Idempotente: ignorar si la columna ya existe (DB con drift de synchronize).
-    const addCol = async (sql: string) => {
-      try {
-        await queryRunner.query(sql);
-      } catch (e: any) {
-        if (!/duplicate column|already exists/i.test(e?.message || '')) throw e;
-      }
+    const isPg = queryRunner.connection.options.type === 'postgres';
+    // Idempotente y locale-independiente: chequear existencia ANTES de agregar
+    // (no por texto del error, que en Postgres viene traducido — ej. "ya existe
+    // la columna" en es_ES — y rompía el guard por regex).
+    const addCol = async (col: string, type: string) => {
+      if (await hasColumn(queryRunner, 'gastos', col, isPg)) return;
+      await queryRunner.query(`ALTER TABLE "gastos" ADD COLUMN "${col}" ${type}`);
     };
-    await addCol(
-      `ALTER TABLE "gastos" ADD COLUMN "destino_tipo" varchar(30) DEFAULT 'CAJA_MAYOR' NOT NULL`,
-    );
-    await addCol(
-      `ALTER TABLE "gastos" ADD COLUMN "cuenta_bancaria_id" integer NULL`,
-    );
+    await addCol('destino_tipo', `varchar(30) DEFAULT 'CAJA_MAYOR' NOT NULL`);
+    await addCol('cuenta_bancaria_id', 'integer NULL');
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

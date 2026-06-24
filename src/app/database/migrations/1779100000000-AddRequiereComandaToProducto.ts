@@ -1,5 +1,23 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
+/** Chequeo de columna existente, independiente del driver y del locale. */
+async function hasColumn(
+  queryRunner: QueryRunner,
+  table: string,
+  column: string,
+  isPg: boolean,
+): Promise<boolean> {
+  if (isPg) {
+    const rows = await queryRunner.query(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2`,
+      [table, column],
+    );
+    return rows.length > 0;
+  }
+  const rows = await queryRunner.query(`PRAGMA table_info("${table}")`);
+  return Array.isArray(rows) && rows.some((r: any) => r.name === column);
+}
+
 /**
  * Agrega `requiere_comanda` a `producto` para el sistema de impresion
  * de comandas. Default true (la mayoria de productos generan comanda).
@@ -14,15 +32,11 @@ export class AddRequiereComandaToProducto1779100000000 implements MigrationInter
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const isPg = queryRunner.connection.options.type === 'postgres';
+    if (await hasColumn(queryRunner, 'producto', 'requiere_comanda', isPg)) return;
     const def = isPg ? 'true' : '1';
-    try {
-      await queryRunner.query(
-        `ALTER TABLE "producto" ADD COLUMN "requiere_comanda" boolean NOT NULL DEFAULT ${def}`,
-      );
-    } catch (e: any) {
-      // Idempotente: si la columna ya existe (DB con drift de synchronize), ignorar.
-      if (!/duplicate column|already exists/i.test(e?.message || '')) throw e;
-    }
+    await queryRunner.query(
+      `ALTER TABLE "producto" ADD COLUMN "requiere_comanda" boolean NOT NULL DEFAULT ${def}`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
