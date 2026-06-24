@@ -10,6 +10,10 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '@frc/shared-core';
 import { ConfirmDialogComponent } from '../../../core/components/confirm-dialog.component';
+import {
+  TransferirMesaDialogComponent,
+  MesaDestino,
+} from './transferir-mesa-dialog.component';
 
 interface ItemVM {
   id: number;
@@ -153,6 +157,67 @@ export class MesaDetallePage implements OnInit {
       this.snack.open('No se pudo quitar el ítem', 'CERRAR', { duration: 4000 });
     } finally {
       this.quitando = false;
+    }
+  }
+
+  async imprimirPreCuenta(): Promise<void> {
+    if (!this.ventaId) return;
+    const api = (window as any).api;
+    if (!api?.callIpc) {
+      this.snack.open('Impresión no disponible', 'CERRAR', { duration: 3000 });
+      return;
+    }
+    try {
+      const res = await api.callIpc('print-precuenta', { ventaId: this.ventaId });
+      if (res?.ok === false) {
+        this.snack.open('La pre-cuenta no se pudo imprimir', 'CERRAR', { duration: 4000 });
+      } else {
+        this.snack.open('Pre-cuenta enviada a impresión', undefined, { duration: 1800 });
+      }
+    } catch {
+      this.snack.open('No se pudo imprimir la pre-cuenta', 'CERRAR', { duration: 4000 });
+    }
+  }
+
+  async transferir(): Promise<void> {
+    if (!this.ventaId) return;
+    const destino = (await firstValueFrom(
+      this.dialog
+        .open(TransferirMesaDialogComponent, {
+          data: { mesaActualId: this.mesaId },
+          width: '320px',
+          maxHeight: '85vh',
+        })
+        .afterClosed(),
+    )) as MesaDestino | undefined;
+    if (!destino) return;
+
+    const ventaOrigenId = this.ventaId;
+    this.loading = true;
+    try {
+      if (destino.ventaId) {
+        // Destino ya tiene cuenta abierta: mover items activos y cancelar la origen.
+        const items = await firstValueFrom(this.repo.getVentaItems(ventaOrigenId));
+        const activos = (items || []).filter((i: any) => i.estado === 'ACTIVO');
+        for (const it of activos) {
+          await firstValueFrom(
+            this.repo.updateVentaItem(it.id, { venta: { id: destino.ventaId } } as any),
+          );
+        }
+        await firstValueFrom(this.repo.updateVenta(ventaOrigenId, { estado: 'CANCELADA' } as any));
+      } else {
+        // Destino libre: mover la venta completa.
+        await firstValueFrom(this.repo.updateVenta(ventaOrigenId, { mesa: { id: destino.id } } as any));
+      }
+      // Liberar mesa origen y ocupar destino.
+      await firstValueFrom(this.repo.updatePdvMesa(this.mesaId, { estado: 'DISPONIBLE' } as any));
+      await firstValueFrom(this.repo.updatePdvMesa(destino.id, { estado: 'OCUPADO' } as any));
+
+      this.snack.open(`Cuenta transferida a Mesa ${destino.numero}`, undefined, { duration: 2000 });
+      this.location.back();
+    } catch {
+      this.snack.open('No se pudo transferir la cuenta', 'CERRAR', { duration: 4000 });
+      this.loading = false;
     }
   }
 

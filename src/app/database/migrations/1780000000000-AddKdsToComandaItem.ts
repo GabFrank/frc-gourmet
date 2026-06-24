@@ -18,13 +18,17 @@ export class AddKdsToComandaItem1780000000000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const isPg = queryRunner.connection.options.type === 'postgres';
-    if (isPg) {
-      await queryRunner.query(`ALTER TABLE "comanda_items" ADD COLUMN "sector_id" integer`);
-      await queryRunner.query(`ALTER TABLE "comanda_items" ADD COLUMN "fecha_en_preparacion" TIMESTAMP`);
-    } else {
-      await queryRunner.query(`ALTER TABLE "comanda_items" ADD COLUMN "sector_id" integer`);
-      await queryRunner.query(`ALTER TABLE "comanda_items" ADD COLUMN "fecha_en_preparacion" datetime`);
-    }
+    const tsType = isPg ? 'TIMESTAMP' : 'datetime';
+    // Idempotente: ignorar si la columna ya existe (DB con drift de synchronize).
+    const addCol = async (sql: string) => {
+      try {
+        await queryRunner.query(sql);
+      } catch (e: any) {
+        if (!/duplicate column|already exists/i.test(e?.message || '')) throw e;
+      }
+    };
+    await addCol(`ALTER TABLE "comanda_items" ADD COLUMN "sector_id" integer`);
+    await addCol(`ALTER TABLE "comanda_items" ADD COLUMN "fecha_en_preparacion" ${tsType}`);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

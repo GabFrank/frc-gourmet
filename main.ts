@@ -1,5 +1,5 @@
 // Use ES Module import syntax
-import { app, BrowserWindow, protocol, ipcMain } from 'electron';
+import { app, BrowserWindow, protocol, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import * as url from 'url';
 import * as fs from 'fs';
@@ -152,6 +152,9 @@ async function buildDbOverride(userDataPath: string): Promise<DbConnectionOverri
 function initializeDatabase() {
   // Get user data path
   const userDataPath = app.getPath('userData');
+
+  // Log a archivo (antes de cualquier trabajo de DB, para capturar fallos de boot).
+  initFileLogging();
 
   // Initialize database service
   dbService = DatabaseService.getInstance();
@@ -308,7 +311,20 @@ function initializeDatabase() {
           ? 'BaselinePostgres1778380893207'
           : 'Baseline1778378410416';
         // F2 (mobile PWA): servir el bundle de projects/mobile (dist/mobile) si existe.
-        const staticRoot = path.join(__dirname, 'dist', 'mobile');
+        // En el paquete (asar) los archivos quedan en app.asar.unpacked (ver
+        // asarUnpack en package.json), así que resolvemos esa ruta para que
+        // @fastify/static los sirva sin tocar el archivo asar.
+        let staticRoot = path.join(__dirname, 'dist', 'mobile');
+        if (
+          staticRoot.includes(`app.asar${path.sep}`) &&
+          !staticRoot.includes('app.asar.unpacked')
+        ) {
+          const unpacked = staticRoot.replace(
+            `app.asar${path.sep}`,
+            `app.asar.unpacked${path.sep}`,
+          );
+          if (fs.existsSync(unpacked)) staticRoot = unpacked;
+        }
         startServer({
           port, appVersion, schemaVersion, driver, dataSource, staticRoot,
         }).catch((e) => console.error('[server] Error al arrancar Fastify:', e));
@@ -324,8 +340,49 @@ function initializeDatabase() {
     })
     .catch((error) => {
       console.error('Failed to initialize database:', error);
-      // Consider how to handle DB init failure (e.g., show error, quit app)
+      // Init falló (típicamente una migración): la app queda sin handlers IPC,
+      // así que el front muestra "Error en el servidor". Mostramos el error real
+      // en un diálogo para poder diagnosticar sin DevTools.
+      try {
+        const logPath = path.join(app.getPath('userData'), 'logs', 'main.log');
+        dialog.showErrorBox(
+          'Error al iniciar la base de datos',
+          `No se pudo inicializar la base de datos (probablemente una migración).\n\n` +
+            `${(error && (error.message || error.toString())) || 'Error desconocido'}\n\n` +
+            `Detalle completo en el log:\n${logPath}`,
+        );
+      } catch { /* no-op */ }
     });
+}
+
+/**
+ * Logging a archivo en `userData/logs/main.log`. Tee de console.* (info/warn/
+ * error) al archivo, con rotación simple. Imprescindible para diagnosticar
+ * fallos de boot en la app empaquetada (no hay consola visible).
+ */
+function initFileLogging(): void {
+  try {
+    const logsDir = path.join(app.getPath('userData'), 'logs');
+    fs.mkdirSync(logsDir, { recursive: true });
+    const logFile = path.join(logsDir, 'main.log');
+    try {
+      const st = fs.statSync(logFile);
+      if (st.size > 5 * 1024 * 1024) fs.renameSync(logFile, `${logFile}.old`);
+    } catch { /* no existe aún */ }
+    const stream = fs.createWriteStream(logFile, { flags: 'a' });
+    const fmt = (a: unknown): string =>
+      typeof a === 'string' ? a : a instanceof Error ? (a.stack ?? a.message) : JSON.stringify(a);
+    const tee = (orig: (...a: unknown[]) => void, level: string) => (...args: unknown[]) => {
+      try {
+        stream.write(`[${new Date().toISOString()}] [${level}] ${args.map(fmt).join(' ')}\n`);
+      } catch { /* no-op */ }
+      orig(...args);
+    };
+    console.log = tee(console.log.bind(console), 'INFO');
+    console.warn = tee(console.warn.bind(console), 'WARN');
+    console.error = tee(console.error.bind(console), 'ERROR');
+    console.log(`[file-logging] iniciado: ${logFile} (app ${app.getVersion()})`);
+  } catch { /* nunca romper el arranque por el logger */ }
 }
 
 // Resuelve el icono de la app. En Win/Linux preferimos PNG; en Mac, .icns.

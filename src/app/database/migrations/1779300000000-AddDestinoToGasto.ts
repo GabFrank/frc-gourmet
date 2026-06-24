@@ -19,10 +19,18 @@ export class AddDestinoToGasto1779300000000 implements MigrationInterface {
   name = 'AddDestinoToGasto1779300000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
+    // Idempotente: ignorar si la columna ya existe (DB con drift de synchronize).
+    const addCol = async (sql: string) => {
+      try {
+        await queryRunner.query(sql);
+      } catch (e: any) {
+        if (!/duplicate column|already exists/i.test(e?.message || '')) throw e;
+      }
+    };
+    await addCol(
       `ALTER TABLE "gastos" ADD COLUMN "destino_tipo" varchar(30) DEFAULT 'CAJA_MAYOR' NOT NULL`,
     );
-    await queryRunner.query(
+    await addCol(
       `ALTER TABLE "gastos" ADD COLUMN "cuenta_bancaria_id" integer NULL`,
     );
   }

@@ -15,6 +15,8 @@ export interface AgregarItemData {
   nombre: string;
   precioUnitario: number;
   recetaId?: number | null;
+  /** Modo "personalizar" (ej. un sabor de pizza): sin cantidad ni total. */
+  soloPersonalizacion?: boolean;
 }
 
 export interface AgregarItemResult {
@@ -62,17 +64,19 @@ interface ObsVM {
     <h2 mat-dialog-title>{{ data.nombre }}</h2>
     <mat-progress-bar *ngIf="cargando" mode="indeterminate"></mat-progress-bar>
     <mat-dialog-content>
-      <div class="precio">{{ data.precioUnitario | number: '1.0-2' }} c/u</div>
+      <ng-container *ngIf="!data.soloPersonalizacion">
+        <div class="precio">{{ data.precioUnitario | number: '1.0-2' }} c/u</div>
 
-      <div class="stepper">
-        <button mat-icon-button (click)="dec()" [disabled]="cantidad <= 1" aria-label="Menos">
-          <mat-icon>remove_circle</mat-icon>
-        </button>
-        <span class="cant">{{ cantidad }}</span>
-        <button mat-icon-button (click)="inc()" aria-label="Más">
-          <mat-icon>add_circle</mat-icon>
-        </button>
-      </div>
+        <div class="stepper">
+          <button mat-icon-button (click)="dec()" [disabled]="cantidad <= 1" aria-label="Menos">
+            <mat-icon>remove_circle</mat-icon>
+          </button>
+          <span class="cant">{{ cantidad }}</span>
+          <button mat-icon-button (click)="inc()" aria-label="Más">
+            <mat-icon>add_circle</mat-icon>
+          </button>
+        </div>
+      </ng-container>
 
       <ng-container *ngIf="adicionales.length">
         <h3 class="sec">Adicionales</h3>
@@ -96,12 +100,12 @@ interface ObsVM {
         <textarea matInput [(ngModel)]="observacionLibre" rows="2" maxlength="500"></textarea>
       </mat-form-field>
 
-      <div class="total">Total: {{ totalLinea | number: '1.0-2' }}</div>
+      <div class="total" *ngIf="!data.soloPersonalizacion">Total: {{ totalLinea | number: '1.0-2' }}</div>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button (click)="ref.close(undefined)">Cancelar</button>
       <button mat-flat-button color="primary" (click)="confirmar()" [disabled]="cargando">
-        Agregar {{ cantidad }}
+        {{ data.soloPersonalizacion ? 'Listo' : 'Agregar ' + cantidad }}
       </button>
     </mat-dialog-actions>
   `,

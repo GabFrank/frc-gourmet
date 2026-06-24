@@ -30,7 +30,7 @@ export class AddConveniosCobroConsolidado1779500000000 implements MigrationInter
 
     // ── convenios ────────────────────────────────────────────────────────
     await queryRunner.query(`
-      CREATE TABLE "convenios" (
+      CREATE TABLE IF NOT EXISTS "convenios" (
         "id" ${pk},
         "nombre" varchar(160) NOT NULL,
         "descripcion" varchar(300) NULL,
@@ -42,21 +42,21 @@ export class AddConveniosCobroConsolidado1779500000000 implements MigrationInter
 
     // ── cliente_convenios (M2M) ──────────────────────────────────────────
     await queryRunner.query(`
-      CREATE TABLE "cliente_convenios" (
+      CREATE TABLE IF NOT EXISTS "cliente_convenios" (
         "cliente_id" integer NOT NULL,
         "convenio_id" integer NOT NULL,
         CONSTRAINT "PK_cliente_convenios" PRIMARY KEY ("cliente_id", "convenio_id")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_cliente_convenios_cliente" ON "cliente_convenios" ("cliente_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_cliente_convenios_convenio" ON "cliente_convenios" ("convenio_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_cliente_convenios_cliente" ON "cliente_convenios" ("cliente_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_cliente_convenios_convenio" ON "cliente_convenios" ("convenio_id")`);
 
     // ── cobros_consolidados ──────────────────────────────────────────────
     const fkConvenio = isPg
       ? `, CONSTRAINT "FK_cobros_consolidados_convenio" FOREIGN KEY ("convenio_id") REFERENCES "convenios"("id")`
       : '';
     await queryRunner.query(`
-      CREATE TABLE "cobros_consolidados" (
+      CREATE TABLE IF NOT EXISTS "cobros_consolidados" (
         "id" ${pk},
         "convenio_id" integer NOT NULL,
         "fecha" ${ts} NOT NULL,
@@ -71,14 +71,14 @@ export class AddConveniosCobroConsolidado1779500000000 implements MigrationInter
         "estado" varchar(30) NOT NULL DEFAULT 'ACTIVO',${audit}${fkConvenio}
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_cobros_consolidados_convenio" ON "cobros_consolidados" ("convenio_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_cobros_consolidados_convenio" ON "cobros_consolidados" ("convenio_id")`);
 
     // ── cobros_consolidados_detalles ─────────────────────────────────────
     const fkDet = isPg
       ? `, CONSTRAINT "FK_ccd_cobro" FOREIGN KEY ("cobro_consolidado_id") REFERENCES "cobros_consolidados"("id") ON DELETE CASCADE`
       : '';
     await queryRunner.query(`
-      CREATE TABLE "cobros_consolidados_detalles" (
+      CREATE TABLE IF NOT EXISTS "cobros_consolidados_detalles" (
         "id" ${pk},
         "cobro_consolidado_id" integer NOT NULL,
         "cliente_id" integer NOT NULL,
@@ -86,8 +86,8 @@ export class AddConveniosCobroConsolidado1779500000000 implements MigrationInter
         "saldo_anterior" numeric(18,2) NOT NULL DEFAULT 0,${audit}${fkDet}
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_ccd_cobro" ON "cobros_consolidados_detalles" ("cobro_consolidado_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_ccd_cliente" ON "cobros_consolidados_detalles" ("cliente_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_ccd_cobro" ON "cobros_consolidados_detalles" ("cobro_consolidado_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_ccd_cliente" ON "cobros_consolidados_detalles" ("cliente_id")`);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

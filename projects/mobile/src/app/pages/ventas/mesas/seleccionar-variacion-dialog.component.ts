@@ -1,12 +1,14 @@
 import { Component, Inject, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '@frc/shared-core';
+import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
 
 export interface SeleccionarVariacionData {
   productoId: number;
@@ -19,6 +21,9 @@ export interface VariacionSaborResult {
   precioReferencia: number;
   costoReferencia: number;
   nombre: string;
+  adicionales: { id: number; precio: number }[];
+  observaciones: number[];
+  observacionLibre?: string;
 }
 
 export interface SeleccionarVariacionResult {
@@ -26,7 +31,8 @@ export interface SeleccionarVariacionResult {
   recetaPresentacionPrincipalId: number;
   precioVentaPresentacionId: number | null;
   sabores: VariacionSaborResult[];
-  precioCalculado: number;
+  precioCalculado: number; // precio por sabores (estrategia), sin adicionales
+  precioAdicionalTotal: number; // suma de adicionales por-sabor (por unidad)
   costoCalculado: number;
   cantidad: number;
   ensambladoDescripcion: string;
@@ -39,21 +45,26 @@ interface PresentacionVM {
 
 interface SaborVM {
   recetaPresentacionId: number;
+  recetaId: number | null;
   nombre: string;
   precio: number;
   precioId: number | null;
   costo: number;
   sel: boolean;
+  // Personalización por-sabor (adicionales/observaciones con FK ventaItemSabor).
+  adicionales: { id: number; precio: number }[];
+  observaciones: number[];
+  observacionLibre?: string;
+  adicTotal: number;
 }
 
 /**
  * Diálogo para vender un producto ELABORADO_CON_VARIACION (ej. pizza): elegir
  * tamaño (presentación) → sabores (hasta `pizzaMaxSabores`) → cantidad. El
  * precio se calcula según `pdvConfig.pizzaEstrategiaPrecio` (MAYOR_PRECIO o
- * PROMEDIO) y el costo es proporcional. Replica el flujo del PdV desktop.
- *
- * Esta primera versión no incluye personalización (adicionales/observaciones)
- * por sabor — llega en una iteración siguiente.
+ * PROMEDIO) y el costo es proporcional. Cada sabor puede personalizarse con
+ * adicionales/observaciones (se persisten con FK `ventaItemSabor`). Replica el
+ * flujo del PdV desktop.
  */
 @Component({
   selector: 'app-seleccionar-variacion-dialog',
@@ -109,6 +120,17 @@ interface SaborVM {
             <mat-icon>add_circle</mat-icon>
           </button>
         </div>
+        <h3 class="sec">Por sabor</h3>
+        <div class="opt" *ngFor="let s of seleccionados">
+          <span>
+            {{ s.nombre }}
+            <mat-icon class="badge" *ngIf="s.adicTotal > 0 || s.observaciones.length || s.observacionLibre">
+              check_circle
+            </mat-icon>
+          </span>
+          <button mat-button color="primary" (click)="personalizarSabor(s)">Personalizar</button>
+        </div>
+
         <div class="ensamblado">{{ ensamblado }}</div>
         <div class="total">Total: {{ totalLinea | number: '1.0-2' }}</div>
       </ng-container>
@@ -199,12 +221,20 @@ interface SaborVM {
         color: var(--primary, #1976d2);
         margin-top: 8px;
       }
+      .badge {
+        font-size: 16px;
+        width: 16px;
+        height: 16px;
+        vertical-align: middle;
+        color: var(--success-color, #2e7d32);
+      }
     `,
   ],
 })
 export class SeleccionarVariacionDialogComponent implements OnInit {
   private readonly repo = inject(RepositoryService);
   private readonly snack = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
 
   cargando = true;
   maxSabores = 2;
@@ -217,6 +247,7 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
 
   cantidad = 1;
   precioCalculado = 0;
+  totalAdicionales = 0;
   costoCalculado = 0;
   totalLinea = 0;
   ensamblado = '';
@@ -262,11 +293,16 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
           const precio = (v.preciosVenta || []).find((pv: any) => pv.principal) || (v.preciosVenta || [])[0];
           return {
             recetaPresentacionId: v.id,
+            recetaId: v.receta?.id ?? null,
             nombre: v.sabor?.nombre || v.nombre_generado || 'Sabor',
             precio: Number(precio?.valor) || 0,
             precioId: precio?.id ?? null,
             costo: Number(v.costo_calculado) || 0,
             sel: false,
+            adicionales: [],
+            observaciones: [],
+            observacionLibre: undefined,
+            adicTotal: 0,
           };
         });
         this.cargando = false;
@@ -284,6 +320,37 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
       return;
     }
     s.sel = !s.sel;
+    if (!s.sel) {
+      // Al deseleccionar, limpiar su personalización.
+      s.adicionales = [];
+      s.observaciones = [];
+      s.observacionLibre = undefined;
+      s.adicTotal = 0;
+    }
+    this.recalcular();
+  }
+
+  async personalizarSabor(s: SaborVM): Promise<void> {
+    const res = (await firstValueFrom(
+      this.dialog
+        .open(AgregarItemDialogComponent, {
+          data: {
+            productoId: this.data.productoId,
+            nombre: s.nombre,
+            precioUnitario: 0,
+            recetaId: s.recetaId,
+            soloPersonalizacion: true,
+          },
+          width: '340px',
+          maxHeight: '85vh',
+        })
+        .afterClosed(),
+    )) as AgregarItemResult | undefined;
+    if (!res) return;
+    s.adicionales = res.adicionales;
+    s.observaciones = res.observaciones;
+    s.observacionLibre = res.observacionLibre;
+    s.adicTotal = res.precioAdicionalTotal;
     this.recalcular();
   }
 
@@ -304,6 +371,7 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
     const n = this.seleccionados.length;
     if (n === 0) {
       this.precioCalculado = 0;
+      this.totalAdicionales = 0;
       this.costoCalculado = 0;
       this.totalLinea = 0;
       this.ensamblado = '';
@@ -315,8 +383,9 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
       this.estrategia === 'PROMEDIO'
         ? precios.reduce((a, b) => a + b, 0) / n
         : Math.max(...precios);
+    this.totalAdicionales = this.seleccionados.reduce((sum, s) => sum + s.adicTotal, 0);
     this.costoCalculado = this.seleccionados.reduce((sum, s) => sum + s.costo * proporcion, 0);
-    this.totalLinea = this.precioCalculado * this.cantidad;
+    this.totalLinea = (this.precioCalculado + this.totalAdicionales) * this.cantidad;
     const fraccion = n > 1 ? `1/${n} ` : '';
     const tam = this.presentacionSel?.nombre ? `${this.presentacionSel.nombre} ` : '';
     this.ensamblado = `${this.data.nombre} ${tam}${this.seleccionados
@@ -339,8 +408,12 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
         precioReferencia: s.precio,
         costoReferencia: s.costo,
         nombre: s.nombre,
+        adicionales: s.adicionales,
+        observaciones: s.observaciones,
+        observacionLibre: s.observacionLibre,
       })),
       precioCalculado: this.precioCalculado,
+      precioAdicionalTotal: this.totalAdicionales,
       costoCalculado: this.costoCalculado,
       cantidad: this.cantidad,
       ensambladoDescripcion: this.ensamblado,

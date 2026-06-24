@@ -14,14 +14,14 @@ export class AddRequiereComandaToProducto1779100000000 implements MigrationInter
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const isPg = queryRunner.connection.options.type === 'postgres';
-    if (isPg) {
+    const def = isPg ? 'true' : '1';
+    try {
       await queryRunner.query(
-        `ALTER TABLE "producto" ADD COLUMN "requiere_comanda" boolean NOT NULL DEFAULT true`
+        `ALTER TABLE "producto" ADD COLUMN "requiere_comanda" boolean NOT NULL DEFAULT ${def}`,
       );
-    } else {
-      await queryRunner.query(
-        `ALTER TABLE "producto" ADD COLUMN "requiere_comanda" boolean NOT NULL DEFAULT 1`
-      );
+    } catch (e: any) {
+      // Idempotente: si la columna ya existe (DB con drift de synchronize), ignorar.
+      if (!/duplicate column|already exists/i.test(e?.message || '')) throw e;
     }
   }
 
