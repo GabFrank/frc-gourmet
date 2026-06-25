@@ -90,7 +90,13 @@ export class HomeComponent implements OnInit, OnDestroy {
   shortcuts: any[] = [];
 
   // Acceso a la PWA mobile (solo cuando la app corre en mode=server).
-  pwaAccess: { available: boolean; url?: string; urls?: string[]; qr?: string } | null = null;
+  pwaAccess: { available: boolean; url?: string; urls?: string[]; qr?: string; isRemote?: boolean } | null = null;
+
+  // Acceso remoto por internet (Cloudflare quick tunnel).
+  remoteRunning = false;
+  remoteBusy = false;
+  remoteUrl: string | null = null;
+  remoteQr: string | null = null;
 
   chartData: ChartData<'line'> = { labels: [], datasets: [] };
   chartOptions: ChartConfiguration<'line'>['options'] = getDashboardChartOptions('line');
@@ -231,10 +237,52 @@ export class HomeComponent implements OnInit, OnDestroy {
       if (api?.callIpc) {
         const res = await api.callIpc('get-pwa-access');
         this.pwaAccess = res?.available ? res : null;
+        // Restaurar estado del túnel remoto (por si ya estaba activo).
+        const st = await api.callIpc('remote-tunnel-status');
+        this.remoteRunning = !!st?.running;
+        this.remoteUrl = st?.url || null;
+        this.remoteQr = st?.qr || null;
       }
     } catch {
       this.pwaAccess = null;
     }
+  }
+
+  /** Activa/desactiva el acceso remoto por internet (Cloudflare quick tunnel). */
+  async toggleRemoto(): Promise<void> {
+    const api = (window as any).api;
+    if (!api?.callIpc || this.remoteBusy) return;
+    this.remoteBusy = true;
+    try {
+      if (this.remoteRunning) {
+        await api.callIpc('remote-tunnel-stop');
+        this.remoteRunning = false;
+        this.remoteUrl = null;
+        this.remoteQr = null;
+      } else {
+        this.snackBar.open('Activando acceso remoto (puede tardar)…', undefined, { duration: 2500 });
+        const res = await api.callIpc('remote-tunnel-start');
+        if (res?.ok) {
+          this.remoteRunning = true;
+          this.remoteUrl = res.url;
+          this.remoteQr = res.qr;
+        } else {
+          this.snackBar.open(res?.error || 'No se pudo activar el acceso remoto', 'Cerrar', { duration: 5000 });
+        }
+      }
+    } catch (e) {
+      this.snackBar.open('Error en el acceso remoto', 'Cerrar', { duration: 4000 });
+    } finally {
+      this.remoteBusy = false;
+    }
+  }
+
+  copiarUrlRemota(): void {
+    if (!this.remoteUrl) return;
+    navigator.clipboard?.writeText(this.remoteUrl).then(
+      () => this.snackBar.open('URL copiada', 'OK', { duration: 1500 }),
+      () => {},
+    );
   }
 
   copiarUrlPwa(): void {

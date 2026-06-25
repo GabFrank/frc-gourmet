@@ -39,6 +39,12 @@ export interface NetworkSettings {
   serverPort?: number;
   /** URL del servidor cuando mode === 'client' (ej: http://192.168.1.10:7070) */
   serverUrl?: string;
+  /**
+   * URL pública del túnel con dominio propio (ej: https://app.midominio.com).
+   * Si está seteada (mode === 'server'), el QR del dashboard apunta SIEMPRE a
+   * esta URL (acceso desde cualquier red) en vez de a la IP de LAN.
+   */
+  remoteUrl?: string;
 }
 
 export interface UpdateSettings {

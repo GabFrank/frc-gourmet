@@ -36,6 +36,7 @@ import { registerProductosHandlers } from './electron/handlers/productos.handler
 import { registerFinancieroHandlers } from './electron/handlers/financiero.handler';
 import { registerComprasHandlers } from './electron/handlers/compras.handler';
 import { registerSystemHandlers } from './electron/handlers/system.handler';
+import { registerRemoteTunnelHandlers } from './electron/handlers/remote-tunnel.handler';
 import { registerVentasHandlers } from './electron/handlers/ventas.handler';
 import { registerKdsHandlers } from './electron/handlers/kds.handler';
 import { registerRecetasHandlers } from './electron/handlers/recetas.handler';
@@ -194,6 +195,7 @@ function initializeDatabase() {
       registerFinancieroHandlers(dataSource, getCurrentUser);
       registerComprasHandlers(dataSource, getCurrentUser);
       registerSystemHandlers(); // system handler doesn't need dataSource or user
+      registerRemoteTunnelHandlers(); // acceso remoto via cloudflare quick tunnel
       registerVentasHandlers(dataSource, getCurrentUser); // Register ventas handlers
       registerKdsHandlers(dataSource, getCurrentUser); // KDS: comandas en pantalla de cocina (estado por sector)
       registerRecetasHandlers(dataSource, getCurrentUser); // Recetas + Sabores + Variaciones (unificado)
