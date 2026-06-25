@@ -98,6 +98,28 @@
   font-weight: 500;
 }
 
+/* Cliente asignado a la cuenta (chip tocable). */
+.mesa-cliente {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 5px 12px;
+  border-radius: 16px;
+  background: var(--surface-variant, #f0f0f0);
+  color: var(--text-primary, rgba(0, 0, 0, 0.85));
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.mesa-cliente mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--primary, #1976d2);
+}
+
 .mesa-cuenta {
   display: flex;
   flex-direction: column;

@@ -17,6 +17,7 @@ import {
 } from './transferir-mesa-dialog.component';
 import { ItemInfoDialogComponent } from './item-info-dialog.component';
 import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
+import { ClienteMesaDialogComponent, ClienteSeleccionado } from './cliente-mesa-dialog.component';
 
 interface ItemVM {
   id: number;
@@ -72,6 +73,7 @@ export class MesaDetallePage implements OnInit {
   sectorNombre?: string;
   ocupada = false;
   estado = 'Libre';
+  clienteNombre: string | null = null;
 
   items: ItemVM[] = [];
   total = 0;
@@ -151,6 +153,7 @@ export class MesaDetallePage implements OnInit {
         this.ventaId = ventaId ?? null;
         this.ocupada = !!ventaId || m?.estado === 'OCUPADO';
         this.estado = this.ocupada ? 'Ocupada' : 'Libre';
+        this.clienteNombre = m?.venta?.nombreCliente || m?.venta?.cliente?.persona?.nombre || null;
         if (ventaId) {
           this.cargarCuenta(ventaId);
         } else {
@@ -446,6 +449,31 @@ export class MesaDetallePage implements OnInit {
       }
     } catch {
       this.snack.open('No se pudo imprimir la pre-cuenta', 'CERRAR', { duration: 4000 });
+    }
+  }
+
+  async asignarCliente(): Promise<void> {
+    if (!this.ventaId) {
+      this.snack.open('Agregá un producto primero para abrir la cuenta', undefined, { duration: 2500 });
+      return;
+    }
+    const sel = (await firstValueFrom(
+      this.dialog
+        .open(ClienteMesaDialogComponent, { width: '360px', maxHeight: '85vh' })
+        .afterClosed(),
+    )) as ClienteSeleccionado | undefined;
+    if (!sel || !sel.id) return;
+    try {
+      await firstValueFrom(
+        this.repo.updateVenta(this.ventaId, {
+          cliente: { id: sel.id },
+          nombreCliente: sel.nombre,
+        } as any),
+      );
+      this.clienteNombre = sel.nombre;
+      this.snack.open(`Cliente asignado: ${sel.nombre}`, undefined, { duration: 1800 });
+    } catch {
+      this.snack.open('No se pudo asignar el cliente', 'CERRAR', { duration: 4000 });
     }
   }
 

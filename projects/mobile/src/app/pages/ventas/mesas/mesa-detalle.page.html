@@ -6,6 +6,14 @@
     <button
       *ngIf="ventaId"
       mat-icon-button
+      (click)="asignarCliente()"
+      aria-label="Asignar cliente"
+    >
+      <mat-icon>{{ clienteNombre ? 'how_to_reg' : 'person_add' }}</mat-icon>
+    </button>
+    <button
+      *ngIf="ventaId"
+      mat-icon-button
       (click)="imprimirPreCuenta()"
       aria-label="Imprimir pre-cuenta"
     >
@@ -22,6 +30,10 @@
 
   <div class="mesa-content" *ngIf="!loading && !error">
     <p class="mesa-sub" *ngIf="sectorNombre">{{ sectorNombre }}</p>
+    <div class="mesa-cliente" *ngIf="clienteNombre" (click)="asignarCliente()">
+      <mat-icon>person</mat-icon>
+      <span>{{ clienteNombre }}</span>
+    </div>
 
     <ng-container *ngIf="ocupada; else libre">
       <section class="mesa-cuenta" *ngIf="items.length; else sinItems">
