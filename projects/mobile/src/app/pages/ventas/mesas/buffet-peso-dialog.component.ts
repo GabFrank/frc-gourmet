@@ -16,6 +16,8 @@ export interface BuffetPesoDialogData {
   precioMaximo?: number | null;
   decimalesMoneda?: number;
   simbolo?: string;
+  /** Peso bruto prellenado (ej: leído de una etiqueta EAN-13 de balanza). */
+  pesoInicialGramos?: number;
 }
 
 export interface BuffetPesoDialogResult {
@@ -171,6 +173,9 @@ export class BuffetPesoDialogComponent {
     this.tara = Number(data.taraGramos) || 0;
     this.precioPorKg = Number(data.precioPorKg) || 0;
     this.digits = `1.0-${data.decimalesMoneda ?? 0}`;
+    if (data.pesoInicialGramos && data.pesoInicialGramos > 0) {
+      this.pesoBruto = data.pesoInicialGramos;
+    }
     this.recalcular();
   }
 

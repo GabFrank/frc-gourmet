@@ -1577,6 +1577,40 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     }
   });
 
+  /**
+   * Resuelve un código de barras a un producto LISTO para el módulo de meseros:
+   * trae el producto con presentaciones + precios + receta (igual shape que el
+   * atajo del PdV), para que el mobile arme el VM y abra el diálogo correcto
+   * (incluye buffet por peso). Devuelve null si el código no está registrado.
+   */
+  ipcMain.handle('buscar-producto-codigo-mesa', async (_event: any, codigo: string) => {
+    try {
+      const codigoBarraRepository = dataSource.getRepository(CodigoBarra);
+      const cb = await codigoBarraRepository.findOne({
+        where: { codigo: codigo, activo: true },
+        relations: ['presentacion', 'presentacion.producto'],
+      });
+      const prodId = cb?.presentacion?.producto?.id;
+      if (!prodId) return null;
+
+      const productoRepo = dataSource.getRepository(Producto);
+      const producto = await productoRepo.findOne({
+        where: { id: prodId },
+        relations: [
+          'presentaciones',
+          'presentaciones.preciosVenta',
+          'presentaciones.preciosVenta.moneda',
+          'receta',
+        ],
+      });
+      if (!producto) return null;
+      return { producto, presentacionId: cb!.presentacion.id };
+    } catch (error) {
+      console.error('Error resolviendo producto por código (mesa):', error);
+      throw error;
+    }
+  });
+
   ipcMain.handle('search-productos-by-nombre', async (_event: any, nombre: string, mode: 'venta' | 'compra' = 'venta') => {
     try {
       const repo = dataSource.getRepository(Producto);
