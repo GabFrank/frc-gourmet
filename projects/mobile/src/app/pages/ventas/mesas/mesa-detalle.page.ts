@@ -1,6 +1,6 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
-import { ActivatedRoute, RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
@@ -17,7 +17,6 @@ import {
 } from './transferir-mesa-dialog.component';
 import { ItemInfoDialogComponent } from './item-info-dialog.component';
 import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
-import { ClienteMesaDialogComponent, ClienteSeleccionado } from './cliente-mesa-dialog.component';
 import { flagFor } from './moneda-flag.util';
 
 interface ItemVM {
@@ -64,6 +63,7 @@ interface ItemVM {
 export class MesaDetallePage implements OnInit {
   private readonly repo = inject(RepositoryService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly location = inject(Location);
   private readonly dialog = inject(MatDialog);
   private readonly snack = inject(MatSnackBar);
@@ -456,29 +456,14 @@ export class MesaDetallePage implements OnInit {
     }
   }
 
-  async asignarCliente(): Promise<void> {
+  asignarCliente(): void {
     if (!this.ventaId) {
       this.snack.open('Agregá un producto primero para abrir la cuenta', undefined, { duration: 2500 });
       return;
     }
-    const sel = (await firstValueFrom(
-      this.dialog
-        .open(ClienteMesaDialogComponent, { width: '360px', maxHeight: '85vh' })
-        .afterClosed(),
-    )) as ClienteSeleccionado | undefined;
-    if (!sel || !sel.id) return;
-    try {
-      await firstValueFrom(
-        this.repo.updateVenta(this.ventaId, {
-          cliente: { id: sel.id },
-          nombreCliente: sel.nombre,
-        } as any),
-      );
-      this.clienteNombre = sel.nombre;
-      this.snack.open(`Cliente asignado: ${sel.nombre}`, undefined, { duration: 1800 });
-    } catch {
-      this.snack.open('No se pudo asignar el cliente', 'CERRAR', { duration: 4000 });
-    }
+    // Pantalla completa de búsqueda/alta de cliente; al volver, cargar() recarga
+    // el nombre del cliente desde la venta.
+    this.router.navigate(['/ventas/mesas', this.mesaId, 'cliente']);
   }
 
   async transferir(): Promise<void> {
