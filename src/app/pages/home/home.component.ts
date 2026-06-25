@@ -90,7 +90,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   shortcuts: any[] = [];
 
   // Acceso a la PWA mobile (solo cuando la app corre en mode=server).
-  pwaAccess: { available: boolean; url?: string; urls?: string[]; qr?: string } | null = null;
+  pwaAccess: { available: boolean; url?: string; urls?: string[]; qr?: string; isRemote?: boolean } | null = null;
 
   // Acceso remoto por internet (Cloudflare quick tunnel).
   remoteRunning = false;

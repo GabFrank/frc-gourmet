@@ -23,14 +23,18 @@ export function registerSystemHandlers() {
         }
       }
       const urls = ips.map((ip) => `http://${ip}:${port}`);
-      const url = urls[0] || `http://localhost:${port}`;
+      // Si hay una URL remota configurada (túnel con dominio propio), el QR apunta
+      // SIEMPRE a ella (acceso desde cualquier red). Si no, a la URL de LAN.
+      const remoteUrl = ((settings as any).network?.remoteUrl || '').trim();
+      const isRemote = !!remoteUrl;
+      const url = remoteUrl || urls[0] || `http://localhost:${port}`;
       let qr = '';
       try {
         qr = await QRCode.toDataURL(url, { margin: 1, width: 240 });
       } catch (e) {
         console.warn('[get-pwa-access] no se pudo generar el QR:', e);
       }
-      return { available: true, mode, port, url, urls, qr };
+      return { available: true, mode, port, url, urls, qr, isRemote };
     } catch (error) {
       console.error('Error en get-pwa-access:', error);
       return { available: false };
