@@ -1,0 +1,16 @@
+{
+  "name": "FRC Gourmet",
+  "short_name": "FRC Gourmet",
+  "description": "App de meseros — FRC Gourmet",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1e1e1e",
+  "theme_color": "#f44336",
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "assets/icons/icon-256.png", "sizes": "256x256", "type": "image/png" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

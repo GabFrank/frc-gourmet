@@ -100,3 +100,12 @@
 .error {
   color: var(--error-color);
 }
+
+.install-btn {
+  width: 100%;
+  margin-bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}

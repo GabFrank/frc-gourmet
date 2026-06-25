@@ -21,62 +21,6 @@
     </div>
   </div>
 
-  <mat-card class="pwa-access-card" *ngIf="pwaAccess?.available">
-    <div class="pwa-access-body">
-      <img
-        *ngIf="remoteRunning ? remoteQr : pwaAccess?.qr"
-        class="pwa-qr"
-        [src]="remoteRunning ? remoteQr : pwaAccess?.qr"
-        alt="QR acceso PWA"
-      />
-      <div class="pwa-access-info">
-        <div class="pwa-access-title">
-          <mat-icon>smartphone</mat-icon>
-          <span>App mobile (escaneá con el teléfono)</span>
-        </div>
-
-        <!-- A) Dominio remoto configurado: el QR ya apunta a internet (fijo). -->
-        <ng-container *ngIf="pwaAccess?.isRemote">
-          <div class="pwa-access-url">{{ pwaAccess?.url }}</div>
-          <div class="pwa-access-hint">Acceso por internet (desde cualquier red).</div>
-          <button mat-stroked-button (click)="copiarUrlPwa()">
-            <mat-icon>content_copy</mat-icon> Copiar URL
-          </button>
-        </ng-container>
-
-        <!-- B) Sin dominio: URL de LAN + toggle de túnel ad-hoc (efímero). -->
-        <ng-container *ngIf="!pwaAccess?.isRemote">
-          <ng-container *ngIf="!remoteRunning">
-            <div class="pwa-access-url">{{ pwaAccess?.url }}</div>
-            <div class="pwa-access-hint">En la misma red Wi-Fi.</div>
-            <button mat-stroked-button (click)="copiarUrlPwa()">
-              <mat-icon>content_copy</mat-icon> Copiar URL
-            </button>
-          </ng-container>
-
-          <ng-container *ngIf="remoteRunning">
-            <div class="pwa-access-url">{{ remoteUrl }}</div>
-            <div class="pwa-access-hint">Acceso por internet activo (URL temporal).</div>
-            <button mat-stroked-button (click)="copiarUrlRemota()">
-              <mat-icon>content_copy</mat-icon> Copiar URL
-            </button>
-          </ng-container>
-
-          <button
-            mat-button
-            color="primary"
-            class="pwa-remote-toggle"
-            [disabled]="remoteBusy"
-            (click)="toggleRemoto()"
-          >
-            <mat-icon>{{ remoteRunning ? 'public_off' : 'public' }}</mat-icon>
-            {{ remoteBusy ? 'Procesando…' : (remoteRunning ? 'Desactivar acceso remoto' : 'Activar acceso por internet (temporal)') }}
-          </button>
-        </ng-container>
-      </div>
-    </div>
-  </mat-card>
-
   <div class="dashboard-stats-row">
     <app-dash-stat-chip
       icon="shopping_cart"
@@ -147,6 +91,38 @@
     </div>
 
     <div class="dashboard-col-right">
+      <mat-card class="pwa-access-card compact" *ngIf="pwaAccess?.available">
+        <div class="pwa-access-title">
+          <mat-icon>smartphone</mat-icon>
+          <span>App mobile</span>
+        </div>
+        <img
+          *ngIf="remoteRunning ? remoteQr : pwaAccess?.qr"
+          class="pwa-qr"
+          [src]="remoteRunning ? remoteQr : pwaAccess?.qr"
+          alt="QR acceso PWA"
+        />
+        <div class="pwa-access-url">{{ remoteRunning ? remoteUrl : pwaAccess?.url }}</div>
+        <div class="pwa-access-hint" *ngIf="pwaAccess?.isRemote">Internet (cualquier red)</div>
+        <div class="pwa-access-hint" *ngIf="!pwaAccess?.isRemote && !remoteRunning">Misma red Wi-Fi</div>
+        <div class="pwa-access-hint" *ngIf="!pwaAccess?.isRemote && remoteRunning">Internet (URL temporal)</div>
+        <div class="pwa-access-actions">
+          <button mat-stroked-button (click)="remoteRunning ? copiarUrlRemota() : copiarUrlPwa()">
+            <mat-icon>content_copy</mat-icon> Copiar
+          </button>
+          <button
+            *ngIf="!pwaAccess?.isRemote"
+            mat-button
+            color="primary"
+            [disabled]="remoteBusy"
+            (click)="toggleRemoto()"
+          >
+            <mat-icon>{{ remoteRunning ? 'public_off' : 'public' }}</mat-icon>
+            {{ remoteBusy ? '…' : (remoteRunning ? 'Apagar' : 'Internet') }}
+          </button>
+        </div>
+      </mat-card>
+
       <div class="dashboard-card">
         <app-dash-section-header
           icon="bookmarks"
