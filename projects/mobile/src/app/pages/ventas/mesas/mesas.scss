@@ -98,6 +98,88 @@
   font-weight: 500;
 }
 
+/* ---- Pantalla de cliente (buscar/crear) ---- */
+.cliente-avatar {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-variant, #f0f0f0);
+}
+
+.cliente-avatar mat-icon {
+  color: var(--primary, #1976d2);
+}
+
+.cliente-doc {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.9rem;
+  color: var(--text-secondary, rgba(0, 0, 0, 0.65));
+}
+
+.cliente-doc mat-icon {
+  font-size: 15px;
+  width: 15px;
+  height: 15px;
+}
+
+.cliente-tipo {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--primary, #1976d2);
+}
+
+.cliente-nuevo-btn {
+  margin-top: 16px;
+  width: 100%;
+}
+
+.cliente-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cliente-field {
+  width: 100%;
+}
+
+.cliente-form-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Cliente asignado a la cuenta (chip tocable). */
+.mesa-cliente {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 5px 12px;
+  border-radius: 16px;
+  background: var(--surface-variant, #f0f0f0);
+  color: var(--text-primary, rgba(0, 0, 0, 0.85));
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.mesa-cliente mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--primary, #1976d2);
+}
+
 .mesa-cuenta {
   display: flex;
   flex-direction: column;
@@ -155,33 +237,21 @@
   z-index: 4;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 13px 92px calc(13px + env(safe-area-inset-bottom)) 18px; /* deja lugar al FAB a la derecha */
+  align-items: center;
+  gap: 5px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
   background: #1f2a30;
   border-top: 3px solid var(--success-color, #4caf50);
   box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.35);
 }
 
-.mesa-footer-main {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.mesa-footer-label {
-  font-size: 0.95rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.mesa-footer-valor {
+/* Moneda principal (guaraní) centrada y grande. */
+.mesa-footer-principal {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-size: 1.8rem;
+  justify-content: center;
+  gap: 8px;
+  font-size: 1.9rem;
   font-weight: 800;
   line-height: 1;
   color: var(--success-color, #4caf50);
@@ -193,13 +263,15 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
-.mesa-footer-monedas {
+/* Otras monedas configuradas, en una fila centrada con banderitas. */
+.mesa-footer-otras {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 16px;
-  font-size: 0.92rem;
+  justify-content: center;
+  gap: 4px 18px;
+  font-size: 0.98rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .mesa-libre {
@@ -250,6 +322,38 @@
 /* Lista de productos (agregar a mesa): tipografía legible + tema (no negro fijo) */
 .pedido-prod {
   color: var(--text-primary, rgba(0, 0, 0, 0.87));
+}
+
+/* Miniatura del producto a la izquierda (imagen o ícono por defecto). */
+.pedido-thumb {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-variant, #f0f0f0);
+}
+
+.pedido-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pedido-thumb mat-icon {
+  font-size: 30px;
+  width: 30px;
+  height: 30px;
+  color: var(--text-secondary, rgba(0, 0, 0, 0.35));
+}
+
+/* La columna de texto ocupa el resto del ancho. */
+.pedido-prod .crud-card-main {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .pedido-nombre {
@@ -337,6 +441,12 @@
   right: 18px;
   bottom: calc(18px + env(safe-area-inset-bottom));
   z-index: 5;
+  transition: bottom 0.15s ease;
+}
+
+/* Cuando hay footer de totales, el FAB se eleva por encima para no superponerse. */
+.mesa-fab.con-footer {
+  bottom: calc(104px + env(safe-area-inset-bottom));
 }
 
 .mesa-item-quitar {
