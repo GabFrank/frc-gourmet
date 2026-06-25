@@ -21,6 +21,23 @@
     </div>
   </div>
 
+  <mat-card class="pwa-access-card" *ngIf="pwaAccess?.available">
+    <div class="pwa-access-body">
+      <img *ngIf="pwaAccess?.qr" class="pwa-qr" [src]="pwaAccess?.qr" alt="QR acceso PWA" />
+      <div class="pwa-access-info">
+        <div class="pwa-access-title">
+          <mat-icon>smartphone</mat-icon>
+          <span>App mobile (escaneá con el teléfono)</span>
+        </div>
+        <div class="pwa-access-url">{{ pwaAccess?.url }}</div>
+        <div class="pwa-access-hint">El teléfono debe estar en la misma red Wi-Fi.</div>
+        <button mat-stroked-button (click)="copiarUrlPwa()">
+          <mat-icon>content_copy</mat-icon> Copiar URL
+        </button>
+      </div>
+    </div>
+  </mat-card>
+
   <div class="dashboard-stats-row">
     <app-dash-stat-chip
       icon="shopping_cart"

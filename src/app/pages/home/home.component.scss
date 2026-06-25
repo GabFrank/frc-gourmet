@@ -63,3 +63,48 @@
     color: var(--text-secondary);
   }
 }
+
+/* ---- Card de acceso a la PWA mobile (QR) ---- */
+.pwa-access-card {
+  margin-bottom: 16px;
+}
+
+.pwa-access-body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.pwa-qr {
+  width: 120px;
+  height: 120px;
+  border-radius: 8px;
+  background: #fff;
+  padding: 4px;
+}
+
+.pwa-access-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 200px;
+}
+
+.pwa-access-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.pwa-access-url {
+  font-family: monospace;
+  color: var(--primary-color, #1976d2);
+  word-break: break-all;
+}
+
+.pwa-access-hint {
+  font-size: 0.85rem;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.6));
+}
