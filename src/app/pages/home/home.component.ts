@@ -89,6 +89,9 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   shortcuts: any[] = [];
 
+  // Acceso a la PWA mobile (solo cuando la app corre en mode=server).
+  pwaAccess: { available: boolean; url?: string; urls?: string[]; qr?: string } | null = null;
+
   chartData: ChartData<'line'> = { labels: [], datasets: [] };
   chartOptions: ChartConfiguration<'line'>['options'] = getDashboardChartOptions('line');
 
@@ -103,6 +106,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.cargarKpis();
     this.loadShortcuts();
+    this.cargarPwaAccess();
     this.subs.add(
       this.onboardingService.status$.subscribe((status) => {
         this.onboardingStatus = status;
@@ -218,6 +222,27 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   abrirShortcut(s: any): void {
     abrirShortcut(s, this.tabsService);
+  }
+
+  /** Carga la URL + QR de acceso a la PWA mobile (si la app está en modo Servidor). */
+  private async cargarPwaAccess(): Promise<void> {
+    try {
+      const api = (window as any).api;
+      if (api?.callIpc) {
+        const res = await api.callIpc('get-pwa-access');
+        this.pwaAccess = res?.available ? res : null;
+      }
+    } catch {
+      this.pwaAccess = null;
+    }
+  }
+
+  copiarUrlPwa(): void {
+    if (!this.pwaAccess?.url) return;
+    navigator.clipboard?.writeText(this.pwaAccess.url).then(
+      () => this.snackBar.open('URL copiada', 'OK', { duration: 1500 }),
+      () => {},
+    );
   }
 
   async eliminarShortcut(s: any, event: Event): Promise<void> {

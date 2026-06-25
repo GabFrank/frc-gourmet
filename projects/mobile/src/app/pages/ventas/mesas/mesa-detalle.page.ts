@@ -5,23 +5,36 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
-import { firstValueFrom } from 'rxjs';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { firstValueFrom, forkJoin, of, Observable } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { RepositoryService } from '@frc/shared-core';
 import { ConfirmDialogComponent } from '../../../core/components/confirm-dialog.component';
 import {
   TransferirMesaDialogComponent,
   MesaDestino,
 } from './transferir-mesa-dialog.component';
+import { ItemInfoDialogComponent } from './item-info-dialog.component';
+import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
 
 interface ItemVM {
   id: number;
+  productoId?: number;
+  precioBase: number;
   descripcion: string;
   detalle?: string;
   cantidad: number;
   unitario: number;
   total: number;
+  estado: string;
+  cancelado: boolean;
+  createdAt?: string;
+  usuario?: string;
+  adicionales: { id: number; nombre: string; precio: number }[];
+  observaciones: { id: number; texto: string }[];
+  ingredientes: { id: number; texto: string }[];
+  sabores: string[];
 }
 
 /**
@@ -39,6 +52,8 @@ interface ItemVM {
     MatIconModule,
     MatButtonModule,
     MatProgressBarModule,
+    MatDialogModule,
+    MatSnackBarModule,
   ],
   templateUrl: './mesa-detalle.page.html',
   styleUrls: ['./mesas.scss'],
@@ -63,9 +78,52 @@ export class MesaDetallePage implements OnInit {
   loading = true;
   error: string | null = null;
 
+  // Total convertido a las otras monedas configuradas (cotización vigente).
+  private monedas: any[] = [];
+  private cambios: any[] = [];
+  private principalMonedaId: number | null = null;
+  totalesConvertidos: { simbolo: string; total: number; digits: string }[] = [];
+
   ngOnInit(): void {
     this.mesaId = Number(this.route.snapshot.paramMap.get('id'));
     this.cargar();
+    this.cargarMonedas();
+  }
+
+  private cargarMonedas(): void {
+    forkJoin({
+      mon: this.repo.getMonedas().pipe(catchError(() => of([] as any[]))),
+      cam: this.repo.getMonedasCambio().pipe(catchError(() => of([] as any[]))),
+    }).subscribe(({ mon, cam }) => {
+      this.monedas = (mon as any[]) || [];
+      this.cambios = (cam as any[]) || [];
+      this.principalMonedaId = this.monedas.find((m: any) => m.principal)?.id ?? null;
+      this.recalcularMonedas();
+    });
+  }
+
+  private recalcularMonedas(): void {
+    if (!this.principalMonedaId || this.monedas.length === 0 || this.total <= 0) {
+      this.totalesConvertidos = [];
+      return;
+    }
+    this.totalesConvertidos = this.monedas
+      .filter((m: any) => m.id !== this.principalMonedaId && m.activo !== false)
+      .map((m: any) => {
+        const rate = this.cambios.find(
+          (c: any) =>
+            (c.monedaOrigen?.id === this.principalMonedaId && c.monedaDestino?.id === m.id) ||
+            (c.monedaOrigen?.id === m.id && c.monedaDestino?.id === this.principalMonedaId),
+        );
+        const comp = Number(rate?.compraLocal) || 0;
+        if (comp <= 0) return null;
+        return {
+          simbolo: m.simbolo || m.denominacion || '',
+          total: this.total / comp,
+          digits: `1.0-${m.decimales ?? 2}`,
+        };
+      })
+      .filter((x): x is { simbolo: string; total: number; digits: string } => !!x);
   }
 
   private cargar(): void {
@@ -99,10 +157,28 @@ export class MesaDetallePage implements OnInit {
   private cargarCuenta(ventaId: number): void {
     this.repo.getVentaItems(ventaId).subscribe({
       next: (data: any[]) => {
-        const activos = (data || []).filter((i) => i.estado === 'ACTIVO');
-        this.items = activos.map((i) => this.toItemVM(i));
-        this.total = this.items.reduce((s, i) => s + i.total, 0);
-        this.loading = false;
+        const items = data || [];
+        if (items.length === 0) {
+          this.items = [];
+          this.total = 0;
+          this.loading = false;
+          return;
+        }
+        // Cargar la personalización de cada item (adicionales/obs/ingredientes/sabores)
+        // en paralelo. Se muestran TODOS los items, incluidos los cancelados.
+        forkJoin(items.map((i) => this.cargarItem(i))).subscribe({
+          next: (vms) => {
+            this.items = vms;
+            // El total de la cuenta suma solo los items ACTIVOS (los cancelados no).
+            this.total = vms.filter((v) => !v.cancelado).reduce((s, v) => s + v.total, 0);
+            this.recalcularMonedas();
+            this.loading = false;
+          },
+          error: () => {
+            this.error = 'No se pudo cargar la cuenta';
+            this.loading = false;
+          },
+        });
       },
       error: () => {
         this.error = 'No se pudo cargar la cuenta';
@@ -111,7 +187,21 @@ export class MesaDetallePage implements OnInit {
     });
   }
 
-  private toItemVM(i: any): ItemVM {
+  private cargarItem(i: any): Observable<ItemVM> {
+    return forkJoin({
+      adic: this.repo.getVentaItemAdicionales(i.id).pipe(catchError(() => of([] as any[]))),
+      obs: this.repo.getObservacionesByVentaItem(i.id).pipe(catchError(() => of([] as any[]))),
+      ing: this.repo
+        .getVentaItemIngredienteModificaciones(i.id)
+        .pipe(catchError(() => of([] as any[]))),
+      sab: this.repo.getVentaItemSabores(i.id).pipe(catchError(() => of([] as any[]))),
+    }).pipe(map((p) => this.toItemVM(i, p)));
+  }
+
+  private toItemVM(
+    i: any,
+    p: { adic: any[]; obs: any[]; ing: any[]; sab: any[] },
+  ): ItemVM {
     const cantidad = Number(i.cantidad) || 0;
     // Mismo cálculo que el PdV desktop: (unitario + adicionales - descuento) * cantidad.
     const unitario =
@@ -120,12 +210,180 @@ export class MesaDetallePage implements OnInit {
       (Number(i.descuentoUnitario) || 0);
     return {
       id: i.id,
+      productoId: i.producto?.id,
+      precioBase: Number(i.precioVentaUnitario) || 0,
       descripcion: i.producto?.nombre || i.ensambladoDescripcion || 'Item',
       detalle: i.presentacion?.nombre,
       cantidad,
       unitario,
       total: unitario * cantidad,
+      estado: i.estado || 'ACTIVO',
+      cancelado: i.estado === 'CANCELADO',
+      createdAt: i.createdAt,
+      usuario: i.createdBy?.persona?.nombre || i.createdBy?.nickname || i.createdBy?.usuario,
+      adicionales: (p.adic || [])
+        .filter((a) => a.activo !== false)
+        .map((a) => ({
+          id: a.id,
+          nombre: a.adicional?.nombre || 'Adicional',
+          precio: Number(a.precioCobrado) || 0,
+        })),
+      observaciones: (p.obs || [])
+        .filter((o) => o.activo !== false)
+        .map((o) => ({
+          id: o.id,
+          texto: [o.observacion?.descripcion || o.observacion?.nombre, o.observacionLibre]
+            .filter(Boolean)
+            .join(' — '),
+        }))
+        .filter((o) => !!o.texto),
+      ingredientes: (p.ing || [])
+        .filter((m) => m.activo !== false)
+        .map((m) => {
+          const nom = m.recetaIngrediente?.ingrediente?.nombre || 'ingrediente';
+          return {
+            id: m.id,
+            texto:
+              m.tipoModificacion === 'INTERCAMBIADO'
+                ? `${nom} → ${m.ingredienteReemplazo?.nombre || '?'}`
+                : `Sin ${nom}`,
+          };
+        }),
+      sabores: (p.sab || []).map((s) => {
+        const prop = Number(s.proporcion) || 1;
+        const frac = prop < 1 ? `1/${Math.round(1 / prop)} ` : '';
+        return `${frac}${s.recetaPresentacion?.sabor?.nombre || 'Sabor'}`;
+      }),
     };
+  }
+
+  async abrirInfo(item: ItemVM): Promise<void> {
+    // Estado del ítem en cocina (KDS), si está disponible. Generic callIpc para no
+    // depender de un método nuevo del repo; si el handler no existe, se ignora.
+    let estadoKds: string | undefined;
+    try {
+      const api = (window as any).api;
+      if (api?.callIpc) {
+        const rows: any[] = await api.callIpc('get-kds-comandas', { incluirEntregados: true });
+        const k = (rows || []).find((r) => r.ventaItemId === item.id);
+        if (k?.estado) estadoKds = k.estado;
+      }
+    } catch {
+      /* KDS no disponible */
+    }
+    this.dialog.open(ItemInfoDialogComponent, {
+      data: {
+        descripcion: item.descripcion,
+        cantidad: item.cantidad,
+        unitario: item.unitario,
+        total: item.total,
+        estado: item.estado,
+        cancelado: item.cancelado,
+        createdAt: item.createdAt,
+        usuario: item.usuario,
+        estadoKds,
+        adicionales: item.adicionales,
+        observaciones: item.observaciones,
+        ingredientes: item.ingredientes,
+        sabores: item.sabores,
+      },
+      width: '340px',
+      maxHeight: '85vh',
+    });
+  }
+
+  async editar(item: ItemVM): Promise<void> {
+    if (item.cancelado || this.quitando) return;
+    // Variaciones (pizza): edición acotada a cantidad + observaciones (los sabores
+    // y el precio de adicionales por-sabor no se tocan acá).
+    const esVariacion = item.sabores.length > 0;
+    this.quitando = true;
+    let adicRows: any[] = [];
+    let obsRows: any[] = [];
+    try {
+      const [adic, obs, prod] = await Promise.all([
+        firstValueFrom(this.repo.getVentaItemAdicionales(item.id).pipe(catchError(() => of([] as any[])))),
+        firstValueFrom(this.repo.getObservacionesByVentaItem(item.id).pipe(catchError(() => of([] as any[])))),
+        item.productoId
+          ? firstValueFrom(this.repo.getProducto(item.productoId).pipe(catchError(() => of(null as any))))
+          : Promise.resolve(null),
+      ]);
+      adicRows = (adic as any[]) || [];
+      obsRows = (obs as any[]) || [];
+      const recetaId = esVariacion ? null : ((prod as any)?.receta?.id ?? null);
+      const adicionalesPreSel = esVariacion
+        ? []
+        : adicRows.filter((a) => a.activo !== false && a.adicional).map((a) => a.adicional.id);
+      const observacionesPreSel = obsRows
+        .filter((o) => o.activo !== false && o.observacion)
+        .map((o) => o.observacion.id);
+      const observacionLibreInicial =
+        obsRows.find((o) => o.observacionLibre && !o.observacion)?.observacionLibre || '';
+      this.quitando = false;
+
+      const res = (await firstValueFrom(
+        this.dialog
+          .open(AgregarItemDialogComponent, {
+            data: {
+              productoId: item.productoId,
+              nombre: item.descripcion,
+              precioUnitario: item.precioBase,
+              recetaId,
+              modoEdicion: true,
+              cantidadInicial: item.cantidad,
+              adicionalesPreSel,
+              observacionesPreSel,
+              observacionLibreInicial,
+            },
+            width: '340px',
+            maxHeight: '85vh',
+          })
+          .afterClosed(),
+      )) as AgregarItemResult | 'QUITAR' | undefined;
+
+      if (!res) return;
+      if (res === 'QUITAR') {
+        await this.quitar(item);
+        return;
+      }
+
+      this.quitando = true;
+      // Observaciones: reconciliar siempre (borrar actuales + recrear selección).
+      for (const o of obsRows) await firstValueFrom(this.repo.deleteVentaItemObservacion(o.id));
+      for (const oid of res.observaciones) {
+        await firstValueFrom(
+          this.repo.createVentaItemObservacion({ ventaItem: { id: item.id }, observacion: { id: oid } }),
+        );
+      }
+      if (res.observacionLibre) {
+        await firstValueFrom(
+          this.repo.createVentaItemObservacion({ ventaItem: { id: item.id }, observacionLibre: res.observacionLibre }),
+        );
+      }
+      const cambios: any = { cantidad: res.cantidad, modificado: true, horaModificacion: new Date() };
+      if (!esVariacion) {
+        // Adicionales: solo para no-variación (en variación son por-sabor y no se tocan acá).
+        for (const a of adicRows) await firstValueFrom(this.repo.deleteVentaItemAdicional(a.id));
+        for (const a of res.adicionales) {
+          await firstValueFrom(
+            this.repo.createVentaItemAdicional({
+              ventaItem: { id: item.id },
+              adicional: { id: a.id },
+              precioCobrado: a.precio,
+              cantidad: 1,
+            }),
+          );
+        }
+        cambios.precioAdicionales = res.precioAdicionalTotal;
+      }
+      await firstValueFrom(this.repo.updateVentaItem(item.id, cambios));
+      this.snack.open('Ítem actualizado', undefined, { duration: 1500 });
+      if (this.ventaId) this.cargarCuenta(this.ventaId);
+    } catch {
+      this.snack.open('No se pudo editar el ítem', 'CERRAR', { duration: 4000 });
+    } finally {
+      this.quitando = false;
+    }
   }
 
   async quitar(item: ItemVM): Promise<void> {

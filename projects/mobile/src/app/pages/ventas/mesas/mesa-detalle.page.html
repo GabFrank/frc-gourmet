@@ -25,22 +25,34 @@
 
     <ng-container *ngIf="ocupada; else libre">
       <section class="mesa-cuenta" *ngIf="items.length; else sinItems">
-        <div class="mesa-item" *ngFor="let it of items">
+        <div class="mesa-item" *ngFor="let it of items" [class.cancelado]="it.cancelado">
           <div class="mesa-item-main">
-            <span class="mesa-item-desc">{{ it.descripcion }}</span>
+            <span class="mesa-item-desc">
+              {{ it.descripcion }}
+              <span class="mesa-item-badge" *ngIf="it.cancelado">CANCELADO</span>
+            </span>
             <span class="mesa-item-detalle" *ngIf="it.detalle">{{ it.detalle }}</span>
             <span class="mesa-item-calc">{{ it.cantidad | number:'1.0-2' }} × {{ it.unitario | number:'1.0-2' }}</span>
+            <span class="mesa-item-extra" *ngFor="let s of it.sabores">{{ s }}</span>
+            <span class="mesa-item-extra adic" *ngFor="let a of it.adicionales">+ {{ a.nombre }} ({{ a.precio | number:'1.0-2' }})</span>
+            <span class="mesa-item-extra" *ngFor="let g of it.ingredientes">{{ g.texto }}</span>
+            <span class="mesa-item-extra obs" *ngFor="let o of it.observaciones">• {{ o.texto }}</span>
           </div>
           <span class="mesa-item-total">{{ it.total | number:'1.0-2' }}</span>
-          <button
-            mat-icon-button
-            class="mesa-item-quitar"
-            [disabled]="quitando"
-            (click)="quitar(it)"
-            aria-label="Quitar ítem"
-          >
-            <mat-icon>delete_outline</mat-icon>
-          </button>
+          <div class="mesa-item-acciones">
+            <button mat-icon-button (click)="abrirInfo(it)" aria-label="Información del ítem">
+              <mat-icon>info_outline</mat-icon>
+            </button>
+            <button
+              *ngIf="!it.cancelado"
+              mat-icon-button
+              [disabled]="quitando"
+              (click)="editar(it)"
+              aria-label="Editar ítem"
+            >
+              <mat-icon>edit</mat-icon>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -51,6 +63,9 @@
       <div class="mesa-total" *ngIf="items.length">
         <span>Total</span>
         <span class="mesa-total-valor">{{ total | number:'1.0-2' }}</span>
+      </div>
+      <div class="mesa-total-monedas" *ngIf="items.length && totalesConvertidos.length">
+        <span *ngFor="let t of totalesConvertidos">{{ t.simbolo }} {{ t.total | number: t.digits }}</span>
       </div>
     </ng-container>
 
