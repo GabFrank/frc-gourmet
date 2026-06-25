@@ -78,9 +78,52 @@ export class MesaDetallePage implements OnInit {
   loading = true;
   error: string | null = null;
 
+  // Total convertido a las otras monedas configuradas (cotización vigente).
+  private monedas: any[] = [];
+  private cambios: any[] = [];
+  private principalMonedaId: number | null = null;
+  totalesConvertidos: { simbolo: string; total: number; digits: string }[] = [];
+
   ngOnInit(): void {
     this.mesaId = Number(this.route.snapshot.paramMap.get('id'));
     this.cargar();
+    this.cargarMonedas();
+  }
+
+  private cargarMonedas(): void {
+    forkJoin({
+      mon: this.repo.getMonedas().pipe(catchError(() => of([] as any[]))),
+      cam: this.repo.getMonedasCambio().pipe(catchError(() => of([] as any[]))),
+    }).subscribe(({ mon, cam }) => {
+      this.monedas = (mon as any[]) || [];
+      this.cambios = (cam as any[]) || [];
+      this.principalMonedaId = this.monedas.find((m: any) => m.principal)?.id ?? null;
+      this.recalcularMonedas();
+    });
+  }
+
+  private recalcularMonedas(): void {
+    if (!this.principalMonedaId || this.monedas.length === 0 || this.total <= 0) {
+      this.totalesConvertidos = [];
+      return;
+    }
+    this.totalesConvertidos = this.monedas
+      .filter((m: any) => m.id !== this.principalMonedaId && m.activo !== false)
+      .map((m: any) => {
+        const rate = this.cambios.find(
+          (c: any) =>
+            (c.monedaOrigen?.id === this.principalMonedaId && c.monedaDestino?.id === m.id) ||
+            (c.monedaOrigen?.id === m.id && c.monedaDestino?.id === this.principalMonedaId),
+        );
+        const comp = Number(rate?.compraLocal) || 0;
+        if (comp <= 0) return null;
+        return {
+          simbolo: m.simbolo || m.denominacion || '',
+          total: this.total / comp,
+          digits: `1.0-${m.decimales ?? 2}`,
+        };
+      })
+      .filter((x): x is { simbolo: string; total: number; digits: string } => !!x);
   }
 
   private cargar(): void {
@@ -128,6 +171,7 @@ export class MesaDetallePage implements OnInit {
             this.items = vms;
             // El total de la cuenta suma solo los items ACTIVOS (los cancelados no).
             this.total = vms.filter((v) => !v.cancelado).reduce((s, v) => s + v.total, 0);
+            this.recalcularMonedas();
             this.loading = false;
           },
           error: () => {
@@ -213,7 +257,20 @@ export class MesaDetallePage implements OnInit {
     };
   }
 
-  abrirInfo(item: ItemVM): void {
+  async abrirInfo(item: ItemVM): Promise<void> {
+    // Estado del ítem en cocina (KDS), si está disponible. Generic callIpc para no
+    // depender de un método nuevo del repo; si el handler no existe, se ignora.
+    let estadoKds: string | undefined;
+    try {
+      const api = (window as any).api;
+      if (api?.callIpc) {
+        const rows: any[] = await api.callIpc('get-kds-comandas', { incluirEntregados: true });
+        const k = (rows || []).find((r) => r.ventaItemId === item.id);
+        if (k?.estado) estadoKds = k.estado;
+      }
+    } catch {
+      /* KDS no disponible */
+    }
     this.dialog.open(ItemInfoDialogComponent, {
       data: {
         descripcion: item.descripcion,
@@ -224,6 +281,7 @@ export class MesaDetallePage implements OnInit {
         cancelado: item.cancelado,
         createdAt: item.createdAt,
         usuario: item.usuario,
+        estadoKds,
         adicionales: item.adicionales,
         observaciones: item.observaciones,
         ingredientes: item.ingredientes,
@@ -236,11 +294,9 @@ export class MesaDetallePage implements OnInit {
 
   async editar(item: ItemVM): Promise<void> {
     if (item.cancelado || this.quitando) return;
-    // Las variaciones (con sabores) no se editan acá — su personalización es por sabor.
-    if (item.sabores.length > 0) {
-      this.snack.open('Las variaciones no se editan desde acá todavía', 'CERRAR', { duration: 3000 });
-      return;
-    }
+    // Variaciones (pizza): edición acotada a cantidad + observaciones (los sabores
+    // y el precio de adicionales por-sabor no se tocan acá).
+    const esVariacion = item.sabores.length > 0;
     this.quitando = true;
     let adicRows: any[] = [];
     let obsRows: any[] = [];
@@ -254,10 +310,10 @@ export class MesaDetallePage implements OnInit {
       ]);
       adicRows = (adic as any[]) || [];
       obsRows = (obs as any[]) || [];
-      const recetaId = (prod as any)?.receta?.id ?? null;
-      const adicionalesPreSel = adicRows
-        .filter((a) => a.activo !== false && a.adicional)
-        .map((a) => a.adicional.id);
+      const recetaId = esVariacion ? null : ((prod as any)?.receta?.id ?? null);
+      const adicionalesPreSel = esVariacion
+        ? []
+        : adicRows.filter((a) => a.activo !== false && a.adicional).map((a) => a.adicional.id);
       const observacionesPreSel = obsRows
         .filter((o) => o.activo !== false && o.observacion)
         .map((o) => o.observacion.id);
@@ -292,19 +348,8 @@ export class MesaDetallePage implements OnInit {
       }
 
       this.quitando = true;
-      // Reconciliar: borrar adicionales/observaciones actuales y recrear según la selección.
-      for (const a of adicRows) await firstValueFrom(this.repo.deleteVentaItemAdicional(a.id));
+      // Observaciones: reconciliar siempre (borrar actuales + recrear selección).
       for (const o of obsRows) await firstValueFrom(this.repo.deleteVentaItemObservacion(o.id));
-      for (const a of res.adicionales) {
-        await firstValueFrom(
-          this.repo.createVentaItemAdicional({
-            ventaItem: { id: item.id },
-            adicional: { id: a.id },
-            precioCobrado: a.precio,
-            cantidad: 1,
-          }),
-        );
-      }
       for (const oid of res.observaciones) {
         await firstValueFrom(
           this.repo.createVentaItemObservacion({ ventaItem: { id: item.id }, observacion: { id: oid } }),
@@ -315,14 +360,23 @@ export class MesaDetallePage implements OnInit {
           this.repo.createVentaItemObservacion({ ventaItem: { id: item.id }, observacionLibre: res.observacionLibre }),
         );
       }
-      await firstValueFrom(
-        this.repo.updateVentaItem(item.id, {
-          cantidad: res.cantidad,
-          precioAdicionales: res.precioAdicionalTotal,
-          modificado: true,
-          horaModificacion: new Date(),
-        } as any),
-      );
+      const cambios: any = { cantidad: res.cantidad, modificado: true, horaModificacion: new Date() };
+      if (!esVariacion) {
+        // Adicionales: solo para no-variación (en variación son por-sabor y no se tocan acá).
+        for (const a of adicRows) await firstValueFrom(this.repo.deleteVentaItemAdicional(a.id));
+        for (const a of res.adicionales) {
+          await firstValueFrom(
+            this.repo.createVentaItemAdicional({
+              ventaItem: { id: item.id },
+              adicional: { id: a.id },
+              precioCobrado: a.precio,
+              cantidad: 1,
+            }),
+          );
+        }
+        cambios.precioAdicionales = res.precioAdicionalTotal;
+      }
+      await firstValueFrom(this.repo.updateVentaItem(item.id, cambios));
       this.snack.open('Ítem actualizado', undefined, { duration: 1500 });
       if (this.ventaId) this.cargarCuenta(this.ventaId);
     } catch {

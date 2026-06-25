@@ -183,7 +183,10 @@ export class TomarPedidoPage implements OnInit {
     const tipo = prod.tipo;
     const esVariacion = tipo === 'ELABORADO_CON_VARIACION';
     const esSimple =
-      tipo === 'RETAIL' || tipo === 'RETAIL_INGREDIENTE' || tipo === 'ELABORADO_SIN_VARIACION';
+      tipo === 'RETAIL' ||
+      tipo === 'RETAIL_INGREDIENTE' ||
+      tipo === 'ELABORADO_SIN_VARIACION' ||
+      tipo === 'COMBO';
     let presObj: any = null;
     let precioObj: any = null;
     if (tipo === 'RETAIL' || tipo === 'RETAIL_INGREDIENTE') {
@@ -260,7 +263,10 @@ export class TomarPedidoPage implements OnInit {
     const tipo = p.tipo;
     const esVariacion = tipo === 'ELABORADO_CON_VARIACION';
     const esSimple =
-      tipo === 'RETAIL' || tipo === 'RETAIL_INGREDIENTE' || tipo === 'ELABORADO_SIN_VARIACION';
+      tipo === 'RETAIL' ||
+      tipo === 'RETAIL_INGREDIENTE' ||
+      tipo === 'ELABORADO_SIN_VARIACION' ||
+      tipo === 'COMBO';
     return {
       id: p.id,
       nombre: p.nombre,

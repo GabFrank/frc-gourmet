@@ -390,3 +390,14 @@
 .atajo-btn[disabled] {
   opacity: 0.6;
 }
+
+/* ---- Total convertido a otras monedas ---- */
+.mesa-total-monedas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  justify-content: flex-end;
+  padding: 2px 16px 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+}

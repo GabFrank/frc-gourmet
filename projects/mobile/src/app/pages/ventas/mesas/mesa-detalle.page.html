@@ -44,23 +44,13 @@
               <mat-icon>info_outline</mat-icon>
             </button>
             <button
-              *ngIf="!it.cancelado && it.sabores.length === 0"
+              *ngIf="!it.cancelado"
               mat-icon-button
               [disabled]="quitando"
               (click)="editar(it)"
               aria-label="Editar ítem"
             >
               <mat-icon>edit</mat-icon>
-            </button>
-            <button
-              *ngIf="!it.cancelado && it.sabores.length > 0"
-              mat-icon-button
-              class="mesa-item-quitar"
-              [disabled]="quitando"
-              (click)="quitar(it)"
-              aria-label="Quitar ítem"
-            >
-              <mat-icon>delete_outline</mat-icon>
             </button>
           </div>
         </div>
@@ -73,6 +63,9 @@
       <div class="mesa-total" *ngIf="items.length">
         <span>Total</span>
         <span class="mesa-total-valor">{{ total | number:'1.0-2' }}</span>
+      </div>
+      <div class="mesa-total-monedas" *ngIf="items.length && totalesConvertidos.length">
+        <span *ngFor="let t of totalesConvertidos">{{ t.simbolo }} {{ t.total | number: t.digits }}</span>
       </div>
     </ng-container>
 
