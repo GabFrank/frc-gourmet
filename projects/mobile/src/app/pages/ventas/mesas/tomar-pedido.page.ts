@@ -95,6 +95,7 @@ export class TomarPedidoPage implements OnInit {
   termino = '';
   resultados: ProductoVM[] = [];
   buscando = false;
+  private searchTimer: any = null;
   cargando = true;
   error: string | null = null;
 
@@ -116,9 +117,14 @@ export class TomarPedidoPage implements OnInit {
   onTermino(valor: string): void {
     // Input siempre en MAYÚSCULA (las cadenas se guardan/buscan en upper).
     this.termino = (valor || '').toUpperCase();
+    if (this.searchTimer) clearTimeout(this.searchTimer);
     if (!this.termino) {
       this.resultados = [];
+      return;
     }
+    // Búsqueda proactiva (debounce) — sin necesidad de enter ni el botón.
+    if (this.termino.trim().length < 2) return;
+    this.searchTimer = setTimeout(() => this.buscar(), 300);
   }
 
   private cargarAtajos(): void {

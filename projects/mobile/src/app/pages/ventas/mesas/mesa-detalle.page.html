@@ -33,10 +33,15 @@
             </span>
             <span class="mesa-item-detalle" *ngIf="it.detalle">{{ it.detalle }}</span>
             <span class="mesa-item-calc">{{ it.cantidad | number:'1.0-2' }} × {{ it.unitario | number:'1.0-2' }}</span>
-            <span class="mesa-item-extra" *ngFor="let s of it.sabores">{{ s }}</span>
-            <span class="mesa-item-extra adic" *ngFor="let a of it.adicionales">+ {{ a.nombre }} ({{ a.precio | number:'1.0-2' }})</span>
-            <span class="mesa-item-extra" *ngFor="let g of it.ingredientes">{{ g.texto }}</span>
-            <span class="mesa-item-extra obs" *ngFor="let o of it.observaciones">• {{ o.texto }}</span>
+            <div
+              class="mesa-chips"
+              *ngIf="it.sabores.length || it.adicionales.length || it.ingredientes.length || it.observaciones.length"
+            >
+              <span class="mesa-chip chip-sabor" *ngFor="let s of it.sabores">{{ s }}</span>
+              <span class="mesa-chip chip-adic" *ngFor="let a of it.adicionales">+ {{ a.nombre }} ({{ a.precio | number:'1.0-2' }})</span>
+              <span class="mesa-chip chip-ingr" *ngFor="let g of it.ingredientes">{{ g.texto }}</span>
+              <span class="mesa-chip chip-obs" *ngFor="let o of it.observaciones">{{ o.texto }}</span>
+            </div>
           </div>
           <span class="mesa-item-total">{{ it.total | number:'1.0-2' }}</span>
           <div class="mesa-item-acciones">
@@ -65,7 +70,10 @@
         <span class="mesa-total-valor">{{ total | number:'1.0-2' }}</span>
       </div>
       <div class="mesa-total-monedas" *ngIf="items.length && totalesConvertidos.length">
-        <span *ngFor="let t of totalesConvertidos">{{ t.simbolo }} {{ t.total | number: t.digits }}</span>
+        <span class="mesa-moneda" *ngFor="let t of totalesConvertidos">
+          <img *ngIf="t.flag" class="mesa-flag" [src]="t.flag" alt="" />
+          {{ t.simbolo }} {{ t.total | number: t.digits }}
+        </span>
       </div>
     </ng-container>
 

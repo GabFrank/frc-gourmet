@@ -82,7 +82,7 @@ export class MesaDetallePage implements OnInit {
   private monedas: any[] = [];
   private cambios: any[] = [];
   private principalMonedaId: number | null = null;
-  totalesConvertidos: { simbolo: string; total: number; digits: string }[] = [];
+  totalesConvertidos: { simbolo: string; total: number; digits: string; flag?: string }[] = [];
 
   ngOnInit(): void {
     this.mesaId = Number(this.route.snapshot.paramMap.get('id'));
@@ -121,9 +121,10 @@ export class MesaDetallePage implements OnInit {
           simbolo: m.simbolo || m.denominacion || '',
           total: this.total / comp,
           digits: `1.0-${m.decimales ?? 2}`,
+          flag: m.flagIconBase64 || m.flagIcon || '',
         };
       })
-      .filter((x): x is { simbolo: string; total: number; digits: string } => !!x);
+      .filter((x) => !!x) as { simbolo: string; total: number; digits: string; flag?: string }[];
   }
 
   private cargar(): void {
