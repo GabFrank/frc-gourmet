@@ -8,8 +8,8 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 import { Observable } from 'rxjs';
 import { filter, map, shareReplay, startWith } from 'rxjs/operators';
-import { AuthService, ThemeService, Usuario } from '@frc/shared-core';
-import { NAV_ITEMS } from './nav';
+import { AuthService, PermissionService, ThemeService, Usuario } from '@frc/shared-core';
+import { NAV_ITEMS, NavItem } from './nav';
 import { OfflineBannerComponent } from '../components/offline-banner.component';
 
 /**
@@ -36,10 +36,18 @@ export class ShellComponent implements OnInit {
   private readonly breakpoints = inject(BreakpointObserver);
   private readonly auth = inject(AuthService);
   private readonly theme = inject(ThemeService);
+  private readonly permissions = inject(PermissionService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 
-  readonly nav = NAV_ITEMS;
+  // Navegación filtrada por permisos: los destinos con `permisos` solo se
+  // muestran si el usuario tiene al menos uno (Compras/Finanzas/RRHH).
+  readonly nav$: Observable<NavItem[]> = this.permissions.codigos$.pipe(
+    map((set) =>
+      NAV_ITEMS.filter((i) => !i.permisos || i.permisos.some((p) => set.has(p.toUpperCase()))),
+    ),
+    shareReplay(1),
+  );
   readonly user: Usuario | null = this.auth.currentUser;
 
   readonly isHandset$: Observable<boolean> = this.breakpoints

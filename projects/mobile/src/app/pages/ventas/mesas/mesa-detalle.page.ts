@@ -82,6 +82,8 @@ export class MesaDetallePage implements OnInit {
   private monedas: any[] = [];
   private cambios: any[] = [];
   private principalMonedaId: number | null = null;
+  // Moneda principal (la del total grande del footer) con su banderita.
+  monedaPrincipal: { simbolo: string; digits: string; flag?: string } | null = null;
   totalesConvertidos: { simbolo: string; total: number; digits: string; flag?: string }[] = [];
 
   ngOnInit(): void {
@@ -105,8 +107,17 @@ export class MesaDetallePage implements OnInit {
   private recalcularMonedas(): void {
     if (!this.principalMonedaId || this.monedas.length === 0 || this.total <= 0) {
       this.totalesConvertidos = [];
+      this.monedaPrincipal = null;
       return;
     }
+    const principal = this.monedas.find((m: any) => m.id === this.principalMonedaId);
+    this.monedaPrincipal = principal
+      ? {
+          simbolo: principal.simbolo || principal.denominacion || '',
+          digits: `1.0-${principal.decimales ?? 0}`,
+          flag: principal.flagIconBase64 || principal.flagIcon || '',
+        }
+      : null;
     this.totalesConvertidos = this.monedas
       .filter((m: any) => m.id !== this.principalMonedaId && m.activo !== false)
       .map((m: any) => {

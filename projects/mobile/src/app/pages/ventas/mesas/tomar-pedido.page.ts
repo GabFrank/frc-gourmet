@@ -11,13 +11,25 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatRippleModule } from '@angular/material/core';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { AuthService, RepositoryService } from '@frc/shared-core';
 import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
 import {
   SeleccionarVariacionDialogComponent,
   SeleccionarVariacionResult,
 } from './seleccionar-variacion-dialog.component';
+import {
+  BuffetPesoDialogComponent,
+  BuffetPesoDialogResult,
+} from './buffet-peso-dialog.component';
+
+interface ConversionVM {
+  simbolo: string;
+  valor: number;
+  digits: string;
+  flag?: string;
+}
 
 interface ProductoVM {
   id: number;
@@ -30,6 +42,16 @@ interface ProductoVM {
   costo: number;
   recetaId?: number | null;
   esVariacion: boolean;
+  // Buffet por peso (BUFFET_POR_PESO): precio = precio por kg.
+  esBuffet?: boolean;
+  taraGramos?: number | null;
+  pesoMinimoGramos?: number | null;
+  precioMinimo?: number | null;
+  precioMaximo?: number | null;
+  decimalesMoneda?: number;
+  simboloMoneda?: string;
+  // Conversión del precio a las otras monedas configuradas (para mostrar en la lista).
+  conversiones: ConversionVM[];
 }
 
 interface PedidoLinea {
@@ -108,10 +130,53 @@ export class TomarPedidoPage implements OnInit {
   grupoSel: AtajoGrupoVM | null = null;
   atajoProductos: ProductoVM[] = []; // drill-in: productos de un atajo con varios
 
+  // Monedas configuradas para mostrar conversiones de precio (como el PdV).
+  private monedas: any[] = [];
+  private cambios: any[] = [];
+  private principalMonedaId: number | null = null;
+
   ngOnInit(): void {
     this.mesaId = Number(this.route.snapshot.paramMap.get('id'));
     this.cargarContexto();
     this.cargarAtajos();
+    this.cargarMonedas();
+  }
+
+  private cargarMonedas(): void {
+    forkJoin({
+      mon: this.repo.getMonedas().pipe(catchError(() => of([] as any[]))),
+      cam: this.repo.getMonedasCambio().pipe(catchError(() => of([] as any[]))),
+    }).subscribe(({ mon, cam }) => {
+      this.monedas = (mon as any[]) || [];
+      this.cambios = (cam as any[]) || [];
+      this.principalMonedaId = this.monedas.find((m: any) => m.principal)?.id ?? null;
+      // Recalcular conversiones de lo ya cargado (búsqueda/atajo previo a monedas).
+      this.resultados.forEach((p) => (p.conversiones = this.convertir(p.precio)));
+      this.atajoProductos.forEach((p) => (p.conversiones = this.convertir(p.precio)));
+    });
+  }
+
+  /** Convierte un monto en moneda principal a las demás monedas activas. */
+  private convertir(monto: number): ConversionVM[] {
+    if (!this.principalMonedaId || this.monedas.length === 0 || !(monto > 0)) return [];
+    return this.monedas
+      .filter((m: any) => m.id !== this.principalMonedaId && m.activo !== false)
+      .map((m: any) => {
+        const rate = this.cambios.find(
+          (c: any) =>
+            (c.monedaOrigen?.id === this.principalMonedaId && c.monedaDestino?.id === m.id) ||
+            (c.monedaOrigen?.id === m.id && c.monedaDestino?.id === this.principalMonedaId),
+        );
+        const comp = Number(rate?.compraLocal) || 0;
+        if (comp <= 0) return null;
+        return {
+          simbolo: m.simbolo || m.denominacion || '',
+          valor: monto / comp,
+          digits: `1.0-${m.decimales ?? 2}`,
+          flag: m.flagIconBase64 || m.flagIcon || '',
+        } as ConversionVM;
+      })
+      .filter((x): x is ConversionVM => !!x);
   }
 
   onTermino(valor: string): void {
@@ -188,6 +253,7 @@ export class TomarPedidoPage implements OnInit {
     const prod = ap.producto;
     const tipo = prod.tipo;
     const esVariacion = tipo === 'ELABORADO_CON_VARIACION';
+    const esBuffet = tipo === 'BUFFET_POR_PESO';
     const esSimple =
       tipo === 'RETAIL' ||
       tipo === 'RETAIL_INGREDIENTE' ||
@@ -195,7 +261,8 @@ export class TomarPedidoPage implements OnInit {
       tipo === 'COMBO';
     let presObj: any = null;
     let precioObj: any = null;
-    if (tipo === 'RETAIL' || tipo === 'RETAIL_INGREDIENTE') {
+    // RETAIL y BUFFET_POR_PESO resuelven precio desde la presentación principal.
+    if (tipo === 'RETAIL' || tipo === 'RETAIL_INGREDIENTE' || esBuffet) {
       const pres = (prod.presentaciones || []).find((p: any) => p.principal) || (prod.presentaciones || [])[0];
       presObj = pres;
       precioObj = (pres?.preciosVenta || []).find((pv: any) => pv.principal) || (pres?.preciosVenta || [])[0];
@@ -203,17 +270,26 @@ export class TomarPedidoPage implements OnInit {
       precioObj = prod.precioDirecto || null;
       presObj = (prod.presentaciones || [])[0] || null;
     }
+    const precio = Number(precioObj?.valor) || 0;
     return {
       id: prod.id,
       nombre: ap.nombre_alternativo || prod.nombre,
       tipo,
-      soportado: esSimple || esVariacion,
+      soportado: esSimple || esVariacion || esBuffet,
       esVariacion,
+      esBuffet,
       presentacionId: presObj?.id,
       precioId: precioObj?.id,
-      precio: Number(precioObj?.valor) || 0,
+      precio,
       costo: Number(prod.receta?.costoCalculado) || 0,
       recetaId: prod.receta?.id ?? null,
+      taraGramos: prod.taraGramos ?? null,
+      pesoMinimoGramos: prod.pesoMinimoGramos ?? null,
+      precioMinimo: precioObj?.precioMinimo ?? null,
+      precioMaximo: precioObj?.precioMaximo ?? null,
+      decimalesMoneda: precioObj?.moneda?.decimales ?? 0,
+      simboloMoneda: precioObj?.moneda?.simbolo || '',
+      conversiones: this.convertir(precio),
     };
   }
 
@@ -268,22 +344,33 @@ export class TomarPedidoPage implements OnInit {
   private toProductoVM(p: any): ProductoVM {
     const tipo = p.tipo;
     const esVariacion = tipo === 'ELABORADO_CON_VARIACION';
+    const esBuffet = tipo === 'BUFFET_POR_PESO';
     const esSimple =
       tipo === 'RETAIL' ||
       tipo === 'RETAIL_INGREDIENTE' ||
       tipo === 'ELABORADO_SIN_VARIACION' ||
       tipo === 'COMBO';
+    const precioObj = p.principalPrecio;
+    const precio = Number(precioObj?.valor) || 0;
     return {
       id: p.id,
       nombre: p.nombre,
       tipo,
-      soportado: esSimple || esVariacion,
+      soportado: esSimple || esVariacion || esBuffet,
       esVariacion,
+      esBuffet,
       presentacionId: p.principalPresentacion?.id,
-      precioId: p.principalPrecio?.id,
-      precio: Number(p.principalPrecio?.valor) || 0,
+      precioId: precioObj?.id,
+      precio,
       costo: Number(p.receta?.costoCalculado) || 0,
       recetaId: p.receta?.id ?? null,
+      taraGramos: p.taraGramos ?? null,
+      pesoMinimoGramos: p.pesoMinimoGramos ?? null,
+      precioMinimo: precioObj?.precioMinimo ?? null,
+      precioMaximo: precioObj?.precioMaximo ?? null,
+      decimalesMoneda: precioObj?.moneda?.decimales ?? 0,
+      simboloMoneda: precioObj?.moneda?.simbolo || '',
+      conversiones: this.convertir(precio),
     };
   }
 
@@ -302,6 +389,15 @@ export class TomarPedidoPage implements OnInit {
         } as any),
       );
       this.ventaId = venta?.id ?? null;
+      // Marcar la mesa OCUPADA (igual que el PdV de escritorio), para que figure
+      // ocupada en ambas vistas. No es fatal si falla la actualización de estado.
+      if (this.ventaId) {
+        try {
+          await firstValueFrom(this.repo.updatePdvMesa(this.mesaId, { estado: 'OCUPADO' } as any));
+        } catch {
+          /* el estado se reconcilia igual por la venta ABIERTA vinculada */
+        }
+      }
       return this.ventaId;
     } catch {
       this.snack.open('No se pudo abrir la cuenta de la mesa', 'CERRAR', { duration: 4000 });
@@ -313,6 +409,10 @@ export class TomarPedidoPage implements OnInit {
     if (!p.soportado || this.guardando) return;
     if (p.esVariacion) {
       await this.agregarVariacion(p);
+      return;
+    }
+    if (p.esBuffet) {
+      await this.agregarBuffet(p);
       return;
     }
     // El precio es obligatorio; la presentación es opcional (los elaborados sin
@@ -397,6 +497,68 @@ export class TomarPedidoPage implements OnInit {
       this.snack.open(`Agregado: ${sel.cantidad} × ${p.nombre}`, undefined, { duration: 1200 });
     } catch {
       this.snack.open('No se pudo agregar el producto', 'CERRAR', { duration: 4000 });
+    } finally {
+      this.guardando = false;
+    }
+  }
+
+  private async agregarBuffet(p: ProductoVM): Promise<void> {
+    if (!p.precioId) {
+      this.snack.open('El producto no tiene un precio por kg configurado', 'CERRAR', { duration: 4000 });
+      return;
+    }
+    const res = (await firstValueFrom(
+      this.dialog
+        .open(BuffetPesoDialogComponent, {
+          data: {
+            nombre: p.nombre,
+            precioPorKg: p.precio,
+            taraGramos: p.taraGramos,
+            pesoMinimoGramos: p.pesoMinimoGramos,
+            precioMinimo: p.precioMinimo,
+            precioMaximo: p.precioMaximo,
+            decimalesMoneda: p.decimalesMoneda,
+            simbolo: p.simboloMoneda,
+          },
+          width: '340px',
+          maxHeight: '85vh',
+        })
+        .afterClosed(),
+    )) as BuffetPesoDialogResult | undefined;
+    if (!res) return;
+
+    this.guardando = true;
+    const ventaId = await this.ensureVenta();
+    if (!ventaId) {
+      this.guardando = false;
+      return;
+    }
+    try {
+      // cantidad = kg neto; precioVentaUnitario = precio/kg efectivo (incluye
+      // tope/mínimo) para que (unitario * cantidad) dé el total correcto.
+      await firstValueFrom(
+        this.repo.createVentaItem({
+          producto: { id: p.id },
+          ...(p.presentacionId ? { presentacion: { id: p.presentacionId } } : {}),
+          cantidad: res.cantidadKg,
+          precioVentaUnitario: res.precioVentaUnitarioEfectivo,
+          precioCostoUnitario: p.costo,
+          venta: { id: ventaId },
+          precioVentaPresentacion: { id: p.precioId },
+          precioAdicionales: 0,
+          pesoBruto: res.pesoBrutoGramos,
+          pesoTara: res.pesoTaraGramos,
+          pesoNeto: res.pesoNetoGramos,
+          precioPorKg: res.precioPorKg,
+          aplicoLibre: res.aplicoLibre,
+          estado: 'ACTIVO',
+        } as any),
+      );
+      this.pedido.unshift({ nombre: p.nombre, cantidad: 1, precio: res.total });
+      this.totalPedido += res.total;
+      this.snack.open(`Agregado: ${p.nombre}`, undefined, { duration: 1200 });
+    } catch {
+      this.snack.open('No se pudo agregar el producto de buffet', 'CERRAR', { duration: 4000 });
     } finally {
       this.guardando = false;
     }

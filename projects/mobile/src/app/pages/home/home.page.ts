@@ -3,7 +3,9 @@ import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
-import { AuthService, Usuario } from '@frc/shared-core';
+import { Observable } from 'rxjs';
+import { map, shareReplay } from 'rxjs/operators';
+import { AuthService, PermissionService, Usuario } from '@frc/shared-core';
 import { NAV_ITEMS, NavItem } from '../../core/shell/nav';
 import { PwaInstallService } from '../../core/services/pwa-install.service';
 
@@ -17,8 +19,17 @@ import { PwaInstallService } from '../../core/services/pwa-install.service';
 })
 export class HomePage {
   private readonly auth = inject(AuthService);
+  private readonly permissions = inject(PermissionService);
   readonly pwa = inject(PwaInstallService);
 
   readonly user: Usuario | null = this.auth.currentUser;
-  readonly accesos: NavItem[] = NAV_ITEMS.filter((i) => !i.exact);
+  // Ventas primero; Compras/Finanzas/RRHH solo si el usuario tiene permiso.
+  readonly accesos$: Observable<NavItem[]> = this.permissions.codigos$.pipe(
+    map((set) =>
+      NAV_ITEMS.filter(
+        (i) => !i.exact && (!i.permisos || i.permisos.some((p) => set.has(p.toUpperCase()))),
+      ),
+    ),
+    shareReplay(1),
+  );
 }

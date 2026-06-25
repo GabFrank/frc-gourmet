@@ -15,7 +15,7 @@
   </button>
 
   <section class="quick">
-    <a *ngFor="let a of accesos" class="quick-card" [routerLink]="a.path">
+    <a *ngFor="let a of accesos$ | async" class="quick-card" [routerLink]="a.path">
       <mat-icon>{{ a.icon }}</mat-icon>
       <span>{{ a.label }}</span>
     </a>
