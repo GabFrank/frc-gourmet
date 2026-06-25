@@ -177,33 +177,21 @@
   z-index: 4;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 13px 92px calc(13px + env(safe-area-inset-bottom)) 18px; /* deja lugar al FAB a la derecha */
+  align-items: center;
+  gap: 5px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
   background: #1f2a30;
   border-top: 3px solid var(--success-color, #4caf50);
   box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.35);
 }
 
-.mesa-footer-main {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.mesa-footer-label {
-  font-size: 0.95rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.mesa-footer-valor {
+/* Moneda principal (guaraní) centrada y grande. */
+.mesa-footer-principal {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-size: 1.8rem;
+  justify-content: center;
+  gap: 8px;
+  font-size: 1.9rem;
   font-weight: 800;
   line-height: 1;
   color: var(--success-color, #4caf50);
@@ -215,13 +203,15 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
-.mesa-footer-monedas {
+/* Otras monedas configuradas, en una fila centrada con banderitas. */
+.mesa-footer-otras {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 16px;
-  font-size: 0.92rem;
+  justify-content: center;
+  gap: 4px 18px;
+  font-size: 0.98rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .mesa-libre {
@@ -391,6 +381,12 @@
   right: 18px;
   bottom: calc(18px + env(safe-area-inset-bottom));
   z-index: 5;
+  transition: bottom 0.15s ease;
+}
+
+/* Cuando hay footer de totales, el FAB se eleva por encima para no superponerse. */
+.mesa-fab.con-footer {
+  bottom: calc(104px + env(safe-area-inset-bottom));
 }
 
 .mesa-item-quitar {

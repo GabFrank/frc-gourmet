@@ -87,17 +87,15 @@
     </ng-template>
   </div>
 
-  <!-- Footer de total: principal grande + conversiones con banderita -->
+  <!-- Footer de total: principal (guaraní) centrado arriba + conversiones con
+       banderitas debajo, también centradas. -->
   <footer class="mesa-footer" *ngIf="!loading && !error && ocupada && items.length">
-    <div class="mesa-footer-main">
-      <span class="mesa-footer-label">Total</span>
-      <span class="mesa-footer-valor">
-        <img *ngIf="monedaPrincipal?.flag" class="mesa-flag big" [src]="monedaPrincipal?.flag" alt="" />
-        <span class="mesa-footer-simbolo" *ngIf="monedaPrincipal?.simbolo">{{ monedaPrincipal?.simbolo }}</span>
-        {{ total | number: (monedaPrincipal?.digits || '1.0-2') }}
-      </span>
+    <div class="mesa-footer-principal">
+      <img *ngIf="monedaPrincipal?.flag" class="mesa-flag big" [src]="monedaPrincipal?.flag" alt="" />
+      <span class="mesa-footer-simbolo" *ngIf="monedaPrincipal?.simbolo">{{ monedaPrincipal?.simbolo }}</span>
+      {{ total | number: (monedaPrincipal?.digits || '1.0-2') }}
     </div>
-    <div class="mesa-footer-monedas" *ngIf="totalesConvertidos.length">
+    <div class="mesa-footer-otras" *ngIf="totalesConvertidos.length">
       <span class="mesa-moneda" *ngFor="let t of totalesConvertidos">
         <img *ngIf="t.flag" class="mesa-flag" [src]="t.flag" alt="" />
         {{ t.simbolo }} {{ t.total | number: t.digits }}
@@ -105,10 +103,11 @@
     </div>
   </footer>
 
-  <!-- Tomar pedido: abre/usa la cuenta de la mesa y agrega productos -->
+  <!-- Tomar pedido: cuando hay footer, el FAB se eleva por encima de él. -->
   <a
     *ngIf="!loading && !error"
     class="mesa-fab"
+    [class.con-footer]="ocupada && items.length"
     mat-fab
     color="primary"
     [routerLink]="['/ventas/mesas', mesaId, 'pedido']"

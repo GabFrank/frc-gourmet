@@ -24,6 +24,7 @@ import {
   BuffetPesoDialogResult,
 } from './buffet-peso-dialog.component';
 import { AppImagePipe } from '../../../core/pipes/app-image.pipe';
+import { flagFor } from './moneda-flag.util';
 
 interface ConversionVM {
   simbolo: string;
@@ -176,7 +177,7 @@ export class TomarPedidoPage implements OnInit {
           simbolo: m.simbolo || m.denominacion || '',
           valor: monto / comp,
           digits: `1.0-${m.decimales ?? 2}`,
-          flag: m.flagIconBase64 || m.flagIcon || '',
+          flag: flagFor(m),
         } as ConversionVM;
       })
       .filter((x): x is ConversionVM => !!x);

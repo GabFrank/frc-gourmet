@@ -18,6 +18,7 @@ import {
 import { ItemInfoDialogComponent } from './item-info-dialog.component';
 import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
 import { ClienteMesaDialogComponent, ClienteSeleccionado } from './cliente-mesa-dialog.component';
+import { flagFor } from './moneda-flag.util';
 
 interface ItemVM {
   id: number;
@@ -118,7 +119,7 @@ export class MesaDetallePage implements OnInit {
       ? {
           simbolo: principal.simbolo || principal.denominacion || '',
           digits: `1.0-${principal.decimales ?? 0}`,
-          flag: principal.flagIconBase64 || principal.flagIcon || '',
+          flag: flagFor(principal),
         }
       : null;
     this.totalesConvertidos = this.monedas
@@ -135,7 +136,7 @@ export class MesaDetallePage implements OnInit {
           simbolo: m.simbolo || m.denominacion || '',
           total: this.total / comp,
           digits: `1.0-${m.decimales ?? 2}`,
-          flag: m.flagIconBase64 || m.flagIcon || '',
+          flag: flagFor(m),
         };
       })
       .filter((x) => !!x) as { simbolo: string; total: number; digits: string; flag?: string }[];
