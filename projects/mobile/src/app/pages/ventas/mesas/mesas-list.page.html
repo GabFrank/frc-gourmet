@@ -19,22 +19,28 @@
   <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
   <p *ngIf="error" class="crud-error">{{ error }}</p>
 
-  <div class="crud-list" *ngIf="!loading && !error">
+  <div class="mesas-grid" *ngIf="!loading && !error">
     <a
       *ngFor="let m of items"
-      class="crud-card mesa-card"
+      class="mesa-card-grid"
+      [class.ocupada]="m.ocupada"
       mat-ripple
       [routerLink]="['/ventas/mesas', m.id]"
     >
-      <div class="crud-card-body">
-        <div class="crud-card-main">
-          <span class="crud-name">{{ m.nombre }}</span>
-          <span class="crud-sub" *ngIf="m.sectorNombre">{{ m.sectorNombre }}</span>
-          <span class="crud-sub muted" *ngIf="m.capacidad">Cap. {{ m.capacidad }}</span>
-          <span class="crud-sub" *ngIf="m.comandas > 0">{{ m.comandas }} comanda(s)</span>
-        </div>
-        <span class="crud-chip" [class.off]="!m.ocupada">{{ m.estado }}</span>
-        <mat-icon class="crud-chevron">chevron_right</mat-icon>
+      <div class="mesa-card-top">
+        <span class="mesa-card-num">{{ m.numero }}</span>
+        <span class="mesa-card-estado" [class.off]="!m.ocupada">{{ m.estado }}</span>
+      </div>
+      <div class="mesa-card-info">
+        <span class="mesa-card-line" *ngIf="m.sectorNombre">
+          <mat-icon>place</mat-icon>{{ m.sectorNombre }}
+        </span>
+        <span class="mesa-card-line" *ngIf="m.capacidad">
+          <mat-icon>group</mat-icon>{{ m.capacidad }}
+        </span>
+        <span class="mesa-card-line" *ngIf="m.comandas > 0">
+          <mat-icon>receipt_long</mat-icon>{{ m.comandas }} comanda(s)
+        </span>
       </div>
     </a>
 

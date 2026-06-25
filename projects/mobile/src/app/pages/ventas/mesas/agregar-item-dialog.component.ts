@@ -17,7 +17,16 @@ export interface AgregarItemData {
   recetaId?: number | null;
   /** Modo "personalizar" (ej. un sabor de pizza): sin cantidad ni total. */
   soloPersonalizacion?: boolean;
+  /** Modo edición de un ítem existente: precarga + botón "Quitar". */
+  modoEdicion?: boolean;
+  cantidadInicial?: number;
+  adicionalesPreSel?: number[]; // ids de Adicional ya seleccionados
+  observacionesPreSel?: number[]; // ids de Observacion ya seleccionados
+  observacionLibreInicial?: string;
 }
+
+/** Sentinela que devuelve el diálogo cuando se pide quitar el ítem (modo edición). */
+export type AgregarItemQuitar = 'QUITAR';
 
 export interface AgregarItemResult {
   cantidad: number;
@@ -102,10 +111,14 @@ interface ObsVM {
 
       <div class="total" *ngIf="!data.soloPersonalizacion">Total: {{ totalLinea | number: '1.0-2' }}</div>
     </mat-dialog-content>
-    <mat-dialog-actions align="end">
+    <mat-dialog-actions class="acciones">
+      <button *ngIf="data.modoEdicion" mat-button color="warn" (click)="ref.close('QUITAR')">
+        Quitar
+      </button>
+      <span class="acciones-spacer"></span>
       <button mat-button (click)="ref.close(undefined)">Cancelar</button>
       <button mat-flat-button color="primary" (click)="confirmar()" [disabled]="cargando">
-        {{ data.soloPersonalizacion ? 'Listo' : 'Agregar ' + cantidad }}
+        {{ data.modoEdicion ? 'Guardar' : data.soloPersonalizacion ? 'Listo' : 'Agregar ' + cantidad }}
       </button>
     </mat-dialog-actions>
   `,
@@ -159,6 +172,13 @@ interface ObsVM {
         color: var(--primary, #1976d2);
         margin-top: 8px;
       }
+      .acciones {
+        display: flex;
+        align-items: center;
+      }
+      .acciones-spacer {
+        flex: 1 1 auto;
+      }
     `,
   ],
 })
@@ -175,11 +195,17 @@ export class AgregarItemDialogComponent implements OnInit {
   totalLinea = 0;
 
   constructor(
-    public ref: MatDialogRef<AgregarItemDialogComponent, AgregarItemResult | undefined>,
+    public ref: MatDialogRef<AgregarItemDialogComponent, AgregarItemResult | AgregarItemQuitar | undefined>,
     @Inject(MAT_DIALOG_DATA) public data: AgregarItemData,
   ) {}
 
   ngOnInit(): void {
+    if (this.data.cantidadInicial && this.data.cantidadInicial > 0) {
+      this.cantidad = this.data.cantidadInicial;
+    }
+    if (this.data.observacionLibreInicial) {
+      this.observacionLibre = this.data.observacionLibreInicial;
+    }
     this.recalcular();
     const tasks: Promise<void>[] = [];
 
@@ -194,7 +220,7 @@ export class AgregarItemDialogComponent implements OnInit {
                   id: v.adicional.id,
                   nombre: v.adicional.nombre,
                   precio: Number(v.precioAdicional) || 0,
-                  sel: false,
+                  sel: (this.data.adicionalesPreSel || []).includes(v.adicional.id),
                 }));
               resolve();
             },
@@ -213,7 +239,7 @@ export class AgregarItemDialogComponent implements OnInit {
               .map((po) => ({
                 id: po.observacion.id,
                 descripcion: po.observacion.descripcion,
-                sel: false,
+                sel: (this.data.observacionesPreSel || []).includes(po.observacion.id),
               }));
             resolve();
           },
@@ -223,6 +249,7 @@ export class AgregarItemDialogComponent implements OnInit {
     );
 
     Promise.all(tasks).then(() => {
+      this.recalcular();
       this.cargando = false;
     });
   }

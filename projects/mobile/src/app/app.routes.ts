@@ -78,6 +78,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/ventas/mesas/tomar-pedido.page').then((m) => m.TomarPedidoPage),
   },
   {
+    path: 'ventas/mesas/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/ventas/mesas/mesa-detalle.page').then((m) => m.MesaDetallePage),
+  },
+  {
     path: 'rrhh/cargos/nuevo',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/rrhh/cargos/cargo-edit.page').then((m) => m.CargoEditPage),
@@ -385,11 +390,6 @@ export const routes: Routes = [
         path: 'ventas/mesas',
         data: { title: 'Mesas' },
         loadComponent: () => import('./pages/ventas/mesas/mesas-list.page').then((m) => m.MesasListPage),
-      },
-      {
-        path: 'ventas/mesas/:id',
-        data: { title: 'Detalle de mesa' },
-        loadComponent: () => import('./pages/ventas/mesas/mesa-detalle.page').then((m) => m.MesaDetallePage),
       },
       {
         path: 'financiero/comisiones-reglas',
