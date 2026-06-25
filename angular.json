@@ -151,7 +151,9 @@
             "inlineStyleLanguage": "scss",
             "assets": [
               "projects/mobile/src/favicon.ico",
-              "projects/mobile/src/assets"
+              "projects/mobile/src/assets",
+              "projects/mobile/src/manifest.webmanifest",
+              "projects/mobile/src/sw.js"
             ],
             "styles": [
               "projects/mobile/src/styles.scss"
@@ -221,7 +223,9 @@
             "inlineStyleLanguage": "scss",
             "assets": [
               "projects/mobile/src/favicon.ico",
-              "projects/mobile/src/assets"
+              "projects/mobile/src/assets",
+              "projects/mobile/src/manifest.webmanifest",
+              "projects/mobile/src/sw.js"
             ],
             "styles": [
               "projects/mobile/src/styles.scss"

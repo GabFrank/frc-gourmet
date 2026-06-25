@@ -37,9 +37,18 @@
       >
         <div class="crud-card-body">
           <div class="crud-card-main">
-            <span class="crud-name">{{ p.nombre }}</span>
-            <span class="crud-sub">{{ p.precio | number:'1.0-2' }}</span>
-            <span class="crud-sub muted" *ngIf="!p.soportado">No soportado en mobile aún</span>
+            <span class="pedido-nombre">{{ p.nombre }}</span>
+            <span class="pedido-precio">
+              {{ p.simboloMoneda }} {{ p.precio | number: ('1.0-' + (p.decimalesMoneda || 0)) }}
+              <span class="pedido-precio-unidad" *ngIf="p.esBuffet">/ kg</span>
+            </span>
+            <span class="pedido-conv" *ngIf="p.conversiones.length">
+              <span class="pedido-conv-item" *ngFor="let c of p.conversiones">
+                <img *ngIf="c.flag" class="mesa-flag" [src]="c.flag" alt="" />
+                {{ c.simbolo }} {{ c.valor | number: c.digits }}
+              </span>
+            </span>
+            <span class="pedido-no-soportado" *ngIf="!p.soportado">No soportado en mobile aún</span>
           </div>
           <mat-icon class="pedido-add" *ngIf="p.soportado">add_circle</mat-icon>
         </div>
@@ -64,8 +73,17 @@
           >
             <div class="crud-card-body">
               <div class="crud-card-main">
-                <span class="crud-name">{{ p.nombre }}</span>
-                <span class="crud-sub">{{ p.precio | number:'1.0-2' }}</span>
+                <span class="pedido-nombre">{{ p.nombre }}</span>
+                <span class="pedido-precio">
+                  {{ p.simboloMoneda }} {{ p.precio | number: ('1.0-' + (p.decimalesMoneda || 0)) }}
+                  <span class="pedido-precio-unidad" *ngIf="p.esBuffet">/ kg</span>
+                </span>
+                <span class="pedido-conv" *ngIf="p.conversiones.length">
+                  <span class="pedido-conv-item" *ngFor="let c of p.conversiones">
+                    <img *ngIf="c.flag" class="mesa-flag" [src]="c.flag" alt="" />
+                    {{ c.simbolo }} {{ c.valor | number: c.digits }}
+                  </span>
+                </span>
               </div>
               <mat-icon class="pedido-add" *ngIf="p.soportado">add_circle</mat-icon>
             </div>
@@ -75,7 +93,7 @@
 
       <!-- Grilla de atajos -->
       <ng-container *ngIf="!atajoProductos.length && grupos.length">
-        <div class="mesas-chips">
+        <div class="mesas-chips grupos-chips">
           <button
             class="mesas-chip"
             *ngFor="let g of grupos"

@@ -1601,7 +1601,9 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
       const mapPrecio = (pv: any) => pv ? {
         id: pv.id, valor: Number(pv.valor), principal: pv.principal, activo: pv.activo,
-        moneda: pv.moneda ? { id: pv.moneda.id, nombre: pv.moneda.nombre, simbolo: pv.moneda.simbolo } : null,
+        precioMinimo: pv.precioMinimo != null ? Number(pv.precioMinimo) : null,
+        precioMaximo: pv.precioMaximo != null ? Number(pv.precioMaximo) : null,
+        moneda: pv.moneda ? { id: pv.moneda.id, nombre: pv.moneda.nombre, simbolo: pv.moneda.simbolo, decimales: pv.moneda.decimales } : null,
       } : null;
 
       const pickPrecio = (precios: any[]) =>
@@ -1619,7 +1621,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         let principalPresentacion: any = null;
         let principalPrecio: any = null;
 
-        if (p.tipo === 'RETAIL' || p.tipo === 'RETAIL_INGREDIENTE') {
+        if (p.tipo === 'RETAIL' || p.tipo === 'RETAIL_INGREDIENTE' || p.tipo === 'BUFFET_POR_PESO') {
           const pres = (p.presentaciones as any[])?.find((pr: any) => pr.principal)
             || (p.presentaciones as any[])?.[0];
           principalPresentacion = mapPres(pres);
@@ -1659,6 +1661,9 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
         return {
           id: p.id, nombre: p.nombre, tipo: p.tipo, activo: p.activo, esVendible: p.esVendible, unidadBase: p.unidadBase,
+          // Datos de buffet por peso (para el flujo de pesaje en mobile/PdV).
+          taraGramos: (p as any).taraGramos ?? null,
+          pesoMinimoGramos: (p as any).pesoMinimoGramos ?? null,
           receta: (p as any).receta ? { id: (p as any).receta.id, costoCalculado: (p as any).receta.costoCalculado } : null,
           recetas: (p as any).recetas?.map((r: any) => ({ id: r.id, costoCalculado: r.costoCalculado })) || [],
           principalPresentacion,
