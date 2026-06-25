@@ -22,6 +22,7 @@ import { ClienteMesaDialogComponent, ClienteSeleccionado } from './cliente-mesa-
 interface ItemVM {
   id: number;
   productoId?: number;
+  imageUrl?: string | null;
   precioBase: number;
   descripcion: string;
   detalle?: string;
@@ -226,6 +227,7 @@ export class MesaDetallePage implements OnInit {
     return {
       id: i.id,
       productoId: i.producto?.id,
+      imageUrl: i.producto?.imageUrl ?? null,
       precioBase: Number(i.precioVentaUnitario) || 0,
       descripcion: i.producto?.nombre || i.ensambladoDescripcion || 'Item',
       detalle: i.presentacion?.nombre,
@@ -289,6 +291,7 @@ export class MesaDetallePage implements OnInit {
     this.dialog.open(ItemInfoDialogComponent, {
       data: {
         descripcion: item.descripcion,
+        imageUrl: item.imageUrl,
         cantidad: item.cantidad,
         unitario: item.unitario,
         total: item.total,

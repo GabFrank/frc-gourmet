@@ -274,6 +274,38 @@
   color: var(--text-primary, rgba(0, 0, 0, 0.87));
 }
 
+/* Miniatura del producto a la izquierda (imagen o ícono por defecto). */
+.pedido-thumb {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-variant, #f0f0f0);
+}
+
+.pedido-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pedido-thumb mat-icon {
+  font-size: 30px;
+  width: 30px;
+  height: 30px;
+  color: var(--text-secondary, rgba(0, 0, 0, 0.35));
+}
+
+/* La columna de texto ocupa el resto del ancho. */
+.pedido-prod .crud-card-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .pedido-nombre {
   display: block;
   font-weight: 700;

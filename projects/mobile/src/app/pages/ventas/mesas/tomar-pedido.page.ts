@@ -23,6 +23,7 @@ import {
   BuffetPesoDialogComponent,
   BuffetPesoDialogResult,
 } from './buffet-peso-dialog.component';
+import { AppImagePipe } from '../../../core/pipes/app-image.pipe';
 
 interface ConversionVM {
   simbolo: string;
@@ -34,6 +35,7 @@ interface ConversionVM {
 interface ProductoVM {
   id: number;
   nombre: string;
+  imageUrl?: string | null;
   tipo: string;
   soportado: boolean; // M2 slice: solo productos simples
   presentacionId?: number;
@@ -97,6 +99,7 @@ interface AtajoGrupoVM {
     MatRippleModule,
     MatDialogModule,
     MatSnackBarModule,
+    AppImagePipe,
   ],
   templateUrl: './tomar-pedido.page.html',
   styleUrls: ['./mesas.scss'],
@@ -274,6 +277,7 @@ export class TomarPedidoPage implements OnInit {
     return {
       id: prod.id,
       nombre: ap.nombre_alternativo || prod.nombre,
+      imageUrl: prod.imageUrl ?? null,
       tipo,
       soportado: esSimple || esVariacion || esBuffet,
       esVariacion,
@@ -355,6 +359,7 @@ export class TomarPedidoPage implements OnInit {
     return {
       id: p.id,
       nombre: p.nombre,
+      imageUrl: p.imageUrl ?? null,
       tipo,
       soportado: esSimple || esVariacion || esBuffet,
       esVariacion,

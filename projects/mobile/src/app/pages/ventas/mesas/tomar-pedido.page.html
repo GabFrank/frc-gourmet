@@ -36,6 +36,10 @@
         (click)="agregar(p)"
       >
         <div class="crud-card-body">
+          <div class="pedido-thumb">
+            <img *ngIf="p.imageUrl | appImage as src; else phRes" [src]="src" alt="" />
+            <ng-template #phRes><mat-icon>restaurant</mat-icon></ng-template>
+          </div>
           <div class="crud-card-main">
             <span class="pedido-nombre">{{ p.nombre }}</span>
             <span class="pedido-precio">
@@ -72,6 +76,10 @@
             (click)="agregar(p)"
           >
             <div class="crud-card-body">
+              <div class="pedido-thumb">
+                <img *ngIf="p.imageUrl | appImage as src; else phAtajo" [src]="src" alt="" />
+                <ng-template #phAtajo><mat-icon>restaurant</mat-icon></ng-template>
+              </div>
               <div class="crud-card-main">
                 <span class="pedido-nombre">{{ p.nombre }}</span>
                 <span class="pedido-precio">
