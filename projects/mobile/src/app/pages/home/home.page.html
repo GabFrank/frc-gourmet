@@ -4,8 +4,18 @@
     <p>Panel administrativo</p>
   </header>
 
+  <button
+    *ngIf="pwa.canInstall$ | async"
+    class="install-btn"
+    mat-flat-button
+    color="primary"
+    (click)="pwa.install()"
+  >
+    <mat-icon>install_mobile</mat-icon> Instalar app
+  </button>
+
   <section class="quick">
-    <a *ngFor="let a of accesos" class="quick-card" [routerLink]="a.path">
+    <a *ngFor="let a of accesos$ | async" class="quick-card" [routerLink]="a.path">
       <mat-icon>{{ a.icon }}</mat-icon>
       <span>{{ a.label }}</span>
     </a>

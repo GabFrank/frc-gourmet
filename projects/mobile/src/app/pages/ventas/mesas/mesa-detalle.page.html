@@ -33,10 +33,15 @@
             </span>
             <span class="mesa-item-detalle" *ngIf="it.detalle">{{ it.detalle }}</span>
             <span class="mesa-item-calc">{{ it.cantidad | number:'1.0-2' }} × {{ it.unitario | number:'1.0-2' }}</span>
-            <span class="mesa-item-extra" *ngFor="let s of it.sabores">{{ s }}</span>
-            <span class="mesa-item-extra adic" *ngFor="let a of it.adicionales">+ {{ a.nombre }} ({{ a.precio | number:'1.0-2' }})</span>
-            <span class="mesa-item-extra" *ngFor="let g of it.ingredientes">{{ g.texto }}</span>
-            <span class="mesa-item-extra obs" *ngFor="let o of it.observaciones">• {{ o.texto }}</span>
+            <div
+              class="mesa-chips"
+              *ngIf="it.sabores.length || it.adicionales.length || it.ingredientes.length || it.observaciones.length"
+            >
+              <span class="mesa-chip chip-sabor" *ngFor="let s of it.sabores">{{ s }}</span>
+              <span class="mesa-chip chip-adic" *ngFor="let a of it.adicionales">+ {{ a.nombre }} ({{ a.precio | number:'1.0-2' }})</span>
+              <span class="mesa-chip chip-ingr" *ngFor="let g of it.ingredientes">{{ g.texto }}</span>
+              <span class="mesa-chip chip-obs" *ngFor="let o of it.observaciones">{{ o.texto }}</span>
+            </div>
           </div>
           <span class="mesa-item-total">{{ it.total | number:'1.0-2' }}</span>
           <div class="mesa-item-acciones">
@@ -60,13 +65,6 @@
         <p class="crud-empty">La cuenta no tiene items todavía.</p>
       </ng-template>
 
-      <div class="mesa-total" *ngIf="items.length">
-        <span>Total</span>
-        <span class="mesa-total-valor">{{ total | number:'1.0-2' }}</span>
-      </div>
-      <div class="mesa-total-monedas" *ngIf="items.length && totalesConvertidos.length">
-        <span *ngFor="let t of totalesConvertidos">{{ t.simbolo }} {{ t.total | number: t.digits }}</span>
-      </div>
     </ng-container>
 
     <ng-template #libre>
@@ -76,6 +74,24 @@
       </div>
     </ng-template>
   </div>
+
+  <!-- Footer de total: principal grande + conversiones con banderita -->
+  <footer class="mesa-footer" *ngIf="!loading && !error && ocupada && items.length">
+    <div class="mesa-footer-main">
+      <span class="mesa-footer-label">Total</span>
+      <span class="mesa-footer-valor">
+        <img *ngIf="monedaPrincipal?.flag" class="mesa-flag big" [src]="monedaPrincipal?.flag" alt="" />
+        <span class="mesa-footer-simbolo" *ngIf="monedaPrincipal?.simbolo">{{ monedaPrincipal?.simbolo }}</span>
+        {{ total | number: (monedaPrincipal?.digits || '1.0-2') }}
+      </span>
+    </div>
+    <div class="mesa-footer-monedas" *ngIf="totalesConvertidos.length">
+      <span class="mesa-moneda" *ngFor="let t of totalesConvertidos">
+        <img *ngIf="t.flag" class="mesa-flag" [src]="t.flag" alt="" />
+        {{ t.simbolo }} {{ t.total | number: t.digits }}
+      </span>
+    </div>
+  </footer>
 
   <!-- Tomar pedido: abre/usa la cuenta de la mesa y agrega productos -->
   <a

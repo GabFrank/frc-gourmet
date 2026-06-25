@@ -21,7 +21,7 @@
     <!-- Nav rail (tablet / desktop) -->
     <nav class="rail" *ngIf="(isHandset$ | async) === false">
       <a
-        *ngFor="let item of nav"
+        *ngFor="let item of nav$ | async"
         class="rail-item"
         [routerLink]="item.path"
         routerLinkActive="active"
@@ -40,7 +40,7 @@
   <!-- Bottom nav (teléfono) -->
   <nav class="bottomnav" *ngIf="isHandset$ | async">
     <a
-      *ngFor="let item of nav"
+      *ngFor="let item of nav$ | async"
       class="bottomnav-item"
       [routerLink]="item.path"
       routerLinkActive="active"

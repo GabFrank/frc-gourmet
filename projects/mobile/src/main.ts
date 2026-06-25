@@ -22,6 +22,20 @@ registerLocaleData(localeEs, 'es');
 // su constructor). En mobile el "repo IPC" enruta a /api/rpc del server.
 installApiHttp();
 
+// PWA: capturar el evento de instalación ANTES del bootstrap (puede dispararse
+// muy temprano). PwaInstallService lo lee de window.__pwaPrompt.
+window.addEventListener('beforeinstallprompt', (e: Event) => {
+  e.preventDefault();
+  (window as any).__pwaPrompt = e;
+});
+// Registrar el service worker mínimo (requisito de instalabilidad). Sin SW, el
+// navegador no ofrece "instalar". No interfiere con el auto-recovery del index.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* ignore */ });
+  });
+}
+
 bootstrapApplication(AppComponent, {
   providers: [
     provideAnimations(),
