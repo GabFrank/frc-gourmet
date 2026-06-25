@@ -1,6 +1,6 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
-import { ActivatedRoute, RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
@@ -17,10 +17,12 @@ import {
 } from './transferir-mesa-dialog.component';
 import { ItemInfoDialogComponent } from './item-info-dialog.component';
 import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
+import { flagFor } from './moneda-flag.util';
 
 interface ItemVM {
   id: number;
   productoId?: number;
+  imageUrl?: string | null;
   precioBase: number;
   descripcion: string;
   detalle?: string;
@@ -61,6 +63,7 @@ interface ItemVM {
 export class MesaDetallePage implements OnInit {
   private readonly repo = inject(RepositoryService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly location = inject(Location);
   private readonly dialog = inject(MatDialog);
   private readonly snack = inject(MatSnackBar);
@@ -72,6 +75,7 @@ export class MesaDetallePage implements OnInit {
   sectorNombre?: string;
   ocupada = false;
   estado = 'Libre';
+  clienteNombre: string | null = null;
 
   items: ItemVM[] = [];
   total = 0;
@@ -115,7 +119,7 @@ export class MesaDetallePage implements OnInit {
       ? {
           simbolo: principal.simbolo || principal.denominacion || '',
           digits: `1.0-${principal.decimales ?? 0}`,
-          flag: principal.flagIconBase64 || principal.flagIcon || '',
+          flag: flagFor(principal),
         }
       : null;
     this.totalesConvertidos = this.monedas
@@ -132,7 +136,7 @@ export class MesaDetallePage implements OnInit {
           simbolo: m.simbolo || m.denominacion || '',
           total: this.total / comp,
           digits: `1.0-${m.decimales ?? 2}`,
-          flag: m.flagIconBase64 || m.flagIcon || '',
+          flag: flagFor(m),
         };
       })
       .filter((x) => !!x) as { simbolo: string; total: number; digits: string; flag?: string }[];
@@ -151,6 +155,7 @@ export class MesaDetallePage implements OnInit {
         this.ventaId = ventaId ?? null;
         this.ocupada = !!ventaId || m?.estado === 'OCUPADO';
         this.estado = this.ocupada ? 'Ocupada' : 'Libre';
+        this.clienteNombre = m?.venta?.nombreCliente || m?.venta?.cliente?.persona?.nombre || null;
         if (ventaId) {
           this.cargarCuenta(ventaId);
         } else {
@@ -223,6 +228,7 @@ export class MesaDetallePage implements OnInit {
     return {
       id: i.id,
       productoId: i.producto?.id,
+      imageUrl: i.producto?.imageUrl ?? null,
       precioBase: Number(i.precioVentaUnitario) || 0,
       descripcion: i.producto?.nombre || i.ensambladoDescripcion || 'Item',
       detalle: i.presentacion?.nombre,
@@ -286,6 +292,7 @@ export class MesaDetallePage implements OnInit {
     this.dialog.open(ItemInfoDialogComponent, {
       data: {
         descripcion: item.descripcion,
+        imageUrl: item.imageUrl,
         cantidad: item.cantidad,
         unitario: item.unitario,
         total: item.total,
@@ -447,6 +454,16 @@ export class MesaDetallePage implements OnInit {
     } catch {
       this.snack.open('No se pudo imprimir la pre-cuenta', 'CERRAR', { duration: 4000 });
     }
+  }
+
+  asignarCliente(): void {
+    if (!this.ventaId) {
+      this.snack.open('Agregá un producto primero para abrir la cuenta', undefined, { duration: 2500 });
+      return;
+    }
+    // Pantalla completa de búsqueda/alta de cliente; al volver, cargar() recarga
+    // el nombre del cliente desde la venta.
+    this.router.navigate(['/ventas/mesas', this.mesaId, 'cliente']);
   }
 
   async transferir(): Promise<void> {

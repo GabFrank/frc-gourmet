@@ -3,9 +3,11 @@ import { CommonModule } from '@angular/common';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { AppImagePipe } from '../../../core/pipes/app-image.pipe';
 
 export interface ItemInfoData {
   descripcion: string;
+  imageUrl?: string | null;
   cantidad: number;
   unitario: number;
   total: number;
@@ -28,10 +30,16 @@ export interface ItemInfoData {
 @Component({
   selector: 'app-item-info-dialog',
   standalone: true,
-  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule],
+  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule, AppImagePipe],
   template: `
     <h2 mat-dialog-title>{{ data.descripcion }}</h2>
     <mat-dialog-content>
+      <div class="img-wrap">
+        <img *ngIf="data.imageUrl | appImage as src; else noImg" class="prod-img" [src]="src" alt="" />
+        <ng-template #noImg>
+          <div class="prod-img placeholder"><mat-icon>restaurant</mat-icon></div>
+        </ng-template>
+      </div>
       <div class="row"><span>Estado</span><span [class.cancel]="data.cancelado">{{ data.estado }}</span></div>
       <div class="row" *ngIf="data.estadoKds"><span>Cocina (KDS)</span><span>{{ data.estadoKds }}</span></div>
       <div class="row"><span>Cantidad</span><span>{{ data.cantidad | number: '1.0-2' }}</span></div>
@@ -68,6 +76,30 @@ export interface ItemInfoData {
   `,
   styles: [
     `
+      .img-wrap {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 10px;
+      }
+      .prod-img {
+        width: 100%;
+        max-width: 240px;
+        height: 150px;
+        object-fit: cover;
+        border-radius: 10px;
+        background: var(--surface-variant, #f0f0f0);
+      }
+      .prod-img.placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .prod-img.placeholder mat-icon {
+        font-size: 56px;
+        width: 56px;
+        height: 56px;
+        color: var(--text-secondary, rgba(0, 0, 0, 0.35));
+      }
       .row {
         display: flex;
         justify-content: space-between;

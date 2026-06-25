@@ -1,0 +1,91 @@
+<div class="mesa-detalle">
+  <mat-toolbar color="primary" class="mesa-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="mesa-bar-title">{{ titulo }}</span>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="buscando || guardando" mode="indeterminate"></mat-progress-bar>
+
+  <div class="pedido-content">
+    <!-- BUSCAR -->
+    <ng-container *ngIf="!modoCrear">
+      <div class="pedido-buscar">
+        <mat-form-field appearance="outline" class="pedido-search-field">
+          <mat-label>Buscar por nombre o documento</mat-label>
+          <input
+            matInput
+            class="input-upper"
+            [ngModel]="termino"
+            (ngModelChange)="onTermino($event)"
+            (keyup.enter)="buscar()"
+            placeholder="NOMBRE / DOCUMENTO / RUC"
+          />
+          <button matSuffix mat-icon-button (click)="buscar()" aria-label="Buscar"><mat-icon>search</mat-icon></button>
+        </mat-form-field>
+      </div>
+
+      <div class="crud-list" *ngIf="termino.length >= 2">
+        <button
+          *ngFor="let c of resultados"
+          class="crud-card pedido-prod"
+          mat-ripple
+          [disabled]="guardando"
+          (click)="elegir(c)"
+        >
+          <div class="crud-card-body">
+            <div class="cliente-avatar"><mat-icon>person</mat-icon></div>
+            <div class="crud-card-main">
+              <span class="pedido-nombre">{{ c.nombre }}</span>
+              <span class="cliente-doc" *ngIf="c.doc"><mat-icon>badge</mat-icon> {{ c.doc }}</span>
+              <span class="cliente-doc" *ngIf="c.telefono"><mat-icon>call</mat-icon> {{ c.telefono }}</span>
+              <span class="cliente-tipo" *ngIf="c.tipo">{{ c.tipo }}</span>
+            </div>
+            <mat-icon class="pedido-add">check_circle</mat-icon>
+          </div>
+        </button>
+        <p *ngIf="resultados.length === 0 && !buscando" class="crud-empty">
+          Sin resultados. Podés crear un cliente nuevo.
+        </p>
+      </div>
+      <p *ngIf="termino.length < 2" class="crud-empty">Escribí al menos 2 caracteres para buscar.</p>
+
+      <button class="cliente-nuevo-btn" mat-stroked-button color="primary" (click)="abrirCrear()">
+        <mat-icon>person_add</mat-icon> Nuevo cliente
+      </button>
+    </ng-container>
+
+    <!-- CREAR (misma pantalla, sin diálogo) -->
+    <ng-container *ngIf="modoCrear">
+      <div class="cliente-form">
+        <mat-form-field appearance="outline" class="cliente-field">
+          <mat-label>Nombre *</mat-label>
+          <input matInput class="input-upper" [(ngModel)]="nuevo.nombre" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="cliente-field">
+          <mat-label>Documento</mat-label>
+          <input matInput class="input-upper" [(ngModel)]="nuevo.documento" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="cliente-field">
+          <mat-label>RUC</mat-label>
+          <input matInput class="input-upper" [(ngModel)]="nuevo.ruc" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="cliente-field">
+          <mat-label>Teléfono</mat-label>
+          <input matInput [(ngModel)]="nuevo.telefono" />
+        </mat-form-field>
+
+        <div class="cliente-form-acciones">
+          <button mat-button (click)="volverBuscar()" [disabled]="guardando">Volver a buscar</button>
+          <button
+            mat-flat-button
+            color="primary"
+            [disabled]="!nuevo.nombre.trim() || guardando"
+            (click)="crear()"
+          >
+            Guardar y asignar
+          </button>
+        </div>
+      </div>
+    </ng-container>
+  </div>
+</div>

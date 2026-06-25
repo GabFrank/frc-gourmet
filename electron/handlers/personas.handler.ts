@@ -627,6 +627,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
   ipcMain.handle('get-clientes', async (_event: any, filters?: {
     nombre?: string;
     ruc?: string;
+    termino?: string;
     tipoClienteId?: number;
     activo?: boolean;
     conCredito?: boolean;
@@ -638,6 +639,18 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
         .leftJoinAndSelect('cliente.tipo_cliente', 'tipo_cliente')
         .orderBy('persona.nombre', 'ASC');
 
+      // Búsqueda unificada (un solo cuadro): nombre/apellido/razón social/ruc/documento.
+      if (filters?.termino) {
+        const t = `%${filters.termino.trim().toUpperCase()}%`;
+        qb.andWhere(
+          `(UPPER(persona.nombre) LIKE :t
+            OR UPPER(COALESCE(persona.apellido, '')) LIKE :t
+            OR UPPER(COALESCE(persona.documento, '')) LIKE :t
+            OR UPPER(COALESCE(cliente.razon_social, '')) LIKE :t
+            OR UPPER(COALESCE(cliente.ruc, '')) LIKE :t)`,
+          { t },
+        );
+      }
       if (filters?.nombre) {
         const nombre = `%${filters.nombre.trim().toUpperCase()}%`;
         qb.andWhere(
@@ -829,6 +842,52 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
   });
 
   // Crear cliente rápido (con datos mínimos)
+  // Alta rápida de cliente desde el módulo de meseros (mesa). Solo el nombre es
+  // obligatorio; documento/ruc/teléfono/dirección son opcionales. No requiere
+  // tipo de cliente. Crea la Persona + el Cliente en una sola llamada.
+  ipcMain.handle('crear-cliente-mesa', async (_event: any, data: {
+    nombre: string;
+    documento?: string;
+    ruc?: string;
+    telefono?: string;
+    direccion?: string;
+  }) => {
+    try {
+      if (!data?.nombre || !data.nombre.trim()) throw new Error('El nombre es obligatorio');
+      const currentUser = getCurrentUser();
+      const personaRepo = dataSource.getRepository(Persona);
+      const clienteRepo = dataSource.getRepository(Cliente);
+
+      const persona = personaRepo.create({
+        nombre: data.nombre.trim().toUpperCase(),
+        documento: data.documento?.trim().toUpperCase() || undefined,
+        telefono: data.telefono?.trim() || undefined,
+        direccion: data.direccion?.trim().toUpperCase() || undefined,
+      });
+      await setEntityUserTracking(dataSource, persona, currentUser?.id, false);
+      const savedPersona = await personaRepo.save(persona);
+
+      const cliente = clienteRepo.create({
+        persona: savedPersona,
+        ruc: data.ruc?.trim().toUpperCase() || undefined,
+        activo: true,
+        tributa: false,
+        credito: false,
+        limite_credito: 0,
+      });
+      await setEntityUserTracking(dataSource, cliente, currentUser?.id, false);
+      const savedCliente = await clienteRepo.save(cliente);
+
+      return await clienteRepo.findOne({
+        where: { id: savedCliente.id },
+        relations: ['persona'],
+      });
+    } catch (error) {
+      console.error('Error creando cliente de mesa:', error);
+      throw error;
+    }
+  });
+
   ipcMain.handle('crear-cliente-rapido', async (_event: any, data: { telefono: string; nombre?: string; direccion?: string }) => {
     try {
       const currentUser = getCurrentUser();

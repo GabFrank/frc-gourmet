@@ -1661,6 +1661,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
         return {
           id: p.id, nombre: p.nombre, tipo: p.tipo, activo: p.activo, esVendible: p.esVendible, unidadBase: p.unidadBase,
+          imageUrl: (p as any).imageUrl ?? null,
           // Datos de buffet por peso (para el flujo de pesaje en mobile/PdV).
           taraGramos: (p as any).taraGramos ?? null,
           pesoMinimoGramos: (p as any).pesoMinimoGramos ?? null,
