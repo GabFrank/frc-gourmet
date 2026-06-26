@@ -1727,8 +1727,26 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         order: { nombre: 'ASC' }
       });
 
+      // Buscar también por CÓDIGO DE BARRA: si el término coincide exactamente
+      // con un código activo, incluir ese producto en los resultados (los
+      // lectores envían el código completo). Así el buscador "encuentra por
+      // código" tanto en el PdV como en el mobile.
+      const termino = (nombre || '').trim();
+      const codigoProdIds = new Set<number>();
+      if (termino) {
+        const cbRepo = dataSource.getRepository(CodigoBarra);
+        const cbs = await cbRepo.find({
+          where: { codigo: termino, activo: true },
+          relations: ['presentacion', 'presentacion.producto'],
+        });
+        for (const cb of cbs) {
+          const pid = (cb as any)?.presentacion?.producto?.id;
+          if (pid) codigoProdIds.add(pid);
+        }
+      }
+
       const filtered = productos.filter(p =>
-        p.nombre.toUpperCase().includes(nombre.toUpperCase())
+        p.nombre.toUpperCase().includes(termino.toUpperCase()) || codigoProdIds.has(p.id)
       );
 
       const mapPrecio = (pv: any) => pv ? {
