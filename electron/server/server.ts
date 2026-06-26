@@ -18,7 +18,7 @@ import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { DataSource } from 'typeorm';
 import { handlerRegistryCount } from '../utils/handler-registry';
 import { registerSpecialRoutes } from './special-routes';
@@ -42,24 +42,37 @@ export interface ServerOptions {
    * la API). Si no se pasa o no existe, no se sirve nada estático.
    */
   staticRoot?: string;
+  /**
+   * HTTPS directo en LAN. Si `certPath`/`keyPath` existen, se abre un segundo
+   * listener HTTPS en `httpsPort` (default 7443) con el mismo set de rutas, para
+   * que los dispositivos del local peguen directo al server (sin pasar por el
+   * túnel) con cert válido. El HTTP en `port` se mantiene (lo usa el túnel).
+   */
+  httpsPort?: number;
+  certPath?: string;
+  keyPath?: string;
+  /** URL LAN-directa que la PWA prueba al arrancar (se expone en /api/client-config). */
+  lanUrl?: string;
 }
 
-let instance: FastifyInstance | null = null;
+const instances: FastifyInstance[] = [];
 
-export async function startServer(opts: ServerOptions): Promise<FastifyInstance> {
-  if (instance) {
-    console.log('[server] Ya estaba arrancado, ignorando startServer.');
-    return instance;
-  }
-
+/** Crea una instancia Fastify (HTTP o HTTPS) y registra TODAS las rutas. */
+async function buildInstance(
+  opts: ServerOptions,
+  https: { key: Buffer; cert: Buffer } | null,
+): Promise<FastifyInstance> {
   const fastify = Fastify({
     logger: {
       level: process.env['NODE_ENV'] === 'development' ? 'info' : 'warn',
     },
     bodyLimit: 50 * 1024 * 1024, // 50MB para uploads de imagenes/adjuntos
+    ...(https ? { https } : {}),
   });
 
-  // CORS — permitir cualquier origen en LAN (clientes desktop con app://, browsers, PWAs)
+  // CORS — permitir cualquier origen en LAN (clientes desktop con app://, browsers, PWAs).
+  // Necesario también para que la PWA cargada desde el dominio (túnel) pueda
+  // pegarle al listener HTTPS de LAN (otro origen) cuando detecta la red local.
   await fastify.register(cors, {
     origin: true,
     credentials: true,
@@ -81,12 +94,14 @@ export async function startServer(opts: ServerOptions): Promise<FastifyInstance>
     driver: opts.driver,
   });
 
+  // Config pública para el cliente (sin auth): la PWA la lee al arrancar para
+  // saber qué URL LAN-directa probar (LAN-first con fallback al origen/túnel).
+  fastify.get('/api/client-config', async () => ({ lanUrl: opts.lanUrl || null }));
+
   // Auth (login + refresh, no requieren JWT previo)
   registerAuthRoutes(fastify, opts.dataSource);
 
   // RPC (requiere JWT — el middleware se aplica via onRequest hook).
-  // dataSource es necesario para resolver el Usuario del JWT y poblar el
-  // AsyncLocalStorage que usa `checkPermission` (P0-1).
   registerRpcRoute(fastify, opts.dataSource);
 
   // Files (requiere JWT)
@@ -96,20 +111,12 @@ export async function startServer(opts: ServerOptions): Promise<FastifyInstance>
   registerKdsSseRoutes(fastify);
 
   // F2 (mobile PWA): servir el bundle estático de projects/mobile en `/`.
-  // Público (sin JWT): index.html/JS/CSS deben cargar antes del login. La API
-  // (/api/*) sigue protegida por su propio onRequest hook. SPA fallback: las
-  // rutas del Angular Router (GET no-/api) devuelven index.html.
   if (opts.staticRoot && existsSync(opts.staticRoot)) {
     await fastify.register(fastifyStatic, {
       root: opts.staticRoot,
       prefix: '/',
       wildcard: false,
       index: ['index.html'],
-      // Politica de cache: index.html NUNCA se cachea (es la fuente de verdad
-      // de los hashes de los bundles; si el navegador la cachea, tras un
-      // rebuild pediria bundles con hash viejo y daria 404 -> pantalla en
-      // blanco). Los demas archivos llevan hash en el nombre -> seguros para
-      // cachear agresivo (`immutable`).
       setHeaders: (res, filePath) => {
         if (filePath.endsWith('.html')) {
           res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -126,28 +133,54 @@ export async function startServer(opts: ServerOptions): Promise<FastifyInstance>
       reply.code(404);
       return { error: 'not_found' };
     });
-    console.log(`[server] PWA mobile servida desde ${opts.staticRoot} en /`);
-  } else {
-    console.log('[server] dist/mobile no encontrado; PWA no se sirve (correr `ng build mobile`).');
   }
 
-  const host = opts.host || '0.0.0.0';
-  await fastify.listen({ port: opts.port, host });
-
-  console.log(`[server] Fastify escuchando en http://${host}:${opts.port}`);
-  console.log(`[server] handlerRegistry: ${handlerRegistryCount()} channels disponibles via /api/rpc`);
-
-  instance = fastify;
   return fastify;
 }
 
+export async function startServer(opts: ServerOptions): Promise<FastifyInstance> {
+  if (instances.length) {
+    console.log('[server] Ya estaba arrancado, ignorando startServer.');
+    return instances[0];
+  }
+
+  const host = opts.host || '0.0.0.0';
+
+  // Listener HTTP (siempre) — lo usa el túnel Cloudflare y el acceso LAN HTTP.
+  const httpFastify = await buildInstance(opts, null);
+  await httpFastify.listen({ port: opts.port, host });
+  instances.push(httpFastify);
+  console.log(`[server] Fastify escuchando en http://${host}:${opts.port}`);
+
+  // Listener HTTPS (opcional) — LAN-directo con cert válido (latencia baja).
+  if (opts.certPath && opts.keyPath && existsSync(opts.certPath) && existsSync(opts.keyPath)) {
+    try {
+      const httpsPort = opts.httpsPort || 7443;
+      const httpsFastify = await buildInstance(opts, {
+        key: readFileSync(opts.keyPath),
+        cert: readFileSync(opts.certPath),
+      });
+      await httpsFastify.listen({ port: httpsPort, host });
+      instances.push(httpsFastify);
+      console.log(`[server] Fastify HTTPS (LAN directo) escuchando en https://${host}:${httpsPort}`);
+    } catch (e) {
+      console.error('[server] No se pudo abrir el listener HTTPS (cert inválido?):', e);
+    }
+  } else if (opts.certPath || opts.keyPath) {
+    console.warn('[server] HTTPS configurado pero falta el cert/key en disco; se sirve solo HTTP.');
+  }
+
+  console.log(`[server] handlerRegistry: ${handlerRegistryCount()} channels disponibles via /api/rpc`);
+  return instances[0];
+}
+
 export async function stopServer(): Promise<void> {
-  if (!instance) return;
-  await instance.close();
-  instance = null;
+  if (!instances.length) return;
+  await Promise.all(instances.map((i) => i.close()));
+  instances.length = 0;
   console.log('[server] Detenido.');
 }
 
 export function getServerInstance(): FastifyInstance | null {
-  return instance;
+  return instances[0] || null;
 }

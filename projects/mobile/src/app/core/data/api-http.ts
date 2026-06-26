@@ -23,9 +23,49 @@ const SERVER_URL_KEY = 'frc_mobile_server_url';
 const DEVICE_ID_KEY = 'frc_mobile_device_id';
 
 let baseUrl = '';
+// URL LAN-directa detectada (latencia baja, sin pasar por el túnel). Cuando está
+// seteada, TODO el tráfico (RPC, login, archivos) va por acá. null = usar baseUrl.
+let lanBaseUrl: string | null = null;
 let deviceId: number | null = null;
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
+
+/** Base efectiva: LAN-directa si fue detectada, si no el origen de instalación. */
+function currentBase(): string {
+  return lanBaseUrl ?? baseUrl;
+}
+
+/**
+ * Detecta si estamos en la red local: lee /api/client-config (del origen),
+ * obtiene la URL LAN-directa y la "prueba" con /api/health (timeout corto). Si
+ * responde, enruta todo por LAN (más rápido). Si no, queda en el origen/túnel.
+ * Es best-effort y no bloquea el arranque.
+ */
+async function detectLan(): Promise<void> {
+  try {
+    const cfg = await fetch(`${baseUrl}/api/client-config`)
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+    const lanUrl = cfg?.lanUrl ? String(cfg.lanUrl).replace(/\/$/, '') : null;
+    if (!lanUrl || lanUrl === baseUrl) return;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 800);
+    const ok = await fetch(`${lanUrl}/api/health`, { signal: ctrl.signal })
+      .then((r) => r.ok)
+      .catch(() => false);
+    clearTimeout(timer);
+    if (ok) {
+      lanBaseUrl = lanUrl;
+      setOnline(true);
+      console.log(`[api-http] LAN directo detectado, enrutando por ${lanUrl}`);
+    } else if (lanBaseUrl) {
+      // Estábamos en LAN y dejó de responder (cambio de red) → volver al origen.
+      lanBaseUrl = null;
+    }
+  } catch {
+    /* queda en baseUrl */
+  }
+}
 
 /** Resuelve la URL base del server. Same-origin por defecto (Fastify sirve la PWA). */
 function resolveBaseUrl(explicit?: string): string {
@@ -60,7 +100,7 @@ async function httpFetch(path: string, body: unknown, withAuth = true): Promise<
   if (withAuth && accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}${path}`, {
+    res = await fetch(`${currentBase()}${path}`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -179,7 +219,7 @@ function buildExplicit(): Record<string, unknown> {
   return {
     getAppVersion: (): string => '0.0.0',
     getAppMode: (): 'client' => 'client',
-    getServerUrl: (): string | null => baseUrl || null,
+    getServerUrl: (): string | null => currentBase() || null,
     getDeviceId: (): number | null => deviceId,
     getAccessToken: (): string | null => accessToken,
     // RepositoryIpcService maneja su propio currentUser (BehaviorSubject interno);
@@ -216,4 +256,8 @@ export function installApiHttp(opts?: { serverUrl?: string; deviceId?: number | 
 
   (window as unknown as { api: unknown }).api = api;
   console.log(`[api-http] window.api instalado (server: "${baseUrl || 'same-origin'}")`);
+
+  // LAN-first: detectar la red local en segundo plano y re-detectar al reconectar.
+  void detectLan();
+  window.addEventListener('online', () => void detectLan());
 }

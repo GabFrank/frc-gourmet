@@ -45,6 +45,22 @@ export interface NetworkSettings {
    * esta URL (acceso desde cualquier red) en vez de a la IP de LAN.
    */
   remoteUrl?: string;
+  /**
+   * HTTPS directo en LAN (latencia baja, sin pasar por el túnel). Cuando hay
+   * un certificado válido (ej: emitido para `lan.midominio.com` vía DNS-01) el
+   * server abre un listener HTTPS adicional con ese cert. El A record público
+   * `lan.midominio.com → IP_LAN` hace que, en el local, el dispositivo pegue
+   * directo al server con cert válido (sin mixed-content).
+   */
+  httpsPort?: number;
+  certPath?: string;
+  keyPath?: string;
+  /**
+   * URL LAN-directa que la PWA "prueba" al arrancar (ej:
+   * https://lan.midominio.com:7443). Si responde, enruta el tráfico de datos
+   * por LAN; si no, cae al origen (túnel). Se expone en /api/client-config.
+   */
+  lanUrl?: string;
 }
 
 export interface UpdateSettings {
