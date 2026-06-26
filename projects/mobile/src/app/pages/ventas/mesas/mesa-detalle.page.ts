@@ -151,11 +151,14 @@ export class MesaDetallePage implements OnInit {
       next: (m: any) => {
         this.titulo = m?.numero != null ? `Mesa ${m.numero}` : 'Mesa';
         this.sectorNombre = m?.sector?.nombre;
-        const ventaId = m?.venta?.id;
+        // Solo la venta ABIERTA es cuenta activa (defensa extra: una venta
+        // CANCELADA/CONCLUIDA no debe mostrar sus ítems).
+        const venta = m?.venta && m.venta.estado === 'ABIERTA' ? m.venta : null;
+        const ventaId = venta?.id;
         this.ventaId = ventaId ?? null;
-        this.ocupada = !!ventaId || m?.estado === 'OCUPADO';
+        this.ocupada = !!ventaId;
         this.estado = this.ocupada ? 'Ocupada' : 'Libre';
-        this.clienteNombre = m?.venta?.nombreCliente || m?.venta?.cliente?.persona?.nombre || null;
+        this.clienteNombre = venta?.nombreCliente || venta?.cliente?.persona?.nombre || null;
         if (ventaId) {
           this.cargarCuenta(ventaId);
         } else {

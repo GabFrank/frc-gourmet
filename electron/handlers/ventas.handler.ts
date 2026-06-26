@@ -1566,10 +1566,22 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('getPdvMesa', async (_event: any, id: number) => {
     try {
       const repo = dataSource.getRepository(PdvMesa);
-      return await repo.findOne({
+      const mesa = await repo.findOne({
         where: { id },
-        relations: ['reserva', 'reserva.cliente', 'reserva.cliente.persona', 'sector', 'venta']
+        relations: ['reserva', 'reserva.cliente', 'reserva.cliente.persona', 'sector']
       });
+      if (!mesa) return null;
+      // Solo la venta ABIERTA cuenta como cuenta activa de la mesa. La relación
+      // OneToOne `mesa.venta` no filtra por estado y puede devolver una venta
+      // CANCELADA/CONCLUIDA que conserva `mesa_id` (al cancelar no se desvincula),
+      // lo que hacía que el detalle en mobile siguiera mostrando ítems cancelados.
+      const ventaRepo = dataSource.getRepository(Venta);
+      const ventaAbierta = await ventaRepo.findOne({
+        where: { mesa: { id }, estado: VentaEstado.ABIERTA },
+        order: { id: 'DESC' },
+      });
+      (mesa as any).venta = ventaAbierta || null;
+      return mesa;
     } catch (error) {
       console.error(`Error getting PDV Mesa ID ${id}:`, error);
       throw error;
