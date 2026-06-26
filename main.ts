@@ -329,6 +329,10 @@ function initializeDatabase() {
         }
         startServer({
           port, appVersion, schemaVersion, driver, dataSource, staticRoot,
+          httpsPort: settings.network?.httpsPort,
+          certPath: settings.network?.certPath,
+          keyPath: settings.network?.keyPath,
+          lanUrl: settings.network?.lanUrl,
         }).catch((e) => console.error('[server] Error al arrancar Fastify:', e));
       } else {
         console.log(`[server] Modo '${settings.mode}', no se arranca Fastify.`);

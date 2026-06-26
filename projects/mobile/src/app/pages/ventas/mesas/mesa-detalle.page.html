@@ -104,6 +104,20 @@
   </footer>
 
   <!-- Tomar pedido: cuando hay footer, el FAB se eleva por encima de él. -->
+  <!-- Escanear código de barras / QR (pesables, etc.): abre el buscador en modo scan -->
+  <a
+    *ngIf="!loading && !error"
+    class="mesa-fab mesa-fab-scan"
+    [class.con-footer]="ocupada && items.length"
+    mat-mini-fab
+    color="accent"
+    [routerLink]="['/ventas/mesas', mesaId, 'pedido']"
+    [queryParams]="{ scan: 1 }"
+    aria-label="Escanear código"
+  >
+    <mat-icon>qr_code_scanner</mat-icon>
+  </a>
+
   <a
     *ngIf="!loading && !error"
     class="mesa-fab"

@@ -14,14 +14,28 @@
   <p *ngIf="error" class="crud-error">{{ error }}</p>
 
   <div class="crud-list" *ngIf="!loading && !error">
-    <mat-card *ngFor="let p of items" class="crud-card" appearance="outlined">
+    <mat-card
+      *ngFor="let p of items"
+      class="crud-card prod-card"
+      appearance="outlined"
+      mat-ripple
+      (click)="abrir(p)"
+    >
       <div class="crud-card-body">
-        <img class="crud-thumb" *ngIf="p.imageUrl | appImage as src" [src]="src" alt="" />
+        <div class="prod-thumb">
+          <img *ngIf="p.imageUrl | appImage as src; else phProd" [src]="src" alt="" />
+          <ng-template #phProd><mat-icon>restaurant</mat-icon></ng-template>
+        </div>
         <div class="crud-card-main">
           <span class="crud-name">{{ p.nombre }}</span>
+          <span class="prod-precio" *ngIf="p.precio != null">
+            {{ p.simbolo }} {{ p.precio | number: p.precioDigits }}
+            <span class="prod-precio-unidad" *ngIf="p.esBuffet">/ kg</span>
+          </span>
           <span class="crud-sub">{{ p.tipo }}</span>
         </div>
         <span class="crud-chip" [class.off]="!p.activo">{{ p.activo ? 'Activo' : 'Inactivo' }}</span>
+        <mat-icon class="prod-chevron">chevron_right</mat-icon>
       </div>
     </mat-card>
     <p *ngIf="items.length === 0" class="crud-empty">No hay productos.</p>
