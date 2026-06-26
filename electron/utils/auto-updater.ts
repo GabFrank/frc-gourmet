@@ -13,12 +13,15 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as https from 'https';
 import type { UpdateInfo } from 'electron-updater';
 import { readAppSettings, updateAppSettings } from './app-settings.utils';
 
 let autoUpdater: any | null = null;
 let pollTimer: NodeJS.Timeout | null = null;
 
+const GH_OWNER = 'GabFrank';
+const GH_REPO = 'frc-gourmet';
 const LEGACY_UPDATE_CONFIG_FILE = 'update-config.json';
 const POLL_INTERVAL_MS = 30 * 60 * 1000; // 30 min
 const STARTUP_DELAY_MS = 8 * 1000; // 8s después de window ready
@@ -205,16 +208,96 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
   registerIpc();
 }
 
+/** GET JSON simple (GitHub API). Devuelve null ante cualquier error. */
+function fetchJson(url: string): Promise<any> {
+  return new Promise((resolve) => {
+    https
+      .get(
+        url,
+        { headers: { 'User-Agent': 'frc-gourmet-updater', Accept: 'application/vnd.github+json' } },
+        (res) => {
+          if (!res.statusCode || res.statusCode >= 300) {
+            res.resume();
+            resolve(null);
+            return;
+          }
+          let data = '';
+          res.on('data', (d) => (data += d));
+          res.on('end', () => {
+            try {
+              resolve(JSON.parse(data));
+            } catch {
+              resolve(null);
+            }
+          });
+        },
+      )
+      .on('error', () => resolve(null));
+  });
+}
+
+/**
+ * Devuelve el tag del ÚLTIMO release del canal pedido (alpha/beta), resolviendo
+ * por la API de GitHub. Esto evita que el provider de electron-updater elija el
+ * release de mayor semver (típicamente un stable) y deje al canal alpha varado:
+ * un binario alpha debe seguir SIEMPRE el último alpha, aunque exista un stable
+ * con número más alto. null si no hay release de ese canal o falla la red.
+ */
+async function fetchLatestTagForChannel(channel: UpdateChannel): Promise<string | null> {
+  const releases = await fetchJson(
+    `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/releases?per_page=30`,
+  );
+  if (!Array.isArray(releases)) return null;
+  // La API devuelve los releases de más nuevo a más viejo → el primero que
+  // matchea el canal es el más reciente.
+  for (const r of releases) {
+    if (r.draft) continue;
+    const tag = String(r.tag_name || '');
+    const version = tag.replace(/^v/, '');
+    if (version && inferChannelFromVersion(version) === channel) return tag;
+  }
+  return null;
+}
+
+/**
+ * Apunta el feed del updater según el canal:
+ *  - stable: provider GitHub normal (usa el último release no-prerelease).
+ *  - alpha/beta: provider 'generic' apuntando al ÚLTIMO release de ese canal
+ *    (lee su latest.yml), para no ser eclipsado por un stable de mayor semver.
+ */
+async function resolveFeedForChannel(channel: UpdateChannel): Promise<void> {
+  if (!autoUpdater) return;
+  autoUpdater.allowPrerelease = channel !== 'stable';
+  if (channel === 'stable') {
+    autoUpdater.setFeedURL({ provider: 'github', owner: GH_OWNER, repo: GH_REPO });
+    return;
+  }
+  const tag = await fetchLatestTagForChannel(channel);
+  if (tag) {
+    autoUpdater.setFeedURL({
+      provider: 'generic',
+      url: `https://github.com/${GH_OWNER}/${GH_REPO}/releases/download/${tag}`,
+      channel: 'latest',
+    });
+  } else {
+    // Sin release del canal o sin red → fallback al provider GitHub.
+    autoUpdater.setFeedURL({ provider: 'github', owner: GH_OWNER, repo: GH_REPO });
+  }
+}
+
 function triggerCheck(): void {
   if (!autoUpdater) return;
-  try {
-    const cfg = readUpdateConfig();
-    cfg.lastCheckAt = new Date().toISOString();
-    writeUpdateConfig(cfg);
-    autoUpdater.checkForUpdates();
-  } catch (e) {
-    console.error('[auto-updater] checkForUpdates falló:', e);
-  }
+  void (async () => {
+    try {
+      const cfg = readUpdateConfig();
+      cfg.lastCheckAt = new Date().toISOString();
+      writeUpdateConfig(cfg);
+      await resolveFeedForChannel(cfg.channel);
+      autoUpdater.checkForUpdates();
+    } catch (e) {
+      console.error('[auto-updater] checkForUpdates falló:', e);
+    }
+  })();
 }
 
 function sendStatus(win: BrowserWindow, status: string, payload?: any): void {
