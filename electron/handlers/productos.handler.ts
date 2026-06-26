@@ -402,6 +402,104 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
     }
   });
 
+  /**
+   * Lista de productos activos con el PRECIO PRINCIPAL resuelto por tipo (para
+   * el listado de Productos del mobile). A diferencia de search-productos-by-
+   * nombre, no filtra por esVendible (muestra también ingredientes).
+   */
+  ipcMain.handle('get-productos-con-precio', async () => {
+    try {
+      const repo = dataSource.getRepository(Producto);
+      const pvRepo = dataSource.getRepository(PrecioVenta);
+      const productos = await repo.find({
+        where: { activo: true },
+        relations: ['presentaciones', 'presentaciones.preciosVenta', 'presentaciones.preciosVenta.moneda', 'receta'],
+        order: { nombre: 'ASC' },
+      });
+
+      const pickPrecio = (precios: any[]) =>
+        precios?.find((pv: any) => pv.activo && pv.principal)
+        || precios?.find((pv: any) => pv.activo)
+        || precios?.[0]
+        || null;
+      const mapPrecio = (pv: any) =>
+        pv ? { valor: Number(pv.valor), simbolo: pv.moneda?.simbolo || '', decimales: pv.moneda?.decimales ?? 0 } : null;
+
+      return await Promise.all(productos.map(async (p: any) => {
+        let precio: any = null;
+        if (p.tipo === 'RETAIL' || p.tipo === 'RETAIL_INGREDIENTE' || p.tipo === 'BUFFET_POR_PESO') {
+          const pres = (p.presentaciones || []).find((pr: any) => pr.principal) || (p.presentaciones || [])[0];
+          precio = mapPrecio(pickPrecio(pres?.preciosVenta));
+        } else if (p.tipo === 'ELABORADO_SIN_VARIACION') {
+          const rid = p.receta?.id;
+          if (rid) {
+            const precios = await pvRepo.find({ where: { receta: { id: rid }, activo: true }, relations: ['moneda'], order: { principal: 'DESC' } });
+            precio = mapPrecio(precios?.[0] || null);
+          }
+        } else if (p.tipo === 'ELABORADO_CON_VARIACION') {
+          const precios = await pvRepo.createQueryBuilder('pv')
+            .leftJoinAndSelect('pv.moneda', 'moneda')
+            .innerJoin('pv.receta', 'receta')
+            .where('receta.productoVariacion = :prodId', { prodId: p.id })
+            .andWhere('pv.activo = :activo', { activo: true })
+            .orderBy('pv.principal', 'DESC')
+            .getMany();
+          precio = mapPrecio(precios?.[0] || null);
+        } else if (p.tipo === 'COMBO') {
+          const precios = await pvRepo.find({ where: { producto: { id: p.id }, activo: true }, relations: ['moneda'], order: { principal: 'DESC' } });
+          precio = mapPrecio(precios?.[0] || null);
+        }
+        return {
+          id: p.id, nombre: p.nombre, tipo: p.tipo, activo: p.activo, imageUrl: p.imageUrl ?? null,
+          esBuffet: p.tipo === 'BUFFET_POR_PESO',
+          precio: precio?.valor ?? null, simbolo: precio?.simbolo || '', decimales: precio?.decimales ?? 0,
+        };
+      }));
+    } catch (error) {
+      console.error('Error getting productos con precio:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Detalle completo (solo lectura) de un producto para el mobile: producto +
+   * familia/subfamilia + presentaciones con sus precios + precios de receta
+   * (elaborados) + precios directos (combos), en un único round-trip.
+   */
+  ipcMain.handle('get-producto-detalle-mesa', async (_event: any, productoId: number) => {
+    try {
+      const repo = dataSource.getRepository(Producto);
+      const pvRepo = dataSource.getRepository(PrecioVenta);
+      const producto = await repo.findOne({
+        where: { id: productoId },
+        relations: [
+          'subfamilia', 'subfamilia.familia', 'receta',
+          'presentaciones', 'presentaciones.preciosVenta',
+          'presentaciones.preciosVenta.moneda', 'presentaciones.preciosVenta.tipoPrecio',
+        ],
+      });
+      if (!producto) return null;
+
+      let preciosReceta: any[] = [];
+      if ((producto as any).receta?.id) {
+        preciosReceta = await pvRepo.find({
+          where: { receta: { id: (producto as any).receta.id }, activo: true },
+          relations: ['moneda', 'tipoPrecio'],
+          order: { principal: 'DESC', id: 'ASC' },
+        });
+      }
+      const preciosProducto = await pvRepo.find({
+        where: { producto: { id: producto.id }, activo: true },
+        relations: ['moneda', 'tipoPrecio'],
+        order: { principal: 'DESC', id: 'ASC' },
+      });
+      return { producto, preciosReceta, preciosProducto };
+    } catch (error) {
+      console.error('Error getting producto detalle (mesa):', error);
+      throw error;
+    }
+  });
+
   ipcMain.handle('create-producto', async (_event: any, productoData: any) => {
     await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
     try {

@@ -208,6 +208,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/productos/adicionales/adicional-edit.page').then((m) => m.AdicionalEditPage),
   },
   {
+    path: 'productos/detalle/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/productos/productos/producto-detalle.page').then((m) => m.ProductoDetallePage),
+  },
+  {
     path: 'compras/categorias/nuevo',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/compras/categorias/compra-categoria-edit.page').then((m) => m.CompraCategoriaEditPage),
