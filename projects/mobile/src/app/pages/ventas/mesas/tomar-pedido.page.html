@@ -3,6 +3,9 @@
     <button mat-icon-button (click)="terminar()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
     <span class="mesa-bar-title">{{ titulo }}</span>
     <span class="mesa-spacer"></span>
+    <button mat-icon-button (click)="escanear()" [disabled]="guardando" aria-label="Escanear código">
+      <mat-icon>qr_code_scanner</mat-icon>
+    </button>
     <button mat-button (click)="terminar()">Listo</button>
   </mat-toolbar>
 

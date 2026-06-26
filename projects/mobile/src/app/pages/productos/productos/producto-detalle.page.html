@@ -1,0 +1,57 @@
+<div class="prod-detalle">
+  <mat-toolbar color="primary" class="prod-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="prod-bar-title">{{ nombre }}</span>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error prod-pad">{{ error }}</p>
+
+  <div class="prod-content" *ngIf="!loading && !error">
+    <div class="prod-hero">
+      <div class="prod-img">
+        <img *ngIf="imageUrl | appImage as src; else phImg" [src]="src" alt="" />
+        <ng-template #phImg><mat-icon>restaurant</mat-icon></ng-template>
+      </div>
+      <div class="prod-hero-info">
+        <h2 class="prod-nombre">{{ nombre }}</h2>
+        <span class="prod-tipo">{{ tipo }}</span>
+      </div>
+    </div>
+
+    <!-- Información general -->
+    <section class="prod-sec">
+      <h3 class="prod-sec-title">Información general</h3>
+      <div class="prod-datos">
+        <div class="prod-dato" *ngFor="let d of datos">
+          <span class="prod-dato-label">{{ d.label }}</span>
+          <span class="prod-dato-valor">{{ d.valor }}</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Precios -->
+    <section class="prod-sec">
+      <h3 class="prod-sec-title">Precios</h3>
+      <p *ngIf="grupos.length === 0" class="crud-empty">Sin precios configurados.</p>
+
+      <div class="prod-precio-grupo" *ngFor="let g of grupos">
+        <div class="prod-grupo-head">
+          <span class="prod-grupo-titulo">{{ g.titulo }}</span>
+          <span class="prod-grupo-sub" *ngIf="g.subtitulo">{{ g.subtitulo }}</span>
+        </div>
+        <div class="prod-precio-row" *ngFor="let pr of g.precios">
+          <div class="prod-precio-main">
+            <span class="prod-precio-valor">{{ pr.texto }}</span>
+            <span class="prod-precio-badge" *ngIf="pr.principal">Principal</span>
+          </div>
+          <div class="prod-precio-meta">
+            <span *ngIf="pr.tipoPrecio">{{ pr.tipoPrecio }}</span>
+            <span *ngIf="pr.vigencia">{{ pr.vigencia }}</span>
+            <span *ngIf="pr.topes">{{ pr.topes }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>

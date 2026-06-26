@@ -25,6 +25,7 @@ import {
 } from './buffet-peso-dialog.component';
 import { AppImagePipe } from '../../../core/pipes/app-image.pipe';
 import { flagFor } from './moneda-flag.util';
+import { BarcodeScannerDialogComponent } from './barcode-scanner-dialog.component';
 
 interface ConversionVM {
   simbolo: string;
@@ -139,11 +140,36 @@ export class TomarPedidoPage implements OnInit {
   private cambios: any[] = [];
   private principalMonedaId: number | null = null;
 
+  // Config de balanza (etiquetas EAN-13 de productos pesables), igual que el PdV.
+  private balanzaPrefijo = '2';
+  private balanzaModo = 'PESO';
+  private balanzaFactorPeso = 1;
+
   ngOnInit(): void {
     this.mesaId = Number(this.route.snapshot.paramMap.get('id'));
     this.cargarContexto();
     this.cargarAtajos();
     this.cargarMonedas();
+    this.cargarBalanzaConfig();
+    // Si se entró con ?scan=1 (desde el botón de código de barras), abrir el
+    // escáner apenas cargue la pantalla.
+    if (this.route.snapshot.queryParamMap.get('scan') === '1') {
+      setTimeout(() => this.escanear(), 350);
+    }
+  }
+
+  private cargarBalanzaConfig(): void {
+    this.repo.getPdvConfig().subscribe({
+      next: (cfg: any) => {
+        if (!cfg) return;
+        this.balanzaPrefijo = cfg.balanzaPrefijo || '2';
+        this.balanzaModo = cfg.balanzaModo || 'PESO';
+        this.balanzaFactorPeso = Number(cfg.balanzaFactorPeso) || 1;
+      },
+      error: () => {
+        /* defaults */
+      },
+    });
   }
 
   private cargarMonedas(): void {
@@ -508,7 +534,7 @@ export class TomarPedidoPage implements OnInit {
     }
   }
 
-  private async agregarBuffet(p: ProductoVM): Promise<void> {
+  private async agregarBuffet(p: ProductoVM, pesoInicialGramos?: number): Promise<void> {
     if (!p.precioId) {
       this.snack.open('El producto no tiene un precio por kg configurado', 'CERRAR', { duration: 4000 });
       return;
@@ -525,6 +551,7 @@ export class TomarPedidoPage implements OnInit {
             precioMaximo: p.precioMaximo,
             decimalesMoneda: p.decimalesMoneda,
             simbolo: p.simboloMoneda,
+            pesoInicialGramos,
           },
           width: '340px',
           maxHeight: '85vh',
@@ -662,6 +689,81 @@ export class TomarPedidoPage implements OnInit {
     } finally {
       this.guardando = false;
     }
+  }
+
+  /** Abre la cámara para escanear un código y lo procesa. */
+  async escanear(): Promise<void> {
+    if (this.guardando) return;
+    const codigo = (await firstValueFrom(
+      this.dialog
+        .open(BarcodeScannerDialogComponent, {
+          width: '100vw',
+          maxWidth: '100vw',
+          height: '100vh',
+          panelClass: 'scanner-dialog-panel',
+        })
+        .afterClosed(),
+    )) as string | undefined;
+    if (codigo) await this.procesarCodigo(codigo.trim());
+  }
+
+  /**
+   * Replica el comportamiento del buscador del PdV ante un código:
+   *  1) Etiqueta de balanza (EAN-13 de pesable) → resuelve el producto buffet y
+   *     abre el diálogo de pesaje con el peso ya cargado.
+   *  2) Código de producto normal → abre el diálogo de personalización.
+   *  3) No encontrado → carga el código en el buscador.
+   */
+  private async procesarCodigo(codigo: string): Promise<void> {
+    if (!codigo) return;
+    const api = (window as any).api;
+
+    // 1) Balanza (pesable)
+    const bal = this.parseBalanza(codigo);
+    if (bal && api?.callIpc) {
+      try {
+        const res: any = await api.callIpc('buscar-producto-codigo-mesa', bal.codigoProducto);
+        if (res?.producto && res.producto.tipo === 'BUFFET_POR_PESO') {
+          const vm = this.toVMFromAtajo({ producto: res.producto });
+          await this.agregarBuffet(vm, bal.pesoGramos);
+          return;
+        }
+      } catch {
+        /* sigue al flujo normal */
+      }
+    }
+
+    // 2) Producto normal por código
+    if (api?.callIpc) {
+      try {
+        const res: any = await api.callIpc('buscar-producto-codigo-mesa', codigo);
+        if (res?.producto) {
+          const vm = this.toVMFromAtajo({ producto: res.producto });
+          if (vm.soportado) {
+            await this.agregar(vm);
+            return;
+          }
+        }
+      } catch {
+        /* sigue al flujo de búsqueda */
+      }
+    }
+
+    // 3) No encontrado → cargar el código en el buscador
+    this.snack.open('Producto no encontrado por código; buscá por nombre', undefined, { duration: 2500 });
+    this.termino = codigo.toUpperCase();
+    this.buscar();
+  }
+
+  /** Parsea una etiqueta EAN-13 de balanza (modo PESO). null si no aplica. */
+  private parseBalanza(code: string): { codigoProducto: string; pesoGramos: number } | null {
+    const s = (code || '').trim();
+    if (!/^\d{13}$/.test(s) || !s.startsWith(this.balanzaPrefijo) || this.balanzaModo !== 'PESO') {
+      return null;
+    }
+    const codigoProducto = s.substring(1, 7);
+    const valor = parseInt(s.substring(7, 12), 10);
+    return { codigoProducto, pesoGramos: valor * (this.balanzaFactorPeso || 1) };
   }
 
   terminar(): void {

@@ -449,6 +449,16 @@
   bottom: calc(104px + env(safe-area-inset-bottom));
 }
 
+/* FAB secundario de escaneo, a la izquierda del FAB principal y centrado con él. */
+.mesa-fab-scan {
+  right: 86px;
+  bottom: calc(26px + env(safe-area-inset-bottom));
+}
+
+.mesa-fab-scan.con-footer {
+  bottom: calc(112px + env(safe-area-inset-bottom));
+}
+
 .mesa-item-quitar {
   margin-left: 4px;
   color: var(--warn-color, #c62828);

@@ -61,3 +61,15 @@ body {
 * {
   box-sizing: border-box;
 }
+
+/* Diálogo del escáner de códigos: full-screen sin padding ni bordes. */
+.scanner-dialog-panel .mat-mdc-dialog-surface,
+.scanner-dialog-panel .mdc-dialog__surface {
+  padding: 0 !important;
+  border-radius: 0 !important;
+  overflow: hidden;
+}
+
+.scanner-dialog-panel .mat-mdc-dialog-container {
+  --mdc-dialog-container-color: #000;
+}
