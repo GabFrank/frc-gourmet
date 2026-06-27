@@ -19,7 +19,10 @@ import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuent
 import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
 import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
 import { CajaMayorEstado, TipoMovimiento, GastoEstado, GastoDestinoTipo, RetiroCajaEstado, RetiroCajaOrigen } from '../../src/app/database/entities/financiero/caja-mayor-enums';
-import { Caja } from '../../src/app/database/entities/financiero/caja.entity';
+import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
+import { Conteo } from '../../src/app/database/entities/financiero/conteo.entity';
+import { ConteoDetalle } from '../../src/app/database/entities/financiero/conteo-detalle.entity';
+import { MonedaBillete } from '../../src/app/database/entities/financiero/moneda-billete.entity';
 import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
 import { TipoOperacionFinanciera, DiferenciaDestinoTipo } from '../../src/app/database/entities/financiero/operaciones-financieras-enums';
 import { setEntityUserTracking } from '../utils/entity.utils';
@@ -388,10 +391,14 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     for (const mov of ordenados) {
       const gastoId = mov.gasto?.id;
       const retiroCajaId = mov.retiroCaja?.id;
+      const conteoId = mov.conteo?.id;
       const isAnulacion = mov.tipoMovimiento === 'ANULACION';
       const contraDeId = mov.referenciaAnulacion?.id;
+      // El egreso de caja inicial genera un movimiento por moneda con el mismo
+      // conteo; se agrupan en una sola fila para poder "abrir caja con este conteo".
       const key = gastoId ? `gasto-${gastoId}` :
                   retiroCajaId ? `retiro-${retiroCajaId}` :
+                  conteoId ? `conteo-${conteoId}` :
                   `mov-${mov.id}`;
 
       if (isAnulacion && (gastoId || retiroCajaId) && grupos.has(key)) {
@@ -429,6 +436,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           origen: '',
           gastoId,
           retiroCajaId,
+          conteoId,
           movimientoIds: [mov.id],
           esAnulacion: isAnulacion || !!contraDeId,
           anulacion: mov.anulacion || null,
@@ -460,6 +468,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           .leftJoinAndSelect('mov.gasto', 'gasto')
           .leftJoinAndSelect('gasto.proveedor', 'proveedor')
           .leftJoinAndSelect('mov.retiroCaja', 'retiroCaja')
+          .leftJoinAndSelect('mov.conteo', 'conteo')
           .leftJoinAndSelect('mov.referenciaAnulacion', 'referenciaAnulacion')
           .where('mov.caja_mayor_id = :cajaMayorId', { cajaMayorId })
           .orderBy('mov.fecha', 'DESC')
@@ -507,6 +516,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           observacion: m.observacion,
           gasto: m.gasto,
           retiroCaja: m.retiroCaja,
+          conteo: m.conteo,
           referenciaAnulacion: m.referenciaAnulacion,
           anulacion: (m as any).anulacion,
         }));
@@ -1473,6 +1483,146 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       return Array.isArray(saved) ? saved[0] : saved;
     } catch (error) {
       console.error(`Error generando retiro de cierre para caja ${cajaId}:`, error);
+      throw error;
+    }
+  });
+
+  /**
+   * EGRESO DE CAJA INICIAL (Fase 2). Retira efectivo de la caja mayor para sembrar
+   * la apertura de una caja: se cuenta billete por billete (un Conteo tipo APERTURA),
+   * se genera un movimiento `EGRESO_CAJA_INICIAL` por moneda (efectivo) y se descuenta
+   * el saldo. El Conteo creado se reutiliza luego como conteo de apertura mediante
+   * `abrir-caja-desde-conteo`.
+   *
+   * data = { cajaMayorId, observacion?, detalles: [{ monedaBilleteId, cantidad }] }
+   */
+  ipcMain.handle('egreso-caja-inicial', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const cajaMayorId = data?.cajaMayorId;
+      if (!cajaMayorId) throw new Error('cajaMayorId requerido');
+      const detallesIn = (data?.detalles || []).filter((d: any) => Number(d.cantidad) > 0);
+      if (detallesIn.length === 0) throw new Error('Debe contar al menos un billete');
+
+      // Forma de pago de EFECTIVO (la que mueve caja; preferir la principal).
+      const formaEfectivo = await queryRunner.manager.findOne(FormasPago, {
+        where: { movimentaCaja: true, activo: true } as any,
+        order: { principal: 'DESC', orden: 'ASC' },
+      });
+      if (!formaEfectivo) throw new Error('No hay forma de pago de efectivo configurada (movimenta caja)');
+
+      const etiqueta = (data?.observacion || 'EGRESO DE CAJA INICIAL').toUpperCase();
+      const currentUser = getEffectiveUser(getCurrentUser);
+
+      // 1. Crear el conteo (tipo APERTURA: reutilizable como apertura de caja).
+      const conteo = queryRunner.manager.create(Conteo, {
+        activo: true,
+        tipo: 'APERTURA',
+        fecha: new Date(),
+        observaciones: etiqueta,
+      });
+      const savedConteo = await queryRunner.manager.save(Conteo, conteo);
+
+      // 2. Crear los detalles del conteo y acumular el efectivo por moneda.
+      const porMoneda = new Map<number, { moneda: any; monto: number }>();
+      for (const d of detallesIn) {
+        const billete = await queryRunner.manager.findOne(MonedaBillete, {
+          where: { id: d.monedaBilleteId },
+          relations: ['moneda'],
+        });
+        if (!billete || !billete.moneda) continue;
+        const cantidad = Number(d.cantidad);
+        const detalle = queryRunner.manager.create(ConteoDetalle, {
+          conteo: { id: savedConteo.id },
+          monedaBillete: { id: billete.id },
+          cantidad,
+          activo: true,
+        });
+        await queryRunner.manager.save(ConteoDetalle, detalle);
+        const sub = Number(billete.valor) * cantidad;
+        const cur = porMoneda.get(billete.moneda.id) || { moneda: billete.moneda, monto: 0 };
+        cur.monto += sub;
+        porMoneda.set(billete.moneda.id, cur);
+      }
+
+      const monedasConMonto = [...porMoneda.values()].filter((x) => x.monto > 0);
+      if (monedasConMonto.length === 0) throw new Error('El conteo no tiene efectivo');
+
+      // 3. Un movimiento EGRESO_CAJA_INICIAL por moneda (efectivo), vinculado al conteo.
+      for (const x of monedasConMonto) {
+        const mov = queryRunner.manager.create(CajaMayorMovimiento, {
+          cajaMayor: { id: cajaMayorId },
+          tipoMovimiento: TipoMovimiento.EGRESO_CAJA_INICIAL,
+          moneda: { id: x.moneda.id },
+          formaPago: { id: formaEfectivo.id },
+          monto: x.monto,
+          fecha: new Date(),
+          observacion: etiqueta,
+          conteo: { id: savedConteo.id },
+        });
+        if (currentUser) mov.responsable = currentUser;
+        await setEntityUserTracking(dataSource, mov, currentUser?.id, false);
+        await queryRunner.manager.save(CajaMayorMovimiento, mov);
+
+        await actualizarSaldo(
+          queryRunner, cajaMayorId, x.moneda.id, formaEfectivo.id,
+          Number(x.monto), TipoMovimiento.EGRESO_CAJA_INICIAL,
+        );
+      }
+
+      await queryRunner.commitTransaction();
+      return { success: true, conteoId: savedConteo.id };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error creando egreso de caja inicial:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  /**
+   * Abre una caja reutilizando un Conteo ya existente (el generado por un
+   * `EGRESO_CAJA_INICIAL`) como su conteo de apertura. Valida que el conteo no haya
+   * sido usado ya para abrir otra caja y que el dispositivo no tenga una caja abierta.
+   */
+  ipcMain.handle('abrir-caja-desde-conteo', async (_event: any, conteoId: number, dispositivoId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+    try {
+      if (!conteoId) throw new Error('conteoId requerido');
+      if (!dispositivoId) throw new Error('Debe seleccionar un dispositivo');
+
+      const conteoRepo = dataSource.getRepository(Conteo);
+      const conteo = await conteoRepo.findOne({ where: { id: conteoId } });
+      if (!conteo) throw new Error(`Conteo ${conteoId} no encontrado`);
+
+      const cajaRepo = dataSource.getRepository(Caja);
+      // El conteo no debe estar ya usado como apertura de otra caja.
+      const yaUsado = await cajaRepo.findOne({ where: { conteoApertura: { id: conteoId } } as any });
+      if (yaUsado) throw new Error(`Este conteo ya fue usado para abrir la caja #${yaUsado.id}`);
+
+      // El dispositivo no debe tener una caja abierta.
+      const abierta = await cajaRepo.findOne({
+        where: { dispositivo: { id: dispositivoId }, estado: CajaEstado.ABIERTO } as any,
+      });
+      if (abierta) throw new Error('El dispositivo ya tiene una caja abierta');
+
+      const currentUser = getEffectiveUser(getCurrentUser);
+      const caja = cajaRepo.create({
+        dispositivo: { id: dispositivoId } as any,
+        estado: CajaEstado.ABIERTO,
+        fechaApertura: new Date(),
+        conteoApertura: { id: conteoId } as any,
+        activo: true,
+      });
+      await setEntityUserTracking(dataSource, caja, currentUser?.id, false);
+      const saved = await cajaRepo.save(caja);
+      return Array.isArray(saved) ? saved[0] : saved;
+    } catch (error) {
+      console.error(`Error abriendo caja desde conteo ${conteoId}:`, error);
       throw error;
     }
   });

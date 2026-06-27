@@ -35,6 +35,8 @@ import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financi
 import { EmitirChequeDialogComponent } from '../cheques/emitir-cheque/emitir-cheque-dialog.component';
 import { PagarComprasDialogComponent } from '../pagar-compras-dialog/pagar-compras-dialog.component';
 import { MovimientosCuentaBancariaDialogComponent } from '../bancos/movimientos-cuenta-bancaria-dialog/movimientos-cuenta-bancaria-dialog.component';
+import { EgresoCajaInicialDialogComponent } from '../egreso-caja-inicial-dialog/egreso-caja-inicial-dialog.component';
+import { AbrirCajaDesdeConteoDialogComponent } from '../abrir-caja-desde-conteo-dialog/abrir-caja-desde-conteo-dialog.component';
 import { TabsService } from 'src/app/services/tabs.service';
 
 interface MovimientoConsolidado {
@@ -52,6 +54,7 @@ interface MovimientoConsolidado {
   origen: string;             // 'GASTO'|'VALE'|'COBRO_CLIENTE'|... ('' para caja)
   gastoId?: number;
   retiroCajaId?: number;
+  conteoId?: number;
   movimientoIds: number[];
   esAnulacion: boolean; // este grupo es un contra-movimiento (toggle "Ver anulaciones")
   anulacion?: {
@@ -541,6 +544,31 @@ export class CajaMayorDetalleComponent implements OnInit {
           CreateEditValeDialogComponent,
         ]);
       }
+    });
+  }
+
+  // Egreso de caja inicial: cuenta el efectivo que sale de la caja mayor para
+  // sembrar la apertura de una caja (genera un Conteo reutilizable).
+  egresoCajaInicial(): void {
+    const dialogRef = this.dialog.open(EgresoCajaInicialDialogComponent, {
+      width: '600px',
+      maxHeight: '90vh',
+      data: { cajaMayorId: this.cajaMayor?.id },
+    });
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result?.success) this.loadData();
+    });
+  }
+
+  // Abre una caja reutilizando el conteo del egreso de caja inicial (fila EGRESO_CAJA_INICIAL).
+  abrirCajaDesdeConteo(mov: MovimientoConsolidado): void {
+    if (!mov?.conteoId) return;
+    const dialogRef = this.dialog.open(AbrirCajaDesdeConteoDialogComponent, {
+      width: '420px',
+      data: { conteoId: mov.conteoId },
+    });
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result?.success) this.loadData();
     });
   }
 

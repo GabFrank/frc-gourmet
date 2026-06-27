@@ -208,6 +208,7 @@ import { AddCotizacionBancariaToPagosCobros1779800000000 } from './migrations/17
 import { AddKdsToComandaItem1780000000000 } from './migrations/1780000000000-AddKdsToComandaItem';
 import { AddKdsPantalla1780100000000 } from './migrations/1780100000000-AddKdsPantalla';
 import { AddOrigenToRetiroCaja1780200000000 } from './migrations/1780200000000-AddOrigenToRetiroCaja';
+import { AddConteoToCajaMayorMovimiento1780300000000 } from './migrations/1780300000000-AddConteoToCajaMayorMovimiento';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -511,6 +512,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddKdsToComandaItem1780000000000,
     AddKdsPantalla1780100000000,
     AddOrigenToRetiroCaja1780200000000,
+    AddConteoToCajaMayorMovimiento1780300000000,
   ];
 }
 

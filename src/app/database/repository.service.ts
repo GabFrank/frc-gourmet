@@ -597,6 +597,8 @@ export abstract class RepositoryService {
   abstract createRetiroCaja(data: any): Observable<any>;
   abstract ingresarRetiroCaja(retiroId: number, cajaMayorId: number): Observable<any>;
   abstract generarRetiroCierreCaja(cajaId: number): Observable<any>;
+  abstract egresoCajaInicial(data: any): Observable<any>;
+  abstract abrirCajaDesdeConteo(conteoId: number, dispositivoId: number): Observable<any>;
   abstract getCuentasBancarias(): Observable<any[]>;
   abstract getCuentaBancaria(id: number): Observable<any>;
   abstract createCuentaBancaria(data: any): Observable<any>;

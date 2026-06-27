@@ -1,0 +1,37 @@
+<h2 mat-dialog-title>Abrir caja con este conteo</h2>
+
+<mat-dialog-content class="abrir-content">
+  <p class="abrir-hint">
+    Se abrirá una caja usando el conteo del egreso de caja inicial como conteo de apertura.
+  </p>
+
+  <div *ngIf="loading" class="abrir-loading">
+    <mat-spinner diameter="36"></mat-spinner>
+  </div>
+
+  <ng-container *ngIf="!loading">
+    <p *ngIf="dispositivos.length === 0" class="abrir-empty">
+      No hay dispositivos de caja disponibles (todos tienen una caja abierta).
+    </p>
+
+    <mat-form-field appearance="outline" class="abrir-select" *ngIf="dispositivos.length > 0">
+      <mat-label>Dispositivo</mat-label>
+      <mat-select [(ngModel)]="dispositivoId">
+        <mat-option *ngFor="let d of dispositivos" [value]="d.id">{{ d.nombre }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </ng-container>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="onCancel()" [disabled]="saving">Cancelar</button>
+  <button
+    mat-raised-button
+    color="primary"
+    (click)="onSubmit()"
+    [disabled]="saving || loading || !dispositivoId"
+  >
+    <mat-icon>point_of_sale</mat-icon>
+    Abrir caja
+  </button>
+</mat-dialog-actions>

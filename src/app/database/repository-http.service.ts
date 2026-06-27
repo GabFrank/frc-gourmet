@@ -1493,6 +1493,12 @@ export class RepositoryHttpService extends RepositoryService {
   generarRetiroCierreCaja(cajaId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.generarRetiroCierreCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  egresoCajaInicial(data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.egresoCajaInicial() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  abrirCajaDesdeConteo(conteoId: number, dispositivoId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.abrirCajaDesdeConteo() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getCuentasBancarias(): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getCuentasBancarias() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
