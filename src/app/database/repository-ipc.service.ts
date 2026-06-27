@@ -40,6 +40,10 @@ import { Sector } from './entities/ventas/sector.entity';
 import { Reserva } from './entities/ventas/reserva.entity';
 import { Moneda } from './entities/financiero/moneda.entity';
 import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
+import { Timbrado } from './entities/facturacion/timbrado.entity';
+import { TimbradoDetalle } from './entities/facturacion/timbrado-detalle.entity';
+import { FacturaPlantilla } from './entities/facturacion/factura-plantilla.entity';
+import { Factura } from './entities/facturacion/factura.entity';
 // Import productos entities
 import { Familia } from './entities/productos/familia.entity';
 import { Subfamilia } from './entities/productos/subfamilia.entity';
@@ -64,6 +68,9 @@ import { RepositoryService, LoginResult, ClienteFilters } from './repository.ser
 
 // Define an interface for the electron API
 interface ElectronAPI {
+  // Generic IPC passthrough (window.api.callIpc) — usado por modulos que no
+  // requieren firma tipada dedicada (ej. facturacion).
+  callIpc: (channel: string, ...args: any[]) => Promise<any>;
   // Persona operations
   getPersonas: () => Promise<Persona[]>;
   getPersona: (personaId: number) => Promise<Persona>;
@@ -3880,6 +3887,62 @@ export class RepositoryIpcService extends RepositoryService {
   }
   exportReporteResumenIpsExcel(periodo: string): Observable<any> {
     return from(this.api.exportReporteResumenIpsExcel(periodo));
+  }
+
+  // ---- Facturacion (modulo de facturacion) ----
+  getTimbrados(): Observable<Timbrado[]> {
+    return from(this.api.callIpc('get-timbrados'));
+  }
+  getTimbrado(id: number): Observable<Timbrado> {
+    return from(this.api.callIpc('get-timbrado', id));
+  }
+  createTimbrado(data: Partial<Timbrado>): Observable<Timbrado> {
+    return from(this.api.callIpc('create-timbrado', data));
+  }
+  updateTimbrado(id: number, data: Partial<Timbrado>): Observable<any> {
+    return from(this.api.callIpc('update-timbrado', id, data));
+  }
+  deleteTimbrado(id: number): Observable<any> {
+    return from(this.api.callIpc('delete-timbrado', id));
+  }
+  getTimbradoDetalles(timbradoId?: number): Observable<TimbradoDetalle[]> {
+    return from(this.api.callIpc('get-timbrado-detalles', timbradoId));
+  }
+  createTimbradoDetalle(data: Partial<TimbradoDetalle>): Observable<TimbradoDetalle> {
+    return from(this.api.callIpc('create-timbrado-detalle', data));
+  }
+  updateTimbradoDetalle(id: number, data: Partial<TimbradoDetalle>): Observable<any> {
+    return from(this.api.callIpc('update-timbrado-detalle', id, data));
+  }
+  deleteTimbradoDetalle(id: number): Observable<any> {
+    return from(this.api.callIpc('delete-timbrado-detalle', id));
+  }
+  getFacturaPlantillas(tipo?: string): Observable<FacturaPlantilla[]> {
+    return from(this.api.callIpc('get-factura-plantillas', tipo));
+  }
+  getFacturaPlantilla(id: number): Observable<FacturaPlantilla> {
+    return from(this.api.callIpc('get-factura-plantilla', id));
+  }
+  createFacturaPlantilla(data: Partial<FacturaPlantilla>): Observable<FacturaPlantilla> {
+    return from(this.api.callIpc('create-factura-plantilla', data));
+  }
+  updateFacturaPlantilla(id: number, data: Partial<FacturaPlantilla>): Observable<any> {
+    return from(this.api.callIpc('update-factura-plantilla', id, data));
+  }
+  deleteFacturaPlantilla(id: number): Observable<any> {
+    return from(this.api.callIpc('delete-factura-plantilla', id));
+  }
+  getFacturas(filtros?: any): Observable<Factura[]> {
+    return from(this.api.callIpc('get-facturas', filtros));
+  }
+  getFactura(id: number): Observable<Factura> {
+    return from(this.api.callIpc('get-factura', id));
+  }
+  createFactura(payload: { factura: Partial<Factura> & { timbradoDetalleId?: number }; items: any[] }): Observable<Factura> {
+    return from(this.api.callIpc('create-factura', payload));
+  }
+  anularFactura(id: number, motivo: string): Observable<any> {
+    return from(this.api.callIpc('anular-factura', id, motivo));
   }
 
 }

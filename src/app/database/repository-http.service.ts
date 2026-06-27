@@ -40,6 +40,10 @@ import { Sector } from './entities/ventas/sector.entity';
 import { Reserva } from './entities/ventas/reserva.entity';
 import { Moneda } from './entities/financiero/moneda.entity';
 import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
+import { Timbrado } from './entities/facturacion/timbrado.entity';
+import { TimbradoDetalle } from './entities/facturacion/timbrado-detalle.entity';
+import { FacturaPlantilla } from './entities/facturacion/factura-plantilla.entity';
+import { Factura } from './entities/facturacion/factura.entity';
 import { Familia } from './entities/productos/familia.entity';
 import { Subfamilia } from './entities/productos/subfamilia.entity';
 import { Producto } from './entities/productos/producto.entity';
@@ -2257,5 +2261,61 @@ export class RepositoryHttpService extends RepositoryService {
   }
   exportReporteResumenIpsExcel(periodo: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.exportReporteResumenIpsExcel() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+
+  // ---- Facturacion (modulo de facturacion) — modo cliente pendiente ----
+  getTimbrados(): Observable<Timbrado[]> {
+    return throwError(() => new Error('RepositoryHttpService.getTimbrados() no esta implementado en modo cliente.')) as any;
+  }
+  getTimbrado(id: number): Observable<Timbrado> {
+    return throwError(() => new Error('RepositoryHttpService.getTimbrado() no esta implementado en modo cliente.')) as any;
+  }
+  createTimbrado(data: Partial<Timbrado>): Observable<Timbrado> {
+    return throwError(() => new Error('RepositoryHttpService.createTimbrado() no esta implementado en modo cliente.')) as any;
+  }
+  updateTimbrado(id: number, data: Partial<Timbrado>): Observable<any> {
+    return throwError(() => new Error('RepositoryHttpService.updateTimbrado() no esta implementado en modo cliente.')) as any;
+  }
+  deleteTimbrado(id: number): Observable<any> {
+    return throwError(() => new Error('RepositoryHttpService.deleteTimbrado() no esta implementado en modo cliente.')) as any;
+  }
+  getTimbradoDetalles(timbradoId?: number): Observable<TimbradoDetalle[]> {
+    return throwError(() => new Error('RepositoryHttpService.getTimbradoDetalles() no esta implementado en modo cliente.')) as any;
+  }
+  createTimbradoDetalle(data: Partial<TimbradoDetalle>): Observable<TimbradoDetalle> {
+    return throwError(() => new Error('RepositoryHttpService.createTimbradoDetalle() no esta implementado en modo cliente.')) as any;
+  }
+  updateTimbradoDetalle(id: number, data: Partial<TimbradoDetalle>): Observable<any> {
+    return throwError(() => new Error('RepositoryHttpService.updateTimbradoDetalle() no esta implementado en modo cliente.')) as any;
+  }
+  deleteTimbradoDetalle(id: number): Observable<any> {
+    return throwError(() => new Error('RepositoryHttpService.deleteTimbradoDetalle() no esta implementado en modo cliente.')) as any;
+  }
+  getFacturaPlantillas(tipo?: string): Observable<FacturaPlantilla[]> {
+    return throwError(() => new Error('RepositoryHttpService.getFacturaPlantillas() no esta implementado en modo cliente.')) as any;
+  }
+  getFacturaPlantilla(id: number): Observable<FacturaPlantilla> {
+    return throwError(() => new Error('RepositoryHttpService.getFacturaPlantilla() no esta implementado en modo cliente.')) as any;
+  }
+  createFacturaPlantilla(data: Partial<FacturaPlantilla>): Observable<FacturaPlantilla> {
+    return throwError(() => new Error('RepositoryHttpService.createFacturaPlantilla() no esta implementado en modo cliente.')) as any;
+  }
+  updateFacturaPlantilla(id: number, data: Partial<FacturaPlantilla>): Observable<any> {
+    return throwError(() => new Error('RepositoryHttpService.updateFacturaPlantilla() no esta implementado en modo cliente.')) as any;
+  }
+  deleteFacturaPlantilla(id: number): Observable<any> {
+    return throwError(() => new Error('RepositoryHttpService.deleteFacturaPlantilla() no esta implementado en modo cliente.')) as any;
+  }
+  getFacturas(filtros?: any): Observable<Factura[]> {
+    return throwError(() => new Error('RepositoryHttpService.getFacturas() no esta implementado en modo cliente.')) as any;
+  }
+  getFactura(id: number): Observable<Factura> {
+    return throwError(() => new Error('RepositoryHttpService.getFactura() no esta implementado en modo cliente.')) as any;
+  }
+  createFactura(payload: { factura: Partial<Factura> & { timbradoDetalleId?: number }; items: any[] }): Observable<Factura> {
+    return throwError(() => new Error('RepositoryHttpService.createFactura() no esta implementado en modo cliente.')) as any;
+  }
+  anularFactura(id: number, motivo: string): Observable<any> {
+    return throwError(() => new Error('RepositoryHttpService.anularFactura() no esta implementado en modo cliente.')) as any;
   }
 }
