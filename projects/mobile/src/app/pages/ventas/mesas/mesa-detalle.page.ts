@@ -68,7 +68,9 @@ export class MesaDetallePage implements OnInit {
   private readonly dialog = inject(MatDialog);
   private readonly snack = inject(MatSnackBar);
 
-  mesaId = 0;
+  mesaId = 0; // id de la entidad (mesa o comanda según contexto)
+  esComanda = false;
+  pedidoLink: any[] = [];
   ventaId: number | null = null;
   quitando = false;
   titulo = 'Mesa';
@@ -91,7 +93,11 @@ export class MesaDetallePage implements OnInit {
   totalesConvertidos: { simbolo: string; total: number; digits: string; flag?: string }[] = [];
 
   ngOnInit(): void {
+    this.esComanda = this.route.snapshot.data['contexto'] === 'comanda';
     this.mesaId = Number(this.route.snapshot.paramMap.get('id'));
+    this.pedidoLink = this.esComanda
+      ? ['/ventas/comandas', this.mesaId, 'pedido']
+      : ['/ventas/mesas', this.mesaId, 'pedido'];
     this.cargar();
     this.cargarMonedas();
   }
@@ -145,18 +151,27 @@ export class MesaDetallePage implements OnInit {
   private cargar(): void {
     this.loading = true;
     this.error = null;
-    // getPdvMesa trae la venta ABIERTA (la venta concluida se desvincula de la
-    // mesa al cobrar, así que `venta` es la cuenta abierta o null).
-    this.repo.getPdvMesa(this.mesaId).subscribe({
+    // Mesa: getPdvMesa trae la venta ABIERTA (o null). Comanda: getComandaWithVenta
+    // trae la comanda + su venta ABIERTA (null si todavía no tiene items).
+    const src = this.esComanda
+      ? this.repo.getComandaWithVenta(this.mesaId)
+      : this.repo.getPdvMesa(this.mesaId);
+    src.subscribe({
       next: (m: any) => {
-        this.titulo = m?.numero != null ? `Mesa ${m.numero}` : 'Mesa';
+        if (this.esComanda) {
+          this.titulo = m?.numero != null ? `Comanda #${m.numero}` : 'Comanda';
+        } else {
+          this.titulo = m?.numero != null ? `Mesa ${m.numero}` : 'Mesa';
+        }
         this.sectorNombre = m?.sector?.nombre;
         // Solo la venta ABIERTA es cuenta activa (defensa extra: una venta
         // CANCELADA/CONCLUIDA no debe mostrar sus ítems).
         const venta = m?.venta && m.venta.estado === 'ABIERTA' ? m.venta : null;
         const ventaId = venta?.id;
         this.ventaId = ventaId ?? null;
-        this.ocupada = !!ventaId;
+        // Comanda: "ocupada" = comanda OCUPADA (puede no tener venta aún → cuenta
+        // vacía con "tomar pedido"). Mesa: ocupada = tiene venta ABIERTA.
+        this.ocupada = this.esComanda ? m?.estado === 'OCUPADO' : !!ventaId;
         this.estado = this.ocupada ? 'Ocupada' : 'Libre';
         this.clienteNombre = venta?.nombreCliente || venta?.cliente?.persona?.nombre || null;
         if (ventaId) {

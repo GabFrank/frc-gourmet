@@ -4,7 +4,7 @@
     <span class="mesa-bar-title">{{ titulo }}</span>
     <span class="mesa-spacer"></span>
     <button
-      *ngIf="ventaId"
+      *ngIf="ventaId && !esComanda"
       mat-icon-button
       (click)="asignarCliente()"
       aria-label="Asignar cliente"
@@ -19,7 +19,7 @@
     >
       <mat-icon>receipt_long</mat-icon>
     </button>
-    <button *ngIf="ventaId" mat-icon-button (click)="transferir()" aria-label="Transferir mesa">
+    <button *ngIf="ventaId && !esComanda" mat-icon-button (click)="transferir()" aria-label="Transferir mesa">
       <mat-icon>swap_horiz</mat-icon>
     </button>
     <span class="crud-chip" [class.off]="!ocupada">{{ estado }}</span>
@@ -30,7 +30,7 @@
 
   <div class="mesa-content" *ngIf="!loading && !error">
     <p class="mesa-sub" *ngIf="sectorNombre">{{ sectorNombre }}</p>
-    <div class="mesa-cliente" *ngIf="clienteNombre" (click)="asignarCliente()">
+    <div class="mesa-cliente" *ngIf="clienteNombre && !esComanda" (click)="asignarCliente()">
       <mat-icon>person</mat-icon>
       <span>{{ clienteNombre }}</span>
     </div>
@@ -111,7 +111,7 @@
     [class.con-footer]="ocupada && items.length"
     mat-mini-fab
     color="accent"
-    [routerLink]="['/ventas/mesas', mesaId, 'pedido']"
+    [routerLink]="pedidoLink"
     [queryParams]="{ scan: 1 }"
     aria-label="Escanear código"
   >
@@ -124,7 +124,7 @@
     [class.con-footer]="ocupada && items.length"
     mat-fab
     color="primary"
-    [routerLink]="['/ventas/mesas', mesaId, 'pedido']"
+    [routerLink]="pedidoLink"
     aria-label="Tomar pedido"
   >
     <mat-icon>restaurant</mat-icon>

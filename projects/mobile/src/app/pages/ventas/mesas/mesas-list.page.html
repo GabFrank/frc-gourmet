@@ -1,5 +1,25 @@
 <div class="crud-page">
-  <!-- Filtro por sector (selección discreta, filtra en memoria) -->
+  <!-- Tabs MESAS / COMANDAS (como el PdV) -->
+  <div class="vista-tabs">
+    <button
+      class="vista-tab"
+      mat-ripple
+      [class.sel]="vista === 'mesas'"
+      (click)="seleccionarVista('mesas')"
+    >
+      <mat-icon>table_restaurant</mat-icon> Mesas
+    </button>
+    <button
+      class="vista-tab"
+      mat-ripple
+      [class.sel]="vista === 'comandas'"
+      (click)="seleccionarVista('comandas')"
+    >
+      <mat-icon>receipt_long</mat-icon> Comandas
+    </button>
+  </div>
+
+  <!-- Filtro por sector + resumen (compartido por ambas vistas) -->
   <div class="mesas-filtros" *ngIf="!loading && !error">
     <div class="mesas-resumen">
       <span>{{ ocupadas }}/{{ totalMesas }} ocupadas</span>
@@ -16,10 +36,11 @@
     </div>
   </div>
 
-  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <mat-progress-bar *ngIf="loading || abriendo" mode="indeterminate"></mat-progress-bar>
   <p *ngIf="error" class="crud-error">{{ error }}</p>
 
-  <div class="mesas-grid" *ngIf="!loading && !error">
+  <!-- Vista MESAS -->
+  <div class="mesas-grid" *ngIf="!loading && !error && vista === 'mesas'">
     <a
       *ngFor="let m of items"
       class="mesa-card-grid"
@@ -45,5 +66,32 @@
     </a>
 
     <p *ngIf="items.length === 0" class="crud-empty">No hay mesas en este sector.</p>
+  </div>
+
+  <!-- Vista COMANDAS -->
+  <div class="mesas-grid" *ngIf="!loading && !error && vista === 'comandas'">
+    <button
+      *ngFor="let c of comandas"
+      class="mesa-card-grid"
+      [class.ocupada]="c.ocupada"
+      mat-ripple
+      [disabled]="abriendo"
+      (click)="tocarComanda(c)"
+    >
+      <div class="mesa-card-top">
+        <span class="mesa-card-num">#{{ c.numero }}</span>
+        <span class="mesa-card-estado" [class.off]="!c.ocupada">{{ c.estado }}</span>
+      </div>
+      <div class="mesa-card-info">
+        <span class="mesa-card-line" *ngIf="c.sectorNombre">
+          <mat-icon>place</mat-icon>{{ c.sectorNombre }}
+        </span>
+        <span class="mesa-card-line" *ngIf="c.observacion">
+          <mat-icon>sticky_note_2</mat-icon>{{ c.observacion }}
+        </span>
+      </div>
+    </button>
+
+    <p *ngIf="comandas.length === 0" class="crud-empty">No hay comandas en este sector.</p>
   </div>
 </div>
