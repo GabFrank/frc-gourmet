@@ -213,6 +213,7 @@ import { AddKdsPantalla1780100000000 } from './migrations/1780100000000-AddKdsPa
 import { AddOrigenToRetiroCaja1780200000000 } from './migrations/1780200000000-AddOrigenToRetiroCaja';
 import { AddConteoToCajaMayorMovimiento1780300000000 } from './migrations/1780300000000-AddConteoToCajaMayorMovimiento';
 import { AddRecetaPreparacion1780400000000 } from './migrations/1780400000000-AddRecetaPreparacion';
+import { AddOcuparMesaAlVincularComanda1780500000000 } from './migrations/1780500000000-AddOcuparMesaAlVincularComanda';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -521,6 +522,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddOrigenToRetiroCaja1780200000000,
     AddConteoToCajaMayorMovimiento1780300000000,
     AddRecetaPreparacion1780400000000,
+    AddOcuparMesaAlVincularComanda1780500000000,
   ];
 }
 
