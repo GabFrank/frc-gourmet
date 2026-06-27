@@ -95,6 +95,12 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/ventas/mesas/tomar-pedido.page').then((m) => m.TomarPedidoPage),
   },
   {
+    path: 'ventas/comandas/:id/cliente',
+    canActivate: [authGuard],
+    data: { contexto: 'comanda' },
+    loadComponent: () => import('./pages/ventas/mesas/cliente-mesa.page').then((m) => m.ClienteMesaPage),
+  },
+  {
     path: 'ventas/comandas/:id',
     canActivate: [authGuard],
     data: { contexto: 'comanda' },

@@ -6,6 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom, forkJoin, of, Observable } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
@@ -17,6 +18,7 @@ import {
 } from './transferir-mesa-dialog.component';
 import { ItemInfoDialogComponent } from './item-info-dialog.component';
 import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
+import { AbrirComandaDialogComponent, AbrirComandaResult } from './abrir-comanda-dialog.component';
 import { flagFor } from './moneda-flag.util';
 
 interface ItemVM {
@@ -55,6 +57,7 @@ interface ItemVM {
     MatButtonModule,
     MatProgressBarModule,
     MatDialogModule,
+    MatMenuModule,
     MatSnackBarModule,
   ],
   templateUrl: './mesa-detalle.page.html',
@@ -71,6 +74,9 @@ export class MesaDetallePage implements OnInit {
   mesaId = 0; // id de la entidad (mesa o comanda según contexto)
   esComanda = false;
   pedidoLink: any[] = [];
+  // Datos de la comanda (para editar/mover), cuando esComanda.
+  private comandaMesaId: number | null = null;
+  private comandaObs = '';
   ventaId: number | null = null;
   quitando = false;
   titulo = 'Mesa';
@@ -160,6 +166,8 @@ export class MesaDetallePage implements OnInit {
       next: (m: any) => {
         if (this.esComanda) {
           this.titulo = m?.numero != null ? `Comanda #${m.numero}` : 'Comanda';
+          this.comandaMesaId = m?.pdv_mesa?.id ?? null;
+          this.comandaObs = m?.observacion || '';
         } else {
           this.titulo = m?.numero != null ? `Mesa ${m.numero}` : 'Mesa';
         }
@@ -481,7 +489,114 @@ export class MesaDetallePage implements OnInit {
     }
     // Pantalla completa de búsqueda/alta de cliente; al volver, cargar() recarga
     // el nombre del cliente desde la venta.
-    this.router.navigate(['/ventas/mesas', this.mesaId, 'cliente']);
+    this.router.navigate(
+      this.esComanda
+        ? ['/ventas/comandas', this.mesaId, 'cliente']
+        : ['/ventas/mesas', this.mesaId, 'cliente'],
+    );
+  }
+
+  /** Mover/editar comanda: cambia mesa/observación (no toca la venta). */
+  async editarComanda(): Promise<void> {
+    const res = (await firstValueFrom(
+      this.dialog
+        .open(AbrirComandaDialogComponent, {
+          data: { modoEditar: true, mesaId: this.comandaMesaId, observacion: this.comandaObs },
+          width: '340px',
+          maxHeight: '85vh',
+        })
+        .afterClosed(),
+    )) as AbrirComandaResult | undefined;
+    if (!res) return;
+    try {
+      await firstValueFrom(
+        this.repo.updateComanda(this.mesaId, {
+          pdv_mesa: res.mesaId != null ? { id: res.mesaId } : null,
+          observacion: res.observacion || null,
+        } as any),
+      );
+      this.snack.open('Comanda actualizada', undefined, { duration: 1500 });
+      this.cargar();
+    } catch {
+      this.snack.open('No se pudo actualizar la comanda', 'CERRAR', { duration: 4000 });
+    }
+  }
+
+  /** Transferir la cuenta de la comanda a una mesa fija y liberar la comanda. */
+  async transferirComandaAMesa(): Promise<void> {
+    if (!this.ventaId) {
+      this.snack.open('La comanda no tiene cuenta para transferir', undefined, { duration: 2500 });
+      return;
+    }
+    const destino = (await firstValueFrom(
+      this.dialog
+        .open(TransferirMesaDialogComponent, {
+          data: { mesaActualId: this.comandaMesaId ?? -1 },
+          width: '320px',
+          maxHeight: '85vh',
+        })
+        .afterClosed(),
+    )) as MesaDestino | undefined;
+    if (!destino) return;
+
+    const ventaOrigenId = this.ventaId;
+    this.loading = true;
+    try {
+      if (destino.ventaId) {
+        // Mesa destino con cuenta: mover items activos y cancelar la venta de la comanda.
+        const items = await firstValueFrom(this.repo.getVentaItems(ventaOrigenId));
+        const activos = (items || []).filter((i: any) => i.estado === 'ACTIVO');
+        for (const it of activos) {
+          await firstValueFrom(this.repo.updateVentaItem(it.id, { venta: { id: destino.ventaId } } as any));
+        }
+        await firstValueFrom(this.repo.updateVenta(ventaOrigenId, { estado: 'CANCELADA' } as any));
+      } else {
+        // Mesa destino libre: re-vincular la venta a la mesa (desvinculando la comanda).
+        await firstValueFrom(
+          this.repo.updateVenta(ventaOrigenId, { mesa: { id: destino.id }, comanda: null } as any),
+        );
+      }
+      await firstValueFrom(this.repo.cerrarComanda(this.mesaId));
+      await firstValueFrom(this.repo.updatePdvMesa(destino.id, { estado: 'OCUPADO' } as any));
+      this.snack.open(`Cuenta transferida a Mesa ${destino.numero}`, undefined, { duration: 2000 });
+      this.location.back();
+    } catch {
+      this.snack.open('No se pudo transferir la comanda', 'CERRAR', { duration: 4000 });
+      this.loading = false;
+    }
+  }
+
+  /** Liberar la comanda (volver a DISPONIBLE). Si tiene cuenta, se cancela. */
+  async liberarComanda(): Promise<void> {
+    const tieneCuenta = !!this.ventaId;
+    const ok = await firstValueFrom(
+      this.dialog
+        .open(ConfirmDialogComponent, {
+          data: {
+            title: 'Liberar comanda',
+            message: tieneCuenta
+              ? 'La comanda tiene una cuenta abierta. Al liberarla se CANCELARÁ esa cuenta. ¿Continuar?'
+              : '¿Liberar la comanda? Volverá a estar disponible.',
+            confirmText: 'Liberar',
+            danger: true,
+          },
+          width: '320px',
+        })
+        .afterClosed(),
+    );
+    if (!ok) return;
+    this.loading = true;
+    try {
+      if (this.ventaId) {
+        await firstValueFrom(this.repo.updateVenta(this.ventaId, { estado: 'CANCELADA' } as any));
+      }
+      await firstValueFrom(this.repo.cerrarComanda(this.mesaId));
+      this.snack.open('Comanda liberada', undefined, { duration: 1800 });
+      this.location.back();
+    } catch {
+      this.snack.open('No se pudo liberar la comanda', 'CERRAR', { duration: 4000 });
+      this.loading = false;
+    }
   }
 
   async transferir(): Promise<void> {
