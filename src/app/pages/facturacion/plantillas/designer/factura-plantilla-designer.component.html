@@ -1,0 +1,170 @@
+<div class="designer-loading" *ngIf="!plantilla">Cargando plantilla…</div>
+
+<div class="designer-toolbar" *ngIf="plantilla">
+  <div class="title">
+    <mat-icon>design_services</mat-icon>
+    <span>{{ plantilla?.nombre || 'Diseñador de plantilla' }}</span>
+    <span class="tipo-badge" *ngIf="plantilla">{{ plantilla.tipo }}</span>
+  </div>
+  <span class="spacer"></span>
+  <mat-form-field appearance="outline" class="dim">
+    <mat-label>Ancho (mm)</mat-label>
+    <input matInput type="number" [(ngModel)]="plantilla!.anchoMm" (ngModelChange)="recomputePage()" />
+  </mat-form-field>
+  <mat-form-field appearance="outline" class="dim">
+    <mat-label>Alto (mm)</mat-label>
+    <input matInput type="number" [(ngModel)]="plantilla!.altoMm" (ngModelChange)="recomputePage()" />
+  </mat-form-field>
+  <button mat-stroked-button (click)="preview()"><mat-icon>visibility</mat-icon> Vista previa</button>
+  <button mat-raised-button color="primary" (click)="save()" [disabled]="isSaving">
+    <mat-icon>save</mat-icon> Guardar
+  </button>
+</div>
+
+<div class="designer-body" *ngIf="plantilla">
+  <!-- Paleta -->
+  <div class="palette">
+    <h4>Elementos</h4>
+    <div class="palette-buttons">
+      <button mat-stroked-button (click)="addText()"><mat-icon>title</mat-icon> Texto</button>
+      <button mat-stroked-button (click)="addLine()"><mat-icon>horizontal_rule</mat-icon> Línea</button>
+      <button mat-stroked-button (click)="addBox()"><mat-icon>crop_square</mat-icon> Caja</button>
+      <button mat-stroked-button (click)="addItemsTable()"><mat-icon>table_chart</mat-icon> Tabla ítems</button>
+    </div>
+
+    <h4>Variables</h4>
+    <mat-accordion multi>
+      <mat-expansion-panel *ngFor="let g of grupos">
+        <mat-expansion-panel-header>{{ g.nombre }}</mat-expansion-panel-header>
+        <button class="var-chip" mat-button *ngFor="let v of g.variables" (click)="addVariable(v)" [matTooltip]="v.key">
+          <mat-icon>add</mat-icon> {{ v.label }}
+        </button>
+      </mat-expansion-panel>
+    </mat-accordion>
+
+    <div class="preimpreso-bg" *ngIf="plantilla?.tipo === 'PRE_IMPRESO'">
+      <h4>Hoja de referencia</h4>
+      <p class="hint">Subí un escaneo de la hoja pre-impresa para alinear los campos. No se imprime.</p>
+      <input type="file" accept="image/*" (change)="onBackgroundSelected($event)" />
+      <button mat-button color="warn" *ngIf="plantilla?.backgroundImageUrl" (click)="clearBackground()">Quitar fondo</button>
+    </div>
+  </div>
+
+  <!-- Lienzo -->
+  <div class="canvas-wrap" (click)="clearSelection()">
+    <div class="designer-page"
+         [style.width.px]="pageWidthPx"
+         [style.height.px]="pageHeightPx">
+      <img *ngIf="plantilla?.backgroundImageUrl as bg" class="page-bg" [src]="bg" alt="fondo" />
+
+      <div *ngFor="let el of config.elementos"
+           class="design-el"
+           [class.selected]="selected?.id === el.id"
+           cdkDrag
+           cdkDragBoundary=".designer-page"
+           [cdkDragFreeDragPosition]="freePos[el.id]"
+           (cdkDragEnded)="onDragEnded(el, $event)"
+           (click)="select(el, $event)">
+
+        <!-- texto / variable -->
+        <span *ngIf="el.type === 'text' || el.type === 'variable'"
+              class="el-text"
+              [class.is-var]="el.type === 'variable'"
+              [style.font-size.pt]="el.fontSize || 9"
+              [style.font-weight]="el.bold ? '700' : '400'"
+              [style.text-align]="el.align || 'left'">
+          {{ previews[el.id] }}
+        </span>
+
+        <!-- linea -->
+        <div *ngIf="el.type === 'line'" class="el-line" [style.width.px]="(el.wMm || 50) * pxPerMm"></div>
+
+        <!-- caja -->
+        <div *ngIf="el.type === 'box'" class="el-box"
+             [style.width.px]="(el.wMm || 30) * pxPerMm"
+             [style.height.px]="(el.hMm || 10) * pxPerMm"></div>
+
+        <!-- imagen -->
+        <img *ngIf="el.type === 'image' && el.imageUrl" class="el-img"
+             [src]="el.imageUrl" [style.width.px]="(el.wMm || 30) * pxPerMm" alt="img" />
+
+        <!-- tabla items (placeholder de diseño) -->
+        <div *ngIf="el.type === 'itemsTable'" class="el-table"
+             [style.width.px]="(el.wMm || 150) * pxPerMm">
+          <div class="el-table-head">
+            <span *ngFor="let c of el.columns" [style.width.px]="c.wMm * pxPerMm">{{ c.header }}</span>
+          </div>
+          <div class="el-table-row">
+            <span *ngFor="let c of el.columns" [style.width.px]="c.wMm * pxPerMm">…</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Propiedades -->
+  <div class="properties">
+    <div *ngIf="!selected" class="no-sel">Seleccioná un elemento para editar sus propiedades.</div>
+
+    <div *ngIf="selected" class="prop-form">
+      <h4>Propiedades</h4>
+
+      <mat-form-field appearance="outline" *ngIf="selected.type === 'text'">
+        <mat-label>Texto</mat-label>
+        <input matInput [(ngModel)]="selected.text" (ngModelChange)="updatePreview(selected)" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" *ngIf="selected.type === 'variable'">
+        <mat-label>Variable</mat-label>
+        <mat-select [(ngModel)]="selected.variable" (ngModelChange)="updatePreview(selected)">
+          <mat-option *ngFor="let v of allVariables" [value]="v.key">{{ v.label }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <div class="pos-row">
+        <mat-form-field appearance="outline">
+          <mat-label>X (mm)</mat-label>
+          <input matInput type="number" [(ngModel)]="selected.xMm" (ngModelChange)="setFreePos(selected)" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Y (mm)</mat-label>
+          <input matInput type="number" [(ngModel)]="selected.yMm" (ngModelChange)="setFreePos(selected)" />
+        </mat-form-field>
+      </div>
+
+      <div class="pos-row" *ngIf="selected.type === 'text' || selected.type === 'variable'">
+        <mat-form-field appearance="outline">
+          <mat-label>Tamaño (pt)</mat-label>
+          <input matInput type="number" [(ngModel)]="selected.fontSize" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Alineación</mat-label>
+          <mat-select [(ngModel)]="selected.align">
+            <mat-option value="left">Izquierda</mat-option>
+            <mat-option value="center">Centro</mat-option>
+            <mat-option value="right">Derecha</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      <mat-checkbox *ngIf="selected.type === 'text' || selected.type === 'variable'" [(ngModel)]="selected.bold">
+        Negrita
+      </mat-checkbox>
+
+      <div class="pos-row" *ngIf="selected.type === 'line' || selected.type === 'box' || selected.type === 'itemsTable' || selected.type === 'image'">
+        <mat-form-field appearance="outline">
+          <mat-label>Ancho (mm)</mat-label>
+          <input matInput type="number" [(ngModel)]="selected.wMm" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" *ngIf="selected.type === 'box'">
+          <mat-label>Alto (mm)</mat-label>
+          <input matInput type="number" [(ngModel)]="selected.hMm" />
+        </mat-form-field>
+      </div>
+
+      <button mat-stroked-button color="warn" (click)="deleteSelected()">
+        <mat-icon>delete</mat-icon> Eliminar elemento
+      </button>
+    </div>
+  </div>
+</div>

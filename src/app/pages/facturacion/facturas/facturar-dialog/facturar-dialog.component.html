@@ -1,0 +1,106 @@
+<h2 mat-dialog-title>Emitir factura</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="form" class="facturar-form">
+    <div class="row">
+      <mat-form-field appearance="outline" class="grow">
+        <mat-label>Punto de expedición</mat-label>
+        <mat-select formControlName="timbradoDetalleId" required>
+          <mat-option *ngFor="let o of detalleOptions" [value]="o.id">{{ o.label }}</mat-option>
+        </mat-select>
+        <mat-error>Seleccione un punto de expedición</mat-error>
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="grow">
+        <mat-label>Plantilla / diseño</mat-label>
+        <mat-select formControlName="plantillaId">
+          <mat-option [value]="null">— Sin impresión —</mat-option>
+          <mat-option *ngFor="let p of plantillas" [value]="p.id">{{ p.nombre }} ({{ p.tipo }})</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Condición</mat-label>
+        <mat-select formControlName="condicionVenta">
+          <mat-option value="CONTADO">Contado</mat-option>
+          <mat-option value="CREDITO">Crédito</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    <div class="row">
+      <mat-form-field appearance="outline" class="grow">
+        <mat-label>Cliente / Razón social</mat-label>
+        <input matInput formControlName="nombreCliente" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>RUC / CI</mat-label>
+        <input matInput formControlName="ruc" />
+      </mat-form-field>
+    </div>
+    <div class="row">
+      <mat-form-field appearance="outline" class="grow">
+        <mat-label>Dirección</mat-label>
+        <input matInput formControlName="direccion" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Email</mat-label>
+        <input matInput formControlName="email" />
+      </mat-form-field>
+    </div>
+
+    <h3>Ítems</h3>
+    <div formArrayName="items" class="items">
+      <div class="item-row" *ngFor="let item of itemsArray.controls; let i = index" [formGroupName]="i">
+        <mat-form-field appearance="outline" class="grow">
+          <mat-label>Descripción</mat-label>
+          <input matInput formControlName="descripcion" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="small">
+          <mat-label>Cant.</mat-label>
+          <input matInput type="number" formControlName="cantidad" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="medium">
+          <mat-label>Precio unit.</mat-label>
+          <input matInput type="number" formControlName="precioUnitario" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="small">
+          <mat-label>IVA</mat-label>
+          <mat-select formControlName="ivaTipo">
+            <mat-option [value]="10">10%</mat-option>
+            <mat-option [value]="5">5%</mat-option>
+            <mat-option [value]="0">Exenta</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <button mat-icon-button color="warn" (click)="removeItem(i)" [disabled]="itemsArray.length === 1">
+          <mat-icon>delete</mat-icon>
+        </button>
+      </div>
+    </div>
+    <button mat-stroked-button (click)="addItem()"><mat-icon>add</mat-icon> Agregar ítem</button>
+
+    <div class="totales">
+      <div class="row">
+        <mat-form-field appearance="outline">
+          <mat-label>Descuento</mat-label>
+          <input matInput type="number" formControlName="descuento" />
+        </mat-form-field>
+      </div>
+      <div class="totales-grid">
+        <span>Gravada 10%:</span><span class="num">{{ gravada10 | number:'1.0-2' }}</span>
+        <span>IVA 10%:</span><span class="num">{{ iva10 | number:'1.0-2' }}</span>
+        <span>Gravada 5%:</span><span class="num">{{ gravada5 | number:'1.0-2' }}</span>
+        <span>IVA 5%:</span><span class="num">{{ iva5 | number:'1.0-2' }}</span>
+        <span>Exenta:</span><span class="num">{{ exenta | number:'1.0-2' }}</span>
+        <span>Total IVA:</span><span class="num">{{ totalIva | number:'1.0-2' }}</span>
+        <span class="grand">TOTAL:</span><span class="num grand">{{ total | number:'1.0-2' }}</span>
+      </div>
+    </div>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()" [disabled]="isSaving">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="facturar()" [disabled]="isSaving">
+    <mat-spinner *ngIf="isSaving" diameter="18"></mat-spinner>
+    <span *ngIf="!isSaving">Emitir e imprimir</span>
+  </button>
+</mat-dialog-actions>

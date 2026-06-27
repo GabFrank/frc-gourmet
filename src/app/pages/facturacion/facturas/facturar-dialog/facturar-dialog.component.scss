@@ -1,0 +1,53 @@
+.facturar-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 720px;
+  padding-top: 8px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+
+  mat-form-field { flex: 0 0 auto; min-width: 140px; }
+  .grow { flex: 1 1 auto; }
+}
+
+h3 {
+  margin: 10px 0 4px;
+}
+
+.items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.item-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+
+  .grow { flex: 1; }
+  .small { width: 90px; }
+  .medium { width: 130px; }
+}
+
+.totales {
+  margin-top: 12px;
+  border-top: 1px solid rgba(128, 128, 128, 0.3);
+  padding-top: 10px;
+}
+
+.totales-grid {
+  display: grid;
+  grid-template-columns: auto 160px;
+  gap: 2px 16px;
+  justify-content: flex-end;
+  text-align: right;
+
+  .num { font-variant-numeric: tabular-nums; }
+  .grand { font-weight: 700; font-size: 1.1em; }
+}

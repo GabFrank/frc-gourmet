@@ -44,6 +44,9 @@ import { LoginSession } from './database/entities/auth/login-session.entity';
 import { firstValueFrom } from 'rxjs';
 import { ListPersonasComponent } from './pages/personas/personas/list-personas.component';
 import { ListMonedasComponent } from './pages/financiero/monedas/list-monedas/list-monedas.component';
+import { ListTimbradosComponent } from './pages/facturacion/timbrados/list-timbrados/list-timbrados.component';
+import { ListPlantillasComponent } from './pages/facturacion/plantillas/list-plantillas/list-plantillas.component';
+import { ListFacturasComponent } from './pages/facturacion/facturas/list-facturas/list-facturas.component';
 import { ListDispositivosComponent } from './pages/financiero/dispositivos/list-dispositivos.component';
 import { ListCajasComponent } from './pages/financiero/cajas/list-cajas.component';
 import { FinancieroDashboardComponent } from './pages/financiero/dashboard/financiero-dashboard.component';
@@ -882,6 +885,21 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       'monedas-tab',
       true
     );
+    this.closeMenu();
+  }
+
+  openTimbradosTab() {
+    this.tabsService.openTab('Timbrados', ListTimbradosComponent, { source: 'navigation' }, 'timbrados-tab', true);
+    this.closeMenu();
+  }
+
+  openPlantillasFacturaTab() {
+    this.tabsService.openTab('Plantillas de factura', ListPlantillasComponent, { source: 'navigation' }, 'plantillas-factura-tab', true);
+    this.closeMenu();
+  }
+
+  openFacturasTab() {
+    this.tabsService.openTab('Facturas', ListFacturasComponent, { source: 'navigation' }, 'facturas-tab', true);
     this.closeMenu();
   }
 

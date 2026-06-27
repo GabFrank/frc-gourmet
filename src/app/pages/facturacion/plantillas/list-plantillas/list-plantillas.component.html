@@ -1,0 +1,60 @@
+<mat-card class="page-card">
+  <mat-card-header class="page-header">
+    <mat-card-title>Plantillas / Diseños de factura</mat-card-title>
+    <span class="spacer"></span>
+    <button mat-raised-button color="primary" (click)="create()">
+      <mat-icon>add</mat-icon> Nueva plantilla
+    </button>
+  </mat-card-header>
+
+  <mat-card-content>
+    <div *ngIf="isLoading" class="loading-container">
+      <mat-spinner diameter="40"></mat-spinner>
+    </div>
+
+    <table mat-table [dataSource]="plantillas" class="full-width-table" *ngIf="!isLoading">
+      <ng-container matColumnDef="nombre">
+        <th mat-header-cell *matHeaderCellDef>Nombre</th>
+        <td mat-cell *matCellDef="let p">{{ p.nombre }}</td>
+      </ng-container>
+      <ng-container matColumnDef="tipo">
+        <th mat-header-cell *matHeaderCellDef>Tipo</th>
+        <td mat-cell *matCellDef="let p">{{ p.tipo }}</td>
+      </ng-container>
+      <ng-container matColumnDef="tamano">
+        <th mat-header-cell *matHeaderCellDef>Tamaño (mm)</th>
+        <td mat-cell *matCellDef="let p">{{ p.anchoMm | number:'1.0-0' }} × {{ p.altoMm | number:'1.0-0' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="predeterminada">
+        <th mat-header-cell *matHeaderCellDef>Predet.</th>
+        <td mat-cell *matCellDef="let p">
+          <mat-icon *ngIf="p.predeterminada" color="primary">star</mat-icon>
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="activo">
+        <th mat-header-cell *matHeaderCellDef>Estado</th>
+        <td mat-cell *matCellDef="let p">{{ p.activo ? 'Activo' : 'Inactivo' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="acciones">
+        <th mat-header-cell *matHeaderCellDef>Acciones</th>
+        <td mat-cell *matCellDef="let p">
+          <button mat-icon-button color="primary" matTooltip="Abrir diseñador" (click)="openDesigner(p)">
+            <mat-icon>design_services</mat-icon>
+          </button>
+          <button mat-icon-button matTooltip="Marcar predeterminada" (click)="setDefault(p)">
+            <mat-icon>star_border</mat-icon>
+          </button>
+          <button mat-icon-button color="warn" matTooltip="Eliminar" (click)="remove(p)">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+
+    <div *ngIf="!isLoading && plantillas.length === 0" class="empty-state">
+      No hay plantillas. Cree una y diseñe su factura arrastrando textos y variables.
+    </div>
+  </mat-card-content>
+</mat-card>

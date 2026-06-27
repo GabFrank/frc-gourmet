@@ -1,0 +1,66 @@
+<h2 mat-dialog-title>{{ isEditing ? 'Editar timbrado' : 'Nuevo timbrado' }}</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="form" class="timbrado-form">
+    <mat-form-field appearance="outline" class="full">
+      <mat-label>Número de timbrado</mat-label>
+      <input matInput formControlName="numero" required />
+      <mat-error *ngIf="form.get('numero')?.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <div class="row">
+      <mat-form-field appearance="outline">
+        <mat-label>RUC</mat-label>
+        <input matInput formControlName="ruc" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Razón social</mat-label>
+        <input matInput formControlName="razonSocial" />
+      </mat-form-field>
+    </div>
+
+    <div class="row">
+      <mat-form-field appearance="outline">
+        <mat-label>Tipo de documento</mat-label>
+        <input matInput formControlName="tipoDocumento" />
+      </mat-form-field>
+      <mat-checkbox formControlName="isElectronico">Electrónico (SIFEN)</mat-checkbox>
+    </div>
+
+    <div class="row" *ngIf="!form.get('isElectronico')?.value">
+      <mat-form-field appearance="outline">
+        <mat-label>Inicio de vigencia</mat-label>
+        <input matInput [matDatepicker]="pi" formControlName="fechaInicio" />
+        <mat-datepicker-toggle matSuffix [for]="pi"></mat-datepicker-toggle>
+        <mat-datepicker #pi></mat-datepicker>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Fin de vigencia</mat-label>
+        <input matInput [matDatepicker]="pf" formControlName="fechaFin" />
+        <mat-datepicker-toggle matSuffix [for]="pf"></mat-datepicker-toggle>
+        <mat-datepicker #pf></mat-datepicker>
+      </mat-form-field>
+    </div>
+
+    <div class="row" *ngIf="form.get('isElectronico')?.value">
+      <mat-form-field appearance="outline">
+        <mat-label>CSC</mat-label>
+        <input matInput formControlName="csc" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>CSC ID</mat-label>
+        <input matInput formControlName="cscId" />
+      </mat-form-field>
+    </div>
+
+    <mat-checkbox formControlName="activo">Activo</mat-checkbox>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()" [disabled]="isSaving">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="save()" [disabled]="isSaving">
+    <mat-spinner *ngIf="isSaving" diameter="18"></mat-spinner>
+    <span *ngIf="!isSaving">Guardar</span>
+  </button>
+</mat-dialog-actions>
