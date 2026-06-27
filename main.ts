@@ -46,6 +46,7 @@ import { registerCuentasPorPagarHandlers } from './electron/handlers/cuentas-por
 import { registerDashboardShortcutsHandlers } from './electron/handlers/dashboard-shortcuts.handler';
 import { registerOnboardingHandlers } from './electron/handlers/onboarding.handler';
 import { registerEmpresaHandlers } from './electron/handlers/empresa.handler';
+import { registerFacturacionHandlers } from './electron/handlers/facturacion.handler';
 import { registerCotizacionMercadoHandlers } from './electron/handlers/cotizacion-mercado.handler';
 import { registerPermissionsHandlers, seedPermissions } from './electron/handlers/permissions.handler';
 import { registerConfiguracionRrhhHandlers, seedConfiguracionRrhh } from './electron/handlers/configuracion-rrhh.handler';
@@ -205,6 +206,7 @@ function initializeDatabase() {
       registerDashboardShortcutsHandlers(dataSource, getCurrentUser); // Dashboard Shortcuts personalizables
       registerOnboardingHandlers(dataSource, getCurrentUser); // Onboarding tasks (lista guiada en Home)
       registerEmpresaHandlers(dataSource, getCurrentUser); // Empresa singleton (datos + branding + fiscal)
+      registerFacturacionHandlers(dataSource, getCurrentUser); // Facturación: timbrados, plantillas, facturas
       registerCotizacionMercadoHandlers(); // Scraping de cotizaciones de mercado on-demand
       registerPermissionsHandlers(dataSource, getCurrentUser); // RRHH: Permission + RolePermission
       registerConfiguracionRrhhHandlers(dataSource, getCurrentUser); // RRHH: ConfiguracionRrhh (parametros legales)
