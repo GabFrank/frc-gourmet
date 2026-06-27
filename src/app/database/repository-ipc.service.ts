@@ -667,6 +667,7 @@ interface ElectronAPI {
   getRetiroCaja: (id: number) => Promise<any>;
   createRetiroCaja: (data: any) => Promise<any>;
   ingresarRetiroCaja: (retiroId: number, cajaMayorId: number) => Promise<any>;
+  generarRetiroCierreCaja: (cajaId: number) => Promise<any>;
 
   // Banking - CuentasBancarias
   getCuentasBancarias: () => Promise<any[]>;
@@ -3038,6 +3039,9 @@ export class RepositoryIpcService extends RepositoryService {
   }
   ingresarRetiroCaja(retiroId: number, cajaMayorId: number): Observable<any> {
     return from(this.api.ingresarRetiroCaja(retiroId, cajaMayorId));
+  }
+  generarRetiroCierreCaja(cajaId: number): Observable<any> {
+    return from(this.api.generarRetiroCierreCaja(cajaId));
   }
 
   // ===================== BANKING =====================

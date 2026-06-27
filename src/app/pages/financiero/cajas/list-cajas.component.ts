@@ -23,6 +23,7 @@ import { Usuario } from 'src/app/database/entities/personas/usuario.entity';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CreateCajaDialogComponent } from './create-caja-dialog/create-caja-dialog.component';
 import { ResumenCajaDialogComponent } from 'src/app/shared/components/resumen-caja-dialog/resumen-caja-dialog.component';
+import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { AuthService } from 'src/app/services/auth.service';
 
 // Confirmation dialog for existing open caja
@@ -306,6 +307,36 @@ export class ListCajasComponent implements OnInit {
         this.loadCajas();
       }
     });
+  }
+
+  /**
+   * Genera (manual) un retiro por el efectivo del cierre de una caja CERRADA.
+   * Queda pendiente de ingreso a una caja mayor (no toca saldos hasta ingresarlo).
+   */
+  async generarRetiroCierre(caja: Caja): Promise<void> {
+    const ok = await firstValueFrom(
+      this.dialog
+        .open(ConfirmationDialogComponent, {
+          width: '440px',
+          data: {
+            title: 'Generar retiro del cierre',
+            message:
+              `Se generará un retiro con el EFECTIVO contado en el cierre de la caja #${caja.id}.\n\n` +
+              `Quedará PENDIENTE de ingreso a una caja mayor — el efectivo "se toca" recién cuando lo ingreses allí. ¿Continuar?`,
+          },
+        })
+        .afterClosed(),
+    );
+    if (!ok) return;
+    try {
+      await firstValueFrom(this.repositoryService.generarRetiroCierreCaja(caja.id!));
+      this.snackBar.open('Retiro del cierre generado (pendiente de ingreso a caja mayor)', 'CERRAR', {
+        duration: 4000,
+      });
+    } catch (e) {
+      console.error('Error generando retiro de cierre:', e);
+      this.snackBar.open('No se pudo generar el retiro del cierre', 'CERRAR', { duration: 4000 });
+    }
   }
 
   openCaja(): void {

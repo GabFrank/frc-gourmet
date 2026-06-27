@@ -54,6 +54,18 @@ export enum RetiroCajaEstado {
 }
 
 /**
+ * Origen de un RetiroCaja:
+ * - MANUAL (default): retiro suelto creado por el usuario.
+ * - CIERRE: generado desde el cierre de una caja (retiro del efectivo contado).
+ *   Al ingresarlo a caja mayor se registra como `INGRESO_CIERRE_CAJA` (en vez de
+ *   `INGRESO_RETIRO_CAJA`) para distinguirlo en reportes.
+ */
+export enum RetiroCajaOrigen {
+  MANUAL = 'MANUAL',
+  CIERRE = 'CIERRE'
+}
+
+/**
  * Destino del egreso de un Gasto.
  * - CAJA_MAYOR (default): el gasto descuenta el saldo de la caja mayor en el
  *   bucket (moneda × forma de pago) del detalle. Caso histórico/cash-like.

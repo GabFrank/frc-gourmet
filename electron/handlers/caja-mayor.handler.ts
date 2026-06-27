@@ -18,7 +18,9 @@ import { OperacionFinanciera } from '../../src/app/database/entities/financiero/
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
 import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
 import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
-import { CajaMayorEstado, TipoMovimiento, GastoEstado, GastoDestinoTipo, RetiroCajaEstado } from '../../src/app/database/entities/financiero/caja-mayor-enums';
+import { CajaMayorEstado, TipoMovimiento, GastoEstado, GastoDestinoTipo, RetiroCajaEstado, RetiroCajaOrigen } from '../../src/app/database/entities/financiero/caja-mayor-enums';
+import { Caja } from '../../src/app/database/entities/financiero/caja.entity';
+import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
 import { TipoOperacionFinanciera, DiferenciaDestinoTipo } from '../../src/app/database/entities/financiero/operaciones-financieras-enums';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
@@ -1356,16 +1358,23 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       await setEntityUserTracking(dataSource, retiro, currentUser?.id, true);
       await queryRunner.manager.save(RetiroCaja, retiro);
 
+      // Tipo de movimiento según el origen del retiro: un retiro generado desde
+      // el cierre de una caja entra como INGRESO_CIERRE_CAJA (distinguible en
+      // reportes); un retiro manual entra como INGRESO_RETIRO_CAJA.
+      const esCierre = retiro.origen === RetiroCajaOrigen.CIERRE;
+      const tipoMov = esCierre ? TipoMovimiento.INGRESO_CIERRE_CAJA : TipoMovimiento.INGRESO_RETIRO_CAJA;
+      const etiqueta = esCierre ? `CIERRE CAJA #${retiroId}` : `RETIRO CAJA #${retiroId}`;
+
       // Crear movimiento por cada detalle
       for (const detalle of retiro.detalles) {
         const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
           cajaMayor: { id: cajaMayorId },
-          tipoMovimiento: TipoMovimiento.INGRESO_RETIRO_CAJA,
+          tipoMovimiento: tipoMov,
           moneda: detalle.moneda,
           formaPago: detalle.formaPago,
           monto: detalle.monto,
           fecha: new Date(),
-          observacion: `RETIRO CAJA #${retiroId}`,
+          observacion: etiqueta,
           retiroCaja: retiro,
         });
 
@@ -1375,7 +1384,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         await setEntityUserTracking(dataSource, movimiento, currentUser?.id, false);
         await queryRunner.manager.save(CajaMayorMovimiento, movimiento);
 
-        await actualizarSaldo(queryRunner, cajaMayorId, detalle.moneda.id, detalle.formaPago.id, Number(detalle.monto), TipoMovimiento.INGRESO_RETIRO_CAJA);
+        await actualizarSaldo(queryRunner, cajaMayorId, detalle.moneda.id, detalle.formaPago.id, Number(detalle.monto), tipoMov);
       }
 
       await queryRunner.commitTransaction();
@@ -1386,6 +1395,85 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       throw error;
     } finally {
       await queryRunner.release();
+    }
+  });
+
+  /**
+   * Genera (manual, desde el cierre) un RetiroCaja por el EFECTIVO contado en el
+   * cierre de una caja. Queda FLOTANTE (pendiente): el efectivo recién "se toca"
+   * cuando se ingresa a una caja mayor (genera INGRESO_CIERRE_CAJA). Idempotente:
+   * si ya existe un retiro para ese conteo de cierre, lo devuelve.
+   */
+  ipcMain.handle('generar-retiro-cierre-caja', async (_event: any, cajaId: number) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
+      const cajaRepo = dataSource.getRepository(Caja);
+      const caja = await cajaRepo.findOne({
+        where: { id: cajaId },
+        relations: [
+          'conteoCierre',
+          'conteoCierre.detalles',
+          'conteoCierre.detalles.monedaBillete',
+          'conteoCierre.detalles.monedaBillete.moneda',
+        ],
+      });
+      if (!caja) throw new Error(`Caja ID ${cajaId} not found`);
+      if (!caja.conteoCierre) throw new Error('La caja no tiene conteo de cierre');
+
+      const retiroRepo = dataSource.getRepository(RetiroCaja);
+      // Idempotencia: no duplicar el retiro de cierre del mismo conteo.
+      const existente = await retiroRepo.findOne({
+        where: { conteoCierre: { id: caja.conteoCierre.id } } as any,
+        relations: ['detalles'],
+      });
+      if (existente) return existente;
+
+      // Efectivo por moneda = suma(valor del billete × cantidad) del conteo de cierre.
+      const porMoneda = new Map<number, { moneda: any; monto: number }>();
+      for (const d of (caja.conteoCierre.detalles || [])) {
+        const mb = (d as any).monedaBillete;
+        const moneda = mb?.moneda;
+        if (!moneda) continue;
+        const sub = Number(mb.valor) * Number((d as any).cantidad);
+        const cur = porMoneda.get(moneda.id) || { moneda, monto: 0 };
+        cur.monto += sub;
+        porMoneda.set(moneda.id, cur);
+      }
+      const monedasConMonto = [...porMoneda.values()].filter((x) => x.monto > 0);
+      if (monedasConMonto.length === 0) throw new Error('El cierre no tiene efectivo para retirar');
+
+      // Forma de pago de EFECTIVO: la que mueve caja (preferir la principal).
+      const fpRepo = dataSource.getRepository(FormasPago);
+      const formasEfectivo = await fpRepo.find({
+        where: { movimentaCaja: true, activo: true } as any,
+        order: { principal: 'DESC', orden: 'ASC' },
+      });
+      const formaEfectivo = formasEfectivo[0];
+      if (!formaEfectivo) throw new Error('No hay forma de pago de efectivo configurada (movimenta caja)');
+
+      const currentUser = getEffectiveUser(getCurrentUser);
+      const retiro = retiroRepo.create({
+        caja: { id: cajaId } as any,
+        origen: RetiroCajaOrigen.CIERRE,
+        estado: RetiroCajaEstado.FLOTANTE,
+        conteoCierre: { id: caja.conteoCierre.id } as any,
+        fechaRetiro: new Date(),
+        observacion: `RETIRO DEL CIERRE DE CAJA #${cajaId}`,
+        ...(currentUser ? { responsableRetiro: currentUser } : {}),
+        detalles: monedasConMonto.map((x) => {
+          const det = new RetiroCajaDetalle();
+          det.moneda = { id: x.moneda.id } as any;
+          det.formaPago = { id: formaEfectivo.id } as any;
+          det.monto = x.monto;
+          return det;
+        }),
+      } as any);
+      await setEntityUserTracking(dataSource, retiro, currentUser?.id, false);
+      const saved = await retiroRepo.save(retiro);
+      return Array.isArray(saved) ? saved[0] : saved;
+    } catch (error) {
+      console.error(`Error generando retiro de cierre para caja ${cajaId}:`, error);
+      throw error;
     }
   });
 
