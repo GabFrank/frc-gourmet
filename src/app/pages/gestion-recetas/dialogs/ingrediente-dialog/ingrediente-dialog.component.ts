@@ -25,6 +25,9 @@ export class IngredienteDialogComponent implements OnInit {
   loading = false;
   isEditMode = false;
 
+  // Ítem solo-descripción: sin ingrediente (Producto) vinculado todavía.
+  soloDescripcion = false;
+
   // Propiedades para producto seleccionado
   productoSeleccionado: Producto | null = null;
 
@@ -66,6 +69,7 @@ export class IngredienteDialogComponent implements OnInit {
   initForm(): void {
     this.ingredienteForm = this.fb.group({
       ingredienteId: [null, [Validators.required]],
+      descripcion: [null],
       cantidad: [null, [Validators.required, Validators.min(0.01)]],
       unidad: ['GRAMOS', [Validators.required]],
       costoUnitario: [0, [Validators.required, Validators.min(0)]],
@@ -102,6 +106,45 @@ export class IngredienteDialogComponent implements OnInit {
     this.ingredienteForm.get('unidad')?.valueChanges.subscribe(() => {
       this.recalcularCostoUnitario();
     });
+  }
+
+  /** Alterna entre ítem con ingrediente vinculado y ítem solo-descripción. */
+  toggleSoloDescripcion(checked: boolean): void {
+    this.soloDescripcion = checked;
+    if (checked) {
+      this.productoSeleccionado = null;
+      this.ingredienteForm.get('ingredienteId')?.setValue(null, { emitEvent: false });
+    }
+    this.aplicarValidadoresModo();
+  }
+
+  /** Ajusta los validadores según el modo (con ingrediente vs solo-descripción). */
+  private aplicarValidadoresModo(): void {
+    const ingredienteId = this.ingredienteForm.get('ingredienteId');
+    const cantidad = this.ingredienteForm.get('cantidad');
+    const unidad = this.ingredienteForm.get('unidad');
+    const descripcion = this.ingredienteForm.get('descripcion');
+    const costoUnitario = this.ingredienteForm.get('costoUnitario');
+    const costoTotal = this.ingredienteForm.get('costoTotal');
+
+    if (this.soloDescripcion) {
+      // En solo-descripción: descripción obligatoria; cantidad/unidad opcionales; sin costos.
+      descripcion?.setValidators([Validators.required]);
+      ingredienteId?.clearValidators();
+      cantidad?.clearValidators();
+      unidad?.clearValidators();
+      costoUnitario?.clearValidators();
+      costoTotal?.clearValidators();
+    } else {
+      ingredienteId?.setValidators([Validators.required]);
+      cantidad?.setValidators([Validators.required, Validators.min(0.01)]);
+      unidad?.setValidators([Validators.required]);
+      costoUnitario?.setValidators([Validators.required, Validators.min(0)]);
+      costoTotal?.setValidators([Validators.required, Validators.min(0)]);
+      descripcion?.clearValidators();
+    }
+    [ingredienteId, cantidad, unidad, descripcion, costoUnitario, costoTotal]
+      .forEach((c) => c?.updateValueAndValidity({ emitEvent: false }));
   }
 
   /**
@@ -284,11 +327,27 @@ export class IngredienteDialogComponent implements OnInit {
   private loadIngredienteData(): void {
     const ingrediente = this.data.ingrediente!;
 
+    // Ítem solo-descripción si no tiene ingrediente vinculado.
+    this.soloDescripcion = !ingrediente.ingrediente;
+    this.ingredienteForm.patchValue({ descripcion: ingrediente.descripcion ?? null }, { emitEvent: false });
+    if (this.soloDescripcion) {
+      this.ingredienteForm.patchValue({
+        cantidad: ingrediente.cantidad ?? null,
+        unidad: ingrediente.unidad ?? null,
+        esExtra: ingrediente.esExtra,
+        esOpcional: ingrediente.esOpcional,
+        esCambiable: ingrediente.esCambiable,
+        activo: ingrediente.activo,
+      });
+      this.aplicarValidadoresModo();
+      return;
+    }
+
     // Determinar si hay conversión de unidades
-    const unidadBaseProducto = ingrediente.ingrediente.unidadBase;
+    const unidadBaseProducto = ingrediente.ingrediente?.unidadBase;
     const unidadGuardada = ingrediente.unidad;
     const unidadOriginal = ingrediente.unidadOriginal;
-    const cantidadGuardada = ingrediente.cantidad;
+    const cantidadGuardada = ingrediente.cantidad ?? 0;
 
     // Convertir cantidad si es necesario para mostrar en la unidad original
     let cantidadParaMostrar = cantidadGuardada;
@@ -308,7 +367,7 @@ export class IngredienteDialogComponent implements OnInit {
     }
 
     this.ingredienteForm.patchValue({
-      ingredienteId: ingrediente.ingrediente.id,
+      ingredienteId: ingrediente.ingrediente?.id ?? null,
       cantidad: cantidadParaMostrar,
       unidad: unidadParaMostrar,
       costoUnitario: ingrediente.costoUnitario,
@@ -322,7 +381,7 @@ export class IngredienteDialogComponent implements OnInit {
       activo: ingrediente.activo
     });
 
-    this.productoSeleccionado = ingrediente.ingrediente;
+    this.productoSeleccionado = ingrediente.ingrediente ?? null;
 
     // ✅ CORREGIDO: Para ingredientes existentes, usar el costo unitario guardado
     // en lugar de recalcular desde la receta del producto
@@ -338,7 +397,7 @@ export class IngredienteDialogComponent implements OnInit {
         // El costo unitario está en ml, convertirlo a litros para el costo base
         this.costoBaseOriginal = ingrediente.costoUnitario * 1000;
       }
-    } else {
+    } else if (ingrediente.ingrediente) {
       // Solo cargar el costo desde la receta si no tenemos un costo unitario guardado
       this.loadPrecioCostoProducto(ingrediente.ingrediente);
     }
@@ -503,7 +562,7 @@ export class IngredienteDialogComponent implements OnInit {
     if (!this.data.existingIngredientes) return true;
 
     const existe = this.data.existingIngredientes.some(
-      ingrediente => ingrediente.ingrediente.id === productoId
+      ingrediente => ingrediente.ingrediente?.id === productoId
     );
 
     if (existe && !this.isEditMode) {
@@ -517,6 +576,25 @@ export class IngredienteDialogComponent implements OnInit {
   onSubmit(): void {
     if (this.ingredienteForm.valid) {
       const formValue = this.ingredienteForm.value;
+
+      // Ítem solo-descripción: sin ingrediente, sin costos.
+      if (this.soloDescripcion) {
+        this.dialogRef.close({
+          recetaId: this.data.recetaId,
+          ingredienteId: null,
+          descripcion: formValue.descripcion,
+          cantidad: formValue.cantidad || null,
+          unidad: formValue.unidad || null,
+          unidadOriginal: formValue.unidad || null,
+          esExtra: formValue.esExtra,
+          esOpcional: formValue.esOpcional,
+          esCambiable: formValue.esCambiable,
+          activo: formValue.activo,
+          costoUnitario: 0,
+          costoTotal: 0,
+        });
+        return;
+      }
 
       // Validar producto duplicado
       if (!this.validarProductoDuplicado(formValue.ingredienteId)) {

@@ -49,7 +49,13 @@ export class GestionRecetasComponent implements OnInit {
     ingrediente: RecetaIngrediente;
     cantidadParaMostrar: number;
     unidadParaMostrar: string;
+    nombreMostrado: string;
+    tipoMostrado: string;
+    pendienteVincular: boolean;
   }> = [];
+
+  // Opciones (id + nombre) para vincular ítems a las fases del modo de preparo.
+  ingredientesOpciones: { id: number; nombre: string }[] = [];
 
   // Propiedades computadas para performance
   costoTotalReceta = 0;
@@ -285,10 +291,10 @@ export class GestionRecetasComponent implements OnInit {
     // ✅ NUEVO: Usar el servicio de eliminación de múltiples variaciones
     this.eliminarIngredienteService.eliminarIngrediente(
       ingrediente.id!,
-      ingrediente.ingrediente.nombre,
+      ingrediente.ingrediente?.nombre || ingrediente.descripcion || 'Ingrediente',
       this.receta?.nombre || 'Receta',
-      ingrediente.cantidad,
-      ingrediente.unidad
+      ingrediente.cantidad ?? 0,
+      ingrediente.unidad || ''
     ).subscribe({
       next: (resultado) => {
         if (resultado.cancelado) {
@@ -360,7 +366,7 @@ export class GestionRecetasComponent implements OnInit {
     const dialogRef = this.dialog.open(ConfirmarAgregarIngredienteDialogComponent, {
       width: '500px',
       data: {
-        nombreIngrediente: ingredienteAgregado.ingrediente.nombre
+        nombreIngrediente: ingredienteAgregado.ingrediente?.nombre || ingredienteAgregado.descripcion || ''
       }
     });
 
@@ -387,13 +393,13 @@ export class GestionRecetasComponent implements OnInit {
         // 2. Abrir el diálogo de gestión
         // ✅ CORREGIDO: Pasar la información original para mostrar correctamente
         const cantidadOriginal = ingredienteOriginal.unidadOriginal && ingredienteOriginal.unidadOriginal !== ingredienteOriginal.unidad
-          ? this.convertirCantidadParaMostrar(ingredienteOriginal.cantidad, ingredienteOriginal.unidad, ingredienteOriginal.unidadOriginal)
-          : ingredienteOriginal.cantidad;
+          ? this.convertirCantidadParaMostrar(ingredienteOriginal.cantidad ?? 0, ingredienteOriginal.unidad || '', ingredienteOriginal.unidadOriginal)
+          : (ingredienteOriginal.cantidad ?? 0);
 
         const dialogRef = this.dialog.open(GestionarIngredienteMultiVariacionDialogComponent, {
           width: '700px',
           data: {
-            nombreIngrediente: ingredienteOriginal.ingrediente.nombre,
+            nombreIngrediente: ingredienteOriginal.ingrediente?.nombre || ingredienteOriginal.descripcion || '',
             unidadIngrediente: ingredienteOriginal.unidad,
             variaciones: variacionesDelSabor,
             ingredienteOriginal: ingredienteOriginal,
@@ -658,7 +664,7 @@ export class GestionRecetasComponent implements OnInit {
     // Calcular propiedades computadas para mostrar en tabla
     this.ingredientesParaMostrar = this.ingredientes.map(ingrediente => {
       let cantidadParaMostrar = ingrediente.cantidad || 0;
-      let unidadParaMostrar = ingrediente.unidad;
+      let unidadParaMostrar = ingrediente.unidad || '';
 
       // Si hay conversión de unidades, convertir de vuelta para mostrar
       if (ingrediente.unidadOriginal && ingrediente.unidadOriginal !== ingrediente.unidad) {
@@ -671,12 +677,27 @@ export class GestionRecetasComponent implements OnInit {
         }
       }
 
+      const pendienteVincular = !ingrediente.ingrediente;
+      const nombreMostrado = ingrediente.ingrediente?.nombre || ingrediente.descripcion || '';
+      const tipoMostrado = ingrediente.ingrediente?.tipo || (pendienteVincular ? 'SIN VINCULAR' : '');
+
       return {
         ingrediente,
         cantidadParaMostrar,
-        unidadParaMostrar
+        unidadParaMostrar,
+        nombreMostrado,
+        tipoMostrado,
+        pendienteVincular
       };
     });
+
+    // Opciones para vincular ítems a las fases del modo de preparo.
+    this.ingredientesOpciones = this.ingredientes
+      .filter((ing) => ing.id != null)
+      .map((ing) => ({
+        id: ing.id!,
+        nombre: (ing.ingrediente?.nombre || ing.descripcion || '').toUpperCase(),
+      }));
   }
 
   // Métodos para cálculos de ingredientes individuales
@@ -686,6 +707,24 @@ export class GestionRecetasComponent implements OnInit {
       return ingrediente.costoTotal;
     }
     return (ingrediente.cantidad || 0) * (ingrediente.costoUnitario || 0);
+  }
+
+  // Exporta la receta completa (ingredientes, materiales, fases, foto) a PDF.
+  exportarPdf(): void {
+    if (!this.receta?.id) return;
+    this.repositoryService.exportRecetaPdf(this.receta.id).subscribe({
+      next: (res: any) => {
+        if (!res?.base64) return;
+        const a = document.createElement('a');
+        a.href = 'data:application/pdf;base64,' + res.base64;
+        a.download = res.fileName || 'receta.pdf';
+        a.click();
+      },
+      error: (e: any) => {
+        console.error('Error exportando receta PDF:', e);
+        this.snackBar.open('Error al exportar el PDF', 'Cerrar', { duration: 3000 });
+      },
+    });
   }
 
   saveReceta(): void {

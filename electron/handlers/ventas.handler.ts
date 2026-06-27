@@ -53,6 +53,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   // Remove this line - get the current user in each handler instead
   // const currentUser = getCurrentUser(); // Get user for tracking
 
+  // Flag de config: ¿vincular una comanda a una mesa debe ocupar la mesa?
+  const ocuparMesaAlVincularComanda = async (): Promise<boolean> => {
+    try {
+      const cfg = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+      return !!cfg?.ocuparMesaAlVincularComanda;
+    } catch {
+      return false;
+    }
+  };
+
   // Arrancar worker de retry de comandas (cada 5s reintenta items con
   // `impreso=false` y al menos un intento previo, en ventas ABIERTAS).
   startRetryComandaWorker(dataSource);
@@ -305,8 +315,10 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Venta);
+      // Solo las ventas DE MESA (comanda IS NULL): las cuentas de comanda
+      // vinculadas a la mesa se cierran/liberan desde su propio flujo.
       const ventasAbiertas = await repo.find({
-        where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA },
+        where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
       });
       for (const v of ventasAbiertas) {
         v.estado = estado as VentaEstado;
@@ -1510,7 +1522,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     return repo.createQueryBuilder('mesa')
       .leftJoinAndSelect('mesa.reserva', 'reserva')
       .leftJoinAndSelect('mesa.sector', 'sector')
-      .leftJoinAndMapOne('mesa.venta', Venta, 'venta', 'venta.mesa_id = mesa.id AND venta.estado = :ventaEstado', { ventaEstado: VentaEstado.ABIERTA })
+      .leftJoinAndMapOne('mesa.venta', Venta, 'venta', 'venta.mesa_id = mesa.id AND venta.estado = :ventaEstado AND venta.comanda_id IS NULL', { ventaEstado: VentaEstado.ABIERTA })
       .leftJoinAndSelect('mesa.comandas', 'comanda', 'comanda.estado = :comandaEstado AND comanda.activo = :comandaActivo', { comandaEstado: ComandaEstado.OCUPADO, comandaActivo: true })
       .orderBy('mesa.numero', 'ASC');
   };
@@ -1837,7 +1849,18 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         entity.observacion = data.observacion;
       }
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+
+      // Si la config lo pide, vincular comanda a mesa también ocupa la mesa.
+      if (data.mesaId && (await ocuparMesaAlVincularComanda())) {
+        const mesaRepo = dataSource.getRepository(PdvMesa);
+        const mesa = await mesaRepo.findOneBy({ id: data.mesaId });
+        if (mesa && mesa.estado !== 'OCUPADO') {
+          mesa.estado = 'OCUPADO' as any;
+          await mesaRepo.save(mesa);
+        }
+      }
+      return saved;
     } catch (error) {
       console.error(`Error abriendo Comanda ID ${comandaId}:`, error);
       throw error;
@@ -1847,15 +1870,36 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('cerrarComanda', async (_event: any, comandaId: number) => {
     try {
       const repo = dataSource.getRepository(Comanda);
-      const entity = await repo.findOneBy({ id: comandaId });
+      const entity = await repo.findOne({ where: { id: comandaId }, relations: ['pdv_mesa'] });
       if (!entity) throw new Error(`Comanda ID ${comandaId} not found`);
 
+      const mesaId = entity.pdv_mesa?.id;
       entity.estado = ComandaEstado.DISPONIBLE;
       entity.pdv_mesa = undefined as any;
       entity.sector = undefined as any;
       entity.observacion = undefined as any;
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+
+      // Si la config ocupa la mesa al vincular comanda, al liberar la comanda
+      // liberar la mesa solo si no quedan otras comandas OCUPADO ni venta de mesa ABIERTA.
+      if (mesaId && (await ocuparMesaAlVincularComanda())) {
+        const otrasComandas = await repo.count({
+          where: { pdv_mesa: { id: mesaId }, estado: ComandaEstado.OCUPADO, activo: true },
+        });
+        const ventaMesa = await dataSource.getRepository(Venta).count({
+          where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
+        });
+        if (otrasComandas === 0 && ventaMesa === 0) {
+          const mesaRepo = dataSource.getRepository(PdvMesa);
+          const mesa = await mesaRepo.findOneBy({ id: mesaId });
+          if (mesa && mesa.estado !== 'DISPONIBLE') {
+            mesa.estado = 'DISPONIBLE' as any;
+            await mesaRepo.save(mesa);
+          }
+        }
+      }
+      return saved;
     } catch (error) {
       console.error(`Error cerrando Comanda ID ${comandaId}:`, error);
       throw error;

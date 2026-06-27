@@ -43,6 +43,7 @@ import { ConfirmarAgregarIngredienteDialogComponent } from './dialogs/confirmar-
 import { GestionarIngredienteMultiVariacionDialogComponent } from './dialogs/gestionar-ingrediente-multi-variacion-dialog/gestionar-ingrediente-multi-variacion-dialog.component';
 import { HasPermissionDirective } from '../../shared/directives/has-permission.directive';
 import { CurrencyInputDirective } from '../../shared/directives/currency-input.directive';
+import { RecetaPreparacionEditorComponent } from './components/receta-preparacion-editor/receta-preparacion-editor.component';
 
 @NgModule({
   declarations: [
@@ -90,6 +91,7 @@ import { CurrencyInputDirective } from '../../shared/directives/currency-input.d
     MatProgressBarModule,
     HasPermissionDirective,
     CurrencyInputDirective,
+    RecetaPreparacionEditorComponent,
   ],
   providers: [CurrencyPipe]
 })

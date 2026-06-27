@@ -37,6 +37,15 @@ export class PdvConfig extends BaseModel {
   @Column({ name: 'comandas_habilitadas', default: false })
   comandasHabilitadas!: boolean;
 
+  /**
+   * Si true, vincular una comanda a una mesa marca la mesa como OCUPADA, y al
+   * liberar/cerrar la comanda la mesa vuelve a DISPONIBLE solo si no quedan otras
+   * comandas OCUPADO ni una venta de mesa ABIERTA. Default false: la comanda no
+   * ocupa la mesa (cuenta portátil independiente).
+   */
+  @Column({ name: 'ocupar_mesa_al_vincular_comanda', default: false })
+  ocuparMesaAlVincularComanda!: boolean;
+
   // Tamaño del grid de atajos: 1=grande, 2=mediano, 3=pequeño
   @Column({ name: 'atajos_grid_size', type: 'int', default: 3 })
   atajosGridSize!: number;

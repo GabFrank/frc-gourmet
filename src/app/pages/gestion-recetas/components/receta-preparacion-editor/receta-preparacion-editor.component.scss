@@ -1,0 +1,109 @@
+.preparacion-editor {
+  display: block;
+}
+
+.prep-loading {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0;
+}
+
+.prep-label {
+  display: block;
+  font-size: 0.8rem;
+  opacity: 0.75;
+  margin-bottom: 4px;
+}
+
+.prep-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+
+  .tiempo-field {
+    width: 220px;
+  }
+
+  .foto-field {
+    flex: 1;
+    min-width: 220px;
+  }
+}
+
+.prep-card {
+  margin-top: 16px;
+  padding: 12px 16px;
+}
+
+.prep-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.material-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+}
+
+.prep-add-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+
+  .prep-grow {
+    flex: 1;
+  }
+}
+
+.full-width {
+  width: 100%;
+}
+
+.fase-item {
+  border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+
+  .fase-head {
+    display: flex;
+    align-items: center;
+    margin-bottom: 6px;
+
+    .fase-num {
+      font-weight: 600;
+    }
+    .fase-spacer {
+      flex: 1;
+    }
+  }
+}
+
+.fase-ingredientes {
+  margin: 4px 0 8px;
+
+  .fase-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+  }
+}
+
+.fase-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.prep-add-fase {
+  border-top: 1px dashed var(--divider-color, rgba(0, 0, 0, 0.12));
+  padding-top: 12px;
+  margin-top: 4px;
+}
