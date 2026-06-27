@@ -7,8 +7,23 @@
   <mat-dialog-content>
     <form [formGroup]="ingredienteForm" class="ingrediente-form">
 
+      <!-- Modo solo-descripción: ítem sin ingrediente vinculado todavía -->
+      <div class="solo-descripcion-toggle">
+        <mat-checkbox color="primary" [checked]="soloDescripcion" (change)="toggleSoloDescripcion($event.checked)">
+          Sin ingrediente (solo descripción)
+        </mat-checkbox>
+      </div>
+
+      <mat-form-field appearance="outline" class="full-width" *ngIf="soloDescripcion">
+        <mat-label>Descripción</mat-label>
+        <input matInput formControlName="descripcion" placeholder="Ej. KIT DE CARNES" maxlength="200">
+        <mat-error *ngIf="ingredienteForm.get('descripcion')?.hasError('required')">
+          La descripción es requerida
+        </mat-error>
+      </mat-form-field>
+
       <!-- Selección de Producto -->
-      <div class="producto-selection">
+      <div class="producto-selection" *ngIf="!soloDescripcion">
         <label class="form-label">Producto Ingrediente *</label>
 
         <!-- Producto Seleccionado -->
@@ -64,7 +79,7 @@
           </mat-error>
         </mat-form-field>
 
-        <mat-form-field appearance="outline" class="porcentaje-field">
+        <mat-form-field appearance="outline" class="porcentaje-field" *ngIf="!soloDescripcion">
           <mat-label>Aprovechamiento</mat-label>
           <input matInput
                  type="number"
@@ -100,7 +115,7 @@
       </div>
 
       <!-- Costo Unitario y Total -->
-      <div class="form-row">
+      <div class="form-row" *ngIf="!soloDescripcion">
         <mat-form-field appearance="outline" class="half-width">
           <mat-label>Costo Unitario</mat-label>
           <input matInput

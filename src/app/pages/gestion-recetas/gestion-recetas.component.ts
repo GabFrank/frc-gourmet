@@ -49,6 +49,9 @@ export class GestionRecetasComponent implements OnInit {
     ingrediente: RecetaIngrediente;
     cantidadParaMostrar: number;
     unidadParaMostrar: string;
+    nombreMostrado: string;
+    tipoMostrado: string;
+    pendienteVincular: boolean;
   }> = [];
 
   // Propiedades computadas para performance
@@ -671,10 +674,17 @@ export class GestionRecetasComponent implements OnInit {
         }
       }
 
+      const pendienteVincular = !ingrediente.ingrediente;
+      const nombreMostrado = ingrediente.ingrediente?.nombre || ingrediente.descripcion || '';
+      const tipoMostrado = ingrediente.ingrediente?.tipo || (pendienteVincular ? 'SIN VINCULAR' : '');
+
       return {
         ingrediente,
         cantidadParaMostrar,
-        unidadParaMostrar
+        unidadParaMostrar,
+        nombreMostrado,
+        tipoMostrado,
+        pendienteVincular
       };
     });
   }
