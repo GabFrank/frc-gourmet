@@ -45,9 +45,26 @@ export interface PlantillaElemento {
   columns?: ItemColumna[];
 }
 
+/**
+ * Transformacion de la imagen de fondo de referencia. Independiente del tamano
+ * de pagina: permite usar un escaneo A4 (con 2 facturas) como referencia
+ * mientras la plantilla mide media hoja, ajustando ancho y desplazamiento para
+ * alinear el sector deseado del escaneo.
+ */
+export interface BackgroundTransform {
+  /** Ancho con el que se dibuja la imagen, en mm (el alto se ajusta por aspecto). */
+  widthMm: number;
+  /** Desplazamiento horizontal en mm (puede ser negativo para "pan"). */
+  offsetXMm: number;
+  /** Desplazamiento vertical en mm (puede ser negativo). */
+  offsetYMm: number;
+}
+
 export interface PlantillaConfig {
   version: number;
   elementos: PlantillaElemento[];
+  /** Ajuste de la imagen de fondo de referencia (solo diseno; ver TipoPlantilla). */
+  background?: BackgroundTransform;
 }
 
 /** Variable bindeable disponible en el disenador. */
@@ -66,15 +83,17 @@ export const CATALOGO_VARIABLES: VariableCatalogo[] = [
   { key: 'factura.numeroCompleto', label: 'Nº de factura', grupo: 'Factura', ejemplo: '001-001-0000123' },
   { key: 'factura.fecha', label: 'Fecha', grupo: 'Factura', ejemplo: '27/06/2026' },
   { key: 'factura.condicionVenta', label: 'Condición de venta', grupo: 'Factura', ejemplo: 'CONTADO' },
+  { key: 'factura.marcaContado', label: 'Marca "X" si CONTADO', grupo: 'Factura', ejemplo: 'X' },
+  { key: 'factura.marcaCredito', label: 'Marca "X" si CRÉDITO', grupo: 'Factura', ejemplo: '' },
   { key: 'cliente.nombre', label: 'Cliente / Razón social', grupo: 'Cliente', ejemplo: 'JUAN PEREZ' },
   { key: 'cliente.ruc', label: 'RUC / CI', grupo: 'Cliente', ejemplo: '1234567-8' },
   { key: 'cliente.direccion', label: 'Dirección', grupo: 'Cliente', ejemplo: 'AV. SIEMPRE VIVA 123' },
   { key: 'cliente.email', label: 'Email', grupo: 'Cliente', ejemplo: 'cliente@mail.com' },
   { key: 'timbrado.numero', label: 'Nº de timbrado', grupo: 'Timbrado', ejemplo: '12345678' },
   { key: 'timbrado.vigencia', label: 'Vigencia timbrado', grupo: 'Timbrado', ejemplo: '01/01/2026 - 31/12/2026' },
-  { key: 'totales.gravada10', label: 'Gravada 10%', grupo: 'Totales', ejemplo: '100.000' },
-  { key: 'totales.gravada5', label: 'Gravada 5%', grupo: 'Totales', ejemplo: '0' },
-  { key: 'totales.exenta', label: 'Exenta', grupo: 'Totales', ejemplo: '0' },
+  { key: 'totales.exenta', label: 'Subtotal Exenta (IVA 0)', grupo: 'Totales', ejemplo: '0' },
+  { key: 'totales.gravada5', label: 'Subtotal Gravada 5%', grupo: 'Totales', ejemplo: '0' },
+  { key: 'totales.gravada10', label: 'Subtotal Gravada 10%', grupo: 'Totales', ejemplo: '100.000' },
   { key: 'totales.iva10', label: 'IVA 10%', grupo: 'Totales', ejemplo: '9.091' },
   { key: 'totales.iva5', label: 'IVA 5%', grupo: 'Totales', ejemplo: '0' },
   { key: 'totales.totalIva', label: 'Total IVA', grupo: 'Totales', ejemplo: '9.091' },
@@ -88,6 +107,7 @@ export const CATALOGO_VARIABLES: VariableCatalogo[] = [
 
 /** Columnas disponibles para el bloque de tabla de items. */
 export const CATALOGO_COLUMNAS_ITEM: { field: string; header: string }[] = [
+  { field: 'id', header: 'ID' },
   { field: 'cantidad', header: 'Cant.' },
   { field: 'descripcion', header: 'Descripción' },
   { field: 'precioUnitario', header: 'Precio unit.' },

@@ -47,6 +47,24 @@
       <p class="hint">Subí un escaneo de la hoja pre-impresa para alinear los campos. No se imprime.</p>
       <input type="file" accept="image/*" (change)="onBackgroundSelected($event)" />
       <button mat-button color="warn" *ngIf="plantilla?.backgroundImageUrl" (click)="clearBackground()">Quitar fondo</button>
+
+      <div *ngIf="plantilla?.backgroundImageUrl && config.background" class="bg-controls">
+        <p class="hint">Ajustá el fondo sin que dependa del tamaño de hoja (ej. media A4 sobre un escaneo A4 con 2 facturas).</p>
+        <mat-form-field appearance="outline">
+          <mat-label>Ancho fondo (mm)</mat-label>
+          <input matInput type="number" [(ngModel)]="config.background!.widthMm" (ngModelChange)="recomputeBg()" />
+        </mat-form-field>
+        <div class="pos-row">
+          <mat-form-field appearance="outline">
+            <mat-label>Offset X (mm)</mat-label>
+            <input matInput type="number" [(ngModel)]="config.background!.offsetXMm" (ngModelChange)="recomputeBg()" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Offset Y (mm)</mat-label>
+            <input matInput type="number" [(ngModel)]="config.background!.offsetYMm" (ngModelChange)="recomputeBg()" />
+          </mat-form-field>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -55,7 +73,8 @@
     <div class="designer-page"
          [style.width.px]="pageWidthPx"
          [style.height.px]="pageHeightPx">
-      <img *ngIf="plantilla?.backgroundImageUrl as bg" class="page-bg" [src]="bg" alt="fondo" />
+      <img *ngIf="plantilla?.backgroundImageUrl as bg" class="page-bg" [src]="bg"
+           [style.width.px]="bgWidthPx" [style.left.px]="bgLeftPx" [style.top.px]="bgTopPx" alt="fondo" />
 
       <div *ngFor="let el of config.elementos"
            class="design-el"
@@ -88,15 +107,17 @@
         <img *ngIf="el.type === 'image' && el.imageUrl" class="el-img"
              [src]="el.imageUrl" [style.width.px]="(el.wMm || 30) * pxPerMm" alt="img" />
 
-        <!-- tabla items (placeholder de diseño) -->
+        <!-- tabla items: la caja indica el area limite donde entran los productos -->
         <div *ngIf="el.type === 'itemsTable'" class="el-table"
-             [style.width.px]="(el.wMm || 150) * pxPerMm">
+             [style.width.px]="(el.wMm || 150) * pxPerMm"
+             [style.height.px]="(el.hMm || 80) * pxPerMm">
           <div class="el-table-head">
             <span *ngFor="let c of el.columns" [style.width.px]="c.wMm * pxPerMm">{{ c.header }}</span>
           </div>
           <div class="el-table-row">
             <span *ngFor="let c of el.columns" [style.width.px]="c.wMm * pxPerMm">…</span>
           </div>
+          <div class="el-table-limit">área de ítems</div>
         </div>
       </div>
     </div>
@@ -156,7 +177,7 @@
           <mat-label>Ancho (mm)</mat-label>
           <input matInput type="number" [(ngModel)]="selected.wMm" />
         </mat-form-field>
-        <mat-form-field appearance="outline" *ngIf="selected.type === 'box'">
+        <mat-form-field appearance="outline" *ngIf="selected.type === 'box' || selected.type === 'itemsTable'">
           <mat-label>Alto (mm)</mat-label>
           <input matInput type="number" [(ngModel)]="selected.hMm" />
         </mat-form-field>

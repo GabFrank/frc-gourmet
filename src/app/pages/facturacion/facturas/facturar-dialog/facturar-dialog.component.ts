@@ -169,10 +169,12 @@ export class FacturarDialogComponent implements OnInit {
           cantidad: Number(it.cantidad) || 0,
           descripcion: it.descripcion,
           precioUnitario: Number(it.precioUnitario) || 0,
-          descuento: 0,
-          exenta: Number(it.ivaTipo) === 0 ? lineTotal : 0,
-          gravada5: Number(it.ivaTipo) === 5 ? lineTotal : 0,
-          gravada10: Number(it.ivaTipo) === 10 ? lineTotal : 0,
+          descuento: undefined,
+          // Solo se completa la columna de IVA que corresponde; el resto queda
+          // en blanco en la impresion (undefined -> celda vacia).
+          exenta: Number(it.ivaTipo) === 0 ? lineTotal : undefined,
+          gravada5: Number(it.ivaTipo) === 5 ? lineTotal : undefined,
+          gravada10: Number(it.ivaTipo) === 10 ? lineTotal : undefined,
           total: lineTotal,
         };
       }),
@@ -248,7 +250,7 @@ export class FacturarDialogComponent implements OnInit {
         { anchoMm: Number(plantilla.anchoMm), altoMm: Number(plantilla.altoMm) },
         config,
         ctx,
-        includeBg ? { background: plantilla.backgroundImageUrl } : undefined,
+        includeBg ? { background: plantilla.backgroundImageUrl, backgroundTransform: config.background } : undefined,
       );
       const pdfMake = await loadPdfMake();
       pdfMake.createPdf(dd).print();

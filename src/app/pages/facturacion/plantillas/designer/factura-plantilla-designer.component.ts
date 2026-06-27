@@ -64,6 +64,11 @@ export class FacturaPlantillaDesignerComponent {
   /** Posicion libre (px) por elemento para cdkDragFreeDragPosition. */
   freePos: { [id: string]: { x: number; y: number } } = {};
 
+  /** Estilo (px) de la imagen de fondo (independiente del tamano de pagina). */
+  bgWidthPx = 0;
+  bgLeftPx = 0;
+  bgTopPx = 0;
+
   /** Texto de previsualizacion por elemento (id -> texto). */
   previews: { [id: string]: string } = {};
 
@@ -81,7 +86,8 @@ export class FacturaPlantillaDesignerComponent {
     totales: { gravada10: 100000, gravada5: 0, exenta: 0, iva10: 9091, iva5: 0, totalIva: 9091, descuento: 0, total: 100000, totalEnLetras: 'CIEN MIL GUARANIES' },
     empresa: { nombre: 'MI EMPRESA S.A.', ruc: '80012345-6', direccion: 'CENTRO, ASUNCIÓN' },
     items: [
-      { cantidad: 1, descripcion: 'PRODUCTO DEMO', precioUnitario: 100000, total: 100000, gravada10: 100000 },
+      { id: 101, cantidad: 1, descripcion: 'PRODUCTO DEMO 10%', precioUnitario: 100000, total: 100000, gravada10: 100000 },
+      { id: 102, cantidad: 2, descripcion: 'PRODUCTO DEMO EXENTO', precioUnitario: 25000, total: 50000, exenta: 50000 },
     ],
   };
 
@@ -111,6 +117,8 @@ export class FacturaPlantillaDesignerComponent {
       this.config = p?.config ? JSON.parse(p.config) : emptyPlantillaConfig();
       if (!this.config.elementos) this.config.elementos = [];
       this.recomputePage();
+      this.ensureBackground();
+      this.recomputeBg();
       this.refreshPreviews();
       for (const el of this.config.elementos) this.setFreePos(el);
     } catch (error) {
@@ -127,6 +135,25 @@ export class FacturaPlantillaDesignerComponent {
 
   setFreePos(el: PlantillaElemento): void {
     this.freePos[el.id] = { x: (el.xMm || 0) * this.pxPerMm, y: (el.yMm || 0) * this.pxPerMm };
+  }
+
+  /** Asegura que exista la config de fondo (ancho = pagina por defecto). */
+  private ensureBackground(): void {
+    if (!this.config.background) {
+      this.config.background = {
+        widthMm: Number(this.plantilla?.anchoMm) || 210,
+        offsetXMm: 0,
+        offsetYMm: 0,
+      };
+    }
+  }
+
+  /** Recalcula el estilo px de la imagen de fondo segun su transform. */
+  recomputeBg(): void {
+    const b = this.config.background;
+    this.bgWidthPx = (Number(b?.widthMm) || Number(this.plantilla?.anchoMm) || 210) * this.pxPerMm;
+    this.bgLeftPx = (Number(b?.offsetXMm) || 0) * this.pxPerMm;
+    this.bgTopPx = (Number(b?.offsetYMm) || 0) * this.pxPerMm;
   }
 
   private genId(): string {
@@ -191,11 +218,12 @@ export class FacturaPlantillaDesignerComponent {
 
   addItemsTable(): void {
     const el: PlantillaElemento = {
-      id: this.genId(), type: 'itemsTable', xMm: 10, yMm: 60, wMm: 150, fontSize: 8,
+      id: this.genId(), type: 'itemsTable', xMm: 10, yMm: 60, wMm: 150, hMm: 80, fontSize: 8,
       columns: [
+        { field: 'id', header: 'ID', wMm: 12, align: 'center' },
         { field: 'cantidad', header: 'Cant.', wMm: 15, align: 'right' },
-        { field: 'descripcion', header: 'Descripción', wMm: 80, align: 'left' },
-        { field: 'precioUnitario', header: 'P. Unit.', wMm: 27, align: 'right' },
+        { field: 'descripcion', header: 'Descripción', wMm: 70, align: 'left' },
+        { field: 'precioUnitario', header: 'P. Unit.', wMm: 25, align: 'right' },
         { field: 'total', header: 'Total', wMm: 28, align: 'right' },
       ],
     };
@@ -235,6 +263,8 @@ export class FacturaPlantillaDesignerComponent {
     const reader = new FileReader();
     reader.onload = () => {
       this.plantilla!.backgroundImageUrl = reader.result as string;
+      this.ensureBackground();
+      this.recomputeBg();
     };
     reader.readAsDataURL(file);
   }
@@ -256,6 +286,7 @@ export class FacturaPlantillaDesignerComponent {
           text: e.text, variable: e.variable, imageUrl: e.imageUrl,
           fontSize: e.fontSize, bold: e.bold, align: e.align, columns: e.columns,
         })),
+        background: this.config.background,
       };
       await firstValueFrom(this.repositoryService.updateFacturaPlantilla(this.plantilla.id, {
         config: JSON.stringify(clean),
@@ -281,7 +312,7 @@ export class FacturaPlantillaDesignerComponent {
         { anchoMm: Number(this.plantilla.anchoMm), altoMm: Number(this.plantilla.altoMm) },
         this.config,
         this.demoCtx,
-        includeBg ? { background: this.plantilla.backgroundImageUrl } : undefined,
+        includeBg ? { background: this.plantilla.backgroundImageUrl, backgroundTransform: this.config.background } : undefined,
       );
       pdfMake.createPdf(dd).open();
     } catch (error: any) {

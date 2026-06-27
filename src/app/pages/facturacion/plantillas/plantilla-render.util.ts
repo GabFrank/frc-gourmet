@@ -1,4 +1,4 @@
-import { PlantillaConfig, PlantillaElemento } from './plantilla-design.model';
+import { BackgroundTransform, PlantillaConfig, PlantillaElemento } from './plantilla-design.model';
 
 /** Conversion milimetros -> puntos PDF (1 pt = 1/72 pulgada, 1 pulgada = 25.4mm). */
 export const MM_TO_PT = 72 / 25.4; // ≈ 2.83465
@@ -22,7 +22,7 @@ export interface FacturaRenderContext {
   };
   empresa: { nombre?: string; ruc?: string; direccion?: string };
   items: Array<{
-    cantidad?: number; descripcion?: string; precioUnitario?: number;
+    id?: number | string; cantidad?: number; descripcion?: string; precioUnitario?: number;
     descuento?: number; exenta?: number; gravada5?: number; gravada10?: number; total?: number;
   }>;
 }
@@ -43,6 +43,9 @@ function fmtDate(v: any): string {
 /** Resuelve una clave de variable (ej. 'totales.total') contra el contexto. */
 export function resolveVariable(key: string, ctx: FacturaRenderContext): string {
   if (!key) return '';
+  // Marcas para formularios pre-impresos con casillero contado/credito.
+  if (key === 'factura.marcaContado') return ctx.factura?.condicionVenta === 'CONTADO' ? 'X' : '';
+  if (key === 'factura.marcaCredito') return ctx.factura?.condicionVenta === 'CREDITO' ? 'X' : '';
   const [grupo, campo] = key.split('.');
   const obj: any = (ctx as any)[grupo];
   if (!obj) return '';
@@ -70,7 +73,7 @@ export function buildDocDefinition(
   page: { anchoMm: number; altoMm: number },
   config: PlantillaConfig,
   ctx: FacturaRenderContext,
-  opts?: { background?: string },
+  opts?: { background?: string; backgroundTransform?: BackgroundTransform },
 ): any {
   const content: any[] = [];
 
@@ -107,10 +110,11 @@ export function buildDocDefinition(
       const cols = el.columns && el.columns.length
         ? el.columns
         : [
+            { field: 'id', header: 'ID', wMm: 12, align: 'center' as const },
             { field: 'cantidad', header: 'Cant.', wMm: 15, align: 'right' as const },
-            { field: 'descripcion', header: 'Descripción', wMm: 80, align: 'left' as const },
+            { field: 'descripcion', header: 'Descripción', wMm: 70, align: 'left' as const },
             { field: 'precioUnitario', header: 'P. Unit.', wMm: 25, align: 'right' as const },
-            { field: 'total', header: 'Total', wMm: 25, align: 'right' as const },
+            { field: 'total', header: 'Total', wMm: 28, align: 'right' as const },
           ];
       const widths = cols.map((c) => mmToPt(c.wMm));
       const header = cols.map((c) => ({ text: c.header, bold: true, alignment: c.align || 'left', fontSize: el.fontSize || 8 }));
@@ -118,8 +122,17 @@ export function buildDocDefinition(
       for (const it of ctx.items || []) {
         body.push(cols.map((c) => {
           const raw = (it as any)[c.field];
-          const isNum = c.field !== 'descripcion';
-          return { text: isNum ? fmtNumber(raw) : (raw ?? ''), alignment: c.align || (isNum ? 'right' : 'left'), fontSize: el.fontSize || 8 };
+          let text: string;
+          if (c.field === 'descripcion') {
+            text = raw != null ? String(raw) : '';
+          } else if (c.field === 'id') {
+            text = raw != null && raw !== '' ? String(raw) : '';
+          } else {
+            // Columnas numericas (montos, cantidad, IVA): vacio si no hay dato.
+            // Asi cada item llena solo la columna de IVA que le corresponde.
+            text = raw == null || raw === '' ? '' : fmtNumber(raw);
+          }
+          return { text, alignment: c.align || (c.field === 'descripcion' ? 'left' : 'right'), fontSize: el.fontSize || 8 };
         }));
       }
       content.push({
@@ -149,7 +162,16 @@ export function buildDocDefinition(
     defaultStyle: { fontSize: 9 },
   };
   if (opts?.background) {
-    dd.background = () => ({ image: opts.background, width: mmToPt(page.anchoMm) });
+    const bt = opts.backgroundTransform;
+    if (bt) {
+      dd.background = () => ({
+        image: opts.background,
+        width: mmToPt(bt.widthMm || page.anchoMm),
+        absolutePosition: { x: mmToPt(bt.offsetXMm || 0), y: mmToPt(bt.offsetYMm || 0) },
+      });
+    } else {
+      dd.background = () => ({ image: opts.background, width: mmToPt(page.anchoMm) });
+    }
   }
   return dd;
 }
