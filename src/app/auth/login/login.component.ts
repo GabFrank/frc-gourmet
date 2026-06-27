@@ -17,6 +17,7 @@ import { ThemeService } from '../../services/theme.service';
 import { trigger, transition, style, animate, query, stagger } from '@angular/animations';
 import { firstValueFrom, Subscription } from 'rxjs';
 import { ForceChangePasswordDialogComponent } from '../force-change-password-dialog/force-change-password-dialog.component';
+import { PasswordRecoveryDialogComponent } from '../password-recovery-dialog/password-recovery-dialog.component';
 
 @Component({
   selector: 'app-login',
@@ -126,6 +127,14 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.themeSub?.unsubscribe();
+  }
+
+  openPasswordRecovery(): void {
+    const nickname = this.loginForm.get('nickname')?.value || '';
+    this.dialog.open(PasswordRecoveryDialogComponent, {
+      width: '420px',
+      data: { nickname },
+    });
   }
 
   async onSubmit(): Promise<void> {

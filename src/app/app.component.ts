@@ -67,6 +67,7 @@ import { BackupRestoreComponent } from './pages/configuracion/backup-restore/bac
 import { IaConfigComponent } from './pages/configuracion/ia-config/ia-config.component';
 import { DbConfigComponent } from './pages/configuracion/db-config/db-config.component';
 import { ModeConfigComponent } from './pages/configuracion/mode-config/mode-config.component';
+import { ConfiguracionNotificacionesComponent } from './pages/configuracion/notificaciones/configuracion-notificaciones.component';
 import { ListCargosComponent } from './pages/rrhh/cargos/list-cargos.component';
 import { ListFuncionariosComponent } from './pages/rrhh/funcionarios/list-funcionarios/list-funcionarios.component';
 import { ListTurnosComponent } from './pages/rrhh/turnos/list-turnos.component';
@@ -650,6 +651,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       ListConfiguracionRrhhComponent,
       { source: 'navigation' },
       'configuracion-rrhh-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openConfiguracionNotificacionesTab() {
+    this.tabsService.openTab(
+      'Notificaciones',
+      ConfiguracionNotificacionesComponent,
+      { source: 'navigation' },
+      'configuracion-notificaciones-tab',
       true
     );
     this.closeMenu();

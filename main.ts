@@ -88,6 +88,9 @@ import { registerDashboardCajaMayorHandlers } from './electron/handlers/dashboar
 import { registerBackupHandlers, startAutoBackupScheduler } from './electron/handlers/backup.handler';
 // Importacion de facturas via OCR + IA
 import { registerFacturaImportHandlers } from './electron/handlers/factura-import.handler';
+import { registerNotificacionesConfigHandlers, seedNotificaciones } from './electron/handlers/notificaciones-config.handler';
+import { registerPasswordRecoveryHandlers } from './electron/handlers/password-recovery.handler';
+import { setNotificacionDataSource } from './electron/services/notificacion.service';
 // Auto-updater
 import { initAutoUpdater } from './electron/utils/auto-updater';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
@@ -255,6 +258,11 @@ function initializeDatabase() {
       // Importacion de facturas con OCR + IA
       registerFacturaImportHandlers(dataSource, getCurrentUser);
 
+      // Notificaciones (Email + WhatsApp): config/receptores/eventos + recuperacion de contrasenha
+      setNotificacionDataSource(dataSource);
+      registerNotificacionesConfigHandlers(dataSource, getCurrentUser);
+      registerPasswordRecoveryHandlers(dataSource, getCurrentUser);
+
       // Seed initial data (idempotent - only inserts if tables are empty)
       // Orden: 1) datos generales 2) permisos+conceptos 3) admin user (necesita permisos ya creados)
       (async () => {
@@ -263,6 +271,7 @@ function initializeDatabase() {
           await seedPermissions(dataSource);
           await seedConfiguracionRrhh(dataSource);
           await seedLiquidacionConceptos(dataSource);
+          await seedNotificaciones(dataSource);
           await seedSystemData(dataSource);
         } catch (e) {
           console.error('Error en seeds iniciales:', e);

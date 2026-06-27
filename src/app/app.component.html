@@ -517,6 +517,10 @@
               <mat-icon matListItemIcon>hub</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Modo de operacion</span>
             </a>
+            <a *appHasPermission="'NOTIFICACIONES_CONFIGURAR'" mat-list-item (click)="openConfiguracionNotificacionesTab()">
+              <mat-icon matListItemIcon>notifications_active</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Notificaciones</span>
+            </a>
           </div>
         </mat-expansion-panel>
 
