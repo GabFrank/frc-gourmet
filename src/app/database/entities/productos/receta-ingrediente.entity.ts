@@ -5,11 +5,17 @@ import { Producto } from './producto.entity';
 
 @Entity('receta_ingrediente')
 export class RecetaIngrediente extends BaseModel {
-  @Column({ type: 'decimal', precision: 10, scale: 4 })
-  cantidad!: number;
+  @Column({ type: 'decimal', precision: 10, scale: 4, nullable: true })
+  cantidad?: number;
 
-  @Column({ type: 'varchar', length: 50 })
-  unidad!: string; // 'GRAMOS', 'UNIDADES', 'ML', etc.
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  unidad?: string; // 'GRAMOS', 'UNIDADES', 'ML', etc.
+
+  // Descripción libre para un ítem sin ingrediente vinculado todavía (ej. "KIT DE
+  // CARNES"). Más adelante se le puede asignar el Producto real. Al menos uno de
+  // `ingrediente` o `descripcion` debe estar presente.
+  @Column({ type: 'text', nullable: true })
+  descripcion?: string;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
   unidadOriginal?: string; // Unidad seleccionada por el usuario (para conversiones)
@@ -47,9 +53,9 @@ export class RecetaIngrediente extends BaseModel {
   @JoinColumn({ name: 'receta_id' })
   receta!: Receta;
 
-  @ManyToOne(() => Producto)
+  @ManyToOne(() => Producto, { nullable: true })
   @JoinColumn({ name: 'ingrediente_id' })
-  ingrediente!: Producto;
+  ingrediente?: Producto | null;
 
   @ManyToOne(() => Producto, { nullable: true })
   @JoinColumn({ name: 'reemplazo_default_id' })

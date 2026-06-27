@@ -37,6 +37,14 @@ export class Receta extends BaseModel {
   @Column({ type: 'varchar', length: 50, nullable: true })
   unidadRendimientoOriginal?: string; // Unidad original seleccionada
 
+  // Tiempo de preparo total en minutos.
+  @Column({ type: 'int', nullable: true })
+  tiempoPreparo?: number;
+
+  // Foto del producto final (protocolo app://producto-images/<file>).
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  imageUrl?: string;
+
   @Column({ type: 'boolean', default: true })
   activo!: boolean;
 
@@ -54,6 +62,13 @@ export class Receta extends BaseModel {
 
   @OneToMany('RecetaIngrediente', 'receta')
   ingredientes?: RecetaIngrediente[];
+
+  // Fases del modo de preparo (ordenadas) y materiales/utensilios.
+  @OneToMany('RecetaFase', 'receta')
+  fases?: any[];
+
+  @OneToMany('RecetaMaterial', 'receta')
+  materiales?: any[];
 
   @OneToMany(() => PrecioVenta, precioVenta => precioVenta.receta)
   preciosVenta?: PrecioVenta[];

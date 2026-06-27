@@ -58,6 +58,11 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       for (const ingrediente of ingredientes) {
         let costoUnitario = 0;
 
+        // Ítem solo-descripción (sin ingrediente vinculado aún): no aporta costo.
+        if (!ingrediente.ingrediente) {
+          continue;
+        }
+
         // Check if the ingredient is an elaborated product with its own recipe
         if (ingrediente.ingrediente.tipo === 'ELABORADO_SIN_VARIACION') {
           // Get the recipe of the ingredient product
@@ -619,30 +624,33 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       // 1. Extraer IDs correctamente del objeto anidado
       const ingredienteId = recetaIngredienteData.ingrediente?.id || recetaIngredienteData.ingredienteId;
       const recetaId = recetaIngredienteData.receta?.id || recetaIngredienteData.recetaId;
-
-      if (!ingredienteId) {
-        throw new Error('ID del ingrediente no proporcionado');
-      }
+      const descripcion = (recetaIngredienteData.descripcion || '').trim() || null;
 
       if (!recetaId) {
         throw new Error('ID de la receta no proporcionado');
       }
 
-      // 2. Verificar que el ingrediente (Producto) exista
+      // El ítem debe tener un ingrediente vinculado O una descripción libre.
+      if (!ingredienteId && !descripcion) {
+        throw new Error('Debe indicar un ingrediente o una descripción');
+      }
 
-      const ingrediente = await productoRepository.findOne({
-        where: { id: ingredienteId }
-      });
-
-            if (!ingrediente) {
-        throw new Error(`El ingrediente con ID ${ingredienteId} no fue encontrado.`);
+      // 2. Si hay ingredienteId, verificar que el Producto exista. Si es ítem
+      //    solo-descripción, no se vincula ingrediente.
+      let ingrediente: Producto | null = null;
+      if (ingredienteId) {
+        ingrediente = await productoRepository.findOne({ where: { id: ingredienteId } });
+        if (!ingrediente) {
+          throw new Error(`El ingrediente con ID ${ingredienteId} no fue encontrado.`);
+        }
       }
       // --- FIN DE LA VALIDACIÓN ---
 
       const recetaIngrediente = recetaIngredienteRepository.create({
-        cantidad: recetaIngredienteData.cantidad,
-        unidad: recetaIngredienteData.unidad,
+        cantidad: recetaIngredienteData.cantidad ?? null,
+        unidad: recetaIngredienteData.unidad ?? null,
         unidadOriginal: recetaIngredienteData.unidadOriginal,
+        descripcion: descripcion ? descripcion.toUpperCase() : null,
         costoUnitario: recetaIngredienteData.costoUnitario || 0,
         costoTotal: recetaIngredienteData.costoTotal || 0,
         esExtra: recetaIngredienteData.esExtra || false,
@@ -651,7 +659,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         costoExtra: recetaIngredienteData.costoExtra || 0,
         activo: recetaIngredienteData.activo !== undefined ? recetaIngredienteData.activo : true,
         receta: { id: recetaId },
-        ingrediente: ingrediente, // ✅ CORREGIDO: Usar la entidad completa
+        ingrediente: ingrediente ?? null, // null = ítem solo-descripción
         reemplazoDefault: recetaIngredienteData.reemplazoDefaultId ? { id: recetaIngredienteData.reemplazoDefaultId } : undefined
       });
 
@@ -699,10 +707,18 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         throw new Error('Receta ingrediente not found');
       }
 
+      const nuevoIngredienteId =
+        recetaIngredienteData.ingredienteId ?? recetaIngredienteData.ingrediente?.id ?? null;
+      const nuevaDescripcion = (recetaIngredienteData.descripcion || '').trim() || null;
+      if (!nuevoIngredienteId && !nuevaDescripcion) {
+        throw new Error('Debe indicar un ingrediente o una descripción');
+      }
+
       Object.assign(recetaIngrediente, {
-        cantidad: recetaIngredienteData.cantidad,
-        unidad: recetaIngredienteData.unidad,
+        cantidad: recetaIngredienteData.cantidad ?? null,
+        unidad: recetaIngredienteData.unidad ?? null,
         unidadOriginal: recetaIngredienteData.unidadOriginal,
+        descripcion: nuevaDescripcion ? nuevaDescripcion.toUpperCase() : null,
         costoUnitario: recetaIngredienteData.costoUnitario || 0,
         costoTotal: recetaIngredienteData.costoTotal || 0,
         esExtra: recetaIngredienteData.esExtra,
@@ -710,7 +726,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         esCambiable: recetaIngredienteData.esCambiable,
         costoExtra: recetaIngredienteData.costoExtra,
         activo: recetaIngredienteData.activo,
-        ingrediente: { id: recetaIngredienteData.ingredienteId },
+        ingrediente: nuevoIngredienteId ? { id: nuevoIngredienteId } : null,
         reemplazoDefault: recetaIngredienteData.reemplazoDefaultId ? { id: recetaIngredienteData.reemplazoDefaultId } : undefined
       });
 
@@ -797,8 +813,9 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         throw new Error('Receta ingrediente not found');
       }
 
-      // 2. Si se debe eliminar de otras variaciones, buscar solo las recetas del MISMO SABOR que usan este ingrediente
-      if (data.eliminarDeOtrasVariaciones) {
+      // 2. Si se debe eliminar de otras variaciones, buscar solo las recetas del MISMO SABOR que usan este ingrediente.
+      //    Un ítem solo-descripción (sin ingrediente vinculado) no aplica a la lógica multi-variación.
+      if (data.eliminarDeOtrasVariaciones && recetaIngrediente.ingrediente) {
         // ✅ NUEVO: Obtener el sabor de la receta actual a través de RecetaPresentacion
         const recetaPresentacionRepository = dataSource.getRepository(RecetaPresentacion);
         const variacionActual = await recetaPresentacionRepository.findOne({
@@ -898,6 +915,11 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
       if (!recetaIngrediente) {
         throw new Error('Receta ingrediente not found');
+      }
+
+      // Ítem solo-descripción (sin ingrediente vinculado): costo 0.
+      if (!recetaIngrediente.ingrediente) {
+        return 0;
       }
 
       let costoUnitario = 0;
@@ -2065,8 +2087,8 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       const ingredientesBase = primeraReceta.ingredientes
         ?.filter(ing => ing.esIngredienteBase)
         .map(ing => ({
-          productoId: ing.ingrediente.id,
-          nombre: ing.ingrediente.nombre,
+          productoId: ing.ingrediente?.id ?? null,
+          nombre: ing.ingrediente?.nombre ?? ing.descripcion ?? '',
           cantidad: ing.cantidad,
           unidad: ing.unidad
         })) || [];
@@ -2076,8 +2098,8 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         const ingredientesEspecificos = receta.ingredientes
           ?.filter(ing => !ing.esIngredienteBase)
           .map(ing => ({
-            productoId: ing.ingrediente.id,
-            nombre: ing.ingrediente.nombre,
+            productoId: ing.ingrediente?.id ?? null,
+            nombre: ing.ingrediente?.nombre ?? ing.descripcion ?? '',
             cantidad: ing.cantidad,
             unidad: ing.unidad
           })) || [];

@@ -617,7 +617,7 @@ export class SaboresVariacionesService {
           const unidadParaGuardar = ingredienteOriginal.unidadOriginal || ingredienteOriginal.unidad;
           const datosNuevoIngrediente: Partial<RecetaIngrediente> = {
             receta: { id: recetaId } as any, // Cast temporal para compatibilidad
-            ingrediente: { id: ingredienteOriginal.ingrediente.id } as any, // Cast temporal para compatibilidad
+            ingrediente: { id: ingredienteOriginal.ingrediente?.id } as any, // Cast temporal para compatibilidad
             cantidad: nuevoIngrediente.cantidad,
             unidad: unidadParaGuardar, // ✅ Usar unidad original
             unidadOriginal: ingredienteOriginal.unidadOriginal, // ✅ Mantener unidad original
@@ -628,7 +628,7 @@ export class SaboresVariacionesService {
           // ✅ DEBUG: Log de los datos que se van a enviar
           console.log(`🔍 [agregarIngredienteMultiplesVariaciones] Datos para variación ${nuevoIngrediente.variacionId}:`, {
             recetaId,
-            ingredienteId: ingredienteOriginal.ingrediente.id,
+            ingredienteId: ingredienteOriginal.ingrediente?.id,
             cantidad: nuevoIngrediente.cantidad,
             unidad: unidadParaGuardar, // ✅ Unidad que se va a guardar
             unidadOriginal: ingredienteOriginal.unidadOriginal, // ✅ Unidad original

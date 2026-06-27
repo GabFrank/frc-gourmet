@@ -71,6 +71,9 @@ import { RecetaIngrediente } from './entities/productos/receta-ingrediente.entit
 import { Adicional } from './entities/productos/adicional.entity';
 import { RecetaAdicionalVinculacion } from './entities/productos/receta-adicional-vinculacion.entity';
 import { RecetaIngredienteIntercambiable } from './entities/productos/receta-ingrediente-intercambiable.entity';
+import { RecetaMaterial } from './entities/productos/receta-material.entity';
+import { RecetaFase } from './entities/productos/receta-fase.entity';
+import { RecetaFaseIngrediente } from './entities/productos/receta-fase-ingrediente.entity';
 import { Observacion } from './entities/productos/observacion.entity';
 import { ProductoObservacion } from './entities/productos/producto-observacion.entity';
 import { TamanhoPizza } from './entities/productos/tamanho-pizza.entity';
@@ -209,6 +212,7 @@ import { AddKdsToComandaItem1780000000000 } from './migrations/1780000000000-Add
 import { AddKdsPantalla1780100000000 } from './migrations/1780100000000-AddKdsPantalla';
 import { AddOrigenToRetiroCaja1780200000000 } from './migrations/1780200000000-AddOrigenToRetiroCaja';
 import { AddConteoToCajaMayorMovimiento1780300000000 } from './migrations/1780300000000-AddConteoToCajaMayorMovimiento';
+import { AddRecetaPreparacion1780400000000 } from './migrations/1780400000000-AddRecetaPreparacion';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -400,6 +404,9 @@ function getEntitiesList(): any[] {
       Adicional,
       RecetaAdicionalVinculacion,
       RecetaIngredienteIntercambiable,
+      RecetaMaterial,
+      RecetaFase,
+      RecetaFaseIngrediente,
       Observacion,
       ProductoObservacion,
       TamanhoPizza,
@@ -513,6 +520,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddKdsPantalla1780100000000,
     AddOrigenToRetiroCaja1780200000000,
     AddConteoToCajaMayorMovimiento1780300000000,
+    AddRecetaPreparacion1780400000000,
   ];
 }
 

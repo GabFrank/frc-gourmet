@@ -285,10 +285,10 @@ export class GestionRecetasComponent implements OnInit {
     // ✅ NUEVO: Usar el servicio de eliminación de múltiples variaciones
     this.eliminarIngredienteService.eliminarIngrediente(
       ingrediente.id!,
-      ingrediente.ingrediente.nombre,
+      ingrediente.ingrediente?.nombre || ingrediente.descripcion || 'Ingrediente',
       this.receta?.nombre || 'Receta',
-      ingrediente.cantidad,
-      ingrediente.unidad
+      ingrediente.cantidad ?? 0,
+      ingrediente.unidad || ''
     ).subscribe({
       next: (resultado) => {
         if (resultado.cancelado) {
@@ -360,7 +360,7 @@ export class GestionRecetasComponent implements OnInit {
     const dialogRef = this.dialog.open(ConfirmarAgregarIngredienteDialogComponent, {
       width: '500px',
       data: {
-        nombreIngrediente: ingredienteAgregado.ingrediente.nombre
+        nombreIngrediente: ingredienteAgregado.ingrediente?.nombre || ingredienteAgregado.descripcion || ''
       }
     });
 
@@ -387,13 +387,13 @@ export class GestionRecetasComponent implements OnInit {
         // 2. Abrir el diálogo de gestión
         // ✅ CORREGIDO: Pasar la información original para mostrar correctamente
         const cantidadOriginal = ingredienteOriginal.unidadOriginal && ingredienteOriginal.unidadOriginal !== ingredienteOriginal.unidad
-          ? this.convertirCantidadParaMostrar(ingredienteOriginal.cantidad, ingredienteOriginal.unidad, ingredienteOriginal.unidadOriginal)
-          : ingredienteOriginal.cantidad;
+          ? this.convertirCantidadParaMostrar(ingredienteOriginal.cantidad ?? 0, ingredienteOriginal.unidad || '', ingredienteOriginal.unidadOriginal)
+          : (ingredienteOriginal.cantidad ?? 0);
 
         const dialogRef = this.dialog.open(GestionarIngredienteMultiVariacionDialogComponent, {
           width: '700px',
           data: {
-            nombreIngrediente: ingredienteOriginal.ingrediente.nombre,
+            nombreIngrediente: ingredienteOriginal.ingrediente?.nombre || ingredienteOriginal.descripcion || '',
             unidadIngrediente: ingredienteOriginal.unidad,
             variaciones: variacionesDelSabor,
             ingredienteOriginal: ingredienteOriginal,
@@ -658,7 +658,7 @@ export class GestionRecetasComponent implements OnInit {
     // Calcular propiedades computadas para mostrar en tabla
     this.ingredientesParaMostrar = this.ingredientes.map(ingrediente => {
       let cantidadParaMostrar = ingrediente.cantidad || 0;
-      let unidadParaMostrar = ingrediente.unidad;
+      let unidadParaMostrar = ingrediente.unidad || '';
 
       // Si hay conversión de unidades, convertir de vuelta para mostrar
       if (ingrediente.unidadOriginal && ingrediente.unidadOriginal !== ingrediente.unidad) {

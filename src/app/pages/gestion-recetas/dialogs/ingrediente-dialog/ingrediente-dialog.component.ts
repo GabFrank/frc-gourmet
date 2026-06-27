@@ -285,10 +285,10 @@ export class IngredienteDialogComponent implements OnInit {
     const ingrediente = this.data.ingrediente!;
 
     // Determinar si hay conversión de unidades
-    const unidadBaseProducto = ingrediente.ingrediente.unidadBase;
+    const unidadBaseProducto = ingrediente.ingrediente?.unidadBase;
     const unidadGuardada = ingrediente.unidad;
     const unidadOriginal = ingrediente.unidadOriginal;
-    const cantidadGuardada = ingrediente.cantidad;
+    const cantidadGuardada = ingrediente.cantidad ?? 0;
 
     // Convertir cantidad si es necesario para mostrar en la unidad original
     let cantidadParaMostrar = cantidadGuardada;
@@ -308,7 +308,7 @@ export class IngredienteDialogComponent implements OnInit {
     }
 
     this.ingredienteForm.patchValue({
-      ingredienteId: ingrediente.ingrediente.id,
+      ingredienteId: ingrediente.ingrediente?.id ?? null,
       cantidad: cantidadParaMostrar,
       unidad: unidadParaMostrar,
       costoUnitario: ingrediente.costoUnitario,
@@ -322,7 +322,7 @@ export class IngredienteDialogComponent implements OnInit {
       activo: ingrediente.activo
     });
 
-    this.productoSeleccionado = ingrediente.ingrediente;
+    this.productoSeleccionado = ingrediente.ingrediente ?? null;
 
     // ✅ CORREGIDO: Para ingredientes existentes, usar el costo unitario guardado
     // en lugar de recalcular desde la receta del producto
@@ -338,7 +338,7 @@ export class IngredienteDialogComponent implements OnInit {
         // El costo unitario está en ml, convertirlo a litros para el costo base
         this.costoBaseOriginal = ingrediente.costoUnitario * 1000;
       }
-    } else {
+    } else if (ingrediente.ingrediente) {
       // Solo cargar el costo desde la receta si no tenemos un costo unitario guardado
       this.loadPrecioCostoProducto(ingrediente.ingrediente);
     }
@@ -503,7 +503,7 @@ export class IngredienteDialogComponent implements OnInit {
     if (!this.data.existingIngredientes) return true;
 
     const existe = this.data.existingIngredientes.some(
-      ingrediente => ingrediente.ingrediente.id === productoId
+      ingrediente => ingrediente.ingrediente?.id === productoId
     );
 
     if (existe && !this.isEditMode) {
