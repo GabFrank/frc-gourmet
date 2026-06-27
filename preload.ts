@@ -2710,6 +2710,9 @@ contextBridge.exposeInMainWorld('api', {
   ingresarRetiroCaja: async (retiroId: number, cajaMayorId: number): Promise<any> => {
     return await ipcRenderer.invoke('ingresar-retiro-caja', retiroId, cajaMayorId);
   },
+  generarRetiroCierreCaja: async (cajaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('generar-retiro-cierre-caja', cajaId);
+  },
 
   // Banking - Cuentas Bancarias
   getCuentasBancarias: async (): Promise<any[]> => {

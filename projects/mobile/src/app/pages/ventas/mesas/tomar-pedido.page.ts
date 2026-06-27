@@ -114,7 +114,9 @@ export class TomarPedidoPage implements OnInit {
   private readonly snack = inject(MatSnackBar);
   private readonly dialog = inject(MatDialog);
 
-  mesaId = 0;
+  mesaId = 0; // id de la entidad (mesa o comanda según contexto)
+  esComanda = false;
+  private comandaMesaId: number | null = null;
   titulo = 'Tomar pedido';
   ventaId: number | null = null;
   cajaId: number | null = null;
@@ -146,6 +148,7 @@ export class TomarPedidoPage implements OnInit {
   private balanzaFactorPeso = 1;
 
   ngOnInit(): void {
+    this.esComanda = this.route.snapshot.data['contexto'] === 'comanda';
     this.mesaId = Number(this.route.snapshot.paramMap.get('id'));
     this.cargarContexto();
     this.cargarAtajos();
@@ -326,9 +329,17 @@ export class TomarPedidoPage implements OnInit {
 
   private cargarContexto(): void {
     this.cargando = true;
-    this.repo.getPdvMesa(this.mesaId).subscribe({
+    const src = this.esComanda
+      ? this.repo.getComandaWithVenta(this.mesaId)
+      : this.repo.getPdvMesa(this.mesaId);
+    src.subscribe({
       next: (m: any) => {
-        this.titulo = m?.numero != null ? `Mesa ${m.numero} — pedido` : 'Tomar pedido';
+        if (this.esComanda) {
+          this.titulo = m?.numero != null ? `Comanda #${m.numero} — pedido` : 'Tomar pedido';
+          this.comandaMesaId = m?.pdv_mesa?.id ?? null;
+        } else {
+          this.titulo = m?.numero != null ? `Mesa ${m.numero} — pedido` : 'Tomar pedido';
+        }
         this.ventaId = m?.venta?.id ?? null;
         const usuarioId = this.auth.currentUser?.id;
         if (usuarioId) {
@@ -413,17 +424,20 @@ export class TomarPedidoPage implements OnInit {
       return null;
     }
     try {
-      const venta: any = await firstValueFrom(
-        this.repo.createVenta({
-          estado: 'ABIERTA',
-          caja: { id: this.cajaId },
-          mesa: { id: this.mesaId },
-        } as any),
-      );
+      // Comanda: la venta se vincula a la comanda (y a su mesa si tiene). Mesa:
+      // se vincula a la mesa. La venta se crea a demanda (al primer item).
+      const ventaData: any = { estado: 'ABIERTA', caja: { id: this.cajaId } };
+      if (this.esComanda) {
+        ventaData.comanda = { id: this.mesaId };
+        if (this.comandaMesaId) ventaData.mesa = { id: this.comandaMesaId };
+      } else {
+        ventaData.mesa = { id: this.mesaId };
+      }
+      const venta: any = await firstValueFrom(this.repo.createVenta(ventaData));
       this.ventaId = venta?.id ?? null;
-      // Marcar la mesa OCUPADA (igual que el PdV de escritorio), para que figure
-      // ocupada en ambas vistas. No es fatal si falla la actualización de estado.
-      if (this.ventaId) {
+      // Mesa: marcarla OCUPADA (igual que el PdV) para que figure ocupada en
+      // ambas vistas. La comanda ya quedó OCUPADA al abrirla, no se toca acá.
+      if (this.ventaId && !this.esComanda) {
         try {
           await firstValueFrom(this.repo.updatePdvMesa(this.mesaId, { estado: 'OCUPADO' } as any));
         } catch {
@@ -432,7 +446,7 @@ export class TomarPedidoPage implements OnInit {
       }
       return this.ventaId;
     } catch {
-      this.snack.open('No se pudo abrir la cuenta de la mesa', 'CERRAR', { duration: 4000 });
+      this.snack.open('No se pudo abrir la cuenta', 'CERRAR', { duration: 4000 });
       return null;
     }
   }

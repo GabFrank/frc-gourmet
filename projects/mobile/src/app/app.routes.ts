@@ -87,6 +87,19 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./pages/ventas/mesas/mesa-detalle.page').then((m) => m.MesaDetallePage),
   },
+  // --- Comandas (reúsan los mismos componentes con contexto = 'comanda') ---
+  {
+    path: 'ventas/comandas/:id/pedido',
+    canActivate: [authGuard],
+    data: { contexto: 'comanda' },
+    loadComponent: () => import('./pages/ventas/mesas/tomar-pedido.page').then((m) => m.TomarPedidoPage),
+  },
+  {
+    path: 'ventas/comandas/:id',
+    canActivate: [authGuard],
+    data: { contexto: 'comanda' },
+    loadComponent: () => import('./pages/ventas/mesas/mesa-detalle.page').then((m) => m.MesaDetallePage),
+  },
   {
     path: 'rrhh/cargos/nuevo',
     canActivate: [authGuard],
