@@ -25,9 +25,65 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { esIngreso, actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { ensurePermission, getEffectiveUser } from '../utils/auth.utils';
 import { getMovimientosBancariosUnificados } from '../utils/movimientos-bancarios';
+import { dispatchEvento } from '../services/notificacion.service';
 
 // Alias local para mantener firma legacy de actualizarSaldo
 const actualizarSaldo = actualizarSaldoCajaMayor;
+
+/**
+ * Arma y despacha el resumen de cierre de caja por las notificaciones
+ * configuradas (WhatsApp/email). No debe romper el cierre si falla el envio.
+ */
+async function notificarCierreCajaMayor(dataSource: DataSource, cajaId: number): Promise<void> {
+  try {
+    const repo = dataSource.getRepository(CajaMayor);
+    const caja = await repo.findOne({
+      where: { id: cajaId },
+      relations: ['responsable', 'responsable.persona', 'saldos', 'saldos.moneda', 'saldos.formaPago'],
+    });
+    if (!caja) return;
+
+    const responsable = caja.responsable?.persona?.nombre || caja.responsable?.nickname || '-';
+    const fmtFecha = (d?: Date) => (d ? new Date(d).toLocaleString('es-PY') : '-');
+    const fmtNum = (n: any) => Number(n || 0).toLocaleString('es-PY', { maximumFractionDigits: 2 });
+
+    const saldos = (caja.saldos || []).filter((s: any) => Number(s.saldo) !== 0);
+    const lineasSaldos = saldos.length
+      ? saldos
+          .map((s: any) => `• ${s.moneda?.simbolo || ''} ${s.formaPago?.nombre || '-'}: ${fmtNum(s.saldo)}`)
+          .join('\n')
+      : '• (sin saldos)';
+
+    const texto =
+      `🧾 *CIERRE DE CAJA MAYOR*\n` +
+      `Caja: ${caja.nombre}\n` +
+      `Responsable: ${responsable}\n` +
+      `Apertura: ${fmtFecha(caja.fechaApertura)}\n` +
+      `Cierre: ${fmtFecha(caja.fechaCierre)}\n\n` +
+      `*Saldos:*\n${lineasSaldos}`;
+
+    const html =
+      `<h3>🧾 Cierre de Caja Mayor</h3>` +
+      `<p><b>Caja:</b> ${caja.nombre}<br>` +
+      `<b>Responsable:</b> ${responsable}<br>` +
+      `<b>Apertura:</b> ${fmtFecha(caja.fechaApertura)}<br>` +
+      `<b>Cierre:</b> ${fmtFecha(caja.fechaCierre)}</p>` +
+      `<p><b>Saldos:</b></p><ul>` +
+      (saldos.length
+        ? saldos.map((s: any) => `<li>${s.moneda?.simbolo || ''} ${s.formaPago?.nombre || '-'}: ${fmtNum(s.saldo)}</li>`).join('')
+        : '<li>(sin saldos)</li>') +
+      `</ul>`;
+
+    await dispatchEvento('CAJA_CIERRE', {
+      asunto: `CIERRE DE CAJA: ${caja.nombre}`,
+      texto,
+      html,
+      dedupeKey: `caja-${caja.id}`,
+    });
+  } catch (e) {
+    console.warn('[caja-mayor] no se pudo notificar el cierre:', (e as Error).message);
+  }
+}
 
 export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
 
@@ -172,7 +228,10 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       entity.estado = CajaMayorEstado.CERRADA;
       entity.fechaCierre = new Date();
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+      // Notificar el cierre (no bloquea ni rompe el cierre si falla el envio).
+      notificarCierreCajaMayor(dataSource, id).catch(() => undefined);
+      return saved;
     } catch (error) {
       console.error(`Error cerrando caja mayor ID ${id}:`, error);
       throw error;

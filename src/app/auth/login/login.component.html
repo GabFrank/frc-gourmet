@@ -65,7 +65,7 @@
 
               <div class="form-options">
                 <mat-checkbox formControlName="rememberMe" color="primary">Recordar usuario</mat-checkbox>
-                <a href="#" class="forgot-password">¿Olvidó su contraseña?</a>
+                <a href="javascript:void(0)" class="forgot-password" (click)="openPasswordRecovery()">¿Olvidó su contraseña?</a>
               </div>
 
               <button mat-raised-button color="primary" type="submit" class="login-button"

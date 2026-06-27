@@ -1210,6 +1210,27 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('restoreSession', { sessionId, token });
   },
 
+  // Recuperacion de contrasenha (pre-login). En mode=client va a las rutas
+  // publicas /api/auth/* (no requieren JWT); en standalone/server va por IPC.
+  resetChannels: async (nickname: string): Promise<any> => {
+    if (APP_MODE === 'client') {
+      return httpFetch('/api/auth/reset-channels', { nickname }, false);
+    }
+    return _originalInvoke('get-reset-channels', { nickname });
+  },
+  requestPasswordReset: async (nickname: string, canal: string): Promise<any> => {
+    if (APP_MODE === 'client') {
+      return httpFetch('/api/auth/request-password-reset', { nickname, canal }, false);
+    }
+    return _originalInvoke('request-password-reset', { nickname, canal });
+  },
+  resetPasswordWithCode: async (nickname: string, codigo: string, newPassword: string): Promise<any> => {
+    if (APP_MODE === 'client') {
+      return httpFetch('/api/auth/reset-password', { nickname, codigo, newPassword }, false);
+    }
+    return _originalInvoke('reset-password-with-code', { nickname, codigo, newPassword });
+  },
+
   // Printer operations
   getPrinters: async (): Promise<PrinterConfig[]> => {
     return await ipcRenderer.invoke('get-printers');

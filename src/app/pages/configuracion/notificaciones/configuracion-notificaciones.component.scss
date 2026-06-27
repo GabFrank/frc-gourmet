@@ -1,0 +1,110 @@
+.notif-config-container {
+  padding: 16px;
+
+  .loading-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+  }
+
+  .tab-content {
+    padding: 16px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .section-card {
+    margin-bottom: 8px;
+  }
+
+  .global-toggle .hint,
+  .hint {
+    opacity: 0.7;
+    font-size: 0.85rem;
+    margin: 6px 0;
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    align-items: center;
+  }
+
+  .secret-row,
+  .test-row,
+  .susc-add {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+
+  .secret-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0.8;
+
+    &.ok {
+      opacity: 1;
+    }
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+  }
+
+  .actions-bar {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+  }
+
+  .inline-select {
+    width: 180px;
+
+    ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+      display: none;
+    }
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+
+    th,
+    td {
+      text-align: center;
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(127, 127, 127, 0.2);
+    }
+
+    th {
+      font-weight: 600;
+      opacity: 0.85;
+    }
+
+    td.left,
+    th.left {
+      text-align: left;
+    }
+  }
+
+  .pager {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+
+    .total {
+      margin-left: auto;
+      opacity: 0.7;
+    }
+  }
+}
