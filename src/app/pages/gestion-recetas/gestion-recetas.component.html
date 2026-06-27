@@ -259,6 +259,19 @@
         </mat-card-content>
       </mat-card>
 
+      <!-- Modo de preparo: tiempo, foto, materiales y fases (solo en edición) -->
+      <mat-card class="preparacion-section" *ngIf="isEditMode && receta?.id">
+        <mat-card-header>
+          <mat-card-title class="titulo">Modo de preparo</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <app-receta-preparacion-editor
+            [recetaId]="receta?.id"
+            [ingredientesOpciones]="ingredientesOpciones"
+          ></app-receta-preparacion-editor>
+        </mat-card-content>
+      </mat-card>
+
       <!-- Sección de Adicionales -->
       <mat-card class="adicionales-section">
         <mat-card-header>

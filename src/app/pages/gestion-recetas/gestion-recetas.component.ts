@@ -54,6 +54,9 @@ export class GestionRecetasComponent implements OnInit {
     pendienteVincular: boolean;
   }> = [];
 
+  // Opciones (id + nombre) para vincular ítems a las fases del modo de preparo.
+  ingredientesOpciones: { id: number; nombre: string }[] = [];
+
   // Propiedades computadas para performance
   costoTotalReceta = 0;
   margenGanancia = 30; // 30% por defecto
@@ -687,6 +690,14 @@ export class GestionRecetasComponent implements OnInit {
         pendienteVincular
       };
     });
+
+    // Opciones para vincular ítems a las fases del modo de preparo.
+    this.ingredientesOpciones = this.ingredientes
+      .filter((ing) => ing.id != null)
+      .map((ing) => ({
+        id: ing.id!,
+        nombre: (ing.ingrediente?.nombre || ing.descripcion || '').toUpperCase(),
+      }));
   }
 
   // Métodos para cálculos de ingredientes individuales

@@ -1,0 +1,109 @@
+<div class="preparacion-editor" *ngIf="recetaId">
+  <div *ngIf="loading" class="prep-loading">
+    <mat-spinner diameter="32"></mat-spinner>
+  </div>
+
+  <ng-container *ngIf="!loading">
+    <!-- Tiempo + foto -->
+    <div class="prep-row">
+      <mat-form-field appearance="outline" class="tiempo-field">
+        <mat-label>Tiempo de preparo (min)</mat-label>
+        <input matInput type="number" min="0" [(ngModel)]="tiempoPreparo" (blur)="guardarTiempo()">
+      </mat-form-field>
+
+      <div class="foto-field">
+        <label class="prep-label">Foto del producto final</label>
+        <app-file-upload
+          carpeta="producto-images"
+          accept="image/*"
+          label="Subir foto"
+          [currentUrl]="imageUrl"
+          (uploaded)="onFotoSubida($event)"
+          (removed)="onFotoRemovida()"
+        ></app-file-upload>
+      </div>
+    </div>
+
+    <!-- Materiales -->
+    <mat-card class="prep-card">
+      <div class="prep-card-title"><mat-icon>kitchen</mat-icon> Materiales / utensilios</div>
+      <div class="material-row" *ngFor="let m of materiales">
+        <span>{{ m.descripcion }}</span>
+        <button mat-icon-button color="warn" (click)="eliminarMaterial(m)" matTooltip="Eliminar">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+      <div class="prep-add-row">
+        <mat-form-field appearance="outline" class="prep-grow">
+          <mat-label>Nuevo material</mat-label>
+          <input matInput [(ngModel)]="nuevoMaterial" (keyup.enter)="agregarMaterial()" placeholder="Ej. OLLA A PRESIÓN DE 20 LITROS">
+        </mat-form-field>
+        <button mat-stroked-button color="primary" (click)="agregarMaterial()" [disabled]="!nuevoMaterial.trim()">
+          <mat-icon>add</mat-icon> Agregar
+        </button>
+      </div>
+    </mat-card>
+
+    <!-- Fases -->
+    <mat-card class="prep-card">
+      <div class="prep-card-title"><mat-icon>format_list_numbered</mat-icon> Modo de preparo (fases)</div>
+
+      <div class="fase-item" *ngFor="let f of fases; let i = index">
+        <div class="fase-head">
+          <span class="fase-num">Fase {{ i + 1 }}</span>
+          <span class="fase-spacer"></span>
+          <button mat-icon-button (click)="moverFase(i, -1)" [disabled]="i === 0" matTooltip="Subir">
+            <mat-icon>arrow_upward</mat-icon>
+          </button>
+          <button mat-icon-button (click)="moverFase(i, 1)" [disabled]="i === fases.length - 1" matTooltip="Bajar">
+            <mat-icon>arrow_downward</mat-icon>
+          </button>
+          <button mat-icon-button color="warn" (click)="eliminarFase(f)" matTooltip="Eliminar fase">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </div>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Título (opcional)</mat-label>
+          <input matInput [(ngModel)]="f.titulo" placeholder="Ej. SOFRITO">
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Descripción del paso</mat-label>
+          <textarea matInput rows="2" [(ngModel)]="f.descripcion"></textarea>
+        </mat-form-field>
+
+        <div class="fase-ingredientes" *ngIf="ingredientesOpciones.length">
+          <span class="prep-label">Ingredientes en esta fase</span>
+          <div class="fase-chips">
+            <mat-checkbox
+              *ngFor="let ing of ingredientesOpciones"
+              color="primary"
+              [checked]="f.ingredienteIds.includes(ing.id)"
+              (change)="toggleIngredienteFase(f, ing.id, $event.checked)"
+            >{{ ing.nombre }}</mat-checkbox>
+          </div>
+        </div>
+
+        <div class="fase-actions">
+          <button mat-stroked-button color="primary" (click)="guardarFase(f)">
+            <mat-icon>save</mat-icon> Guardar fase
+          </button>
+        </div>
+      </div>
+
+      <div class="prep-add-fase">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Título de la nueva fase (opcional)</mat-label>
+          <input matInput [(ngModel)]="nuevaFaseTitulo">
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Descripción del paso</mat-label>
+          <textarea matInput rows="2" [(ngModel)]="nuevaFaseDescripcion" placeholder="Ej. Picar el ajo y freír con aceite"></textarea>
+        </mat-form-field>
+        <button mat-raised-button color="primary" (click)="agregarFase()" [disabled]="!nuevaFaseDescripcion.trim()">
+          <mat-icon>add</mat-icon> Agregar fase
+        </button>
+      </div>
+    </mat-card>
+  </ng-container>
+</div>
