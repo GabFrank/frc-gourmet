@@ -263,6 +263,11 @@
       <mat-card class="preparacion-section" *ngIf="isEditMode && receta?.id">
         <mat-card-header>
           <mat-card-title class="titulo">Modo de preparo</mat-card-title>
+          <span class="spacer" style="flex: 1 1 auto;"></span>
+          <button mat-stroked-button color="primary" type="button" (click)="exportarPdf()">
+            <mat-icon>picture_as_pdf</mat-icon>
+            Exportar PDF
+          </button>
         </mat-card-header>
         <mat-card-content>
           <app-receta-preparacion-editor

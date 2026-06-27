@@ -544,6 +544,7 @@ export abstract class RepositoryService {
   abstract createRecetaMaterial(data: any): Observable<any>;
   abstract updateRecetaMaterial(materialId: number, data: any): Observable<any>;
   abstract deleteRecetaMaterial(materialId: number): Observable<any>;
+  abstract exportRecetaPdf(recetaId: number): Observable<any>;
   abstract getSabores(): Observable<string[]>;
   abstract createOrUpdateSabor(saborData: any): Observable<{ success: boolean, message: string }>;
   abstract getSaborDetails(categoria: string): Observable<any>;

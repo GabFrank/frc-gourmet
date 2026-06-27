@@ -2424,6 +2424,9 @@ contextBridge.exposeInMainWorld('api', {
   deleteRecetaMaterial: async (materialId: number): Promise<any> => {
     return await ipcRenderer.invoke('delete-receta-material', materialId);
   },
+  exportRecetaPdf: async (recetaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('export-receta-pdf', recetaId);
+  },
   // StockMovimiento methods
   getStockMovimientos: async (): Promise<StockMovimiento[]> => {
     return await ipcRenderer.invoke('get-stock-movimientos');

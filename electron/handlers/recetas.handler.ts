@@ -22,6 +22,13 @@ import { TipoPrecio } from '../../src/app/database/entities/financiero/tipo-prec
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { Like, IsNull, Not } from 'typeorm';
 import { ensurePermission } from '../utils/auth.utils';
+import * as fs from 'fs';
+import * as path from 'path';
+import { app } from 'electron';
+import {
+  buildPdfBase64, pdfHeaderEmpresa, pdfTablaSimple, pdfMetadatos,
+  pdfFooterPaginado, pdfFmtMonto,
+} from '../utils/pdf.utils';
 
 export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
 
@@ -2303,6 +2310,117 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       return { success: true };
     } catch (error) {
       console.error('Error deleting receta material:', error);
+      throw error;
+    }
+  });
+
+  // ===================== EXPORT PDF DE RECETA =====================
+
+  // Convierte una URL app://carpeta/archivo a dataURL para incrustar en el PDF.
+  const appUrlToDataUrl = (appUrl?: string | null): string | null => {
+    try {
+      if (!appUrl || !appUrl.startsWith('app://')) return null;
+      const rest = appUrl.replace(/^app:\/\//, '');
+      const slash = rest.indexOf('/');
+      if (slash <= 0) return null;
+      const carpeta = rest.substring(0, slash);
+      const relPath = rest.substring(slash + 1);
+      const abs = path.join(app.getPath('userData'), carpeta, relPath);
+      if (!fs.existsSync(abs)) return null;
+      const buf = fs.readFileSync(abs);
+      const ext = path.extname(abs).toLowerCase();
+      const mime = ext === '.png' ? 'image/png'
+        : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+        : ext === '.gif' ? 'image/gif'
+        : 'image/png';
+      return `data:${mime};base64,${buf.toString('base64')}`;
+    } catch {
+      return null;
+    }
+  };
+
+  ipcMain.handle('export-receta-pdf', async (_event: any, recetaId: number) => {
+    try {
+      const recetaRepo = dataSource.getRepository(Receta);
+      const receta = await recetaRepo.findOne({
+        where: { id: recetaId },
+        relations: ['ingredientes', 'ingredientes.ingrediente'],
+      });
+      if (!receta) throw new Error('Receta not found');
+
+      const fases = await dataSource.getRepository(RecetaFase).find({
+        where: { receta: { id: recetaId }, activo: true },
+        relations: ['ingredientes', 'ingredientes.recetaIngrediente', 'ingredientes.recetaIngrediente.ingrediente'],
+        order: { orden: 'ASC' },
+      });
+      const materiales = await dataSource.getRepository(RecetaMaterial).find({
+        where: { receta: { id: recetaId }, activo: true },
+        order: { orden: 'ASC' },
+      });
+
+      const nombreIng = (ri: any): string =>
+        (ri?.ingrediente?.nombre || ri?.descripcion || '').toUpperCase();
+
+      const header = await pdfHeaderEmpresa(dataSource, { titulo: receta.nombre });
+
+      const content: any[] = [header];
+
+      // Foto del producto final.
+      const fotoDataUrl = appUrlToDataUrl(receta.imageUrl);
+      if (fotoDataUrl) {
+        content.push({ image: fotoDataUrl, width: 180, alignment: 'center', margin: [0, 0, 0, 10] });
+      }
+
+      // Metadatos (tiempo + rendimiento).
+      const meta: { label: string; value: string }[] = [];
+      if (receta.tiempoPreparo != null) meta.push({ label: 'Tiempo de preparo', value: `${receta.tiempoPreparo} MIN` });
+      meta.push({
+        label: 'Rendimiento',
+        value: `${pdfFmtMonto(receta.rendimiento, 2)} ${(receta.unidadRendimiento || '').toUpperCase()}`.trim(),
+      });
+      content.push(pdfMetadatos(meta, 2));
+
+      if (receta.descripcion) {
+        content.push({ text: receta.descripcion, style: 'legal', margin: [0, 6, 0, 0] });
+      }
+
+      // Ingredientes.
+      const ingRows = (receta.ingredientes || []).map((ri: any) => [
+        nombreIng(ri),
+        ri.cantidad != null ? pdfFmtMonto(ri.cantidad, 2) : '',
+        (ri.unidad || '').toUpperCase(),
+      ]);
+      content.push({ text: 'INGREDIENTES', style: 'sectionHeader' });
+      content.push(ingRows.length
+        ? pdfTablaSimple(['INGREDIENTE', 'CANTIDAD', 'UNIDAD'], ingRows, { widths: ['*', 'auto', 'auto'], alignment: ['left', 'right', 'left'] })
+        : { text: 'Sin ingredientes.', style: 'smallMuted' });
+
+      // Materiales.
+      if (materiales.length) {
+        content.push({ text: 'MATERIALES', style: 'sectionHeader' });
+        content.push({ ul: materiales.map((m: any) => m.descripcion) });
+      }
+
+      // Modo de preparo (fases).
+      if (fases.length) {
+        content.push({ text: 'MODO DE PREPARO', style: 'sectionHeader' });
+        fases.forEach((f: any, i: number) => {
+          const titulo = f.titulo ? `FASE ${i + 1} — ${f.titulo}` : `FASE ${i + 1}`;
+          content.push({ text: titulo, style: 'h3' });
+          content.push({ text: f.descripcion || '' });
+          const ings = (f.ingredientes || [])
+            .map((fi: any) => nombreIng(fi.recetaIngrediente))
+            .filter((x: string) => !!x);
+          if (ings.length) {
+            content.push({ ul: ings, margin: [0, 2, 0, 4], style: 'smallMuted' });
+          }
+        });
+      }
+
+      const base64 = await buildPdfBase64({ content, footer: pdfFooterPaginado() });
+      return { base64, fileName: `RECETA_${(receta.nombre || 'RECETA').toUpperCase().replace(/[^A-Z0-9]+/g, '_')}.pdf` };
+    } catch (error) {
+      console.error('Error exporting receta PDF:', error);
       throw error;
     }
   });

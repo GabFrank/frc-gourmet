@@ -709,6 +709,24 @@ export class GestionRecetasComponent implements OnInit {
     return (ingrediente.cantidad || 0) * (ingrediente.costoUnitario || 0);
   }
 
+  // Exporta la receta completa (ingredientes, materiales, fases, foto) a PDF.
+  exportarPdf(): void {
+    if (!this.receta?.id) return;
+    this.repositoryService.exportRecetaPdf(this.receta.id).subscribe({
+      next: (res: any) => {
+        if (!res?.base64) return;
+        const a = document.createElement('a');
+        a.href = 'data:application/pdf;base64,' + res.base64;
+        a.download = res.fileName || 'receta.pdf';
+        a.click();
+      },
+      error: (e: any) => {
+        console.error('Error exportando receta PDF:', e);
+        this.snackBar.open('Error al exportar el PDF', 'Cerrar', { duration: 3000 });
+      },
+    });
+  }
+
   saveReceta(): void {
     if (this.recetaForm.valid) {
       this.loading = true;

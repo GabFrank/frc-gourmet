@@ -604,6 +604,7 @@ interface ElectronAPI {
   createRecetaMaterial: (data: any) => Promise<any>;
   updateRecetaMaterial: (materialId: number, data: any) => Promise<any>;
   deleteRecetaMaterial: (materialId: number) => Promise<any>;
+  exportRecetaPdf: (recetaId: number) => Promise<any>;
   // Sabor methods
   getSabores: () => Promise<string[]>;
   createOrUpdateSabor: (saborData: any) => Promise<{ success: boolean, message: string }>;
@@ -2869,6 +2870,9 @@ export class RepositoryIpcService extends RepositoryService {
   }
   deleteRecetaMaterial(materialId: number): Observable<any> {
     return from(this.api.deleteRecetaMaterial(materialId));
+  }
+  exportRecetaPdf(recetaId: number): Observable<any> {
+    return from(this.api.exportRecetaPdf(recetaId));
   }
 
   // Sabor methods

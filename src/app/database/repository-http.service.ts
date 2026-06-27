@@ -1345,6 +1345,9 @@ export class RepositoryHttpService extends RepositoryService {
   deleteRecetaMaterial(materialId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.deleteRecetaMaterial() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  exportRecetaPdf(recetaId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.exportRecetaPdf() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getSabores(): Observable<string[]> {
     return throwError(() => new Error(`RepositoryHttpService.getSabores() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
