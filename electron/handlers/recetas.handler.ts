@@ -8,6 +8,9 @@ import { Receta } from '../../src/app/database/entities/productos/receta.entity'
 import { RecetaIngrediente } from '../../src/app/database/entities/productos/receta-ingrediente.entity';
 import { Adicional } from '../../src/app/database/entities/productos/adicional.entity';
 import { RecetaAdicionalVinculacion } from '../../src/app/database/entities/productos/receta-adicional-vinculacion.entity';
+import { RecetaMaterial } from '../../src/app/database/entities/productos/receta-material.entity';
+import { RecetaFase } from '../../src/app/database/entities/productos/receta-fase.entity';
+import { RecetaFaseIngrediente } from '../../src/app/database/entities/productos/receta-fase-ingrediente.entity';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
 import { PrecioVenta } from '../../src/app/database/entities/productos/precio-venta.entity';
 import { PrecioCosto, FuenteCosto } from '../../src/app/database/entities/productos/precio-costo.entity';
@@ -401,6 +404,8 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         rendimiento: recetaData.rendimiento || 1,
         unidadRendimiento: recetaData.unidadRendimiento || 'UNIDADES',
         unidadRendimientoOriginal: recetaData.unidadRendimientoOriginal,
+        tiempoPreparo: recetaData.tiempoPreparo ?? null,
+        imageUrl: recetaData.imageUrl ?? null,
         activo: recetaData.activo !== undefined ? recetaData.activo : true
       });
 
@@ -433,6 +438,9 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         activo: recetaData.activo,
         productoId: recetaData.productoId // Agregar actualización del productoId
       });
+      // tiempoPreparo / imageUrl: solo actualizar si vienen en el payload.
+      if (recetaData.tiempoPreparo !== undefined) receta.tiempoPreparo = recetaData.tiempoPreparo;
+      if (recetaData.imageUrl !== undefined) receta.imageUrl = recetaData.imageUrl;
 
       setEntityUserTracking(dataSource, receta, currentUser?.id, true);
       return await recetaRepository.save(receta);
@@ -2120,6 +2128,181 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
     } catch (error) {
       console.error('Error getting sabor details:', error);
+      throw error;
+    }
+  });
+
+  // ===================== RECETA FASES (modo de preparo) =====================
+
+  ipcMain.handle('get-receta-fases', async (_event: any, recetaId: number) => {
+    try {
+      const repo = dataSource.getRepository(RecetaFase);
+      return await repo.find({
+        where: { receta: { id: recetaId }, activo: true },
+        relations: [
+          'ingredientes',
+          'ingredientes.recetaIngrediente',
+          'ingredientes.recetaIngrediente.ingrediente',
+        ],
+        order: { orden: 'ASC' },
+      });
+    } catch (error) {
+      console.error('Error getting receta fases:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('create-receta-fase', async (_event: any, data: any) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+      const repo = dataSource.getRepository(RecetaFase);
+      const recetaId = data.recetaId || data.receta?.id;
+      if (!recetaId) throw new Error('recetaId requerido');
+      if (!data.descripcion || !`${data.descripcion}`.trim()) throw new Error('La fase requiere una descripción');
+      const fase = repo.create({
+        receta: { id: recetaId } as any,
+        orden: data.orden ?? 0,
+        titulo: data.titulo ? `${data.titulo}`.toUpperCase() : null,
+        descripcion: `${data.descripcion}`.toUpperCase(),
+        activo: true,
+      });
+      setEntityUserTracking(dataSource, fase, getCurrentUser()?.id, false);
+      return await repo.save(fase);
+    } catch (error) {
+      console.error('Error creating receta fase:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('update-receta-fase', async (_event: any, faseId: number, data: any) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+      const repo = dataSource.getRepository(RecetaFase);
+      const fase = await repo.findOne({ where: { id: faseId } });
+      if (!fase) throw new Error('Fase not found');
+      if (data.titulo !== undefined) fase.titulo = data.titulo ? `${data.titulo}`.toUpperCase() : undefined;
+      if (data.descripcion !== undefined) fase.descripcion = `${data.descripcion}`.toUpperCase();
+      if (data.orden !== undefined) fase.orden = data.orden;
+      if (data.activo !== undefined) fase.activo = data.activo;
+      setEntityUserTracking(dataSource, fase, getCurrentUser()?.id, true);
+      return await repo.save(fase);
+    } catch (error) {
+      console.error('Error updating receta fase:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('delete-receta-fase', async (_event: any, faseId: number) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+      const repo = dataSource.getRepository(RecetaFase);
+      const fiRepo = dataSource.getRepository(RecetaFaseIngrediente);
+      await fiRepo.delete({ fase: { id: faseId } } as any);
+      await repo.delete(faseId);
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting receta fase:', error);
+      throw error;
+    }
+  });
+
+  // Reordena las fases segun el array de IDs recibido (indice = nuevo orden).
+  ipcMain.handle('reorder-receta-fases', async (_event: any, recetaId: number, ordenIds: number[]) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+      const repo = dataSource.getRepository(RecetaFase);
+      for (let i = 0; i < (ordenIds || []).length; i++) {
+        await repo.update(ordenIds[i], { orden: i });
+      }
+      return { success: true };
+    } catch (error) {
+      console.error('Error reordering receta fases:', error);
+      throw error;
+    }
+  });
+
+  // Reemplaza el conjunto de itemes de receta vinculados a una fase.
+  ipcMain.handle('set-receta-fase-ingredientes', async (_event: any, faseId: number, recetaIngredienteIds: number[]) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+      const fiRepo = dataSource.getRepository(RecetaFaseIngrediente);
+      await fiRepo.delete({ fase: { id: faseId } } as any);
+      for (const riId of recetaIngredienteIds || []) {
+        const link = fiRepo.create({
+          fase: { id: faseId } as any,
+          recetaIngrediente: { id: riId } as any,
+        });
+        setEntityUserTracking(dataSource, link, getCurrentUser()?.id, false);
+        await fiRepo.save(link);
+      }
+      return { success: true };
+    } catch (error) {
+      console.error('Error setting receta fase ingredientes:', error);
+      throw error;
+    }
+  });
+
+  // ===================== RECETA MATERIALES =====================
+
+  ipcMain.handle('get-receta-materiales', async (_event: any, recetaId: number) => {
+    try {
+      const repo = dataSource.getRepository(RecetaMaterial);
+      return await repo.find({
+        where: { receta: { id: recetaId }, activo: true },
+        order: { orden: 'ASC' },
+      });
+    } catch (error) {
+      console.error('Error getting receta materiales:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('create-receta-material', async (_event: any, data: any) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+      const repo = dataSource.getRepository(RecetaMaterial);
+      const recetaId = data.recetaId || data.receta?.id;
+      if (!recetaId) throw new Error('recetaId requerido');
+      if (!data.descripcion || !`${data.descripcion}`.trim()) throw new Error('El material requiere una descripción');
+      const material = repo.create({
+        receta: { id: recetaId } as any,
+        descripcion: `${data.descripcion}`.toUpperCase(),
+        orden: data.orden ?? 0,
+        activo: true,
+      });
+      setEntityUserTracking(dataSource, material, getCurrentUser()?.id, false);
+      return await repo.save(material);
+    } catch (error) {
+      console.error('Error creating receta material:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('update-receta-material', async (_event: any, materialId: number, data: any) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+      const repo = dataSource.getRepository(RecetaMaterial);
+      const material = await repo.findOne({ where: { id: materialId } });
+      if (!material) throw new Error('Material not found');
+      if (data.descripcion !== undefined) material.descripcion = `${data.descripcion}`.toUpperCase();
+      if (data.orden !== undefined) material.orden = data.orden;
+      if (data.activo !== undefined) material.activo = data.activo;
+      setEntityUserTracking(dataSource, material, getCurrentUser()?.id, true);
+      return await repo.save(material);
+    } catch (error) {
+      console.error('Error updating receta material:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('delete-receta-material', async (_event: any, materialId: number) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+      const repo = dataSource.getRepository(RecetaMaterial);
+      await repo.delete(materialId);
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting receta material:', error);
       throw error;
     }
   });

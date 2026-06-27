@@ -1315,6 +1315,36 @@ export class RepositoryHttpService extends RepositoryService {
   recalculateRecipeCost(recetaId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.recalculateRecipeCost() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getRecetaFases(recetaId: number): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getRecetaFases() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  createRecetaFase(data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.createRecetaFase() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  updateRecetaFase(faseId: number, data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.updateRecetaFase() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  deleteRecetaFase(faseId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deleteRecetaFase() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  reorderRecetaFases(recetaId: number, ordenIds: number[]): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.reorderRecetaFases() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  setRecetaFaseIngredientes(faseId: number, recetaIngredienteIds: number[]): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.setRecetaFaseIngredientes() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getRecetaMateriales(recetaId: number): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getRecetaMateriales() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  createRecetaMaterial(data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.createRecetaMaterial() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  updateRecetaMaterial(materialId: number, data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.updateRecetaMaterial() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  deleteRecetaMaterial(materialId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deleteRecetaMaterial() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getSabores(): Observable<string[]> {
     return throwError(() => new Error(`RepositoryHttpService.getSabores() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

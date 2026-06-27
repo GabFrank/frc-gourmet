@@ -534,6 +534,16 @@ export abstract class RepositoryService {
   abstract deleteTipoPrecio(tipoPrecioId: number): Observable<any>;
   abstract recalculateAllRecipeCosts(): Observable<any[]>;
   abstract recalculateRecipeCost(recetaId: number): Observable<any>;
+  abstract getRecetaFases(recetaId: number): Observable<any[]>;
+  abstract createRecetaFase(data: any): Observable<any>;
+  abstract updateRecetaFase(faseId: number, data: any): Observable<any>;
+  abstract deleteRecetaFase(faseId: number): Observable<any>;
+  abstract reorderRecetaFases(recetaId: number, ordenIds: number[]): Observable<any>;
+  abstract setRecetaFaseIngredientes(faseId: number, recetaIngredienteIds: number[]): Observable<any>;
+  abstract getRecetaMateriales(recetaId: number): Observable<any[]>;
+  abstract createRecetaMaterial(data: any): Observable<any>;
+  abstract updateRecetaMaterial(materialId: number, data: any): Observable<any>;
+  abstract deleteRecetaMaterial(materialId: number): Observable<any>;
   abstract getSabores(): Observable<string[]>;
   abstract createOrUpdateSabor(saborData: any): Observable<{ success: boolean, message: string }>;
   abstract getSaborDetails(categoria: string): Observable<any>;

@@ -2393,6 +2393,37 @@ contextBridge.exposeInMainWorld('api', {
   recalculateRecipeCost: async (recetaId: number): Promise<any> => {
     return await ipcRenderer.invoke('recalculate-recipe-cost', recetaId);
   },
+  // Receta fases (modo de preparo) y materiales
+  getRecetaFases: async (recetaId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-receta-fases', recetaId);
+  },
+  createRecetaFase: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-receta-fase', data);
+  },
+  updateRecetaFase: async (faseId: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-receta-fase', faseId, data);
+  },
+  deleteRecetaFase: async (faseId: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-receta-fase', faseId);
+  },
+  reorderRecetaFases: async (recetaId: number, ordenIds: number[]): Promise<any> => {
+    return await ipcRenderer.invoke('reorder-receta-fases', recetaId, ordenIds);
+  },
+  setRecetaFaseIngredientes: async (faseId: number, recetaIngredienteIds: number[]): Promise<any> => {
+    return await ipcRenderer.invoke('set-receta-fase-ingredientes', faseId, recetaIngredienteIds);
+  },
+  getRecetaMateriales: async (recetaId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-receta-materiales', recetaId);
+  },
+  createRecetaMaterial: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-receta-material', data);
+  },
+  updateRecetaMaterial: async (materialId: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-receta-material', materialId, data);
+  },
+  deleteRecetaMaterial: async (materialId: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-receta-material', materialId);
+  },
   // StockMovimiento methods
   getStockMovimientos: async (): Promise<StockMovimiento[]> => {
     return await ipcRenderer.invoke('get-stock-movimientos');
