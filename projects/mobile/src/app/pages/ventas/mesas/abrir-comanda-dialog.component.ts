@@ -1,12 +1,19 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, Inject, OnInit, Optional, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { RepositoryService } from '@frc/shared-core';
+
+export interface AbrirComandaData {
+  /** Modo editar (mover comanda): prefila y cambia el título/botón. */
+  modoEditar?: boolean;
+  mesaId?: number | null;
+  observacion?: string;
+}
 
 export interface AbrirComandaResult {
   mesaId?: number;
@@ -36,7 +43,7 @@ interface MesaOpt {
     MatSelectModule,
   ],
   template: `
-    <h2 mat-dialog-title>Abrir comanda</h2>
+    <h2 mat-dialog-title>{{ modoEditar ? 'Editar comanda' : 'Abrir comanda' }}</h2>
     <mat-dialog-content class="ac-content">
       <mat-form-field appearance="outline" class="ac-field">
         <mat-label>Mesa (opcional)</mat-label>
@@ -52,7 +59,7 @@ interface MesaOpt {
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button (click)="ref.close()">Cancelar</button>
-      <button mat-flat-button color="primary" (click)="aceptar()">Abrir</button>
+      <button mat-flat-button color="primary" (click)="aceptar()">{{ modoEditar ? 'Guardar' : 'Abrir' }}</button>
     </mat-dialog-actions>
   `,
   styles: [
@@ -70,6 +77,15 @@ export class AbrirComandaDialogComponent implements OnInit {
   mesas: MesaOpt[] = [];
   mesaId: number | null = null;
   observacion = '';
+  modoEditar = false;
+
+  constructor(@Optional() @Inject(MAT_DIALOG_DATA) data?: AbrirComandaData) {
+    if (data) {
+      this.modoEditar = !!data.modoEditar;
+      this.mesaId = data.mesaId ?? null;
+      this.observacion = data.observacion || '';
+    }
+  }
 
   ngOnInit(): void {
     this.repo.getPdvMesasActivas().subscribe({

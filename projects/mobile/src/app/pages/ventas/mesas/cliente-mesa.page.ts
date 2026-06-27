@@ -52,6 +52,7 @@ export class ClienteMesaPage implements OnInit {
   private readonly snack = inject(MatSnackBar);
 
   mesaId = 0;
+  esComanda = false;
   ventaId: number | null = null;
   titulo = 'Cliente';
 
@@ -65,11 +66,19 @@ export class ClienteMesaPage implements OnInit {
   nuevo = { nombre: '', documento: '', ruc: '', telefono: '' };
 
   ngOnInit(): void {
+    this.esComanda = this.route.snapshot.data['contexto'] === 'comanda';
     this.mesaId = Number(this.route.snapshot.paramMap.get('id'));
-    this.repo.getPdvMesa(this.mesaId).subscribe({
+    const src = this.esComanda
+      ? this.repo.getComandaWithVenta(this.mesaId)
+      : this.repo.getPdvMesa(this.mesaId);
+    src.subscribe({
       next: (m: any) => {
         this.ventaId = m?.venta?.id ?? null;
-        this.titulo = m?.numero != null ? `Mesa ${m.numero} — cliente` : 'Cliente';
+        if (this.esComanda) {
+          this.titulo = m?.numero != null ? `Comanda #${m.numero} — cliente` : 'Cliente';
+        } else {
+          this.titulo = m?.numero != null ? `Mesa ${m.numero} — cliente` : 'Cliente';
+        }
       },
       error: () => {
         /* sin venta no se puede asignar; se avisa al elegir */
