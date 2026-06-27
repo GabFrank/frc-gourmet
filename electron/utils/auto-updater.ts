@@ -28,14 +28,6 @@ const STARTUP_DELAY_MS = 8 * 1000; // 8s después de window ready
 
 export type UpdateChannel = 'stable' | 'beta' | 'alpha';
 
-// electron-updater busca <channel>.yml. Mapeo interno → manifest publicado:
-//   stable → latest.yml (default de electron-builder, NO existe stable.yml)
-//   beta   → beta.yml
-//   alpha  → alpha.yml
-function toUpdaterChannel(c: UpdateChannel): string {
-  return c === 'stable' ? 'latest' : c;
-}
-
 interface UpdateConfig {
   channel: UpdateChannel;
   autoCheck: boolean;
@@ -120,7 +112,9 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
   }
 
   const cfg = readUpdateConfig();
-  autoUpdater.channel = toUpdaterChannel(cfg.channel);
+  // El manifiesto publicado siempre es latest.yml (no hay alpha.yml/beta.yml);
+  // el canal real se resuelve por feed en cada chequeo (resolveFeedForChannel).
+  autoUpdater.channel = 'latest';
   // autoDownload=false: descargamos manualmente SOLO si el canal de la versión
   // ofrecida coincide con el suscripto (guard contra cross-channel del provider
   // de GitHub, que con allowPrerelease puede colar un stable más nuevo por semver).
@@ -267,6 +261,11 @@ async function fetchLatestTagForChannel(channel: UpdateChannel): Promise<string 
  */
 async function resolveFeedForChannel(channel: UpdateChannel): Promise<void> {
   if (!autoUpdater) return;
+  // El manifiesto SIEMPRE es `latest.yml` (electron-builder no genera alpha.yml/
+  // beta.yml). La "selección" del release del canal la hace el feed (abajo), no
+  // el `channel` de electron-updater. Si dejáramos channel='alpha', pediría
+  // `alpha.yml` y daría 404.
+  autoUpdater.channel = 'latest';
   autoUpdater.allowPrerelease = channel !== 'stable';
   if (channel === 'stable') {
     autoUpdater.setFeedURL({ provider: 'github', owner: GH_OWNER, repo: GH_REPO });
@@ -312,7 +311,9 @@ function registerIpc(): void {
     cfg.channel = channel;
     writeUpdateConfig(cfg);
     if (autoUpdater) {
-      autoUpdater.channel = toUpdaterChannel(channel);
+      // El feed/canal real se aplica en el próximo chequeo (resolveFeedForChannel);
+      // acá solo ajustamos allowPrerelease. El manifiesto siempre es latest.yml.
+      autoUpdater.channel = 'latest';
       autoUpdater.allowPrerelease = channel !== 'stable';
     }
     return cfg;
