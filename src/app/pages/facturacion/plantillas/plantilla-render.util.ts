@@ -61,6 +61,16 @@ function elementText(el: PlantillaElemento, ctx: FacturaRenderContext): string {
 }
 
 /**
+ * Formatea el valor de una celda de item segun el campo. Las columnas
+ * numericas quedan en blanco si no hay dato (cada item llena solo su IVA).
+ */
+function itemCellText(field: string | undefined, raw: any): string {
+  if (field === 'descripcion') return raw != null ? String(raw) : '';
+  if (field === 'id') return raw != null && raw !== '' ? String(raw) : '';
+  return raw == null || raw === '' ? '' : fmtNumber(raw);
+}
+
+/**
  * Construye el docDefinition de pdfmake para una plantilla + contexto.
  *
  * @param page  { anchoMm, altoMm } tamano de pagina.
@@ -117,29 +127,40 @@ export function buildDocDefinition(
             { field: 'total', header: 'Total', wMm: 28, align: 'right' as const },
           ];
       const widths = cols.map((c) => mmToPt(c.wMm));
-      const header = cols.map((c) => ({ text: c.header, bold: true, alignment: c.align || 'left', fontSize: el.fontSize || 8 }));
-      const body: any[][] = [header];
+      const body: any[][] = [];
+      // La hoja pre-impresa ya trae los titulos; el encabezado es opcional.
+      if (el.showHeader) {
+        body.push(cols.map((c) => ({ text: c.header, bold: true, alignment: c.align || 'left', fontSize: el.fontSize || 8 })));
+      }
       for (const it of ctx.items || []) {
-        body.push(cols.map((c) => {
-          const raw = (it as any)[c.field];
-          let text: string;
-          if (c.field === 'descripcion') {
-            text = raw != null ? String(raw) : '';
-          } else if (c.field === 'id') {
-            text = raw != null && raw !== '' ? String(raw) : '';
-          } else {
-            // Columnas numericas (montos, cantidad, IVA): vacio si no hay dato.
-            // Asi cada item llena solo la columna de IVA que le corresponde.
-            text = raw == null || raw === '' ? '' : fmtNumber(raw);
-          }
-          return { text, alignment: c.align || (c.field === 'descripcion' ? 'left' : 'right'), fontSize: el.fontSize || 8 };
-        }));
+        body.push(cols.map((c) => ({
+          text: itemCellText(c.field, (it as any)[c.field]),
+          alignment: c.align || (c.field === 'descripcion' ? 'left' : 'right'),
+          fontSize: el.fontSize || 8,
+        })));
       }
       content.push({
-        table: { headerRows: 1, widths, body },
-        layout: 'lightHorizontalLines',
+        table: { headerRows: el.showHeader ? 1 : 0, widths, body },
+        layout: el.showHeader ? 'lightHorizontalLines' : 'noBorders',
         absolutePosition: { x, y },
         width: widths.reduce((a, b) => a + b, 0),
+      });
+      continue;
+    }
+
+    if (el.type === 'itemColumn') {
+      // Columna individual de items: cada fila se posiciona en y + i*rowHeight.
+      const rowH = mmToPt(el.rowHeightMm || 5);
+      const width = el.wMm ? mmToPt(el.wMm) : undefined;
+      const align = el.align || (el.field === 'descripcion' ? 'left' : el.field === 'id' ? 'center' : 'right');
+      (ctx.items || []).forEach((it, i) => {
+        content.push({
+          text: itemCellText(el.field, (it as any)[el.field || '']),
+          absolutePosition: { x, y: y + i * rowH },
+          width,
+          alignment: align,
+          fontSize: el.fontSize || 8,
+        });
       });
       continue;
     }

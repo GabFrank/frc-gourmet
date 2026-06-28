@@ -32,6 +32,14 @@
       <button mat-stroked-button (click)="addItemsTable()"><mat-icon>table_chart</mat-icon> Tabla ítems</button>
     </div>
 
+    <h4>Columnas de ítems</h4>
+    <p class="hint">Agregá cada columna por separado y posicionala sobre su encabezado pre-impreso. No imprime títulos.</p>
+    <div class="palette-buttons">
+      <button class="var-chip" mat-stroked-button *ngFor="let c of columnasItem" (click)="addItemColumn(c.field)">
+        <mat-icon>view_column</mat-icon> {{ c.header }}
+      </button>
+    </div>
+
     <h4>Variables</h4>
     <mat-accordion multi>
       <mat-expansion-panel *ngFor="let g of grupos">
@@ -107,6 +115,16 @@
         <img *ngIf="el.type === 'image' && el.imageUrl" class="el-img"
              [src]="el.imageUrl" [style.width.px]="(el.wMm || 30) * pxPerMm" alt="img" />
 
+        <!-- columna de items individual -->
+        <div *ngIf="el.type === 'itemColumn'" class="el-col"
+             [style.width.px]="(el.wMm || 25) * pxPerMm"
+             [style.font-size.pt]="el.fontSize || 8"
+             [style.text-align]="el.align || 'right'">
+          <div class="el-col-cap">{{ previews[el.id] }}</div>
+          <div class="el-col-cell" *ngFor="let cell of colRows[el.id]"
+               [style.height.px]="(el.rowHeightMm || 5) * pxPerMm">{{ cell }}</div>
+        </div>
+
         <!-- tabla items: la caja indica el area limite donde entran los productos -->
         <div *ngIf="el.type === 'itemsTable'" class="el-table"
              [style.width.px]="(el.wMm || 150) * pxPerMm"
@@ -142,6 +160,13 @@
         </mat-select>
       </mat-form-field>
 
+      <mat-form-field appearance="outline" *ngIf="selected.type === 'itemColumn'">
+        <mat-label>Campo de la columna</mat-label>
+        <mat-select [(ngModel)]="selected.field" (ngModelChange)="updatePreview(selected)">
+          <mat-option *ngFor="let c of columnasItem" [value]="c.field">{{ c.header }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
       <div class="pos-row">
         <mat-form-field appearance="outline">
           <mat-label>X (mm)</mat-label>
@@ -153,12 +178,12 @@
         </mat-form-field>
       </div>
 
-      <div class="pos-row" *ngIf="selected.type === 'text' || selected.type === 'variable'">
+      <div class="pos-row" *ngIf="selected.type === 'text' || selected.type === 'variable' || selected.type === 'itemColumn' || selected.type === 'itemsTable'">
         <mat-form-field appearance="outline">
           <mat-label>Tamaño (pt)</mat-label>
           <input matInput type="number" [(ngModel)]="selected.fontSize" />
         </mat-form-field>
-        <mat-form-field appearance="outline">
+        <mat-form-field appearance="outline" *ngIf="selected.type !== 'itemsTable'">
           <mat-label>Alineación</mat-label>
           <mat-select [(ngModel)]="selected.align">
             <mat-option value="left">Izquierda</mat-option>
@@ -168,11 +193,22 @@
         </mat-form-field>
       </div>
 
+      <div class="pos-row" *ngIf="selected.type === 'itemColumn'">
+        <mat-form-field appearance="outline">
+          <mat-label>Alto de fila (mm)</mat-label>
+          <input matInput type="number" [(ngModel)]="selected.rowHeightMm" />
+        </mat-form-field>
+      </div>
+
+      <mat-checkbox *ngIf="selected.type === 'itemsTable'" [(ngModel)]="selected.showHeader">
+        Imprimir encabezados de columna
+      </mat-checkbox>
+
       <mat-checkbox *ngIf="selected.type === 'text' || selected.type === 'variable'" [(ngModel)]="selected.bold">
         Negrita
       </mat-checkbox>
 
-      <div class="pos-row" *ngIf="selected.type === 'line' || selected.type === 'box' || selected.type === 'itemsTable' || selected.type === 'image'">
+      <div class="pos-row" *ngIf="selected.type === 'line' || selected.type === 'box' || selected.type === 'itemsTable' || selected.type === 'image' || selected.type === 'itemColumn'">
         <mat-form-field appearance="outline">
           <mat-label>Ancho (mm)</mat-label>
           <input matInput type="number" [(ngModel)]="selected.wMm" />

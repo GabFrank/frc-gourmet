@@ -16,6 +16,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '../../../../database/repository.service';
 import { FacturaPlantilla } from '../../../../database/entities/facturacion/factura-plantilla.entity';
 import {
+  CATALOGO_COLUMNAS_ITEM,
   CATALOGO_VARIABLES,
   PlantillaConfig,
   PlantillaElemento,
@@ -72,11 +73,17 @@ export class FacturaPlantillaDesignerComponent {
   /** Texto de previsualizacion por elemento (id -> texto). */
   previews: { [id: string]: string } = {};
 
+  /** Filas demo por columna de items (id -> celdas) para el lienzo. */
+  colRows: { [id: string]: string[] } = {};
+
   /** Variables agrupadas para la paleta. */
   grupos: { nombre: string; variables: VariableCatalogo[] }[] = [];
 
   /** Catalogo plano para el selector de variable en propiedades. */
   allVariables: VariableCatalogo[] = CATALOGO_VARIABLES;
+
+  /** Campos de item disponibles para columnas individuales. */
+  columnasItem = CATALOGO_COLUMNAS_ITEM;
 
   /** Contexto de ejemplo para previsualizar variables en el lienzo. */
   private demoCtx: FacturaRenderContext = {
@@ -172,6 +179,14 @@ export class FacturaPlantillaDesignerComponent {
       this.previews[el.id] = el.text || 'Texto';
     } else if (el.type === 'itemsTable') {
       this.previews[el.id] = 'Tabla de ítems';
+    } else if (el.type === 'itemColumn') {
+      const found = this.columnasItem.find((c) => c.field === el.field);
+      this.previews[el.id] = found?.header || el.field || 'Columna';
+      this.colRows[el.id] = this.demoCtx.items.map((it) => {
+        const raw = (it as any)[el.field || ''];
+        if (el.field === 'descripcion' || el.field === 'id') return raw != null ? String(raw) : '';
+        return raw == null || raw === '' ? '' : Number(raw).toLocaleString('es-PY');
+      });
     } else {
       this.previews[el.id] = '';
     }
@@ -233,6 +248,33 @@ export class FacturaPlantillaDesignerComponent {
     this.selected = el;
   }
 
+  private colWidthFor(field: string): number {
+    const map: { [k: string]: number } = {
+      id: 12, cantidad: 15, descripcion: 70, precioUnitario: 25,
+      descuento: 20, exenta: 22, gravada5: 22, gravada10: 22, total: 28,
+    };
+    return map[field] || 25;
+  }
+
+  private colAlignFor(field: string): 'left' | 'center' | 'right' {
+    if (field === 'descripcion') return 'left';
+    if (field === 'id') return 'center';
+    return 'right';
+  }
+
+  /** Agrega una columna de items individual (posicionable y redimensionable). */
+  addItemColumn(field: string): void {
+    const el: PlantillaElemento = {
+      id: this.genId(), type: 'itemColumn', field,
+      xMm: 10, yMm: 60, wMm: this.colWidthFor(field), rowHeightMm: 5, rows: 6,
+      fontSize: 8, align: this.colAlignFor(field),
+    };
+    this.config.elementos.push(el);
+    this.setFreePos(el);
+    this.updatePreview(el);
+    this.selected = el;
+  }
+
   // -------- seleccion / drag --------
   select(el: PlantillaElemento, ev: MouseEvent): void {
     ev.stopPropagation();
@@ -285,6 +327,7 @@ export class FacturaPlantillaDesignerComponent {
           id: e.id, type: e.type, xMm: e.xMm, yMm: e.yMm, wMm: e.wMm, hMm: e.hMm,
           text: e.text, variable: e.variable, imageUrl: e.imageUrl,
           fontSize: e.fontSize, bold: e.bold, align: e.align, columns: e.columns,
+          showHeader: e.showHeader, field: e.field, rowHeightMm: e.rowHeightMm, rows: e.rows,
         })),
         background: this.config.background,
       };

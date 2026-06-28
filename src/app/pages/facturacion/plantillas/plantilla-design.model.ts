@@ -10,7 +10,7 @@
  * del zoom del disenador y mapear directo a la pagina fisica.
  */
 
-export type ElementoTipo = 'text' | 'variable' | 'line' | 'box' | 'image' | 'itemsTable';
+export type ElementoTipo = 'text' | 'variable' | 'line' | 'box' | 'image' | 'itemsTable' | 'itemColumn';
 
 export type Alineacion = 'left' | 'center' | 'right';
 
@@ -43,6 +43,15 @@ export interface PlantillaElemento {
   align?: Alineacion;
   /** Columnas (type='itemsTable'). */
   columns?: ItemColumna[];
+  /** Mostrar fila de encabezados (type='itemsTable'). Default false: la hoja
+   *  pre-impresa ya trae los titulos de columna. */
+  showHeader?: boolean;
+  /** Campo del item a renderizar (type='itemColumn'; ver CATALOGO_COLUMNAS_ITEM). */
+  field?: string;
+  /** Alto de fila en mm (type='itemColumn'): separacion vertical entre items. */
+  rowHeightMm?: number;
+  /** Cantidad de filas guia a dibujar en el disenador (type='itemColumn'). */
+  rows?: number;
 }
 
 /**
