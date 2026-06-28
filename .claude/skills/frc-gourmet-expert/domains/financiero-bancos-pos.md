@@ -10,8 +10,9 @@
   tipoCuenta: TipoCuentaBancaria        // CORRIENTE | AHORRO
   moneda: Moneda
   saldo: decimal(14,2)                  // disponible
-  saldoReservado: decimal(14,2)         // comprometido (cheques emitidos)
+  saldoReservado: decimal(14,2)         // comprometido (cheques diferidos emitidos)
   titular?, alias?
+  activo: boolean (default true)
 }
 ```
 
@@ -24,12 +25,13 @@
 - `EntradaVaria` destino banco: suma directa a `cuentaBancaria.saldo`.
 - `OperacionFinanciera DEPOSITO_BANCARIO`: suma a destino.
 - `OperacionFinanciera RETIRO_BANCARIO`: resta de origen.
-- Cheque cobrado: suma a `cuentaBancaria.saldo` (banking.handler.ts:931+).
+- Cheque cobrado: resta de `cuentaBancaria.saldo` (handler `cobrar-cheque` en banking.handler.ts).
 - AcreditacionPos auto-procesada: suma `montoEsperado` a `cuentaBancaria.saldo`.
+- `acreditar-transferencia-bancaria`: suma instantánea al saldo (cobro con transferencia/PIX; sin comisión, no crea AcreditacionPos).
 
 ⚠️ **No usa `actualizarSaldoCajaMayor()`** — es directo al campo. Auditar manualmente si hay descuadres.
 
-`saldoReservado`: incrementa al emitir cheque diferido (banking.handler:~890), decrementa al cobrar/anular.
+`saldoReservado`: incrementa al emitir cheque diferido (handler `emitir-cheque`), decrementa al cobrar o anular ese cheque diferido (con piso en 0).
 
 ## MovimientoBancario
 
@@ -75,33 +77,38 @@ Validación al emitir cheque: `siguienteNumero ≤ numeroFinal`. Si no, `estado=
   fechaPago?: datetime         // si es diferido
   fechaCobro?: datetime
   estado: ChequeEstado          // EMITIDO | DIFERIDO | COBRADO | ANULADO
-  esDiferido: boolean           // postfechado
+  esDiferido: boolean           // define el flujo (postfechado), NO se infiere de fechaPago
   cajaMayor?: CajaMayor
   formaPago?: FormasPago
+  observacion?, motivoAnulacion?
 }
 ```
 
-### Emitir cheque (banking.handler.ts:841)
+> Estado de cheque se decide por el flag `esDiferido` del payload (NO por comparar `fechaPago`). Permiso requerido en los 3 handlers: `BANCOS_GESTIONAR`.
+
+### Emitir cheque (`emitir-cheque`)
 
 Transacción atómica:
-1. Validar chequera ACTIVA + numero válido.
-2. Crear Cheque (estado=EMITIDO o DIFERIDO según fechaPago).
-3. Si NO diferido: crear `CajaMayorMovimiento` EGRESO_CHEQUE + `actualizarSaldoCajaMayor`.
-4. Si DIFERIDO: incrementar `cuentaBancaria.saldoReservado += monto`. Caja Mayor no se afecta hasta el cobro.
-5. Avanzar `chequera.siguienteNumero`.
+1. Validar chequera ACTIVA.
+2. Crear Cheque.
+3. **Si NO diferido** (estado inicial EMITIDO): restar `cuentaBancaria.saldo -= monto`; si vienen `cajaMayorId`+`monedaId`+`formaPagoId`, crear `CajaMayorMovimiento` EGRESO_CHEQUE + `actualizarSaldoCajaMayor`; luego marcar el cheque como **COBRADO** con `fechaCobro = now` (el cheque a la vista se considera cobrado al emitirse).
+4. **Si DIFERIDO**: incrementar `cuentaBancaria.saldoReservado += monto`. No toca `saldo` ni Caja Mayor hasta el cobro.
+5. Avanzar `chequera.siguienteNumero` (si supera `numeroFinal`, chequera → AGOTADA).
 
-### Cobrar cheque (banking.handler.ts:931)
+### Cobrar cheque (`cobrar-cheque`) — para diferidos
 
-1. Cheque.estado → COBRADO.
-2. Cheque.fechaCobro = now.
-3. Restar de `cuentaBancaria.saldo`.
-4. Si era DIFERIDO: restar de `saldoReservado` (lo libera, ya descontado del saldo real).
+1. Validar que no esté ya COBRADO/ANULADO.
+2. Si era DIFERIDO: liberar `saldoReservado -= monto` (con piso en 0).
+3. Restar `cuentaBancaria.saldo -= monto`.
+4. Si el cheque tiene `cajaMayor`+`moneda`+`formaPago`: crear `CajaMayorMovimiento` EGRESO_CHEQUE + `actualizarSaldoCajaMayor`.
+5. Cheque.estado → COBRADO, `fechaCobro = now`.
 
-### Anular cheque (banking.handler.ts:993)
+### Anular cheque (`anular-cheque`)
 
-1. Cheque.estado → ANULADO.
-2. Si EMITIDO: contra-mov AJUSTE_POSITIVO en caja mayor.
-3. Si DIFERIDO: liberar `saldoReservado`.
+1. Bloquea si el cheque ya está COBRADO o ANULADO.
+2. Si era DIFERIDO: liberar `saldoReservado -= monto` (piso en 0).
+3. Cheque.estado → ANULADO, guarda `motivoAnulacion`.
+   - **No** genera contra-movimiento en Caja Mayor (un cheque a la vista ya queda COBRADO al emitirse, así que no es anulable por esta vía).
 
 ## Máquinas POS
 
@@ -109,29 +116,35 @@ Transacción atómica:
 
 ```typescript
 {
-  nombre, proveedor?
+  nombre
+  proveedor?: string                   // nombre del operador (texto libre)
   cuentaBancaria: CuentaBancaria       // donde se acreditan ventas
   porcentajeComision: decimal(5,2)     // 2.50%
   minutosAcreditacion: int             // 1440 (24h), 4320 (3 días), etc.
+  activo: boolean (default true)
 }
 ```
 
 ## AcreditacionPos
 
-Cada venta con tarjeta crea una AcreditacionPos PENDIENTE. Tras `minutosAcreditacion` se acredita automáticamente.
+Cobro de venta con máquina POS → se crea una AcreditacionPos PENDIENTE. Tras `minutosAcreditacion` se acredita automáticamente.
+
+> El disparo ocurre en `cobrar-venta-dialog.component.ts` (handler `create-acreditacion-pos` vía `RepositoryService.createAcreditacionPos`), una por cada detalle de pago que use una máquina POS. La llamada es **no-blocking** (si falla, loguea y no aborta el cobro). NO está cableado dentro de `ventas.handler.ts`.
 
 ```typescript
 {
   maquinaPos
   cuentaBancaria
   montoOriginal: decimal               // venta bruta
-  montoComision: decimal               // descuento operador
-  montoEsperado = montoOriginal - montoComision
+  montoComision: decimal(14,2)         // descuento operador (default 0)
+  montoEsperado: decimal(14,2)         // almacenado; al crear = montoOriginal - montoComision
   montoAcreditado?: decimal            // lo que realmente llegó
   fechaTransaccion
   fechaEsperadaAcreditacion            // = fechaTransaccion + minutosAcreditacion
   fechaAcreditacionReal?
   estado: AcreditacionPosEstado        // PENDIENTE | ACREDITADO_AUTO | VERIFICADO | CON_DIFERENCIA
+  diferencia?: decimal                 // montoAcreditado - montoEsperado (al verificar)
+  verificadoPor?: Usuario, fechaVerificacion?
   ventaId?: int                        // sin FK constraint
 }
 ```
@@ -155,9 +168,13 @@ async procesarAcreditacionesPendientes() {
 
 ### Verificación manual
 
-`verificar-acreditacion-pos`: usuario compara con extracto bancario. Si difiere:
-- Actualizar `montoAcreditado` real.
-- Estado → VERIFICADO o CON_DIFERENCIA.
+`verificar-acreditacion-pos(id, montoAcreditado)` (permiso `BANCOS_GESTIONAR`): usuario compara con el extracto bancario. Transacción:
+- `diferencia = montoAcreditado - montoEsperado`.
+- Ajuste de saldo:
+  - Si ya estaba ACREDITADO_AUTO (ya se sumó `montoEsperado`): ajusta `saldo += diferencia`.
+  - Si aún PENDIENTE: suma `saldo += montoAcreditado` (el monto real).
+- Guarda `montoAcreditado`, `diferencia`, `verificadoPor`, `fechaVerificacion`.
+- Estado → VERIFICADO si `diferencia === 0`, sino CON_DIFERENCIA.
 
 ## Configuración por Caja Mayor: cuentas visibles
 
@@ -169,17 +186,18 @@ Click en card de cuenta bancaria → abre `MovimientosCuentaBancariaDialogCompon
 
 `src/app/pages/financiero/caja-mayor/`:
 
-- `bancos/`: list-cuentas-bancarias, create-edit-cuenta-bancaria, list-movimientos.
-- `cheques/`: list-chequeras, create-chequera, list-cheques, emitir-cheque, cobrar-cheque, anular-cheque.
-- `pos/`: list-maquinas-pos, create-edit-maquina-pos, list-acreditaciones-pos, verificar-acreditacion-dialog.
+- `bancos/`: `list-cuentas-bancarias`, `create-edit-cuenta-bancaria`, `crear-movimiento-bancario-dialog`, `movimientos-cuenta-bancaria-dialog` (tab/dialog híbrido).
+- `cheques/`: `list-chequeras`, `create-edit-chequera`, `list-cheques`, `emitir-cheque`. (Cobrar/anular se disparan desde la lista de cheques vía sus handlers, sin componentes dialog dedicados.)
+- `pos/`: `list-maquinas-pos`, `create-edit-maquina-pos`, y `acreditaciones/` con `list-acreditaciones-pos` + `verificar-acreditacion-dialog`.
 
-## Handler banking.handler.ts (1032 líneas)
+## Handler banking.handler.ts (~916 líneas)
 
-Cubre:
-- CuentaBancaria CRUD (105-186)
-- MaquinaPos CRUD (187-265)
-- AcreditacionPos (266-461): get, create, procesar-auto, verificar, acreditar-transferencia
-- MovimientoBancario (463-686)
-- Acreditaciones pendientes (687-705)
-- Chequera CRUD (706-787)
-- Cheque (788-1032): get, emitir, cobrar, anular
+Cubre (handlers, sin números de línea fijos):
+- CuentaBancaria CRUD (`get/create/update/delete-cuenta-bancaria`)
+- MaquinaPos CRUD (`get/create/update/delete-maquina-pos`)
+- AcreditacionPos: `get-acreditaciones-pos`, `get-acreditacion-pos`, `create-acreditacion-pos`, `procesar-acreditaciones-auto`, `verificar-acreditacion-pos`, `acreditar-transferencia-bancaria`, `get-acreditaciones-pendientes`
+- MovimientoBancario: `get-movimientos-cuenta-bancaria`, `create-movimiento-bancario`
+- Chequera CRUD (`get/create/update/delete-chequera`)
+- Cheque: `get-cheques`, `get-cheque`, `emitir-cheque`, `cobrar-cheque`, `anular-cheque`
+
+Además exporta (fuera de `ipcMain.handle`) `procesarAcreditacionesPendientes(dataSource)` y `startAcreditacionesScheduler(dataSource, 5)`, usados por el scheduler del main process.

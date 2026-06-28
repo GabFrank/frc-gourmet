@@ -20,7 +20,7 @@
 
 **Menu → Productos → Dashboard**.
 
-- Cards de Productos, Recetas, Sabores, Adicionales.
+- Accesos a Productos, Recetas, Gestión de Sabores, Adicionales, Ingredientes y Movimientos de Stock.
 
 ### Dashboard de Compras
 

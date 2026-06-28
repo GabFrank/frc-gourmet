@@ -87,7 +87,7 @@ sqlite3 "$DB" ".schema venta_items"
 
 ### Personas / Auth
 
-- Login falla: chequear que Usuario.activo=true, password coincide en texto plano (sí, **literal**).
+- Login falla: chequear que Usuario.activo=true y que la password coincida. Los passwords se **hashean con bcrypt** (`electron/utils/password.utils.ts`: `hashPassword`/`verifyPassword`). `verifyPassword` compara con `bcrypt.compare` si el valor guardado es un hash (`$2a/$2b/$2y$...`); solo cae a comparación de **texto plano** como fallback legacy si el valor aún no fue hasheado. Una migración one-shot (`migrate-passwords.ts`) hashea los plaintext al arranque. Por eso `usuarios.password` en BD ya no es legible.
 - "No tiene permisos": `SELECT codigo FROM permissions WHERE id IN (SELECT permission_id FROM role_permissions WHERE role_id IN (SELECT role_id FROM usuario_roles WHERE usuario_id = ?))`.
 - Sesión inválida: `LoginSession.is_active=false` significa logout.
 
@@ -97,9 +97,9 @@ sqlite3 "$DB" ".schema venta_items"
 |---|---|---|
 | "Error invoking remote method 'foo'" | Handler tira excepción | Buscar `console.error('Error foo:', ...)` en stderr Electron |
 | Handler nuevo no funciona | No registrado en main.ts | Agregar `registerXxxHandlers(...)` |
-| Tabla no existe | Entidad no en `database.config.ts` | Agregar al array `entities`, reiniciar app |
-| `NOT NULL constraint failed` al `synchronize` | Columna nueva NOT NULL sin default en tabla con datos | Hacerla nullable o agregarle `default: 0` |
-| Cambio de tipo de columna falla | TypeORM no migra cambios incompatibles | Backup + delete tabla + reiniciar (recreará vacía con nuevo schema) — ⚠️ pierde datos |
+| Tabla no existe | Entidad sin migración (o migración no registrada en `getMigrations()`) | Crear migración + registrarla en `database.config.ts`, reiniciar app. `synchronize` está en `false` — registrar la entidad NO crea la tabla. |
+| `NOT NULL constraint failed` al migrar | Columna nueva NOT NULL sin default en tabla con datos | En la migración, agregarla nullable o con `DEFAULT` |
+| Migración nueva no corre | No registrada en `getMigrations()` de `database.config.ts` | Importar la clase y agregarla al final del array de incrementales |
 | `Cannot read properties of undefined (reading 'databaseName')` en QB | snake_case en `.where()` o `.orderBy()` con QueryBuilder | Cambiar a property names camelCase: `c.fechaCompra` no `c.fecha_compra` |
 | Nueva columna NULL después de update | TypeORM ignora `undefined` | Usar `(entity as any).campo = null` |
 | Fecha guardada un día antes | `new Date('YYYY-MM-DD')` en zona UTC-3 | Helper `parseLocalDate` (ver pitfalls) |

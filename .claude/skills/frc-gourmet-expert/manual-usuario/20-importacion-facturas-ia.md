@@ -17,7 +17,7 @@ FRC Gourmet puede leer una **foto o PDF de una factura física** y armar el borr
 
 ## Configurar la IA (una sola vez)
 
-Vas a **Sistema → Configurar IA** en el menú lateral.
+Vas a **Configuración → Configurar IA** en el menú lateral.
 
 - **API Key de OpenAI**: pegá la clave (empieza con `sk-...`). Cómo obtenerla: cuenta en https://platform.openai.com, sección "API Keys". Necesitás cargar saldo (mínimo USD 5). No es la cuenta de ChatGPT — es separada.
 - **Modelo**: por defecto **gpt-4o** (~USD 0.01 por factura, mejor calidad). Si querés bajar costo, usá **gpt-4o-mini** (~USD 0.002, calidad algo menor).

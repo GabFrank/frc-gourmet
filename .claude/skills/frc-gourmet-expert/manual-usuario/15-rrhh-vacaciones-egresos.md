@@ -72,9 +72,7 @@ Sistema marca esto automáticamente (TODO trigger).
 
 ## 5. Liquidación final (egreso)
 
-Al egresar un funcionario (capítulo 11), generás su liquidación final:
-
-**Menu → Recursos Humanos → Liquidaciones final → "Nueva liquidación"**.
+Al egresar un funcionario (capítulo 11), generás su liquidación final desde el detalle del funcionario (tab Liquidaciones) o desde **Menu → Recursos Humanos → Liquidaciones**, eligiendo el tipo "Liquidación final":
 
 - **Funcionario** (debe estar egresado).
 - **Fecha egreso** (la del egreso).

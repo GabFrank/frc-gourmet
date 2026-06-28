@@ -1,4 +1,4 @@
-# Capítulo 9 — Solución de problemas
+# Solución de problemas
 
 ## "No se pudo conectar con el servidor" (al iniciar sesión)
 
@@ -37,7 +37,7 @@ Usuario o contraseña incorrectos.
 ## No veo el botón "+" para crear (o no aparece "Eliminar")
 
 No es un error: tu usuario **no tiene permiso** para gestionar esa sección. Pediselo al
-administrador. Ver [Capítulo 8](08-permisos-y-roles.md).
+administrador. Ver [Permisos y roles](08-permisos-y-roles.md).
 
 ## "Sin permiso para guardar / eliminar"
 
@@ -57,7 +57,7 @@ Suele ser un problema de **conexión** o un dato rechazado por el servidor:
 Es **correcto y a propósito**. Esos cambios generan historial y se hacen desde la app de
 escritorio. En mobile, al editar un funcionario solo podés cambiar código interno,
 jornalero/valor de jornal, observación y el estado Activo. Ver
-[Capítulo 4](04-modulo-rrhh.md).
+[Módulo RRHH](04-modulo-rrhh.md).
 
 ## No me deja eliminar un funcionario
 
@@ -76,12 +76,18 @@ Como es una app web, a veces conviene **recargar**:
 - Cerrá y volvé a abrir la app (o el navegador).
 - Si la instalaste en la pantalla de inicio, cerrala por completo y abrila de nuevo.
 
+## Quiero cobrar/cerrar una mesa y no encuentro cómo
+
+En mobile el mesero **toma el pedido**, pero el **cobro y cierre** de la venta se hacen en
+la **caja (PdV del escritorio)**. La pre-cuenta que imprimís desde mobile es solo
+informativa. Ver [Módulo Ventas — meseros](04-modulo-ventas-meseros.md).
+
 ## La función que busco no está / dice "pronto"
 
-Algunas funciones todavía no están en mobile (PdV, recetas, sabores, Caja Mayor, monedas,
-importación con IA, reportes, y ciertas operaciones de RRHH). Se hacen en la app de
-escritorio. Ver [Capítulo 10](10-limitaciones-y-version-escritorio.md).
+Algunas funciones todavía no están en mobile (cobrar/cerrar ventas, delivery, recetas,
+sabores, alta de monedas, importación con IA, reportes, y ciertas operaciones de RRHH). Se
+hacen en la app de escritorio. Ver [Qué falta en mobile](10-limitaciones-y-version-escritorio.md).
 
 ---
 
-**Próximo capítulo →** [10 — Qué falta en mobile y se hace desde el escritorio](10-limitaciones-y-version-escritorio.md)
+**Próximo capítulo →** [Qué falta en mobile y se hace desde el escritorio](10-limitaciones-y-version-escritorio.md)

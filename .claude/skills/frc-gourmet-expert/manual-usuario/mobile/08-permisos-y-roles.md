@@ -1,4 +1,4 @@
-# Capítulo 8 — Permisos y roles
+# Permisos y roles
 
 ## Cómo funcionan los permisos
 
@@ -16,7 +16,7 @@ La app mobile aplica los permisos de **dos maneras**, para que la experiencia se
    **"Sin permiso…"**. Esto garantiza que nadie pueda saltarse las reglas.
 
 > Quién tiene cada permiso lo define el **administrador**, asignando roles a los usuarios.
-> Eso se hace en el sub-módulo **Usuarios** (ver [Capítulo 4](04-modulo-rrhh.md)) o desde
+> Eso se hace en el sub-módulo **Usuarios** (ver [Módulo RRHH](04-modulo-rrhh.md)) o desde
 > el escritorio.
 
 ## Qué permiso necesita cada sección (gestión)
@@ -37,6 +37,7 @@ entrar a la sección.
 | RRHH · Tipos de cliente | `CLIENTES_GESTIONAR` |
 | RRHH · Usuarios | `USUARIOS_GESTIONAR` |
 | Finanzas · Categorías de gasto | `CAJA_MAYOR_OPERAR` |
+| Finanzas · Caja Mayor (gastos, ingresos, ajustes, anular) | `CAJA_MAYOR_OPERAR` |
 | Compras · Categorías de compra | `COMPRAS_GESTIONAR` |
 | Productos · Familias | `CATEGORIAS_GESTIONAR` |
 | Productos · Subfamilias | `CATEGORIAS_GESTIONAR` |
@@ -45,6 +46,13 @@ entrar a la sección.
 Las secciones de **solo consulta** (Vales, Liquidaciones, Cajas, CxC, Compras,
 Proveedores, Productos, Comisiones, etc.) no tienen botón de crear/editar en mobile, así
 que no dependen de un permiso de gestión para verlas.
+
+**Ventas (meseros)** es visible para cualquier usuario logueado. Tomar pedidos, transferir,
+imprimir, etc. se validan en el servidor con los **mismos permisos del PdV** del escritorio.
+
+> **Qué se muestra en la barra de navegación:** **Inicio**, **Ventas** y **Productos** los
+> ve cualquier usuario logueado. **Compras**, **Finanzas** y **RRHH** aparecen solo si tu
+> usuario tiene al menos un permiso de esa sección (de dashboard, de ver o de gestionar).
 
 ## Si te falta un permiso
 
@@ -58,4 +66,4 @@ correspondiente (en Usuarios, o desde el escritorio).
 
 ---
 
-**Próximo capítulo →** [09 — Solución de problemas](09-solucion-de-problemas.md)
+**Próximo capítulo →** [Solución de problemas](09-solucion-de-problemas.md)

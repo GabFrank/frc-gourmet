@@ -90,6 +90,16 @@ Crear:
 
 El tipo aplica como default — al crear un cliente, hereda esos parámetros.
 
+## Convenios (cobro consolidado)
+
+Un **Convenio** agrupa varios clientes que pertenecen a una empresa o entidad externa con la que tenés un acuerdo (ej. "FUNCIONARIOS EMPRESA X"). A fin de mes, la empresa puede pagar de forma consolidada la deuda de todos sus clientes, y luego descontarla internamente a cada uno.
+
+**Menu → Recursos Humanos → Convenios**.
+
+- **Nuevo convenio**: nombre, descripción, RUC y contacto de la empresa (opcionales).
+- **Asignar clientes**: vinculá los clientes que forman parte del convenio (un cliente puede estar en varios convenios).
+- **Cobro consolidado**: registra el pago único de toda la deuda del grupo.
+
 ## Búsqueda rápida en PdV
 
 Cuando estás cobrando una venta y querés vincularla a un cliente registrado:

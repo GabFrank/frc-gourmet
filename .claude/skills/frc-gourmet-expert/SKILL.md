@@ -26,10 +26,12 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 - **Moneda:** Paraguay primero (PYG, sin decimales) + USD/BRL. Conversión vía `MonedaCambio.compraLocal`.
 - **Seeds idempotentes** en cada arranque: cubren admin user, permisos, monedas, formas de pago, categorías de gasto/compra, conceptos liquidación, config RRHH, familia GENERAL, turnos, feriados PY, observaciones, roles plantilla (GERENTE/CAJERO/MOZO). Detalles → [architecture/seed-system.md](architecture/seed-system.md).
 - **Comandos:**
-  - **`npm run build`** — compila Angular + tsc Electron. **Usar para verificar compilación.**
+  - **`npm run build`** — compila Angular (`ng build`) + tsc Electron. **Usar para verificar compilación.**
+  - **`npm run check`** — AOT de producción (`ng build --configuration production`). **Correr ANTES de pushear** — el AOT rechaza errores que `ng serve` tolera.
   - **`npm start`** — el USUARIO lo corre manualmente. NUNCA ejecutar desde el agente. (`feedback_npm_start_manual`)
-  - **`npm run migration:generate -- src/app/database/migrations/<NombreMigration>`** — generar migration desde diff de entities.
-  - **`npm run migration:generate:postgres -- ...`** — variante para baseline Postgres.
+  - **`npm run migration:generate -- src/app/database/migrations/<NombreMigration>`** — generar migration desde diff de entities (usa el DataSource CLI `src/app/database/datasource.ts`, SQLite por default; el timestamp epoch-ms se prefija solo).
+  - **Baseline Postgres:** NO hay script `migration:generate:postgres`. Se genera con variables de entorno: `FRC_DB_TYPE=postgres FRC_PG_DATABASE=frc_gourmet_baseline_pg npm run migration:generate -- src/app/database/migrations/<Nombre>`.
+  - Otros: `migration:create`, `migration:run`, `migration:revert`, `migration:show`.
 
 ---
 

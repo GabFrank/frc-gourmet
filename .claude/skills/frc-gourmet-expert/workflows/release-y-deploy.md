@@ -24,7 +24,7 @@ Se dispara en **push** a `master`, `release/beta`, `develop`. Dos jobs:
 - Crea tag `vX.Y.Z` + GitHub Release (vacío al principio).
 - Output: `new_release_version`, `new_release_git_tag`, `new_release_channel`, `new_release_published`.
 
-Config en raíz del repo: `.releaserc` (JSON). Branches y reglas de release ahí.
+Config en raíz del repo: `.releaserc.json`. Branches y reglas de release ahí.
 
 #### Job 2 — `build` (matrix)
 - Solo si `new_release_published == 'true'`.
@@ -35,10 +35,10 @@ Config en raíz del repo: `.releaserc` (JSON). Branches y reglas de release ahí
   - **⚠️ `--omit=optional`** es para evitar compilar `canvas` (transitivo de `pdfjs-dist`) — falla porque no hay headers nativos en el runner. La app usa `@napi-rs/canvas` (prebuilt) que monkey-patchea CanvasFactory.
   - Esto históricamente excluía `pg` cuando estaba en `optionalDependencies` → bug "postgres package has not been found". Fix: `pg` debe estar en `dependencies` (PR #24, v1.1.1).
 - `npm run build:prod` (Angular + Electron TS).
-- `npx electron-builder --publish always` → empaqueta:
-  - **Windows:** NSIS installer `.exe` (`x64`, nombre `FRC-Gourmet-Setup-X.Y.Z.exe`)
-  - **Linux:** AppImage `.AppImage` (`x64`)
-  - **macOS:** no se buildea (target removido — ver branch `feat/drop-mac-target`)
+- `npx electron-builder --publish always` → empaqueta (config en `package.json:build`, no hay `electron-builder.json` separado):
+  - **Windows:** NSIS installer `.exe` (`x64`, `artifactName: FRC-Gourmet-Setup-${version}.${ext}` → `FRC-Gourmet-Setup-X.Y.Z.exe`)
+  - **Linux:** AppImage (`x64`, `artifactName: FRC-Gourmet-${version}-${arch}.${ext}` → `FRC-Gourmet-X.Y.Z-x64.AppImage`)
+  - **macOS:** no se buildea (`package.json:build` solo tiene targets `win` + `linux`)
 - Sube los artifacts + manifests (`latest.yml`, `alpha.yml`, `beta.yml`) al GitHub Release.
 
 ### Firma de código (SignPath, opcional)

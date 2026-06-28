@@ -1,4 +1,4 @@
-# Capítulo 10 — Qué falta en mobile (y se hace desde el escritorio)
+# Qué falta en mobile (y se hace desde el escritorio)
 
 La app mobile cubre las **tareas administrativas** del día a día. Otras funciones, más
 complejas o con efectos contables/operativos, **siguen en la app de escritorio**. Este
@@ -10,9 +10,11 @@ capítulo te dice claramente qué buscar en cada lado, para que no pierdas tiemp
 |---|---|
 | Consultar y mantener datos maestros (cargos, personas, funcionarios, clientes, usuarios, categorías, familias, adicionales) | ✅ **Mobile** |
 | Revisar vales, liquidaciones, comisiones, cajas, cuentas por cobrar, compras, proveedores, productos | ✅ **Mobile** (solo lectura) |
-| Vender (Punto de Venta, mesas, comandas, delivery, cobros) | 💻 Escritorio |
+| Tomar pedidos en mesas y comandas (mesero) | ✅ **Mobile** |
+| Operar la Caja Mayor (gastos, ingresos, ajustes, anular) | ✅ **Mobile** |
+| **Cobrar / cerrar** una venta (pago de la mesa o comanda) | 💻 Escritorio (caja / PdV) |
+| Delivery | 💻 Escritorio |
 | Cargar recetas, sabores y variaciones | 💻 Escritorio |
-| Operar la Caja Mayor (egresos, ingresos, anulaciones) | 💻 Escritorio |
 | Crear/editar monedas | 💻 Escritorio |
 | Registrar una compra nueva o importar facturas con IA | 💻 Escritorio |
 | Confirmar un vale, generar una liquidación, cambiar cargo/salario, cobrar/pagar | 💻 Escritorio |
@@ -20,21 +22,25 @@ capítulo te dice claramente qué buscar en cada lado, para que no pierdas tiemp
 
 ## Detalle de lo que NO está en mobile (todavía)
 
-### Punto de Venta (PdV)
+### Cobro / cierre de ventas y delivery
 
-Vender, manejar mesas, comandas, delivery y cobrar. Es la operación más sensible del
-sistema y se hace en la PC del local con la app de escritorio.
+En mobile el mesero **toma el pedido** (mesas y comandas), pero el **cobro y cierre** de la
+venta —elegir formas de pago, vuelto, facturación— se hacen en la **caja (PdV del
+escritorio)**. La **pre-cuenta** que imprime el mesero es solo informativa. El **delivery**
+también se maneja en el escritorio. Ver [Módulo Ventas — meseros](04-modulo-ventas-meseros.md).
 
 ### Recetas y Sabores
 
 La gestión de recetas, sabores y variaciones (como las pizzas multi-sabor) involucra
 varias pantallas relacionadas y queda en el escritorio. En mobile aparecen como **"pronto"**
-dentro de Productos.
+dentro de Productos. (Sí podés **vender** un producto con variaciones/sabores al tomar un
+pedido; lo que no está en mobile es **gestionar** las recetas y los sabores.)
 
-### Caja Mayor y Monedas
+### Monedas
 
-Los movimientos de la Caja Mayor (egresos, ingresos, anulaciones) y el alta de monedas se
-manejan en el escritorio. En Finanzas aparecen como **"pronto"**.
+El alta/edición de monedas se maneja en el escritorio. En Finanzas aparece como
+**"pronto"**. (La **Caja Mayor sí se opera desde mobile**: gastos, ingresos, ajustes y
+anulaciones; ver [Módulo Finanzas](05-modulo-finanzas.md).)
 
 ### Compras nuevas e Importación con IA
 

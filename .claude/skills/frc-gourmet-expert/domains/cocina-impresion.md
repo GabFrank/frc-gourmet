@@ -1,24 +1,28 @@
 # Dominio: Cocina e impresión térmica
 
-Sistema de impresoras configurables (epson / star / thermal genérica) con node-thermal-printer.
+Sistema de impresoras térmicas configurables (driver `epson` / `star`, default EPSON) con `node-thermal-printer`. Conexiones: network (TCP raw), lpr (LPD), usb/serial, bluetooth. Impresión de tickets estructurados (`TicketSpec`), comandas de cocina multi-sector, y KDS digital como alternativa.
 
 ## Entidad Printer
 
-`src/app/database/entities/printer.entity.ts`:
+`src/app/database/entities/printer.entity.ts` (tabla `printers`). Nombres reales de columnas (¡no `nombre`/`tipo`/`conexion`!):
 
 ```typescript
 {
-  nombre: string
-  tipo: 'epson' | 'star' | 'thermal'   // tipo de driver
-  conexion: 'network' | 'usb' | 'bluetooth'
-  address: string                       // IP, USB device path, MAC bluetooth
-  port?: int                            // 9100 default network
+  name: string
+  type: string                          // driver: 'epson' | 'star' (default EPSON si desconocido)
+  connectionType: string                // 'network' | 'usb' | 'serial' | 'bluetooth' | 'lpr'
+  address: string                       // IP, IP/QueueName (lpr), USB device path, MAC bluetooth
+  port?: int                            // 9100 default network / 515 default lpr
+  dpi?: int
+  width?: int                           // ancho físico en mm; printerWidthToChars() lo pasa a chars (58mm→32, 80mm→48)
   characterSet?: string                 // PC437_USA | PC850_MULTILINGUAL | etc.
-  width: int                            // chars (32 común, 48 wide)
   isDefault: boolean
-  activo
+  options?: text                        // JSON serializado
+  rol?: string                          // fallback global de rol: TICKET_VENTA | COMANDA | PRECUENTA | OFICINA | null
 }
 ```
+
+`rol` es un atajo de enrutamiento global (cuando NO se quiere configurar la M2M `SectorImpresora`): una impresora con `rol='TICKET_VENTA'` se usa para todos los tickets de venta del sistema. La M2M por sector sigue siendo el mecanismo principal. NO existe campo `activo`.
 
 ## Configuración por conexión
 
@@ -26,7 +30,7 @@ Sistema de impresoras configurables (epson / star / thermal genérica) con node-
 |---|---|---|
 | `network` | `IP` + campo `port` (default 9100) | TCP raw vía `node-thermal-printer` (`tcp://<IP>:<port>`) |
 | `lpr` | `IP/QueueName` + campo `port` (default 515) | Cliente LPR propio (RFC 1179) en `electron/utils/lpr.utils.ts`. Usa `node-thermal-printer` solo para armar el buffer ESC/POS en memoria, después envía vía LPR. Pensado para impresoras USB compartidas en otra PC Windows. |
-| `usb` | path device (`/dev/usb/lp0` Linux, `\\.\COM3` Windows). Si en macOS y address contiene `'ticket-'` → usa `lp` command (CUPS local) | `node-thermal-printer` con path directo |
+| `usb` / `serial` | path device (`/dev/usb/lp0` Linux, `\\.\COM3` Windows). Caso especial: si `connectionType==='usb'` y `address` empieza con `'ticket-'` → usa `lp -d <name>` (CUPS local) en vez de `node-thermal-printer` | `node-thermal-printer` con path directo |
 | `bluetooth` | `bt:<MAC>` | `node-thermal-printer` |
 
 ### LPR (RFC 1179) — impresora USB compartida en otra PC Windows
@@ -66,60 +70,96 @@ printf '\x02barra\n' | nc -w 3 <ip-windows> 515 | xxd
 
 ## Handlers
 
-`electron/handlers/printers.handler.ts` (129 líneas):
+### `electron/handlers/printers.handler.ts` (ABM de impresoras)
 - `get-printers`: lista todas
-- `add-printer`: crear (si `isDefault=true`, desactivar las anteriores con `Not(printerId)` en línea 60)
-- `update-printer`: editar
+- `add-printer`: crear (si `isDefault=true`, desactiva las demás). Permiso `IMPRESORAS_GESTIONAR`
+- `update-printer`: editar (usa `Not(printerId)` para no desmarcarse a sí misma al setear default)
 - `delete-printer`
 - `print-test-page(printerId)`: genera contenido de prueba y llama `printPosReceipt()` (utility)
 
+### `electron/handlers/documentos-tickets.handler.ts` (impresión de tickets — implementado)
+
+Cada handler `print-*` retorna `{ ok, printed: [...], errors: [...] }` y **nunca hace throw** (el caller decide si bloquea o muestra toast). Las funciones `printXxxInternal(...)` son reusables desde los hooks de auto-impresión (sin chequeo de permisos; esos viven en los wrappers IPC). Contenido vía `TicketSpec` estructurado + `printTicketSpec(printer, spec)` de `ticket.utils.ts`.
+
+- `print-comanda({ventaId, soloItemsNoImpresos?, sectorIdFilter?, forceReprint?})`: ticket de cocina multi-sector. La venta debe tener mesa o comanda.
+- `print-venta-ticket({ventaId, printerId?})`: comprobante de venta.
+- `print-precuenta({ventaId, printerId?})`: pre-cuenta (no fiscal).
+- `print-recibo-cobro-cuota-ticket`, `print-recibo-pago-cuota-ticket`, `print-retiro-caja-ticket`, `print-vale-ticket`, `print-pagare-cpc-ticket`, `print-etiqueta-delivery`, `print-acreditacion-pos-ticket`, `print-conteo-caja-ticket`.
+
+Resolución de impresora por rol (`getPrinterByRol`): 1) `printerId` explícito; 2) `dispositivoId` + rol TICKET_VENTA/PRECUENTA → `Dispositivo.printerTicket` (impresora local del PdV); 3) `sectorId` → M2M `SectorImpresora`; 4) fallback global `Printer.rol`; 5) `Printer.isDefault`.
+
+### Ruteo por sector (ABM)
+- `electron/handlers/producto-sectores.handler.ts`: `get-producto-sectores(productoId)`, `set-producto-sectores(productoId, sectorIds[])`.
+- `electron/handlers/sectores-impresoras.handler.ts`: `get-sectores-impresoras`, `get-sector-impresoras-by-sector(sectorId)`, `create-sector-impresora`, `update-sector-impresora`, `delete-sector-impresora`.
+
+### `electron/handlers/kds.handler.ts` (Kitchen Display System — implementado)
+- `get-kds-comandas({sectorIds?, estados?, incluirEntregados?})`: feed de items en preparación (filas planas por (ventaItem, sector); el front agrupa por venta en tickets).
+- `update-comanda-item-estado(id, nuevoEstado)`, `bump-comanda-item(id)` (avanza), `recall-comanda-item(id)` (retrocede). Flujo PENDIENTE → EN_PREPARACION → LISTO → ENTREGADO (o CANCELADO). Sella timestamps y emite evento (`broadcastComandaEvent`) para refrescar pantallas en vivo.
+- ABM de `KdsPantalla`: `get-kds-pantallas`, `get-kds-pantalla`, `create-kds-pantalla`, `update-kds-pantalla`, `delete-kds-pantalla`.
+- Estos handlers NO imprimen — solo mueven estado digital, reusando el ruteo por sector.
+
 ## Utility printer.utils.ts
 
-`electron/utils/printer.utils.ts:33-118` (`printPosReceipt(config, content)`):
+`electron/utils/printer.utils.ts` → `printPosReceipt(printer, content): Promise<boolean>` (usado por `print-test-page`; los tickets estructurados van por `printTicketSpec` de `ticket.utils.ts`). Devuelve boolean, **no hace throw**:
 
 ```typescript
-async function printPosReceipt(config, content) {
-  // 1. CUPS shortcut (macOS, address con 'ticket-')
-  if (Linux/macOS && address.contains('ticket-')) {
-    exec('lp -d <name> <tempFile>')
-    return
+async function printPosReceipt(printer, content): Promise<boolean> {
+  // 1. CUPS shortcut: connectionType==='usb' && address.startsWith('ticket-')
+  if (printer.connectionType === 'usb' && printer.address.startsWith('ticket-')) {
+    exec('lp -d <address> <tempFile>')   // funciona en cualquier OS con CUPS
+    return true
   }
 
-  // 2. Configurar ThermalPrinter según tipo
-  const printer = new ThermalPrinter({
-    type: PrinterTypes.EPSON | STAR,
-    interface: 'tcp://...' | 'printer:USB...' | 'bt:...',
-    width: config.width,
-    characterSet: PC437_USA | PC850_MULTILINGUAL | ...
+  // 2. Resolver interface según connectionType
+  //    network → tcp://<address>:<port||9100>
+  //    usb/serial → address (path directo)
+  //    bluetooth → bt:<address>
+  //    lpr → 'tcp://127.0.0.1:1' (dummy; el ThermalPrinter solo arma el buffer)
+  const thermalPrinter = new ThermalPrinter({
+    type: getPrinterType(printer.type),            // EPSON | STAR
+    interface: interfaceConfig,
+    width: printerWidthToChars(printer.width),     // mm físicos → chars (58→32, 80→48)
+    characterSet: getCharacterSet(printer.characterSet) ?? PC437_USA,
   });
 
-  // 3. Verificar conexión
-  isConnected = await printer.isPrinterConnected()
-  if (!isConnected) throw new Error('Impresora no conectada')
+  // 3. LPR: armar buffer ESC/POS y enviarlo por sendLprJob (NO usa execute())
+  if (printer.connectionType === 'lpr') {
+    thermalPrinter.alignCenter(); thermalPrinter.println(content);
+    thermalPrinter.cut(); thermalPrinter.beep();
+    const buffer = thermalPrinter.getBuffer();
+    return (await sendLprJob(buffer, { host, port||515, queue, ... })).ok
+  }
 
-  // 4. Imprimir
-  printer.alignCenter();
-  printer.println(content);
-  printer.cut();
-  printer.beep();
-  await printer.execute();
+  // 4. Resto: verificar conexión + imprimir
+  if (!await thermalPrinter.isPrinterConnected()) return false
+  thermalPrinter.alignCenter(); thermalPrinter.println(content);
+  thermalPrinter.cut(); thermalPrinter.beep();
+  await thermalPrinter.execute();
+  return true
 }
 ```
 
 ## Qué se imprime (estado actual)
 
-⚠️ **Implementación parcial**:
+| Documento | Estado | Handler / función |
+|---|---|---|
+| Test page | ✅ | `print-test-page` |
+| Ticket de venta | ✅ con auto-impresión al cobrar (`PdvConfig.autoImprimirTicketVenta`) | `print-venta-ticket` / `printVentaTicketInternal` |
+| Comanda de cocina | ✅ con auto-impresión al agregar items (`PdvConfig.autoImprimirComanda`), multi-sector + worker de retry | `print-comanda` / `printComandaInternal` |
+| Pre-cuenta | ✅ | `print-precuenta` |
+| Recibo cobro/pago de cuota (CPC/CPP) | ✅ | `print-recibo-cobro-cuota-ticket` / `print-recibo-pago-cuota-ticket` |
+| Retiro de caja | ✅ | `print-retiro-caja-ticket` |
+| Vale / adelanto funcionario | ✅ | `print-vale-ticket` |
+| Pagaré CPC (venta a crédito) | ✅ | `print-pagare-cpc-ticket` |
+| Etiqueta delivery | ✅ | `print-etiqueta-delivery` |
+| Acreditación POS | ✅ | `print-acreditacion-pos-ticket` |
+| Acta de conteo de caja | ✅ | `print-conteo-caja-ticket` |
+| Resumen completo de cierre de caja | ❌ TODO | — |
+| Recibo de liquidación RRHH | ❌ TODO (existe `comprobante_url` en LiquidacionSueldo) | — |
 
-| Documento | Estado |
-|---|---|
-| Test page | ✅ implementado (`printers.handler.ts`) |
-| Ticket de venta | ⚠️ partial (falta auto-impresión al cobrar) |
-| Comanda de cocina | ⚠️ partial |
-| Resumen de cierre de caja | ❌ TODO |
-| Pre-cuenta | ❌ TODO |
-| Recibo de liquidación RRHH | ❌ TODO (existe `comprobante_url` en LiquidacionSueldo) |
+## Estructura de un ticket de venta (ilustrativo)
 
-## Estructura de un ticket de venta (especificación)
+> Layout de referencia. La salida real la arma `printVentaTicketInternal` con `ticketHeaderEmpresa` (datos de empresa/timbrado desde BD) y columnas CANT/DESCRIPCION/TOTAL via `ticketColumns`. El título real es "COMPROBANTE DE VENTA" (o "PRE-CUENTA").
 
 ```
 ==============================
@@ -151,28 +191,23 @@ Vuelto:        600 PYG
 
 ## Estructura de una comanda de cocina
 
+Salida real de `printComandaInternal` (un ticket por impresora/sector). El encabezado de empresa lo arma `ticketHeaderEmpresa`:
+
 ```
-========================
-  COMANDA #C-007
-========================
-Mesa: 3
-Hora: 14:32
-Mozo: Juan Pérez
-========================
-
-* 1 Pizza Margherita
-   - SIN orégano
-   - + Extra queso
-
-* 1 Pizza Calabresa Mediana
-   - Mitad y mitad con Pepperoni
-   - Bien cocida
-
-* 2 Coca 500ml
-========================
+==============================
+** COMANDA - COCINA **
+   2026-05-05 14:32:10
+------------------------------
+MESA               3
+VENTA              #123
+------------------------------
+1  PIZZA MARGHERITA
+   SIN OREGANO / + EXTRA QUESO
+2  COCA 500ML
+==============================
 ```
 
-Idealmente se enrutaría a estación específica (cocina caliente, fría, parrilla, barra) según `Producto.estacion` (campo TODO).
+El enrutamiento a estación (cocina, barra, parrilla, etc.) es **100% por la M2M `producto_sectores`** (ver abajo), NO por un campo `Producto.estacion` (ese campo no existe). El flag `Producto.requiereComanda` decide si el item se imprime; mesa/comanda solo deciden SI imprimir, no DÓNDE.
 
 ## Documentación existente
 
@@ -182,17 +217,21 @@ Idealmente se enrutaría a estación específica (cocina caliente, fría, parril
 
 `thermal-printer-example.ts` (en root) — referencia / ejemplo histórico.
 
+## Implementado
+
+- [x] **Botón "Reimprimir comanda"** en el PdV (`pdv.component.ts:reimprimirComanda` → `api.callIpc('print-comanda', {ventaId, forceReprint:true})`). Menú en `pdv.component.html`.
+- [x] **Auto-impresión de comanda al agregar items** — `ventas.handler.ts:autoPrintComandaIfNeeded`, gate por `venta.mesa || venta.comanda` + `PdvConfig.autoImprimirComanda`. Routing por M2M `producto_sectores` → `sectores_impresoras` (rol COMANDA). Tracking en `venta_items.impreso`/`fecha_impresion`/`impresiones` (JSON log por sector) + worker de retry para items fallidos.
+- [x] **Auto-impresión de ticket al cobrar venta** — `updateVenta(CONCLUIDA)` dispara `printVentaTicketInternal` si `PdvConfig.autoImprimirTicketVenta`.
+- [x] **Pre-cuenta antes de cobrar** — `print-precuenta`.
+- [x] **Relación Producto → Sector(es) → Impresora(s)** — M2M `producto_sectores` + `sectores_impresoras` + flag `Producto.requiereComanda`. UI en `gestionar-producto` (multi-select) y `Configuración → Sectores e impresoras` (`sectores-impresoras-settings.component`).
+- [x] **KDS (Kitchen Display System)** — `kds.handler.ts` + entidad `KdsPantalla` + páginas en `src/app/pages/ventas/kds/`.
+- [x] **Conexión LPR seleccionable** en `printer-settings` (con port default 515 y texto de ayuda del formato `IP/recurso`).
+
 ## Pendientes (TODO)
 
-- [ ] **Botón "Reimprimir comanda"** en el PdV / detalle de venta. Llama a `print-comanda` con `{ventaId, forceReprint: true}` (o `{soloItemsNoImpresos: false}` para incluir solo no-impresos). Con badge visible si hay items con `impreso=false` después de un intento fallido — esos quedan a la espera de reimpresión manual (no se auto-reintentan al agregar el siguiente item, para evitar duplicados en cocina).
-- [ ] **Wizard de configuración LPR** (UI). Al crear/editar una impresora con `connectionType=lpr`, mostrar un diálogo con los pasos para configurar la PC Windows que tiene la impresora USB compartida: activar feature LPD, instalar driver Generic/Text Only, compartir con share name sin espacios, firewall TCP 515, **agregar ACE ANONYMOUS LOGON** (este paso es el más fácil de olvidar y deja LPDSVC rechazando todo). Incluir un botón "Probar conexión" que haga el handshake `\x02<queue>\n` antes de guardar, con mensaje de error específico (`código 1 → falta ACE ANONYMOUS LOGON`, `timeout → firewall/puerto`, etc.).
-- [ ] Auto-impresión al cobrar venta (handler `procesarStockVenta` ya se llama post-cobro; agregar `imprimirTicket(ventaId, printerId)`).
-- [x] Auto-impresión de comanda al agregar items — implementado en `ventas.handler.ts:autoPrintComandaIfNeeded` con gate por `venta.mesa || venta.comanda` + `PdvConfig.autoImprimirComanda`. Routing por M2M `producto_sectores` → `sectores_impresoras`. Tracking en `venta_items.impreso`/`fecha_impresion`/`impresiones` (JSON log por sector).
-- [x] Relación Producto → Sector(es) → Impresora(s) — M2M `producto_sectores` + `sectores_impresoras` + flag `Producto.requiereComanda`. UI en `gestionar-producto` (multi-select) y `Configuración → Sectores e impresoras`.
-- [ ] Templates ESC/POS por tipo de impresora.
-- [ ] Kitchen Display Screen (KDS) para alternativa digital.
+- [ ] **Wizard de configuración LPR** (UI guiada). Hoy LPR es solo una opción más del form. Falta el diálogo con los pasos para configurar la PC Windows: activar feature LPD, driver Generic/Text Only, compartir con share name sin espacios, firewall TCP 515, **agregar ACE ANONYMOUS LOGON** (paso más fácil de olvidar; sin él LPDSVC rechaza con código `\x01`). Y un botón "Probar conexión" que haga el handshake `\x02<queue>\n` antes de guardar.
+- [ ] Templates ESC/POS configurables por tipo de impresora.
 - [ ] Recibos de liquidación RRHH PDF (campo `comprobante_url` ya existe).
-- [ ] Resumen de cierre de caja imprimible.
-- [ ] Pre-cuenta antes de cobrar.
+- [ ] Resumen completo de cierre de caja imprimible (hoy existe `print-conteo-caja-ticket`, acta breve de conteo).
 
-`PrinterService` Angular en `src/app/services/printer.service.ts`. Componente `PrinterSettingsComponent` en `src/app/components/printer-settings/`.
+`PrinterService` Angular en `src/app/services/printer.service.ts`. Componente `PrinterSettingsComponent` en `src/app/components/printer-settings/`. Settings de ruteo en `src/app/components/sectores-impresoras-settings/`. Eventos de impresión en vivo: `src/app/services/printer-events.service.ts`.

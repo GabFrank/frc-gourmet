@@ -1,22 +1,21 @@
 # Migraciones TypeORM
 
-Esta carpeta contiene migraciones de schema versionadas. Reemplaza el modo `synchronize: true` para builds productivas.
+Esta carpeta contiene migraciones de schema versionadas. Desde F1.5 reemplazan por completo a `synchronize`.
 
 ## Modelo
 
 | Entorno | `synchronize` | Migraciones |
 |---|---|---|
-| Dev (no empaquetado) | **true** | No corren — sync hace todo |
-| Prod (empaquetado) | **false** | Corren al iniciar, después de backup |
-| Primer arranque prod (BD inexistente) | **true** (bootstrap) | Marcadas como aplicadas |
+| Cualquiera (dev / packaged / sqlite / postgres) | **false** | corren al iniciar (`runMigrations`), después del backup pre-migration |
 
 Tabla de tracking: `typeorm_migrations` (no `migrations` para evitar colisiones con cualquier entidad legacy).
+
+> ⚠️ Con `synchronize:false`, **toda** entity nueva o cambiada exige una migración. Sin migración la tabla/columna no existe en runtime.
 
 ## Cómo agregar una migración
 
 1. Hacer el cambio en la entity (`src/app/database/entities/.../foo.entity.ts`).
-2. **No** correr la app aún (en dev synchronize la aplicaría sin migración).
-3. Generar el archivo:
+2. Generar el archivo:
    ```bash
    npm run migration:generate -- src/app/database/migrations/AgregarCampoFooEnBar
    ```

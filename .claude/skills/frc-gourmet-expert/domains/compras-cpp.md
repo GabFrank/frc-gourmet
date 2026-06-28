@@ -151,13 +151,13 @@ CuentaPorPagarCuota {
 
 ## Flujo: finalizar-compra
 
-`compras.handler.ts:528-663`. Transacción atómica:
+`compras.handler.ts:527-663`. Transacción atómica:
 
 ```
 1. Validar: estado=ABIERTO, tiene detalles, tiene proveedor
 2. Para cada detalle:
    a. costoUB = costoUnitarioPresentacion / presentacionFactor (Presentacion.cantidad)
-   b. Costo promedio ponderado:
+   b. Costo promedio ponderado vía helper `aplicarCostoPromedioPonderado(qr, ...)` (se calcula ANTES de persistir el StockMovimiento, sino el denominador queda inflado):
       - si stockAnterior <= 0 o sin costo previo: nuevoCosto = costoUB
       - sino: (stockAnterior × costoAnterior + cantidadAgregada × costoUB) / (stockAnterior + cantidadAgregada)
       - Desactiva PrecioCosto previo (activo=false)
@@ -193,7 +193,7 @@ CuentaPorPagarCuota {
 
 Componente: `src/app/pages/financiero/caja-mayor/pagar-compras-dialog/`.
 
-1. Carga inicial: `getCuotasPendientesCompras({})` (handler en cuentas-por-pagar.handler.ts:675-743).
+1. Carga inicial: canal IPC `get-cuotas-pendientes-compras` (cuentas-por-pagar.handler.ts:701-771).
    - Filtra: cpp.tipo=COMPRA, estado IN (PENDIENTE, PARCIAL), cpp.estado=ACTIVO.
    - Enriquece: cppId, compraId, compraNumeroNota, compraFechaCompra, compraCredito, proveedorId, proveedorNombre, moneda, saldoPendiente.
    - Orden: proveedor ASC, fechaVencimiento ASC.
@@ -202,11 +202,11 @@ Componente: `src/app/pages/financiero/caja-mayor/pagar-compras-dialog/`.
    - Si CAJA_MAYOR: caja mayor abierta + moneda + forma pago (movimentaCaja=true).
    - Si CUENTA_BANCARIA: cuenta bancaria.
 4. Defaults sensatos: si solo 1 caja abierta, preselecciona; preselecciona moneda principal y forma de pago "EFECTIVO" o la primera con `movimentaCaja=true`.
-5. Confirmar → `pagarCuotasComprasLote(payload)`.
+5. Confirmar → canal IPC `pagar-cuotas-compras-lote` (payload: `{ pagos: [{cuotaId, monto, observacion?}], fuente, cajaMayorId?, monedaId?, formaPagoId?, cuentaBancariaId? }`).
 
 ### Handler: pagar-cuotas-compras-lote
 
-`cuentas-por-pagar.handler.ts:618-672`. Itera cuotas y llama `aplicarPagoCpoCuota()` (línea 86-200) **en una sola transacción**.
+`cuentas-por-pagar.handler.ts:643-698`. Itera cuotas y llama `aplicarPagoCpoCuota()` (línea 88-193) **en una sola transacción**.
 
 `aplicarPagoCpoCuota()`:
 - Valida cuota existe, no PAGADA/CANCELADA, monto > 0, monto ≤ saldo + 0.005 (tolerancia decimal).
@@ -215,14 +215,15 @@ Componente: `src/app/pages/financiero/caja-mayor/pagar-compras-dialog/`.
   - Si parcial: estado = PARCIAL.
 - CPP.montoPagado += monto. Si todas cuotas PAGADA: cpp.estado = PAGADO.
 - Si fuente=CAJA_MAYOR:
-  - Crear `CajaMayorMovimiento` tipo `EGRESO_CUOTA_COMPRA` (o `EGRESO_CUOTA_PRESTAMO` para PRESTAMO, o `EGRESO_CUOTA_PRESTAMO_FUNCIONARIO` para préstamo a func).
-  - `actualizarSaldoCajaMayor(qr, ..., EGRESO)` descuenta saldo.
+  - Crear `CajaMayorMovimiento` con `cuentaPorPagarCuotaId` y tipo según `cpp.tipo`: `EGRESO_CUOTA_COMPRA` (COMPRA/OTRO), `EGRESO_CUOTA_PRESTAMO` (PRESTAMO), o `INGRESO_COBRO_CUOTA_PRESTAMO_FUNCIONARIO` (PRESTAMO_FUNCIONARIO).
+  - Descuenta saldo vía `descontarSaldoCajaMayor` (o `sumarSaldoCajaMayor` si PRESTAMO_FUNCIONARIO, que es ingreso).
+- Si fuente=CUENTA_BANCARIA: resta `cuentaBancaria.saldo` (suma si PRESTAMO_FUNCIONARIO).
 
 ## Filtros default en lista
 
-**Lista CPP general** (`get-cuentas-por-pagar`): acepta `excluirContadoCompras: boolean`.
-- `true` (default UI): `LEFT JOIN compras ON ... WHERE cpp.compra_id IS NULL OR compra.credito = 1` — excluye CPP de tickets contado diarios.
-- Toggle UI permite ver con `false`.
+**Lista CPP general** (`get-cuentas-por-pagar`): acepta `excluirContadoCompras: boolean` (default `false` → lista todo).
+- Con `true`: `LEFT JOIN compras ... WHERE (cpp.compra_id IS NULL OR compra.credito = true OR cpp.estado = 'ACTIVO')` — oculta **solo** las compras al contado YA pagadas/canceladas (tickets diarios liquidados). Las contado **pendientes** (estado ACTIVO) son deuda real y siguen apareciendo, igual que las a crédito y las CPP sin compra (préstamos, etc.).
+- Otros filtros del handler: `estado`, `tipo`, `proveedorId`, `funcionarioId`, `soloPrestamosFuncionario`, `excluirPrestamosFuncionario`, paginación (`page`/`pageSize`).
 
 **Lista compras**: `creditoOptions` con default "Solo contado" (false). Toggle "Todos" o "Solo crédito".
 

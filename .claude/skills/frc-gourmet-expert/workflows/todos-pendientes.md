@@ -1,6 +1,6 @@
 # TODOs pendientes del proyecto
 
-Snapshot **2026-05-06**, **auditado 2026-06-08** contra el código. Verificar `git log` y memorias antes de afirmar que algo sigue pendiente.
+Snapshot **2026-05-06**, **auditado 2026-06-08**, **revisado 2026-06-28** (seguridad P0 + RecetaAdicional) contra el código. Verificar `git log` y memorias antes de afirmar que algo sigue pendiente.
 
 > 📌 **El orden de ataque está en `## Plan de implementación priorizado (P0→P5)` al final.** Lo de arriba es el catálogo detallado.
 
@@ -51,7 +51,7 @@ Snapshot **2026-05-06**, **auditado 2026-06-08** contra el código. Verificar `g
 - [ ] **Migrar `PdvCategoriaItem.imagen` (base64 → app://)** — hoy guarda base64 directo en BD (anti-patrón). Crear job de migración que: lee cada `imagen` que empieza con `data:image/...`, llama `save-file` con carpeta='producto-images' o nueva 'pdv-images', actualiza la columna con la URL devuelta, y opcionalmente elimina el data URL viejo (o deja la columna apuntando al archivo). Patrón: tab de "Mantenimiento BD" con botón "Migrar imágenes legacy".
 - [ ] **Backup/restore extender a carpetas userData** — el backup actual cubre solo la BD. Sumar `userData/{profile-images,producto-images,funcionario-documentos,factura-imports,adjuntos}` al ZIP de backup. Restore correspondiente.
 - [ ] Limpiar `.js` y `.js.map` del repo (deberían estar en `.gitignore`).
-- [ ] Eliminar entidad `RecetaAdicional` legacy (reemplazada por `RecetaAdicionalVinculacion`).
+- [x] Eliminar entidad `RecetaAdicional` legacy (verificado 2026-06-28: ya no existe el `.entity.ts` ni referencias; solo queda `RecetaAdicionalVinculacion`).
 - [ ] **Permisos OCR**: `COMPRAS_IMPORTAR_FACTURA` y `SISTEMA_CONFIGURAR_IA` están seedeados pero no se chequean en sidenav. Agregar `*ngIf="hasPermission(...)"` a las entradas correspondientes.
 - [ ] **Inferidor de presentación** (regex en `producto-inference.util.ts`) no detecta unidad cuando la descripción no incluye número/unidad explícita (ej "MANDIOCA" sin tamaño). Mejora futura: que el OCR sugiera unidad y cantidad por separado en el JSON.
 
@@ -172,8 +172,8 @@ Snapshot **2026-05-06**, **auditado 2026-06-08** contra el código. Verificar `g
 
 ## Seguridad (alta prioridad para producción)
 
-- [ ] **Hash de contraseñas con bcrypt/argon2**: actualmente texto plano.
-- [ ] **JWT secret en variable de entorno**: actualmente hardcoded `'frc-gourmet-secret-key'` en `auth.handler.ts:9`.
+- [x] **Hash de contraseñas con bcrypt** (HECHO, verificado 2026-06-28): `electron/utils/password.utils.ts` (`hashPassword`/`verifyPassword` con `bcryptjs`, 10 rounds) + migración one-shot `migrate-passwords.ts` que hashea los plaintext legacy al arranque. `verifyPassword` solo cae a comparación plaintext como fallback si el valor aún no fue hasheado.
+- [x] **JWT secret fuera del código** (HECHO, verificado 2026-06-28): `electron/utils/jwt-secret.utils.ts` (`getJwtSecret`) lee el secret de keytar (fallback a archivo local en userData) y lo genera si no existe. Ya NO está hardcodeado.
 - [x] **Validación de permisos en backend** (HECHO, auditado 2026-06-08): sweep `ensurePermission` en ~178 handlers IPC (memoria `project_todo_sweep_handlers_auth`).
 - [ ] **Idle timeout server-side**: hoy solo `last_activity_time` se actualiza, sin auto-logout.
 - [ ] **Refresh tokens** + invalidación.
@@ -204,11 +204,10 @@ Snapshot **2026-05-06**, **auditado 2026-06-08** contra el código. Verificar `g
 Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `project_roadmap_prioritizado`). Orden por urgencia × impacto × esfuerzo. Es una propuesta; el negocio puede reordenar. Ataca de arriba hacia abajo.
 
 ### P0 — Gating de producción (seguridad) 🔴
-Lo más urgente para un deploy real:
-- **Hash de contraseñas** (bcrypt/argon2) — hoy texto plano.
-- **JWT secret a variable de entorno** — hoy hardcoded en `auth.handler.ts`.
-- (2º orden: idle timeout server-side, bloqueo por intentos fallidos, refresh tokens.)
-- ✅ *Validación de permisos backend ya está hecha (no incluir).*
+- ✅ **Hash de contraseñas (bcrypt)** — HECHO (verificado 2026-06-28, `password.utils.ts`).
+- ✅ **JWT secret fuera del código** — HECHO (verificado 2026-06-28, `jwt-secret.utils.ts`, en keytar).
+- ✅ **Validación de permisos backend** — HECHO.
+- Restante (2º orden): idle timeout server-side, bloqueo por intentos fallidos, refresh tokens (existe `RefreshToken` entity + `password-recovery.handler.ts`; auditar cobertura real).
 
 ### P1 — Correctness / riesgo de datos
 - **Sweep fechas timezone-safe** (`parseLocalDate`) en handlers con columnas `date` — parcial, completar los restantes.

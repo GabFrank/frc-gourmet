@@ -1,6 +1,28 @@
 # Plan: DB externa + arquitectura cliente/servidor
 
-> **Estado:** Borrador — 2026-05-09. Pendiente revision y aprobacion antes de empezar.
+> **Estado (2026-06-28): IMPLEMENTADO en lo esencial.** Este documento se mantiene como
+> referencia de diseño; ya no es un borrador. Lo construido en `develop`:
+> - **DB externa (Fase 1):** driver dual SQLite/PostgreSQL configurable, `synchronize: false`
+>   con migraciones al arranque (driver-aware). ✅
+> - **Repository abstraido (Fase 2):** `repository.service.ts` es abstracto; existen
+>   `repository-ipc.service.ts` y `repository-http.service.ts` (este último, esqueleto). ✅
+> - **Modo servidor (Fase 3):** `electron/server/` con Fastify expone `/api/version`, `/api/health`,
+>   `/api/auth/login` + `/api/auth/refresh`, `/api/rpc` (vía `handlerRegistry`), `/api/files/:id`,
+>   SSE de KDS, y sirve la PWA mobile (`@fastify/static`). ✅
+> - **Modo cliente (Fase 4):** seleccionable en `app-settings.json` (`mode`); el cliente rutea por HTTP.
+>   En el desktop el ruteo se hace monkey-patcheando `ipcRenderer.invoke` en el preload (NO la clase
+>   `RepositoryHttpService`, que quedó como esqueleto). ✅
+> - **Foundations (Fase 0):** bcrypt + migración de passwords, refresh tokens. ✅
+> - **Mobile PWA (Fase 6):** implementada dentro del mismo repo (`projects/mobile`), no en repo separado
+>   como anticipaba el plan. Ver `docs/arquitectura/mobile-pwa-plan.md`.
+>
+> **Pendiente / parcial:** endurecer el JWT secret hardcodeado (`'frc-gourmet-secret-key'`),
+> mDNS auto-discovery, multi-tenant fields/audit (Fase 5), code signing Windows (SignPath, ver
+> `docs/RELEASE.md`).
+>
+> ---
+>
+> **Estado original:** Borrador — 2026-05-09.
 > **Alcance:** Permitir DB externa configurable (SQLite/PostgreSQL) Y modo cliente/servidor para multiples instancias en una misma sucursal (oficina + caja + futuros mobiles/tablets).
 
 ## 0. Decisiones arquitectonicas (lo que el dueño me pidio que decida)

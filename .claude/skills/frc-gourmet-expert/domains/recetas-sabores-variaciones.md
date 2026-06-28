@@ -32,12 +32,12 @@ Producto Pizza (tipo ELABORADO_CON_VARIACION)
 ```
 
 Cada combinación `(presentación, sabor)` es una `RecetaPresentacion` con:
-- Su propia `Receta` (ingredientes específicos)
 - Su propio nombre generado y SKU
-- Su propio costo calculado
-- Sus propios precios
+- Su propio costo calculado (cache `costo_calculado`)
+- Sus propios precios (`PrecioVenta` con `receta_presentacion_id`)
+- Una `Receta` asociada (FK `receta_id`)
 
-Flexibilidad total: pizza grande puede llevar más queso, otro tipo de masa, etc., independientemente de la mediana.
+⚠️ **Matiz importante (verificado en código)**: `RecetaPresentacion.receta` es `@ManyToOne` (NO OneToOne) y la creación automática (`generarVariacionesParaProducto` en `recetas.handler.ts`) hace que **todas las variaciones de un mismo sabor compartan la MISMA `Receta` base** (mismo `receta_id`). Es decir, al crear un sabor se crea **una** receta y se enlaza a cada presentación. Por lo tanto, "out of the box", la pizza grande y la mediana de un sabor comparten ingredientes salvo que el flujo cree/asigne recetas distintas por variación. La flexibilidad por (presentación, sabor) existe a nivel de modelo (cada `RecetaPresentacion` puede apuntar a una receta distinta), pero el alta automática no genera una receta por variación. (Marcado para revisión humana: confirmar si la UI de variaciones asigna recetas independientes al editarlas.)
 
 ## Entidades
 
@@ -46,28 +46,35 @@ Flexibilidad total: pizza grande puede llevar más queso, otro tipo de masa, etc
 `src/app/database/entities/productos/receta.entity.ts`:
 
 ```typescript
-@Entity('recetas')
+@Entity('receta')
 class Receta extends BaseModel {
   @Index() categoria?: string;       // 'PIZZA CALABRESA'
   subcategoria?: string;             // 'GRANDE', 'MEDIANA'
   nombre: string;
   descripcion?: string;
-  costoCalculado: decimal(10,2);     // CACHE — actualizado por recalcular-costo
+  costoCalculado: decimal(10,2);     // CACHE — actualizado por 'calcular-costo-receta'
   rendimiento: decimal(10,4);        // cantidad producida (default 1)
-  unidadRendimiento: string;         // 'UNIDADES', 'PORCIONES'
+  unidadRendimiento: string;         // 'UNIDADES', 'PORCIONES' (default 'UNIDADES')
+  unidadRendimientoOriginal?: string;
+  tiempoPreparo?: int;               // minutos
+  imageUrl?: string;                 // app://producto-images/<file>
   activo: boolean;
 
-  @OneToOne 'Producto' producto;     // legacy 1:1 (pre-refactor) — deprecated
+  @OneToOne 'Producto' producto;     // legacy 1:1 (pre-refactor) — deprecated, FK producto_id
   @OneToOne 'Adicional' adicional;   // si la receta es de un Adicional complejo
-  @OneToMany RecetaIngrediente[];
+  @OneToMany RecetaIngrediente[] ingredientes;
+  @OneToMany 'RecetaFase' fases;     // fases del modo de preparo (ordenadas)
+  @OneToMany 'RecetaMaterial' materiales; // materiales/utensilios
   @OneToMany PrecioVenta[];
   @OneToMany PrecioCosto[];
-  @ManyToMany 'Adicional' adicionales;  // disponibilidad general (tabla receta_adicional)
-  @OneToMany RecetaAdicionalVinculacion[]; // con precio personalizado por receta
-  @ManyToOne 'Producto' productoVariacion; // para ELABORADO_CON_VARIACION
-  @OneToOne 'RecetaPresentacion' variacion; // post-refactor: 1:1 con su variación
+  @ManyToMany 'Adicional' adicionalesDisponibles; // tabla receta_adicional
+  @OneToMany RecetaAdicionalVinculacion[] adicionalesVinculados; // con precio por receta
+  @ManyToOne 'Producto' productoVariacion; // ELABORADO_CON_VARIACION, FK producto_variacion_id
+  @OneToOne 'RecetaPresentacion' variacion; // relación inversa hacia su variación
 }
 ```
+
+(Entidades nuevas relacionadas: `RecetaFase` / `RecetaFaseIngrediente` para el modo de preparo por pasos, y `RecetaMaterial` para utensilios — ver archivos homónimos en `entities/productos/`.)
 
 ### RecetaIngrediente
 
@@ -75,9 +82,10 @@ class Receta extends BaseModel {
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `cantidad` | decimal(10,4) | Cantidad usada |
-| `unidad` | varchar(50) | GRAMOS, KILOGRAMOS, ML, LITROS, UNIDADES |
-| `unidadOriginal` | varchar(50) | Unidad que eligió el usuario (para conversión) |
+| `cantidad` | decimal(10,4), nullable | Cantidad usada |
+| `unidad` | varchar(50), nullable | GRAMOS, KILOGRAMOS, ML, LITROS, UNIDADES |
+| `descripcion` | text, nullable | Ítem solo-descripción sin ingrediente vinculado todavía (ej. "KIT DE CARNES"). Al menos uno de `ingrediente` o `descripcion` debe estar presente. No aporta costo. |
+| `unidadOriginal` | varchar(50), nullable | Unidad que eligió el usuario (para conversión) |
 | `costoUnitario` | decimal(10,2) | Calculado |
 | `costoTotal` | decimal(10,2) | `costoUnitario × cantidad` |
 | `esExtra` | boolean | Ingrediente adicional |
@@ -87,8 +95,8 @@ class Receta extends BaseModel {
 | `porcentajeAprovechamiento` | decimal(5,2), default 100 | Para mermas. **No afecta costo** actualmente — sólo se almacena. |
 | `esIngredienteBase` | boolean | Forma parte del sabor base |
 | `receta_id` | FK | |
-| `ingrediente_id` | FK | Producto tipo RETAIL_INGREDIENTE o ELABORADO_SIN_VARIACION |
-| `reemplazoDefault_id` | FK, nullable | Sustituto por defecto |
+| `ingrediente_id` | FK, **nullable** | Producto (RETAIL_INGREDIENTE o ELABORADO_SIN_VARIACION). Nullable: puede ser un ítem solo-descripción |
+| `reemplazoDefault_id` | FK, nullable (col `reemplazo_default_id`) | Sustituto por defecto |
 
 ### RecetaIngredienteIntercambiable
 
@@ -110,12 +118,14 @@ Campos: `receta_ingrediente_id`, `ingrediente_opcion_id` (Producto), `costoExtra
 `sabor.entity.ts`:
 
 ```typescript
+@Entity('sabor')
 class Sabor extends BaseModel {
-  nombre: string;        // 'Calabresa', 'Pepperoni'
-  categoria: string;     // 'PIZZA', 'HAMBURGUESA'
+  nombre: string;        // 'CALABRESA', 'PEPPERONI'
+  categoria: string;     // 'PIZZA', 'HAMBURGUESA' (NOT nullable)
   descripcion?: string;
   activo: boolean;
-  producto_id: FK;       // Solo ELABORADO_CON_VARIACION
+  imageUrl?: string;     // app://producto-images/<file>
+  producto_id: FK;       // NOT nullable. Solo ELABORADO_CON_VARIACION
 }
 ```
 
@@ -126,25 +136,27 @@ class Sabor extends BaseModel {
 `receta-presentacion.entity.ts`:
 
 ```typescript
-@Entity('recetas_presentaciones')
+@Entity('receta_presentacion')
 @Index(['presentacion', 'sabor'], { unique: true })
 class RecetaPresentacion extends BaseModel {
   nombre_generado: string;          // 'PIZZA GRANDE CALABRESA'
-  sku: string, nullable, unique;    // 'PIZ-CAL-G'
-  precio_ajuste: decimal(10,2), nullable;
-  costo_calculado: decimal(10,2);   // CACHE
+  sku?: string;                     // nullable, unique. 'PIZ-CAL-G'
+  precio_ajuste?: decimal(10,2);    // ajuste al precio base
+  costo_calculado: decimal(10,2);   // CACHE (default 0)
   activo: boolean;
 
-  @OneToOne 'Receta', { eager: true, cascade: true } receta;  // ← eager + cascade
-  @ManyToOne 'Presentacion' presentacion;
-  @ManyToOne 'Sabor' sabor;
-  @OneToMany 'PrecioVenta' precios;
+  @ManyToOne 'Receta', { nullable: false, eager: true } receta;  // FK receta_id, eager (SIN cascade)
+  @ManyToOne 'Presentacion' presentacion;  // FK presentacion_id, nullable:false
+  @ManyToOne 'Sabor' sabor;                // FK sabor_id, nullable:false
+  @OneToMany 'PrecioVenta' preciosVenta;
 }
 ```
 
+**`@ManyToOne` (NO OneToOne)**: varias variaciones pueden compartir la misma `Receta` base (de hecho, el alta automática las comparte por sabor — ver más abajo).
+
 **`eager: true`** carga la receta automáticamente cada vez que cargás `RecetaPresentacion`. **Costoso** si hay muchas variaciones — considerar lazy en performance hot paths.
 
-**`cascade: true`**: borrar la variación borra su receta.
+⚠️ **No hay `cascade`**: borrar la variación NO borra automáticamente su receta. El borrado se maneja manualmente en el handler (`delete-sabor` borra primero las `RecetaPresentacion` y luego las recetas deduplicadas + sus ingredientes).
 
 ### Adicional
 
@@ -194,7 +206,7 @@ Adicional: "Extra Queso"
 
 ## Algoritmo: cálculo de costo de receta
 
-`recetas.handler.ts:24-207` (`recalcular-costo-receta`):
+Canal IPC `calcular-costo-receta` (`recetas.handler.ts`, ~línea 588) → función interna `calcularCostoReceta` (~líneas 30-223). También existe `actualizar-costo-receta`, `calcular-costo-ingrediente`, `recalcular-costo-variacion`, `recalculate-all-recipe-costs`:
 
 ```
 calcularCostoReceta(recetaId):
@@ -218,7 +230,7 @@ calcularCostoReceta(recetaId):
     cantidadNormalizada = convertir(cantidad, unidadOriginal → unidad)
     costoIngrediente = costoUnitario × cantidadNormalizada
     
-    // Paso 3: porcentajeAprovechamiento NO afecta costo (línea 137-138)
+    // Paso 3: porcentajeAprovechamiento NO afecta costo (solo se almacena)
     
     ingrediente.costoUnitario = costoUnitario
     ingrediente.costoTotal = costoIngrediente
@@ -245,22 +257,22 @@ calcularCostoReceta(recetaId):
 
 ## Algoritmo: generación automática de variaciones
 
-Cuando se crea un Sabor nuevo en `producto-sabores.component`:
+Cuando se crea un Sabor nuevo (desde `producto-sabores.component`):
 
-1. `create-sabor` (sabores.handler.ts:38) crea el `Sabor` vinculado al producto.
-2. Crea una `Receta` para ese sabor (con ingredientes copiados de un sabor base si aplica).
-3. Por cada `Presentacion` activa del producto: crea un `RecetaPresentacion` con:
-   - `nombre_generado = generarNombreVariacion(receta.nombre, presentacion.nombre, sabor.nombre)` → "PIZZA GRANDE CALABRESA"
-   - `sku = generarSKU(receta.nombre, sabor.nombre, presentacion.nombre)` → "PIZ-CAL-G"
-   - `receta_id` apuntando a la receta del sabor.
+1. `create-sabor` (**`recetas.handler.ts`, ~línea 1527**, NO sabores.handler.ts) crea el `Sabor` vinculado al producto (todo en una transacción con `ensurePermission('SABORES_GESTIONAR')`).
+2. Crea **una sola** `Receta` base para ese sabor (`<producto> <sabor>`, rendimiento 1, costo 0). El alta NO copia ingredientes de otro sabor.
+3. Llama `generarVariacionesParaProducto`: por cada `Presentacion` del producto crea un `RecetaPresentacion` (si no existe ya para esa presentación+sabor) con:
+   - `nombre_generado = generarNombreVariacion(producto.nombre, presentacion.nombre, producto.nombre)`
+   - `sku = generarSKU(producto.nombre, producto.nombre, presentacion.nombre)`
+   - `receta_id` = **la misma** receta base creada en el paso 2 (todas las variaciones del sabor comparten esa receta).
 
-Función helper: `receta-presentacion.handler.ts:108-118` (`generarNombreVariacion`, `generarSKU`).
+Funciones helper: `generarVariacionesParaProducto`, `generarNombreVariacion`, `generarSKU` viven en **`recetas.handler.ts`** (~líneas 226-280), NO en `receta-presentacion.handler.ts`.
 
-## ⚠️ Trampa: handlers en `recetas.handler.ts`, NO en `receta-presentacion.handler.ts`
+## ⚠️ Trampa: handlers en `recetas.handler.ts`, NO en `receta-presentacion.handler.ts` ni `sabores.handler.ts`
 
-`receta-presentacion.handler.ts` existe (556 líneas) pero **NUNCA se registra en main.ts**. Los handlers de variaciones que sí se usan están dentro de `recetas.handler.ts` (que se registra como `registerRecetasHandlers`). (`project_atajos_sistema`)
+Tanto `receta-presentacion.handler.ts` (556 líneas) como `sabores.handler.ts` (437 líneas) existen pero **NUNCA se registran en main.ts**. Los handlers de recetas + sabores + variaciones que sí se usan están todos dentro de `recetas.handler.ts` (registrado como `registerRecetasHandlers`, con el comentario "Recetas + Sabores + Variaciones (unificado)"). (`project_atajos_sistema`)
 
-Si encontrás un canal IPC que dice no existir, chequear ambos archivos.
+Si encontrás un canal IPC que dice no existir, chequear `recetas.handler.ts` primero (es el único de estos tres que se registra).
 
 ## Servicios Angular
 

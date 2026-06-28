@@ -110,6 +110,8 @@ Movimientos:
 
 ⚠️ **UI de movimientos manuales: parcialmente implementada**. Los movimientos automáticos sí funcionan.
 
+> También existe una vista global de movimientos en **Menu → Productos → Movimientos de Stock**, y un listado de insumos en **Menu → Productos → Ingredientes**.
+
 ### Tab 7: Receta (solo ELABORADO_*)
 
 → Ver capítulo 5.
@@ -138,7 +140,7 @@ Ejemplo: "Combo Familiar":
 Vincular observaciones predefinidas:
 - "SIN GLUTEN", "CONTIENE FRUTOS SECOS", "VEGETARIANO", etc.
 
-Catálogo en **Menu → Productos → Observaciones** (TODO: UI parcial).
+El catálogo de observaciones se gestiona desde el editor del producto (no hay un ítem de menú independiente todavía — UI parcial).
 
 ### Tab 11: Resumen
 
