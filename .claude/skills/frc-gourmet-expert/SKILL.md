@@ -75,7 +75,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | TODOs pendientes del proyecto | [workflows/todos-pendientes.md](workflows/todos-pendientes.md) |
 | Árbol completo del sidenav | [reference/menu-sidenav-tree.md](reference/menu-sidenav-tree.md) |
 | Lista de handlers IPC con responsabilidades | [reference/handlers-index.md](reference/handlers-index.md) |
-| Índice de las ~170 entidades por dominio | [reference/entities-index.md](reference/entities-index.md) |
+| Índice de las 157 entidades por dominio | [reference/entities-index.md](reference/entities-index.md) |
 | Catálogo de enums clave | [reference/enums-index.md](reference/enums-index.md) |
 | Bugs conocidos sin resolver | [reference/known-bugs.md](reference/known-bugs.md) |
 

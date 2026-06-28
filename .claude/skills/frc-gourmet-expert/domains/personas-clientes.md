@@ -226,12 +226,15 @@ Header del dialog tiene autocomplete de Cliente + botón "Nuevo cliente" (reusa 
 - `permissions.handler.ts` (~313 líneas): Permission CRUD, RolePermission CRUD, get-permissions-by-user, seed-permissions.
 - `dashboard-shortcuts.handler.ts` (~78 líneas): get/create/update/delete dashboard shortcuts.
 
+## Estado de seguridad (ya implementado)
+
+- **Hash de passwords con bcrypt** (`electron/utils/password.utils.ts`); migración automática de legacy plaintext → bcrypt al arranque (`migrate-passwords.ts`). Flujo `mustChangePassword` (P0-3) fuerza el cambio del admin seedeado.
+- **JWT secret en keytar** (`jwt-secret.utils.ts`), no hardcodeado.
+- **Validación de permisos en backend** (`ensurePermission`/`checkPermission` en handlers), además del frontend (`*appHasPermission`).
+
 ## Pendientes
 
-- Hash de passwords (bcrypt). Hoy se guardan en texto plano; ya existe el flujo `mustChangePassword` (P0-3) que fuerza el cambio post-login del admin seedeado, pero no hay hashing aún.
-- JWT secret en env.
-- Validación de permisos en handlers (no solo frontend).
-- Recuperación contraseña, bloqueo cuenta, MFA.
+- Bloqueo de cuenta tras N intentos, MFA.
 - Crear Persona inline desde dialogs (botón "+" junto al select).
 
 → [workflows/todos-pendientes.md](../workflows/todos-pendientes.md) sección Seguridad.

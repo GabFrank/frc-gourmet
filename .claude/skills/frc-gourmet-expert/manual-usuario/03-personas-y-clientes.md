@@ -45,7 +45,7 @@ Para que alguien pueda iniciar sesión:
 Campos:
 - **Persona**: seleccionar de la lista (debe existir antes).
 - **Nickname**: único, sin espacios. Ej: `juan`, `maria.gomez`. Es lo que escribirá al loguearse.
-- **Contraseña**: ⚠️ **se guarda en texto plano** en esta versión. Asignar contraseñas robustas.
+- **Contraseña**: se guarda cifrada (hash bcrypt). Aun así, asigná contraseñas robustas; el usuario podrá cambiarla luego y el admin inicial debe cambiarla en el primer ingreso.
 - **Activo**: ✅ por default.
 
 Click en **Guardar**.
