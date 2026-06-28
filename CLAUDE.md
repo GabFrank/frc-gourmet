@@ -34,9 +34,16 @@ Handler registration happens in `main.ts` after DB initialization. Each handler 
 
 ### Database
 
-- SQLite with TypeORM, `synchronize: true` (auto-creates tables, no migrations in dev)
-- DB file stored at Electron's `userData` path as `frc-gourmet.db`
-- Entity config: `src/app/database/database.config.ts` — all entities must be imported and listed here
+- TypeORM with **dual driver**: SQLite (default; file at Electron's `userData` path as `frc-gourmet.db`) or Postgres (client/server mode).
+- **`synchronize: false`** — the schema is managed **exclusively by migrations**, which run automatically at startup (`runMigrations`). There is NO auto-DDL. Adding or changing an entity REQUIRES a migration; without one the table/column won't exist at runtime.
+- Entity config: `src/app/database/database.config.ts` — every entity must be imported and added to `getEntitiesList()`, and every migration imported and added to `getMigrations()`.
+
+#### Migrations
+
+- One file per change in `src/app/database/migrations/`, named **`<epoch-millis>-<Descripcion>.ts`** with class `Descripcion<epoch-millis>` (e.g. `1782606189440-AddNotificaciones.ts`).
+- **Timestamp = real epoch milliseconds** — get it with `date +%s%3N` (or let `npm run migration:generate` assign it). **NEVER hand-pick a rounded number** (e.g. `1780500000000`): rounded timestamps collide across unmerged branches; a real-ms value is unique and orders correctly. Older migrations use rounded numbers — do not imitate them.
+- Must be **driver-aware** (branch on `queryRunner.connection.options.type === 'postgres'`) and **additive** (no `DROP`/`RENAME` without a 2-version strategy). Prefer `IF NOT EXISTS`.
+- Register the class in `getMigrations()` (`database.config.ts`). Edit `.ts` only (`.js` are generated). Never modify an already-merged migration — add a new one. Full guide: `docs/MIGRATIONS.md`.
 
 ### Frontend Structure
 
