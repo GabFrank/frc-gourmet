@@ -215,6 +215,7 @@ import { AddCuentaBancariaToPagosCobros1779700000000 } from './migrations/177970
 import { AddCotizacionBancariaToPagosCobros1779800000000 } from './migrations/1779800000000-AddCotizacionBancariaToPagosCobros';
 import { AddKdsToComandaItem1780000000000 } from './migrations/1780000000000-AddKdsToComandaItem';
 import { AddKdsPantalla1780100000000 } from './migrations/1780100000000-AddKdsPantalla';
+import { AddNotificaciones1782606189440 } from './migrations/1782606189440-AddNotificaciones';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -524,6 +525,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddCotizacionBancariaToPagosCobros1779800000000,
     AddKdsToComandaItem1780000000000,
     AddKdsPantalla1780100000000,
+    AddNotificaciones1782606189440,
   ];
 }
 
