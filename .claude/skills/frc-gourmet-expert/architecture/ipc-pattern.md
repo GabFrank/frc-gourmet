@@ -131,7 +131,7 @@ registerXxxHandlers(dataSource, getCurrentUser);
 
 ### 3. Preload (contextBridge)
 
-**Ubicación:** `preload.ts` (~3.700 líneas, compila a `preload.js` ~98 KB).
+**Ubicación:** `preload.ts` (~3.800 líneas), compila a `preload.js`.
 
 ```typescript
 // preload.ts

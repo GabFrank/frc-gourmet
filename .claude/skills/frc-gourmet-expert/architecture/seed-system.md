@@ -41,13 +41,13 @@ Agregar un permiso nuevo = añadirlo al array `SEED_PERMISOS`. Al siguiente arra
 
 ### 3. `seedConfiguracionRrhh` — parámetros legales PY
 
-`electron/handlers/configuracion-rrhh.handler.ts:41`. 17 claves: IPS (9% / 16.5%), salario mínimo PYG (referencia 2026, actualizar c/año), días de vacaciones por antigüedad, indemnización (15 días/año, mín 90), recargos HE (50% diurna / 100% nocturna+feriado), tolerancia/penalización tardanza, día de cierre mensual.
+`seedConfiguracionRrhh` en `electron/handlers/configuracion-rrhh.handler.ts`. 17 claves: IPS (9% / 16.5%), salario mínimo PYG (referencia 2026, actualizar c/año), días de vacaciones por antigüedad, indemnización (15 días/año, mín 90), recargos HE (50% diurna / 100% nocturna+feriado), tolerancia/penalización tardanza, día de cierre mensual.
 
 Idempotente por `clave`.
 
 ### 4. `seedLiquidacionConceptos` — conceptos de liquidación
 
-`electron/handlers/liquidacion-sueldo.handler.ts:43`. 10 conceptos auto-calculados: SALARIO_BASE, IPS_DESCUENTO, ADELANTO_DESCUENTO, VALE_DESCUENTO, HORA_EXTRA, PENALIZACION, BONO_MANUAL, AGUINALDO, COMISION, PRESTAMO_CUOTA.
+`seedLiquidacionConceptos` en `electron/handlers/liquidacion-sueldo.handler.ts`. 10 conceptos auto-calculados: SALARIO_BASE, IPS_DESCUENTO, ADELANTO_DESCUENTO, VALE_DESCUENTO, HORA_EXTRA, PENALIZACION, BONO_MANUAL, AGUINALDO, COMISION, PRESTAMO_CUOTA.
 
 Idempotente por `codigo`.
 

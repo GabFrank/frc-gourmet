@@ -61,7 +61,9 @@ frc-gourmet/
 │       ├── database/
 │       │   ├── database.config.ts # DataSourceOptions con TODAS las entidades
 │       │   ├── database.service.ts# Singleton wrapper de DataSource
-│       │   ├── repository.service.ts # ~3700 líneas. Wrapper de window.api
+│       │   ├── repository.service.ts # Clase abstracta canónica (~870 líneas)
+│       │   ├── repository-ipc.service.ts # Impl IPC sobre window.api (~3900 líneas)
+│       │   ├── repository-http.service.ts # Impl HTTP (skeleton, no usado)
 │       │   └── entities/
 │       │       ├── base.entity.ts # BaseModel (id, createdAt, updatedAt, createdBy, updatedBy)
 │       │       ├── auth/

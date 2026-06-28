@@ -180,4 +180,4 @@ Hay índices puntuales (no exhaustivo):
 
 ## Recalcular saldos de Caja Mayor
 
-`recalcular-saldos` (caja-mayor.handler.ts:121) es el **safety net**: borra todos los `CajaMayorSaldo` y los reconstruye sumando todos los `CajaMayorMovimiento` activos. Útil cuando se sospecha desincronización (ej: tras un cambio manual en BD o un bug en una transacción no atómica).
+`recalcular-saldos` (`caja-mayor.handler.ts`) es el **safety net**: borra todos los `CajaMayorSaldo` y los reconstruye sumando todos los `CajaMayorMovimiento` activos. Útil cuando se sospecha desincronización (ej: tras un cambio manual en BD o un bug en una transacción no atómica).
