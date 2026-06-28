@@ -32,6 +32,7 @@ import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Cliente } from '../../../database/entities/personas/cliente.entity';
 import { CreateEditClienteDialogComponent } from '../../../pages/personas/clientes/create-edit-cliente-dialog/create-edit-cliente-dialog.component';
+import { FacturarDialogComponent } from '../../../pages/facturacion/facturas/facturar-dialog/facturar-dialog.component';
 
 export interface CobrarVentaDialogData {
   venta: Venta;
@@ -966,6 +967,31 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
           error: (e) => console.error('Error procesando stock (no-blocking):', e),
         });
         this.dialogRef.close({ success: true, credito: true, ventaId: result.ventaId, cpcId: result.cpcId });
+      }
+    });
+  }
+
+  /**
+   * Abre el dialogo de emision de factura precargado con el cliente y los
+   * items del cobro. El usuario puede ajustar/vincular productos y emitir.
+   */
+  facturar(): void {
+    const ref = this.dialog.open(FacturarDialogComponent, {
+      width: '1000px',
+      maxWidth: '95vw',
+      maxHeight: '92vh',
+      disableClose: true,
+      data: {
+        venta: this.data.venta,
+        items: this.activeItems,
+        cliente: this.selectedCliente,
+        moneda: this.data.principalMoneda,
+        total: this.totalPrincipal,
+      },
+    });
+    ref.afterClosed().subscribe((result) => {
+      if (result?.factura?.numeroCompleto) {
+        this.snackBar.open(`Factura ${result.factura.numeroCompleto} emitida`, 'Cerrar', { duration: 3500 });
       }
     });
   }

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -6,9 +6,10 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '../../../../database/repository.service';
 import { TimbradoDetalle } from '../../../../database/entities/facturacion/timbrado-detalle.entity';
@@ -27,6 +28,7 @@ import { buildDocDefinition, loadPdfMake, FacturaRenderContext } from '../../pla
     MatInputModule,
     MatFormFieldModule,
     MatSelectModule,
+    MatAutocompleteModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatDialogModule,
@@ -62,11 +64,17 @@ export class FacturarDialogComponent implements OnInit {
   /** Proximo numero a emitir del punto de expedicion seleccionado. */
   proximoNumero: number | null = null;
 
+  /** Venta de origen (si se factura desde el cobro del PdV). */
+  prefillVentaId?: number;
+  /** Resultados del buscador de productos (autocomplete por item). */
+  productoOptions: any[] = [];
+
   constructor(
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
     private snackBar: MatSnackBar,
     private dialogRef: MatDialogRef<FacturarDialogComponent>,
+    @Optional() @Inject(MAT_DIALOG_DATA) private data?: any,
   ) {
     this.form = this.fb.group({
       timbradoDetalleId: [null, [Validators.required]],
@@ -84,9 +92,51 @@ export class FacturarDialogComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    // Prefill desde el cobro del PdV (venta + items + cliente).
+    if (this.data && (this.data.items?.length || this.data.venta || this.data.cliente)) {
+      this.prefillFromData();
+    } else {
+      this.addItem();
+    }
     this.loadRefs();
-    this.addItem();
+    this.recalc();
     this.form.valueChanges.subscribe(() => this.recalc());
+  }
+
+  private prefillFromData(): void {
+    const d = this.data || {};
+    this.prefillVentaId = d.venta?.id;
+    const cliente = d.cliente || d.venta?.cliente;
+    if (cliente) {
+      const per = cliente.persona;
+      const nombre = `${per?.nombre || ''} ${per?.apellido || ''}`.trim() || cliente.razon_social || '';
+      this.form.patchValue({
+        nombreCliente: nombre,
+        ruc: cliente.ruc || '',
+        direccion: per?.direccion || '',
+        email: per?.email || '',
+      });
+    }
+    const items: any[] = d.items || [];
+    if (items.length) {
+      this.itemsArray.clear();
+      for (const it of items) {
+        const prod = it.producto;
+        const pres = it.presentacion;
+        const desc = `${prod?.nombre || it.descripcion || ''}${pres?.nombre ? ' (' + pres.nombre + ')' : ''}`.trim();
+        this.addItem({
+          descripcion: desc.toUpperCase(),
+          cantidad: Number(it.cantidad) || 1,
+          precioUnitario: Number(it.precioVentaUnitario ?? it.precioUnitario) || 0,
+          ivaTipo: prod?.iva ?? 10,
+          productoId: prod?.id ?? null,
+          productoNombre: prod?.nombre ?? '',
+          ventaItemId: it.id ?? null,
+        });
+      }
+    } else {
+      this.addItem();
+    }
   }
 
   async loadRefs(): Promise<void> {
@@ -146,17 +196,46 @@ export class FacturarDialogComponent implements OnInit {
     }
   }
 
-  addItem(): void {
+  addItem(init?: any): void {
     this.itemsArray.push(this.fb.group({
-      descripcion: ['', [Validators.required]],
-      cantidad: [1, [Validators.required, Validators.min(0.001)]],
-      precioUnitario: [0, [Validators.required, Validators.min(0)]],
-      ivaTipo: [10],
+      descripcion: [init?.descripcion ?? '', [Validators.required]],
+      cantidad: [init?.cantidad ?? 1, [Validators.required, Validators.min(0.001)]],
+      precioUnitario: [init?.precioUnitario ?? 0, [Validators.required, Validators.min(0)]],
+      ivaTipo: [init?.ivaTipo ?? 10],
+      productoId: [init?.productoId ?? null],
+      productoNombre: [init?.productoNombre ?? ''],
+      ventaItemId: [init?.ventaItemId ?? null],
     }));
   }
 
   removeItem(i: number): void {
     this.itemsArray.removeAt(i);
+    this.recalc();
+  }
+
+  /** Busca productos para vincular a un item (autocomplete). */
+  async buscarProducto(term: string): Promise<void> {
+    const t = (term || '').trim();
+    if (t.length < 2) { this.productoOptions = []; return; }
+    try {
+      this.productoOptions = await firstValueFrom(this.repositoryService.searchProductosByNombre(t, 'venta')) as any[];
+    } catch (error) {
+      console.error('Error buscando productos:', error);
+      this.productoOptions = [];
+    }
+  }
+
+  /** Vincula el producto elegido al item: completa descripcion, precio e IVA. */
+  onProductoSelected(i: number, prod: any): void {
+    const grp = this.itemsArray.at(i);
+    if (!grp || !prod) return;
+    grp.patchValue({
+      productoId: prod.id,
+      productoNombre: prod.nombre,
+      descripcion: String(prod.nombre || '').toUpperCase(),
+      precioUnitario: Number(prod.principalPrecio?.valor) || grp.value.precioUnitario || 0,
+      ivaTipo: prod.iva ?? 10,
+    });
     this.recalc();
   }
 
@@ -235,17 +314,21 @@ export class FacturarDialogComponent implements OnInit {
 
     const itemsPayload = this.itemsArray.controls.map((c) => {
       const it = c.value;
-      return {
+      const payload: any = {
         descripcion: String(it.descripcion || '').toUpperCase(),
         cantidad: Number(it.cantidad) || 0,
         precioUnitario: Number(it.precioUnitario) || 0,
         ivaTipo: Number(it.ivaTipo),
         total: (Number(it.cantidad) || 0) * (Number(it.precioUnitario) || 0),
       };
+      if (it.productoId) payload.producto = { id: it.productoId };
+      if (it.ventaItemId) payload.ventaItem = { id: it.ventaItemId };
+      return payload;
     });
 
     const facturaPayload: any = {
       timbradoDetalleId: v.timbradoDetalleId,
+      venta: this.prefillVentaId ? { id: this.prefillVentaId } : undefined,
       // En pre-impreso editable, se registra el numero tipeado de la hoja fisica.
       numeroManual: this.permitirEditarNumero && v.numeroManual != null ? Number(v.numeroManual) : undefined,
       plantilla: plantilla ? { id: plantilla.id } : undefined,
@@ -273,7 +356,7 @@ export class FacturarDialogComponent implements OnInit {
       if (plantilla?.config) {
         await this.imprimir(plantilla, factura);
       }
-      this.dialogRef.close(true);
+      this.dialogRef.close({ factura });
     } catch (error: any) {
       console.error('Error facturando:', error);
       this.snackBar.open(error?.message || 'Error al emitir la factura', 'Cerrar', { duration: 5000 });

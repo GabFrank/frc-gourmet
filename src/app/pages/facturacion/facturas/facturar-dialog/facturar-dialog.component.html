@@ -63,6 +63,18 @@
     <div formArrayName="items" class="items">
       <div class="item-row" *ngFor="let item of itemsArray.controls; let i = index" [formGroupName]="i">
         <mat-form-field appearance="outline" class="grow">
+          <mat-label>Producto (opcional)</mat-label>
+          <input matInput formControlName="productoNombre" [matAutocomplete]="auto" #prodInput
+                 (input)="buscarProducto(prodInput.value)" placeholder="Buscar para vincular IVA y precio" />
+          <mat-autocomplete #auto="matAutocomplete">
+            <mat-option *ngFor="let p of productoOptions" [value]="p.nombre"
+                        (onSelectionChange)="$event.isUserInput && onProductoSelected(i, p)">
+              {{ p.nombre }}
+              <span *ngIf="p.principalPrecio"> — {{ p.principalPrecio.valor | number:'1.0-2' }} (IVA {{ p.iva }})</span>
+            </mat-option>
+          </mat-autocomplete>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="grow">
           <mat-label>Descripción</mat-label>
           <input matInput formControlName="descripcion" />
         </mat-form-field>
