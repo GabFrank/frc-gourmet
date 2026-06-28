@@ -5,6 +5,7 @@ import { TimbradoDetalle } from '../../src/app/database/entities/facturacion/tim
 import { FacturaPlantilla } from '../../src/app/database/entities/facturacion/factura-plantilla.entity';
 import { Factura, EstadoFactura } from '../../src/app/database/entities/facturacion/factura.entity';
 import { FacturaItem } from '../../src/app/database/entities/facturacion/factura-item.entity';
+import { FacturacionConfig } from '../../src/app/database/entities/facturacion/facturacion-config.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 
@@ -276,13 +277,20 @@ export function registerFacturacionHandlers(
             relations: ['timbrado'],
           });
           if (!detalle) throw new Error('TimbradoDetalle no encontrado para asignar numeracion');
-          if (detalle.numeroActual > detalle.rangoHasta) {
-            throw new Error(`El rango del timbrado (${detalle.rangoDesde}-${detalle.rangoHasta}) esta agotado`);
+
+          // numeroManual: en pre-impreso la hoja fisica ya trae su numero; se
+          // registra ese valor y la numeracion avanza a partir de el.
+          const manual = factura?.numeroManual != null ? Number(factura.numeroManual) : null;
+          const numero = manual != null && !isNaN(manual) ? manual : detalle.numeroActual;
+
+          if (numero > detalle.rangoHasta || numero < detalle.rangoDesde) {
+            throw new Error(`El numero ${numero} esta fuera del rango del timbrado (${detalle.rangoDesde}-${detalle.rangoHasta})`);
           }
           f.timbradoDetalle = detalle;
-          f.numeroFactura = detalle.numeroActual;
-          f.numeroCompleto = `${detalle.establecimiento}-${detalle.puntoExpedicion}-${String(detalle.numeroActual).padStart(7, '0')}`;
-          detalle.numeroActual = detalle.numeroActual + 1;
+          f.numeroFactura = numero;
+          f.numeroCompleto = `${detalle.establecimiento}-${detalle.puntoExpedicion}-${String(numero).padStart(7, '0')}`;
+          // Avanza el contador (sin retroceder si el manual es menor al actual).
+          detalle.numeroActual = Math.max(detalle.numeroActual, numero + 1);
           await detalleRepo.save(detalle);
         }
 
@@ -306,6 +314,48 @@ export function registerFacturacionHandlers(
       });
     } catch (error) {
       console.error('Error creating factura:', error);
+      throw error;
+    }
+  });
+
+  // ----------------------------------------------------------------------
+  // FacturacionConfig (singleton)
+  // ----------------------------------------------------------------------
+  ipcMain.handle('get-facturacion-config', async () => {
+    try {
+      const repo = dataSource.getRepository(FacturacionConfig);
+      let cfg = await repo.findOne({
+        where: {},
+        relations: ['plantillaPredeterminada', 'timbradoDetallePredeterminado', 'timbradoDetallePredeterminado.timbrado'],
+        order: { id: 'ASC' },
+      });
+      if (!cfg) {
+        cfg = repo.create({ permitirEditarNumeroPreimpreso: true });
+        await setEntityUserTracking(dataSource, cfg, uid(), false);
+        cfg = await repo.save(cfg);
+      }
+      return cfg;
+    } catch (error) {
+      console.error('Error getting facturacion config:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('save-facturacion-config', async (_e: any, data: any) => {
+    try {
+      const repo = dataSource.getRepository(FacturacionConfig);
+      let cfg = await repo.findOne({ where: {}, order: { id: 'ASC' } });
+      if (!cfg) cfg = repo.create({});
+      repo.merge(cfg, {
+        tipoFacturacion: data.tipoFacturacion,
+        plantillaPredeterminada: data.plantillaPredeterminadaId ? ({ id: data.plantillaPredeterminadaId } as any) : null,
+        timbradoDetallePredeterminado: data.timbradoDetallePredeterminadoId ? ({ id: data.timbradoDetallePredeterminadoId } as any) : null,
+        permitirEditarNumeroPreimpreso: !!data.permitirEditarNumeroPreimpreso,
+      });
+      await setEntityUserTracking(dataSource, cfg, uid(), true);
+      return await repo.save(cfg);
+    } catch (error) {
+      console.error('Error saving facturacion config:', error);
       throw error;
     }
   });

@@ -47,6 +47,7 @@ import { ListMonedasComponent } from './pages/financiero/monedas/list-monedas/li
 import { ListTimbradosComponent } from './pages/facturacion/timbrados/list-timbrados/list-timbrados.component';
 import { ListPlantillasComponent } from './pages/facturacion/plantillas/list-plantillas/list-plantillas.component';
 import { ListFacturasComponent } from './pages/facturacion/facturas/list-facturas/list-facturas.component';
+import { FacturacionConfigComponent } from './pages/facturacion/config/facturacion-config.component';
 import { ListDispositivosComponent } from './pages/financiero/dispositivos/list-dispositivos.component';
 import { ListCajasComponent } from './pages/financiero/cajas/list-cajas.component';
 import { FinancieroDashboardComponent } from './pages/financiero/dashboard/financiero-dashboard.component';
@@ -895,6 +896,11 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
 
   openPlantillasFacturaTab() {
     this.tabsService.openTab('Plantillas de factura', ListPlantillasComponent, { source: 'navigation' }, 'plantillas-factura-tab', true);
+    this.closeMenu();
+  }
+
+  openFacturacionConfigTab() {
+    this.tabsService.openTab('Config. facturación', FacturacionConfigComponent, { source: 'navigation' }, 'facturacion-config-tab', true);
     this.closeMenu();
   }
 

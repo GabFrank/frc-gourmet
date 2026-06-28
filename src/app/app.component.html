@@ -494,6 +494,10 @@
               <mat-icon matListItemIcon>design_services</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Plantillas / Diseños</span>
             </a>
+            <a mat-list-item (click)="openFacturacionConfigTab()">
+              <mat-icon matListItemIcon>settings</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Configuración</span>
+            </a>
           </div>
         </mat-expansion-panel>
 

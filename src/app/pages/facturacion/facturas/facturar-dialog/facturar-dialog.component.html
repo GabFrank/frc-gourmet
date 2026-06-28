@@ -5,7 +5,7 @@
     <div class="row">
       <mat-form-field appearance="outline" class="grow">
         <mat-label>Punto de expedición</mat-label>
-        <mat-select formControlName="timbradoDetalleId" required>
+        <mat-select formControlName="timbradoDetalleId" required (selectionChange)="onDetalleChange()">
           <mat-option *ngFor="let o of detalleOptions" [value]="o.id">{{ o.label }}</mat-option>
         </mat-select>
         <mat-error>Seleccione un punto de expedición</mat-error>
@@ -24,6 +24,18 @@
           <mat-option value="CREDITO">Crédito</mat-option>
         </mat-select>
       </mat-form-field>
+    </div>
+
+    <div class="row numero-row">
+      <mat-form-field appearance="outline" *ngIf="permitirEditarNumero">
+        <mat-label>Número de factura (pre-impreso)</mat-label>
+        <input matInput type="number" formControlName="numeroManual" />
+        <mat-hint>El número impreso en la hoja física. Se guarda solo como registro.</mat-hint>
+      </mat-form-field>
+      <div class="proximo" *ngIf="!permitirEditarNumero">
+        Próximo número a emitir:
+        <strong>{{ proximoNumero != null ? proximoNumero : '—' }}</strong>
+      </div>
     </div>
 
     <div class="row">

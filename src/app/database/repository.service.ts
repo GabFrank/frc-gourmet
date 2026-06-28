@@ -43,6 +43,7 @@ import { Timbrado } from './entities/facturacion/timbrado.entity';
 import { TimbradoDetalle } from './entities/facturacion/timbrado-detalle.entity';
 import { FacturaPlantilla } from './entities/facturacion/factura-plantilla.entity';
 import { Factura } from './entities/facturacion/factura.entity';
+import { FacturacionConfig } from './entities/facturacion/facturacion-config.entity';
 import { Familia } from './entities/productos/familia.entity';
 import { Subfamilia } from './entities/productos/subfamilia.entity';
 import { Producto } from './entities/productos/producto.entity';
@@ -876,6 +877,8 @@ export abstract class RepositoryService {
   abstract deleteFacturaPlantilla(id: number): Observable<any>;
   abstract getFacturas(filtros?: any): Observable<Factura[]>;
   abstract getFactura(id: number): Observable<Factura>;
-  abstract createFactura(payload: { factura: Partial<Factura> & { timbradoDetalleId?: number }; items: any[] }): Observable<Factura>;
+  abstract createFactura(payload: { factura: Partial<Factura> & { timbradoDetalleId?: number; numeroManual?: number }; items: any[] }): Observable<Factura>;
   abstract anularFactura(id: number, motivo: string): Observable<any>;
+  abstract getFacturacionConfig(): Observable<FacturacionConfig>;
+  abstract saveFacturacionConfig(data: any): Observable<FacturacionConfig>;
 }

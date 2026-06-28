@@ -44,6 +44,7 @@ import { Timbrado } from './entities/facturacion/timbrado.entity';
 import { TimbradoDetalle } from './entities/facturacion/timbrado-detalle.entity';
 import { FacturaPlantilla } from './entities/facturacion/factura-plantilla.entity';
 import { Factura } from './entities/facturacion/factura.entity';
+import { FacturacionConfig } from './entities/facturacion/facturacion-config.entity';
 // Import productos entities
 import { Familia } from './entities/productos/familia.entity';
 import { Subfamilia } from './entities/productos/subfamilia.entity';
@@ -3938,11 +3939,17 @@ export class RepositoryIpcService extends RepositoryService {
   getFactura(id: number): Observable<Factura> {
     return from(this.api.callIpc('get-factura', id));
   }
-  createFactura(payload: { factura: Partial<Factura> & { timbradoDetalleId?: number }; items: any[] }): Observable<Factura> {
+  createFactura(payload: { factura: Partial<Factura> & { timbradoDetalleId?: number; numeroManual?: number }; items: any[] }): Observable<Factura> {
     return from(this.api.callIpc('create-factura', payload));
   }
   anularFactura(id: number, motivo: string): Observable<any> {
     return from(this.api.callIpc('anular-factura', id, motivo));
+  }
+  getFacturacionConfig(): Observable<FacturacionConfig> {
+    return from(this.api.callIpc('get-facturacion-config'));
+  }
+  saveFacturacionConfig(data: any): Observable<FacturacionConfig> {
+    return from(this.api.callIpc('save-facturacion-config', data));
   }
 
 }

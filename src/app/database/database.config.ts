@@ -208,6 +208,7 @@ import { AddCotizacionBancariaToPagosCobros1779800000000 } from './migrations/17
 import { AddKdsToComandaItem1780000000000 } from './migrations/1780000000000-AddKdsToComandaItem';
 import { AddKdsPantalla1780100000000 } from './migrations/1780100000000-AddKdsPantalla';
 import { AddFacturacion1780200000000 } from './migrations/1780200000000-AddFacturacion';
+import { AddFacturacionConfig1780300000000 } from './migrations/1780300000000-AddFacturacionConfig';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -221,6 +222,7 @@ import { TimbradoDetalle } from './entities/facturacion/timbrado-detalle.entity'
 import { FacturaPlantilla } from './entities/facturacion/factura-plantilla.entity';
 import { Factura } from './entities/facturacion/factura.entity';
 import { FacturaItem } from './entities/facturacion/factura-item.entity';
+import { FacturacionConfig } from './entities/facturacion/facturacion-config.entity';
 
 /**
  * Override de conexion. F1.1: el caller (main.ts) lo construye leyendo
@@ -474,6 +476,7 @@ function getEntitiesList(): any[] {
       FacturaPlantilla,
       Factura,
       FacturaItem,
+      FacturacionConfig,
   ];
 }
 
@@ -524,6 +527,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddKdsToComandaItem1780000000000,
     AddKdsPantalla1780100000000,
     AddFacturacion1780200000000,
+    AddFacturacionConfig1780300000000,
   ];
 }
 

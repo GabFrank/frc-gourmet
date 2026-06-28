@@ -53,6 +53,14 @@ export class FacturarDialogComponent implements OnInit {
 
   itemsArray!: FormArray;
   private empresa: any = null;
+  private config: any = null;
+
+  /** Modelo de facturacion del sistema (de la config). */
+  esPreImpreso = false;
+  /** En pre-impreso, permitir tipear el numero de la hoja fisica. */
+  permitirEditarNumero = false;
+  /** Proximo numero a emitir del punto de expedicion seleccionado. */
+  proximoNumero: number | null = null;
 
   constructor(
     private fb: FormBuilder,
@@ -69,6 +77,7 @@ export class FacturarDialogComponent implements OnInit {
       direccion: [''],
       email: [''],
       descuento: [0],
+      numeroManual: [null],
       items: this.fb.array([]),
     });
     this.itemsArray = this.form.get('items') as FormArray;
@@ -83,17 +92,37 @@ export class FacturarDialogComponent implements OnInit {
   async loadRefs(): Promise<void> {
     this.isLoading = true;
     try {
-      const [detalles, plantillas, empresa] = await Promise.all([
+      const [detalles, plantillas, empresa, config] = await Promise.all([
         firstValueFrom(this.repositoryService.getTimbradoDetalles()),
         firstValueFrom(this.repositoryService.getFacturaPlantillas()),
         firstValueFrom(this.repositoryService.getEmpresa()).catch(() => null),
+        firstValueFrom(this.repositoryService.getFacturacionConfig()).catch(() => null),
       ]);
+      this.empresa = empresa;
+      this.config = config;
+      const tipoSistema = config?.tipoFacturacion || 'PRE_IMPRESO';
+      this.esPreImpreso = String(tipoSistema) === 'PRE_IMPRESO';
+      this.permitirEditarNumero = this.esPreImpreso && config?.permitirEditarNumeroPreimpreso !== false;
+
       this.detalles = (detalles || []).filter((d) => d.activo);
       this.detalleOptions = this.detalles.map((d) => ({ id: d.id!, label: this.detalleLabel(d) }));
-      this.plantillas = (plantillas || []).filter((p) => p.activo);
-      this.empresa = empresa;
-      const predet = this.plantillas.find((p) => p.predeterminada);
-      if (predet) this.form.patchValue({ plantillaId: predet.id });
+
+      // Filtra los disenos al tipo de facturacion del sistema.
+      this.plantillas = (plantillas || []).filter((p) => {
+        if (!p.activo) return false;
+        const pt = String(p.tipo);
+        if (String(tipoSistema) === 'PRE_IMPRESO') return pt === 'PRE_IMPRESO';
+        if (String(tipoSistema) === 'AUTO_IMPRESO') return pt === 'AUTO_IMPRESO_TERMICA' || pt === 'AUTO_IMPRESO_A4';
+        return true;
+      });
+
+      // Preselecciones desde la config (plantilla y punto de expedicion).
+      const plantillaPre = config?.plantillaPredeterminada?.id
+        ?? this.plantillas.find((p) => p.predeterminada)?.id ?? null;
+      const detallePre = config?.timbradoDetallePredeterminado?.id
+        ?? (this.detalles.length === 1 ? this.detalles[0].id : null);
+      this.form.patchValue({ plantillaId: plantillaPre, timbradoDetalleId: detallePre });
+      this.onDetalleChange();
     } catch (error) {
       console.error('Error loading refs:', error);
     } finally {
@@ -104,6 +133,17 @@ export class FacturarDialogComponent implements OnInit {
   detalleLabel(d: TimbradoDetalle): string {
     const t = (d as any).timbrado;
     return `${d.establecimiento}-${d.puntoExpedicion} (próx. ${d.numeroActual})${t?.numero ? ' · Timb. ' + t.numero : ''}`;
+  }
+
+  /** Recalcula el proximo numero al cambiar el punto de expedicion. */
+  onDetalleChange(): void {
+    const id = this.form.get('timbradoDetalleId')?.value;
+    const d = this.detalles.find((x) => x.id === id);
+    this.proximoNumero = d ? d.numeroActual : null;
+    // En pre-impreso editable, el numero arranca en el proximo pero es editable.
+    if (this.permitirEditarNumero) {
+      this.form.patchValue({ numeroManual: this.proximoNumero }, { emitEvent: false });
+    }
   }
 
   addItem(): void {
@@ -190,9 +230,8 @@ export class FacturarDialogComponent implements OnInit {
     this.isSaving = true;
     const v = this.form.value;
     const plantilla = this.plantillas.find((p) => p.id === v.plantillaId);
-    const tipo = plantilla
-      ? (String(plantilla.tipo) === 'PRE_IMPRESO' ? TipoFacturacion.PRE_IMPRESO : TipoFacturacion.AUTO_IMPRESO)
-      : TipoFacturacion.PRE_IMPRESO;
+    // El tipo lo define la config del sistema (un unico modelo de facturacion).
+    const tipo = (this.config?.tipoFacturacion as TipoFacturacion) || TipoFacturacion.PRE_IMPRESO;
 
     const itemsPayload = this.itemsArray.controls.map((c) => {
       const it = c.value;
@@ -207,6 +246,8 @@ export class FacturarDialogComponent implements OnInit {
 
     const facturaPayload: any = {
       timbradoDetalleId: v.timbradoDetalleId,
+      // En pre-impreso editable, se registra el numero tipeado de la hoja fisica.
+      numeroManual: this.permitirEditarNumero && v.numeroManual != null ? Number(v.numeroManual) : undefined,
       plantilla: plantilla ? { id: plantilla.id } : undefined,
       tipoFacturacion: tipo,
       condicionVenta: v.condicionVenta,
