@@ -1,6 +1,6 @@
 # Integration Steps for Profile Image Handling
 
-Follow these steps to integrate the profile image handling functionality into your Electron application.
+Follow these steps to integrate the profile image handling functionality into your Electron application. Esta es una guía de referencia genérica; el estado real del proyecto está en la nota al final.
 
 ## 1. Import the Image Handler in Your Main Process
 
@@ -100,4 +100,20 @@ In your HTML template:
 1. Create a new persona with an image
 2. Verify it's saved in the app data directory
 3. Restart the app and ensure the image still appears
-4. Edit the persona and update the image, verify the old one is deleted 
+4. Edit the persona and update the image, verify the old one is deleted
+
+---
+
+## Implementación real en FRC Gourmet
+
+- **Protocolo `app://` genérico:** se registra una sola vez en `main.ts` (`protocol.registerFileProtocol`)
+  y mapea `app://<bucket>/<archivo>` a `userData/<bucket>/`. Los buckets conocidos no son solo
+  `profile-images`: incluyen `producto-images`, `factura-imports`, `funcionario-documentos`,
+  `adjuntos` y `logos`.
+- **Handlers de imágenes:** `electron/handlers/images.handler.ts` (`save-profile-image`,
+  `delete-profile-image`) y `electron/handlers/adjuntos.handler.ts` para adjuntos genéricos.
+- **Preload:** la API se expone con `contextBridge.exposeInMainWorld('api', ...)` en `preload.ts`
+  (raíz del repo); además del método genérico `callIpc`, hay métodos tipados.
+- **En modo cliente / PWA mobile** (sin acceso al filesystem local) las imágenes se sirven por HTTP
+  desde el nodo `server`: `GET /api/files/...` (`electron/server/file-routes.ts`). Como `<img>` no
+  manda headers de auth, la PWA usa `fetch → blobURL`. 

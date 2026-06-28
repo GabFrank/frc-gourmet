@@ -1,6 +1,6 @@
 # Bugs conocidos sin resolver
 
-Snapshot **2026-05-05**. Verificar `git log` antes de afirmar que algo sigue roto.
+Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo sigue roto. La sección de **Seguridad** está mayormente resuelta (bcrypt, JWT en keytar, permisos en backend, must-change-password) — ver detalle abajo y [architecture/auth-permissions.md](../architecture/auth-permissions.md).
 
 ## Frontend / UI
 
@@ -85,7 +85,7 @@ WHERE compra_id IS NOT NULL
 
 **Causa:** algún flujo creó un movimiento sin pasar por `actualizarSaldoCajaMayor()` (raro, pero posible si se inserta manualmente o se hace bypass).
 
-**Fix:** handler `recalcular-saldos` (caja-mayor.handler.ts:121) reconstruye desde 0.
+**Fix:** handler `recalcular-saldos` (`caja-mayor.handler.ts`) reconstruye desde 0.
 
 ### Migración auto en cada arranque
 
@@ -94,7 +94,7 @@ UPDATE ventas SET vendedor_id = created_by
 WHERE vendedor_id IS NULL AND created_by IS NOT NULL;
 ```
 
-Corre en `main.ts:125` cada arranque. Es **idempotente** — la próxima vez no actualiza nada. Pero si por algún motivo `vendedor_id` se nulea manualmente, se rellenará automáticamente al reiniciar.
+Corre en `main.ts` cada arranque (en el `then` de `DataSource.initialize`). Es **idempotente** — la próxima vez no actualiza nada. Pero si por algún motivo `vendedor_id` se nulea manualmente, se rellenará automáticamente al reiniciar.
 
 ## Seguridad ⚠️
 
@@ -136,7 +136,7 @@ PdV refresca el estado de las mesas cada 1 segundo. Con 50 mesas, son ~50 querie
 ## Trampas que parecen bugs pero no son
 
 - **`getPdvConfig` retorna array** con un solo elemento (legacy). Usar `result[0]`.
-- **Imágenes de producto** parcialmente desactivadas (handler comentado en `images.handler.ts:31-121`).
+- **Imágenes:** `images.handler.ts` solo maneja imágenes de perfil (legacy compat). Las imágenes de producto y demás archivos usan el `files.handler.ts` genérico (`save-file`/`delete-file`).
 - **Compras pre-refactor 2026-05-05 contado** sin CPP — aparecen como "ya pagadas". Es **intencional**, no se migran.
 - **`get-presentaciones-by-producto` devuelve `{ data, total, page, pageSize }`** — NO `{ items }`. Si ves un componente leyendo `res.items` está roto. Causó un bug en el módulo OCR (presentaciones siempre vacías).
 - **`create-presentacion` y `create-codigo-barra`** aceptan tanto `productoId`/`presentacionId` planos como `producto: { id }` / `presentacion: { id }` (estilo TypeORM relations). Tolerancia explícita desde 2026-05-06.
@@ -145,4 +145,4 @@ PdV refresca el estado de las mesas cada 1 segundo. Con 50 mesas, son ~50 querie
 - **Lista CPP filtra contado por defecto** — toggle UI activa.
 - **Handlers de RecetaPresentacion en `recetas.handler.ts`**, NO en `receta-presentacion.handler.ts` (existe pero NO se registra).
 - **Bono auto-generado por tardanza** no se recalcula si cambian los valores de config — solo aplica al siguiente registro de asistencia.
-- **`porcentajeAprovechamiento` en RecetaIngrediente NO afecta costo** (intencional, línea 137-138 del handler). Solo se almacena para uso futuro.
+- **`porcentajeAprovechamiento` en RecetaIngrediente NO afecta costo** (intencional, ver `recetas.handler.ts`). Solo se almacena para uso futuro.

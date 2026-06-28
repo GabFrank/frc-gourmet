@@ -39,19 +39,21 @@ Detalles a tener en cuenta:
 
 - **"Credenciales inválidas":** usuario o contraseña incorrectos. Revisá el bloq. mayús.
 - **"No se pudo conectar con el servidor":** la PC del local está apagada, fuera de la red,
-  o no está en modo servidor. Ver [Capítulo 9](09-solucion-de-problemas.md).
+  o no está en modo servidor. Ver [Solución de problemas](09-solucion-de-problemas.md).
 
 > Si es tu primera vez en el sistema y nunca tuviste usuario, pediselo al administrador:
 > los usuarios se crean en RRHH (y también se pueden crear desde la app mobile, ver
-> [Capítulo 4](04-modulo-rrhh.md)).
+> [Módulo RRHH](04-modulo-rrhh.md)).
 
 ## La pantalla principal (Inicio)
 
 Apenas entrás, ves la pantalla de **Inicio**:
 
 - Un **saludo** con tu nombre de usuario.
-- **Accesos rápidos** a las grandes secciones del sistema (RRHH, Finanzas, Compras,
-  Productos). Tocá cualquiera para entrar.
+- **Accesos rápidos** a las grandes secciones del sistema. Solo aparecen las secciones a
+  las que tu usuario tiene acceso: Ventas y Productos las ve cualquier usuario logueado;
+  Compras, Finanzas y RRHH aparecen solo si tenés el permiso correspondiente. Tocá
+  cualquiera para entrar.
 
 ## La barra superior
 
@@ -73,19 +75,24 @@ La forma de navegar **se adapta al tamaño de la pantalla**:
 
 ### En tablet (pantalla grande)
 
-Hay una **barra de navegación lateral** (a la izquierda) con cinco destinos:
+Hay una **barra de navegación lateral** (a la izquierda) con hasta seis destinos:
 
 | Ícono | Destino | Qué contiene |
 |---|---|---|
 | 🏠 | **Inicio** | Saludo y accesos rápidos |
-| 👥 | **RRHH** | Empleados, personas, clientes, usuarios, vales… |
-| 💵 | **Finanzas** | Cajas, cuentas por cobrar, gastos, comisiones |
-| 🛒 | **Compras** | Compras, proveedores, categorías |
+| 🍽️ | **Ventas** | Mesas y comandas (tomar pedidos) |
 | 📦 | **Productos** | Familias, subfamilias, adicionales, productos |
+| 🛒 | **Compras** | Compras, proveedores, categorías |
+| 💵 | **Finanzas** | Cajas, Caja Mayor, cuentas por cobrar, gastos, comisiones |
+| 👥 | **RRHH** | Empleados, personas, clientes, usuarios, vales… |
+
+> **Ventas** y **Productos** las ve cualquier usuario logueado. **Compras**, **Finanzas** y
+> **RRHH** aparecen en la barra **solo si tu usuario tiene el permiso** de esa sección; si
+> no lo tenés, ese destino no se muestra.
 
 ### En teléfono (pantalla chica)
 
-Los mismos cinco destinos aparecen en una **barra inferior** (abajo de todo), cómoda para
+Los mismos destinos aparecen en una **barra inferior** (abajo de todo), cómoda para
 el pulgar.
 
 ### Dentro de cada sección

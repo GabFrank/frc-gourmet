@@ -20,7 +20,8 @@ Persona (entidad raíz, datos personales)
 **Usuario** (`personas/usuario.entity.ts`):
 - `persona_id` FK (M:1)
 - `nickname` UNIQUE
-- `password` ⚠️ **TEXTO PLANO** (línea 35 auth.handler: `password === usuario.password`). Comentario interno marca TODO bcrypt para producción.
+- `password` — **hash bcrypt** (`bcryptjs`). El login compara con `verifyPassword(plain, stored)` (`electron/utils/password.utils.ts`). Al arranque `migratePlaintextPasswords()` re-hashea cualquier password plano residual.
+- `mustChangePassword` — fuerza cambio de password en el próximo login (el admin default `admin/admin` arranca con este flag).
 - `activo`
 
 **LoginSession** (`auth/login-session.entity.ts`):
@@ -35,11 +36,12 @@ Persona (entidad raíz, datos personales)
 
 ```
 1. User envía { nickname, password, deviceInfo }
-2. Handler:
+2. Handler (auth.handler.ts):
    - SELECT WHERE LOWER(nickname) = LOWER(?)  (case-insensitive)
    - if (!usuario || !usuario.activo) → fail
-   - if (password !== usuario.password) → fail   ⚠️ texto plano
-   - jwt.sign({ id, nickname }, JWT_SECRET, { expiresIn: '7d' })
+   - const ok = await verifyPassword(password, usuario.password)  // bcrypt
+   - if (!ok) → fail
+   - jwt.sign({ id, nickname }, await getJwtSecret(), { ... })
    - INSERT LoginSession (browser, os, login_time = now)
    - setCurrentUser(usuario)  // global en main process
    - return { success, usuario, token, sessionId }
@@ -52,9 +54,11 @@ Persona (entidad raíz, datos personales)
    - repositoryService.setCurrentUser(usuario)  // sincroniza
 ```
 
-**JWT secret hardcoded:** `'frc-gourmet-secret-key'` en `auth.handler.ts:9`. ⚠️ Mover a env en producción.
+**JWT secret en keytar:** `getJwtSecret()` (`electron/utils/jwt-secret.utils.ts`) lee/genera el secret en el keychain del SO (`service: com.frcgourmet.app`, `account: jwt-secret`), con fallback a filesystem si keytar no está disponible. **No hay secret hardcodeado.**
 
-**Token:** generado pero **no validado** en cliente (Angular sólo lo guarda). El backend (handlers) tampoco lo verifica — confía en `getCurrentUser()` en main process.
+**Refresh tokens:** el modo server (Fastify + `@fastify/jwt`) emite access + refresh tokens. En modo `client`/PWA el access token va en `Authorization: Bearer` a `/api/rpc` y el shim hace refresh automático ante 401.
+
+**Validación en backend:** en modo server, el `jwt.verify` corre en el middleware de Fastify y el usuario del token se propaga vía `withRequestUser(...)` (AsyncLocalStorage) a los handlers. En desktop standalone el handler confía en `getCurrentUser()` del main process. En ambos casos, los handlers sensibles **revalidan permisos** (`ensurePermission`).
 
 ## Sesión
 
@@ -85,55 +89,34 @@ Usuario ─(UsuarioRole)─► Role ─(RolePermission)─► Permission
 
 ### Seed de permisos
 
-`electron/handlers/permissions.handler.ts:10-72` define ~56 permisos pre-cargados al startup (idempotente — sólo inserta si la tabla está vacía).
+`electron/handlers/permissions.handler.ts` — el array `SEED_PERMISOS` define **94 permisos** pre-cargados al startup (`seedPermissions()`, idempotente por `codigo`). Agregar un permiso = añadirlo al array; al siguiente arranque se inserta y `syncAdminPermissions()` se lo asigna al rol ADMINISTRADOR.
 
-Categorías:
-- **RRHH**: 18+ permisos (`RRHH_FUNCIONARIO_VER`, `RRHH_FUNCIONARIO_EDITAR`, `RRHH_VALE_CREAR`, `RRHH_VALE_CONFIRMAR`, `RRHH_LIQUIDACION_GENERAR`, `RRHH_LIQUIDACION_APROBAR`, `RRHH_LIQUIDACION_PAGAR`, `RRHH_VACACION_GESTIONAR`, `RRHH_ASISTENCIA_REGISTRAR`, etc.)
-- **COMISIONES**: 7 (`COMISION_REGLA_VER`, `COMISION_REGLA_GESTIONAR`, `COMISION_LIQUIDACION_APROBAR`, etc.)
-- **SISTEMA**: `SISTEMA_PERMISO_GESTIONAR`, `SISTEMA_ROL_GESTIONAR`
-- **FINANCIERO**: `CPC_GESTIONAR`, `CPC_COBRAR`, `CPC_ANULAR`, etc.
-- **RRHH Fase 8**: `RRHH_DASHBOARD_VER`, `RRHH_REPORTES_EXPORTAR`, etc.
+Categorías (prefijos): `HOME_*`, `VENTAS_*`, `COMANDAS_KDS_*`, `RRHH_*`, `PERSONAS_*`, `USUARIOS_*`, `CLIENTES_*`, `COMISION_*`, `PRODUCTOS_*` / `RECETAS_*` / `SABORES_*` / `ADICIONALES_*` / `INGREDIENTES_*` / `STOCK_MOVIMIENTO_*` / `CATEGORIAS_*`, `COMPRAS_*`, `FINANCIERO_*` / `CAJA_MAYOR_*` / `MONEDAS_*` / `CPC_*`, `EMPRESA_*`, `IMPRESORAS_*` / `SECTORES_IMPRESORAS_*` / `DISPOSITIVOS_*`, `SISTEMA_*` (BACKUP, CONFIGURAR_IA, BD_CONFIGURAR, MODO_CONFIGURAR, PERMISO_GESTIONAR, ROL_GESTIONAR).
 
-→ Lista completa al ejecutar `seedPermissions(dataSource)` en main.ts.
+→ Lista exacta: array `SEED_PERMISOS` en `permissions.handler.ts`. **Grepear el código real antes de usarlo** — no inventar nombres.
 
 ### Permisos en frontend
 
-`src/app/services/permission.service.ts`:
+`src/app/services/permission.service.ts` — `PermissionService` cachea los códigos del usuario actual en un `Set<string>` (`BehaviorSubject codigos$`). Se suscribe a `currentUser$` y carga permisos al login (`get-permissions-by-user` resuelve UsuarioRole → RolePermission → Permission). API: `has(codigo)`, `hasAny(codigos[])`, `hasAll(codigos[])` (comparan en UPPERCASE).
 
-```typescript
-@Injectable({ providedIn: 'root' })
-export class PermissionService {
-  private codigosSubject = new BehaviorSubject<Set<string>>(new Set());
-
-  // Suscribe a currentUser$ y carga permisos al login
-  // (`get-permissions-by-user` en personas.handler resuelve UsuarioRole → RolePermission → Permission)
-
-  has(codigo: string): boolean {
-    return this.codigosSubject.value.has(codigo.toUpperCase());
-  }
-  hasAny(codigos: string[]): boolean { /* OR */ }
-  hasAll(codigos: string[]): boolean { /* AND */ }
-}
-```
-
-Uso en componentes:
+**Directivas estructurales** (`src/app/shared/directives/has-permission.directive.ts`):
+- `*appHasPermission="'CODIGO'"` — muestra el elemento si el usuario tiene ese permiso.
+- `*appHasAnyPermission="['A','B']"` — muestra si tiene alguno (se usa en los headers de sección del sidenav).
 
 ```html
-<button mat-button *ngIf="permService.has('RRHH_LIQUIDACION_APROBAR')" (click)="aprobar()">Aprobar</button>
+<button mat-button *appHasPermission="'RRHH_LIQUIDACION_PAGAR'" (click)="aprobar()">Pagar</button>
 ```
 
-```typescript
-if (!this.permService.has('RRHH_LIQUIDACION_PAGAR')) {
-  this.snackBar.open('Sin permiso para pagar liquidaciones', 'Cerrar', { duration: 3000 });
-  return;
-}
-```
+El rol ADMINISTRADOR se auto-sincroniza con todos los permisos al arranque, así que ve todo.
 
-### ⚠️ Validación en backend: parcial
+### Validación en backend (activa)
 
-Los handlers **NO** validan permisos del `getCurrentUser()`. Sólo el frontend lo hace. Significa:
-- Un usuario malicioso con DevTools puede invocar `window.api.deleteFuncionario(id)` saltándose el check del componente.
-- TODO de seguridad: agregar middleware de permisos en cada handler sensible.
+Los handlers sensibles **SÍ** validan permisos del usuario efectivo vía `ensurePermission(dataSource, getCurrentUser, 'CODIGO')` / `checkPermission(...)` (`electron/utils/auth.utils.ts`). El frontend ya no es la única frontera. Detalles:
+- **Cache** de permisos por usuario con TTL 30s (un cambio de rol surte efecto en ≤30s).
+- **`withRequestUser` (AsyncLocalStorage):** en modo server el rpc-router envuelve cada invocación con el usuario del JWT; `checkPermission` lee de ahí primero, cayendo a `getCurrentUser()` en standalone/desktop.
+- `clearPermissionCache(usuarioId?)` invalida manualmente.
+
+> Riesgo residual: el IPC `setCurrentUser` sigue existiendo y un usuario autenticado podría intentar spoofear a otro. Mitigado porque cada handler revalida permisos contra el usuario efectivo. Ver [reference/known-bugs.md](../reference/known-bugs.md).
 
 ## Auth Guard
 
@@ -162,28 +145,28 @@ Pasada como callback a cada handler. Los handlers la usan para popular `createdB
 
 **Inconsistencia:** el renderer puede invocar `setCurrentUser` (handler `setCurrentUser`). Eso permite "spoofing" de usuario desde DevTools. El handler tiene un `console.warn` señalando el riesgo, pero no rechaza.
 
-## Lo que NO está implementado
+## Estado de features de seguridad
 
 | Feature | Estado |
 |---|---|
-| Hash de contraseña (bcrypt) | ❌ texto plano |
-| Refresh tokens | ❌ token único 7d |
+| Hash de contraseña (bcryptjs) | ✅ implementado |
+| JWT secret en keytar (no hardcodeado) | ✅ implementado |
+| Refresh tokens | ✅ en modo server/client |
+| Validación de permisos en backend | ✅ `ensurePermission`/`checkPermission` en handlers sensibles |
+| Forzar cambio de password (admin default) | ✅ `mustChangePassword` + dialog bloqueante post-login |
 | Recuperación de contraseña | ❌ |
 | Bloqueo por intentos fallidos | ❌ |
 | 2FA / MFA | ❌ |
-| Idle timeout server-side | ❌ (solo activity tracking) |
-| Validación de permisos en backend | ❌ solo frontend |
 | Audit log de operaciones sensibles | Parcial (BaseModel.createdBy/updatedBy) |
-| Captcha en login | ❌ |
 
-Estos son todos TODOs conocidos para producción.
+## Usuario administrador inicial (seed automático)
 
-## Crear usuario administrador (manual)
+`seedSystemData` → `seedAdminUserAndRole` crea (solo si la tabla `usuarios` está vacía):
+1. Persona "ADMINISTRADOR SISTEMA"
+2. Usuario `admin` / password `admin` (bcrypt) con `mustChangePassword = true`
+3. Rol ADMINISTRADOR vinculado a TODOS los permisos.
 
-No hay seed de usuarios iniciales (`seedInitialData` no crea Usuario/Persona). El primer admin debe crearse manualmente:
-1. Crear Persona → 2. Crear Usuario vinculado → 3. Crear Role "Administrador" → 4. Crear UsuarioRole → 5. (opcional) Asignar todos los permisos al Role.
-
-Hay UI para esto: Personas → Crear Persona → Usuarios → Crear Usuario → Roles → Asignar Permisos.
+En el primer login con `admin/admin`, un dialog bloqueante obliga a cambiar la password antes de cargar el dashboard. `syncAdminPermissions` corre en cada arranque para que el rol ADMINISTRADOR siempre tenga todos los permisos (clave al agregar permisos nuevos). También hay roles plantilla (`GERENTE`, `CAJERO`, `MOZO`) seedeados con permisos curados. Ver [seed-system.md](seed-system.md).
 
 ## Dashboard shortcuts (personalización)
 

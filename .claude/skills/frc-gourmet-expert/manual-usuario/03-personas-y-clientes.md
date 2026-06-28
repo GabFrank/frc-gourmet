@@ -45,7 +45,7 @@ Para que alguien pueda iniciar sesión:
 Campos:
 - **Persona**: seleccionar de la lista (debe existir antes).
 - **Nickname**: único, sin espacios. Ej: `juan`, `maria.gomez`. Es lo que escribirá al loguearse.
-- **Contraseña**: ⚠️ **se guarda en texto plano** en esta versión. Asignar contraseñas robustas.
+- **Contraseña**: se guarda cifrada (hash bcrypt). Aun así, asigná contraseñas robustas; el usuario podrá cambiarla luego y el admin inicial debe cambiarla en el primer ingreso.
 - **Activo**: ✅ por default.
 
 Click en **Guardar**.
@@ -89,6 +89,16 @@ Crear:
 - VIP: descuento extra.
 
 El tipo aplica como default — al crear un cliente, hereda esos parámetros.
+
+## Convenios (cobro consolidado)
+
+Un **Convenio** agrupa varios clientes que pertenecen a una empresa o entidad externa con la que tenés un acuerdo (ej. "FUNCIONARIOS EMPRESA X"). A fin de mes, la empresa puede pagar de forma consolidada la deuda de todos sus clientes, y luego descontarla internamente a cada uno.
+
+**Menu → Recursos Humanos → Convenios**.
+
+- **Nuevo convenio**: nombre, descripción, RUC y contacto de la empresa (opcionales).
+- **Asignar clientes**: vinculá los clientes que forman parte del convenio (un cliente puede estar en varios convenios).
+- **Cobro consolidado**: registra el pago único de toda la deuda del grupo.
 
 ## Búsqueda rápida en PdV
 

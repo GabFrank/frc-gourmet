@@ -1,10 +1,14 @@
-# Capítulo 4 — Módulo RRHH (Recursos Humanos)
+# Módulo RRHH (Recursos Humanos)
 
-Es el módulo más completo de la app mobile. Entrás tocando **RRHH** (👥) en la navegación.
-Vas a ver una grilla de tarjetas con todos los sub-módulos.
+Es el módulo administrativo más completo de la app mobile. Entrás tocando **RRHH** (👥) en
+la navegación (aparece solo si tu usuario tiene permiso de RRHH). Vas a ver una grilla de
+tarjetas con todos los sub-módulos.
+
+> El destino **RRHH** en la barra solo se muestra a usuarios con algún permiso de RRHH (ver
+> dashboard o ver funcionarios). Ver [Permisos y roles](08-permisos-y-roles.md).
 
 > Antes de leer este capítulo conviene tener claro cómo funcionan las listas y los
-> formularios en general → [Capítulo 3](03-como-usar-listas-y-formularios.md).
+> formularios en general → [Cómo usar las listas y los formularios](03-como-usar-listas-y-formularios.md).
 
 Los sub-módulos se dividen en dos grupos:
 
@@ -109,7 +113,7 @@ Las cuentas que pueden iniciar sesión en el sistema (escritorio y mobile).
     app calcula qué roles agregar y cuáles quitar.
   - **Activo.**
 - Los **roles** determinan qué permisos tiene el usuario. Ver
-  [Capítulo 8 — Permisos y roles](08-permisos-y-roles.md).
+  [Permisos y roles](08-permisos-y-roles.md).
 
 ---
 
@@ -135,7 +139,7 @@ y, cuando aplica, una etiqueta de **estado**.
 > ¿Por qué solo consulta? Estas operaciones tienen reglas y efectos contables (afectan la
 > Caja Mayor, generan movimientos, etc.) que por ahora se manejan únicamente en el
 > escritorio para evitar errores. La app mobile te sirve para **revisarlas estando fuera
-> de la PC**. Ver [Capítulo 10](10-limitaciones-y-version-escritorio.md).
+> de la PC**. Ver [Qué falta en mobile](10-limitaciones-y-version-escritorio.md).
 
 ---
 
@@ -151,4 +155,4 @@ y, cuando aplica, una etiqueta de **estado**.
 
 ---
 
-**Próximo capítulo →** [05 — Módulo Finanzas](05-modulo-finanzas.md)
+**Próximo capítulo →** [Módulo Finanzas](05-modulo-finanzas.md)

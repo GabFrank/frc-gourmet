@@ -11,7 +11,7 @@ userData/
   funcionario-documentos/  ← docs RRHH (CONTRATO, CEDULA, ...)
     {funcionarioId}/<file>
   factura-imports/         ← PDFs/imágenes de OCR de compras
-  adjuntos/                ← entity polimórfica (release 2)
+  adjuntos/                ← entity polimórfica Adjunto (handlers ya implementados)
 ```
 
 Acceso desde el renderer: `app://<carpeta>/<file>`. El custom protocol está en `main.ts:registerAppProtocol()` y mapea cualquier ruta `app://<X>/<Y>` → `userData/<X>/<Y>`. **Nunca** sirvas archivos por base64 inline si podés usar `app://`.
@@ -26,19 +26,21 @@ Acceso desde el renderer: `app://<carpeta>/<file>`. El custom protocol está en 
 - `deleteFuncionarioDocumento(rutaRelativa)`, `readFuncionarioDocumentoBase64(rutaRelativa)`.
 
 ### `electron/utils/image-resize.utils.ts` (NUEVO 2026-05-07)
-- `generateImageDerivatives(absolutePath)` → genera `<base>.thumb.jpg` (96×96, q80%) y `<base>.medium.jpg` (400×400, q85%) usando `@napi-rs/canvas`. Si el original es ≤ 96 o ≤ 400 px, copia bytes (no re-encodea, evita pérdida).
-- `deleteImageDerivatives(absolutePath)` — borra ambas derivadas si existen, silencioso si no.
+- `generateImageDerivatives(absolutePath)` → genera `<base>.thumb.jpg` (max 96px lado largo, q80%) y `<base>.medium.jpg` (max 400px lado largo, q85%) usando `@napi-rs/canvas`. Si el original es ≤ 96 o ≤ 400 px, copia bytes (no re-encodea, evita pérdida).
+- `deleteImageByUrl(url)` — resuelve un `app://...` a path absoluto y borra el original + derivadas. Es el entry point que usan `delete-file` y `delete-adjunto`. No-op silencioso para PDFs/no-imágenes.
+- `deleteImageDerivatives(absolutePath)` — borra `<base>.thumb.jpg` y `<base>.medium.jpg` si existen, silencioso si no.
 
 ## 3. IPCs genéricos (`electron/handlers/files.handler.ts` — NUEVO)
 
 | IPC | Input | Output |
 |---|---|---|
 | `save-file` | `{ carpeta, base64, fileName, generateThumbnails? }` | `{ url, fileName, mimeType, tamanoBytes, thumbUrl?, mediumUrl? }` |
-| `delete-file` | `{ url }` | `{ ok }` (también borra derivadas) |
+| `delete-file` | `{ url }` | `{ ok }` (también borra derivadas via `deleteImageByUrl`) |
 | `read-file-base64` | `{ url }` | `{ base64, mimeType }` |
 | `open-file-with-system` | `{ url }` | `{ ok, error? }` (usa `shell.openPath`) |
+| `open-base64-file` | `{ base64, fileName }` | escribe a temp y abre con el sistema |
 
-`carpeta` ∈ `'profile-images' | 'producto-images' | 'funcionario-documentos' | 'factura-imports' | 'adjuntos'`. Cualquier otra es rechazada.
+`carpeta` ∈ `'profile-images' | 'producto-images' | 'funcionario-documentos' | 'factura-imports' | 'adjuntos'` (set `ALLOWED_CARPETAS` en `files.handler.ts`). Cualquier otra es rechazada. Se permiten subpaths anidados bajo un bucket conocido (ej. `funcionario-documentos/{id}/<file>`).
 
 `save-file` para imágenes genera thumbnails por default. Para PDFs/docs el flag es ignorado.
 
@@ -90,26 +92,42 @@ mediumUrl(url) → 'app://producto-images/abc.medium.jpg'
 
 **En BD se guarda solo la URL del original**. Las derivadas se infieren con regex. Si una derivada no existe (legacy), `<img>` falla y el componente debe caer al original con `(error)`.
 
-## 5. Entity polimórfica `Adjunto` (release 1: solo schema; release 2: handlers + UI)
+## 5. Entity polimórfica `Adjunto`
 
-`src/app/database/entities/shared/adjunto.entity.ts`. Indexada por `(entidadTipo, entidadId)`.
+`src/app/database/entities/shared/adjunto.entity.ts`. Indexada por `(entidadTipo, entidadId)`. Permite N archivos por registro de cualquier entidad sin columna `comprobanteUrl` dedicada.
 
 ```ts
 @Entity('adjuntos')
 @Index(['entidadTipo', 'entidadId'])
 export class Adjunto extends BaseModel {
-  entidadTipo: string;  // 'GASTO' | 'VALE' | 'CPP_CUOTA' | ...
+  entidadTipo: string;  // varchar(50). 'GASTO' | 'VALE' | 'CPP_CUOTA' | ...
   entidadId: number;
-  tipo: string;         // 'COMPROBANTE' | 'FACTURA' | 'CONTRATO' | 'OTRO'
-  archivoUrl: string;   // 'app://adjuntos/<file>'
-  nombreArchivo: string;
-  mimeType?: string;
+  tipo: string;         // varchar(30), default 'OTRO'. 'COMPROBANTE' | 'FACTURA' | ...
+  archivoUrl: string;   // varchar(500), 'app://adjuntos/<file>'
+  nombreArchivo: string;// varchar(255)
+  mimeType?: string;    // varchar(100)
   tamanoBytes?: number;
-  observacion?: string;
+  observacion?: string; // text
 }
 ```
 
+> El docstring de la entity todavía dice "no usado todavía / handlers en release 2" — está desactualizado: los handlers genéricos ya existen (ver abajo). No tomar ese comentario como vigente.
+
 **Convención `entidadTipo`** (UPPERCASE): `GASTO`, `VALE`, `PRESTAMO_FUNCIONARIO`, `CPP`, `CPP_CUOTA`, `CPC`, `CPC_CUOTA`, `CHEQUE`, `RETIRO_CAJA`, `ENTRADA_VARIA`, `OPERACION_FINANCIERA`, `MOVIMIENTO_BANCARIO`, `ACREDITACION_POS`, `COMPRA`, `VENTA`, `ASISTENCIA`.
+
+### Handlers genéricos (`electron/handlers/adjuntos.handler.ts`)
+
+IPCs polimórficos — toda entidad que adjunte archivos usa estos, no se crean handlers por dominio:
+
+| IPC | Input | Notas |
+|---|---|---|
+| `get-adjuntos` | `{ entidadTipo, entidadId, tipo? }` | filtra por tipo opcional, orden `createdAt DESC`. Sin chequeo de permiso. |
+| `get-adjunto-by-id` | `id` | sin chequeo de permiso. |
+| `create-adjunto` | `{ entidadTipo, entidadId, tipo?, archivoUrl, nombreArchivo, mimeType?, tamanoBytes?, observacion? }` | requiere `DOCUMENTOS_ADJUNTAR` + permiso del dominio. |
+| `update-adjunto` | `id, { tipo?, observacion? }` | requiere `DOCUMENTOS_ADJUNTAR` + permiso del dominio. |
+| `delete-adjunto` | `id` | requiere `DOCUMENTOS_ADJUNTOS_ELIMINAR` + permiso del dominio. Borra el archivo del FS con `deleteImageByUrl` antes de la fila. |
+
+**Seguridad:** `create/update/delete` chequean el permiso base (`DOCUMENTOS_ADJUNTAR` / `DOCUMENTOS_ADJUNTOS_ELIMINAR`) más el permiso del dominio resuelto por `getPermisoAdjuntarPorTipo(entidadTipo)` en `electron/handlers/documentos-permissions.config.ts`. Los `get-*` no chequean (se asume que ya pasaste por el listado del dominio padre). Strings se guardan UPPERCASE (`entidadTipo`, `tipo`, `observacion`).
 
 ## 6. Patrón "una imagen principal" (Producto, Persona, Presentación, Sabor)
 
@@ -126,10 +144,10 @@ Para entidades donde la foto se consulta mucho en listados (PDV, lista de produc
 5. **Para mostrar imágenes en listas usá `thumbUrl(...)`**, no la URL original. Si no hay thumb (legacy), cae al original via `(error)`.
 6. **Para mostrar documentos no-imagen usá `<app-document-viewer>`** — nunca descargues a `<a>` salvo que sea explícitamente "descargar a disco".
 
-## 8. Pendientes (release 2 y siguientes)
+## 8. Pendientes
 
-Ver [workflows/todos-pendientes.md](../workflows/todos-pendientes.md) sección "Acciones inmediatas":
-- Adoptar `Adjunto` polimórfico en gastos, vales, préstamos, CPP, CPC, cheques, retiros, operaciones financieras, movimientos bancarios, acreditaciones POS, ventas (comprobante de transferencia), asistencias.
+Ver [workflows/todos-pendientes.md](../workflows/todos-pendientes.md) sección "Acciones inmediatas". El schema y los handlers genéricos de `Adjunto` ya están; lo pendiente es la adopción dominio por dominio y algunas migraciones de almacenamiento:
+- Adoptar (UI + wiring) el `Adjunto` polimórfico en gastos, vales, préstamos, CPP, CPC, cheques, retiros, operaciones financieras, movimientos bancarios, acreditaciones POS, ventas (comprobante de transferencia), asistencias.
 - UI de imagen en Presentación + Sabor (columnas ya existen).
 - Migrar `create-edit-persona` a `<app-file-upload>`.
 - Migrar `PdvCategoriaItem.imagen` base64 → `app://`.

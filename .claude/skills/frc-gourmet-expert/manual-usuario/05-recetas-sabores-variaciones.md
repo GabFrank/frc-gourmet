@@ -153,9 +153,7 @@ Notas reutilizables (no específicas de receta):
 - "BIEN COCIDO", "POCO COCIDO".
 - "SIN SAL", "MUCHO PICANTE".
 
-**Menu → Productos → Observaciones** (UI parcial).
-
-Se vinculan a productos en el tab "Observaciones" del producto, y aparecen como chips en el PdV al personalizar.
+Se gestionan y vinculan desde el tab "Observaciones" del producto (UI parcial), y aparecen como chips en el PdV al personalizar.
 
 ## Adicionales de adicionales
 

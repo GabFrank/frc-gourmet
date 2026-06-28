@@ -1,14 +1,14 @@
 # Base de datos — TypeORM dual driver (SQLite / Postgres)
 
-## Configuración (desde F1.5)
+## Configuración
 
-`src/app/database/database.config.ts:214-256` — `getDataSourceOptions(userDataPath, override?)`:
+`src/app/database/database.config.ts` — `getDataSourceOptions(userDataPath, override?)`:
 
 ```typescript
-const driverType = override?.type === 'postgres' ? 'postgres' : 'sqlite';
+const driverType: 'sqlite' | 'postgres' = override?.type === 'postgres' ? 'postgres' : 'sqlite';
 const shared = {
-  entities: getEntitiesList(),       // ~170 clases
-  synchronize: false,                 // ⚠️ desde F1.5 — toda nueva entity requiere migration
+  entities: getEntitiesList(),       // 157 clases (incl. base abstracta)
+  synchronize: false,                 // ⚠️ toda nueva entity requiere migration
   logging: process.env['NODE_ENV'] === 'development',
   migrations: getMigrations(driverType),   // dual baseline: elige SQLite o Postgres
   migrationsRun: false,
@@ -19,10 +19,13 @@ if (override?.type === 'postgres') return { type: 'postgres', host, port, databa
 return { type: 'sqlite', database: dbPath, ...shared };
 ```
 
-- **`synchronize: false` desde F1.5** — toda entity nueva exige migration generada con `npm run migration:generate -- src/app/database/migrations/<Nombre>` (o `:postgres` para Postgres).
-- **`migrations/` tiene dual baseline:** `1778380893206-Baseline.ts` (SQLite) y `1778380893207-BaselinePostgres.ts`. `getMigrations(driver)` devuelve la mitad correcta + las incrementales (que deben ser portables a ambos drivers, ver patterns en [conventions/pitfalls-typeorm-electron.md](../conventions/pitfalls-typeorm-electron.md)).
-- **`DatabaseService.runMigrations`** corre manualmente al iniciar, tras backup pre-migrate.
-- **`renameLegacyBaselineRows`** — si la DB ya tiene la baseline vieja registrada con otro nombre, se renombra en `typeorm_migrations` antes de `runMigrations` para no re-correr todo.
+- **`synchronize: false`** — NO hay auto-DDL. Toda entity nueva exige migration registrada en `getMigrations()`.
+- **`migrations/` tiene dual baseline:**
+  - `1778378410416-Baseline.ts` → clase `Baseline1778378410416` (SQLite)
+  - `1778380893207-BaselinePostgres.ts` → clase `BaselinePostgres1778380893207` (Postgres)
+  - `getMigrations(driver)` devuelve la baseline del driver correcto + las migraciones incrementales (compartidas, deben ser portables a ambos drivers, ver patterns en [conventions/pitfalls-typeorm-electron.md](../conventions/pitfalls-typeorm-electron.md)).
+- **Las migraciones corren al arranque** dentro de `DatabaseService.runMigrations` (tras backup pre-migrate).
+- **Naming de migración nueva:** `<epoch-millis>-<Descripcion>.ts` con clase `Descripcion<epoch-millis>`. El timestamp debe ser **epoch-ms real** (`date +%s%3N`), nunca un número redondeado a mano. (Las migraciones incrementales ya existentes usan números redondeados — son legacy, no imitarlas.)
 
 ### SQLite default
 - Path: `app.getPath('userData') + '/frc-gourmet.db'`. macOS: `~/Library/Application Support/frc-gourmet/`.
@@ -134,19 +137,23 @@ try {
 
 ## Mapa de dominios y cantidades
 
-| Dominio | Entidades | Handler principal |
-|---|---|---|
-| **personas** | 9 (Persona, Usuario, Role, UsuarioRole, Permission, RolePermission, Cliente, TipoCliente, LoginSession) | personas.handler, auth.handler, permissions.handler |
-| **personalizacion** | 1 (DashboardShortcut) | dashboard-shortcuts.handler |
-| **productos** | ~30 (Familia, Subfamilia, Producto, Presentacion, Receta, Sabor, Combo, Promocion, Producción, etc.) | productos.handler, recetas.handler, sabores.handler, receta-presentacion.handler |
-| **ventas** | 22 (Venta, VentaItem, VentaItemSabor, Comanda, Mesa, Sector, Reserva, Delivery, PdvAtajo*, PdvCategoria*, etc.) | ventas.handler |
-| **compras** | 10 (Proveedor, ProveedorProducto, Compra, CompraDetalle, CompraCategoria, FormasPago, Pago/PagoDetalle [legacy]) | compras.handler |
-| **financiero** | ~30 (Moneda, Caja, Conteo, CajaMayor, CajaMayorMovimiento, CajaMayorSaldo, Gasto, RetiroCaja, EntradaVaria, OperacionFinanciera, CuentaBancaria, MaquinaPos, AcreditacionPos, MovimientoBancario, Chequera, Cheque, CuentaPorPagar, CuentaPorCobrar, MovimientoCliente, etc.) | financiero, caja-mayor, banking, cuentas-por-pagar, cuentas-por-cobrar, movimientos-cliente |
-| **rrhh** | ~40 (Funcionario, Cargo, HistoricoCargo, HistoricoSalario, Turno, Asistencia, Penalizacion, Feriado, HoraExtra, Vale, MotivoVale, Aguinaldo, Bono, Vacacion, VacacionPeriodo, LiquidacionSueldo/Item/Concepto, LiquidacionFinal/Item, ReglaComision*, EquipoComision*, FuncionarioReglaComision, NotificacionRrhh, ConfiguracionRrhh, FuncionarioDocumento) | ~13 handlers RRHH |
-| **auth** | 1 (LoginSession) | auth.handler |
-| **printer** | 1 (Printer) | printers.handler |
+Conteo por carpeta de `src/app/database/entities/` (157 archivos `*.entity.ts` en total, incluye `base.entity.ts` abstracto):
 
-→ Índice completo en [reference/entities-index.md](../reference/entities-index.md).
+| Carpeta | Entidades | Handlers principales |
+|---|---:|---|
+| **personas** | 9 (Persona, Usuario, Role, UsuarioRole, Permission, RolePermission, Cliente, TipoCliente, ...) | personas, auth, permissions |
+| **auth** | 2 (LoginSession + refresh/sesión) | auth |
+| **personalizacion** | 2 (DashboardShortcut, ...) | dashboard-shortcuts |
+| **productos** | 33 (Familia, Subfamilia, Producto, Presentacion, Receta, Sabor, Combo, Promocion, Produccion, etc.) | productos, recetas, sabores, receta-presentacion |
+| **ventas** | 24 (Venta, VentaItem, VentaItemSabor, Comanda, PdvMesa, Sector, Reserva, Delivery, PdvAtajo*, PdvConfig, etc.) | ventas, kds |
+| **compras** | 12 (Proveedor, ProveedorProducto, Compra, CompraDetalle, CompraCategoria, FormasPago, DocumentoCompraImportado, OcrAlias*, ...) | compras, cuentas-por-pagar, factura-import |
+| **financiero** | 35 (Moneda, Caja, Conteo, CajaMayor*, Gasto, RetiroCaja, EntradaVaria, OperacionFinanciera, CuentaBancaria, MaquinaPos, AcreditacionPos, Chequera, Cheque, CuentaPorPagar/Cobrar*, MovimientoCliente, Convenio*, etc.) | financiero, caja-mayor, banking, cuentas-por-pagar, cuentas-por-cobrar, movimientos-cliente, convenios |
+| **rrhh** | 34 (Funcionario, Cargo, Turno, Asistencia, Penalizacion, Feriado, HoraExtra, Vale, Aguinaldo, Bono, Vacacion*, LiquidacionSueldo*, LiquidacionFinal*, ReglaComision*, EquipoComision*, NotificacionRrhh, ConfiguracionRrhh, ...) | ~14 handlers RRHH + comisiones |
+| **ia** | 2 (config OCR/IA) | factura-import |
+| **sistema / shared** | 2 (documentos, adjuntos polimórficos, etc.) | documentos-tickets, adjuntos, empresa |
+| **(top-level)** | Printer + base.entity (abstracta) | printers |
+
+→ Índice completo y exacto en [reference/entities-index.md](../reference/entities-index.md).
 
 ## Convenciones de naming
 
@@ -173,4 +180,4 @@ Hay índices puntuales (no exhaustivo):
 
 ## Recalcular saldos de Caja Mayor
 
-`recalcular-saldos` (caja-mayor.handler.ts:121) es el **safety net**: borra todos los `CajaMayorSaldo` y los reconstruye sumando todos los `CajaMayorMovimiento` activos. Útil cuando se sospecha desincronización (ej: tras un cambio manual en BD o un bug en una transacción no atómica).
+`recalcular-saldos` (`caja-mayor.handler.ts`) es el **safety net**: borra todos los `CajaMayorSaldo` y los reconstruye sumando todos los `CajaMayorMovimiento` activos. Útil cuando se sospecha desincronización (ej: tras un cambio manual en BD o un bug en una transacción no atómica).

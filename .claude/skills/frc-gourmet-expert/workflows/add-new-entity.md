@@ -1,6 +1,18 @@
 # Workflow: agregar una nueva entidad de punta a punta
 
-Patrón estándar para crear entidad + CRUD + UI completos. Adaptado de `.cursor/rules/create-new-entities.mdc`.
+Patrón estándar para crear entidad + CRUD + UI completos.
+
+> ⚠️ **`synchronize: false`** — la app NO auto-crea tablas. Toda entidad nueva (o cambio de columna) **exige una migración**. Sin migración la tabla/columna no existe en runtime y el handler falla al hacer `dataSource.getRepository(...)`. El paso 3 (migración) es obligatorio, no opcional.
+
+Pasos:
+1. Entity en `src/app/database/entities/<dominio>/`.
+2. Registrarla en `getEntitiesList()` de `database.config.ts`.
+3. **Crear migración** driver-aware y registrarla en `getMigrations()` de `database.config.ts`.
+4. Handler IPC + registrarlo en `main.ts`.
+5. Exponer en `preload.ts` (`window.api`).
+6. Métodos en `RepositoryService` (abstract + impl IPC/HTTP — ver paso 6).
+7. Componentes Angular standalone (`list-*`, `create-edit-*`).
+8. Tab opener en `app.component.ts` + item de menú con `*appHasPermission`.
 
 ## 1. Entity (TypeORM)
 
@@ -39,15 +51,66 @@ import { MiEntidad } from './entities/<dominio>/mi-entidad.entity';
 
 // ...
 
-entities: [
-  // existentes
-  MiEntidad,  // ← AGREGAR
-],
+function getEntitiesList(): any[] {
+  return [
+    // existentes
+    MiEntidad,  // ← AGREGAR
+  ];
+}
 ```
 
-**Sin esto**, `synchronize: true` no la conoce y la tabla nunca se crea. La app arrancará pero el handler fallará al hacer `dataSource.getRepository(MiEntidad)`.
+**Sin esto**, TypeORM no conoce la entidad: el `DataSource` falla al validar metadata o el handler falla al hacer `dataSource.getRepository(MiEntidad)`. Registrar la entidad **no** crea la tabla (ver paso 3) — `synchronize` está en `false`.
 
-## 3. Handler IPC
+## 3. Crear la migración (OBLIGATORIO)
+
+`synchronize: false` → la tabla no se crea sola. Hay que generar/escribir una migración y registrarla.
+
+### Generar desde el diff de entities
+
+```bash
+# El nombre se prefija con el timestamp epoch-ms automáticamente
+npm run migration:generate -- src/app/database/migrations/AddMiEntidad
+```
+
+Esto compara las entities contra el `DataSource` de CLI (`src/app/database/datasource.ts`, SQLite por default) y emite el SQL del diff. Para regenerar la baseline Postgres se usan variables de entorno (no hay script `:postgres`):
+
+```bash
+FRC_DB_TYPE=postgres FRC_PG_DATABASE=frc_gourmet_baseline_pg \
+  npm run migration:generate -- src/app/database/migrations/MiCambioPostgres
+```
+
+En la práctica, para una entidad nueva conviene escribir **una sola migración driver-aware** a mano (un archivo) que cree la tabla en ambos drivers.
+
+### Reglas de la migración
+
+- **Nombre del archivo:** `<epoch-millis>-<Descripcion>.ts`, clase `Descripcion<epoch-millis>` (ej. `1782606189440-AddMiEntidad.ts` → `class AddMiEntidad1782606189440`).
+- **Timestamp = epoch-ms real.** Obtenelo con `date +%s%3N` (o dejá que `migration:generate` lo asigne). **NUNCA un número redondeado** a mano (ej. `1780500000000`): los redondeados colisionan entre ramas no mergeadas. ⚠️ Las migraciones viejas del repo usan números redondeados — **no las imites**.
+- **Driver-aware:** ramificar por `queryRunner.connection.options.type === 'postgres'` cuando el SQL difiera entre SQLite y Postgres.
+- **Aditiva:** sin `DROP`/`RENAME` sin estrategia de 2 versiones. Preferir `IF NOT EXISTS`.
+- Editar SOLO el `.ts` (el `.js` se genera). Nunca modificar una migración ya mergeada — agregar una nueva.
+
+Guía completa: `docs/MIGRATIONS.md`.
+
+### Registrar la migración
+
+En `database.config.ts`, dentro de `getMigrations(driverType)`, importar la clase y agregarla **al final** del array de incrementales (después de la baseline):
+
+```typescript
+import { AddMiEntidad1782606189440 } from './migrations/1782606189440-AddMiEntidad';
+
+function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
+  const baseline = driverType === 'postgres' ? BaselinePostgres... : Baseline...;
+  return [
+    baseline,
+    // ... incrementales existentes
+    AddMiEntidad1782606189440,  // ← AGREGAR al final
+  ];
+}
+```
+
+`DatabaseService` corre `runMigrations` (con backup previo) en cada arranque. La tabla se crea ahí.
+
+## 4. Handler IPC
 
 **Archivo**: si existe handler del dominio, agregar dentro. Si no, crear `electron/handlers/<dominio>.handler.ts`.
 
@@ -180,7 +243,7 @@ export function registerMiDominioHandlers(
 }
 ```
 
-## 4. Registrar handler en main.ts
+## 5. Registrar handler en main.ts
 
 ```typescript
 // main.ts (en initializeDatabase().then())
@@ -189,7 +252,7 @@ import { registerMiDominioHandlers } from './electron/handlers/mi-dominio.handle
 registerMiDominioHandlers(dataSource, getCurrentUser);
 ```
 
-## 5. Preload
+## 6. Preload
 
 `preload.ts`. Agregar dentro del objeto `api` que se expone con `contextBridge.exposeInMainWorld('api', api)`:
 
@@ -220,54 +283,52 @@ const api = {
 
 Si tipás explícitamente `ElectronAPI` en preload (recomendado), agregar también las firmas a esa interfaz.
 
-## 6. RepositoryService
+## 7. RepositoryService (abstract + impl IPC/HTTP)
 
-`src/app/database/repository.service.ts`. Agregar:
+> ⚠️ **`RepositoryService` ya NO es una clase concreta única.** Tras el refactor cliente/servidor (F1–F5) es una **clase abstracta** que actúa como token DI (`src/app/database/repository.service.ts`), con **dos implementaciones**:
+> - `repository-ipc.service.ts` — modo `standalone`/`server`: invoca `window.api.*` (Electron IPC), envuelve en `Observable` con `from()`.
+> - `repository-http.service.ts` — modo `client`: hace HTTP contra el server remoto (`/api/...`).
+>
+> La factory en `app.module.ts` elige la implementación según el modo. **Cada método nuevo debe existir en las tres**: la firma `abstract` en `repository.service.ts` y la implementación concreta en `repository-ipc.service.ts` y `repository-http.service.ts`.
 
-(a) Firmas a la interface `ElectronAPI` al inicio:
-```typescript
-interface ElectronAPI {
-  // ...
-  getMiEntidades: () => Promise<MiEntidad[]>;
-  getMiEntidad: (id: number) => Promise<MiEntidad>;
-  createMiEntidad: (data: any) => Promise<MiEntidad>;
-  updateMiEntidad: (id: number, data: any) => Promise<any>;
-  deleteMiEntidad: (id: number) => Promise<any>;
-  getMiEntidadesPaginated: (page: number, pageSize: number, filters?: any) => Promise<{items: MiEntidad[], total: number}>;
-}
-```
+La clase abstracta (`repository.service.ts`) se **autogenera** con `scripts/generate-repository-abstract.py` a partir de la implementación IPC. El flujo práctico:
 
-(b) Métodos públicos:
+(a) Implementar los métodos en `repository-ipc.service.ts` (es la fuente de la generación). Dentro de la clase se usa `this.api` (= `window.api`):
 ```typescript
 import { MiEntidad } from './entities/<dominio>/mi-entidad.entity';
 
-// Dentro de RepositoryService
 getMiEntidades(): Observable<MiEntidad[]> {
   return from(this.api.getMiEntidades());
 }
-
 getMiEntidad(id: number): Observable<MiEntidad> {
   return from(this.api.getMiEntidad(id));
 }
-
 createMiEntidad(data: Partial<MiEntidad>): Observable<MiEntidad> {
   return from(this.api.createMiEntidad(data));
 }
-
 updateMiEntidad(id: number, data: Partial<MiEntidad>): Observable<any> {
   return from(this.api.updateMiEntidad(id, data));
 }
-
 deleteMiEntidad(id: number): Observable<any> {
   return from(this.api.deleteMiEntidad(id));
 }
-
 getMiEntidadesPaginated(page: number, pageSize: number, filters?: any): Observable<{items: MiEntidad[], total: number}> {
   return from(this.api.getMiEntidadesPaginated(page, pageSize, filters));
 }
 ```
+Agregar también las firmas a la interface `ElectronAPI` declarada en `repository-ipc.service.ts`.
 
-## 7. Componentes Angular
+(b) Implementar los mismos métodos en `repository-http.service.ts` (versión HTTP para `mode=client`).
+
+(c) Regenerar la clase abstracta:
+```bash
+python3 scripts/generate-repository-abstract.py
+```
+Esto reescribe `repository.service.ts` con las firmas `abstract`. Si preferís, podés agregar la firma `abstract` a mano, pero mantené las tres en sync.
+
+Los componentes Angular inyectan `RepositoryService` (el token abstracto) y no saben qué implementación reciben.
+
+## 8. Componentes Angular
 
 Convención de naming:
 - `src/app/pages/<dominio>/list-mi-entidades/list-mi-entidades.component.{ts,html,scss}`
@@ -275,7 +336,7 @@ Convención de naming:
 
 **Standalone por default**. Importar Material modules necesarios y `ConfirmationDialogComponent`. Usar Reactive Forms (no `ngModel` dentro de `formGroup`). Patrón full-height para listas con scroll local. Acciones en `mat-menu`.
 
-## 8. Tab opener en AppComponent
+## 9. Tab opener en AppComponent
 
 ```typescript
 // app.component.ts
@@ -295,33 +356,39 @@ openMiEntidadesTab() {
 
 ```html
 <!-- app.component.html, dentro del expansion-panel del dominio -->
-<a mat-list-item (click)="openMiEntidadesTab()">
+<!-- Usar *appHasPermission para gatear la entrada por permiso (directiva del proyecto) -->
+<a mat-list-item (click)="openMiEntidadesTab()" *appHasPermission="'MI_ENTIDAD_VER'">
   <mat-icon matListItemIcon>category</mat-icon>
   <span matListItemTitle *ngIf="isMenuExpanded">Mis Entidades</span>
 </a>
 ```
 
-## 9. Reiniciar la app
+Si la funcionalidad requiere permisos, agregarlos al catálogo `SEED_PERMISOS` en `electron/handlers/permissions.handler.ts` (`{ codigo, descripcion, modulo }`) y chequearlos también en el handler con `ensurePermission`.
 
-Cambios en `electron/handlers/`, `preload.ts`, `main.ts`, nueva entidad o `database.config.ts` requieren **reinicio completo de la app** (el usuario lo hace manualmente; ver [conventions/coding-rules.md](../conventions/coding-rules.md)).
+## 10. Reiniciar la app
 
-## 10. Verificar
+Cambios en `electron/handlers/`, `preload.ts`, `main.ts`, nueva entidad, nueva migración o `database.config.ts` requieren **reinicio completo de la app** (el usuario lo hace manualmente; ver [conventions/coding-rules.md](../conventions/coding-rules.md)). Al reiniciar corre la migración nueva.
 
-1. `npm run build` para chequear que TypeScript compila.
-2. Reiniciar la app. Buscar en consola: `Database connection initialized`.
+## 11. Verificar
+
+1. `npm run build` para chequear que TypeScript compila. (`npm run check` para el AOT de producción antes de pushear.)
+2. Reiniciar la app. Buscar en consola que las migraciones corrieron sin error y la conexión se inicializó.
 3. Abrir el tab nuevo desde el sidenav.
-4. Crear un registro. Verificar en BD: `sqlite3 ~/Library/Application\ Support/frc-gourmet/frc-gourmet.db "SELECT * FROM nombre_tabla;"`.
+4. Crear un registro. Verificar en BD que la tabla existe y tiene la fila. Path del `.db` SQLite por OS → [verificacion-bd-sqlite.md](verificacion-bd-sqlite.md). Ej. Linux:
+   `sqlite3 ~/.config/frc-gourmet/frc-gourmet.db "SELECT * FROM nombre_tabla;"`
 5. Editar y eliminar.
 
 ## Checklist resumen
 
 - [ ] Entity creada con `BaseModel`, decoradores, relaciones
-- [ ] Registrada en `database.config.ts`
-- [ ] Handler con CRUD + paginated, UPPERCASE, `setEntityUserTracking`
+- [ ] Registrada en `getEntitiesList()` de `database.config.ts`
+- [ ] **Migración** creada (timestamp epoch-ms real, driver-aware) y registrada en `getMigrations()`
+- [ ] Handler con CRUD + paginated, UPPERCASE, `setEntityUserTracking`, `ensurePermission` si aplica
 - [ ] Handler registrado en `main.ts`
 - [ ] Preload expone métodos en `window.api`
-- [ ] RepositoryService tiene métodos Observable
+- [ ] Métodos en `repository-ipc.service.ts` + `repository-http.service.ts` + firma abstract en `repository.service.ts` (regenerar con el script)
 - [ ] Componente list y create-edit standalone
-- [ ] Tab opener en AppComponent
+- [ ] Tab opener en AppComponent + item de menú con `*appHasPermission`
+- [ ] Permisos seedeados en `permissions.handler.ts` si aplica
 - [ ] Pruebas manuales pasaron
 - [ ] Avisar al usuario para reiniciar

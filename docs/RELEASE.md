@@ -217,7 +217,9 @@ Cuando hay update disponible:
 3. Si acepta: app se cierra, instala el update, relanza.
 4. Si rechaza: instala automáticamente al próximo `app.quit()` (config `autoInstallOnAppQuit: true`).
 
-Canal: por defecto `stable`. Cambiar desde Sistema → Actualizaciones (UI pendiente — IPC ya implementado en preload: `autoUpdateSetChannel('beta')`).
+Canal: por defecto `stable`. Cambiar desde Sistema → Actualizaciones mediante el diálogo
+`update-channel-dialog` (`src/app/shared/components/update-channel-dialog/`), que usa el IPC
+`autoUpdateSetChannel('beta')` expuesto en el preload.
 
 ## Branch protection rules (configurar en GitHub)
 
@@ -275,7 +277,8 @@ Manifest del canal:
 
 ### "El cliente no recibe la update"
 - Verificar que el manifest del canal exista: `https://github.com/GabFrank/frc-gourmet/releases/latest/download/<canal>.yml`
-- Verificar canal seteado en cliente: `update-config.json` en userData
+- Verificar canal seteado en cliente: sub-sección `update.channel` de `app-settings.json` en userData
+  (el viejo `update-config.json` se migra automáticamente a `app-settings.json` y se elimina)
 - Logs Windows: `%APPDATA%\frc-gourmet\logs\main.log`
 
 ### "CI rompe en `npm ci` con peer-deps"

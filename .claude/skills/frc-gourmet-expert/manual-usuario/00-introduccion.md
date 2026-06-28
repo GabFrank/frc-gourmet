@@ -22,7 +22,7 @@ Todo en una sola aplicación de escritorio que corre en tu PC (Windows / macOS /
 - **Cajero / Mozo**: usa el PdV diariamente para vender.
 - **Encargado de Compras**: registra compras y maneja proveedores.
 - **Contador / Administrador**: gestiona Caja Mayor, gastos, pagos, cobros, RRHH.
-- **Cocinero**: consulta comandas (en el futuro, con KDS).
+- **Cocinero**: consulta los pedidos en la pantalla de cocina (KDS).
 
 ## Capítulos del manual
 
@@ -77,11 +77,14 @@ Si esto no fue hecho, consultá [02-configuracion-inicial.md](02-configuracion-i
 - **RRHH** = Recursos Humanos.
 - **PYG** = Guaraní paraguayo.
 
-## Limitación importante
+## Modo de operación
 
-⚠️ **Esta versión está optimizada para uso local single-user**. No está pensada para entornos multi-usuario simultáneos en distintas máquinas. Cada PC tiene su propia base de datos (`frc-gourmet.db`) en la carpeta de usuario del sistema.
+La app puede funcionar de dos maneras:
 
-Si necesitás varios cajeros simultáneamente, hay que evaluar setup específico (servidor central + clientes thin) — fuera del scope actual.
+- **Local (standalone)**: cada PC tiene su propia base de datos (`frc-gourmet.db`) en la carpeta de usuario del sistema. Es el modo por defecto.
+- **Servidor / Cliente**: un equipo actúa como **servidor** (mantiene la base de datos) y los demás se conectan como **clientes**. Útil cuando hay varias cajas que deben compartir los mismos datos.
+
+El modo se elige en **Configuración → Modo de operación**. Cuando estás en modo servidor o cliente, la barra superior muestra una etiqueta (SERVIDOR / CLIENTE).
 
 ## Licencia y soporte
 

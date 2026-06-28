@@ -2,6 +2,8 @@
 
 Toda comunicación entre Angular (renderer) y la base de datos viaja por las **4 capas Entity → Handler → Preload → RepositoryService**. Cualquier dato que veas en pantalla pasó por estas 4 piezas.
 
+> **Modo server/client:** los mismos handlers se exponen por HTTP. Al arranque, `installHandlerRegistry()` monkey-patchea `ipcMain.handle` para copiar cada canal a `handlerRegistry`; el endpoint `POST /api/rpc/:channel` (Fastify) los invoca por nombre sin reescribir nada. Ver [cliente-servidor.md](cliente-servidor.md).
+
 ## Diagrama
 
 ```
@@ -61,7 +63,7 @@ export class Producto extends BaseModel {
 }
 ```
 
-**Después de crear/modificar**, registrar en `src/app/database/database.config.ts` en el array `entities`. Sin eso, `synchronize: true` no la conoce.
+**Después de crear/modificar**, registrar en `src/app/database/database.config.ts` (`getEntitiesList()`). Como `synchronize: false`, además requiere una **migración** (driver-aware) registrada en `getMigrations()`. Sin eso la tabla/columna no existe en runtime. Ver [database.md](database.md).
 
 ### 2. Handler (Electron main)
 
@@ -117,6 +119,7 @@ export function registerProductosHandlers(
 **Reglas críticas:**
 - Strings UPPERCASE antes de guardar.
 - `setEntityUserTracking(...)` para popular `createdBy` / `updatedBy`.
+- **Permisos en backend:** los handlers que mutan datos sensibles llaman `ensurePermission(dataSource, getCurrentUser, 'CODIGO')` (o `checkPermission`) al inicio. Definidos en `electron/utils/auth.utils.ts` (cache 30s, lee de `withRequestUser` AsyncLocalStorage en modo server). El renderer **ya no es la única frontera** — el backend valida. Grepear el código de permiso real del handler antes de asumirlo.
 - Operaciones complejas (multi-entity, contra-mov) usar **QueryRunner con transacción atómica**.
 - Error handling: dos patrones coexisten. `throw error` (preferido) o `return { success: false, error: msg }`. **Inconsistencia conocida** — chequear el handler antes de cambiar.
 
@@ -128,7 +131,7 @@ registerXxxHandlers(dataSource, getCurrentUser);
 
 ### 3. Preload (contextBridge)
 
-**Ubicación:** `preload.ts` (~3.700 líneas, compila a `preload.js` ~98 KB).
+**Ubicación:** `preload.ts` (~3.800 líneas), compila a `preload.js`.
 
 ```typescript
 // preload.ts
@@ -144,25 +147,37 @@ const api = {
 contextBridge.exposeInMainWorld('api', api);  // Disponible como window.api
 ```
 
-Adicionalmente hay una interfaz TypeScript que tipea `window.api` (la versión más completa vive duplicada como `ElectronAPI` dentro de `repository.service.ts`).
+`preload.ts` expone ~780 métodos en `window.api`, más un escape hatch genérico:
+
+```typescript
+callIpc: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args)
+```
+
+`callIpc` permite invocar cualquier canal IPC por nombre sin tener un método tipado (lo usa, por ejemplo, `DocumentoService`). Útil para canales nuevos o poco usados.
 
 ### 4. RepositoryService (Angular)
 
-**Ubicación:** `src/app/database/repository.service.ts`. ~3700 líneas. Es el ÚNICO lugar desde donde el código Angular debería tocar la BD.
+**Ubicación:** `src/app/database/`. Es el ÚNICO lugar desde donde el código Angular debería tocar la BD.
+
+`RepositoryService` es una **clase abstracta canónica** con dos implementaciones:
+- `repository-ipc.service.ts` (`RepositoryIpcService`) — impl IPC sobre `window.api`. Es la que se usa en el desktop (modos standalone/server) y, vía shim HTTP, en la PWA mobile.
+- `repository-http.service.ts` (`RepositoryHttpService`) — **skeleton, NO se usa** (sus métodos tiran "no implementado"). El modo `client` del desktop routea HTTP mediante el monkey-patch de `ipcRenderer.invoke` en el preload, no por esta clase.
+
+El provider DI elige la impl al arranque; en la práctica devuelve siempre `RepositoryIpcService`. Ver [cliente-servidor.md](cliente-servidor.md) y [mobile-pwa.md](mobile-pwa.md).
 
 ```typescript
 import { Injectable } from '@angular/core';
 import { Observable, from } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
-export class RepositoryService {
-  private api = (window as any).api as ElectronAPI;
+export class RepositoryIpcService extends RepositoryService {
+  private api = (window as any).api;
 
-  getProducto(id: number): Observable<Producto> {
+  override getProducto(id: number): Observable<Producto> {
     return from(this.api.getProducto(id));
   }
 
-  createProducto(data: Partial<Producto>): Observable<Producto> {
+  override createProducto(data: Partial<Producto>): Observable<Producto> {
     return from(this.api.createProducto(data));
   }
 }
@@ -172,15 +187,12 @@ export class RepositoryService {
 
 ## Cómo añadir una nueva operación IPC
 
-→ Ver checklist completo en [workflows/add-new-entity.md](../workflows/add-new-entity.md). Resumen:
-
-1. **Entity** + registro en `database.config.ts`.
-2. **Handler** en `electron/handlers/<dominio>.handler.ts` (CRUD + paginated si aplica).
-3. **Preload** método en `preload.ts` (`getX`, `createX`, etc.).
-4. **RepositoryService** método público que envuelve el `window.api.X` en `Observable`.
-5. **Tipo TypeScript** en `ElectronAPI` interface (al inicio de `repository.service.ts`).
-6. (UI) Componente consume `repositoryService.X(...).subscribe(...)`.
-7. **Reiniciar la app** — porque cambios en `electron/handlers/`, `preload.ts`, `main.ts` no son hot-reload. Avisarle al usuario.
+1. **Entity** + registro en `database.config.ts` (`getEntitiesList()`) + **migración** driver-aware en `getMigrations()`.
+2. **Handler** en `electron/handlers/<dominio>.handler.ts` (CRUD + paginated si aplica), con `ensurePermission(...)` si muta datos sensibles.
+3. **Preload** método en `preload.ts` (`getX`, `createX`, etc.). Tras tocar preload, regenerar el mapa método→canal del mobile (`npm run generate:mobile-api`).
+4. **RepositoryService**: declarar el método abstracto en `repository.service.ts` y la impl en `repository-ipc.service.ts` (envuelve `window.api.X` en `Observable`).
+5. (UI) Componente consume `repositoryService.X(...).subscribe(...)`.
+6. **Reiniciar la app** — porque cambios en `electron/handlers/`, `preload.ts`, `main.ts` no son hot-reload. Avisarle al usuario.
 
 ## Reglas de oro
 

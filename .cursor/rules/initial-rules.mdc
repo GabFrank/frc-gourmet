@@ -39,15 +39,15 @@ alwaysApply: false
 
 ## Application Features
 12. **CONFIRMATION DIALOGS**: Always use `@confirmation-dialog.component.ts` for all confirmations.
-13. **TYPEORM SYNC**: Remember `synchronize: true` is for development only, not production.
+13. **SCHEMA = MIGRATIONS, NOT SYNC**: `synchronize` is **false** in every environment. The schema is managed only by TypeORM migrations that run at startup. Any new/changed entity REQUIRES a migration (`src/app/database/migrations/`, registered in `getMigrations()`). See `docs/MIGRATIONS.md`. Migration timestamp must be the **real epoch-ms** (`date +%s%3N`), never a rounded number.
 
 ## Backend
-14. Always use [repository.service.ts](mdc:src/app/database/repository.service.ts) for getting data from database
+14. Always use [repository.service.ts](mdc:src/app/database/repository.service.ts) for getting data from database. For one-off handlers without a wrapper, `window.api.callIpc(channel, ...args)` is fine (it routes by mode automatically).
 
 ## Creating new entity
-15. See [presentacion.entity.js](mdc:src/app/database/entities/productos/presentacion.entity.js) to take as example
-16. add methods on [repository.service.ts](mdc:src/app/database/repository.service.ts) [preload.ts](mdc:preload.ts) and the corresponding .handler.ts file, in this case for presentacion is [productos.handler.ts](mdc:electron/handlers/productos.handler.ts), import the new entity on [database.config.ts](mdc:src/app/database/database.config.ts) 
-17. Always look for existing code example to take as example
+15. See [presentacion.entity.ts](mdc:src/app/database/entities/productos/presentacion.entity.ts) to take as example. Edit `.ts` only (the `.js` are generated).
+16. Touch all layers: entity in `src/app/database/entities/<domain>/` → register in `getEntitiesList()` of [database.config.ts](mdc:src/app/database/database.config.ts) → **add a migration** and register it in `getMigrations()` → handler in the matching `.handler.ts` (e.g. [productos.handler.ts](mdc:electron/handlers/productos.handler.ts)) registered in `main.ts` → expose in [preload.ts](mdc:preload.ts) via `window.api` (or use `callIpc`) → methods in [repository.service.ts](mdc:src/app/database/repository.service.ts) (+ ipc/http impls) → Angular components + `openXTab()` in `app.component.ts` and a menu item gated by `*appHasPermission`.
+17. Always look for existing code to take as example. Full checklist: `.cursor/rules/create-new-entities.mdc`.
 
 ## Remember
 - These rules ensure application consistency and performance

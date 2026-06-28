@@ -67,7 +67,7 @@ abrir el formulario en blanco y crear un registro nuevo.
 
 > El botón **+** y la opción **Eliminar** solo aparecen **si tu usuario tiene permiso**
 > para esa sección. Si no los ves, es porque no tenés permiso (ver
-> [Capítulo 8](08-permisos-y-roles.md)).
+> [Permisos y roles](08-permisos-y-roles.md)).
 
 ### Mientras carga / si hay error
 
@@ -165,4 +165,4 @@ mensaje como **"Sin permiso para eliminar"** o **"No se pudo eliminar"**.
 
 ---
 
-**Próximo capítulo →** [04 — Módulo RRHH](04-modulo-rrhh.md)
+**Próximo capítulo →** [Módulo Ventas — meseros](04-modulo-ventas-meseros.md)

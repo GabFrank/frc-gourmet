@@ -19,7 +19,7 @@ Una vez logueado, ves esta estructura:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ [☰] FRC Gourmet              [☀ ⇄ 🌙] [🔔] [👤 ▾]                │  ← Toolbar
+│ [☰] FRC Gourmet         USD/BRL  hh:mm:ss        [👤 ▾] [_ ▢ ✕]   │  ← Toolbar
 ├──────────┬──────────────────────────────────────────────────────┤
 │ MENU     │                                                      │
 │ LATERAL  │   ÁREA DE TRABAJO (PESTAÑAS)                         │
@@ -36,24 +36,28 @@ Una vez logueado, ves esta estructura:
 ### Toolbar (arriba)
 
 - **☰**: abre/cierra el menú lateral.
-- **☀ / 🌙**: cambia entre tema claro y oscuro. Tu preferencia se guarda.
-- **🔔**: notificaciones de RRHH (cumpleaños próximos, cuotas vencidas, etc.). El número rojo es la cantidad sin leer.
-- **👤 Mi Perfil ▾**: tu menú de usuario:
+- **Cotizaciones + reloj** (centro): muestra las cotizaciones del día (USD / BRL, compra/venta) y la fecha/hora actual.
+- **👤 Usuario ▾**: tu menú de usuario:
   - **Mi Perfil**: ver tus datos.
+  - **Tema claro / Tema oscuro**: cambia entre los dos temas. Tu preferencia se guarda.
+  - **Buscar actualizaciones / Instalar actualización**: gestiona las actualizaciones de la app.
   - **Cerrar Sesión**: salir del sistema.
+- **Botones de ventana** (minimizar / maximizar / cerrar): a la derecha, en Windows y Linux.
+
+> En esta versión el cambio de tema está dentro del menú de usuario (👤), no como botón suelto en la barra. El ícono de notificaciones de la barra superior está oculto: las notificaciones de RRHH se ven desde **Recursos Humanos → Notificaciones** (el ítem muestra un contador rojo con la cantidad sin leer).
 
 ### Menú lateral
 
-Tiene 8 secciones (cada una expandible):
+El menú lateral muestra solo las secciones para las que tu usuario tiene permiso. Las secciones posibles son:
 
-1. **Dashboard** (item simple, va al inicio).
-2. **Ventas** → Dashboard de ventas, abre PdV desde acá.
-3. **Recursos Humanos** → 19 sub-items (Funcionarios, Asistencias, Vales, Liquidaciones, etc.).
-4. **Comisiones** → Reglas, Equipos, Liquidaciones de comisión.
-5. **Productos** → Dashboard, Productos, Recetas, Sabores, Adicionales.
-6. **Compras** → Dashboard, Lista de compras.
-7. **Financiero** → Dashboard, Cajas, Monedas, Caja Mayor, Cuentas por Cobrar.
-8. **Configuración** → Impresoras, Dispositivos.
+1. **Dashboard** (ítem simple, va al inicio).
+2. **Ventas** → Dashboard, Buffet por kilo, KDS — Cocina, Pantallas KDS.
+3. **Recursos Humanos** → Dashboard RRHH, Notificaciones, Reportes RRHH, Personas, Usuarios, Clientes, Convenios, Cargos, Funcionarios, Turnos, Asistencias, Penalizaciones, Horas extra, Vales, Motivos de vale, Prestamos, Liquidaciones, Bonos, Aguinaldos, Vacaciones, Feriados, Permisos, Config RRHH.
+4. **Comisiones** → Reglas, Equipos, Liquidaciones.
+5. **Productos** → Dashboard, Categorías, Productos, Recetas, Gestión de Sabores, Adicionales, Ingredientes, Movimientos de Stock.
+6. **Compras** → Dashboard, Compras, Importaciones IA.
+7. **Financiero** → Dashboard, Cajas, Monedas, Tipos de Precio, Caja Mayor, Cuentas por Cobrar.
+8. **Configuración** → Datos de la Empresa, Impresoras, Sectores e impresoras, Dispositivos y puntos de venta, Backup y Restauración, Configurar IA, Configurar BD, Modo de operación.
 
 **Click** en el icono de la sección → expande sus items.
 **Click** en un item → abre una **pestaña** en el área de trabajo.
@@ -78,7 +82,7 @@ Cada item del menú abre como una **pestaña** (no como página completa). Esto 
 
 ## Tema oscuro / claro
 
-El switch de tema en la toolbar cambia inmediatamente todos los colores:
+El cambio de tema está en el menú de usuario (👤 → **Tema claro / Tema oscuro**) y cambia inmediatamente todos los colores:
 
 - **Claro**: fondo blanco, texto oscuro. Más legible con luz natural.
 - **Oscuro**: fondo gris oscuro, texto blanco. Más cómodo en ambientes con poca luz, menos cansancio visual.

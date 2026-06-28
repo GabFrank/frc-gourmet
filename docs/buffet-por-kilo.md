@@ -4,8 +4,8 @@ Documento de diseño e implementación del módulo de **producto de buffet por
 peso** (venta por kilo, "peso libre") y de la funcionalidad transversal de
 **precios programados por día y horario**.
 
-> Estado: en implementación (branch `claude/frc-gourmet-expert-skill-tuxit6`).
-> Los tests manuales en PC quedan pendientes; ver sección "Verificación".
+> Estado (verificado 2026-06-28): Fases 0–4 **implementadas**; Fase 5 (integración serial de balanza
+> + modo receta proporcional) pendiente. Los tests manuales en PC quedan pendientes; ver "Verificación".
 
 ---
 
@@ -51,8 +51,8 @@ aplicoLibre = (precioMaximo != null && subtotal >= precioMaximo)
 - `pesoNeto` se persiste SIEMPRE con el valor real, aunque el `total` quede
   capado por `precioMaximo`.
 
-La lógica pura vive en `electron/utils/buffet-peso.util.ts` (testeable sin
-Electron).
+La lógica pura vive en `src/app/shared/utils/buffet-peso.util.ts` (testeable sin
+Electron; los tests autónomos están en `electron/utils/buffet-peso.util.spec.ts`).
 
 ---
 
@@ -72,7 +72,7 @@ Columnas nuevas (todas nullable / con default → migración aditiva):
 | `fecha_fin` | date null | vigencia hasta |
 | `prioridad` | int default 0 | ante solape, gana mayor prioridad |
 
-**Resolución** (`electron/utils/precio-vigencia.util.ts`, pura y testeable):
+**Resolución** (`src/app/shared/utils/precio-vigencia.util.ts`, pura y testeable):
 dado un conjunto de `PrecioVenta` candidatos y una fecha/hora, devuelve el de
 mayor prioridad cuya ventana matchea; si ninguno programado matchea, cae al
 precio sin programación (fallback / `principal`). Se resuelve en JS, no en SQL,
@@ -135,7 +135,7 @@ ingredientes prorrateados en vez del producto buffet.
   - dígitos 8–12 = peso (gramos) o precio (5 dígitos)
   - dígito 13 = verificador
   Config global en `PdvConfig`: si la etiqueta trae **peso** o **precio**, y el
-  divisor. El parseo (`electron/utils/balanza-ean13.util.ts`, puro) extrae el
+  divisor. El parseo (`src/app/shared/utils/balanza-ean13.util.ts`, puro) extrae el
   peso y prellena el `ingresar-peso-dialog`.
 - **Fase 5 (futuro)** — integración serial directa (driver por modelo).
 
@@ -219,5 +219,3 @@ Cada fase: cambio de entity → **migración aditiva portable** registrada en
 - Fechas con `parseLocalDate`; nulear con `(x as any).campo = null`.
 - Acceso a BD desde Angular solo vía `RepositoryService`.
 - Number pipe `| number:'1.0-2'`; confirmaciones con `ConfirmationDialogComponent`.
-</content>
-</invoke>

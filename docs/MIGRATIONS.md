@@ -12,6 +12,15 @@ Tabla de tracking: **`typeorm_migrations`** (mismo nombre en SQLite y Postgres).
 
 `DatabaseService.initialize()` aplica migrations pendientes con `transaction: 'each'`. Para SQLite, copia el `.db` a `<userData>/backups/...premigrate_<ts>.db` antes de migrar (no aplica a Postgres — usuario hace `pg_dump` externo).
 
+## Naming y timestamp (regla)
+
+Nombre de archivo: **`<epoch-millis>-<Descripcion>.ts`**, con la clase `Descripcion<epoch-millis>` (ej. `1782606189440-AddNotificaciones.ts` → `class AddNotificaciones1782606189440`).
+
+- **El timestamp DEBE ser el epoch en milisegundos real** (precisión de ms), no un número redondeado a mano.
+  - `npm run migration:generate` / `migration:create` ya lo asignan solos (usan `Date.now()`). **No lo edites a un número redondo.**
+  - Si escribís la migración a mano, generá el valor con: `date +%s%3N`.
+- **Por qué:** varias migraciones viejas usan timestamps redondeados espaciados de a `1e8` (`...100000000`, `...500000000`). Eso hace que dos ramas no mergeadas elijan el "siguiente número redondo" y **colisionen** al integrar. Un epoch-ms real es único y, al ser mayor que cualquier redondeado previo, **ordena correctamente** al final. **No imites los timestamps redondeados.**
+
 ## Flujo developer
 
 1. Modificar entity (agregar columna, índice, tabla, etc.).
