@@ -68,13 +68,15 @@ qb.leftJoin('compras', 'compra', 'compra.id = cpp.compra_id')
 
 **Aplicado en:** `cuentas-por-pagar.handler` para enriquecer CPP con datos de la compra origen.
 
-## SQLite: `synchronize: true` con `NOT NULL` y datos legacy
+## Migraciones: columna NOT NULL nueva con datos legacy
 
-Al agregar columna NEW NOT NULL a una tabla con datos existentes, TypeORM falla con `NOT NULL constraint failed`. Soluciones:
+> **Importante:** el proyecto usa `synchronize: false` — NO hay auto-DDL. Toda columna nueva se agrega vía **migración** (driver-aware), no por TypeORM. Las migraciones corren al arranque.
 
-1. **Default value**: `@Column({ type: 'decimal', default: 0 })` — TypeORM rellena 0 en filas existentes.
+Al agregar una columna NOT NULL a una tabla con filas existentes, el `ALTER TABLE ADD COLUMN` falla si no hay valor para las filas viejas. Soluciones (en la migración y/o el `@Column`):
+
+1. **Default value**: `@Column({ type: 'decimal', default: 0 })` + `ADD COLUMN ... DEFAULT 0` — rellena las filas existentes.
 2. **Nullable**: `@Column({ type: 'int', nullable: true })` — permite NULL en datos legacy.
-3. **Backfill manual**: query SQL `UPDATE` antes de aplicar `synchronize` (no escalable, sólo para una sola vez).
+3. **Backfill en la migración**: `ADD COLUMN nullable` → `UPDATE` para poblar → (opcional) `SET NOT NULL` en una migración posterior.
 
 **Aplicado en compras** (refactor 2026-05-04): `costoUnitarioPresentacion` y `cantidad` necesitaron `default: 0`. FK `producto` en CompraDetalle y ProveedorProducto fueron relajadas a nullable.
 
@@ -257,7 +259,7 @@ dataSource.query(`UPDATE ventas SET vendedor_id = created_by WHERE vendedor_id I
   .catch((e: any) => console.warn('Migration vendedor_id:', e.message));
 ```
 
-Esta corre en cada arranque. Es idempotente (la próxima vez el WHERE está vacío). Patrón aceptable para data fixes simples cuando no querés hacer una migración formal.
+Corre en cada arranque (en el `then` de `DataSource.initialize`). Es idempotente (la próxima vez el WHERE está vacío). Patrón aceptable para data fixes simples; para cambios de esquema, usar una migración formal.
 
 ## TypeORM cascade en BaseModel.createdBy/updatedBy
 

@@ -416,12 +416,13 @@ NotificacionRrhh {
 ### Generación automática
 
 `generarNotificacionesRrhh()` en `notificaciones-rrhh.handler.ts`. Corre al startup + cada 24h (`setInterval` en `main.ts`):
-1. **CUMPLEANIOS**: funcionarios cuya `persona.fechaNacimiento` mes/día = hoy.
+1. **CUMPLEANIOS**: funcionarios activos cuya `persona.fechaNacimiento` mes/día = hoy.
 2. **CUOTA_VENCIDA**: CuentaPorPagarCuota vencida de PRESTAMO_FUNCIONARIO.
-3. **VACACION_PROXIMA**: VacacionPeriodo EN_CURSO próximas a término (±3 días).
-4. **LIQUIDACION_PENDIENTE**: LiquidacionSueldo APROBADA no pagada > 5 días.
-5. **COMISION_PENDIENTE**: LiquidacionComision APROBADA no integrada.
-6. **DOCUMENTO_VENCE**: FuncionarioDocumento con vencimiento ≤ hoy+30 días.
+3. **PRESTAMO_VENCIDO**: CuentaPorPagar PRESTAMO_FUNCIONARIO con todas las cuotas vencidas.
+4. **VACACION_PROXIMA**: VacacionPeriodo próximas a término.
+5. **LIQUIDACION_PENDIENTE**: LiquidacionSueldo APROBADA no pagada.
+6. **COMISION_PENDIENTE**: LiquidacionComision APROBADA no integrada.
+7. **DOCUMENTO_VENCE**: FuncionarioDocumento con vencimiento próximo.
 
 **Deduplicación**: `claveDedupe` UNIQUE evita duplicados (regenerar es idempotente).
 

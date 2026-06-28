@@ -1,6 +1,6 @@
 # Bugs conocidos sin resolver
 
-Snapshot **2026-05-05**. Verificar `git log` antes de afirmar que algo sigue roto.
+Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo sigue roto. La sección de **Seguridad** está mayormente resuelta (bcrypt, JWT en keytar, permisos en backend, must-change-password) — ver detalle abajo y [architecture/auth-permissions.md](../architecture/auth-permissions.md).
 
 ## Frontend / UI
 

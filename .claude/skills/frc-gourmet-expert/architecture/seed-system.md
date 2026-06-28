@@ -4,7 +4,7 @@ Los seeds dejan la BD operable apenas se instala el sistema. Todos son **idempot
 
 ## Orden de ejecución
 
-`main.ts:222-234` (dentro del `then` del `DataSource.initialize`):
+En `main.ts` (dentro del `then` del `DataSource.initialize`, tras registrar handlers):
 
 ```
 1. seedInitialData          (electron/utils/seed-data.ts)
@@ -35,7 +35,7 @@ El orden importa: `seedSystemData` corre al final porque crea el rol ADMINISTRAD
 
 ### 2. `seedPermissions` — catálogo de permisos
 
-`electron/handlers/permissions.handler.ts:68`. ~48 permisos cableados por código (`SISTEMA_*`, `RRHH_*`, `CPC_*`, `*_DASHBOARD_VER`, etc.). Idempotente por `codigo`.
+`electron/handlers/permissions.handler.ts` — array `SEED_PERMISOS` con **94 permisos** cableados por código (`HOME_*`, `VENTAS_*`, `COMANDAS_KDS_*`, `RRHH_*`, `PERSONAS_*`, `USUARIOS_*`, `CLIENTES_*`, `COMISION_*`, `PRODUCTOS_*`, `COMPRAS_*`, `FINANCIERO_*`, `CAJA_MAYOR_*`, `CPC_*`, `EMPRESA_*`, `SISTEMA_*`, etc.). Idempotente por `codigo`.
 
 Agregar un permiso nuevo = añadirlo al array `SEED_PERMISOS`. Al siguiente arranque se inserta y `syncAdminPermissions` se lo asigna al rol ADMINISTRADOR.
 
