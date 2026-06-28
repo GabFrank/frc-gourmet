@@ -7,10 +7,11 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * `factura_plantillas`, `facturas`, `factura_items`. Driver-aware
  * (SQLite usa `datetime`/AUTOINCREMENT, Postgres `TIMESTAMP`/SERIAL).
  *
- * Aditiva: solo CREATE TABLE / CREATE INDEX. No toca tablas existentes.
+ * Aditiva e idempotente (CREATE TABLE/INDEX IF NOT EXISTS): no toca tablas
+ * existentes y es segura de re-ejecutar.
  */
-export class AddFacturacion1780200000000 implements MigrationInterface {
-  name = 'AddFacturacion1780200000000';
+export class AddFacturacion1782519234187 implements MigrationInterface {
+  name = 'AddFacturacion1782519234187';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const isPg = queryRunner.connection.options.type === 'postgres';
@@ -26,7 +27,7 @@ export class AddFacturacion1780200000000 implements MigrationInterface {
 
     // timbrados
     await queryRunner.query(`
-      CREATE TABLE "timbrados" (
+      CREATE TABLE IF NOT EXISTS "timbrados" (
         ${pk},
         "numero" varchar NOT NULL,
         "razon_social" varchar NULL,
@@ -45,7 +46,7 @@ export class AddFacturacion1780200000000 implements MigrationInterface {
 
     // timbrado_detalles
     await queryRunner.query(`
-      CREATE TABLE "timbrado_detalles" (
+      CREATE TABLE IF NOT EXISTS "timbrado_detalles" (
         ${pk},
         "timbrado_id" integer NULL,
         "dispositivo_id" integer NULL,
@@ -61,7 +62,7 @@ export class AddFacturacion1780200000000 implements MigrationInterface {
 
     // factura_plantillas
     await queryRunner.query(`
-      CREATE TABLE "factura_plantillas" (
+      CREATE TABLE IF NOT EXISTS "factura_plantillas" (
         ${pk},
         "nombre" varchar NOT NULL,
         "tipo" varchar NOT NULL DEFAULT 'PRE_IMPRESO',
@@ -77,7 +78,7 @@ export class AddFacturacion1780200000000 implements MigrationInterface {
 
     // facturas
     await queryRunner.query(`
-      CREATE TABLE "facturas" (
+      CREATE TABLE IF NOT EXISTS "facturas" (
         ${pk},
         "timbrado_detalle_id" integer NULL,
         "venta_id" integer NULL,
@@ -111,7 +112,7 @@ export class AddFacturacion1780200000000 implements MigrationInterface {
 
     // factura_items
     await queryRunner.query(`
-      CREATE TABLE "factura_items" (
+      CREATE TABLE IF NOT EXISTS "factura_items" (
         ${pk},
         "factura_id" integer NULL,
         "venta_item_id" integer NULL,
@@ -127,10 +128,10 @@ export class AddFacturacion1780200000000 implements MigrationInterface {
       )
     `);
 
-    await queryRunner.query(`CREATE INDEX "idx_timbrado_detalles_timbrado" ON "timbrado_detalles" ("timbrado_id")`);
-    await queryRunner.query(`CREATE INDEX "idx_facturas_venta" ON "facturas" ("venta_id")`);
-    await queryRunner.query(`CREATE INDEX "idx_facturas_timbrado_detalle" ON "facturas" ("timbrado_detalle_id")`);
-    await queryRunner.query(`CREATE INDEX "idx_factura_items_factura" ON "factura_items" ("factura_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_timbrado_detalles_timbrado" ON "timbrado_detalles" ("timbrado_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_facturas_venta" ON "facturas" ("venta_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_facturas_timbrado_detalle" ON "facturas" ("timbrado_detalle_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_factura_items_factura" ON "factura_items" ("factura_id")`);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

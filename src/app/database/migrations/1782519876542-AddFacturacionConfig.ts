@@ -2,10 +2,12 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
  * Configuracion singleton del modulo de facturacion (tipo de facturacion del
- * sistema + plantilla y punto de expedicion predeterminados). Aditiva.
+ * sistema + plantilla y punto de expedicion predeterminados).
+ *
+ * Aditiva e idempotente (CREATE TABLE IF NOT EXISTS).
  */
-export class AddFacturacionConfig1780300000000 implements MigrationInterface {
-  name = 'AddFacturacionConfig1780300000000';
+export class AddFacturacionConfig1782519876542 implements MigrationInterface {
+  name = 'AddFacturacionConfig1782519876542';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const isPg = queryRunner.connection.options.type === 'postgres';
@@ -14,7 +16,7 @@ export class AddFacturacionConfig1780300000000 implements MigrationInterface {
     const now = isPg ? 'now()' : `(datetime('now'))`;
 
     await queryRunner.query(`
-      CREATE TABLE "facturacion_config" (
+      CREATE TABLE IF NOT EXISTS "facturacion_config" (
         ${pk},
         "tipo_facturacion" varchar NOT NULL DEFAULT 'PRE_IMPRESO',
         "plantilla_predeterminada_id" integer NULL,
