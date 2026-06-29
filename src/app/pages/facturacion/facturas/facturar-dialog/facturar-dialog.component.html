@@ -51,11 +51,13 @@
     <div class="row">
       <mat-form-field appearance="outline" class="grow">
         <mat-label>Cliente / Razón social</mat-label>
-        <input matInput formControlName="nombreCliente" />
+        <input matInput formControlName="nombreCliente" required />
+        <mat-error *ngIf="form.get('nombreCliente')?.hasError('required')">Requerido</mat-error>
       </mat-form-field>
       <mat-form-field appearance="outline">
         <mat-label>RUC / CI</mat-label>
-        <input matInput formControlName="ruc" />
+        <input matInput formControlName="ruc" required />
+        <mat-error *ngIf="form.get('ruc')?.hasError('required')">Requerido</mat-error>
       </mat-form-field>
     </div>
     <div class="row">
@@ -86,7 +88,8 @@
         </mat-form-field>
         <mat-form-field appearance="outline" class="grow">
           <mat-label>Descripción</mat-label>
-          <input matInput formControlName="descripcion" />
+          <input matInput formControlName="descripcion" required />
+          <mat-error *ngIf="item.get('descripcion')?.hasError('required')">Requerido</mat-error>
         </mat-form-field>
         <mat-form-field appearance="outline" class="small">
           <mat-label>Cant.</mat-label>
@@ -133,7 +136,7 @@
 
 <mat-dialog-actions align="end">
   <button mat-button (click)="cancel()" [disabled]="isSaving">Cancelar</button>
-  <button mat-raised-button color="primary" (click)="facturar()" [disabled]="isSaving">
+  <button mat-raised-button color="primary" (click)="facturar()" [disabled]="isSaving || form.invalid">
     <mat-spinner *ngIf="isSaving" diameter="18"></mat-spinner>
     <span *ngIf="!isSaving">Emitir e imprimir</span>
   </button>
