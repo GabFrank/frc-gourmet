@@ -15,9 +15,13 @@
     <mat-label>Alto (mm)</mat-label>
     <input matInput type="number" [(ngModel)]="plantilla!.altoMm" (ngModelChange)="recomputePage()" />
   </mat-form-field>
-  <mat-form-field appearance="outline" class="dim" matTooltip="Separación vertical entre ítems (todas las columnas)">
-    <mat-label>Alto fila ítems (mm)</mat-label>
-    <input matInput type="number" [(ngModel)]="config.itemRowHeightMm" (ngModelChange)="recomputeItemRowHeight()" />
+  <mat-form-field appearance="outline" class="dim" matTooltip="Alto total del bloque donde se apilan todas las filas de ítems">
+    <mat-label>Alto área ítems (mm)</mat-label>
+    <input matInput type="number" [(ngModel)]="config.itemAreaHeightMm" (ngModelChange)="recomputeItemArea()" />
+  </mat-form-field>
+  <mat-form-field appearance="outline" class="dim" matTooltip="Cantidad de renglones que entran en el área (define el alto de fila = área ÷ filas)">
+    <mat-label>Filas</mat-label>
+    <input matInput type="number" [(ngModel)]="config.itemRows" (ngModelChange)="recomputeItemArea()" />
   </mat-form-field>
   <button mat-stroked-button (click)="preview()"><mat-icon>visibility</mat-icon> Vista previa</button>
   <button mat-raised-button color="primary" (click)="save()" [disabled]="isSaving">
@@ -122,6 +126,7 @@
         <!-- columna de items individual -->
         <div *ngIf="el.type === 'itemColumn'" class="el-col"
              [style.width.px]="(el.wMm || 25) * pxPerMm"
+             [style.min-height.px]="itemAreaHeightPx"
              [style.font-size.pt]="el.fontSize || 8"
              [style.text-align]="el.align || 'right'">
           <div class="el-col-cap">{{ previews[el.id] }}</div>

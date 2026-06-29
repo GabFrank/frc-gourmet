@@ -75,10 +75,16 @@ export interface PlantillaConfig {
   /** Ajuste de la imagen de fondo de referencia (solo diseno; ver TipoPlantilla). */
   background?: BackgroundTransform;
   /**
-   * Alto de fila (mm) UNICO para todas las columnas de items (type='itemColumn').
-   * Asegura que las filas queden alineadas y con separacion consistente. Si
-   * esta definido, tiene prioridad sobre el rowHeightMm por columna.
+   * Contenedor del area de items (donde se apilan TODAS las filas), comun a
+   * todas las columnas (type='itemColumn'):
+   *  - itemAreaHeightMm: alto total del bloque de items (mm).
+   *  - itemRows: cantidad de filas/renglones que entran en ese alto.
+   * El alto de cada fila se DERIVA: itemAreaHeightMm / itemRows. Asi las filas
+   * llenan el contenedor y, en pre-impreso, caen sobre los renglones de la hoja.
    */
+  itemAreaHeightMm?: number;
+  itemRows?: number;
+  /** @deprecated alto de fila fijo (compat); ahora se deriva del contenedor. */
   itemRowHeightMm?: number;
 }
 

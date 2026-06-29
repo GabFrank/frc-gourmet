@@ -150,9 +150,11 @@ export function buildDocDefinition(
 
     if (el.type === 'itemColumn') {
       // Columna individual de items: cada fila se posiciona en y + i*rowHeight.
-      // El alto de fila global (config.itemRowHeightMm) tiene prioridad para que
-      // todas las columnas queden alineadas con la misma separacion.
-      const rowH = mmToPt(Number(config.itemRowHeightMm) || el.rowHeightMm || 6);
+      // El alto de fila se DERIVA del contenedor (area / cantidad de filas) para
+      // que todas las columnas queden alineadas y las filas llenen el area.
+      const rowH = (config.itemAreaHeightMm && config.itemRows)
+        ? mmToPt(Number(config.itemAreaHeightMm) / Number(config.itemRows))
+        : mmToPt(Number(config.itemRowHeightMm) || el.rowHeightMm || 6);
       const width = el.wMm ? mmToPt(el.wMm) : undefined;
       const align = el.align || (el.field === 'descripcion' ? 'left' : el.field === 'id' ? 'center' : 'right');
       (ctx.items || []).forEach((it, i) => {

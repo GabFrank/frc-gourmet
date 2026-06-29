@@ -70,8 +70,10 @@ export class FacturaPlantillaDesignerComponent {
   bgLeftPx = 0;
   bgTopPx = 0;
 
-  /** Alto de fila de items (px) en el lienzo (deriva de config.itemRowHeightMm). */
-  itemRowHeightPx = 6 * 3;
+  /** Contenedor del area de items en el lienzo (px). */
+  itemAreaHeightPx = 50 * 3;
+  /** Alto de fila DERIVADO (area / filas) en px, para el lienzo. */
+  itemRowHeightPx = (50 / 8) * 3;
 
   /** Texto de previsualizacion por elemento (id -> texto). */
   previews: { [id: string]: string } = {};
@@ -129,8 +131,8 @@ export class FacturaPlantillaDesignerComponent {
       this.recomputePage();
       this.ensureBackground();
       this.recomputeBg();
-      this.ensureItemRowHeight();
-      this.recomputeItemRowHeight();
+      this.ensureItemArea();
+      this.recomputeItemArea();
       this.refreshPreviews();
       for (const el of this.config.elementos) this.setFreePos(el);
     } catch (error) {
@@ -160,13 +162,22 @@ export class FacturaPlantillaDesignerComponent {
     }
   }
 
-  /** Alto de fila de items por defecto (apretado) si no esta seteado. */
-  private ensureItemRowHeight(): void {
-    if (this.config.itemRowHeightMm == null) this.config.itemRowHeightMm = 6;
+  /** Defaults del contenedor del area de items (alto total + cantidad de filas). */
+  private ensureItemArea(): void {
+    if (this.config.itemAreaHeightMm == null) {
+      // Migracion: si habia un alto de fila viejo, derivar un area equivalente.
+      this.config.itemAreaHeightMm = this.config.itemRowHeightMm
+        ? Number(this.config.itemRowHeightMm) * (this.config.itemRows || 8)
+        : 50;
+    }
+    if (this.config.itemRows == null) this.config.itemRows = 8;
   }
 
-  recomputeItemRowHeight(): void {
-    this.itemRowHeightPx = (Number(this.config.itemRowHeightMm) || 6) * this.pxPerMm;
+  recomputeItemArea(): void {
+    const h = Number(this.config.itemAreaHeightMm) || 50;
+    const rows = Number(this.config.itemRows) || 8;
+    this.itemAreaHeightPx = h * this.pxPerMm;
+    this.itemRowHeightPx = (h / Math.max(1, rows)) * this.pxPerMm;
   }
 
   /** Recalcula el estilo px de la imagen de fondo segun su transform. */
@@ -344,7 +355,8 @@ export class FacturaPlantillaDesignerComponent {
           showHeader: e.showHeader, field: e.field, rowHeightMm: e.rowHeightMm, rows: e.rows,
         })),
         background: this.config.background,
-        itemRowHeightMm: this.config.itemRowHeightMm,
+        itemAreaHeightMm: this.config.itemAreaHeightMm,
+        itemRows: this.config.itemRows,
       };
       await firstValueFrom(this.repositoryService.updateFacturaPlantilla(this.plantilla.id, {
         config: JSON.stringify(clean),
