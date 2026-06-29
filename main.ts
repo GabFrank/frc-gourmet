@@ -596,6 +596,14 @@ app.on('ready', () => {
     if (typeof earlySettings.deviceId === 'number') {
       process.env['FRC_DEVICE_ID'] = String(earlySettings.deviceId);
     }
+    // Zona horaria: setear TZ ANTES de createWindow para que el renderer
+    // (Chromium) y Node usen la zona configurada en toda la app. Paraguay
+    // quedo en UTC-3 fijo; si el tzdata del SO esta viejo, configurar
+    // 'America/Sao_Paulo' (UTC-3 estable) corrige la hora mostrada.
+    if (earlySettings.timezone) {
+      process.env.TZ = earlySettings.timezone;
+      console.log(`[main] TZ=${earlySettings.timezone} (zona horaria de la empresa)`);
+    }
     // Exponer version de la app al preload — para mostrarla en el header
     // como subtitle ("FRC Gourmet vX.Y.Z"). app.getVersion() lee package.json
     // (en build empaquetada lee el del .asar). En dev queda el "1.0.0" del

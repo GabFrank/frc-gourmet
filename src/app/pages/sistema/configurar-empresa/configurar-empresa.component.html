@@ -133,8 +133,10 @@
           </mat-form-field>
           <mat-form-field appearance="outline" class="col-1">
             <mat-label>Zona horaria</mat-label>
-            <input matInput formControlName="zonaHoraria" maxlength="60" autocomplete="off" />
-            <mat-hint>Ej. America/Asuncion</mat-hint>
+            <mat-select formControlName="zonaHoraria">
+              <mat-option *ngFor="let z of zonasHorarias" [value]="z.value">{{ z.label }}</mat-option>
+            </mat-select>
+            <mat-hint>Se aplica a toda la app al reiniciar.</mat-hint>
             <mat-error *ngIf="form.get('zonaHoraria')?.hasError('required')">Requerido</mat-error>
           </mat-form-field>
         </div>
