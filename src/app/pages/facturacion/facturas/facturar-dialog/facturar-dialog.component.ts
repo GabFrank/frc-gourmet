@@ -9,13 +9,15 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '../../../../database/repository.service';
+import { BuscarClienteDialogComponent } from '../../../../shared/components/buscar-cliente-dialog/buscar-cliente-dialog.component';
 import { TimbradoDetalle } from '../../../../database/entities/facturacion/timbrado-detalle.entity';
 import { FacturaPlantilla } from '../../../../database/entities/facturacion/factura-plantilla.entity';
 import { TipoFacturacion } from '../../../../database/entities/facturacion/factura.entity';
 import { buildDocDefinition, loadPdfMake, FacturaRenderContext } from '../../plantillas/plantilla-render.util';
+import { montoEnLetras } from '../../../../shared/utils/monto-letras.util';
 
 @Component({
   selector: 'app-facturar-dialog',
@@ -66,6 +68,10 @@ export class FacturarDialogComponent implements OnInit {
 
   /** Venta de origen (si se factura desde el cobro del PdV). */
   prefillVentaId?: number;
+  /** Cliente vinculado (desde el cobro o desde el buscador de clientes). */
+  clienteId?: number;
+  /** Etiqueta del cliente seleccionado (para mostrar en el dialogo). */
+  clienteLabel = '';
   /** Resultados del buscador de productos (autocomplete por item). */
   productoOptions: any[] = [];
 
@@ -73,6 +79,7 @@ export class FacturarDialogComponent implements OnInit {
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
     private snackBar: MatSnackBar,
+    private dialog: MatDialog,
     private dialogRef: MatDialogRef<FacturarDialogComponent>,
     @Optional() @Inject(MAT_DIALOG_DATA) private data?: any,
   ) {
@@ -107,16 +114,7 @@ export class FacturarDialogComponent implements OnInit {
     const d = this.data || {};
     this.prefillVentaId = d.venta?.id;
     const cliente = d.cliente || d.venta?.cliente;
-    if (cliente) {
-      const per = cliente.persona;
-      const nombre = `${per?.nombre || ''} ${per?.apellido || ''}`.trim() || cliente.razon_social || '';
-      this.form.patchValue({
-        nombreCliente: nombre,
-        ruc: cliente.ruc || '',
-        direccion: per?.direccion || '',
-        email: per?.email || '',
-      });
-    }
+    if (cliente) this.aplicarCliente(cliente);
     const items: any[] = d.items || [];
     if (items.length) {
       this.itemsArray.clear();
@@ -178,6 +176,34 @@ export class FacturarDialogComponent implements OnInit {
     } finally {
       this.isLoading = false;
     }
+  }
+
+  /** Aplica los datos de un cliente al form (nombre, ruc, direccion, email). */
+  private aplicarCliente(cliente: any): void {
+    const per = cliente?.persona;
+    const nombre = `${per?.nombre || ''} ${per?.apellido || ''}`.trim() || cliente?.razon_social || '';
+    this.clienteId = cliente?.id;
+    this.clienteLabel = nombre;
+    this.form.patchValue({
+      nombreCliente: nombre,
+      ruc: cliente?.ruc || '',
+      direccion: per?.direccion || '',
+      email: per?.email || '',
+    });
+  }
+
+  /** Abre el buscador de clientes y aplica el elegido. */
+  buscarCliente(): void {
+    const ref = this.dialog.open(BuscarClienteDialogComponent, { width: '600px' });
+    ref.afterClosed().subscribe((cliente) => {
+      if (cliente) this.aplicarCliente(cliente);
+    });
+  }
+
+  /** Quita el vinculo con el cliente (deja los datos editables manualmente). */
+  limpiarCliente(): void {
+    this.clienteId = undefined;
+    this.clienteLabel = '';
   }
 
   detalleLabel(d: TimbradoDetalle): string {
@@ -260,13 +286,14 @@ export class FacturarDialogComponent implements OnInit {
 
   private buildContext(factura: any): FacturaRenderContext {
     const v = this.form.value;
+    const up = (s: any) => String(s ?? '').toUpperCase();
     return {
       factura: {
         numeroCompleto: factura?.numeroCompleto || '',
         fecha: factura?.fecha || new Date(),
         condicionVenta: v.condicionVenta,
       },
-      cliente: { nombre: v.nombreCliente, ruc: v.ruc, direccion: v.direccion, email: v.email },
+      cliente: { nombre: up(v.nombreCliente), ruc: v.ruc, direccion: up(v.direccion), email: v.email },
       timbrado: {
         numero: factura?.timbradoDetalle?.timbrado?.numero || '',
         vigencia: '',
@@ -274,19 +301,20 @@ export class FacturarDialogComponent implements OnInit {
       totales: {
         gravada10: this.gravada10, gravada5: this.gravada5, exenta: this.exenta,
         iva10: this.iva10, iva5: this.iva5, totalIva: this.totalIva,
-        descuento: Number(v.descuento) || 0, total: this.total, totalEnLetras: '',
+        descuento: Number(v.descuento) || 0, total: this.total,
+        totalEnLetras: montoEnLetras(this.total, 'PYG'),
       },
       empresa: {
-        nombre: this.empresa?.nombre || this.empresa?.razonSocial || '',
+        nombre: up(this.empresa?.nombre || this.empresa?.razonSocial || ''),
         ruc: this.empresa?.ruc || '',
-        direccion: this.empresa?.direccion || '',
+        direccion: up(this.empresa?.direccion || ''),
       },
       items: this.itemsArray.controls.map((c) => {
         const it = c.value;
         const lineTotal = (Number(it.cantidad) || 0) * (Number(it.precioUnitario) || 0);
         return {
           cantidad: Number(it.cantidad) || 0,
-          descripcion: it.descripcion,
+          descripcion: up(it.descripcion),
           precioUnitario: Number(it.precioUnitario) || 0,
           descuento: undefined,
           // Solo se completa la columna de IVA que corresponde; el resto queda
@@ -329,6 +357,7 @@ export class FacturarDialogComponent implements OnInit {
     const facturaPayload: any = {
       timbradoDetalleId: v.timbradoDetalleId,
       venta: this.prefillVentaId ? { id: this.prefillVentaId } : undefined,
+      cliente: this.clienteId ? { id: this.clienteId } : undefined,
       // En pre-impreso editable, se registra el numero tipeado de la hoja fisica.
       numeroManual: this.permitirEditarNumero && v.numeroManual != null ? Number(v.numeroManual) : undefined,
       plantilla: plantilla ? { id: plantilla.id } : undefined,

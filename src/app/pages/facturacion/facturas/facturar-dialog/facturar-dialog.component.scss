@@ -19,6 +19,15 @@ h3 {
   margin: 10px 0 4px;
 }
 
+.cliente-row {
+  align-items: center;
+
+  .cliente-link {
+    opacity: 0.85;
+    font-size: 0.9em;
+  }
+}
+
 .numero-row {
   .proximo {
     padding: 6px 0;

@@ -38,6 +38,16 @@
       </div>
     </div>
 
+    <div class="row cliente-row">
+      <button mat-stroked-button type="button" (click)="buscarCliente()" class="buscar-cliente-btn">
+        <mat-icon>person_search</mat-icon> Buscar cliente
+      </button>
+      <button mat-icon-button type="button" *ngIf="clienteId" (click)="limpiarCliente()" aria-label="Quitar vínculo de cliente">
+        <mat-icon>link_off</mat-icon>
+      </button>
+      <span class="cliente-link" *ngIf="clienteId">Vinculado: {{ clienteLabel }}</span>
+    </div>
+
     <div class="row">
       <mat-form-field appearance="outline" class="grow">
         <mat-label>Cliente / Razón social</mat-label>
