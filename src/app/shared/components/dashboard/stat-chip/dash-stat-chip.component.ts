@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -17,4 +17,13 @@ export class DashStatChipComponent {
   @Input() label = '';
   @Input() color: DashStatChipColor = 'primary';
   @Input() loading = false;
+  // Si es clickable, muestra cursor/realce y emite chipClick al hacer click.
+  @Input() clickable = false;
+  @Output() chipClick = new EventEmitter<void>();
+
+  onClick(): void {
+    if (this.clickable) {
+      this.chipClick.emit();
+    }
+  }
 }

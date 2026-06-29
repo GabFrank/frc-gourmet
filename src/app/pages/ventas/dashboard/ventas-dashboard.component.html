@@ -25,7 +25,9 @@
       icon="payments"
       [value]="formatPYG(totalHoyPYG) + ' Gs'"
       label="Total hoy"
-      [loading]="loading">
+      [loading]="loading"
+      [clickable]="!!desgloseVentasHoy"
+      (chipClick)="abrirDesgloseVentas()">
     </app-dash-stat-chip>
     <app-dash-stat-chip
       icon="confirmation_number"
