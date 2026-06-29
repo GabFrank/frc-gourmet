@@ -38,11 +38,15 @@ export class Receta extends BaseModel {
   unidadRendimientoOriginal?: string; // Unidad original seleccionada
 
   // Tiempo de preparo total en minutos.
-  @Column({ type: 'int', nullable: true })
+  // El nombre de columna es snake_case porque así lo creó la migración
+  // AddRecetaPreparacion (tiempo_preparo). Sin `name:` explícito TypeORM usaría
+  // "tiempoPreparo" y el join a receta en search-productos-by-nombre fallaba con
+  // "no existe la columna ... tiempoPreparo".
+  @Column({ name: 'tiempo_preparo', type: 'int', nullable: true })
   tiempoPreparo?: number;
 
   // Foto del producto final (protocolo app://producto-images/<file>).
-  @Column({ type: 'varchar', length: 500, nullable: true })
+  @Column({ name: 'image_url', type: 'varchar', length: 500, nullable: true })
   imageUrl?: string;
 
   @Column({ type: 'boolean', default: true })
