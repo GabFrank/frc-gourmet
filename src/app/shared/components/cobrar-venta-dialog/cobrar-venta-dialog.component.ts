@@ -589,7 +589,10 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
           estado: PagoEstado.ABIERTO,
           caja: this.data.caja,
           activo: true,
-        }));
+          // El backend valida que este dispositivo sea el dueño de la caja.
+          // Si no lo es, rechaza el cobro (COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO).
+          validarDispositivoCaja: true,
+        } as any));
         // Vincular pago a venta inmediatamente
         await firstValueFrom(this.repositoryService.updateVenta(this.data.venta.id, {
           pago: this.pago!,

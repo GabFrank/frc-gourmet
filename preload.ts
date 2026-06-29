@@ -1520,6 +1520,9 @@ contextBridge.exposeInMainWorld('api', {
   getCajaAbiertaByUsuario: async () => {
     return await ipcRenderer.invoke('get-caja-abierta-by-usuario');
   },
+  getCajasAbiertas: async () => {
+    return await ipcRenderer.invoke('get-cajas-abiertas');
+  },
 
   // CajaMoneda methods
   getCajasMonedas: () => ipcRenderer.invoke('get-cajas-monedas'),

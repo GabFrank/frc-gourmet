@@ -321,6 +321,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getBonos": "get-bonos",
   "getCaja": "get-caja",
   "getCajaAbiertaByUsuario": "get-caja-abierta-by-usuario",
+  "getCajasAbiertas": "get-cajas-abiertas",
   "getCajaByDispositivo": "get-caja-by-dispositivo",
   "getCajaMayor": "get-caja-mayor",
   "getCajaMayorConfiguracion": "get-caja-mayor-configuracion",

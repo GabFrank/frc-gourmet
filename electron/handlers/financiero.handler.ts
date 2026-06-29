@@ -534,6 +534,23 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
     }
   });
 
+  // get-cajas-abiertas: todas las cajas ABIERTO (de cualquier usuario/dispositivo).
+  // Permite que otros usuarios/dispositivos (desktop o PWA) se "unan" a una caja
+  // abierta para lanzar items. El cobro sigue restringido al dispositivo dueño.
+  ipcMain.handle('get-cajas-abiertas', async () => {
+    try {
+      const repo = dataSource.getRepository(Caja);
+      return await repo.find({
+        where: { estado: CajaEstado.ABIERTO },
+        relations: ['dispositivo', 'conteoApertura', 'createdBy', 'createdBy.persona'],
+        order: { fechaApertura: 'DESC' }
+      });
+    } catch (error) {
+      console.error('Error getting cajas abiertas:', error);
+      throw error;
+    }
+  });
+
   // --- CajaMoneda Handlers ---
   ipcMain.handle('get-cajas-monedas', async () => {
     try {

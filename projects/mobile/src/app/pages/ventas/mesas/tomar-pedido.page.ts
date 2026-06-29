@@ -26,6 +26,7 @@ import {
 import { AppImagePipe } from '../../../core/pipes/app-image.pipe';
 import { flagFor } from './moneda-flag.util';
 import { BarcodeScannerDialogComponent } from './barcode-scanner-dialog.component';
+import { SeleccionarCajaDialogComponent } from '../../../core/components/seleccionar-caja-dialog.component';
 
 interface ConversionVM {
   simbolo: string;
@@ -341,24 +342,52 @@ export class TomarPedidoPage implements OnInit {
           this.titulo = m?.numero != null ? `Mesa ${m.numero} — pedido` : 'Tomar pedido';
         }
         this.ventaId = m?.venta?.id ?? null;
-        const usuarioId = this.auth.currentUser?.id;
-        if (usuarioId) {
-          this.repo.getCajaAbiertaByUsuario(usuarioId).subscribe({
-            next: (caja: any) => {
-              this.cajaId = caja?.id ?? null;
-              this.cargando = false;
-            },
-            error: () => {
-              this.cajaId = null;
-              this.cargando = false;
-            },
-          });
-        } else {
-          this.cargando = false;
-        }
+        this.resolverCaja();
       },
       error: () => {
         this.error = 'No se pudo cargar la mesa';
+        this.cargando = false;
+      },
+    });
+  }
+
+  /**
+   * Resuelve a qué caja abierta se une este pedido: cualquier usuario puede
+   * unirse a una caja ABIERTA para lanzar items (el cobro vive en el desktop
+   * donde se abrió la caja). 1 caja → automática; varias → diálogo de
+   * selección; ninguna → sin caja.
+   */
+  private resolverCaja(): void {
+    this.repo.getCajasAbiertas().subscribe({
+      next: (cajas: any[]) => {
+        const abiertas = cajas || [];
+        if (abiertas.length === 1) {
+          this.cajaId = abiertas[0]?.id ?? null;
+          this.cargando = false;
+        } else if (abiertas.length > 1) {
+          this.cargando = false;
+          this.dialog
+            .open(SeleccionarCajaDialogComponent, {
+              width: '92vw',
+              maxWidth: '420px',
+              data: { cajas: abiertas, currentDeviceId: null },
+            })
+            .afterClosed()
+            .subscribe((caja: any) => {
+              if (caja?.id) {
+                this.cajaId = caja.id;
+              } else {
+                this.snack.open('No se seleccionó ninguna caja', 'CERRAR', { duration: 3000 });
+              }
+            });
+        } else {
+          this.cajaId = null;
+          this.cargando = false;
+          this.snack.open('No hay ninguna caja abierta', 'CERRAR', { duration: 3000 });
+        }
+      },
+      error: () => {
+        this.cajaId = null;
         this.cargando = false;
       },
     });
