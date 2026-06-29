@@ -1,9 +1,10 @@
-import { ipcMain } from 'electron';
+import { app, ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { Empresa } from '../../src/app/database/entities/sistema/empresa.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { ensurePermission } from '../utils/auth.utils';
+import { updateAppSettings } from '../utils/app-settings.utils';
 
 /**
  * Normaliza un string a UPPERCASE + trim; devuelve null si queda vacio o
@@ -82,7 +83,18 @@ export function registerEmpresaHandlers(
     }
     if ('zonaHoraria' in data) {
       const v = toTrimOrNull(data.zonaHoraria);
-      if (v !== null) existing.zonaHoraria = v;
+      if (v !== null) {
+        existing.zonaHoraria = v;
+        // Espejar la zona horaria a app-settings (se lee sync al arranque para
+        // setear process.env.TZ antes de createWindow) y aplicarla en vivo al
+        // proceso main. El renderer toma la nueva zona al reiniciar la app.
+        try {
+          updateAppSettings(app.getPath('userData'), (s) => ({ ...s, timezone: v }));
+          process.env.TZ = v;
+        } catch (e) {
+          console.warn('[empresa] no se pudo persistir timezone en app-settings:', e);
+        }
+      }
     }
     if ('monedaPrincipalId' in data) {
       const v = data.monedaPrincipalId;

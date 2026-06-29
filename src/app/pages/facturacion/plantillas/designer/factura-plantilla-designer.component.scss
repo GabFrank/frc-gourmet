@@ -1,0 +1,216 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.designer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+
+  .title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+  }
+
+  .tipo-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border: 1px solid rgba(128, 128, 128, 0.5);
+    border-radius: 10px;
+    opacity: 0.8;
+  }
+
+  .spacer { flex: 1 1 auto; }
+
+  .dim {
+    width: 110px;
+  }
+}
+
+.designer-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.palette,
+.properties {
+  width: 280px;
+  padding: 12px;
+  overflow-y: auto;
+  border-right: 1px solid rgba(128, 128, 128, 0.3);
+
+  h4 {
+    margin: 12px 0 6px;
+  }
+}
+
+.properties {
+  border-right: none;
+  border-left: 1px solid rgba(128, 128, 128, 0.3);
+}
+
+.palette-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.var-chip {
+  display: flex;
+  justify-content: flex-start;
+  width: 100%;
+  text-transform: none;
+}
+
+.hint {
+  font-size: 12px;
+  opacity: 0.7;
+  margin: 4px 0;
+}
+
+.bg-controls {
+  margin-top: 8px;
+
+  mat-form-field {
+    width: 100%;
+  }
+}
+
+.canvas-wrap {
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  background: rgba(128, 128, 128, 0.12);
+}
+
+.designer-page {
+  position: relative;
+  background: #ffffff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  // El lienzo representa la hoja fisica (siempre blanca); el texto va en negro.
+  color: #000000;
+}
+
+.page-bg {
+  position: absolute;
+  // El ancho y el desplazamiento (left/top) se controlan por binding (mm),
+  // independientes del tamano de hoja. El alto se ajusta por aspecto.
+  height: auto;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.design-el {
+  position: absolute;
+  top: 0;
+  left: 0;
+  cursor: move;
+  padding: 1px 2px;
+  border: 1px dashed transparent;
+
+  &.selected {
+    border-color: #1976d2;
+    background: rgba(25, 118, 210, 0.08);
+  }
+}
+
+.el-text {
+  display: inline-block;
+  white-space: nowrap;
+  line-height: 1.1;
+
+  &.is-var {
+    color: #0d47a1;
+  }
+}
+
+.el-line {
+  border-top: 1px solid #000000;
+  height: 0;
+}
+
+.el-box {
+  border: 1px solid #000000;
+}
+
+.el-table {
+  font-size: 9px;
+  position: relative;
+  box-sizing: border-box;
+  border: 1px dashed #888;
+  overflow: hidden;
+
+  .el-table-head {
+    display: flex;
+    font-weight: 700;
+    border-bottom: 1px solid #000;
+  }
+
+  .el-table-row {
+    display: flex;
+    opacity: 0.6;
+  }
+
+  span {
+    display: inline-block;
+    overflow: hidden;
+  }
+
+  .el-table-limit {
+    position: absolute;
+    bottom: 1px;
+    right: 2px;
+    font-size: 8px;
+    opacity: 0.45;
+    pointer-events: none;
+  }
+}
+
+.el-col {
+  border: 1px dashed #4a90d9;
+
+  .el-col-cap {
+    font-size: 7px;
+    font-weight: 700;
+    color: #0d47a1;
+    opacity: 0.7;
+    border-bottom: 1px dotted #4a90d9;
+    white-space: nowrap;
+  }
+
+  .el-col-cell {
+    overflow: hidden;
+    white-space: nowrap;
+    line-height: 1;
+  }
+}
+
+.pos-row {
+  display: flex;
+  gap: 8px;
+
+  mat-form-field { flex: 1; }
+}
+
+.prop-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.no-sel {
+  opacity: 0.6;
+  padding-top: 24px;
+  text-align: center;
+}

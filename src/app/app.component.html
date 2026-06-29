@@ -469,6 +469,38 @@
           </div>
         </mat-expansion-panel>
 
+        <!-- Facturación Menu (TODO: gatear con permisos FACTURACION_* cuando se siembren) -->
+        <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel"
+                            [expanded]="isMenuSectionExpanded('facturacion')"
+                            [hideToggle]="!isMenuExpanded">
+          <mat-expansion-panel-header class="nav-panel-header" (click)="expandMenu($event, 'facturacion')">
+            <mat-panel-title>
+              <div class="menu-item-content" [ngClass]="{'centered': !isMenuExpanded}">
+                <mat-icon class="nav-icon">receipt_long</mat-icon>
+                <span class="nav-title" *ngIf="isMenuExpanded">Facturación</span>
+              </div>
+            </mat-panel-title>
+          </mat-expansion-panel-header>
+          <div class="submenu-container">
+            <a mat-list-item (click)="openFacturasTab()">
+              <mat-icon matListItemIcon>receipt_long</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Facturas</span>
+            </a>
+            <a mat-list-item (click)="openTimbradosTab()">
+              <mat-icon matListItemIcon>verified</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Timbrados</span>
+            </a>
+            <a mat-list-item (click)="openPlantillasFacturaTab()">
+              <mat-icon matListItemIcon>design_services</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Plantillas / Diseños</span>
+            </a>
+            <a mat-list-item (click)="openFacturacionConfigTab()">
+              <mat-icon matListItemIcon>settings</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Configuración</span>
+            </a>
+          </div>
+        </mat-expansion-panel>
+
         <mat-divider></mat-divider>
 
         <!-- Settings Menu - Convert to expansion panel -->
@@ -516,6 +548,10 @@
             <a *appHasPermission="'SISTEMA_MODO_CONFIGURAR'" mat-list-item (click)="openModeConfigTab()">
               <mat-icon matListItemIcon>hub</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Modo de operacion</span>
+            </a>
+            <a *appHasPermission="'NOTIFICACIONES_CONFIGURAR'" mat-list-item (click)="openConfiguracionNotificacionesTab()">
+              <mat-icon matListItemIcon>notifications_active</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Notificaciones</span>
             </a>
           </div>
         </mat-expansion-panel>
