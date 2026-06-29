@@ -198,6 +198,43 @@ export function buildDocDefinition(
 }
 
 /**
+ * Imprime un docDefinition mostrando UN solo dialogo de impresion, sin abrir
+ * una ventana de PDF aparte. `pdfMake.print()` en Electron abre una ventana
+ * extra (Chromium PDF viewer) ademas del dialogo nativo, lo que genera el
+ * doble dialogo. Aca usamos un iframe oculto reutilizable: una sola impresion.
+ */
+export function printDocDefinition(pdfMake: any, dd: any): void {
+  pdfMake.createPdf(dd).getBlob((blob: Blob) => {
+    const url = URL.createObjectURL(blob);
+    const ID = 'frc-factura-print-iframe';
+    let iframe = document.getElementById(ID) as HTMLIFrameElement | null;
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = ID;
+      iframe.style.position = 'fixed';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.style.visibility = 'hidden';
+      document.body.appendChild(iframe);
+    }
+    iframe.onload = () => {
+      // Pequeno delay para que el visor PDF del iframe termine de renderizar.
+      setTimeout(() => {
+        try {
+          iframe!.contentWindow?.focus();
+          iframe!.contentWindow?.print();
+        } catch (e) {
+          console.error('Error al imprimir la factura:', e);
+        }
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      }, 300);
+    };
+    iframe.src = url;
+  });
+}
+
+/**
  * Carga pdfmake dinamicamente (sin types) y devuelve la instancia lista para
  * crear PDFs. Mismo patron que el resto de la app.
  */
