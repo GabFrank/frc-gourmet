@@ -15,7 +15,15 @@ import { Permission } from './entities/personas/permission.entity';
 import { RolePermission } from './entities/personas/role-permission.entity';
 import { LoginSession } from './entities/auth/login-session.entity';
 import { RefreshToken } from './entities/auth/refresh-token.entity';
+import { PasswordResetToken } from './entities/auth/password-reset-token.entity';
 import { Adjunto } from './entities/shared/adjunto.entity';
+
+// Notificaciones (Email + WhatsApp)
+import { ConfiguracionNotificacion } from './entities/notificaciones/configuracion-notificacion.entity';
+import { EventoNotificacion } from './entities/notificaciones/evento-notificacion.entity';
+import { ReceptorNotificacion } from './entities/notificaciones/receptor-notificacion.entity';
+import { SuscripcionNotificacion } from './entities/notificaciones/suscripcion-notificacion.entity';
+import { LogNotificacion } from './entities/notificaciones/log-notificacion.entity';
 
 // RRHH entities
 import { ConfiguracionRrhh } from './entities/rrhh/configuracion-rrhh.entity';
@@ -308,8 +316,15 @@ function getEntitiesList(): any[] {
       RolePermission,
       LoginSession,
       RefreshToken,
+      PasswordResetToken,
       // Shared
       Adjunto,
+      // Notificaciones (Email + WhatsApp)
+      ConfiguracionNotificacion,
+      EventoNotificacion,
+      ReceptorNotificacion,
+      SuscripcionNotificacion,
+      LogNotificacion,
       // RRHH entities
       ConfiguracionRrhh,
       Cargo,

@@ -1,0 +1,280 @@
+<div class="notif-config-container">
+  <div *ngIf="loading" class="loading-row">
+    <mat-spinner diameter="32"></mat-spinner>
+    <span>Cargando...</span>
+  </div>
+
+  <mat-tab-group animationDuration="0ms">
+    <!-- ============ GENERAL ============ -->
+    <mat-tab label="General">
+      <div class="tab-content">
+        <mat-card class="section-card">
+          <mat-card-content>
+            <div class="global-toggle">
+              <mat-slide-toggle [(ngModel)]="globalActivo">
+                Notificaciones habilitadas (interruptor maestro)
+              </mat-slide-toggle>
+              <p class="hint">Si esta desactivado, no se envia ningun mensaje (excepto codigos de recuperacion de contrasenha).</p>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card class="section-card">
+          <mat-card-header><mat-card-title>Email (SMTP)</mat-card-title></mat-card-header>
+          <mat-card-content>
+            <div class="form-grid">
+              <mat-form-field appearance="outline">
+                <mat-label>Servidor SMTP</mat-label>
+                <input matInput [(ngModel)]="smtpHost" placeholder="smtp.gmail.com" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Puerto</mat-label>
+                <input matInput [(ngModel)]="smtpPort" />
+              </mat-form-field>
+              <mat-checkbox [(ngModel)]="smtpSecure">SSL (puerto 465)</mat-checkbox>
+              <mat-form-field appearance="outline">
+                <mat-label>Usuario (email emisor)</mat-label>
+                <input matInput [(ngModel)]="smtpUser" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>From (opcional)</mat-label>
+                <input matInput [(ngModel)]="smtpFrom" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Nombre del remitente</mat-label>
+                <input matInput [(ngModel)]="smtpFromName" />
+              </mat-form-field>
+            </div>
+
+            <div class="secret-row">
+              <mat-form-field appearance="outline">
+                <mat-label>Password / App password SMTP</mat-label>
+                <input matInput type="password" [(ngModel)]="smtpPassword" placeholder="(guardado de forma segura)" />
+              </mat-form-field>
+              <span class="secret-status" [class.ok]="secrets.smtpPassword">
+                <mat-icon>{{ secrets.smtpPassword ? 'check_circle' : 'error_outline' }}</mat-icon>
+                {{ secrets.smtpPassword ? 'Configurado' : 'No configurado' }}
+              </span>
+              <button mat-stroked-button color="primary" (click)="guardarSecretoSmtp()" [disabled]="!smtpPassword">
+                Guardar password
+              </button>
+            </div>
+
+            <div class="test-row">
+              <mat-form-field appearance="outline">
+                <mat-label>Email de prueba</mat-label>
+                <input matInput [(ngModel)]="testEmailTo" />
+              </mat-form-field>
+              <button mat-stroked-button (click)="probarEmail()" [disabled]="!testEmailTo">
+                <mat-icon>send</mat-icon> Enviar prueba
+              </button>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card class="section-card">
+          <mat-card-header><mat-card-title>WhatsApp (Evolution API)</mat-card-title></mat-card-header>
+          <mat-card-content>
+            <div class="form-grid">
+              <mat-form-field appearance="outline">
+                <mat-label>URL de Evolution API</mat-label>
+                <input matInput [(ngModel)]="evolutionUrl" placeholder="http://172.25.0.172:8090" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Instancia</mat-label>
+                <input matInput [(ngModel)]="evolutionInstance" placeholder="frc-alertas" />
+              </mat-form-field>
+            </div>
+
+            <div class="secret-row">
+              <mat-form-field appearance="outline">
+                <mat-label>API Key</mat-label>
+                <input matInput type="password" [(ngModel)]="evolutionApiKey" placeholder="(guardado de forma segura)" />
+              </mat-form-field>
+              <span class="secret-status" [class.ok]="secrets.evolutionApiKey">
+                <mat-icon>{{ secrets.evolutionApiKey ? 'check_circle' : 'error_outline' }}</mat-icon>
+                {{ secrets.evolutionApiKey ? 'Configurado' : 'No configurado' }}
+              </span>
+              <button mat-stroked-button color="primary" (click)="guardarSecretoEvolution()" [disabled]="!evolutionApiKey">
+                Guardar API key
+              </button>
+            </div>
+
+            <div class="test-row">
+              <mat-form-field appearance="outline">
+                <mat-label>Numero/grupo de prueba</mat-label>
+                <input matInput [(ngModel)]="testWhatsappTo" placeholder="595991123456 o 1203...@g.us" />
+              </mat-form-field>
+              <button mat-stroked-button (click)="probarWhatsapp()" [disabled]="!testWhatsappTo">
+                <mat-icon>send</mat-icon> Enviar prueba
+              </button>
+              <button mat-button (click)="verificarEvolution()">Estado: {{ evolutionState || '—' }}</button>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <div class="actions-bar">
+          <button mat-raised-button color="primary" (click)="guardarConfig()" [disabled]="saving">
+            <mat-icon>save</mat-icon> Guardar configuracion
+          </button>
+        </div>
+      </div>
+    </mat-tab>
+
+    <!-- ============ EVENTOS ============ -->
+    <mat-tab label="Eventos">
+      <div class="tab-content">
+        <p class="hint">Activa o desactiva cada tipo de evento y elige por que canal se envia.</p>
+        <table class="data-table">
+          <thead>
+            <tr><th>Activo</th><th>Evento</th><th>Descripcion</th><th>Canal</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let ev of eventos">
+              <td>
+                <mat-slide-toggle [(ngModel)]="ev.activo" (change)="toggleEvento(ev)"></mat-slide-toggle>
+              </td>
+              <td>{{ ev.nombre }}</td>
+              <td class="left">{{ ev.descripcion }}</td>
+              <td>
+                <mat-form-field appearance="outline" class="inline-select">
+                  <mat-select [(ngModel)]="ev.canal" (selectionChange)="cambiarCanalEvento(ev)">
+                    <mat-option *ngFor="let c of canalEventoOpciones" [value]="c.value">{{ c.label }}</mat-option>
+                  </mat-select>
+                </mat-form-field>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </mat-tab>
+
+    <!-- ============ RECEPTORES ============ -->
+    <mat-tab label="Receptores">
+      <div class="tab-content">
+        <mat-card class="section-card">
+          <mat-card-header><mat-card-title>{{ receptorForm.id ? 'Editar receptor' : 'Nuevo receptor' }}</mat-card-title></mat-card-header>
+          <mat-card-content>
+            <div class="form-grid">
+              <mat-form-field appearance="outline">
+                <mat-label>Tipo</mat-label>
+                <mat-select [(ngModel)]="receptorForm.tipo">
+                  <mat-option *ngFor="let t of tipoReceptorOpciones" [value]="t.value">{{ t.label }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Nombre</mat-label>
+                <input matInput [(ngModel)]="receptorForm.nombre" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" *ngIf="receptorForm.tipo === 'PERSONA'">
+                <mat-label>Persona</mat-label>
+                <mat-select [(ngModel)]="receptorForm.personaId">
+                  <mat-option *ngFor="let p of personas" [value]="p.id">{{ p.nombre }} {{ p.apellido }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline" *ngIf="receptorForm.tipo !== 'PERSONA'">
+                <mat-label>Valor (email / numero / grupo)</mat-label>
+                <input matInput [(ngModel)]="receptorForm.valor" />
+              </mat-form-field>
+            </div>
+            <div class="actions-bar">
+              <button mat-raised-button color="primary" (click)="guardarReceptor()">Guardar</button>
+              <button mat-button (click)="cancelarReceptor()" *ngIf="receptorForm.id">Cancelar</button>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <table class="data-table">
+          <thead>
+            <tr><th>Tipo</th><th>Nombre</th><th>Destino</th><th>Activo</th><th>Acciones</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of receptores">
+              <td>{{ r.tipo }}</td>
+              <td>{{ r.nombre }}</td>
+              <td>{{ r.tipo === 'PERSONA' ? (r.persona?.nombre || '-') : (r.valor || '-') }}</td>
+              <td><mat-icon>{{ r.activo ? 'check' : 'block' }}</mat-icon></td>
+              <td>
+                <button mat-icon-button (click)="editarReceptor(r)" matTooltip="Editar"><mat-icon>edit</mat-icon></button>
+                <button mat-icon-button (click)="eliminarReceptor(r)" matTooltip="Eliminar"><mat-icon>delete</mat-icon></button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </mat-tab>
+
+    <!-- ============ SUSCRIPCIONES ============ -->
+    <mat-tab label="Suscripciones">
+      <div class="tab-content">
+        <p class="hint">Define que receptor recibe que evento y por que canal.</p>
+        <div class="form-grid">
+          <mat-form-field appearance="outline">
+            <mat-label>Evento</mat-label>
+            <mat-select [(ngModel)]="selectedEventoId" (selectionChange)="onEventoSeleccionado()">
+              <mat-option *ngFor="let ev of eventos" [value]="ev.id">{{ ev.nombre }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div *ngIf="selectedEventoId" class="susc-add">
+          <mat-form-field appearance="outline">
+            <mat-label>Receptor</mat-label>
+            <mat-select [(ngModel)]="nuevoReceptorId">
+              <mat-option *ngFor="let r of receptores" [value]="r.id">{{ r.nombre }} ({{ r.tipo }})</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Canal</mat-label>
+            <mat-select [(ngModel)]="nuevoCanal">
+              <mat-option *ngFor="let c of canalOpciones" [value]="c.value">{{ c.label }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <button mat-raised-button color="primary" (click)="agregarSuscripcion()">Agregar</button>
+        </div>
+
+        <table class="data-table" *ngIf="selectedEventoId">
+          <thead>
+            <tr><th>Receptor</th><th>Canal</th><th>Acciones</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let s of suscripciones">
+              <td>{{ s.receptor?.nombre }}</td>
+              <td>{{ s.canal }}</td>
+              <td><button mat-icon-button (click)="eliminarSuscripcion(s)"><mat-icon>delete</mat-icon></button></td>
+            </tr>
+            <tr *ngIf="suscripciones.length === 0"><td colspan="3">Sin suscripciones</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </mat-tab>
+
+    <!-- ============ LOG ============ -->
+    <mat-tab label="Historial">
+      <div class="tab-content">
+        <table class="data-table">
+          <thead>
+            <tr><th>Fecha</th><th>Evento</th><th>Canal</th><th>Destino</th><th>Estado</th><th>Detalle</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let l of logs">
+              <td>{{ l.fechaEnvio | date:'short' }}</td>
+              <td>{{ l.eventoCodigo }}</td>
+              <td>{{ l.canal }}</td>
+              <td>{{ l.destino }}</td>
+              <td>{{ l.estado }}</td>
+              <td class="left">{{ l.error || l.asunto }}</td>
+            </tr>
+            <tr *ngIf="logs.length === 0"><td colspan="6">Sin registros</td></tr>
+          </tbody>
+        </table>
+        <div class="pager">
+          <button mat-icon-button (click)="paginaLogAnterior()" [disabled]="logPage === 0"><mat-icon>chevron_left</mat-icon></button>
+          <span>{{ logPage + 1 }}</span>
+          <button mat-icon-button (click)="paginaLogSiguiente()"><mat-icon>chevron_right</mat-icon></button>
+          <span class="total">Total: {{ logTotal }}</span>
+        </div>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</div>
