@@ -55,6 +55,103 @@ async function sumaVentasRango(
   return { cnt: Number(rows?.[0]?.cnt || 0), suma: Number(rows?.[0]?.suma || 0) };
 }
 
+// Desglose del total cobrado en un rango: por moneda y por forma de pago, con
+// CADA moneda convertida a la moneda principal (Gs) usando la cotización
+// (compra_local) más reciente de monedas_cambio. El total en Gs suma TODAS las
+// monedas convertidas, no solo la principal.
+async function desgloseVentasRango(
+  dataSource: DataSource,
+  monedaPrincipalId: number,
+  desdeISO: string,
+  hastaISO: string,
+): Promise<{
+  totalGs: number;
+  porMoneda: any[];
+  porFormaPago: any[];
+}> {
+  // Totales (PAGO - VUELTO) agrupados por moneda y forma de pago.
+  const rows: any[] = await dbQuery(dataSource, `
+    SELECT pd.moneda_id      as moneda_id,
+           m.simbolo         as simbolo,
+           m.denominacion    as denominacion,
+           m.decimales       as decimales,
+           m.principal       as principal,
+           pd.forma_pago_id  as forma_pago_id,
+           fp.nombre         as forma_pago_nombre,
+           COALESCE(SUM(CASE WHEN pd.tipo = 'PAGO' THEN pd.valor ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN pd.tipo = 'VUELTO' THEN pd.valor ELSE 0 END), 0) as total
+    FROM ventas v
+    JOIN pagos p ON v.pago_id = p.id
+    JOIN pagos_detalles pd ON pd.pago_id = p.id
+    JOIN monedas m ON m.id = pd.moneda_id
+    LEFT JOIN formas_pago fp ON fp.id = pd.forma_pago_id
+    WHERE v.estado = ? AND v.created_at >= ? AND v.created_at <= ?
+    GROUP BY pd.moneda_id, m.simbolo, m.denominacion, m.decimales, m.principal, pd.forma_pago_id, fp.nombre
+  `, [VentaEstado.CONCLUIDA, desdeISO, hastaISO]);
+
+  // Cotización (compra_local) más reciente de cada moneda origen → principal.
+  const cambioRows: any[] = await dbQuery(dataSource, `
+    SELECT moneda_origen_id, compra_local, created_at
+    FROM monedas_cambio
+    WHERE moneda_destino_id = ? AND activo = true
+    ORDER BY created_at DESC
+  `, [monedaPrincipalId]);
+  const cotizacionPorMoneda: { [monedaId: number]: number } = {};
+  for (const c of cambioRows) {
+    const oid = Number(c.moneda_origen_id);
+    if (cotizacionPorMoneda[oid] == null) cotizacionPorMoneda[oid] = Number(c.compra_local || 0);
+  }
+
+  const esPrincipalFlag = (v: any) => v === true || v === 1 || v === '1';
+
+  const porMonedaMap: { [monedaId: number]: any } = {};
+  const porFormaPago: any[] = [];
+  let totalGs = 0;
+
+  for (const r of rows) {
+    const monedaId = Number(r.moneda_id);
+    const esPrincipal = esPrincipalFlag(r.principal);
+    const total = Number(r.total || 0);
+    const cotizacion = esPrincipal ? 1 : (cotizacionPorMoneda[monedaId] || 0);
+    const totalEnGs = Math.round(total * cotizacion);
+
+    if (!porMonedaMap[monedaId]) {
+      porMonedaMap[monedaId] = {
+        monedaId,
+        simbolo: r.simbolo || '',
+        denominacion: String(r.denominacion || '').toUpperCase(),
+        decimales: Number(r.decimales || 0),
+        esPrincipal,
+        cotizacion,
+        total: 0,
+        totalEnGs: 0,
+      };
+    }
+    porMonedaMap[monedaId].total += total;
+    porMonedaMap[monedaId].totalEnGs += totalEnGs;
+
+    porFormaPago.push({
+      formaPago: String(r.forma_pago_nombre || 'SIN FORMA').toUpperCase(),
+      monedaId,
+      simbolo: r.simbolo || '',
+      total,
+      totalEnGs,
+      cotizacion,
+    });
+
+    totalGs += totalEnGs;
+  }
+
+  // Orden: principal primero, luego por aporte en Gs descendente.
+  const porMoneda = Object.values(porMonedaMap).sort((a: any, b: any) => {
+    if (a.esPrincipal !== b.esPrincipal) return a.esPrincipal ? -1 : 1;
+    return b.totalEnGs - a.totalEnGs;
+  });
+  porFormaPago.sort((a: any, b: any) => b.totalEnGs - a.totalEnGs);
+
+  return { totalGs, porMoneda, porFormaPago };
+}
+
 export function registerDashboardVentasHandlers(
   dataSource: DataSource,
   _getCurrentUser: () => Usuario | null,
@@ -69,10 +166,15 @@ export function registerDashboardVentasHandlers(
 
       const monedaPrincipalId = await getMonedaPrincipalId(dataSource);
 
-      // 1. Ventas hoy + total hoy (monto cobrado en moneda principal)
-      const { cnt: ventasHoy, suma: totalHoyPYG } = await sumaVentasRango(
+      // 1. Ventas hoy + total hoy. El total incluye TODAS las monedas y formas
+      // de pago, convertidas y sumadas a Gs (no solo la moneda principal).
+      const { cnt: ventasHoy } = await sumaVentasRango(
         dataSource, monedaPrincipalId, hoyInicio.toISOString(), hoyFin.toISOString(),
       );
+      const desgloseHoy = await desgloseVentasRango(
+        dataSource, monedaPrincipalId, hoyInicio.toISOString(), hoyFin.toISOString(),
+      );
+      const totalHoyPYG = desgloseHoy.totalGs;
       const ticketPromedio = ventasHoy > 0 ? Math.round(totalHoyPYG / ventasHoy) : 0;
 
       // 2. Mesas
@@ -181,6 +283,8 @@ export function registerDashboardVentasHandlers(
         cajasAbiertas,
         topProductos,
         ventasPorPeriodo: periodoData,
+        // Desglose del total de hoy por moneda y forma de pago (todo en Gs).
+        desgloseVentasHoy: desgloseHoy,
       };
     } catch (error) {
       console.error('Error get-dashboard-ventas-kpis:', error);

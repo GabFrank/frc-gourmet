@@ -352,6 +352,9 @@ export class RepositoryHttpService extends RepositoryService {
   getCajaAbiertaByUsuario(usuarioId: number): Observable<Caja> {
     return throwError(() => new Error(`RepositoryHttpService.getCajaAbiertaByUsuario() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getCajasAbiertas(): Observable<Caja[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getCajasAbiertas() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getCaja(cajaId: number): Observable<Caja> {
     return throwError(() => new Error(`RepositoryHttpService.getCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

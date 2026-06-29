@@ -177,6 +177,7 @@ export abstract class RepositoryService {
   abstract deleteDispositivo(dispositivoId: number): Observable<any>;
   abstract getCajas(): Observable<Caja[]>;
   abstract getCajaAbiertaByUsuario(usuarioId: number): Observable<Caja>;
+  abstract getCajasAbiertas(): Observable<Caja[]>;
   abstract getCaja(cajaId: number): Observable<Caja>;
   abstract createCaja(cajaData: Partial<Caja>): Observable<Caja>;
   abstract updateCaja(cajaId: number, cajaData: Partial<Caja>): Observable<any>;

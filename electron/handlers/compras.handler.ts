@@ -12,6 +12,7 @@ import { Producto } from '../../src/app/database/entities/productos/producto.ent
 import { Presentacion } from '../../src/app/database/entities/productos/presentacion.entity';
 import { PrecioCosto, FuenteCosto } from '../../src/app/database/entities/productos/precio-costo.entity';
 import { StockMovimiento, StockMovimientoTipo, StockMovimientoTipoReferencia } from '../../src/app/database/entities/productos/stock-movimiento.entity';
+import { Caja } from '../../src/app/database/entities/financiero/caja.entity';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { CuentaPorPagar } from '../../src/app/database/entities/financiero/cuenta-por-pagar.entity';
@@ -1140,8 +1141,29 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('createPago', async (_event: any, data: any) => {
+    // Cobro de venta: solo el dispositivo donde se abrio la caja puede cobrar.
+    // El flag `validarDispositivoCaja` lo envia unicamente el flujo de cobro de
+    // venta (cobrar-venta-dialog). Los pagos de compra no lo mandan, asi que no
+    // se ven afectados. Se descarta el flag antes de persistir el Pago.
+    const { validarDispositivoCaja, ...pagoData } = data ?? {};
+    if (validarDispositivoCaja) {
+      const cajaId = pagoData?.caja?.id ?? pagoData?.caja ?? null;
+      const cajaRepo = dataSource.getRepository(Caja);
+      const caja = cajaId
+        ? await cajaRepo.findOne({ where: { id: cajaId }, relations: ['dispositivo'] })
+        : null;
+      const dispositivoCajaId = caja?.dispositivo?.id ?? null;
+      const deviceActual = resolveRequestDeviceId(_event);
+      // Bloquea SOLO cuando se puede determinar positivamente que el dispositivo
+      // actual difiere del dueño de la caja. Si el dispositivo actual no se puede
+      // resolver (standalone sin device configurado), no se bloquea para no
+      // romper el cobro en instalaciones de un solo equipo.
+      if (deviceActual != null && dispositivoCajaId != null && deviceActual !== dispositivoCajaId) {
+        throw new Error('COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO');
+      }
+    }
     const repo = dataSource.getRepository(Pago);
-    const entity = repo.create(data);
+    const entity = repo.create(pagoData);
     await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
     return await repo.save(entity);
   });
