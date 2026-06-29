@@ -215,12 +215,22 @@ import { AddCuentaBancariaToPagosCobros1779700000000 } from './migrations/177970
 import { AddCotizacionBancariaToPagosCobros1779800000000 } from './migrations/1779800000000-AddCotizacionBancariaToPagosCobros';
 import { AddKdsToComandaItem1780000000000 } from './migrations/1780000000000-AddKdsToComandaItem';
 import { AddKdsPantalla1780100000000 } from './migrations/1780100000000-AddKdsPantalla';
+import { AddFacturacion1782519234187 } from './migrations/1782519234187-AddFacturacion';
+import { AddFacturacionConfig1782519876542 } from './migrations/1782519876542-AddFacturacionConfig';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
 import { PdvAtajoGrupoItem } from './entities/ventas/pdv-atajo-grupo-item.entity';
 import { PdvAtajoItemProducto } from './entities/ventas/pdv-atajo-item-producto.entity';
 import { VentaItemSabor } from './entities/ventas/venta-item-sabor.entity';
+
+// Facturacion entities (modulo de facturacion: pre-impreso, auto-impreso, electronica)
+import { Timbrado } from './entities/facturacion/timbrado.entity';
+import { TimbradoDetalle } from './entities/facturacion/timbrado-detalle.entity';
+import { FacturaPlantilla } from './entities/facturacion/factura-plantilla.entity';
+import { Factura } from './entities/facturacion/factura.entity';
+import { FacturaItem } from './entities/facturacion/factura-item.entity';
+import { FacturacionConfig } from './entities/facturacion/facturacion-config.entity';
 
 /**
  * Override de conexion. F1.1: el caller (main.ts) lo construye leyendo
@@ -475,6 +485,13 @@ function getEntitiesList(): any[] {
       PdvAtajoItemProducto,
       // VentaItem sabores (variaciones multi-sabor)
       VentaItemSabor,
+      // Facturacion (modulo de facturacion)
+      Timbrado,
+      TimbradoDetalle,
+      FacturaPlantilla,
+      Factura,
+      FacturaItem,
+      FacturacionConfig,
   ];
 }
 
@@ -524,6 +541,8 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddCotizacionBancariaToPagosCobros1779800000000,
     AddKdsToComandaItem1780000000000,
     AddKdsPantalla1780100000000,
+    AddFacturacion1782519234187,
+    AddFacturacionConfig1782519876542,
   ];
 }
 

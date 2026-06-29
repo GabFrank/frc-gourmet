@@ -1,0 +1,23 @@
+<h2 mat-dialog-title>Nueva plantilla</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="form" class="plantilla-form">
+    <mat-form-field appearance="outline" class="full">
+      <mat-label>Nombre</mat-label>
+      <input matInput formControlName="nombre" required />
+      <mat-error *ngIf="form.get('nombre')?.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full">
+      <mat-label>Tipo</mat-label>
+      <mat-select formControlName="tipo">
+        <mat-option *ngFor="let t of tipos" [value]="t.value">{{ t.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()" [disabled]="isSaving">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="save()" [disabled]="isSaving">Crear y diseñar</button>
+</mat-dialog-actions>

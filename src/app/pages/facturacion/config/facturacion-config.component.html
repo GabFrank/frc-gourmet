@@ -1,0 +1,49 @@
+<mat-card class="page-card">
+  <mat-card-header>
+    <mat-card-title>Configuración de facturación</mat-card-title>
+  </mat-card-header>
+
+  <mat-card-content>
+    <div *ngIf="isLoading" class="loading-container">
+      <mat-spinner diameter="40"></mat-spinner>
+    </div>
+
+    <form [formGroup]="form" class="config-form" *ngIf="!isLoading">
+      <mat-form-field appearance="outline" class="full">
+        <mat-label>Tipo de facturación del sistema</mat-label>
+        <mat-select formControlName="tipoFacturacion" (selectionChange)="filtrarPlantillas()">
+          <mat-option *ngFor="let t of tipos" [value]="t.value">{{ t.label }}</mat-option>
+        </mat-select>
+        <mat-hint>El sistema opera con un único modelo de facturación.</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full">
+        <mat-label>Diseño / plantilla predeterminada</mat-label>
+        <mat-select formControlName="plantillaPredeterminadaId">
+          <mat-option [value]="null">— Ninguna —</mat-option>
+          <mat-option *ngFor="let p of plantillasFiltradas" [value]="p.id">{{ p.nombre }} ({{ p.tipo }})</mat-option>
+        </mat-select>
+        <mat-hint *ngIf="plantillasFiltradas.length === 0">No hay plantillas del tipo seleccionado. Creá una en Plantillas.</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full">
+        <mat-label>Punto de expedición predeterminado</mat-label>
+        <mat-select formControlName="timbradoDetallePredeterminadoId">
+          <mat-option [value]="null">— Ninguno —</mat-option>
+          <mat-option *ngFor="let o of detalleOptions" [value]="o.id">{{ o.label }}</mat-option>
+        </mat-select>
+        <mat-hint>La numeración (próximo número) se administra en Timbrados → Puntos de expedición.</mat-hint>
+      </mat-form-field>
+
+      <mat-checkbox formControlName="permitirEditarNumeroPreimpreso">
+        Permitir editar el número de factura al emitir (pre-impreso)
+      </mat-checkbox>
+
+      <div class="actions">
+        <button mat-raised-button color="primary" (click)="save()" [disabled]="isSaving">
+          <mat-icon>save</mat-icon> Guardar configuración
+        </button>
+      </div>
+    </form>
+  </mat-card-content>
+</mat-card>

@@ -105,6 +105,14 @@ export interface AppSettings {
    * columna `dispositivo_id` queda vacia (es nullable).
    */
   deviceId?: number | null;
+  /**
+   * Zona horaria IANA aplicada a TODO el proceso via `process.env.TZ` al
+   * arranque (antes de createWindow, para que el renderer la herede). Espejo
+   * de `empresa.zonaHoraria` — se persiste aca para poder leerla sync temprano.
+   * Paraguay quedo en UTC-3 fijo (sin horario de invierno): si el tzdata del SO
+   * esta viejo, usar 'America/Sao_Paulo' (UTC-3 estable) corrige la hora.
+   */
+  timezone?: string;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -124,6 +132,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     habilitado: false,
   },
   deviceId: null,
+  timezone: 'America/Asuncion',
 };
 
 export function getAppSettingsPath(userDataPath: string): string {

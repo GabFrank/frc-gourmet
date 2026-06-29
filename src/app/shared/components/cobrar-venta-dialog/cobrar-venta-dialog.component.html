@@ -326,6 +326,10 @@
         <mat-icon>{{ saldoPrincipal > 0 ? 'discount' : 'add_circle' }}</mat-icon>
         {{ saldoPrincipal > 0 ? 'Descuento (F9)' : 'Aumento (F9)' }}
       </button>
+      <button mat-raised-button class="btn-factura" (click)="facturar()" matTooltip="Emitir factura legal con los ítems del cobro">
+        <mat-icon>receipt_long</mat-icon>
+        Factura
+      </button>
       <button mat-raised-button class="btn-cancelar" (click)="onCancel()">
         <mat-icon>close</mat-icon>
         Cancelar

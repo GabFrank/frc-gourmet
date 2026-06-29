@@ -867,31 +867,42 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
 
   private detectCurrentDevice(): void {
     this.loadingDeviceInfo = true;
+    const api = (window as any).api;
 
-    // Use the Electron API exposed through preload script to get MAC address
-    (window as any).api.getSystemMacAddress()
-      .then((macAddress: string) => {
-        if (macAddress) {
-          // Find dispositivo with this MAC address
-          const matchingDispositivo = this.dispositivos.find(d =>
-            d.mac && d.mac.toLowerCase() === macAddress.toLowerCase()
-          );
+    const aplicarDispositivo = (id: number | null | undefined): boolean => {
+      if (!id) return false;
+      const match = this.dispositivos.find(d => d.id === id);
+      if (!match) return false;
+      this.detectedDispositivoId = match.id;
+      this.cajaInfoForm.get('dispositivoId')?.setValue(match.id);
+      return true;
+    };
 
-          if (matchingDispositivo) {
-            // Set the detected dispositivo ID
-            this.detectedDispositivoId = matchingDispositivo.id;
-
-            // Update the form value
-            this.cajaInfoForm.get('dispositivoId')?.setValue(matchingDispositivo.id);
-            console.log(`Dispositivo detectado automáticamente: ${matchingDispositivo.nombre}`);
-          } else {
-            console.log(`No se encontró dispositivo con MAC: ${macAddress}`);
-          }
+    // 1) Prioridad: el dispositivo asignado a esta PC en la configuracion
+    //    (app-settings.deviceId). Si esta seteado, no tiene sentido pedir
+    //    al usuario que elija otro.
+    Promise.resolve(api?.getDeviceId ? api.getDeviceId() : null)
+      .then((deviceId: number | null) => {
+        if (aplicarDispositivo(deviceId)) {
+          this.loadingDeviceInfo = false;
+          return undefined;
         }
-        this.loadingDeviceInfo = false;
+        // 2) Fallback: deteccion por direccion MAC.
+        return api.getSystemMacAddress().then((macAddress: string) => {
+          if (macAddress) {
+            const matchingDispositivo = this.dispositivos.find(d =>
+              d.mac && d.mac.toLowerCase() === macAddress.toLowerCase()
+            );
+            if (matchingDispositivo) {
+              this.detectedDispositivoId = matchingDispositivo.id;
+              this.cajaInfoForm.get('dispositivoId')?.setValue(matchingDispositivo.id);
+            }
+          }
+          this.loadingDeviceInfo = false;
+        });
       })
       .catch((error: any) => {
-        console.error('Error al obtener dirección MAC:', error);
+        console.error('Error detectando el dispositivo actual:', error);
         this.loadingDeviceInfo = false;
       });
   }

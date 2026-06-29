@@ -110,9 +110,14 @@ export class ListCajaDialogComponent implements OnInit {
     try {
       const dispositivos = await firstValueFrom(this.repositoryService.getDispositivos());
       this.dispositivos = dispositivos || [];
-      
-      // Set default selected dispositivo if available
-      if (this.dispositivos.length > 0) {
+
+      // Preferir el dispositivo asignado a esta PC (app-settings.deviceId); si
+      // no esta seteado o no esta en la lista, caer al primero disponible.
+      const deviceId = (window as any).api?.getDeviceId ? (window as any).api.getDeviceId() : null;
+      const propio = deviceId ? this.dispositivos.find(d => d.id === deviceId) : null;
+      if (propio) {
+        this.selectedDispositivoId = propio.id;
+      } else if (this.dispositivos.length > 0) {
         this.selectedDispositivoId = this.dispositivos[0].id;
       }
     } catch (error: any) {

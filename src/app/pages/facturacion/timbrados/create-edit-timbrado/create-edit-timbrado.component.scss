@@ -1,0 +1,21 @@
+.timbrado-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 480px;
+  padding-top: 8px;
+}
+
+.full {
+  width: 100%;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+
+  mat-form-field {
+    flex: 1;
+  }
+}
