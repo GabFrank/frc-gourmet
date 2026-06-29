@@ -16,7 +16,7 @@ import { BuscarClienteDialogComponent } from '../../../../shared/components/busc
 import { TimbradoDetalle } from '../../../../database/entities/facturacion/timbrado-detalle.entity';
 import { FacturaPlantilla } from '../../../../database/entities/facturacion/factura-plantilla.entity';
 import { TipoFacturacion } from '../../../../database/entities/facturacion/factura.entity';
-import { buildDocDefinition, loadPdfMake, printDocDefinition, FacturaRenderContext } from '../../plantillas/plantilla-render.util';
+import { buildDocDefinition, loadPdfMake, FacturaRenderContext } from '../../plantillas/plantilla-render.util';
 import { montoEnLetras } from '../../../../shared/utils/monto-letras.util';
 
 @Component({
@@ -406,7 +406,10 @@ export class FacturarDialogComponent implements OnInit {
         includeBg ? { background: plantilla.backgroundImageUrl, backgroundTransform: config.background } : undefined,
       );
       const pdfMake = await loadPdfMake();
-      printDocDefinition(pdfMake, dd);
+      // Abrimos el PDF en el visor (preview + respeta la orientacion del
+      // documento). pdfMake.print() abria una ventana extra + dialogo sin
+      // preview que reflowaba a vertical/Letter (orientacion equivocada).
+      pdfMake.createPdf(dd).open();
     } catch (error) {
       console.error('Error imprimiendo factura:', error);
       this.snackBar.open('Factura emitida, pero no se pudo imprimir automáticamente', 'Cerrar', { duration: 5000 });
