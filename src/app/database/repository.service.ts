@@ -39,6 +39,11 @@ import { Sector } from './entities/ventas/sector.entity';
 import { Reserva } from './entities/ventas/reserva.entity';
 import { Moneda } from './entities/financiero/moneda.entity';
 import { TipoPrecio } from './entities/financiero/tipo-precio.entity';
+import { Timbrado } from './entities/facturacion/timbrado.entity';
+import { TimbradoDetalle } from './entities/facturacion/timbrado-detalle.entity';
+import { FacturaPlantilla } from './entities/facturacion/factura-plantilla.entity';
+import { Factura } from './entities/facturacion/factura.entity';
+import { FacturacionConfig } from './entities/facturacion/facturacion-config.entity';
 import { Familia } from './entities/productos/familia.entity';
 import { Subfamilia } from './entities/productos/subfamilia.entity';
 import { Producto } from './entities/productos/producto.entity';
@@ -868,4 +873,26 @@ export abstract class RepositoryService {
   abstract exportReporteAguinaldoAnualPdf(anio: number): Observable<any>;
   abstract getReporteResumenIpsData(periodo: string): Observable<any>;
   abstract exportReporteResumenIpsExcel(periodo: string): Observable<any>;
+
+  // ---- Facturacion (modulo de facturacion) ----
+  abstract getTimbrados(): Observable<Timbrado[]>;
+  abstract getTimbrado(id: number): Observable<Timbrado>;
+  abstract createTimbrado(data: Partial<Timbrado>): Observable<Timbrado>;
+  abstract updateTimbrado(id: number, data: Partial<Timbrado>): Observable<any>;
+  abstract deleteTimbrado(id: number): Observable<any>;
+  abstract getTimbradoDetalles(timbradoId?: number): Observable<TimbradoDetalle[]>;
+  abstract createTimbradoDetalle(data: Partial<TimbradoDetalle>): Observable<TimbradoDetalle>;
+  abstract updateTimbradoDetalle(id: number, data: Partial<TimbradoDetalle>): Observable<any>;
+  abstract deleteTimbradoDetalle(id: number): Observable<any>;
+  abstract getFacturaPlantillas(tipo?: string): Observable<FacturaPlantilla[]>;
+  abstract getFacturaPlantilla(id: number): Observable<FacturaPlantilla>;
+  abstract createFacturaPlantilla(data: Partial<FacturaPlantilla>): Observable<FacturaPlantilla>;
+  abstract updateFacturaPlantilla(id: number, data: Partial<FacturaPlantilla>): Observable<any>;
+  abstract deleteFacturaPlantilla(id: number): Observable<any>;
+  abstract getFacturas(filtros?: any): Observable<Factura[]>;
+  abstract getFactura(id: number): Observable<Factura>;
+  abstract createFactura(payload: { factura: Partial<Factura> & { timbradoDetalleId?: number; numeroManual?: number }; items: any[] }): Observable<Factura>;
+  abstract anularFactura(id: number, motivo: string): Observable<any>;
+  abstract getFacturacionConfig(): Observable<FacturacionConfig>;
+  abstract saveFacturacionConfig(data: any): Observable<FacturacionConfig>;
 }

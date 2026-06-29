@@ -44,6 +44,10 @@ import { LoginSession } from './database/entities/auth/login-session.entity';
 import { firstValueFrom } from 'rxjs';
 import { ListPersonasComponent } from './pages/personas/personas/list-personas.component';
 import { ListMonedasComponent } from './pages/financiero/monedas/list-monedas/list-monedas.component';
+import { ListTimbradosComponent } from './pages/facturacion/timbrados/list-timbrados/list-timbrados.component';
+import { ListPlantillasComponent } from './pages/facturacion/plantillas/list-plantillas/list-plantillas.component';
+import { ListFacturasComponent } from './pages/facturacion/facturas/list-facturas/list-facturas.component';
+import { FacturacionConfigComponent } from './pages/facturacion/config/facturacion-config.component';
 import { ListDispositivosComponent } from './pages/financiero/dispositivos/list-dispositivos.component';
 import { ListCajasComponent } from './pages/financiero/cajas/list-cajas.component';
 import { FinancieroDashboardComponent } from './pages/financiero/dashboard/financiero-dashboard.component';
@@ -67,6 +71,7 @@ import { BackupRestoreComponent } from './pages/configuracion/backup-restore/bac
 import { IaConfigComponent } from './pages/configuracion/ia-config/ia-config.component';
 import { DbConfigComponent } from './pages/configuracion/db-config/db-config.component';
 import { ModeConfigComponent } from './pages/configuracion/mode-config/mode-config.component';
+import { ConfiguracionNotificacionesComponent } from './pages/configuracion/notificaciones/configuracion-notificaciones.component';
 import { ListCargosComponent } from './pages/rrhh/cargos/list-cargos.component';
 import { ListFuncionariosComponent } from './pages/rrhh/funcionarios/list-funcionarios/list-funcionarios.component';
 import { ListTurnosComponent } from './pages/rrhh/turnos/list-turnos.component';
@@ -655,6 +660,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     this.closeMenu();
   }
 
+  openConfiguracionNotificacionesTab() {
+    this.tabsService.openTab(
+      'Notificaciones',
+      ConfiguracionNotificacionesComponent,
+      { source: 'navigation' },
+      'configuracion-notificaciones-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
   openBackupRestoreTab() {
     this.tabsService.openTab(
       'Backup y Restauración',
@@ -882,6 +898,26 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       'monedas-tab',
       true
     );
+    this.closeMenu();
+  }
+
+  openTimbradosTab() {
+    this.tabsService.openTab('Timbrados', ListTimbradosComponent, { source: 'navigation' }, 'timbrados-tab', true);
+    this.closeMenu();
+  }
+
+  openPlantillasFacturaTab() {
+    this.tabsService.openTab('Plantillas de factura', ListPlantillasComponent, { source: 'navigation' }, 'plantillas-factura-tab', true);
+    this.closeMenu();
+  }
+
+  openFacturacionConfigTab() {
+    this.tabsService.openTab('Config. facturación', FacturacionConfigComponent, { source: 'navigation' }, 'facturacion-config-tab', true);
+    this.closeMenu();
+  }
+
+  openFacturasTab() {
+    this.tabsService.openTab('Facturas', ListFacturasComponent, { source: 'navigation' }, 'facturas-tab', true);
     this.closeMenu();
   }
 

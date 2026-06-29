@@ -6,6 +6,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -34,6 +35,7 @@ function rucValidator(control: AbstractControl): ValidationErrors | null {
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
+    MatSelectModule,
     MatDatepickerModule,
     MatNativeDateModule,
     MatProgressSpinnerModule,
@@ -47,6 +49,17 @@ export class ConfigurarEmpresaComponent implements OnInit {
   form!: FormGroup;
   loading = false;
   saving = false;
+
+  /**
+   * Zonas horarias soportadas (solo PY/BR/AR). Paraguay quedo en UTC-3 fijo
+   * (sin horario de invierno); si el SO tiene tzdata viejo y muestra la hora
+   * 1h atras, elegir Brasil (Sao Paulo, UTC-3 estable) corrige la hora.
+   */
+  zonasHorarias: { value: string; label: string }[] = [
+    { value: 'America/Asuncion', label: 'Paraguay — Asunción (UTC-3)' },
+    { value: 'America/Sao_Paulo', label: 'Brasil — Brasília (UTC-3, estable)' },
+    { value: 'America/Argentina/Buenos_Aires', label: 'Argentina — Buenos Aires (UTC-3)' },
+  ];
 
   /**
    * URL del logo. NO va al form (lo persistimos directo al subir/remover,

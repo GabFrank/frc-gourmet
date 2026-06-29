@@ -46,6 +46,7 @@ import { registerCuentasPorPagarHandlers } from './electron/handlers/cuentas-por
 import { registerDashboardShortcutsHandlers } from './electron/handlers/dashboard-shortcuts.handler';
 import { registerOnboardingHandlers } from './electron/handlers/onboarding.handler';
 import { registerEmpresaHandlers } from './electron/handlers/empresa.handler';
+import { registerFacturacionHandlers } from './electron/handlers/facturacion.handler';
 import { registerCotizacionMercadoHandlers } from './electron/handlers/cotizacion-mercado.handler';
 import { registerPermissionsHandlers, seedPermissions } from './electron/handlers/permissions.handler';
 import { registerConfiguracionRrhhHandlers, seedConfiguracionRrhh } from './electron/handlers/configuracion-rrhh.handler';
@@ -88,6 +89,9 @@ import { registerDashboardCajaMayorHandlers } from './electron/handlers/dashboar
 import { registerBackupHandlers, startAutoBackupScheduler } from './electron/handlers/backup.handler';
 // Importacion de facturas via OCR + IA
 import { registerFacturaImportHandlers } from './electron/handlers/factura-import.handler';
+import { registerNotificacionesConfigHandlers, seedNotificaciones } from './electron/handlers/notificaciones-config.handler';
+import { registerPasswordRecoveryHandlers } from './electron/handlers/password-recovery.handler';
+import { setNotificacionDataSource } from './electron/services/notificacion.service';
 // Auto-updater
 import { initAutoUpdater } from './electron/utils/auto-updater';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
@@ -205,6 +209,7 @@ function initializeDatabase() {
       registerDashboardShortcutsHandlers(dataSource, getCurrentUser); // Dashboard Shortcuts personalizables
       registerOnboardingHandlers(dataSource, getCurrentUser); // Onboarding tasks (lista guiada en Home)
       registerEmpresaHandlers(dataSource, getCurrentUser); // Empresa singleton (datos + branding + fiscal)
+      registerFacturacionHandlers(dataSource, getCurrentUser); // Facturación: timbrados, plantillas, facturas
       registerCotizacionMercadoHandlers(); // Scraping de cotizaciones de mercado on-demand
       registerPermissionsHandlers(dataSource, getCurrentUser); // RRHH: Permission + RolePermission
       registerConfiguracionRrhhHandlers(dataSource, getCurrentUser); // RRHH: ConfiguracionRrhh (parametros legales)
@@ -255,6 +260,11 @@ function initializeDatabase() {
       // Importacion de facturas con OCR + IA
       registerFacturaImportHandlers(dataSource, getCurrentUser);
 
+      // Notificaciones (Email + WhatsApp): config/receptores/eventos + recuperacion de contrasenha
+      setNotificacionDataSource(dataSource);
+      registerNotificacionesConfigHandlers(dataSource, getCurrentUser);
+      registerPasswordRecoveryHandlers(dataSource, getCurrentUser);
+
       // Seed initial data (idempotent - only inserts if tables are empty)
       // Orden: 1) datos generales 2) permisos+conceptos 3) admin user (necesita permisos ya creados)
       (async () => {
@@ -263,6 +273,7 @@ function initializeDatabase() {
           await seedPermissions(dataSource);
           await seedConfiguracionRrhh(dataSource);
           await seedLiquidacionConceptos(dataSource);
+          await seedNotificaciones(dataSource);
           await seedSystemData(dataSource);
         } catch (e) {
           console.error('Error en seeds iniciales:', e);
@@ -593,6 +604,14 @@ app.on('ready', () => {
     // herede el valor al spawn — initializeDatabase() corre async, no llega.
     if (typeof earlySettings.deviceId === 'number') {
       process.env['FRC_DEVICE_ID'] = String(earlySettings.deviceId);
+    }
+    // Zona horaria: setear TZ ANTES de createWindow para que el renderer
+    // (Chromium) y Node usen la zona configurada en toda la app. Paraguay
+    // quedo en UTC-3 fijo; si el tzdata del SO esta viejo, configurar
+    // 'America/Sao_Paulo' (UTC-3 estable) corrige la hora mostrada.
+    if (earlySettings.timezone) {
+      process.env.TZ = earlySettings.timezone;
+      console.log(`[main] TZ=${earlySettings.timezone} (zona horaria de la empresa)`);
     }
     // Exponer version de la app al preload — para mostrarla en el header
     // como subtitle ("FRC Gourmet vX.Y.Z"). app.getVersion() lee package.json

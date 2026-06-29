@@ -53,6 +53,7 @@ import { registerDashboardCajaMayorHandlers } from '../handlers/dashboard-caja-m
 import { registerBackupHandlers } from '../handlers/backup.handler';
 import { registerFacturaImportHandlers } from '../handlers/factura-import.handler';
 import { registerEmpresaHandlers } from '../handlers/empresa.handler';
+import { registerFacturacionHandlers } from '../handlers/facturacion.handler';
 import { registerDbConfigHandlers } from '../handlers/db-config.handler';
 import { registerAppModeHandlers } from '../handlers/app-mode.handler';
 
@@ -109,4 +110,5 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerAppModeHandlers(dataSource, getCurrentUser);
   registerFacturaImportHandlers(dataSource, getCurrentUser);
   registerEmpresaHandlers(dataSource, getCurrentUser);
+  registerFacturacionHandlers(dataSource, getCurrentUser);
 }

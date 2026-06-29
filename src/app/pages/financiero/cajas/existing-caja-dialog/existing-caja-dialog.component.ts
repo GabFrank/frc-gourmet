@@ -51,9 +51,12 @@ export class ExistingCajaDialogComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    // If there are other dispositivos, select the first one by default
+    // Preferir el dispositivo asignado a esta PC (app-settings.deviceId) si esta
+    // entre los disponibles; sino, seleccionar el primero por defecto.
     if (this.otherDispositivos.length > 0) {
-      this.dispositivoForm.get('dispositivoId')?.setValue(this.otherDispositivos[0].id);
+      const deviceId = (window as any).api?.getDeviceId ? (window as any).api.getDeviceId() : null;
+      const propio = deviceId ? this.otherDispositivos.find(d => d.id === deviceId) : null;
+      this.dispositivoForm.get('dispositivoId')?.setValue(propio ? propio.id : this.otherDispositivos[0].id);
     }
   }
 

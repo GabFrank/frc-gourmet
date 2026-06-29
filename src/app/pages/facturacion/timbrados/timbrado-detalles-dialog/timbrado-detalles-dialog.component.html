@@ -1,0 +1,72 @@
+<h2 mat-dialog-title>Puntos de expedición — Timbrado {{ timbrado.numero }}</h2>
+
+<mat-dialog-content>
+  <table mat-table [dataSource]="detalles" class="full-width-table" *ngIf="detalles.length">
+    <ng-container matColumnDef="punto">
+      <th mat-header-cell *matHeaderCellDef>Establ. - P.Exp.</th>
+      <td mat-cell *matCellDef="let d">{{ d.establecimiento }}-{{ d.puntoExpedicion }}</td>
+    </ng-container>
+    <ng-container matColumnDef="rango">
+      <th mat-header-cell *matHeaderCellDef>Rango</th>
+      <td mat-cell *matCellDef="let d">{{ d.rangoDesde }} — {{ d.rangoHasta }}</td>
+    </ng-container>
+    <ng-container matColumnDef="numeroActual">
+      <th mat-header-cell *matHeaderCellDef>Próximo nº</th>
+      <td mat-cell *matCellDef="let d">{{ d.numeroActual }}</td>
+    </ng-container>
+    <ng-container matColumnDef="activo">
+      <th mat-header-cell *matHeaderCellDef>Estado</th>
+      <td mat-cell *matCellDef="let d">{{ d.activo ? 'Activo' : 'Inactivo' }}</td>
+    </ng-container>
+    <ng-container matColumnDef="acciones">
+      <th mat-header-cell *matHeaderCellDef></th>
+      <td mat-cell *matCellDef="let d">
+        <button mat-icon-button (click)="edit(d)" matTooltip="Editar"><mat-icon>edit</mat-icon></button>
+        <button mat-icon-button color="warn" (click)="remove(d)" matTooltip="Eliminar"><mat-icon>delete</mat-icon></button>
+      </td>
+    </ng-container>
+    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+    <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+  </table>
+
+  <div *ngIf="!detalles.length" class="empty-state">Sin puntos de expedición. Agregue uno abajo.</div>
+
+  <form [formGroup]="form" class="detalle-form">
+    <h3>{{ editingId ? 'Editar punto' : 'Nuevo punto de expedición' }}</h3>
+    <div class="row">
+      <mat-form-field appearance="outline">
+        <mat-label>Establecimiento</mat-label>
+        <input matInput formControlName="establecimiento" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Punto exp.</mat-label>
+        <input matInput formControlName="puntoExpedicion" />
+      </mat-form-field>
+    </div>
+    <div class="row">
+      <mat-form-field appearance="outline">
+        <mat-label>Rango desde</mat-label>
+        <input matInput type="number" formControlName="rangoDesde" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Rango hasta</mat-label>
+        <input matInput type="number" formControlName="rangoHasta" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Próximo nº</mat-label>
+        <input matInput type="number" formControlName="numeroActual" />
+      </mat-form-field>
+    </div>
+    <mat-checkbox formControlName="activo">Activo</mat-checkbox>
+    <div class="form-actions">
+      <button mat-button *ngIf="editingId" (click)="resetForm()">Cancelar edición</button>
+      <button mat-raised-button color="primary" (click)="save()">
+        {{ editingId ? 'Actualizar' : 'Agregar' }}
+      </button>
+    </div>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>Cerrar</button>
+</mat-dialog-actions>

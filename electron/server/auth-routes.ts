@@ -9,6 +9,7 @@ import {
   rotateRefreshToken,
   revokeRefreshToken,
 } from '../utils/refresh-token.utils';
+import { invokeHandler } from '../utils/handler-registry';
 
 interface LoginBody {
   nickname: string;
@@ -184,5 +185,27 @@ export function registerAuthRoutes(fastify: FastifyInstance, dataSource: DataSou
     const t = request.body?.refreshToken;
     if (t) await revokeRefreshToken(dataSource, t);
     return { success: true };
+  });
+
+  // ============== RECUPERACION DE CONTRASENHA (pre-login, sin JWT) ==============
+  // Delegan a los handlers IPC ya registrados, para que el flujo funcione tambien
+  // en mode=client (donde el renderer no puede usar /api/rpc sin estar logueado).
+  fastify.post<{ Body: { nickname: string } }>('/api/auth/reset-channels', async (request) => {
+    return invokeHandler('get-reset-channels', { nickname: request.body?.nickname });
+  });
+
+  fastify.post<{ Body: { nickname: string; canal: string } }>('/api/auth/request-password-reset', async (request) => {
+    return invokeHandler('request-password-reset', {
+      nickname: request.body?.nickname,
+      canal: request.body?.canal,
+    });
+  });
+
+  fastify.post<{ Body: { nickname: string; codigo: string; newPassword: string } }>('/api/auth/reset-password', async (request) => {
+    return invokeHandler('reset-password-with-code', {
+      nickname: request.body?.nickname,
+      codigo: request.body?.codigo,
+      newPassword: request.body?.newPassword,
+    });
   });
 }
