@@ -70,6 +70,9 @@ export class FacturaPlantillaDesignerComponent {
   bgLeftPx = 0;
   bgTopPx = 0;
 
+  /** Alto de fila de items (px) en el lienzo (deriva de config.itemRowHeightMm). */
+  itemRowHeightPx = 6 * 3;
+
   /** Texto de previsualizacion por elemento (id -> texto). */
   previews: { [id: string]: string } = {};
 
@@ -126,6 +129,8 @@ export class FacturaPlantillaDesignerComponent {
       this.recomputePage();
       this.ensureBackground();
       this.recomputeBg();
+      this.ensureItemRowHeight();
+      this.recomputeItemRowHeight();
       this.refreshPreviews();
       for (const el of this.config.elementos) this.setFreePos(el);
     } catch (error) {
@@ -153,6 +158,15 @@ export class FacturaPlantillaDesignerComponent {
         offsetYMm: 0,
       };
     }
+  }
+
+  /** Alto de fila de items por defecto (apretado) si no esta seteado. */
+  private ensureItemRowHeight(): void {
+    if (this.config.itemRowHeightMm == null) this.config.itemRowHeightMm = 6;
+  }
+
+  recomputeItemRowHeight(): void {
+    this.itemRowHeightPx = (Number(this.config.itemRowHeightMm) || 6) * this.pxPerMm;
   }
 
   /** Recalcula el estilo px de la imagen de fondo segun su transform. */
@@ -330,6 +344,7 @@ export class FacturaPlantillaDesignerComponent {
           showHeader: e.showHeader, field: e.field, rowHeightMm: e.rowHeightMm, rows: e.rows,
         })),
         background: this.config.background,
+        itemRowHeightMm: this.config.itemRowHeightMm,
       };
       await firstValueFrom(this.repositoryService.updateFacturaPlantilla(this.plantilla.id, {
         config: JSON.stringify(clean),

@@ -15,6 +15,10 @@
     <mat-label>Alto (mm)</mat-label>
     <input matInput type="number" [(ngModel)]="plantilla!.altoMm" (ngModelChange)="recomputePage()" />
   </mat-form-field>
+  <mat-form-field appearance="outline" class="dim" matTooltip="Separación vertical entre ítems (todas las columnas)">
+    <mat-label>Alto fila ítems (mm)</mat-label>
+    <input matInput type="number" [(ngModel)]="config.itemRowHeightMm" (ngModelChange)="recomputeItemRowHeight()" />
+  </mat-form-field>
   <button mat-stroked-button (click)="preview()"><mat-icon>visibility</mat-icon> Vista previa</button>
   <button mat-raised-button color="primary" (click)="save()" [disabled]="isSaving">
     <mat-icon>save</mat-icon> Guardar
@@ -122,7 +126,7 @@
              [style.text-align]="el.align || 'right'">
           <div class="el-col-cap">{{ previews[el.id] }}</div>
           <div class="el-col-cell" *ngFor="let cell of colRows[el.id]"
-               [style.height.px]="(el.rowHeightMm || 5) * pxPerMm">{{ cell }}</div>
+               [style.height.px]="itemRowHeightPx">{{ cell }}</div>
         </div>
 
         <!-- tabla items: la caja indica el area limite donde entran los productos -->
@@ -190,13 +194,6 @@
             <mat-option value="center">Centro</mat-option>
             <mat-option value="right">Derecha</mat-option>
           </mat-select>
-        </mat-form-field>
-      </div>
-
-      <div class="pos-row" *ngIf="selected.type === 'itemColumn'">
-        <mat-form-field appearance="outline">
-          <mat-label>Alto de fila (mm)</mat-label>
-          <input matInput type="number" [(ngModel)]="selected.rowHeightMm" />
         </mat-form-field>
       </div>
 

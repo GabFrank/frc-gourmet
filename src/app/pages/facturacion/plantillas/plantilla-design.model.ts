@@ -74,6 +74,12 @@ export interface PlantillaConfig {
   elementos: PlantillaElemento[];
   /** Ajuste de la imagen de fondo de referencia (solo diseno; ver TipoPlantilla). */
   background?: BackgroundTransform;
+  /**
+   * Alto de fila (mm) UNICO para todas las columnas de items (type='itemColumn').
+   * Asegura que las filas queden alineadas y con separacion consistente. Si
+   * esta definido, tiene prioridad sobre el rowHeightMm por columna.
+   */
+  itemRowHeightMm?: number;
 }
 
 /** Variable bindeable disponible en el disenador. */
