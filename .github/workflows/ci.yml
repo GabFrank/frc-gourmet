@@ -43,7 +43,15 @@ jobs:
 
   commitlint:
     name: Commitlint (PR)
-    if: github.event_name == 'pull_request'
+    # Solo en PRs de feature/fix/hotfix (head = rama corta). En PRs de
+    # PROMOCION entre ramas long-lived (develop -> master, release/beta ->
+    # master, develop -> release/beta) el head es 'develop' o 'release/beta':
+    # esos commits ya se validaron al entrar a develop, y re-lintear todo el
+    # historico bloquea la promocion por commits viejos inmutables.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.head_ref != 'develop' &&
+      github.head_ref != 'release/beta'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
