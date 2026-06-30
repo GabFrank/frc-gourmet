@@ -22,6 +22,12 @@
           </mat-select>
         </mat-form-field>
 
+        <button mat-icon-button type="button" color="primary"
+                matTooltip="Nuevo sector de impresión"
+                (click)="crearSectorImpresion()">
+          <mat-icon>add</mat-icon>
+        </button>
+
         <mat-form-field appearance="outline" class="field-rol">
           <mat-label>Rol</mat-label>
           <mat-select formControlName="rol" required>

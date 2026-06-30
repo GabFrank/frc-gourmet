@@ -1982,11 +1982,11 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // Sector methods
-  getSectores: async (): Promise<Sector[]> => {
-    return await ipcRenderer.invoke('getSectores');
+  getSectores: async (tipo?: string): Promise<Sector[]> => {
+    return await ipcRenderer.invoke('getSectores', tipo);
   },
-  getSectoresActivos: async (): Promise<Sector[]> => {
-    return await ipcRenderer.invoke('getSectoresActivos');
+  getSectoresActivos: async (tipo?: string): Promise<Sector[]> => {
+    return await ipcRenderer.invoke('getSectoresActivos', tipo);
   },
   getSector: async (id: number): Promise<Sector> => {
     return await ipcRenderer.invoke('getSector', id);

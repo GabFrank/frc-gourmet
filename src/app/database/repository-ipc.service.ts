@@ -368,8 +368,8 @@ interface ElectronAPI {
   deletePdvMesa: (id: number) => Promise<boolean>;
 
   // Sector methods
-  getSectores: () => Promise<Sector[]>;
-  getSectoresActivos: () => Promise<Sector[]>;
+  getSectores: (tipo?: string) => Promise<Sector[]>;
+  getSectoresActivos: (tipo?: string) => Promise<Sector[]>;
   getSector: (id: number) => Promise<Sector>;
   createSector: (data: Partial<Sector>) => Promise<Sector>;
   updateSector: (id: number, data: Partial<Sector>) => Promise<Sector>;
@@ -2189,12 +2189,12 @@ export class RepositoryIpcService extends RepositoryService {
   }
 
   // Sector methods
-  getSectores(): Observable<Sector[]> {
-    return from(this.api.getSectores());
+  getSectores(tipo?: string): Observable<Sector[]> {
+    return from(this.api.getSectores(tipo));
   }
 
-  getSectoresActivos(): Observable<Sector[]> {
-    return from(this.api.getSectoresActivos());
+  getSectoresActivos(tipo?: string): Observable<Sector[]> {
+    return from(this.api.getSectoresActivos(tipo));
   }
 
   getSector(id: number): Observable<Sector> {
