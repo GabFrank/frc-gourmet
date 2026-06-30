@@ -107,6 +107,12 @@
   position: sticky;
   top: 0;
   z-index: 2;
+  // iOS PWA (status bar translúcida, viewport-fit=cover): estas páginas son
+  // full-screen (fuera del shell), así que su toolbar quedaba bajo el reloj/
+  // batería del sistema. El inset lo empuja debajo del área segura.
+  padding-top: env(safe-area-inset-top);
+  height: calc(56px + env(safe-area-inset-top));
+  box-sizing: border-box;
 }
 
 .mesa-bar-title {
