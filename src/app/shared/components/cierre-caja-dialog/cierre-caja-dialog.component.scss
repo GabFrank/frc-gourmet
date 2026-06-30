@@ -68,3 +68,11 @@
 .faltante {
   color: #f44336;
 }
+
+.cierre-error {
+  margin: 4px 24px 0;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--error-color, #f44336);
+}
