@@ -89,9 +89,12 @@ async function desgloseVentasRango(
     GROUP BY pd.moneda_id, m.simbolo, m.denominacion, m.decimales, m.principal, pd.forma_pago_id, fp.nombre
   `, [VentaEstado.CONCLUIDA, desdeISO, hastaISO]);
 
-  // Cotización (compra_local) más reciente de cada moneda origen → principal.
+  // Cotización (compraLocal) más reciente de cada moneda origen → principal.
+  // La columna en monedas_cambio es "compraLocal" (camelCase): el entity
+  // MonedaCambio.compraLocal no define `name:` y no hay naming strategy snake,
+  // así que TypeORM la creó camelCase. Se cita y se aliasea a compra_local.
   const cambioRows: any[] = await dbQuery(dataSource, `
-    SELECT moneda_origen_id, compra_local, created_at
+    SELECT moneda_origen_id, "compraLocal" AS compra_local, created_at
     FROM monedas_cambio
     WHERE moneda_destino_id = ? AND activo = true
     ORDER BY created_at DESC

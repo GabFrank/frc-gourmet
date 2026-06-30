@@ -58,6 +58,8 @@ export class ProductoSearchDialogComponent implements OnInit {
   searchResults: Producto[] = [];
   selectedProduct: Producto | null = null;
   selectedPresentacion: Presentacion | null = null;
+  // Evita auto-seleccionar más de una vez (cierra el diálogo una sola vez).
+  private autoSelected = false;
 
   // replace cantidad
   willReplace = true;
@@ -135,6 +137,20 @@ export class ProductoSearchDialogComponent implements OnInit {
       );
       this.searchResults = results || [];
       this.totalItems = this.searchResults.length;
+
+      // Auto-selección por código de barra: si el término matcheó EXACTAMENTE
+      // el código de UN único producto, se comporta como un click en esa fila
+      // (respeta el tipo de producto: variación, presentación, precio). Si hay
+      // 0 o >1 matches exactos, se muestran los resultados para elegir.
+      if (!this.autoSelected) {
+        const exactos = (this.searchResults as any[]).filter(p => p?.matchByCodigo);
+        if (exactos.length === 1) {
+          this.autoSelected = true;
+          const p: any = exactos[0];
+          this.selectProduct(p, p.principalPresentacion, p.principalPrecio);
+          return;
+        }
+      }
     } catch (error) {
       console.error('Error searching products:', error);
       this.searchResults = [];
