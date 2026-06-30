@@ -1831,6 +1831,10 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
           recetas: (p as any).recetas?.map((r: any) => ({ id: r.id, costoCalculado: r.costoCalculado })) || [],
           principalPresentacion,
           principalPrecio,
+          // true si el término de búsqueda matcheó EXACTAMENTE un código de
+          // barra de este producto. El PdV/buscador lo usa para auto-seleccionar
+          // (como un click en la fila) cuando hay un único match exacto.
+          matchByCodigo: codigoProdIds.has(p.id),
         };
       }));
     } catch (error) {
