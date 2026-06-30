@@ -169,8 +169,8 @@ export class MesaFormDialogComponent implements OnInit {
   
   loadSectores(): void {
     this.loading = true;
-    
-    (window as any).api.getSectoresActivos()
+
+    (window as any).api.getSectoresActivos('MESA')
       .then((response: SectorEntity[]) => {
         this.sectores = response;
         this.loading = false;

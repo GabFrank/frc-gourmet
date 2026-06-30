@@ -833,10 +833,10 @@ export class RepositoryHttpService extends RepositoryService {
   deletePdvMesa(id: number): Observable<boolean> {
     return throwError(() => new Error(`RepositoryHttpService.deletePdvMesa() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  getSectores(): Observable<Sector[]> {
+  getSectores(_tipo?: string): Observable<Sector[]> {
     return throwError(() => new Error(`RepositoryHttpService.getSectores() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  getSectoresActivos(): Observable<Sector[]> {
+  getSectoresActivos(_tipo?: string): Observable<Sector[]> {
     return throwError(() => new Error(`RepositoryHttpService.getSectoresActivos() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getSector(id: number): Observable<Sector> {

@@ -124,8 +124,8 @@ export class KdsComponent implements OnInit, OnDestroy {
     // 1. Sectores activos + selección persistida
     try {
       const secs: any[] = this.esWeb
-        ? ((await this.invokeData('getSectoresActivos')) || [])
-        : ((await firstValueFrom(this.repo.getSectoresActivos())) || []);
+        ? ((await this.invokeData('getSectoresActivos', 'IMPRESION')) || [])
+        : ((await firstValueFrom(this.repo.getSectoresActivos('IMPRESION'))) || []);
       this.sectores = secs || [];
     } catch { this.sectores = []; }
     // Pantallas configuradas (Fase 2). Si hay una elegida, aplica sus sectores.

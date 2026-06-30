@@ -106,9 +106,9 @@ export class MesasListPage implements OnInit {
     else this.cargarMesas();
   }
 
-  // ---- Sectores ----
+  // ---- Sectores (de MESA, para los chips de filtro) ----
   private cargarSectores(): void {
-    this.repo.getSectoresActivos().subscribe({
+    this.repo.getSectoresActivos('MESA').subscribe({
       next: (data: any[]) => {
         this.sectores = (data || []).map((s) => ({ id: s.id, nombre: s.nombre }));
       },

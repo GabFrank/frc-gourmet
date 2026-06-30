@@ -1939,10 +1939,11 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   });
 
   // --- Sector Handlers ---
-  ipcMain.handle('getSectores', async () => {
+  ipcMain.handle('getSectores', async (_event: any, tipo?: string) => {
     try {
       const repo = dataSource.getRepository(Sector);
       return await repo.find({
+        where: tipo ? { tipo: tipo as any } : {},
         order: { nombre: 'ASC' }
       });
     } catch (error) {
@@ -1951,11 +1952,11 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     }
   });
 
-  ipcMain.handle('getSectoresActivos', async () => {
+  ipcMain.handle('getSectoresActivos', async (_event: any, tipo?: string) => {
     try {
       const repo = dataSource.getRepository(Sector);
       return await repo.find({
-        where: { activo: true },
+        where: { activo: true, ...(tipo ? { tipo: tipo as any } : {}) },
         order: { nombre: 'ASC' }
       });
     } catch (error) {

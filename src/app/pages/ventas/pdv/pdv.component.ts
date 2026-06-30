@@ -388,8 +388,8 @@ export class PdvComponent implements OnInit, OnDestroy {
       // Load tables (mesas)
       await this.loadMesas();
 
-      // Load sectores
-      this.sectores = await firstValueFrom(this.repositoryService.getSectoresActivos());
+      // Load sectores de MESA (chips para filtrar mesas)
+      this.sectores = await firstValueFrom(this.repositoryService.getSectoresActivos('MESA'));
 
       // Load comandas
       await this.loadComandas();
