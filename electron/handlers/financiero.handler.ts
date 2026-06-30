@@ -9,6 +9,7 @@ import { ConteoDetalle } from '../../src/app/database/entities/financiero/conteo
 import { Dispositivo } from '../../src/app/database/entities/financiero/dispositivo.entity';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { CajaMoneda } from '../../src/app/database/entities/financiero/caja-moneda.entity';
+import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
 import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
@@ -500,6 +501,25 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
       const repo = dataSource.getRepository(Caja);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Caja ID ${id} not found`);
+
+      // Guard: no permitir CERRAR una caja que todavía tiene ventas ABIERTAS
+      // (mesas/comandas/ventas rápidas sin cobrar). Si se cierra igual, esas
+      // ventas quedan huérfanas (la mesa queda OCUPADA para siempre, visible
+      // para cualquier caja nueva). El chequeo del diálogo de cierre es solo de
+      // frontend y un snapshot: en el modelo multi-dispositivo otro equipo puede
+      // abrir una venta en esta caja después de que el diálogo cargó. Este guard
+      // en backend es inmune a esa carrera.
+      if (data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO) {
+        const ventasAbiertas = await dataSource.getRepository(Venta).count({
+          where: { caja: { id }, estado: VentaEstado.ABIERTA },
+        });
+        if (ventasAbiertas > 0) {
+          throw new Error(
+            `No se puede cerrar la caja: tiene ${ventasAbiertas} venta(s) abierta(s) (mesas/comandas sin cobrar). Cobrá o cancelá esas cuentas antes de cerrar.`
+          );
+        }
+      }
+
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       return await repo.save(entity);
