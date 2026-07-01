@@ -49,6 +49,51 @@ function inferChannelFromVersion(version: string): UpdateChannel {
   return 'stable';
 }
 
+/**
+ * Compara dos versiones semver (`MAJOR.MINOR.PATCH[-pre.N]`). Devuelve >0 si a>b,
+ * <0 si a<b, 0 si iguales. Necesario porque NO podemos confiar en el orden de la
+ * API de GitHub (ordena por `created_at`, no por semver): si se re-publica o edita
+ * un release viejo, queda arriba de uno más nuevo. Comparación acorde a semver:
+ * identificadores de prerelease numéricos se comparan como número (alpha.10 >
+ * alpha.9), y una versión SIN prerelease es mayor que la misma CON prerelease.
+ */
+function compareVersions(a: string, b: string): number {
+  const parse = (v: string) => {
+    const clean = v.replace(/^v/, '').trim();
+    const [core, pre = ''] = clean.split('-');
+    const nums = core.split('.').map((n) => parseInt(n, 10) || 0);
+    return { nums, pre };
+  };
+  const pa = parse(a);
+  const pb = parse(b);
+  for (let i = 0; i < 3; i++) {
+    const diff = (pa.nums[i] || 0) - (pb.nums[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  // Core igual: sin-prerelease gana sobre con-prerelease.
+  if (!pa.pre && pb.pre) return 1;
+  if (pa.pre && !pb.pre) return -1;
+  if (!pa.pre && !pb.pre) return 0;
+  // Ambos tienen prerelease: comparar identificador a identificador.
+  const ida = pa.pre.split('.');
+  const idb = pb.pre.split('.');
+  for (let i = 0; i < Math.max(ida.length, idb.length); i++) {
+    const x = ida[i];
+    const y = idb[i];
+    if (x === undefined) return -1; // menos identificadores = menor
+    if (y === undefined) return 1;
+    const nx = /^\d+$/.test(x);
+    const ny = /^\d+$/.test(y);
+    if (nx && ny) {
+      const diff = parseInt(x, 10) - parseInt(y, 10);
+      if (diff !== 0) return diff;
+    } else if (x !== y) {
+      return x < y ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
 function migrateLegacyUpdateConfig(): void {
   const p = legacyConfigPath();
   if (!fs.existsSync(p)) return;
@@ -236,21 +281,29 @@ function fetchJson(url: string): Promise<any> {
  * release de mayor semver (típicamente un stable) y deje al canal alpha varado:
  * un binario alpha debe seguir SIEMPRE el último alpha, aunque exista un stable
  * con número más alto. null si no hay release de ese canal o falla la red.
+ *
+ * OJO: la API de GitHub ordena los releases por `created_at`, NO por semver. Si
+ * un release viejo se re-publica/edita después de uno más nuevo, queda arriba en
+ * la lista. Por eso NO se toma "el primero del canal": se filtran TODOS los del
+ * canal y se elige el de mayor semver (alpha.10 > alpha.9 aunque alpha.9 figure
+ * primero). Era el bug: alpha.9 quedaba arriba y devolvía la versión ya instalada.
  */
 async function fetchLatestTagForChannel(channel: UpdateChannel): Promise<string | null> {
   const releases = await fetchJson(
     `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/releases?per_page=30`,
   );
   if (!Array.isArray(releases)) return null;
-  // La API devuelve los releases de más nuevo a más viejo → el primero que
-  // matchea el canal es el más reciente.
+  let best: string | null = null;
   for (const r of releases) {
     if (r.draft) continue;
     const tag = String(r.tag_name || '');
     const version = tag.replace(/^v/, '');
-    if (version && inferChannelFromVersion(version) === channel) return tag;
+    if (!version || inferChannelFromVersion(version) !== channel) continue;
+    if (best === null || compareVersions(version, best.replace(/^v/, '')) > 0) {
+      best = tag;
+    }
   }
-  return null;
+  return best;
 }
 
 /**
