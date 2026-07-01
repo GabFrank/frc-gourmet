@@ -10,6 +10,11 @@
     </button>
     <mat-menu #userMenu="matMenu">
       <div class="menu-user" *ngIf="user">{{ user.nickname }}</div>
+      <div class="menu-version">Versión {{ appVersion || '—' }}</div>
+      <button mat-menu-item (click)="buscarActualizacion()" [disabled]="buscandoUpdate">
+        <mat-icon>system_update_alt</mat-icon>
+        <span>Buscar actualización</span>
+      </button>
       <button mat-menu-item (click)="logout()">
         <mat-icon>logout</mat-icon>
         <span>Cerrar sesión</span>
