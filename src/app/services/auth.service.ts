@@ -52,6 +52,22 @@ export class AuthService {
     return this.currentUserSubject.value;
   }
 
+  /**
+   * Baja el flag `mustChangePassword` del usuario en memoria (y storage) tras un
+   * cambio de contraseña exitoso, para que el guard de la PWA deje de redirigir
+   * a la pantalla de cambio obligatorio. El backend ya persistió el false.
+   */
+  markPasswordChanged(): void {
+    const user = this.currentUserSubject.value;
+    if (!user) return;
+    const updated = { ...user, mustChangePassword: false } as Usuario;
+    this.currentUserSubject.next(updated);
+    this.repositoryService.setCurrentUser(updated);
+    if (localStorage.getItem(this.USER_KEY)) {
+      localStorage.setItem(this.USER_KEY, JSON.stringify(updated));
+    }
+  }
+
   // Login user
   async login(nickname: string, password: string): Promise<LoginResult> {
     try {

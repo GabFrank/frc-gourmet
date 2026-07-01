@@ -70,6 +70,13 @@ export const routes: Routes = [
     path: 'login',
     loadComponent: () => import('./pages/login/login.page').then((m) => m.LoginPage),
   },
+  // Cambio de contraseña temporal obligatorio (full-screen, con sesión). El
+  // authGuard redirige acá mientras el usuario tenga mustChangePassword=true.
+  {
+    path: 'cambiar-password',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/cambiar-password/cambiar-password.page').then((m) => m.CambiarPasswordPage),
+  },
 
   // --- Formularios full-screen (fuera del shell) ---
   {
