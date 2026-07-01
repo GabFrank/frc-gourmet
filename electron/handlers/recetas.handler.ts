@@ -68,8 +68,15 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       for (const ingrediente of ingredientes) {
         let costoUnitario = 0;
 
-        // Ítem solo-descripción (sin ingrediente vinculado aún): no aporta costo.
+        // Ítem solo-descripción (sin producto vinculado aún): usa el costo
+        // cargado MANUALMENTE. Antes se ignoraba (continue → costo 0), así que
+        // no había forma de costear estos ítems (pre-recetas). Ahora se toma el
+        // costoTotal cargado, o costoUnitario × cantidad. No se sobrescriben sus
+        // valores (a diferencia de los ítems con producto, que se recalculan).
         if (!ingrediente.ingrediente) {
+          const manual = Number(ingrediente.costoTotal)
+            || (Number(ingrediente.costoUnitario || 0) * Number(ingrediente.cantidad || 0));
+          if (manual > 0) costoTotal += manual;
           continue;
         }
 
@@ -344,6 +351,9 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       // Obtener registros paginados
       const recetas = await recetaRepository.find({
         where: whereConditions,
+        // `producto` para que la UI distinga pre-receta (sin producto) de
+        // receta completa (con producto vinculado).
+        relations: ['producto'],
         order: { nombre: 'ASC' },
         skip,
         take: pageSize

@@ -1,0 +1,68 @@
+<h2 mat-dialog-title>{{ esEdicion ? 'Editar ítem' : 'Agregar ítem' }}</h2>
+
+<mat-dialog-content class="ing-content">
+  <mat-button-toggle-group [(ngModel)]="modo" class="ing-modo" *ngIf="!esEdicion">
+    <mat-button-toggle value="producto">Producto</mat-button-toggle>
+    <mat-button-toggle value="descripcion">Descripción</mat-button-toggle>
+  </mat-button-toggle-group>
+
+  <!-- Modo producto -->
+  <ng-container *ngIf="modo === 'producto'">
+    <div class="ing-producto-sel" *ngIf="productoId != null">
+      <span class="ing-producto-nombre">{{ productoNombre }}</span>
+      <button mat-icon-button (click)="limpiarProducto()" *ngIf="!esEdicion" aria-label="Cambiar">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+
+    <ng-container *ngIf="productoId == null">
+      <mat-form-field appearance="outline" class="ing-field">
+        <mat-label>Buscar producto</mat-label>
+        <input matInput [ngModel]="termino" (ngModelChange)="onTermino($event)" autocapitalize="characters" />
+      </mat-form-field>
+      <mat-progress-bar *ngIf="buscando" mode="indeterminate"></mat-progress-bar>
+      <div class="ing-resultados">
+        <button class="ing-resultado" *ngFor="let p of resultados" (click)="seleccionarProducto(p)">
+          {{ p.nombre }}
+        </button>
+      </div>
+    </ng-container>
+  </ng-container>
+
+  <!-- Modo descripción -->
+  <ng-container *ngIf="modo === 'descripcion'">
+    <mat-form-field appearance="outline" class="ing-field">
+      <mat-label>Descripción del ítem</mat-label>
+      <input matInput [(ngModel)]="descripcion" autocapitalize="characters" placeholder="Ej: KIT DE CARNES" />
+    </mat-form-field>
+  </ng-container>
+
+  <!-- Cantidad / unidad / costo -->
+  <div class="ing-row">
+    <mat-form-field appearance="outline" class="ing-cant">
+      <mat-label>Cantidad</mat-label>
+      <input matInput type="number" inputmode="decimal" [(ngModel)]="cantidad" (ngModelChange)="recalcTotal()" />
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="ing-unidad">
+      <mat-label>Unidad</mat-label>
+      <mat-select [(ngModel)]="unidad">
+        <mat-option *ngFor="let u of unidades" [value]="u">{{ u }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
+
+  <mat-form-field appearance="outline" class="ing-field">
+    <mat-label>Costo unitario (Gs)</mat-label>
+    <input matInput type="number" inputmode="numeric" [(ngModel)]="costoUnitario" (ngModelChange)="recalcTotal()" />
+  </mat-form-field>
+
+  <div class="ing-total">
+    <span>Costo total</span>
+    <strong>{{ totalCalculado | number: '1.0-0' }} Gs</strong>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancelar()">Cancelar</button>
+  <button mat-flat-button color="primary" (click)="confirmar()">Guardar</button>
+</mat-dialog-actions>
