@@ -101,7 +101,10 @@
   align-items: stretch;
   background: var(--surface);
   border-top: 1px solid var(--border-color);
-  padding-bottom: env(safe-area-inset-bottom);
+  // Reserva COMPACTA del home indicator (iPhone X/11+): los iconos despejan la
+  // rayita de gesto sin dejar el hueco grande de los 34px completos. En iPhone
+  // con botón home (inset 0) no agrega nada.
+  padding-bottom: max(0px, calc(env(safe-area-inset-bottom) - 16px));
 
   .bottomnav-item {
     flex: 1;
@@ -110,7 +113,7 @@
     align-items: center;
     justify-content: center;
     gap: 2px;
-    padding: 8px 0 6px;
+    padding: 8px 0 4px;
     text-decoration: none;
     color: var(--text-secondary);
 
