@@ -275,6 +275,23 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./pages/financiero/caja-mayor/ops/ajuste-nuevo.page').then((m) => m.AjusteNuevoPage),
   },
+  // Cajas: apertura, detalle/resumen y cierre (full-screen). 'abrir' debe ir
+  // ANTES de ':id' para no matchearse como un id.
+  {
+    path: 'financiero/cajas/abrir',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/cajas/caja-abrir.page').then((m) => m.CajaAbrirPage),
+  },
+  {
+    path: 'financiero/cajas/:id/cerrar',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/cajas/caja-cerrar.page').then((m) => m.CajaCerrarPage),
+  },
+  {
+    path: 'financiero/cajas/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/cajas/caja-detalle.page').then((m) => m.CajaDetallePage),
+  },
 
   // --- Shell autenticado (listados / índices) ---
   {

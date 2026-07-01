@@ -486,6 +486,18 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
     await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
     try {
       const repo = dataSource.getRepository(Caja);
+      // Guard: una sola caja ABIERTA por dispositivo (terminal). Antes solo lo
+      // aseguraba el frontend del desktop; la PWA también abre cajas, así que el
+      // chequeo va en backend para ser inmune a la carrera multi-dispositivo.
+      const dispositivoId = data?.dispositivo?.id ?? data?.dispositivo_id ?? null;
+      if (data?.estado === CajaEstado.ABIERTO && dispositivoId != null) {
+        const yaAbierta = await repo.count({
+          where: { dispositivo: { id: dispositivoId }, estado: CajaEstado.ABIERTO },
+        });
+        if (yaAbierta > 0) {
+          throw new Error('Ya hay una caja abierta en esta terminal. Cerrá esa caja antes de abrir otra.');
+        }
+      }
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
@@ -499,8 +511,19 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
     try {
       await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(Caja);
-      const entity = await repo.findOneBy({ id });
+      const entity = await repo.findOne({ where: { id }, relations: ['createdBy'] });
       if (!entity) throw new Error(`Caja ID ${id} not found`);
+
+      // Guard: solo el usuario que ABRIÓ la caja puede cerrarla. Antes solo lo
+      // aseguraba el frontend del desktop (mostraba la acción solo al creador);
+      // la PWA también cierra cajas, así que va en backend.
+      if (data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO) {
+        const abridorId = (entity.createdBy as any)?.id ?? null;
+        const actualId = getCurrentUser()?.id ?? null;
+        if (abridorId != null && actualId !== abridorId) {
+          throw new Error('Solo el usuario que abrió la caja puede cerrarla.');
+        }
+      }
 
       // Guard: no permitir CERRAR una caja que todavía tiene ventas ABIERTAS
       // (mesas/comandas/ventas rápidas sin cobrar). Si se cierra igual, esas
