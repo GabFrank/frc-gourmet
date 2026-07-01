@@ -37,11 +37,24 @@ async function getMonedaPrincipalId(dataSource: DataSource): Promise<number> {
   return Number(rows?.[0]?.id || 0);
 }
 
+// Filtro de ventas para los totales: o por rango de fechas (día calendario, para
+// el histórico) o por caja_id (las cajas abiertas — Opción B: el total "de hoy"
+// sigue la caja abierta, así una caja que cruza medianoche NO reinicia el total).
+type VentaFiltro = { sql: string; params: any[] };
+
+function filtroRango(desdeISO: string, hastaISO: string): VentaFiltro {
+  return { sql: 'v.created_at >= ? AND v.created_at <= ?', params: [desdeISO, hastaISO] };
+}
+
+function filtroCajas(cajaIds: number[]): VentaFiltro {
+  const placeholders = cajaIds.map(() => '?').join(',');
+  return { sql: `v.caja_id IN (${placeholders})`, params: [...cajaIds] };
+}
+
 async function sumaVentasRango(
   dataSource: DataSource,
   monedaPrincipalId: number,
-  desdeISO: string,
-  hastaISO: string,
+  filtro: VentaFiltro,
 ): Promise<{ cnt: number; suma: number }> {
   const rows: any[] = await dbQuery(dataSource, `
     SELECT COUNT(DISTINCT v.id) as cnt,
@@ -50,8 +63,8 @@ async function sumaVentasRango(
     FROM ventas v
     LEFT JOIN pagos p ON v.pago_id = p.id
     LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.moneda_id = ?
-    WHERE v.estado = ? AND v.created_at >= ? AND v.created_at <= ?
-  `, [monedaPrincipalId, VentaEstado.CONCLUIDA, desdeISO, hastaISO]);
+    WHERE v.estado = ? AND ${filtro.sql}
+  `, [monedaPrincipalId, VentaEstado.CONCLUIDA, ...filtro.params]);
   return { cnt: Number(rows?.[0]?.cnt || 0), suma: Number(rows?.[0]?.suma || 0) };
 }
 
@@ -62,8 +75,7 @@ async function sumaVentasRango(
 async function desgloseVentasRango(
   dataSource: DataSource,
   monedaPrincipalId: number,
-  desdeISO: string,
-  hastaISO: string,
+  filtro: VentaFiltro,
 ): Promise<{
   totalGs: number;
   porMoneda: any[];
@@ -85,9 +97,9 @@ async function desgloseVentasRango(
     JOIN pagos_detalles pd ON pd.pago_id = p.id
     JOIN monedas m ON m.id = pd.moneda_id
     LEFT JOIN formas_pago fp ON fp.id = pd.forma_pago_id
-    WHERE v.estado = ? AND v.created_at >= ? AND v.created_at <= ?
+    WHERE v.estado = ? AND ${filtro.sql}
     GROUP BY pd.moneda_id, m.simbolo, m.denominacion, m.decimales, m.principal, pd.forma_pago_id, fp.nombre
-  `, [VentaEstado.CONCLUIDA, desdeISO, hastaISO]);
+  `, [VentaEstado.CONCLUIDA, ...filtro.params]);
 
   // Cotización (compraLocal) más reciente de cada moneda origen → principal.
   // La columna en monedas_cambio es "compraLocal" (camelCase): el entity
@@ -169,14 +181,27 @@ export function registerDashboardVentasHandlers(
 
       const monedaPrincipalId = await getMonedaPrincipalId(dataSource);
 
-      // 1. Ventas hoy + total hoy. El total incluye TODAS las monedas y formas
-      // de pago, convertidas y sumadas a Gs (no solo la moneda principal).
-      const { cnt: ventasHoy } = await sumaVentasRango(
-        dataSource, monedaPrincipalId, hoyInicio.toISOString(), hoyFin.toISOString(),
-      );
-      const desgloseHoy = await desgloseVentasRango(
-        dataSource, monedaPrincipalId, hoyInicio.toISOString(), hoyFin.toISOString(),
-      );
+      // Cajas abiertas: se resuelven ANTES del total porque el KPI de "hoy"
+      // se calcula sobre ellas (Opción B).
+      const cajasAbiertasEntities = await dataSource.getRepository(Caja).find({
+        where: { estado: CajaEstado.ABIERTO, activo: true },
+        relations: ['createdBy', 'createdBy.persona', 'dispositivo'],
+        order: { fechaApertura: 'ASC' },
+      });
+
+      // 1. Ventas + total. Opción B: si hay cajas abiertas, el total corresponde
+      // a esas cajas (desde su apertura), NO al día calendario — así una caja que
+      // cruza medianoche no reinicia el total. Sin cajas abiertas (local cerrado)
+      // cae al día calendario para que la card no quede en 0. El total incluye
+      // TODAS las monedas y formas de pago, convertidas y sumadas a Gs.
+      const cajaIdsAbiertas = cajasAbiertasEntities.map((c) => c.id);
+      const totalBasadoEnCajas = cajaIdsAbiertas.length > 0;
+      const filtroHoy: VentaFiltro = totalBasadoEnCajas
+        ? filtroCajas(cajaIdsAbiertas)
+        : filtroRango(hoyInicio.toISOString(), hoyFin.toISOString());
+
+      const { cnt: ventasHoy } = await sumaVentasRango(dataSource, monedaPrincipalId, filtroHoy);
+      const desgloseHoy = await desgloseVentasRango(dataSource, monedaPrincipalId, filtroHoy);
       const totalHoyPYG = desgloseHoy.totalGs;
       const ticketPromedio = ventasHoy > 0 ? Math.round(totalHoyPYG / ventasHoy) : 0;
 
@@ -197,13 +222,6 @@ export function registerDashboardVentasHandlers(
           .where('ci.estado = :e', { e: ComandaItemEstado.PENDIENTE })
           .getCount();
       } catch { /* opt */ }
-
-      // 4. Cajas abiertas
-      const cajasAbiertasEntities = await dataSource.getRepository(Caja).find({
-        where: { estado: CajaEstado.ABIERTO, activo: true },
-        relations: ['createdBy', 'createdBy.persona', 'dispositivo'],
-        order: { fechaApertura: 'ASC' },
-      });
 
       const cajasAbiertas: any[] = [];
       for (const caja of cajasAbiertasEntities) {
@@ -288,6 +306,10 @@ export function registerDashboardVentasHandlers(
         ventasPorPeriodo: periodoData,
         // Desglose del total de hoy por moneda y forma de pago (todo en Gs).
         desgloseVentasHoy: desgloseHoy,
+        // true → el total/desglose corresponde a las cajas abiertas (Opción B);
+        // false → al día calendario (fallback sin cajas abiertas). El front usa
+        // esto para el label de la card ("Total en caja" vs "Total hoy").
+        totalBasadoEnCajas,
       };
     } catch (error) {
       console.error('Error get-dashboard-ventas-kpis:', error);
@@ -313,7 +335,7 @@ async function buildVentasPorPeriodo(
       d.setDate(d.getDate() - i);
       d.setHours(0, 0, 0, 0);
       const f = new Date(d); f.setHours(23, 59, 59, 999);
-      const r = await sumaVentasRango(dataSource, monedaPrincipalId, d.toISOString(), f.toISOString());
+      const r = await sumaVentasRango(dataSource, monedaPrincipalId, filtroRango(d.toISOString(), f.toISOString()));
       labels.push(diasNombre[d.getDay()]);
       ventas.push(r.suma);
       cantidades.push(r.cnt);
@@ -324,7 +346,7 @@ async function buildVentasPorPeriodo(
       d.setDate(d.getDate() - i);
       d.setHours(0, 0, 0, 0);
       const f = new Date(d); f.setHours(23, 59, 59, 999);
-      const r = await sumaVentasRango(dataSource, monedaPrincipalId, d.toISOString(), f.toISOString());
+      const r = await sumaVentasRango(dataSource, monedaPrincipalId, filtroRango(d.toISOString(), f.toISOString()));
       labels.push(`${d.getDate()}`);
       ventas.push(r.suma);
       cantidades.push(r.cnt);
@@ -335,7 +357,7 @@ async function buildVentasPorPeriodo(
       d.setDate(d.getDate() - (i * 7) - 6);
       d.setHours(0, 0, 0, 0);
       const f = new Date(d); f.setDate(f.getDate() + 6); f.setHours(23, 59, 59, 999);
-      const r = await sumaVentasRango(dataSource, monedaPrincipalId, d.toISOString(), f.toISOString());
+      const r = await sumaVentasRango(dataSource, monedaPrincipalId, filtroRango(d.toISOString(), f.toISOString()));
       labels.push(`S${12 - i}`);
       ventas.push(r.suma);
       cantidades.push(r.cnt);
@@ -345,7 +367,7 @@ async function buildVentasPorPeriodo(
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const f = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
-      const r = await sumaVentasRango(dataSource, monedaPrincipalId, d.toISOString(), f.toISOString());
+      const r = await sumaVentasRango(dataSource, monedaPrincipalId, filtroRango(d.toISOString(), f.toISOString()));
       labels.push(meses[d.getMonth()]);
       ventas.push(r.suma);
       cantidades.push(r.cnt);

@@ -102,6 +102,11 @@ export class VentasDashboardComponent implements OnInit {
   topProductos: DashRankingItem[] = [];
   // Desglose del total de ventas de hoy (por moneda y forma de pago, en Gs).
   desgloseVentasHoy: any = null;
+  // true → el total corresponde a las cajas abiertas (no al día calendario);
+  // define los labels de las cards y el título del desglose.
+  totalBasadoEnCajas = false;
+  labelVentas = 'Ventas hoy';
+  labelTotal = 'Total hoy';
 
   // --- Rango ---
   rangosChips: RangoChip[] = [
@@ -136,6 +141,9 @@ export class VentasDashboardComponent implements OnInit {
         this.ventasHoy = kpis.ventasHoy || 0;
         this.totalHoyPYG = kpis.totalHoyPYG || 0;
         this.desgloseVentasHoy = kpis.desgloseVentasHoy || null;
+        this.totalBasadoEnCajas = !!kpis.totalBasadoEnCajas;
+        this.labelVentas = this.totalBasadoEnCajas ? 'Ventas en caja' : 'Ventas hoy';
+        this.labelTotal = this.totalBasadoEnCajas ? 'Total en caja' : 'Total hoy';
         this.ticketPromedio = kpis.ticketPromedio || 0;
         this.mesasOcupadas = kpis.mesasOcupadas || 0;
         this.mesasTotal = kpis.mesasTotal || 0;
@@ -182,7 +190,7 @@ export class VentasDashboardComponent implements OnInit {
       width: '600px',
       maxWidth: '95vw',
       data: {
-        titulo: 'Total de ventas de hoy',
+        titulo: this.totalBasadoEnCajas ? 'Total de ventas en caja' : 'Total de ventas de hoy',
         totalGs: this.desgloseVentasHoy.totalGs || 0,
         porMoneda: this.desgloseVentasHoy.porMoneda || [],
         porFormaPago: this.desgloseVentasHoy.porFormaPago || [],
