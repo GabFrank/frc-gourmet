@@ -1,0 +1,168 @@
+.resumen-page {
+  padding: 12px 12px calc(16px + env(safe-area-inset-bottom));
+}
+
+.resumen-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+}
+
+/* --- Stat cards --- */
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+}
+
+.stat-card.stat-total {
+  grid-column: 1 / -1;
+  background: color-mix(in srgb, var(--error-color) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--error-color) 35%, var(--border-color));
+}
+
+.stat-label {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.stat-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.stat-value small {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.stat-total .stat-value {
+  font-size: 1.7rem;
+}
+
+/* --- Bloques (secciones) --- */
+.block {
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.block-title {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* --- Filas (moneda / forma de pago / cajas) --- */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.row:first-of-type {
+  border-top: none;
+}
+
+.row.head {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  border-top: none;
+  padding-bottom: 2px;
+}
+
+.c-nombre {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+
+.c-nombre small {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.c-num {
+  flex: 0 0 auto;
+  text-align: right;
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  min-width: 84px;
+}
+
+.c-num.strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* --- Rankings (top meseros / productos) --- */
+.rank {
+  padding: 8px 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.rank:first-of-type {
+  border-top: none;
+}
+
+.rank-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rank-nombre {
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank-total {
+  flex: 0 0 auto;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.rank-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-variant);
+  margin: 6px 0 4px;
+  overflow: hidden;
+}
+
+.rank-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--error-color);
+}
+
+.rank-sub {
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
