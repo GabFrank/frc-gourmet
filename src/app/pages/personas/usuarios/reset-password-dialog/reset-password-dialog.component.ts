@@ -14,16 +14,19 @@ export interface ResetPasswordDialogData {
   nickname: string;
 }
 
-function generarPasswordAleatoria(longitud = 12): string {
-  const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+/**
+ * Password temporal de 6 dígitos numéricos (tipo PIN), fácil de dictar. El
+ * usuario está obligado a cambiarla en su próximo login (mustChangePassword).
+ */
+function generarPasswordAleatoria(longitud = 6): string {
   let out = '';
   const cryptoObj = (globalThis as any).crypto;
   if (cryptoObj?.getRandomValues) {
     const arr = new Uint32Array(longitud);
     cryptoObj.getRandomValues(arr);
-    for (let i = 0; i < longitud; i++) out += chars[arr[i] % chars.length];
+    for (let i = 0; i < longitud; i++) out += (arr[i] % 10).toString();
   } else {
-    for (let i = 0; i < longitud; i++) out += chars[Math.floor(Math.random() * chars.length)];
+    for (let i = 0; i < longitud; i++) out += Math.floor(Math.random() * 10).toString();
   }
   return out;
 }
@@ -57,10 +60,11 @@ export class ResetPasswordDialogComponent {
   async confirmar(): Promise<void> {
     this.saving = true;
     try {
-      const pass = generarPasswordAleatoria(12);
+      const pass = generarPasswordAleatoria(6);
       // El handler `update-usuario` hashea la password si viene en el payload.
+      // mustChangePassword=true → el usuario debe cambiar la temporal al loguear.
       const res: any = await firstValueFrom(
-        this.repositoryService.updateUsuario(this.data.usuarioId, { password: pass } as any),
+        this.repositoryService.updateUsuario(this.data.usuarioId, { password: pass, mustChangePassword: true } as any),
       );
       if (res && (res as any).success === false) {
         this.snackBar.open((res as any).message || 'Error al resetear', 'OK', { duration: 4000 });

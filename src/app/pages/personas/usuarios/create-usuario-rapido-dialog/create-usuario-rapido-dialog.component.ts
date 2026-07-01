@@ -25,19 +25,19 @@ export interface CreateUsuarioRapidoDialogResult {
 }
 
 /**
- * Genera una password aleatoria legible (sin caracteres ambiguos).
- * 12 chars, mezcla a-z A-Z 0-9.
+ * Genera una password temporal de 6 dígitos numéricos (tipo PIN), fácil de
+ * dictar. La debilidad relativa se compensa porque el usuario está obligado a
+ * cambiarla en el primer login (mustChangePassword=true).
  */
-function generarPasswordAleatoria(longitud = 12): string {
-  const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function generarPasswordAleatoria(longitud = 6): string {
   let out = '';
   const cryptoObj = (globalThis as any).crypto;
   if (cryptoObj?.getRandomValues) {
     const arr = new Uint32Array(longitud);
     cryptoObj.getRandomValues(arr);
-    for (let i = 0; i < longitud; i++) out += chars[arr[i] % chars.length];
+    for (let i = 0; i < longitud; i++) out += (arr[i] % 10).toString();
   } else {
-    for (let i = 0; i < longitud; i++) out += chars[Math.floor(Math.random() * chars.length)];
+    for (let i = 0; i < longitud; i++) out += Math.floor(Math.random() * 10).toString();
   }
   return out;
 }
@@ -106,11 +106,13 @@ export class CreateUsuarioRapidoDialogComponent implements OnInit {
     this.saving = true;
     try {
       const v = this.form.getRawValue();
-      const passwordTemporal = generarPasswordAleatoria(12);
+      const passwordTemporal = generarPasswordAleatoria(6);
       const usuarioPayload: any = {
         nickname: v.nickname,
         password: passwordTemporal,
         activo: true,
+        // Obliga a cambiar la temporal en el primer login (dialog bloqueante).
+        mustChangePassword: true,
       };
       if (this.data?.personaId) usuarioPayload.persona_id = this.data.personaId;
 
