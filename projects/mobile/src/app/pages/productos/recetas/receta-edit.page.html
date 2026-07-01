@@ -1,0 +1,113 @@
+<div class="crud-edit">
+  <mat-toolbar color="primary" class="crud-edit-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="crud-edit-title">{{ esNuevo ? 'Nueva receta' : 'Editar receta' }}</span>
+    <span class="crud-spacer"></span>
+    <button mat-button (click)="guardarReceta()" [disabled]="saving">Guardar</button>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
+
+  <form class="crud-form" [formGroup]="form" (ngSubmit)="guardarReceta()">
+    <mat-form-field appearance="outline">
+      <mat-label>Nombre</mat-label>
+      <input matInput formControlName="nombre" autocapitalize="characters" />
+      <mat-error *ngIf="form.controls.nombre.hasError('required')">Requerido</mat-error>
+      <mat-error *ngIf="form.controls.nombre.hasError('minlength')">Mínimo 3 caracteres</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Descripción</mat-label>
+      <textarea matInput formControlName="descripcion" rows="2" autocapitalize="characters"></textarea>
+    </mat-form-field>
+
+    <div class="re-row">
+      <mat-form-field appearance="outline" class="re-rend">
+        <mat-label>Rendimiento</mat-label>
+        <input matInput type="number" inputmode="decimal" formControlName="rendimiento" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="re-unidad">
+        <mat-label>Unidad</mat-label>
+        <mat-select formControlName="unidadRendimiento">
+          <mat-option *ngFor="let u of unidadesRendimiento" [value]="u">{{ u }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Tiempo de preparo (min)</mat-label>
+      <input matInput type="number" inputmode="numeric" formControlName="tiempoPreparo" />
+    </mat-form-field>
+
+    <mat-slide-toggle formControlName="activo" color="primary">Activa</mat-slide-toggle>
+
+    <button type="submit" mat-flat-button color="primary" class="crud-save-btn" [disabled]="saving">
+      {{ saving ? 'Guardando…' : 'Guardar receta' }}
+    </button>
+  </form>
+
+  <!-- Secciones disponibles una vez creada la receta -->
+  <ng-container *ngIf="!esNuevo">
+    <!-- Costo + estado -->
+    <div class="re-costo">
+      <div class="re-costo-line">
+        <span>Costo total</span>
+        <strong>{{ costoTotalFmt }} Gs</strong>
+      </div>
+      <div class="re-estado">
+        <span class="crud-chip" [class.warn]="!productoVinculado">
+          {{ productoVinculado ? 'Completa' : 'Pre-receta' }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Vincular producto -->
+    <section class="re-block">
+      <div class="re-block-head">
+        <h3 class="re-block-title">Producto vinculado</h3>
+      </div>
+      <div class="re-vinculo" *ngIf="productoVinculado">
+        <span class="re-vinculo-nombre">{{ productoVinculado.nombre }}</span>
+        <button mat-icon-button (click)="desvincularProducto()" aria-label="Desvincular">
+          <mat-icon>link_off</mat-icon>
+        </button>
+      </div>
+      <button *ngIf="!productoVinculado" mat-stroked-button color="primary" class="re-vincular-btn" (click)="vincularProducto()">
+        <mat-icon>link</mat-icon> Vincular producto
+      </button>
+    </section>
+
+    <!-- Ítems -->
+    <section class="re-block">
+      <div class="re-block-head">
+        <h3 class="re-block-title">Ítems ({{ items.length }})</h3>
+        <button mat-flat-button color="primary" (click)="agregarItem()">
+          <mat-icon>add</mat-icon> Agregar
+        </button>
+      </div>
+
+      <div class="re-item" *ngFor="let it of items">
+        <div class="re-item-main">
+          <span class="re-item-nombre">
+            {{ it.nombre }}
+            <mat-icon class="re-item-tipo" [title]="it.esProducto ? 'Vinculado a producto' : 'Solo descripción'">
+              {{ it.esProducto ? 'inventory_2' : 'notes' }}
+            </mat-icon>
+          </span>
+          <span class="re-item-detalle" *ngIf="it.detalle">{{ it.detalle }}</span>
+        </div>
+        <span class="re-item-costo">{{ it.costoFmt }} Gs</span>
+        <button mat-icon-button [matMenuTriggerFor]="im" aria-label="Acciones">
+          <mat-icon>more_vert</mat-icon>
+        </button>
+        <mat-menu #im="matMenu">
+          <button mat-menu-item (click)="editarItem(it)"><mat-icon>edit</mat-icon><span>Editar</span></button>
+          <button mat-menu-item (click)="eliminarItem(it)"><mat-icon color="warn">delete</mat-icon><span>Eliminar</span></button>
+        </mat-menu>
+      </div>
+      <p *ngIf="items.length === 0" class="crud-empty">Sin ítems. Agregá el primero.</p>
+    </section>
+  </ng-container>
+
+  <p *ngIf="esNuevo" class="re-hint">Guardá la receta para poder agregar ítems y vincular un producto.</p>
+</div>
