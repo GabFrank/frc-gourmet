@@ -1,0 +1,92 @@
+<div class="resumen-page">
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <ng-container *ngIf="!loading && !error">
+    <div class="resumen-actions">
+      <button mat-icon-button (click)="cargar()" aria-label="Actualizar">
+        <mat-icon>refresh</mat-icon>
+      </button>
+    </div>
+
+    <!-- Stat cards -->
+    <div class="stat-grid">
+      <div class="stat-card stat-total">
+        <span class="stat-label">{{ labelTotal }}</span>
+        <span class="stat-value">{{ totalFmt }} <small>Gs</small></span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Ventas</span>
+        <span class="stat-value">{{ ventas }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Ticket prom.</span>
+        <span class="stat-value">{{ ticketFmt }} <small>Gs</small></span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Mesas ocupadas</span>
+        <span class="stat-value">{{ mesasOcupadas }} <small>/ {{ mesasTotal }}</small></span>
+      </div>
+    </div>
+
+    <!-- Desglose por moneda -->
+    <section class="block" *ngIf="porMoneda.length">
+      <h3 class="block-title">Por moneda</h3>
+      <div class="row head">
+        <span class="c-nombre">Moneda</span>
+        <span class="c-num">Monto</span>
+        <span class="c-num">En Gs</span>
+      </div>
+      <div class="row" *ngFor="let m of porMoneda">
+        <span class="c-nombre">{{ m.denominacion }}<small *ngIf="!m.esPrincipal"> · cotiz. {{ m.cotizacionFmt }}</small></span>
+        <span class="c-num">{{ m.totalFmt }} {{ m.simbolo }}</span>
+        <span class="c-num strong">{{ m.totalEnGsFmt }}</span>
+      </div>
+    </section>
+
+    <!-- Desglose por forma de pago -->
+    <section class="block" *ngIf="porFormaPago.length">
+      <h3 class="block-title">Por forma de pago</h3>
+      <div class="row" *ngFor="let f of porFormaPago">
+        <span class="c-nombre">{{ f.formaPago }}</span>
+        <span class="c-num">{{ f.totalFmt }} {{ f.simbolo }}</span>
+        <span class="c-num strong">{{ f.totalEnGsFmt }}</span>
+      </div>
+    </section>
+
+    <!-- Top meseros -->
+    <section class="block" *ngIf="topMeseros.length">
+      <h3 class="block-title">Top meseros</h3>
+      <div class="rank" *ngFor="let r of topMeseros">
+        <div class="rank-head">
+          <span class="rank-nombre">{{ r.nombre }}</span>
+          <span class="rank-total">{{ r.totalFmt }}</span>
+        </div>
+        <div class="rank-bar"><span [style.width.%]="r.porcentaje"></span></div>
+        <span class="rank-sub">{{ r.detalle }}</span>
+      </div>
+    </section>
+
+    <!-- Top productos -->
+    <section class="block" *ngIf="topProductos.length">
+      <h3 class="block-title">Top productos</h3>
+      <div class="rank" *ngFor="let r of topProductos">
+        <div class="rank-head">
+          <span class="rank-nombre">{{ r.nombre }}</span>
+          <span class="rank-total">{{ r.totalFmt }}</span>
+        </div>
+        <div class="rank-bar"><span [style.width.%]="r.porcentaje"></span></div>
+        <span class="rank-sub">{{ r.detalle }}</span>
+      </div>
+    </section>
+
+    <!-- Cajas abiertas -->
+    <section class="block" *ngIf="cajasAbiertas.length">
+      <h3 class="block-title">Cajas abiertas</h3>
+      <div class="row" *ngFor="let c of cajasAbiertas">
+        <span class="c-nombre">{{ c.cajero }}<small> · {{ c.horasAbierto }} · {{ c.cantidadVentas }} vta.</small></span>
+        <span class="c-num strong">{{ c.ventaTotalFmt }}</span>
+      </div>
+    </section>
+  </ng-container>
+</div>

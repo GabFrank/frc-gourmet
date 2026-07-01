@@ -291,7 +291,37 @@ export function registerDashboardVentasHandlers(
         porcentaje: maxTotal > 0 ? Math.round((Number(r.total || 0) / maxTotal) * 100) : 0,
       }));
 
-      // 6. Ventas por periodo (chart)
+      // 6. Top meseros (mismo alcance que el total: cajas abiertas o día). El
+      // "mesero" es quien creó la venta (created_by). Total en moneda principal
+      // (PAGO - VUELTO), mismo criterio que el ventaTotal por caja.
+      const meseroRows: any[] = await dbQuery(dataSource, `
+        SELECT u.id as usuario_id,
+               COALESCE(per.nombre, u.nickname) as nombre,
+               COUNT(DISTINCT v.id) as cantidad,
+               COALESCE(SUM(CASE WHEN pd.tipo = 'PAGO' THEN pd.valor ELSE 0 END), 0)
+             - COALESCE(SUM(CASE WHEN pd.tipo = 'VUELTO' THEN pd.valor ELSE 0 END), 0) as total
+        FROM ventas v
+        LEFT JOIN pagos p ON v.pago_id = p.id
+        LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.moneda_id = ?
+        LEFT JOIN usuarios u ON u.id = v.created_by
+        LEFT JOIN personas per ON per.id = u.persona_id
+        WHERE v.estado = ? AND ${filtroHoy.sql}
+        GROUP BY u.id, per.nombre, u.nickname
+        ORDER BY total DESC
+        LIMIT 8
+      `, [monedaPrincipalId, VentaEstado.CONCLUIDA, ...filtroHoy.params]);
+
+      const maxMesero = meseroRows.reduce((m, r) => Math.max(m, Number(r.total || 0)), 0);
+      const topMeseros = meseroRows
+        .filter((r) => r.usuario_id != null)
+        .map((r) => ({
+          nombre: String(r.nombre || 'SIN USUARIO').toUpperCase(),
+          cantidad: Number(r.cantidad || 0),
+          total: Number(r.total || 0),
+          porcentaje: maxMesero > 0 ? Math.round((Number(r.total || 0) / maxMesero) * 100) : 0,
+        }));
+
+      // 7. Ventas por periodo (chart)
       const periodoData = await buildVentasPorPeriodo(dataSource, rango);
 
       return {
@@ -303,6 +333,7 @@ export function registerDashboardVentasHandlers(
         comandasPendientes,
         cajasAbiertas,
         topProductos,
+        topMeseros,
         ventasPorPeriodo: periodoData,
         // Desglose del total de hoy por moneda y forma de pago (todo en Gs).
         desgloseVentasHoy: desgloseHoy,
