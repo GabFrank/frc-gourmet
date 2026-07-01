@@ -1,0 +1,90 @@
+<mat-toolbar color="primary" class="caja-bar">
+  <button mat-icon-button (click)="volver()" aria-label="Volver">
+    <mat-icon>arrow_back</mat-icon>
+  </button>
+  <span class="caja-bar-title">Caja</span>
+</mat-toolbar>
+
+<mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+
+<div class="caja-body" *ngIf="!loading">
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <ng-container *ngIf="!error">
+    <!-- Cabecera -->
+    <div class="caja-head">
+      <div class="caja-head-row">
+        <span class="caja-head-label">Cajero</span>
+        <span class="caja-head-value">{{ cajero }}</span>
+      </div>
+      <div class="caja-head-row">
+        <span class="caja-head-label">Terminal</span>
+        <span class="caja-head-value">{{ terminal }}</span>
+      </div>
+      <div class="caja-head-row">
+        <span class="caja-head-label">Estado</span>
+        <span class="chip" [class.ok]="estadoClase === 'ok'" [class.off]="estadoClase === 'off'">{{ estado }}</span>
+      </div>
+      <div class="caja-head-row" *ngIf="aperturaFmt">
+        <span class="caja-head-label">Apertura</span>
+        <span class="caja-head-value">{{ aperturaFmt }}</span>
+      </div>
+      <div class="caja-head-row" *ngIf="cierreFmt">
+        <span class="caja-head-label">Cierre</span>
+        <span class="caja-head-value">{{ cierreFmt }}</span>
+      </div>
+    </div>
+
+    <!-- Ventas -->
+    <section class="block">
+      <h3 class="block-title">Ventas ({{ cantidadVentas }})</h3>
+      <div class="line" *ngFor="let l of ventasPorMoneda">
+        <span class="line-label">{{ l.label }}</span>
+        <span class="line-value">{{ l.valorFmt }}</span>
+      </div>
+      <p *ngIf="!ventasPorMoneda.length" class="crud-empty">Sin ventas.</p>
+    </section>
+
+    <!-- Por forma de pago -->
+    <section class="block" *ngIf="ventasPorForma.length">
+      <h3 class="block-title">Por forma de pago</h3>
+      <div class="line" *ngFor="let l of ventasPorForma">
+        <span class="line-label">{{ l.label }}</span>
+        <span class="line-value">{{ l.valorFmt }}</span>
+      </div>
+    </section>
+
+    <!-- Conteo apertura -->
+    <section class="block" *ngIf="conteoApertura.length">
+      <h3 class="block-title">Conteo de apertura</h3>
+      <div class="line" *ngFor="let l of conteoApertura">
+        <span class="line-label">{{ l.label }}</span>
+        <span class="line-value">{{ l.valorFmt }}</span>
+      </div>
+    </section>
+
+    <!-- Conteo cierre -->
+    <section class="block" *ngIf="conteoCierre.length">
+      <h3 class="block-title">Conteo de cierre</h3>
+      <div class="line" *ngFor="let l of conteoCierre">
+        <span class="line-label">{{ l.label }}</span>
+        <span class="line-value">{{ l.valorFmt }}</span>
+      </div>
+    </section>
+
+    <!-- Diferencias -->
+    <section class="block" *ngIf="diferencias.length">
+      <h3 class="block-title">Diferencia</h3>
+      <div class="line" *ngFor="let l of diferencias">
+        <span class="line-label">{{ l.label }}</span>
+        <span class="line-value" [class.pos]="l.clase === 'pos'" [class.neg]="l.clase === 'neg'">{{ l.valorFmt }}</span>
+      </div>
+    </section>
+
+    <!-- Cerrar -->
+    <button *ngIf="puedeCerrar" mat-flat-button color="warn" class="caja-cta" (click)="irACerrar()">
+      Cerrar caja
+    </button>
+    <p *ngIf="avisoNoCierre" class="crud-empty">{{ avisoNoCierre }}</p>
+  </ng-container>
+</div>

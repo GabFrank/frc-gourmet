@@ -2,12 +2,26 @@
   <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
   <p *ngIf="error" class="crud-error">{{ error }}</p>
 
+  <div class="crud-actions" *ngIf="!loading && !error">
+    <button mat-flat-button color="primary" routerLink="/financiero/cajas/abrir">
+      <mat-icon>add</mat-icon>
+      Abrir caja
+    </button>
+  </div>
+
   <div class="crud-list" *ngIf="!loading && !error">
-    <mat-card *ngFor="let c of items" class="crud-card" appearance="outlined">
+    <mat-card
+      *ngFor="let c of items"
+      class="crud-card"
+      appearance="outlined"
+      matRipple
+      [routerLink]="['/financiero/cajas', c.id]"
+    >
       <div class="crud-card-body">
         <div class="crud-card-main">
-          <span class="crud-name">{{ c.dispositivo?.nombre || ('Caja #' + c.id) }}</span>
+          <span class="crud-name">{{ c.cajero }}</span>
           <span class="crud-sub" *ngIf="c.fechaApertura">Apertura: {{ c.fechaApertura | date: 'dd/MM/yyyy HH:mm' }}</span>
+          <span class="crud-sub" *ngIf="c.fechaCierre">Cierre: {{ c.fechaCierre | date: 'dd/MM/yyyy HH:mm' }}</span>
         </div>
         <span class="crud-chip" [class.off]="c.estadoClase === 'off'" [class.warn]="c.estadoClase === 'warn'">{{ c.estado }}</span>
       </div>

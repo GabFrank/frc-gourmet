@@ -1,0 +1,29 @@
+<mat-toolbar color="primary" class="caja-bar">
+  <button mat-icon-button (click)="volver()" aria-label="Volver">
+    <mat-icon>arrow_back</mat-icon>
+  </button>
+  <span class="caja-bar-title">Abrir caja</span>
+</mat-toolbar>
+
+<mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
+
+<div class="caja-body" *ngIf="!loading">
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <ng-container *ngIf="!error">
+    <label class="field">
+      <span class="field-label">Terminal</span>
+      <select class="field-select" [(ngModel)]="terminalId">
+        <option [ngValue]="null" disabled>Elegí una terminal…</option>
+        <option *ngFor="let t of terminales" [ngValue]="t.id">{{ t.nombre }}</option>
+      </select>
+    </label>
+
+    <h3 class="caja-section-title">Conteo inicial</h3>
+    <app-conteo-form [grupos]="grupos"></app-conteo-form>
+
+    <button mat-flat-button color="primary" class="caja-cta" [disabled]="saving || terminalId == null" (click)="abrir()">
+      Abrir caja
+    </button>
+  </ng-container>
+</div>
