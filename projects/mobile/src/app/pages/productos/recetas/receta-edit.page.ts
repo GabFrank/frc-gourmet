@@ -5,6 +5,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
@@ -40,7 +41,7 @@ const UNIDADES_RENDIMIENTO = ['UNIDADES', 'GRAMOS', 'KILOGRAMOS', 'MILILITROS', 
   standalone: true,
   imports: [
     CommonModule, ReactiveFormsModule, MatToolbarModule, MatIconModule, MatButtonModule,
-    MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule,
+    MatMenuModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule,
     MatProgressBarModule, MatDialogModule, MatSnackBarModule,
   ],
   templateUrl: './receta-edit.page.html',
