@@ -25,13 +25,13 @@
     <app-dash-stat-chip
       icon="shopping_cart"
       [value]="ventasHoy"
-      label="Ventas hoy"
+      [label]="labelVentas"
       [loading]="loading">
     </app-dash-stat-chip>
     <app-dash-stat-chip
       icon="payments"
       [value]="formatPYG(totalHoyPYG) + ' Gs'"
-      label="Total hoy"
+      [label]="labelTotal"
       [loading]="loading"
       [clickable]="!!desgloseVentasHoy"
       (chipClick)="abrirDesgloseVentas()">

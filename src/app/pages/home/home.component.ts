@@ -87,6 +87,10 @@ export class HomeComponent implements OnInit, OnDestroy {
   cppVencidos = 0;
   // Desglose del total de ventas de hoy (por moneda y forma de pago, en Gs).
   desgloseVentasHoy: any = null;
+  // true → el total corresponde a las cajas abiertas (no al día calendario).
+  totalBasadoEnCajas = false;
+  labelVentas = 'Ventas hoy';
+  labelTotal = 'Total hoy';
 
   alertas: { tipo: string; titulo: string; detalle: string; color: 'error' | 'warning' | 'info' }[] = [];
 
@@ -152,6 +156,9 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.totalHoyPYG = ventasKpi.totalHoyPYG || 0;
         this.cajasAbiertas = (ventasKpi.cajasAbiertas || []).length;
         this.desgloseVentasHoy = ventasKpi.desgloseVentasHoy || null;
+        this.totalBasadoEnCajas = !!ventasKpi.totalBasadoEnCajas;
+        this.labelVentas = this.totalBasadoEnCajas ? 'Ventas en caja' : 'Ventas hoy';
+        this.labelTotal = this.totalBasadoEnCajas ? 'Total en caja' : 'Total hoy';
 
         const periodo = ventasKpi.ventasPorPeriodo || { labels: [], ventas: [] };
         this.chartData = {
@@ -216,7 +223,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       width: '600px',
       maxWidth: '95vw',
       data: {
-        titulo: 'Total de ventas de hoy',
+        titulo: this.totalBasadoEnCajas ? 'Total de ventas en caja' : 'Total de ventas de hoy',
         totalGs: this.desgloseVentasHoy.totalGs || 0,
         porMoneda: this.desgloseVentasHoy.porMoneda || [],
         porFormaPago: this.desgloseVentasHoy.porFormaPago || [],
