@@ -57,6 +57,7 @@ const FINANCIERO_ITEMS: SectionItem[] = [
 /** Sub-módulos de Ventas (módulo meseros). */
 const VENTAS_ITEMS: SectionItem[] = [
   { label: 'Mesas', icon: 'table_restaurant', path: '/ventas/mesas', enabled: true },
+  { label: 'Resumen', icon: 'insights', path: '/ventas/resumen', enabled: true },
 ];
 
 /**
@@ -426,6 +427,11 @@ export const routes: Routes = [
         path: 'ventas/mesas',
         data: { title: 'Mesas' },
         loadComponent: () => import('./pages/ventas/mesas/mesas-list.page').then((m) => m.MesasListPage),
+      },
+      {
+        path: 'ventas/resumen',
+        data: { title: 'Resumen de ventas' },
+        loadComponent: () => import('./pages/ventas/resumen/ventas-resumen.page').then((m) => m.VentasResumenPage),
       },
       {
         path: 'financiero/comisiones-reglas',
