@@ -407,12 +407,17 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
    * el listado de Productos del mobile). A diferencia de search-productos-by-
    * nombre, no filtra por esVendible (muestra también ingredientes).
    */
-  ipcMain.handle('get-productos-con-precio', async () => {
+  ipcMain.handle('get-productos-con-precio', async (_event: any, search?: string) => {
     try {
       const repo = dataSource.getRepository(Producto);
       const pvRepo = dataSource.getRepository(PrecioVenta);
+      // Filtro por nombre en el BACKEND (no en el cliente): el término va en
+      // UPPERCASE porque los nombres se guardan así (Like case-sensitive en Postgres).
+      const term = (search || '').trim().toUpperCase();
+      const where: any = { activo: true };
+      if (term) where.nombre = Like(`%${term}%`);
       const productos = await repo.find({
-        where: { activo: true },
+        where,
         relations: ['presentaciones', 'presentaciones.preciosVenta', 'presentaciones.preciosVenta.moneda', 'receta'],
         order: { nombre: 'ASC' },
       });
