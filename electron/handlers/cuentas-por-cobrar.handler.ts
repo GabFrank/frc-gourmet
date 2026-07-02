@@ -761,24 +761,25 @@ export function registerCuentasPorCobrarHandlers(
       // El handler `cobrar-venta-credito` no pasa por `updateVenta`, así
       // que el hook de auto-print del ticket no se dispara. Lo invocamos
       // explícitamente acá, igual que el flujo de cobro normal.
-      // El pagaré solo se imprime si el usuario lo pidió explícitamente en el
-      // diálogo de cobro (por defecto NO). El ticket de venta sigue el config.
+      // La impresión es opt-in: solo si el usuario pidió imprimir en el diálogo
+      // de cobro (por defecto NO). Si no se desea el pagaré, tampoco se imprime
+      // el ticket de venta.
       const imprimirPagare = data?.imprimirPagare === true;
-      setImmediate(async () => {
-        try {
-          const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
-          if (pdvConfig?.autoImprimirTicketVenta) {
-            await printVentaTicketInternal(dataSource, venta.id);
-          }
-          if (imprimirPagare) {
+      if (imprimirPagare) {
+        setImmediate(async () => {
+          try {
+            const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+            if (pdvConfig?.autoImprimirTicketVenta) {
+              await printVentaTicketInternal(dataSource, venta.id);
+            }
             // Pequeña pausa para que el ticket salga primero en la térmica.
             await new Promise(r => setTimeout(r, 600));
             await printPagareCpcTicketInternal(dataSource, cpcSaved.id);
+          } catch (e: any) {
+            console.warn('[cobrar-venta-credito] auto-print:', e?.message || e);
           }
-        } catch (e: any) {
-          console.warn('[cobrar-venta-credito] auto-print:', e?.message || e);
-        }
-      });
+        });
+      }
 
       return { success: true, ventaId: venta.id, cpcId: cpcSaved.id };
     } catch (error) {
