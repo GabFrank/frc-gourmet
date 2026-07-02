@@ -2503,13 +2503,21 @@ export class PdvComponent implements OnInit, OnDestroy {
         if (variacionResult) {
           await this.addVariacionItem(result.producto, variacionResult);
         }
-        this.searchForm.get('searchTerm')?.setValue('');
+        this.resetBuscador();
       } else if (result) {
         this.addProduct(result.producto, result.presentacion, result.cantidad, result.precioVenta);
-        // Clear search term after adding product
-        this.searchForm.get('searchTerm')?.setValue('');
+        this.resetBuscador();
       }
     });
+  }
+
+  /**
+   * Limpia el buscador tras agregar un ítem: borra el término y **resetea la
+   * cantidad a 1** (si el usuario había cargado "3*" para agregar 3, la próxima
+   * búsqueda arranca de nuevo en 1).
+   */
+  private resetBuscador(): void {
+    this.searchForm.patchValue({ searchTerm: '', cantidad: 1 });
   }
 
   // Handle search from input
