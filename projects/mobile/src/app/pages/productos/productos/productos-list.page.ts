@@ -40,20 +40,25 @@ export class ProductosListPage implements OnInit {
   private readonly router = inject(Router);
 
   readonly busqueda = new FormControl('', { nonNullable: true });
-  private todos: ProductoVM[] = [];
   items: ProductoVM[] = [];
   loading = true;
   error: string | null = null;
 
   ngOnInit(): void {
+    this.cargar();
+  }
+
+  /** Carga desde el backend filtrando por nombre server-side (no filtro local). */
+  private cargar(): void {
+    this.loading = true;
+    this.error = null;
     const api = (window as any).api;
-    const cargar: Promise<any[]> = api?.callIpc
-      ? api.callIpc('get-productos-con-precio')
+    const req: Promise<any[]> = api?.callIpc
+      ? api.callIpc('get-productos-con-precio', this.busqueda.value.trim())
       : Promise.reject();
-    cargar
+    req
       .then((data: any[]) => {
-        this.todos = (data || []).map((p) => this.toVM(p));
-        this.aplicarFiltro();
+        this.items = (data || []).map((p) => this.toVM(p));
         this.loading = false;
       })
       .catch(() => {
@@ -78,13 +83,12 @@ export class ProductosListPage implements OnInit {
   }
 
   aplicarFiltro(): void {
-    const q = this.busqueda.value.trim().toLowerCase();
-    this.items = q ? this.todos.filter((p) => (p.nombre || '').toLowerCase().includes(q)) : [...this.todos];
+    this.cargar();
   }
 
   limpiarFiltro(): void {
     this.busqueda.setValue('');
-    this.aplicarFiltro();
+    this.cargar();
   }
 
   abrir(p: ProductoVM): void {
