@@ -20,20 +20,35 @@
 .uv-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  padding: 10px 12px;
+  gap: 4px;
   border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.1));
   border-radius: 8px;
   background: var(--surface-hover, rgba(255, 255, 255, 0.04));
+  padding-right: 4px;
+}
+
+.uv-row-cancelada {
+  opacity: 0.55;
+}
+
+.uv-rowmain {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
   color: inherit;
   cursor: pointer;
   text-align: left;
+  border-radius: 8px;
   transition: background 0.12s;
 }
 
-.uv-row:hover {
+.uv-rowmain:hover {
   background: var(--hover-bg, rgba(127, 127, 127, 0.12));
 }
 

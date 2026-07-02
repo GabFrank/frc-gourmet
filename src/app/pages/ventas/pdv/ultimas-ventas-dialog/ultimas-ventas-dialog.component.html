@@ -6,20 +6,39 @@
   <div *ngIf="!loading && rows.length === 0" class="uv-empty">SIN VENTAS EN ESTA CAJA</div>
 
   <div class="uv-list" *ngIf="!loading">
-    <button type="button" class="uv-row" *ngFor="let r of rows" (click)="verDetalle(r)">
-      <div class="uv-main">
-        <span class="uv-id">#{{ r.venta.id }}</span>
-        <span class="uv-hora">{{ r.hora | date:'dd/MM HH:mm' }}</span>
-        <span class="uv-fp">{{ r.formaPago }}</span>
-      </div>
-      <div class="uv-side">
-        <span class="uv-total">{{ r.totalFmt }}</span>
-        <span class="uv-estado"
-          [class.uv-concluida]="r.estado === 'CONCLUIDA'"
-          [class.uv-cancelada]="r.estado === 'CANCELADA'"
-          [class.uv-abierta]="r.estado === 'ABIERTA'">{{ r.estado }}</span>
-      </div>
-    </button>
+    <div class="uv-row" *ngFor="let r of rows" [class.uv-row-cancelada]="r.estado === 'CANCELADA'">
+      <button type="button" class="uv-rowmain" (click)="verDetalle(r)">
+        <div class="uv-main">
+          <span class="uv-id">#{{ r.venta.id }}</span>
+          <span class="uv-hora">{{ r.hora | date:'dd/MM HH:mm' }}</span>
+          <span class="uv-fp">{{ r.formaPago }}</span>
+        </div>
+        <div class="uv-side">
+          <span class="uv-total">{{ r.totalFmt }}</span>
+          <span class="uv-estado"
+            [class.uv-concluida]="r.estado === 'CONCLUIDA'"
+            [class.uv-cancelada]="r.estado === 'CANCELADA'"
+            [class.uv-abierta]="r.estado === 'ABIERTA'">{{ r.estado }}</span>
+        </div>
+      </button>
+      <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+        <mat-icon>more_vert</mat-icon>
+      </button>
+      <mat-menu #menu="matMenu">
+        <button mat-menu-item (click)="verDetalle(r)">
+          <mat-icon>visibility</mat-icon><span>Ver detalles</span>
+        </button>
+        <button mat-menu-item (click)="reimprimirTicket(r)">
+          <mat-icon>print</mat-icon><span>Reimprimir ticket</span>
+        </button>
+        <button mat-menu-item *ngIf="r.esCredito" (click)="reimprimirPagare(r)">
+          <mat-icon>description</mat-icon><span>Reimprimir pagaré</span>
+        </button>
+        <button mat-menu-item *ngIf="r.estado !== 'CANCELADA'" (click)="cancelarVenta(r)">
+          <mat-icon color="warn">cancel</mat-icon><span>Cancelar venta</span>
+        </button>
+      </mat-menu>
+    </div>
   </div>
 </mat-dialog-content>
 
