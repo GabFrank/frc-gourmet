@@ -580,8 +580,8 @@ export async function printVentaTicketInternal(
     ticketSeparador('-'),
   ];
 
-  const mesaTxt = (venta.mesa as any)?.numero ? `MESA ${(venta.mesa as any).numero}` : '';
-  if (mesaTxt) lines.push(ticketKv('MESA', mesaTxt));
+  const mesaNro = (venta.mesa as any)?.numero;
+  if (mesaNro) lines.push(ticketKv('MESA', String(mesaNro)));
 
   const clienteTxt = (venta.cliente as any)?.razon_social || (venta.cliente as any)?.persona?.nombre;
   if (clienteTxt) lines.push(ticketKv('CLIENTE', clienteTxt));
