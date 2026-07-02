@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { DataSource, Not } from 'typeorm';
 import { Printer } from '../../src/app/database/entities/printer.entity';
-import { generateTestPageContent, printPosReceipt } from '../utils/printer.utils';
+import { printTestTicket } from '../utils/ticket.utils';
 import { ensurePermission } from '../utils/auth.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 
@@ -123,13 +123,11 @@ export function registerPrinterHandlers(
         throw new Error('Printer not found');
       }
 
-      // Generate test page content using the utility function
-      const content = generateTestPageContent(printer);
+      // Prueba diagnóstica: pasa por el mismo pipeline que los tickets reales
+      // (columnas, tamaños, corte y safe-area) para validar la configuración.
+      const res = await printTestTicket(printer);
 
-      // Print the test page using the utility function
-      const success = await printPosReceipt(printer, content);
-
-      return { success };
+      return { success: res.ok, error: res.error };
     } catch (error) {
       console.error('Error printing test page:', error);
       return { success: false, error: error instanceof Error ? error.message : String(error) };
