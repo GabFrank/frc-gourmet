@@ -26,6 +26,9 @@ import type { DataSource } from 'typeorm';
 import { In as TIn } from 'typeorm';
 import { Venta } from '../../src/app/database/entities/ventas/venta.entity';
 import { VentaItem, EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
+import { VentaItemAdicional } from '../../src/app/database/entities/ventas/venta-item-adicional.entity';
+import { VentaItemObservacion } from '../../src/app/database/entities/ventas/venta-item-observacion.entity';
+import { VentaItemIngredienteModificacion } from '../../src/app/database/entities/ventas/venta-item-ingrediente-modificacion.entity';
 import { Printer } from '../../src/app/database/entities/printer.entity';
 import { SectorImpresora, SectorImpresoraRol } from '../../src/app/database/entities/ventas/sector-impresora.entity';
 import { ProductoSector } from '../../src/app/database/entities/productos/producto-sector.entity';
@@ -262,6 +265,64 @@ export async function printComandaInternal(
     return { ok: true, printed, errors };
   }
 
+  // 1.b Cargar modificadores por ítem (adicionales, observaciones, opcionales/
+  // modificaciones de ingredientes) para mostrarlos en la comanda de cocina.
+  const itemIds = itemsAImprimir.map(i => i.id);
+  const adicionalesByItem = new Map<number, string[]>();
+  const observacionesByItem = new Map<number, string[]>();
+  const modificacionesByItem = new Map<number, string[]>();
+  const pushMap = (m: Map<number, string[]>, k: number, v: string) => {
+    if (!m.has(k)) m.set(k, []);
+    m.get(k)!.push(v);
+  };
+  if (itemIds.length > 0) {
+    try {
+      const adics = await dataSource.getRepository(VentaItemAdicional).find({
+        where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+        relations: ['adicional', 'ventaItem'],
+      });
+      for (const a of adics) {
+        const iid = (a as any).ventaItem?.id;
+        if (!iid) continue;
+        const cant = Number((a as any).cantidad || 1);
+        const nom = ((a as any).adicional?.nombre || 'ADICIONAL').toUpperCase();
+        pushMap(adicionalesByItem, iid, cant > 1 ? `+ ${cant}x ${nom}` : `+ ${nom}`);
+      }
+
+      const obs = await dataSource.getRepository(VentaItemObservacion).find({
+        where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+        relations: ['observacion', 'ventaItem'],
+      });
+      for (const o of obs) {
+        const iid = (o as any).ventaItem?.id;
+        if (!iid) continue;
+        const txt = String((o as any).descripcion || (o as any).observacion?.descripcion || '').toUpperCase().trim();
+        if (txt) pushMap(observacionesByItem, iid, `>> ${txt}`);
+      }
+
+      const mods = await dataSource.getRepository(VentaItemIngredienteModificacion).find({
+        where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+        relations: ['recetaIngrediente', 'recetaIngrediente.ingrediente', 'ingredienteReemplazo', 'ventaItem'],
+      });
+      for (const m of mods) {
+        const iid = (m as any).ventaItem?.id;
+        if (!iid) continue;
+        const ing = String((m as any).recetaIngrediente?.ingrediente?.nombre || (m as any).recetaIngrediente?.descripcion || 'INGREDIENTE').toUpperCase();
+        let txt: string;
+        if ((m as any).tipoModificacion === 'REMOVIDO') {
+          txt = `SIN ${ing}`;
+        } else {
+          const rep = String((m as any).ingredienteReemplazo?.nombre || '').toUpperCase();
+          txt = rep ? `CAMBIAR ${ing} -> ${rep}` : `CAMBIAR ${ing}`;
+        }
+        pushMap(modificacionesByItem, iid, `* ${txt}`);
+      }
+    } catch (e) {
+      // Los modificadores son opcionales: si fallan, se imprime la comanda igual.
+      console.warn('[printComandaInternal] no se pudieron cargar modificadores del ítem:', e);
+    }
+  }
+
   // 2. Cargar M2M producto_sectores para todos los producto_id involucrados
   const productoIds = Array.from(new Set(
     itemsAImprimir.map(i => (i as any).producto?.id).filter((x): x is number => !!x),
@@ -365,32 +426,46 @@ export async function printComandaInternal(
     if (job.items.length === 0) continue;
 
     const width = printerWidthToChars(job.printer.width);
-    const headerLines: TicketLine[] = await ticketHeaderEmpresa(dataSource, width);
     const sectorNombre = await getSectorNombre(dataSource, job.sectorId);
 
+    // Comanda de cocina: sin datos de empresa/RUC. Se enfatizan MESA y N° de
+    // ticket (venta) en grande para identificar el pedido de un vistazo.
     const lines: TicketLine[] = [
-      ...headerLines,
-      ticketSeparador('='),
       ticketText(`** COMANDA - ${sectorNombre} **`, { align: 'C', bold: true }),
       ticketText(ticketFmtFechaHora(new Date()), { align: 'C' }),
-      ticketSeparador('-'),
+      ticketSeparador('='),
     ];
-    if (refMesa) lines.push(ticketKv('MESA', refMesa.replace('MESA ', '')));
-    if (refComanda) lines.push(ticketKv('COMANDA', refComanda));
-    lines.push(ticketKv('VENTA', `#${ventaId}`));
-    lines.push(ticketSeparador('-'));
+    if (mesa?.numero) {
+      lines.push(ticketText('MESA', { align: 'C' }));
+      lines.push(ticketText(String(mesa.numero), { align: 'C', bold: true, size: 'big' }));
+    } else if (refComanda) {
+      lines.push(ticketText('COMANDA', { align: 'C' }));
+      lines.push(ticketText(String(refComanda), { align: 'C', bold: true, size: 'big' }));
+    } else {
+      lines.push(ticketText('PARA LLEVAR', { align: 'C', bold: true, size: 'tall' }));
+    }
+    lines.push(ticketText(`TICKET #${ventaId}`, { align: 'C', bold: true, size: 'tall' }));
+    lines.push(ticketSeparador('='));
 
     for (const j of job.items) {
       const v = j.item;
       const nombre = ((v as any).producto?.nombre || 'PRODUCTO').toUpperCase();
       const qty = Number(v.cantidad || 1);
-      lines.push(ticketText(`${qty}  ${nombre}`, { bold: true }));
+      lines.push(ticketText(`${qty}  ${nombre}`, { bold: true, size: 'tall' }));
       if (v.ensambladoDescripcion) {
-        lines.push(ticketText(`   ${v.ensambladoDescripcion}`, { size: 'normal' }));
+        lines.push(ticketText(`   ${String(v.ensambladoDescripcion).toUpperCase()}`));
       }
+      // Opcionales/modificaciones, adicionales y observaciones del ítem.
+      for (const t of (modificacionesByItem.get(v.id) || [])) lines.push(ticketText(`   ${t}`));
+      for (const t of (adicionalesByItem.get(v.id) || [])) lines.push(ticketText(`   ${t}`));
+      for (const t of (observacionesByItem.get(v.id) || [])) lines.push(ticketText(`   ${t}`));
+      lines.push(ticketBlank());
     }
 
     lines.push(ticketSeparador('='));
+    // Feed antes del corte: sin esto el cortante se come las últimas líneas
+    // (el corte se hace ~2-3 cm por encima del cabezal de impresión).
+    lines.push(ticketBlank(3));
 
     const spec: TicketSpec = { printerWidth: width, lines, cutAtEnd: true };
 
