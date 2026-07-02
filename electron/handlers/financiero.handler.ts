@@ -12,6 +12,7 @@ import { CajaMoneda } from '../../src/app/database/entities/financiero/caja-mone
 import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
 import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { generarRetiroDelCierre } from './retiro-cierre.util';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
@@ -543,9 +544,23 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
         }
       }
 
+      const seEstaCerrando = data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO;
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+
+      // Al cerrar, auto-generar el RetiroCaja FLOTANTE con el efectivo del cierre,
+      // para que quede disponible para ingresar a una caja mayor. Best-effort: si
+      // falla (p. ej. cierre sin conteo de billetes), NO bloquea el cierre. Es
+      // idempotente, así que el botón manual del desktop sigue funcionando igual.
+      if (seEstaCerrando) {
+        try {
+          await generarRetiroDelCierre(dataSource, id, getCurrentUser()?.id);
+        } catch (e) {
+          console.error(`[update-caja] no se pudo auto-generar el retiro del cierre de la caja ${id}:`, e);
+        }
+      }
+      return saved;
     } catch (error) {
       console.error(`Error updating caja ${id}:`, error);
       throw error;
