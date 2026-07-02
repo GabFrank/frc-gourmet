@@ -77,6 +77,21 @@ export function registerCuentasPorCobrarHandlers(
     }
   });
 
+  // CPC asociada a una venta (para reimprimir el pagaré desde el historial/PdV).
+  ipcMain.handle('get-cpc-by-venta', async (_event, ventaId: number) => {
+    try {
+      const repo = dataSource.getRepository(CuentaPorCobrar);
+      return await repo.findOne({
+        where: { ventaId },
+        relations: ['cliente', 'cliente.persona', 'moneda', 'cuotas'],
+        order: { id: 'DESC' },
+      });
+    } catch (error) {
+      console.error(`Error getting cpc for venta ${ventaId}:`, error);
+      throw error;
+    }
+  });
+
   ipcMain.handle('create-cuenta-por-cobrar', async (_event, data: any) => {
     await ensurePermission(dataSource, getCurrentUser, 'CPC_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();

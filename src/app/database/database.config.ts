@@ -119,6 +119,7 @@ import { GastoCategoria } from './entities/financiero/gasto-categoria.entity';
 import { Gasto } from './entities/financiero/gasto.entity';
 import { RetiroCaja } from './entities/financiero/retiro-caja.entity';
 import { RetiroCajaDetalle } from './entities/financiero/retiro-caja-detalle.entity';
+import { GastoCaja } from './entities/financiero/gasto-caja.entity';
 import { GastoDetalle } from './entities/financiero/gasto-detalle.entity';
 
 // Banking entities (Fase 2)
@@ -217,6 +218,7 @@ import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVa
 import { AddCuentaBancariaToPagosCobros1779700000000 } from './migrations/1779700000000-AddCuentaBancariaToPagosCobros';
 import { AddCotizacionBancariaToPagosCobros1779800000000 } from './migrations/1779800000000-AddCotizacionBancariaToPagosCobros';
 import { AddKdsToComandaItem1780000000000 } from './migrations/1780000000000-AddKdsToComandaItem';
+import { AddGastoCaja1783025751400 } from './migrations/1783025751400-AddGastoCaja';
 import { AddKdsPantalla1780100000000 } from './migrations/1780100000000-AddKdsPantalla';
 import { AddOrigenToRetiroCaja1780200000000 } from './migrations/1780200000000-AddOrigenToRetiroCaja';
 import { AddConteoToCajaMayorMovimiento1780300000000 } from './migrations/1780300000000-AddConteoToCajaMayorMovimiento';
@@ -390,6 +392,7 @@ function getEntitiesList(): any[] {
       GastoDetalle,
       RetiroCaja,
       RetiroCajaDetalle,
+      GastoCaja,
       // Banking (Fase 2)
       CuentaBancaria,
       MaquinaPos,
@@ -559,6 +562,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddFacturacion1782519234187,
     AddFacturacionConfig1782519876542,
     AddTipoToSector1782860367433,
+    AddGastoCaja1783025751400,
   ];
 }
 

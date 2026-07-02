@@ -25,6 +25,7 @@ import { printComandaInternal, printVentaTicketInternal } from './documentos-tic
 import { Sector } from '../../src/app/database/entities/ventas/sector.entity';
 import { ComandaItem, ComandaItemEstado } from '../../src/app/database/entities/ventas/comanda-item.entity';
 import { ProductoSector } from '../../src/app/database/entities/productos/producto-sector.entity';
+import { GastoCaja } from '../../src/app/database/entities/financiero/gasto-caja.entity';
 import { broadcastComandaEvent } from '../utils/comanda-events.utils';
 import { PdvAtajoGrupo } from '../../src/app/database/entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from '../../src/app/database/entities/ventas/pdv-atajo-item.entity';
@@ -646,19 +647,48 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         }
       }
 
-      // Calcular esperado y diferencia
+      // Gastos pagados con el efectivo de esta caja de venta (ACTIVOS).
+      const gastosCaja = await dataSource.getRepository(GastoCaja).find({
+        where: { caja: { id: cajaId } as any, estado: 'ACTIVO' },
+        relations: ['moneda', 'formaPago', 'gastoCategoria'],
+        order: { fecha: 'DESC', id: 'DESC' } as any,
+      });
+      const gastosEfectivoPorMoneda: { [monedaId: number]: number } = {};
+      const gastos = gastosCaja.map(g => {
+        const monedaId = (g.moneda as any)?.id;
+        const monto = Number(g.monto || 0);
+        if (monedaId && (g.formaPago as any)?.movimentaCaja) {
+          gastosEfectivoPorMoneda[monedaId] = (gastosEfectivoPorMoneda[monedaId] || 0) + monto;
+        }
+        return {
+          id: g.id,
+          descripcion: g.descripcion,
+          monto,
+          monedaId,
+          monedaSimbolo: (g.moneda as any)?.simbolo || '',
+          monedaDenominacion: (g.moneda as any)?.denominacion || '',
+          formaPago: (g.formaPago as any)?.nombre || '',
+          categoria: (g.gastoCategoria as any)?.nombre || '',
+          fecha: g.fecha,
+        };
+      });
+
+      // Calcular esperado y diferencia. El efectivo de gastos sale del cajón, así
+      // que reduce el esperado en su moneda.
       const esperadoPorMoneda: { [monedaId: number]: number } = {};
       const diferenciaPorMoneda: { [monedaId: number]: number } = {};
       const allMonedaIds = new Set<number>();
       conteoApertura.forEach(c => allMonedaIds.add(c.monedaId));
       conteoCierre.forEach(c => allMonedaIds.add(c.monedaId));
       Object.keys(efectivoPorMoneda).forEach(k => allMonedaIds.add(Number(k)));
+      Object.keys(gastosEfectivoPorMoneda).forEach(k => allMonedaIds.add(Number(k)));
 
       for (const monedaId of allMonedaIds) {
         const apertura = conteoApertura.find(c => c.monedaId === monedaId)?.total || 0;
         const cierre = conteoCierre.find(c => c.monedaId === monedaId)?.total || 0;
         const efectivo = efectivoPorMoneda[monedaId] || 0;
-        esperadoPorMoneda[monedaId] = apertura + efectivo;
+        const gastoEfectivo = gastosEfectivoPorMoneda[monedaId] || 0;
+        esperadoPorMoneda[monedaId] = apertura + efectivo - gastoEfectivo;
         diferenciaPorMoneda[monedaId] = cierre - esperadoPorMoneda[monedaId];
       }
 
@@ -672,6 +702,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         efectivoPorMoneda,
         esperadoPorMoneda,
         diferenciaPorMoneda,
+        gastos,
       };
     } catch (error) {
       console.error(`Error getting resumen caja ${cajaId}:`, error);

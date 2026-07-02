@@ -118,7 +118,13 @@
         <h3>GASTOS</h3>
       </div>
       <div class="resumen-card-body">
-        <div class="placeholder-text">SIN GASTOS REGISTRADOS</div>
+        <div class="tile-grid" *ngIf="resumen.gastos?.length">
+          <div class="tile" *ngFor="let g of resumen.gastos">
+            <span class="tile-label">{{ g.descripcion }}{{ g.categoria ? ' · ' + g.categoria : '' }}</span>
+            <span class="tile-value">{{ g.monedaSimbolo }} {{ g.monto | number:'1.0-2' }}</span>
+          </div>
+        </div>
+        <div *ngIf="!resumen.gastos?.length" class="placeholder-text">SIN GASTOS REGISTRADOS</div>
       </div>
     </div>
 
