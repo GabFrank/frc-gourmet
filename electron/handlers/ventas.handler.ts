@@ -708,6 +708,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta ID ${id} not found`);
 
+      // Control opcional de impresión del ticket para esta transición puntual.
+      // Si viene definido (true/false), tiene prioridad sobre el config global
+      // `autoImprimirTicketVenta`. Se extrae antes del merge para que no intente
+      // persistirse como columna de la entidad.
+      let imprimirTicketOverride: boolean | undefined;
+      if (data && Object.prototype.hasOwnProperty.call(data, '__imprimirTicketVenta')) {
+        imprimirTicketOverride = data.__imprimirTicketVenta === true;
+        delete data.__imprimirTicketVenta;
+      }
+
       const estadoAnterior = entity.estado;
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
@@ -717,8 +727,15 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // Fire-and-forget. NUNCA bloquea ni revierte la transición de estado.
       if (estadoAnterior !== VentaEstado.CONCLUIDA && saved.estado === VentaEstado.CONCLUIDA) {
         try {
-          const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
-          if (pdvConfig?.autoImprimirTicketVenta) {
+          let debeImprimir: boolean;
+          if (imprimirTicketOverride !== undefined) {
+            // El llamador (finalizar / finalizar + ticket) decide explícitamente.
+            debeImprimir = imprimirTicketOverride;
+          } else {
+            const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+            debeImprimir = !!pdvConfig?.autoImprimirTicketVenta;
+          }
+          if (debeImprimir) {
             setImmediate(() => {
               printVentaTicketInternal(dataSource, id)
                 .catch(e => console.warn('[updateVenta] auto-print ticket falló:', e));

@@ -838,7 +838,8 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     return this.detalleRows.length > 0 && this.saldoPrincipal > 0 && !this.processing;
   }
 
-  async finalizar(): Promise<void> {
+  /** Finaliza sin imprimir el ticket de venta (comportamiento por defecto). */
+  async finalizar(imprimirTicket = false): Promise<void> {
     if (!this.canFinalizar) return;
     this.processing = true;
 
@@ -857,7 +858,11 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
         formaPago: principalFp || this.selectedFormaPago!,
         pago: this.pago!,
         fechaCierre: new Date(),
-      }));
+        // Controla explícitamente la impresión del ticket para esta venta,
+        // por encima del config global. "Finalizar" no imprime; "Finalizar +
+        // Ticket" sí.
+        __imprimirTicketVenta: imprimirTicket,
+      } as any));
 
       // 1) Crear AcreditacionPos por cada detalle con maquina POS elegida (tipo=PAGO).
       //    Las acreditaciones se procesan al cumplir los minutos configurados.
@@ -904,6 +909,11 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       console.error('Error al finalizar cobro:', error);
       this.processing = false;
     }
+  }
+
+  /** Finaliza e imprime el ticket de venta. */
+  finalizarConTicket(): Promise<void> {
+    return this.finalizar(true);
   }
 
   private recomputeCobrarCredito(): void {
@@ -1059,6 +1069,10 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       case 'F10':
         event.preventDefault();
         this.finalizar();
+        break;
+      case 'F11':
+        event.preventDefault();
+        this.finalizarConTicket();
         break;
     }
   }

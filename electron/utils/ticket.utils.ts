@@ -332,6 +332,119 @@ async function applyLine(tp: ThermalPrinter, line: TicketLine, width: number): P
 }
 
 /**
+ * Líneas en blanco que se alimentan al pie de TODO ticket antes del corte.
+ * El cortante de las térmicas/matriciales está ~2-3 cm por encima del cabezal,
+ * así que sin este feed las últimas líneas quedan por encima del corte (se
+ * "comen"). Centralizado acá para que aplique a todos los tickets por igual.
+ */
+const BOTTOM_SAFE_FEED = 6;
+
+function feedBottomSafeArea(tp: ThermalPrinter): void {
+  for (let i = 0; i < BOTTOM_SAFE_FEED; i++) tp.newLine();
+}
+
+/**
+ * Construye las líneas de una PRUEBA DE IMPRESIÓN diagnóstica: sirve para
+ * verificar que la impresora esté configurada con la cantidad de columnas
+ * correcta y que los márgenes superior/inferior no recorten el contenido.
+ *
+ * Incluye:
+ *  - Datos de la impresora y columnas configuradas.
+ *  - Una REGLA de caracteres (línea de unidades + decenas) para contar cuántas
+ *    columnas entran realmente. Si la impresora hace wrap, las columnas
+ *    configuradas superan la capacidad real → hay que bajarlas.
+ *  - Muestras de alineación (izq/centro/der) y de tamaños (normal/alto/ancho/
+ *    grande).
+ *  - Una tabla de columnas (igual al comprobante) para verificar la separación.
+ *  - Marcadores de inicio y fin para chequear los márgenes.
+ */
+export function buildTestTicketLines(printer: any): TicketLine[] {
+  const width = printerWidthToChars(printer.width);
+
+  // Regla de caracteres: unidades (1..0 repetido) y decenas (marca cada 10).
+  let units = '';
+  let tens = '';
+  for (let i = 1; i <= width; i++) {
+    units += String(i % 10);
+    tens += (i % 10 === 0) ? String(Math.floor(i / 10) % 10) : ' ';
+  }
+
+  const tech = [printer.type, printer.connectionType].filter(Boolean).join(' / ');
+
+  const lines: TicketLine[] = [
+    ticketText('<< INICIO DEL TICKET >>', { align: 'C' }),
+    ticketSeparador('='),
+    ticketText('PRUEBA DE IMPRESION', { align: 'C', bold: true, size: 'tall' }),
+    ticketText(ticketFmtFechaHora(new Date()), { align: 'C' }),
+    ticketSeparador('='),
+    ticketText(`Impresora: ${(printer.name || '-').toUpperCase()}`),
+    ticketText(`Tecnologia: ${tech || '-'}`),
+    ticketText(`Columnas configuradas: ${width}`, { bold: true }),
+    ticketSeparador('-'),
+    ticketText('REGLA DE CARACTERES', { align: 'C', bold: true }),
+    ticketText('Deben entrar sin cortar ni', { align: 'C' }),
+    ticketText('pasar a otra linea:', { align: 'C' }),
+    ticketText(tens),
+    ticketText(units),
+    ticketText('='.repeat(width)),
+    ticketSeparador('-'),
+    ticketText('ALINEACION', { align: 'C', bold: true }),
+    ticketText('IZQUIERDA', { align: 'L' }),
+    ticketText('CENTRO', { align: 'C' }),
+    ticketText('DERECHA', { align: 'R' }),
+    ticketSeparador('-'),
+    ticketText('TAMANOS', { align: 'C', bold: true }),
+    ticketText('NORMAL'),
+    ticketText('ALTO', { size: 'tall' }),
+    ticketText('ANCHO', { size: 'wide' }),
+    ticketText('GRANDE', { size: 'big' }),
+    ticketSeparador('-'),
+    ticketText('TABLA DE COLUMNAS', { align: 'C', bold: true }),
+  ];
+
+  // Tabla igual a la del comprobante (misma lógica de anchos) para verificar
+  // que CANT / DESCRIPCION / TOTAL queden separados y alineados.
+  const totalW = 12;
+  const cantW = Math.max(5, Math.min(6, Math.floor(width * 0.12)));
+  const descW = width - cantW - totalW;
+  lines.push(ticketColumns([
+    { text: 'CANT', width: cantW, align: 'L' },
+    { text: 'DESCRIPCION', width: descW, align: 'L' },
+    { text: 'TOTAL', width: totalW, align: 'R' },
+  ]));
+  lines.push(ticketSeparador('-'));
+  lines.push(ticketColumns([
+    { text: '2', width: cantW, align: 'L' },
+    { text: 'PRODUCTO DE PRUEBA', width: descW, align: 'L' },
+    { text: '123.456', width: totalW, align: 'R' },
+  ]));
+  lines.push(ticketKv('TOTAL', 'Gs. 123.456', true));
+
+  lines.push(ticketSeparador('='));
+  lines.push(ticketText('Si ves esta linea completa,', { align: 'C' }));
+  lines.push(ticketText('el margen inferior esta OK.', { align: 'C' }));
+  lines.push(ticketText('<< FIN DEL TICKET >>', { align: 'C', bold: true }));
+
+  return lines;
+}
+
+/**
+ * Imprime la prueba diagnóstica en la impresora, pasando por el mismo pipeline
+ * (`printTicketSpec`) que los tickets reales: así valida columnas, tamaños,
+ * corte y safe-area inferior tal como saldrán en producción.
+ */
+export async function printTestTicket(printer: any): Promise<{ ok: boolean; error?: string }> {
+  const width = printerWidthToChars(printer.width);
+  const spec: TicketSpec = {
+    printerWidth: width,
+    lines: buildTestTicketLines(printer),
+    cutAtEnd: true,
+    beepAtEnd: true,
+  };
+  return await printTicketSpec(printer, spec);
+}
+
+/**
  * Imprime un `TicketSpec` en una impresora térmica. Maneja:
  * - Impresoras CUPS (address que empieza con `ticket-`) → fallback texto plano + `lp`.
  * - Impresoras network/USB/bluetooth → comandos ESC/POS vía `node-thermal-printer`.
@@ -372,7 +485,10 @@ export async function printTicketSpec(
       for (const line of spec.lines) {
         await applyLine(tp, line, width);
       }
-      if (spec.cutAtEnd !== false) tp.cut({ verticalTabAmount: 0 });
+      if (spec.cutAtEnd !== false) {
+        feedBottomSafeArea(tp);
+        tp.cut({ verticalTabAmount: 0 });
+      }
       if (spec.beepAtEnd) tp.beep();
       const buffer = (tp as any).getBuffer?.() as Buffer | undefined;
       if (!buffer || buffer.length === 0) {
@@ -397,7 +513,10 @@ export async function printTicketSpec(
     for (const line of spec.lines) {
       await applyLine(tp, line, width);
     }
-    if (spec.cutAtEnd !== false) tp.cut({ verticalTabAmount: 0 });
+    if (spec.cutAtEnd !== false) {
+      feedBottomSafeArea(tp);
+      tp.cut({ verticalTabAmount: 0 });
+    }
     if (spec.beepAtEnd) tp.beep();
 
     await tp.execute();
@@ -468,6 +587,11 @@ export function renderTicketToPlainText(spec: TicketSpec): string {
         // omitidos en texto plano
         break;
     }
+  }
+  // Safe area inferior: mismas líneas en blanco que el path ESC/POS, para que
+  // el corte de CUPS/`lp` tampoco recorte el final del ticket.
+  if (spec.cutAtEnd !== false) {
+    for (let i = 0; i < BOTTOM_SAFE_FEED; i++) out.push('');
   }
   return out.join('\n') + '\n';
 }

@@ -270,7 +270,10 @@ export async function printComandaInternal(
   const itemIds = itemsAImprimir.map(i => i.id);
   const adicionalesByItem = new Map<number, string[]>();
   const observacionesByItem = new Map<number, string[]>();
-  const modificacionesByItem = new Map<number, string[]>();
+  // Se separan las remociones (SIN X) de los cambios (CAMBIAR X POR Y) para
+  // darle a cada una el énfasis que corresponde en el ticket de cocina.
+  const removidosByItem = new Map<number, string[]>();
+  const cambiosByItem = new Map<number, string[]>();
   const pushMap = (m: Map<number, string[]>, k: number, v: string) => {
     if (!m.has(k)) m.set(k, []);
     m.get(k)!.push(v);
@@ -286,7 +289,7 @@ export async function printComandaInternal(
         if (!iid) continue;
         const cant = Number((a as any).cantidad || 1);
         const nom = ((a as any).adicional?.nombre || 'ADICIONAL').toUpperCase();
-        pushMap(adicionalesByItem, iid, cant > 1 ? `+ ${cant}x ${nom}` : `+ ${nom}`);
+        pushMap(adicionalesByItem, iid, cant > 1 ? `ADD ${cant}x ${nom}` : `ADD ${nom}`);
       }
 
       const obs = await dataSource.getRepository(VentaItemObservacion).find({
@@ -308,14 +311,12 @@ export async function printComandaInternal(
         const iid = (m as any).ventaItem?.id;
         if (!iid) continue;
         const ing = String((m as any).recetaIngrediente?.ingrediente?.nombre || (m as any).recetaIngrediente?.descripcion || 'INGREDIENTE').toUpperCase();
-        let txt: string;
         if ((m as any).tipoModificacion === 'REMOVIDO') {
-          txt = `SIN ${ing}`;
+          pushMap(removidosByItem, iid, ing);
         } else {
           const rep = String((m as any).ingredienteReemplazo?.nombre || '').toUpperCase();
-          txt = rep ? `CAMBIAR ${ing} -> ${rep}` : `CAMBIAR ${ing}`;
+          pushMap(cambiosByItem, iid, rep ? `${ing} POR ${rep}` : ing);
         }
-        pushMap(modificacionesByItem, iid, `* ${txt}`);
       }
     } catch (e) {
       // Los modificadores son opcionales: si fallan, se imprime la comanda igual.
@@ -455,18 +456,24 @@ export async function printComandaInternal(
       if (v.ensambladoDescripcion) {
         lines.push(ticketText(`   ${String(v.ensambladoDescripcion).toUpperCase()}`));
       }
-      // Opcionales/modificaciones, adicionales y observaciones del ítem.
-      for (const t of (modificacionesByItem.get(v.id) || [])) lines.push(ticketText(`   ${t}`));
-      for (const t of (adicionalesByItem.get(v.id) || [])) lines.push(ticketText(`   ${t}`));
+      // QUITAR — lo más crítico en cocina: se imprime invertido (fondo negro).
+      // El video inverso ya destaca por sí solo, sin agrandar la fuente.
+      for (const ing of (removidosByItem.get(v.id) || [])) {
+        lines.push(ticketText(`SIN ${ing}`, { bold: true, invert: true }));
+      }
+      // CAMBIAR — destacado en negrita, tamaño normal.
+      for (const c of (cambiosByItem.get(v.id) || [])) {
+        lines.push(ticketText(`CAMBIAR ${c}`, { bold: true }));
+      }
+      // AGREGAR — en negrita para diferenciar de las observaciones.
+      for (const t of (adicionalesByItem.get(v.id) || [])) lines.push(ticketText(`   ${t}`, { bold: true }));
       for (const t of (observacionesByItem.get(v.id) || [])) lines.push(ticketText(`   ${t}`));
       lines.push(ticketBlank());
     }
 
     lines.push(ticketSeparador('='));
-    // Margen/feed al pie antes del corte: además de que el cortante está ~2-3 cm
-    // por encima del cabezal (sin feed se comería las últimas líneas), deja un
-    // margen cómodo para tomar/colgar el ticket.
-    lines.push(ticketBlank(6));
+    // El margen inferior antes del corte lo agrega printTicketSpec de forma
+    // centralizada (BOTTOM_SAFE_FEED) para todos los tickets por igual.
 
     const spec: TicketSpec = { printerWidth: width, lines, cutAtEnd: true };
 
@@ -582,17 +589,24 @@ export async function printVentaTicketInternal(
     ticketSeparador('-'),
   ];
 
-  const mesaTxt = (venta.mesa as any)?.numero ? `MESA ${(venta.mesa as any).numero}` : '';
-  if (mesaTxt) lines.push(ticketKv('MESA', mesaTxt));
+  const mesaNro = (venta.mesa as any)?.numero;
+  if (mesaNro) lines.push(ticketKv('MESA', String(mesaNro)));
 
   const clienteTxt = (venta.cliente as any)?.razon_social || (venta.cliente as any)?.persona?.nombre;
   if (clienteTxt) lines.push(ticketKv('CLIENTE', clienteTxt));
 
+  // Ancho de la columna CANT: mínimo 5 para que "CANT" (4) + la cantidad no
+  // queden pegados a DESCRIPCION (el padding derecho de la celda deja el
+  // espacio). Con anchos chicos (32/40 col) floor(width*0.12) daba 3-4 → sin
+  // separación. TOTAL usa 12 col fijos.
+  const totalW = 12;
+  const cantW = Math.max(5, Math.min(6, Math.floor(width * 0.12)));
+  const descW = width - cantW - totalW;
   lines.push(ticketSeparador('-'));
   lines.push(ticketColumns([
-    { text: 'CANT', width: Math.min(6, Math.floor(width * 0.12)), align: 'L' },
-    { text: 'DESCRIPCION', width: width - Math.min(6, Math.floor(width * 0.12)) - 12, align: 'L' },
-    { text: 'TOTAL', width: 12, align: 'R' },
+    { text: 'CANT', width: cantW, align: 'L' },
+    { text: 'DESCRIPCION', width: descW, align: 'L' },
+    { text: 'TOTAL', width: totalW, align: 'R' },
   ]));
   lines.push(ticketSeparador('-'));
 
@@ -604,9 +618,9 @@ export async function printVentaTicketInternal(
     subtotal += total;
     const nombre = (it.producto?.nombre || 'PRODUCTO').toUpperCase();
     lines.push(ticketColumns([
-      { text: String(qty), width: Math.min(6, Math.floor(width * 0.12)), align: 'L' },
-      { text: nombre, width: width - Math.min(6, Math.floor(width * 0.12)) - 12, align: 'L' },
-      { text: ticketFmtMonto(total), width: 12, align: 'R' },
+      { text: String(qty), width: cantW, align: 'L' },
+      { text: nombre, width: descW, align: 'L' },
+      { text: ticketFmtMonto(total), width: totalW, align: 'R' },
     ]));
   }
 
@@ -1001,7 +1015,7 @@ export async function printPagareCpcTicketInternal(
   lines.push(ticketText('_'.repeat(Math.min(width - 2, 32)), { align: 'C' }));
   lines.push(ticketText(clienteNombre, { align: 'C', bold: true }));
   lines.push(ticketText('FIRMA DEL CLIENTE', { align: 'C' }));
-  lines.push(ticketBlank(2));
+  // El margen inferior antes del corte lo agrega printTicketSpec (BOTTOM_SAFE_FEED).
 
   const res = await printTicketSpec(printer, { printerWidth: width, lines, cutAtEnd: true });
   return res.ok
