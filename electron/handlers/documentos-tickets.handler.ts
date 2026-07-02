@@ -463,9 +463,10 @@ export async function printComandaInternal(
     }
 
     lines.push(ticketSeparador('='));
-    // Feed antes del corte: sin esto el cortante se come las últimas líneas
-    // (el corte se hace ~2-3 cm por encima del cabezal de impresión).
-    lines.push(ticketBlank(3));
+    // Margen/feed al pie antes del corte: además de que el cortante está ~2-3 cm
+    // por encima del cabezal (sin feed se comería las últimas líneas), deja un
+    // margen cómodo para tomar/colgar el ticket.
+    lines.push(ticketBlank(6));
 
     const spec: TicketSpec = { printerWidth: width, lines, cutAtEnd: true };
 
