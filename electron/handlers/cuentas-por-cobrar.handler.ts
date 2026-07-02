@@ -640,8 +640,9 @@ export function registerCuentasPorCobrarHandlers(
         };
       }
 
-      // Get-or-create FormaPago "CUENTA CORRIENTE"
-      const NOMBRE_FP = 'CUENTA CORRIENTE';
+      // Get-or-create FormaPago "CREDITO" (la venta a crédito se registra con
+      // esta forma de pago; movimentaCaja:false para no impactar el arqueo).
+      const NOMBRE_FP = 'CREDITO';
       let formaPago = await formaPagoRepo
         .createQueryBuilder('fp')
         .where('UPPER(fp.nombre) = :n', { n: NOMBRE_FP })
