@@ -85,8 +85,12 @@
           <!-- Configuración avanzada -->
           <div class="form-row">
             <mat-form-field appearance="outline" class="form-field-third">
-              <mat-label>Ancho (mm)</mat-label>
-              <input matInput type="number" formControlName="width" placeholder="58">
+              <mat-label>Ancho del papel</mat-label>
+              <mat-select formControlName="width">
+                <mat-option *ngFor="let w of paperWidths" [value]="w.value">
+                  {{ w.displayName }}
+                </mat-option>
+              </mat-select>
             </mat-form-field>
 
             <mat-form-field appearance="outline" class="form-field-third">

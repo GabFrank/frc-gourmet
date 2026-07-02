@@ -64,6 +64,11 @@ export class PrinterSettingsComponent implements OnInit {
     { value: 'bluetooth', displayName: 'Bluetooth' }
   ];
 
+  paperWidths = [
+    { value: 58, displayName: '58 mm (32 caracteres)' },
+    { value: 80, displayName: '80 mm (48 caracteres)' },
+  ];
+
   characterSets = [
     { value: 'PC437_USA', displayName: 'USA (PC437)' },
     { value: 'PC850_MULTILINGUAL', displayName: 'Multilingual (PC850)' },
@@ -94,6 +99,22 @@ export class PrinterSettingsComponent implements OnInit {
   /**
    * Create the printer form
    */
+  /**
+   * Normaliza el ancho guardado (en mm, o valores legacy en caracteres) a una
+   * de las opciones soportadas por el selector: 58 u 80 mm. Así los tickets se
+   * adaptan al ancho real del papel configurado en la impresora.
+   */
+  normalizePaperWidth(width?: number | null): number {
+    const w = Number(width || 0);
+    if (!w || w <= 0) return 58;
+    // Valores tipicos en mm
+    if (w >= 70) return 80;          // 76mm / 80mm → 80
+    if (w >= 50) return 58;          // 58mm
+    // Valores legacy expresados en caracteres (ej: CUPS width: 48)
+    if (w >= 40) return 80;          // ~48 chars → 80mm
+    return 58;                       // ~32 chars → 58mm
+  }
+
   createPrinterForm(printer?: PrinterConfig): FormGroup {
     const form = this.fb.group({
       name: [printer?.name || '', [Validators.required, Validators.maxLength(100)]],
@@ -102,7 +123,7 @@ export class PrinterSettingsComponent implements OnInit {
       address: [printer?.address || '', Validators.required],
       port: [printer?.port || 9100],
       dpi: [printer?.dpi || 203],
-      width: [printer?.width || 58],
+      width: [this.normalizePaperWidth(printer?.width)],
       characterSet: [printer?.characterSet || 'PC437_USA'],
       isDefault: [printer?.isDefault || false]
     });
@@ -315,7 +336,7 @@ export class PrinterSettingsComponent implements OnInit {
       connectionType: 'usb',     // Use USB connection type for CUPS
       address: printerName,      // Just use the printer name for CUPS
       port: null,                // CUPS doesn't need a port
-      width: 48,                 // Character width in characters (not mm)
+      width: 58,                 // Ancho del papel en mm (58mm → 32 caracteres)
       dpi: 203,                  // Standard DPI for most thermal printers
       characterSet: 'PC437_USA', // Use a standard character set supported by the library
       isDefault: true
