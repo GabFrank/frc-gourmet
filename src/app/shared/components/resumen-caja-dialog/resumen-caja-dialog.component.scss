@@ -84,6 +84,53 @@
   color: var(--primary-color, #b39ddb);
 }
 
+// Tiles compactos: label y valor juntos (en vez de fila space-between a lo
+// ancho del diálogo, donde el valor quedaba muy lejos del label).
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background-color: rgba(0, 0, 0, 0.16);
+  border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
+}
+
+.tile-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tile-value {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.tile-grid-total {
+  margin-top: 8px;
+}
+
+.tile-total {
+  background-color: color-mix(in srgb, var(--primary-color, #b39ddb) 14%, transparent);
+  border-color: color-mix(in srgb, var(--primary-color, #b39ddb) 35%, transparent);
+
+  .tile-value {
+    color: var(--primary-color, #b39ddb);
+  }
+}
+
 .placeholder-text {
   opacity: 0.5;
   font-size: 12px;

@@ -52,9 +52,11 @@
         <h3>CONTEO APERTURA</h3>
       </div>
       <div class="resumen-card-body">
-        <div class="resumen-row" *ngFor="let c of resumen.conteoApertura">
-          <span>{{ c.monedaDenominacion }}:</span>
-          <span>{{ c.monedaSimbolo }} {{ c.total | number:'1.0-2' }}</span>
+        <div class="tile-grid">
+          <div class="tile" *ngFor="let c of resumen.conteoApertura">
+            <span class="tile-label">{{ c.monedaDenominacion }}</span>
+            <span class="tile-value">{{ c.monedaSimbolo }} {{ c.total | number:'1.0-2' }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -66,9 +68,11 @@
         <h3>CONTEO CIERRE</h3>
       </div>
       <div class="resumen-card-body">
-        <div class="resumen-row" *ngFor="let c of resumen.conteoCierre">
-          <span>{{ c.monedaDenominacion }}:</span>
-          <span>{{ c.monedaSimbolo }} {{ c.total | number:'1.0-2' }}</span>
+        <div class="tile-grid">
+          <div class="tile" *ngFor="let c of resumen.conteoCierre">
+            <span class="tile-label">{{ c.monedaDenominacion }}</span>
+            <span class="tile-value">{{ c.monedaSimbolo }} {{ c.total | number:'1.0-2' }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -80,13 +84,17 @@
         <h3>VENTAS ({{ resumen.cantidadVentas }})</h3>
       </div>
       <div class="resumen-card-body">
-        <div class="resumen-row" *ngFor="let v of resumen.ventasPorFormaPago">
-          <span>{{ v.formaPago }}:</span>
-          <span>{{ v.monedaSimbolo }} {{ v.total | number:'1.0-2' }}</span>
+        <div class="tile-grid" *ngIf="resumen.cantidadVentas > 0">
+          <div class="tile" *ngFor="let v of resumen.ventasPorFormaPago">
+            <span class="tile-label">{{ v.formaPago }}</span>
+            <span class="tile-value">{{ v.monedaSimbolo }} {{ v.total | number:'1.0-2' }}</span>
+          </div>
         </div>
-        <div class="resumen-row resumen-row-total" *ngFor="let t of resumen.ventasTotalPorMoneda">
-          <span>TOTAL {{ t.monedaSimbolo }}:</span>
-          <span class="total-value">{{ t.monedaSimbolo }} {{ t.total | number:'1.0-2' }}</span>
+        <div class="tile-grid tile-grid-total" *ngIf="resumen.cantidadVentas > 0">
+          <div class="tile tile-total" *ngFor="let t of resumen.ventasTotalPorMoneda">
+            <span class="tile-label">TOTAL {{ t.monedaSimbolo }}</span>
+            <span class="tile-value">{{ t.monedaSimbolo }} {{ t.total | number:'1.0-2' }}</span>
+          </div>
         </div>
         <div *ngIf="resumen.cantidadVentas === 0" class="placeholder-text">SIN VENTAS REGISTRADAS</div>
       </div>
