@@ -2811,12 +2811,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   });
 }
 
+// Retardo antes de auto-imprimir la comanda: da tiempo a que el PdV persista los
+// adicionales/observaciones/opcionales del ítem (que guarda en llamadas separadas
+// DESPUÉS de createVentaItem) para que salgan en el ticket de cocina.
+const AUTO_PRINT_COMANDA_DELAY_MS = 2500;
+
 /**
  * Hook auto-impresión de comanda (ticket de cocina).
  *
  * Se ejecuta tras `createVentaItem`. Si la Venta tiene **mesa o comanda**
  * asignada Y `pdv_config.autoImprimirComanda=true`, dispara
- * `printComandaInternal` en background (setImmediate) — el item ya fue
+ * `printComandaInternal` en background (con un retardo corto) — el item ya fue
  * guardado y la respuesta al frontend NO espera la impresión.
  *
  * Si la venta no tiene ni mesa ni comanda → venta directa de mostrador
@@ -2844,8 +2849,15 @@ async function autoPrintComandaIfNeeded(
   const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
   if (!pdvConfig?.autoImprimirComanda) return;
 
-  // 3. Disparar en background
-  setImmediate(() => {
+  // 3. Disparar en background, con un pequeño retardo.
+  //    El PdV guarda el VentaItem PRIMERO (esto dispara el hook) y RECIÉN DESPUÉS
+  //    persiste sus adicionales/observaciones/opcionales en llamadas separadas.
+  //    Sin el retardo, la comanda se imprime antes de que esos modificadores
+  //    existan y salen sin ellos. El retardo deja que se guarden (son round-trips
+  //    rápidos, locales o por LAN) antes de imprimir. La comanda usa
+  //    soloItemsNoImpresos + tracking de `impreso`, así que agregar varios ítems
+  //    seguidos no duplica.
+  setTimeout(() => {
     printComandaInternal(dataSource, ventaId, { soloItemsNoImpresos: true })
       .then(res => {
         if (!res.ok) {
@@ -2854,7 +2866,7 @@ async function autoPrintComandaIfNeeded(
         }
       })
       .catch(e => console.error(`[auto-print comanda venta=${ventaId}] excepción:`, e));
-  });
+  }, AUTO_PRINT_COMANDA_DELAY_MS);
 }
 
 /**
