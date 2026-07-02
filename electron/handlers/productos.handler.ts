@@ -321,9 +321,11 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       // Construir where conditions
       const whereConditions: any = {};
 
-      // Filtro por búsqueda
+      // Filtro por búsqueda. Los strings se guardan en MAYÚSCULAS, así que se
+      // mayusculiza el término (en Postgres LIKE es case-sensitive; sin esto no
+      // trae datos al escribir en minúsculas).
       if (filters.search) {
-        whereConditions.nombre = Like(`%${filters.search}%`);
+        whereConditions.nombre = Like(`%${filters.search.toUpperCase()}%`);
       }
 
       // Filtro por tipo
