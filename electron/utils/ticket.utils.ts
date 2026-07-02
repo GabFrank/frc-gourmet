@@ -162,28 +162,36 @@ export function ticketTotales(items: { label: string; monto: string; bold?: bool
 // ============================================================
 
 /**
- * Mapea el campo `printer.width` (interpretado como **mm físicos**, según
- * el label "Width (mm)" de la UI) al número de caracteres por línea que
- * usan los templates ESC/POS.
+ * Devuelve la cantidad de **caracteres por línea (columnas)** que usan los
+ * templates ESC/POS, a partir del campo `printer.width`.
  *
- * Convención estándar para impresoras térmicas (Font A, default):
- *   - 58mm → 32 chars
- *   - 80mm → 48 chars
- *   - 76mm → 42 chars (raro)
+ * La cantidad de columnas NO se puede deducir de forma confiable del ancho
+ * físico en mm, porque depende de la tecnología de la impresora y de la
+ * fuente activa. Ejemplos reales:
+ *   - Térmica 58mm  (Font A) → 32 columnas
+ *   - Térmica 80mm  (Font A) → 48 columnas
+ *   - Matriz de punto 9 pines 76mm (ej. Epson TM-U220, Font A) → 40 columnas
  *
- * Si el valor recibido ya está en rango de chars (>=20 y <=80), se asume
- * que el usuario puso chars directos y se respeta — pero la convención
- * de la UI es mm.
+ * Por eso la UI configura **directamente la cantidad de columnas** y ese es
+ * el valor que se guarda en `printer.width` (32, 40, 42, 48...).
+ *
+ * Interpretación del valor guardado (retrocompatible):
+ *   - `< 50`  → ya es cantidad de columnas configurada directamente (nuevo).
+ *   - `>= 50` → valor legacy expresado en mm; se mapea a columnas por densidad
+ *               térmica estándar (58mm→32, 80mm→48).
  */
 export function printerWidthToChars(width?: number | null): number {
   const w = Number(width || 0);
-  if (!w || w <= 0) return 48; // default
-  if (w >= 75 && w <= 85) return 48;   // 80mm
-  if (w >= 70 && w < 75) return 42;    // 76mm raro
-  if (w >= 50 && w < 70) return 32;    // 58mm
-  if (w < 50) return 32;               // < 58mm asume 58mm safe default
-  // > 85: probable que el usuario haya puesto chars directo
-  return Math.min(64, Math.max(20, w));
+  if (!w || w <= 0) return 48; // default 80mm térmica
+
+  // Nuevo: el valor es la cantidad de columnas configurada directamente.
+  if (w < 50) return Math.max(20, Math.round(w)); // 32, 40, 42, 48...
+
+  // Legacy: el valor está en mm → mapear a columnas (densidad térmica).
+  if (w <= 68) return 32;   // 58mm
+  if (w < 76) return 42;    // 70-75mm
+  if (w <= 85) return 48;   // 76-80mm
+  return Math.min(64, Math.round(w));
 }
 
 /**

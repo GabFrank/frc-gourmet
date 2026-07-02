@@ -85,12 +85,13 @@
           <!-- Configuración avanzada -->
           <div class="form-row">
             <mat-form-field appearance="outline" class="form-field-third">
-              <mat-label>Ancho del papel</mat-label>
+              <mat-label>Caracteres por línea</mat-label>
               <mat-select formControlName="width">
-                <mat-option *ngFor="let w of paperWidths" [value]="w.value">
-                  {{ w.displayName }}
+                <mat-option *ngFor="let c of columnOptions" [value]="c.value">
+                  {{ c.displayName }}
                 </mat-option>
               </mat-select>
+              <mat-hint>Depende del modelo de impresora, no solo del ancho en mm</mat-hint>
             </mat-form-field>
 
             <mat-form-field appearance="outline" class="form-field-third">
