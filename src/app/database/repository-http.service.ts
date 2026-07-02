@@ -1513,6 +1513,15 @@ export class RepositoryHttpService extends RepositoryService {
   editGasto(gastoId: number, data: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.editGasto() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  createGastoCaja(data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.createGastoCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getGastosCaja(cajaId: number, incluirAnulados?: boolean): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getGastosCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  anularGastoCaja(gastoId: number, motivo?: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.anularGastoCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   editCajaMayorMovimiento(movId: number, data: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.editCajaMayorMovimiento() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

@@ -41,6 +41,7 @@ import { registerVentasHandlers } from './electron/handlers/ventas.handler';
 import { registerKdsHandlers } from './electron/handlers/kds.handler';
 import { registerRecetasHandlers } from './electron/handlers/recetas.handler';
 import { registerCajaMayorHandlers } from './electron/handlers/caja-mayor.handler';
+import { registerGastosCajaHandlers } from './electron/handlers/gastos-caja.handler';
 import { registerBankingHandlers, startAcreditacionesScheduler } from './electron/handlers/banking.handler';
 import { registerCuentasPorPagarHandlers } from './electron/handlers/cuentas-por-pagar.handler';
 import { registerDashboardShortcutsHandlers } from './electron/handlers/dashboard-shortcuts.handler';
@@ -204,6 +205,7 @@ function initializeDatabase() {
       registerKdsHandlers(dataSource, getCurrentUser); // KDS: comandas en pantalla de cocina (estado por sector)
       registerRecetasHandlers(dataSource, getCurrentUser); // Recetas + Sabores + Variaciones (unificado)
       registerCajaMayorHandlers(dataSource, getCurrentUser); // Caja Mayor + Gastos + Retiros
+      registerGastosCajaHandlers(dataSource, getCurrentUser); // Gastos de la caja de venta (PdV)
       registerBankingHandlers(dataSource, getCurrentUser); // CuentasBancarias + MaquinasPos + Acreditaciones
       registerCuentasPorPagarHandlers(dataSource, getCurrentUser); // CompraCategoria + CompraCuota + CuentaPorPagar
       registerDashboardShortcutsHandlers(dataSource, getCurrentUser); // Dashboard Shortcuts personalizables

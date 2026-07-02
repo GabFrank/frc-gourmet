@@ -1,0 +1,28 @@
+<h2 mat-dialog-title>ÚLTIMAS VENTAS</h2>
+
+<mat-dialog-content class="uv-content">
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+
+  <div *ngIf="!loading && rows.length === 0" class="uv-empty">SIN VENTAS EN ESTA CAJA</div>
+
+  <div class="uv-list" *ngIf="!loading">
+    <button type="button" class="uv-row" *ngFor="let r of rows" (click)="verDetalle(r)">
+      <div class="uv-main">
+        <span class="uv-id">#{{ r.venta.id }}</span>
+        <span class="uv-hora">{{ r.hora | date:'dd/MM HH:mm' }}</span>
+        <span class="uv-fp">{{ r.formaPago }}</span>
+      </div>
+      <div class="uv-side">
+        <span class="uv-total">{{ r.totalFmt }}</span>
+        <span class="uv-estado"
+          [class.uv-concluida]="r.estado === 'CONCLUIDA'"
+          [class.uv-cancelada]="r.estado === 'CANCELADA'"
+          [class.uv-abierta]="r.estado === 'ABIERTA'">{{ r.estado }}</span>
+      </div>
+    </button>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-raised-button (click)="cerrar()">CERRAR</button>
+</mat-dialog-actions>

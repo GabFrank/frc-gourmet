@@ -682,6 +682,9 @@ interface ElectronAPI {
   createGasto: (data: any) => Promise<any>;
   anularGasto: (id: number, motivo: string) => Promise<any>;
   editGasto: (gastoId: number, data: any) => Promise<any>;
+  createGastoCaja: (data: any) => Promise<any>;
+  getGastosCaja: (cajaId: number, incluirAnulados?: boolean) => Promise<any[]>;
+  anularGastoCaja: (gastoId: number, motivo?: string) => Promise<any>;
   editCajaMayorMovimiento: (movId: number, data: any) => Promise<any>;
   getGastosProgramados: () => Promise<any[]>;
   getRetirosCaja: (filtros?: any) => Promise<any[]>;
@@ -3076,6 +3079,15 @@ export class RepositoryIpcService extends RepositoryService {
   }
   anularGasto(id: number, motivo: string): Observable<any> {
     return from(this.api.anularGasto(id, motivo));
+  }
+  createGastoCaja(data: any): Observable<any> {
+    return from(this.api.createGastoCaja(data));
+  }
+  getGastosCaja(cajaId: number, incluirAnulados?: boolean): Observable<any[]> {
+    return from(this.api.getGastosCaja(cajaId, incluirAnulados));
+  }
+  anularGastoCaja(gastoId: number, motivo?: string): Observable<any> {
+    return from(this.api.anularGastoCaja(gastoId, motivo));
   }
   editGasto(gastoId: number, data: any): Observable<any> {
     return from(this.api.editGasto(gastoId, data));

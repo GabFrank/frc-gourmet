@@ -5,6 +5,8 @@ import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { CreateRetiroCajaDialogComponent } from 'src/app/pages/financiero/caja-mayor/retiros/create-retiro-caja-dialog/create-retiro-caja-dialog.component';
+import { UltimasVentasDialogComponent } from '../ultimas-ventas-dialog/ultimas-ventas-dialog.component';
+import { CreateGastoCajaDialogComponent } from '../gasto-caja-dialog/gasto-caja-dialog.component';
 
 interface UtilitarioOption {
   key: string;
@@ -43,24 +45,22 @@ export class UtilitariosDialogComponent implements OnInit {
     {
       key: 'GASTOS',
       titulo: 'Gastos',
-      descripcion: 'Proximamente',
+      descripcion: 'Registrar un gasto pagado con el efectivo de la caja de venta',
       icono: 'receipt_long',
-      color: '#9e9e9e',
-      disabled: true,
+      color: '#c62828',
+    },
+    {
+      key: 'ULTIMAS_VENTAS',
+      titulo: 'Ultimas Ventas',
+      descripcion: 'Ver las últimas ventas de esta caja',
+      icono: 'history',
+      color: '#1565c0',
     },
     {
       key: 'CIERRE_PARCIAL',
       titulo: 'Cierre Parcial',
       descripcion: 'Proximamente',
       icono: 'fact_check',
-      color: '#9e9e9e',
-      disabled: true,
-    },
-    {
-      key: 'ULTIMAS_VENTAS',
-      titulo: 'Ultimas Ventas',
-      descripcion: 'Proximamente',
-      icono: 'history',
       color: '#9e9e9e',
       disabled: true,
     },
@@ -84,6 +84,18 @@ export class UtilitariosDialogComponent implements OnInit {
       this.dialogRef?.close();
       this.dialog.open(CreateRetiroCajaDialogComponent, {
         width: '700px',
+        data: { cajaId: this.cajaId, cajaNombre: this.cajaNombre },
+      });
+    } else if (opt.key === 'GASTOS') {
+      this.dialogRef?.close();
+      this.dialog.open(CreateGastoCajaDialogComponent, {
+        width: '560px',
+        data: { cajaId: this.cajaId, cajaNombre: this.cajaNombre },
+      });
+    } else if (opt.key === 'ULTIMAS_VENTAS') {
+      this.dialogRef?.close();
+      this.dialog.open(UltimasVentasDialogComponent, {
+        width: '560px',
         data: { cajaId: this.cajaId, cajaNombre: this.cajaNombre },
       });
     }

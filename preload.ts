@@ -2748,6 +2748,15 @@ contextBridge.exposeInMainWorld('api', {
   editGasto: async (gastoId: number, data: any): Promise<any> => {
     return await ipcRenderer.invoke('edit-gasto', gastoId, data);
   },
+  createGastoCaja: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-gasto-caja', data);
+  },
+  getGastosCaja: async (cajaId: number, incluirAnulados?: boolean): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-gastos-caja', cajaId, incluirAnulados);
+  },
+  anularGastoCaja: async (gastoId: number, motivo?: string): Promise<any> => {
+    return await ipcRenderer.invoke('anular-gasto-caja', gastoId, motivo);
+  },
   editCajaMayorMovimiento: async (movId: number, data: any): Promise<any> => {
     return await ipcRenderer.invoke('edit-caja-mayor-movimiento', movId, data);
   },

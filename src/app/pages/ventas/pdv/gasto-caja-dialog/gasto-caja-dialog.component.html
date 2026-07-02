@@ -1,0 +1,63 @@
+<h2 mat-dialog-title>REGISTRAR GASTO</h2>
+
+<mat-dialog-content>
+  <p class="gc-sub" *ngIf="cajaNombre">Caja: {{ cajaNombre }}</p>
+
+  <form [formGroup]="form" class="gc-form" (ngSubmit)="guardar()">
+    <mat-form-field appearance="outline" class="gc-full">
+      <mat-label>Categoría (opcional)</mat-label>
+      <mat-select formControlName="gastoCategoriaId">
+        <mat-option [value]="null">— Sin categoría —</mat-option>
+        <mat-option *ngFor="let c of gastoCategorias" [value]="c.id">
+          {{ c.padre ? c.padre.nombre + ' > ' + c.nombre : c.nombre }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="gc-full">
+      <mat-label>Descripción</mat-label>
+      <input matInput formControlName="descripcion" autocapitalize="characters" required />
+      <mat-error *ngIf="form.get('descripcion')?.hasError('required')">La descripción es obligatoria</mat-error>
+    </mat-form-field>
+
+    <div class="gc-row">
+      <mat-form-field appearance="outline" class="gc-monto">
+        <mat-label>Monto</mat-label>
+        <input matInput type="number" formControlName="monto" min="0" required />
+        <mat-error *ngIf="form.get('monto')?.hasError('required')">Ingresá el monto</mat-error>
+        <mat-error *ngIf="form.get('monto')?.hasError('min')">Debe ser mayor a cero</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="gc-moneda">
+        <mat-label>Moneda</mat-label>
+        <mat-select formControlName="monedaId" required>
+          <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    <div class="gc-row">
+      <mat-form-field appearance="outline" class="gc-fp">
+        <mat-label>Forma de pago</mat-label>
+        <mat-select formControlName="formaPagoId" required>
+          <mat-option *ngFor="let f of formasPago" [value]="f.id">{{ f.nombre }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="gc-fecha">
+        <mat-label>Fecha</mat-label>
+        <input matInput [matDatepicker]="picker" formControlName="fecha" required />
+        <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
+        <mat-datepicker #picker></mat-datepicker>
+      </mat-form-field>
+    </div>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancelar()" [disabled]="saving">CANCELAR</button>
+  <button mat-raised-button color="primary" (click)="guardar()" [disabled]="saving || form.invalid">
+    <mat-spinner *ngIf="saving" diameter="18" class="gc-spinner"></mat-spinner>
+    <span *ngIf="!saving">GUARDAR</span>
+  </button>
+</mat-dialog-actions>

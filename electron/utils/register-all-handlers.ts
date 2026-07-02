@@ -24,6 +24,7 @@ import { registerSystemHandlers } from '../handlers/system.handler';
 import { registerVentasHandlers } from '../handlers/ventas.handler';
 import { registerRecetasHandlers } from '../handlers/recetas.handler';
 import { registerCajaMayorHandlers } from '../handlers/caja-mayor.handler';
+import { registerGastosCajaHandlers } from '../handlers/gastos-caja.handler';
 import { registerBankingHandlers } from '../handlers/banking.handler';
 import { registerCuentasPorPagarHandlers } from '../handlers/cuentas-por-pagar.handler';
 import { registerDashboardShortcutsHandlers } from '../handlers/dashboard-shortcuts.handler';
@@ -79,6 +80,7 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerVentasHandlers(dataSource, getCurrentUser);
   registerRecetasHandlers(dataSource, getCurrentUser);
   registerCajaMayorHandlers(dataSource, getCurrentUser);
+  registerGastosCajaHandlers(dataSource, getCurrentUser);
   registerBankingHandlers(dataSource, getCurrentUser);
   registerCuentasPorPagarHandlers(dataSource, getCurrentUser);
   registerDashboardShortcutsHandlers(dataSource, getCurrentUser);
