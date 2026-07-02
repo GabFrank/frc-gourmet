@@ -336,8 +336,10 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         whereConditions.activo = filters.activo;
       }
 
+      // Mayusculiza el término: los strings se guardan en MAYÚSCULAS y en
+      // Postgres LIKE es case-sensitive (sin esto no trae datos en minúsculas).
       if (filters.search && filters.search.trim()) {
-        whereConditions.nombre = Like(`%${filters.search.trim()}%`);
+        whereConditions.nombre = Like(`%${filters.search.trim().toUpperCase()}%`);
       }
 
       // Configurar paginación
@@ -571,7 +573,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       const recetaRepository = dataSource.getRepository(Receta);
       return await recetaRepository.find({
         where: {
-          nombre: Like(`%${nombre}%`),
+          nombre: Like(`%${(nombre || '').toUpperCase()}%`),
           activo: true
         },
         order: { nombre: 'ASC' }
@@ -1291,7 +1293,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       const whereConditions: any = {};
 
       if (filters.search) {
-        whereConditions.nombre = Like(`%${filters.search}%`);
+        whereConditions.nombre = Like(`%${filters.search.toUpperCase()}%`);
       }
 
       if (filters.activo !== null && filters.activo !== undefined) {
