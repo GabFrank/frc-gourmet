@@ -30,7 +30,7 @@ const PRODUCTOS_ITEMS: SectionItem[] = [
   { label: 'Subfamilias', icon: 'account_tree', path: '/productos/subfamilias', enabled: true },
   { label: 'Adicionales', icon: 'add_circle', path: '/productos/adicionales', enabled: true },
   { label: 'Productos', icon: 'restaurant', path: '/productos/lista', enabled: true },
-  { label: 'Recetas', icon: 'menu_book', path: '/productos/recetas', enabled: false },
+  { label: 'Recetas', icon: 'menu_book', path: '/productos/recetas', enabled: true },
   { label: 'Sabores', icon: 'auto_awesome', path: '/productos/sabores', enabled: false },
 ];
 
@@ -238,6 +238,17 @@ export const routes: Routes = [
     path: 'productos/detalle/:id',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/productos/productos/producto-detalle.page').then((m) => m.ProductoDetallePage),
+  },
+  // Recetas: alta/edición full-screen ('nuevo' antes de ':id').
+  {
+    path: 'productos/recetas/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/productos/recetas/receta-edit.page').then((m) => m.RecetaEditPage),
+  },
+  {
+    path: 'productos/recetas/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/productos/recetas/receta-edit.page').then((m) => m.RecetaEditPage),
   },
   {
     path: 'compras/categorias/nuevo',
@@ -511,6 +522,11 @@ export const routes: Routes = [
         path: 'productos/lista',
         data: { title: 'Productos' },
         loadComponent: () => import('./pages/productos/productos/productos-list.page').then((m) => m.ProductosListPage),
+      },
+      {
+        path: 'productos/recetas',
+        data: { title: 'Recetas' },
+        loadComponent: () => import('./pages/productos/recetas/recetas-list.page').then((m) => m.RecetasListPage),
       },
     ],
   },
