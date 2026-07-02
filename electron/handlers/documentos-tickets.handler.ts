@@ -289,7 +289,7 @@ export async function printComandaInternal(
         if (!iid) continue;
         const cant = Number((a as any).cantidad || 1);
         const nom = ((a as any).adicional?.nombre || 'ADICIONAL').toUpperCase();
-        pushMap(adicionalesByItem, iid, cant > 1 ? `AGREGAR ${cant}x ${nom}` : `AGREGAR ${nom}`);
+        pushMap(adicionalesByItem, iid, cant > 1 ? `ADD ${cant}x ${nom}` : `ADD ${nom}`);
       }
 
       const obs = await dataSource.getRepository(VentaItemObservacion).find({
@@ -456,10 +456,10 @@ export async function printComandaInternal(
       if (v.ensambladoDescripcion) {
         lines.push(ticketText(`   ${String(v.ensambladoDescripcion).toUpperCase()}`));
       }
-      // QUITAR — lo más crítico en cocina: se imprime invertido (fondo negro)
-      // y en doble alto para que salte a la vista y no se pase por alto.
+      // QUITAR — lo más crítico en cocina: se imprime invertido (fondo negro).
+      // El video inverso ya destaca por sí solo, sin agrandar la fuente.
       for (const ing of (removidosByItem.get(v.id) || [])) {
-        lines.push(ticketText(`SIN ${ing}`, { bold: true, size: 'tall', invert: true }));
+        lines.push(ticketText(`SIN ${ing}`, { bold: true, invert: true }));
       }
       // CAMBIAR — también destacado, en doble alto.
       for (const c of (cambiosByItem.get(v.id) || [])) {
