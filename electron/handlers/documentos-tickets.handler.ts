@@ -461,9 +461,9 @@ export async function printComandaInternal(
       for (const ing of (removidosByItem.get(v.id) || [])) {
         lines.push(ticketText(`SIN ${ing}`, { bold: true, invert: true }));
       }
-      // CAMBIAR — también destacado, en doble alto.
+      // CAMBIAR — destacado en negrita, tamaño normal.
       for (const c of (cambiosByItem.get(v.id) || [])) {
-        lines.push(ticketText(`CAMBIAR ${c}`, { bold: true, size: 'tall' }));
+        lines.push(ticketText(`CAMBIAR ${c}`, { bold: true }));
       }
       // AGREGAR — en negrita para diferenciar de las observaciones.
       for (const t of (adicionalesByItem.get(v.id) || [])) lines.push(ticketText(`   ${t}`, { bold: true }));
