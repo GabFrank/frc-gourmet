@@ -344,6 +344,107 @@ function feedBottomSafeArea(tp: ThermalPrinter): void {
 }
 
 /**
+ * Construye las líneas de una PRUEBA DE IMPRESIÓN diagnóstica: sirve para
+ * verificar que la impresora esté configurada con la cantidad de columnas
+ * correcta y que los márgenes superior/inferior no recorten el contenido.
+ *
+ * Incluye:
+ *  - Datos de la impresora y columnas configuradas.
+ *  - Una REGLA de caracteres (línea de unidades + decenas) para contar cuántas
+ *    columnas entran realmente. Si la impresora hace wrap, las columnas
+ *    configuradas superan la capacidad real → hay que bajarlas.
+ *  - Muestras de alineación (izq/centro/der) y de tamaños (normal/alto/ancho/
+ *    grande).
+ *  - Una tabla de columnas (igual al comprobante) para verificar la separación.
+ *  - Marcadores de inicio y fin para chequear los márgenes.
+ */
+export function buildTestTicketLines(printer: any): TicketLine[] {
+  const width = printerWidthToChars(printer.width);
+
+  // Regla de caracteres: unidades (1..0 repetido) y decenas (marca cada 10).
+  let units = '';
+  let tens = '';
+  for (let i = 1; i <= width; i++) {
+    units += String(i % 10);
+    tens += (i % 10 === 0) ? String(Math.floor(i / 10) % 10) : ' ';
+  }
+
+  const tech = [printer.type, printer.connectionType].filter(Boolean).join(' / ');
+
+  const lines: TicketLine[] = [
+    ticketText('<< INICIO DEL TICKET >>', { align: 'C' }),
+    ticketSeparador('='),
+    ticketText('PRUEBA DE IMPRESION', { align: 'C', bold: true, size: 'tall' }),
+    ticketText(ticketFmtFechaHora(new Date()), { align: 'C' }),
+    ticketSeparador('='),
+    ticketText(`Impresora: ${(printer.name || '-').toUpperCase()}`),
+    ticketText(`Tecnologia: ${tech || '-'}`),
+    ticketText(`Columnas configuradas: ${width}`, { bold: true }),
+    ticketSeparador('-'),
+    ticketText('REGLA DE CARACTERES', { align: 'C', bold: true }),
+    ticketText('Deben entrar sin cortar ni', { align: 'C' }),
+    ticketText('pasar a otra linea:', { align: 'C' }),
+    ticketText(tens),
+    ticketText(units),
+    ticketText('='.repeat(width)),
+    ticketSeparador('-'),
+    ticketText('ALINEACION', { align: 'C', bold: true }),
+    ticketText('IZQUIERDA', { align: 'L' }),
+    ticketText('CENTRO', { align: 'C' }),
+    ticketText('DERECHA', { align: 'R' }),
+    ticketSeparador('-'),
+    ticketText('TAMANOS', { align: 'C', bold: true }),
+    ticketText('NORMAL'),
+    ticketText('ALTO', { size: 'tall' }),
+    ticketText('ANCHO', { size: 'wide' }),
+    ticketText('GRANDE', { size: 'big' }),
+    ticketSeparador('-'),
+    ticketText('TABLA DE COLUMNAS', { align: 'C', bold: true }),
+  ];
+
+  // Tabla igual a la del comprobante (misma lógica de anchos) para verificar
+  // que CANT / DESCRIPCION / TOTAL queden separados y alineados.
+  const totalW = 12;
+  const cantW = Math.max(5, Math.min(6, Math.floor(width * 0.12)));
+  const descW = width - cantW - totalW;
+  lines.push(ticketColumns([
+    { text: 'CANT', width: cantW, align: 'L' },
+    { text: 'DESCRIPCION', width: descW, align: 'L' },
+    { text: 'TOTAL', width: totalW, align: 'R' },
+  ]));
+  lines.push(ticketSeparador('-'));
+  lines.push(ticketColumns([
+    { text: '2', width: cantW, align: 'L' },
+    { text: 'PRODUCTO DE PRUEBA', width: descW, align: 'L' },
+    { text: '123.456', width: totalW, align: 'R' },
+  ]));
+  lines.push(ticketKv('TOTAL', 'Gs. 123.456', true));
+
+  lines.push(ticketSeparador('='));
+  lines.push(ticketText('Si ves esta linea completa,', { align: 'C' }));
+  lines.push(ticketText('el margen inferior esta OK.', { align: 'C' }));
+  lines.push(ticketText('<< FIN DEL TICKET >>', { align: 'C', bold: true }));
+
+  return lines;
+}
+
+/**
+ * Imprime la prueba diagnóstica en la impresora, pasando por el mismo pipeline
+ * (`printTicketSpec`) que los tickets reales: así valida columnas, tamaños,
+ * corte y safe-area inferior tal como saldrán en producción.
+ */
+export async function printTestTicket(printer: any): Promise<{ ok: boolean; error?: string }> {
+  const width = printerWidthToChars(printer.width);
+  const spec: TicketSpec = {
+    printerWidth: width,
+    lines: buildTestTicketLines(printer),
+    cutAtEnd: true,
+    beepAtEnd: true,
+  };
+  return await printTicketSpec(printer, spec);
+}
+
+/**
  * Imprime un `TicketSpec` en una impresora térmica. Maneja:
  * - Impresoras CUPS (address que empieza con `ticket-`) → fallback texto plano + `lp`.
  * - Impresoras network/USB/bluetooth → comandos ESC/POS vía `node-thermal-printer`.
