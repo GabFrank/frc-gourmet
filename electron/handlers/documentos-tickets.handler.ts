@@ -463,10 +463,8 @@ export async function printComandaInternal(
     }
 
     lines.push(ticketSeparador('='));
-    // Margen/feed al pie antes del corte: además de que el cortante está ~2-3 cm
-    // por encima del cabezal (sin feed se comería las últimas líneas), deja un
-    // margen cómodo para tomar/colgar el ticket.
-    lines.push(ticketBlank(6));
+    // El margen inferior antes del corte lo agrega printTicketSpec de forma
+    // centralizada (BOTTOM_SAFE_FEED) para todos los tickets por igual.
 
     const spec: TicketSpec = { printerWidth: width, lines, cutAtEnd: true };
 
@@ -588,11 +586,18 @@ export async function printVentaTicketInternal(
   const clienteTxt = (venta.cliente as any)?.razon_social || (venta.cliente as any)?.persona?.nombre;
   if (clienteTxt) lines.push(ticketKv('CLIENTE', clienteTxt));
 
+  // Ancho de la columna CANT: mínimo 5 para que "CANT" (4) + la cantidad no
+  // queden pegados a DESCRIPCION (el padding derecho de la celda deja el
+  // espacio). Con anchos chicos (32/40 col) floor(width*0.12) daba 3-4 → sin
+  // separación. TOTAL usa 12 col fijos.
+  const totalW = 12;
+  const cantW = Math.max(5, Math.min(6, Math.floor(width * 0.12)));
+  const descW = width - cantW - totalW;
   lines.push(ticketSeparador('-'));
   lines.push(ticketColumns([
-    { text: 'CANT', width: Math.min(6, Math.floor(width * 0.12)), align: 'L' },
-    { text: 'DESCRIPCION', width: width - Math.min(6, Math.floor(width * 0.12)) - 12, align: 'L' },
-    { text: 'TOTAL', width: 12, align: 'R' },
+    { text: 'CANT', width: cantW, align: 'L' },
+    { text: 'DESCRIPCION', width: descW, align: 'L' },
+    { text: 'TOTAL', width: totalW, align: 'R' },
   ]));
   lines.push(ticketSeparador('-'));
 
@@ -604,9 +609,9 @@ export async function printVentaTicketInternal(
     subtotal += total;
     const nombre = (it.producto?.nombre || 'PRODUCTO').toUpperCase();
     lines.push(ticketColumns([
-      { text: String(qty), width: Math.min(6, Math.floor(width * 0.12)), align: 'L' },
-      { text: nombre, width: width - Math.min(6, Math.floor(width * 0.12)) - 12, align: 'L' },
-      { text: ticketFmtMonto(total), width: 12, align: 'R' },
+      { text: String(qty), width: cantW, align: 'L' },
+      { text: nombre, width: descW, align: 'L' },
+      { text: ticketFmtMonto(total), width: totalW, align: 'R' },
     ]));
   }
 
@@ -1001,7 +1006,7 @@ export async function printPagareCpcTicketInternal(
   lines.push(ticketText('_'.repeat(Math.min(width - 2, 32)), { align: 'C' }));
   lines.push(ticketText(clienteNombre, { align: 'C', bold: true }));
   lines.push(ticketText('FIRMA DEL CLIENTE', { align: 'C' }));
-  lines.push(ticketBlank(2));
+  // El margen inferior antes del corte lo agrega printTicketSpec (BOTTOM_SAFE_FEED).
 
   const res = await printTicketSpec(printer, { printerWidth: width, lines, cutAtEnd: true });
   return res.ok

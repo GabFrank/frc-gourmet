@@ -528,6 +528,16 @@ mat-dialog-actions {
   }
 }
 
+.btn-finalizar-ticket {
+  background-color: #00796b !important;
+  color: #fff !important;
+
+  &:disabled {
+    background-color: #2a2a2a !important;
+    color: #555 !important;
+  }
+}
+
 .btn-parcial {
   background-color: #424242 !important;
   color: rgba(255, 255, 255, 0.8) !important;

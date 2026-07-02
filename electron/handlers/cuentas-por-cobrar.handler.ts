@@ -761,16 +761,20 @@ export function registerCuentasPorCobrarHandlers(
       // El handler `cobrar-venta-credito` no pasa por `updateVenta`, así
       // que el hook de auto-print del ticket no se dispara. Lo invocamos
       // explícitamente acá, igual que el flujo de cobro normal.
+      // El pagaré solo se imprime si el usuario lo pidió explícitamente en el
+      // diálogo de cobro (por defecto NO). El ticket de venta sigue el config.
+      const imprimirPagare = data?.imprimirPagare === true;
       setImmediate(async () => {
         try {
           const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
           if (pdvConfig?.autoImprimirTicketVenta) {
             await printVentaTicketInternal(dataSource, venta.id);
           }
-          // Pagaré siempre — es requerido para venta a crédito. Pequeña
-          // pausa para que el ticket salga primero en la térmica.
-          await new Promise(r => setTimeout(r, 600));
-          await printPagareCpcTicketInternal(dataSource, cpcSaved.id);
+          if (imprimirPagare) {
+            // Pequeña pausa para que el ticket salga primero en la térmica.
+            await new Promise(r => setTimeout(r, 600));
+            await printPagareCpcTicketInternal(dataSource, cpcSaved.id);
+          }
         } catch (e: any) {
           console.warn('[cobrar-venta-credito] auto-print:', e?.message || e);
         }
