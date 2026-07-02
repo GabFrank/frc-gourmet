@@ -33,6 +33,9 @@ import { Printer } from '../../src/app/database/entities/printer.entity';
 import { SectorImpresora, SectorImpresoraRol } from '../../src/app/database/entities/ventas/sector-impresora.entity';
 import { ProductoSector } from '../../src/app/database/entities/productos/producto-sector.entity';
 import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
+import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
+import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
+import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
@@ -545,6 +548,26 @@ async function getSectorNombre(dataSource: DataSource, sectorId: number): Promis
 // PRINT VENTA TICKET
 // ============================================================
 
+/**
+ * Cotización (compraLocal) entre la moneda principal y otra. compraLocal =
+ * cuántos principal vale 1 unidad de la otra moneda. Toma la más reciente
+ * (`cambios` viene ordenado por createdAt DESC). 0 si no hay.
+ */
+function buscarCotizacion(cambios: any[], principal: any, moneda: any): number {
+  if (!principal || !moneda) return 0;
+  const c = (cambios || []).find((x: any) =>
+    (x.monedaOrigen?.id === principal.id && x.monedaDestino?.id === moneda.id) ||
+    (x.monedaOrigen?.id === moneda.id && x.monedaDestino?.id === principal.id));
+  return c ? Number(c.compraLocal || 0) : 0;
+}
+
+/** Convierte un valor expresado en `moneda` a la moneda principal. */
+function convertirAPrincipal(valor: number, moneda: any, principal: any, cambios: any[]): number {
+  if (!moneda || !principal || moneda.id === principal.id) return valor;
+  const rate = buscarCotizacion(cambios, principal, moneda);
+  return rate > 0 ? valor * rate : valor; // 1 moneda = rate principal
+}
+
 export async function printVentaTicketInternal(
   dataSource: DataSource,
   ventaId: number,
@@ -554,7 +577,7 @@ export async function printVentaTicketInternal(
 
   const venta = await dataSource.getRepository(Venta).findOne({
     where: { id: ventaId },
-    relations: ['cliente', 'cliente.persona', 'mesa', 'formaPago', 'dispositivo'],
+    relations: ['cliente', 'cliente.persona', 'mesa', 'formaPago', 'dispositivo', 'pago'],
   });
   if (!venta) {
     return { ok: false, printed: [], errors: [{ message: `Venta ${ventaId} no encontrada` }] };
@@ -579,18 +602,70 @@ export async function printVentaTicketInternal(
   const width = printerWidthToChars(printer.width);
   const headerLines = await ticketHeaderEmpresa(dataSource, width, { showTimbrado: !opts.isPrecuenta });
 
-  const titulo = opts.isPrecuenta ? 'PRE-CUENTA' : 'COMPROBANTE DE VENTA';
-  const lines: TicketLine[] = [
-    ...headerLines,
-    ticketSeparador('='),
-    ticketText(titulo, { align: 'C', bold: true, size: 'tall' }),
-    ticketText(`N° ${ventaId}`, { align: 'C' }),
-    ticketText(ticketFmtFechaHora((venta as any).fechaCierre || new Date()), { align: 'C' }),
-    ticketSeparador('-'),
-  ];
+  // Monedas activas + cotizaciones para mostrar los totales en cada moneda.
+  const monedaRepo = dataSource.getRepository(Moneda);
+  const [principalMoneda, monedasActivas, cambios] = await Promise.all([
+    monedaRepo.findOne({ where: { principal: true } as any }),
+    monedaRepo.find({ where: { activo: true } as any }),
+    dataSource.getRepository(MonedaCambio).find({
+      where: { activo: true } as any,
+      relations: ['monedaOrigen', 'monedaDestino'],
+      order: { createdAt: 'DESC' } as any,
+    }),
+  ]);
 
+  // Totales: bruto (sin descuento) y descuento de nivel ítem.
+  let bruto = 0;
+  let descItems = 0;
+  for (const it of items) {
+    const qty = Number(it.cantidad || 1);
+    const pu = Number(it.precioVentaUnitario || 0) + Number(it.precioAdicionales || 0);
+    bruto += qty * pu;
+    descItems += qty * Number(it.descuentoUnitario || 0);
+  }
+  // Descuentos/aumentos a nivel de pago (ajustes del cobro).
+  let descPago = 0;
+  let aumPago = 0;
+  const pagoId = (venta as any).pago?.id;
+  if (pagoId) {
+    try {
+      const detalles = await dataSource.getRepository(PagoDetalle).find({
+        where: { pago: { id: pagoId } as any, activo: true },
+        relations: ['moneda'],
+      });
+      for (const d of detalles) {
+        const valP = convertirAPrincipal(Number((d as any).valor || 0), (d as any).moneda, principalMoneda, cambios);
+        if ((d as any).tipo === TipoDetalle.DESCUENTO) descPago += valP;
+        else if ((d as any).tipo === TipoDetalle.AUMENTO) aumPago += valP;
+      }
+    } catch (e) {
+      console.warn('[printVentaTicketInternal] no se pudieron cargar ajustes del pago:', e);
+    }
+  }
+  const descuentoTotal = descItems + descPago;
+  const totalPrincipal = Number((venta as any).total) > 0
+    ? Number((venta as any).total)
+    : bruto - descItems - descPago + aumPago;
+
+  const lines: TicketLine[] = [...headerLines];
+
+  // MESA en grande — identifica el pedido de un vistazo (reemplaza el título
+  // "PRE-CUENTA", que era redundante).
   const mesaNro = (venta.mesa as any)?.numero;
-  if (mesaNro) lines.push(ticketKv('MESA', String(mesaNro)));
+  if (mesaNro) {
+    lines.push(ticketSeparador('='));
+    lines.push(ticketText('MESA', { align: 'C' }));
+    lines.push(ticketText(String(mesaNro), { align: 'C', bold: true, size: 'big' }));
+  }
+
+  lines.push(ticketSeparador('='));
+  // El comprobante conserva su título; la pre-cuenta no lo necesita.
+  if (!opts.isPrecuenta) {
+    lines.push(ticketText('COMPROBANTE DE VENTA', { align: 'C', bold: true }));
+  }
+  lines.push(ticketText(`N° ${ventaId}`, { align: 'C' }));
+  lines.push(ticketText(ticketFmtFechaHora((venta as any).fechaCierre || new Date()), { align: 'C' }));
+  lines.push(ticketSeparador('-'));
 
   const clienteTxt = (venta.cliente as any)?.razon_social || (venta.cliente as any)?.persona?.nombre;
   if (clienteTxt) lines.push(ticketKv('CLIENTE', clienteTxt));
@@ -610,12 +685,10 @@ export async function printVentaTicketInternal(
   ]));
   lines.push(ticketSeparador('-'));
 
-  let subtotal = 0;
   for (const it of items) {
     const qty = Number(it.cantidad || 1);
     const precio = Number(it.precioVentaUnitario || 0) + Number(it.precioAdicionales || 0);
     const total = qty * precio - qty * Number(it.descuentoUnitario || 0);
-    subtotal += total;
     const nombre = (it.producto?.nombre || 'PRODUCTO').toUpperCase();
     lines.push(ticketColumns([
       { text: String(qty), width: cantW, align: 'L' },
@@ -625,7 +698,27 @@ export async function printVentaTicketInternal(
   }
 
   lines.push(ticketSeparador('-'));
-  lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(Number(venta.total || subtotal))}`, true));
+  if (descuentoTotal > 0) {
+    lines.push(ticketKv('SUBTOTAL', `Gs. ${ticketFmtMonto(bruto)}`));
+    lines.push(ticketKv('DESCUENTO', `Gs. -${ticketFmtMonto(descuentoTotal)}`));
+  }
+  if (aumPago > 0) lines.push(ticketKv('AUMENTO', `Gs. ${ticketFmtMonto(aumPago)}`));
+  lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(totalPrincipal)}`, true));
+
+  // Totales en las demás monedas configuradas (según cotización vigente).
+  const otrasMonedas = (monedasActivas || []).filter((m: any) => m.id !== (principalMoneda as any)?.id);
+  const totalesMonedaLines: TicketLine[] = [];
+  for (const m of otrasMonedas) {
+    const rate = buscarCotizacion(cambios, principalMoneda, m);
+    if (!rate || rate <= 0) continue;
+    const val = totalPrincipal / rate;
+    const label = String((m as any).denominacion || (m as any).simbolo || '').toUpperCase();
+    totalesMonedaLines.push(ticketKv(`TOTAL ${label}`, ticketFmtMonto(val, Number((m as any).decimales) || 0)));
+  }
+  if (totalesMonedaLines.length) {
+    lines.push(ticketSeparador('-'));
+    lines.push(...totalesMonedaLines);
+  }
 
   if (!opts.isPrecuenta && venta.formaPago) {
     lines.push(ticketKv('FORMA PAGO', (venta.formaPago as any).descripcion || ''));
