@@ -15,6 +15,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { ImprimirPagareDialogComponent } from './imprimir-pagare-dialog.component';
 
 export interface CobrarCreditoDialogData {
   ventaId: number;
@@ -54,6 +55,10 @@ export class CobrarCreditoDialogComponent implements OnInit {
   saldoProyectado = 0;
   excedeLimite = false;
   saldoClass: 'ok' | 'warn' | 'over' = 'ok';
+
+  // Decisión de impresión del pagaré (se pregunta una sola vez, por defecto No).
+  private imprimirPagare = false;
+  private imprimirPagarePreguntado = false;
 
   // Vista previa de cuotas (pre-computado, no funciones en template)
   cuotasPreview: { numero: number; monto: number; vencimiento: Date }[] = [];
@@ -134,6 +139,15 @@ export class CobrarCreditoDialogComponent implements OnInit {
       this.form.markAllAsTouched();
       return;
     }
+    // Preguntar una sola vez si se imprime el pagaré (por defecto No). En el
+    // re-submit con `forzar` no se vuelve a preguntar.
+    if (!this.imprimirPagarePreguntado) {
+      const resp = await firstValueFrom(
+        this.dialog.open(ImprimirPagareDialogComponent, { width: '360px' }).afterClosed()
+      );
+      this.imprimirPagare = resp === true;
+      this.imprimirPagarePreguntado = true;
+    }
     this.saving = true;
     const v = this.form.value;
     const payload: any = {
@@ -145,6 +159,7 @@ export class CobrarCreditoDialogComponent implements OnInit {
       frecuenciaDias: Number(v.frecuenciaDias),
       fechaInicio: this.toIsoDate(v.fechaInicio),
       descripcion: v.descripcion?.trim() || null,
+      imprimirPagare: this.imprimirPagare,
       forzar,
     };
     try {
@@ -166,8 +181,8 @@ export class CobrarCreditoDialogComponent implements OnInit {
         return;
       }
       this.snackBar.open('Venta a crédito registrada', 'Cerrar', { duration: 2500 });
-      // El backend dispara automáticamente la impresión del ticket de venta
-      // y el pagaré (cobrar-venta-credito → auto-print con setImmediate).
+      // El backend imprime el ticket de venta según config y el pagaré solo si
+      // el usuario lo pidió (imprimirPagare) — cobrar-venta-credito.
       this.dialogRef.close({ success: true, ventaId: res?.ventaId, cpcId: res?.cpcId });
     } catch (e: any) {
       console.error('Error cobrarVentaCredito:', e);

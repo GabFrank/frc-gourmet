@@ -332,6 +332,18 @@ async function applyLine(tp: ThermalPrinter, line: TicketLine, width: number): P
 }
 
 /**
+ * Líneas en blanco que se alimentan al pie de TODO ticket antes del corte.
+ * El cortante de las térmicas/matriciales está ~2-3 cm por encima del cabezal,
+ * así que sin este feed las últimas líneas quedan por encima del corte (se
+ * "comen"). Centralizado acá para que aplique a todos los tickets por igual.
+ */
+const BOTTOM_SAFE_FEED = 6;
+
+function feedBottomSafeArea(tp: ThermalPrinter): void {
+  for (let i = 0; i < BOTTOM_SAFE_FEED; i++) tp.newLine();
+}
+
+/**
  * Imprime un `TicketSpec` en una impresora térmica. Maneja:
  * - Impresoras CUPS (address que empieza con `ticket-`) → fallback texto plano + `lp`.
  * - Impresoras network/USB/bluetooth → comandos ESC/POS vía `node-thermal-printer`.
@@ -372,7 +384,10 @@ export async function printTicketSpec(
       for (const line of spec.lines) {
         await applyLine(tp, line, width);
       }
-      if (spec.cutAtEnd !== false) tp.cut({ verticalTabAmount: 0 });
+      if (spec.cutAtEnd !== false) {
+        feedBottomSafeArea(tp);
+        tp.cut({ verticalTabAmount: 0 });
+      }
       if (spec.beepAtEnd) tp.beep();
       const buffer = (tp as any).getBuffer?.() as Buffer | undefined;
       if (!buffer || buffer.length === 0) {
@@ -397,7 +412,10 @@ export async function printTicketSpec(
     for (const line of spec.lines) {
       await applyLine(tp, line, width);
     }
-    if (spec.cutAtEnd !== false) tp.cut({ verticalTabAmount: 0 });
+    if (spec.cutAtEnd !== false) {
+      feedBottomSafeArea(tp);
+      tp.cut({ verticalTabAmount: 0 });
+    }
     if (spec.beepAtEnd) tp.beep();
 
     await tp.execute();
@@ -468,6 +486,11 @@ export function renderTicketToPlainText(spec: TicketSpec): string {
         // omitidos en texto plano
         break;
     }
+  }
+  // Safe area inferior: mismas líneas en blanco que el path ESC/POS, para que
+  // el corte de CUPS/`lp` tampoco recorte el final del ticket.
+  if (spec.cutAtEnd !== false) {
+    for (let i = 0; i < BOTTOM_SAFE_FEED; i++) out.push('');
   }
   return out.join('\n') + '\n';
 }
