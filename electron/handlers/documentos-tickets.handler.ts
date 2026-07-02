@@ -721,7 +721,7 @@ export async function printVentaTicketInternal(
   }
 
   if (!opts.isPrecuenta && venta.formaPago) {
-    lines.push(ticketKv('FORMA PAGO', (venta.formaPago as any).descripcion || ''));
+    lines.push(ticketKv('FORMA PAGO', (venta.formaPago as any).nombre || (venta.formaPago as any).descripcion || ''));
   }
 
   lines.push(ticketBlank());
