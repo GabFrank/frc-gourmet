@@ -339,6 +339,17 @@ async function applyLine(tp: ThermalPrinter, line: TicketLine, width: number): P
  */
 const BOTTOM_SAFE_FEED = 6;
 
+/**
+ * Líneas en blanco al inicio de cada ticket. Sin este margen, la primera línea
+ * (típicamente el nombre de la empresa en doble alto) sale recortada por la
+ * mitad, porque el papel no avanzó lo suficiente cuando arranca el cabezal.
+ */
+const TOP_SAFE_FEED = 2;
+
+function feedTopSafeArea(tp: ThermalPrinter): void {
+  for (let i = 0; i < TOP_SAFE_FEED; i++) tp.newLine();
+}
+
 function feedBottomSafeArea(tp: ThermalPrinter): void {
   for (let i = 0; i < BOTTOM_SAFE_FEED; i++) tp.newLine();
 }
@@ -482,6 +493,7 @@ export async function printTicketSpec(
     // cola compartida de un servidor LPD remoto (típicamente Windows con
     // "Servicios de impresión LPD" habilitado).
     if (printer.connectionType === 'lpr') {
+      feedTopSafeArea(tp);
       for (const line of spec.lines) {
         await applyLine(tp, line, width);
       }
@@ -510,6 +522,7 @@ export async function printTicketSpec(
       return { ok: false, error: `Impresora "${printer.name}" no responde (${printer.address})` };
     }
 
+    feedTopSafeArea(tp);
     for (const line of spec.lines) {
       await applyLine(tp, line, width);
     }
@@ -540,6 +553,9 @@ export async function printTicketSpec(
 export function renderTicketToPlainText(spec: TicketSpec): string {
   const width = spec.printerWidth || 48;
   const out: string[] = [];
+
+  // Safe area superior (mismo criterio que el path ESC/POS).
+  for (let i = 0; i < TOP_SAFE_FEED; i++) out.push('');
 
   for (const line of spec.lines) {
     switch (line.type) {

@@ -28,6 +28,7 @@ export interface VentaRow {
   venta: Venta;
   total: number;
   duracion: string;
+  formaPago: string;
 }
 
 @Component({
@@ -56,7 +57,7 @@ export interface VentaRow {
 })
 export class ListVentasComponent implements OnInit {
   ventaRows: VentaRow[] = [];
-  displayedColumns = ['fecha', 'mesa', 'cajero', 'estado', 'total', 'duracion', 'acciones'];
+  displayedColumns = ['id', 'fecha', 'mesa', 'cajero', 'formaPago', 'estado', 'total', 'duracion', 'acciones'];
 
   // Filtros básicos
   fechaDesde: Date = new Date();
@@ -141,6 +142,7 @@ export class ListVentasComponent implements OnInit {
       venta: v,
       total: this.calcTotal(v),
       duracion: this.calcDuracion(v),
+      formaPago: (v.formaPago as any)?.nombre || '-',
     }));
   }
 
