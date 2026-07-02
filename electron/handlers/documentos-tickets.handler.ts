@@ -270,7 +270,10 @@ export async function printComandaInternal(
   const itemIds = itemsAImprimir.map(i => i.id);
   const adicionalesByItem = new Map<number, string[]>();
   const observacionesByItem = new Map<number, string[]>();
-  const modificacionesByItem = new Map<number, string[]>();
+  // Se separan las remociones (SIN X) de los cambios (CAMBIAR X POR Y) para
+  // darle a cada una el énfasis que corresponde en el ticket de cocina.
+  const removidosByItem = new Map<number, string[]>();
+  const cambiosByItem = new Map<number, string[]>();
   const pushMap = (m: Map<number, string[]>, k: number, v: string) => {
     if (!m.has(k)) m.set(k, []);
     m.get(k)!.push(v);
@@ -286,7 +289,7 @@ export async function printComandaInternal(
         if (!iid) continue;
         const cant = Number((a as any).cantidad || 1);
         const nom = ((a as any).adicional?.nombre || 'ADICIONAL').toUpperCase();
-        pushMap(adicionalesByItem, iid, cant > 1 ? `+ ${cant}x ${nom}` : `+ ${nom}`);
+        pushMap(adicionalesByItem, iid, cant > 1 ? `AGREGAR ${cant}x ${nom}` : `AGREGAR ${nom}`);
       }
 
       const obs = await dataSource.getRepository(VentaItemObservacion).find({
@@ -308,14 +311,12 @@ export async function printComandaInternal(
         const iid = (m as any).ventaItem?.id;
         if (!iid) continue;
         const ing = String((m as any).recetaIngrediente?.ingrediente?.nombre || (m as any).recetaIngrediente?.descripcion || 'INGREDIENTE').toUpperCase();
-        let txt: string;
         if ((m as any).tipoModificacion === 'REMOVIDO') {
-          txt = `SIN ${ing}`;
+          pushMap(removidosByItem, iid, ing);
         } else {
           const rep = String((m as any).ingredienteReemplazo?.nombre || '').toUpperCase();
-          txt = rep ? `CAMBIAR ${ing} -> ${rep}` : `CAMBIAR ${ing}`;
+          pushMap(cambiosByItem, iid, rep ? `${ing} POR ${rep}` : ing);
         }
-        pushMap(modificacionesByItem, iid, `* ${txt}`);
       }
     } catch (e) {
       // Los modificadores son opcionales: si fallan, se imprime la comanda igual.
@@ -455,9 +456,17 @@ export async function printComandaInternal(
       if (v.ensambladoDescripcion) {
         lines.push(ticketText(`   ${String(v.ensambladoDescripcion).toUpperCase()}`));
       }
-      // Opcionales/modificaciones, adicionales y observaciones del ítem.
-      for (const t of (modificacionesByItem.get(v.id) || [])) lines.push(ticketText(`   ${t}`));
-      for (const t of (adicionalesByItem.get(v.id) || [])) lines.push(ticketText(`   ${t}`));
+      // QUITAR — lo más crítico en cocina: se imprime invertido (fondo negro)
+      // y en doble alto para que salte a la vista y no se pase por alto.
+      for (const ing of (removidosByItem.get(v.id) || [])) {
+        lines.push(ticketText(`SIN ${ing}`, { bold: true, size: 'tall', invert: true }));
+      }
+      // CAMBIAR — también destacado, en doble alto.
+      for (const c of (cambiosByItem.get(v.id) || [])) {
+        lines.push(ticketText(`CAMBIAR ${c}`, { bold: true, size: 'tall' }));
+      }
+      // AGREGAR — en negrita para diferenciar de las observaciones.
+      for (const t of (adicionalesByItem.get(v.id) || [])) lines.push(ticketText(`   ${t}`, { bold: true }));
       for (const t of (observacionesByItem.get(v.id) || [])) lines.push(ticketText(`   ${t}`));
       lines.push(ticketBlank());
     }
