@@ -15,6 +15,8 @@ export interface AtajoProductosDialogData {
   atajoItemId: number;
   atajoItemNombre: string;
   gridSize?: number;
+  /** Cantidad inicial propagada desde el input de cantidad del PdV. */
+  cantidad?: number;
 }
 
 @Component({
@@ -47,6 +49,11 @@ export class AtajoProductosDialogComponent implements OnInit {
     private dialog: MatDialog
   ) {
     this.gridSize = data.gridSize || 3;
+    // Propagar la cantidad del PdV como valor inicial (default 1).
+    const cantidadInicial = Number(data.cantidad);
+    if (cantidadInicial && cantidadInicial > 0) {
+      this.cantidadFormControl.setValue(cantidadInicial);
+    }
   }
 
   async ngOnInit(): Promise<void> {
