@@ -129,6 +129,16 @@ export class AuthService {
     }
   }
 
+  /**
+   * Aplica una sesión obtenida por fuera del login con usuario/clave (ej. login
+   * por QR / device grant). Persiste el estado y emite el usuario actual. El
+   * transporte HTTP (api-http) debe recibir sus tokens por separado.
+   */
+  applyExternalSession(user: Usuario, token: string, sessionId: number): void {
+    this.setSession(user, token, sessionId);
+    this.currentUserSubject.next(user);
+  }
+
   // Set up session data after successful login
   private setSession(user: Usuario, token: string, sessionId: number): void {
     this.sessionId = sessionId;

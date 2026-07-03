@@ -1,0 +1,58 @@
+.ad-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;
+  padding: 24px;
+}
+
+.ad-card {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 28px 24px;
+  border-radius: 16px;
+  background: var(--surface, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  text-align: center;
+}
+
+.ad-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.ad-hint {
+  margin: 0;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.7));
+  font-size: 0.92rem;
+}
+
+.ad-scan {
+  min-width: 200px;
+}
+
+.ad-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.ad-ok mat-icon {
+  color: #4caf50;
+  font-size: 44px;
+  width: 44px;
+  height: 44px;
+}
+
+.ad-err mat-icon {
+  color: #f44336;
+  font-size: 44px;
+  width: 44px;
+  height: 44px;
+}

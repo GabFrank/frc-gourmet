@@ -1,0 +1,21 @@
+<div class="ad-wrap">
+  <div class="ad-card">
+    <h1 class="ad-title">Autorizar dispositivo</h1>
+    <p class="ad-hint">Escaneá el código QR que aparece en la TV / pantalla para vincularla con tu usuario.</p>
+
+    <button mat-raised-button color="primary" class="ad-scan" (click)="escanear()" [disabled]="estado === 'aprobando'">
+      <mat-icon>qr_code_scanner</mat-icon>
+      Escanear QR
+    </button>
+
+    <div *ngIf="estado === 'ok'" class="ad-result ad-ok">
+      <mat-icon>check_circle</mat-icon>
+      <p>¡Dispositivo vinculado! Ya podés usarlo.</p>
+    </div>
+
+    <div *ngIf="estado === 'error'" class="ad-result ad-err">
+      <mat-icon>error_outline</mat-icon>
+      <p>{{ mensaje }}</p>
+    </div>
+  </div>
+</div>
