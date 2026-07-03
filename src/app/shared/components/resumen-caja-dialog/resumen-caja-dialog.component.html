@@ -107,7 +107,15 @@
         <h3>RETIROS DE EFECTIVO</h3>
       </div>
       <div class="resumen-card-body">
-        <div class="placeholder-text">SIN RETIROS REGISTRADOS</div>
+        <div class="tile-grid" *ngIf="resumen.retiros?.length">
+          <ng-container *ngFor="let r of resumen.retiros">
+            <div class="tile" *ngFor="let d of r.detalles">
+              <span class="tile-label">Retiro #{{ r.id }}{{ r.responsable ? ' · ' + r.responsable : '' }}</span>
+              <span class="tile-value">{{ d.monedaSimbolo }} {{ d.monto | number:'1.0-2' }}</span>
+            </div>
+          </ng-container>
+        </div>
+        <div *ngIf="!resumen.retiros?.length" class="placeholder-text">SIN RETIROS REGISTRADOS</div>
       </div>
     </div>
 
