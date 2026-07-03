@@ -194,9 +194,22 @@
     min-width: 22px;
     text-align: center;
   }
-  .kds-item-body { display: flex; flex-direction: column; flex: 1 1 auto; }
+  .kds-item-body { display: flex; flex-direction: column; flex: 1 1 auto; gap: 1px; }
   .kds-item-name { font-weight: 600; font-size: 14px; }
   .kds-item-obs { font-size: 12px; color: var(--text-secondary); }
+  // Personalizaciones por ítem (mismo detalle que el ticket de cocina).
+  .kds-item-mod { font-size: 12px; font-weight: 700; line-height: 1.25; }
+  // SIN X (ingrediente removido): lo más importante para cocina → destacado.
+  .kds-mod-sin {
+    color: #ff5252;
+    align-self: flex-start;
+    background: rgba(244, 67, 54, 0.16);
+    padding: 0 4px;
+    border-radius: 3px;
+  }
+  .kds-mod-cambio { color: #ffb300; }
+  .kds-mod-add { color: #4caf50; }
+  .kds-mod-obs { color: var(--text-secondary); font-weight: 600; font-style: italic; }
   .kds-item-state { font-size: 20px; width: 20px; height: 20px; }
 
   &.st-PENDIENTE .kds-item-state { color: var(--text-secondary); }
