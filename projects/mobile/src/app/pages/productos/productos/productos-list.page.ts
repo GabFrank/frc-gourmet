@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatRippleModule } from '@angular/material/core';
+import { PermissionService } from '@frc/shared-core';
 import { AppImagePipe } from '../../../core/pipes/app-image.pipe';
 
 interface ProductoVM {
@@ -38,14 +39,21 @@ interface ProductoVM {
 })
 export class ProductosListPage implements OnInit {
   private readonly router = inject(Router);
+  private readonly perm = inject(PermissionService);
 
   readonly busqueda = new FormControl('', { nonNullable: true });
   items: ProductoVM[] = [];
   loading = true;
   error: string | null = null;
+  canEdit = false;
 
   ngOnInit(): void {
+    this.perm.codigos$.subscribe(() => (this.canEdit = this.perm.has('PRODUCTOS_GESTIONAR')));
     this.cargar();
+  }
+
+  nuevo(): void {
+    this.router.navigate(['/productos/nuevo']);
   }
 
   /** Carga desde el backend filtrando por nombre server-side (no filtro local). */

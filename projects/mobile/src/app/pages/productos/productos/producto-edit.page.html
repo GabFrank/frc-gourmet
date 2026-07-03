@@ -1,0 +1,101 @@
+<div class="crud-edit">
+  <mat-toolbar color="primary" class="crud-edit-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="crud-edit-title">Nuevo producto</span>
+    <span class="crud-spacer"></span>
+    <button mat-button (click)="guardar()" [disabled]="saving">Guardar</button>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
+
+  <form class="crud-form" [formGroup]="form">
+    <h3 class="pe-section">Información general</h3>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Familia</mat-label>
+      <mat-select formControlName="familiaId" (selectionChange)="onFamiliaChange($event.value)">
+        <mat-option *ngFor="let f of familias" [value]="f.id">{{ f.nombre }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.familiaId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Subfamilia</mat-label>
+      <mat-select formControlName="subfamiliaId">
+        <mat-option *ngFor="let s of subfamilias" [value]="s.id">{{ s.nombre }}</mat-option>
+      </mat-select>
+      <mat-hint *ngIf="form.controls.familiaId.value && subfamilias.length === 0">
+        Esta familia no tiene subfamilias
+      </mat-hint>
+      <mat-error *ngIf="form.controls.subfamiliaId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Nombre</mat-label>
+      <input matInput formControlName="nombre" autocapitalize="characters" />
+      <mat-error *ngIf="form.controls.nombre.hasError('required') || form.controls.nombre.hasError('minlength')">
+        Ingresá un nombre
+      </mat-error>
+    </mat-form-field>
+
+    <div class="pe-row">
+      <mat-form-field appearance="outline">
+        <mat-label>Tipo</mat-label>
+        <mat-select formControlName="tipo">
+          <mat-option *ngFor="let t of tipos" [value]="t.value">{{ t.label }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Unidad base</mat-label>
+        <mat-select formControlName="unidadBase">
+          <mat-option *ngFor="let u of unidadesBase" [value]="u">{{ u }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline">
+      <mat-label>IVA</mat-label>
+      <mat-select formControlName="iva">
+        <mat-option *ngFor="let i of ivas" [value]="i">{{ i }}%</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <div class="pe-toggles">
+      <mat-slide-toggle formControlName="activo" color="primary">Activo</mat-slide-toggle>
+      <mat-slide-toggle formControlName="esVendible" color="primary">Vendible</mat-slide-toggle>
+      <mat-slide-toggle formControlName="esComprable" color="primary">Comprable</mat-slide-toggle>
+      <mat-slide-toggle formControlName="controlaStock" color="primary">Controla stock</mat-slide-toggle>
+      <mat-slide-toggle formControlName="esIngrediente" color="primary">Es ingrediente</mat-slide-toggle>
+      <mat-slide-toggle formControlName="requiereComanda" color="primary">Requiere comanda</mat-slide-toggle>
+    </div>
+
+    <h3 class="pe-section">
+      Presentaciones
+      <button mat-icon-button color="primary" type="button" (click)="agregarPresentacion()" aria-label="Agregar presentación">
+        <mat-icon>add_circle</mat-icon>
+      </button>
+    </h3>
+
+    <p class="pe-empty" *ngIf="presentaciones.length === 0">
+      Agregá al menos una presentación con su precio y códigos.
+    </p>
+
+    <mat-card *ngFor="let p of presentaciones; let i = index" class="pe-pres" appearance="outlined">
+      <div class="pe-pres-body">
+        <div class="pe-pres-main" (click)="editarPresentacion(i)">
+          <span class="pe-pres-name">
+            {{ p.nombre }}
+            <mat-icon *ngIf="p.principal" class="pe-star" aria-label="Principal">star</mat-icon>
+          </span>
+          <span class="pe-pres-sub">{{ resumenPresentacion(p) }}</span>
+        </div>
+        <button mat-icon-button (click)="editarPresentacion(i)" aria-label="Editar"><mat-icon>edit</mat-icon></button>
+        <button mat-icon-button color="warn" (click)="quitarPresentacion(i)" aria-label="Quitar"><mat-icon>delete</mat-icon></button>
+      </div>
+    </mat-card>
+
+    <button type="button" mat-flat-button color="primary" class="crud-save-btn" (click)="guardar()" [disabled]="saving">
+      {{ saving ? 'Guardando…' : 'Guardar producto' }}
+    </button>
+  </form>
+</div>
