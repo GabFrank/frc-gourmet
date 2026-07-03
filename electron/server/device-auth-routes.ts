@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto';
 import * as QRCode from 'qrcode';
 import { DeviceAuthCode } from '../../src/app/database/entities/auth/device-auth-code.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { LoginSession } from '../../src/app/database/entities/auth/login-session.entity';
 import { issueRefreshToken } from '../utils/refresh-token.utils';
 
 /**
@@ -100,6 +101,21 @@ export function registerDeviceAuthRoutes(fastify: FastifyInstance, dataSource: D
       userAgent: request.headers['user-agent'] || 'device-qr',
     });
 
+    // LoginSession para audit (igual que el login normal).
+    const sessionRepo = dataSource.getRepository(LoginSession);
+    const session = sessionRepo.create({
+      usuario,
+      ip_address: request.ip,
+      user_agent: request.headers['user-agent'] || 'device-qr',
+      device_info: entity.deviceInfo || '{}',
+      login_time: new Date(),
+      is_active: true,
+      last_activity_time: new Date(),
+      browser: 'QR-DEVICE',
+      os: 'Unknown',
+    });
+    const savedSession = await sessionRepo.save(session);
+
     entity.estado = 'CONSUMED';
     entity.consumedAt = new Date();
     await repo().save(entity);
@@ -109,6 +125,7 @@ export function registerDeviceAuthRoutes(fastify: FastifyInstance, dataSource: D
       accessToken,
       refreshToken: refresh.token,
       refreshTokenExpiresAt: refresh.expiresAt.toISOString(),
+      sessionId: savedSession.id,
       usuario: { id: usuario.id, nickname: usuario.nickname, persona: usuario.persona },
     };
   });

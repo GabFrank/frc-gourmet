@@ -71,6 +71,17 @@ export const routes: Routes = [
     path: 'login',
     loadComponent: () => import('./pages/login/login.page').then((m) => m.LoginPage),
   },
+  // Login por QR — lado del dispositivo (TV/desktop): público, aún sin sesión.
+  {
+    path: 'vincular-dispositivo',
+    loadComponent: () => import('./pages/vincular-dispositivo/vincular-dispositivo.page').then((m) => m.VincularDispositivoPage),
+  },
+  // Login por QR — lado del que autoriza (teléfono ya logueado).
+  {
+    path: 'aprobar-dispositivo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/aprobar-dispositivo/aprobar-dispositivo.page').then((m) => m.AprobarDispositivoPage),
+  },
   // Cambio de contraseña temporal obligatorio (full-screen, con sesión). El
   // authGuard redirige acá mientras el usuario tenga mustChangePassword=true.
   {
