@@ -399,11 +399,18 @@ export class FacturarDialogComponent implements OnInit {
       const config = JSON.parse(plantilla.config!);
       const ctx = this.buildContext(factura);
       const includeBg = String(plantilla.tipo) !== 'PRE_IMPRESO' && !!plantilla.backgroundImageUrl;
+      // Facturas legales (pre-impreso / auto-impreso A4) se emiten SIEMPRE en A4
+      // vertical, aunque el diseno sea "medio A4": asi el SO no rota la hoja a
+      // horizontal al imprimir. Las termicas (80mm) mantienen su tamano de rollo.
+      const forceA4 = String(plantilla.tipo) !== 'AUTO_IMPRESO_TERMICA';
       const dd = buildDocDefinition(
         { anchoMm: Number(plantilla.anchoMm), altoMm: Number(plantilla.altoMm) },
         config,
         ctx,
-        includeBg ? { background: plantilla.backgroundImageUrl, backgroundTransform: config.background } : undefined,
+        {
+          forceA4,
+          ...(includeBg ? { background: plantilla.backgroundImageUrl, backgroundTransform: config.background } : {}),
+        },
       );
       const pdfMake = await loadPdfMake();
       // Abrimos el PDF en el visor (preview + respeta la orientacion del
