@@ -90,6 +90,7 @@ export class FacturarDialogComponent implements OnInit {
       nombreCliente: ['', [Validators.required]],
       ruc: ['', [Validators.required]],
       direccion: [''],
+      telefono: [''],
       email: [''],
       descuento: [0],
       numeroManual: [null],
@@ -188,6 +189,7 @@ export class FacturarDialogComponent implements OnInit {
       nombreCliente: nombre,
       ruc: cliente?.ruc || '',
       direccion: per?.direccion || '',
+      telefono: per?.telefono || '',
       email: per?.email || '',
     });
   }
@@ -293,7 +295,7 @@ export class FacturarDialogComponent implements OnInit {
         fecha: factura?.fecha || new Date(),
         condicionVenta: v.condicionVenta,
       },
-      cliente: { nombre: up(v.nombreCliente), ruc: v.ruc, direccion: up(v.direccion), email: v.email },
+      cliente: { nombre: up(v.nombreCliente), ruc: v.ruc, direccion: up(v.direccion), email: v.email, telefono: v.telefono },
       timbrado: {
         numero: factura?.timbradoDetalle?.timbrado?.numero || '',
         vigencia: '',
@@ -309,10 +311,12 @@ export class FacturarDialogComponent implements OnInit {
         ruc: this.empresa?.ruc || '',
         direccion: up(this.empresa?.direccion || ''),
       },
-      items: this.itemsArray.controls.map((c) => {
+      items: this.itemsArray.controls.map((c, i) => {
         const it = c.value;
         const lineTotal = (Number(it.cantidad) || 0) * (Number(it.precioUnitario) || 0);
         return {
+          // Nº de línea (la columna ID del diseño). Antes no se llenaba → salía vacía.
+          id: i + 1,
           cantidad: Number(it.cantidad) || 0,
           descripcion: up(it.descripcion),
           precioUnitario: Number(it.precioUnitario) || 0,

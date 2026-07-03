@@ -93,7 +93,7 @@ export class FacturaPlantillaDesignerComponent {
   /** Contexto de ejemplo para previsualizar variables en el lienzo. */
   private demoCtx: FacturaRenderContext = {
     factura: { numeroCompleto: '001-001-0000123', fecha: new Date(), condicionVenta: 'CONTADO' },
-    cliente: { nombre: 'JUAN PEREZ', ruc: '1234567-8', direccion: 'AV. SIEMPRE VIVA 123', email: 'cliente@mail.com' },
+    cliente: { nombre: 'JUAN PEREZ', ruc: '1234567-8', direccion: 'AV. SIEMPRE VIVA 123', telefono: '0981 123 456', email: 'cliente@mail.com' },
     timbrado: { numero: '12345678', vigencia: '01/01/2026 - 31/12/2026' },
     totales: { gravada10: 100000, gravada5: 0, exenta: 0, iva10: 9091, iva5: 0, totalIva: 9091, descuento: 0, total: 100000, totalEnLetras: 'CIEN MIL GUARANIES' },
     empresa: { nombre: 'MI EMPRESA S.A.', ruc: '80012345-6', direccion: 'CENTRO, ASUNCIÓN' },
