@@ -29,9 +29,12 @@ export class DeviceAuthCode extends BaseModel {
   @Column({ name: 'expires_at' })
   expiresAt!: Date;
 
+  // Type: `Date` solo. `Date | null` resolvia a "Object" en TypeORM
+  // reflection metadata y rompia migration:run en Postgres (ver refresh-token.entity.ts).
+  // Para nulear en runtime usar cast — la columna ya es `nullable: true`.
   @Column({ name: 'approved_at', nullable: true })
-  approvedAt?: Date | null;
+  approvedAt?: Date;
 
   @Column({ name: 'consumed_at', nullable: true })
-  consumedAt?: Date | null;
+  consumedAt?: Date;
 }
