@@ -25,6 +25,11 @@ interface KdsRow {
   mesaNumero?: number;
   comandaCodigo?: string;
   comandaNumero?: number;
+  // Personalizaciones por ítem (mismo detalle que el ticket de cocina).
+  removidos?: string[];
+  cambios?: string[];
+  adicionales?: string[];
+  observacionesItem?: string[];
 }
 
 interface KdsItem {
@@ -35,6 +40,11 @@ interface KdsItem {
   ensamblado?: string;
   estado: string;
   sectorNombre?: string;
+  // Personalizaciones a mostrar en la card.
+  removidos: string[];
+  cambios: string[];
+  adicionales: string[];
+  observacionesItem: string[];
 }
 
 interface KdsTicket {
@@ -303,6 +313,10 @@ export class KdsComponent implements OnInit, OnDestroy {
         ensamblado: r.ensambladoDescripcion || undefined,
         estado: r.estado,
         sectorNombre: r.sectorNombre,
+        removidos: r.removidos || [],
+        cambios: r.cambios || [],
+        adicionales: r.adicionales || [],
+        observacionesItem: r.observacionesItem || [],
       }));
       const todoListo = items.every(i => i.estado === 'LISTO');
       return {

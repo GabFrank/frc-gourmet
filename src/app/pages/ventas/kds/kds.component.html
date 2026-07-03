@@ -68,6 +68,10 @@
           <span class="kds-item-body">
             <span class="kds-item-name">{{ it.productoNombre }}</span>
             <span class="kds-item-obs" *ngIf="it.ensamblado">{{ it.ensamblado }}</span>
+            <span class="kds-item-mod kds-mod-sin" *ngFor="let x of it.removidos">SIN {{ x }}</span>
+            <span class="kds-item-mod kds-mod-cambio" *ngFor="let x of it.cambios">CAMBIAR {{ x }}</span>
+            <span class="kds-item-mod kds-mod-add" *ngFor="let x of it.adicionales">+ {{ x }}</span>
+            <span class="kds-item-mod kds-mod-obs" *ngFor="let x of it.observacionesItem">&gt;&gt; {{ x }}</span>
             <span class="kds-item-obs" *ngIf="it.observacion">{{ it.observacion }}</span>
           </span>
           <mat-icon class="kds-item-state">
