@@ -18,6 +18,7 @@ import { RepositoryService } from '@frc/shared-core';
 import { ConfirmDialogComponent } from '../../../core/components/confirm-dialog.component';
 import { RecetaIngredienteDialogComponent, RecetaIngredienteResult } from './receta-ingrediente-dialog.component';
 import { VincularProductoDialogComponent, VincularProductoResult } from './vincular-producto-dialog.component';
+import { RecetaPasoDialogComponent, PasoResult } from './receta-paso-dialog.component';
 
 interface ItemVM {
   id: number;
@@ -26,6 +27,13 @@ interface ItemVM {
   costoFmt: string;
   esProducto: boolean;
   raw: any;
+}
+
+interface PasoVM {
+  id: number;
+  orden: number;
+  titulo: string | null;
+  descripcion: string;
 }
 
 const UNIDADES_RENDIMIENTO = ['UNIDADES', 'GRAMOS', 'KILOGRAMOS', 'MILILITROS', 'LITROS', 'PAQUETES'];
@@ -71,6 +79,7 @@ export class RecetaEditPage implements OnInit {
   });
 
   items: ItemVM[] = [];
+  pasos: PasoVM[] = [];
   costoTotalFmt = '0';
   productoVinculado: { id: number; nombre: string } | null = null;
   esNuevo = true;
@@ -102,11 +111,25 @@ export class RecetaEditPage implements OnInit {
         this.productoVinculado = r.producto ? { id: r.producto.id, nombre: r.producto.nombre } : null;
       }
       await this.cargarItems();
+      await this.cargarPasos();
     } catch {
       this.snack.open('No se pudo cargar la receta', 'OK', { duration: 3000 });
     } finally {
       this.loading = false;
     }
+  }
+
+  private async cargarPasos(): Promise<void> {
+    if (this.id == null) return;
+    const data: any[] = await firstValueFrom(this.repo.getRecetaFases(this.id));
+    this.pasos = (data || [])
+      .map((f) => ({
+        id: f.id,
+        orden: f.orden ?? 0,
+        titulo: f.titulo || null,
+        descripcion: f.descripcion || '',
+      }))
+      .sort((a, b) => a.orden - b.orden);
   }
 
   private async cargarItems(): Promise<void> {
@@ -211,6 +234,76 @@ export class RecetaEditPage implements OnInit {
       await this.refrescarCosto();
     } catch (e: any) {
       this.snack.open((e?.message || 'No se pudo eliminar').replace(/^Error:\s*/, ''), 'OK', { duration: 4000 });
+    }
+  }
+
+  // --- Pasos de preparación (fases) ---
+
+  async agregarPaso(): Promise<void> {
+    if (this.id == null) return;
+    const result: PasoResult | undefined = await firstValueFrom(
+      this.dialog.open(RecetaPasoDialogComponent, { data: {}, maxWidth: '95vw' }).afterClosed(),
+    );
+    if (!result) return;
+    try {
+      await firstValueFrom(this.repo.createRecetaFase({
+        recetaId: this.id,
+        orden: this.pasos.length,
+        titulo: result.titulo,
+        descripcion: result.descripcion,
+      }));
+      await this.cargarPasos();
+    } catch (e: any) {
+      this.snack.open((e?.message || 'No se pudo agregar el paso').replace(/^Error:\s*/, ''), 'OK', { duration: 4000 });
+    }
+  }
+
+  async editarPaso(p: PasoVM): Promise<void> {
+    const result: PasoResult | undefined = await firstValueFrom(
+      this.dialog.open(RecetaPasoDialogComponent, {
+        data: { titulo: p.titulo, descripcion: p.descripcion, orden: p.orden },
+        maxWidth: '95vw',
+      }).afterClosed(),
+    );
+    if (!result) return;
+    try {
+      await firstValueFrom(this.repo.updateRecetaFase(p.id, { titulo: result.titulo, descripcion: result.descripcion }));
+      await this.cargarPasos();
+    } catch (e: any) {
+      this.snack.open((e?.message || 'No se pudo actualizar el paso').replace(/^Error:\s*/, ''), 'OK', { duration: 4000 });
+    }
+  }
+
+  async eliminarPaso(p: PasoVM): Promise<void> {
+    const ok = await firstValueFrom(
+      this.dialog.open(ConfirmDialogComponent, {
+        data: { title: 'Eliminar paso', message: '¿Eliminar este paso?', danger: true },
+        width: '320px',
+      }).afterClosed(),
+    );
+    if (!ok) return;
+    try {
+      await firstValueFrom(this.repo.deleteRecetaFase(p.id));
+      await this.cargarPasos();
+    } catch (e: any) {
+      this.snack.open((e?.message || 'No se pudo eliminar el paso').replace(/^Error:\s*/, ''), 'OK', { duration: 4000 });
+    }
+  }
+
+  /** Mueve un paso una posición arriba/abajo y persiste el nuevo orden. */
+  async moverPaso(index: number, delta: number): Promise<void> {
+    if (this.id == null) return;
+    const destino = index + delta;
+    if (destino < 0 || destino >= this.pasos.length) return;
+    const arr = [...this.pasos];
+    [arr[index], arr[destino]] = [arr[destino], arr[index]];
+    this.pasos = arr; // feedback inmediato
+    try {
+      await firstValueFrom(this.repo.reorderRecetaFases(this.id, arr.map((p) => p.id)));
+      await this.cargarPasos();
+    } catch (e: any) {
+      this.snack.open((e?.message || 'No se pudo reordenar').replace(/^Error:\s*/, ''), 'OK', { duration: 4000 });
+      await this.cargarPasos();
     }
   }
 

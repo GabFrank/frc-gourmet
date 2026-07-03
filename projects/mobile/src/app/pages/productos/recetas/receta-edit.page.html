@@ -107,6 +107,40 @@
       </div>
       <p *ngIf="items.length === 0" class="crud-empty">Sin ítems. Agregá el primero.</p>
     </section>
+
+    <!-- Pasos de preparación (fases) -->
+    <section class="re-block">
+      <div class="re-block-head">
+        <h3 class="re-block-title">Pasos de preparación ({{ pasos.length }})</h3>
+        <button mat-flat-button color="primary" (click)="agregarPaso()">
+          <mat-icon>add</mat-icon> Agregar
+        </button>
+      </div>
+
+      <div class="re-paso" *ngFor="let p of pasos; let i = index">
+        <span class="re-paso-num">{{ i + 1 }}</span>
+        <div class="re-paso-main">
+          <span class="re-paso-titulo" *ngIf="p.titulo">{{ p.titulo }}</span>
+          <span class="re-paso-desc">{{ p.descripcion }}</span>
+        </div>
+        <div class="re-paso-orden">
+          <button mat-icon-button (click)="moverPaso(i, -1)" [disabled]="i === 0" aria-label="Subir">
+            <mat-icon>arrow_upward</mat-icon>
+          </button>
+          <button mat-icon-button (click)="moverPaso(i, 1)" [disabled]="i === pasos.length - 1" aria-label="Bajar">
+            <mat-icon>arrow_downward</mat-icon>
+          </button>
+        </div>
+        <button mat-icon-button [matMenuTriggerFor]="pm" aria-label="Acciones">
+          <mat-icon>more_vert</mat-icon>
+        </button>
+        <mat-menu #pm="matMenu">
+          <button mat-menu-item (click)="editarPaso(p)"><mat-icon>edit</mat-icon><span>Editar</span></button>
+          <button mat-menu-item (click)="eliminarPaso(p)"><mat-icon color="warn">delete</mat-icon><span>Eliminar</span></button>
+        </mat-menu>
+      </div>
+      <p *ngIf="pasos.length === 0" class="crud-empty">Sin pasos. Agregá el primero.</p>
+    </section>
   </ng-container>
 
   <p *ngIf="esNuevo" class="re-hint">Guardá la receta para poder agregar ítems y vincular un producto.</p>
