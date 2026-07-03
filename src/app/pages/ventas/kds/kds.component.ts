@@ -170,7 +170,13 @@ export class KdsComponent implements OnInit, OnDestroy {
       this.conectado = true;
       return;
     }
-    // Web: SSE
+    // SSE solo en modo navegador puro con token (?token=...). En el PWA (shim
+    // HTTP) no hay token para el stream → se usa el poll de respaldo (12s), que
+    // ya viaja autenticado por callIpc. Evita reintentos de EventSource sin auth.
+    if (!this.webToken) {
+      this.conectado = false;
+      return;
+    }
     try {
       const secs = this.selectedSectorIds.join(',');
       const url = `${this.webBase}/api/kds/stream?token=${encodeURIComponent(this.webToken)}&sectores=${secs}`;
@@ -202,7 +208,10 @@ export class KdsComponent implements OnInit, OnDestroy {
       body: JSON.stringify({ method, params }),
     });
     if (!res.ok) throw new Error(`RPC ${method} → ${res.status}`);
-    return await res.json();
+    // El router RPC responde `{ result: <valor> }`; hay que desenvolverlo (el
+    // path Electron/callIpc ya devuelve el valor directo).
+    const data = await res.json();
+    return data && Object.prototype.hasOwnProperty.call(data, 'result') ? data.result : data;
   }
 
   setData(_d: any): void { /* hook tab/standalone */ }
