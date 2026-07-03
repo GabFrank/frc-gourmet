@@ -202,7 +202,10 @@ export class KdsComponent implements OnInit, OnDestroy {
       body: JSON.stringify({ method, params }),
     });
     if (!res.ok) throw new Error(`RPC ${method} → ${res.status}`);
-    return await res.json();
+    // El router RPC responde `{ result: <valor> }`; hay que desenvolverlo (el
+    // path Electron/callIpc ya devuelve el valor directo).
+    const data = await res.json();
+    return data && Object.prototype.hasOwnProperty.call(data, 'result') ? data.result : data;
   }
 
   setData(_d: any): void { /* hook tab/standalone */ }
