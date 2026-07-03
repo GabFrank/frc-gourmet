@@ -436,6 +436,43 @@ export class PdvComponent implements OnInit, OnDestroy {
     if (this.mesasRefreshInterval) {
       clearInterval(this.mesasRefreshInterval);
     }
+    if (this.focusBuscadorTimeout) {
+      clearTimeout(this.focusBuscadorTimeout);
+    }
+  }
+
+  private focusBuscadorTimeout: any = null;
+
+  /**
+   * Reenfoca el input de búsqueda de producto tras un pequeño delay.
+   * Se usa al hacer click en una mesa/comanda u otro lugar del PdV, para que el
+   * usuario pueda seguir escaneando/escribiendo productos sin reubicar el foco a mano.
+   * No roba el foco si el usuario está escribiendo en el input de nombre de cliente
+   * (u otro input de texto), ni si hay un diálogo abierto.
+   */
+  private focusBuscadorConDelay(delayMs = 500): void {
+    if (this.focusBuscadorTimeout) {
+      clearTimeout(this.focusBuscadorTimeout);
+    }
+    this.focusBuscadorTimeout = setTimeout(() => {
+      this.focusBuscadorTimeout = null;
+      // No interrumpir la edición del nombre del cliente.
+      if (this.isEditingClienteName) return;
+      // No robar el foco si hay un diálogo abierto (ej. cobro, asociar cliente).
+      if (this.dialog.openDialogs.length > 0) return;
+      const active = document.activeElement as HTMLElement | null;
+      if (active) {
+        const tag = active.tagName;
+        const esInputTexto = tag === 'INPUT' || tag === 'TEXTAREA';
+        const esBuscador = active.getAttribute('formControlName') === 'searchTerm';
+        // Si está escribiendo en otro input (ej. nombre cliente), no interrumpir.
+        if (esInputTexto && !esBuscador) return;
+      }
+      const searchTermInput = document.querySelector('input[formControlName="searchTerm"]');
+      if (searchTermInput) {
+        (searchTermInput as HTMLInputElement).focus();
+      }
+    }, delayMs);
   }
 
   /**
@@ -653,6 +690,9 @@ export class PdvComponent implements OnInit, OnDestroy {
       this.ventaItemsDataSource.data = [];
       this.calculateTotals();
     }
+
+    // Devolver el foco al buscador de productos tras un pequeño delay.
+    this.focusBuscadorConDelay();
   }
 
   private async loadVentaItemsForVenta(ventaId: number): Promise<void> {
@@ -822,7 +862,13 @@ export class PdvComponent implements OnInit, OnDestroy {
       width: '55%',
       height: '70%',
       panelClass: 'atajo-productos-dialog-container',
-      data: { atajoItemId: item.id, atajoItemNombre: item.nombre, gridSize: this.atajosProductosGridSize }
+      data: {
+        atajoItemId: item.id,
+        atajoItemNombre: item.nombre,
+        gridSize: this.atajosProductosGridSize,
+        // Propagar la cantidad actual del buscador al panel de accesos directos.
+        cantidad: Number(this.searchForm.get('cantidad')?.value) || 1,
+      }
     });
 
     dialogRef.afterClosed().subscribe(async (result: any) => {
@@ -2560,6 +2606,9 @@ export class PdvComponent implements OnInit, OnDestroy {
 
     // Load venta items if mesa has a venta
     this.loadVentaItems(mesa);
+
+    // Devolver el foco al buscador de productos tras un pequeño delay.
+    this.focusBuscadorConDelay();
   }
 
   /**

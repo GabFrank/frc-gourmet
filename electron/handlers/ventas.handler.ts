@@ -1609,6 +1609,10 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       .leftJoinAndSelect('mesa.reserva', 'reserva')
       .leftJoinAndSelect('mesa.sector', 'sector')
       .leftJoinAndMapOne('mesa.venta', Venta, 'venta', 'venta.mesa_id = mesa.id AND venta.estado = :ventaEstado AND venta.comanda_id IS NULL', { ventaEstado: VentaEstado.ABIERTA })
+      // Cargar el cliente de la venta (+ persona) para que el auto-refresh de mesas
+      // no pierda el cliente asignado al volver a seleccionar la mesa.
+      .leftJoinAndSelect('venta.cliente', 'ventaCliente')
+      .leftJoinAndSelect('ventaCliente.persona', 'ventaClientePersona')
       .leftJoinAndSelect('mesa.comandas', 'comanda', 'comanda.estado = :comandaEstado AND comanda.activo = :comandaActivo', { comandaEstado: ComandaEstado.OCUPADO, comandaActivo: true })
       .orderBy('mesa.numero', 'ASC');
   };
@@ -2016,6 +2020,9 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         .leftJoinAndSelect('comanda.pdv_mesa', 'pdv_mesa')
         .leftJoinAndSelect('comanda.sector', 'sector')
         .leftJoinAndMapOne('comanda.venta', Venta, 'venta', 'venta.comanda_id = comanda.id AND venta.estado = :ventaEstado', { ventaEstado: VentaEstado.ABIERTA })
+        // Cargar cliente (+ persona) para que el auto-refresh no lo pierda al reseleccionar la comanda.
+        .leftJoinAndSelect('venta.cliente', 'ventaCliente')
+        .leftJoinAndSelect('ventaCliente.persona', 'ventaClientePersona')
         .where('comanda.id = :id', { id: comandaId })
         .getOne();
     } catch (error) {
