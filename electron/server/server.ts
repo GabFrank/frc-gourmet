@@ -24,6 +24,7 @@ import { handlerRegistryCount } from '../utils/handler-registry';
 import { registerSpecialRoutes } from './special-routes';
 import { registerRpcRoute } from './rpc-router';
 import { registerAuthRoutes } from './auth-routes';
+import { registerDeviceAuthRoutes } from './device-auth-routes';
 import { registerFileRoutes } from './file-routes';
 import { registerKdsSseRoutes } from './kds-sse-routes';
 import { registerAuthPlugin } from './auth-middleware';
@@ -100,6 +101,9 @@ async function buildInstance(
 
   // Auth (login + refresh, no requieren JWT previo)
   registerAuthRoutes(fastify, opts.dataSource);
+
+  // Login por QR (device grant): vincular TV KDS / desktop escaneando con el PWA
+  registerDeviceAuthRoutes(fastify, opts.dataSource);
 
   // RPC (requiere JWT — el middleware se aplica via onRequest hook).
   registerRpcRoute(fastify, opts.dataSource);

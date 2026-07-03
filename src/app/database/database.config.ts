@@ -15,6 +15,7 @@ import { Permission } from './entities/personas/permission.entity';
 import { RolePermission } from './entities/personas/role-permission.entity';
 import { LoginSession } from './entities/auth/login-session.entity';
 import { RefreshToken } from './entities/auth/refresh-token.entity';
+import { DeviceAuthCode } from './entities/auth/device-auth-code.entity';
 import { PasswordResetToken } from './entities/auth/password-reset-token.entity';
 import { Adjunto } from './entities/shared/adjunto.entity';
 
@@ -219,6 +220,7 @@ import { AddCuentaBancariaToPagosCobros1779700000000 } from './migrations/177970
 import { AddCotizacionBancariaToPagosCobros1779800000000 } from './migrations/1779800000000-AddCotizacionBancariaToPagosCobros';
 import { AddKdsToComandaItem1780000000000 } from './migrations/1780000000000-AddKdsToComandaItem';
 import { AddGastoCaja1783025751400 } from './migrations/1783025751400-AddGastoCaja';
+import { AddDeviceAuthCodes1783088331915 } from './migrations/1783088331915-AddDeviceAuthCodes';
 import { AddKdsPantalla1780100000000 } from './migrations/1780100000000-AddKdsPantalla';
 import { AddOrigenToRetiroCaja1780200000000 } from './migrations/1780200000000-AddOrigenToRetiroCaja';
 import { AddConteoToCajaMayorMovimiento1780300000000 } from './migrations/1780300000000-AddConteoToCajaMayorMovimiento';
@@ -326,6 +328,7 @@ function getEntitiesList(): any[] {
       RolePermission,
       LoginSession,
       RefreshToken,
+      DeviceAuthCode,
       PasswordResetToken,
       // Shared
       Adjunto,
@@ -563,6 +566,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddFacturacionConfig1782519876542,
     AddTipoToSector1782860367433,
     AddGastoCaja1783025751400,
+    AddDeviceAuthCodes1783088331915,
   ];
 }
 
