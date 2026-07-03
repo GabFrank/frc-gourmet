@@ -29,6 +29,11 @@ export { PermissionService } from '../services/permission.service';
 export { AppModeService } from '../services/app-mode.service';
 export type { AppMode, AppModeDto } from '../services/app-mode.service';
 
+// --- Componentes standalone compartidos ---
+// KDS (pantalla de cocina): reusado por el desktop (tab) y la PWA (ruta /kds
+// para TV). No está acoplado a Electron — usa window.api si existe, sino HTTP.
+export { KdsComponent } from '../pages/ventas/kds/kds.component';
+
 // --- Enums de dominio (valores puros, sin decoradores TypeORM) ---
 export { PersonaTipo } from '../database/entities/personas/persona-tipo.enum';
 

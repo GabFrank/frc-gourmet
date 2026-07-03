@@ -79,6 +79,14 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/cambiar-password/cambiar-password.page').then((m) => m.CambiarPasswordPage),
   },
 
+  // KDS (pantalla de cocina) para TV — full-screen, fuera del shell. El TV se
+  // loguea una vez (usuario de servicio con permiso de ver KDS) y queda andando.
+  {
+    path: 'kds',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/kds/kds.page').then((m) => m.KdsPage),
+  },
+
   // --- Formularios full-screen (fuera del shell) ---
   {
     path: 'ventas/mesas/:id/pedido',
