@@ -253,6 +253,12 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./pages/productos/adicionales/adicional-edit.page').then((m) => m.AdicionalEditPage),
   },
+  // Alta de producto full-screen ('nuevo' antes de 'detalle/:id').
+  {
+    path: 'productos/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/productos/productos/producto-edit.page').then((m) => m.ProductoEditPage),
+  },
   {
     path: 'productos/detalle/:id',
     canActivate: [authGuard],
