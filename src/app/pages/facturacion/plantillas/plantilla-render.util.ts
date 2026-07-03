@@ -13,7 +13,7 @@ export function mmToPt(mm: number): number {
  */
 export interface FacturaRenderContext {
   factura: { numeroCompleto?: string; fecha?: any; condicionVenta?: string };
-  cliente: { nombre?: string; ruc?: string; direccion?: string; email?: string };
+  cliente: { nombre?: string; ruc?: string; direccion?: string; email?: string; telefono?: string };
   timbrado: { numero?: string; vigencia?: string };
   totales: {
     gravada10?: number; gravada5?: number; exenta?: number;
@@ -159,28 +159,40 @@ export function buildDocDefinition(
       const rowH = (config.itemAreaHeightMm && config.itemRows)
         ? mmToPt(Number(config.itemAreaHeightMm) / Number(config.itemRows))
         : mmToPt(Number(config.itemRowHeightMm) || el.rowHeightMm || 6);
-      const width = el.wMm ? mmToPt(el.wMm) : undefined;
+      // Ancho de la celda: 'auto' cuando no hay wMm para que el texto se ajuste
+      // a su contenido en vez de expandirse a todo el ancho de página.
+      const width = el.wMm ? mmToPt(el.wMm) : 'auto';
       const align = el.align || (el.field === 'descripcion' ? 'left' : el.field === 'id' ? 'center' : 'right');
       (ctx.items || []).forEach((it, i) => {
+        // Se envuelve en `columns` con ancho fijo: pdfmake alinea (right/center)
+        // DENTRO de ese ancho. Un nodo `text` suelto con `absolutePosition`
+        // ignora su `width` y alinea contra el ancho de página → las columnas
+        // numéricas se corrían hacia el borde derecho de la hoja.
         content.push({
-          text: itemCellText(el.field, (it as any)[el.field || '']),
+          columns: [{
+            width,
+            text: itemCellText(el.field, (it as any)[el.field || '']),
+            alignment: align,
+            fontSize: el.fontSize || 8,
+          }],
           absolutePosition: { x, y: y + i * rowH },
-          width,
-          alignment: align,
-          fontSize: el.fontSize || 8,
         });
       });
       continue;
     }
 
-    // text / variable
+    // text / variable — mismo envoltorio en `columns` que itemColumn, para que
+    // la alineación (right/center) respete el ancho configurado y no el ancho
+    // de la página.
     content.push({
-      text: elementText(el, ctx),
+      columns: [{
+        width: el.wMm ? mmToPt(el.wMm) : 'auto',
+        text: elementText(el, ctx),
+        fontSize: el.fontSize || 9,
+        bold: !!el.bold,
+        alignment: el.align || 'left',
+      }],
       absolutePosition: { x, y },
-      fontSize: el.fontSize || 9,
-      bold: !!el.bold,
-      alignment: el.align || 'left',
-      width: el.wMm ? mmToPt(el.wMm) : undefined,
     });
   }
 
