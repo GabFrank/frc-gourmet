@@ -378,11 +378,17 @@ export class FacturaPlantillaDesignerComponent {
       const pdfMake = await loadPdfMake();
       // En pre-impreso NO se imprime el fondo (la hoja ya esta impresa); en A4 si.
       const includeBg = String(this.plantilla.tipo) !== 'PRE_IMPRESO' && !!this.plantilla.backgroundImageUrl;
+      // La vista previa refleja la impresion real: facturas no termicas salen en
+      // A4 vertical (ver facturar-dialog / plantilla-render.util).
+      const forceA4 = String(this.plantilla.tipo) !== 'AUTO_IMPRESO_TERMICA';
       const dd = buildDocDefinition(
         { anchoMm: Number(this.plantilla.anchoMm), altoMm: Number(this.plantilla.altoMm) },
         this.config,
         this.demoCtx,
-        includeBg ? { background: this.plantilla.backgroundImageUrl, backgroundTransform: this.config.background } : undefined,
+        {
+          forceA4,
+          ...(includeBg ? { background: this.plantilla.backgroundImageUrl, backgroundTransform: this.config.background } : {}),
+        },
       );
       pdfMake.createPdf(dd).open();
     } catch (error: any) {

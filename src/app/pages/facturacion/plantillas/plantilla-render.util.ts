@@ -79,11 +79,15 @@ function itemCellText(field: string | undefined, raw: any): string {
  * @param opts.background imagen de fondo (base64/dataURL) — usar solo en
  *        auto-impreso A4, NO en pre-impreso (la hoja ya esta impresa).
  */
+// Tamano A4 vertical en mm (ISO 216).
+const A4_ANCHO_MM = 210;
+const A4_ALTO_MM = 297;
+
 export function buildDocDefinition(
   page: { anchoMm: number; altoMm: number },
   config: PlantillaConfig,
   ctx: FacturaRenderContext,
-  opts?: { background?: string; backgroundTransform?: BackgroundTransform },
+  opts?: { background?: string; backgroundTransform?: BackgroundTransform; forceA4?: boolean },
 ): any {
   const content: any[] = [];
 
@@ -180,8 +184,17 @@ export function buildDocDefinition(
     });
   }
 
+  // Con forceA4, el PDF final se genera en A4 vertical sin importar el tamano
+  // configurado en la plantilla. El contenido se mantiene en sus posiciones
+  // absolutas (mm desde arriba-izquierda), asi un diseno "medio A4" queda arriba
+  // y la mitad inferior en blanco. Esto evita que el sistema de impresion del SO
+  // rote la hoja a horizontal para "llenar" el A4 cuando el diseno es mas chico.
+  const pageSize = opts?.forceA4
+    ? { width: mmToPt(A4_ANCHO_MM), height: mmToPt(A4_ALTO_MM) }
+    : { width: mmToPt(page.anchoMm), height: mmToPt(page.altoMm) };
   const dd: any = {
-    pageSize: { width: mmToPt(page.anchoMm), height: mmToPt(page.altoMm) },
+    pageSize,
+    pageOrientation: 'portrait',
     pageMargins: [0, 0, 0, 0],
     content,
     defaultStyle: { fontSize: 9 },
