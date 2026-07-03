@@ -26,6 +26,8 @@ import { Sector } from '../../src/app/database/entities/ventas/sector.entity';
 import { ComandaItem, ComandaItemEstado } from '../../src/app/database/entities/ventas/comanda-item.entity';
 import { ProductoSector } from '../../src/app/database/entities/productos/producto-sector.entity';
 import { GastoCaja } from '../../src/app/database/entities/financiero/gasto-caja.entity';
+import { RetiroCaja } from '../../src/app/database/entities/financiero/retiro-caja.entity';
+import { RetiroCajaOrigen } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { broadcastComandaEvent } from '../utils/comanda-events.utils';
 import { PdvAtajoGrupo } from '../../src/app/database/entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from '../../src/app/database/entities/ventas/pdv-atajo-item.entity';
@@ -673,8 +675,41 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         };
       });
 
-      // Calcular esperado y diferencia. El efectivo de gastos sale del cajón, así
-      // que reduce el esperado en su moneda.
+      // Retiros MANUALES de esta caja. El retiro de CIERRE se genera del propio
+      // conteo (mueve el efectivo contado a caja mayor) y NO debe descontarse del
+      // esperado; solo los manuales, que salieron del cajón durante el turno.
+      const retirosCaja = await dataSource.getRepository(RetiroCaja).find({
+        where: { caja: { id: cajaId } as any, origen: RetiroCajaOrigen.MANUAL as any },
+        relations: ['detalles', 'detalles.moneda', 'detalles.formaPago', 'responsableRetiro', 'responsableRetiro.persona'],
+        order: { fechaRetiro: 'DESC' } as any,
+      });
+      const retirosEfectivoPorMoneda: { [monedaId: number]: number } = {};
+      const retiros = retirosCaja.map(r => {
+        const detalles = (r.detalles || []).map((d: any) => {
+          const monedaId = d.moneda?.id;
+          const monto = Number(d.monto || 0);
+          if (monedaId && d.formaPago?.movimentaCaja) {
+            retirosEfectivoPorMoneda[monedaId] = (retirosEfectivoPorMoneda[monedaId] || 0) + monto;
+          }
+          return {
+            monedaId,
+            monedaSimbolo: d.moneda?.simbolo || '',
+            monedaDenominacion: d.moneda?.denominacion || '',
+            monto,
+          };
+        });
+        return {
+          id: r.id,
+          fecha: r.fechaRetiro,
+          responsable: (r.responsableRetiro as any)?.persona?.nombre || '',
+          observacion: r.observacion || '',
+          estado: r.estado,
+          detalles,
+        };
+      });
+
+      // Calcular esperado y diferencia. Todo lo que salió del cajón (gastos y
+      // retiros manuales en efectivo) reduce el esperado en su moneda.
       const esperadoPorMoneda: { [monedaId: number]: number } = {};
       const diferenciaPorMoneda: { [monedaId: number]: number } = {};
       const allMonedaIds = new Set<number>();
@@ -682,13 +717,15 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       conteoCierre.forEach(c => allMonedaIds.add(c.monedaId));
       Object.keys(efectivoPorMoneda).forEach(k => allMonedaIds.add(Number(k)));
       Object.keys(gastosEfectivoPorMoneda).forEach(k => allMonedaIds.add(Number(k)));
+      Object.keys(retirosEfectivoPorMoneda).forEach(k => allMonedaIds.add(Number(k)));
 
       for (const monedaId of allMonedaIds) {
         const apertura = conteoApertura.find(c => c.monedaId === monedaId)?.total || 0;
         const cierre = conteoCierre.find(c => c.monedaId === monedaId)?.total || 0;
         const efectivo = efectivoPorMoneda[monedaId] || 0;
         const gastoEfectivo = gastosEfectivoPorMoneda[monedaId] || 0;
-        esperadoPorMoneda[monedaId] = apertura + efectivo - gastoEfectivo;
+        const retiroEfectivo = retirosEfectivoPorMoneda[monedaId] || 0;
+        esperadoPorMoneda[monedaId] = apertura + efectivo - gastoEfectivo - retiroEfectivo;
         diferenciaPorMoneda[monedaId] = cierre - esperadoPorMoneda[monedaId];
       }
 
@@ -703,6 +740,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         esperadoPorMoneda,
         diferenciaPorMoneda,
         gastos,
+        retiros,
       };
     } catch (error) {
       console.error(`Error getting resumen caja ${cajaId}:`, error);
