@@ -1,4 +1,4 @@
-<div class="kds-root">
+<div class="kds-root" [class.tv]="tvMode">
   <!-- Barra superior -->
   <header class="kds-header">
     <div class="kds-title">
@@ -26,6 +26,14 @@
     <div class="kds-actions">
       <span class="kds-numpad" *ngIf="numpadBuffer">#{{ numpadBuffer }}</span>
       <mat-slide-toggle [checked]="allDay" (change)="toggleAllDay()" color="primary">All-day</mat-slide-toggle>
+      <button mat-icon-button class="kds-action-btn" (click)="toggleTvMode()"
+              [class.on]="tvMode" [matTooltip]="tvMode ? 'Modo TV activo (texto grande + márgenes)' : 'Modo TV (texto grande + márgenes)'">
+        <mat-icon>{{ tvMode ? 'tv' : 'tv_off' }}</mat-icon>
+      </button>
+      <button mat-icon-button class="kds-action-btn" (click)="toggleFullscreen()"
+              [matTooltip]="isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'">
+        <mat-icon>{{ isFullscreen ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+      </button>
     </div>
   </header>
 

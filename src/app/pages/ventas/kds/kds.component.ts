@@ -96,6 +96,13 @@ export class KdsComponent implements OnInit, OnDestroy {
   conectado = false;
   numpadBuffer = '';
 
+  // Modo TV: escala grande + márgenes seguros (anti-overscan) para leer de lejos.
+  // Persistido en localStorage. Fullscreen aparte (requiere gesto del usuario).
+  tvMode = false;
+  isFullscreen = false;
+  private readonly LS_TV = 'kds.tvMode';
+  private readonly onFsChange = (): void => { this.isFullscreen = !!document.fullscreenElement; };
+
   // Umbrales de semáforo (minutos). Fase 2 los hará configurables por pantalla.
   umbralAmarillo = 5;
   umbralRojo = 10;
@@ -122,6 +129,11 @@ export class KdsComponent implements OnInit, OnDestroy {
   ) {}
 
   async ngOnInit(): Promise<void> {
+    // Modo TV persistido + listener de fullscreen.
+    try { this.tvMode = localStorage.getItem(this.LS_TV) === '1'; } catch { /* no-op */ }
+    this.isFullscreen = !!document.fullscreenElement;
+    document.addEventListener('fullscreenchange', this.onFsChange);
+
     // Modo web: leer token/server de la query o localStorage
     if (this.esWeb) {
       const params = new URLSearchParams(window.location.search);
@@ -170,6 +182,24 @@ export class KdsComponent implements OnInit, OnDestroy {
     if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.tickTimer) clearInterval(this.tickTimer);
     if (this.reloadDebounce) clearTimeout(this.reloadDebounce);
+    document.removeEventListener('fullscreenchange', this.onFsChange);
+  }
+
+  /** Modo TV: escala grande + márgenes seguros para la pantalla de cocina. */
+  toggleTvMode(): void {
+    this.tvMode = !this.tvMode;
+    try { localStorage.setItem(this.LS_TV, this.tvMode ? '1' : '0'); } catch { /* no-op */ }
+  }
+
+  /** Pantalla completa (oculta la barra del navegador en la TV). */
+  toggleFullscreen(): void {
+    try {
+      if (!document.fullscreenElement) {
+        void document.documentElement.requestFullscreen?.();
+      } else {
+        void document.exitFullscreen?.();
+      }
+    } catch { /* no soportado */ }
   }
 
   /** Conecta el canal de tiempo real según el transporte disponible. */
