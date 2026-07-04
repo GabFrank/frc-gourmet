@@ -252,3 +252,45 @@
   }
   .kds-allday-name { font-weight: 600; }
 }
+
+/* ── Botones de acción del header (Modo TV / Fullscreen) ── */
+.kds-action-btn {
+  color: var(--text-secondary);
+  &.on { color: #4caf50; }
+}
+
+/* ── Modo TV: márgenes seguros (anti-overscan) + escala grande ── */
+.kds-root.tv {
+  // La TV suele recortar ~3-5% de cada borde: dejamos un margen seguro para que
+  // el header y el borde derecho no queden cortados.
+  padding: 2.2vh 2.2vw;
+  box-sizing: border-box;
+
+  .kds-title { font-size: 26px; }
+  .kds-title .kds-conn mat-icon { font-size: 24px; width: 24px; height: 24px; }
+  .kds-sector-chip { font-size: 16px; padding: 6px 16px; }
+  .kds-pantalla-select { font-size: 16px; }
+
+  .kds-board {
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 20px;
+  }
+
+  .kds-empty { p { font-size: 26px; } mat-icon { font-size: 72px; width: 72px; height: 72px; } }
+
+  .kds-ticket-num { min-width: 34px; height: 34px; font-size: 20px; }
+  .kds-ticket-ref { font-size: 22px; }
+  .kds-ticket-time { font-size: 19px; mat-icon { font-size: 22px; width: 22px; height: 22px; } }
+
+  .kds-item { padding: 12px; gap: 14px; }
+  .kds-item-qty { font-size: 26px; min-width: 32px; }
+  .kds-item-name { font-size: 21px; }
+  .kds-item-obs { font-size: 16px; }
+  .kds-item-mod { font-size: 17px; }
+  .kds-item-state { font-size: 30px; width: 30px; height: 30px; }
+
+  .kds-bump { font-size: 18px; padding: 12px; mat-icon { font-size: 24px; width: 24px; height: 24px; } }
+
+  .kds-allday-row { font-size: 26px; }
+  .kds-allday-qty { font-size: 34px; min-width: 64px; }
+}
