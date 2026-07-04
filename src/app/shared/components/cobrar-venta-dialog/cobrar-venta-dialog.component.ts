@@ -458,6 +458,26 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     return rate !== 0 ? principalAmount / rate : 0;
   }
 
+  /**
+   * Tolerancia de redondeo (en moneda principal) para dar por cuadrado el cobro.
+   * Es el valor en principal de UNA unidad mínima de la moneda con la que se paga
+   * (ej. 0,01 R$ = 10,9 Gs): como no se puede pagar menos que eso, un residuo por
+   * debajo se considera 0. Se toma el mayor entre las monedas usadas en el cobro.
+   * Sin pagos → 0 (no se tolera nada, sigue exigiendo pagar).
+   */
+  private toleranciaRedondeoPrincipal(): number {
+    const hayPago = this.detalleRows.some(d => d.tipo === TipoDetalle.PAGO);
+    if (!hayPago) return 0;
+    let tol = 0;
+    for (const d of this.detalleRows) {
+      const dec = Number(d.moneda?.decimales) || 0;
+      const rate = this.getExchangeRate(d.moneda.id);
+      const unidadMinimaEnPrincipal = Math.pow(10, -dec) * rate;
+      if (unidadMinimaEnPrincipal > tol) tol = unidadMinimaEnPrincipal;
+    }
+    return tol;
+  }
+
   private updateCurrencyDisplays(): void {
     let totalPagadoPrincipal = 0;
     let totalDescuentoPrincipal = 0;
@@ -479,14 +499,22 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     const totalDeuda = this.totalPrincipal + totalAumentoPrincipal - totalDescuentoPrincipal;
     // Lo que se recibió neto = pagos - vueltos
     const totalRecibidoNeto = totalPagadoPrincipal - totalVueltoPrincipal;
-    // Saldo neto: positivo = falta pagar, negativo = falta dar vuelto.
-    // Se redondea a los decimales de la moneda principal: al pagar en monedas
-    // con decimales/cotización, la conversión a principal deja residuos de punto
-    // flotante (ej. 0.0000001) que dejaban el saldo != 0 y no habilitaban
-    // "Finalizar" aunque el pago fuera exacto.
+
+    // Tolerancia de redondeo por conversión de moneda: al pagar en una moneda con
+    // decimales (ej. Real/Dólar), el monto convertido a la principal casi nunca
+    // cae exacto sobre el total en guaraníes (ej. R$ 50,73 = 55.295,7 → faltan
+    // ~4 Gs). Como no se puede pagar menos de una unidad mínima de esa moneda, se
+    // tolera un residuo menor a esa unidad (0,01 R$ ≈ 10,9 Gs) y se considera
+    // cuadrado — así no hace falta agregar un "aumento" de 2/4/8 Gs a mano.
     const decPrincipal = Number(this.data.principalMoneda?.decimales) || 0;
     const factor = Math.pow(10, decPrincipal);
-    const saldoNeto = Math.round((totalDeuda - totalRecibidoNeto) * factor) / factor;
+    let saldoNeto = totalDeuda - totalRecibidoNeto;
+    const tolerancia = this.toleranciaRedondeoPrincipal();
+    if (Math.abs(saldoNeto) <= tolerancia + 1e-6) {
+      saldoNeto = 0;
+    } else {
+      saldoNeto = Math.round(saldoNeto * factor) / factor;
+    }
 
     this.saldoPrincipal = saldoNeto > 0 ? saldoNeto : 0;
     this.vueltoPrincipal = saldoNeto < 0 ? Math.abs(saldoNeto) : 0;
