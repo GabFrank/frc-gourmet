@@ -1,10 +1,11 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { PermissionService } from '@frc/shared-core';
 import { AppImagePipe } from '../../../core/pipes/app-image.pipe';
 
 interface PrecioVM {
@@ -43,9 +44,13 @@ interface DatoVM {
 export class ProductoDetallePage implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly location = inject(Location);
+  private readonly router = inject(Router);
+  private readonly perm = inject(PermissionService);
 
   loading = true;
   error: string | null = null;
+  canEdit = false;
+  productoId = 0;
 
   nombre = 'Producto';
   tipo = '';
@@ -53,8 +58,14 @@ export class ProductoDetallePage implements OnInit {
   datos: DatoVM[] = [];
   grupos: PrecioGrupoVM[] = [];
 
+  editar(): void {
+    this.router.navigate(['/productos/editar', this.productoId]);
+  }
+
   ngOnInit(): void {
+    this.perm.codigos$.subscribe(() => (this.canEdit = this.perm.has('PRODUCTOS_GESTIONAR')));
     const id = Number(this.route.snapshot.paramMap.get('id'));
+    this.productoId = id;
     const api = (window as any).api;
     if (!api?.callIpc) {
       this.error = 'No disponible';

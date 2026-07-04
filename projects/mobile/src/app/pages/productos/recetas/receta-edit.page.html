@@ -122,6 +122,9 @@
         <div class="re-paso-main">
           <span class="re-paso-titulo" *ngIf="p.titulo">{{ p.titulo }}</span>
           <span class="re-paso-desc">{{ p.descripcion }}</span>
+          <span class="re-paso-items" *ngIf="p.itemIds.length">
+            <mat-icon>list_alt</mat-icon> {{ p.itemIds.length }} ítem(s)
+          </span>
         </div>
         <div class="re-paso-orden">
           <button mat-icon-button (click)="moverPaso(i, -1)" [disabled]="i === 0" aria-label="Subir">

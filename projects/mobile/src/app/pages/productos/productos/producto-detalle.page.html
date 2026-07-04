@@ -2,6 +2,10 @@
   <mat-toolbar color="primary" class="prod-bar">
     <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
     <span class="prod-bar-title">{{ nombre }}</span>
+    <span style="flex:1 1 auto"></span>
+    <button mat-icon-button *ngIf="canEdit && !error" (click)="editar()" aria-label="Editar">
+      <mat-icon>edit</mat-icon>
+    </button>
   </mat-toolbar>
 
   <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>

@@ -18,6 +18,7 @@ import { trigger, transition, style, animate, query, stagger } from '@angular/an
 import { firstValueFrom, Subscription } from 'rxjs';
 import { ForceChangePasswordDialogComponent } from '../force-change-password-dialog/force-change-password-dialog.component';
 import { PasswordRecoveryDialogComponent } from '../password-recovery-dialog/password-recovery-dialog.component';
+import { QrLoginDialogComponent } from '../qr-login-dialog/qr-login-dialog.component';
 
 @Component({
   selector: 'app-login',
@@ -73,6 +74,8 @@ export class LoginComponent implements OnInit, OnDestroy {
   timeGreeting: string;
   rememberMe: boolean = false;
   isDarkTheme = false;
+  // El login por QR solo aplica en modo cliente (hay un server que emite el code).
+  puedeQr = false;
   private themeSub?: Subscription;
 
   constructor(
@@ -104,6 +107,13 @@ export class LoginComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // El login por QR requiere un server (modo cliente).
+    try {
+      this.puedeQr = (window as any).api?.getAppMode?.() === 'client';
+    } catch {
+      this.puedeQr = false;
+    }
+
     // Check if already logged in
     if (this.authService.isLoggedIn) {
       this.router.navigate(['/']);
@@ -127,6 +137,14 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.themeSub?.unsubscribe();
+  }
+
+  /** Abre el diálogo de login por QR; al aprobarse desde el teléfono, entra. */
+  loginConQr(): void {
+    const ref = this.dialog.open(QrLoginDialogComponent, { width: '380px', disableClose: false });
+    ref.afterClosed().subscribe((outcome) => {
+      if (outcome === 'approved') this.router.navigate(['/']);
+    });
   }
 
   openPasswordRecovery(): void {
