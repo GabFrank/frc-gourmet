@@ -5,11 +5,13 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { FormsModule } from '@angular/forms';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '@frc/shared-core';
 import { ConteoFormComponent, ConteoGrupo } from './conteo-form.component';
-import { buildGruposConteo, detallesDeGrupos } from './caja-conteo.util';
+import { buildGruposConteo, detallesDeGrupos, detallesResumidoDeGrupos } from './caja-conteo.util';
 
 interface EsperadoRow {
   denominacion: string;
@@ -27,8 +29,8 @@ interface EsperadoRow {
   selector: 'app-caja-cerrar',
   standalone: true,
   imports: [
-    CommonModule, MatToolbarModule, MatIconModule, MatButtonModule,
-    MatProgressBarModule, MatSnackBarModule, ConteoFormComponent,
+    CommonModule, FormsModule, MatToolbarModule, MatIconModule, MatButtonModule,
+    MatProgressBarModule, MatSlideToggleModule, MatSnackBarModule, ConteoFormComponent,
   ],
   templateUrl: './caja-cerrar.page.html',
   styleUrls: ['./cajas.scss'],
@@ -47,6 +49,8 @@ export class CajaCerrarPage implements OnInit {
 
   grupos: ConteoGrupo[] = [];
   esperados: EsperadoRow[] = [];
+  // Conteo completo (por denominación) por defecto; resumido = total por moneda.
+  resumido = false;
 
   async ngOnInit(): Promise<void> {
     this.cajaId = Number(this.route.snapshot.paramMap.get('id'));
@@ -85,7 +89,7 @@ export class CajaCerrarPage implements OnInit {
         fecha: new Date(),
         observaciones: 'CONTEO DE CIERRE DE CAJA',
       } as any));
-      const detalles = detallesDeGrupos(this.grupos);
+      const detalles = this.resumido ? detallesResumidoDeGrupos(this.grupos) : detallesDeGrupos(this.grupos);
       for (const d of detalles) {
         await firstValueFrom(this.repo.createConteoDetalle({ ...d, conteo: { id: conteo.id } } as any));
       }

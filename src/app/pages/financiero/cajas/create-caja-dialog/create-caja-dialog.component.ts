@@ -4,12 +4,13 @@ import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/materia
 import { MatStepperModule, MatStepper } from '@angular/material/stepper';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
+import { FormBuilder, FormGroup, Validators, ReactiveFormsModule, FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { Dispositivo } from 'src/app/database/entities/financiero/dispositivo.entity';
 import { Moneda } from 'src/app/database/entities/financiero/moneda.entity';
@@ -42,11 +43,13 @@ interface MonedaConfig {
     MatButtonModule,
     MatIconModule,
     ReactiveFormsModule,
+    FormsModule,
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
     MatProgressSpinnerModule,
-    MatTabsModule
+    MatTabsModule,
+    MatSlideToggleModule
   ]
 })
 export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
@@ -79,6 +82,14 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
 
   billeteValuesStore: { [key: string]: number } = {};
   cierreBilleteValuesStore: { [key: string]: number } = {};
+
+  // Conteo resumido: en vez de contar por denominación, se carga un total por
+  // moneda. Por defecto completo. Se persiste como un ConteoDetalle por moneda
+  // con `monto` (cantidad 0, apuntando a un billete portador).
+  conteoResumido = false;
+  cierreResumido = false;
+  resumidoTotals: { [monedaId: number]: number } = {};
+  cierreResumidoTotals: { [monedaId: number]: number } = {};
 
   // Mode of operation
   dialogMode: 'create' | 'conteo' = 'create';
@@ -548,6 +559,15 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   }
 
   updatePropertiesForTemplate(): void {
+    // En modo resumido, el total por moneda es el ingresado directamente.
+    if (this.conteoResumido) {
+      for (const monedaConfig of this.monedasConfig) {
+        const t = Number(this.resumidoTotals[monedaConfig.moneda.id]) || 0;
+        this.currencyTotals[monedaConfig.moneda.id] = t;
+        this.currencyHasValues[monedaConfig.moneda.id] = t > 0;
+      }
+      return;
+    }
     // Pre-calculate all bill values for better performance
     const billeteValues: { [key: number]: number } = {};
 
@@ -580,6 +600,15 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   }
 
   updateCierrePropertiesForTemplate(): void {
+    // En modo resumido, el total por moneda es el ingresado directamente.
+    if (this.cierreResumido) {
+      for (const monedaConfig of this.monedasConfig) {
+        const t = Number(this.cierreResumidoTotals[monedaConfig.moneda.id]) || 0;
+        this.cierreCurrencyTotals[monedaConfig.moneda.id] = t;
+        this.cierreCurrencyHasValues[monedaConfig.moneda.id] = t > 0;
+      }
+      return;
+    }
     // Pre-calculate all bill values for better performance
     const billeteValues: { [key: number]: number } = {};
 
@@ -714,6 +743,50 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
     }
   }
 
+  /**
+   * Arma los observables de creación de ConteoDetalle. En modo resumido, una
+   * fila por moneda con el total en `monto` (cantidad 0, billete portador). En
+   * modo completo, una fila por denominación con cantidad > 0.
+   */
+  private buildConteoDetalleObservables(
+    conteoId: number,
+    resumido: boolean,
+    resumidoTotals: { [monedaId: number]: number },
+    valuesStore: { [key: string]: number },
+    prefix: string,
+  ): Observable<any>[] {
+    const obs: Observable<any>[] = [];
+    this.monedasConfig.forEach(monedaConfig => {
+      if (resumido) {
+        const portador = (monedaConfig.billetes || [])[0];
+        const total = Number(resumidoTotals[monedaConfig.moneda.id]) || 0;
+        if (portador?.id && total > 0) {
+          obs.push(this.repositoryService.createConteoDetalle({
+            conteo: { id: conteoId } as Conteo,
+            monedaBillete: { id: portador.id } as MonedaBillete,
+            cantidad: 0,
+            monto: total,
+            activo: true,
+          } as Partial<ConteoDetalle>));
+        }
+      } else {
+        (monedaConfig.billetes || []).forEach(billete => {
+          if (!billete || !billete.id) return;
+          const cantidad = valuesStore[`${prefix}${billete.id}`] || 0;
+          if (cantidad > 0) {
+            obs.push(this.repositoryService.createConteoDetalle({
+              conteo: { id: conteoId } as Conteo,
+              monedaBillete: { id: billete.id } as MonedaBillete,
+              cantidad,
+              activo: true,
+            } as Partial<ConteoDetalle>));
+          }
+        });
+      }
+    });
+    return obs;
+  }
+
   onSubmit(): void {
     // Sync all form values to stores before submission
     this.syncFormValuesToStores();
@@ -749,35 +822,11 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
 
     this.repositoryService.createConteo(conteoData).subscribe(
       conteo => {
-        // Step 2: Create conteo detalles for each currency and denomination
-        const conteoDetalleObservables: Observable<any>[] = [];
-
-        // For each currency config with values
-        this.monedasConfig.forEach(monedaConfig => {
-          // For each billete with a value > 0
-          if (monedaConfig.billetes) {
-            monedaConfig.billetes.forEach(billete => {
-              if (!billete || !billete.id) return;
-
-              const controlName = `billete_${billete.id}`;
-              const cantidadControl = this.billeteValuesStore[controlName];
-              const cantidad = cantidadControl || 0;
-
-              if (cantidad > 0) {
-                const conteoDetalleData: Partial<ConteoDetalle> = {
-                  conteo: { id: conteo.id } as Conteo,
-                  monedaBillete: { id: billete.id } as MonedaBillete,
-                  cantidad: cantidad,
-                  activo: true
-                };
-
-                conteoDetalleObservables.push(
-                  this.repositoryService.createConteoDetalle(conteoDetalleData)
-                );
-              }
-            });
-          }
-        });
+        // Step 2: Create conteo detalles (completo por denominación o resumido
+        // con un total por moneda).
+        const conteoDetalleObservables: Observable<any>[] = this.buildConteoDetalleObservables(
+          conteo.id!, this.conteoResumido, this.resumidoTotals, this.billeteValuesStore, 'billete_',
+        );
 
         // Process all conteo detalles
         forkJoin(conteoDetalleObservables.length > 0 ? conteoDetalleObservables : [of(null)])
@@ -1209,6 +1258,13 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
     cierreObservable.subscribe(conteoCierre => {
       const conteoCierreId = conteoCierre.id;
 
+      // Cierre resumido (solo al crear un conteo nuevo): un total por moneda.
+      if (this.cierreResumido && !this.existingConteoCierre) {
+        const resumidoObs = this.buildConteoDetalleObservables(
+          conteoCierreId, true, this.cierreResumidoTotals, this.cierreBilleteValuesStore, 'cierre_billete_',
+        );
+        updateObservables.push(...resumidoObs);
+      } else {
       // Now create or update conteo cierre detalles
             this.monedasConfig.forEach(monedaConfig => {
                 monedaConfig.billetes.forEach(billete => {
@@ -1246,6 +1302,7 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
                   }
                 });
       });
+      } // fin del modo completo (cierre)
 
       // If this is a new conteo cierre, update the caja with the conteo cierre ID
       if (!this.existingConteoCierre && this.existingCaja && this.existingCaja.id) {

@@ -567,7 +567,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const conteoApertura: any[] = [];
       if (caja.conteoApertura?.id) {
         const rows = await dbQuery(dataSource, `
-          SELECT mb.moneda_id, m.simbolo, m.denominacion, SUM(cd.cantidad * mb.valor) as total
+          SELECT mb.moneda_id, m.simbolo, m.denominacion, SUM(COALESCE(cd.monto, cd.cantidad * mb.valor)) as total
           FROM conteos_detalles cd
           JOIN monedas_billetes mb ON cd.moneda_billete_id = mb.id
           JOIN monedas m ON mb.moneda_id = m.id
@@ -583,7 +583,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const conteoCierre: any[] = [];
       if (caja.conteoCierre?.id) {
         const rows = await dbQuery(dataSource, `
-          SELECT mb.moneda_id, m.simbolo, m.denominacion, SUM(cd.cantidad * mb.valor) as total
+          SELECT mb.moneda_id, m.simbolo, m.denominacion, SUM(COALESCE(cd.monto, cd.cantidad * mb.valor)) as total
           FROM conteos_detalles cd
           JOIN monedas_billetes mb ON cd.moneda_billete_id = mb.id
           JOIN monedas m ON mb.moneda_id = m.id

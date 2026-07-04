@@ -75,10 +75,18 @@
       </mat-form-field>
     </div>
 
-    <h3>Ítems</h3>
+    <div class="items-head">
+      <h3>Ítems</h3>
+      <mat-slide-toggle color="primary" [checked]="resumido" (change)="onResumidoChange($event.checked)">
+        Resumido
+      </mat-slide-toggle>
+    </div>
+    <p class="resumido-hint" *ngIf="resumido">
+      La factura se emite con un único ítem <strong>CONSUMISION</strong> (IVA 10) por el total.
+    </p>
     <div formArrayName="items" class="items">
       <div class="item-row" *ngFor="let item of itemsArray.controls; let i = index" [formGroupName]="i">
-        <mat-form-field appearance="outline" class="grow">
+        <mat-form-field appearance="outline" class="grow" *ngIf="!resumido">
           <mat-label>Producto (opcional)</mat-label>
           <input matInput formControlName="productoNombre" [matAutocomplete]="auto" #prodInput
                  (input)="buscarProducto(prodInput.value)" placeholder="Buscar para vincular IVA y precio" />
@@ -92,18 +100,18 @@
         </mat-form-field>
         <mat-form-field appearance="outline" class="grow">
           <mat-label>Descripción</mat-label>
-          <input matInput formControlName="descripcion" required />
+          <input matInput formControlName="descripcion" required [readonly]="resumido" />
           <mat-error *ngIf="item.get('descripcion')?.hasError('required')">Requerido</mat-error>
         </mat-form-field>
         <mat-form-field appearance="outline" class="small">
           <mat-label>Cant.</mat-label>
-          <input matInput type="number" formControlName="cantidad" />
+          <input matInput type="number" formControlName="cantidad" [readonly]="resumido" />
         </mat-form-field>
         <mat-form-field appearance="outline" class="medium">
           <mat-label>Precio unit.</mat-label>
-          <input matInput type="number" formControlName="precioUnitario" />
+          <input matInput type="number" formControlName="precioUnitario" [readonly]="resumido" />
         </mat-form-field>
-        <mat-form-field appearance="outline" class="small">
+        <mat-form-field appearance="outline" class="small" *ngIf="!resumido">
           <mat-label>IVA</mat-label>
           <mat-select formControlName="ivaTipo">
             <mat-option [value]="10">10%</mat-option>
@@ -111,15 +119,15 @@
             <mat-option [value]="0">Exenta</mat-option>
           </mat-select>
         </mat-form-field>
-        <button mat-icon-button color="warn" (click)="removeItem(i)" [disabled]="itemsArray.length === 1">
+        <button mat-icon-button color="warn" (click)="removeItem(i)" [disabled]="itemsArray.length === 1" *ngIf="!resumido">
           <mat-icon>delete</mat-icon>
         </button>
       </div>
     </div>
-    <button mat-stroked-button (click)="addItem()"><mat-icon>add</mat-icon> Agregar ítem</button>
+    <button mat-stroked-button (click)="addItem()" *ngIf="!resumido"><mat-icon>add</mat-icon> Agregar ítem</button>
 
     <div class="totales">
-      <div class="row">
+      <div class="row" *ngIf="!resumido">
         <mat-form-field appearance="outline">
           <mat-label>Descuento</mat-label>
           <input matInput type="number" formControlName="descuento" />

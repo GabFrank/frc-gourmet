@@ -8,6 +8,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
@@ -32,6 +33,7 @@ import { montoEnLetras } from '../../../../shared/utils/monto-letras.util';
     MatSelectModule,
     MatAutocompleteModule,
     MatProgressSpinnerModule,
+    MatSlideToggleModule,
     MatSnackBarModule,
     MatDialogModule,
   ],
@@ -238,6 +240,37 @@ export class FacturarDialogComponent implements OnInit {
 
   removeItem(i: number): void {
     this.itemsArray.removeAt(i);
+    this.recalc();
+  }
+
+  // --- Modo resumido ---
+  // Colapsa todos los ítems en uno solo ("CONSUMISION", IVA 10, cant 1) cuyo
+  // valor es el total de la factura. Al desactivar, restaura los ítems normales.
+  resumido = false;
+  private itemsBackup: any[] | null = null;
+  private descuentoBackup = 0;
+
+  onResumidoChange(checked: boolean): void {
+    this.resumido = checked;
+    if (checked) {
+      this.recalc();
+      const totalActual = this.total;
+      this.itemsBackup = this.itemsArray.controls.map((c) => c.getRawValue());
+      this.descuentoBackup = Number(this.form.get('descuento')?.value) || 0;
+      this.itemsArray.clear();
+      this.addItem({ descripcion: 'CONSUMISION', cantidad: 1, precioUnitario: totalActual, ivaTipo: 10 });
+      this.form.get('descuento')?.setValue(0);
+    } else {
+      const backup = this.itemsBackup && this.itemsBackup.length ? this.itemsBackup : null;
+      this.itemsArray.clear();
+      if (backup) {
+        for (const it of backup) this.addItem(it);
+      } else {
+        this.addItem();
+      }
+      this.form.get('descuento')?.setValue(this.descuentoBackup);
+      this.itemsBackup = null;
+    }
     this.recalc();
   }
 

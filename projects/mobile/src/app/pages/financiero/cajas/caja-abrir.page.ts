@@ -6,11 +6,12 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '@frc/shared-core';
 import { ConteoFormComponent, ConteoGrupo } from './conteo-form.component';
-import { buildGruposConteo, detallesDeGrupos } from './caja-conteo.util';
+import { buildGruposConteo, detallesDeGrupos, detallesResumidoDeGrupos } from './caja-conteo.util';
 
 interface TerminalOpt {
   id: number;
@@ -28,7 +29,7 @@ interface TerminalOpt {
   standalone: true,
   imports: [
     CommonModule, FormsModule, MatToolbarModule, MatIconModule, MatButtonModule,
-    MatProgressBarModule, MatSnackBarModule, ConteoFormComponent,
+    MatProgressBarModule, MatSlideToggleModule, MatSnackBarModule, ConteoFormComponent,
   ],
   templateUrl: './caja-abrir.page.html',
   styleUrls: ['./cajas.scss'],
@@ -46,6 +47,8 @@ export class CajaAbrirPage implements OnInit {
   terminales: TerminalOpt[] = [];
   terminalId: number | null = null;
   grupos: ConteoGrupo[] = [];
+  // Conteo completo (por denominación) por defecto; resumido = total por moneda.
+  resumido = false;
 
   async ngOnInit(): Promise<void> {
     this.loading = true;
@@ -90,7 +93,7 @@ export class CajaAbrirPage implements OnInit {
         fecha: new Date(),
         observaciones: 'CONTEO INICIAL DE APERTURA DE CAJA',
       } as any));
-      const detalles = detallesDeGrupos(this.grupos);
+      const detalles = this.resumido ? detallesResumidoDeGrupos(this.grupos) : detallesDeGrupos(this.grupos);
       for (const d of detalles) {
         await firstValueFrom(this.repo.createConteoDetalle({ ...d, conteo: { id: conteo.id } } as any));
       }

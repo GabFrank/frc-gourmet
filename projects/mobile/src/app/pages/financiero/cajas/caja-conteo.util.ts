@@ -36,6 +36,7 @@ export function buildGruposConteo(cajasMonedas: any[], billetes: any[]): ConteoG
       })),
       subtotal: 0,
       subtotalFmt: fmt(0, decimales),
+      total: null,
     });
   }
   return grupos;
@@ -48,6 +49,23 @@ export function detallesDeGrupos(grupos: ConteoGrupo[]): { monedaBillete: { id: 
     for (const b of g.billetes) {
       const cant = Number(b.cantidad) || 0;
       if (cant > 0) out.push({ monedaBillete: { id: b.billeteId }, cantidad: cant, activo: true });
+    }
+  }
+  return out;
+}
+
+/**
+ * Conteo resumido: una fila por moneda con el total directo en `monto`. La fila
+ * apunta a cualquier billete de la moneda (portador, `cantidad = 0`); el backend
+ * agrega con COALESCE(monto, cantidad*valor).
+ */
+export function detallesResumidoDeGrupos(grupos: ConteoGrupo[]): { monedaBillete: { id: number }; cantidad: number; monto: number; activo: boolean }[] {
+  const out: { monedaBillete: { id: number }; cantidad: number; monto: number; activo: boolean }[] = [];
+  for (const g of grupos) {
+    const total = Number(g.total) || 0;
+    const portador = g.billetes[0];
+    if (total > 0 && portador) {
+      out.push({ monedaBillete: { id: portador.billeteId }, cantidad: 0, monto: total, activo: true });
     }
   }
   return out;
