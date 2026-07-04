@@ -479,8 +479,14 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     const totalDeuda = this.totalPrincipal + totalAumentoPrincipal - totalDescuentoPrincipal;
     // Lo que se recibió neto = pagos - vueltos
     const totalRecibidoNeto = totalPagadoPrincipal - totalVueltoPrincipal;
-    // Saldo neto: positivo = falta pagar, negativo = falta dar vuelto
-    const saldoNeto = totalDeuda - totalRecibidoNeto;
+    // Saldo neto: positivo = falta pagar, negativo = falta dar vuelto.
+    // Se redondea a los decimales de la moneda principal: al pagar en monedas
+    // con decimales/cotización, la conversión a principal deja residuos de punto
+    // flotante (ej. 0.0000001) que dejaban el saldo != 0 y no habilitaban
+    // "Finalizar" aunque el pago fuera exacto.
+    const decPrincipal = Number(this.data.principalMoneda?.decimales) || 0;
+    const factor = Math.pow(10, decPrincipal);
+    const saldoNeto = Math.round((totalDeuda - totalRecibidoNeto) * factor) / factor;
 
     this.saldoPrincipal = saldoNeto > 0 ? saldoNeto : 0;
     this.vueltoPrincipal = saldoNeto < 0 ? Math.abs(saldoNeto) : 0;
