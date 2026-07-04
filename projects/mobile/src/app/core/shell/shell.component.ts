@@ -60,6 +60,13 @@ export class ShellComponent implements OnInit {
   );
   readonly user: Usuario | null = this.auth.currentUser;
 
+  // KDS (cocina): destino full-screen fuera del menú de navegación. Se ofrece un
+  // acceso en el menú de usuario para quien pueda verlo (útil en la TV/cocina).
+  readonly canKds$: Observable<boolean> = this.permissions.codigos$.pipe(
+    map((set) => set.has('COMANDAS_KDS_VER') || set.has('VENTAS_PDV')),
+    shareReplay(1),
+  );
+
   readonly isHandset$: Observable<boolean> = this.breakpoints
     .observe('(max-width: 767px)')
     .pipe(map((r) => r.matches), shareReplay(1));

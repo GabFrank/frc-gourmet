@@ -19,6 +19,10 @@
         <mat-icon>qr_code_scanner</mat-icon>
         <span>Autorizar dispositivo (QR)</span>
       </button>
+      <button mat-menu-item routerLink="/kds" *ngIf="canKds$ | async">
+        <mat-icon>ramen_dining</mat-icon>
+        <span>KDS (cocina)</span>
+      </button>
       <button mat-menu-item (click)="logout()">
         <mat-icon>logout</mat-icon>
         <span>Cerrar sesión</span>
