@@ -34,6 +34,7 @@ interface PasoVM {
   orden: number;
   titulo: string | null;
   descripcion: string;
+  itemIds: number[];
 }
 
 const UNIDADES_RENDIMIENTO = ['UNIDADES', 'GRAMOS', 'KILOGRAMOS', 'MILILITROS', 'LITROS', 'PAQUETES'];
@@ -128,6 +129,9 @@ export class RecetaEditPage implements OnInit {
         orden: f.orden ?? 0,
         titulo: f.titulo || null,
         descripcion: f.descripcion || '',
+        itemIds: (f.ingredientes || [])
+          .map((fi: any) => fi.recetaIngrediente?.id)
+          .filter((x: any): x is number => x != null),
       }))
       .sort((a, b) => a.orden - b.orden);
   }
@@ -239,19 +243,30 @@ export class RecetaEditPage implements OnInit {
 
   // --- Pasos de preparación (fases) ---
 
+  /** Opciones de ítems (id + nombre) para vincular a un paso. */
+  private itemOptions(): { id: number; nombre: string }[] {
+    return this.items.map((it) => ({ id: it.id, nombre: it.nombre }));
+  }
+
   async agregarPaso(): Promise<void> {
     if (this.id == null) return;
     const result: PasoResult | undefined = await firstValueFrom(
-      this.dialog.open(RecetaPasoDialogComponent, { data: {}, maxWidth: '95vw' }).afterClosed(),
+      this.dialog.open(RecetaPasoDialogComponent, {
+        data: { items: this.itemOptions() },
+        maxWidth: '95vw',
+      }).afterClosed(),
     );
     if (!result) return;
     try {
-      await firstValueFrom(this.repo.createRecetaFase({
+      const fase: any = await firstValueFrom(this.repo.createRecetaFase({
         recetaId: this.id,
         orden: this.pasos.length,
         titulo: result.titulo,
         descripcion: result.descripcion,
       }));
+      if (fase?.id && result.itemIds.length) {
+        await firstValueFrom(this.repo.setRecetaFaseIngredientes(fase.id, result.itemIds));
+      }
       await this.cargarPasos();
     } catch (e: any) {
       this.snack.open((e?.message || 'No se pudo agregar el paso').replace(/^Error:\s*/, ''), 'OK', { duration: 4000 });
@@ -261,13 +276,14 @@ export class RecetaEditPage implements OnInit {
   async editarPaso(p: PasoVM): Promise<void> {
     const result: PasoResult | undefined = await firstValueFrom(
       this.dialog.open(RecetaPasoDialogComponent, {
-        data: { titulo: p.titulo, descripcion: p.descripcion, orden: p.orden },
+        data: { titulo: p.titulo, descripcion: p.descripcion, orden: p.orden, items: this.itemOptions(), selectedItemIds: p.itemIds },
         maxWidth: '95vw',
       }).afterClosed(),
     );
     if (!result) return;
     try {
       await firstValueFrom(this.repo.updateRecetaFase(p.id, { titulo: result.titulo, descripcion: result.descripcion }));
+      await firstValueFrom(this.repo.setRecetaFaseIngredientes(p.id, result.itemIds));
       await this.cargarPasos();
     } catch (e: any) {
       this.snack.open((e?.message || 'No se pudo actualizar el paso').replace(/^Error:\s*/, ''), 'OK', { duration: 4000 });

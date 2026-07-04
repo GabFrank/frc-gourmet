@@ -68,3 +68,34 @@
     color: var(--text-secondary);
   }
 }
+
+/* Imagen del producto */
+.pe-imagen {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 10px;
+}
+
+.pe-imagen-thumb {
+  flex: 0 0 auto;
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-variant, rgba(127, 127, 127, 0.15));
+  border: 1px solid var(--border-color);
+
+  img { width: 100%; height: 100%; object-fit: cover; }
+  mat-icon { color: var(--text-secondary); font-size: 30px; width: 30px; height: 30px; }
+}
+
+.pe-imagen-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}

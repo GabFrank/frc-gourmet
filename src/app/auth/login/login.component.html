@@ -73,6 +73,12 @@
                 <span *ngIf="!isLoggingIn">Iniciar Sesión</span>
                 <mat-spinner diameter="24" *ngIf="isLoggingIn"></mat-spinner>
               </button>
+
+              <button *ngIf="puedeQr" mat-stroked-button type="button" class="qr-login-button"
+                      (click)="loginConQr()" [disabled]="isLoggingIn">
+                <mat-icon>qr_code_scanner</mat-icon>
+                Ingresar escaneando un QR
+              </button>
             </form>
           </mat-card-content>
 

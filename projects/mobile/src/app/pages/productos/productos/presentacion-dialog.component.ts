@@ -10,14 +10,20 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-/** Código de barra en borrador (aún no persistido). */
+/** Código de barra en borrador. `id` presente = ya existe en la BD (edición). */
 export interface CodigoDraft {
+  id?: number;
   codigo: string;
   principal: boolean;
 }
 
-/** Presentación en borrador: se persiste recién al guardar el producto. */
+/**
+ * Presentación en borrador. En edición trae `id` (presentación existente) y
+ * `precioId` (precio principal existente) para saber si actualizar o crear.
+ */
 export interface PresentacionDraft {
+  id?: number;
+  precioId?: number;
   nombre: string;
   cantidad: number;
   principal: boolean;
@@ -184,11 +190,14 @@ export class PresentacionDialogComponent {
       return;
     }
     const v = this.form.getRawValue();
-    const codigos = this.codigos
-      .map((c) => ({ codigo: c.codigo.trim().toUpperCase(), principal: c.principal }))
+    const codigos: CodigoDraft[] = this.codigos
+      .map((c) => ({ id: c.id, codigo: c.codigo.trim().toUpperCase(), principal: c.principal }))
       .filter((c) => c.codigo.length > 0);
     if (codigos.length && !codigos.some((c) => c.principal)) codigos[0].principal = true;
+    const prev = this.data.presentacion;
     const result: PresentacionDraft = {
+      id: prev?.id,
+      precioId: prev?.precioId,
       nombre: v.nombre.trim().toUpperCase(),
       cantidad: Number(v.cantidad) || 1,
       principal: v.principal,

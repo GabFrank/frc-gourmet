@@ -1231,6 +1231,24 @@ contextBridge.exposeInMainWorld('api', {
     return _originalInvoke('reset-password-with-code', { nickname, codigo, newPassword });
   },
 
+  // Login por QR (Device Authorization Grant) — solo modo cliente: el desktop es
+  // el dispositivo que muestra el QR; un teléfono ya logueado lo escanea y aprueba.
+  // `deviceToken` inyecta los tokens en el estado del preload (igual que `login`)
+  // para que las llamadas /api/rpc posteriores viajen autenticadas.
+  deviceStart: async (): Promise<any> => {
+    if (APP_MODE !== 'client') throw new Error('El login por QR solo está disponible en modo cliente');
+    return httpFetch('/api/auth/device/start', {}, false);
+  },
+  deviceToken: async (deviceCode: string): Promise<any> => {
+    if (APP_MODE !== 'client') throw new Error('El login por QR solo está disponible en modo cliente');
+    const data = await httpFetch('/api/auth/device/token', { deviceCode }, false);
+    if (data?.status === 'approved') {
+      accessToken = data.accessToken;
+      refreshToken = data.refreshToken;
+    }
+    return data;
+  },
+
   // Printer operations
   getPrinters: async (): Promise<PrinterConfig[]> => {
     return await ipcRenderer.invoke('get-printers');

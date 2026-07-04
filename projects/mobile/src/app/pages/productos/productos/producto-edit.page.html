@@ -1,15 +1,29 @@
 <div class="crud-edit">
   <mat-toolbar color="primary" class="crud-edit-bar">
     <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
-    <span class="crud-edit-title">Nuevo producto</span>
+    <span class="crud-edit-title">{{ esNuevo ? 'Nuevo producto' : 'Editar producto' }}</span>
     <span class="crud-spacer"></span>
     <button mat-button (click)="guardar()" [disabled]="saving">Guardar</button>
   </mat-toolbar>
 
-  <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
+  <mat-progress-bar *ngIf="loading || saving || uploadingImage" mode="indeterminate"></mat-progress-bar>
 
   <form class="crud-form" [formGroup]="form">
     <h3 class="pe-section">Información general</h3>
+
+    <div class="pe-imagen">
+      <div class="pe-imagen-thumb">
+        <img *ngIf="imageUrl | appImage as src; else phImg" [src]="src" alt="Imagen del producto" />
+        <ng-template #phImg><mat-icon>photo_camera</mat-icon></ng-template>
+      </div>
+      <div class="pe-imagen-actions">
+        <button type="button" mat-stroked-button (click)="fileInput.click()" [disabled]="uploadingImage">
+          <mat-icon>upload</mat-icon> {{ imageUrl ? 'Cambiar' : 'Subir imagen' }}
+        </button>
+        <button type="button" mat-button color="warn" *ngIf="imageUrl" (click)="quitarImagen()">Quitar</button>
+      </div>
+      <input #fileInput type="file" accept="image/*" hidden (change)="onImageSelected($event)" />
+    </div>
 
     <mat-form-field appearance="outline">
       <mat-label>Familia</mat-label>
