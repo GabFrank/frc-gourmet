@@ -99,12 +99,31 @@ export class CajaCerrarPage implements OnInit {
         conteoCierre: { id: conteo.id },
       } as any));
       this.snack.open('Caja cerrada', 'OK', { duration: 2500 });
+      // Auto-imprimir el ticket de cierre (no bloquea el flujo si falla).
+      this.imprimirTicketCierre();
       await this.router.navigateByUrl('/financiero/cajas');
     } catch (e: any) {
       const msg = (e?.message || 'No se pudo cerrar la caja').replace(/^Error:\s*/, '');
       this.snack.open(msg, 'CERRAR', { duration: 6000 });
       this.saving = false;
     }
+  }
+
+  /**
+   * Imprime el ticket de cierre vía el server (callIpc → /api/rpc). No bloquea
+   * la navegación; si no hay impresora o falla, solo lo registra.
+   */
+  private imprimirTicketCierre(): void {
+    const api = (window as unknown as { api?: { callIpc?: (c: string, ...a: any[]) => Promise<any> } }).api;
+    if (!api?.callIpc) return;
+    Promise.resolve(api.callIpc('print-cierre-caja', { cajaId: this.cajaId }))
+      .then((res: any) => {
+        if (!res?.ok) {
+          const msg = res?.errors?.[0]?.message || 'No se pudo imprimir el ticket de cierre';
+          this.snack.open(msg, 'CERRAR', { duration: 4000 });
+        }
+      })
+      .catch((e: any) => console.error('Error imprimiendo ticket de cierre:', e));
   }
 
   volver(): void {

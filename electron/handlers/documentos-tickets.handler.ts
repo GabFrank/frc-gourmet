@@ -47,6 +47,7 @@ import {
   printTicketSpec, printerWidthToChars, monedaSimboloAscii,
 } from '../utils/ticket.utils';
 import { broadcastPrinterEvent, PrinterEventPayload } from '../utils/printer-events.utils';
+import { computeResumenCaja } from '../utils/resumen-caja.utils';
 
 type GetCurrentUser = () => Usuario | null;
 
@@ -1023,6 +1024,19 @@ export function registerDocumentosTicketsHandlers(
       ? { ok: true, printed: [{ itemId: params.conteoId, sectorId: null, printerId: printer.id, printerName: printer.name }], errors: [] }
       : { ok: false, printed: [], errors: [{ printerId: printer.id, message: res.error || 'Error' }] };
   });
+
+  // ─── CIERRE DE CAJA (reporte completo del turno) ────────────────────────
+  ipcMain.handle('print-cierre-caja', async (_event, params: {
+    cajaId: number;
+    printerId?: number;
+  }) => {
+    await ensurePermission(dataSource, getCurrentUser, ['FINANCIERO_CAJA_VER', 'DOCUMENTOS_IMPRIMIR_TICKET']);
+    const dispositivoId = resolveRequestDeviceId(_event) ?? undefined;
+    return await printCierreCajaInternal(dataSource, params.cajaId, {
+      printerId: params.printerId,
+      dispositivoId,
+    });
+  });
 }
 
 // ============================================================
@@ -1141,5 +1155,185 @@ async function printReciboGenericoInternal(
   const res = await printTicketSpec(printer, { printerWidth: width, lines });
   return res.ok
     ? { ok: true, printed: [{ itemId: 0, sectorId: null, printerId: printer.id, printerName: printer.name }], errors: [] }
+    : { ok: false, printed: [], errors: [{ printerId: printer.id, message: res.error || 'Error' }] };
+}
+
+// ============================================================
+// CIERRE DE CAJA (reporte completo del turno)
+// ============================================================
+
+/** Formatea "Xh Ym" a partir de dos fechas (apertura → cierre). */
+function formatDuracion(desde?: Date | string | null, hasta?: Date | string | null): string {
+  if (!desde) return '—';
+  const d1 = typeof desde === 'string' ? new Date(desde) : desde;
+  const d2 = hasta ? (typeof hasta === 'string' ? new Date(hasta) : hasta) : new Date();
+  const ms = d2.getTime() - d1.getTime();
+  if (!isFinite(ms) || ms < 0) return '—';
+  const totalMin = Math.floor(ms / 60000);
+  const dias = Math.floor(totalMin / 1440);
+  const horas = Math.floor((totalMin % 1440) / 60);
+  const mins = totalMin % 60;
+  const parts: string[] = [];
+  if (dias > 0) parts.push(`${dias}d`);
+  parts.push(`${horas}h`);
+  parts.push(`${mins}m`);
+  return parts.join(' ');
+}
+
+/**
+ * Imprime el TICKET DE CIERRE DE CAJA: reporte completo del turno con datos de
+ * la caja, ventas por forma de pago, gastos, retiros, descuentos/aumentos y el
+ * arqueo (apertura, cierre, esperado y diferencia por moneda).
+ *
+ * Reusable como función (auto-print al cerrar la caja) sin chequeo de permisos.
+ */
+export async function printCierreCajaInternal(
+  dataSource: DataSource,
+  cajaId: number,
+  opts: { printerId?: number; dispositivoId?: number } = {},
+): Promise<ImpresionResultado> {
+  let resumen;
+  try {
+    resumen = await computeResumenCaja(dataSource, cajaId);
+  } catch (e: any) {
+    return { ok: false, printed: [], errors: [{ message: e?.message || `No se pudo calcular el resumen de la caja ${cajaId}` }] };
+  }
+
+  const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, {
+    printerId: opts.printerId,
+    dispositivoId: opts.dispositivoId,
+  });
+  if (!printer) return { ok: false, printed: [], errors: [{ message: 'Sin impresora' }] };
+  const width = printerWidthToChars(printer.width);
+
+  // Mapa moneda → { decimales, simbolo ASCII } para formateo correcto por moneda.
+  const monedas = await dataSource.getRepository(Moneda).find();
+  const monedaInfo: { [id: number]: { decimales: number; simbolo: string } } = {};
+  for (const m of monedas) {
+    monedaInfo[m.id] = { decimales: Number((m as any).decimales) || 0, simbolo: monedaSimboloAscii(m) };
+  }
+  const fmtMoneda = (monedaId: number, monto: number): string => {
+    const info = monedaInfo[monedaId] || { decimales: 0, simbolo: '' };
+    return `${info.simbolo} ${ticketFmtMonto(monto, info.decimales)}`.trim();
+  };
+
+  const caja = resumen.caja as any;
+  const cajero = caja?.createdBy?.persona?.nombre
+    || caja?.createdBy?.nickname
+    || caja?.createdBy?.usuario
+    || '—';
+  const dispositivo = caja?.dispositivo?.nombre || '—';
+
+  const headerLines = await ticketHeaderEmpresa(dataSource, width);
+  const lines: TicketLine[] = [
+    ...headerLines,
+    ticketSeparador('='),
+    ticketText('CIERRE DE CAJA', { align: 'C', bold: true, size: 'tall' }),
+    ticketText(ticketFmtFechaHora(new Date()), { align: 'C' }),
+    ticketSeparador('='),
+    ticketKv('CAJA N°', String(caja?.id ?? cajaId)),
+    ticketKv('DISPOSITIVO', String(dispositivo).toUpperCase()),
+    ticketKv('CAJERO', String(cajero).toUpperCase()),
+    ticketKv('APERTURA', ticketFmtFechaHora(caja?.fechaApertura)),
+    ticketKv('CIERRE', ticketFmtFechaHora(caja?.fechaCierre)),
+    ticketKv('TIEMPO ABIERTO', formatDuracion(caja?.fechaApertura, caja?.fechaCierre)),
+    ticketKv('N° VENTAS', String(resumen.cantidadVentas)),
+  ];
+
+  // ── Ventas por forma de pago ──────────────────────────────
+  lines.push(ticketSeparador('-'));
+  lines.push(ticketText('VENTAS POR FORMA DE PAGO', { align: 'C', bold: true }));
+  if (resumen.ventasPorFormaPago.length === 0) {
+    lines.push(ticketText('Sin ventas', { align: 'C' }));
+  } else {
+    for (const fp of resumen.ventasPorFormaPago) {
+      lines.push(ticketKv(`${fp.formaPago}`.toUpperCase(), fmtMoneda(fp.monedaId, fp.total)));
+    }
+    lines.push(ticketSeparador('.'));
+    for (const vt of resumen.ventasTotalPorMoneda) {
+      lines.push(ticketKv('TOTAL VENTAS', fmtMoneda(vt.monedaId, vt.total), true));
+    }
+  }
+
+  // ── Descuentos / Aumentos ─────────────────────────────────
+  const descMonedas = Object.keys(resumen.descuentosPorMoneda).map(Number).filter(id => resumen.descuentosPorMoneda[id]);
+  const aumMonedas = Object.keys(resumen.aumentosPorMoneda).map(Number).filter(id => resumen.aumentosPorMoneda[id]);
+  if (descMonedas.length > 0 || aumMonedas.length > 0) {
+    lines.push(ticketSeparador('-'));
+    lines.push(ticketText('DESCUENTOS / AUMENTOS', { align: 'C', bold: true }));
+    for (const id of descMonedas) {
+      lines.push(ticketKv('TOTAL DESCUENTOS', fmtMoneda(id, resumen.descuentosPorMoneda[id])));
+    }
+    for (const id of aumMonedas) {
+      lines.push(ticketKv('TOTAL AUMENTOS', fmtMoneda(id, resumen.aumentosPorMoneda[id])));
+    }
+  }
+
+  // ── Gastos ────────────────────────────────────────────────
+  if (resumen.gastos.length > 0) {
+    lines.push(ticketSeparador('-'));
+    lines.push(ticketText('GASTOS', { align: 'C', bold: true }));
+    const gastoTotalPorMoneda: { [id: number]: number } = {};
+    for (const g of resumen.gastos) {
+      const desc = `${g.descripcion || g.categoria || 'GASTO'}`.toUpperCase().slice(0, width - 14);
+      lines.push(ticketKv(desc, fmtMoneda(g.monedaId, g.monto)));
+      gastoTotalPorMoneda[g.monedaId] = (gastoTotalPorMoneda[g.monedaId] || 0) + g.monto;
+    }
+    lines.push(ticketSeparador('.'));
+    for (const id of Object.keys(gastoTotalPorMoneda).map(Number)) {
+      lines.push(ticketKv('TOTAL GASTOS', fmtMoneda(id, gastoTotalPorMoneda[id]), true));
+    }
+  }
+
+  // ── Retiros ───────────────────────────────────────────────
+  if (resumen.retiros.length > 0) {
+    lines.push(ticketSeparador('-'));
+    lines.push(ticketText('RETIROS', { align: 'C', bold: true }));
+    const retiroTotalPorMoneda: { [id: number]: number } = {};
+    for (const r of resumen.retiros) {
+      const etiqueta = `RETIRO N° ${r.id}${r.responsable ? ' - ' + String(r.responsable).toUpperCase() : ''}`.slice(0, width - 12);
+      lines.push(ticketText(etiqueta));
+      for (const d of (r.detalles || [])) {
+        lines.push(ticketKv(`  ${d.monedaDenominacion || ''}`.trimEnd() || '  ', fmtMoneda(d.monedaId, d.monto)));
+        retiroTotalPorMoneda[d.monedaId] = (retiroTotalPorMoneda[d.monedaId] || 0) + d.monto;
+      }
+    }
+    lines.push(ticketSeparador('.'));
+    for (const id of Object.keys(retiroTotalPorMoneda).map(Number)) {
+      lines.push(ticketKv('TOTAL RETIROS', fmtMoneda(id, retiroTotalPorMoneda[id]), true));
+    }
+  }
+
+  // ── Arqueo (apertura / cierre / esperado / diferencia por moneda) ──
+  lines.push(ticketSeparador('='));
+  lines.push(ticketText('ARQUEO DE CAJA', { align: 'C', bold: true }));
+  const arqueoMonedaIds = new Set<number>();
+  resumen.conteoApertura.forEach(c => arqueoMonedaIds.add(c.monedaId));
+  resumen.conteoCierre.forEach(c => arqueoMonedaIds.add(c.monedaId));
+  Object.keys(resumen.esperadoPorMoneda).forEach(k => arqueoMonedaIds.add(Number(k)));
+  Object.keys(resumen.diferenciaPorMoneda).forEach(k => arqueoMonedaIds.add(Number(k)));
+  if (arqueoMonedaIds.size === 0) {
+    lines.push(ticketText('Sin datos de conteo', { align: 'C' }));
+  } else {
+    for (const id of arqueoMonedaIds) {
+      const info = monedaInfo[id];
+      const apertura = resumen.conteoApertura.find(c => c.monedaId === id)?.total || 0;
+      const cierre = resumen.conteoCierre.find(c => c.monedaId === id)?.total || 0;
+      const esperado = resumen.esperadoPorMoneda[id] || 0;
+      const diferencia = resumen.diferenciaPorMoneda[id] || 0;
+      lines.push(ticketSeparador('.'));
+      lines.push(ticketText((info?.simbolo || `MONEDA ${id}`).toUpperCase(), { bold: true }));
+      lines.push(ticketKv('  MONTO APERTURA', fmtMoneda(id, apertura)));
+      lines.push(ticketKv('  MONTO CIERRE', fmtMoneda(id, cierre)));
+      lines.push(ticketKv('  ESPERADO', fmtMoneda(id, esperado)));
+      lines.push(ticketKv('  DIFERENCIA', fmtMoneda(id, diferencia), true));
+    }
+  }
+
+  lines.push(...ticketLineasFirma(width, 'FIRMA CAJERO'));
+
+  const res = await printTicketSpec(printer, { printerWidth: width, lines });
+  return res.ok
+    ? { ok: true, printed: [{ itemId: caja?.id ?? cajaId, sectorId: null, printerId: printer.id, printerName: printer.name }], errors: [] }
     : { ok: false, printed: [], errors: [{ printerId: printer.id, message: res.error || 'Error' }] };
 }
