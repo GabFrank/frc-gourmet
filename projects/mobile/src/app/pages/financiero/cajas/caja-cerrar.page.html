@@ -19,8 +19,14 @@
       </div>
     </section>
 
-    <h3 class="caja-section-title">Conteo de cierre</h3>
-    <app-conteo-form [grupos]="grupos"></app-conteo-form>
+    <div class="caja-section-head">
+      <h3 class="caja-section-title">Conteo de cierre</h3>
+      <mat-slide-toggle color="primary" [(ngModel)]="resumido">Resumido</mat-slide-toggle>
+    </div>
+    <p class="caja-conteo-hint">
+      {{ resumido ? 'Cargá el total por moneda.' : 'Cargá la cantidad por denominación.' }}
+    </p>
+    <app-conteo-form [grupos]="grupos" [resumido]="resumido"></app-conteo-form>
 
     <button mat-flat-button color="warn" class="caja-cta" [disabled]="saving" (click)="cerrar()">
       Cerrar caja

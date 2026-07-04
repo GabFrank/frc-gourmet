@@ -66,8 +66,12 @@
               *ngIf="!loading && monedasConfig.length > 0"
               class="content-container"
             >
-              <div class="step-subtitle">
+              <div class="step-subtitle conteo-subtitle">
                 <h4>Conteo de Apertura</h4>
+                <mat-slide-toggle color="primary" [(ngModel)]="conteoResumido" [ngModelOptions]="{ standalone: true }"
+                                  (change)="updatePropertiesForTemplate()">
+                  Resumido
+                </mat-slide-toggle>
               </div>
 
             <!-- Currency selection using Material Tabs -->
@@ -100,8 +104,20 @@
                       <p>NO HAY DENOMINACIONES REGISTRADAS PARA ESTA MONEDA.</p>
                     </div>
 
+                    <!-- Modo resumido: un total por moneda -->
+                    <div *ngIf="conteoResumido && activeCurrency.billetes.length > 0" class="conteo-resumido">
+                      <mat-form-field appearance="outline" class="conteo-resumido-field">
+                        <mat-label>Total {{ activeCurrency.moneda.simbolo }} {{ activeCurrency.moneda.denominacion }}</mat-label>
+                        <input matInput type="number" min="0"
+                               [(ngModel)]="resumidoTotals[activeCurrency.moneda.id]"
+                               [ngModelOptions]="{ standalone: true }"
+                               (ngModelChange)="updatePropertiesForTemplate()"
+                               (focus)="selectAllContent($event)" />
+                      </mat-form-field>
+                    </div>
+
                     <div
-                      *ngIf="activeCurrency.billetes.length > 0"
+                      *ngIf="!conteoResumido && activeCurrency.billetes.length > 0"
                       class="billete-grid"
                     >
                       <!-- Left column (first half of billetes) -->
@@ -211,7 +227,7 @@
                     <div class="currency-total-value">
                       {{ monedaConfig.moneda.simbolo }}
                       {{
-                        currencyTotals[monedaConfig.moneda.id] | number : "1.0-2"
+                        (conteoResumido ? resumidoTotals[monedaConfig.moneda.id] : currencyTotals[monedaConfig.moneda.id]) | number : "1.0-2"
                       }}
                     </div>
                   </div>
@@ -257,8 +273,13 @@
               *ngIf="!loading && monedasConfig.length > 0"
               class="content-container"
             >
-              <div class="step-subtitle">
+              <div class="step-subtitle conteo-subtitle">
                 <h4>Conteo de Cierre</h4>
+                <mat-slide-toggle color="primary" [(ngModel)]="cierreResumido" [ngModelOptions]="{ standalone: true }"
+                                  [disabled]="!!existingConteoCierre"
+                                  (change)="updateCierrePropertiesForTemplate(); updateDifferenceCalculation()">
+                  Resumido
+                </mat-slide-toggle>
               </div>
 
             <!-- Currency selection using Material Tabs for Conteo Cierre -->
@@ -291,8 +312,20 @@
                       <p>NO HAY DENOMINACIONES REGISTRADAS PARA ESTA MONEDA.</p>
                     </div>
 
+                    <!-- Modo resumido: un total por moneda -->
+                    <div *ngIf="cierreResumido && activeCierreCurrency.billetes.length > 0" class="conteo-resumido">
+                      <mat-form-field appearance="outline" class="conteo-resumido-field">
+                        <mat-label>Total {{ activeCierreCurrency.moneda.simbolo }} {{ activeCierreCurrency.moneda.denominacion }}</mat-label>
+                        <input matInput type="number" min="0"
+                               [(ngModel)]="cierreResumidoTotals[activeCierreCurrency.moneda.id]"
+                               [ngModelOptions]="{ standalone: true }"
+                               (ngModelChange)="updateCierrePropertiesForTemplate(); updateDifferenceCalculation()"
+                               (focus)="selectAllContent($event)" />
+                      </mat-form-field>
+                    </div>
+
                     <div
-                      *ngIf="activeCierreCurrency.billetes.length > 0"
+                      *ngIf="!cierreResumido && activeCierreCurrency.billetes.length > 0"
                       class="billete-grid"
                     >
                       <!-- Left column (first half of billetes) -->

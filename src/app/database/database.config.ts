@@ -220,6 +220,7 @@ import { AddCuentaBancariaToPagosCobros1779700000000 } from './migrations/177970
 import { AddCotizacionBancariaToPagosCobros1779800000000 } from './migrations/1779800000000-AddCotizacionBancariaToPagosCobros';
 import { AddKdsToComandaItem1780000000000 } from './migrations/1780000000000-AddKdsToComandaItem';
 import { AddGastoCaja1783025751400 } from './migrations/1783025751400-AddGastoCaja';
+import { AddMontoToConteoDetalle1783173960142 } from './migrations/1783173960142-AddMontoToConteoDetalle';
 import { AddDeviceAuthCodes1783088331915 } from './migrations/1783088331915-AddDeviceAuthCodes';
 import { AddKdsPantalla1780100000000 } from './migrations/1780100000000-AddKdsPantalla';
 import { AddOrigenToRetiroCaja1780200000000 } from './migrations/1780200000000-AddOrigenToRetiroCaja';
@@ -567,6 +568,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddTipoToSector1782860367433,
     AddGastoCaja1783025751400,
     AddDeviceAuthCodes1783088331915,
+    AddMontoToConteoDetalle1783173960142,
   ];
 }
 
