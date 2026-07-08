@@ -3,13 +3,20 @@
 > **Estado:** propuesta / plan (2026-07). No hay código todavía.
 > **Objetivo:** una web app exclusiva de marca, conectada al SaaS FRC Gourmet, donde el cliente final hace pedidos (retiro / delivery / mesa por QR), paga online, y el pedido se **recibe y procesa directamente desde el SaaS**. Menú, precios, disponibilidad y configuración se administran desde FRC Gourmet.
 
+### Decisiones tomadas (2026-07, con Gabriel)
+
+1. **Hosting: edge cloud.** Un servidor cloud sirve la web app y guarda un **snapshot del menú** para no cargar la PC. La **fuente de verdad sigue en la PC** (SaaS); el cloud tiene solo réplica del menú publicado + cola de pedidos entrantes. La **PC se conecta de forma saliente** al cloud (no se expone a internet). Ver §3.1.
+2. **Pasarela de pago: Bancard vPOS 2.0 primero** (tarjeta + QR/billeteras + tokenización one-click) + **efectivo contra entrega** interno. **uPay (Ueno)** y **Pagopar** como adapters adicionales (uPay requiere ser cliente Ueno y pedir la doc de API; Pagopar suma transferencia + boca de cobranza). Ver §3.6.
+3. **Alcance MVP: pickup + delivery** desde el arranque. **QR de mesa: fase posterior.**
+4. **Auth de cliente: completo** (teléfono + OTP por SMS/WhatsApp **y** email + password, con hash argon2, JWT + refresh, verificación).
+
 ---
 
 ## 0. TL;DR ejecutivo
 
 - **No necesitamos reinventar casi nada del modelo de datos**: `Producto → Presentacion → PrecioVenta`, `Adicional`, `Observacion`, modificación de ingredientes, multi-sabor, `Venta/VentaItem`, `Delivery`, `PrecioDelivery`, `Cliente`, `Notificaciones` y **facturación electrónica (SIFEN)** ya existen. La carta online es un **subconjunto publicable** del catálogo del POS — el mismo patrón "menú = fuente única de verdad" de Toast/Square/Deliverect.
 - **Ya tenemos la mitad de la infraestructura de conexión**: el `mode=server` (Fastify) expone los ~696 handlers por HTTP/JWT, y la **PWA mobile** (`projects/mobile`) ya demostró cómo montar un cliente web sobre ese server reusando `@frc/shared-core`. La web de pedidos es una **segunda app** del mismo workspace con el mismo patrón.
-- **Lo que falta y hay que construir de cero**: (1) **superficie pública segura** separada del RPC admin, (2) **auth de cliente autoservicio** (teléfono/OTP), (3) **pasarela de pago online** local (Bancard/Pagopar/Mercado Pago), (4) **storefront PWA de marca**, (5) **bandeja de pedidos entrantes** en el PdV (aceptar/rechazar/tiempo de preparación), (6) **hosting alcanzable por internet con TLS** (hoy el server es LAN sin TLS), (7) **imágenes de producto** (hoy "parcialmente desactivadas").
+- **Lo que falta y hay que construir de cero**: (1) **edge cloud** que sirve la web y guarda el snapshot del menú, con la PC conectada de forma saliente (§3.1), (2) **superficie pública segura** separada del RPC admin, (3) **auth de cliente autoservicio** (teléfono/OTP + email/password), (4) **pasarela de pago** (Bancard primero; uPay/Pagopar después), (5) **storefront PWA de marca**, (6) **bandeja de pedidos entrantes** en el PdV (aceptar/rechazar/tiempo de preparación), (7) **imágenes de producto** (hoy "parcialmente desactivadas").
 - **Nuestra ventaja competitiva**: 0% comisión y 0 fee por pedido (POS propio, sin lock-in de hardware ajeno), **PYG sin decimales + multimoneda** nativo, **delivery propio de primera clase**, **pago local + efectivo contra entrega**, y **WhatsApp** como canal — todo lo que las plataformas US-first no priorizan y por lo que Rappi/PedidosYa/Uber cobran 20-35%.
 
 ---
@@ -118,42 +125,38 @@ Debilidad transversal: el "commission-free" suele esconder **fee por pedido (US$
 
 ## 3. Arquitectura propuesta
 
-### 3.1 Decisión clave: modelo de hosting/tenancy
+### 3.1 Modelo de hosting (decidido): edge cloud + PC como fuente de verdad
 
-El `mode=server` actual es una **PC en LAN**. Una web pública necesita estar siempre online y con TLS. Tres opciones:
+El `mode=server` actual es una **PC en LAN sin TLS**; una web pública necesita estar siempre online. **Decisión:** un **servidor cloud multi-tenant** sirve la web app y descarga a la PC, sin mover la fuente de verdad. El principio es **separar lecturas de escrituras** (patrón Deliverect/Toast):
 
-**Opción A — Túnel seguro sobre el server local (MVP rápido).**
-Exponer el `mode=server` de cada local por un **Cloudflare Tunnel** (o Tailscale Funnel): TLS + dominio + protección DDoS gratis, sin abrir puertos. Reutiliza el 100% de la infra actual.
-- ✅ Time-to-market mínimo, cero infra nueva de servidor.
-- ❌ Si la PC del local se apaga, la tienda cae. No hay cola durable si el POS está offline.
+- **Lecturas (navegar la carta = ~95% del tráfico):** la PC **publica un snapshot del menú** al cloud (al publicar cambios y al hacer 86ing). El cloud sirve la carta **desde su propia copia, sin tocar la PC**. → La PC queda libre y la tienda sigue navegable aunque la PC esté apagada.
+- **Escrituras (crear pedido + pago):** entran al **cloud** (ahí también llegan los webhooks de Bancard). El cloud las guarda en una **cola durable** y se las entrega a la PC. Si la PC está offline un rato, el pedido **no se pierde**.
+- **La PC se conecta de forma SALIENTE al cloud** (WebSocket/long-poll) y por ahí recibe los pedidos. → La PC **nunca queda expuesta a internet** (cero puertos abiertos, funciona detrás de NAT); más seguro y simple que un túnel entrante.
 
-**Opción B — Edge cloud + inyección al POS (arquitectura objetivo, estilo Deliverect/Toast).**
-Un componente **cloud multi-tenant** siempre online que: (1) sirve el storefront (CDN/TLS/dominio por local), (2) guarda un **snapshot publicado del menú** empujado desde cada POS, (3) recibe pedidos + pagos online y los **inyecta al POS** vía cola durable (webhook si el server local está alcanzable, o el server local hace *poll/long-poll* de pedidos pendientes).
-- ✅ Storefront desacoplado del PC local (resiliente), multi-tenant real de SaaS, escala.
-- ❌ Más infra y build.
+**Qué vive dónde:** la **fuente de verdad es el SaaS en la PC** (productos, precios, ventas, stock, caja, SIFEN). El cloud solo tiene **réplica del menú publicado** + **bandeja/cola de pedidos entrantes** hasta que la PC los ingiere. Se mantiene el modelo local-first. Multi-tenant: cada PC se autentica al cloud con una **clave de tenant** (un local = un tenant).
 
-**Recomendación: arrancar con A, evolucionar a B.** El MVP corre el storefront contra el server local por túnel (reusa todo). Cuando haya volumen/varios locales, se introduce el edge cloud con **menú-snapshot + cola de pedidos durable**. El diseño de datos y API se hace desde ya "edge-ready" (snapshot de menú + endpoints idempotentes) para que el salto A→B no rompa nada.
+> Alternativa de MVP más liviana descartada: exponer el server local por túnel (Cloudflare Tunnel). Sirve, pero no independiza de la PC (toda lectura la golpea) y la expone a internet. Como Gabriel quiere el cloud desde el arranque, vamos directo al edge cloud.
 
 ```
    [Cliente / navegador]
             │  HTTPS (dominio de marca)
             ▼
-   ┌───────────────────────┐        Fase A: túnel Cloudflare → server local
-   │   Storefront PWA       │        Fase B: edge cloud (CDN + API pública + cola)
-   │  (projects/storefront) │
-   └───────────┬───────────┘
-               │  API PÚBLICA (whitelist, JWT cliente)   ← NO es /api/rpc admin
-               ▼
-   ┌───────────────────────┐
-   │  Public API Gateway    │  menú publicado · crear pedido · pago · estado
-   │  (Fastify, rutas /pub) │
-   └───────────┬───────────┘
-               │  materializa pedido aceptado
-               ▼
-   ┌───────────────────────┐   Bandeja "Pedidos Online" en PdV (aceptar/rechazar)
-   │  FRC Gourmet (SaaS)    │→  Venta + VentaItem + Delivery + Comanda/print + stock
-   │  handlers existentes   │→  Notificaciones al staff · Factura SIFEN
-   └───────────────────────┘
+   ┌───────────────────────────────────────────┐
+   │  CLOUD (siempre online, multi-tenant)      │
+   │  ├─ Storefront PWA (CDN/TLS)               │
+   │  ├─ Menú snapshot        ◀──push── PC publica menú / 86ing
+   │  ├─ API pública /pub (whitelist, JWT cliente)   ← NO es /api/rpc admin
+   │  ├─ Pago + webhook Bancard                 │
+   │  └─ Cola de pedidos ─────┐                 │
+   └──────────────────────────┼─────────────────┘
+                              │  conexión SALIENTE desde la PC (WS/long-poll)
+                              ▼
+   ┌───────────────────────────────────────────┐
+   │  FRC Gourmet (SaaS en la PC) = fuente de verdad
+   │  Bandeja "Pedidos Online" → aceptar/rechazar
+   │  → Venta + VentaItem + Delivery + Comanda/print + stock
+   │  → Notificaciones al staff · Factura SIFEN
+   └───────────────────────────────────────────┘
 ```
 
 ### 3.2 Superficie pública separada (seguridad)
@@ -201,14 +204,21 @@ Siguiendo la convención (BaseModel, UPPERCASE, migration generada, registrar en
 - **QR de mesa**: misma PWA con `?mesa=N` → asocia el pedido a `PdvMesa`, permite "enviar a cocina" y propina/split.
 - Regenerar el mapa canal-método solo para los endpoints públicos; **no** reusar `api-channel-map.generated.ts` completo (expone admin).
 
-### 3.6 Pagos — adaptadores
+### 3.6 Pagos — adaptadores (decidido)
 
-Interfaz `PasarelaPago { crearIntento(), confirmarWebhook(), reembolsar() }` con adapters:
-- **Bancard vPOS 2.0** (tarjetas, la más usada en PY).
-- **Pagopar** (agregador local: tarjeta + transferencia + billeteras + **pago en efectivo en bocas de cobranza**).
-- **Mercado Pago** Checkout Pro (cobertura LatAm, wallet).
-- **Efectivo contra entrega / contra retiro** (sin gateway).
-Idempotencia por `transactionId`, conciliación contra `Pago`. Las liquidaciones de tarjeta online encajan con el patrón `AcreditacionPos` existente.
+Interfaz `PasarelaPago { crearIntento(), confirmarWebhook(), reembolsar() }` con adapters intercambiables. **Orden de implementación decidido:**
+
+1. **Bancard vPOS 2.0 (primero).** Es el procesador dominante en PY. Da API REST + `bancard-checkout.js` (iframe embebido, la tarjeta se ingresa dentro de Bancard sin redirección) + **confirmación server-to-server** + rollback + **tokenización one-click** (clientes recurrentes guardan tarjeta). Cubre **tarjetas + QR interoperable** → el QR alcanza **todas las billeteras** (Zimple, Tigo Money, Personal Pay, Mango…). Con Bancard solo ya cubrimos tarjeta + billeteras.
+   - **Flujo:** backend → `create_single_buy` (REST) devuelve `process_id` → front `Bancard.Checkout.createForm(container, process_id)` → cliente paga en el iframe → Bancard **POST server-to-server** a nuestro endpoint `confirmations` (`payment_success`/`payment_fail`), al que respondemos **HTTP 200 body `"OK"`**. Rollback disponible para reembolso.
+   - **Auth:** `public_key`(32) + `private_key`(40) por comercio; cada operación firma un **token MD5** = `private_key + shop_process_id + amount + currency` (orden estricto). Ambientes staging/producción desde `comercios.bancard.com.py`.
+   - **Doc:** repos oficiales públicos `github.com/Bancard/bancard-checkout-js` y `bancard-connectors` (SDK JS/Python); la spec completa se accede **tras afiliarse** al portal de comercios. **Comisiones no publicadas → negociar con Bancard/banco adquirente.**
+2. **Efectivo contra entrega / contra retiro** — método interno **sin gateway** (se cobra al entregar; se registra como `FormaPago` EFECTIVO al aceptar).
+3. **uPay (Ueno) — adapter posterior.** Es procesadora de comercios real (no solo P2P), con API + plugins, **tarifas publicadas 3%+IVA local / 3,6% QR-ext.**, plan base gratis. **Requisitos:** ser **cliente de Ueno bank** y **solicitar la spec de API** (endpoints/webhooks/auth **no son públicos**). → Sumar cuando tengamos la doc.
+4. **Pagopar — adapter posterior (comodín).** Único con **API pública documentada + webhooks** que cubre con una cuenta: tarjeta + transferencia + billeteras + QR + PIX + **efectivo en bocas de cobranza**. Ideal si queremos ofrecer transferencia o pago en efectivo en boca de cobranza. Comisiones a confirmar (fuentes dispares 3–3,6% vs 5,5–7% + mensual).
+
+> **Mercado Pago PY: descartado** — no tiene acquiring local formal hoy.
+
+Idempotencia por `transactionId`, conciliación contra `Pago/PagoDetalle` + `FormaPago`. Las liquidaciones de tarjeta online encajan con el patrón `AcreditacionPos` existente.
 
 ---
 
@@ -216,31 +226,32 @@ Idempotencia por `transactionId`, conciliación contra `Pago`. Las liquidaciones
 
 > Convención del proyecto: `synchronize:false` → cada entidad nueva exige **migration generada** (SQLite + Postgres) y registro en `database.config.ts`; tocar backend = reiniciar app.
 
-### Fase 0 — Fundaciones de seguridad (pre-requisito, no negociable)
+### Fase 0 — Fundaciones de seguridad + esqueleto edge cloud (pre-requisito, no negociable)
 Exponer a internet obliga a cerrar deuda de seguridad primero.
-- Hash de passwords (**argon2/bcrypt**) para `Usuario` + migración de los existentes.
+- Hash de passwords (**argon2**) para `Usuario` + migración de los existentes.
 - `JWT_SECRET` en env, rotación, `audience` separada staff/cliente.
 - **Namespace público `/pub/*`** con whitelist, `@fastify/rate-limit`, CORS, verificación de firma en webhooks.
-- Activar TLS (Cloudflare Tunnel para Fase A).
-- **Entregable:** server que puede exponerse a internet sin filtrar handlers admin.
+- **Esqueleto del edge cloud** (§3.1): servicio cloud multi-tenant con TLS/dominio + **canal saliente PC→cloud** (WebSocket/long-poll) + autenticación por clave de tenant. Sin lógica de negocio todavía, solo el transporte.
+- **Entregable:** cloud alcanzable por internet + PC conectada de forma saliente, sin exponer la PC ni filtrar handlers admin.
 
-### Fase 1 — Menú publicable + disponibilidad por canal
+### Fase 1 — Menú publicable + snapshot al cloud + disponibilidad por canal
 - Flags `disponibleOnline` / `pausadoOnline` en `Producto`/`Presentacion`; `TipoPrecio=ONLINE`.
 - **Reactivar imágenes** de producto (subida + `app://`/`/pub/files`).
-- Endpoint `GET /pub/menu` (snapshot: categorías → productos → modificadores → precio online → disponibilidad).
+- **Publish del snapshot de menú al cloud** (categorías → productos → modificadores → precio online → disponibilidad) + update liviano de disponibilidad para 86ing.
+- Endpoint `GET /pub/menu` servido **desde el snapshot del cloud** (no golpea la PC).
 - Backoffice: pantalla "Carta Online" (marcar disponibles, precio online, imágenes, **86ing en vivo**).
-- **Entregable:** carta online consultable por HTTP, administrable desde el SaaS.
+- **Entregable:** carta online navegable desde el cloud, administrada desde el SaaS.
 
-### Fase 2 — Config de tienda online + auth de cliente
+### Fase 2 — Config de tienda online + auth de cliente (completo)
 - Entidad `TiendaOnlineConfig` + pantalla de configuración (horarios, tipos de pedido, prep time, mínimos, throttling, branding).
-- `CuentaCliente` + `CodigoOtp` + flujo **teléfono + OTP** (SMS/WhatsApp), JWT cliente, refresh.
-- **Entregable:** un cliente puede registrarse/loguearse; el local configura su tienda.
+- `CuentaCliente` + `CodigoOtp`: **auth completo** → teléfono + OTP (SMS/WhatsApp) **y** email + password (argon2), verificación, JWT cliente + refresh, recuperación de contraseña.
+- **Entregable:** un cliente puede registrarse/loguearse por teléfono o email; el local configura su tienda.
 
-### Fase 3 — Storefront PWA (MVP pedido pickup, pago efectivo)
+### Fase 3 — Storefront PWA (MVP: pickup + delivery, pago efectivo)
 - `projects/storefront`: menú, carrito con modificadores, checkout, cuenta, historial.
-- Tipo **PICKUP** + **efectivo contra retiro** (sin gateway todavía).
-- `PedidoOnline` + `PedidoOnlineItem` + `POST /pub/pedido`.
-- **Entregable:** demo real de pedido de punta a punta sin pagos online.
+- Tipos **PICKUP + DELIVERY** (dirección + zona/tarifa básica + mínimo por zona) con **efectivo contra entrega/retiro** (sin gateway todavía).
+- `PedidoOnline` + `PedidoOnlineItem` + `ZonaDelivery` (básico) + `POST /pub/pedido` (encolado al cloud).
+- **Entregable:** pedido real de punta a punta (retiro y delivery) sin pagos online.
 
 ### Fase 4 — Bandeja de pedidos en el PdV (inyección al POS)
 - Panel "Pedidos Online" en PdV: lista en vivo (auto-refresh/SSE), sonido, `Notificaciones`.
@@ -248,38 +259,41 @@ Exponer a internet obliga a cerrar deuda de seguridad primero.
 - Aceptación manual/automática según config; countdown de prep time.
 - **Entregable:** el pedido online se procesa como venta real en el SaaS.
 
-### Fase 5 — Pagos online
-- Interfaz `PasarelaPago` + adapter **Bancard** (o Pagopar/Mercado Pago según prioridad comercial).
-- `PagoOnline`, `POST /pub/pedido/pagar`, webhook idempotente, conciliación con `Pago`, reembolso en rechazo.
-- **Entregable:** cobro online real, conciliado en caja.
+### Fase 5 — Pagos online (Bancard)
+- Interfaz `PasarelaPago` + adapter **Bancard vPOS 2.0** (create_single_buy → iframe checkout.js → webhook `confirmations` → `"OK"`; rollback para reembolso; tokenización one-click).
+- `PagoOnline`, `POST /pub/pedido/pagar`, **webhook en el cloud** idempotente por `transactionId`, conciliación con `Pago`, reembolso en rechazo.
+- **Entregable:** cobro online real con tarjeta/QR, conciliado en caja.
 
-### Fase 6 — Delivery + tracking
-- `ZonaDelivery` (por drive-time/polígono, tarifa, mínimo), auto-asignación por dirección.
+### Fase 6 — Delivery avanzado + tracking
+- `ZonaDelivery` **por drive-time/polígono** (más allá del mínimo de F3), auto-asignación fina por dirección.
 - Reusar estados de `Delivery`; **página de tracking** para el cliente; notificaciones por estado (WhatsApp/push).
 - Repartidores propios (`entregadoPor`). Integración Uber Direct/DoorDash = opcional futuro.
-- **Entregable:** delivery propio completo con seguimiento.
+- **Entregable:** delivery propio completo con seguimiento en vivo.
 
 ### Fase 7 — Diferenciadores
 - **Loyalty** por puntos, **favoritos**, **re-order 1-click** (Owner reporta 2× reorder).
-- **QR de mesa** (dine-in): misma PWA con `?mesa=N`, split bill, propina.
-- **WhatsApp** como canal de pedido/estado (Twilio/WhatsApp Cloud API).
+- **QR de mesa** (dine-in): misma PWA con `?mesa=N`, split bill, propina. *(Diferido del MVP por decisión.)*
+- **WhatsApp** como canal de pedido/estado (WhatsApp Cloud API / Twilio).
 - **Facturación SIFEN** automática del pedido online.
 - **Scheduling** de pedidos futuros + **throttling** en horas pico.
+- Adapters de pago adicionales: **uPay** (con doc de Ueno) y **Pagopar** (transferencia + boca de cobranza).
 
-### Fase 8 — Edge cloud (escala multi-local, evolución de A→B)
-- `MenuPublicado` snapshot empujado al edge; **cola durable de pedidos** (resiliencia si el POS está offline); dominio por local; panel SaaS multi-tenant.
-- **Entregable:** storefront desacoplado del PC local, listo para muchos locales.
+### Fase 8 — Escala multi-local / resiliencia
+- Endurecer la **cola durable** (reintentos, re-sync tras caída del POS), panel SaaS multi-tenant, dominio propio por local, métricas por tienda.
+- **Entregable:** operación estable con varios locales sobre el mismo edge cloud.
 
 ---
 
-## 5. Decisiones abiertas (para definir con Gabriel)
+## 5. Decisiones — estado
 
-1. **Hosting:** ¿arrancamos con túnel sobre el server local (rápido) o vamos directo al edge cloud? *(Recomendado: túnel para MVP.)*
-2. **Pasarela de pago prioritaria en PY:** ¿Bancard, Pagopar o Mercado Pago primero?
-3. **Alcance del MVP:** ¿solo **pickup** primero, o pickup + delivery desde el arranque?
-4. **QR de mesa dine-in:** ¿entra en el MVP o es fase posterior?
-5. **Auth de cliente:** ¿solo OTP por teléfono/WhatsApp, o también email+password?
-6. **Multi-local desde el día 1**, o un solo local y generalizar después.
+**Resueltas (§ "Decisiones tomadas"):** hosting = edge cloud · pasarela = Bancard primero (uPay/Pagopar después) · MVP = pickup + delivery · QR de mesa = fase posterior · auth de cliente = completo (teléfono/OTP + email/password).
+
+**Pendientes de definir:**
+1. **Infra cloud concreta:** proveedor (VPS propio / Render / Fly.io / AWS) y stack del edge (¿Node/Fastify reutilizando `@frc/shared-core`? ¿Postgres gestionado para el snapshot + cola?).
+2. **Comisiones reales de Bancard** — pedir a Bancard/banco adquirente para modelar costos.
+3. **Multi-local desde el día 1**, o un solo local (piloto) y generalizar después.
+4. **Canal de OTP:** ¿WhatsApp Cloud API, SMS (proveedor), o ambos? (afecta costo por mensaje).
+5. **Dominio:** ¿subdominio por local (`local.tudominio.com`) o dominio propio del restaurante?
 
 ---
 
