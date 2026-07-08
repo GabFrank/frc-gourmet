@@ -1,6 +1,6 @@
 # Web App de Pedidos Online — Análisis de mercado + Plan de desarrollo
 
-> **Estado:** propuesta / plan (2026-07). No hay código todavía.
+> **Estado:** plan aprobado — **en ejecución** (2026-07). Se construye fase por fase; commit + push al cerrar cada fase. Ver §7 Registro de avance.
 > **Objetivo:** una web app exclusiva de marca, conectada al SaaS FRC Gourmet, donde el cliente final hace pedidos (retiro / delivery / mesa por QR), paga online, y el pedido se **recibe y procesa directamente desde el SaaS**. Menú, precios, disponibilidad y configuración se administran desde FRC Gourmet.
 
 ### Decisiones tomadas (2026-07, con Gabriel)
@@ -303,4 +303,21 @@ Exponer a internet obliga a cerrar deuda de seguridad primero.
 - **Consistencia de precio/stock**: definir si el precio online se congela al momento del pedido (snapshot en `PedidoOnlineItem`) — sí, para evitar disputas.
 - **Caja**: decidir a qué `Caja` entra la venta online (¿una caja virtual "ONLINE" por dispositivo/canal?). Encaja con el `dispositivo_id` de F5.
 - **Facturación legal**: pedidos con RUC requieren SIFEN; el dominio existe pero hay que cablearlo al flujo online.
-```
+
+---
+
+## 7. Registro de avance (ejecución)
+
+Se completa a medida que se cierra cada fase (con el commit correspondiente).
+
+| Fase | Estado | Notas / commit |
+|---|---|---|
+| Fase 0 — Seguridad + túnel | ⏳ En curso | 0.1 `/pub/*` namespace · 0.2 JWT cliente · 0.3 rate-limit/CORS · 0.4 argon2 · 0.5 túnel (infra) |
+| Fase 1 — Menú publicable | ⬜ Pendiente | |
+| Fase 2 — Config tienda + auth cliente | ⬜ Pendiente | |
+| Fase 3 — Storefront PWA (pickup+delivery) | ⬜ Pendiente | |
+| Fase 4 — Bandeja de pedidos en PdV | ⬜ Pendiente | |
+| Fase 5 — Pagos Bancard | ⬜ Pendiente | |
+| Fase 6 — Delivery avanzado + tracking | ⬜ Pendiente | |
+| Fase 7 — Diferenciadores | ⬜ Pendiente | |
+| Fase 8 — Migración edge cloud | ⬜ Pendiente | |
