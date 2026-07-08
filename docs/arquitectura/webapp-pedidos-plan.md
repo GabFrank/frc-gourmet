@@ -325,8 +325,8 @@ Se completa a medida que se cierra cada fase (con el commit correspondiente).
 | Fase 0 — Seguridad + túnel | ✅ Hecha | Base de seguridad ya existía (bcrypt+migración, JWT keytar, rate-limit, CORS, permisos P0-1, túnel/HTTPS). **Nuevo:** `customer-jwt.utils.ts` (JWT cliente separado) + `public-routes.ts` (`/pub/*` whitelist + `/pub/health`). Compila. |
 | Fase 1 — Menú publicable | 🟩 Backend hecho | Entidad+migración flags online, handler `get-menu-online` (público `menu.get`), `update-producto` persiste flags. Pendiente UI "Carta Online" + reactivar imágenes. |
 | Fase 2 — Config tienda + auth cliente | 🟩 Auth backend hecho | CuentaCliente+CodigoOtp+migración, OTP WhatsApp (sender con fallback dev), handlers auth (`auth.otp.*`/`auth.login`/`auth.me`) en `/pub`. Pendiente TiendaOnlineConfig+UI y refresh token. |
-| Fase 3 — Storefront PWA (pickup+delivery) | ⬜ Pendiente | |
-| Fase 4 — Bandeja de pedidos en PdV | ⬜ Pendiente | |
+| Fase 3 — Storefront PWA (pickup+delivery) | 🟩 Backend + storefront | Backend pedidos/zonas (público). Storefront `projects/storefront` (Angular 15, standalone): menú, carrito, checkout pickup/delivery, login OTP, mis-pedidos, cuenta. **Compila (`ng build storefront`).** Pendiente: servir desde el server en prod, probar en vivo. |
+| Fase 4 — Bandeja de pedidos en PdV | 🟨 Backend + wiring | Handlers admin listos (list/aceptar/rechazar/avanzar). Pendiente: 4-capas (preload+repository) + UI de bandeja en el desktop. |
 | Fase 5 — Pagos Bancard | ⬜ Pendiente | |
 | Fase 6 — Delivery avanzado + tracking | ⬜ Pendiente | |
 | Fase 7 — Diferenciadores | ⬜ Pendiente | |

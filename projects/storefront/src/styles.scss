@@ -1,0 +1,67 @@
+/* Estilos globales del storefront de pedidos. Mobile-first, tema propio. */
+:root {
+  --sf-primary: #c0392b;
+  --sf-primary-dark: #96281b;
+  --sf-bg: #f6f6f7;
+  --sf-surface: #ffffff;
+  --sf-text: #1c1c1e;
+  --sf-text-muted: #6b6b70;
+  --sf-border: #e4e4e7;
+  --sf-success: #2e7d32;
+  --sf-radius: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sf-bg: #131315;
+    --sf-surface: #1e1e21;
+    --sf-text: #f2f2f4;
+    --sf-text-muted: #a0a0a6;
+    --sf-border: #2c2c31;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--sf-bg);
+  color: var(--sf-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font-family: inherit; cursor: pointer; }
+
+.sf-btn {
+  border: none;
+  border-radius: var(--sf-radius);
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  background: var(--sf-primary);
+  color: #fff;
+  transition: background .15s ease;
+}
+.sf-btn:hover { background: var(--sf-primary-dark); }
+.sf-btn:disabled { opacity: .5; cursor: not-allowed; }
+.sf-btn--ghost { background: transparent; color: var(--sf-primary); border: 1px solid var(--sf-border); }
+
+.sf-card {
+  background: var(--sf-surface);
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius);
+  padding: 14px;
+}
+
+.sf-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius);
+  background: var(--sf-surface);
+  color: var(--sf-text);
+  font-size: 16px;
+}
+
+.sf-muted { color: var(--sf-text-muted); }
+.sf-container { max-width: 720px; margin: 0 auto; padding: 16px; }
