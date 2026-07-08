@@ -11,7 +11,7 @@
 
 ## 2. Asignar turnos a funcionarios
 
-**Tab "Turnos" del funcionario** o **Menu → Funcionarios → click → "Asignar turno"**.
+**Tab "Turnos" del funcionario** o **Menu → Recursos Humanos → Funcionarios → click → "Asignar turno"**.
 
 - Turno.
 - Fecha desde.
@@ -67,7 +67,7 @@ monto = montoFijo + (montoPorMinuto × minutosTardanza)
 
 Ej: con `montoFijo=50000`, `montoPorMin=2000`, tardanza 15 min → 50000 + 2000*15 = 80.000 PYG.
 
-Configurar montos en **Menu → RRHH → Config RRHH** (capítulo 2).
+Configurar montos en **Menu → Recursos Humanos → Config RRHH** (capítulo 2).
 
 ## 5. Justificar asistencia
 

@@ -52,6 +52,22 @@ export class AuthService {
     return this.currentUserSubject.value;
   }
 
+  /**
+   * Baja el flag `mustChangePassword` del usuario en memoria (y storage) tras un
+   * cambio de contraseña exitoso, para que el guard de la PWA deje de redirigir
+   * a la pantalla de cambio obligatorio. El backend ya persistió el false.
+   */
+  markPasswordChanged(): void {
+    const user = this.currentUserSubject.value;
+    if (!user) return;
+    const updated = { ...user, mustChangePassword: false } as Usuario;
+    this.currentUserSubject.next(updated);
+    this.repositoryService.setCurrentUser(updated);
+    if (localStorage.getItem(this.USER_KEY)) {
+      localStorage.setItem(this.USER_KEY, JSON.stringify(updated));
+    }
+  }
+
   // Login user
   async login(nickname: string, password: string): Promise<LoginResult> {
     try {
@@ -111,6 +127,16 @@ export class AuthService {
         console.error('Error updating session activity:', error);
       }
     }
+  }
+
+  /**
+   * Aplica una sesión obtenida por fuera del login con usuario/clave (ej. login
+   * por QR / device grant). Persiste el estado y emite el usuario actual. El
+   * transporte HTTP (api-http) debe recibir sus tokens por separado.
+   */
+  applyExternalSession(user: Usuario, token: string, sessionId: number): void {
+    this.setSession(user, token, sessionId);
+    this.currentUserSubject.next(user);
   }
 
   // Set up session data after successful login

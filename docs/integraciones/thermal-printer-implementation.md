@@ -1,17 +1,20 @@
 # Thermal Printer Implementation Guide
 
-This guide explains how to implement thermal printer functionality in an Electron application using the `node-thermal-printer` library.
+This guide explains how to implement thermal printer functionality in an Electron application using the `node-thermal-printer` library. The code below is a generic reference; for the **actual FRC Gourmet implementation** see the note at the end.
 
 ## Dependencies
 
 ```json
 {
   "dependencies": {
-    "node-thermal-printer": "^4.2.0",
-    "electron": "^X.X.X"  // Your electron version
+    "node-thermal-printer": "^4.4.4",
+    "electron": "^24.3.0"
   }
 }
 ```
+
+> En FRC Gourmet `node-thermal-printer` es la librería de impresión real; `electron-pos-printer`
+> figura también como dependencia.
 
 ## Implementation Overview
 
@@ -354,6 +357,29 @@ Your application should have a UI for managing printer configurations, including
 - For Windows: USB printers typically use COM ports (e.g., 'COM1')
 - For macOS/Linux: USB printers use device paths (e.g., '/dev/usb/lp0')
 - For CUPS printing (common on Linux/macOS), handle as shown in the code
+
+## Implementación real en FRC Gourmet
+
+La guía de arriba es un patrón de referencia. En el código del proyecto:
+
+- **Lógica de impresión:** `electron/utils/printer.utils.ts` (impresión cruda / test) y
+  `electron/utils/ticket.utils.ts` (interpreta un "ticket spec" y arma el contenido). Ambos importan
+  `ThermalPrinter, PrinterTypes, CharacterSet` de `node-thermal-printer`.
+- **Tipos de conexión soportados** (`printer.connectionType`): `network` (`tcp://<ip>:<port|9100>`),
+  `usb`/`serial` (path directo), `bluetooth` (`bt:<address>`), `lpr` (vía `electron/utils/lpr.utils.ts`,
+  `sendLprJob`) y CUPS (impresoras cuyo `address` empieza con `ticket-`, vía comando `lp -d`).
+- **Handlers IPC:** `electron/handlers/printers.handler.ts` (ABM de impresoras + test) y
+  `electron/handlers/documentos-tickets.handler.ts` para los tickets de negocio: `print-comanda`,
+  `print-venta-ticket` (auto al concluir la venta), `print-precuenta`, recibos de cuotas,
+  `print-retiro-caja-ticket`, `print-vale-ticket`, `print-pagare-cpc-ticket`, `print-etiqueta-delivery`,
+  `print-acreditacion-pos-ticket`, entre otros.
+- **Ruteo por sector:** entidad `SectorImpresora` (`sectores-impresoras.handler.ts`) decide a qué
+  impresora va cada documento según el sector.
+- **Cocina en tiempo real (KDS):** `kds.handler.ts` + eventos SSE (`electron/server/kds-sse-routes.ts`)
+  para pantallas de cocina, además/o en lugar de impresión física.
+- **Acceso desde Angular:** vía `window.api.callIpc('<channel>', params)` (el preload expone
+  `contextBridge.exposeInMainWorld('api', ...)`), no `window.electron.ipcRenderer` como en el ejemplo
+  genérico de arriba.
 
 ## Resources
 

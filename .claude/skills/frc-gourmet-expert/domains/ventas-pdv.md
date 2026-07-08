@@ -2,7 +2,7 @@
 
 El módulo más visible y operativamente más usado. Ventas, mesas, comandas, delivery, atajos, multi-sabor, descuento de stock automático.
 
-## Entidades clave (22 totales)
+## Entidades clave (24 archivos `*.entity.ts` en `entities/ventas/`)
 
 ```
 Sector ─┐
@@ -11,9 +11,11 @@ Sector ─┐
                             ├── VentaItemIngredienteModificacion
                             ├── VentaItemObservacion
                             ├── Pago + PagoDetalle (legacy)
-                            ├── Comanda (en cocina)
+                            ├── Comanda ─── ComandaItem (cocina / KDS)
                             └── Delivery (si delivery)
                                   └── PrecioDelivery
+
+KdsPantalla   (config de pantallas KDS, standalone — no FK)
 ```
 
 ## Diferencia: Venta vs Comanda vs Mesa
@@ -47,11 +49,12 @@ TipoModificacionIngrediente: REMOVIDO | INTERCAMBIADO
 | `cliente_id` FK nullable | Cliente registrado |
 | `nombreCliente` string | Nombre rápido sin registrar |
 | `estado` enum | ABIERTA por default |
-| `formaPago_id` FK | |
-| `caja_id` FK obligatorio | Una venta siempre pertenece a una caja |
+| `forma_pago_id` FK (prop `formaPago`) | |
+| `caja_id` FK | Una venta siempre pertenece a una caja |
+| `dispositivo_id` FK nullable | Dispositivo origen (F5 device tracking). Null en ventas pre-F5; en cliente HTTP lo resuelve el server del JWT |
 | `pago_id` FK nullable | Se crea al cobrar (legacy entity Pago) |
 | `delivery_id` FK nullable | Si es delivery |
-| `mesa_id` FK nullable | Si es venta en mesa |
+| `mesa_id` FK nullable (prop `mesa`) | Si es venta en mesa |
 | `comanda_id` FK nullable | Si está vinculada a comanda |
 | `ventaPadre_id` FK nullable | Para división de cuenta |
 | `descuentoPorcentaje, descuentoMonto, descuentoMotivo` | Descuento global |
@@ -82,6 +85,14 @@ TipoModificacionIngrediente: REMOVIDO | INTERCAMBIADO
   cantidadSabores: int             // 1, 2, 3 (max según PdvConfig.pizzaMaxSabores)
   saboresVenta: VentaItemSabor[]
   vendedor: Usuario (split de comisiones por item, opcional)
+  // Buffet por peso (solo producto BUFFET_POR_PESO):
+  pesoBruto, pesoTara, pesoNeto: decimal(10,3)  // gramos; siempre se persiste
+  precioPorKg: decimal              // precio por kilo real usado (reporting)
+  aplicoLibre: boolean             // true si se activó el tope "buffet libre"
+  // Impresión de comanda de cocina (sistema documentos):
+  impreso: boolean                 // true solo cuando TODOS los sectores del item se imprimieron OK
+  fechaImpresion: Date
+  impresiones: text JSON           // log [{sectorId, printerId, ts, ok, error?}] por intento
 }
 ```
 
@@ -158,7 +169,7 @@ REMOVIDO: "sin tomate". INTERCAMBIADO: "Mozzarella → Queso de Cabra" (ingredie
 
 `Sector`: `nombre`, `activo`, `mesas[]`. Ej: "Salón A", "Barra", "Terraza".
 
-**Estado auto-update**: el handler `setPdvMesaEstado(mesaId, estado)` y el flujo de cobro liberan la mesa al concluir/cancelar venta.
+**Estado auto-update**: el handler `cerrarVentasAbiertasMesa(mesaId, estado)` concluye/cancela la venta abierta de la mesa y libera la mesa (estado → DISPONIBLE). Lo invoca el flujo de cobro/cancelación del PdV.
 
 ## Comandas (cuentas individuales)
 
@@ -178,12 +189,16 @@ Comanda {
 ComandaItem {
   comanda_id (CASCADE)
   ventaItem_id            // referencia a item específico de la venta
+  sector_id nullable      // KDS: sector donde se prepara (1 ComandaItem por sector → estado independiente)
   estado: PENDIENTE | EN_PREPARACION | LISTO | ENTREGADO | CANCELADO
   observacion
+  fechaEnPreparacion      // timestamp al pasar a EN_PREPARACION (métricas de tiempo de prep)
   fechaListo
   activo
 }
 ```
+
+**KDS (Kitchen Display System)**: los `ComandaItem` alimentan el feed de pantallas de cocina. Ver dominio `cocina-impresion.md` y el handler `kds.handler.ts`. Páginas en `src/app/pages/ventas/kds/` (`kds.component`, `list-kds-pantallas`, `create-edit-kds-pantalla-dialog`).
 
 **Caso de uso**:
 - Cliente en barra: abre comanda CMD-007 sin mesa.
@@ -255,10 +270,17 @@ Una sola fila. Campos:
 | `deliveryTiempoRojo` | 60 | min para color rojo |
 | `pdvTabDefault` | "MESAS" | Tab inicial PdV (MESAS/COMANDAS/CATEGORIAS/ATAJOS) |
 | `comandasHabilitadas` | false | Activa sistema de comandas |
+| `ocuparMesaAlVincularComanda` | false | Si true, vincular comanda a mesa marca la mesa OCUPADA; al cerrar la comanda vuelve a DISPONIBLE si no quedan otras comandas/venta abierta |
 | `atajosGridSize` | 3 | Tamaño grid atajos (1=grande, 3=pequeño) |
 | `atajosProductosGridSize` | 3 | Tamaño grid productos en atajos |
 | `pizzaMaxSabores` | 2 | Máximo sabores por pizza |
 | `pizzaEstrategiaPrecio` | MAYOR_PRECIO | MAYOR_PRECIO o PROMEDIO |
+| `autoImprimirComanda` | true | Al agregar items → imprimir comanda automáticamente a impresoras del sector |
+| `autoImprimirTicketVenta` | true | Al cobrar (CONCLUIDA) → imprimir ticket de venta automáticamente |
+| `imprimirPrecuentaAlSolicitar` | true | Botón "Pre-cuenta" imprime sin confirmación intermedia |
+| `balanzaPrefijo` | '2' | Prefijo EAN-13 de etiqueta de balanza (buffet por peso) |
+| `balanzaModo` | PESO | Qué codifica el valor embebido: PESO o PRECIO |
+| `balanzaFactorPeso` | 1 | Factor valor embebido → gramos |
 
 ## Flujo completo de venta (Pdv)
 
@@ -270,11 +292,11 @@ Una sola fila. Campos:
 
 ### 2. Selección de mesa
 
-User click mesa → load `getVentasByDateRange(cajaId, { mesaId })`.
-- Si no hay venta abierta: `ventaActual = null`, items = [].
-- Si hay: load items con relations: producto, presentacion, sabores, adicionales, modificaciones, observaciones.
+El polling de mesas (`getPdvMesasActivas()`) ya trae cada `PdvMesa` con su `venta` abierta (max 1). Al click:
+- Si `mesa.venta?.id`: `loadVentaItems(mesa)` → `getVentaItems(ventaId)` y `cargarPersonalizacionesItem` por item (sabores, adicionales, modificaciones, observaciones).
+- Si no hay venta abierta: items = [].
 
-Auto-refresh cada 1s (`getPdvMesasActivas()`) para detectar cambios concurrentes.
+Auto-refresh periódico (`getPdvMesasActivas()`) para detectar cambios concurrentes.
 
 ### 3. Agregar producto
 
@@ -323,7 +345,7 @@ Al confirmar:
 - `Venta.estado = CONCLUIDA`, `fechaCierre`, `pago_id`.
 - `PdvMesa.estado = DISPONIBLE`, `venta = null`.
 - `procesarStockVenta(ventaId)` (fire-and-forget — si falla, venta NO se revierte).
-- (TODO) imprimir ticket.
+- Auto-impresión de ticket de venta si `PdvConfig.autoImprimirTicketVenta=true`: `updateVenta` dispara `printVentaTicketInternal(ventaId)` (ver `cocina-impresion.md`).
 
 ### 7. Cancelar venta completa
 
@@ -396,30 +418,33 @@ Cobrar dialog:
 - F9: descuento/aumento
 - F10: finalizar
 
-## Página principal: `pdv.component.ts` (2472 líneas)
+## Página principal: `pdv.component.ts` (~2600 líneas)
 
 `src/app/pages/ventas/pdv/`. Sub-componentes:
 - `utilitarios-dialog/`: utilidades extra.
 
 Patrón: master con paneles (mesas, tabla items, totales por moneda).
 
-## Handler: `ventas.handler.ts` (2579 líneas)
+## Handler: `ventas.handler.ts` (~3000 líneas)
 
-75 handlers organizados en grupos:
-- PrecioDelivery (5)
-- Delivery (7)
-- Venta (11)
-- VentaItem (5)
-- VentaItemObservacion / Adicional / IngredienteModificacion / Sabor (3 cada)
-- PdvGrupoCategoria / PdvCategoria / PdvCategoriaItem / PdvItemProducto (5-6 cada)
-- PdvConfig (3)
-- Reserva (6)
-- PdvMesa (8)
-- Comanda (13, incluye `abrirComanda`, `cerrarComanda`, `createBatchComandas`)
-- Sector (6)
+~123 handlers `ipcMain.handle(...)` organizados en grupos (más helpers internos como `autoPrintComandaIfNeeded`):
+- Buffet métricas (`get-buffet-metricas`)
+- PrecioDelivery
+- Delivery (incluye `getDeliveriesByEstado`, `getDeliveriesByCaja`)
+- Venta (CRUD + `getVentasByDateRange(desde, hasta, filtros?)`, `getResumenCaja`, `cerrarVentasAbiertasMesa`)
+- VentaItem
+- VentaItemObservacion / Adicional / IngredienteModificacion
+- PdvGrupoCategoria / PdvCategoria / PdvCategoriaItem / PdvItemProducto
+- PdvConfig (get / create / update)
+- Reserva
+- PdvMesa (incluye `createBatchPdvMesas`)
+- Comanda (incluye `abrirComanda`, `cerrarComanda`, `createBatchComandas`, `getComandaWithVenta`)
+- Sector
 - Stock (`procesarStockVenta`, `revertirStockVenta`)
-- PdvAtajoGrupo / PdvAtajoItem / PdvAtajoItemProducto (~16)
-- VentaItemSabor (3)
+- PdvAtajoGrupo / PdvAtajoItem / PdvAtajoItemProducto
+- VentaItemSabor
+
+**Hooks de auto-impresión** (no son IPC, son helpers internos): `createVentaItem`/`updateVentaItem` llaman `autoPrintComandaIfNeeded`; `updateVenta(CONCLUIDA)` dispara el ticket de venta. Ambos respetan flags de `PdvConfig` y van por `documentos-tickets.handler.ts`. Ruteo de impresión por sector vía handlers `producto-sectores.handler.ts` y `sectores-impresoras.handler.ts`. KDS en `kds.handler.ts`.
 
 → Lista completa en [reference/handlers-index.md](../reference/handlers-index.md).
 

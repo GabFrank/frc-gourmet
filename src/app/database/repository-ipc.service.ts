@@ -183,6 +183,7 @@ interface ElectronAPI {
   getCajas: () => Promise<Caja[]>;
   getCaja: (cajaId: number) => Promise<Caja>;
   getCajaAbiertaByUsuario: (usuarioId: number) => Promise<Caja>;
+  getCajasAbiertas: () => Promise<Caja[]>;
   createCaja: (cajaData: Partial<Caja>) => Promise<Caja>;
   updateCaja: (cajaId: number, cajaData: Partial<Caja>) => Promise<any>;
   deleteCaja: (cajaId: number) => Promise<any>;
@@ -367,8 +368,8 @@ interface ElectronAPI {
   deletePdvMesa: (id: number) => Promise<boolean>;
 
   // Sector methods
-  getSectores: () => Promise<Sector[]>;
-  getSectoresActivos: () => Promise<Sector[]>;
+  getSectores: (tipo?: string) => Promise<Sector[]>;
+  getSectoresActivos: (tipo?: string) => Promise<Sector[]>;
   getSector: (id: number) => Promise<Sector>;
   createSector: (data: Partial<Sector>) => Promise<Sector>;
   updateSector: (id: number, data: Partial<Sector>) => Promise<Sector>;
@@ -610,6 +611,18 @@ interface ElectronAPI {
   recalculateRecipeCost: (recetaId: number) => Promise<{ success: boolean; costoCalculado: number }>;
   recalculateAllRecipeCosts: () => Promise<any[]>;
   getPreciosCostoReceta: (recetaId: number) => Promise<PrecioCosto[]>;
+  // Receta fases / materiales
+  getRecetaFases: (recetaId: number) => Promise<any[]>;
+  createRecetaFase: (data: any) => Promise<any>;
+  updateRecetaFase: (faseId: number, data: any) => Promise<any>;
+  deleteRecetaFase: (faseId: number) => Promise<any>;
+  reorderRecetaFases: (recetaId: number, ordenIds: number[]) => Promise<any>;
+  setRecetaFaseIngredientes: (faseId: number, recetaIngredienteIds: number[]) => Promise<any>;
+  getRecetaMateriales: (recetaId: number) => Promise<any[]>;
+  createRecetaMaterial: (data: any) => Promise<any>;
+  updateRecetaMaterial: (materialId: number, data: any) => Promise<any>;
+  deleteRecetaMaterial: (materialId: number) => Promise<any>;
+  exportRecetaPdf: (recetaId: number) => Promise<any>;
   // Sabor methods
   getSabores: () => Promise<string[]>;
   createOrUpdateSabor: (saborData: any) => Promise<{ success: boolean, message: string }>;
@@ -678,12 +691,18 @@ interface ElectronAPI {
   createGasto: (data: any) => Promise<any>;
   anularGasto: (id: number, motivo: string) => Promise<any>;
   editGasto: (gastoId: number, data: any) => Promise<any>;
+  createGastoCaja: (data: any) => Promise<any>;
+  getGastosCaja: (cajaId: number, incluirAnulados?: boolean) => Promise<any[]>;
+  anularGastoCaja: (gastoId: number, motivo?: string) => Promise<any>;
   editCajaMayorMovimiento: (movId: number, data: any) => Promise<any>;
   getGastosProgramados: () => Promise<any[]>;
   getRetirosCaja: (filtros?: any) => Promise<any[]>;
   getRetiroCaja: (id: number) => Promise<any>;
   createRetiroCaja: (data: any) => Promise<any>;
   ingresarRetiroCaja: (retiroId: number, cajaMayorId: number) => Promise<any>;
+  generarRetiroCierreCaja: (cajaId: number) => Promise<any>;
+  egresoCajaInicial: (data: any) => Promise<any>;
+  abrirCajaDesdeConteo: (conteoId: number, dispositivoId: number) => Promise<any>;
 
   // Banking - CuentasBancarias
   getCuentasBancarias: () => Promise<any[]>;
@@ -1498,6 +1517,10 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.getCajaAbiertaByUsuario(usuarioId));
   }
 
+  getCajasAbiertas(): Observable<Caja[]> {
+    return from(this.api.getCajasAbiertas());
+  }
+
   getCaja(cajaId: number): Observable<Caja> {
     return from(this.api.getCaja(cajaId));
   }
@@ -2178,12 +2201,12 @@ export class RepositoryIpcService extends RepositoryService {
   }
 
   // Sector methods
-  getSectores(): Observable<Sector[]> {
-    return from(this.api.getSectores());
+  getSectores(tipo?: string): Observable<Sector[]> {
+    return from(this.api.getSectores(tipo));
   }
 
-  getSectoresActivos(): Observable<Sector[]> {
-    return from(this.api.getSectoresActivos());
+  getSectoresActivos(tipo?: string): Observable<Sector[]> {
+    return from(this.api.getSectoresActivos(tipo));
   }
 
   getSector(id: number): Observable<Sector> {
@@ -2869,6 +2892,39 @@ export class RepositoryIpcService extends RepositoryService {
   recalculateRecipeCost(recetaId: number): Observable<any> {
     return from(this.api.recalculateRecipeCost(recetaId));
   }
+  getRecetaFases(recetaId: number): Observable<any[]> {
+    return from(this.api.getRecetaFases(recetaId));
+  }
+  createRecetaFase(data: any): Observable<any> {
+    return from(this.api.createRecetaFase(data));
+  }
+  updateRecetaFase(faseId: number, data: any): Observable<any> {
+    return from(this.api.updateRecetaFase(faseId, data));
+  }
+  deleteRecetaFase(faseId: number): Observable<any> {
+    return from(this.api.deleteRecetaFase(faseId));
+  }
+  reorderRecetaFases(recetaId: number, ordenIds: number[]): Observable<any> {
+    return from(this.api.reorderRecetaFases(recetaId, ordenIds));
+  }
+  setRecetaFaseIngredientes(faseId: number, recetaIngredienteIds: number[]): Observable<any> {
+    return from(this.api.setRecetaFaseIngredientes(faseId, recetaIngredienteIds));
+  }
+  getRecetaMateriales(recetaId: number): Observable<any[]> {
+    return from(this.api.getRecetaMateriales(recetaId));
+  }
+  createRecetaMaterial(data: any): Observable<any> {
+    return from(this.api.createRecetaMaterial(data));
+  }
+  updateRecetaMaterial(materialId: number, data: any): Observable<any> {
+    return from(this.api.updateRecetaMaterial(materialId, data));
+  }
+  deleteRecetaMaterial(materialId: number): Observable<any> {
+    return from(this.api.deleteRecetaMaterial(materialId));
+  }
+  exportRecetaPdf(recetaId: number): Observable<any> {
+    return from(this.api.exportRecetaPdf(recetaId));
+  }
 
   // Sabor methods
   getSabores(): Observable<string[]> {
@@ -3059,6 +3115,15 @@ export class RepositoryIpcService extends RepositoryService {
   anularGasto(id: number, motivo: string): Observable<any> {
     return from(this.api.anularGasto(id, motivo));
   }
+  createGastoCaja(data: any): Observable<any> {
+    return from(this.api.createGastoCaja(data));
+  }
+  getGastosCaja(cajaId: number, incluirAnulados?: boolean): Observable<any[]> {
+    return from(this.api.getGastosCaja(cajaId, incluirAnulados));
+  }
+  anularGastoCaja(gastoId: number, motivo?: string): Observable<any> {
+    return from(this.api.anularGastoCaja(gastoId, motivo));
+  }
   editGasto(gastoId: number, data: any): Observable<any> {
     return from(this.api.editGasto(gastoId, data));
   }
@@ -3081,6 +3146,15 @@ export class RepositoryIpcService extends RepositoryService {
   }
   ingresarRetiroCaja(retiroId: number, cajaMayorId: number): Observable<any> {
     return from(this.api.ingresarRetiroCaja(retiroId, cajaMayorId));
+  }
+  generarRetiroCierreCaja(cajaId: number): Observable<any> {
+    return from(this.api.generarRetiroCierreCaja(cajaId));
+  }
+  egresoCajaInicial(data: any): Observable<any> {
+    return from(this.api.egresoCajaInicial(data));
+  }
+  abrirCajaDesdeConteo(conteoId: number, dispositivoId: number): Observable<any> {
+    return from(this.api.abrirCajaDesdeConteo(conteoId, dispositivoId));
   }
 
   // ===================== BANKING =====================

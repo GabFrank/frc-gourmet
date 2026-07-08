@@ -9,6 +9,12 @@
   margin: 0 auto;
 }
 
+.crud-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
 .crud-filterbar {
   display: flex;
   align-items: flex-start;

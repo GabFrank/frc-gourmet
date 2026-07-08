@@ -2,7 +2,16 @@
 description: 
 globs: 
 ---
-# Guide for Creating tvides a comprehensive guide for creating new entities in the FRC Gourmet application. It covers all layers of the application stack and ensures consistency across the codebase.
+# Guide for Creating New Entities
+
+This is a comprehensive guide for creating new entities in the FRC Gourmet application. It covers all layers of the application stack and ensures consistency across the codebase.
+
+> **⚠️ Correcciones importantes (la guía se escribió con un modelo anterior):**
+> - El schema se maneja con **migraciones**, no con `synchronize` (que está en `false`). Crear una entity SIN migración = la tabla no existe en runtime. Ver el nuevo paso **2.5**.
+> - El preload expone la API como **`window.api`** (`contextBridge.exposeInMainWorld('api', ...)`), no `window.electron`. Existe `window.api.callIpc(channel, ...args)` genérico para evitar wrappers repetidos.
+> - El array de entidades se arma en **`getEntitiesList()`** (no en `getDataSourceOptions` directamente).
+> - `RepositoryService` es abstracto con dos impls: `repository-ipc.service.ts` (standalone/server) y `repository-http.service.ts` (client).
+> - Los ejemplos de código de abajo siguen siendo válidos como referencia de estructura; ajustá los nombres según lo anterior.
 
 ## 1. Entity Definition (TypeORM)
 
@@ -54,7 +63,7 @@ export class EntityName extends BaseModel {
 
 ### Rules:
 - Import the new entity at the top of the file
-- Add the entity to the `entities` array in the `getDataSourceOptions` function
+- Add the entity to the array returned by **`getEntitiesList()`** (used by `getDataSourceOptions`)
 
 ### Example:
 
@@ -72,6 +81,48 @@ export function getDataSourceOptions(userDataPath: string): DataSourceOptions {
     ],
     // ...
   };
+}
+```
+
+## 2.5. Migration (OBLIGATORIO)
+
+Como `synchronize: false`, la tabla no se crea sola. Hay que escribir una migración.
+
+### Files to Create:
+- `src/app/database/migrations/<epoch-millis>-Add<EntityName>.ts`
+
+### Rules:
+- **Timestamp = epoch-ms real** (`date +%s%3N`), nunca un número redondeado a mano (colisiona entre ramas). El nombre de clase termina con ese mismo número (`AddFoo1782606189440`).
+- **Driver-aware**: ramificar con `queryRunner.connection.options.type === 'postgres'` (SQLite usa `integer PRIMARY KEY AUTOINCREMENT`, `datetime`, `0/1`; Postgres usa `SERIAL`, `TIMESTAMP`, `true/false`, `now()`).
+- **Aditiva** (sin DROP/RENAME salvo estrategia de 2 versiones), idempotente (`IF NOT EXISTS`).
+- Registrar la clase en `getMigrations()` de `database.config.ts`.
+- Recordá los campos de `BaseModel`: `id`, `created_at`, `updated_at`, `created_by`, `updated_by`.
+- Detalle completo y ejemplos: `docs/MIGRATIONS.md`.
+
+### Example:
+
+```typescript
+import { MigrationInterface, QueryRunner } from 'typeorm';
+
+export class AddEntityName1782606189440 implements MigrationInterface {
+  name = 'AddEntityName1782606189440';
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    const isPg = queryRunner.connection.options.type === 'postgres';
+    if (isPg) {
+      await queryRunner.query(`CREATE TABLE IF NOT EXISTS "table_name" (
+        "id" SERIAL PRIMARY KEY, "name" varchar NOT NULL, "activo" boolean NOT NULL DEFAULT true,
+        "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
+        "created_by" integer NULL, "updated_by" integer NULL)`);
+    } else {
+      await queryRunner.query(`CREATE TABLE IF NOT EXISTS "table_name" (
+        "id" integer PRIMARY KEY AUTOINCREMENT NOT NULL, "name" varchar NOT NULL, "activo" boolean NOT NULL DEFAULT (1),
+        "created_at" datetime NOT NULL DEFAULT (datetime('now')), "updated_at" datetime NOT NULL DEFAULT (datetime('now')),
+        "created_by" integer, "updated_by" integer)`);
+    }
+  }
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`DROP TABLE IF EXISTS "table_name"`);
+  }
 }
 ```
 

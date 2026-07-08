@@ -1,0 +1,37 @@
+<div class="vd-wrap">
+  <div class="vd-card">
+    <h1 class="vd-title">Vincular este dispositivo</h1>
+
+    <div *ngIf="estado === 'cargando'" class="vd-center">
+      <mat-spinner diameter="40"></mat-spinner>
+    </div>
+
+    <ng-container *ngIf="estado === 'esperando'">
+      <p class="vd-hint">Escaneá este código con la app en tu teléfono (ya logueado) para autorizar.</p>
+      <div class="vd-qr" *ngIf="qr">
+        <img [src]="qr" alt="Código QR de vinculación" />
+      </div>
+      <p class="vd-code" *ngIf="!qr">Código: {{ deviceCode }}</p>
+      <p class="vd-waiting"><mat-icon>hourglass_top</mat-icon> Esperando aprobación…</p>
+    </ng-container>
+
+    <div *ngIf="estado === 'aprobado'" class="vd-center vd-ok">
+      <mat-icon>check_circle</mat-icon>
+      <p>¡Vinculado! Entrando…</p>
+    </div>
+
+    <div *ngIf="estado === 'expirado'" class="vd-center">
+      <mat-icon class="vd-warn">timer_off</mat-icon>
+      <p>El código expiró.</p>
+      <button mat-raised-button color="primary" (click)="iniciar()">Generar nuevo</button>
+    </div>
+
+    <div *ngIf="estado === 'error'" class="vd-center">
+      <mat-icon class="vd-warn">error_outline</mat-icon>
+      <p>No se pudo iniciar la vinculación.</p>
+      <button mat-raised-button color="primary" (click)="iniciar()">Reintentar</button>
+    </div>
+
+    <a class="vd-alt" routerLink="/login">Usar usuario y contraseña</a>
+  </div>
+</div>

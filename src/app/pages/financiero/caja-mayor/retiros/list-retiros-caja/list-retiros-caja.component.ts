@@ -48,7 +48,7 @@ interface RetiroRow {
 export class ListRetirosCajaComponent implements OnInit {
   retiroRows: RetiroRow[] = [];
   loading = false;
-  displayedColumns = ['id', 'caja', 'estado', 'fechaRetiro', 'cajaMayor', 'responsable', 'total', 'actions'];
+  displayedColumns = ['id', 'caja', 'origen', 'estado', 'fechaRetiro', 'cajaMayor', 'responsable', 'total', 'actions'];
 
   estadoFilter = new FormControl(null);
   estadoOptions = ['FLOTANTE', 'VINCULADO_PENDIENTE', 'INGRESADO'];

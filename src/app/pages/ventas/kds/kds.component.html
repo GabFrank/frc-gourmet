@@ -1,4 +1,4 @@
-<div class="kds-root">
+<div class="kds-root" [class.tv]="tvMode">
   <!-- Barra superior -->
   <header class="kds-header">
     <div class="kds-title">
@@ -26,6 +26,14 @@
     <div class="kds-actions">
       <span class="kds-numpad" *ngIf="numpadBuffer">#{{ numpadBuffer }}</span>
       <mat-slide-toggle [checked]="allDay" (change)="toggleAllDay()" color="primary">All-day</mat-slide-toggle>
+      <button mat-icon-button class="kds-action-btn" (click)="toggleTvMode()"
+              [class.on]="tvMode" [matTooltip]="tvMode ? 'Modo TV activo (texto grande + márgenes)' : 'Modo TV (texto grande + márgenes)'">
+        <mat-icon>{{ tvMode ? 'tv' : 'tv_off' }}</mat-icon>
+      </button>
+      <button mat-icon-button class="kds-action-btn" (click)="toggleFullscreen()"
+              [matTooltip]="isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'">
+        <mat-icon>{{ isFullscreen ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+      </button>
     </div>
   </header>
 
@@ -68,6 +76,10 @@
           <span class="kds-item-body">
             <span class="kds-item-name">{{ it.productoNombre }}</span>
             <span class="kds-item-obs" *ngIf="it.ensamblado">{{ it.ensamblado }}</span>
+            <span class="kds-item-mod kds-mod-sin" *ngFor="let x of it.removidos">SIN {{ x }}</span>
+            <span class="kds-item-mod kds-mod-cambio" *ngFor="let x of it.cambios">CAMBIAR {{ x }}</span>
+            <span class="kds-item-mod kds-mod-add" *ngFor="let x of it.adicionales">+ {{ x }}</span>
+            <span class="kds-item-mod kds-mod-obs" *ngFor="let x of it.observacionesItem">&gt;&gt; {{ x }}</span>
             <span class="kds-item-obs" *ngIf="it.observacion">{{ it.observacion }}</span>
           </span>
           <mat-icon class="kds-item-state">

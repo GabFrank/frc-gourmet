@@ -62,6 +62,8 @@
   </div>
 </mat-dialog-content>
 
+<p *ngIf="errorMsg" class="cierre-error">{{ errorMsg }}</p>
+
 <mat-dialog-actions align="end">
   <button mat-button (click)="onCancel()">CANCELAR</button>
   <button

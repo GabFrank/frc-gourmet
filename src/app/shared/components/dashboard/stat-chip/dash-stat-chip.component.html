@@ -1,4 +1,4 @@
-<div class="dashboard-stat-chip" [ngClass]="'chip-' + color">
+<div class="dashboard-stat-chip" [ngClass]="'chip-' + color" [class.chip-clickable]="clickable" (click)="onClick()">
   <mat-icon>{{ icon }}</mat-icon>
   <div class="dashboard-stat-chip-data">
     <span class="dashboard-stat-chip-value">

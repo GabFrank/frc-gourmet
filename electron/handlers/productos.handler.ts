@@ -321,9 +321,11 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       // Construir where conditions
       const whereConditions: any = {};
 
-      // Filtro por búsqueda
+      // Filtro por búsqueda. Los strings se guardan en MAYÚSCULAS, así que se
+      // mayusculiza el término (en Postgres LIKE es case-sensitive; sin esto no
+      // trae datos al escribir en minúsculas).
       if (filters.search) {
-        whereConditions.nombre = Like(`%${filters.search}%`);
+        whereConditions.nombre = Like(`%${filters.search.toUpperCase()}%`);
       }
 
       // Filtro por tipo
@@ -407,12 +409,17 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
    * el listado de Productos del mobile). A diferencia de search-productos-by-
    * nombre, no filtra por esVendible (muestra también ingredientes).
    */
-  ipcMain.handle('get-productos-con-precio', async () => {
+  ipcMain.handle('get-productos-con-precio', async (_event: any, search?: string) => {
     try {
       const repo = dataSource.getRepository(Producto);
       const pvRepo = dataSource.getRepository(PrecioVenta);
+      // Filtro por nombre en el BACKEND (no en el cliente): el término va en
+      // UPPERCASE porque los nombres se guardan así (Like case-sensitive en Postgres).
+      const term = (search || '').trim().toUpperCase();
+      const where: any = { activo: true };
+      if (term) where.nombre = Like(`%${term}%`);
       const productos = await repo.find({
-        where: { activo: true },
+        where,
         relations: ['presentaciones', 'presentaciones.preciosVenta', 'presentaciones.preciosVenta.moneda', 'receta'],
         order: { nombre: 'ASC' },
       });
@@ -933,6 +940,12 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   // --- Codigo Barra Handlers ---
+  // Normaliza el código de barra antes de persistir: recorta espacios (los
+  // lectores a veces agregan un salto de línea / espacio final) y lo pasa a
+  // MAYÚSCULAS, de modo que el guardado y la búsqueda usen la misma forma.
+  const normalizarCodigoBarra = (codigo: any): string =>
+    (codigo ?? '').toString().trim().toUpperCase();
+
   ipcMain.handle('create-codigo-barra', async (_event: any, codigoBarraData: any) => {
     try {
       console.log('Creating codigo barra with data:', codigoBarraData);
@@ -961,7 +974,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       }
 
       const codigoBarra = codigoBarraRepository.create({
-        codigo: codigoBarraData.codigo,
+        codigo: normalizarCodigoBarra(codigoBarraData.codigo),
         presentacion: presentacion,
         principal: codigoBarraData.principal !== undefined ? codigoBarraData.principal : false,
         activo: codigoBarraData.activo !== undefined ? codigoBarraData.activo : true
@@ -1004,7 +1017,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
       // Update fields
       if (codigoBarraData.codigo !== undefined) {
-        codigoBarra.codigo = codigoBarraData.codigo;
+        codigoBarra.codigo = normalizarCodigoBarra(codigoBarraData.codigo);
       }
       if (codigoBarraData.principal !== undefined) {
         codigoBarra.principal = codigoBarraData.principal;
@@ -1733,18 +1746,23 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         order: { nombre: 'ASC' }
       });
 
-      // Buscar también por CÓDIGO DE BARRA: si el término coincide exactamente
-      // con un código activo, incluir ese producto en los resultados (los
-      // lectores envían el código completo). Así el buscador "encuentra por
-      // código" tanto en el PdV como en el mobile.
+      // Buscar también por CÓDIGO DE BARRA: si el término coincide con un
+      // código activo, incluir ese producto en los resultados (los lectores
+      // envían el código completo). Así el buscador "encuentra por código"
+      // tanto en el PdV como en el mobile.
+      // Se compara con TRIM + UPPER en ambos lados para tolerar diferencias de
+      // espacios/mayúsculas (incluye códigos ya guardados sin normalizar).
       const termino = (nombre || '').trim();
       const codigoProdIds = new Set<number>();
       if (termino) {
         const cbRepo = dataSource.getRepository(CodigoBarra);
-        const cbs = await cbRepo.find({
-          where: { codigo: termino, activo: true },
-          relations: ['presentacion', 'presentacion.producto'],
-        });
+        const cbs = await cbRepo
+          .createQueryBuilder('cb')
+          .leftJoinAndSelect('cb.presentacion', 'presentacion')
+          .leftJoinAndSelect('presentacion.producto', 'producto')
+          .where('cb.activo = :activo', { activo: true })
+          .andWhere('UPPER(TRIM(cb.codigo)) = UPPER(:codigo)', { codigo: termino })
+          .getMany();
         for (const cb of cbs) {
           const pid = (cb as any)?.presentacion?.producto?.id;
           if (pid) codigoProdIds.add(pid);
@@ -1826,6 +1844,10 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
           recetas: (p as any).recetas?.map((r: any) => ({ id: r.id, costoCalculado: r.costoCalculado })) || [],
           principalPresentacion,
           principalPrecio,
+          // true si el término de búsqueda matcheó EXACTAMENTE un código de
+          // barra de este producto. El PdV/buscador lo usa para auto-seleccionar
+          // (como un click en la fila) cuando hay un único match exacto.
+          matchByCodigo: codigoProdIds.has(p.id),
         };
       }));
     } catch (error) {

@@ -71,7 +71,7 @@
           <div *ngIf="receta.ingredientes && receta.ingredientes.length > 0; else noIngredients">
             <div class="ingredient-item" *ngFor="let ingrediente of receta.ingredientes">
               <div class="ingredient-info">
-                <span class="ingredient-name">{{ingrediente.ingrediente.nombre}}</span>
+                <span class="ingredient-name">{{ingrediente.ingrediente?.nombre || ingrediente.descripcion}}</span>
                 <span class="ingredient-quantity">{{ingrediente.cantidad}} {{ingrediente.unidad}}</span>
               </div>
               <div class="ingredient-cost">

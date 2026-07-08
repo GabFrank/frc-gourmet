@@ -1,0 +1,31 @@
+<h2 mat-dialog-title>Seleccionar caja abierta</h2>
+
+<mat-dialog-content>
+  <p class="hint">Hay varias cajas abiertas. Elegí a cuál querés unirte para lanzar items.</p>
+
+  <mat-list class="cajas-list">
+    <button
+      mat-list-item
+      class="caja-item"
+      *ngFor="let vm of cajasVm"
+      (click)="seleccionar(vm.caja)">
+      <mat-icon matListItemIcon>point_of_sale</mat-icon>
+      <div matListItemTitle class="caja-titulo">
+        {{ vm.titulo }}
+        <span class="badge" *ngIf="vm.esEsteDispositivo">ESTE DISPOSITIVO · COBRA</span>
+      </div>
+      <div matListItemLine class="caja-sub">
+        {{ vm.dispositivo }} · {{ vm.usuario }}
+        <span *ngIf="vm.apertura"> · {{ vm.apertura }}</span>
+      </div>
+    </button>
+  </mat-list>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-stroked-button (click)="abrirNueva()">
+    <mat-icon>add</mat-icon>
+    Abrir nueva caja
+  </button>
+  <button mat-button (click)="cancelar()">Cancelar</button>
+</mat-dialog-actions>

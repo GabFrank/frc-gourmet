@@ -91,6 +91,15 @@ function storeTokens(access: string | null, refresh: string | null): void {
   else localStorage.removeItem(REFRESH_KEY);
 }
 
+/**
+ * Guarda tokens obtenidos por fuera del login normal (ej. login por QR /
+ * device grant). Actualiza el cache en memoria y localStorage para que los
+ * siguientes requests viajen autenticados sin recargar.
+ */
+export function setSessionTokens(access: string | null, refresh: string | null): void {
+  storeTokens(access, refresh);
+}
+
 interface HttpError extends Error {
   status?: number;
 }

@@ -29,9 +29,9 @@ Settings unificadas en `userData/app-settings.json`. Password DB en **keytar** (
 - DI provider `repositoryFactory()` en `AppModule` elige impl según `process.env.FRC_APP_MODE` (que setea `main.ts`); en la práctica devuelve siempre `RepositoryIpcService` y el preload routea HTTP en cliente.
 
 ### F3 — Server skeleton + RPC router
-- F3.1: Fastify server en `electron/server/` con endpoints `/api/version`, `/api/health`.
-- F3.2/3.3: JWT auth middleware + login/refresh + RPC router (`/api/rpc/:channel`) + file endpoint.
-- **Handler registry global** vía monkey-patch de `ipcMain.handle` — cada canal IPC queda registrado en `handlerRegistry` y el RPC router puede invocarlo por nombre. Resultado: los 696 handlers IPC originales son automáticamente accesibles por HTTP sin duplicar código.
+- F3.1: Fastify server en `electron/server/` (archivos: `server.ts`, `rpc-router.ts`, `auth-middleware.ts`, `auth-routes.ts`, `file-routes.ts`, `kds-sse-routes.ts`, `special-routes.ts`). Endpoints de salud/versión + SSE para KDS.
+- F3.2/3.3: JWT auth middleware + login/refresh + RPC router (`POST /api/rpc` con body `{ method, params }`) + file endpoint (`/api/files/by-url`).
+- **Handler registry global** vía monkey-patch de `ipcMain.handle` — cada canal IPC queda registrado en `handlerRegistry` y el RPC router puede invocarlo por nombre. Resultado: los 700+ handlers IPC originales son automáticamente accesibles por HTTP sin duplicar código.
 
 ### F4 — UI modo + cliente HTTP
 - F4.1: Preload monkey-patchea `ipcRenderer.invoke` en `mode=client` para rutear a HTTP. Auth flow (login → JWT en memoria → refresh).
@@ -63,15 +63,12 @@ Memoria `feedback_preload_monkey_patch_gotchas.md`. Los 4 patrones:
 
 ## Smoke server para testing E2E
 
-`scripts/test-server-standalone.ts` arranca un Fastify completo con los 696 handlers reales (mediante el handler registry global). Permite testear `mode=client` en una sola Mac sin necesidad de 2 PCs.
+`scripts/test-server-standalone.ts` arranca un Fastify completo con los 700+ handlers reales (mediante el handler registry global). Permite testear `mode=client` en una sola Mac sin necesidad de 2 PCs.
 
 Memoria: `reference_smoke_server_e2e.md`.
 
-## Estado al 2026-05-11
+## Estado
 
-Todo F1–F5 está mergeado en `develop`. Pendiente:
-- Testing E2E F4 images con cliente real.
-- F6 Mobile: **EN CURSO** — cliente PWA (`projects/mobile`) construido sobre este server. Ver [mobile-pwa.md](mobile-pwa.md).
-- Activar `PermissionService` en frontend (existe pero no se usa para chequear permisos).
-
-Memoria: `project_proxima_sesion_post_f5.md`, `project_cliente_servidor_f4.md`.
+- F1–F5 mergeado en `develop`. Permisos validados en backend (`ensurePermission`) + frontend (`*appHasPermission`).
+- Cliente PWA (`projects/mobile`) construido sobre este server. Ver [mobile-pwa.md](mobile-pwa.md).
+- El server además puede servir la PWA estática (`dist/mobile`) y exponer SSE para KDS.

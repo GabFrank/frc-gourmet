@@ -265,10 +265,11 @@ Este documento describe todas las funciones del Punto de Venta y el estado actua
 
 ## 10. PRE-CUENTA / IMPRIMIR
 
-- **Estado:** PARCIALMENTE IMPLEMENTADO
-- **Ubicacion:** `pdv.component.ts`
-- **Notas:** Muestra dialogo con resumen de cuenta (mesa, fecha, items, total). Impresion a impresora fisica pendiente.
-- **Pendiente:** Envio a impresora termica configurada
+- **Estado:** IMPLEMENTADO
+- **Ubicacion:** `pdv.component.ts` - `imprimirPreCuenta()`, `reimprimirComanda()`
+- **Notas:** Imprime en impresora termica via handler `print-precuenta` (`documentos-tickets.handler.ts`).
+  La impresion fisica usa `node-thermal-printer` con ruteo por sector (`SectorImpresora`). Tambien se
+  reimprime la comanda con `print-comanda` (forceReprint).
 
 ---
 
@@ -353,7 +354,7 @@ Este documento describe todas las funciones del Punto de Venta y el estado actua
 - **DATOS:** Abre dialogo de edicion de datos del delivery. Deshabilitado si ENTREGADO/CANCELADO.
 - **ITEMS:** Cierra dialogo y carga venta en PdV (modo delivery). Deshabilitado si ENTREGADO/CANCELADO.
 - **PAGO:** Abre dialogo de cobro con la venta del delivery. Deshabilitado si ENTREGADO/CANCELADO. Post-cobro pregunta si finalizar delivery.
-- **IMPRIMIR:** Siempre habilitado (pendiente impresion real).
+- **IMPRIMIR:** Siempre habilitado. Imprime etiqueta de delivery via `print-etiqueta-delivery`.
 - **CANCELAR:** Pide motivo, cancela delivery + venta. Deshabilitado si ENTREGADO/CANCELADO.
 - **Todos deshabilitados si no hay delivery seleccionado.**
 
@@ -652,7 +653,7 @@ Este documento describe todas las funciones del Punto de Venta y el estado actua
 | Cancelar Venta | 1 | 0 | 0 |
 | Transferir Mesa | 1 | 0 | 0 |
 | Mover Items | 1 | 0 | 0 |
-| Pre-Cuenta/Imprimir | 0 | 1 | 0 |
+| Pre-Cuenta/Imprimir | 1 | 0 | 0 |
 | Asociar Cliente | 3 | 0 | 0 |
 | Atajos de Teclado | 1 | 0 | 0 |
 | Delivery | 8 | 0 | 1 |
@@ -663,19 +664,23 @@ Este documento describe todas las funciones del Punto de Venta y el estado actua
 | Movimiento de Stock | 7 | 0 | 0 |
 | Comandas | 8 | 0 | 0 |
 | Dashboard | 0 | 1 | 0 |
-| **TOTAL** | **59** | **6** | **2** |
+| **TOTAL** | **60** | **5** | **2** |
+
+> **Nota (2026-06-28):** la impresion termica ya esta implementada (`documentos-tickets.handler.ts`,
+> `print-precuenta`/`print-comanda`/`print-venta-ticket`/`print-etiqueta-delivery`, etc.), con ruteo por
+> sector (`SectorImpresora`) y KDS de cocina via SSE. Las menciones de "impresion pendiente" mas abajo
+> son del estado anterior.
 
 ---
 
 ## FUNCIONES PENDIENTES GENERALES
 
-1. **Impresion** — tickets, comandas, resumen de caja (entidad e integracion con impresora termica)
-2. **Cancelar Caja** — cancela caja con ventas, cobros y movimientos de stock
-3. **Retiros de Efectivo** — registrar retiros de caja durante el turno
-4. **Gastos** — registrar gastos operativos desde el PdV
-5. **Categorias click** — agregar productos al carrito desde items de categoria
-6. **UI Precios de Delivery** — ABM visual (actualmente se gestionan desde crear-delivery dialog)
-7. **UI Configuracion PdV** — dialogo para editar umbrales y parametros de PdvConfig
+1. **Cancelar Caja** — cancela caja con ventas, cobros y movimientos de stock
+2. **Retiros de Efectivo** — registrar retiros de caja durante el turno
+3. **Gastos** — registrar gastos operativos desde el PdV
+4. **Categorias click** — agregar productos al carrito desde items de categoria
+5. **UI Precios de Delivery** — ABM visual (actualmente se gestionan desde crear-delivery dialog)
+6. **UI Configuracion PdV** — dialogo para editar umbrales y parametros de PdvConfig
 
 ---
 

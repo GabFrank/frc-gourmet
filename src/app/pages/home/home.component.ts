@@ -43,6 +43,7 @@ import { ListClientesComponent } from 'src/app/pages/personas/clientes/list-clie
 import { PdvConfigDialogComponent } from 'src/app/shared/components/pdv-config-dialog/pdv-config-dialog.component';
 import { PdvMesaDialogComponent } from 'src/app/shared/components/pdv-mesa-dialog/pdv-mesa-dialog.component';
 import { MatDialog } from '@angular/material/dialog';
+import { VentasDesgloseDialogComponent } from 'src/app/shared/components/ventas-desglose-dialog/ventas-desglose-dialog.component';
 
 @Component({
   selector: 'app-home',
@@ -84,6 +85,12 @@ export class HomeComponent implements OnInit, OnDestroy {
   totalHoyPYG = 0;
   cajasAbiertas = 0;
   cppVencidos = 0;
+  // Desglose del total de ventas de hoy (por moneda y forma de pago, en Gs).
+  desgloseVentasHoy: any = null;
+  // true → el total corresponde a las cajas abiertas (no al día calendario).
+  totalBasadoEnCajas = false;
+  labelVentas = 'Ventas hoy';
+  labelTotal = 'Total hoy';
 
   alertas: { tipo: string; titulo: string; detalle: string; color: 'error' | 'warning' | 'info' }[] = [];
 
@@ -148,6 +155,10 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.ventasHoy = ventasKpi.ventasHoy || 0;
         this.totalHoyPYG = ventasKpi.totalHoyPYG || 0;
         this.cajasAbiertas = (ventasKpi.cajasAbiertas || []).length;
+        this.desgloseVentasHoy = ventasKpi.desgloseVentasHoy || null;
+        this.totalBasadoEnCajas = !!ventasKpi.totalBasadoEnCajas;
+        this.labelVentas = this.totalBasadoEnCajas ? 'Ventas en caja' : 'Ventas hoy';
+        this.labelTotal = this.totalBasadoEnCajas ? 'Total en caja' : 'Total hoy';
 
         const periodo = ventasKpi.ventasPorPeriodo || { labels: [], ventas: [] };
         this.chartData = {
@@ -203,6 +214,21 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   formatPYG(v: number): string {
     return (v || 0).toLocaleString('es-PY', { maximumFractionDigits: 0 });
+  }
+
+  /** Abre el desglose del total de ventas por moneda y forma de pago (en Gs). */
+  abrirDesgloseVentas(): void {
+    if (!this.desgloseVentasHoy) return;
+    this.dialog.open(VentasDesgloseDialogComponent, {
+      width: '600px',
+      maxWidth: '95vw',
+      data: {
+        titulo: this.totalBasadoEnCajas ? 'Total de ventas en caja' : 'Total de ventas de hoy',
+        totalGs: this.desgloseVentasHoy.totalGs || 0,
+        porMoneda: this.desgloseVentasHoy.porMoneda || [],
+        porFormaPago: this.desgloseVentasHoy.porFormaPago || [],
+      },
+    });
   }
 
   navigateTo(action: string): void {

@@ -13,25 +13,20 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as https from 'https';
 import type { UpdateInfo } from 'electron-updater';
 import { readAppSettings, updateAppSettings } from './app-settings.utils';
 
 let autoUpdater: any | null = null;
 let pollTimer: NodeJS.Timeout | null = null;
 
+const GH_OWNER = 'GabFrank';
+const GH_REPO = 'frc-gourmet';
 const LEGACY_UPDATE_CONFIG_FILE = 'update-config.json';
 const POLL_INTERVAL_MS = 30 * 60 * 1000; // 30 min
 const STARTUP_DELAY_MS = 8 * 1000; // 8s después de window ready
 
 export type UpdateChannel = 'stable' | 'beta' | 'alpha';
-
-// electron-updater busca <channel>.yml. Mapeo interno → manifest publicado:
-//   stable → latest.yml (default de electron-builder, NO existe stable.yml)
-//   beta   → beta.yml
-//   alpha  → alpha.yml
-function toUpdaterChannel(c: UpdateChannel): string {
-  return c === 'stable' ? 'latest' : c;
-}
 
 interface UpdateConfig {
   channel: UpdateChannel;
@@ -52,6 +47,51 @@ function inferChannelFromVersion(version: string): UpdateChannel {
   if (version.includes('-alpha')) return 'alpha';
   if (version.includes('-beta')) return 'beta';
   return 'stable';
+}
+
+/**
+ * Compara dos versiones semver (`MAJOR.MINOR.PATCH[-pre.N]`). Devuelve >0 si a>b,
+ * <0 si a<b, 0 si iguales. Necesario porque NO podemos confiar en el orden de la
+ * API de GitHub (ordena por `created_at`, no por semver): si se re-publica o edita
+ * un release viejo, queda arriba de uno más nuevo. Comparación acorde a semver:
+ * identificadores de prerelease numéricos se comparan como número (alpha.10 >
+ * alpha.9), y una versión SIN prerelease es mayor que la misma CON prerelease.
+ */
+function compareVersions(a: string, b: string): number {
+  const parse = (v: string) => {
+    const clean = v.replace(/^v/, '').trim();
+    const [core, pre = ''] = clean.split('-');
+    const nums = core.split('.').map((n) => parseInt(n, 10) || 0);
+    return { nums, pre };
+  };
+  const pa = parse(a);
+  const pb = parse(b);
+  for (let i = 0; i < 3; i++) {
+    const diff = (pa.nums[i] || 0) - (pb.nums[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  // Core igual: sin-prerelease gana sobre con-prerelease.
+  if (!pa.pre && pb.pre) return 1;
+  if (pa.pre && !pb.pre) return -1;
+  if (!pa.pre && !pb.pre) return 0;
+  // Ambos tienen prerelease: comparar identificador a identificador.
+  const ida = pa.pre.split('.');
+  const idb = pb.pre.split('.');
+  for (let i = 0; i < Math.max(ida.length, idb.length); i++) {
+    const x = ida[i];
+    const y = idb[i];
+    if (x === undefined) return -1; // menos identificadores = menor
+    if (y === undefined) return 1;
+    const nx = /^\d+$/.test(x);
+    const ny = /^\d+$/.test(y);
+    if (nx && ny) {
+      const diff = parseInt(x, 10) - parseInt(y, 10);
+      if (diff !== 0) return diff;
+    } else if (x !== y) {
+      return x < y ? -1 : 1;
+    }
+  }
+  return 0;
 }
 
 function migrateLegacyUpdateConfig(): void {
@@ -117,7 +157,9 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
   }
 
   const cfg = readUpdateConfig();
-  autoUpdater.channel = toUpdaterChannel(cfg.channel);
+  // El manifiesto publicado siempre es latest.yml (no hay alpha.yml/beta.yml);
+  // el canal real se resuelve por feed en cada chequeo (resolveFeedForChannel).
+  autoUpdater.channel = 'latest';
   // autoDownload=false: descargamos manualmente SOLO si el canal de la versión
   // ofrecida coincide con el suscripto (guard contra cross-channel del provider
   // de GitHub, que con allowPrerelease puede colar un stable más nuevo por semver).
@@ -205,16 +247,109 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
   registerIpc();
 }
 
+/** GET JSON simple (GitHub API). Devuelve null ante cualquier error. */
+function fetchJson(url: string): Promise<any> {
+  return new Promise((resolve) => {
+    https
+      .get(
+        url,
+        { headers: { 'User-Agent': 'frc-gourmet-updater', Accept: 'application/vnd.github+json' } },
+        (res) => {
+          if (!res.statusCode || res.statusCode >= 300) {
+            res.resume();
+            resolve(null);
+            return;
+          }
+          let data = '';
+          res.on('data', (d) => (data += d));
+          res.on('end', () => {
+            try {
+              resolve(JSON.parse(data));
+            } catch {
+              resolve(null);
+            }
+          });
+        },
+      )
+      .on('error', () => resolve(null));
+  });
+}
+
+/**
+ * Devuelve el tag del ÚLTIMO release del canal pedido (alpha/beta), resolviendo
+ * por la API de GitHub. Esto evita que el provider de electron-updater elija el
+ * release de mayor semver (típicamente un stable) y deje al canal alpha varado:
+ * un binario alpha debe seguir SIEMPRE el último alpha, aunque exista un stable
+ * con número más alto. null si no hay release de ese canal o falla la red.
+ *
+ * OJO: la API de GitHub ordena los releases por `created_at`, NO por semver. Si
+ * un release viejo se re-publica/edita después de uno más nuevo, queda arriba en
+ * la lista. Por eso NO se toma "el primero del canal": se filtran TODOS los del
+ * canal y se elige el de mayor semver (alpha.10 > alpha.9 aunque alpha.9 figure
+ * primero). Era el bug: alpha.9 quedaba arriba y devolvía la versión ya instalada.
+ */
+async function fetchLatestTagForChannel(channel: UpdateChannel): Promise<string | null> {
+  const releases = await fetchJson(
+    `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/releases?per_page=30`,
+  );
+  if (!Array.isArray(releases)) return null;
+  let best: string | null = null;
+  for (const r of releases) {
+    if (r.draft) continue;
+    const tag = String(r.tag_name || '');
+    const version = tag.replace(/^v/, '');
+    if (!version || inferChannelFromVersion(version) !== channel) continue;
+    if (best === null || compareVersions(version, best.replace(/^v/, '')) > 0) {
+      best = tag;
+    }
+  }
+  return best;
+}
+
+/**
+ * Apunta el feed del updater según el canal:
+ *  - stable: provider GitHub normal (usa el último release no-prerelease).
+ *  - alpha/beta: provider 'generic' apuntando al ÚLTIMO release de ese canal
+ *    (lee su latest.yml), para no ser eclipsado por un stable de mayor semver.
+ */
+async function resolveFeedForChannel(channel: UpdateChannel): Promise<void> {
+  if (!autoUpdater) return;
+  // El manifiesto SIEMPRE es `latest.yml` (electron-builder no genera alpha.yml/
+  // beta.yml). La "selección" del release del canal la hace el feed (abajo), no
+  // el `channel` de electron-updater. Si dejáramos channel='alpha', pediría
+  // `alpha.yml` y daría 404.
+  autoUpdater.channel = 'latest';
+  autoUpdater.allowPrerelease = channel !== 'stable';
+  if (channel === 'stable') {
+    autoUpdater.setFeedURL({ provider: 'github', owner: GH_OWNER, repo: GH_REPO });
+    return;
+  }
+  const tag = await fetchLatestTagForChannel(channel);
+  if (tag) {
+    autoUpdater.setFeedURL({
+      provider: 'generic',
+      url: `https://github.com/${GH_OWNER}/${GH_REPO}/releases/download/${tag}`,
+      channel: 'latest',
+    });
+  } else {
+    // Sin release del canal o sin red → fallback al provider GitHub.
+    autoUpdater.setFeedURL({ provider: 'github', owner: GH_OWNER, repo: GH_REPO });
+  }
+}
+
 function triggerCheck(): void {
   if (!autoUpdater) return;
-  try {
-    const cfg = readUpdateConfig();
-    cfg.lastCheckAt = new Date().toISOString();
-    writeUpdateConfig(cfg);
-    autoUpdater.checkForUpdates();
-  } catch (e) {
-    console.error('[auto-updater] checkForUpdates falló:', e);
-  }
+  void (async () => {
+    try {
+      const cfg = readUpdateConfig();
+      cfg.lastCheckAt = new Date().toISOString();
+      writeUpdateConfig(cfg);
+      await resolveFeedForChannel(cfg.channel);
+      autoUpdater.checkForUpdates();
+    } catch (e) {
+      console.error('[auto-updater] checkForUpdates falló:', e);
+    }
+  })();
 }
 
 function sendStatus(win: BrowserWindow, status: string, payload?: any): void {
@@ -229,7 +364,9 @@ function registerIpc(): void {
     cfg.channel = channel;
     writeUpdateConfig(cfg);
     if (autoUpdater) {
-      autoUpdater.channel = toUpdaterChannel(channel);
+      // El feed/canal real se aplica en el próximo chequeo (resolveFeedForChannel);
+      // acá solo ajustamos allowPrerelease. El manifiesto siempre es latest.yml.
+      autoUpdater.channel = 'latest';
       autoUpdater.allowPrerelease = channel !== 'stable';
     }
     return cfg;

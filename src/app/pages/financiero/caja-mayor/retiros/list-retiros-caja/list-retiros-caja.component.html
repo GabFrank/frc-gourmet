@@ -40,6 +40,17 @@
         <td mat-cell *matCellDef="let row">{{row.retiro.caja?.dispositivo?.nombre || row.retiro.caja?.nombre || '-'}}</td>
       </ng-container>
 
+      <ng-container matColumnDef="origen">
+        <th mat-header-cell *matHeaderCellDef>Origen</th>
+        <td mat-cell *matCellDef="let row">
+          <mat-chip
+            [ngStyle]="{'background-color': row.retiro.origen === 'CIERRE' ? '#6a1b9a' : '#9e9e9e', 'color': 'white'}"
+          >
+            {{ row.retiro.origen === 'CIERRE' ? 'CIERRE' : 'MANUAL' }}
+          </mat-chip>
+        </td>
+      </ng-container>
+
       <ng-container matColumnDef="estado">
         <th mat-header-cell *matHeaderCellDef>Estado</th>
         <td mat-cell *matCellDef="let row">

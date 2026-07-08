@@ -367,7 +367,17 @@ Acciones:
 - Cancelar venta (CONCLUIDA → CANCELADA).
 - Rehabilitar venta cancelada.
 
-## 15. Errores comunes
+## 15. Otros módulos de Ventas
+
+Además del PdV, el menú **Ventas** incluye:
+
+- **Buffet por kilo** (`Ventas → Buffet por kilo`): pantalla pensada para vender comida por peso (el producto se pesa y se cobra según el precio por kilo).
+- **KDS — Cocina** (`Ventas → KDS — Cocina`): pantalla de cocina (Kitchen Display System) donde el personal de cocina ve los pedidos a preparar en tiempo real, sin papel.
+- **Pantallas KDS** (`Ventas → Pantallas KDS`): configuración de las pantallas de cocina (qué sectores/productos muestra cada una).
+
+Estos módulos dependen de permisos y de la configuración del local; pueden no estar visibles si tu negocio no los usa.
+
+## 16. Errores comunes
 
 ### "No puedo abrir caja"
 

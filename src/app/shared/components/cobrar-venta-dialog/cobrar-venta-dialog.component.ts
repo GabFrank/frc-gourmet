@@ -458,6 +458,26 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     return rate !== 0 ? principalAmount / rate : 0;
   }
 
+  /**
+   * Tolerancia de redondeo (en moneda principal) para dar por cuadrado el cobro.
+   * Es el valor en principal de UNA unidad mínima de la moneda con la que se paga
+   * (ej. 0,01 R$ = 10,9 Gs): como no se puede pagar menos que eso, un residuo por
+   * debajo se considera 0. Se toma el mayor entre las monedas usadas en el cobro.
+   * Sin pagos → 0 (no se tolera nada, sigue exigiendo pagar).
+   */
+  private toleranciaRedondeoPrincipal(): number {
+    const hayPago = this.detalleRows.some(d => d.tipo === TipoDetalle.PAGO);
+    if (!hayPago) return 0;
+    let tol = 0;
+    for (const d of this.detalleRows) {
+      const dec = Number(d.moneda?.decimales) || 0;
+      const rate = this.getExchangeRate(d.moneda.id);
+      const unidadMinimaEnPrincipal = Math.pow(10, -dec) * rate;
+      if (unidadMinimaEnPrincipal > tol) tol = unidadMinimaEnPrincipal;
+    }
+    return tol;
+  }
+
   private updateCurrencyDisplays(): void {
     let totalPagadoPrincipal = 0;
     let totalDescuentoPrincipal = 0;
@@ -479,8 +499,22 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     const totalDeuda = this.totalPrincipal + totalAumentoPrincipal - totalDescuentoPrincipal;
     // Lo que se recibió neto = pagos - vueltos
     const totalRecibidoNeto = totalPagadoPrincipal - totalVueltoPrincipal;
-    // Saldo neto: positivo = falta pagar, negativo = falta dar vuelto
-    const saldoNeto = totalDeuda - totalRecibidoNeto;
+
+    // Tolerancia de redondeo por conversión de moneda: al pagar en una moneda con
+    // decimales (ej. Real/Dólar), el monto convertido a la principal casi nunca
+    // cae exacto sobre el total en guaraníes (ej. R$ 50,73 = 55.295,7 → faltan
+    // ~4 Gs). Como no se puede pagar menos de una unidad mínima de esa moneda, se
+    // tolera un residuo menor a esa unidad (0,01 R$ ≈ 10,9 Gs) y se considera
+    // cuadrado — así no hace falta agregar un "aumento" de 2/4/8 Gs a mano.
+    const decPrincipal = Number(this.data.principalMoneda?.decimales) || 0;
+    const factor = Math.pow(10, decPrincipal);
+    let saldoNeto = totalDeuda - totalRecibidoNeto;
+    const tolerancia = this.toleranciaRedondeoPrincipal();
+    if (Math.abs(saldoNeto) <= tolerancia + 1e-6) {
+      saldoNeto = 0;
+    } else {
+      saldoNeto = Math.round(saldoNeto * factor) / factor;
+    }
 
     this.saldoPrincipal = saldoNeto > 0 ? saldoNeto : 0;
     this.vueltoPrincipal = saldoNeto < 0 ? Math.abs(saldoNeto) : 0;
@@ -589,7 +623,10 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
           estado: PagoEstado.ABIERTO,
           caja: this.data.caja,
           activo: true,
-        }));
+          // El backend valida que este dispositivo sea el dueño de la caja.
+          // Si no lo es, rechaza el cobro (COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO).
+          validarDispositivoCaja: true,
+        } as any));
         // Vincular pago a venta inmediatamente
         await firstValueFrom(this.repositoryService.updateVenta(this.data.venta.id, {
           pago: this.pago!,
@@ -835,7 +872,8 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     return this.detalleRows.length > 0 && this.saldoPrincipal > 0 && !this.processing;
   }
 
-  async finalizar(): Promise<void> {
+  /** Finaliza sin imprimir el ticket de venta (comportamiento por defecto). */
+  async finalizar(imprimirTicket = false): Promise<void> {
     if (!this.canFinalizar) return;
     this.processing = true;
 
@@ -854,7 +892,11 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
         formaPago: principalFp || this.selectedFormaPago!,
         pago: this.pago!,
         fechaCierre: new Date(),
-      }));
+        // Controla explícitamente la impresión del ticket para esta venta,
+        // por encima del config global. "Finalizar" no imprime; "Finalizar +
+        // Ticket" sí.
+        __imprimirTicketVenta: imprimirTicket,
+      } as any));
 
       // 1) Crear AcreditacionPos por cada detalle con maquina POS elegida (tipo=PAGO).
       //    Las acreditaciones se procesan al cumplir los minutos configurados.
@@ -901,6 +943,11 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       console.error('Error al finalizar cobro:', error);
       this.processing = false;
     }
+  }
+
+  /** Finaliza e imprime el ticket de venta. */
+  finalizarConTicket(): Promise<void> {
+    return this.finalizar(true);
   }
 
   private recomputeCobrarCredito(): void {
@@ -1056,6 +1103,10 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       case 'F10':
         event.preventDefault();
         this.finalizar();
+        break;
+      case 'F11':
+        event.preventDefault();
+        this.finalizarConTicket();
         break;
     }
   }

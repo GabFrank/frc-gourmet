@@ -87,6 +87,14 @@
   &.chip-warning mat-icon { color: var(--warning-color); }
   &.chip-error mat-icon { color: var(--error-color); }
   &.chip-info mat-icon { color: var(--info-color); }
+
+  &.chip-clickable {
+    cursor: pointer;
+
+    &:hover {
+      border-color: rgba(124, 77, 255, 0.6);
+    }
+  }
 }
 
 .dashboard-stat-chip-data {

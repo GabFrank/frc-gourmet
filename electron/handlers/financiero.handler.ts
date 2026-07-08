@@ -9,8 +9,10 @@ import { ConteoDetalle } from '../../src/app/database/entities/financiero/conteo
 import { Dispositivo } from '../../src/app/database/entities/financiero/dispositivo.entity';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { CajaMoneda } from '../../src/app/database/entities/financiero/caja-moneda.entity';
+import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
 import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { generarRetiroDelCierre } from './retiro-cierre.util';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
@@ -485,6 +487,18 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
     await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
     try {
       const repo = dataSource.getRepository(Caja);
+      // Guard: una sola caja ABIERTA por dispositivo (terminal). Antes solo lo
+      // aseguraba el frontend del desktop; la PWA también abre cajas, así que el
+      // chequeo va en backend para ser inmune a la carrera multi-dispositivo.
+      const dispositivoId = data?.dispositivo?.id ?? data?.dispositivo_id ?? null;
+      if (data?.estado === CajaEstado.ABIERTO && dispositivoId != null) {
+        const yaAbierta = await repo.count({
+          where: { dispositivo: { id: dispositivoId }, estado: CajaEstado.ABIERTO },
+        });
+        if (yaAbierta > 0) {
+          throw new Error('Ya hay una caja abierta en esta terminal. Cerrá esa caja antes de abrir otra.');
+        }
+      }
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
@@ -498,11 +512,55 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
     try {
       await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(Caja);
-      const entity = await repo.findOneBy({ id });
+      const entity = await repo.findOne({ where: { id }, relations: ['createdBy'] });
       if (!entity) throw new Error(`Caja ID ${id} not found`);
+
+      // Guard: solo el usuario que ABRIÓ la caja puede cerrarla. Antes solo lo
+      // aseguraba el frontend del desktop (mostraba la acción solo al creador);
+      // la PWA también cierra cajas, así que va en backend.
+      if (data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO) {
+        const abridorId = (entity.createdBy as any)?.id ?? null;
+        const actualId = getCurrentUser()?.id ?? null;
+        if (abridorId != null && actualId !== abridorId) {
+          throw new Error('Solo el usuario que abrió la caja puede cerrarla.');
+        }
+      }
+
+      // Guard: no permitir CERRAR una caja que todavía tiene ventas ABIERTAS
+      // (mesas/comandas/ventas rápidas sin cobrar). Si se cierra igual, esas
+      // ventas quedan huérfanas (la mesa queda OCUPADA para siempre, visible
+      // para cualquier caja nueva). El chequeo del diálogo de cierre es solo de
+      // frontend y un snapshot: en el modelo multi-dispositivo otro equipo puede
+      // abrir una venta en esta caja después de que el diálogo cargó. Este guard
+      // en backend es inmune a esa carrera.
+      if (data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO) {
+        const ventasAbiertas = await dataSource.getRepository(Venta).count({
+          where: { caja: { id }, estado: VentaEstado.ABIERTA },
+        });
+        if (ventasAbiertas > 0) {
+          throw new Error(
+            `No se puede cerrar la caja: tiene ${ventasAbiertas} venta(s) abierta(s) (mesas/comandas sin cobrar). Cobrá o cancelá esas cuentas antes de cerrar.`
+          );
+        }
+      }
+
+      const seEstaCerrando = data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO;
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+
+      // Al cerrar, auto-generar el RetiroCaja FLOTANTE con el efectivo del cierre,
+      // para que quede disponible para ingresar a una caja mayor. Best-effort: si
+      // falla (p. ej. cierre sin conteo de billetes), NO bloquea el cierre. Es
+      // idempotente, así que el botón manual del desktop sigue funcionando igual.
+      if (seEstaCerrando) {
+        try {
+          await generarRetiroDelCierre(dataSource, id, getCurrentUser()?.id);
+        } catch (e) {
+          console.error(`[update-caja] no se pudo auto-generar el retiro del cierre de la caja ${id}:`, e);
+        }
+      }
+      return saved;
     } catch (error) {
       console.error(`Error updating caja ${id}:`, error);
       throw error;
@@ -530,6 +588,23 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
       return await repo.findOne({ where: { createdBy: { id: usuarioId }, estado: CajaEstado.ABIERTO } });
     } catch (error) {
       console.error('Error getting caja abierta por usuario:', error);
+      throw error;
+    }
+  });
+
+  // get-cajas-abiertas: todas las cajas ABIERTO (de cualquier usuario/dispositivo).
+  // Permite que otros usuarios/dispositivos (desktop o PWA) se "unan" a una caja
+  // abierta para lanzar items. El cobro sigue restringido al dispositivo dueño.
+  ipcMain.handle('get-cajas-abiertas', async () => {
+    try {
+      const repo = dataSource.getRepository(Caja);
+      return await repo.find({
+        where: { estado: CajaEstado.ABIERTO },
+        relations: ['dispositivo', 'conteoApertura', 'createdBy', 'createdBy.persona'],
+        order: { fechaApertura: 'DESC' }
+      });
+    } catch (error) {
+      console.error('Error getting cajas abiertas:', error);
       throw error;
     }
   });

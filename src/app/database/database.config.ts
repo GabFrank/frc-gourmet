@@ -15,6 +15,7 @@ import { Permission } from './entities/personas/permission.entity';
 import { RolePermission } from './entities/personas/role-permission.entity';
 import { LoginSession } from './entities/auth/login-session.entity';
 import { RefreshToken } from './entities/auth/refresh-token.entity';
+import { DeviceAuthCode } from './entities/auth/device-auth-code.entity';
 import { PasswordResetToken } from './entities/auth/password-reset-token.entity';
 import { Adjunto } from './entities/shared/adjunto.entity';
 
@@ -79,6 +80,9 @@ import { RecetaIngrediente } from './entities/productos/receta-ingrediente.entit
 import { Adicional } from './entities/productos/adicional.entity';
 import { RecetaAdicionalVinculacion } from './entities/productos/receta-adicional-vinculacion.entity';
 import { RecetaIngredienteIntercambiable } from './entities/productos/receta-ingrediente-intercambiable.entity';
+import { RecetaMaterial } from './entities/productos/receta-material.entity';
+import { RecetaFase } from './entities/productos/receta-fase.entity';
+import { RecetaFaseIngrediente } from './entities/productos/receta-fase-ingrediente.entity';
 import { Observacion } from './entities/productos/observacion.entity';
 import { ProductoObservacion } from './entities/productos/producto-observacion.entity';
 import { TamanhoPizza } from './entities/productos/tamanho-pizza.entity';
@@ -116,6 +120,7 @@ import { GastoCategoria } from './entities/financiero/gasto-categoria.entity';
 import { Gasto } from './entities/financiero/gasto.entity';
 import { RetiroCaja } from './entities/financiero/retiro-caja.entity';
 import { RetiroCajaDetalle } from './entities/financiero/retiro-caja-detalle.entity';
+import { GastoCaja } from './entities/financiero/gasto-caja.entity';
 import { GastoDetalle } from './entities/financiero/gasto-detalle.entity';
 
 // Banking entities (Fase 2)
@@ -214,9 +219,17 @@ import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVa
 import { AddCuentaBancariaToPagosCobros1779700000000 } from './migrations/1779700000000-AddCuentaBancariaToPagosCobros';
 import { AddCotizacionBancariaToPagosCobros1779800000000 } from './migrations/1779800000000-AddCotizacionBancariaToPagosCobros';
 import { AddKdsToComandaItem1780000000000 } from './migrations/1780000000000-AddKdsToComandaItem';
+import { AddGastoCaja1783025751400 } from './migrations/1783025751400-AddGastoCaja';
+import { AddMontoToConteoDetalle1783173960142 } from './migrations/1783173960142-AddMontoToConteoDetalle';
+import { AddDeviceAuthCodes1783088331915 } from './migrations/1783088331915-AddDeviceAuthCodes';
 import { AddKdsPantalla1780100000000 } from './migrations/1780100000000-AddKdsPantalla';
+import { AddOrigenToRetiroCaja1780200000000 } from './migrations/1780200000000-AddOrigenToRetiroCaja';
+import { AddConteoToCajaMayorMovimiento1780300000000 } from './migrations/1780300000000-AddConteoToCajaMayorMovimiento';
+import { AddRecetaPreparacion1780400000000 } from './migrations/1780400000000-AddRecetaPreparacion';
+import { AddOcuparMesaAlVincularComanda1780500000000 } from './migrations/1780500000000-AddOcuparMesaAlVincularComanda';
 import { AddFacturacion1782519234187 } from './migrations/1782519234187-AddFacturacion';
 import { AddFacturacionConfig1782519876542 } from './migrations/1782519876542-AddFacturacionConfig';
+import { AddTipoToSector1782860367433 } from './migrations/1782860367433-AddTipoToSector';
 import { AddOnlineFieldsToProducto1783520460210 } from './migrations/1783520460210-AddOnlineFieldsToProducto';
 import { AddCuentasClienteYOtp1783520460211 } from './migrations/1783520460211-AddCuentasClienteYOtp';
 import { AddPedidosOnline1783520460212 } from './migrations/1783520460212-AddPedidosOnline';
@@ -327,6 +340,7 @@ function getEntitiesList(): any[] {
       RolePermission,
       LoginSession,
       RefreshToken,
+      DeviceAuthCode,
       PasswordResetToken,
       // Pedidos online (web app)
       CuentaCliente,
@@ -401,6 +415,7 @@ function getEntitiesList(): any[] {
       GastoDetalle,
       RetiroCaja,
       RetiroCajaDetalle,
+      GastoCaja,
       // Banking (Fase 2)
       CuentaBancaria,
       MaquinaPos,
@@ -442,6 +457,9 @@ function getEntitiesList(): any[] {
       Adicional,
       RecetaAdicionalVinculacion,
       RecetaIngredienteIntercambiable,
+      RecetaMaterial,
+      RecetaFase,
+      RecetaFaseIngrediente,
       Observacion,
       ProductoObservacion,
       TamanhoPizza,
@@ -560,8 +578,16 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddCotizacionBancariaToPagosCobros1779800000000,
     AddKdsToComandaItem1780000000000,
     AddKdsPantalla1780100000000,
+    AddOrigenToRetiroCaja1780200000000,
+    AddConteoToCajaMayorMovimiento1780300000000,
+    AddRecetaPreparacion1780400000000,
+    AddOcuparMesaAlVincularComanda1780500000000,
     AddFacturacion1782519234187,
     AddFacturacionConfig1782519876542,
+    AddTipoToSector1782860367433,
+    AddGastoCaja1783025751400,
+    AddDeviceAuthCodes1783088331915,
+    AddMontoToConteoDetalle1783173960142,
     AddOnlineFieldsToProducto1783520460210,
     AddCuentasClienteYOtp1783520460211,
     AddPedidosOnline1783520460212,

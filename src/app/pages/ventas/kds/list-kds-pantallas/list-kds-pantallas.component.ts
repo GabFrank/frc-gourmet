@@ -44,7 +44,7 @@ export class ListKdsPantallasComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
-      this.sectores = (await firstValueFrom(this.repo.getSectoresActivos())) || [];
+      this.sectores = (await firstValueFrom(this.repo.getSectoresActivos('IMPRESION'))) || [];
     } catch { this.sectores = []; }
     await this.cargar();
   }

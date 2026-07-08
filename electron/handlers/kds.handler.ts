@@ -15,9 +15,12 @@
  */
 
 import { ipcMain } from 'electron';
-import { DataSource } from 'typeorm';
+import { DataSource, In as TIn } from 'typeorm';
 import { ComandaItem, ComandaItemEstado } from '../../src/app/database/entities/ventas/comanda-item.entity';
 import { KdsPantalla } from '../../src/app/database/entities/ventas/kds-pantalla.entity';
+import { VentaItemAdicional } from '../../src/app/database/entities/ventas/venta-item-adicional.entity';
+import { VentaItemObservacion } from '../../src/app/database/entities/ventas/venta-item-observacion.entity';
+import { VentaItemIngredienteModificacion } from '../../src/app/database/entities/ventas/venta-item-ingrediente-modificacion.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
@@ -89,7 +92,88 @@ async function getKdsComandas(dataSource: DataSource, params: GetKdsComandasPara
     qb.andWhere('ci.sector_id IN (:...secs)', { secs: params.sectorIds });
   }
 
-  return await qb.getRawMany();
+  const rows = await qb.getRawMany();
+  await adjuntarPersonalizaciones(dataSource, rows);
+  return rows;
+}
+
+/**
+ * Carga las personalizaciones por ítem (ingredientes removidos, cambios,
+ * adicionales y observaciones) y las adjunta a cada fila del feed KDS, para que
+ * la cocina las vea en pantalla (mismo detalle que el ticket impreso de comanda).
+ * Se agrupan por `ventaItemId`. Es opcional: si falla, el KDS sigue funcionando.
+ */
+async function adjuntarPersonalizaciones(dataSource: DataSource, rows: any[]): Promise<void> {
+  const itemIds = Array.from(new Set(rows.map((r) => r.ventaItemId).filter((x): x is number => x != null)));
+  // Defaults para que el front siempre reciba arrays.
+  for (const r of rows) {
+    r.removidos = [];
+    r.cambios = [];
+    r.adicionales = [];
+    r.observacionesItem = [];
+  }
+  if (itemIds.length === 0) return;
+
+  const push = (m: Map<number, string[]>, k: number, v: string) => {
+    if (!m.has(k)) m.set(k, []);
+    m.get(k)!.push(v);
+  };
+  const removidos = new Map<number, string[]>();
+  const cambios = new Map<number, string[]>();
+  const adicionales = new Map<number, string[]>();
+  const observaciones = new Map<number, string[]>();
+
+  try {
+    const adics = await dataSource.getRepository(VentaItemAdicional).find({
+      where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+      relations: ['adicional', 'ventaItem'],
+    });
+    for (const a of adics) {
+      const iid = (a as any).ventaItem?.id;
+      if (!iid) continue;
+      const cant = Number((a as any).cantidad || 1);
+      const nom = ((a as any).adicional?.nombre || 'ADICIONAL').toUpperCase();
+      push(adicionales, iid, cant > 1 ? `${cant}x ${nom}` : nom);
+    }
+
+    const obs = await dataSource.getRepository(VentaItemObservacion).find({
+      where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+      relations: ['observacion', 'ventaItem'],
+    });
+    for (const o of obs) {
+      const iid = (o as any).ventaItem?.id;
+      if (!iid) continue;
+      const txt = String((o as any).observacionLibre || (o as any).observacion?.descripcion || '').toUpperCase().trim();
+      if (txt) push(observaciones, iid, txt);
+    }
+
+    const mods = await dataSource.getRepository(VentaItemIngredienteModificacion).find({
+      where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+      relations: ['recetaIngrediente', 'recetaIngrediente.ingrediente', 'ingredienteReemplazo', 'ventaItem'],
+    });
+    for (const m of mods) {
+      const iid = (m as any).ventaItem?.id;
+      if (!iid) continue;
+      const ing = String((m as any).recetaIngrediente?.ingrediente?.nombre || (m as any).recetaIngrediente?.descripcion || 'INGREDIENTE').toUpperCase();
+      if ((m as any).tipoModificacion === 'REMOVIDO') {
+        push(removidos, iid, ing);
+      } else {
+        const rep = String((m as any).ingredienteReemplazo?.nombre || '').toUpperCase();
+        push(cambios, iid, rep ? `${ing} POR ${rep}` : ing);
+      }
+    }
+  } catch (e) {
+    console.warn('[getKdsComandas] no se pudieron cargar personalizaciones del ítem:', e);
+    return;
+  }
+
+  for (const r of rows) {
+    const iid = r.ventaItemId;
+    r.removidos = removidos.get(iid) || [];
+    r.cambios = cambios.get(iid) || [];
+    r.adicionales = adicionales.get(iid) || [];
+    r.observacionesItem = observaciones.get(iid) || [];
+  }
 }
 
 async function transicionar(

@@ -109,6 +109,7 @@ export const CATALOGO_VARIABLES: VariableCatalogo[] = [
   { key: 'cliente.nombre', label: 'Cliente / Razón social', grupo: 'Cliente', ejemplo: 'JUAN PEREZ' },
   { key: 'cliente.ruc', label: 'RUC / CI', grupo: 'Cliente', ejemplo: '1234567-8' },
   { key: 'cliente.direccion', label: 'Dirección', grupo: 'Cliente', ejemplo: 'AV. SIEMPRE VIVA 123' },
+  { key: 'cliente.telefono', label: 'Teléfono', grupo: 'Cliente', ejemplo: '0981 123 456' },
   { key: 'cliente.email', label: 'Email', grupo: 'Cliente', ejemplo: 'cliente@mail.com' },
   { key: 'timbrado.numero', label: 'Nº de timbrado', grupo: 'Timbrado', ejemplo: '12345678' },
   { key: 'timbrado.vigencia', label: 'Vigencia timbrado', grupo: 'Timbrado', ejemplo: '01/01/2026 - 31/12/2026' },

@@ -64,6 +64,15 @@ export class PrinterSettingsComponent implements OnInit {
     { value: 'bluetooth', displayName: 'Bluetooth' }
   ];
 
+  // La cantidad de columnas depende de la tecnología + fuente de la impresora,
+  // no solo del ancho en mm. Se configura directamente (se guarda en `width`).
+  columnOptions = [
+    { value: 32, displayName: '32 columnas — térmica 58 mm' },
+    { value: 40, displayName: '40 columnas — matriz de punto 76 mm (9 pines) / comprimido' },
+    { value: 42, displayName: '42 columnas — térmica 80 mm' },
+    { value: 48, displayName: '48 columnas — térmica 80 mm (estándar)' },
+  ];
+
   characterSets = [
     { value: 'PC437_USA', displayName: 'USA (PC437)' },
     { value: 'PC850_MULTILINGUAL', displayName: 'Multilingual (PC850)' },
@@ -94,6 +103,27 @@ export class PrinterSettingsComponent implements OnInit {
   /**
    * Create the printer form
    */
+  /**
+   * Normaliza el valor guardado en `width` a una de las opciones del selector
+   * de columnas (32/40/42/48). Soporta valores nuevos (ya en columnas) y
+   * valores legacy expresados en mm (ej. 58, 80). Así el selector siempre
+   * muestra una opción válida al editar una impresora existente.
+   */
+  normalizeColumns(width?: number | null): number {
+    const w = Number(width || 0);
+    if (!w || w <= 0) return 48;
+    if (w < 50) {
+      // Ya está en columnas: snap al preset más cercano
+      if (w <= 36) return 32;
+      if (w <= 41) return 40;
+      if (w <= 45) return 42;
+      return 48;
+    }
+    // Legacy en mm
+    if (w <= 68) return 32;          // 58mm
+    return 48;                       // 76/80mm
+  }
+
   createPrinterForm(printer?: PrinterConfig): FormGroup {
     const form = this.fb.group({
       name: [printer?.name || '', [Validators.required, Validators.maxLength(100)]],
@@ -102,7 +132,7 @@ export class PrinterSettingsComponent implements OnInit {
       address: [printer?.address || '', Validators.required],
       port: [printer?.port || 9100],
       dpi: [printer?.dpi || 203],
-      width: [printer?.width || 58],
+      width: [this.normalizeColumns(printer?.width)],
       characterSet: [printer?.characterSet || 'PC437_USA'],
       isDefault: [printer?.isDefault || false]
     });
@@ -315,7 +345,7 @@ export class PrinterSettingsComponent implements OnInit {
       connectionType: 'usb',     // Use USB connection type for CUPS
       address: printerName,      // Just use the printer name for CUPS
       port: null,                // CUPS doesn't need a port
-      width: 48,                 // Character width in characters (not mm)
+      width: 32,                 // Columnas por línea (58mm térmica = 32)
       dpi: 203,                  // Standard DPI for most thermal printers
       characterSet: 'PC437_USA', // Use a standard character set supported by the library
       isDefault: true

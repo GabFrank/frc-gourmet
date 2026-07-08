@@ -870,3 +870,19 @@
   }
 }
 
+
+.conteo-subtitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.conteo-resumido {
+  padding: 8px 4px 0;
+}
+
+.conteo-resumido-field {
+  width: 100%;
+  max-width: 340px;
+}

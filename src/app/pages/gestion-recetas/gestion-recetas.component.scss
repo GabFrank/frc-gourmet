@@ -679,3 +679,15 @@
   min-width: 10% !important;
   justify-content: center !important;
 }
+
+// Ítem de receta sin ingrediente vinculado (solo descripción)
+.ingrediente-pendiente {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border: 1px solid var(--warning-color, #b26a00);
+  color: var(--warning-color, #b26a00);
+}

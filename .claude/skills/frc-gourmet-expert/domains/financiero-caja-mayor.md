@@ -29,20 +29,22 @@ Registro **inmutable** de cada movimiento. NUNCA se borra — se anula con contr
 ```typescript
 {
   cajaMayor_id (sin FK constraint para flexibilidad)
-  tipoMovimiento: TipoMovimiento  // 28 valores (ver abajo)
+  tipoMovimiento: TipoMovimiento  // 23 valores (ver abajo)
   moneda_id, formaPago_id          // QUÉ se movió y CÓMO se pagó
   monto: decimal(10,2)
   fecha: datetime
   responsable: Usuario
   observacion?: text
 
-  // FK a origen (todas opcionales):
-  gasto_id, retiroCaja_id          // ManyToOne (con FK)
+  // Relaciones ManyToOne a origen (todas opcionales, createForeignKeyConstraints:false):
+  gasto, retiroCaja, conteo        // @ManyToOne SIN constraint de FK real
+                                   // (conteo: para EGRESO_CAJA_INICIAL, el efectivo
+                                   //  sembrado a una apertura de caja)
+  // Columnas planas int sin relación ORM:
   compraCuotaId, operacionFinancieraId, entradaVariaId,
   cuentaPorPagarCuotaId, cuentaPorPagarId, chequeId,
   acreditacionPosId, valeId, liquidacionSueldoId,
   liquidacionComisionId, cuentaPorCobrarCuotaId, compraId
-                                   // columnas planas int sin FK ORM
   referenciaAnulacion?: CajaMayorMovimiento  // self-ref (este es contra-mov de aquel)
 }
 ```
@@ -58,7 +60,7 @@ Snapshot del saldo por (caja, moneda, formaPago):
 }
 ```
 
-**Sin trigger SQL**: actualización manual en transacción vía `actualizarSaldoCajaMayor()` (caja-mayor-utils.ts:21-51).
+**Sin trigger SQL**: actualización manual en transacción vía `actualizarSaldoCajaMayor()` (`caja-mayor-utils.ts`).
 
 ### CajaMayorConfiguracion
 
@@ -76,16 +78,16 @@ Configuración por caja mayor:
 
 **Default tolerante**: si no existe config para una caja, mostrar TODAS las FPs y NINGUNA cuenta bancaria.
 
-## TipoMovimiento (28 valores)
+## TipoMovimiento (23 valores)
 
-`src/app/database/entities/financiero/caja-mayor-enums.ts:6-30`:
+`src/app/database/entities/financiero/caja-mayor-enums.ts` (enum `TipoMovimiento`, líneas 6-30): 9 ingresos + 13 egresos + 1 administrativo.
 
 ### Ingresos (9)
 
 | Tipo | Origen |
 |---|---|
-| INGRESO_RETIRO_CAJA | Ingresar retiro de caja PdV |
-| INGRESO_CIERRE_CAJA | Cierre de caja PdV (no se usa actualmente) |
+| INGRESO_RETIRO_CAJA | Ingresar retiro de caja PdV (origen MANUAL) |
+| INGRESO_CIERRE_CAJA | Ingresar retiro generado por el cierre de una caja PdV (`RetiroCajaOrigen.CIERRE`); ver `ingresar-retiro-caja` |
 | INGRESO_ENTRADA_VARIA | Entrada varia destino CAJA_MAYOR |
 | INGRESO_OPERACION_FINANCIERA | Lado destino de operación financiera |
 | INGRESO_RETIRO_BANCO | Retiro de cuenta bancaria → caja mayor |
@@ -94,7 +96,7 @@ Configuración por caja mayor:
 | TRANSFERENCIA_ENTRADA | Lado destino de transferencia entre cajas |
 | AJUSTE_POSITIVO | Manual o contra-mov de anulación de egreso |
 
-### Egresos (14)
+### Egresos (13)
 
 | Tipo | Origen |
 |---|---|
@@ -108,7 +110,7 @@ Configuración por caja mayor:
 | EGRESO_CHEQUE | Emitir cheque |
 | EGRESO_OPERACION_FINANCIERA | Lado origen de operación financiera |
 | EGRESO_DEPOSITO_BANCO | Depósito bancario (caja mayor → cuenta bancaria) |
-| EGRESO_CAJA_INICIAL | Caja inicial al abrir (no se usa actualmente) |
+| EGRESO_CAJA_INICIAL | Efectivo retirado de caja mayor para sembrar la apertura de una caja PdV; ver `egreso-caja-inicial` (genera un movimiento por moneda y reutiliza el `Conteo` como apertura) |
 | TRANSFERENCIA_SALIDA | Lado origen de transferencia entre cajas |
 | AJUSTE_NEGATIVO | Manual o contra-mov de anulación de ingreso |
 
@@ -120,7 +122,7 @@ Configuración por caja mayor:
 
 ## Helper crítico: actualizarSaldoCajaMayor
 
-`electron/handlers/caja-mayor-utils.ts:21-51`:
+`electron/handlers/caja-mayor-utils.ts` (todo el archivo, ~51 líneas). Tanto `esIngreso` como `actualizarSaldoCajaMayor` viven acá; el handler los importa como `actualizarSaldo` (alias) y `esIngreso`:
 
 ```typescript
 async function actualizarSaldoCajaMayor(
@@ -145,19 +147,19 @@ function esIngreso(tipo: TipoMovimiento): boolean {
 **Reglas**:
 - **Siempre llamar dentro de una transacción** (`queryRunner.manager`).
 - **Mismo helper para todos los módulos** — no reimplementar.
-- Si se agrega tipo nuevo, actualizar `esIngreso()` en `caja-mayor-enums.ts`.
+- Si se agrega tipo nuevo, actualizar `esIngreso()` en `caja-mayor-utils.ts` (NO en `caja-mayor-enums.ts`, que solo define el enum).
 
-**Recalcular saldos** (safety net): handler `recalcular-saldos` (caja-mayor.handler.ts:121) borra todos los `CajaMayorSaldo` y los reconstruye sumando movimientos activos.
+**Recalcular saldos** (safety net): handler `recalcular-saldos` (`caja-mayor.handler.ts`) borra todos los `CajaMayorSaldo` y los reconstruye sumando movimientos activos (resta los anulados vía `esIngreso`).
 
 ## Anulación de movimiento
 
-`anular-caja-mayor-movimiento` (caja-mayor.handler.ts:296+):
+`anular-caja-mayor-movimiento` (`caja-mayor.handler.ts`, permiso `CAJA_MAYOR_OPERAR`):
 
 ### Bloqueos automáticos
 
-Si el movimiento tiene FK a otro módulo, bloquea con mensaje claro:
+Si el movimiento tiene una columna de trazabilidad a otro módulo, bloquea con mensaje claro (debe anularse desde el módulo origen):
 
-| FK | Mensaje |
+| Columna | Mensaje |
 |---|---|
 | `liquidacionSueldoId` | "Anular desde Liquidaciones de Sueldo" |
 | `cuentaPorPagarCuotaId` | "Anular desde Cuentas por Pagar (cuota)" |
@@ -166,8 +168,12 @@ Si el movimiento tiene FK a otro módulo, bloquea con mensaje claro:
 | `cuentaPorCobrarCuotaId` | "Anular desde Cuentas por Cobrar" |
 | `cuentaPorPagarId` | "Anular CPP completo" |
 | `compraId` | "Anular desde módulo Compras" |
-| `tipoMovimiento === ANULACION` | "No se puede anular una anulación" |
-| Ya tiene contra-movimiento | "Movimiento ya anulado" (idempotencia) |
+| `tipoMovimiento === ANULACION` | "No se puede anular un movimiento de tipo ANULACION" |
+| Ya tiene contra-movimiento | "ya fue anulado previamente" (idempotencia) |
+
+### Caso especial: operación financiera
+
+Si el movimiento tiene `operacionFinancieraId`, NO se bloquea ni se crea un contra-mov simple: delega en `anularOperacionFinancieraTx`, que anula la operación **completa** (ambos lados + saldo bancario si aplica), dentro de la misma transacción.
 
 ### Si pasa los bloqueos
 
@@ -216,8 +222,14 @@ Gasto {
   proximoVencimiento?: date
   proveedor?: Proveedor
   numeroComprobante, tipoBoleta
-  cajaMayor: CajaMayor                  // qué caja paga
+  cajaMayor: CajaMayor                  // de qué caja se registró (siempre seteada)
   detalles: GastoDetalle[]              // multi-moneda/formaPago
+
+  // Destino del egreso:
+  destinoTipo: GastoDestinoTipo         // CAJA_MAYOR (default) | CUENTA_BANCARIA
+  cuentaBancaria?, cuentaBancariaId?    // si destino = CUENTA_BANCARIA
+  montoCuentaBancaria?: decimal(18,2)   // monto debitado en la moneda de la cuenta
+  cotizacion?: decimal(18,6)            // si la moneda del gasto difiere de la cuenta
 }
 
 GastoDetalle {
@@ -230,19 +242,23 @@ GastoDetalle {
 
 ### Crear gasto (transacción atómica)
 
-`create-gasto` (caja-mayor.handler.ts:533):
-1. Crear Gasto.
+`create-gasto` (`caja-mayor.handler.ts`). El estado del gasto queda en `PAGADO`. Bifurca por `destinoTipo`:
+
+**Rama CAJA_MAYOR (default):**
+1. Crear Gasto (monto = suma de detalles).
 2. Para cada `GastoDetalle`:
    a. Crear detalle.
-   b. Crear `CajaMayorMovimiento` tipo EGRESO_GASTO con `gasto_id` apuntando.
+   b. Crear `CajaMayorMovimiento` tipo EGRESO_GASTO con `gasto` apuntando.
    c. `actualizarSaldoCajaMayor(qr, ..., EGRESO_GASTO)`.
-3. Commit.
+3. Commit. → Genera N movimientos si hay N detalles (multi-moneda en mismo gasto).
 
-→ Genera N movimientos si hay N detalles (multi-moneda en mismo gasto).
+**Rama CUENTA_BANCARIA:** crea el Gasto con `cuentaBancaria` seteada y debita directo `cuentaBancaria.saldo -= monto`. **NO genera movimientos de Caja Mayor.**
+
+> Nota: el payload también acepta un flag legacy `fuente === 'CUENTA_BANCARIA'` que, dentro de la rama CAJA_MAYOR, además debita la cuenta por el total (`montoCuentaBancaria`/`cotizacion`). El camino canónico es `destinoTipo`.
 
 ### Anular gasto
 
-`anular-gasto`: por cada detalle, crear contra-mov AJUSTE_POSITIVO. Estado del Gasto → CANCELADO.
+`anular-gasto`: por cada detalle, crear contra-mov AJUSTE_POSITIVO. Estado del Gasto → CANCELADO. (Para gastos con destino CUENTA_BANCARIA, la reversión es sobre el saldo de la cuenta.)
 
 ## Retiros de Caja
 
@@ -349,26 +365,29 @@ Nunca ambas a la vez.
 - `create-edit-caja-mayor/` — CRUD.
 - `caja-mayor-detalle/` — vista operativa.
 - `registrar-ingreso-dialog/` — entrada varia o retiro caja.
-- `registrar-egreso-dialog/` — gasto, compra, vale (card "Registrar Vale" → handler atómico `crear-vale-confirmado`, v1.5.0), etc.
+- `registrar-egreso-dialog/` — gasto, compra, vale (card "Registrar Vale" → handler atómico `crear-vale-confirmado` en `vales.handler.ts`), etc.
 - `edit-movimiento-dialog/` — editar/anular movimiento.
 - `configurar-caja-mayor-dialog/` — qué FPs y cuentas mostrar (M:M).
 - `pagar-compras-dialog/` — pago multi-cuota CPP.
+- `egreso-caja-inicial-dialog/` — sembrar efectivo a la apertura de una caja PdV (EGRESO_CAJA_INICIAL).
+- `abrir-caja-desde-conteo-dialog/` — abrir caja reutilizando el conteo del egreso inicial.
 - Sub-carpetas: `gastos/`, `entradas-varias/`, `retiros/`, `operaciones-financieras/`, `bancos/`, `cheques/`, `pos/`, `cuentas-por-pagar/`, `cuentas-por-cobrar/`.
 
 ## Handler
 
-`electron/handlers/caja-mayor.handler.ts` (1901 líneas) — el más grande del proyecto. Cubre:
-- CRUD CajaMayor (líneas 34-105)
-- Saldos (107-170)
-- Movimientos (172-410, incluye `anular-caja-mayor-movimiento` con bloqueos)
-- Gastos + GastoCategoria (412-803)
-- Retiros (820-958)
-- Entradas Varias (959-1209)
-- Operaciones Financieras (1211-1602)
-- Configuración (1605-1678)
-- Resúmenes CPP/CPC y bancarios (1679-1900)
+`electron/handlers/caja-mayor.handler.ts` (~2530 líneas) — el más grande del proyecto. Cubre (orden aproximado):
+- CRUD CajaMayor (`get-cajas-mayor`, `get-caja-mayor`, `create/update-caja-mayor`, `cerrar-caja-mayor`)
+- Saldos (`get-caja-mayor-saldos`, `recalcular-saldos`)
+- Movimientos: `get-caja-mayor-movimientos` (con `incluirAnulaciones`), `get-movimientos-caja-mayor-consolidados`, `create-caja-mayor-movimiento`, `anular-caja-mayor-movimiento` (bloqueos), `edit-caja-mayor-movimiento`
+- Gastos + GastoCategoria (`create-gasto`, `anular-gasto`, `edit-gasto`, `get-gastos`, `get-gastos-programados`)
+- Retiros (`create-retiro-caja`, `ingresar-retiro-caja`, `generar-retiro-cierre-caja`)
+- Caja inicial / apertura (`egreso-caja-inicial`, `abrir-caja-desde-conteo`)
+- Entradas Varias + categorías (`create-entrada-varia`, `anular-entrada-varia`)
+- Operaciones Financieras + categorías (`create-operacion-financiera`, `anular-operacion-financiera`)
+- Configuración (`get-caja-mayor-configuracion`, set config)
+- Resúmenes CPP/CPC y bancarios (`get-caja-mayor-cpp-resumen`, `get-caja-mayor-cpc-resumen`, `get-cuenta-bancaria-resumen`, `get-cuentas-bancarias-resumenes`)
 
-`electron/handlers/caja-mayor-utils.ts` (51 líneas):
+`electron/handlers/caja-mayor-utils.ts` (~51 líneas):
 - `esIngreso(tipo): boolean`
 - `actualizarSaldoCajaMayor(qr, cajaMayorId, monedaId, formaPagoId, monto, tipo): Promise<void>`
 

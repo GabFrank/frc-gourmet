@@ -1,0 +1,61 @@
+<h2 mat-dialog-title>Egreso de caja inicial</h2>
+
+<mat-dialog-content class="egreso-content">
+  <p class="egreso-hint">
+    Conte el efectivo que sale de la caja mayor para sembrar la apertura de una caja.
+    El conteo quedará disponible para "Abrir caja con este conteo".
+  </p>
+
+  <div *ngIf="loading" class="egreso-loading">
+    <mat-spinner diameter="36"></mat-spinner>
+  </div>
+
+  <ng-container *ngIf="!loading">
+    <mat-card *ngFor="let mc of monedasConfig" class="moneda-card">
+      <div class="moneda-card-header">
+        <span class="moneda-nombre">{{ mc.denominacion }}</span>
+        <span class="moneda-total">{{ mc.simbolo }} {{ mc.total | number: mc.digits }}</span>
+      </div>
+
+      <div class="billete-row" *ngFor="let b of mc.billetes">
+        <span class="billete-valor">{{ mc.simbolo }} {{ b.valor | number: mc.digits }}</span>
+        <mat-form-field appearance="outline" class="billete-input">
+          <input
+            matInput
+            type="number"
+            min="0"
+            [(ngModel)]="b.cantidad"
+            (ngModelChange)="recompute()"
+            (focus)="selectOnFocus($event)"
+          />
+        </mat-form-field>
+        <span class="billete-subtotal">{{ mc.simbolo }} {{ b.subtotal | number: mc.digits }}</span>
+      </div>
+    </mat-card>
+
+    <mat-form-field appearance="outline" class="egreso-obs">
+      <mat-label>Observación (opcional)</mat-label>
+      <input matInput [(ngModel)]="observacion" maxlength="200" />
+    </mat-form-field>
+
+    <div class="egreso-resumen" *ngIf="tieneMonto">
+      <span class="egreso-resumen-label">Total a retirar:</span>
+      <span class="egreso-resumen-monto" *ngFor="let t of totalGeneralPorMoneda">
+        {{ t.simbolo }} {{ t.total | number: t.digits }}
+      </span>
+    </div>
+  </ng-container>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="onCancel()" [disabled]="saving">Cancelar</button>
+  <button
+    mat-raised-button
+    color="primary"
+    (click)="onSubmit()"
+    [disabled]="saving || loading || !tieneMonto"
+  >
+    <mat-icon>output</mat-icon>
+    Registrar egreso
+  </button>
+</mat-dialog-actions>

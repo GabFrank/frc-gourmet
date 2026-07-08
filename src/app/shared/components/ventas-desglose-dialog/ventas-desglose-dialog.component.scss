@@ -1,0 +1,58 @@
+.total-general {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 0 18px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 12px;
+}
+
+.total-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.6;
+}
+
+.total-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #7c4dff;
+}
+
+.seccion-titulo {
+  margin: 16px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.8;
+}
+
+.desglose-table {
+  width: 100%;
+  background: transparent;
+
+  th.mat-header-cell,
+  td.mat-cell {
+    text-align: center;
+    padding: 6px 10px;
+  }
+
+  th.mat-header-cell:first-child,
+  td.mat-cell:first-child {
+    text-align: left;
+  }
+
+  td.mat-cell:last-child {
+    font-weight: 600;
+  }
+}
+
+.sin-datos {
+  text-align: center;
+  opacity: 0.6;
+  font-size: 13px;
+  padding: 8px 0;
+}

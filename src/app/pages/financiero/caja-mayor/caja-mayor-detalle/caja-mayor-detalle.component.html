@@ -19,6 +19,10 @@
         <mat-icon>remove_circle</mat-icon>
         Registrar Egreso
       </button>
+      <button mat-stroked-button (click)="egresoCajaInicial()" matTooltip="Retirar efectivo para abrir una caja">
+        <mat-icon>output</mat-icon>
+        Egreso de caja inicial
+      </button>
       <button mat-raised-button color="primary" (click)="cobrarCpcRapido()" matTooltip="Cobrar cuota de un cliente">
         <mat-icon>payments</mat-icon>
         Cobrar a cliente
@@ -360,6 +364,14 @@
                 <button mat-menu-item (click)="anularMovimiento(row)">
                   <mat-icon color="warn">block</mat-icon>
                   <span>Anular</span>
+                </button>
+                <button
+                  mat-menu-item
+                  *ngIf="row.tipoMovimiento === 'EGRESO_CAJA_INICIAL' && row.conteoId"
+                  (click)="abrirCajaDesdeConteo(row)"
+                >
+                  <mat-icon>point_of_sale</mat-icon>
+                  <span>Abrir caja con este conteo</span>
                 </button>
               </mat-menu>
               <button mat-icon-button *ngIf="row.fuente === 'BANCO'" (click)="verMovimientoBanco(row)"

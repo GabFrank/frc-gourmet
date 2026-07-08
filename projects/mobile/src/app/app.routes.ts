@@ -30,7 +30,7 @@ const PRODUCTOS_ITEMS: SectionItem[] = [
   { label: 'Subfamilias', icon: 'account_tree', path: '/productos/subfamilias', enabled: true },
   { label: 'Adicionales', icon: 'add_circle', path: '/productos/adicionales', enabled: true },
   { label: 'Productos', icon: 'restaurant', path: '/productos/lista', enabled: true },
-  { label: 'Recetas', icon: 'menu_book', path: '/productos/recetas', enabled: false },
+  { label: 'Recetas', icon: 'menu_book', path: '/productos/recetas', enabled: true },
   { label: 'Sabores', icon: 'auto_awesome', path: '/productos/sabores', enabled: false },
 ];
 
@@ -57,6 +57,7 @@ const FINANCIERO_ITEMS: SectionItem[] = [
 /** Sub-módulos de Ventas (módulo meseros). */
 const VENTAS_ITEMS: SectionItem[] = [
   { label: 'Mesas', icon: 'table_restaurant', path: '/ventas/mesas', enabled: true },
+  { label: 'Resumen', icon: 'insights', path: '/ventas/resumen', enabled: true },
 ];
 
 /**
@@ -69,6 +70,32 @@ export const routes: Routes = [
   {
     path: 'login',
     loadComponent: () => import('./pages/login/login.page').then((m) => m.LoginPage),
+  },
+  // Login por QR — lado del dispositivo (TV/desktop): público, aún sin sesión.
+  {
+    path: 'vincular-dispositivo',
+    loadComponent: () => import('./pages/vincular-dispositivo/vincular-dispositivo.page').then((m) => m.VincularDispositivoPage),
+  },
+  // Login por QR — lado del que autoriza (teléfono ya logueado).
+  {
+    path: 'aprobar-dispositivo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/aprobar-dispositivo/aprobar-dispositivo.page').then((m) => m.AprobarDispositivoPage),
+  },
+  // Cambio de contraseña temporal obligatorio (full-screen, con sesión). El
+  // authGuard redirige acá mientras el usuario tenga mustChangePassword=true.
+  {
+    path: 'cambiar-password',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/cambiar-password/cambiar-password.page').then((m) => m.CambiarPasswordPage),
+  },
+
+  // KDS (pantalla de cocina) para TV — full-screen, fuera del shell. El TV se
+  // loguea una vez (usuario de servicio con permiso de ver KDS) y queda andando.
+  {
+    path: 'kds',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/kds/kds.page').then((m) => m.KdsPage),
   },
 
   // --- Formularios full-screen (fuera del shell) ---
@@ -85,6 +112,25 @@ export const routes: Routes = [
   {
     path: 'ventas/mesas/:id',
     canActivate: [authGuard],
+    loadComponent: () => import('./pages/ventas/mesas/mesa-detalle.page').then((m) => m.MesaDetallePage),
+  },
+  // --- Comandas (reúsan los mismos componentes con contexto = 'comanda') ---
+  {
+    path: 'ventas/comandas/:id/pedido',
+    canActivate: [authGuard],
+    data: { contexto: 'comanda' },
+    loadComponent: () => import('./pages/ventas/mesas/tomar-pedido.page').then((m) => m.TomarPedidoPage),
+  },
+  {
+    path: 'ventas/comandas/:id/cliente',
+    canActivate: [authGuard],
+    data: { contexto: 'comanda' },
+    loadComponent: () => import('./pages/ventas/mesas/cliente-mesa.page').then((m) => m.ClienteMesaPage),
+  },
+  {
+    path: 'ventas/comandas/:id',
+    canActivate: [authGuard],
+    data: { contexto: 'comanda' },
     loadComponent: () => import('./pages/ventas/mesas/mesa-detalle.page').then((m) => m.MesaDetallePage),
   },
   {
@@ -207,10 +253,32 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./pages/productos/adicionales/adicional-edit.page').then((m) => m.AdicionalEditPage),
   },
+  // Alta/edición de producto full-screen ('nuevo'/'editar' antes de 'detalle/:id').
+  {
+    path: 'productos/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/productos/productos/producto-edit.page').then((m) => m.ProductoEditPage),
+  },
+  {
+    path: 'productos/editar/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/productos/productos/producto-edit.page').then((m) => m.ProductoEditPage),
+  },
   {
     path: 'productos/detalle/:id',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/productos/productos/producto-detalle.page').then((m) => m.ProductoDetallePage),
+  },
+  // Recetas: alta/edición full-screen ('nuevo' antes de ':id').
+  {
+    path: 'productos/recetas/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/productos/recetas/receta-edit.page').then((m) => m.RecetaEditPage),
+  },
+  {
+    path: 'productos/recetas/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/productos/recetas/receta-edit.page').then((m) => m.RecetaEditPage),
   },
   {
     path: 'compras/categorias/nuevo',
@@ -248,6 +316,23 @@ export const routes: Routes = [
     path: 'financiero/caja-mayor/:id/ajuste/:signo',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/financiero/caja-mayor/ops/ajuste-nuevo.page').then((m) => m.AjusteNuevoPage),
+  },
+  // Cajas: apertura, detalle/resumen y cierre (full-screen). 'abrir' debe ir
+  // ANTES de ':id' para no matchearse como un id.
+  {
+    path: 'financiero/cajas/abrir',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/cajas/caja-abrir.page').then((m) => m.CajaAbrirPage),
+  },
+  {
+    path: 'financiero/cajas/:id/cerrar',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/cajas/caja-cerrar.page').then((m) => m.CajaCerrarPage),
+  },
+  {
+    path: 'financiero/cajas/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/cajas/caja-detalle.page').then((m) => m.CajaDetallePage),
   },
 
   // --- Shell autenticado (listados / índices) ---
@@ -402,6 +487,11 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/ventas/mesas/mesas-list.page').then((m) => m.MesasListPage),
       },
       {
+        path: 'ventas/resumen',
+        data: { title: 'Resumen de ventas' },
+        loadComponent: () => import('./pages/ventas/resumen/ventas-resumen.page').then((m) => m.VentasResumenPage),
+      },
+      {
         path: 'financiero/comisiones-reglas',
         data: { title: 'Reglas de comisión', source: 'reglas-comision' },
         loadComponent: () => import('./pages/rrhh/ops/rrhh-ops-list.page').then((m) => m.RrhhOpsListPage),
@@ -462,6 +552,11 @@ export const routes: Routes = [
         path: 'productos/lista',
         data: { title: 'Productos' },
         loadComponent: () => import('./pages/productos/productos/productos-list.page').then((m) => m.ProductosListPage),
+      },
+      {
+        path: 'productos/recetas',
+        data: { title: 'Recetas' },
+        loadComponent: () => import('./pages/productos/recetas/recetas-list.page').then((m) => m.RecetasListPage),
       },
     ],
   },

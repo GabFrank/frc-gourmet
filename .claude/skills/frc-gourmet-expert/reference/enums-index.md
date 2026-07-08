@@ -1,6 +1,6 @@
 # Catálogo de enums
 
-30+ enums distribuidos por dominio. Lista referencia.
+30+ enums distribuidos por dominio. Lista de referencia — **no exhaustiva ni siempre exacta** (los enums cambian seguido). Antes de usar un valor, verificarlo en el archivo `*.enum.ts` / `*-enums.ts` del dominio. Enums recientes no listados abajo: por ejemplo `RetiroCajaOrigen`, `GastoDestinoTipo` (financiero), enums de buffet por peso (productos/ventas), KDS.
 
 ## Personas / Auth
 
@@ -22,7 +22,7 @@ EstadoCivil = SOLTERO | CASADO | UNION_LIBRE | DIVORCIADO | VIUDO
 
 ```typescript
 // producto-tipo.enum.ts
-ProductoTipo = RETAIL | RETAIL_INGREDIENTE | ELABORADO_SIN_VARIACION | ELABORADO_CON_VARIACION | COMBO
+ProductoTipo = RETAIL | RETAIL_INGREDIENTE | ELABORADO_SIN_VARIACION | ELABORADO_CON_VARIACION | COMBO | BUFFET_POR_PESO
 
 // receta-tipo.enum.ts
 RecetaTipo = BASE | VARIACION
@@ -92,7 +92,9 @@ TipoDetalle = PAGO | VUELTO | DESCUENTO | AUMENTO
 // caja-mayor-enums.ts
 CajaMayorEstado = ABIERTA | CERRADA
 
-TipoMovimiento (28 valores, ver dominio):
+// caja-mayor-enums.ts también define: RetiroCajaOrigen, GastoDestinoTipo (verificar en el archivo).
+
+TipoMovimiento (23 valores — verificar en `caja-mayor-enums.ts`):
   // Ingresos (9)
   INGRESO_RETIRO_CAJA
   INGRESO_CIERRE_CAJA
@@ -104,7 +106,7 @@ TipoMovimiento (28 valores, ver dominio):
   TRANSFERENCIA_ENTRADA
   AJUSTE_POSITIVO
 
-  // Egresos (14)
+  // Egresos (13)
   EGRESO_GASTO
   EGRESO_COMPRA              // legacy pre-refactor 2026-05-05
   EGRESO_CUOTA_COMPRA

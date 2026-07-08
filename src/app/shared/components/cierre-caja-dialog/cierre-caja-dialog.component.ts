@@ -55,6 +55,7 @@ export class CierreCajaDialogComponent implements OnInit {
   observaciones = '';
   processing = false;
   hasOpenVentas = false;
+  errorMsg = '';
 
   constructor(
     public dialogRef: MatDialogRef<CierreCajaDialogComponent>,
@@ -96,6 +97,7 @@ export class CierreCajaDialogComponent implements OnInit {
   async cerrar(): Promise<void> {
     if (!this.canCerrar || this.processing) return;
     this.processing = true;
+    this.errorMsg = '';
 
     try {
       // Crear conteo de cierre
@@ -114,8 +116,12 @@ export class CierreCajaDialogComponent implements OnInit {
       }));
 
       this.dialogRef.close({ success: true });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al cerrar caja:', error);
+      // Surfacing del guard de backend (ej. ventas abiertas por la carrera
+      // multi-dispositivo): mostrar el mensaje y refrescar el estado de ventas.
+      this.errorMsg = (error?.message || 'No se pudo cerrar la caja.').replace(/^Error:\s*/, '');
+      await this.loadVentasDeCaja();
       this.processing = false;
     }
   }

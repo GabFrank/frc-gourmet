@@ -29,7 +29,7 @@ saber que existe:
 3. Si todo está bien, aparece la pantalla de **Iniciar sesión**.
 
 Si en lugar de eso ves un error de conexión, mirá el
-[Capítulo 9 — Solución de problemas](09-solucion-de-problemas.md).
+[Solución de problemas](09-solucion-de-problemas.md).
 
 ## Instalar la app en la pantalla de inicio (recomendado)
 
@@ -83,7 +83,7 @@ Esto es una tarea de soporte; un usuario normal nunca la necesita.
 - **Teléfono:** la navegación pasa a una barra inferior con los accesos principales. Todo
   está pensado para usarse con el dedo (botones grandes, sin tablas con scroll lateral).
 - **Tema claro / oscuro:** podés cambiarlo desde la barra superior según la luz del
-  ambiente (ver [Capítulo 2](02-login-y-navegacion.md)).
+  ambiente (ver [Iniciar sesión y navegar](02-login-y-navegacion.md)).
 
 ---
 

@@ -55,7 +55,7 @@ enum CuentaPorPagarTipo {
 
 ### Pago de cuota
 
-`pagar-cpp-cuota` y `aplicarPagoCpoCuota` (cuentas-por-pagar.handler.ts:86-200, 300+):
+Canal IPC `pagar-cpp-cuota` (cuentas-por-pagar.handler.ts:618), wrapper sobre el helper `aplicarPagoCpoCuota` (línea 88-193):
 
 Flujo unificado, **bifurca por tipo y fuente**:
 
@@ -81,11 +81,13 @@ Flujo unificado, **bifurca por tipo y fuente**:
 
 ### Lote: pagar-cuotas-compras-lote
 
-`cuentas-por-pagar.handler.ts:618-672`. Itera N cuotas en una sola transacción. Usado por `pagar-compras-dialog`.
+`cuentas-por-pagar.handler.ts:643-698`. Itera N cuotas en una sola transacción. Usado por `pagar-compras-dialog`.
 
 ### Cancelar CPP
 
-`cancelar-cpp`: marca CPP estado=CANCELADO, todas cuotas PENDIENTE → CANCELADA.
+Canal `cancelar-cuenta-por-pagar` (línea 588): marca **solo** la CPP en estado=CANCELADO (no toca las cuotas). Para anular una cuota individual pendiente existe `cancelar-cpp-cuota` (línea 774), que la pone CANCELADA y descuenta su saldo no pagado.
+
+> Excepción: al anular una compra FINALIZADA, `anular-compra` (compras.handler.ts) sí marca la CPP CANCELADO **y** sus cuotas PENDIENTE → CANCELADA en bloque.
 
 ### Crear préstamo a funcionario
 
@@ -96,8 +98,9 @@ Si `tipo=PRESTAMO_FUNCIONARIO` y se especifica `cajaMayorId/monedaId/formaPagoId
 ### UI
 
 `src/app/pages/financiero/caja-mayor/cuentas-por-pagar/`:
-- `list-cpp/` — paginada con filtros.
-- `create-edit-cpp/` — para crear préstamos.
+- `list-cuentas-por-pagar/` — paginada con filtros.
+- `create-edit-cuenta-por-pagar-dialog/` — para crear préstamos.
+- `cuenta-por-pagar-detalle/` — detalle de una CPP con sus cuotas.
 - `pagar-cuota-dialog/` — pago individual con prop `direccion: 'PAGAR' | 'COBRAR'`. Cambia título, labels, botón. Si COBRAR (PRESTAMO_FUNCIONARIO) no valida saldo negativo.
 
 `pagar-compras-dialog/` (en caja-mayor) — pago multi-cuota lote.
@@ -144,11 +147,16 @@ CuentaPorCobrarCuota {
 
 ### Cobrar cuota
 
-`cobrar-cpc-cuota`:
-1. Cuota.montoCobrado += monto.
-2. CPC.montoCobrado += monto.
-3. Si fuente=CAJA_MAYOR: crear `CajaMayorMovimiento` INGRESO_COBRO_CLIENTE + `actualizarSaldoCajaMayor`.
-4. Crear `MovimientoCliente` tipo PAGO + actualizar `cliente.saldoActual`.
+`cobrar-cpc-cuota` (permiso `CPC_COBRAR`):
+1. Cuota.montoCobrado += monto. Estado vía `calcularEstadoCuota` (COBRADO si completa).
+2. CPC.montoCobrado += monto. Si todas las cuotas cobradas → CPC.estado = COBRADO.
+3. Por fuente:
+   - `CAJA_MAYOR`: crear `CajaMayorMovimiento` INGRESO_COBRO_CLIENTE (con `cuentaPorCobrarCuotaId`) + `actualizarSaldoCajaMayor`.
+   - `CUENTA_BANCARIA`: acredita `cuentaBancaria.saldo` (monto en moneda de la cuenta, vía `montoCuentaBancaria`/`cotizacion` si difiere), **sin** movimiento de Caja Mayor.
+4. `cliente.saldoActual` -= monto (el cobro reduce la deuda).
+5. Crear `MovimientoCliente` tipo PAGO (guarda `cajaMayorMovimientoId` o `cuentaBancariaId`/`montoCuentaBancaria` según la fuente).
+
+`anular-cobro-cpc-cuota` revierte el cobro (cuota/CPC/saldo cliente + contra-asiento de la fuente). Dialogs: `cobrar-cuota-dialog/` (individual) y `cobrar-cpc-rapido-dialog/` (acceso rápido desde Caja Mayor).
 
 ## MovimientoCliente
 
@@ -182,7 +190,7 @@ Tracking paralelo a Caja Mayor para auditar interacciones con un cliente:
 
 ## Resúmenes para sidebar de Caja Mayor
 
-`get-caja-mayor-cpp-resumen()` (caja-mayor.handler.ts:1679):
+`get-caja-mayor-cpp-resumen()` (caja-mayor.handler.ts:2306):
 
 Devuelve `[{ monedaId, monedaSimbolo, monedaDenominacion, esteMes, mesQueViene, total, vencidas }]`. Agrupa cuotas CPP `PENDIENTE/PARCIAL` por moneda.
 
@@ -214,5 +222,6 @@ Para CPP #2 "PRESTAMO DE PRUEBA" (ID 2): se agregó movimiento `EGRESO_DESEMBOLS
 ## Pendientes
 
 - Detalle CPP con link inverso a Compra origen.
-- Cobro CPC desde dialog Ingresos de Caja Mayor (acceso rápido).
 - Tasa de interés en CPP PRESTAMO (cálculo simple/compuesto).
+
+(El cobro CPC de acceso rápido ya existe: `cobrar-cpc-rapido-dialog/`.)

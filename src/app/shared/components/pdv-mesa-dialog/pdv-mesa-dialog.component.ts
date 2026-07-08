@@ -118,9 +118,9 @@ export class PdvMesaDialogComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
   
-  // Method to load sectors
+  // Method to load sectors (solo sectores de MESA)
   loadSectores(): void {
-    (window as any).api.getSectores()
+    (window as any).api.getSectores('MESA')
       .then((response: SectorEntity[]) => {
         this.sectors = response;
       })
@@ -311,8 +311,9 @@ export class PdvMesaDialogComponent implements OnInit, OnDestroy {
   // Method to create a sector
   createSector(sectorData: any): void {
     this.submitting = true;
-    
-    (window as any).api.createSector(sectorData)
+
+    // Este ABM crea sectores de MESA.
+    (window as any).api.createSector({ ...sectorData, tipo: 'MESA' })
       .then((response: SectorEntity) => {
         this.snackBar.open('Sector creado con éxito', 'Cerrar', { duration: 3000 });
         this.loadSectores();

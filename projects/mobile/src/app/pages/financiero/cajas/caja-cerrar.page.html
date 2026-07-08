@@ -1,0 +1,35 @@
+<mat-toolbar color="primary" class="caja-bar">
+  <button mat-icon-button (click)="volver()" aria-label="Volver">
+    <mat-icon>arrow_back</mat-icon>
+  </button>
+  <span class="caja-bar-title">Cerrar caja</span>
+</mat-toolbar>
+
+<mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
+
+<div class="caja-body" *ngIf="!loading">
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <ng-container *ngIf="!error">
+    <section class="block" *ngIf="esperados.length">
+      <h3 class="block-title">Efectivo esperado</h3>
+      <div class="line" *ngFor="let e of esperados">
+        <span class="line-label">{{ e.denominacion }}</span>
+        <span class="line-value">{{ e.montoFmt }} {{ e.simbolo }}</span>
+      </div>
+    </section>
+
+    <div class="caja-section-head">
+      <h3 class="caja-section-title">Conteo de cierre</h3>
+      <mat-slide-toggle color="primary" [(ngModel)]="resumido">Resumido</mat-slide-toggle>
+    </div>
+    <p class="caja-conteo-hint">
+      {{ resumido ? 'Cargá el total por moneda.' : 'Cargá la cantidad por denominación.' }}
+    </p>
+    <app-conteo-form [grupos]="grupos" [resumido]="resumido"></app-conteo-form>
+
+    <button mat-flat-button color="warn" class="caja-cta" [disabled]="saving" (click)="cerrar()">
+      Cerrar caja
+    </button>
+  </ng-container>
+</div>

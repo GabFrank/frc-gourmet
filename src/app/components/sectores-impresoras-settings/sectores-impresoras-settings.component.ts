@@ -18,6 +18,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '../../database/repository.service';
 import { ConfirmationDialogComponent } from '../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { SectorFormDialogComponent } from '../../shared/components/pdv-mesa-dialog/sector-form-dialog/sector-form-dialog.component';
 
 interface SectorImpresoraView {
   id: number;
@@ -113,11 +114,29 @@ export class SectoresImpresorasSettingsComponent implements OnInit {
 
   private async cargarSectores(): Promise<void> {
     try {
-      const data = await firstValueFrom(this.repository.getSectoresActivos());
+      // Solo sectores de IMPRESION (cocina/barra): a estos se les asignan
+      // impresoras. Los sectores de MESA se gestionan en el ABM de mesas.
+      const data = await firstValueFrom(this.repository.getSectoresActivos('IMPRESION'));
       this.sectores = (data || []).map((s: any) => ({ id: s.id, nombre: s.nombre }));
     } catch (e) {
       console.error('Error getSectoresActivos:', e);
     }
+  }
+
+  /** Crea un sector de IMPRESION (cocina/barra) — su propio lugar de creación. */
+  crearSectorImpresion(): void {
+    const ref = this.dialog.open(SectorFormDialogComponent, { width: '400px', data: {} });
+    ref.afterClosed().subscribe(async (result: any) => {
+      if (!result?.nombre) return;
+      try {
+        await firstValueFrom(this.repository.createSector({ ...result, tipo: 'IMPRESION' } as any));
+        this.snackBar.open('Sector de impresión creado', 'Cerrar', { duration: 2000 });
+        await this.cargarSectores();
+      } catch (e: any) {
+        console.error('Error creando sector de impresión:', e);
+        this.snackBar.open(e?.message || 'Error al crear sector', 'Cerrar', { duration: 3000 });
+      }
+    });
   }
 
   private async cargarPrinters(): Promise<void> {

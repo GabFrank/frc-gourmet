@@ -183,7 +183,10 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
         persona: persona, // Assign the potentially null persona object
         nickname: usuarioData.nickname,
         password: await hashPassword(plainPassword),
-        activo: usuarioData.activo !== undefined ? usuarioData.activo : true
+        activo: usuarioData.activo !== undefined ? usuarioData.activo : true,
+        // Cuando se crea con password temporal (alta rápida), el frontend manda
+        // este flag en true para que el primer login obligue a cambiarla.
+        mustChangePassword: usuarioData.mustChangePassword === true,
       });
 
       // Set tracking before saving
@@ -261,6 +264,11 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
         usuario.password = await hashPassword(usuarioData.password);
       }
       if (usuarioData.activo !== undefined) usuario.activo = usuarioData.activo;
+      // Reset de password (admin): el frontend manda mustChangePassword=true para
+      // que el usuario cambie la temporal en su próximo login.
+      if (usuarioData.mustChangePassword !== undefined) {
+        usuario.mustChangePassword = usuarioData.mustChangePassword === true;
+      }
 
       await setEntityUserTracking(dataSource, usuario, currentUser?.id, true);
       const updatedUsuario = await usuarioRepository.save(usuario);

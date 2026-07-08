@@ -25,6 +25,9 @@ import { printComandaInternal, printVentaTicketInternal } from './documentos-tic
 import { Sector } from '../../src/app/database/entities/ventas/sector.entity';
 import { ComandaItem, ComandaItemEstado } from '../../src/app/database/entities/ventas/comanda-item.entity';
 import { ProductoSector } from '../../src/app/database/entities/productos/producto-sector.entity';
+import { GastoCaja } from '../../src/app/database/entities/financiero/gasto-caja.entity';
+import { RetiroCaja } from '../../src/app/database/entities/financiero/retiro-caja.entity';
+import { RetiroCajaOrigen } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { broadcastComandaEvent } from '../utils/comanda-events.utils';
 import { PdvAtajoGrupo } from '../../src/app/database/entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from '../../src/app/database/entities/ventas/pdv-atajo-item.entity';
@@ -52,6 +55,16 @@ import { dbQuery } from '../utils/db-query';
 export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Remove this line - get the current user in each handler instead
   // const currentUser = getCurrentUser(); // Get user for tracking
+
+  // Flag de config: ¿vincular una comanda a una mesa debe ocupar la mesa?
+  const ocuparMesaAlVincularComanda = async (): Promise<boolean> => {
+    try {
+      const cfg = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+      return !!cfg?.ocuparMesaAlVincularComanda;
+    } catch {
+      return false;
+    }
+  };
 
   // Arrancar worker de retry de comandas (cada 5s reintenta items con
   // `impreso=false` y al menos un intento previo, en ventas ABIERTAS).
@@ -305,8 +318,10 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Venta);
+      // Solo las ventas DE MESA (comanda IS NULL): las cuentas de comanda
+      // vinculadas a la mesa se cierran/liberan desde su propio flujo.
       const ventasAbiertas = await repo.find({
-        where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA },
+        where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
       });
       for (const v of ventasAbiertas) {
         v.estado = estado as VentaEstado;
@@ -552,7 +567,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const conteoApertura: any[] = [];
       if (caja.conteoApertura?.id) {
         const rows = await dbQuery(dataSource, `
-          SELECT mb.moneda_id, m.simbolo, m.denominacion, SUM(cd.cantidad * mb.valor) as total
+          SELECT mb.moneda_id, m.simbolo, m.denominacion, SUM(COALESCE(cd.monto, cd.cantidad * mb.valor)) as total
           FROM conteos_detalles cd
           JOIN monedas_billetes mb ON cd.moneda_billete_id = mb.id
           JOIN monedas m ON mb.moneda_id = m.id
@@ -568,7 +583,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const conteoCierre: any[] = [];
       if (caja.conteoCierre?.id) {
         const rows = await dbQuery(dataSource, `
-          SELECT mb.moneda_id, m.simbolo, m.denominacion, SUM(cd.cantidad * mb.valor) as total
+          SELECT mb.moneda_id, m.simbolo, m.denominacion, SUM(COALESCE(cd.monto, cd.cantidad * mb.valor)) as total
           FROM conteos_detalles cd
           JOIN monedas_billetes mb ON cd.moneda_billete_id = mb.id
           JOIN monedas m ON mb.moneda_id = m.id
@@ -634,19 +649,83 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         }
       }
 
-      // Calcular esperado y diferencia
+      // Gastos pagados con el efectivo de esta caja de venta (ACTIVOS).
+      const gastosCaja = await dataSource.getRepository(GastoCaja).find({
+        where: { caja: { id: cajaId } as any, estado: 'ACTIVO' },
+        relations: ['moneda', 'formaPago', 'gastoCategoria'],
+        order: { fecha: 'DESC', id: 'DESC' } as any,
+      });
+      const gastosEfectivoPorMoneda: { [monedaId: number]: number } = {};
+      const gastos = gastosCaja.map(g => {
+        const monedaId = (g.moneda as any)?.id;
+        const monto = Number(g.monto || 0);
+        if (monedaId && (g.formaPago as any)?.movimentaCaja) {
+          gastosEfectivoPorMoneda[monedaId] = (gastosEfectivoPorMoneda[monedaId] || 0) + monto;
+        }
+        return {
+          id: g.id,
+          descripcion: g.descripcion,
+          monto,
+          monedaId,
+          monedaSimbolo: (g.moneda as any)?.simbolo || '',
+          monedaDenominacion: (g.moneda as any)?.denominacion || '',
+          formaPago: (g.formaPago as any)?.nombre || '',
+          categoria: (g.gastoCategoria as any)?.nombre || '',
+          fecha: g.fecha,
+        };
+      });
+
+      // Retiros MANUALES de esta caja. El retiro de CIERRE se genera del propio
+      // conteo (mueve el efectivo contado a caja mayor) y NO debe descontarse del
+      // esperado; solo los manuales, que salieron del cajón durante el turno.
+      const retirosCaja = await dataSource.getRepository(RetiroCaja).find({
+        where: { caja: { id: cajaId } as any, origen: RetiroCajaOrigen.MANUAL as any },
+        relations: ['detalles', 'detalles.moneda', 'detalles.formaPago', 'responsableRetiro', 'responsableRetiro.persona'],
+        order: { fechaRetiro: 'DESC' } as any,
+      });
+      const retirosEfectivoPorMoneda: { [monedaId: number]: number } = {};
+      const retiros = retirosCaja.map(r => {
+        const detalles = (r.detalles || []).map((d: any) => {
+          const monedaId = d.moneda?.id;
+          const monto = Number(d.monto || 0);
+          if (monedaId && d.formaPago?.movimentaCaja) {
+            retirosEfectivoPorMoneda[monedaId] = (retirosEfectivoPorMoneda[monedaId] || 0) + monto;
+          }
+          return {
+            monedaId,
+            monedaSimbolo: d.moneda?.simbolo || '',
+            monedaDenominacion: d.moneda?.denominacion || '',
+            monto,
+          };
+        });
+        return {
+          id: r.id,
+          fecha: r.fechaRetiro,
+          responsable: (r.responsableRetiro as any)?.persona?.nombre || '',
+          observacion: r.observacion || '',
+          estado: r.estado,
+          detalles,
+        };
+      });
+
+      // Calcular esperado y diferencia. Todo lo que salió del cajón (gastos y
+      // retiros manuales en efectivo) reduce el esperado en su moneda.
       const esperadoPorMoneda: { [monedaId: number]: number } = {};
       const diferenciaPorMoneda: { [monedaId: number]: number } = {};
       const allMonedaIds = new Set<number>();
       conteoApertura.forEach(c => allMonedaIds.add(c.monedaId));
       conteoCierre.forEach(c => allMonedaIds.add(c.monedaId));
       Object.keys(efectivoPorMoneda).forEach(k => allMonedaIds.add(Number(k)));
+      Object.keys(gastosEfectivoPorMoneda).forEach(k => allMonedaIds.add(Number(k)));
+      Object.keys(retirosEfectivoPorMoneda).forEach(k => allMonedaIds.add(Number(k)));
 
       for (const monedaId of allMonedaIds) {
         const apertura = conteoApertura.find(c => c.monedaId === monedaId)?.total || 0;
         const cierre = conteoCierre.find(c => c.monedaId === monedaId)?.total || 0;
         const efectivo = efectivoPorMoneda[monedaId] || 0;
-        esperadoPorMoneda[monedaId] = apertura + efectivo;
+        const gastoEfectivo = gastosEfectivoPorMoneda[monedaId] || 0;
+        const retiroEfectivo = retirosEfectivoPorMoneda[monedaId] || 0;
+        esperadoPorMoneda[monedaId] = apertura + efectivo - gastoEfectivo - retiroEfectivo;
         diferenciaPorMoneda[monedaId] = cierre - esperadoPorMoneda[monedaId];
       }
 
@@ -660,6 +739,8 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         efectivoPorMoneda,
         esperadoPorMoneda,
         diferenciaPorMoneda,
+        gastos,
+        retiros,
       };
     } catch (error) {
       console.error(`Error getting resumen caja ${cajaId}:`, error);
@@ -696,6 +777,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta ID ${id} not found`);
 
+      // Control opcional de impresión del ticket para esta transición puntual.
+      // Si viene definido (true/false), tiene prioridad sobre el config global
+      // `autoImprimirTicketVenta`. Se extrae antes del merge para que no intente
+      // persistirse como columna de la entidad.
+      let imprimirTicketOverride: boolean | undefined;
+      if (data && Object.prototype.hasOwnProperty.call(data, '__imprimirTicketVenta')) {
+        imprimirTicketOverride = data.__imprimirTicketVenta === true;
+        delete data.__imprimirTicketVenta;
+      }
+
       const estadoAnterior = entity.estado;
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
@@ -705,8 +796,15 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // Fire-and-forget. NUNCA bloquea ni revierte la transición de estado.
       if (estadoAnterior !== VentaEstado.CONCLUIDA && saved.estado === VentaEstado.CONCLUIDA) {
         try {
-          const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
-          if (pdvConfig?.autoImprimirTicketVenta) {
+          let debeImprimir: boolean;
+          if (imprimirTicketOverride !== undefined) {
+            // El llamador (finalizar / finalizar + ticket) decide explícitamente.
+            debeImprimir = imprimirTicketOverride;
+          } else {
+            const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+            debeImprimir = !!pdvConfig?.autoImprimirTicketVenta;
+          }
+          if (debeImprimir) {
             setImmediate(() => {
               printVentaTicketInternal(dataSource, id)
                 .catch(e => console.warn('[updateVenta] auto-print ticket falló:', e));
@@ -1510,7 +1608,11 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     return repo.createQueryBuilder('mesa')
       .leftJoinAndSelect('mesa.reserva', 'reserva')
       .leftJoinAndSelect('mesa.sector', 'sector')
-      .leftJoinAndMapOne('mesa.venta', Venta, 'venta', 'venta.mesa_id = mesa.id AND venta.estado = :ventaEstado', { ventaEstado: VentaEstado.ABIERTA })
+      .leftJoinAndMapOne('mesa.venta', Venta, 'venta', 'venta.mesa_id = mesa.id AND venta.estado = :ventaEstado AND venta.comanda_id IS NULL', { ventaEstado: VentaEstado.ABIERTA })
+      // Cargar el cliente de la venta (+ persona) para que el auto-refresh de mesas
+      // no pierda el cliente asignado al volver a seleccionar la mesa.
+      .leftJoinAndSelect('venta.cliente', 'ventaCliente')
+      .leftJoinAndSelect('ventaCliente.persona', 'ventaClientePersona')
       .leftJoinAndSelect('mesa.comandas', 'comanda', 'comanda.estado = :comandaEstado AND comanda.activo = :comandaActivo', { comandaEstado: ComandaEstado.OCUPADO, comandaActivo: true })
       .orderBy('mesa.numero', 'ASC');
   };
@@ -1837,7 +1939,18 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         entity.observacion = data.observacion;
       }
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+
+      // Si la config lo pide, vincular comanda a mesa también ocupa la mesa.
+      if (data.mesaId && (await ocuparMesaAlVincularComanda())) {
+        const mesaRepo = dataSource.getRepository(PdvMesa);
+        const mesa = await mesaRepo.findOneBy({ id: data.mesaId });
+        if (mesa && mesa.estado !== 'OCUPADO') {
+          mesa.estado = 'OCUPADO' as any;
+          await mesaRepo.save(mesa);
+        }
+      }
+      return saved;
     } catch (error) {
       console.error(`Error abriendo Comanda ID ${comandaId}:`, error);
       throw error;
@@ -1847,15 +1960,36 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('cerrarComanda', async (_event: any, comandaId: number) => {
     try {
       const repo = dataSource.getRepository(Comanda);
-      const entity = await repo.findOneBy({ id: comandaId });
+      const entity = await repo.findOne({ where: { id: comandaId }, relations: ['pdv_mesa'] });
       if (!entity) throw new Error(`Comanda ID ${comandaId} not found`);
 
+      const mesaId = entity.pdv_mesa?.id;
       entity.estado = ComandaEstado.DISPONIBLE;
       entity.pdv_mesa = undefined as any;
       entity.sector = undefined as any;
       entity.observacion = undefined as any;
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+
+      // Si la config ocupa la mesa al vincular comanda, al liberar la comanda
+      // liberar la mesa solo si no quedan otras comandas OCUPADO ni venta de mesa ABIERTA.
+      if (mesaId && (await ocuparMesaAlVincularComanda())) {
+        const otrasComandas = await repo.count({
+          where: { pdv_mesa: { id: mesaId }, estado: ComandaEstado.OCUPADO, activo: true },
+        });
+        const ventaMesa = await dataSource.getRepository(Venta).count({
+          where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
+        });
+        if (otrasComandas === 0 && ventaMesa === 0) {
+          const mesaRepo = dataSource.getRepository(PdvMesa);
+          const mesa = await mesaRepo.findOneBy({ id: mesaId });
+          if (mesa && mesa.estado !== 'DISPONIBLE') {
+            mesa.estado = 'DISPONIBLE' as any;
+            await mesaRepo.save(mesa);
+          }
+        }
+      }
+      return saved;
     } catch (error) {
       console.error(`Error cerrando Comanda ID ${comandaId}:`, error);
       throw error;
@@ -1886,6 +2020,9 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         .leftJoinAndSelect('comanda.pdv_mesa', 'pdv_mesa')
         .leftJoinAndSelect('comanda.sector', 'sector')
         .leftJoinAndMapOne('comanda.venta', Venta, 'venta', 'venta.comanda_id = comanda.id AND venta.estado = :ventaEstado', { ventaEstado: VentaEstado.ABIERTA })
+        // Cargar cliente (+ persona) para que el auto-refresh no lo pierda al reseleccionar la comanda.
+        .leftJoinAndSelect('venta.cliente', 'ventaCliente')
+        .leftJoinAndSelect('ventaCliente.persona', 'ventaClientePersona')
         .where('comanda.id = :id', { id: comandaId })
         .getOne();
     } catch (error) {
@@ -1895,10 +2032,11 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   });
 
   // --- Sector Handlers ---
-  ipcMain.handle('getSectores', async () => {
+  ipcMain.handle('getSectores', async (_event: any, tipo?: string) => {
     try {
       const repo = dataSource.getRepository(Sector);
       return await repo.find({
+        where: tipo ? { tipo: tipo as any } : {},
         order: { nombre: 'ASC' }
       });
     } catch (error) {
@@ -1907,11 +2045,11 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     }
   });
 
-  ipcMain.handle('getSectoresActivos', async () => {
+  ipcMain.handle('getSectoresActivos', async (_event: any, tipo?: string) => {
     try {
       const repo = dataSource.getRepository(Sector);
       return await repo.find({
-        where: { activo: true },
+        where: { activo: true, ...(tipo ? { tipo: tipo as any } : {}) },
         order: { nombre: 'ASC' }
       });
     } catch (error) {
@@ -2766,12 +2904,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   });
 }
 
+// Retardo antes de auto-imprimir la comanda: da tiempo a que el PdV persista los
+// adicionales/observaciones/opcionales del ítem (que guarda en llamadas separadas
+// DESPUÉS de createVentaItem) para que salgan en el ticket de cocina.
+const AUTO_PRINT_COMANDA_DELAY_MS = 2500;
+
 /**
  * Hook auto-impresión de comanda (ticket de cocina).
  *
  * Se ejecuta tras `createVentaItem`. Si la Venta tiene **mesa o comanda**
  * asignada Y `pdv_config.autoImprimirComanda=true`, dispara
- * `printComandaInternal` en background (setImmediate) — el item ya fue
+ * `printComandaInternal` en background (con un retardo corto) — el item ya fue
  * guardado y la respuesta al frontend NO espera la impresión.
  *
  * Si la venta no tiene ni mesa ni comanda → venta directa de mostrador
@@ -2799,8 +2942,15 @@ async function autoPrintComandaIfNeeded(
   const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
   if (!pdvConfig?.autoImprimirComanda) return;
 
-  // 3. Disparar en background
-  setImmediate(() => {
+  // 3. Disparar en background, con un pequeño retardo.
+  //    El PdV guarda el VentaItem PRIMERO (esto dispara el hook) y RECIÉN DESPUÉS
+  //    persiste sus adicionales/observaciones/opcionales en llamadas separadas.
+  //    Sin el retardo, la comanda se imprime antes de que esos modificadores
+  //    existan y salen sin ellos. El retardo deja que se guarden (son round-trips
+  //    rápidos, locales o por LAN) antes de imprimir. La comanda usa
+  //    soloItemsNoImpresos + tracking de `impreso`, así que agregar varios ítems
+  //    seguidos no duplica.
+  setTimeout(() => {
     printComandaInternal(dataSource, ventaId, { soloItemsNoImpresos: true })
       .then(res => {
         if (!res.ok) {
@@ -2809,7 +2959,7 @@ async function autoPrintComandaIfNeeded(
         }
       })
       .catch(e => console.error(`[auto-print comanda venta=${ventaId}] excepción:`, e));
-  });
+  }, AUTO_PRINT_COMANDA_DELAY_MS);
 }
 
 /**

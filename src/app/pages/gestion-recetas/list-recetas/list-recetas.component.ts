@@ -90,7 +90,8 @@ export class ListRecetasComponent implements OnInit {
 
   applyFilter(event: Event): void {
     const filterValue = (event.target as HTMLInputElement).value;
-    this.searchTerm = filterValue.trim().toLowerCase();
+    // El backend mayusculiza el término (los datos se guardan en MAYÚSCULAS).
+    this.searchTerm = filterValue.trim();
     this.currentPage = 0; // Reset to first page when filtering
     this.loadRecetas();
   }

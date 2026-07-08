@@ -73,7 +73,7 @@ Crear:
 
 Cada PC desde la que se vende debe registrarse como Dispositivo:
 
-**Menu → Configuración → Dispositivos y Puntos de Venta**.
+**Menu → Configuración → Dispositivos y puntos de venta**.
 
 1. Crear nuevo dispositivo:
    - Nombre: "PC Caja Frente", "Tablet Mostrador", etc.
@@ -131,7 +131,9 @@ Configurar visibilidad (botón "Configurar" en el detalle):
 
 ## 11. Categorías de Productos (Familias)
 
-**Menu → Productos → Productos → (botón "Familias")** o desde Dashboard de Productos.
+**Menu → Productos → Productos → (botón "Familias")** o desde el Dashboard de Productos.
+
+> El menú **Productos** incluye un ítem **Categorías**, pero en esta versión las familias y subfamilias se gestionan desde el botón **Familias** de la lista de Productos / Dashboard de Productos.
 
 Estructura jerárquica:
 
@@ -217,7 +219,13 @@ Asignar permisos a cada rol.
 
 Luego, en **Menu → Recursos Humanos → Usuarios**, asignar roles a cada usuario.
 
-## 16. Impresoras
+## 16. Datos de la Empresa
+
+**Menu → Configuración → Datos de la Empresa**.
+
+Cargá los datos del negocio (nombre, logo, RUC/datos fiscales, dirección, contacto). El logo y el nombre aparecen en la barra superior de la app y en los reportes.
+
+## 17. Impresoras
 
 **Menu → Configuración → Impresoras**.
 
@@ -230,9 +238,11 @@ Agregar cada impresora térmica:
 
 Botón "Test print" verifica que funcione.
 
-## 17. Backup inicial
+## 18. Backup inicial
 
-⚠️ **Antes de empezar a usar el sistema en producción**:
+La forma recomendada es usar la herramienta integrada: **Menu → Configuración → Backup y Restauración**. Desde ahí podés generar y restaurar copias de la base de datos sin tocar archivos a mano.
+
+Alternativa manual (con la app cerrada), copiando el archivo de base de datos:
 
 1. Cerrá la app.
 2. Encontrá el archivo:
@@ -241,6 +251,8 @@ Botón "Test print" verifica que funcione.
    - Linux: `~/.config/frc-gourmet/frc-gourmet.db`
 3. Copialo a un lugar seguro (USB, disco externo, nube).
 4. Repetir backup periódicamente (al menos semanal).
+
+> **Modo de operación:** si vas a usar la app en red (un equipo como servidor y otros como clientes), configuralo en **Menu → Configuración → Modo de operación**. Por defecto la app funciona en modo local (standalone). La base de datos también puede configurarse (SQLite o Postgres) desde **Configuración → Configurar BD**.
 
 ## Resumen del orden recomendado
 
@@ -257,8 +269,9 @@ Botón "Test print" verifica que funcione.
 10. PdvConfig (umbrales, mesas, pizza)
 11. ConfiguracionRrhh (parámetros legales)
 12. Roles y permisos
-13. Impresoras
-14. Backup
+13. Datos de la Empresa
+14. Impresoras
+15. Backup
 ```
 
 Después podés empezar a cargar productos, recetas, funcionarios y operar.

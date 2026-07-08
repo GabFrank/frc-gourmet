@@ -8,6 +8,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
@@ -32,6 +33,7 @@ import { montoEnLetras } from '../../../../shared/utils/monto-letras.util';
     MatSelectModule,
     MatAutocompleteModule,
     MatProgressSpinnerModule,
+    MatSlideToggleModule,
     MatSnackBarModule,
     MatDialogModule,
   ],
@@ -90,6 +92,7 @@ export class FacturarDialogComponent implements OnInit {
       nombreCliente: ['', [Validators.required]],
       ruc: ['', [Validators.required]],
       direccion: [''],
+      telefono: [''],
       email: [''],
       descuento: [0],
       numeroManual: [null],
@@ -188,6 +191,7 @@ export class FacturarDialogComponent implements OnInit {
       nombreCliente: nombre,
       ruc: cliente?.ruc || '',
       direccion: per?.direccion || '',
+      telefono: per?.telefono || '',
       email: per?.email || '',
     });
   }
@@ -236,6 +240,37 @@ export class FacturarDialogComponent implements OnInit {
 
   removeItem(i: number): void {
     this.itemsArray.removeAt(i);
+    this.recalc();
+  }
+
+  // --- Modo resumido ---
+  // Colapsa todos los ítems en uno solo ("CONSUMISION", IVA 10, cant 1) cuyo
+  // valor es el total de la factura. Al desactivar, restaura los ítems normales.
+  resumido = false;
+  private itemsBackup: any[] | null = null;
+  private descuentoBackup = 0;
+
+  onResumidoChange(checked: boolean): void {
+    this.resumido = checked;
+    if (checked) {
+      this.recalc();
+      const totalActual = this.total;
+      this.itemsBackup = this.itemsArray.controls.map((c) => c.getRawValue());
+      this.descuentoBackup = Number(this.form.get('descuento')?.value) || 0;
+      this.itemsArray.clear();
+      this.addItem({ descripcion: 'CONSUMISION', cantidad: 1, precioUnitario: totalActual, ivaTipo: 10 });
+      this.form.get('descuento')?.setValue(0);
+    } else {
+      const backup = this.itemsBackup && this.itemsBackup.length ? this.itemsBackup : null;
+      this.itemsArray.clear();
+      if (backup) {
+        for (const it of backup) this.addItem(it);
+      } else {
+        this.addItem();
+      }
+      this.form.get('descuento')?.setValue(this.descuentoBackup);
+      this.itemsBackup = null;
+    }
     this.recalc();
   }
 
@@ -293,7 +328,7 @@ export class FacturarDialogComponent implements OnInit {
         fecha: factura?.fecha || new Date(),
         condicionVenta: v.condicionVenta,
       },
-      cliente: { nombre: up(v.nombreCliente), ruc: v.ruc, direccion: up(v.direccion), email: v.email },
+      cliente: { nombre: up(v.nombreCliente), ruc: v.ruc, direccion: up(v.direccion), email: v.email, telefono: v.telefono },
       timbrado: {
         numero: factura?.timbradoDetalle?.timbrado?.numero || '',
         vigencia: '',
@@ -309,10 +344,12 @@ export class FacturarDialogComponent implements OnInit {
         ruc: this.empresa?.ruc || '',
         direccion: up(this.empresa?.direccion || ''),
       },
-      items: this.itemsArray.controls.map((c) => {
+      items: this.itemsArray.controls.map((c, i) => {
         const it = c.value;
         const lineTotal = (Number(it.cantidad) || 0) * (Number(it.precioUnitario) || 0);
         return {
+          // Nº de línea (la columna ID del diseño). Antes no se llenaba → salía vacía.
+          id: i + 1,
           cantidad: Number(it.cantidad) || 0,
           descripcion: up(it.descripcion),
           precioUnitario: Number(it.precioUnitario) || 0,
@@ -399,11 +436,18 @@ export class FacturarDialogComponent implements OnInit {
       const config = JSON.parse(plantilla.config!);
       const ctx = this.buildContext(factura);
       const includeBg = String(plantilla.tipo) !== 'PRE_IMPRESO' && !!plantilla.backgroundImageUrl;
+      // Facturas legales (pre-impreso / auto-impreso A4) se emiten SIEMPRE en A4
+      // vertical, aunque el diseno sea "medio A4": asi el SO no rota la hoja a
+      // horizontal al imprimir. Las termicas (80mm) mantienen su tamano de rollo.
+      const forceA4 = String(plantilla.tipo) !== 'AUTO_IMPRESO_TERMICA';
       const dd = buildDocDefinition(
         { anchoMm: Number(plantilla.anchoMm), altoMm: Number(plantilla.altoMm) },
         config,
         ctx,
-        includeBg ? { background: plantilla.backgroundImageUrl, backgroundTransform: config.background } : undefined,
+        {
+          forceA4,
+          ...(includeBg ? { background: plantilla.backgroundImageUrl, backgroundTransform: config.background } : {}),
+        },
       );
       const pdfMake = await loadPdfMake();
       // Abrimos el PDF en el visor (preview + respeta la orientacion del

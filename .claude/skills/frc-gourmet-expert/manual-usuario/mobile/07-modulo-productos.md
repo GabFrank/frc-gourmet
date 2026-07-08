@@ -1,10 +1,10 @@
-# Capítulo 7 — Módulo Productos
+# Módulo Productos
 
 Entrás tocando **Productos** (📦) en la navegación. Te permite **gestionar la estructura de
 categorías** (familias, subfamilias) y los **adicionales**, y **consultar** el catálogo de
 productos.
 
-> Repasá [Capítulo 3](03-como-usar-listas-y-formularios.md) para el uso general de listas.
+> Repasá [Cómo usar las listas y los formularios](03-como-usar-listas-y-formularios.md) para el uso general de listas.
 
 ---
 
@@ -58,7 +58,7 @@ etc.) se hacen en el **escritorio**, porque involucran varias pantallas relacion
 - **Sabores** — la gestión de sabores y variaciones (por ejemplo, pizzas multi-sabor) no
   está en mobile.
 
-Ambas se manejan en el escritorio. Ver [Capítulo 10](10-limitaciones-y-version-escritorio.md).
+Ambas se manejan en el escritorio. Ver [Qué falta en mobile](10-limitaciones-y-version-escritorio.md).
 
 ---
 
@@ -71,4 +71,4 @@ Ambas se manejan en el escritorio. Ver [Capítulo 10](10-limitaciones-y-version-
 
 ---
 
-**Próximo capítulo →** [08 — Permisos y roles](08-permisos-y-roles.md)
+**Próximo capítulo →** [Permisos y roles](08-permisos-y-roles.md)

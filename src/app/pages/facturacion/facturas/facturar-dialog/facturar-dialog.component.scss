@@ -69,3 +69,18 @@ h3 {
   .num { font-variant-numeric: tabular-nums; }
   .grand { font-weight: 700; font-size: 1.1em; }
 }
+
+.items-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  h3 { margin: 0; }
+}
+
+.resumido-hint {
+  margin: 4px 0 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}

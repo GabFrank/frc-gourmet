@@ -2,7 +2,7 @@
 
 ## main.ts
 
-`main.ts` (~301 líneas tras quitar comentarios). Compila a `main.js` ~17 KB.
+`main.ts` es el bootstrap de Electron: inicializa la BD, registra los 54 handlers, dispara seeds y schedulers, y crea las ventanas (splash + principal).
 
 ### Variables globales
 
@@ -21,20 +21,20 @@ function setCurrentUser(user: Usuario | null): void { currentUser = user; }
 app.on('ready')
   ├─ protocol.registerFileProtocol('app', ...)
   ├─ initializeDatabase()
-  │   └─ DatabaseService.getInstance().initialize(userDataPath)
-  │       └─ .then(dataSource => {
-  │            registerXxxHandlers(dataSource, getCurrentUser);  // ← orden importa
+  │   └─ buildDbOverride() → DatabaseService.initialize(userDataPath, override)  // corre migraciones
+  │       └─ .then(async dataSource => {
+  │            await runBootstrapMigrations(dataSource);        // SQL fixes idempotentes
+  │            await migratePlaintextPasswords(dataSource);     // bcrypt
+  │            installHandlerRegistry();                        // monkey-patch ipcMain.handle → /api/rpc
+  │            registerXxxHandlers(dataSource, getCurrentUser); // ← orden importa (54 handlers)
+  │            dataSource.query('UPDATE ventas SET vendedor_id ...'); // migración 1-vez idempotente
   │            startAcreditacionesScheduler(dataSource, 5);
-  │            seedXxx(dataSource);
-  │            generarNotificacionesRrhh();
-  │            setInterval(generarNotif..., 24h);
+  │            registerBackupHandlers / registerDbConfigHandlers / registerAppModeHandlers / registerFacturaImportHandlers
+  │            // seeds idempotentes (en orden):
+  │            await seedInitialData; seedPermissions; seedConfiguracionRrhh; seedLiquidacionConceptos; seedSystemData;
+  │            generarNotificacionesRrhh(); setInterval(..., 24h);
   │          })
-  └─ createWindow()
-       └─ new BrowserWindow({
-            width: 1200, height: 800, fullscreen: true,
-            webPreferences: { nodeIntegration: false, contextIsolation: true, preload: 'preload.js' }
-          })
-          .loadURL('http://localhost:4201' if --serve else 'dist/index.html')
+  └─ createWindow()  // splash + ventana frameless maximizada
 
 app.on('window-all-closed')
   └─ if (platform !== 'darwin') { dbService.close(); app.quit(); }
@@ -45,74 +45,91 @@ app.on('activate')   // macOS
 
 ### Orden de registro de handlers
 
-`main.ts:90-122`. El orden importa porque algunos handlers dependen de seeds o de `getCurrentUser` ya configurado.
+El orden importa porque algunos handlers dependen de seeds o de `getCurrentUser` ya configurado, y `installHandlerRegistry()` debe correr **antes** del primer `registerXxxHandlers` para capturar todos los canales. Bloque real (54 handlers + helpers):
 
 ```typescript
-registerPrinterHandlers(dataSource);
+installHandlerRegistry();   // monkey-patch ipcMain.handle
+
+registerPrinterHandlers(dataSource, getCurrentUser);
 registerPersonasHandlers(dataSource, getCurrentUser);
 registerAuthHandlers(dataSource, getCurrentUser, setCurrentUser);
 registerImageHandlers(dataSource);
-registerProductosHandlers(dataSource, getCurrentUser);
-registerFinancieroHandlers(dataSource, getCurrentUser);
-registerComprasHandlers(dataSource, getCurrentUser);
-registerSystemHandlers();              // No necesita DB
-registerVentasHandlers(dataSource, getCurrentUser);
-registerRecetasHandlers(dataSource, getCurrentUser);  // Unificado: recetas + sabores + variaciones
-registerCajaMayorHandlers(dataSource, getCurrentUser);
-registerBankingHandlers(dataSource, getCurrentUser);
-registerCuentasPorPagarHandlers(dataSource, getCurrentUser);
-registerDashboardShortcutsHandlers(dataSource, getCurrentUser);
-registerPermissionsHandlers(dataSource, getCurrentUser);
-registerConfiguracionRrhhHandlers(dataSource, getCurrentUser);
-registerRrhhFuncionariosHandlers(dataSource, getCurrentUser);
-registerFuncionarioDocumentosHandlers(dataSource, getCurrentUser);
-registerAsistenciasHandlers(dataSource, getCurrentUser);
-registerFeriadosHandlers(dataSource, getCurrentUser);
-registerHorasExtraHandlers(dataSource, getCurrentUser);
-registerValesHandlers(dataSource, getCurrentUser);
-registerLiquidacionSueldoHandlers(dataSource, getCurrentUser);
-registerVacacionesHandlers(dataSource, getCurrentUser);
-registerLiquidacionFinalHandlers(dataSource, getCurrentUser);
-registerComisionesHandlers(dataSource, getCurrentUser);
-registerEquiposComisionHandlers(dataSource, getCurrentUser);
-registerCuentasPorCobrarHandlers(dataSource, getCurrentUser);
-registerMovimientosClienteHandlers(dataSource, getCurrentUser);
-registerNotificacionesRrhhHandlers(dataSource, getCurrentUser);
-registerDashboardRrhhHandlers(dataSource, getCurrentUser);
-registerReportesRrhhHandlers(dataSource, getCurrentUser);
+registerFilesHandlers();                 // IPCs genéricos de archivos
+registerAdjuntosHandlers(...);           // adjuntos polimórficos
+registerDocumentosTicketsHandlers(...);  // tickets térmicos
+registerSectoresImpresorasHandlers(...); // M2M Sector↔Printer
+registerProductoSectoresHandlers(...);   // M2M Producto↔Sector (routing comanda)
+registerProductosHandlers(...);
+registerFinancieroHandlers(...);
+registerComprasHandlers(...);
+registerSystemHandlers();                // no necesita DB
+registerRemoteTunnelHandlers();          // acceso remoto vía cloudflare quick tunnel
+registerVentasHandlers(...);
+registerKdsHandlers(...);                // KDS cocina (estado por sector)
+registerRecetasHandlers(...);            // recetas + sabores + variaciones (unificado)
+registerCajaMayorHandlers(...);
+registerBankingHandlers(...);
+registerCuentasPorPagarHandlers(...);
+registerDashboardShortcutsHandlers(...);
+registerOnboardingHandlers(...);         // tareas guiadas en Home
+registerEmpresaHandlers(...);            // Empresa singleton (datos + branding)
+registerCotizacionMercadoHandlers();     // scraping de cotizaciones on-demand
+registerPermissionsHandlers(...);
+registerConfiguracionRrhhHandlers(...);
+// ... handlers RRHH (funcionarios, asistencias, vales, liquidaciones, vacaciones, comisiones, etc.)
+registerConveniosHandlers(...);          // convenios + cobro consolidado
+registerNotificacionesRrhhHandlers(...);
+registerDashboardRrhhHandlers(...);
+registerReportesRrhhHandlers(...);
+// dashboards por dominio:
+registerDashboardVentasHandlers(...); registerDashboardComprasHandlers(...);
+registerDashboardProductosHandlers(...); registerDashboardFinancieroHandlers(...);
+registerDashboardCajaMayorHandlers(...);
 
-// Migración 1-vez:
+// Migración 1-vez (idempotente):
 dataSource.query(`UPDATE ventas SET vendedor_id = created_by WHERE vendedor_id IS NULL AND created_by IS NOT NULL`);
 
-// Scheduler en main process: cada 5 min procesa AcreditacionPos PENDIENTE vencida
-startAcreditacionesScheduler(dataSource, 5);
+startAcreditacionesScheduler(dataSource, 5);   // AcreditacionPos PENDIENTE vencida, cada 5 min
 
-// Seeds idempotentes (chequean si tabla está vacía antes de insertar)
-seedInitialData(dataSource);
-seedPermissions(dataSource);
-seedConfiguracionRrhh(dataSource);
-seedLiquidacionConceptos(dataSource);
+registerBackupHandlers(dataSource, getCurrentUser);   // + startAutoBackupScheduler
+registerDbConfigHandlers(dataSource, getCurrentUser); // configuración de BD (sqlite/postgres)
+registerAppModeHandlers(dataSource, getCurrentUser);  // standalone/server/client
+registerFacturaImportHandlers(dataSource, getCurrentUser); // OCR + IA
 
-// RRHH notificaciones: al startup + cada 24h
+// Seeds idempotentes (en orden):
+await seedInitialData(dataSource);
+await seedPermissions(dataSource);
+await seedConfiguracionRrhh(dataSource);
+await seedLiquidacionConceptos(dataSource);
+await seedSystemData(dataSource);   // admin + catálogos operativos
+
 generarNotificacionesRrhh();
 setInterval(() => generarNotificacionesRrhh(), 24 * 60 * 60 * 1000);
 ```
+
+→ Índice completo de handlers en [reference/handlers-index.md](../reference/handlers-index.md).
 
 ### BrowserWindow
 
 ```typescript
 new BrowserWindow({
   width: 1200, height: 800,
+  show: false,                                // se muestra en did-finish-load (cierra splash)
+  frame: isMac ? true : false,                // Win/Linux: frameless con controles custom
+  titleBarStyle: isMac ? 'hiddenInset' : 'default',
+  icon: iconPath,
   webPreferences: {
     nodeIntegration: false,         // Renderer no tiene acceso a Node directo
     contextIsolation: true,         // World contextual aislado
     preload: path.join(__dirname, 'preload.js'),
   },
-  fullscreen: true,                 // Inicia maximizada
 });
+win.maximize();                     // arranca maximizada (NO fullscreen)
 ```
 
-**Una sola ventana**. No hay multi-window. `win.on('closed') => win = null`.
+**Una sola ventana principal** + un **splash window** (`520×360`, `frame:false`) que se cierra al `did-finish-load`. No hay multi-window. `win.on('closed') => win = null`.
+
+**Titlebar custom:** en Win/Linux la ventana es frameless y el toolbar de Angular dibuja los controles (minimizar / maximizar-restaurar / cerrar), conectados por IPC (`window:minimize`, `window:maximize`, `window:close`, evento `window:state-changed`). En macOS se usa `titleBarStyle:'hiddenInset'`.
 
 **Dev vs prod load:**
 - Dev: `--serve` → `win.loadURL('http://localhost:4201')` + `openDevTools()`.
@@ -132,7 +149,7 @@ Registrado en `app.on('ready')` ANTES de cargar la app. Sirve archivos locales *
 
 Si el archivo no existe → `callback({ error: -2 })` (ENOENT).
 
-**Imágenes de producto** comentadas en `images.handler.ts` (líneas 31-121) — funcionalidad parcialmente desactivada en el refactor de productos. Sólo perfiles activos.
+**`images.handler.ts`** ahora solo expone imágenes de perfil (`save-profile-image` / `delete-profile-image`), mantenidas por compat con `create-edit-persona.component.ts`. Los consumidores nuevos (incluidas imágenes de producto) usan el **`files.handler.ts` genérico** (`save-file` / `delete-file`, con thumbnails automáticos).
 
 ## DataSource singleton
 

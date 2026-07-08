@@ -29,6 +29,7 @@ import { DashRankingListComponent, DashRankingItem } from 'src/app/shared/compon
 import { DashSectionHeaderComponent } from 'src/app/shared/components/dashboard/section-header/dash-section-header.component';
 import { DashChartCardComponent } from 'src/app/shared/components/dashboard/chart-card/dash-chart-card.component';
 import { getDashboardChartOptions, DASHBOARD_CHART_COLORS, buildLineDataset } from 'src/app/shared/utils/dashboard-chart-theme';
+import { VentasDesgloseDialogComponent } from 'src/app/shared/components/ventas-desglose-dialog/ventas-desglose-dialog.component';
 
 interface CajaAbierta {
   id: number;
@@ -99,6 +100,13 @@ export class VentasDashboardComponent implements OnInit {
 
   cajasAbiertas: CajaAbierta[] = [];
   topProductos: DashRankingItem[] = [];
+  // Desglose del total de ventas de hoy (por moneda y forma de pago, en Gs).
+  desgloseVentasHoy: any = null;
+  // true → el total corresponde a las cajas abiertas (no al día calendario);
+  // define los labels de las cards y el título del desglose.
+  totalBasadoEnCajas = false;
+  labelVentas = 'Ventas hoy';
+  labelTotal = 'Total hoy';
 
   // --- Rango ---
   rangosChips: RangoChip[] = [
@@ -132,6 +140,10 @@ export class VentasDashboardComponent implements OnInit {
       if (kpis) {
         this.ventasHoy = kpis.ventasHoy || 0;
         this.totalHoyPYG = kpis.totalHoyPYG || 0;
+        this.desgloseVentasHoy = kpis.desgloseVentasHoy || null;
+        this.totalBasadoEnCajas = !!kpis.totalBasadoEnCajas;
+        this.labelVentas = this.totalBasadoEnCajas ? 'Ventas en caja' : 'Ventas hoy';
+        this.labelTotal = this.totalBasadoEnCajas ? 'Total en caja' : 'Total hoy';
         this.ticketPromedio = kpis.ticketPromedio || 0;
         this.mesasOcupadas = kpis.mesasOcupadas || 0;
         this.mesasTotal = kpis.mesasTotal || 0;
@@ -169,6 +181,21 @@ export class VentasDashboardComponent implements OnInit {
 
   formatPYG(v: number): string {
     return (v || 0).toLocaleString('es-PY', { maximumFractionDigits: 0 });
+  }
+
+  /** Abre el desglose del total de ventas por moneda y forma de pago (en Gs). */
+  abrirDesgloseVentas(): void {
+    if (!this.desgloseVentasHoy) return;
+    this.dialog.open(VentasDesgloseDialogComponent, {
+      width: '600px',
+      maxWidth: '95vw',
+      data: {
+        titulo: this.totalBasadoEnCajas ? 'Total de ventas en caja' : 'Total de ventas de hoy',
+        totalGs: this.desgloseVentasHoy.totalGs || 0,
+        porMoneda: this.desgloseVentasHoy.porMoneda || [],
+        porFormaPago: this.desgloseVentasHoy.porFormaPago || [],
+      },
+    });
   }
 
   navigateTo(action: string): void {

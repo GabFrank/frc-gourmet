@@ -144,8 +144,8 @@ export class ProductoInformacionGeneralComponent implements OnInit, OnDestroy {
     // Inicializar estados
     this.actualizarEstadoFormulario();
 
-    // Cargar sectores para el multi-select de impresión de comanda
-    this.repositoryService.getSectoresActivos()
+    // Cargar sectores de IMPRESION para el multi-select de impresión de comanda
+    this.repositoryService.getSectoresActivos('IMPRESION')
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (sectores) => { this.sectores = sectores || []; },

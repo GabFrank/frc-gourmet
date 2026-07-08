@@ -309,9 +309,13 @@
   <!-- Action buttons -->
   <mat-dialog-actions>
     <div class="action-buttons-row">
-      <button mat-raised-button class="btn-finalizar" [disabled]="!canFinalizar" (click)="finalizar()" matTooltip="Finalizar (F10)">
+      <button mat-raised-button class="btn-finalizar" [disabled]="!canFinalizar" (click)="finalizar()" matTooltip="Finalizar sin imprimir ticket (F10)">
         <mat-icon>check</mat-icon>
         Finalizar (F10)
+      </button>
+      <button mat-raised-button class="btn-finalizar-ticket" [disabled]="!canFinalizar" (click)="finalizarConTicket()" matTooltip="Finalizar e imprimir ticket (F11)">
+        <mat-icon>receipt_long</mat-icon>
+        Finalizar + Ticket (F11)
       </button>
       <button mat-raised-button class="btn-parcial" [disabled]="!canCobroParcial" (click)="cobroParcial()">
         <mat-icon>timelapse</mat-icon>

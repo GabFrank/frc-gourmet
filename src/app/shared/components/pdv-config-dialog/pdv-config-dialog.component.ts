@@ -51,6 +51,7 @@ export class PdvConfigDialogComponent implements OnInit {
     this.configForm = this.fb.group({
       pdvTabDefault: ['MESAS'],
       comandasHabilitadas: [false],
+      ocuparMesaAlVincularComanda: [false],
       pizzaMaxSabores: [2],
       pizzaEstrategiaPrecio: ['MAYOR_PRECIO'],
       umbralDiferenciaBaja: [5],
@@ -69,6 +70,7 @@ export class PdvConfigDialogComponent implements OnInit {
         this.configForm.patchValue({
           pdvTabDefault: cfg.pdvTabDefault || 'MESAS',
           comandasHabilitadas: cfg.comandasHabilitadas || false,
+          ocuparMesaAlVincularComanda: cfg.ocuparMesaAlVincularComanda || false,
           pizzaMaxSabores: cfg.pizzaMaxSabores || 2,
           pizzaEstrategiaPrecio: cfg.pizzaEstrategiaPrecio || 'MAYOR_PRECIO',
           umbralDiferenciaBaja: cfg.umbralDiferenciaBaja || 5,

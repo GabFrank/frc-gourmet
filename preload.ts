@@ -1231,6 +1231,24 @@ contextBridge.exposeInMainWorld('api', {
     return _originalInvoke('reset-password-with-code', { nickname, codigo, newPassword });
   },
 
+  // Login por QR (Device Authorization Grant) — solo modo cliente: el desktop es
+  // el dispositivo que muestra el QR; un teléfono ya logueado lo escanea y aprueba.
+  // `deviceToken` inyecta los tokens en el estado del preload (igual que `login`)
+  // para que las llamadas /api/rpc posteriores viajen autenticadas.
+  deviceStart: async (): Promise<any> => {
+    if (APP_MODE !== 'client') throw new Error('El login por QR solo está disponible en modo cliente');
+    return httpFetch('/api/auth/device/start', {}, false);
+  },
+  deviceToken: async (deviceCode: string): Promise<any> => {
+    if (APP_MODE !== 'client') throw new Error('El login por QR solo está disponible en modo cliente');
+    const data = await httpFetch('/api/auth/device/token', { deviceCode }, false);
+    if (data?.status === 'approved') {
+      accessToken = data.accessToken;
+      refreshToken = data.refreshToken;
+    }
+    return data;
+  },
+
   // Printer operations
   getPrinters: async (): Promise<PrinterConfig[]> => {
     return await ipcRenderer.invoke('get-printers');
@@ -1519,6 +1537,9 @@ contextBridge.exposeInMainWorld('api', {
   },
   getCajaAbiertaByUsuario: async () => {
     return await ipcRenderer.invoke('get-caja-abierta-by-usuario');
+  },
+  getCajasAbiertas: async () => {
+    return await ipcRenderer.invoke('get-cajas-abiertas');
   },
 
   // CajaMoneda methods
@@ -1979,11 +2000,11 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // Sector methods
-  getSectores: async (): Promise<Sector[]> => {
-    return await ipcRenderer.invoke('getSectores');
+  getSectores: async (tipo?: string): Promise<Sector[]> => {
+    return await ipcRenderer.invoke('getSectores', tipo);
   },
-  getSectoresActivos: async (): Promise<Sector[]> => {
-    return await ipcRenderer.invoke('getSectoresActivos');
+  getSectoresActivos: async (tipo?: string): Promise<Sector[]> => {
+    return await ipcRenderer.invoke('getSectoresActivos', tipo);
   },
   getSector: async (id: number): Promise<Sector> => {
     return await ipcRenderer.invoke('getSector', id);
@@ -2440,6 +2461,40 @@ contextBridge.exposeInMainWorld('api', {
   recalculateRecipeCost: async (recetaId: number): Promise<any> => {
     return await ipcRenderer.invoke('recalculate-recipe-cost', recetaId);
   },
+  // Receta fases (modo de preparo) y materiales
+  getRecetaFases: async (recetaId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-receta-fases', recetaId);
+  },
+  createRecetaFase: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-receta-fase', data);
+  },
+  updateRecetaFase: async (faseId: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-receta-fase', faseId, data);
+  },
+  deleteRecetaFase: async (faseId: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-receta-fase', faseId);
+  },
+  reorderRecetaFases: async (recetaId: number, ordenIds: number[]): Promise<any> => {
+    return await ipcRenderer.invoke('reorder-receta-fases', recetaId, ordenIds);
+  },
+  setRecetaFaseIngredientes: async (faseId: number, recetaIngredienteIds: number[]): Promise<any> => {
+    return await ipcRenderer.invoke('set-receta-fase-ingredientes', faseId, recetaIngredienteIds);
+  },
+  getRecetaMateriales: async (recetaId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-receta-materiales', recetaId);
+  },
+  createRecetaMaterial: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-receta-material', data);
+  },
+  updateRecetaMaterial: async (materialId: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-receta-material', materialId, data);
+  },
+  deleteRecetaMaterial: async (materialId: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-receta-material', materialId);
+  },
+  exportRecetaPdf: async (recetaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('export-receta-pdf', recetaId);
+  },
   // StockMovimiento methods
   getStockMovimientos: async (): Promise<StockMovimiento[]> => {
     return await ipcRenderer.invoke('get-stock-movimientos');
@@ -2737,6 +2792,15 @@ contextBridge.exposeInMainWorld('api', {
   editGasto: async (gastoId: number, data: any): Promise<any> => {
     return await ipcRenderer.invoke('edit-gasto', gastoId, data);
   },
+  createGastoCaja: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-gasto-caja', data);
+  },
+  getGastosCaja: async (cajaId: number, incluirAnulados?: boolean): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-gastos-caja', cajaId, incluirAnulados);
+  },
+  anularGastoCaja: async (gastoId: number, motivo?: string): Promise<any> => {
+    return await ipcRenderer.invoke('anular-gasto-caja', gastoId, motivo);
+  },
   editCajaMayorMovimiento: async (movId: number, data: any): Promise<any> => {
     return await ipcRenderer.invoke('edit-caja-mayor-movimiento', movId, data);
   },
@@ -2756,6 +2820,15 @@ contextBridge.exposeInMainWorld('api', {
   },
   ingresarRetiroCaja: async (retiroId: number, cajaMayorId: number): Promise<any> => {
     return await ipcRenderer.invoke('ingresar-retiro-caja', retiroId, cajaMayorId);
+  },
+  generarRetiroCierreCaja: async (cajaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('generar-retiro-cierre-caja', cajaId);
+  },
+  egresoCajaInicial: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('egreso-caja-inicial', data);
+  },
+  abrirCajaDesdeConteo: async (conteoId: number, dispositivoId: number): Promise<any> => {
+    return await ipcRenderer.invoke('abrir-caja-desde-conteo', conteoId, dispositivoId);
   },
 
   // Banking - Cuentas Bancarias

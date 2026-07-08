@@ -22,14 +22,19 @@ Una Persona puede vincularse a múltiples contextos (1:1 lógicos): Usuario, Cli
 
 ## Usuario
 
+`src/app/database/entities/personas/usuario.entity.ts`:
+
 ```typescript
 {
-  persona: Persona (M:1, nullable en algunos contextos legacy)
+  persona: Persona (M:1, JoinColumn persona_id)
   nickname: string UNIQUE
-  password: string                     // ⚠️ TEXTO PLANO (TODO bcrypt)
+  password: string
   activo: boolean
+  mustChangePassword: boolean default false  // col must_change_password
 }
 ```
+
+`mustChangePassword` (P0-3): si es `true`, el frontend abre un dialog bloqueante post-login que obliga a cambiar la password antes de cargar el dashboard. Se setea en `true` para el admin seedeado (admin/admin) y vuelve a `false` cuando el usuario completa el cambio.
 
 → Auth flow detallado en [architecture/auth-permissions.md](../architecture/auth-permissions.md).
 
@@ -60,23 +65,45 @@ Permission {
 
 ## Cliente
 
+`src/app/database/entities/personas/cliente.entity.ts`:
+
 ```typescript
 {
-  persona: Persona (M:1)
-  tipo_cliente: TipoCliente (M:1)
+  persona: Persona (M:1, JoinColumn persona_id)
+  tipo_cliente: TipoCliente (M:1, JoinColumn tipo_cliente_id)
   ruc?: string                         // RUC empresa (si juridica)
   razon_social?: string
   tributa: boolean default false
   activo
   credito: boolean default false       // ¿acepta crédito?
-  limite_credito: float default 0
-  saldoActual: decimal(18,2) default 0 // saldo deuda actual del cliente
+  limite_credito: decimal(18,2) default 0
+  saldoActual: decimal(18,2) default 0 // col saldo_actual, deuda actual
+  convenios?: Convenio[]               // M:N, tabla join cliente_convenios
 }
 ```
 
 `saldoActual` se actualiza con cada `MovimientoCliente` (en transacción).
 
+### Convenio
+
+`src/app/database/entities/personas/convenio.entity.ts`. Agrupa clientes que pertenecen a una empresa/entidad externa con acuerdo (ej. "FUNCIONARIOS BODEGA FRANCO"). A fin de mes la empresa puede pagar de forma consolidada la deuda de todos sus clientes y descontarla internamente.
+
+```typescript
+{
+  nombre: string                       // varchar(160)
+  descripcion?: string                 // varchar(300)
+  ruc?: string                         // varchar(40), empresa que paga
+  contacto?: string                    // varchar(160), col contacto
+  activo: boolean default true
+  clientes?: Cliente[]                 // M:N (lado dueño es Cliente.convenios)
+}
+```
+
+Relación M:N con `Cliente` vía tabla `cliente_convenios`; el lado dueño del `JoinTable` es `Cliente`. Páginas en `src/app/pages/personas/convenios/`.
+
 ### TipoCliente
+
+`src/app/database/entities/personas/tipo-cliente.entity.ts` (tabla `tipo_clientes`):
 
 ```typescript
 {
@@ -84,13 +111,15 @@ Permission {
   activo
   credito: boolean default false       // tipo permite crédito
   descuento: boolean default false     // aplica descuento
-  porcentaje_descuento: float default 0
+  porcentaje_descuento: decimal(5,2) default 0
 }
 ```
 
 Política de tipo aplica como default a todos los clientes de ese tipo.
 
 ## LoginSession
+
+`src/app/database/entities/auth/login-session.entity.ts`:
 
 ```typescript
 {
@@ -120,7 +149,8 @@ Política de tipo aplica como default a todos los clientes de ese tipo.
 ## Estado de cuenta del cliente (F2)
 
 `movimientos-cliente.handler.ts`:
-- `get-cliente-estado-cuenta(clienteId)`: cliente + saldoActual + cuotasVencidas + KPIs del mes + CPC abiertas (con cuotas y moneda) + últimas 10 ventas concluidas. Hace todo en queries paralelas.
+- `get-saldo-cliente(clienteId)`: devuelve `saldoActual` del cliente.
+- `get-cliente-estado-cuenta(clienteId)`: cliente + saldoActual + cuotasVencidas + `kpis` del mes (`movsMesCount`, `cargosMesTotal`, `pagosMesTotal`, `netoMes`) + CPC abiertas (estado ACTIVO, con cuotas y moneda) + últimas 10 ventas CONCLUIDA.
 - `get-movimientos-cliente-stats(clienteId)`: agregados por mes (12 últimos, inicializados a 0 para chart continuo) y composición por tipo (CARGO/PAGO/AJUSTE_POSITIVO/AJUSTE_NEGATIVO). Para los charts de `cliente-detalle`.
 - `get-movimientos-cliente(clienteId, filtros?)`: paginado con filtros `{ fechaInicio, fechaFin, tipo, page, pageSize }`.
 - `recalcular-saldo-cliente(clienteId)` (en `cuentas-por-cobrar.handler.ts`): suma todos los movimientos del cliente y sobreescribe `saldoActual`. Safety net expuesto en mat-menu del detalle.
@@ -177,7 +207,8 @@ Header del dialog tiene autocomplete de Cliente + botón "Nuevo cliente" (reusa 
 - `usuarios/list-usuarios.component`: tabla con paginación, asignación de roles.
 - `clientes/list-clientes.component`: tabla con saldoActual, crédito.
 - `clientes/cliente-detalle/`: detalle con histórico de movimientos.
-- `rrhhDash/`: placeholder legacy (a reemplazar por `pages/rrhh/dashboard/`).
+- `convenios/`: CRUD de convenios (agrupación de clientes por empresa/acuerdo).
+- `rrhhDash/`: placeholder legacy. El dashboard real de RRHH ya existe en `pages/rrhh/dashboard/`.
 
 `src/app/pages/personalizacion/permisos/`:
 - `list-permisos/`: CRUD permisos.
@@ -190,17 +221,20 @@ Header del dialog tiene autocomplete de Cliente + botón "Nuevo cliente" (reusa 
 ## Handlers
 
 `electron/handlers/`:
-- `personas.handler.ts` (~758 líneas): Persona, Usuario, Role, UsuarioRole, TipoCliente, Cliente.
-- `auth.handler.ts` (~164 líneas): login, logout, validate-credentials, sessionId, getCurrentUser, setCurrentUser, getLoginSessions, updateSessionActivity.
-- `permissions.handler.ts` (~241 líneas): Permission CRUD, RolePermission CRUD, get-permissions-by-user, seed-permissions.
+- `personas.handler.ts` (~927 líneas): Persona, Usuario, Role, UsuarioRole, TipoCliente, Cliente.
+- `auth.handler.ts` (~212 líneas): login, logout, validate-credentials, sessionId, getCurrentUser, setCurrentUser, getLoginSessions, updateSessionActivity.
+- `permissions.handler.ts` (~313 líneas): Permission CRUD, RolePermission CRUD, get-permissions-by-user, seed-permissions.
 - `dashboard-shortcuts.handler.ts` (~78 líneas): get/create/update/delete dashboard shortcuts.
+
+## Estado de seguridad (ya implementado)
+
+- **Hash de passwords con bcrypt** (`electron/utils/password.utils.ts`); migración automática de legacy plaintext → bcrypt al arranque (`migrate-passwords.ts`). Flujo `mustChangePassword` (P0-3) fuerza el cambio del admin seedeado.
+- **JWT secret en keytar** (`jwt-secret.utils.ts`), no hardcodeado.
+- **Validación de permisos en backend** (`ensurePermission`/`checkPermission` en handlers), además del frontend (`*appHasPermission`).
 
 ## Pendientes
 
-- Hash de passwords (bcrypt).
-- JWT secret en env.
-- Validación de permisos en handlers (no solo frontend).
-- Recuperación contraseña, bloqueo cuenta, MFA.
+- Bloqueo de cuenta tras N intentos, MFA.
 - Crear Persona inline desde dialogs (botón "+" junto al select).
 
 → [workflows/todos-pendientes.md](../workflows/todos-pendientes.md) sección Seguridad.

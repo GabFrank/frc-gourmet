@@ -1,11 +1,15 @@
 # Plan: Cliente web mobile (PWA) — FRC Gourmet
 
-> Estado vivo. Última actualización: 2026-05-20. Branch: `feat/mobile-pwa-cliente`.
+> Estado vivo. Verificado: 2026-06-28. Branch original: `feat/mobile-pwa-cliente` (ya en `develop`).
 >
-> **Progreso:** F0 ✅ · F1 ✅ · F2 🟦 (servir ✅ / TLS ⛔ usuario) · F3 ✅ · Ola 1 RRHH 🟦 (Cargos ejemplar ✅).
-> Tracker detallado en [`mobile-pwa-skill-notes.md`](./mobile-pwa-skill-notes.md). **GATE:** validar E2E contra
-> server real antes de producir en masa el resto de pantallas.
-> Documento hermano de seguimiento de skill: [`mobile-pwa-skill-notes.md`](./mobile-pwa-skill-notes.md).
+> **IMPLEMENTADO:** la PWA existe en `projects/mobile` y el server Fastify la sirve. F0 ✅ · F1 ✅ ·
+> F2 (servir PWA ✅ / TLS del mesh ⛔ requiere acción del usuario) · F3 ✅ · olas administrativas con
+> múltiples dominios ya cubiertos (RRHH, Productos, Compras, Financiero, Clientes/Comisiones — mezcla de
+> CRUD y vistas). Detalle por pantalla en [`mobile-pwa-skill-notes.md`](./mobile-pwa-skill-notes.md).
+> **GATE pendiente:** validar E2E contra server real (mode=server + mesh) antes de dar por cerrado el resto.
+>
+> > **Nota de alcance:** el plan original anticipaba un *repo separado* (`frc-gourmet-mobile`); se decidió
+> > finalmente hacerlo **dentro del mismo repo** (`projects/mobile` + path-alias `@frc/shared-core`).
 
 ## Objetivo
 

@@ -13,7 +13,7 @@ export function mmToPt(mm: number): number {
  */
 export interface FacturaRenderContext {
   factura: { numeroCompleto?: string; fecha?: any; condicionVenta?: string };
-  cliente: { nombre?: string; ruc?: string; direccion?: string; email?: string };
+  cliente: { nombre?: string; ruc?: string; direccion?: string; email?: string; telefono?: string };
   timbrado: { numero?: string; vigencia?: string };
   totales: {
     gravada10?: number; gravada5?: number; exenta?: number;
@@ -79,11 +79,15 @@ function itemCellText(field: string | undefined, raw: any): string {
  * @param opts.background imagen de fondo (base64/dataURL) — usar solo en
  *        auto-impreso A4, NO en pre-impreso (la hoja ya esta impresa).
  */
+// Tamano A4 vertical en mm (ISO 216).
+const A4_ANCHO_MM = 210;
+const A4_ALTO_MM = 297;
+
 export function buildDocDefinition(
   page: { anchoMm: number; altoMm: number },
   config: PlantillaConfig,
   ctx: FacturaRenderContext,
-  opts?: { background?: string; backgroundTransform?: BackgroundTransform },
+  opts?: { background?: string; backgroundTransform?: BackgroundTransform; forceA4?: boolean },
 ): any {
   const content: any[] = [];
 
@@ -155,33 +159,54 @@ export function buildDocDefinition(
       const rowH = (config.itemAreaHeightMm && config.itemRows)
         ? mmToPt(Number(config.itemAreaHeightMm) / Number(config.itemRows))
         : mmToPt(Number(config.itemRowHeightMm) || el.rowHeightMm || 6);
-      const width = el.wMm ? mmToPt(el.wMm) : undefined;
+      // Ancho de la celda: 'auto' cuando no hay wMm para que el texto se ajuste
+      // a su contenido en vez de expandirse a todo el ancho de página.
+      const width = el.wMm ? mmToPt(el.wMm) : 'auto';
       const align = el.align || (el.field === 'descripcion' ? 'left' : el.field === 'id' ? 'center' : 'right');
       (ctx.items || []).forEach((it, i) => {
+        // Se envuelve en `columns` con ancho fijo: pdfmake alinea (right/center)
+        // DENTRO de ese ancho. Un nodo `text` suelto con `absolutePosition`
+        // ignora su `width` y alinea contra el ancho de página → las columnas
+        // numéricas se corrían hacia el borde derecho de la hoja.
         content.push({
-          text: itemCellText(el.field, (it as any)[el.field || '']),
+          columns: [{
+            width,
+            text: itemCellText(el.field, (it as any)[el.field || '']),
+            alignment: align,
+            fontSize: el.fontSize || 8,
+          }],
           absolutePosition: { x, y: y + i * rowH },
-          width,
-          alignment: align,
-          fontSize: el.fontSize || 8,
         });
       });
       continue;
     }
 
-    // text / variable
+    // text / variable — mismo envoltorio en `columns` que itemColumn, para que
+    // la alineación (right/center) respete el ancho configurado y no el ancho
+    // de la página.
     content.push({
-      text: elementText(el, ctx),
+      columns: [{
+        width: el.wMm ? mmToPt(el.wMm) : 'auto',
+        text: elementText(el, ctx),
+        fontSize: el.fontSize || 9,
+        bold: !!el.bold,
+        alignment: el.align || 'left',
+      }],
       absolutePosition: { x, y },
-      fontSize: el.fontSize || 9,
-      bold: !!el.bold,
-      alignment: el.align || 'left',
-      width: el.wMm ? mmToPt(el.wMm) : undefined,
     });
   }
 
+  // Con forceA4, el PDF final se genera en A4 vertical sin importar el tamano
+  // configurado en la plantilla. El contenido se mantiene en sus posiciones
+  // absolutas (mm desde arriba-izquierda), asi un diseno "medio A4" queda arriba
+  // y la mitad inferior en blanco. Esto evita que el sistema de impresion del SO
+  // rote la hoja a horizontal para "llenar" el A4 cuando el diseno es mas chico.
+  const pageSize = opts?.forceA4
+    ? { width: mmToPt(A4_ANCHO_MM), height: mmToPt(A4_ALTO_MM) }
+    : { width: mmToPt(page.anchoMm), height: mmToPt(page.altoMm) };
   const dd: any = {
-    pageSize: { width: mmToPt(page.anchoMm), height: mmToPt(page.altoMm) },
+    pageSize,
+    pageOrientation: 'portrait',
     pageMargins: [0, 0, 0, 0],
     content,
     defaultStyle: { fontSize: 9 },

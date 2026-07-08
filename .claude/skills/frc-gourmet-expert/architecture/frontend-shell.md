@@ -9,7 +9,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │ ┌────────────────────────────────────────────────────────────────┐  │
-│ │ [☰] FRC Gourmet                  [☀/🌙] [🔔5] [👤Mi Perfil ▾] │  │  ← mat-toolbar (64px)
+│ │ [☰] Empresa  USD/BRL  🕐         [👤 Usuario ▾]  [_ ▢ ✕] │  │  ← mat-toolbar (tema y acciones en el menú de usuario)
 │ └────────────────────────────────────────────────────────────────┘  │
 │ ┌──────────┬─────────────────────────────────────────────────────┐  │
 │ │ SIDENAV  │  TAB CONTAINER                                      │  │
@@ -33,9 +33,11 @@
 ### Toolbar (header)
 
 - **Botón menu** (☰): toggle expanded/collapsed sidenav.
-- **Theme toggle**: `mat-slide-toggle` con iconos `light_mode` / `dark_mode`. Persiste en `localStorage.darkTheme`.
-- **Notificaciones** (badge "5" hardcoded en HTML, pero también se carga `notificacionesNoLeidas` real de RRHH cada 5 min vía `repo.countNotificacionesNoLeidas()`).
-- **User menu**: Mi Perfil, Cerrar Sesión.
+- **Logo + nombre de empresa** (si configurados) + versión + chip de modo (`SERVIDOR`/`CLIENTE`, oculto en standalone).
+- **Bloque central:** cotizaciones USD/BRL y reloj en vivo.
+- **User menu** (dropdown): header de usuario, **Mi Perfil** (inerte), **Tema claro/oscuro** (`toggleTheme()` — el toggle de tema vive ACÁ, no como botón suelto en el toolbar), **Actualizaciones** (`UpdateChannelDialogComponent`), **Cerrar Sesión**.
+- **Controles de ventana custom** (minimizar/maximizar/cerrar, solo Win/Linux, vía IPC `window:*`).
+- El botón de **notificaciones con badge** está **comentado** en el template; el badge real de notificaciones RRHH está en el item "Notificaciones" del sidenav.
 
 ### Sidenav
 
@@ -43,21 +45,21 @@
 - **`collapsed`**: 60px, sólo iconos centrados.
 - **`expanded`**: 250px, iconos + labels + paneles expandibles.
 
-User profile header al tope (avatar + nombre + último acceso).
+User profile header al tope (avatar + nombre + último acceso). Cada item está protegido por `*appHasPermission`; cada sección por `*appHasAnyPermission`.
 
-Secciones (8 paneles `mat-expansion-panel`):
-1. **Dashboard** (item simple, no expansion)
-2. **Ventas** → Dashboard
-3. **Recursos Humanos** → 19 sub-items (Dashboard, Notificaciones [con badge], Reportes, Personas, Usuarios, Clientes, Cargos, Funcionarios, Turnos, Asistencias, Penalizaciones, Horas extra, Vales, Motivos vale, Préstamos, Liquidaciones, Bonos, Aguinaldos, Feriados, Permisos, Config RRHH)
+Secciones (Dashboard simple + 7 paneles `mat-expansion-panel`):
+1. **Dashboard** (item simple) → HomeComponent
+2. **Ventas** → Dashboard, Buffet por kilo, KDS — Cocina, Pantallas KDS
+3. **Recursos Humanos** → ~24 sub-items (Dashboard, Notificaciones [badge], Reportes, Personas, Usuarios, Clientes, Convenios, Cargos, Funcionarios, Turnos, Asistencias, Penalizaciones, Horas extra, Vales, Motivos vale, Préstamos, Liquidaciones, Bonos, Aguinaldos, Vacaciones, Feriados, Permisos, Config RRHH)
 4. **Comisiones** → Reglas, Equipos, Liquidaciones
 5. **Productos** → Dashboard, Categorías (TODO), Productos, Recetas, Sabores, Adicionales, Ingredientes (TODO), Movimientos Stock (TODO)
-6. **Compras** → Dashboard, Compras
+6. **Compras** → Dashboard, Compras, Importaciones IA
 7. **Financiero** → Dashboard, Cajas, Monedas, Tipos Precio (TODO), Caja Mayor, Cuentas por Cobrar
-8. **Configuración** → Impresoras, Dispositivos y Puntos de Venta
+8. **Configuración** (tras divider) → Datos de la Empresa, Impresoras (dialog), Sectores e impresoras (dialog), Dispositivos y Puntos de Venta, Backup y Restauración, Configurar IA, Configurar BD, Modo de operación
 
 Footer del sidenav: botón **Salir** (logout, rojo).
 
-→ Árbol completo en [reference/menu-sidenav-tree.md](../reference/menu-sidenav-tree.md).
+→ Árbol completo y exacto (iconos, componentes, permisos) en [reference/menu-sidenav-tree.md](../reference/menu-sidenav-tree.md).
 
 ## TabsService — sistema de navegación
 
@@ -95,7 +97,7 @@ class TabsService {
 - `openTab`: si ya hay tab con mismo título → activa la existente (no duplica).
 - `openTabWithData`: si hay tab con mismo `id` o `title` → actualiza `data` y la activa. Útil para "abrir compra-detalle del id 42" desde múltiples lugares.
 
-**Tab inicial:** el constructor agrega `'Dashboard de ventas'` (`VentasDashboardComponent`).
+**Tab inicial:** el constructor agrega `'Inicio'` (`HomeComponent`, no closable, id `home-tab`). El cliente nuevo ve ahí la lista guiada de onboarding; luego cambia a accesos directos personalizables.
 
 **Logout** llama `removeAllTabs()` antes del `authService.logout()`.
 
@@ -111,7 +113,7 @@ Cada tab puede tener botón × para cerrarse (si `closable=true`). Click en × u
 
 | Servicio | Función |
 |---|---|
-| `RepositoryService` (en `database/`) | Wrapper de `window.api.*` → Observables. ~3700 líneas. |
+| `RepositoryService` (en `database/`) | Clase abstracta canónica; impl `RepositoryIpcService` (sobre `window.api` → Observables). Ver [ipc-pattern.md](ipc-pattern.md). |
 | `TabsService` | Gestión de tabs dinámicas. |
 | `AuthService` | Login/logout, sesión, `currentUser$` BehaviorSubject. JWT en localStorage. |
 | `ThemeService` | Dark/light, persistencia en localStorage, fallback `prefers-color-scheme`. |
@@ -186,7 +188,7 @@ const routes: Routes = [
 
 **`AuthGuard`** (`src/app/guards/auth.guard.ts`): chequea `authService.isLoggedIn`, redirige a `/login?returnUrl=<url>` si no.
 
-**No hay guards de permisos** — la validación de permisos se hace en componentes (`*ngIf="permService.has('CODIGO')"`) o, idealmente, en handlers (TODO: agregar).
+**No hay guards de permisos en el router** — la visibilidad por permiso se hace con las directivas `*appHasPermission` / `*appHasAnyPermission` en el template, y la validación real se hace en el **backend** (`ensurePermission` en los handlers sensibles). Ver [auth-permissions.md](auth-permissions.md).
 
 ## I18n
 

@@ -77,6 +77,21 @@ export function registerCuentasPorCobrarHandlers(
     }
   });
 
+  // CPC asociada a una venta (para reimprimir el pagaré desde el historial/PdV).
+  ipcMain.handle('get-cpc-by-venta', async (_event, ventaId: number) => {
+    try {
+      const repo = dataSource.getRepository(CuentaPorCobrar);
+      return await repo.findOne({
+        where: { ventaId },
+        relations: ['cliente', 'cliente.persona', 'moneda', 'cuotas'],
+        order: { id: 'DESC' },
+      });
+    } catch (error) {
+      console.error(`Error getting cpc for venta ${ventaId}:`, error);
+      throw error;
+    }
+  });
+
   ipcMain.handle('create-cuenta-por-cobrar', async (_event, data: any) => {
     await ensurePermission(dataSource, getCurrentUser, 'CPC_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
@@ -640,8 +655,9 @@ export function registerCuentasPorCobrarHandlers(
         };
       }
 
-      // Get-or-create FormaPago "CUENTA CORRIENTE"
-      const NOMBRE_FP = 'CUENTA CORRIENTE';
+      // Get-or-create FormaPago "CREDITO" (la venta a crédito se registra con
+      // esta forma de pago; movimentaCaja:false para no impactar el arqueo).
+      const NOMBRE_FP = 'CREDITO';
       let formaPago = await formaPagoRepo
         .createQueryBuilder('fp')
         .where('UPPER(fp.nombre) = :n', { n: NOMBRE_FP })
@@ -761,20 +777,25 @@ export function registerCuentasPorCobrarHandlers(
       // El handler `cobrar-venta-credito` no pasa por `updateVenta`, así
       // que el hook de auto-print del ticket no se dispara. Lo invocamos
       // explícitamente acá, igual que el flujo de cobro normal.
-      setImmediate(async () => {
-        try {
-          const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
-          if (pdvConfig?.autoImprimirTicketVenta) {
-            await printVentaTicketInternal(dataSource, venta.id);
+      // La impresión es opt-in: solo si el usuario pidió imprimir en el diálogo
+      // de cobro (por defecto NO). Si no se desea el pagaré, tampoco se imprime
+      // el ticket de venta.
+      const imprimirPagare = data?.imprimirPagare === true;
+      if (imprimirPagare) {
+        setImmediate(async () => {
+          try {
+            const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+            if (pdvConfig?.autoImprimirTicketVenta) {
+              await printVentaTicketInternal(dataSource, venta.id);
+            }
+            // Pequeña pausa para que el ticket salga primero en la térmica.
+            await new Promise(r => setTimeout(r, 600));
+            await printPagareCpcTicketInternal(dataSource, cpcSaved.id);
+          } catch (e: any) {
+            console.warn('[cobrar-venta-credito] auto-print:', e?.message || e);
           }
-          // Pagaré siempre — es requerido para venta a crédito. Pequeña
-          // pausa para que el ticket salga primero en la térmica.
-          await new Promise(r => setTimeout(r, 600));
-          await printPagareCpcTicketInternal(dataSource, cpcSaved.id);
-        } catch (e: any) {
-          console.warn('[cobrar-venta-credito] auto-print:', e?.message || e);
-        }
-      });
+        });
+      }
 
       return { success: true, ventaId: venta.id, cpcId: cpcSaved.id };
     } catch (error) {
