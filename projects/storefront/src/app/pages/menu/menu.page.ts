@@ -49,8 +49,8 @@ import { MenuSnapshot, MenuProducto, MenuPresentacion, MenuCategoria } from '../
   `,
   styles: [`
     .sf-title { font-size: 22px; margin: 4px 0 16px; }
-    .sf-error { color: #c0392b; }
-    .sf-cerrada { background: rgba(249,168,37,.15); color: #b8860b; padding: 12px; border-radius: var(--sf-radius); margin-bottom: 12px; font-weight: 600; }
+    .sf-error { color: var(--sf-error); }
+    .sf-cerrada { background: var(--sf-warning-bg); color: var(--sf-warning); padding: 12px; border-radius: var(--sf-radius); margin-bottom: 12px; font-weight: 600; }
     .sf-bienvenida { color: var(--sf-text-muted); margin: 0 0 12px; }
     .sf-cat { margin-bottom: 22px; }
     .sf-cat-title { font-size: 16px; text-transform: uppercase; letter-spacing: .5px; color: var(--sf-text-muted); margin: 0 0 10px; }

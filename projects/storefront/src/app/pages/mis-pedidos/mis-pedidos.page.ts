@@ -52,12 +52,12 @@ const ESTADO_LABEL: Record<string, string> = {
   `,
   styles: [`
     .sf-title { font-size: 22px; margin: 4px 0 16px; }
-    .sf-ok { background: rgba(46,125,50,.12); color: var(--sf-success); padding: 12px; border-radius: var(--sf-radius); margin-bottom: 14px; }
+    .sf-ok { background: var(--sf-success-bg); color: var(--sf-success); padding: 12px; border-radius: var(--sf-radius); margin-bottom: 14px; }
     .sf-pedido { margin-bottom: 12px; }
     .sf-pedido-head { display: flex; justify-content: space-between; align-items: center; }
     .sf-estado { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; background: var(--sf-border); }
-    .sf-estado[data-estado="ENTREGADO"] { background: rgba(46,125,50,.18); color: var(--sf-success); }
-    .sf-estado[data-estado="RECHAZADO"], .sf-estado[data-estado="CANCELADO"] { background: rgba(192,57,43,.15); color: #c0392b; }
+    .sf-estado[data-estado="ENTREGADO"] { background: var(--sf-success-bg); color: var(--sf-success); }
+    .sf-estado[data-estado="RECHAZADO"], .sf-estado[data-estado="CANCELADO"] { background: var(--sf-error-bg); color: var(--sf-error); }
     .sf-pedido-sub { font-size: 12px; margin: 4px 0 8px; }
     .sf-pedido-item { font-size: 14px; padding: 2px 0; }
     .sf-pedido-total { margin-top: 8px; font-weight: 600; }

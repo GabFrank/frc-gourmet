@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
+import { In } from 'typeorm';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { EstadoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { ensurePermission } from '../utils/auth.utils';
@@ -16,12 +17,14 @@ import { ensurePermission } from '../utils/auth.utils';
 
 const PERM = 'VENTAS_PDV';
 
-// Transiciones válidas de la bandeja.
+// Transiciones válidas de la bandeja (avance del pedido). La cancelación de un
+// pedido RECIBIDO/ACEPTADO se maneja con `rechazar-pedido-online` (con motivo),
+// por eso CANCELADO no se ofrece acá.
 const TRANSICIONES: Record<string, EstadoPedidoOnline[]> = {
-  [EstadoPedidoOnline.ACEPTADO]: [EstadoPedidoOnline.EN_PREPARACION, EstadoPedidoOnline.CANCELADO],
-  [EstadoPedidoOnline.EN_PREPARACION]: [EstadoPedidoOnline.LISTO, EstadoPedidoOnline.CANCELADO],
-  [EstadoPedidoOnline.LISTO]: [EstadoPedidoOnline.EN_CAMINO, EstadoPedidoOnline.ENTREGADO, EstadoPedidoOnline.CANCELADO],
-  [EstadoPedidoOnline.EN_CAMINO]: [EstadoPedidoOnline.ENTREGADO, EstadoPedidoOnline.CANCELADO],
+  [EstadoPedidoOnline.ACEPTADO]: [EstadoPedidoOnline.EN_PREPARACION],
+  [EstadoPedidoOnline.EN_PREPARACION]: [EstadoPedidoOnline.LISTO],
+  [EstadoPedidoOnline.LISTO]: [EstadoPedidoOnline.EN_CAMINO, EstadoPedidoOnline.ENTREGADO],
+  [EstadoPedidoOnline.EN_CAMINO]: [EstadoPedidoOnline.ENTREGADO],
 };
 
 function mapPedidoAdmin(p: PedidoOnline): any {
@@ -87,9 +90,13 @@ export function registerPedidosOnlineAdminHandlers(
   });
 
   // ============== CONTADOR DE PENDIENTES (badge/sonido) ==============
+  // Cuenta RECIBIDO + ACEPTADO sin venta materializada: así el staff también ve
+  // señal de los pedidos auto-aceptados (que no pasan por RECIBIDO).
   ipcMain.handle('contar-pedidos-online-pendientes', async () => {
     await ensurePermission(dataSource, getCurrentUser, PERM);
-    const count = await repo().count({ where: { estado: EstadoPedidoOnline.RECIBIDO } });
+    const count = await repo().count({
+      where: { estado: In([EstadoPedidoOnline.RECIBIDO, EstadoPedidoOnline.ACEPTADO]) },
+    });
     return { pendientes: count };
   });
 

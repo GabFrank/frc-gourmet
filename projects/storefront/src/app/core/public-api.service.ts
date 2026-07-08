@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, throwError, from } from 'rxjs';
+import { Observable, throwError, from, firstValueFrom } from 'rxjs';
 import { map, catchError, switchMap } from 'rxjs/operators';
 
 /**
@@ -15,7 +15,7 @@ import { map, catchError, switchMap } from 'rxjs/operators';
 export class PublicApiService {
   private token: string | null = null;
   private refreshToken: string | null = null;
-  private refreshing = false;
+  private refreshPromise: Promise<boolean> | null = null;
 
   constructor(private http: HttpClient) {
     this.token = localStorage.getItem('frc_sf_token');
@@ -63,8 +63,8 @@ export class PublicApiService {
     return this.rawCall<T>(op, params).pipe(
       catchError((err) => {
         const is401 = err?.status === 401;
-        if (is401 && this.refreshToken && op !== 'auth.refresh' && !this.refreshing) {
-          return from(this.doRefresh()).pipe(
+        if (is401 && this.refreshToken && op !== 'auth.refresh') {
+          return from(this.ensureRefresh()).pipe(
             switchMap((okRefresh) =>
               okRefresh ? this.rawCall<T>(op, params) : throwError(() => err),
             ),
@@ -75,12 +75,19 @@ export class PublicApiService {
     );
   }
 
+  /** Comparte una única rotación en curso entre varios 401 concurrentes. */
+  private ensureRefresh(): Promise<boolean> {
+    if (!this.refreshPromise) {
+      this.refreshPromise = this.doRefresh().finally(() => (this.refreshPromise = null));
+    }
+    return this.refreshPromise;
+  }
+
   /** Rota el refresh token. Devuelve true si obtuvo un access token nuevo. */
   private async doRefresh(): Promise<boolean> {
     if (!this.refreshToken) return false;
-    this.refreshing = true;
     try {
-      const res: any = await this.rawCall<any>('auth.refresh', [this.refreshToken], false).toPromise();
+      const res: any = await firstValueFrom(this.rawCall<any>('auth.refresh', [this.refreshToken], false));
       if (res?.success && res.accessToken) {
         this.setTokens(res.accessToken, res.refreshToken ?? this.refreshToken);
         return true;
@@ -90,8 +97,6 @@ export class PublicApiService {
     } catch {
       this.setTokens(null, null);
       return false;
-    } finally {
-      this.refreshing = false;
     }
   }
 }

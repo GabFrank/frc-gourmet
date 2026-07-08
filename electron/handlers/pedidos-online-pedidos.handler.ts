@@ -100,7 +100,7 @@ export function registerPedidosOnlinePedidosHandlers(
         ],
       });
       if (!producto) return { success: false, error: `producto_inexistente:${it.productoId}` };
-      if (!producto.activo || !producto.disponibleOnline || producto.pausadoOnline) {
+      if (!producto.activo || !producto.esVendible || !producto.disponibleOnline || producto.pausadoOnline) {
         return { success: false, error: `producto_no_disponible:${producto.nombre}` };
       }
 
@@ -116,13 +116,15 @@ export function registerPedidosOnlinePedidosHandlers(
 
       // Cantidad entera ≥ 1 (no se venden fracciones online).
       const cantidad = Math.max(1, Math.floor(Number(it.cantidad) || 1));
-      // Adicionales del snapshot del cliente (precio de referencia). El PdV
-      // revisa el pedido antes de aceptar; el cobro online real llega en Fase 5.
+      // Adicionales del snapshot del cliente. Se CLAMPea a ≥0 para que un POST
+      // directo no pueda inyectar precios negativos y evadir el mínimo. El precio
+      // real de los adicionales se valida contra el catálogo en Fase 5 (cobro
+      // online); hoy el PdV revisa el pedido antes de aceptar.
       const adicionales = Array.isArray(it.personalizacion?.adicionales)
         ? it.personalizacion.adicionales
         : [];
       const totalAdicionales = adicionales.reduce(
-        (s: number, a: any) => s + (Number(a?.precio) || 0),
+        (s: number, a: any) => s + Math.max(0, Number(a?.precio) || 0),
         0,
       );
       const precioUnitario = Number(precio.valor) + totalAdicionales;

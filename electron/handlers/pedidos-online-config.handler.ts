@@ -83,7 +83,13 @@ export function registerPedidosOnlineConfigHandlers(
     if (data.activa !== undefined) cfg.activa = !!data.activa;
     if (data.nombreComercio !== undefined) cfg.nombreComercio = data.nombreComercio ? String(data.nombreComercio).toUpperCase() : undefined;
     if (data.mensajeBienvenida !== undefined) cfg.mensajeBienvenida = data.mensajeBienvenida || undefined;
-    if (data.colorPrimario !== undefined) cfg.colorPrimario = data.colorPrimario || undefined;
+    if (data.colorPrimario !== undefined) {
+      const c = String(data.colorPrimario || '').trim();
+      // Solo hex válido (#rgb / #rrggbb); si no, se ignora para no romper el branding.
+      if (!c) cfg.colorPrimario = undefined;
+      else if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(c)) cfg.colorPrimario = c;
+      else return { success: false, error: 'color_invalido' };
+    }
     if (data.permitePickup !== undefined) cfg.permitePickup = !!data.permitePickup;
     if (data.permiteDelivery !== undefined) cfg.permiteDelivery = !!data.permiteDelivery;
     if (data.prepTimeMinutos !== undefined) cfg.prepTimeMinutos = Number(data.prepTimeMinutos) || 0;

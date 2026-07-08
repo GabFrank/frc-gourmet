@@ -49,7 +49,23 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
     { value: 'EN_CAMINO', label: 'En camino' },
     { value: 'ENTREGADO', label: 'Entregados' },
     { value: 'RECHAZADO', label: 'Rechazados' },
+    { value: 'CANCELADO', label: 'Cancelados' },
   ];
+
+  private readonly estadoLabels: Record<string, string> = {
+    RECIBIDO: 'Recibido',
+    ACEPTADO: 'Aceptado',
+    EN_PREPARACION: 'En preparación',
+    LISTO: 'Listo',
+    EN_CAMINO: 'En camino',
+    ENTREGADO: 'Entregado',
+    RECHAZADO: 'Rechazado',
+    CANCELADO: 'Cancelado',
+  };
+
+  estadoLabel(estado: string): string {
+    return this.estadoLabels[estado] || estado;
+  }
 
   constructor(
     private repo: RepositoryService,

@@ -40,7 +40,7 @@
   &[data-estado='ACEPTADO'] { border-left-color: var(--info-color); }
   &[data-estado='EN_PREPARACION'] { border-left-color: var(--info-color); }
   &[data-estado='LISTO'] { border-left-color: var(--success-color); }
-  &[data-estado='EN_CAMINO'] { border-left-color: var(--success-color); }
+  &[data-estado='EN_CAMINO'] { border-left-color: var(--info-color); }
   &[data-estado='ENTREGADO'] { border-left-color: var(--success-color); }
   &[data-estado='RECHAZADO'] { border-left-color: var(--error-color); }
   &[data-estado='CANCELADO'] { border-left-color: var(--error-color); }
@@ -66,8 +66,8 @@
   border: 1px solid transparent;
 
   &[data-estado='RECIBIDO'] { color: var(--warning-color); border-color: var(--warning-color); }
-  &[data-estado='ACEPTADO'], &[data-estado='EN_PREPARACION'] { color: var(--info-color); border-color: var(--info-color); }
-  &[data-estado='LISTO'], &[data-estado='EN_CAMINO'], &[data-estado='ENTREGADO'] { color: var(--success-color); border-color: var(--success-color); }
+  &[data-estado='ACEPTADO'], &[data-estado='EN_PREPARACION'], &[data-estado='EN_CAMINO'] { color: var(--info-color); border-color: var(--info-color); }
+  &[data-estado='LISTO'], &[data-estado='ENTREGADO'] { color: var(--success-color); border-color: var(--success-color); }
   &[data-estado='RECHAZADO'], &[data-estado='CANCELADO'] { color: var(--error-color); border-color: var(--error-color); }
 }
 

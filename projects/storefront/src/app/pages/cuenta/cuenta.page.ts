@@ -46,7 +46,7 @@ import { AuthService } from '../../core/auth.service';
     .sf-full { width: 100%; margin-top: 12px; }
     .sf-mt { margin-top: 14px; }
     .sf-ok { color: var(--sf-success); }
-    .sf-error { color: #c0392b; }
+    .sf-error { color: var(--sf-error); }
   `],
 })
 export class CuentaPage {

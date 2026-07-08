@@ -118,11 +118,12 @@ export function registerPublicRoutes(fastify: FastifyInstance): void {
         const msg = err?.message || String(err);
         if (/no registrado/.test(msg)) {
           reply.code(404);
-          return { error: msg };
+          return { error: 'operacion_no_disponible' };
         }
+        // No filtrar el mensaje interno (posible SQL/stack) al cliente público.
         console.error(`[pub] op '${op}' (channel '${def.channel}') falló:`, err);
         reply.code(500);
-        return { error: msg };
+        return { error: 'error_interno' };
       }
     },
   );

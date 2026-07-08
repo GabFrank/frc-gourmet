@@ -24,7 +24,7 @@
           <span class="numero">{{ p.numero }}</span>
           <span class="tipo">{{ p.tipoPedido }}</span>
         </div>
-        <span class="estado" [attr.data-estado]="p.estado">{{ p.estado }}</span>
+        <span class="estado" [attr.data-estado]="p.estado">{{ estadoLabel(p.estado) }}</span>
       </div>
 
       <div class="cliente">

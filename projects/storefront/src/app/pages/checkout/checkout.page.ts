@@ -84,8 +84,8 @@ import { ZonaDelivery, TipoPedido } from '../../core/models';
     .sf-row { display: flex; justify-content: space-between; padding: 4px 0; }
     .sf-grand { font-size: 18px; margin-top: 6px; border-top: 1px solid var(--sf-border); padding-top: 10px; }
     .sf-full { width: 100%; }
-    .sf-error { color: #c0392b; }
-    .sf-cerrada { background: rgba(249,168,37,.15); color: #b8860b; font-weight: 600; }
+    .sf-error { color: var(--sf-error); }
+    .sf-cerrada { background: var(--sf-warning-bg); color: var(--sf-warning); font-weight: 600; }
     .sf-prep { margin: 10px 0 0; font-size: 13px; }
   `],
 })

@@ -106,6 +106,11 @@ export function registerPedidosOnlineAuthHandlers(
     await otpRepo().save(otp);
 
     const envio = await sendWhatsappOtp(telefono, codigo);
+    // Si el envío real falló (no dev-log), avisar al cliente en vez de dejarlo
+    // esperando un código que no va a llegar.
+    if (!envio.ok && envio.provider !== 'dev-log') {
+      return { success: false, error: 'envio_fallido' };
+    }
     return {
       success: true,
       canal: 'WHATSAPP',

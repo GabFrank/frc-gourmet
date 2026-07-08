@@ -43,7 +43,7 @@ import { AuthService } from '../../core/auth.service';
     .sf-full { width: 100%; }
     .sf-mt { margin-top: 8px; }
     .sf-input { margin-bottom: 12px; }
-    .sf-error { color: #c0392b; }
+    .sf-error { color: var(--sf-error); }
     .sf-hint { font-size: 12px; margin-top: 12px; }
   `],
 })
