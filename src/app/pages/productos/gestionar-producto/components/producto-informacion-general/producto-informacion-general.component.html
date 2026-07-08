@@ -100,6 +100,25 @@
             Es Comprable
           </mat-slide-toggle>
         </div>
+
+        <!-- Pedidos online (web app) -->
+        <div class="toggles-container">
+          <mat-slide-toggle
+            formControlName="disponibleOnline"
+            color="primary"
+            class="toggle-item">
+            Disponible online
+            <mat-icon class="stock-info-icon" matTooltip="Se publica en la carta de la web de pedidos." matTooltipPosition="above">info_outline</mat-icon>
+          </mat-slide-toggle>
+          <mat-slide-toggle
+            *ngIf="informacionPrincipalForm.get('disponibleOnline')?.value"
+            formControlName="pausadoOnline"
+            color="warn"
+            class="toggle-item">
+            Pausado (86) online
+            <mat-icon class="stock-info-icon" matTooltip="Pausa temporal en la web sin quitarlo de la carta (se agotó por hoy)." matTooltipPosition="above">info_outline</mat-icon>
+          </mat-slide-toggle>
+        </div>
         
         <div class="toggles-container">
           <mat-slide-toggle

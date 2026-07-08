@@ -537,6 +537,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         esComprable: productoData.esComprable !== undefined ? productoData.esComprable : false,
         controlaStock: productoData.controlaStock !== undefined ? productoData.controlaStock : true,
         esIngrediente: productoData.esIngrediente !== undefined ? productoData.esIngrediente : false,
+        disponibleOnline: productoData.disponibleOnline === true,
+        pausadoOnline: productoData.pausadoOnline === true,
         stockMinimo: productoData.stockMinimo,
         stockMaximo: productoData.stockMaximo,
         // Buffet por peso
