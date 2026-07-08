@@ -8,7 +8,9 @@
 1. **Hosting: túnel primero (MVP), migración a edge cloud después.** El MVP corre el storefront contra el server local expuesto por un **túnel seguro** (Cloudflare Tunnel): TLS + dominio + sin abrir puertos, reutilizando la infra actual. Cuando el MVP esté validado, se **migra al edge cloud** (snapshot de menú + cola de pedidos + PC con conexión saliente) para descargar la PC y ganar resiliencia. El diseño de datos/API se hace **"edge-ready"** desde el arranque para que la migración no rompa nada. Ver §3.1.
 2. **Pasarela de pago: Bancard vPOS 2.0 primero** (tarjeta + QR/billeteras + tokenización one-click) + **efectivo contra entrega** interno. **uPay (Ueno)** y **Pagopar** como adapters adicionales (uPay requiere ser cliente Ueno y pedir la doc de API; Pagopar suma transferencia + boca de cobranza). Ver §3.6.
 3. **Alcance MVP: pickup + delivery** desde el arranque. **QR de mesa: fase posterior.**
-4. **Auth de cliente: completo** (teléfono + OTP por SMS/WhatsApp **y** email + password, con hash argon2, JWT + refresh, verificación).
+4. **Auth de cliente: completo** (teléfono + OTP **por WhatsApp** **y** email + password, con hash argon2, JWT + refresh, verificación).
+5. **OTP por WhatsApp** (WhatsApp Cloud API / proveedor). SMS no en el MVP.
+6. **Piloto: un solo local** primero; multi-tenant se generaliza después (al migrar a edge cloud, Fase 8).
 
 ---
 
@@ -289,9 +291,8 @@ Exponer a internet obliga a cerrar deuda de seguridad primero.
 **Pendientes de definir:**
 1. **Túnel:** Cloudflare Tunnel (recomendado) vs Tailscale Funnel; dominio a usar para el MVP.
 2. **Comisiones reales de Bancard** — pedir a Bancard/banco adquirente para modelar costos.
-3. **Multi-local desde el día 1**, o un solo local (piloto) y generalizar después.
-4. **Canal de OTP:** ¿WhatsApp Cloud API, SMS (proveedor), o ambos? (afecta costo por mensaje).
-5. **(Para la migración) Infra cloud:** proveedor (VPS / Render / Fly.io / AWS) y stack del edge — se decide al llegar a Fase 8.
+3. **Proveedor de WhatsApp Cloud API** (Meta directo vs Twilio/360dialog) — número + plantillas aprobadas para OTP.
+4. **(Para la migración) Infra cloud:** proveedor (VPS / Render / Fly.io / AWS) y stack del edge — se decide al llegar a Fase 8.
 
 ---
 
