@@ -19,6 +19,7 @@ import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import { existsSync, readFileSync } from 'fs';
+import * as path from 'path';
 import { DataSource } from 'typeorm';
 import { handlerRegistryCount } from '../utils/handler-registry';
 import { registerSpecialRoutes } from './special-routes';
@@ -43,6 +44,12 @@ export interface ServerOptions {
    * la API). Si no se pasa o no existe, no se sirve nada estático.
    */
   staticRoot?: string;
+  /**
+   * Storefront de pedidos online (`dist/storefront`). Si existe, se sirve en
+   * `/tienda/` (la web pública del cliente), separado del bundle mobile (`/`).
+   * Debe buildearse con `--base-href /tienda/`.
+   */
+  storefrontRoot?: string;
   /**
    * HTTPS directo en LAN. Si `certPath`/`keyPath` existen, se abre un segundo
    * listener HTTPS en `httpsPort` (default 7443) con el mismo set de rutas, para
@@ -116,6 +123,22 @@ async function buildInstance(
   // para que sus rutas explícitas matcheen primero.
   registerPublicRoutes(fastify);
 
+  // Storefront de pedidos online en `/tienda/` (web pública del cliente).
+  // Se registra ANTES del static de mobile (`/`) para que su prefijo matchee.
+  const storefrontIndex =
+    opts.storefrontRoot && existsSync(opts.storefrontRoot)
+      ? path.join(opts.storefrontRoot, 'index.html')
+      : null;
+  if (opts.storefrontRoot && storefrontIndex && existsSync(storefrontIndex)) {
+    await fastify.register(fastifyStatic, {
+      root: opts.storefrontRoot,
+      prefix: '/tienda/',
+      decorateReply: false, // el static de mobile ya decora reply.sendFile
+      wildcard: false,
+      index: ['index.html'],
+    });
+  }
+
   // F2 (mobile PWA): servir el bundle estático de projects/mobile en `/`.
   if (opts.staticRoot && existsSync(opts.staticRoot)) {
     await fastify.register(fastifyStatic, {
@@ -134,6 +157,10 @@ async function buildInstance(
     fastify.setNotFoundHandler((request, reply) => {
       if (request.method === 'GET' && !request.url.startsWith('/api')) {
         reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+        // Deep-links del storefront → su propio index (SPA fallback).
+        if (storefrontIndex && request.url.startsWith('/tienda')) {
+          return reply.type('text/html').send(readFileSync(storefrontIndex));
+        }
         return (reply as any).sendFile('index.html');
       }
       reply.code(404);

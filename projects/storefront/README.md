@@ -30,14 +30,21 @@ El precio usa el `TipoPrecio` "ONLINE" si existe; si no, el precio principal.
 Sin credenciales de WhatsApp Cloud API (`WHATSAPP_CLOUD_TOKEN`), el código OTP se
 **loguea en la consola del server** (proveedor `dev-log`). El login lo avisa.
 
-## Build
+## Build y serving desde el server (producción)
 
 ```bash
-npx ng build storefront            # dist/storefront
+npm run build:storefront           # = ng build storefront --base-href /tienda/
 ```
+
+El server (`mode=server`) sirve `dist/storefront` en **`/tienda/`** si el bundle
+existe (junto a la PWA mobile que va en `/`). Por eso el build usa
+`--base-href /tienda/`. Con el server levantado, la web del cliente queda en
+`http://<host>:7070/tienda/` (o el dominio del túnel: `https://tudominio/tienda/`).
+
+> En dev con `ng serve` (`:4202`) el base-href es `/` — sólo para desarrollo.
 
 ## Pendiente
 
-- Servir `dist/storefront` desde el server en producción (hoy testeable con `ng serve`).
 - Pago online (Fase 5), tracking en vivo (Fase 6), QR de mesa (Fase 7).
 - Refresh token de cliente (hoy access token de 30 min).
+- Pantalla de config de tienda (`TiendaOnlineConfig`: horarios, prep-time, branding).

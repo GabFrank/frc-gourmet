@@ -348,8 +348,18 @@ function initializeDatabase() {
           );
           if (fs.existsSync(unpacked)) staticRoot = unpacked;
         }
+        // Storefront de pedidos online (dist/storefront) — se sirve en /tienda si existe.
+        let storefrontRoot: string | undefined = path.join(__dirname, 'dist', 'storefront');
+        if (
+          storefrontRoot.includes(`app.asar${path.sep}`) &&
+          !storefrontRoot.includes('app.asar.unpacked')
+        ) {
+          const unpackedSf = storefrontRoot.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+          if (fs.existsSync(unpackedSf)) storefrontRoot = unpackedSf;
+        }
+        if (!fs.existsSync(storefrontRoot)) storefrontRoot = undefined;
         startServer({
-          port, appVersion, schemaVersion, driver, dataSource, staticRoot,
+          port, appVersion, schemaVersion, driver, dataSource, staticRoot, storefrontRoot,
           httpsPort: settings.network?.httpsPort,
           certPath: settings.network?.certPath,
           keyPath: settings.network?.keyPath,

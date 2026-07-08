@@ -37,6 +37,7 @@
     "test:e2e": "npm run electron:serve-tsc && npx playwright test",
     "test:e2e:dev": "npm run electron:serve-tsc && npx playwright test",
     "test:pedidos-online": "ts-node --project tsconfig.typeorm.json scripts/test-pedidos-online-e2e.ts",
+    "build:storefront": "ng build storefront --base-href /tienda/",
     "lint": "ng lint",
     "release": "semantic-release",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/app/database/datasource.ts",
