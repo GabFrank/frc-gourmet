@@ -11,11 +11,14 @@ import { CuentaCliente } from './models';
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   cuenta: CuentaCliente | null = null;
-  isAuthenticated = false;
 
   constructor(private api: PublicApiService) {
-    this.isAuthenticated = this.api.hasToken();
-    if (this.isAuthenticated) this.refreshMe();
+    if (this.api.hasToken()) this.refreshMe();
+  }
+
+  /** Refleja siempre el estado real del token (incluye refresh fallido). */
+  get isAuthenticated(): boolean {
+    return this.api.hasToken();
   }
 
   solicitarOtp(telefono: string): Observable<any> {
@@ -61,12 +64,10 @@ export class AuthService {
     if (refresh) this.api.call('auth.logout', [refresh]).subscribe({ next: () => {}, error: () => {} });
     this.api.setTokens(null, null);
     this.cuenta = null;
-    this.isAuthenticated = false;
   }
 
   private setSesion(res: any): void {
     this.api.setTokens(res.accessToken, res.refreshToken ?? null);
     this.cuenta = res.cuenta;
-    this.isAuthenticated = true;
   }
 }

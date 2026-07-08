@@ -36,13 +36,14 @@
   padding: 14px;
   border-left: 4px solid var(--border-color);
 
-  &[data-estado='RECIBIDO'] { border-left-color: #f9a825; }
-  &[data-estado='ACEPTADO'] { border-left-color: #29b6f6; }
-  &[data-estado='EN_PREPARACION'] { border-left-color: #29b6f6; }
-  &[data-estado='LISTO'] { border-left-color: #66bb6a; }
-  &[data-estado='EN_CAMINO'] { border-left-color: #66bb6a; }
-  &[data-estado='ENTREGADO'] { border-left-color: #9e9e9e; }
-  &[data-estado='RECHAZADO'] { border-left-color: #ef5350; }
+  &[data-estado='RECIBIDO'] { border-left-color: var(--warning-color); }
+  &[data-estado='ACEPTADO'] { border-left-color: var(--info-color); }
+  &[data-estado='EN_PREPARACION'] { border-left-color: var(--info-color); }
+  &[data-estado='LISTO'] { border-left-color: var(--success-color); }
+  &[data-estado='EN_CAMINO'] { border-left-color: var(--success-color); }
+  &[data-estado='ENTREGADO'] { border-left-color: var(--success-color); }
+  &[data-estado='RECHAZADO'] { border-left-color: var(--error-color); }
+  &[data-estado='CANCELADO'] { border-left-color: var(--error-color); }
 }
 
 .pedido-top {
@@ -60,12 +61,14 @@
   font-weight: 700;
   padding: 3px 10px;
   border-radius: 20px;
-  background: var(--surface-2, rgba(128, 128, 128, 0.15));
+  background: var(--surface-variant);
   color: var(--text-secondary);
+  border: 1px solid transparent;
 
-  &[data-estado='RECIBIDO'] { background: rgba(249, 168, 37, 0.18); color: #f9a825; }
-  &[data-estado='LISTO'], &[data-estado='EN_CAMINO'] { background: rgba(102, 187, 106, 0.18); color: #66bb6a; }
-  &[data-estado='RECHAZADO'] { background: rgba(239, 83, 80, 0.18); color: #ef5350; }
+  &[data-estado='RECIBIDO'] { color: var(--warning-color); border-color: var(--warning-color); }
+  &[data-estado='ACEPTADO'], &[data-estado='EN_PREPARACION'] { color: var(--info-color); border-color: var(--info-color); }
+  &[data-estado='LISTO'], &[data-estado='EN_CAMINO'], &[data-estado='ENTREGADO'] { color: var(--success-color); border-color: var(--success-color); }
+  &[data-estado='RECHAZADO'], &[data-estado='CANCELADO'] { color: var(--error-color); border-color: var(--error-color); }
 }
 
 .cliente,

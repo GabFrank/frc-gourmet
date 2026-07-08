@@ -40,6 +40,8 @@ export function estaAbierta(cfg: TiendaOnlineConfig, now: Date = new Date()): bo
   const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const abre = String(hoy.abre || '00:00');
   const cierra = String(hoy.cierra || '23:59');
+  // Soporta franjas que cruzan la medianoche (ej. abre 20:00, cierra 02:00).
+  if (abre > cierra) return hhmm >= abre || hhmm <= cierra;
   return hhmm >= abre && hhmm <= cierra;
 }
 

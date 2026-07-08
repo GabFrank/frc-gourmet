@@ -80,8 +80,8 @@ import { RepositoryService } from '../../../database/repository.service';
     .muted { color: var(--text-secondary); }
     .config-card { max-width: 760px; padding: 20px; }
     .row-toggle { margin-right: 12px; }
-    .estado-chip { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; background: rgba(239,83,80,.15); color: #ef5350; }
-    .estado-chip.abierta { background: rgba(102,187,106,.18); color: #66bb6a; }
+    .estado-chip { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; background: var(--surface-variant); color: var(--error-color); border: 1px solid var(--error-color); }
+    .estado-chip.abierta { color: var(--success-color); border-color: var(--success-color); }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0 6px; }
     .grid .full { grid-column: 1 / -1; }
     .toggles { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 18px; }

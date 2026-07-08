@@ -114,7 +114,8 @@ export function registerPedidosOnlinePedidosHandlers(
       if (!precio) return { success: false, error: `sin_precio_online:${producto.nombre}` };
       if (monedaId == null && precio.moneda) monedaId = precio.moneda.id;
 
-      const cantidad = Math.max(1, Number(it.cantidad) || 1);
+      // Cantidad entera ≥ 1 (no se venden fracciones online).
+      const cantidad = Math.max(1, Math.floor(Number(it.cantidad) || 1));
       // Adicionales del snapshot del cliente (precio de referencia). El PdV
       // revisa el pedido antes de aceptar; el cobro online real llega en Fase 5.
       const adicionales = Array.isArray(it.personalizacion?.adicionales)
