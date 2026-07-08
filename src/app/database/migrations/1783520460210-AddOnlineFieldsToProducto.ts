@@ -29,8 +29,8 @@ async function hasColumn(
  * el operador lo marca desde la pantalla "Carta Online". Portable SQLite/Postgres.
  * Ver docs/arquitectura/webapp-pedidos-plan.md.
  */
-export class AddOnlineFieldsToProducto1782600000000 implements MigrationInterface {
-  name = 'AddOnlineFieldsToProducto1782600000000';
+export class AddOnlineFieldsToProducto1783520460210 implements MigrationInterface {
+  name = 'AddOnlineFieldsToProducto1783520460210';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const isPg = queryRunner.connection.options.type === 'postgres';

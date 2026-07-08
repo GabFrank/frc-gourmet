@@ -217,9 +217,9 @@ import { AddKdsToComandaItem1780000000000 } from './migrations/1780000000000-Add
 import { AddKdsPantalla1780100000000 } from './migrations/1780100000000-AddKdsPantalla';
 import { AddFacturacion1782519234187 } from './migrations/1782519234187-AddFacturacion';
 import { AddFacturacionConfig1782519876542 } from './migrations/1782519876542-AddFacturacionConfig';
-import { AddOnlineFieldsToProducto1782600000000 } from './migrations/1782600000000-AddOnlineFieldsToProducto';
-import { AddCuentasClienteYOtp1782700000000 } from './migrations/1782700000000-AddCuentasClienteYOtp';
-import { AddPedidosOnline1782800000000 } from './migrations/1782800000000-AddPedidosOnline';
+import { AddOnlineFieldsToProducto1783520460210 } from './migrations/1783520460210-AddOnlineFieldsToProducto';
+import { AddCuentasClienteYOtp1783520460211 } from './migrations/1783520460211-AddCuentasClienteYOtp';
+import { AddPedidosOnline1783520460212 } from './migrations/1783520460212-AddPedidosOnline';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -557,9 +557,9 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddKdsPantalla1780100000000,
     AddFacturacion1782519234187,
     AddFacturacionConfig1782519876542,
-    AddOnlineFieldsToProducto1782600000000,
-    AddCuentasClienteYOtp1782700000000,
-    AddPedidosOnline1782800000000,
+    AddOnlineFieldsToProducto1783520460210,
+    AddCuentasClienteYOtp1783520460211,
+    AddPedidosOnline1783520460212,
   ];
 }
 

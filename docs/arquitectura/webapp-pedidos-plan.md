@@ -241,7 +241,7 @@ Idempotencia por `transactionId`, conciliación contra `Pago/PagoDetalle` + `For
 **Entregable:** superficie pública segura lista para colgar los endpoints de menú/pedido/cuenta (Fases 1-5), aislada del RPC admin. Compila (`npm run electron:serve-tsc`). *Túnel/dominio concreto = tarea de infra fuera del código.*
 
 ### Fase 1 — Menú publicable + disponibilidad por canal — backend ✅
-- ✅ Flags `disponibleOnline` / `pausadoOnline` en `Producto` (entidad + migración portable `AddOnlineFieldsToProducto1782600000000`, registrada en `database.config.ts`).
+- ✅ Flags `disponibleOnline` / `pausadoOnline` en `Producto` (entidad + migración portable `AddOnlineFieldsToProducto1783520460210`, registrada en `database.config.ts`).
 - ✅ Handler `get-menu-online` (`electron/handlers/pedidos-online.handler.ts`): arma el snapshot (categorías por familia → productos publicados → presentaciones → precio **ONLINE con fallback a principal** → moneda), filtra `activo && esVendible && disponibleOnline && !pausadoOnline` y descarta presentaciones/productos sin precio publicable. Registrado en `main.ts`.
 - ✅ Expuesto en la superficie pública como `menu.get` (sin auth) vía `registerPublicOperation` → consumible en `POST /pub/rpc { op: 'menu.get' }`.
 - ✅ `update-producto` persiste los flags → el toggle de disponibilidad y el **86ing** funcionan con `updateProducto(id, { pausadoOnline })` (ya cableado en las 4 capas).
@@ -250,7 +250,7 @@ Idempotencia por `transactionId`, conciliación contra `Pago/PagoDetalle` + `For
 - **Entregable:** carta online consultable por HTTP (`/pub/rpc menu.get`), administrable con los flags desde el SaaS. Falta solo la pantalla dedicada (UI).
 
 ### Fase 2 — Auth de cliente (completo) — backend ✅ / Config tienda ⬜
-- ✅ Entidades `CuentaCliente` + `CodigoOtp` (`entities/pedidos-online/`) + migración portable `AddCuentasClienteYOtp1782700000000`, registradas en `database.config.ts`.
+- ✅ Entidades `CuentaCliente` + `CodigoOtp` (`entities/pedidos-online/`) + migración portable `AddCuentasClienteYOtp1783520460211`, registradas en `database.config.ts`.
 - ✅ **OTP por WhatsApp**: `electron/utils/whatsapp-sender.ts` (WhatsApp Cloud API por env; fallback de dev que loguea el código sin credenciales). Código de 6 dígitos con `crypto.randomInt`, hash bcrypt, TTL 5 min, anti-spam 3/min, máx 5 intentos.
 - ✅ Handlers (`pedidos-online-auth.handler.ts`) expuestos como operaciones públicas: `auth.otp.request`, `auth.otp.verify` (get-or-create cuenta + emite **JWT de cliente**), `auth.login` (teléfono/email + password bcrypt), `auth.me` y `auth.perfil.update` (con JWT de cliente). El `customerId` del JWT se propaga al handler vía `HandlerInvocationContext`.
 - ⬜ **Pendiente:** `TiendaOnlineConfig` (horarios, tipos de pedido, prep time, throttling, branding) + su pantalla de config (UI). Refresh token de cliente (hoy access token 30 min; se agrega junto al storefront). Recuperación de contraseña por OTP (reusa el flujo OTP).

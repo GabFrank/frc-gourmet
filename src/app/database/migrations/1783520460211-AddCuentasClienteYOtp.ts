@@ -10,8 +10,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * Portable SQLite/Postgres. Ver docs/arquitectura/webapp-pedidos-plan.md.
  */
-export class AddCuentasClienteYOtp1782700000000 implements MigrationInterface {
-  name = 'AddCuentasClienteYOtp1782700000000';
+export class AddCuentasClienteYOtp1783520460211 implements MigrationInterface {
+  name = 'AddCuentasClienteYOtp1783520460211';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const isPg = queryRunner.connection.options.type === 'postgres';
