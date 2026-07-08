@@ -220,11 +220,14 @@ import { AddFacturacionConfig1782519876542 } from './migrations/1782519876542-Ad
 import { AddOnlineFieldsToProducto1783520460210 } from './migrations/1783520460210-AddOnlineFieldsToProducto';
 import { AddCuentasClienteYOtp1783520460211 } from './migrations/1783520460211-AddCuentasClienteYOtp';
 import { AddPedidosOnline1783520460212 } from './migrations/1783520460212-AddPedidosOnline';
+import { AddTiendaConfigYCustomerRefresh1783525141550 } from './migrations/1783525141550-AddTiendaConfigYCustomerRefresh';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
 import { PedidoOnline } from './entities/pedidos-online/pedido-online.entity';
 import { PedidoOnlineItem } from './entities/pedidos-online/pedido-online-item.entity';
+import { CustomerRefreshToken } from './entities/pedidos-online/customer-refresh-token.entity';
+import { TiendaOnlineConfig } from './entities/pedidos-online/tienda-online-config.entity';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -331,6 +334,8 @@ function getEntitiesList(): any[] {
       ZonaDelivery,
       PedidoOnline,
       PedidoOnlineItem,
+      CustomerRefreshToken,
+      TiendaOnlineConfig,
       // Shared
       Adjunto,
       // Notificaciones (Email + WhatsApp)
@@ -560,6 +565,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddOnlineFieldsToProducto1783520460210,
     AddCuentasClienteYOtp1783520460211,
     AddPedidosOnline1783520460212,
+    AddTiendaConfigYCustomerRefresh1783525141550,
   ];
 }
 

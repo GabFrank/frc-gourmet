@@ -1041,6 +1041,12 @@ export class RepositoryHttpService extends RepositoryService {
   vincularVentaPedidoOnline(pedidoId: number, ventaId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.vincularVentaPedidoOnline() no esta implementado todavia.`)) as any;
   }
+  getTiendaOnlineConfig(): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getTiendaOnlineConfig() no esta implementado todavia.`)) as any;
+  }
+  updateTiendaOnlineConfig(data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.updateTiendaOnlineConfig() no esta implementado todavia.`)) as any;
+  }
   crearProduccion(data: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.crearProduccion() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

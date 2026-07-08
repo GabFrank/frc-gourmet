@@ -6,6 +6,11 @@ import { CodigoOtp } from '../../src/app/database/entities/pedidos-online/codigo
 import { hashPassword, verifyPassword } from '../utils/password.utils';
 import { sendWhatsappOtp } from '../utils/whatsapp-sender';
 import { signCustomerToken } from '../utils/customer-jwt.utils';
+import {
+  issueCustomerRefreshToken,
+  rotateCustomerRefreshToken,
+  revokeCustomerRefreshToken,
+} from '../utils/customer-refresh-token.utils';
 import { registerPublicOperation } from '../server/public-routes';
 
 /**
@@ -52,6 +57,22 @@ export function registerPedidosOnlineAuthHandlers(
 ): void {
   const cuentaRepo = () => dataSource.getRepository(CuentaCliente);
   const otpRepo = () => dataSource.getRepository(CodigoOtp);
+
+  // Emite access + refresh token para una cuenta ya autenticada.
+  async function emitirSesion(cuenta: CuentaCliente): Promise<any> {
+    const accessToken = await signCustomerToken({
+      sub: cuenta.id,
+      tel: cuenta.telefono,
+      clienteId: (cuenta.cliente as any)?.id ?? null,
+    });
+    const refresh = await issueCustomerRefreshToken(dataSource, cuenta);
+    return {
+      accessToken,
+      refreshToken: refresh.token,
+      refreshTokenExpiresAt: refresh.expiresAt.toISOString(),
+      cuenta: mapCuenta(cuenta),
+    };
+  }
 
   // ============== OTP REQUEST ==============
   ipcMain.handle('pub-otp-request', async (_event: any, telefonoRaw: string) => {
@@ -130,12 +151,7 @@ export function registerPedidosOnlineAuthHandlers(
     cuenta.ultimoLogin = new Date();
     cuenta = await cuentaRepo().save(cuenta);
 
-    const accessToken = await signCustomerToken({
-      sub: cuenta.id,
-      tel: cuenta.telefono,
-      clienteId: (cuenta.cliente as any)?.id ?? null,
-    });
-    return { success: true, accessToken, cuenta: mapCuenta(cuenta) };
+    return { success: true, ...(await emitirSesion(cuenta)) };
   });
 
   // ============== LOGIN POR PASSWORD ==============
@@ -159,12 +175,34 @@ export function registerPedidosOnlineAuthHandlers(
     cuenta.ultimoLogin = new Date();
     await cuentaRepo().save(cuenta);
 
+    return { success: true, ...(await emitirSesion(cuenta)) };
+  });
+
+  // ============== REFRESH (rotación de refresh token) ==============
+  ipcMain.handle('pub-cliente-refresh', async (_event: any, refreshToken: string) => {
+    const rotated = await rotateCustomerRefreshToken(dataSource, refreshToken);
+    if (!rotated) return { success: false, error: 'refresh_invalido_o_expirado' };
+    // Recargar cuenta con relación cliente para el JWT nuevo.
+    const cuenta = await cuentaRepo().findOne({ where: { id: rotated.cuenta.id }, relations: ['cliente'] });
+    if (!cuenta || !cuenta.activo) return { success: false, error: 'cuenta_invalida' };
     const accessToken = await signCustomerToken({
       sub: cuenta.id,
       tel: cuenta.telefono,
       clienteId: (cuenta.cliente as any)?.id ?? null,
     });
-    return { success: true, accessToken, cuenta: mapCuenta(cuenta) };
+    return {
+      success: true,
+      accessToken,
+      refreshToken: rotated.refresh.token,
+      refreshTokenExpiresAt: rotated.refresh.expiresAt.toISOString(),
+      cuenta: mapCuenta(cuenta),
+    };
+  });
+
+  // ============== LOGOUT (revoca refresh token) ==============
+  ipcMain.handle('pub-cliente-logout', async (_event: any, refreshToken: string) => {
+    if (refreshToken) await revokeCustomerRefreshToken(dataSource, refreshToken);
+    return { success: true };
   });
 
   // ============== ME (requiere JWT de cliente) ==============
@@ -209,6 +247,8 @@ export function registerPedidosOnlineAuthHandlers(
   registerPublicOperation('auth.otp.request', { channel: 'pub-otp-request', requiresAuth: false, description: 'Solicitar OTP por WhatsApp.' });
   registerPublicOperation('auth.otp.verify', { channel: 'pub-otp-verify', requiresAuth: false, description: 'Verificar OTP y emitir JWT de cliente.' });
   registerPublicOperation('auth.login', { channel: 'pub-cliente-login-password', requiresAuth: false, description: 'Login por teléfono/email + password.' });
+  registerPublicOperation('auth.refresh', { channel: 'pub-cliente-refresh', requiresAuth: false, description: 'Rotar refresh token → nuevo access token.' });
+  registerPublicOperation('auth.logout', { channel: 'pub-cliente-logout', requiresAuth: false, description: 'Revocar refresh token.' });
   registerPublicOperation('auth.me', { channel: 'pub-cliente-me', requiresAuth: true, description: 'Datos de la cuenta autenticada.' });
   registerPublicOperation('auth.perfil.update', { channel: 'pub-cliente-perfil-update', requiresAuth: true, description: 'Actualizar nombre/email/password.' });
 }

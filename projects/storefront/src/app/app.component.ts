@@ -1,8 +1,9 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, RouterLink } from '@angular/router';
 import { CartService } from './core/cart.service';
 import { AuthService } from './core/auth.service';
+import { ConfigService } from './core/config.service';
 
 @Component({
   selector: 'sf-root',
@@ -10,7 +11,7 @@ import { AuthService } from './core/auth.service';
   imports: [CommonModule, RouterOutlet, RouterLink],
   template: `
     <header class="sf-header">
-      <a routerLink="/" class="sf-brand">🍔 Pedí Online</a>
+      <a routerLink="/" class="sf-brand">🍔 {{ config.config.nombreComercio || 'Pedí Online' }}</a>
       <nav class="sf-nav">
         <a routerLink="/mis-pedidos" class="sf-nav-link" *ngIf="auth.isAuthenticated">Mis pedidos</a>
         <a routerLink="/cuenta" class="sf-nav-link" *ngIf="auth.isAuthenticated">
@@ -46,7 +47,12 @@ import { AuthService } from './core/auth.service';
     .sf-main { min-height: calc(100vh - 56px); }
   `],
 })
-export class AppComponent {
+export class AppComponent implements OnInit {
   cart = inject(CartService);
   auth = inject(AuthService);
+  config = inject(ConfigService);
+
+  ngOnInit(): void {
+    this.config.load();
+  }
 }

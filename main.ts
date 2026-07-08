@@ -95,6 +95,7 @@ import { registerPedidosOnlineHandlers } from './electron/handlers/pedidos-onlin
 import { registerPedidosOnlineAuthHandlers } from './electron/handlers/pedidos-online-auth.handler';
 import { registerPedidosOnlinePedidosHandlers } from './electron/handlers/pedidos-online-pedidos.handler';
 import { registerPedidosOnlineAdminHandlers } from './electron/handlers/pedidos-online-admin.handler';
+import { registerPedidosOnlineConfigHandlers } from './electron/handlers/pedidos-online-config.handler';
 import { setNotificacionDataSource } from './electron/services/notificacion.service';
 // Auto-updater
 import { initAutoUpdater } from './electron/utils/auto-updater';
@@ -248,6 +249,7 @@ function initializeDatabase() {
       registerPedidosOnlineAuthHandlers(dataSource, getCurrentUser); // auth de cliente (OTP WhatsApp + password)
       registerPedidosOnlinePedidosHandlers(dataSource, getCurrentUser); // crear pedido + zonas (público)
       registerPedidosOnlineAdminHandlers(dataSource, getCurrentUser); // bandeja de pedidos en el PdV
+      registerPedidosOnlineConfigHandlers(dataSource, getCurrentUser); // config de tienda online
 
       console.log(`[F3] handlerRegistry: ${handlerRegistryCount()} channels registrados (disponibles via IPC + futuro /api/rpc).`);
 

@@ -27,6 +27,7 @@ import { registerPedidosOnlineHandlers } from '../electron/handlers/pedidos-onli
 import { registerPedidosOnlineAuthHandlers } from '../electron/handlers/pedidos-online-auth.handler';
 import { registerPedidosOnlinePedidosHandlers } from '../electron/handlers/pedidos-online-pedidos.handler';
 import { registerPedidosOnlineAdminHandlers } from '../electron/handlers/pedidos-online-admin.handler';
+import { registerPedidosOnlineConfigHandlers } from '../electron/handlers/pedidos-online-config.handler';
 
 const PORT = 7099;
 const BASE = `http://localhost:${PORT}`;
@@ -149,6 +150,7 @@ async function main() {
   registerPedidosOnlineAuthHandlers(dataSource, getCurrentUser);
   registerPedidosOnlinePedidosHandlers(dataSource, getCurrentUser);
   registerPedidosOnlineAdminHandlers(dataSource, getCurrentUser);
+  registerPedidosOnlineConfigHandlers(dataSource, getCurrentUser);
 
   const fastify = Fastify({ logger: false });
   await fastify.register(cors, { origin: true });
@@ -187,7 +189,9 @@ async function main() {
   // 3. OTP verify
   const otpVer = await pub('auth.otp.verify', [tel, otpCapturado]);
   ok(otpVer.result?.success === true && !!otpVer.result?.accessToken, 'auth.otp.verify emite accessToken');
+  ok(!!otpVer.result?.refreshToken, 'auth.otp.verify emite refreshToken');
   const token = otpVer.result?.accessToken;
+  const refreshTok = otpVer.result?.refreshToken;
 
   // 3b. verify con código incorrecto
   const otpBad = await pub('auth.otp.verify', [tel, '000000']);
@@ -260,6 +264,49 @@ async function main() {
   // 15. pendientes
   const pend = await invokeHandlerWithContext('contar-pedidos-online-pendientes', undefined);
   ok(pend?.pendientes === 0, 'contar pendientes = 0 (ya no hay RECIBIDO)', pend?.pendientes);
+
+  console.log('\n[e2e] === CONFIG DE TIENDA + REFRESH TOKEN ===');
+  // 16. config pública (default: abierta, ambos tipos)
+  const cfgPub = await pub('tienda.config');
+  ok(cfgPub.result?.abiertaAhora === true, 'tienda.config: abierta por default');
+  ok(cfgPub.result?.permitePickup === true && cfgPub.result?.permiteDelivery === true, 'ambos tipos habilitados por default');
+
+  // 17. refresh token: rota y emite nuevo access
+  const ref1 = await pub('auth.refresh', [refreshTok]);
+  ok(ref1.result?.success === true && !!ref1.result?.accessToken && !!ref1.result?.refreshToken, 'auth.refresh emite nuevo access+refresh');
+  // el refresh viejo ya no sirve (rotación)
+  const refOld = await pub('auth.refresh', [refreshTok]);
+  ok(refOld.result?.success === false, 'refresh viejo invalidado tras rotar');
+  const token2 = ref1.result?.accessToken;
+  const me2 = await pub('auth.me', [], token2);
+  ok(me2.result?.success === true, 'access token nuevo funciona en auth.me');
+
+  // 18. aceptación automática: el pedido entra ACEPTADO
+  await invokeHandlerWithContext('update-tienda-online-config', undefined, { aceptacionAutomatica: true });
+  const pedAuto = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }],
+  }], token2);
+  ok(pedAuto.result?.success === true && pedAuto.result?.estado === 'ACEPTADO', 'aceptación automática → pedido ACEPTADO', pedAuto.result?.estado);
+  await invokeHandlerWithContext('update-tienda-online-config', undefined, { aceptacionAutomatica: false });
+
+  // 19. pickup deshabilitado → rechazo
+  await invokeHandlerWithContext('update-tienda-online-config', undefined, { permitePickup: false });
+  const pedNoPickup = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }],
+  }], token2);
+  ok(pedNoPickup.result?.error === 'pickup_no_disponible', 'pickup deshabilitado → error', pedNoPickup.result?.error);
+  await invokeHandlerWithContext('update-tienda-online-config', undefined, { permitePickup: true });
+
+  // 20. tienda inactiva → cerrada
+  await invokeHandlerWithContext('update-tienda-online-config', undefined, { activa: false });
+  const pedCerrada = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }],
+  }], token2);
+  ok(pedCerrada.result?.error === 'tienda_cerrada', 'tienda inactiva → tienda_cerrada', pedCerrada.result?.error);
+  await invokeHandlerWithContext('update-tienda-online-config', undefined, { activa: true });
 
   console.log = origLog;
   await fastify.close();

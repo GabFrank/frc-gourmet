@@ -3,14 +3,21 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { PublicApiService } from '../../core/public-api.service';
 import { CartService } from '../../core/cart.service';
+import { ConfigService } from '../../core/config.service';
+import { AppImgPipe } from '../../core/app-img.pipe';
 import { MenuSnapshot, MenuProducto, MenuPresentacion, MenuCategoria } from '../../core/models';
 
 @Component({
   selector: 'sf-menu',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, AppImgPipe],
   template: `
     <div class="sf-container">
+      <div class="sf-cerrada" *ngIf="config.loaded && !config.config.abiertaAhora">
+        🕒 La tienda está cerrada ahora. Podés ver la carta pero no tomar pedidos.
+      </div>
+      <p class="sf-bienvenida" *ngIf="config.config.mensajeBienvenida">{{ config.config.mensajeBienvenida }}</p>
+
       <h1 class="sf-title">Nuestra carta</h1>
 
       <p class="sf-muted" *ngIf="cargando">Cargando carta…</p>
@@ -22,7 +29,7 @@ import { MenuSnapshot, MenuProducto, MenuPresentacion, MenuCategoria } from '../
         <section *ngFor="let cat of menu.categorias" class="sf-cat">
           <h2 class="sf-cat-title">{{ cat.nombre }}</h2>
           <div class="sf-prod" *ngFor="let p of productosDe(cat)">
-            <img *ngIf="p.imageUrl" [src]="p.imageUrl" class="sf-prod-img" alt="" />
+            <img *ngIf="p.imageUrl | appImg as img" [src]="img" class="sf-prod-img" alt="" />
             <div class="sf-prod-body">
               <div class="sf-prod-nombre">{{ p.nombre }}</div>
               <div class="sf-pres" *ngFor="let pr of p.presentaciones">
@@ -43,6 +50,8 @@ import { MenuSnapshot, MenuProducto, MenuPresentacion, MenuCategoria } from '../
   styles: [`
     .sf-title { font-size: 22px; margin: 4px 0 16px; }
     .sf-error { color: #c0392b; }
+    .sf-cerrada { background: rgba(249,168,37,.15); color: #b8860b; padding: 12px; border-radius: var(--sf-radius); margin-bottom: 12px; font-weight: 600; }
+    .sf-bienvenida { color: var(--sf-text-muted); margin: 0 0 12px; }
     .sf-cat { margin-bottom: 22px; }
     .sf-cat-title { font-size: 16px; text-transform: uppercase; letter-spacing: .5px; color: var(--sf-text-muted); margin: 0 0 10px; }
     .sf-prod { display: flex; gap: 12px; background: var(--sf-surface); border: 1px solid var(--sf-border); border-radius: var(--sf-radius); padding: 12px; margin-bottom: 10px; }
@@ -64,6 +73,7 @@ import { MenuSnapshot, MenuProducto, MenuPresentacion, MenuCategoria } from '../
 export class MenuPage implements OnInit {
   private api = inject(PublicApiService);
   cart = inject(CartService);
+  config = inject(ConfigService);
 
   menu: MenuSnapshot | null = null;
   cargando = true;

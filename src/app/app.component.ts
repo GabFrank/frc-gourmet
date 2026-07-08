@@ -38,6 +38,7 @@ import { RrhhDashComponent } from './pages/personas/rrhhDash/rrhh-dash.component
 import { ListUsuariosComponent } from './pages/personas/usuarios/list-usuarios.component';
 import { ListClientesComponent } from './pages/personas/clientes/list-clientes.component';
 import { ListPedidosOnlineComponent } from './pages/ventas/pedidos-online/list-pedidos-online.component';
+import { TiendaOnlineConfigComponent } from './pages/ventas/pedidos-online/tienda-online-config.component';
 import { ListConveniosComponent } from './pages/personas/convenios/list-convenios.component';
 import { AuthService } from './services/auth.service';
 import { Usuario } from './database/entities/personas/usuario.entity';
@@ -612,6 +613,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       ListPedidosOnlineComponent,
       { source: 'navigation' },
       'pedidos-online-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openTiendaOnlineConfigTab() {
+    this.tabsService.openTab(
+      'Config Tienda Online',
+      TiendaOnlineConfigComponent,
+      { source: 'navigation' },
+      'tienda-online-config-tab',
       true
     );
     this.closeMenu();

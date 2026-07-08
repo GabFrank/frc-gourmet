@@ -123,6 +123,25 @@ async function buildInstance(
   // para que sus rutas explícitas matcheen primero.
   registerPublicRoutes(fastify);
 
+  // Imágenes de producto públicas para la carta online (`app://producto-images/X`
+  // → `/pub/producto-image/X`). Sólo fotos de menú (no sensible). @fastify/static
+  // bloquea path-traversal. decorateReply:false para no chocar con otros statics.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { app } = require('electron');
+    const productoImagesDir = path.join(app.getPath('userData'), 'producto-images');
+    if (existsSync(productoImagesDir)) {
+      await fastify.register(fastifyStatic, {
+        root: productoImagesDir,
+        prefix: '/pub/producto-image/',
+        decorateReply: false,
+        wildcard: false,
+      });
+    }
+  } catch {
+    // Sin electron (tests) o sin dir: se omite el serving de imágenes.
+  }
+
   // Storefront de pedidos online en `/tienda/` (web pública del cliente).
   // Se registra ANTES del static de mobile (`/`) para que su prefijo matchee.
   const storefrontIndex =

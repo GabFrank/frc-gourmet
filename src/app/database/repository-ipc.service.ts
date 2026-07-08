@@ -467,6 +467,8 @@ interface ElectronAPI {
   rechazarPedidoOnline: (pedidoId: number, motivo: string) => Promise<any>;
   avanzarEstadoPedidoOnline: (pedidoId: number, nuevoEstado: string) => Promise<any>;
   vincularVentaPedidoOnline: (pedidoId: number, ventaId: number) => Promise<any>;
+  getTiendaOnlineConfig: () => Promise<any>;
+  updateTiendaOnlineConfig: (data: any) => Promise<any>;
   crearProduccion: (data: any) => Promise<any>;
   getProducciones: (filtros?: any) => Promise<any[]>;
   // Presentacion methods
@@ -2457,6 +2459,12 @@ export class RepositoryIpcService extends RepositoryService {
   }
   vincularVentaPedidoOnline(pedidoId: number, ventaId: number): Observable<any> {
     return from(this.api.vincularVentaPedidoOnline(pedidoId, ventaId));
+  }
+  getTiendaOnlineConfig(): Observable<any> {
+    return from(this.api.getTiendaOnlineConfig());
+  }
+  updateTiendaOnlineConfig(data: any): Observable<any> {
+    return from(this.api.updateTiendaOnlineConfig(data));
   }
 
   crearProduccion(data: any): Observable<any> {

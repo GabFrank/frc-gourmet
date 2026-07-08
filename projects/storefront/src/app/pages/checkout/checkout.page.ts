@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { PublicApiService } from '../../core/public-api.service';
 import { CartService } from '../../core/cart.service';
 import { AuthService } from '../../core/auth.service';
+import { ConfigService } from '../../core/config.service';
 import { ZonaDelivery, TipoPedido } from '../../core/models';
 
 @Component({
@@ -22,13 +23,18 @@ import { ZonaDelivery, TipoPedido } from '../../core/models';
         </div>
       </ng-container>
 
-      <ng-container *ngIf="auth.isAuthenticated">
+      <div class="sf-card sf-cerrada" *ngIf="config.loaded && !config.config.abiertaAhora">
+        🕒 La tienda está cerrada ahora. No se pueden tomar pedidos.
+      </div>
+
+      <ng-container *ngIf="auth.isAuthenticated && config.config.abiertaAhora">
         <div class="sf-card">
           <h3>Tipo de pedido</h3>
           <div class="sf-choices">
-            <button class="sf-choice" [class.active]="tipo === 'PICKUP'" (click)="setTipo('PICKUP')">🏃 Retiro</button>
-            <button class="sf-choice" [class.active]="tipo === 'DELIVERY'" (click)="setTipo('DELIVERY')">🛵 Delivery</button>
+            <button class="sf-choice" *ngIf="config.config.permitePickup" [class.active]="tipo === 'PICKUP'" (click)="setTipo('PICKUP')">🏃 Retiro</button>
+            <button class="sf-choice" *ngIf="config.config.permiteDelivery" [class.active]="tipo === 'DELIVERY'" (click)="setTipo('DELIVERY')">🛵 Delivery</button>
           </div>
+          <p class="sf-muted sf-prep" *ngIf="config.config.prepTimeMinutos">⏱ Preparación estimada: {{ config.config.prepTimeMinutos }} min.</p>
         </div>
 
         <div class="sf-card" *ngIf="tipo === 'DELIVERY'">
@@ -79,6 +85,8 @@ import { ZonaDelivery, TipoPedido } from '../../core/models';
     .sf-grand { font-size: 18px; margin-top: 6px; border-top: 1px solid var(--sf-border); padding-top: 10px; }
     .sf-full { width: 100%; }
     .sf-error { color: #c0392b; }
+    .sf-cerrada { background: rgba(249,168,37,.15); color: #b8860b; font-weight: 600; }
+    .sf-prep { margin: 10px 0 0; font-size: 13px; }
   `],
 })
 export class CheckoutPage implements OnInit {
@@ -86,6 +94,7 @@ export class CheckoutPage implements OnInit {
   private router = inject(Router);
   cart = inject(CartService);
   auth = inject(AuthService);
+  config = inject(ConfigService);
 
   tipo: TipoPedido = 'PICKUP';
   zonas: ZonaDelivery[] = [];
@@ -100,6 +109,10 @@ export class CheckoutPage implements OnInit {
   total = 0;
 
   ngOnInit(): void {
+    // Default: primer tipo permitido por la config.
+    if (!this.config.config.permitePickup && this.config.config.permiteDelivery) {
+      this.tipo = 'DELIVERY';
+    }
     this.recomputar();
     this.api.call<ZonaDelivery[]>('zonas.get').subscribe({
       next: (z) => (this.zonas = z || []),
@@ -163,6 +176,14 @@ export class CheckoutPage implements OnInit {
         return 'Elegí una zona de entrega.';
       case 'falta_direccion':
         return 'Ingresá la dirección.';
+      case 'monto_minimo_global':
+        return `El pedido mínimo es ${res.montoMinimo}. Tu subtotal es ${res.subtotal}.`;
+      case 'tienda_cerrada':
+        return 'La tienda está cerrada en este momento.';
+      case 'pickup_no_disponible':
+        return 'El retiro no está disponible.';
+      case 'delivery_no_disponible':
+        return 'El delivery no está disponible.';
       default:
         return res?.error || 'No se pudo crear el pedido.';
     }

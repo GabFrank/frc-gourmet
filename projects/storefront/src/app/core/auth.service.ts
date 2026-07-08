@@ -25,7 +25,7 @@ export class AuthService {
   verificarOtp(telefono: string, codigo: string): Observable<any> {
     return this.api.call<any>('auth.otp.verify', [telefono, codigo]).pipe(
       tap((res) => {
-        if (res?.success && res.accessToken) this.setSesion(res.accessToken, res.cuenta);
+        if (res?.success && res.accessToken) this.setSesion(res);
       }),
     );
   }
@@ -33,7 +33,7 @@ export class AuthService {
   loginPassword(identificador: string, password: string): Observable<any> {
     return this.api.call<any>('auth.login', [identificador, password]).pipe(
       tap((res) => {
-        if (res?.success && res.accessToken) this.setSesion(res.accessToken, res.cuenta);
+        if (res?.success && res.accessToken) this.setSesion(res);
       }),
     );
   }
@@ -57,14 +57,16 @@ export class AuthService {
   }
 
   logout(): void {
-    this.api.setToken(null);
+    const refresh = this.api.getRefreshToken();
+    if (refresh) this.api.call('auth.logout', [refresh]).subscribe({ next: () => {}, error: () => {} });
+    this.api.setTokens(null, null);
     this.cuenta = null;
     this.isAuthenticated = false;
   }
 
-  private setSesion(token: string, cuenta: CuentaCliente): void {
-    this.api.setToken(token);
-    this.cuenta = cuenta;
+  private setSesion(res: any): void {
+    this.api.setTokens(res.accessToken, res.refreshToken ?? null);
+    this.cuenta = res.cuenta;
     this.isAuthenticated = true;
   }
 }

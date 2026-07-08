@@ -12,6 +12,7 @@ import {
   MetodoPagoOnline,
 } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { registerPublicOperation } from '../server/public-routes';
+import { getTiendaConfig, estaAbierta } from './pedidos-online-config.handler';
 
 /**
  * Pedidos online — Fase 3: creación de pedido + zonas de delivery (superficie pública).
@@ -73,6 +74,16 @@ export function registerPedidosOnlinePedidosHandlers(
       .findOne({ where: { id: customerId } });
     if (!cuenta || !cuenta.activo) return { success: false, error: 'cuenta_invalida' };
 
+    // Config de tienda: apertura + tipos de pedido habilitados.
+    const cfg = await getTiendaConfig(dataSource);
+    if (!estaAbierta(cfg)) return { success: false, error: 'tienda_cerrada' };
+    if (tipoPedido === TipoPedidoOnline.PICKUP && !cfg.permitePickup) {
+      return { success: false, error: 'pickup_no_disponible' };
+    }
+    if (tipoPedido === TipoPedidoOnline.DELIVERY && !cfg.permiteDelivery) {
+      return { success: false, error: 'delivery_no_disponible' };
+    }
+
     const productoRepo = dataSource.getRepository(Producto);
     let subtotal = 0;
     let monedaId: number | null = null;
@@ -129,6 +140,16 @@ export function registerPedidosOnlinePedidosHandlers(
       itemsToSave.push(item);
     }
 
+    // Mínimo global de pedido (config de tienda), independiente de la zona.
+    if (Number(cfg.montoMinimoPedido) > 0 && subtotal < Number(cfg.montoMinimoPedido)) {
+      return {
+        success: false,
+        error: 'monto_minimo_global',
+        montoMinimo: Number(cfg.montoMinimoPedido),
+        subtotal,
+      };
+    }
+
     // Delivery: tarifa + validación de monto mínimo.
     let costoEnvio = 0;
     let zona: ZonaDelivery | null = null;
@@ -159,7 +180,13 @@ export function registerPedidosOnlinePedidosHandlers(
     pedido.nombreCliente = cuenta.nombre || null as any;
     pedido.telefonoCliente = cuenta.telefono;
     pedido.tipoPedido = tipoPedido;
-    pedido.estado = EstadoPedidoOnline.RECIBIDO;
+    // Aceptación automática: entra ACEPTADO directo; si no, RECIBIDO (revisión en PdV).
+    if (cfg.aceptacionAutomatica) {
+      pedido.estado = EstadoPedidoOnline.ACEPTADO;
+      pedido.fechaAceptado = new Date();
+    } else {
+      pedido.estado = EstadoPedidoOnline.RECIBIDO;
+    }
     pedido.canalOrigen = data?.canalOrigen || CanalPedidoOnline.WEB;
     pedido.metodoPago = data?.metodoPago || MetodoPagoOnline.EFECTIVO;
     pedido.fechaProgramada = data?.fechaProgramada ? new Date(data.fechaProgramada) : undefined;
