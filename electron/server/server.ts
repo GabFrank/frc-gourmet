@@ -26,6 +26,7 @@ import { registerRpcRoute } from './rpc-router';
 import { registerAuthRoutes } from './auth-routes';
 import { registerFileRoutes } from './file-routes';
 import { registerKdsSseRoutes } from './kds-sse-routes';
+import { registerPublicRoutes } from './public-routes';
 import { registerAuthPlugin } from './auth-middleware';
 
 export interface ServerOptions {
@@ -109,6 +110,11 @@ async function buildInstance(
 
   // KDS: stream SSE para pantallas web en tiempo real (auth por token en query)
   registerKdsSseRoutes(fastify);
+
+  // Pedidos online: namespace público `/pub/*` con whitelist + JWT de cliente.
+  // Separado de `/api/rpc` (staff). Se registra ANTES del static/SPA fallback
+  // para que sus rutas explícitas matcheen primero.
+  registerPublicRoutes(fastify);
 
   // F2 (mobile PWA): servir el bundle estático de projects/mobile en `/`.
   if (opts.staticRoot && existsSync(opts.staticRoot)) {

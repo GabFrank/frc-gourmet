@@ -226,13 +226,19 @@ Idempotencia por `transactionId`, conciliación contra `Pago/PagoDetalle` + `For
 
 > Convención del proyecto: `synchronize:false` → cada entidad nueva exige **migration generada** (SQLite + Postgres) y registro en `database.config.ts`; tocar backend = reiniciar app.
 
-### Fase 0 — Fundaciones de seguridad + túnel (pre-requisito, no negociable)
-Exponer a internet obliga a cerrar deuda de seguridad primero.
-- Hash de passwords (**argon2**) para `Usuario` + migración de los existentes.
-- `JWT_SECRET` en env, rotación, `audience` separada staff/cliente.
-- **Namespace público `/pub/*`** con whitelist, `@fastify/rate-limit`, CORS, verificación de firma en webhooks.
-- **Túnel seguro** (Cloudflare Tunnel) sobre el `mode=server`: TLS + dominio, sin abrir puertos.
-- **Entregable:** el server local queda alcanzable por internet con TLS, exponiendo **solo** `/pub/*` (nunca `/api/rpc` admin).
+### Fase 0 — Fundaciones de seguridad + túnel (pre-requisito, no negociable) ✅
+**Al abrir el código, la mayor parte de la base de seguridad YA ESTABA hecha** (el repo estaba más avanzado que el snapshot de la skill):
+- ✅ **Hash de passwords**: `bcryptjs` en `electron/utils/password.utils.ts` (`isHashed`/`hashPassword`/`verifyPassword` con fallback legacy) + migración automática al arranque en `electron/utils/migrate-passwords.ts`. → Se **mantiene bcrypt** (ya funciona y migra); no se agrega argon2.
+- ✅ **JWT secret fuera del código**: `electron/utils/jwt-secret.utils.ts` (keytar + fallback file).
+- ✅ **`@fastify/rate-limit`** (300/min) + **`@fastify/cors`** ya registrados en `server.ts`.
+- ✅ **Permisos en handlers** (P0-1): `ensurePermission` + `withRequestUser` (AsyncLocalStorage) en `rpc-router.ts`.
+- ✅ **Túnel Cloudflare + HTTPS LAN** ya cableados (listeners y `lanUrl` en `server.ts`).
+
+**Lo genuinamente nuevo (construido en esta fase):**
+- ✅ **JWT de cliente separado** — `electron/utils/customer-jwt.utils.ts`: secret propio (keychain account `customer-jwt-secret`), `aud: 'customer'`, `iss: 'frc-gourmet'`, `signCustomerToken`/`verifyCustomerToken` con `jsonwebtoken`. Un token de cliente NO sirve para `/api/rpc` y viceversa.
+- ✅ **Namespace público `/pub/*`** — `electron/server/public-routes.ts`: `GET /pub/health` + `POST /pub/rpc` acotado por **whitelist estricta** (`registerPublicOperation(op, {channel, requiresAuth})`), rate-limit propio (120/min), auth de cliente por Bearer. **Nunca** acepta un channel arbitrario por nombre. Registrado en `server.ts` antes del SPA fallback.
+
+**Entregable:** superficie pública segura lista para colgar los endpoints de menú/pedido/cuenta (Fases 1-5), aislada del RPC admin. Compila (`npm run electron:serve-tsc`). *Túnel/dominio concreto = tarea de infra fuera del código.*
 
 ### Fase 1 — Menú publicable + disponibilidad por canal
 - Flags `disponibleOnline` / `pausadoOnline` en `Producto`/`Presentacion`; `TipoPrecio=ONLINE`.
@@ -312,7 +318,7 @@ Se completa a medida que se cierra cada fase (con el commit correspondiente).
 
 | Fase | Estado | Notas / commit |
 |---|---|---|
-| Fase 0 — Seguridad + túnel | ⏳ En curso | 0.1 `/pub/*` namespace · 0.2 JWT cliente · 0.3 rate-limit/CORS · 0.4 argon2 · 0.5 túnel (infra) |
+| Fase 0 — Seguridad + túnel | ✅ Hecha | Base de seguridad ya existía (bcrypt+migración, JWT keytar, rate-limit, CORS, permisos P0-1, túnel/HTTPS). **Nuevo:** `customer-jwt.utils.ts` (JWT cliente separado) + `public-routes.ts` (`/pub/*` whitelist + `/pub/health`). Compila. |
 | Fase 1 — Menú publicable | ⬜ Pendiente | |
 | Fase 2 — Config tienda + auth cliente | ⬜ Pendiente | |
 | Fase 3 — Storefront PWA (pickup+delivery) | ⬜ Pendiente | |
