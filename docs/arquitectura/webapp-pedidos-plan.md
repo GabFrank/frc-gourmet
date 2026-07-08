@@ -249,10 +249,12 @@ Idempotencia por `transactionId`, conciliación contra `Pago/PagoDetalle` + `For
 - ⬜ **Reactivar imágenes** de producto (pipeline `producto-images` + proxy `/pub/files`) — el campo `imageUrl` ya viaja en el snapshot.
 - **Entregable:** carta online consultable por HTTP (`/pub/rpc menu.get`), administrable con los flags desde el SaaS. Falta solo la pantalla dedicada (UI).
 
-### Fase 2 — Config de tienda online + auth de cliente (completo)
-- Entidad `TiendaOnlineConfig` + pantalla de configuración (horarios, tipos de pedido, prep time, mínimos, throttling, branding).
-- `CuentaCliente` + `CodigoOtp`: **auth completo** → teléfono + OTP (SMS/WhatsApp) **y** email + password (argon2), verificación, JWT cliente + refresh, recuperación de contraseña.
-- **Entregable:** un cliente puede registrarse/loguearse por teléfono o email; el local configura su tienda.
+### Fase 2 — Auth de cliente (completo) — backend ✅ / Config tienda ⬜
+- ✅ Entidades `CuentaCliente` + `CodigoOtp` (`entities/pedidos-online/`) + migración portable `AddCuentasClienteYOtp1782700000000`, registradas en `database.config.ts`.
+- ✅ **OTP por WhatsApp**: `electron/utils/whatsapp-sender.ts` (WhatsApp Cloud API por env; fallback de dev que loguea el código sin credenciales). Código de 6 dígitos con `crypto.randomInt`, hash bcrypt, TTL 5 min, anti-spam 3/min, máx 5 intentos.
+- ✅ Handlers (`pedidos-online-auth.handler.ts`) expuestos como operaciones públicas: `auth.otp.request`, `auth.otp.verify` (get-or-create cuenta + emite **JWT de cliente**), `auth.login` (teléfono/email + password bcrypt), `auth.me` y `auth.perfil.update` (con JWT de cliente). El `customerId` del JWT se propaga al handler vía `HandlerInvocationContext`.
+- ⬜ **Pendiente:** `TiendaOnlineConfig` (horarios, tipos de pedido, prep time, throttling, branding) + su pantalla de config (UI). Refresh token de cliente (hoy access token 30 min; se agrega junto al storefront). Recuperación de contraseña por OTP (reusa el flujo OTP).
+- **Entregable:** un cliente puede registrarse/loguearse por teléfono (OTP) o email+password contra `/pub/rpc`; falta la config de tienda (UI) y el refresh.
 
 ### Fase 3 — Storefront PWA (MVP: pickup + delivery, pago efectivo)
 - `projects/storefront`: menú, carrito con modificadores, checkout, cuenta, historial.
@@ -322,7 +324,7 @@ Se completa a medida que se cierra cada fase (con el commit correspondiente).
 |---|---|---|
 | Fase 0 — Seguridad + túnel | ✅ Hecha | Base de seguridad ya existía (bcrypt+migración, JWT keytar, rate-limit, CORS, permisos P0-1, túnel/HTTPS). **Nuevo:** `customer-jwt.utils.ts` (JWT cliente separado) + `public-routes.ts` (`/pub/*` whitelist + `/pub/health`). Compila. |
 | Fase 1 — Menú publicable | 🟩 Backend hecho | Entidad+migración flags online, handler `get-menu-online` (público `menu.get`), `update-producto` persiste flags. Pendiente UI "Carta Online" + reactivar imágenes. |
-| Fase 2 — Config tienda + auth cliente | ⬜ Pendiente | |
+| Fase 2 — Config tienda + auth cliente | 🟩 Auth backend hecho | CuentaCliente+CodigoOtp+migración, OTP WhatsApp (sender con fallback dev), handlers auth (`auth.otp.*`/`auth.login`/`auth.me`) en `/pub`. Pendiente TiendaOnlineConfig+UI y refresh token. |
 | Fase 3 — Storefront PWA (pickup+delivery) | ⬜ Pendiente | |
 | Fase 4 — Bandeja de pedidos en PdV | ⬜ Pendiente | |
 | Fase 5 — Pagos Bancard | ⬜ Pendiente | |

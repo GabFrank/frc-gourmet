@@ -92,6 +92,7 @@ import { registerFacturaImportHandlers } from './electron/handlers/factura-impor
 import { registerNotificacionesConfigHandlers, seedNotificaciones } from './electron/handlers/notificaciones-config.handler';
 import { registerPasswordRecoveryHandlers } from './electron/handlers/password-recovery.handler';
 import { registerPedidosOnlineHandlers } from './electron/handlers/pedidos-online.handler';
+import { registerPedidosOnlineAuthHandlers } from './electron/handlers/pedidos-online-auth.handler';
 import { setNotificacionDataSource } from './electron/services/notificacion.service';
 // Auto-updater
 import { initAutoUpdater } from './electron/utils/auto-updater';
@@ -242,6 +243,7 @@ function initializeDatabase() {
 
       // Pedidos online (web app): menú publicable + superficie pública /pub
       registerPedidosOnlineHandlers(dataSource, getCurrentUser);
+      registerPedidosOnlineAuthHandlers(dataSource, getCurrentUser); // auth de cliente (OTP WhatsApp + password)
 
       console.log(`[F3] handlerRegistry: ${handlerRegistryCount()} channels registrados (disponibles via IPC + futuro /api/rpc).`);
 

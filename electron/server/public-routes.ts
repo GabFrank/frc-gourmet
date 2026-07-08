@@ -109,8 +109,9 @@ export function registerPublicRoutes(fastify: FastifyInstance): void {
 
       try {
         // El contexto NO lleva userId de staff: las operaciones públicas usan
-        // handlers que no exigen permisos de staff. Trazamos el cliente aparte.
-        const ctx = { userId: null, deviceId: null };
+        // handlers que no exigen permisos de staff. El cliente autenticado se
+        // propaga como `customerId` para que el handler sepa a quién atiende.
+        const ctx = { userId: null, deviceId: null, customerId: customer?.sub ?? null };
         const result = await invokeHandlerWithContext(def.channel, ctx, ...(params || []));
         return { result };
       } catch (err: any) {

@@ -218,6 +218,9 @@ import { AddKdsPantalla1780100000000 } from './migrations/1780100000000-AddKdsPa
 import { AddFacturacion1782519234187 } from './migrations/1782519234187-AddFacturacion';
 import { AddFacturacionConfig1782519876542 } from './migrations/1782519876542-AddFacturacionConfig';
 import { AddOnlineFieldsToProducto1782600000000 } from './migrations/1782600000000-AddOnlineFieldsToProducto';
+import { AddCuentasClienteYOtp1782700000000 } from './migrations/1782700000000-AddCuentasClienteYOtp';
+import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
+import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -318,6 +321,9 @@ function getEntitiesList(): any[] {
       LoginSession,
       RefreshToken,
       PasswordResetToken,
+      // Pedidos online (web app)
+      CuentaCliente,
+      CodigoOtp,
       // Shared
       Adjunto,
       // Notificaciones (Email + WhatsApp)
@@ -545,6 +551,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddFacturacion1782519234187,
     AddFacturacionConfig1782519876542,
     AddOnlineFieldsToProducto1782600000000,
+    AddCuentasClienteYOtp1782700000000,
   ];
 }
 
