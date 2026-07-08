@@ -217,6 +217,7 @@ import { AddKdsToComandaItem1780000000000 } from './migrations/1780000000000-Add
 import { AddKdsPantalla1780100000000 } from './migrations/1780100000000-AddKdsPantalla';
 import { AddFacturacion1782519234187 } from './migrations/1782519234187-AddFacturacion';
 import { AddFacturacionConfig1782519876542 } from './migrations/1782519876542-AddFacturacionConfig';
+import { AddOnlineFieldsToProducto1782600000000 } from './migrations/1782600000000-AddOnlineFieldsToProducto';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -543,6 +544,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddKdsPantalla1780100000000,
     AddFacturacion1782519234187,
     AddFacturacionConfig1782519876542,
+    AddOnlineFieldsToProducto1782600000000,
   ];
 }
 

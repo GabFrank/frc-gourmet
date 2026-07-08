@@ -240,12 +240,14 @@ Idempotencia por `transactionId`, conciliación contra `Pago/PagoDetalle` + `For
 
 **Entregable:** superficie pública segura lista para colgar los endpoints de menú/pedido/cuenta (Fases 1-5), aislada del RPC admin. Compila (`npm run electron:serve-tsc`). *Túnel/dominio concreto = tarea de infra fuera del código.*
 
-### Fase 1 — Menú publicable + disponibilidad por canal
-- Flags `disponibleOnline` / `pausadoOnline` en `Producto`/`Presentacion`; `TipoPrecio=ONLINE`.
-- **Reactivar imágenes** de producto (subida + `app://`/`/pub/files`).
-- Endpoint `GET /pub/menu` (snapshot: categorías → productos → modificadores → precio online → disponibilidad). En el MVP se **arma y sirve desde la PC** (por el túnel); el modelo ya es un snapshot publicable, listo para empujarlo al cloud en la migración.
-- Backoffice: pantalla "Carta Online" (marcar disponibles, precio online, imágenes, **86ing en vivo**).
-- **Entregable:** carta online consultable por HTTP, administrada desde el SaaS.
+### Fase 1 — Menú publicable + disponibilidad por canal — backend ✅
+- ✅ Flags `disponibleOnline` / `pausadoOnline` en `Producto` (entidad + migración portable `AddOnlineFieldsToProducto1782600000000`, registrada en `database.config.ts`).
+- ✅ Handler `get-menu-online` (`electron/handlers/pedidos-online.handler.ts`): arma el snapshot (categorías por familia → productos publicados → presentaciones → precio **ONLINE con fallback a principal** → moneda), filtra `activo && esVendible && disponibleOnline && !pausadoOnline` y descarta presentaciones/productos sin precio publicable. Registrado en `main.ts`.
+- ✅ Expuesto en la superficie pública como `menu.get` (sin auth) vía `registerPublicOperation` → consumible en `POST /pub/rpc { op: 'menu.get' }`.
+- ✅ `update-producto` persiste los flags → el toggle de disponibilidad y el **86ing** funcionan con `updateProducto(id, { pausadoOnline })` (ya cableado en las 4 capas).
+- ⬜ **Pendiente (UI, requiere app viva):** pantalla backoffice "Carta Online" (marcar disponibles, precio online, subir imágenes, 86ing con un click). El precio ONLINE usa un `TipoPrecio` con descripción `ONLINE` (crear el registro desde la pantalla de tipos de precio; si no existe, el snapshot usa el precio principal).
+- ⬜ **Reactivar imágenes** de producto (pipeline `producto-images` + proxy `/pub/files`) — el campo `imageUrl` ya viaja en el snapshot.
+- **Entregable:** carta online consultable por HTTP (`/pub/rpc menu.get`), administrable con los flags desde el SaaS. Falta solo la pantalla dedicada (UI).
 
 ### Fase 2 — Config de tienda online + auth de cliente (completo)
 - Entidad `TiendaOnlineConfig` + pantalla de configuración (horarios, tipos de pedido, prep time, mínimos, throttling, branding).
@@ -319,7 +321,7 @@ Se completa a medida que se cierra cada fase (con el commit correspondiente).
 | Fase | Estado | Notas / commit |
 |---|---|---|
 | Fase 0 — Seguridad + túnel | ✅ Hecha | Base de seguridad ya existía (bcrypt+migración, JWT keytar, rate-limit, CORS, permisos P0-1, túnel/HTTPS). **Nuevo:** `customer-jwt.utils.ts` (JWT cliente separado) + `public-routes.ts` (`/pub/*` whitelist + `/pub/health`). Compila. |
-| Fase 1 — Menú publicable | ⬜ Pendiente | |
+| Fase 1 — Menú publicable | 🟩 Backend hecho | Entidad+migración flags online, handler `get-menu-online` (público `menu.get`), `update-producto` persiste flags. Pendiente UI "Carta Online" + reactivar imágenes. |
 | Fase 2 — Config tienda + auth cliente | ⬜ Pendiente | |
 | Fase 3 — Storefront PWA (pickup+delivery) | ⬜ Pendiente | |
 | Fase 4 — Bandeja de pedidos en PdV | ⬜ Pendiente | |

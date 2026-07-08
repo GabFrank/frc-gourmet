@@ -91,6 +91,7 @@ import { registerBackupHandlers, startAutoBackupScheduler } from './electron/han
 import { registerFacturaImportHandlers } from './electron/handlers/factura-import.handler';
 import { registerNotificacionesConfigHandlers, seedNotificaciones } from './electron/handlers/notificaciones-config.handler';
 import { registerPasswordRecoveryHandlers } from './electron/handlers/password-recovery.handler';
+import { registerPedidosOnlineHandlers } from './electron/handlers/pedidos-online.handler';
 import { setNotificacionDataSource } from './electron/services/notificacion.service';
 // Auto-updater
 import { initAutoUpdater } from './electron/utils/auto-updater';
@@ -238,6 +239,9 @@ function initializeDatabase() {
       registerDashboardProductosHandlers(dataSource, getCurrentUser);
       registerDashboardFinancieroHandlers(dataSource, getCurrentUser);
       registerDashboardCajaMayorHandlers(dataSource, getCurrentUser);
+
+      // Pedidos online (web app): menú publicable + superficie pública /pub
+      registerPedidosOnlineHandlers(dataSource, getCurrentUser);
 
       console.log(`[F3] handlerRegistry: ${handlerRegistryCount()} channels registrados (disponibles via IPC + futuro /api/rpc).`);
 
