@@ -1023,6 +1023,24 @@ export class RepositoryHttpService extends RepositoryService {
   deleteProducto(productoId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.deleteProducto() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getPedidosOnlineAdmin(filtros?: any): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getPedidosOnlineAdmin() no esta implementado todavia.`)) as any;
+  }
+  contarPedidosOnlinePendientes(): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.contarPedidosOnlinePendientes() no esta implementado todavia.`)) as any;
+  }
+  aceptarPedidoOnline(pedidoId: number, data?: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.aceptarPedidoOnline() no esta implementado todavia.`)) as any;
+  }
+  rechazarPedidoOnline(pedidoId: number, motivo: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.rechazarPedidoOnline() no esta implementado todavia.`)) as any;
+  }
+  avanzarEstadoPedidoOnline(pedidoId: number, nuevoEstado: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.avanzarEstadoPedidoOnline() no esta implementado todavia.`)) as any;
+  }
+  vincularVentaPedidoOnline(pedidoId: number, ventaId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.vincularVentaPedidoOnline() no esta implementado todavia.`)) as any;
+  }
   crearProduccion(data: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.crearProduccion() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

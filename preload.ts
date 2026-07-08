@@ -2239,6 +2239,26 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('delete-producto', productoId);
   },
 
+  // Pedidos online (bandeja en el PdV)
+  getPedidosOnlineAdmin: async (filtros: any = {}): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-pedidos-online-admin', filtros);
+  },
+  contarPedidosOnlinePendientes: async (): Promise<any> => {
+    return await ipcRenderer.invoke('contar-pedidos-online-pendientes');
+  },
+  aceptarPedidoOnline: async (pedidoId: number, data?: any): Promise<any> => {
+    return await ipcRenderer.invoke('aceptar-pedido-online', pedidoId, data);
+  },
+  rechazarPedidoOnline: async (pedidoId: number, motivo: string): Promise<any> => {
+    return await ipcRenderer.invoke('rechazar-pedido-online', pedidoId, motivo);
+  },
+  avanzarEstadoPedidoOnline: async (pedidoId: number, nuevoEstado: string): Promise<any> => {
+    return await ipcRenderer.invoke('avanzar-estado-pedido-online', pedidoId, nuevoEstado);
+  },
+  vincularVentaPedidoOnline: async (pedidoId: number, ventaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('vincular-venta-pedido-online', pedidoId, ventaId);
+  },
+
   // Producción (buffet)
   crearProduccion: async (data: any): Promise<any> => {
     return await ipcRenderer.invoke('crear-produccion', data);

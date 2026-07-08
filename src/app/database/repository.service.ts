@@ -411,6 +411,13 @@ export abstract class RepositoryService {
   abstract createProducto(productoData: Partial<Producto>): Observable<Producto>;
   abstract updateProducto(productoId: number, productoData: Partial<Producto>): Observable<any>;
   abstract deleteProducto(productoId: number): Observable<any>;
+  // Pedidos online (bandeja PdV)
+  abstract getPedidosOnlineAdmin(filtros?: any): Observable<any[]>;
+  abstract contarPedidosOnlinePendientes(): Observable<any>;
+  abstract aceptarPedidoOnline(pedidoId: number, data?: any): Observable<any>;
+  abstract rechazarPedidoOnline(pedidoId: number, motivo: string): Observable<any>;
+  abstract avanzarEstadoPedidoOnline(pedidoId: number, nuevoEstado: string): Observable<any>;
+  abstract vincularVentaPedidoOnline(pedidoId: number, ventaId: number): Observable<any>;
   // Producción de buffet (cargar cubas)
   abstract crearProduccion(data: any): Observable<any>;
   abstract getProducciones(filtros?: any): Observable<any[]>;
