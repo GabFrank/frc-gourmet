@@ -92,6 +92,11 @@ import { registerBackupHandlers, startAutoBackupScheduler } from './electron/han
 import { registerFacturaImportHandlers } from './electron/handlers/factura-import.handler';
 import { registerNotificacionesConfigHandlers, seedNotificaciones } from './electron/handlers/notificaciones-config.handler';
 import { registerPasswordRecoveryHandlers } from './electron/handlers/password-recovery.handler';
+import { registerPedidosOnlineHandlers } from './electron/handlers/pedidos-online.handler';
+import { registerPedidosOnlineAuthHandlers } from './electron/handlers/pedidos-online-auth.handler';
+import { registerPedidosOnlinePedidosHandlers } from './electron/handlers/pedidos-online-pedidos.handler';
+import { registerPedidosOnlineAdminHandlers } from './electron/handlers/pedidos-online-admin.handler';
+import { registerPedidosOnlineConfigHandlers } from './electron/handlers/pedidos-online-config.handler';
 import { setNotificacionDataSource } from './electron/services/notificacion.service';
 // Auto-updater
 import { initAutoUpdater } from './electron/utils/auto-updater';
@@ -241,6 +246,13 @@ function initializeDatabase() {
       registerDashboardFinancieroHandlers(dataSource, getCurrentUser);
       registerDashboardCajaMayorHandlers(dataSource, getCurrentUser);
 
+      // Pedidos online (web app): menú publicable + superficie pública /pub
+      registerPedidosOnlineHandlers(dataSource, getCurrentUser);
+      registerPedidosOnlineAuthHandlers(dataSource, getCurrentUser); // auth de cliente (OTP WhatsApp + password)
+      registerPedidosOnlinePedidosHandlers(dataSource, getCurrentUser); // crear pedido + zonas (público)
+      registerPedidosOnlineAdminHandlers(dataSource, getCurrentUser); // bandeja de pedidos en el PdV
+      registerPedidosOnlineConfigHandlers(dataSource, getCurrentUser); // config de tienda online
+
       console.log(`[F3] handlerRegistry: ${handlerRegistryCount()} channels registrados (disponibles via IPC + futuro /api/rpc).`);
 
       // Startup migration: populate vendedor_id from created_by for historic ventas
@@ -340,8 +352,18 @@ function initializeDatabase() {
           );
           if (fs.existsSync(unpacked)) staticRoot = unpacked;
         }
+        // Storefront de pedidos online (dist/storefront) — se sirve en /tienda si existe.
+        let storefrontRoot: string | undefined = path.join(__dirname, 'dist', 'storefront');
+        if (
+          storefrontRoot.includes(`app.asar${path.sep}`) &&
+          !storefrontRoot.includes('app.asar.unpacked')
+        ) {
+          const unpackedSf = storefrontRoot.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+          if (fs.existsSync(unpackedSf)) storefrontRoot = unpackedSf;
+        }
+        if (!fs.existsSync(storefrontRoot)) storefrontRoot = undefined;
         startServer({
-          port, appVersion, schemaVersion, driver, dataSource, staticRoot,
+          port, appVersion, schemaVersion, driver, dataSource, staticRoot, storefrontRoot,
           httpsPort: settings.network?.httpsPort,
           certPath: settings.network?.certPath,
           keyPath: settings.network?.keyPath,

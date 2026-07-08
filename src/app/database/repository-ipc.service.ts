@@ -461,6 +461,15 @@ interface ElectronAPI {
   createProducto: (productoData: any) => Promise<Producto>;
   updateProducto: (productoId: number, productoData: any) => Promise<any>;
   deleteProducto: (productoId: number) => Promise<any>;
+  // Pedidos online (bandeja PdV)
+  getPedidosOnlineAdmin: (filtros?: any) => Promise<any[]>;
+  contarPedidosOnlinePendientes: () => Promise<any>;
+  aceptarPedidoOnline: (pedidoId: number, data?: any) => Promise<any>;
+  rechazarPedidoOnline: (pedidoId: number, motivo: string) => Promise<any>;
+  avanzarEstadoPedidoOnline: (pedidoId: number, nuevoEstado: string) => Promise<any>;
+  vincularVentaPedidoOnline: (pedidoId: number, ventaId: number) => Promise<any>;
+  getTiendaOnlineConfig: () => Promise<any>;
+  updateTiendaOnlineConfig: (data: any) => Promise<any>;
   crearProduccion: (data: any) => Promise<any>;
   getProducciones: (filtros?: any) => Promise<any[]>;
   // Presentacion methods
@@ -2453,6 +2462,32 @@ export class RepositoryIpcService extends RepositoryService {
 
   deleteProducto(productoId: number): Observable<any> {
     return from(this.api.deleteProducto(productoId));
+  }
+
+  // ===== Pedidos online (bandeja PdV) =====
+  getPedidosOnlineAdmin(filtros: any = {}): Observable<any[]> {
+    return from(this.api.getPedidosOnlineAdmin(filtros));
+  }
+  contarPedidosOnlinePendientes(): Observable<any> {
+    return from(this.api.contarPedidosOnlinePendientes());
+  }
+  aceptarPedidoOnline(pedidoId: number, data?: any): Observable<any> {
+    return from(this.api.aceptarPedidoOnline(pedidoId, data));
+  }
+  rechazarPedidoOnline(pedidoId: number, motivo: string): Observable<any> {
+    return from(this.api.rechazarPedidoOnline(pedidoId, motivo));
+  }
+  avanzarEstadoPedidoOnline(pedidoId: number, nuevoEstado: string): Observable<any> {
+    return from(this.api.avanzarEstadoPedidoOnline(pedidoId, nuevoEstado));
+  }
+  vincularVentaPedidoOnline(pedidoId: number, ventaId: number): Observable<any> {
+    return from(this.api.vincularVentaPedidoOnline(pedidoId, ventaId));
+  }
+  getTiendaOnlineConfig(): Observable<any> {
+    return from(this.api.getTiendaOnlineConfig());
+  }
+  updateTiendaOnlineConfig(data: any): Observable<any> {
+    return from(this.api.updateTiendaOnlineConfig(data));
   }
 
   crearProduccion(data: any): Observable<any> {

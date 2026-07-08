@@ -19,6 +19,7 @@ import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import { existsSync, readFileSync } from 'fs';
+import * as path from 'path';
 import { DataSource } from 'typeorm';
 import { handlerRegistryCount } from '../utils/handler-registry';
 import { registerSpecialRoutes } from './special-routes';
@@ -27,6 +28,7 @@ import { registerAuthRoutes } from './auth-routes';
 import { registerDeviceAuthRoutes } from './device-auth-routes';
 import { registerFileRoutes } from './file-routes';
 import { registerKdsSseRoutes } from './kds-sse-routes';
+import { registerPublicRoutes } from './public-routes';
 import { registerAuthPlugin } from './auth-middleware';
 
 export interface ServerOptions {
@@ -43,6 +45,12 @@ export interface ServerOptions {
    * la API). Si no se pasa o no existe, no se sirve nada estático.
    */
   staticRoot?: string;
+  /**
+   * Storefront de pedidos online (`dist/storefront`). Si existe, se sirve en
+   * `/tienda/` (la web pública del cliente), separado del bundle mobile (`/`).
+   * Debe buildearse con `--base-href /tienda/`.
+   */
+  storefrontRoot?: string;
   /**
    * HTTPS directo en LAN. Si `certPath`/`keyPath` existen, se abre un segundo
    * listener HTTPS en `httpsPort` (default 7443) con el mismo set de rutas, para
@@ -114,6 +122,46 @@ async function buildInstance(
   // KDS: stream SSE para pantallas web en tiempo real (auth por token en query)
   registerKdsSseRoutes(fastify);
 
+  // Pedidos online: namespace público `/pub/*` con whitelist + JWT de cliente.
+  // Separado de `/api/rpc` (staff). Se registra ANTES del static/SPA fallback
+  // para que sus rutas explícitas matcheen primero.
+  registerPublicRoutes(fastify);
+
+  // Imágenes de producto públicas para la carta online (`app://producto-images/X`
+  // → `/pub/producto-image/X`). Sólo fotos de menú (no sensible). @fastify/static
+  // bloquea path-traversal. decorateReply:false para no chocar con otros statics.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { app } = require('electron');
+    const productoImagesDir = path.join(app.getPath('userData'), 'producto-images');
+    if (existsSync(productoImagesDir)) {
+      await fastify.register(fastifyStatic, {
+        root: productoImagesDir,
+        prefix: '/pub/producto-image/',
+        decorateReply: false,
+        wildcard: false,
+      });
+    }
+  } catch {
+    // Sin electron (tests) o sin dir: se omite el serving de imágenes.
+  }
+
+  // Storefront de pedidos online en `/tienda/` (web pública del cliente).
+  // Se registra ANTES del static de mobile (`/`) para que su prefijo matchee.
+  const storefrontIndex =
+    opts.storefrontRoot && existsSync(opts.storefrontRoot)
+      ? path.join(opts.storefrontRoot, 'index.html')
+      : null;
+  if (opts.storefrontRoot && storefrontIndex && existsSync(storefrontIndex)) {
+    await fastify.register(fastifyStatic, {
+      root: opts.storefrontRoot,
+      prefix: '/tienda/',
+      decorateReply: false, // el static de mobile ya decora reply.sendFile
+      wildcard: false,
+      index: ['index.html'],
+    });
+  }
+
   // F2 (mobile PWA): servir el bundle estático de projects/mobile en `/`.
   if (opts.staticRoot && existsSync(opts.staticRoot)) {
     await fastify.register(fastifyStatic, {
@@ -132,6 +180,10 @@ async function buildInstance(
     fastify.setNotFoundHandler((request, reply) => {
       if (request.method === 'GET' && !request.url.startsWith('/api')) {
         reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+        // Deep-links del storefront → su propio index (SPA fallback).
+        if (storefrontIndex && request.url.startsWith('/tienda')) {
+          return reply.type('text/html').send(readFileSync(storefrontIndex));
+        }
         return (reply as any).sendFile('index.html');
       }
       reply.code(404);

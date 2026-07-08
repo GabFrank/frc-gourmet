@@ -544,6 +544,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         esComprable: productoData.esComprable !== undefined ? productoData.esComprable : false,
         controlaStock: productoData.controlaStock !== undefined ? productoData.controlaStock : true,
         esIngrediente: productoData.esIngrediente !== undefined ? productoData.esIngrediente : false,
+        disponibleOnline: productoData.disponibleOnline === true,
+        pausadoOnline: productoData.pausadoOnline === true,
         stockMinimo: productoData.stockMinimo,
         stockMaximo: productoData.stockMaximo,
         // Buffet por peso
@@ -590,6 +592,10 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       if (productoData.esComprable !== undefined) producto.esComprable = productoData.esComprable;
       if (productoData.controlaStock !== undefined) producto.controlaStock = productoData.controlaStock;
       if (productoData.esIngrediente !== undefined) producto.esIngrediente = productoData.esIngrediente;
+
+      // Pedidos online (web app): disponibilidad y pausa (86ing) por canal.
+      if (productoData.disponibleOnline !== undefined) producto.disponibleOnline = productoData.disponibleOnline;
+      if (productoData.pausadoOnline !== undefined) producto.pausadoOnline = productoData.pausadoOnline;
 
       // Actualizar campos de control de stock
       if (productoData.stockMinimo !== undefined) producto.stockMinimo = productoData.stockMinimo;

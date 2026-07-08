@@ -1,0 +1,86 @@
+<div class="pedidos-online-container">
+  <div class="header">
+    <h2>Pedidos Online</h2>
+    <div class="header-actions">
+      <mat-form-field appearance="outline" class="filtro">
+        <mat-label>Estado</mat-label>
+        <mat-select [(ngModel)]="filtroEstado" (selectionChange)="cargar()">
+          <mat-option *ngFor="let e of estados" [value]="e.value">{{ e.label }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <button mat-stroked-button (click)="cargar()">
+        <mat-icon>refresh</mat-icon> Actualizar
+      </button>
+    </div>
+  </div>
+
+  <p class="muted" *ngIf="cargando">Cargando…</p>
+  <p class="muted" *ngIf="!cargando && pedidos.length === 0">No hay pedidos para este filtro.</p>
+
+  <div class="grid">
+    <mat-card class="pedido-card" *ngFor="let p of pedidos" [attr.data-estado]="p.estado">
+      <div class="pedido-top">
+        <div>
+          <span class="numero">{{ p.numero }}</span>
+          <span class="tipo">{{ p.tipoPedido }}</span>
+        </div>
+        <span class="estado" [attr.data-estado]="p.estado">{{ estadoLabel(p.estado) }}</span>
+      </div>
+
+      <div class="cliente">
+        <mat-icon>person</mat-icon>
+        <span>{{ p.nombreCliente || 'Cliente' }} · {{ p.telefonoCliente }}</span>
+      </div>
+
+      <div class="direccion" *ngIf="p.tipoPedido === 'DELIVERY'">
+        <mat-icon>place</mat-icon>
+        <span>{{ p.direccionEntrega }}<span *ngIf="p.zonaDelivery"> · {{ p.zonaDelivery.nombre }}</span></span>
+      </div>
+
+      <div class="items">
+        <div class="item" *ngFor="let it of p.items">
+          <span class="cant">{{ it.cantidad }}×</span>
+          <span class="nombre">{{ it.nombreProducto }}
+            <span class="pres muted" *ngIf="it.nombrePresentacion">({{ it.nombrePresentacion }})</span>
+          </span>
+          <span class="precio">{{ it.subtotal | number:'1.0-2' }}</span>
+        </div>
+      </div>
+
+      <div class="notas" *ngIf="p.notas">
+        <mat-icon>sticky_note_2</mat-icon> {{ p.notas }}
+      </div>
+
+      <div class="totales">
+        <span class="muted" *ngIf="p.costoEnvio > 0">Envío {{ p.costoEnvio | number:'1.0-2' }}</span>
+        <span class="total">Total {{ p.total | number:'1.0-2' }}</span>
+      </div>
+
+      <!-- Acciones -->
+      <div class="acciones">
+        <ng-container *ngIf="p.estado === 'RECIBIDO'">
+          <ng-container *ngIf="confirmandoRechazoId !== p.id">
+            <button mat-flat-button color="primary" (click)="aceptar(p)">
+              <mat-icon>check</mat-icon> Aceptar
+            </button>
+            <button mat-stroked-button color="warn" (click)="confirmarRechazo(p)">Rechazar</button>
+          </ng-container>
+          <ng-container *ngIf="confirmandoRechazoId === p.id">
+            <span class="confirm-text">¿Rechazar {{ p.numero }}?</span>
+            <button mat-flat-button color="warn" (click)="rechazar(p)">Sí, rechazar</button>
+            <button mat-button (click)="cancelarRechazo()">Cancelar</button>
+          </ng-container>
+        </ng-container>
+
+        <button
+          mat-flat-button
+          color="primary"
+          *ngIf="siguienteEstado(p) as sig"
+          (click)="avanzar(p, sig.estado)"
+        >
+          {{ sig.label }}
+        </button>
+      </div>
+    </mat-card>
+  </div>
+</div>

@@ -201,6 +201,14 @@
               <mat-icon matListItemIcon>scale</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Buffet por kilo</span>
             </a>
+            <a *appHasPermission="'VENTAS_PDV'" mat-list-item (click)="openPedidosOnlineTab()">
+              <mat-icon matListItemIcon>shopping_bag</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Pedidos Online</span>
+            </a>
+            <a *appHasPermission="'VENTAS_PDV'" mat-list-item (click)="openTiendaOnlineConfigTab()">
+              <mat-icon matListItemIcon>storefront</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Config Tienda Online</span>
+            </a>
             <a *appHasPermission="'COMANDAS_KDS_VER'" mat-list-item (click)="openKdsTab()">
               <mat-icon matListItemIcon>restaurant</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">KDS — Cocina</span>

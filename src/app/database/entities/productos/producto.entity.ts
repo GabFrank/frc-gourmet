@@ -24,6 +24,16 @@ export class Producto extends BaseModel {
   @Column({ type: 'boolean', default: true, comment: 'Indica si el producto se muestra en el punto de venta.' })
   esVendible!: boolean;
 
+  // --- Pedidos online (web app) ---
+  // Si true, el producto se publica en la carta online (web de pedidos).
+  @Column({ type: 'boolean', default: false, name: 'disponible_online', comment: 'Se muestra en la carta de la web de pedidos online.' })
+  disponibleOnline!: boolean;
+
+  // "86ing" en vivo: pausa temporal del producto en la carta online sin quitarlo
+  // de la publicación (ej. se agotó por hoy). Si true, no aparece disponible online.
+  @Column({ type: 'boolean', default: false, name: 'pausado_online', comment: 'Pausa temporal (86ing) del producto en la carta online.' })
+  pausadoOnline!: boolean;
+
   @Column({ type: 'boolean', default: false, comment: 'Indica si el producto puede ser comprado a proveedores.' })
   esComprable!: boolean;
 
