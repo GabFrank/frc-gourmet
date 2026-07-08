@@ -219,8 +219,12 @@ import { AddFacturacion1782519234187 } from './migrations/1782519234187-AddFactu
 import { AddFacturacionConfig1782519876542 } from './migrations/1782519876542-AddFacturacionConfig';
 import { AddOnlineFieldsToProducto1782600000000 } from './migrations/1782600000000-AddOnlineFieldsToProducto';
 import { AddCuentasClienteYOtp1782700000000 } from './migrations/1782700000000-AddCuentasClienteYOtp';
+import { AddPedidosOnline1782800000000 } from './migrations/1782800000000-AddPedidosOnline';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
+import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
+import { PedidoOnline } from './entities/pedidos-online/pedido-online.entity';
+import { PedidoOnlineItem } from './entities/pedidos-online/pedido-online-item.entity';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -324,6 +328,9 @@ function getEntitiesList(): any[] {
       // Pedidos online (web app)
       CuentaCliente,
       CodigoOtp,
+      ZonaDelivery,
+      PedidoOnline,
+      PedidoOnlineItem,
       // Shared
       Adjunto,
       // Notificaciones (Email + WhatsApp)
@@ -552,6 +559,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddFacturacionConfig1782519876542,
     AddOnlineFieldsToProducto1782600000000,
     AddCuentasClienteYOtp1782700000000,
+    AddPedidosOnline1782800000000,
   ];
 }
 
