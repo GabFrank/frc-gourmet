@@ -31,7 +31,7 @@ import { AuthService } from '../../core/auth.service';
       </div>
 
       <p class="sf-hint sf-muted" *ngIf="devHint">
-        (Dev: sin credenciales de WhatsApp, el código aparece en la consola del server.)
+        Modo dev (sin WhatsApp configurado).<span *ngIf="devCodigo"> Código: <strong>{{ devCodigo }}</strong> (precargado).</span>
       </p>
       <p class="sf-error" *ngIf="error">{{ error }}</p>
     </div>
@@ -58,6 +58,7 @@ export class LoginPage {
   enviando = false;
   error: string | null = null;
   devHint = false;
+  devCodigo: string | null = null;
 
   pedirCodigo(): void {
     this.error = null;
@@ -69,6 +70,11 @@ export class LoginPage {
         if (res?.success) {
           this.paso = 'codigo';
           this.devHint = res.provider === 'dev-log';
+          // En modo dev el server devuelve el código: lo precargamos para probar.
+          if (res.devCodigo) {
+            this.devCodigo = res.devCodigo;
+            this.codigo = res.devCodigo;
+          }
         } else {
           this.error = this.msg(res?.error);
         }

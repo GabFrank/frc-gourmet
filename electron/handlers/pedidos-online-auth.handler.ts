@@ -118,6 +118,11 @@ export function registerPedidosOnlineAuthHandlers(
       // En dev (sin credenciales) el proveedor es 'dev-log'; el front puede
       // avisar que el código se muestra en la consola del server.
       provider: envio.provider,
+      // Solo en modo dev-log (sin WhatsApp configurado, sin canal real de envío)
+      // devolvemos el código para poder probar el flujo sin abrir el log. En
+      // cuanto se configuran credenciales el provider es 'whatsapp-cloud' y NO
+      // se echoa nunca.
+      ...(envio.provider === 'dev-log' ? { devCodigo: codigo } : {}),
     };
   });
 
