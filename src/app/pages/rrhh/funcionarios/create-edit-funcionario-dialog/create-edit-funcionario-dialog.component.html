@@ -115,6 +115,11 @@
     </mat-form-field>
 
     <mat-slide-toggle formControlName="activo">Activo</mat-slide-toggle>
+
+    <mat-slide-toggle *ngIf="!isEditing" formControlName="crearClienteConveniado"
+      matTooltip="Crea un cliente tipo CONVENIADO con crédito equivalente al 15% del salario base">
+      Crear cliente conveniado con crédito (15% del salario)
+    </mat-slide-toggle>
   </form>
 </mat-dialog-content>
 <mat-dialog-actions align="end">
