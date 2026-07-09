@@ -12,6 +12,7 @@ import {
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
 import { CajaMayorSaldo } from '../../src/app/database/entities/financiero/caja-mayor-saldo.entity';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
+import { MovimientoBancario, MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
@@ -185,6 +186,21 @@ async function aplicarPagoCpoCuota(
       ? Number(cb.saldo) + monto
       : Number(cb.saldo) - monto;
     await queryRunner.manager.save(CuentaBancaria, cb);
+
+    // Registrar el movimiento bancario. Antes solo se ajustaba el saldo, por lo
+    // que el pago no aparecia en la lista de movimientos del banco.
+    const movBancario = queryRunner.manager.create(MovimientoBancario, {
+      cuentaBancaria: { id: cuentaBancariaId } as any,
+      tipoMovimiento: esPrestamoFuncionario
+        ? MovimientoBancarioTipo.ENTRADA_MANUAL
+        : MovimientoBancarioTipo.SALIDA_MANUAL,
+      monto,
+      fecha: new Date(),
+      observacion: observacion ? `${obsBase} — ${observacion}` : obsBase,
+      responsable: currentUser || undefined,
+    });
+    await setEntityUserTracking(dataSource, movBancario, currentUser?.id, false);
+    await queryRunner.manager.save(MovimientoBancario, movBancario);
   } else {
     throw new Error('Fuente de pago no valida');
   }
@@ -393,6 +409,19 @@ export function registerCuentasPorPagarHandlers(
         if (!cb) throw new Error('Cuenta bancaria no encontrada');
         cb.saldo = Number(cb.saldo) - monto;
         await queryRunner.manager.save(CuentaBancaria, cb);
+
+        // Registrar el movimiento bancario (antes solo se ajustaba el saldo).
+        const cuMov = getCurrentUser();
+        const movBancario = queryRunner.manager.create(MovimientoBancario, {
+          cuentaBancaria: { id: cuentaBancariaId } as any,
+          tipoMovimiento: MovimientoBancarioTipo.SALIDA_MANUAL,
+          monto,
+          fecha: new Date(),
+          observacion: observacion ? `${obsBase} — ${observacion}` : obsBase,
+          responsable: cuMov || undefined,
+        });
+        await setEntityUserTracking(dataSource, movBancario, cuMov?.id, false);
+        await queryRunner.manager.save(MovimientoBancario, movBancario);
       } else {
         throw new Error('Fuente de pago no valida');
       }
@@ -520,12 +549,25 @@ export function registerCuentasPorPagarHandlers(
       // Si es PRESTAMO_FUNCIONARIO, desembolsar segun la fuente elegida.
       if (entity.tipo === CuentaPorPagarTipo.PRESTAMO_FUNCIONARIO) {
         if (data.cuentaBancariaId) {
-          // Desembolso desde cuenta bancaria: debita el saldo, sin movimiento de caja.
+          // Desembolso desde cuenta bancaria: debita el saldo y registra el
+          // movimiento bancario (no impacta caja mayor).
           const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
           const cb = await cbRepo.findOne({ where: { id: Number(data.cuentaBancariaId) } });
           if (!cb) throw new Error('Cuenta bancaria no encontrada');
           cb.saldo = Number(cb.saldo) - montoTotal;
           await queryRunner.manager.save(CuentaBancaria, cb);
+
+          const cuDesemb = getCurrentUser();
+          const movDesembolso = queryRunner.manager.create(MovimientoBancario, {
+            cuentaBancaria: { id: Number(data.cuentaBancariaId) } as any,
+            tipoMovimiento: MovimientoBancarioTipo.SALIDA_MANUAL,
+            monto: montoTotal,
+            fecha: new Date(),
+            observacion: `DESEMBOLSO PRESTAMO FUNCIONARIO #${cppSaved.id} - ${entity.descripcion}`,
+            responsable: cuDesemb || undefined,
+          });
+          await setEntityUserTracking(dataSource, movDesembolso, cuDesemb?.id, false);
+          await queryRunner.manager.save(MovimientoBancario, movDesembolso);
         } else if (data.cajaMayorId) {
           // Desembolso desde Caja Mayor: genera EGRESO y descuenta saldo.
           const cajaMayorId = Number(data.cajaMayorId);
