@@ -23,6 +23,8 @@ import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
+import { MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
+import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
@@ -539,6 +541,13 @@ export function registerLiquidacionSueldoHandlers(
         if (!cb) throw new Error('Cuenta bancaria no encontrada');
         cb.saldo = Number(cb.saldo) - monto;
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId,
+          tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+          monto,
+          observacion: `LIQUIDACION ${liq.periodo} - ${liq.funcionario.persona?.nombre || ''} ${liq.funcionario.persona?.apellido || ''}`.trim(),
+          responsable: userEntity,
+        });
         liq.cuentaBancariaId = cuentaBancariaId;
       } else {
         const cajaMayorId = payload?.cajaMayorId;
@@ -829,6 +838,13 @@ export function registerLiquidacionSueldoHandlers(
           if (cb) {
             cb.saldo = Number(cb.saldo) + Number(liq.totalNeto);
             await queryRunner.manager.save(CuentaBancaria, cb);
+            await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+              cuentaBancariaId: liq.cuentaBancariaId,
+              tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
+              monto: Number(liq.totalNeto),
+              observacion: `ANULACION LIQ #${liq.id}` + (motivo ? ` - ${motivo}` : ''),
+              responsable: userEntity,
+            });
           }
         }
       }
