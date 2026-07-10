@@ -15,6 +15,16 @@
   color: var(--text-secondary);
 }
 
+.upload-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  button span {
+    margin-left: 4px;
+  }
+}
+
 .spinner-inline {
   margin-right: 6px;
   vertical-align: middle;

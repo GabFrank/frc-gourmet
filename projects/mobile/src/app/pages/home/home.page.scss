@@ -109,3 +109,11 @@
   justify-content: center;
   gap: 6px;
 }
+
+.qr-fab {
+  position: fixed;
+  right: 18px;
+  bottom: calc(76px + env(safe-area-inset-bottom)); // por encima del bottom-nav
+  z-index: 20;
+}
+

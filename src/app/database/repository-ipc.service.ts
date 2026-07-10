@@ -133,6 +133,11 @@ interface ElectronAPI {
   readFileBase64: (url: string) => Promise<{ base64: string; mimeType: string }>;
   openFileWithSystem: (url: string) => Promise<{ ok: boolean; error?: string }>;
   openBase64File: (base64: string, fileName: string) => Promise<{ ok: boolean; error?: string }>;
+  // Subida por QR
+  qrUploadCreateSession: (input: { carpeta: string; accept?: string; maxSizeMB?: number }) => Promise<any>;
+  qrUploadEnableRemote: (sessionId: string) => Promise<any>;
+  qrUploadPoll: (sessionId: string) => Promise<any>;
+  qrUploadClose: (sessionId: string) => Promise<any>;
 
   // Adjuntos polimorficos
   getAdjuntos: (params: { entidadTipo: string; entidadId: number; tipo?: string }) => Promise<any[]>;
@@ -1378,6 +1383,20 @@ export class RepositoryIpcService extends RepositoryService {
   }
   openBase64File(base64: string, fileName: string): Observable<{ ok: boolean; error?: string }> {
     return from(this.api.openBase64File(base64, fileName));
+  }
+
+  // ===================== SUBIDA POR QR =====================
+  qrUploadCreateSession(input: { carpeta: string; accept?: string; maxSizeMB?: number }): Observable<any> {
+    return from(this.api.qrUploadCreateSession(input));
+  }
+  qrUploadEnableRemote(sessionId: string): Observable<any> {
+    return from(this.api.qrUploadEnableRemote(sessionId));
+  }
+  qrUploadPoll(sessionId: string): Observable<any> {
+    return from(this.api.qrUploadPoll(sessionId));
+  }
+  qrUploadClose(sessionId: string): Observable<any> {
+    return from(this.api.qrUploadClose(sessionId));
   }
 
   // ===================== ADJUNTOS POLIMORFICOS =====================

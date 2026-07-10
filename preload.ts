@@ -1390,6 +1390,20 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('open-base64-file', { base64, fileName });
   },
 
+  // === Subida por QR (emparejamiento con la PWA mobile) ===
+  qrUploadCreateSession: async (input: { carpeta: string; accept?: string; maxSizeMB?: number }): Promise<any> => {
+    return await ipcRenderer.invoke('qr-upload-create-session', input);
+  },
+  qrUploadEnableRemote: async (sessionId: string): Promise<any> => {
+    return await ipcRenderer.invoke('qr-upload-enable-remote', { sessionId });
+  },
+  qrUploadPoll: async (sessionId: string): Promise<any> => {
+    return await ipcRenderer.invoke('qr-upload-poll', { sessionId });
+  },
+  qrUploadClose: async (sessionId: string): Promise<any> => {
+    return await ipcRenderer.invoke('qr-upload-close', { sessionId });
+  },
+
   // === Adjuntos polimorficos ===
   getAdjuntos: async (params: { entidadTipo: string; entidadId: number; tipo?: string }): Promise<any[]> => {
     return await ipcRenderer.invoke('get-adjuntos', params);

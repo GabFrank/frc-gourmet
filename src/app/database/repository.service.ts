@@ -78,6 +78,41 @@ export interface ClienteFilters {
   conCredito?: boolean;
 }
 
+/** Archivo devuelto por la subida (genérica o por QR). */
+export interface QrUploadedFile {
+  url: string;
+  fileName: string;
+  mimeType: string;
+  tamanoBytes: number;
+  thumbUrl?: string;
+  mediumUrl?: string;
+}
+
+export interface QrUploadCreateResult {
+  ok: boolean;
+  sessionId?: string;
+  lanUrl?: string;
+  targetUrl?: string;
+  qrDataUrl?: string | null;
+  expiresAt?: number;
+  error?: string;
+}
+
+export interface QrUploadRemoteResult {
+  ok: boolean;
+  remoteUrl?: string;
+  targetUrl?: string;
+  qrDataUrl?: string | null;
+  error?: string;
+}
+
+export interface QrUploadPollResult {
+  ok: boolean;
+  expired: boolean;
+  files: QrUploadedFile[];
+  expiresAt?: number;
+}
+
 /**
  * Abstracción del repositorio de datos.
  *
@@ -144,6 +179,10 @@ export abstract class RepositoryService {
   abstract readFileBase64(url: string): Observable<{ base64: string; mimeType: string }>;
   abstract openFileWithSystem(url: string): Observable<{ ok: boolean; error?: string }>;
   abstract openBase64File(base64: string, fileName: string): Observable<{ ok: boolean; error?: string }>;
+  abstract qrUploadCreateSession(input: { carpeta: string; accept?: string; maxSizeMB?: number }): Observable<QrUploadCreateResult>;
+  abstract qrUploadEnableRemote(sessionId: string): Observable<QrUploadRemoteResult>;
+  abstract qrUploadPoll(sessionId: string): Observable<QrUploadPollResult>;
+  abstract qrUploadClose(sessionId: string): Observable<{ ok: boolean }>;
   abstract getAdjuntos(params: { entidadTipo: string; entidadId: number; tipo?: string }): Observable<any[]>;
   abstract getAdjuntoById(id: number): Observable<any>;
   abstract createAdjunto(data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }): Observable<any>;
