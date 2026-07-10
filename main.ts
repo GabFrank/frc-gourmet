@@ -28,6 +28,7 @@ import { registerPersonasHandlers } from './electron/handlers/personas.handler';
 import { registerAuthHandlers } from './electron/handlers/auth.handler';
 import { registerImageHandlers } from './electron/handlers/images.handler';
 import { registerFilesHandlers } from './electron/handlers/files.handler';
+import { registerQrUploadHandler } from './electron/handlers/qr-upload.handler';
 import { registerAdjuntosHandlers } from './electron/handlers/adjuntos.handler';
 import { registerDocumentosTicketsHandlers } from './electron/handlers/documentos-tickets.handler';
 import { registerSectoresImpresorasHandlers } from './electron/handlers/sectores-impresoras.handler';
@@ -197,6 +198,7 @@ function initializeDatabase() {
       registerAuthHandlers(dataSource, getCurrentUser, setCurrentUser);
       registerImageHandlers(dataSource);
       registerFilesHandlers(); // generic file IPCs (save/delete/read/open)
+      registerQrUploadHandler(dataSource); // emparejamiento QR -> subida desde la PWA mobile
       registerAdjuntosHandlers(dataSource, getCurrentUser); // CRUD generico de adjuntos polimorficos
       registerDocumentosTicketsHandlers(dataSource, getCurrentUser); // Tickets termicos (comanda multi-sector, venta, recibos, vales, etc.)
       registerSectoresImpresorasHandlers(dataSource, getCurrentUser); // M2M Sector↔Printer con rol (COMANDA/TICKET_VENTA/PRECUENTA)
