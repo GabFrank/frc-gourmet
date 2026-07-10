@@ -30,7 +30,7 @@ Acceso desde el renderer: `app://<carpeta>/<file>`. El custom protocol está en 
 - `deleteImageByUrl(url)` — resuelve un `app://...` a path absoluto y borra el original + derivadas. Es el entry point que usan `delete-file` y `delete-adjunto`. No-op silencioso para PDFs/no-imágenes.
 - `deleteImageDerivatives(absolutePath)` — borra `<base>.thumb.jpg` y `<base>.medium.jpg` si existen, silencioso si no.
 
-## 3. IPCs genéricos (`electron/handlers/files.handler.ts` — NUEVO)
+## 3. IPCs genéricos (`electron/handlers/files.handler.ts`)
 
 | IPC | Input | Output |
 |---|---|---|
@@ -40,7 +40,9 @@ Acceso desde el renderer: `app://<carpeta>/<file>`. El custom protocol está en 
 | `open-file-with-system` | `{ url }` | `{ ok, error? }` (usa `shell.openPath`) |
 | `open-base64-file` | `{ base64, fileName }` | escribe a temp y abre con el sistema |
 
-`carpeta` ∈ `'profile-images' | 'producto-images' | 'funcionario-documentos' | 'factura-imports' | 'adjuntos'` (set `ALLOWED_CARPETAS` en `files.handler.ts`). Cualquier otra es rechazada. Se permiten subpaths anidados bajo un bucket conocido (ej. `funcionario-documentos/{id}/<file>`).
+> **La lógica real de `save-file` vive en `electron/utils/file-save.utils.ts`** (`saveFileToBucket`), extraída para reusarla desde el handler IPC **y** desde la ruta Fastify de subida por QR (ver §9). `files.handler.ts` es sólo el wrapper IPC.
+
+**Buckets permitidos** — fuente única en `file-save.utils.ts` (`ALLOWED_CARPETAS`): `profile-images`, `producto-images`, `producto-thumbs`, `sabores`, `presentaciones`, `funcionario-documentos`, `factura-imports`, `adjuntos`, `logos`. Cualquier otra es rechazada. Se permiten subpaths anidados bajo un bucket conocido (ej. `funcionario-documentos/{id}/<file>`). **Regla:** un bucket nuevo se agrega SOLO ahí; `file-routes.ts` (server) lo importa y `main.ts:registerAppProtocol()` (`knownBuckets`) debe reflejarlo.
 
 `save-file` para imágenes genera thumbnails por default. Para PDFs/docs el flag es ignorado.
 
@@ -144,11 +146,46 @@ Para entidades donde la foto se consulta mucho en listados (PDV, lista de produc
 5. **Para mostrar imágenes en listas usá `thumbUrl(...)`**, no la URL original. Si no hay thumb (legacy), cae al original via `(error)`.
 6. **Para mostrar documentos no-imagen usá `<app-document-viewer>`** — nunca descargues a `<a>` salvo que sea explícitamente "descargar a disco".
 
-## 8. Pendientes
+## 8. Subida por QR desde el celular (PWA) — 2026-07-10
+
+Feature transversal: en **cada punto de subida** el usuario puede escanear un **QR** que abre la **PWA mobile** (`/upload?session=<id>`) y subir una foto / documento / archivo desde el celular. El archivo vuelve al widget del desktop **en tiempo real**, sin pasar el archivo a la PC de forma externa. Copia el UX de Google Drive (escáner de documento con recorte de perspectiva).
+
+### Arquitectura (el "pegamento")
+
+```
+Desktop (widget)                 Main process                    Celular (PWA)
+   │ qr-upload-create-session ─────► ensurePairingServer() ─► levanta Fastify (cualquier modo)
+   │                                 createQrUploadSession() ─► sesión en memoria (TTL 10min)
+   │ ◄──── { sessionId, qrDataUrl, lanUrl, targetUrl }
+   │  muestra QR ────────────────────────── escaneo ─────────────► abre /upload?session=<id>
+   │ qr-upload-poll (cada 2s)                                       POST /api/qr-upload/:id {base64}
+   │ ◄──── { files: [...] } ◄──── addFileToSession ◄── saveFileToBucket (misma lógica que save-file)
+   │  emite (uploaded) al form
+```
+
+- **Store de sesiones:** `electron/server/qr-upload-store.ts` (Map en memoria, TTL 10min, cleanup). El `sessionId` (aleatorio) **es la credencial**: sin login en el celular.
+- **Rutas Fastify (sin JWT):** `electron/server/qr-upload-routes.ts` → `GET /api/qr-upload/:id` (metadata) + `POST /api/qr-upload/:id` (sube base64, valida sesión, escribe con `saveFileToBucket`). Rate-limit global + bodyLimit 50MB.
+- **Arranque on-demand:** `electron/server/pairing.ts` (`ensurePairingServer`) levanta el Fastify **en cualquier modo** (`startServer` es idempotente) y calcula la IP LAN. Túnel HTTPS reutilizable vía `startTunnel()` exportado de `remote-tunnel.handler.ts` (el escáner de cámara en vivo exige HTTPS → el toggle "acceso remoto" del diálogo lo activa).
+- **Handler IPC:** `electron/handlers/qr-upload.handler.ts` → `qr-upload-create-session`, `qr-upload-enable-remote`, `qr-upload-poll`, `qr-upload-close`. Expuestos en `preload.ts` + `RepositoryService` (`qrUpload*`).
+- **Seguridad:** el celular **sólo escribe el archivo a disco** y devuelve su `app://` URL; **nunca toca la BD**. La asociación a la entidad la hace el desktop al guardar el form (igual que una subida local). La `carpeta` la fija el desktop al crear la sesión (el celular no la elige).
+
+### Desktop
+
+- **Diálogo:** `src/app/shared/components/qr-upload-dialog/` — muestra el QR, hace polling y devuelve `QrUploadedFile[]`. Data: `{ carpeta, accept?, maxSizeMB?, multiple? }`.
+- **`<app-file-upload>`** trae un botón "Celular" (`@Input() enableQr = true`, `openQrUpload()`) → **propaga la feature** a: logo empresa, imágenes producto/presentación/sabor, adjuntos (`adjuntos-list`).
+- **Flujos a medida con QR** (no usan el widget compartido): foto de persona (`create-edit-persona`), documentos RRHH (`upload-documento-dialog`), "Adjuntar firmado" (`document-actions` → `documento.service.adjuntarUrlSubida`), imagen de PdV categoría (base64 en BD → lee de vuelta con `readFileBase64`), fondo de plantilla de factura, e **importación de facturas OCR** (`factura-import-process` acepta `url` además de `filePath`).
+
+### Mobile (PWA)
+
+- **Ruta pública `/upload`** (sin `authGuard`) → `projects/mobile/src/app/pages/upload/qr-upload.page.ts`. Fetch same-origin a `/api/qr-upload/:id`. 3 acciones: escanear documento / tomar foto (`<input capture>`) / elegir archivo.
+- **`document-scanner.component.ts`:** cámara en vivo + ajuste de 4 esquinas + corrección de perspectiva (**homografía + muestreo bilineal en canvas puro, sin OpenCV**) + realce de documento. Requiere contexto seguro (HTTPS) para `getUserMedia`.
+- **FAB de QR en la home** (`home.page.ts` `scanQr()`) que reusa `BarcodeScannerDialogComponent` para leer el QR del desktop y navegar a `/upload`.
+
+## 9. Pendientes (release 2 y siguientes)
 
 Ver [workflows/todos-pendientes.md](../workflows/todos-pendientes.md) sección "Acciones inmediatas". El schema y los handlers genéricos de `Adjunto` ya están; lo pendiente es la adopción dominio por dominio y algunas migraciones de almacenamiento:
 - Adoptar (UI + wiring) el `Adjunto` polimórfico en gastos, vales, préstamos, CPP, CPC, cheques, retiros, operaciones financieras, movimientos bancarios, acreditaciones POS, ventas (comprobante de transferencia), asistencias.
 - UI de imagen en Presentación + Sabor (columnas ya existen).
-- Migrar `create-edit-persona` a `<app-file-upload>`.
-- Migrar `PdvCategoriaItem.imagen` base64 → `app://`.
+- Migrar `create-edit-persona` a `<app-file-upload>` (hoy es bespoke, ya con QR propio).
+- Migrar `PdvCategoriaItem.imagen` base64 → `app://` (hoy sigue base64-in-DB, ya con QR que lee de vuelta a base64).
 - Backup/restore extendido a carpetas `userData/`.

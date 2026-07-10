@@ -21,12 +21,20 @@
             <mat-icon>add_photo_alternate</mat-icon>
             Añadir imagen de perfil
           </button>
+          <button mat-stroked-button type="button" (click)="openQrUpload()" matTooltip="Subir desde el celular (QR)">
+            <mat-icon>qr_code_2</mat-icon>
+            Celular
+          </button>
         </div>
-        
+
         <div class="change-image-button" *ngIf="imagePreviewUrl">
           <button mat-stroked-button type="button" (click)="fileInput.click()">
             <mat-icon>photo_camera</mat-icon>
             Cambiar imagen
+          </button>
+          <button mat-stroked-button type="button" (click)="openQrUpload()" matTooltip="Subir desde el celular (QR)">
+            <mat-icon>qr_code_2</mat-icon>
+            Celular
           </button>
         </div>
         

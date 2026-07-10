@@ -235,6 +235,20 @@ export class RepositoryHttpService extends RepositoryService {
   openFileWithSystem(url: string): Observable<{ ok: boolean; error?: string }> {
     return throwError(() => new Error(`RepositoryHttpService.openFileWithSystem() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  qrUploadCreateSession(_input: { carpeta: string; accept?: string; maxSizeMB?: number }): Observable<any> {
+    // La subida por QR es una feature del server/desktop; en modo cliente HTTP
+    // no aplica (el cliente ya ES un dispositivo remoto).
+    return throwError(() => new Error(`RepositoryHttpService.qrUploadCreateSession() no disponible en modo cliente.`)) as any;
+  }
+  qrUploadEnableRemote(_sessionId: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.qrUploadEnableRemote() no disponible en modo cliente.`)) as any;
+  }
+  qrUploadPoll(_sessionId: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.qrUploadPoll() no disponible en modo cliente.`)) as any;
+  }
+  qrUploadClose(_sessionId: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.qrUploadClose() no disponible en modo cliente.`)) as any;
+  }
   openBase64File(base64: string, fileName: string): Observable<{ ok: boolean; error?: string }> {
     // En modo web/PWA no hay shell del SO: abrimos el PDF en una nueva pestaña
     // (visor del navegador) a partir de un blob URL.

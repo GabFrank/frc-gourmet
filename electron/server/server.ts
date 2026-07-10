@@ -29,6 +29,7 @@ import { registerDeviceAuthRoutes } from './device-auth-routes';
 import { registerFileRoutes } from './file-routes';
 import { registerKdsSseRoutes } from './kds-sse-routes';
 import { registerPublicRoutes } from './public-routes';
+import { registerQrUploadRoutes } from './qr-upload-routes';
 import { registerAuthPlugin } from './auth-middleware';
 
 export interface ServerOptions {
@@ -118,6 +119,9 @@ async function buildInstance(
 
   // Files (requiere JWT)
   registerFileRoutes(fastify, opts.dataSource);
+
+  // Subida por QR (sin JWT — el token de sesión es la credencial).
+  registerQrUploadRoutes(fastify);
 
   // KDS: stream SSE para pantallas web en tiempo real (auth por token en query)
   registerKdsSseRoutes(fastify);

@@ -16,6 +16,7 @@ import { registerPersonasHandlers } from '../handlers/personas.handler';
 import { registerAuthHandlers } from '../handlers/auth.handler';
 import { registerImageHandlers } from '../handlers/images.handler';
 import { registerFilesHandlers } from '../handlers/files.handler';
+import { registerQrUploadHandler } from '../handlers/qr-upload.handler';
 import { registerAdjuntosHandlers } from '../handlers/adjuntos.handler';
 import { registerProductosHandlers } from '../handlers/productos.handler';
 import { registerFinancieroHandlers } from '../handlers/financiero.handler';
@@ -72,6 +73,7 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerAuthHandlers(dataSource, getCurrentUser, setCurrentUser);
   registerImageHandlers(dataSource);
   registerFilesHandlers();
+  registerQrUploadHandler(dataSource);
   registerAdjuntosHandlers(dataSource, getCurrentUser);
   registerProductosHandlers(dataSource, getCurrentUser);
   registerFinancieroHandlers(dataSource, getCurrentUser);

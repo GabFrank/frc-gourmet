@@ -49,6 +49,16 @@ Migración incremental: el desktop sigue importando por rutas relativas; el mobi
 `path.join(__dirname,'dist/mobile')`. `dist/mobile/**` en `asarUnpack`. **TLS del mesh: pendiente**
 (headscale `tailscale serve`/cert o Caddy/CA privada); por ahora HTTP plano en LAN, sin service worker.
 
+## Subida por QR desde el celular (2026-07-10)
+
+Ruta **pública** `/upload?session=<id>` (sin `authGuard`) → `pages/upload/qr-upload.page.ts`. Se abre al
+escanear el QR mostrado en el desktop. El token de sesión es la credencial (sin login). Sube via **fetch
+same-origin** a `/api/qr-upload/:id` (NO usa el shim RPC). 3 acciones: escanear documento / tomar foto
+(`<input capture>`) / elegir archivo. **`document-scanner.component.ts`:** cámara + ajuste de 4 esquinas +
+corrección de perspectiva (homografía + bilineal en canvas puro, sin OpenCV) + realce; requiere HTTPS
+(`getUserMedia`). **FAB de QR en la home** (`home.page.ts:scanQr()`) reusa `BarcodeScannerDialogComponent`
+para leer el QR del desktop y navegar a `/upload`. Contraparte desktop/server → [domains/archivos-y-adjuntos.md](../domains/archivos-y-adjuntos.md) §9.
+
 ## Cobertura (MVP administrativo, 2026-05-21)
 
 CRUD: RRHH (Cargos, Turnos, MotivosVale, Feriados, Personas, Usuarios+roles, Funcionarios, Clientes,

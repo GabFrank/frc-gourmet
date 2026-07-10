@@ -1,0 +1,125 @@
+.qr-dialog {
+  display: flex;
+  flex-direction: column;
+  min-width: 320px;
+  max-width: 400px;
+}
+
+.qr-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 12px;
+  position: relative;
+
+  .qr-header-icon {
+    color: var(--primary-color, #3f51b5);
+  }
+
+  .qr-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+  }
+
+  .qr-close {
+    color: var(--text-secondary);
+  }
+}
+
+.qr-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.qr-center {
+  align-items: center;
+  text-align: center;
+  padding: 24px 8px;
+}
+
+.qr-muted {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.qr-instructions {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.qr-image-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.qr-image {
+  width: 220px;
+  height: 220px;
+  border-radius: 12px;
+  background: #fff; // el QR necesita fondo blanco para lecturabilidad en dark
+  padding: 8px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15);
+}
+
+.qr-waiting,
+.qr-remote-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.qr-received {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--success-color, #2e7d32);
+  font-weight: 600;
+  font-size: 0.9rem;
+
+  .qr-check {
+    color: var(--success-color, #2e7d32);
+  }
+}
+
+.qr-remote {
+  border-top: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  .qr-remote-hint {
+    font-size: 0.78rem;
+  }
+}
+
+.qr-error-icon {
+  font-size: 40px;
+  width: 40px;
+  height: 40px;
+  color: var(--warn-color, #d32f2f);
+}
+
+.qr-error-text {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.qr-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}

@@ -6,13 +6,24 @@
          (change)="onFileSelected($event)" />
 
   <ng-container *ngIf="!hasFile">
-    <button type="button" mat-stroked-button color="primary"
-            (click)="triggerFileInput()"
-            [disabled]="disabled || uploading">
-      <mat-spinner *ngIf="uploading" diameter="18" class="spinner-inline"></mat-spinner>
-      <mat-icon *ngIf="!uploading">cloud_upload</mat-icon>
-      <span>{{ uploading ? 'Subiendo...' : label }}</span>
-    </button>
+    <div class="upload-buttons">
+      <button type="button" mat-stroked-button color="primary"
+              (click)="triggerFileInput()"
+              [disabled]="disabled || uploading">
+        <mat-spinner *ngIf="uploading" diameter="18" class="spinner-inline"></mat-spinner>
+        <mat-icon *ngIf="!uploading">cloud_upload</mat-icon>
+        <span>{{ uploading ? 'Subiendo...' : label }}</span>
+      </button>
+      <button type="button" mat-stroked-button
+              *ngIf="enableQr"
+              class="qr-button"
+              matTooltip="Subir desde el celular (QR)"
+              (click)="openQrUpload()"
+              [disabled]="disabled || uploading">
+        <mat-icon>qr_code_2</mat-icon>
+        <span>Celular</span>
+      </button>
+    </div>
     <span class="hint" *ngIf="hint">{{ hint }}</span>
   </ng-container>
 
@@ -30,6 +41,15 @@
         <mat-spinner *ngIf="uploading" diameter="16" class="spinner-inline"></mat-spinner>
         <mat-icon *ngIf="!uploading">swap_horiz</mat-icon>
         <span>Reemplazar</span>
+      </button>
+      <button type="button" mat-stroked-button
+              *ngIf="enableQr"
+              class="qr-button"
+              matTooltip="Subir desde el celular (QR)"
+              (click)="openQrUpload()"
+              [disabled]="disabled || uploading">
+        <mat-icon>qr_code_2</mat-icon>
+        <span>Celular</span>
       </button>
       <button type="button" mat-stroked-button color="warn" (click)="remove()" [disabled]="disabled || uploading">
         <mat-icon>delete</mat-icon>

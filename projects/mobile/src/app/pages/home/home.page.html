@@ -20,4 +20,15 @@
       <span>{{ a.label }}</span>
     </a>
   </section>
+
+  <!-- FAB: escanear el QR mostrado en la PC para subir un archivo desde el celular -->
+  <button
+    class="qr-fab"
+    mat-fab
+    color="primary"
+    aria-label="Escanear QR para subir archivo"
+    (click)="scanQr()"
+  >
+    <mat-icon>qr_code_scanner</mat-icon>
+  </button>
 </div>

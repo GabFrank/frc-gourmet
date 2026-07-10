@@ -1,0 +1,70 @@
+<div class="upload-page">
+  <!-- Cargando -->
+  <div class="up-center" *ngIf="state === 'loading'">
+    <mat-spinner diameter="40"></mat-spinner>
+    <p>Conectando…</p>
+  </div>
+
+  <!-- Inválido / expirado -->
+  <div class="up-center" *ngIf="state === 'invalid'">
+    <mat-icon class="up-error-icon">link_off</mat-icon>
+    <h2>No se pudo abrir</h2>
+    <p class="up-muted">{{ errorMsg }}</p>
+  </div>
+
+  <!-- Listo para subir -->
+  <ng-container *ngIf="state === 'ready'">
+    <header class="up-header">
+      <mat-icon>cloud_upload</mat-icon>
+      <div>
+        <h1>Subir a la PC</h1>
+        <p class="up-muted">Elegí cómo querés enviar el archivo</p>
+      </div>
+    </header>
+
+    <div class="up-actions">
+      <button class="up-action" (click)="scanDocument()" [disabled]="uploading">
+        <mat-icon>document_scanner</mat-icon>
+        <span class="up-action-title">Escanear documento</span>
+        <span class="up-action-sub" *ngIf="secureContext">Cámara en vivo con recorte</span>
+        <span class="up-action-sub warn" *ngIf="!secureContext">Requiere HTTPS</span>
+      </button>
+
+      <button class="up-action" (click)="triggerPhoto()" [disabled]="uploading">
+        <mat-icon>photo_camera</mat-icon>
+        <span class="up-action-title">Tomar foto</span>
+        <span class="up-action-sub">Con la cámara del teléfono</span>
+      </button>
+
+      <button class="up-action" (click)="triggerFile()" [disabled]="uploading">
+        <mat-icon>attach_file</mat-icon>
+        <span class="up-action-title">Elegir archivo</span>
+        <span class="up-action-sub">Imagen o documento existente</span>
+      </button>
+    </div>
+
+    <div class="up-uploading" *ngIf="uploading">
+      <mat-spinner diameter="22"></mat-spinner>
+      <span>Enviando…</span>
+    </div>
+
+    <div class="up-done" *ngIf="uploaded.length > 0">
+      <div class="up-done-head">
+        <mat-icon>check_circle</mat-icon>
+        <span>{{ uploaded.length }} enviado(s) a la PC</span>
+      </div>
+      <div class="up-thumbs">
+        <div class="up-thumb" *ngFor="let item of uploaded">
+          <img *ngIf="item.thumb" [src]="item.thumb" [alt]="item.fileName" />
+          <mat-icon *ngIf="!item.thumb">description</mat-icon>
+        </div>
+      </div>
+      <p class="up-muted up-hint">Podés seguir subiendo más o cerrar esta página.</p>
+    </div>
+
+    <input #photoInput type="file" hidden accept="image/*" capture="environment"
+           (change)="onFileSelected($event)" />
+    <input #fileInput type="file" hidden [attr.accept]="accept"
+           (change)="onFileSelected($event)" />
+  </ng-container>
+</div>
