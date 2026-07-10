@@ -97,6 +97,11 @@
               <mat-icon>photo_camera</mat-icon>
               Seleccionar imagen
             </button>
+            <button type="button" mat-stroked-button color="primary" (click)="openQrImageUpload()"
+                    matTooltip="Subir desde el celular (QR)">
+              <mat-icon>qr_code_2</mat-icon>
+              Celular
+            </button>
             <input hidden type="file" #fileInput (change)="onImageSelected($event)" accept="image/*">
           </div>
         </div>

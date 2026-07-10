@@ -7,6 +7,12 @@
       <span *ngIf="!importing">Nueva importación</span>
       <mat-spinner *ngIf="importing" diameter="18"></mat-spinner>
     </button>
+    <button *appHasPermission="'COMPRAS_IMPORTAR_FACTURA'" mat-stroked-button color="primary"
+            (click)="nuevaImportacionQr()" [disabled]="importing"
+            matTooltip="Sacar foto de la factura desde el celular (QR)">
+      <mat-icon>qr_code_2</mat-icon>
+      <span>Desde el celular</span>
+    </button>
   </app-table-toolbar>
 
   <div class="filtros-bar">

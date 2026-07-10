@@ -1,7 +1,7 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormControl, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
-import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
+import { MatDialog, MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -17,7 +17,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 
 import { AppUrlPipe } from '../../pipes/app-url.pipe';
-import { RepositoryService } from '../../../database/repository.service';
+import { RepositoryService, QrUploadedFile } from '../../../database/repository.service';
+import { QrUploadDialogComponent } from '../qr-upload-dialog/qr-upload-dialog.component';
 import { PdvGrupoCategoria } from '../../../database/entities/ventas/pdv-grupo-categoria.entity';
 import { PdvCategoria } from '../../../database/entities/ventas/pdv-categoria.entity';
 import { PdvCategoriaItem } from '../../../database/entities/ventas/pdv-categoria-item.entity';
@@ -87,13 +88,16 @@ export class CreateEditPdvCategoriasComponent implements OnInit {
   // Image handling
   imageFile: File | null = null;
   imagePreview: string | null = null;
-  
+  // Imagen ya subida por QR (data-URL leída de vuelta del archivo temporal).
+  qrImageBase64: string | null = null;
+
   constructor(
     private dialogRef: MatDialogRef<CreateEditPdvCategoriasComponent>,
     @Inject(MAT_DIALOG_DATA) public data: CreateEditPdvCategoriasData,
     private formBuilder: FormBuilder,
     private repositoryService: RepositoryService,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private dialog: MatDialog
   ) {
     // Initialize forms
     this.grupoForm = this.formBuilder.group({
@@ -450,6 +454,12 @@ export class CreateEditPdvCategoriasComponent implements OnInit {
    * Save item entity with image handling
    */
   private async saveItem(formData: any): Promise<void> {
+    // Imagen subida por QR desde el celular (ya en base64).
+    if (this.qrImageBase64) {
+      formData.imagen = this.qrImageBase64;
+      await this.saveItemWithImage(formData);
+      return;
+    }
     // Handle image upload if there is a new image selected
     if (this.imageFile) {
       const reader = new FileReader();
@@ -513,26 +523,55 @@ export class CreateEditPdvCategoriasComponent implements OnInit {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
       this.imageFile = input.files[0];
-      
+      this.qrImageBase64 = null; // un archivo local reemplaza al subido por QR
+
       // Create preview
       const reader = new FileReader();
       reader.onload = (e) => {
         const result = e.target?.result;
         this.imagePreview = typeof result === 'string' ? result : null;
       };
-      
+
       if (this.imageFile) {
         reader.readAsDataURL(this.imageFile);
       }
     }
   }
-  
+
+  /**
+   * Subir la imagen del item desde el celular (QR). El archivo llega al bucket
+   * producto-images; lo leemos de vuelta a base64 (la columna guarda base64) y
+   * borramos el temporal del disco.
+   */
+  async openQrImageUpload(): Promise<void> {
+    const ref = this.dialog.open(QrUploadDialogComponent, {
+      data: { carpeta: 'producto-images', accept: 'image/*', maxSizeMB: 5, multiple: false },
+      width: '420px',
+      maxWidth: '95vw',
+    });
+    const files: QrUploadedFile[] | undefined = await firstValueFrom(ref.afterClosed());
+    const f = files?.[0];
+    if (!f) return;
+    try {
+      const { base64, mimeType } = await firstValueFrom(this.repositoryService.readFileBase64(f.url));
+      const dataUrl = `data:${mimeType};base64,${base64}`;
+      this.imageFile = null;
+      this.qrImageBase64 = dataUrl;
+      this.imagePreview = dataUrl;
+      this.repositoryService.deleteFile(f.url).subscribe({ error: () => { /* best-effort */ } });
+    } catch (e) {
+      console.error(e);
+      this.snackBar.open('No se pudo leer la imagen subida.', 'Cerrar', { duration: 3500 });
+    }
+  }
+
   /**
    * Clear selected image
    */
   clearImage(): void {
     this.imageFile = null;
     this.imagePreview = null;
+    this.qrImageBase64 = null;
     this.itemForm.patchValue({ imagen: null });
   }
   

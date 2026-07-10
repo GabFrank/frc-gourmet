@@ -3848,7 +3848,7 @@ contextBridge.exposeInMainWorld('api', {
   facturaImportPickFile: async (): Promise<any> => {
     return await ipcRenderer.invoke('factura-import-pick-file');
   },
-  facturaImportProcess: async (payload: { filePath: string }): Promise<any> => {
+  facturaImportProcess: async (payload: { filePath?: string; url?: string }): Promise<any> => {
     return await ipcRenderer.invoke('factura-import-process', payload);
   },
   facturaImportReprocess: async (payload: { documentoId: number }): Promise<any> => {

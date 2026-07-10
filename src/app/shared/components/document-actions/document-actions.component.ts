@@ -14,8 +14,11 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { DocumentoService, DocumentoGenerado, EntidadRef } from '../../../services/documento.service';
+import { QrUploadDialogComponent } from '../qr-upload-dialog/qr-upload-dialog.component';
+import { QrUploadedFile } from '../../../database/repository.service';
 
 export type DocumentFormat = 'PDF' | 'TICKET' | 'EXCEL';
 
@@ -56,6 +59,7 @@ export type DocumentFormat = 'PDF' | 'TICKET' | 'EXCEL';
     MatProgressSpinnerModule,
     MatTooltipModule,
     MatDividerModule,
+    MatDialogModule,
   ],
   templateUrl: './document-actions.component.html',
   styleUrls: ['./document-actions.component.scss'],
@@ -125,6 +129,7 @@ export class DocumentActionsComponent {
   constructor(
     private documentoService: DocumentoService,
     private snackBar: MatSnackBar,
+    private dialog: MatDialog,
   ) {}
 
   // ─── Acciones PDF ────────────────────────────────────────────────────────
@@ -215,6 +220,32 @@ export class DocumentActionsComponent {
   // ─── Adjuntar firmado escaneado ──────────────────────────────────────────
   onSeleccionarArchivo(): void {
     this.fileInput?.nativeElement.click();
+  }
+
+  /** Adjuntar el documento firmado escaneándolo/subiéndolo desde el celular (QR). */
+  async onAdjuntarPorQr(): Promise<void> {
+    if (!this.entidad) return;
+    const ref = this.dialog.open(QrUploadDialogComponent, {
+      data: { carpeta: 'adjuntos', accept: this.acceptFirmado, maxSizeMB: 20, multiple: false },
+      width: '420px',
+      maxWidth: '95vw',
+    });
+    const files: QrUploadedFile[] | undefined = await firstValueFrom(ref.afterClosed());
+    const f = files?.[0];
+    if (!f) return;
+    this.loading = true;
+    try {
+      const adj = await firstValueFrom(
+        this.documentoService.adjuntarUrlSubida(f, this.entidad, this.adjuntoTipo + '_FIRMADO'),
+      );
+      this.adjuntoCreado.emit(adj);
+      this.snackBar.open(`Adjunto firmado guardado (${f.fileName})`, 'Cerrar', { duration: 3000 });
+    } catch (err: any) {
+      console.error('Error adjuntar firmado por QR:', err);
+      this.snackBar.open(`Error: ${err?.message || err}`, 'Cerrar', { duration: 4000 });
+    } finally {
+      this.loading = false;
+    }
   }
 
   async onFileSelected(event: Event): Promise<void> {
