@@ -878,6 +878,12 @@ interface ElectronAPI {
   justificarAsistencia: (id: number, data: any) => Promise<any>;
   marcarAsistenciaMasiva: (payload: any) => Promise<any>;
 
+  // RRHH - Reconocimiento facial
+  enrolarRostro: (data: any) => Promise<any>;
+  getRostrosFuncionario: (funcionarioId: number) => Promise<any[]>;
+  eliminarRostro: (id: number) => Promise<any>;
+  ficharFacial: (payload: any) => Promise<any>;
+
   // RRHH - Penalizaciones
   getPenalizaciones: (filtros?: any) => Promise<any[]>;
   createPenalizacion: (data: any) => Promise<any>;
@@ -3597,6 +3603,20 @@ export class RepositoryIpcService extends RepositoryService {
   }
   marcarAsistenciaMasiva(payload: any): Observable<any> {
     return from(this.api.marcarAsistenciaMasiva(payload));
+  }
+
+  // ===================== RRHH: RECONOCIMIENTO FACIAL =====================
+  enrolarRostro(data: any): Observable<any> {
+    return from(this.api.enrolarRostro(data));
+  }
+  getRostrosFuncionario(funcionarioId: number): Observable<any[]> {
+    return from(this.api.getRostrosFuncionario(funcionarioId));
+  }
+  eliminarRostro(id: number): Observable<any> {
+    return from(this.api.eliminarRostro(id));
+  }
+  ficharFacial(payload: any): Observable<any> {
+    return from(this.api.ficharFacial(payload));
   }
 
   // ===================== RRHH: PENALIZACIONES =====================

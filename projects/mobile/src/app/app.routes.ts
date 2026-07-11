@@ -226,6 +226,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/rrhh/funcionarios/funcionario-edit.page').then((m) => m.FuncionarioEditPage),
   },
   {
+    path: 'rrhh/funcionarios/:id/rostros',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/rrhh/funcionarios/enrolar-rostro.page').then((m) => m.EnrolarRostroPage),
+  },
+  {
     path: 'rrhh/funcionarios/:id',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/rrhh/funcionarios/funcionario-edit.page').then((m) => m.FuncionarioEditPage),

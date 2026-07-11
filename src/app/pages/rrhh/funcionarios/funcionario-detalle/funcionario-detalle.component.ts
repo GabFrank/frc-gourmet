@@ -20,6 +20,7 @@ import { EgresarFuncionarioDialogComponent } from '../egresar-funcionario-dialog
 import { UploadDocumentoDialogComponent } from '../upload-documento-dialog/upload-documento-dialog.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { AsignarTurnoFuncionarioDialogComponent } from '../asignar-turno-dialog/asignar-turno-funcionario-dialog.component';
+import { EnrolarRostroDialogComponent } from '../enrolar-rostro-dialog/enrolar-rostro-dialog.component';
 
 @Component({
   selector: 'app-funcionario-detalle',
@@ -51,14 +52,17 @@ export class FuncionarioDetalleComponent implements OnInit {
   historicoSalarios: any[] = [];
   documentos: any[] = [];
   turnos: any[] = [];
+  rostros: any[] = [];
   loadingHistorico = false;
   loadingDocumentos = false;
   loadingTurnos = false;
+  loadingRostros = false;
 
   cargosColumns = ['fechaDesde', 'fechaHasta', 'cargo', 'motivo'];
   salariosColumns = ['fechaVigencia', 'salarioAnterior', 'salarioNuevo', 'moneda', 'motivo'];
   documentosColumns = ['tipo', 'nombre', 'tamano', 'fechaSubida', 'vencimiento', 'actions'];
   turnosColumns = ['turno', 'horario', 'fechaDesde', 'fechaHasta', 'actions'];
+  rostrosColumns = ['createdAt', 'modelo', 'actions'];
 
   constructor(
     private repositoryService: RepositoryService,
@@ -89,6 +93,7 @@ export class FuncionarioDetalleComponent implements OnInit {
       this.loadHistoricos();
       this.loadDocumentos();
       this.loadTurnos();
+      this.loadRostros();
     } catch (error) {
       console.error('Error loading funcionario:', error);
       this.snackBar.open('Error al cargar funcionario', 'Cerrar', { duration: 3500 });
@@ -136,6 +141,51 @@ export class FuncionarioDetalleComponent implements OnInit {
     } finally {
       this.loadingTurnos = false;
     }
+  }
+
+  async loadRostros(): Promise<void> {
+    if (!this.funcionarioId) return;
+    this.loadingRostros = true;
+    try {
+      this.rostros = await firstValueFrom(this.repositoryService.getRostrosFuncionario(this.funcionarioId)) || [];
+    } catch (e) {
+      console.error('Error cargando rostros del funcionario:', e);
+    } finally {
+      this.loadingRostros = false;
+    }
+  }
+
+  abrirEnrolarRostro(): void {
+    if (!this.funcionarioId || !this.funcionario) return;
+    const nombre = `${this.funcionario.persona?.nombre || ''} ${this.funcionario.persona?.apellido || ''}`.trim();
+    const ref = this.dialog.open(EnrolarRostroDialogComponent, {
+      width: '600px',
+      maxWidth: '95vw',
+      data: { funcionarioId: this.funcionarioId, funcionarioNombre: nombre },
+    });
+    ref.afterClosed().subscribe((ok) => {
+      if (ok) this.loadRostros();
+    });
+  }
+
+  eliminarRostro(rostro: any): void {
+    const ref = this.dialog.open(ConfirmationDialogComponent, {
+      width: '400px',
+      data: {
+        title: 'Eliminar rostro',
+        message: '¿Eliminar este rostro registrado? El funcionario no podrá fichar con él.',
+      },
+    });
+    ref.afterClosed().subscribe(async (confirm) => {
+      if (!confirm) return;
+      try {
+        await firstValueFrom(this.repositoryService.eliminarRostro(rostro.id));
+        this.snackBar.open('Rostro eliminado', 'Cerrar', { duration: 2500 });
+        this.loadRostros();
+      } catch (e: any) {
+        this.snackBar.open('Error al eliminar: ' + (e?.message || e), 'Cerrar', { duration: 3500 });
+      }
+    });
   }
 
   abrirAsignarTurno(): void {

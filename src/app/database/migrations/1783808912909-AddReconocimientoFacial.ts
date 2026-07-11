@@ -13,7 +13,9 @@ async function hasColumn(qr: QueryRunner, table: string, col: string, isPg: bool
  * Reconocimiento facial para marcación de asistencia — Fase 1 (datos).
  *
  * - Crea `funcionario_rostros` (embeddings de enrollment por funcionario). El embedding
- *   se guarda como texto JSON (portable): `text` en SQLite, `jsonb` en Postgres.
+ *   se guarda como JSON en columna `text` en ambos drivers (no `jsonb`: el driver pg
+ *   devolveria el jsonb ya parseado y SQLite un string, rompiendo la consistencia; el
+ *   match carga todo en memoria, no necesita queries sobre el vector).
  * - Agrega a `asistencias` las columnas de auditoría del método de registro:
  *   `metodo_registro` (MANUAL|FACIAL) y `similitud_facial` (score del match).
  * Portable SQLite/Postgres, additiva e idempotente.
@@ -26,7 +28,7 @@ export class AddReconocimientoFacial1783808912909 implements MigrationInterface 
     const pk = isPg ? 'SERIAL PRIMARY KEY' : 'integer PRIMARY KEY AUTOINCREMENT NOT NULL';
     const ts = isPg ? 'TIMESTAMP' : 'datetime';
     const tsDefault = isPg ? 'now()' : "(datetime('now'))";
-    const embeddingType = isPg ? 'jsonb' : 'text';
+    const embeddingType = 'text';
     const fk = isPg
       ? `, CONSTRAINT "FK_funcionario_rostros_funcionario" FOREIGN KEY ("funcionario_id") REFERENCES "funcionarios"("id")`
       : '';
