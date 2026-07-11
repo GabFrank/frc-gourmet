@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { RecetaPresentacion } from '../../src/app/database/entities/productos/receta-presentacion.entity';
 import { Receta } from '../../src/app/database/entities/productos/receta.entity';
 import { Presentacion } from '../../src/app/database/entities/productos/presentacion.entity';
@@ -18,13 +18,15 @@ export const recetaPresentacionHandlers = {
     try {
       console.log(`📋 Getting variaciones for producto ID: ${productoId}`);
 
+      // El sabor vive en RecetaPresentacion (no en Receta). Filtramos por la
+      // receta base (producto_variacion_id) y ordenamos por sabor + tamaño.
       const variaciones = await dataSource.getRepository(RecetaPresentacion)
         .createQueryBuilder('rp')
         .leftJoinAndSelect('rp.receta', 'receta')
         .leftJoinAndSelect('rp.presentacion', 'presentacion')
-        .leftJoinAndSelect('receta.sabor', 'sabor')
+        .leftJoinAndSelect('rp.sabor', 'sabor')
         .leftJoinAndSelect('rp.preciosVenta', 'preciosVenta')
-        .where('receta.producto_id_variacion = :productoId', { productoId })
+        .where('receta.producto_variacion_id = :productoId', { productoId })
         .orderBy('sabor.nombre', 'ASC')
         .addOrderBy('presentacion.cantidad', 'ASC')
         .getMany();
@@ -207,7 +209,7 @@ export const recetaPresentacionHandlers = {
       // Obtener variación con relaciones
       const variacion = await queryRunner.manager.getRepository(RecetaPresentacion).findOne({
         where: { id: variacionId },
-        relations: ['receta', 'presentacion', 'receta.sabor', 'preciosVenta']
+        relations: ['receta', 'presentacion', 'sabor', 'preciosVenta']
       });
 
       if (!variacion) {
@@ -363,10 +365,10 @@ export const recetaPresentacionHandlers = {
     try {
       console.log(`🔄 Generating missing variaciones for producto ID: ${productoId}`);
 
-      // Obtener todas las recetas del producto
+      // Obtener todas las recetas del producto (una por sabor).
       const recetas = await queryRunner.manager.getRepository(Receta).find({
         where: { productoVariacion: { id: productoId } },
-        relations: ['sabor', 'productoVariacion', 'productoVariacion.presentaciones']
+        relations: ['productoVariacion', 'productoVariacion.presentaciones']
       });
 
       if (!recetas.length) {
@@ -377,50 +379,64 @@ export const recetaPresentacionHandlers = {
         };
       }
 
+      // El sabor de cada receta NO vive en Receta, sino en RecetaPresentacion.
+      // Inferimos el sabor de cada receta a partir de sus variaciones existentes.
+      const recetaIds = recetas.map((r) => r.id!).filter(Boolean);
+      const rpsExistentes = recetaIds.length
+        ? await queryRunner.manager.getRepository(RecetaPresentacion).find({
+            where: { receta: { id: In(recetaIds) } },
+            relations: ['receta', 'sabor', 'presentacion']
+          })
+        : [];
+      const saborDeReceta = new Map<number, any>();
+      for (const rp of rpsExistentes) {
+        if (rp.receta?.id != null && rp.sabor && !saborDeReceta.has(rp.receta.id)) {
+          saborDeReceta.set(rp.receta.id, rp.sabor);
+        }
+      }
+
       const variacionesGeneradas: RecetaPresentacion[] = [];
 
-      // Para cada receta, generar variaciones faltantes
+      // Para cada receta, generar variaciones faltantes (con su sabor inferido).
       for (const receta of recetas) {
+        const sabor = saborDeReceta.get(receta.id!);
+        // Sin al menos una variación previa no podemos inferir el sabor → se omite.
+        if (!sabor) {
+          console.log(`⚠️ Receta ${receta.id} sin sabor inferible (sin variaciones previas); se omite.`);
+          continue;
+        }
         const presentaciones = receta.productoVariacion?.presentaciones || [];
 
         for (const presentacion of presentaciones) {
-          // Verificar si ya existe esta variación
-          const variacionExistente = await queryRunner.manager.getRepository(RecetaPresentacion).findOne({
-            where: {
-              receta: { id: receta.id },
-              presentacion: { id: presentacion.id }
-            }
+          const yaExiste = rpsExistentes.some(
+            (rp) => rp.receta?.id === receta.id && rp.presentacion?.id === presentacion.id,
+          );
+          if (yaExiste) continue;
+
+          const nombreGenerado = generarNombreVariacion(
+            receta.productoVariacion?.nombre || 'Producto',
+            presentacion.nombre,
+            sabor.nombre,
+          );
+          const sku = generarSKU(
+            receta.productoVariacion?.nombre || 'Producto',
+            sabor.nombre,
+            presentacion.nombre,
+          );
+
+          const nuevaVariacion = await queryRunner.manager.getRepository(RecetaPresentacion).save({
+            nombre_generado: nombreGenerado,
+            sku,
+            precio_ajuste: 0,
+            costo_calculado: 0,
+            activo: true,
+            receta: { id: receta.id },
+            presentacion: { id: presentacion.id },
+            sabor: { id: sabor.id },
           });
 
-          if (!variacionExistente) {
-            // Crear nueva variación
-            const nombreGenerado = generarNombreVariacion(
-              receta.productoVariacion?.nombre || 'Producto',
-              presentacion.nombre,
-              receta.sabor?.nombre
-            );
-
-            const sku = generarSKU(
-              receta.productoVariacion?.nombre || 'Producto',
-              receta.sabor?.nombre,
-              presentacion.nombre
-            );
-
-            const nuevaVariacion = await queryRunner.manager.getRepository(RecetaPresentacion).save({
-              nombre_generado: nombreGenerado,
-              sku,
-              precio_ajuste: 0,
-              costo_calculado: 0,
-              activo: true,
-              receta: { id: receta.id },
-              presentacion: { id: presentacion.id },
-              sabor: { id: receta.sabor?.id } // ✅ NUEVO: Asignar el sabor
-            });
-
-            variacionesGeneradas.push(nuevaVariacion);
-
-            console.log(`✅ Generated variacion: ${nombreGenerado}`);
-          }
+          variacionesGeneradas.push(nuevaVariacion);
+          console.log(`✅ Generated variacion: ${nombreGenerado}`);
         }
       }
 
