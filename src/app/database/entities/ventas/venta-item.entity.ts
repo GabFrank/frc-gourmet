@@ -129,6 +129,14 @@ export class VentaItem extends BaseModel {
   @Column({ name: 'precio_adicionales', type: 'decimal', precision: 10, scale: 2, default: 0 })
   precioAdicionales!: number;
 
+  // ─── Cobro parcial por ítems ───────────────────────────────────────────
+  // Cobertura acumulada EN BRUTO (precio con descuento propio del ítem, SIN
+  // descuento global) = Σ CobroParcialItem.brutoCubierto de rondas activas.
+  // Cache denormalizado para render y cálculo de saldo. Estado de pago del
+  // ítem (PENDIENTE/PARCIAL/PAGADO) se deriva de este valor vs su neto bruto.
+  @Column({ name: 'monto_cubierto', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  montoCubierto!: number;
+
   // Campos para productos ELABORADO_CON_VARIACION (pizzas, etc.)
   @ManyToOne('RecetaPresentacion', { nullable: true })
   @JoinColumn({ name: 'receta_presentacion_id' })

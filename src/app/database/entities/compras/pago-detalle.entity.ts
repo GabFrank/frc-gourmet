@@ -55,4 +55,9 @@ export class PagoDetalle extends BaseModel {
   // Preparado para vincular pagos a comandas en el futuro
   @Column({ name: 'comanda_id', nullable: true })
   comandaId?: number;
+
+  // Ronda de cobro parcial que originó esta línea (null = cobro directo/total).
+  // Permite anular una ronda desactivando sus PagoDetalle y recomputar saldo.
+  @Column({ name: 'cobro_parcial_id', nullable: true })
+  cobroParcialId?: number;
 }
