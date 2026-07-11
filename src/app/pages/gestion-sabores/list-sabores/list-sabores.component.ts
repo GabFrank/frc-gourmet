@@ -204,6 +204,36 @@ export class ListSaboresComponent implements OnInit {
     });
   }
 
+  repararRecetasCompartidas(): void {
+    const ref = this.dialog.open(ConfirmationDialogComponent, {
+      width: '480px',
+      data: {
+        title: 'Reparar recetas compartidas',
+        message: 'Las variaciones (tamaños) de un sabor que hoy comparten una misma receta pasarán a tener cada una su propia receta (clonada), para poder editar sus ingredientes por separado.',
+        details: ['Es seguro y no borra datos.', 'Solo afecta a variaciones que hoy comparten receta.'],
+        confirmText: 'Reparar',
+        cancelText: 'Cancelar',
+      },
+    });
+    ref.afterClosed().subscribe((confirmed) => {
+      if (!confirmed) return;
+      this.loading = true;
+      this.repositoryService.repararRecetasCompartidas().subscribe({
+        next: (res) => {
+          this.loading = false;
+          const msg = res.variacionesReparadas > 0
+            ? `Listo: ${res.variacionesReparadas} variación(es) ahora tienen su propia receta.`
+            : 'No había recetas compartidas para reparar.';
+          this.snackBar.open(msg, 'Cerrar', { duration: 5000 });
+        },
+        error: (error) => {
+          this.loading = false;
+          this.snackBar.open(error?.message || 'No se pudo reparar', 'Cerrar', { duration: 5000 });
+        },
+      });
+    });
+  }
+
   eliminarSabor(row: SaborRow): void {
     const ref = this.dialog.open(ConfirmationDialogComponent, {
       width: '450px',

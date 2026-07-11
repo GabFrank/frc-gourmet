@@ -524,6 +524,7 @@ export abstract class RepositoryService {
   abstract validarStockIngrediente(recetaIngredienteId: number): Observable<boolean>;
   abstract getSaboresByProducto(productoId: number): Observable<any[]>;
   abstract getAllSabores(filtros?: { productoId?: number | null; categoria?: string | null; activo?: boolean | null; texto?: string | null; }): Observable<any[]>;
+  abstract repararRecetasCompartidas(): Observable<{ recetasCompartidas: number; variacionesReparadas: number }>;
   abstract createSabor(saborData: {
     nombre: string;
     categoria: string;

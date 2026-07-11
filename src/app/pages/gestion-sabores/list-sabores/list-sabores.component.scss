@@ -21,6 +21,12 @@
   color: var(--text-primary);
 }
 
+.header-acciones {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .filtros-card {
   padding: 12px 16px;
 }

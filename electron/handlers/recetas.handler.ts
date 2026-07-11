@@ -22,6 +22,7 @@ import { TipoPrecio } from '../../src/app/database/entities/financiero/tipo-prec
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { Like, IsNull, Not } from 'typeorm';
 import { ensurePermission } from '../utils/auth.utils';
+import { desduplicarRecetasCompartidas } from '../utils/receta-clone.utils';
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
@@ -230,7 +231,10 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   };
 
   // ===== Helpers unificados (antes en handlers separados) =====
-  async function generarVariacionesParaProducto(queryRunner: any, productoId: number, saborId: number, recetaId: number): Promise<RecetaPresentacion[]> {
+  // Genera las variaciones (RecetaPresentacion) de un sabor, UNA por presentación,
+  // creando una RECETA PROPIA para cada una (cada tamaño puede tener ingredientes y
+  // costo distintos). Antes se compartía una sola receta base entre los tamaños.
+  async function generarVariacionesParaProducto(queryRunner: any, productoId: number, saborId: number): Promise<RecetaPresentacion[]> {
     const producto = await queryRunner.manager.getRepository(Producto).findOne({
       where: { id: productoId },
       relations: ['presentaciones']
@@ -243,6 +247,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
     const sabor = await queryRunner.manager.getRepository(Sabor).findOne({ where: { id: saborId } });
     const nombreSabor = sabor?.nombre;
 
+    const recetaRepo = queryRunner.manager.getRepository(Receta);
     const repo = queryRunner.manager.getRepository(RecetaPresentacion);
     const variaciones: RecetaPresentacion[] = [];
 
@@ -260,17 +265,28 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       const nombre = generarNombreVariacion(producto.nombre, presentacion.nombre, nombreSabor);
       const sku = generarSKU(producto.nombre, nombreSabor, presentacion.nombre);
 
+      // Receta propia de esta variación (sabor × tamaño).
+      const recetaGuardada = await recetaRepo.save(recetaRepo.create({
+        nombre: nombre,
+        descripcion: `Receta para ${nombre}`,
+        rendimiento: 1,
+        unidadRendimiento: 'UNIDADES',
+        costoCalculado: 0,
+        activo: true
+      }));
+
       const nueva = repo.create({
         nombre_generado: nombre,
         sku,
         costo_calculado: 0,
         activo: true,
-        receta: { id: recetaId },
+        receta: { id: recetaGuardada.id },
         presentacion: { id: presentacion.id },
         sabor: { id: saborId }
       });
 
       const guardada = await repo.save(nueva);
+      (guardada as any).receta = recetaGuardada;
       variaciones.push(guardada);
     }
 
@@ -1626,29 +1642,25 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       });
       const saborGuardado = await saborRepo.save(sabor);
 
-      // Crear receta base
-      const recetaRepo = queryRunner.manager.getRepository(Receta);
-      const receta = recetaRepo.create({
-        nombre: `${producto.nombre} ${saborData.nombre}`.toUpperCase(),
-        descripcion: `Receta base para ${producto.nombre} ${saborData.nombre}`,
-        rendimiento: 1,
-        unidadRendimiento: 'UNIDADES',
-        costoCalculado: 0,
-        activo: true
-      });
-      const recetaGuardada = await recetaRepo.save(receta);
-
-      // Generar variaciones para cada presentación del producto
-      const variaciones = await generarVariacionesParaProducto(queryRunner, producto.id, saborGuardado.id, recetaGuardada.id);
+      // Generar variaciones: UNA RECETA PROPIA por presentación (cada tamaño
+      // puede tener ingredientes/costo distintos). Ya no se comparte una receta base.
+      const variaciones = await generarVariacionesParaProducto(queryRunner, producto.id, saborGuardado.id);
 
       await queryRunner.commitTransaction();
-      return { sabor: saborGuardado, receta: recetaGuardada, mensaje: `Sabor creado con ${variaciones.length} variaciones` };
+      return { sabor: saborGuardado, receta: (variaciones[0] as any)?.receta ?? null, mensaje: `Sabor creado con ${variaciones.length} variaciones` };
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
     } finally {
       await queryRunner.release();
     }
+  });
+
+  // Reparación de datos: des-comparte las recetas que hoy usan más de una
+  // variación (modelo viejo), clonando la receta para cada tamaño. Manual/opt-in.
+  ipcMain.handle('reparar-recetas-compartidas', async () => {
+    await ensurePermission(dataSource, getCurrentUser, 'SABORES_GESTIONAR');
+    return await dataSource.transaction(async (manager) => desduplicarRecetasCompartidas(manager));
   });
 
   ipcMain.handle('update-sabor', async (_e: IpcMainInvokeEvent, id: number, saborData: Partial<Sabor> & { imageUrl?: string | null }) => {
