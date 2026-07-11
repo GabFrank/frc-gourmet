@@ -301,6 +301,9 @@
             <ng-container matColumnDef="expandedDetail">
               <td mat-cell *matCellDef="let sabor" [attr.colspan]="displayedColumns.length">
                 <div class="variaciones-detail" [@detailExpand]="expandedSabor === sabor ? 'expanded' : 'collapsed'">
+                  <!-- Wrapper interno: el padding/borde viven acá, NO en el elemento
+                       animado, para que colapsado mida 0px sin dejar hueco. -->
+                  <div class="variaciones-detail-inner">
 
                   <!-- Header de Variaciones -->
                   <div class="variaciones-header">
@@ -476,6 +479,7 @@
 
                   </div>
 
+                  </div>
                 </div>
               </td>
             </ng-container>
