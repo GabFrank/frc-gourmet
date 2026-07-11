@@ -11,6 +11,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog } from '@angular/material/dialog';
 import { AuthService } from '../../services/auth.service';
 import { ThemeService } from '../../services/theme.service';
@@ -19,6 +20,7 @@ import { firstValueFrom, Subscription } from 'rxjs';
 import { ForceChangePasswordDialogComponent } from '../force-change-password-dialog/force-change-password-dialog.component';
 import { PasswordRecoveryDialogComponent } from '../password-recovery-dialog/password-recovery-dialog.component';
 import { QrLoginDialogComponent } from '../qr-login-dialog/qr-login-dialog.component';
+import { ConexionConfigDialogComponent } from '../conexion-config-dialog/conexion-config-dialog.component';
 
 @Component({
   selector: 'app-login',
@@ -34,7 +36,8 @@ import { QrLoginDialogComponent } from '../qr-login-dialog/qr-login-dialog.compo
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatCheckboxModule,
-    MatDividerModule
+    MatDividerModule,
+    MatTooltipModule
   ],
   templateUrl: './login.component.html',
   styleUrls: ['./login.component.scss'],
@@ -145,6 +148,11 @@ export class LoginComponent implements OnInit, OnDestroy {
     ref.afterClosed().subscribe((outcome) => {
       if (outcome === 'approved') this.router.navigate(['/']);
     });
+  }
+
+  /** Config de conexión (modo/URL server) accesible sin login. */
+  openConexionConfig(): void {
+    this.dialog.open(ConexionConfigDialogComponent, { width: '480px', autoFocus: false });
   }
 
   openPasswordRecovery(): void {
