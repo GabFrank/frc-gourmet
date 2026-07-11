@@ -535,6 +535,7 @@ interface ElectronAPI {
   // ✅ NUEVOS MÉTODOS PARA ARQUITECTURA CON VARIACIONES
   // Sabor methods
   getSaboresByProducto: (productoId: number) => Promise<any[]>;
+  getAllSabores: (filtros?: { productoId?: number | null; categoria?: string | null; activo?: boolean | null; texto?: string | null; }) => Promise<any[]>;
   createSabor: (saborData: {
     nombre: string;
     categoria: string;
@@ -2733,6 +2734,10 @@ export class RepositoryIpcService extends RepositoryService {
   // Sabor methods
   getSaboresByProducto(productoId: number): Observable<any[]> {
     return from(this.api.getSaboresByProducto(productoId));
+  }
+
+  getAllSabores(filtros?: { productoId?: number | null; categoria?: string | null; activo?: boolean | null; texto?: string | null; }): Observable<any[]> {
+    return from(this.api.getAllSabores(filtros));
   }
 
   createSabor(saborData: {
