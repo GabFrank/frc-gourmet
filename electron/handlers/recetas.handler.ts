@@ -1690,38 +1690,27 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       .addOrderBy('presentacion.cantidad', 'ASC')
       .getMany()
       .then(async (variaciones) => {
-        // ✅ NUEVO: Buscar precios de venta por recetaId para cada variación
+        // El precio es POR VARIACIÓN (sabor × tamaño): se lee de la
+        // RecetaPresentacion, no de la receta base (compartida entre tamaños).
+        // Así cada tamaño tiene su precio y coincide con lo que lee el storefront.
         const variacionesConPrecios = await Promise.all(
           variaciones.map(async (variacion) => {
-            if (!variacion.receta?.id) {
-              return {
-                ...variacion,
-                precioPrincipal: null
-              };
-            }
-
-            // ✅ CORREGIDO: Buscar precios por receta_id, no por recetaId
-            console.log(`🔍 Buscando precios para receta ID: ${variacion.receta.id}`);
-
             const preciosVenta = await dataSource.getRepository(PrecioVenta)
               .createQueryBuilder('pv')
               .leftJoinAndSelect('pv.moneda', 'moneda')
               .leftJoinAndSelect('pv.tipoPrecio', 'tipoPrecio')
-              .leftJoinAndSelect('pv.receta', 'receta') // ✅ NUEVO: Join con receta
-              .where('pv.receta.id = :recetaId', { recetaId: variacion.receta.id })
+              .where('pv.receta_presentacion_id = :rpId', { rpId: variacion.id })
               .andWhere('pv.activo = :activo', { activo: true })
               .orderBy('pv.principal', 'DESC') // Precio principal primero
               .addOrderBy('pv.created_at', 'DESC')
               .getMany();
-
-            console.log(`💰 Precios encontrados para receta ${variacion.receta.id}:`, preciosVenta.length);
 
             // Buscar el precio principal
             const precioPrincipal = preciosVenta.find(p => p.principal);
 
             return {
               ...variacion,
-              preciosVenta, // ✅ NUEVO: Incluir todos los precios de la receta
+              preciosVenta,
               precioPrincipal: precioPrincipal ? {
                 id: precioPrincipal.id,
                 valor: precioPrincipal.valor,
@@ -1763,16 +1752,14 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       .orderBy('sabor.nombre', 'ASC')
       .getMany();
 
-    // Cargar precios de venta para cada variación
+    // Cargar precios de venta por VARIACIÓN (receta_presentacion_id): precio por tamaño.
     const variacionesConPrecios = await Promise.all(
       variaciones.map(async (variacion) => {
-        if (!variacion.receta?.id) return { ...variacion, preciosVenta: [] };
-
         const preciosVenta = await dataSource.getRepository(PrecioVenta)
           .createQueryBuilder('pv')
           .leftJoinAndSelect('pv.moneda', 'moneda')
           .leftJoinAndSelect('pv.tipoPrecio', 'tipoPrecio')
-          .where('pv.receta_id = :recetaId', { recetaId: variacion.receta.id })
+          .where('pv.receta_presentacion_id = :rpId', { rpId: variacion.id })
           .andWhere('pv.activo = :activo', { activo: true })
           .orderBy('pv.principal', 'DESC')
           .getMany();

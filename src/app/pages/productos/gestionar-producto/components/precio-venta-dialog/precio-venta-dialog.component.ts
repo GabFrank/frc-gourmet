@@ -17,11 +17,15 @@ export interface PrecioVentaDialogData {
   entityName: string;
   entityType: 'presentacion' | 'variacion' | 'producto' | 'categoria' | 'otro';
 
-  // ✅ NUEVO: ID de la receta para variaciones (OBLIGATORIO para variaciones)
-  recetaId: number;
+  // ID de la receta (para recetas simples). Opcional.
+  recetaId?: number;
+
+  // ID de la RecetaPresentacion para VARIACIONES: el precio es por variación
+  // (sabor × tamaño), no por la receta base (que es compartida entre tamaños).
+  recetaPresentacionId?: number;
 
   // Relación específica para la base de datos
-  relationField: 'presentacionId' | 'recetaId' | 'productoId' | 'categoriaId' | 'entityId';
+  relationField: 'presentacionId' | 'recetaId' | 'recetaPresentacionId' | 'productoId' | 'categoriaId' | 'entityId';
 
   // Precios existentes (opcional)
   preciosExistentes?: any[];
@@ -350,9 +354,9 @@ export class PrecioVentaDialogComponent implements OnInit {
 
       // ✅ NUEVO: Manejar cualquier tipo de entidad
       if (this.data.entityId) {
-        // ✅ CORREGIDO: Para variaciones, usar recetaId directamente
+        // Para variaciones el precio va por RecetaPresentacion (precio por tamaño).
         if (this.data.entityType === 'variacion') {
-          precioData.recetaId = this.data.recetaId;
+          precioData.recetaPresentacionId = this.data.recetaPresentacionId ?? this.data.entityId;
         } else {
           // Para otras entidades, usar el campo de relación dinámico
           (precioData as any)[this.data.relationField] = this.data.entityId;
@@ -570,7 +574,8 @@ export class PrecioVentaDialogComponent implements OnInit {
     entityName: string,
     entityType: 'presentacion' | 'variacion' | 'producto' | 'categoria' | 'otro',
     options: {
-      recetaId: number; // ✅ OBLIGATORIO para variaciones
+      recetaId?: number;
+      recetaPresentacionId?: number; // Para variaciones (precio por tamaño)
       preciosExistentes?: any[];
       allowMultiplePrincipals?: boolean;
       showFilters?: boolean;
@@ -583,7 +588,7 @@ export class PrecioVentaDialogComponent implements OnInit {
     // Mapear tipo de entidad al campo de relación correcto
     const relationFieldMap: { [key: string]: any } = {
       'presentacion': 'presentacionId',
-      'variacion': 'recetaId',
+      'variacion': 'recetaPresentacionId',
       'producto': 'productoId',
       'categoria': 'categoriaId',
       'otro': 'entityId'
@@ -593,7 +598,8 @@ export class PrecioVentaDialogComponent implements OnInit {
       entityId,
       entityName,
       entityType,
-      recetaId: options.recetaId, // ✅ Ahora es obligatorio
+      recetaId: options.recetaId,
+      recetaPresentacionId: options.recetaPresentacionId ?? (entityType === 'variacion' ? entityId : undefined),
       relationField: relationFieldMap[entityType] || 'entityId',
       preciosExistentes: options.preciosExistentes || [],
       allowMultiplePrincipals: options.allowMultiplePrincipals || false,
