@@ -11,6 +11,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { Dispositivo } from 'src/app/database/entities/financiero/dispositivo.entity';
 import { Moneda } from 'src/app/database/entities/financiero/moneda.entity';
@@ -49,7 +50,8 @@ interface MonedaConfig {
     MatSelectModule,
     MatProgressSpinnerModule,
     MatTabsModule,
-    MatSlideToggleModule
+    MatSlideToggleModule,
+    MatSnackBarModule
   ]
 })
 export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
@@ -118,7 +120,8 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
     @Inject(MAT_DIALOG_DATA) public data: any,
     private formBuilder: FormBuilder,
     private repositoryService: RepositoryService,
-    private authService: AuthService
+    private authService: AuthService,
+    private snackBar: MatSnackBar
   ) {
     // Handle dialog data
     if (data) {
@@ -1322,6 +1325,7 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
                 () => {
                   this.loading = false;
                   this.cierreCompleted = true;
+                  this.imprimirTicketCierre();
                 },
           (error: any) => {
             console.error('Error updating conteo detalles:', error);
@@ -1336,6 +1340,7 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
         // No changes needed
               this.loading = false;
               this.cierreCompleted = true;
+              this.imprimirTicketCierre();
             }
     }, error => {
       console.error('Error creating conteo cierre:', error);
@@ -1345,6 +1350,29 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
         error: 'ERROR AL CREAR CONTEO DE CIERRE'
       });
     });
+  }
+
+  /**
+   * Imprime automáticamente el ticket de cierre de caja tras cerrar la caja.
+   * No bloquea el flujo: si no hay impresora o falla, solo muestra un aviso.
+   */
+  private imprimirTicketCierre(): void {
+    const cajaId = this.existingCaja?.id;
+    if (!cajaId) return;
+    const api = (window as any).api;
+    if (!api?.callIpc) return;
+    Promise.resolve(api.callIpc('print-cierre-caja', { cajaId }))
+      .then((res: any) => {
+        if (res?.ok) {
+          this.snackBar.open('Ticket de cierre enviado a la impresora', 'CERRAR', { duration: 3000 });
+        } else {
+          const msg = res?.errors?.[0]?.message || 'No se pudo imprimir el ticket de cierre';
+          this.snackBar.open(msg, 'CERRAR', { duration: 4000, panelClass: ['error-snackbar'] });
+        }
+      })
+      .catch((e: any) => {
+        console.error('Error imprimiendo ticket de cierre:', e);
+      });
   }
 
   private loadExistingCajaData(cajaId: number): void {
