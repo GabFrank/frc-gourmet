@@ -6,6 +6,7 @@ import { PublicApiService } from '../../core/public-api.service';
 import { CartService } from '../../core/cart.service';
 import { AuthService } from '../../core/auth.service';
 import { ConfigService } from '../../core/config.service';
+import { IconComponent } from '../../core/icon.component';
 import { TipoPedido } from '../../core/models';
 
 declare const L: any;
@@ -13,7 +14,7 @@ declare const L: any;
 @Component({
   selector: 'sf-checkout',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, IconComponent],
   templateUrl: './checkout.page.html',
   styleUrls: ['./checkout.page.scss'],
 })

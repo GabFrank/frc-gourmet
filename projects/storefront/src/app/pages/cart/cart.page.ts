@@ -2,26 +2,29 @@ import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, Router } from '@angular/router';
 import { CartService } from '../../core/cart.service';
+import { AppImgPipe } from '../../core/app-img.pipe';
+import { IconComponent } from '../../core/icon.component';
 
 @Component({
   selector: 'sf-cart',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, AppImgPipe, IconComponent],
   template: `
     <div class="sf-container cart-body">
       <h1 class="title">Tu pedido</h1>
 
       <div class="empty sf-card" *ngIf="cart.items.length === 0">
-        <div class="empty-ic">🛒</div>
+        <div class="empty-ic"><sf-icon name="cart" [size]="40"></sf-icon></div>
         <p>Tu carrito está vacío.</p>
         <a routerLink="/" class="sf-btn sf-btn--ghost">Ver la carta</a>
       </div>
 
       <div class="line" *ngFor="let it of cart.items">
+        <div class="line-photo" *ngIf="it.imageUrl | appImg as img" [style.background-image]="'url(' + img + ')'"></div>
         <div class="line-main">
           <div class="line-top">
             <span class="line-nombre">{{ it.nombreProducto }}</span>
-            <button class="line-del" (click)="cart.quitar(it.uid)" aria-label="Quitar">✕</button>
+            <button class="line-del" (click)="cart.quitar(it.uid)" aria-label="Quitar"><sf-icon name="x" [size]="16"></sf-icon></button>
           </div>
           <div class="line-perso sf-muted" *ngIf="cart.resumen(it)">{{ cart.resumen(it) }}</div>
           <div class="line-bottom">
@@ -48,12 +51,14 @@ import { CartService } from '../../core/cart.service';
     .cart-body { padding-bottom: 90px; }
     .title { font-size: 22px; font-weight: 800; margin: 4px 0 16px; }
     .empty { text-align: center; padding: 32px 16px; }
-    .empty-ic { font-size: 40px; margin-bottom: 8px; }
+    .empty-ic { color: var(--sf-text-muted); margin-bottom: 8px; display: flex; justify-content: center; }
     .empty p { color: var(--sf-text-muted); margin: 0 0 16px; }
-    .line { background: var(--sf-surface); border-radius: var(--sf-radius); box-shadow: var(--sf-shadow-card); padding: 14px; margin-bottom: 10px; }
+    .line { display: flex; gap: 12px; align-items: flex-start; background: var(--sf-surface); border-radius: var(--sf-radius); box-shadow: var(--sf-shadow-card); padding: 14px; margin-bottom: 10px; }
+    .line-photo { width: 56px; height: 56px; border-radius: var(--sf-radius-sm); background-size: cover; background-position: center; background-color: var(--sf-surface-alt); flex-shrink: 0; }
+    .line-main { flex: 1; min-width: 0; }
     .line-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
     .line-nombre { font-weight: 600; font-size: 15px; }
-    .line-del { border: none; background: none; color: var(--sf-text-muted); font-size: 15px; }
+    .line-del { border: none; background: none; color: var(--sf-text-muted); display: inline-flex; align-items: center; padding: 0; }
     .line-perso { font-size: 13px; margin-top: 4px; line-height: 1.4; }
     .line-bottom { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
     .sf-stepper.sm button { width: 32px; height: 32px; font-size: 18px; }

@@ -6,12 +6,13 @@ import { CartService } from '../../core/cart.service';
 import { MenuService } from '../../core/menu.service';
 import { ConfigService } from '../../core/config.service';
 import { AppImgPipe } from '../../core/app-img.pipe';
+import { IconComponent } from '../../core/icon.component';
 import { MenuProducto, MenuOpcion, MenuAdicional, MenuObservacion } from '../../core/models';
 
 @Component({
   selector: 'sf-producto-detalle',
   standalone: true,
-  imports: [CommonModule, FormsModule, AppImgPipe],
+  imports: [CommonModule, FormsModule, AppImgPipe, IconComponent],
   templateUrl: './producto-detalle.page.html',
   styleUrls: ['./producto-detalle.page.scss'],
 })

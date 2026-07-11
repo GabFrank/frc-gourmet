@@ -4,20 +4,21 @@ import { RouterOutlet, RouterLink } from '@angular/router';
 import { CartService } from './core/cart.service';
 import { AuthService } from './core/auth.service';
 import { ConfigService } from './core/config.service';
+import { IconComponent } from './core/icon.component';
 
 @Component({
   selector: 'sf-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink],
+  imports: [CommonModule, RouterOutlet, RouterLink, IconComponent],
   template: `
     <header class="topbar">
       <a routerLink="/" class="brand">{{ config.config.nombreComercio || 'Pedí Online' }}</a>
       <nav class="nav">
         <a routerLink="/mis-pedidos" class="nav-link" *ngIf="auth.isAuthenticated" aria-label="Mis pedidos">
-          <span class="ic">🧾</span>
+          <sf-icon name="receipt" [size]="21"></sf-icon>
         </a>
         <a routerLink="/cuenta" class="nav-link" *ngIf="auth.isAuthenticated" aria-label="Cuenta">
-          <span class="ic">👤</span>
+          <sf-icon name="user" [size]="21"></sf-icon>
         </a>
         <a routerLink="/login" class="nav-link nav-login" *ngIf="!auth.isAuthenticated">Ingresar</a>
       </nav>
