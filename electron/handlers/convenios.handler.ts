@@ -16,6 +16,8 @@ import { CobroConsolidadoEstado, CobroConsolidadoFuente } from '../../src/app/da
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
+import { MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
+import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { ensurePermission } from '../utils/auth.utils';
@@ -489,6 +491,13 @@ export function registerConveniosHandlers(
         if (!cb) throw new Error('Cuenta bancaria no encontrada');
         cb.saldo = +(Number(cb.saldo) + totalGeneral).toFixed(2);
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId,
+          tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
+          monto: totalGeneral,
+          observacion: `COBRO CONSOLIDADO #${cobroSaved.id} - ${convenio.nombre}`,
+          responsable: cu,
+        });
       }
 
       cobroSaved.montoTotal = +totalGeneral.toFixed(2);

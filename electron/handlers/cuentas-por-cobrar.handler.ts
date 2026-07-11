@@ -12,6 +12,8 @@ import {
 } from '../../src/app/database/entities/financiero/cuentas-por-cobrar-enums';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
+import { MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
+import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
@@ -360,6 +362,13 @@ export function registerCuentasPorCobrarHandlers(
         if (!cb) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
         cb.saldo = +(Number(cb.saldo) + montoBanco).toFixed(2);
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId,
+          tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
+          monto: montoBanco,
+          observacion: observacion ? `${obsBase} — ${observacion}` : obsBase,
+          responsable: cu,
+        });
       } else {
         const movCM = queryRunner.manager.create(CajaMayorMovimiento, {
           cajaMayor: { id: cajaMayorId } as any,
@@ -454,6 +463,13 @@ export function registerCuentasPorCobrarHandlers(
         if (cb) {
           cb.saldo = +(Number(cb.saldo) - montoBancoRevertir).toFixed(2);
           await queryRunner.manager.save(CuentaBancaria, cb);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: ultimoPago.cuentaBancariaId,
+            tipo: MovimientoBancarioTipo.AJUSTE_NEGATIVO,
+            monto: montoBancoRevertir,
+            observacion: `ANULACION COBRO CPC CUOTA #${cuotaId} - ${motivo}`,
+            responsable: cu,
+          });
         }
 
         cuota.montoCobrado = +(Math.max(0, Number(cuota.montoCobrado) - montoAnuladoBanco)).toFixed(2);
