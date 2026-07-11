@@ -300,18 +300,32 @@ Auto-refresh periódico (`getPdvMesasActivas()`) para detectar cambios concurren
 
 ### 3. Agregar producto
 
-User busca → dialog `producto-search-dialog` → selecciona producto.
+User busca (`searchForm`: `cantidad` + `searchTerm`) → dialog `producto-search-dialog` → selecciona producto. Atajo de cantidad **`N*`** en el buscador (ej: `3*` → cantidad 3). Antes de abrir el buscador, `openProductSearchDialog()` intenta `tryHandleBalanzaScan()` (etiqueta de balanza, ver buffet). Tras agregar, `resetBuscador()` **resetea la cantidad a 1**.
 
-Si producto tiene receta: abre `PersonalizarProductoDialog` (750px, 2 columnas):
-- Izquierda: ingredientes opcionales (chips verde/rojo toggle), intercambiables (chip naranja + select alternativas), fijos (texto compacto).
-- Derecha: adicionales con precio (chips verde con +valor), observaciones predefinidas (chips celeste), observación libre.
-- Footer: cantidad +/-, desglose precio, total.
+Despacho por tipo en `addProduct()`:
+- **BUFFET_POR_PESO** → `addBuffetPorPesoItem()` (ver sección Buffet por peso). NO abre buscador si vino de escaneo de balanza.
+- **ELABORADO_CON_VARIACION** → `seleccionar-variacion-dialog` (3 pasos genéricos con labels configurables PIZZA/DEFAULT) → `addVariacionItem()` (crea VentaItem + un `VentaItemSabor` por sabor).
+- Producto **con receta** (ELABORADO_SIN_VARIACION) → `PersonalizarProductoDialog` (750px, 2 columnas):
+  - Izquierda: ingredientes opcionales (chips verde/rojo toggle), intercambiables (chip naranja + select alternativas), fijos (texto compacto).
+  - Derecha: adicionales con precio (chips verde con +valor), observaciones predefinidas (chips celeste), observación libre.
+  - Footer: cantidad +/-, desglose precio, total.
+- **COMBO / RETAIL** sin receta: agregar directo.
 
-Si tipo ELABORADO_CON_VARIACION: abre `seleccionar-variacion-dialog` (3 pasos genéricos con labels configurables PIZZA/DEFAULT).
+Si no hay mesa/comanda/venta-rápida seleccionada → `showMesaSelectionDialog()`. `createVentaItem(...)` con `precioAdicionales` denormalizado; crea sub-entidades en cascada.
 
-Si tipo COMBO o RETAIL: agregar directo.
+**Atajos de accesos rápidos**: `onAtajoItemClick()` abre `AtajoProductosDialogComponent` (55%×70%) pasando la cantidad actual del buscador.
 
-`createVentaItem(...)` con `precioAdicionales` denormalizado. Crea sub-entidades en cascada.
+### Buffet por peso (venta por kilo)
+
+Producto tipo **`BUFFET_POR_PESO`** (Fases 1-4, merged 2026). Flujo `addBuffetPorPesoItem()`:
+- Resuelve el precio vigente con `resolverPrecioVigente` (**precios programados por día/horario**).
+- Abre `PesajeBuffetDialogComponent` (peso bruto/tara → neto).
+- Persiste `VentaItem` con `cantidad = kg neto`, `precioVentaUnitario = precio/kg efectivo` (incluye tope "buffet libre"), y los campos de peso reales: `pesoBruto`, `pesoTara`, `pesoNeto` (gramos), `precioPorKg`, `aplicoLibre`.
+- En la tabla se ve como un item normal (cantidad = kg); no hay columnas de peso propias.
+
+**Escaneo de etiqueta EAN-13 de balanza** (`tryHandleBalanzaScan` → `parseEtiquetaBalanza`): usa config de `PdvConfig` (`balanzaPrefijo` def '2', `balanzaModo` PESO/PRECIO, `balanzaFactorPeso`). Si el código resuelve a un producto buffet, agrega el item con el peso de la etiqueta sin abrir el buscador.
+
+**Backend**: descuento de stock por `processBuffetPorPeso` (híbrido: por receta si `descuentaPorReceta`, si no por kg neto del propio producto; stock se carga vía Producción). Métricas en `get-buffet-metricas` → dashboard buffet. Detalle → `docs/buffet-por-kilo.md`.
 
 ### 4. Editar item
 
@@ -325,27 +339,42 @@ Cambia estado a CANCELADO. `canceladoPor`, `horaCancelado`. NO se borra. NO suma
 
 ### 6. Cobrar venta
 
-`cobrar-venta-dialog` (80vw × 80vh):
-- Top: totales por moneda con banderas y cotizaciones (`MonedaCambio.compraLocal`).
-- Izq (55%): tabla de líneas de pago.
-- Der (45%): botones moneda (F1-F3) + forma pago (F4-F7) + input valor + indicador PAGO/VUELTO.
-- F9: Descuento/Aumento global (con `descuentoAutorizadoPor`).
-- F10: Finalizar.
+`cobrar-venta-dialog` (dimensión la fija quien lo abre; ~80vw × 80vh). Componente en `shared/components/cobrar-venta-dialog/`. **El cobro NO crea entidades en `ventas.handler.ts`** — usa `createPago`/`createPagoDetalle` (que viven en `compras.handler.ts`, compartidos) + `updateVenta(CONCLUIDA)`.
+
+Layout:
+- Top: barra de cliente (autocomplete + "Nuevo cliente", asignable en vivo con `updateVenta`) y totales por moneda con banderas y cotizaciones (`MonedaCambio.compraLocal`).
+- Izq (55%): tabla de líneas de pago (`numero, moneda, formaPago, valor, tipo, actions`). Menú por línea: observación, duplicar, editar valor, eliminar (`edit-detalle-dialog`).
+- Der (45%): botones moneda (**F1-F3**) + forma pago (**F4-F7**) + selector Máquina POS + selector Cuenta Bancaria + input valor + indicador PAGO/VUELTO + bloque división de cuenta.
+
+**Atajos**: F1-F3 monedas, F4-F7 formas de pago, **F9** Descuento/Aumento (`ajuste-cobrar-dialog`), **F10** Finalizar (sin ticket), **F11** Finalizar + Ticket. No hay F8.
+
+**Botones de acción**: Finalizar (F10) · Finalizar + Ticket (F11) · Cobro Parcial · **Cobrar a crédito** · Descuento/Aumento (F9) · **Factura** · Cancelar.
 
 Soporta:
-- Multi-pago (varias formas de pago en la misma venta).
-- Multi-moneda (líneas en distintas monedas, vuelto en cualquier moneda).
-- Cobro parcial (guarda líneas sin cerrar venta).
-- División de cuenta (1-20 personas, auto-calcula).
-- "Ver costo" (requiere credenciales).
-- Cobro rápido (F2): cobra total en moneda principal + forma principal con un click.
+- Multi-pago (varias formas de pago) y multi-moneda (vuelto en cualquier moneda). Cada línea se persiste al agregarla.
+- **Tolerancia de redondeo** en monedas con decimales (`toleranciaRedondeoPrincipal()`): un residuo menor a la unidad mínima convertida se considera saldo cero (habilita Finalizar aunque pagos en R$/USD no cuadren exacto en Gs).
+- Cobro parcial (`{success:false, partial:true}` — deja Pago ABIERTO con detalles ya persistidos, no cierra venta).
+- División de cuenta (1-20 personas): **solo informativa** — autocompleta el input con valor/persona; sugiere registrar cada pago con nombre en observación. No divide realmente ni crea múltiples pagos.
+- **Ver costo** (protegido por credenciales vía `edit-detalle-dialog` modo password + `validateCredentials`).
 
-Al confirmar:
-- `Pago` + `PagoDetalle[]` (legacy entities, todavía se usan en ventas).
-- `Venta.estado = CONCLUIDA`, `fechaCierre`, `pago_id`.
-- `PdvMesa.estado = DISPONIBLE`, `venta = null`.
+**Máquina POS / Cuenta bancaria por forma de pago** (`FormasPago.maquinasPos` / `.cuentasBancarias`): el selector se muestra si hay ≥1 y es **obligatorio** si hay ≥2 (con 1 se auto-selecciona). Elegir POS/cuenta **ajusta la moneda** del pago a la de la cuenta bancaria asociada. Al finalizar: cada línea PAGO con POS → `createAcreditacionPos`; con cuenta bancaria → `acreditarTransferenciaBancaria` (ambos no bloqueantes).
+
+**Ajuste global (`ajuste-cobrar-dialog`, F9)**: descuento|aumento, modo %|monto (chips 5/10/15/20/25/50%), **redondeo a múltiplos de 500 Gs** (arriba/abajo/exacto), **alerta si el nuevo total < costo** (venta a pérdida). Devuelve `{valor, motivo}` (valor POSITIVO = descuento, NEGATIVO = aumento). Se persiste como `PagoDetalle` tipo DESCUENTO/AUMENTO. **No pide password** (la única autorización por credenciales del flujo es "Ver costo").
+
+**Cobro a crédito (`cobrar-credito-dialog`)**: requiere cliente asignado con `credito` habilitado y saldo pendiente. Configura cuotas (cantidad, frecuencia 30/15/7 días, fecha inicio) con preview de saldo proyectado vs `limite_credito`. Pregunta si imprimir pagaré (`imprimir-pagare-dialog`). Llama `cobrarVentaCredito(payload)` (handler en **`cuentas-por-cobrar.handler.ts`**), que en una transacción: get-or-create `FormaPago` CREDITO (`movimentaCaja=false`), crea Pago PAGADO + PagoDetalle, cierra la venta CONCLUIDA, crea la **CuentaPorCobrar (CREDITO_VENTA)** + cuotas, imprime ticket/pagaré. Si excede el límite devuelve `{requiereConfirmacion:true}` → confirmación → reintento con `forzar`. El front NO crea Pago/PagoDetalle por este camino.
+
+**Factura**: botón abre `FacturarDialogComponent` (facturación electrónica precargada con cliente e items). NO finaliza el cobro.
+
+**Gate por dispositivo (caja compartida multi-dispositivo)**: `createPago` con `validarDispositivoCaja:true` valida que el dispositivo actual sea dueño de la caja; si difiere lanza `COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO`. El PdV además desactiva el botón Cobrar (`puedeCobrar`) en dispositivos que no son dueños de la caja: pueden lanzar items pero no cobrar.
+
+**Cobro rápido (F2, en `pdv.component`)**: cobra total en moneda + forma de pago principal con un click (crea Pago/PagoDetalle "COBRO RAPIDO", concluye la venta, procesa stock).
+
+Al confirmar contado (`finalizar`):
+- `Pago.estado = PAGADO`; `Venta.estado = CONCLUIDA`, `formaPago` = FP dominante, `pago`, `fechaCierre`. Flag interno `__imprimirTicketVenta` (F10=false / F11=true) controla la impresión del ticket **por encima** de `PdvConfig.autoImprimirTicketVenta`.
+- `PdvMesa.estado = DISPONIBLE`, `venta = null` (comanda vuelve a DISPONIBLE si aplica).
 - `procesarStockVenta(ventaId)` (fire-and-forget — si falla, venta NO se revierte).
-- Auto-impresión de ticket de venta si `PdvConfig.autoImprimirTicketVenta=true`: `updateVenta` dispara `printVentaTicketInternal(ventaId)` (ver `cocina-impresion.md`).
+- Auto-impresión de ticket vía `printVentaTicketInternal(ventaId)` (ver `cocina-impresion.md`).
+- Hook KDS en `updateVenta`: CONCLUIDA → `ComandaItem` activos a ENTREGADO; CANCELADA → a CANCELADO.
 
 ### 7. Cancelar venta completa
 
@@ -415,15 +444,34 @@ PdV principal:
 Cobrar dialog:
 - F1/F2/F3: monedas
 - F4/F5/F6/F7: formas de pago
-- F9: descuento/aumento
-- F10: finalizar
+- F9: descuento/aumento (`ajuste-cobrar-dialog`)
+- F10: finalizar (sin ticket)
+- F11: finalizar + imprimir ticket
 
-## Página principal: `pdv.component.ts` (~2600 líneas)
+Guard: los atajos del PdV principal NO disparan si hay un diálogo abierto ni si el host no es visible (evita fugas entre pestañas).
 
-`src/app/pages/ventas/pdv/`. Sub-componentes:
-- `utilitarios-dialog/`: utilidades extra.
+## Utilitarios PdV (retiros, gastos, últimas ventas)
 
-Patrón: master con paneles (mesas, tabla items, totales por moneda).
+Botón **UTILITARIOS** → `utilitarios-dialog` (600px, requiere caja abierta). Grid de tarjetas:
+- **Retiro de Caja** → `create-retiro-caja-dialog`.
+- **Gastos** → `gasto-caja-dialog`: gasto pagado con efectivo de la caja del PdV (descuenta del cajón, aparece en el cierre). Campos: categoría (opcional), descripción, monto, moneda, forma de pago (preselecciona EFECTIVO), fecha. Handler `create-gasto-caja` (**`gastos-caja.handler.ts`**: `create-gasto-caja`/`get-gastos-caja`/`anular-gasto-caja`).
+- **Últimas Ventas** → `ultimas-ventas-dialog`: últimas ventas de la caja (`getVentasByCaja`). Menú por venta: ver detalle (`detalle-venta-dialog`), reimprimir ticket (`print-venta-ticket`), reimprimir pagaré si es crédito (`get-cpc-by-venta` → `print-pagare-cpc-ticket`), cancelar venta (revierte stock si estaba CONCLUIDA).
+- **Cierre Parcial** — próximamente (deshabilitado).
+
+## Página principal: `pdv.component.ts` (~2745 líneas)
+
+`src/app/pages/ventas/pdv/`. Standalone. Sub-componentes:
+- `utilitarios-dialog/`: lanzador (retiros, gastos, últimas ventas).
+- `gasto-caja-dialog/`: registro de gasto pagado con efectivo de caja.
+- `ultimas-ventas-dialog/`: últimas ventas de la caja con acciones.
+
+Patrón: master con 2 paneles. Izq: totales/saldos por moneda → tarjeta de contexto (delivery/venta-rápida/mesa/comanda) → **tabla de items** → buscador → botones COBRAR/COBRO RÁPIDO/CANCELAR. Der: tarjeta de caja → accesos rápidos (atajos) → tabs MESAS/COMANDAS con filtro de sector → botones inferiores (TRANSFERIR/MOVER, IMPRIMIR, DELIVERY, UTILITARIOS).
+
+**Tabla de items** (`ventaItemsDataSource`, `multiTemplateDataRows`): columnas `['productoNombre','cantidad','precio','total','actions']` (+ `'select'` al frente en modo mover items). `productoNombre` muestra `ensambladoDescripcion || producto.nombre` + icono `tune` si tiene personalizaciones. Fila con clases `item-cancelado` / `item-personalizado`; click expande el detalle (`expandedDetail`: chips de removidos/intercambiados/adicionales/observaciones/descuento + metadata). Menú de acciones del item: **Personalizar / Editar / Cancelar** (NO hay Eliminar en el menú, aunque `removeItem()` existe).
+
+**Apertura de caja (`inicializarCaja`)**: 1 caja abierta → automática; varias → `seleccionar-caja-dialog`; ninguna → ofrecer abrir (`create-caja-dialog`). Si se descarta, se cierra la pestaña PdV.
+
+**Polling**: `setInterval` cada **1 segundo** refresca mesas + comandas silenciosamente (sin pisar selección); otro cada 60s actualiza el tiempo de caja abierta.
 
 ## Handler: `ventas.handler.ts` (~3000 líneas)
 
@@ -444,12 +492,17 @@ Patrón: master con paneles (mesas, tabla items, totales por moneda).
 - PdvAtajoGrupo / PdvAtajoItem / PdvAtajoItemProducto
 - VentaItemSabor
 
-**Hooks de auto-impresión** (no son IPC, son helpers internos): `createVentaItem`/`updateVentaItem` llaman `autoPrintComandaIfNeeded`; `updateVenta(CONCLUIDA)` dispara el ticket de venta. Ambos respetan flags de `PdvConfig` y van por `documentos-tickets.handler.ts`. Ruteo de impresión por sector vía handlers `producto-sectores.handler.ts` y `sectores-impresoras.handler.ts`. KDS en `kds.handler.ts`.
+**El cobro NO vive en `ventas.handler.ts`.** `createPago`/`createPagoDetalle`/`updatePago` están en **`compras.handler.ts`** (compartidos compras+ventas; `createPago` con flag `validarDispositivoCaja` para el gate por dispositivo). El cobro a crédito (`cobrarVentaCredito`, `cobrar-cpc-cuota`, `get-cpc-by-venta`) en **`cuentas-por-cobrar.handler.ts`**. Gastos de caja en **`gastos-caja.handler.ts`**. Convenios/cobro consolidado en **`convenios.handler.ts`**. Acreditaciones POS y transferencias bancarias en **`banking.handler.ts`**. `ventas.handler.ts` cierra la venta con `updateVenta(CONCLUIDA)`.
+
+**Permisos**: `ensurePermission(..., 'VENTAS_PDV')` es **selectivo** — solo en `cerrarVentasAbiertasMesa`, `updateVenta`, `deleteVenta`. El resto de handlers de este archivo NO chequea permiso explícito (confía en el gating del frontend).
+
+**Hooks de auto-impresión** (no son IPC, son helpers internos): `createVentaItem`/`updateVentaItem` llaman `autoPrintComandaIfNeeded` (delay 2500ms) + `startRetryComandaWorker` (setInterval 5s reintenta comandas no impresas); `updateVenta(CONCLUIDA)` dispara el ticket de venta. Ambos respetan flags de `PdvConfig` y van por `documentos-tickets.handler.ts`. Ruteo de impresión por sector (sectores de IMPRESION ≠ sectores de MESA) vía `producto-sectores.handler.ts` y `sectores-impresoras.handler.ts`. KDS en `kds.handler.ts`.
 
 → Lista completa en [reference/handlers-index.md](../reference/handlers-index.md).
 
 ## Funcionalidades documentadas
 
-→ Detalle completo en `docs/guia-funcionamiento-punto-de-venta.md` (727 líneas, 20 secciones).
+→ Detalle completo (manual funcional por función, con estado de implementación) en `docs/guia-funcionamiento-punto-de-venta.md`.
+→ Buffet por kilo (venta por peso): `docs/buffet-por-kilo.md`.
 → Plan de implementación: `docs/PLAN-IMPLEMENTACION-PDV.md`.
-→ Errores conocidos: `docs/testing/ERRORES-PDV.md`.
+→ Errores conocidos: `docs/testing/ERRORES-PDV.md`; checklist de testing: `docs/testing/TESTING-CHECKLIST-PDV.md`.
