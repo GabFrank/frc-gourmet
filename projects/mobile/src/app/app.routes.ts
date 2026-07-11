@@ -98,6 +98,13 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/kds/kds.page').then((m) => m.KdsPage),
   },
 
+  // Subida por QR — pública (sin authGuard): el token de sesión en la query es
+  // la credencial. Se abre al escanear el QR del desktop (`/upload?session=<id>`).
+  {
+    path: 'upload',
+    loadComponent: () => import('./pages/upload/qr-upload.page').then((m) => m.QrUploadPage),
+  },
+
   // --- Formularios full-screen (fuera del shell) ---
   {
     path: 'ventas/mesas/:id/pedido',

@@ -9,6 +9,8 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { QrUploadDialogComponent } from 'src/app/shared/components/qr-upload-dialog/qr-upload-dialog.component';
+import { QrUploadedFile } from 'src/app/database/repository.service';
 import { mediumUrl, resolveAppUrl } from 'src/app/shared/utils/image-url.util';
 
 export type FileUploadCarpeta =
@@ -63,6 +65,8 @@ export class FileUploadComponent {
   @Input() confirmRemove = true;
   /** Deshabilitado. */
   @Input() disabled = false;
+  /** Mostrar el botón de subir por QR (desde el celular vía la PWA). */
+  @Input() enableQr = true;
 
   @Output() uploaded = new EventEmitter<FileUploadResult>();
   @Output() removed = new EventEmitter<void>();
@@ -102,6 +106,39 @@ export class FileUploadComponent {
   triggerFileInput(): void {
     if (this.disabled || this.uploading) return;
     this.fileInput.nativeElement.click();
+  }
+
+  /**
+   * Abre el diálogo de QR: el usuario escanea con el celular y sube la
+   * foto/archivo desde la PWA. Al recibirlo, se comporta igual que una subida
+   * local (setea `currentUrl` y emite `(uploaded)` con el primer archivo).
+   */
+  async openQrUpload(): Promise<void> {
+    if (this.disabled || this.uploading) return;
+    const ref = this.dialog.open(QrUploadDialogComponent, {
+      data: {
+        carpeta: this.carpeta,
+        accept: this.accept,
+        maxSizeMB: this.maxSizeMB,
+        multiple: false,
+      },
+      width: '420px',
+      maxWidth: '95vw',
+    });
+    const files: QrUploadedFile[] | undefined = await firstValueFrom(ref.afterClosed());
+    const file = files?.[0];
+    if (!file) return;
+    this.currentUrl = file.url;
+    this.lastFileName = file.fileName;
+    this.lastMimeType = file.mimeType;
+    this.uploaded.emit({
+      url: file.url,
+      fileName: file.fileName,
+      mimeType: file.mimeType,
+      tamanoBytes: file.tamanoBytes,
+      thumbUrl: file.thumbUrl,
+      mediumUrl: file.mediumUrl,
+    });
   }
 
   async onFileSelected(event: Event): Promise<void> {

@@ -25,7 +25,7 @@
     "build": "npm run electron:serve-tsc && ng build --base-href ./",
     "build:mobile": "ng build mobile",
     "build:dev": "npm run build -- -c dev && npm run build:mobile",
-    "build:prod": "npm run build -- -c production && npm run build:mobile",
+    "build:prod": "npm run build -- -c production && npm run build:mobile && npm run build:storefront",
     "check": "npm run electron:serve-tsc && ng build --configuration production --base-href ./",
     "ng:serve": "ng serve --port 4201",
     "electron:serve-tsc": "tsc -p tsconfig.electron.json",
@@ -180,7 +180,8 @@
       "**/node_modules/sqlite3/**",
       "**/node_modules/keytar/**",
       "**/node_modules/@napi-rs/canvas/**",
-      "dist/mobile/**"
+      "dist/mobile/**",
+      "dist/storefront/**"
     ],
     "publish": [
       {

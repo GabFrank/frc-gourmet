@@ -12,8 +12,10 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
-import { RepositoryService } from '../../../../database/repository.service';
+import { RepositoryService, QrUploadedFile } from '../../../../database/repository.service';
+import { QrUploadDialogComponent } from '../../../../shared/components/qr-upload-dialog/qr-upload-dialog.component';
 import { FacturaPlantilla } from '../../../../database/entities/facturacion/factura-plantilla.entity';
 import {
   CATALOGO_COLUMNAS_ITEM,
@@ -42,6 +44,7 @@ import { buildDocDefinition, loadPdfMake, resolveVariable, FacturaRenderContext 
     MatTooltipModule,
     MatExpansionModule,
     MatSnackBarModule,
+    MatDialogModule,
   ],
   templateUrl: './factura-plantilla-designer.component.html',
   styleUrls: ['./factura-plantilla-designer.component.scss'],
@@ -106,6 +109,7 @@ export class FacturaPlantillaDesignerComponent {
   constructor(
     private repositoryService: RepositoryService,
     private snackBar: MatSnackBar,
+    private dialog: MatDialog,
   ) {
     const map = new Map<string, VariableCatalogo[]>();
     for (const v of CATALOGO_VARIABLES) {
@@ -334,6 +338,29 @@ export class FacturaPlantillaDesignerComponent {
       this.recomputeBg();
     };
     reader.readAsDataURL(file);
+  }
+
+  /** Subir la imagen de fondo desde el celular (QR). Se guarda como base64 en la plantilla. */
+  async onBackgroundFromQr(): Promise<void> {
+    if (!this.plantilla) return;
+    const ref = this.dialog.open(QrUploadDialogComponent, {
+      data: { carpeta: 'producto-images', accept: 'image/*', maxSizeMB: 5, multiple: false },
+      width: '420px',
+      maxWidth: '95vw',
+    });
+    const files: QrUploadedFile[] | undefined = await firstValueFrom(ref.afterClosed());
+    const f = files?.[0];
+    if (!f) return;
+    try {
+      const { base64, mimeType } = await firstValueFrom(this.repositoryService.readFileBase64(f.url));
+      this.plantilla.backgroundImageUrl = `data:${mimeType};base64,${base64}`;
+      this.ensureBackground();
+      this.recomputeBg();
+      this.repositoryService.deleteFile(f.url).subscribe({ error: () => { /* best-effort */ } });
+    } catch (e) {
+      console.error(e);
+      this.snackBar.open('No se pudo leer la imagen subida.', 'Cerrar', { duration: 3500 });
+    }
   }
 
   clearBackground(): void {

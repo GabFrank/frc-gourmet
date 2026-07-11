@@ -22,6 +22,8 @@ import { CreateEditCompraComponent } from '../create-edit-compra/create-edit-com
 import { CompraDetalleComponent } from '../compra-detalle/compra-detalle.component';
 import { TableToolbarComponent } from 'src/app/shared/components/table-toolbar/table-toolbar.component';
 import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
+import { QrUploadDialogComponent } from 'src/app/shared/components/qr-upload-dialog/qr-upload-dialog.component';
+import { RepositoryService, QrUploadedFile } from 'src/app/database/repository.service';
 
 @Component({
   selector: 'app-list-factura-imports',
@@ -76,6 +78,7 @@ export class ListFacturaImportsComponent implements OnInit {
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
     private tabsService: TabsService,
+    private repository: RepositoryService,
   ) {}
 
   ngOnInit(): void {
@@ -153,6 +156,40 @@ export class ListFacturaImportsComponent implements OnInit {
       this.snackBar.open('Procesando con IA, esto puede tardar 10-30s...', 'Cerrar', { duration: 5000 });
       const proc = await firstValueFrom(this.service.process(pick.filePath));
       this.importing = false;
+      if (!proc.success || !proc.documentoId) {
+        this.snackBar.open('Error al procesar: ' + (proc.error || 'desconocido'), 'Cerrar', { duration: 7000 });
+        this.load();
+        return;
+      }
+      this.revisar(proc.documentoId);
+    } catch (e: any) {
+      this.importing = false;
+      this.snackBar.open('Error: ' + e?.message, 'Cerrar', { duration: 6000 });
+    }
+  }
+
+  /**
+   * Importar una factura sacándole una foto o subiéndola desde el celular (QR).
+   * El archivo llega al bucket `factura-imports`; se procesa por su app:// URL y
+   * luego se borra el temporal (el procesamiento ya copió el archivo definitivo).
+   */
+  async nuevaImportacionQr(): Promise<void> {
+    if (this.importing) return;
+    const ref = this.dialog.open(QrUploadDialogComponent, {
+      data: { carpeta: 'factura-imports', accept: 'image/*,application/pdf', maxSizeMB: 5, multiple: false },
+      width: '420px',
+      maxWidth: '95vw',
+    });
+    const files: QrUploadedFile[] | undefined = await firstValueFrom(ref.afterClosed());
+    const f = files?.[0];
+    if (!f) return;
+    try {
+      this.importing = true;
+      this.snackBar.open('Procesando con IA, esto puede tardar 10-30s...', 'Cerrar', { duration: 5000 });
+      const proc = await firstValueFrom(this.service.processFromUrl(f.url));
+      this.importing = false;
+      // Limpiar el temporal subido (el proceso ya copió su propia versión al bucket).
+      this.repository.deleteFile(f.url).subscribe({ error: () => { /* best-effort */ } });
       if (!proc.success || !proc.documentoId) {
         this.snackBar.open('Error al procesar: ' + (proc.error || 'desconocido'), 'Cerrar', { duration: 7000 });
         this.load();

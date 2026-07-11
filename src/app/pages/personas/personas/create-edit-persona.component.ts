@@ -11,7 +11,10 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
-import { RepositoryService } from '../../../database/repository.service';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatDialog } from '@angular/material/dialog';
+import { RepositoryService, QrUploadedFile } from '../../../database/repository.service';
+import { QrUploadDialogComponent } from '../../../shared/components/qr-upload-dialog/qr-upload-dialog.component';
 import { resolveAppUrl } from '../../../shared/utils/image-url.util';
 import { Persona } from '../../../database/entities/personas/persona.entity';
 import { DocumentoTipo } from '../../../database/entities/personas/documento-tipo.enum';
@@ -35,6 +38,7 @@ import { firstValueFrom } from 'rxjs';
     MatProgressSpinnerModule,
     MatDatepickerModule,
     MatNativeDateModule,
+    MatTooltipModule,
     ReactiveFormsModule
   ],
   templateUrl: './create-edit-persona.component.html',
@@ -52,13 +56,16 @@ export class CreateEditPersonaComponent implements OnInit {
   // Image upload properties
   selectedImageFile: File | null = null;
   imagePreviewUrl: string | null = null;
+  // URL app:// del archivo ya subido por QR desde el celular (ya está en disco).
+  qrUploadedUrl: string | null = null;
   maxImageSize = 5 * 1024 * 1024; // 5MB
 
   constructor(
     private dialogRef: MatDialogRef<CreateEditPersonaComponent>,
     @Inject(MAT_DIALOG_DATA) public data: { persona?: Persona },
     private fb: FormBuilder,
-    private repositoryService: RepositoryService
+    private repositoryService: RepositoryService,
+    private dialog: MatDialog
   ) {
     this.personaForm = this.fb.group({
       nombre: ['', [Validators.required]],
@@ -147,7 +154,8 @@ export class CreateEditPersonaComponent implements OnInit {
     }
     
     this.selectedImageFile = file;
-    
+    this.qrUploadedUrl = null; // un archivo local reemplaza al subido por QR
+
     // Create preview URL
     const reader = new FileReader();
     reader.onload = () => {
@@ -156,6 +164,22 @@ export class CreateEditPersonaComponent implements OnInit {
     reader.readAsDataURL(file);
   }
   
+  /** Abre el diálogo de QR para subir la foto desde el celular (bucket profile-images). */
+  async openQrUpload(): Promise<void> {
+    const ref = this.dialog.open(QrUploadDialogComponent, {
+      data: { carpeta: 'profile-images', accept: 'image/*', maxSizeMB: 5, multiple: false },
+      width: '420px',
+      maxWidth: '95vw',
+    });
+    const files: QrUploadedFile[] | undefined = await firstValueFrom(ref.afterClosed());
+    const file = files?.[0];
+    if (!file) return;
+    this.selectedImageFile = null;
+    this.qrUploadedUrl = file.url;
+    this.imagePreviewUrl = file.url; // app:// → displayImageUrl lo resuelve
+    this.personaForm.patchValue({ imageUrl: file.url });
+  }
+
   removeImage(): void {
     // If we have an existing image URL and we're editing, delete the image
     if (this.isEditing && this.data.persona && this.data.persona.imageUrl && 
@@ -173,6 +197,7 @@ export class CreateEditPersonaComponent implements OnInit {
     
     this.selectedImageFile = null;
     this.imagePreviewUrl = null;
+    this.qrUploadedUrl = null;
     this.personaForm.patchValue({ imageUrl: null });
   }
 
@@ -221,8 +246,17 @@ export class CreateEditPersonaComponent implements OnInit {
       // Handle image changes
       const oldImageUrl = this.isEditing && this.data.persona ? this.data.persona.imageUrl : null;
       
+      // La imagen ya fue subida por QR desde el celular (ya está en disco).
+      if (this.qrUploadedUrl) {
+        personaData.imageUrl = this.qrUploadedUrl;
+        if (oldImageUrl && oldImageUrl !== this.qrUploadedUrl && oldImageUrl.startsWith('app://')) {
+          this.repositoryService.deleteProfileImage(oldImageUrl).subscribe({
+            next: (success: boolean) => console.log('Old image deleted:', success),
+            error: (error: any) => console.error('Error deleting old image:', error)
+          });
+        }
       // Handle image upload if a new image was selected
-      if (this.selectedImageFile) {
+      } else if (this.selectedImageFile) {
         try {
           const imageUrl = await this.uploadImage(this.selectedImageFile);
           personaData.imageUrl = imageUrl;

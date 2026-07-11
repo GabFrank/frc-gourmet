@@ -198,6 +198,29 @@ export class DocumentoService {
     );
   }
 
+  /**
+   * Adjuntar un archivo YA subido (por QR desde el celular): el archivo ya está
+   * en disco (`app://adjuntos/...`), sólo falta crear la row `Adjunto`. Evita el
+   * `save-file` (que re-guardaría) porque la subida por QR ya escribió el archivo.
+   */
+  adjuntarUrlSubida(
+    saved: { url: string; fileName: string; mimeType: string; tamanoBytes: number },
+    entidad: EntidadRef,
+    tipo: string,
+    observacion?: string,
+  ): Observable<any> {
+    return from(this.api.callIpc('create-adjunto', {
+      entidadTipo: entidad.tipo.toUpperCase(),
+      entidadId: entidad.id,
+      tipo: tipo.toUpperCase(),
+      archivoUrl: saved.url,
+      nombreArchivo: saved.fileName,
+      mimeType: saved.mimeType,
+      tamanoBytes: saved.tamanoBytes,
+      observacion,
+    }));
+  }
+
   // ============================================================
   // IMPRIMIR TICKET TÉRMICO
   // ============================================================

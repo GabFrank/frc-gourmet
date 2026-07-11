@@ -1,0 +1,76 @@
+<div class="scanner">
+  <!-- Cámara en vivo -->
+  <ng-container *ngIf="state === 'camera'">
+    <div class="cam-wrap">
+      <video #video class="cam-video" [class.hidden]="!camaraOk" playsinline muted autoplay></video>
+
+      <div class="cam-overlay" *ngIf="camaraOk">
+        <div class="cam-frame"></div>
+        <p class="cam-hint">Encuadrá el documento y tocá el botón</p>
+      </div>
+
+      <div class="cam-fallback" *ngIf="!camaraOk">
+        <mat-icon class="cam-fallback-icon">no_photography</mat-icon>
+        <p>{{ mensaje || 'No se pudo abrir la cámara.' }}</p>
+        <button mat-stroked-button (click)="cancelar()">Cerrar</button>
+      </div>
+
+      <button mat-icon-button class="cam-close" (click)="cancelar()" aria-label="Cerrar">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+
+    <div class="cam-actions" *ngIf="camaraOk">
+      <button class="shutter" (click)="capture()" aria-label="Capturar">
+        <span class="shutter-inner"></span>
+      </button>
+    </div>
+  </ng-container>
+
+  <!-- Ajuste de esquinas -->
+  <ng-container *ngIf="state === 'adjust'">
+    <div class="adjust-head">
+      <button mat-icon-button (click)="cancelar()" aria-label="Cerrar"><mat-icon>close</mat-icon></button>
+      <span class="adjust-title">Ajustá las esquinas</span>
+      <button mat-icon-button (click)="retake()" aria-label="Repetir"><mat-icon>replay</mat-icon></button>
+    </div>
+
+    <div class="stage" #stage
+         (pointermove)="onPointerMove($event)"
+         (pointerup)="onPointerUp()"
+         (pointercancel)="onPointerUp()">
+      <div class="canvas-holder">
+        <canvas #preview class="preview-canvas"></canvas>
+        <svg class="quad" [attr.width]="previewW"
+             [attr.height]="previewH"
+             *ngIf="corners.length === 4">
+          <polygon
+            [attr.points]="corners[0].x + ',' + corners[0].y + ' ' + corners[1].x + ',' + corners[1].y + ' ' + corners[2].x + ',' + corners[2].y + ' ' + corners[3].x + ',' + corners[3].y"
+            class="quad-poly"></polygon>
+        </svg>
+        <div class="handle"
+             *ngFor="let c of corners; let i = index"
+             [style.left.px]="c.x"
+             [style.top.px]="c.y"
+             (pointerdown)="onPointerDown(i, $event)"></div>
+      </div>
+    </div>
+
+    <div class="adjust-actions">
+      <button mat-stroked-button (click)="toggleEnhance()">
+        <mat-icon>{{ enhance ? 'auto_fix_high' : 'auto_fix_off' }}</mat-icon>
+        <span>{{ enhance ? 'Realce ON' : 'Realce OFF' }}</span>
+      </button>
+      <button mat-flat-button color="primary" (click)="confirmar()">
+        <mat-icon>check</mat-icon>
+        <span>Usar</span>
+      </button>
+    </div>
+  </ng-container>
+
+  <!-- Procesando -->
+  <div class="processing" *ngIf="state === 'processing'">
+    <mat-icon class="spin">progress_activity</mat-icon>
+    <p>Procesando…</p>
+  </div>
+</div>

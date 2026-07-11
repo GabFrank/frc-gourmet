@@ -90,12 +90,87 @@ function stopTunnel(): void {
   tunnelQr = null;
 }
 
+export interface TunnelResult {
+  ok: boolean;
+  running?: boolean;
+  url?: string | null;
+  qr?: string | null;
+  error?: string;
+}
+
+export function getTunnelStatus(): { running: boolean; url: string | null; qr: string | null } {
+  return { running: !!tunnelProc, url: tunnelUrl, qr: tunnelQr };
+}
+
+/**
+ * Arranca el túnel Cloudflare contra `http://localhost:<port>` y devuelve la URL
+ * pública HTTPS + su QR. Idempotente: si ya hay un túnel activo lo reutiliza.
+ *
+ * NO exige `mode === 'server'` — lo usa tanto el acceso remoto de Sistema como
+ * el emparejamiento por QR (que puede correr en standalone). El chequeo de modo
+ * queda en el handler IPC `remote-tunnel-start` para su caso de uso original.
+ */
+export async function startTunnel(port: number): Promise<TunnelResult> {
+  if (tunnelProc && tunnelUrl) {
+    return { ok: true, running: true, url: tunnelUrl, qr: tunnelQr };
+  }
+  let bin: string;
+  try {
+    bin = await ensureCloudflared();
+  } catch (e: any) {
+    return { ok: false, error: `No se pudo descargar cloudflared: ${e?.message || e}` };
+  }
+
+  return await new Promise((resolve) => {
+    let settled = false;
+    const proc = spawn(bin, [
+      'tunnel',
+      '--no-autoupdate',
+      '--url',
+      `http://localhost:${port}`,
+    ]);
+    tunnelProc = proc;
+
+    const onData = async (buf: Buffer) => {
+      const text = buf.toString();
+      const m = text.match(URL_RE);
+      if (m && !settled) {
+        settled = true;
+        tunnelUrl = m[0];
+        try {
+          tunnelQr = await QRCode.toDataURL(tunnelUrl, { margin: 1, width: 240 });
+        } catch {
+          tunnelQr = null;
+        }
+        resolve({ ok: true, running: true, url: tunnelUrl, qr: tunnelQr });
+      }
+    };
+    proc.stdout?.on('data', onData);
+    proc.stderr?.on('data', onData);
+    proc.on('error', (e) => {
+      if (!settled) {
+        settled = true;
+        stopTunnel();
+        resolve({ ok: false, error: `No se pudo iniciar el túnel: ${e.message}` });
+      }
+    });
+    proc.on('exit', () => {
+      if (proc === tunnelProc) { tunnelProc = null; tunnelUrl = null; tunnelQr = null; }
+    });
+
+    // Timeout si no aparece la URL.
+    setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        stopTunnel();
+        resolve({ ok: false, error: 'Timeout esperando la URL del túnel.' });
+      }
+    }, 25000);
+  });
+}
+
 export function registerRemoteTunnelHandlers(): void {
-  ipcMain.handle('remote-tunnel-status', () => ({
-    running: !!tunnelProc,
-    url: tunnelUrl,
-    qr: tunnelQr,
-  }));
+  ipcMain.handle('remote-tunnel-status', () => getTunnelStatus());
 
   ipcMain.handle('remote-tunnel-stop', () => {
     stopTunnel();
@@ -103,67 +178,12 @@ export function registerRemoteTunnelHandlers(): void {
   });
 
   ipcMain.handle('remote-tunnel-start', async () => {
-    if (tunnelProc && tunnelUrl) {
-      return { ok: true, running: true, url: tunnelUrl, qr: tunnelQr };
-    }
     const settings = readAppSettings(app.getPath('userData'));
     if ((settings as any).mode !== 'server') {
       return { ok: false, error: 'La app no está en modo Servidor.' };
     }
     const port = (settings as any).network?.serverPort || 7070;
-    let bin: string;
-    try {
-      bin = await ensureCloudflared();
-    } catch (e: any) {
-      return { ok: false, error: `No se pudo descargar cloudflared: ${e?.message || e}` };
-    }
-
-    return await new Promise((resolve) => {
-      let settled = false;
-      const proc = spawn(bin, [
-        'tunnel',
-        '--no-autoupdate',
-        '--url',
-        `http://localhost:${port}`,
-      ]);
-      tunnelProc = proc;
-
-      const onData = async (buf: Buffer) => {
-        const text = buf.toString();
-        const m = text.match(URL_RE);
-        if (m && !settled) {
-          settled = true;
-          tunnelUrl = m[0];
-          try {
-            tunnelQr = await QRCode.toDataURL(tunnelUrl, { margin: 1, width: 240 });
-          } catch {
-            tunnelQr = null;
-          }
-          resolve({ ok: true, running: true, url: tunnelUrl, qr: tunnelQr });
-        }
-      };
-      proc.stdout?.on('data', onData);
-      proc.stderr?.on('data', onData);
-      proc.on('error', (e) => {
-        if (!settled) {
-          settled = true;
-          stopTunnel();
-          resolve({ ok: false, error: `No se pudo iniciar el túnel: ${e.message}` });
-        }
-      });
-      proc.on('exit', () => {
-        if (proc === tunnelProc) { tunnelProc = null; tunnelUrl = null; tunnelQr = null; }
-      });
-
-      // Timeout si no aparece la URL.
-      setTimeout(() => {
-        if (!settled) {
-          settled = true;
-          stopTunnel();
-          resolve({ ok: false, error: 'Timeout esperando la URL del túnel.' });
-        }
-      }, 25000);
-    });
+    return startTunnel(port);
   });
 
   // Asegurar que el proceso hijo muera con la app.

@@ -1,0 +1,72 @@
+<div class="qr-dialog">
+  <div class="qr-header">
+    <mat-icon class="qr-header-icon">qr_code_2</mat-icon>
+    <h2 class="qr-title">{{ titulo }}</h2>
+    <button mat-icon-button class="qr-close" (click)="cancel()" aria-label="Cerrar">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <!-- Cargando -->
+  <div class="qr-body qr-center" *ngIf="state === 'loading'">
+    <mat-spinner diameter="40"></mat-spinner>
+    <p class="qr-muted">Generando código…</p>
+  </div>
+
+  <!-- Error -->
+  <div class="qr-body qr-center" *ngIf="state === 'error'">
+    <mat-icon class="qr-error-icon">error_outline</mat-icon>
+    <p class="qr-error-text">{{ errorMsg }}</p>
+    <button mat-stroked-button (click)="cancel()">Cerrar</button>
+  </div>
+
+  <!-- Listo -->
+  <div class="qr-body" *ngIf="state === 'ready'">
+    <p class="qr-instructions">
+      Escaneá este código con la cámara del celular para abrir la app y subir la foto o el archivo.
+    </p>
+
+    <div class="qr-image-wrap">
+      <img *ngIf="qrDataUrl" [src]="qrDataUrl" alt="Código QR" class="qr-image" />
+
+      <div class="qr-waiting" *ngIf="receivedCount === 0">
+        <mat-spinner diameter="20"></mat-spinner>
+        <span>Esperando archivo…</span>
+      </div>
+
+      <div class="qr-received" *ngIf="receivedCount > 0">
+        <mat-icon class="qr-check">check_circle</mat-icon>
+        <span>{{ receivedCount }} archivo(s) recibido(s)</span>
+      </div>
+    </div>
+
+    <div class="qr-remote">
+      <mat-slide-toggle
+        [checked]="remoteEnabled"
+        [disabled]="remoteEnabled || remoteLoading"
+        (change)="toggleRemote()">
+        Habilitar escáner en vivo / acceso remoto
+      </mat-slide-toggle>
+      <p class="qr-muted qr-remote-hint" *ngIf="!remoteEnabled">
+        Actívalo para escanear documentos con la cámara en vivo o si el celular no está en la misma red WiFi.
+      </p>
+      <div class="qr-remote-loading" *ngIf="remoteLoading">
+        <mat-spinner diameter="16"></mat-spinner>
+        <span class="qr-muted">Iniciando acceso remoto…</span>
+      </div>
+      <p class="qr-muted" *ngIf="remoteEnabled">Acceso remoto activo (HTTPS).</p>
+    </div>
+
+    <div class="qr-actions">
+      <button mat-stroked-button (click)="cancel()">Cancelar</button>
+      <button
+        *ngIf="multiple"
+        mat-flat-button
+        color="primary"
+        [disabled]="receivedCount === 0"
+        (click)="finish()">
+        Listo ({{ receivedCount }})
+      </button>
+    </div>
+  </div>
+</div>

@@ -50,6 +50,7 @@
 | **printers.handler.ts** | 137 | Printer (epson/star/thermal; network/usb/bluetooth) |
 | **producto-sectores.handler.ts** | 107 | M2M Producto↔Sector (routing de comanda por producto) |
 | **productos.handler.ts** | 2275 | Familia, Subfamilia, Producto, Presentacion, CodigoBarra, PrecioVenta, PrecioCosto, Adicional, Observacion + search por modo venta/compra |
+| **qr-upload.handler.ts** | ~110 | Emparejamiento QR → subida desde la PWA mobile (`qr-upload-{create-session,enable-remote,poll,close}`). Store en `server/qr-upload-store.ts`, rutas Fastify en `server/qr-upload-routes.ts`, arranque on-demand en `server/pairing.ts`. Detalles → [domains/archivos-y-adjuntos.md](../domains/archivos-y-adjuntos.md) §8 |
 | **receta-presentacion.handler.ts** | 556 | Helpers `generarNombreVariacion`, `generarSKU` usados desde recetas.handler (NO se registra como handler propio) |
 | **recetas.handler.ts** | 2427 | Receta, RecetaIngrediente*, RecetaAdicionalVinculacion **+ RecetaPresentacion (variaciones) + Sabores** (unificado) |
 | **remote-tunnel.handler.ts** | 172 | Acceso remoto vía Cloudflare quick tunnel |

@@ -90,6 +90,12 @@
     <mat-icon>upload_file</mat-icon>
     <span>Adjuntar firmado escaneado</span>
   </button>
+
+  <!-- Adjuntar firmado desde el celular (QR) -->
+  <button mat-menu-item *ngIf="showAdjuntar" (click)="onAdjuntarPorQr()">
+    <mat-icon>qr_code_2</mat-icon>
+    <span>Adjuntar desde el celular</span>
+  </button>
 </mat-menu>
 
 <!-- Input file oculto para subir adjunto firmado -->

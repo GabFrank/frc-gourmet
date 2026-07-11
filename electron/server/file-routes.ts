@@ -4,16 +4,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
 import { Adjunto } from '../../src/app/database/entities/shared/adjunto.entity';
-
-const ALLOWED_CARPETAS = new Set([
-  'adjuntos',
-  'profile-images',
-  'producto-images',
-  'producto-thumbs',
-  'sabores',
-  'presentaciones',
-  'funcionario-documentos',
-]);
+// Fuente única de buckets permitidos (compartida con files.handler + qr-upload).
+import { ALLOWED_CARPETAS } from '../utils/file-save.utils';
 
 function urlToAbsolute(url: string): string | null {
   if (!url || !url.startsWith('app://')) return null;
