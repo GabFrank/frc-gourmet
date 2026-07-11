@@ -775,21 +775,14 @@ export class ProductoSaboresComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // ✅ NUEVO: Verificar que la variación tenga una receta asociada
-    if (!variacion.receta?.id) {
-      this.snackBar.open('No se puede gestionar precios: La variación no tiene una receta asociada', 'Cerrar', {
-        duration: 4000,
-        panelClass: ['snackbar-error']
-      });
-      return;
-    }
-
     const dialogData: PrecioVentaDialogData = {
       entityId: variacion.id,
       entityName: variacion.nombre_generado,
       entityType: 'variacion',
-      recetaId: variacion.receta.id, // ✅ OBLIGATORIO: ID de la receta
-      relationField: 'recetaId', // ✅ CORREGIDO: Usar recetaId para variaciones
+      // El precio es por VARIACIÓN (sabor × tamaño) → RecetaPresentacion, no la
+      // receta base (compartida entre tamaños). Así cada tamaño tiene su precio.
+      recetaPresentacionId: variacion.id,
+      relationField: 'recetaPresentacionId',
       preciosExistentes: variacion.preciosVenta || [],
       onPrecioCreated: (precio) => {
         // Actualizar la variación con el nuevo precio

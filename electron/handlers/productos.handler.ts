@@ -1955,11 +1955,20 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       let presentacion = null;
       let receta = null;
       let producto = null;
+      let recetaPresentacion = null;
 
       if (precioVentaData.presentacionId) {
         presentacion = await presentacionRepo.findOneBy({ id: precioVentaData.presentacionId });
         if (!presentacion) {
           throw new Error('Presentacion not found');
+        }
+      } else if (precioVentaData.recetaPresentacionId) {
+        // Precio por VARIACIÓN (sabor × tamaño): el precio vive en la
+        // RecetaPresentacion, no en la receta base (que es compartida entre tamaños).
+        recetaPresentacion = await dataSource.getRepository(RecetaPresentacion)
+          .findOneBy({ id: precioVentaData.recetaPresentacionId });
+        if (!recetaPresentacion) {
+          throw new Error('RecetaPresentacion not found');
         }
       } else if (precioVentaData.recetaId) {
         receta = await recetaRepo.findOneBy({ id: precioVentaData.recetaId });
@@ -1972,7 +1981,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
           throw new Error('Producto not found');
         }
       } else {
-        throw new Error('Either presentacionId, recetaId, or productoId must be provided');
+        throw new Error('Either presentacionId, recetaPresentacionId, recetaId, or productoId must be provided');
       }
 
       const moneda = await monedaRepo.findOneBy({ id: precioVentaData.monedaId });
@@ -1990,6 +1999,14 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         if (presentacion) {
           const existingPrincipals = await repo.find({
             where: { presentacion: { id: presentacion.id }, principal: true }
+          });
+          for (const existing of existingPrincipals) {
+            existing.principal = false;
+            await repo.save(existing);
+          }
+        } else if (recetaPresentacion) {
+          const existingPrincipals = await repo.find({
+            where: { recetaPresentacion: { id: recetaPresentacion.id }, principal: true }
           });
           for (const existing of existingPrincipals) {
             existing.principal = false;
@@ -2031,6 +2048,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         moneda: moneda,
         tipoPrecio: tipoPrecio,
         ...(presentacion && { presentacion }),
+        ...(recetaPresentacion && { recetaPresentacion }),
         ...(receta && { receta }),
         ...(producto && { producto })
       });
@@ -2053,7 +2071,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
       const precioVenta = await repo.findOne({
         where: { id: precioVentaId },
-        relations: ['presentacion', 'receta', 'moneda', 'tipoPrecio']
+        relations: ['presentacion', 'receta', 'recetaPresentacion', 'moneda', 'tipoPrecio']
       });
 
       if (!precioVenta) {
@@ -2090,6 +2108,14 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
           if (precioVenta.presentacion) {
             const existingPrincipals = await repo.find({
               where: { presentacion: { id: precioVenta.presentacion.id }, principal: true, id: Not(precioVentaId) }
+            });
+            for (const existing of existingPrincipals) {
+              existing.principal = false;
+              await repo.save(existing);
+            }
+          } else if (precioVenta.recetaPresentacion) {
+            const existingPrincipals = await repo.find({
+              where: { recetaPresentacion: { id: precioVenta.recetaPresentacion.id }, principal: true, id: Not(precioVentaId) }
             });
             for (const existing of existingPrincipals) {
               existing.principal = false;

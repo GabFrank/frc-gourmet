@@ -354,9 +354,8 @@ export class VariacionDialogComponent implements OnInit, OnDestroy {
 
   // ✅ NUEVO: Método para abrir el dialog de precios de venta
   abrirPreciosVentaDialog(): void {
-    // ✅ NUEVO: Verificar que la variación tenga una receta asociada
-    if (!this.data.variacion.receta?.id) {
-      this.snackBar.open('No se puede gestionar precios: La variación no tiene una receta asociada', 'Cerrar', {
+    if (!this.data.variacion.id) {
+      this.snackBar.open('No se puede gestionar precios: variación no válida', 'Cerrar', {
         duration: 4000,
         panelClass: ['snackbar-error']
       });
@@ -367,8 +366,9 @@ export class VariacionDialogComponent implements OnInit, OnDestroy {
       entityId: this.data.variacion.id!,
       entityName: this.data.variacion.nombre_generado,
       entityType: 'variacion',
-      recetaId: this.data.variacion.receta.id, // ✅ Ahora es seguro usar
-      relationField: 'recetaId', // ✅ CORREGIDO: Usar recetaId para variaciones
+      // Precio por VARIACIÓN (sabor × tamaño) → RecetaPresentacion, no la receta base.
+      recetaPresentacionId: this.data.variacion.id!,
+      relationField: 'recetaPresentacionId',
       preciosExistentes: this.data.variacion.preciosVenta || []
     };
 
