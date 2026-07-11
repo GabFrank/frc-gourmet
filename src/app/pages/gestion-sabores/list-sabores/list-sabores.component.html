@@ -91,7 +91,8 @@
       <ng-container matColumnDef="variaciones">
         <th mat-header-cell *matHeaderCellDef>Variaciones</th>
         <td mat-cell *matCellDef="let s">
-          <span class="chip chip-num">{{ s.variacionesCount }}</span>
+          <button class="chip chip-num chip-link" (click)="gestionarVariaciones(s)"
+                  matTooltip="Gestionar variaciones (tamaños, precios, recetas)">{{ s.variacionesCount }}</button>
         </td>
       </ng-container>
 
@@ -111,6 +112,9 @@
             <mat-icon>more_vert</mat-icon>
           </button>
           <mat-menu #menu="matMenu">
+            <button mat-menu-item (click)="gestionarVariaciones(s)">
+              <mat-icon>tune</mat-icon> <span>Gestionar variaciones</span>
+            </button>
             <button mat-menu-item (click)="editarSabor(s)" *appHasPermission="'SABORES_GESTIONAR'">
               <mat-icon>edit</mat-icon> <span>Editar sabor</span>
             </button>

@@ -91,6 +91,14 @@
   color: var(--on-info, var(--text-primary));
 }
 
+.chip-link {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+
+  &:hover { filter: brightness(1.08); text-decoration: underline; }
+}
+
 .chip-off {
   background: var(--surface-variant);
   color: var(--text-secondary);

@@ -21,6 +21,7 @@ import { RepositoryService } from '../../../database/repository.service';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { SaborDialogComponent } from '../../productos/gestionar-producto/dialogs/sabor-dialog/sabor-dialog.component';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { VariacionesSaborDialogComponent } from '../dialogs/variaciones-sabor-dialog/variaciones-sabor-dialog.component';
 
 interface SaborRow {
   id: number;
@@ -202,6 +203,21 @@ export class ListSaboresComponent implements OnInit {
       },
       error: () => this.snackBar.open('No se pudo cambiar el estado', 'Cerrar', { duration: 3000 }),
     });
+  }
+
+  gestionarVariaciones(row: SaborRow): void {
+    if (!row.producto) return;
+    this.dialog.open(VariacionesSaborDialogComponent, {
+      width: '760px',
+      maxWidth: '96vw',
+      maxHeight: '90vh',
+      data: {
+        saborId: row.id,
+        saborNombre: row.nombre,
+        productoId: row.producto.id,
+        productoNombre: row.producto.nombre,
+      },
+    }).afterClosed().subscribe(() => this.buscar());
   }
 
   repararRecetasCompartidas(): void {
