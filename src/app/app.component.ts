@@ -39,6 +39,7 @@ import { ListUsuariosComponent } from './pages/personas/usuarios/list-usuarios.c
 import { ListClientesComponent } from './pages/personas/clientes/list-clientes.component';
 import { ListPedidosOnlineComponent } from './pages/ventas/pedidos-online/list-pedidos-online.component';
 import { TiendaOnlineConfigComponent } from './pages/ventas/pedidos-online/tienda-online-config.component';
+import { ZonasDeliveryComponent } from './pages/ventas/pedidos-online/zonas-delivery.component';
 import { ListConveniosComponent } from './pages/personas/convenios/list-convenios.component';
 import { AuthService } from './services/auth.service';
 import { Usuario } from './database/entities/personas/usuario.entity';
@@ -624,6 +625,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       TiendaOnlineConfigComponent,
       { source: 'navigation' },
       'tienda-online-config-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openZonasDeliveryTab() {
+    this.tabsService.openTab(
+      'Zonas de Delivery',
+      ZonasDeliveryComponent,
+      { source: 'navigation' },
+      'zonas-delivery-tab',
       true
     );
     this.closeMenu();

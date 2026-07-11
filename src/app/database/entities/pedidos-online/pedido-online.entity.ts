@@ -79,6 +79,13 @@ export class PedidoOnline extends BaseModel {
   @Column({ name: 'referencia_direccion', type: 'varchar', length: 255, nullable: true })
   referenciaDireccion?: string;
 
+  // Punto elegido en el mapa (Leaflet) — para el repartidor.
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  latitud?: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  longitud?: number;
+
   @Column({ type: 'text', nullable: true })
   notas?: string;
 

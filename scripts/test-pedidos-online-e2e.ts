@@ -364,6 +364,55 @@ async function main() {
   const g = await pub('auth.google', ['fake-token']);
   ok(g.result?.error === 'google_no_configurado', 'auth.google sin GOOGLE_CLIENT_ID → no_configurado');
 
+  console.log('\n[e2e] === ZONAS DELIVERY (ADMIN CRUD) + UBICACIÓN ===');
+  // 26. listar zonas (ya hay 1 del seed)
+  const zonasIni: any = await invokeHandlerWithContext('get-zonas-delivery-admin', undefined);
+  ok(Array.isArray(zonasIni) && zonasIni.length === 1, 'admin ve 1 zona inicial', zonasIni?.length);
+
+  // 27. crear una zona nueva
+  const nuevaZona: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, {
+    nombre: 'villa morra', tarifa: 20000, montoMinimo: 60000, activa: true, orden: 2,
+  });
+  ok(nuevaZona?.success === true && !!nuevaZona?.zona?.id, 'guardar-zona-delivery crea zona');
+  ok(nuevaZona?.zona?.nombre === 'VILLA MORRA', 'nombre de zona en UPPERCASE', nuevaZona?.zona?.nombre);
+  ok(nuevaZona?.zona?.tarifa === 20000, 'tarifa persistida', nuevaZona?.zona?.tarifa);
+
+  // 28. editar la zona creada
+  const editZona: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, {
+    id: nuevaZona.zona.id, nombre: 'villa morra norte', tarifa: 22000, montoMinimo: 60000, activa: false, orden: 2,
+  });
+  ok(editZona?.success === true && editZona?.zona?.nombre === 'VILLA MORRA NORTE' && editZona?.zona?.activa === false,
+    'guardar-zona-delivery edita zona existente');
+
+  // 29. nombre requerido
+  const zonaSinNombre: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, { nombre: '   ', tarifa: 1000 });
+  ok(zonaSinNombre?.success === false && zonaSinNombre?.error === 'nombre_requerido', 'zona sin nombre → nombre_requerido');
+
+  // 30. la zona pública (activa) NO incluye la inactiva
+  const zonasPub = await pub('zonas.get');
+  const zonasPubList = zonasPub.result || zonasPub;
+  const nombresPub = (Array.isArray(zonasPubList) ? zonasPubList : []).map((z: any) => z.nombre);
+  ok(nombresPub.includes('CENTRO') && !nombresPub.includes('VILLA MORRA NORTE'),
+    'zonas.get público sólo devuelve zonas activas', nombresPub);
+
+  // 31. eliminar la zona creada → vuelve a quedar 1
+  const del: any = await invokeHandlerWithContext('eliminar-zona-delivery', undefined, nuevaZona.zona.id);
+  ok(del?.success === true, 'eliminar-zona-delivery ok');
+  const zonasFin: any = await invokeHandlerWithContext('get-zonas-delivery-admin', undefined);
+  ok(Array.isArray(zonasFin) && zonasFin.length === 1, 'tras eliminar queda 1 zona', zonasFin?.length);
+
+  // 32. pedido DELIVERY con ubicación (lat/lng) → persiste y la ve el admin
+  const deliGeo = await pub('pedido.crear', [{
+    tipoPedido: 'DELIVERY', zonaDeliveryId: seeded.zona.id, direccionEntrega: 'Av. España 123',
+    latitud: -25.2891, longitud: -57.6109,
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 3 }],
+  }], token2);
+  ok(deliGeo.result?.success === true, 'pedido DELIVERY con ubicación creado', deliGeo.result?.error);
+  const listaGeo: any = await invokeHandlerWithContext('get-pedidos-online-admin', undefined, {});
+  const pedGeo: any = (listaGeo || []).find((p: any) => p.numero === deliGeo.result?.numero);
+  ok(!!pedGeo && Math.abs((pedGeo.latitud ?? 0) - (-25.2891)) < 1e-4 && Math.abs((pedGeo.longitud ?? 0) - (-57.6109)) < 1e-4,
+    'admin ve la ubicación (lat/lng) del pedido', { lat: pedGeo?.latitud, lng: pedGeo?.longitud });
+
   console.log = origLog;
   await fastify.close();
   await dataSource.destroy();

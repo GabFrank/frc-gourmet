@@ -301,6 +301,10 @@ export function registerPedidosOnlinePedidosHandlers(
     if (zona) pedido.zonaDelivery = zona;
     pedido.direccionEntrega = data?.direccionEntrega || undefined;
     pedido.referenciaDireccion = data?.referenciaDireccion || undefined;
+    if (tipoPedido === TipoPedidoOnline.DELIVERY) {
+      if (typeof data?.latitud === 'number') pedido.latitud = data.latitud;
+      if (typeof data?.longitud === 'number') pedido.longitud = data.longitud;
+    }
     pedido.notas = data?.notas || undefined;
     pedido.items = itemsToSave;
 

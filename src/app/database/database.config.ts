@@ -235,6 +235,7 @@ import { AddCuentasClienteYOtp1783520460211 } from './migrations/1783520460211-A
 import { AddPedidosOnline1783520460212 } from './migrations/1783520460212-AddPedidosOnline';
 import { AddTiendaConfigYCustomerRefresh1783525141550 } from './migrations/1783525141550-AddTiendaConfigYCustomerRefresh';
 import { CuentaClienteTelefonoNullable1783740826975 } from './migrations/1783740826975-CuentaClienteTelefonoNullable';
+import { AddUbicacionPedidoOnline1783741165054 } from './migrations/1783741165054-AddUbicacionPedidoOnline';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -594,6 +595,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddPedidosOnline1783520460212,
     AddTiendaConfigYCustomerRefresh1783525141550,
     CuentaClienteTelefonoNullable1783740826975,
+    AddUbicacionPedidoOnline1783741165054,
   ];
 }
 
