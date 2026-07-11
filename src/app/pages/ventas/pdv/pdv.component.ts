@@ -122,6 +122,13 @@ export class PdvComponent implements OnInit, OnDestroy {
   expandedElement: VentaItem | null = null;
   columnsToDisplayWithExpand: string[] = [...this.displayedColumns];
 
+  // ─── Estado de cobro por ítem (cobro parcial) ──────────────────────────
+  // Resumen en bruto para la barra Total/Pagado/Saldo del PdV.
+  cobroDeudaBruta = 0;
+  cobroPagado = 0;
+  cobroSaldo = 0;
+  hayCobroParcial = false; // true si algún ítem tiene cobertura parcial/total
+
   // Search form
   searchForm: FormGroup;
 
@@ -703,11 +710,47 @@ export class PdvComponent implements OnInit, OnDestroy {
       }
       this.ventaItemsDataSource.data = items;
       this.calculateTotals();
+      await this.loadEstadoCobroActual(ventaId);
     } catch (error) {
       console.error('Error loading venta items:', error);
       this.ventaItemsDataSource.data = [];
       this.calculateTotals();
+      this.resetEstadoCobro();
     }
+  }
+
+  /**
+   * Carga el estado de cobro por ítem (PAGADO/PARCIAL/PENDIENTE) y el resumen
+   * en bruto. Estampa `_estadoCobro` y `_montoCubierto` en cada VentaItem para
+   * el template (sin funciones en la vista).
+   */
+  private async loadEstadoCobroActual(ventaId: number): Promise<void> {
+    try {
+      const estado: any = await firstValueFrom(this.repositoryService.getEstadoCobroVenta(ventaId));
+      if (!estado) { this.resetEstadoCobro(); return; }
+      const map = new Map<number, any>();
+      for (const e of (estado.items || [])) map.set(e.id, e);
+      for (const item of this.ventaItemsDataSource.data) {
+        const e = map.get(item.id);
+        (item as any)._estadoCobro = e?.estado || 'PENDIENTE';
+        (item as any)._montoCubierto = Number(e?.montoCubierto || 0);
+      }
+      this.ventaItemsDataSource.data = [...this.ventaItemsDataSource.data];
+      this.cobroDeudaBruta = Number(estado.deudaBruta || 0);
+      this.cobroPagado = Number(estado.totalCubierto || 0);
+      this.cobroSaldo = Number(estado.pendienteBruto || 0);
+      this.hayCobroParcial = this.cobroPagado > 0.5;
+    } catch (error) {
+      console.error('Error cargando estado de cobro:', error);
+      this.resetEstadoCobro();
+    }
+  }
+
+  private resetEstadoCobro(): void {
+    this.cobroDeudaBruta = 0;
+    this.cobroPagado = 0;
+    this.cobroSaldo = 0;
+    this.hayCobroParcial = false;
   }
 
   private async cerrarComandaActual(): Promise<void> {
@@ -1849,6 +1892,13 @@ export class PdvComponent implements OnInit, OnDestroy {
         // Limpiar UI
         this.ventaItemsDataSource.data = [];
         this.calculateTotals();
+        this.resetEstadoCobro();
+      } else if (result?.partial) {
+        // Cobro parcial: la venta sigue abierta. Recargar ítems + estado de cobro.
+        const ventaId = this.ventaRapidaActual?.id || this.selectedComanda?.venta?.id || this.selectedMesa?.venta?.id;
+        if (ventaId) {
+          await this.loadVentaItemsForVenta(ventaId);
+        }
       }
     });
   }
@@ -2619,19 +2669,21 @@ export class PdvComponent implements OnInit, OnDestroy {
           await this.cargarPersonalizacionesItem(item);
         }
         this.ventaItemsDataSource.data = items;
-        console.log(this.ventaItemsDataSource.data);
         // Calculate totals based on loaded items
         this.calculateTotals();
+        await this.loadEstadoCobroActual(mesa.venta.id);
       } catch (error) {
         console.error('Error loading venta items:', error);
         // Reset items and totals on error
         this.ventaItemsDataSource.data = [];
         this.calculateTotals();
+        this.resetEstadoCobro();
       }
     } else {
       // If there is no venta, clear the table
       this.ventaItemsDataSource.data = [];
       this.calculateTotals();
+      this.resetEstadoCobro();
     }
   }
 
