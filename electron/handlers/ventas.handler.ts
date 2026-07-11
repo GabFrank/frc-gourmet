@@ -15,7 +15,7 @@ import { setEntityUserTracking } from '../utils/entity.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
-import { Not, IsNull } from 'typeorm';
+import { Not, IsNull, In } from 'typeorm';
 import { DeepPartial } from 'typeorm';
 import { Reserva } from '../../src/app/database/entities/ventas/reserva.entity';
 import { ensurePermission } from '../utils/auth.utils';
@@ -47,6 +47,9 @@ import { EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-it
 import { VentaItemSabor } from '../../src/app/database/entities/ventas/venta-item-sabor.entity';
 import { dbQuery } from '../utils/db-query';
 import { computeResumenCaja } from '../utils/resumen-caja.utils';
+import { CobroParcial } from '../../src/app/database/entities/ventas/cobro-parcial.entity';
+import { CobroParcialItem } from '../../src/app/database/entities/ventas/cobro-parcial-item.entity';
+import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
 
 export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Remove this line - get the current user in each handler instead
@@ -2713,6 +2716,210 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       throw error;
     }
   });
+
+  // ─── Cobro parcial por ítems ─────────────────────────────────────────────
+  // Ver docs/PLAN-COBRO-PARCIAL-POR-ITEMS.md. El estado de cobro se maneja en
+  // BRUTO (moneda principal, sin conversión): la cobertura por ítem
+  // (`montoCubierto`) y los topes viven en bruto. El descuento/aumento global
+  // se absorbe vía el `factor` que calcula el front (ya trabaja en principal).
+
+  // Estado de cobro de una venta: por ítem (neto bruto, cubierto, estado) +
+  // totales en bruto. La verdad de dinero (saldo con descuento global) la
+  // sigue calculando el front con sus cotizaciones.
+  ipcMain.handle('getEstadoCobroVenta', async (_event: any, ventaId: number) => {
+    return await getEstadoCobroVentaInternal(dataSource, ventaId);
+  });
+
+  // Registra una ronda de cobro parcial: crea `CobroParcial`, taguea las líneas
+  // de pago de la ronda, crea las imputaciones en bruto y actualiza el cache
+  // `VentaItem.montoCubierto`. Transaccional + anti-doble-cobro (valida topes
+  // contra la cobertura ya persistida, incluso desde otro dispositivo).
+  ipcMain.handle('registrarCobroParcial', async (_event: any, ventaId: number, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+    const imputaciones: Array<{ ventaItemId: number; brutoCubierto: number; cantidad?: number }> =
+      Array.isArray(payload?.imputaciones) ? payload.imputaciones : [];
+    const pagoDetalleIds: number[] = Array.isArray(payload?.pagoDetalleIds) ? payload.pagoDetalleIds : [];
+    const cashTotal = Number(payload?.cashTotalPrincipal ?? 0);
+    const factor = Number(payload?.factorAplicado ?? 1) || 1;
+    const TOL = 0.5;
+
+    if (!imputaciones.length) throw new Error('COBRO_PARCIAL_SIN_ITEMS');
+
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const venta = await queryRunner.manager.findOne(Venta, { where: { id: ventaId } });
+      if (!venta) throw new Error(`Venta ${ventaId} no encontrada`);
+      if (venta.estado !== VentaEstado.ABIERTA) throw new Error('VENTA_NO_ABIERTA');
+
+      // Validar topes por ítem contra la cobertura ya persistida (anti doble-cobro).
+      const itemsAfectados: Array<{ item: VentaItem; brutoCubierto: number; cantidad?: number }> = [];
+      for (const imp of imputaciones) {
+        const item = await queryRunner.manager.findOne(VentaItem, {
+          where: { id: imp.ventaItemId },
+          relations: ['venta'],
+        });
+        if (!item || (item.venta as any)?.id !== ventaId) throw new Error(`ITEM_INVALIDO_${imp.ventaItemId}`);
+        if (item.estado !== EstadoVentaItem.ACTIVO) throw new Error(`ITEM_NO_ACTIVO_${imp.ventaItemId}`);
+        const netoBruto = computeNetoBrutoItem(item);
+        const yaCubierto = Number(item.montoCubierto || 0);
+        const bruto = Number(imp.brutoCubierto || 0);
+        if (bruto <= 0) continue;
+        if (yaCubierto + bruto > netoBruto + TOL) {
+          throw new Error(`ITEM_YA_CUBIERTO_${imp.ventaItemId}`);
+        }
+        itemsAfectados.push({ item, brutoCubierto: bruto, cantidad: imp.cantidad });
+      }
+      if (!itemsAfectados.length) throw new Error('COBRO_PARCIAL_SIN_ITEMS');
+
+      // Crear la ronda.
+      const ronda = queryRunner.manager.create(CobroParcial, {
+        venta: { id: ventaId } as any,
+        usuario: getCurrentUser()?.id ? ({ id: getCurrentUser()!.id } as any) : null,
+        fecha: new Date(),
+        factorAplicado: factor,
+        cashTotal: cashTotal,
+        activo: true,
+      });
+      setEntityUserTracking(dataSource, ronda, getCurrentUser()?.id, false);
+      const rondaSaved = await queryRunner.manager.save(CobroParcial, ronda);
+
+      // Taguear las líneas de pago de esta ronda.
+      if (pagoDetalleIds.length) {
+        await queryRunner.manager.update(
+          PagoDetalle,
+          { id: In(pagoDetalleIds) },
+          { cobroParcialId: rondaSaved.id },
+        );
+      }
+
+      // Imputaciones + actualización del cache montoCubierto.
+      for (const af of itemsAfectados) {
+        const cpi = queryRunner.manager.create(CobroParcialItem, {
+          cobroParcial: { id: rondaSaved.id } as any,
+          ventaItem: { id: af.item.id } as any,
+          brutoCubierto: af.brutoCubierto,
+          cantidad: af.cantidad ?? null,
+        });
+        setEntityUserTracking(dataSource, cpi, getCurrentUser()?.id, false);
+        await queryRunner.manager.save(CobroParcialItem, cpi);
+
+        const netoBruto = computeNetoBrutoItem(af.item);
+        let nuevo = Number(af.item.montoCubierto || 0) + af.brutoCubierto;
+        if (nuevo > netoBruto) nuevo = netoBruto; // clamp
+        await queryRunner.manager.update(VentaItem, { id: af.item.id }, { montoCubierto: nuevo });
+      }
+
+      await queryRunner.commitTransaction();
+      return await getEstadoCobroVentaInternal(dataSource, ventaId);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error en registrarCobroParcial:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  // Anula una ronda de cobro parcial: desactiva la ronda + sus líneas de pago y
+  // recomputa `montoCubierto` de los ítems afectados desde las rondas activas.
+  ipcMain.handle('anularCobroParcial', async (_event: any, cobroParcialId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const ronda = await queryRunner.manager.findOne(CobroParcial, {
+        where: { id: cobroParcialId },
+        relations: ['venta'],
+      });
+      if (!ronda) throw new Error(`CobroParcial ${cobroParcialId} no encontrado`);
+      const ventaId = (ronda.venta as any)?.id;
+
+      // Ítems que tocaba esta ronda.
+      const impsRonda = await queryRunner.manager.find(CobroParcialItem, {
+        where: { cobroParcial: { id: cobroParcialId } },
+        relations: ['ventaItem'],
+      });
+
+      // Desactivar ronda + sus líneas de pago.
+      await queryRunner.manager.update(CobroParcial, { id: cobroParcialId }, { activo: false });
+      await queryRunner.manager.update(
+        PagoDetalle,
+        { cobroParcialId: cobroParcialId },
+        { activo: false },
+      );
+
+      // Recomputar montoCubierto de cada ítem afectado desde rondas ACTIVAS.
+      const itemIds = Array.from(new Set(impsRonda.map(i => (i.ventaItem as any)?.id).filter(Boolean)));
+      for (const itemId of itemIds) {
+        const activos = await queryRunner.manager.find(CobroParcialItem, {
+          where: { ventaItem: { id: itemId }, cobroParcial: { activo: true } },
+          relations: ['cobroParcial'],
+        });
+        const total = activos.reduce((s, i) => s + Number(i.brutoCubierto || 0), 0);
+        await queryRunner.manager.update(VentaItem, { id: itemId }, { montoCubierto: total });
+      }
+
+      await queryRunner.commitTransaction();
+      return await getEstadoCobroVentaInternal(dataSource, ventaId);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error en anularCobroParcial:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+}
+
+/** Neto bruto de un ítem (con descuento propio, SIN descuento global). */
+function computeNetoBrutoItem(item: any): number {
+  const unit = Number(item.precioVentaUnitario || 0)
+    + Number(item.precioAdicionales || 0)
+    - Number(item.descuentoUnitario || 0);
+  return unit * Number(item.cantidad || 0);
+}
+
+/**
+ * Estado de cobro de una venta (en bruto). Devuelve por ítem el neto bruto,
+ * lo cubierto y su estado (PENDIENTE/PARCIAL/PAGADO), más totales en bruto y el
+ * descuento/aumento global vigente (referencia para el front).
+ */
+async function getEstadoCobroVentaInternal(dataSource: DataSource, ventaId: number) {
+  const TOL = 0.5;
+  const items = await dataSource.getRepository(VentaItem).find({
+    where: { venta: { id: ventaId }, estado: EstadoVentaItem.ACTIVO },
+  });
+  const itemsEstado = items.map(it => {
+    const netoBruto = computeNetoBrutoItem(it);
+    const cubierto = Number(it.montoCubierto || 0);
+    let estado: 'PENDIENTE' | 'PARCIAL' | 'PAGADO';
+    if (cubierto <= TOL) estado = 'PENDIENTE';
+    else if (cubierto >= netoBruto - TOL) estado = 'PAGADO';
+    else estado = 'PARCIAL';
+    return { id: it.id, netoBruto, montoCubierto: cubierto, estado };
+  });
+  const deudaBruta = itemsEstado.reduce((s, i) => s + i.netoBruto, 0);
+  const totalCubierto = itemsEstado.reduce((s, i) => s + i.montoCubierto, 0);
+  const pendienteBruto = Math.max(0, deudaBruta - totalCubierto);
+
+  // Descuento/aumento global desde las líneas del pago (si existe pago).
+  let descuentoGlobal = 0;
+  let aumentoGlobal = 0;
+  const venta = await dataSource.getRepository(Venta).findOne({ where: { id: ventaId }, relations: ['pago'] });
+  if (venta?.pago?.id) {
+    const detalles = await dataSource.getRepository(PagoDetalle).find({
+      where: { pago: { id: venta.pago.id }, activo: true },
+    });
+    for (const d of detalles) {
+      if (d.tipo === TipoDetalle.DESCUENTO) descuentoGlobal += Number(d.valor || 0);
+      else if (d.tipo === TipoDetalle.AUMENTO) aumentoGlobal += Number(d.valor || 0);
+    }
+  }
+
+  return { items: itemsEstado, deudaBruta, totalCubierto, pendienteBruto, descuentoGlobal, aumentoGlobal };
 }
 
 // Retardo antes de auto-imprimir la comanda: da tiempo a que el PdV persista los
