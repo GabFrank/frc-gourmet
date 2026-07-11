@@ -111,11 +111,25 @@ export class DocumentScannerComponent implements AfterViewInit, OnDestroy {
     this.frame = frame;
     this.stopCamera();
 
-    // Canvas de preview escalado al ancho disponible del stage.
+    // Cambiar de estado PRIMERO: el bloque de ajuste (con #stage/#preview) está
+    // detrás de *ngIf y no existe en el DOM mientras state === 'camera'. Dibujar
+    // el preview recién cuando Angular lo renderizó (siguiente ciclo).
+    this.state = 'adjust';
+    setTimeout(() => this.renderPreview(), 0);
+  }
+
+  /** Dibuja el frame capturado en el canvas de preview e inicializa las esquinas. */
+  private renderPreview(attempt = 0): void {
+    const frame = this.frame;
+    // El *ngIf pudo no haber renderizado aún el canvas → reintentar unas veces.
+    if (!frame || !this.stageRef?.nativeElement || !this.previewRef?.nativeElement) {
+      if (attempt < 10) setTimeout(() => this.renderPreview(attempt + 1), 30);
+      return;
+    }
     const stageW = this.stageRef.nativeElement.clientWidth || Math.min(window.innerWidth, 480);
-    const scale = Math.min(1, stageW / fw);
-    const pw = Math.round(fw * scale);
-    const ph = Math.round(fh * scale);
+    const scale = Math.min(1, stageW / frame.width);
+    const pw = Math.round(frame.width * scale);
+    const ph = Math.round(frame.height * scale);
     this.displayScale = scale;
 
     const preview = this.previewRef.nativeElement;
@@ -134,13 +148,14 @@ export class DocumentScannerComponent implements AfterViewInit, OnDestroy {
       { x: pw - mx, y: ph - my },
       { x: mx, y: ph - my },
     ];
-    this.state = 'adjust';
   }
 
   retake(): void {
     this.frame = null;
+    this.corners = [];
     this.state = 'camera';
-    void this.startCamera();
+    // El <video> vuelve a montarse con el *ngIf; arrancar la cámara tras el render.
+    setTimeout(() => this.startCamera(), 0);
   }
 
   toggleEnhance(): void {
