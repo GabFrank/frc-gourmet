@@ -1,89 +1,42 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, ElementRef, ViewChildren, QueryList, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
-import { PublicApiService } from '../../core/public-api.service';
+import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { CartService } from '../../core/cart.service';
 import { ConfigService } from '../../core/config.service';
+import { MenuService } from '../../core/menu.service';
 import { AppImgPipe } from '../../core/app-img.pipe';
-import { MenuSnapshot, MenuProducto, MenuPresentacion, MenuCategoria } from '../../core/models';
+import { MenuSnapshot, MenuProducto, MenuCategoria } from '../../core/models';
 
 @Component({
   selector: 'sf-menu',
   standalone: true,
-  imports: [CommonModule, RouterLink, AppImgPipe],
-  template: `
-    <div class="sf-container">
-      <div class="sf-cerrada" *ngIf="config.loaded && !config.config.abiertaAhora">
-        🕒 La tienda está cerrada ahora. Podés ver la carta pero no tomar pedidos.
-      </div>
-      <p class="sf-bienvenida" *ngIf="config.config.mensajeBienvenida">{{ config.config.mensajeBienvenida }}</p>
-
-      <h1 class="sf-title">Nuestra carta</h1>
-
-      <p class="sf-muted" *ngIf="cargando">Cargando carta…</p>
-      <p class="sf-error" *ngIf="error">{{ error }}</p>
-
-      <ng-container *ngIf="menu">
-        <p class="sf-muted" *ngIf="!menu.productos.length">No hay productos disponibles online por ahora.</p>
-
-        <section *ngFor="let cat of menu.categorias" class="sf-cat">
-          <h2 class="sf-cat-title">{{ cat.nombre }}</h2>
-          <div class="sf-prod" *ngFor="let p of productosDe(cat)">
-            <img *ngIf="p.imageUrl | appImg as img" [src]="img" class="sf-prod-img" alt="" />
-            <div class="sf-prod-body">
-              <div class="sf-prod-nombre">{{ p.nombre }}</div>
-              <div class="sf-pres" *ngFor="let pr of p.presentaciones">
-                <span class="sf-pres-nombre">{{ pr.nombre }}</span>
-                <span class="sf-pres-precio">{{ pr.moneda?.simbolo || '' }} {{ pr.precio | number:'1.0-2' }}</span>
-                <button class="sf-btn sf-add" (click)="agregar(p, pr)">Agregar</button>
-              </div>
-            </div>
-          </div>
-        </section>
-      </ng-container>
-    </div>
-
-    <a routerLink="/carrito" class="sf-fab" *ngIf="cart.count > 0">
-      Ver carrito ({{ cart.count }}) · {{ cart.subtotal | number:'1.0-2' }}
-    </a>
-  `,
-  styles: [`
-    .sf-title { font-size: 22px; margin: 4px 0 16px; }
-    .sf-error { color: var(--sf-error); }
-    .sf-cerrada { background: var(--sf-warning-bg); color: var(--sf-warning); padding: 12px; border-radius: var(--sf-radius); margin-bottom: 12px; font-weight: 600; }
-    .sf-bienvenida { color: var(--sf-text-muted); margin: 0 0 12px; }
-    .sf-cat { margin-bottom: 22px; }
-    .sf-cat-title { font-size: 16px; text-transform: uppercase; letter-spacing: .5px; color: var(--sf-text-muted); margin: 0 0 10px; }
-    .sf-prod { display: flex; gap: 12px; background: var(--sf-surface); border: 1px solid var(--sf-border); border-radius: var(--sf-radius); padding: 12px; margin-bottom: 10px; }
-    .sf-prod-img { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; }
-    .sf-prod-body { flex: 1; }
-    .sf-prod-nombre { font-weight: 600; margin-bottom: 8px; }
-    .sf-pres { display: flex; align-items: center; gap: 10px; margin: 4px 0; }
-    .sf-pres-nombre { flex: 1; font-size: 14px; }
-    .sf-pres-precio { font-weight: 600; font-size: 14px; }
-    .sf-add { padding: 6px 12px; font-size: 13px; }
-    .sf-fab {
-      position: fixed; left: 16px; right: 16px; bottom: 16px;
-      background: var(--sf-primary); color: #fff; text-decoration: none;
-      text-align: center; padding: 14px; border-radius: var(--sf-radius); font-weight: 700;
-      box-shadow: 0 4px 16px rgba(0,0,0,.2);
-    }
-  `],
+  imports: [CommonModule, FormsModule, AppImgPipe],
+  templateUrl: './menu.page.html',
+  styleUrls: ['./menu.page.scss'],
 })
-export class MenuPage implements OnInit {
-  private api = inject(PublicApiService);
+export class MenuPage implements OnInit, AfterViewInit, OnDestroy {
+  private router = inject(Router);
+  private menuSvc = inject(MenuService);
   cart = inject(CartService);
   config = inject(ConfigService);
 
   menu: MenuSnapshot | null = null;
   cargando = true;
   error: string | null = null;
+  busqueda = '';
+  categoriaActiva: number | string | null = null;
+
+  @ViewChildren('seccion') secciones!: QueryList<ElementRef<HTMLElement>>;
+  private observer?: IntersectionObserver;
 
   ngOnInit(): void {
-    this.api.call<MenuSnapshot>('menu.get').subscribe({
+    this.menuSvc.cargar().subscribe({
       next: (m) => {
         this.menu = m;
+        this.categoriaActiva = m.categorias[0]?.id ?? null;
         this.cargando = false;
+        setTimeout(() => this.setupScrollSpy(), 0);
       },
       error: (e) => {
         this.error = 'No se pudo cargar la carta. ' + (e?.message || '');
@@ -92,11 +45,64 @@ export class MenuPage implements OnInit {
     });
   }
 
-  productosDe(cat: MenuCategoria): MenuProducto[] {
-    return (this.menu?.productos || []).filter((p: MenuProducto) => p.categoriaId === cat.id);
+  ngAfterViewInit(): void {
+    this.secciones.changes.subscribe(() => this.setupScrollSpy());
   }
 
-  agregar(p: MenuProducto, pr: MenuPresentacion): void {
-    this.cart.agregar(p, pr);
+  ngOnDestroy(): void {
+    this.observer?.disconnect();
   }
+
+  private setupScrollSpy(): void {
+    this.observer?.disconnect();
+    if (!this.secciones?.length) return;
+    this.observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            const id = (e.target as HTMLElement).dataset['cat'];
+            if (id != null) this.categoriaActiva = this.parseId(id);
+          }
+        }
+      },
+      { rootMargin: '-120px 0px -70% 0px', threshold: 0 },
+    );
+    this.secciones.forEach((s) => this.observer!.observe(s.nativeElement));
+  }
+
+  private parseId(id: string): number | string {
+    const n = Number(id);
+    return String(n) === id ? n : id;
+  }
+
+  productosDe(cat: MenuCategoria): MenuProducto[] {
+    const term = this.busqueda.trim().toUpperCase();
+    return (this.menu?.productos || []).filter(
+      (p) => p.categoriaId === cat.id && (!term || p.nombre.toUpperCase().includes(term)),
+    );
+  }
+
+  categoriasVisibles(): MenuCategoria[] {
+    if (!this.menu) return [];
+    return this.menu.categorias.filter((c) => this.productosDe(c).length > 0);
+  }
+
+  irACategoria(cat: MenuCategoria): void {
+    this.categoriaActiva = cat.id;
+    const el = document.getElementById('cat-' + cat.id);
+    if (el) {
+      const y = el.getBoundingClientRect().top + window.scrollY - 104;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }
+  }
+
+  abrir(p: MenuProducto): void {
+    this.router.navigate(['/producto', p.id]);
+  }
+
+  verCarrito(): void {
+    this.router.navigate(['/carrito']);
+  }
+
+  skeletons = Array.from({ length: 6 });
 }

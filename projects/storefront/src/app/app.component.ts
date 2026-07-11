@@ -10,41 +10,37 @@ import { ConfigService } from './core/config.service';
   standalone: true,
   imports: [CommonModule, RouterOutlet, RouterLink],
   template: `
-    <header class="sf-header">
-      <a routerLink="/" class="sf-brand">🍔 {{ config.config.nombreComercio || 'Pedí Online' }}</a>
-      <nav class="sf-nav">
-        <a routerLink="/mis-pedidos" class="sf-nav-link" *ngIf="auth.isAuthenticated">Mis pedidos</a>
-        <a routerLink="/cuenta" class="sf-nav-link" *ngIf="auth.isAuthenticated">
-          {{ auth.cuenta?.nombre || auth.cuenta?.telefono || 'Cuenta' }}
+    <header class="topbar">
+      <a routerLink="/" class="brand">{{ config.config.nombreComercio || 'Pedí Online' }}</a>
+      <nav class="nav">
+        <a routerLink="/mis-pedidos" class="nav-link" *ngIf="auth.isAuthenticated" aria-label="Mis pedidos">
+          <span class="ic">🧾</span>
         </a>
-        <a routerLink="/login" class="sf-nav-link" *ngIf="!auth.isAuthenticated">Ingresar</a>
-        <a routerLink="/carrito" class="sf-cart" aria-label="Carrito">
-          🛒<span class="sf-badge" *ngIf="cart.count > 0">{{ cart.count }}</span>
+        <a routerLink="/cuenta" class="nav-link" *ngIf="auth.isAuthenticated" aria-label="Cuenta">
+          <span class="ic">👤</span>
         </a>
+        <a routerLink="/login" class="nav-link nav-login" *ngIf="!auth.isAuthenticated">Ingresar</a>
       </nav>
     </header>
-    <main class="sf-main">
-      <router-outlet></router-outlet>
-    </main>
+    <main><router-outlet></router-outlet></main>
   `,
   styles: [`
-    .sf-header {
-      position: sticky; top: 0; z-index: 10;
+    :host { display: block; min-height: 100%; }
+    .topbar {
+      position: sticky; top: 0; z-index: 30;
+      height: var(--sf-header-h);
       display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 16px;
-      background: var(--sf-primary); color: #fff;
+      padding: 0 16px;
+      background: var(--sf-surface);
+      border-bottom: 1px solid var(--sf-divider);
     }
-    .sf-brand { color: #fff; text-decoration: none; font-weight: 700; font-size: 18px; }
-    .sf-nav { display: flex; align-items: center; gap: 14px; }
-    .sf-nav-link { color: #fff; text-decoration: none; font-size: 14px; opacity: .95; }
-    .sf-cart { position: relative; color: #fff; text-decoration: none; font-size: 20px; }
-    .sf-badge {
-      position: absolute; top: -8px; right: -10px;
-      background: #fff; color: var(--sf-primary);
-      border-radius: 10px; font-size: 11px; font-weight: 700;
-      min-width: 18px; height: 18px; line-height: 18px; text-align: center; padding: 0 4px;
-    }
-    .sf-main { min-height: calc(100vh - 56px); }
+    .brand { color: var(--sf-primary); text-decoration: none; font-weight: 800; font-size: 18px; letter-spacing: -.2px; }
+    .nav { display: flex; align-items: center; gap: 6px; }
+    .nav-link { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; height: 40px; text-decoration: none; color: var(--sf-text); border-radius: 50%; }
+    .nav-link:hover { background: var(--sf-surface-alt); }
+    .nav-link .ic { font-size: 19px; }
+    .nav-login { color: var(--sf-primary); font-weight: 600; width: auto; padding: 0 12px; border-radius: var(--sf-pill); }
+    main { min-height: calc(100vh - var(--sf-header-h)); }
   `],
 })
 export class AppComponent implements OnInit {

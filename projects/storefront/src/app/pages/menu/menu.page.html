@@ -1,0 +1,71 @@
+<!-- Header del local -->
+<div class="resto-header">
+  <div class="resto-name">{{ config.config.nombreComercio || 'Nuestra carta' }}</div>
+  <div class="resto-meta">
+    <span class="estado" [class.abierto]="config.config.abiertaAhora">
+      {{ config.config.abiertaAhora ? '● Abierto ahora' : '● Cerrado' }}
+    </span>
+    <span *ngIf="config.config.prepTimeMinutos" class="dot">·</span>
+    <span *ngIf="config.config.prepTimeMinutos">⏱ {{ config.config.prepTimeMinutos }} min</span>
+  </div>
+  <div class="resto-msg" *ngIf="config.config.mensajeBienvenida">{{ config.config.mensajeBienvenida }}</div>
+</div>
+
+<!-- Buscador + tabs sticky -->
+<div class="sticky-nav">
+  <div class="search-wrap">
+    <span class="search-ic">🔍</span>
+    <input class="search" [(ngModel)]="busqueda" placeholder="Buscar en el menú…" />
+  </div>
+  <div class="tabs" *ngIf="!cargando">
+    <button *ngFor="let cat of categoriasVisibles()"
+            class="sf-chip" [class.active]="categoriaActiva === cat.id"
+            (click)="irACategoria(cat)">{{ cat.nombre }}</button>
+  </div>
+</div>
+
+<div class="sf-container menu-body">
+  <p class="sf-error" *ngIf="error">{{ error }}</p>
+
+  <!-- Skeletons -->
+  <ng-container *ngIf="cargando">
+    <div class="prod-card skel-card" *ngFor="let s of skeletons">
+      <div class="prod-info">
+        <div class="sf-skel skel-line w60"></div>
+        <div class="sf-skel skel-line w90"></div>
+        <div class="sf-skel skel-line w30"></div>
+      </div>
+      <div class="sf-skel skel-photo"></div>
+    </div>
+  </ng-container>
+
+  <!-- Secciones por categoría -->
+  <ng-container *ngIf="!cargando && menu">
+    <p class="sf-muted empty" *ngIf="!categoriasVisibles().length">No encontramos productos.</p>
+
+    <section *ngFor="let cat of categoriasVisibles()" class="cat-section"
+             [id]="'cat-' + cat.id" [attr.data-cat]="cat.id" #seccion>
+      <h2 class="cat-title">{{ cat.nombre }}</h2>
+
+      <button class="prod-card" *ngFor="let p of productosDe(cat)" (click)="abrir(p)">
+        <div class="prod-info">
+          <div class="prod-nombre">{{ p.nombre }}</div>
+          <div class="prod-desc" *ngIf="p.descripcion">{{ p.descripcion }}</div>
+          <div class="prod-precio">
+            <span class="desde" *ngIf="p.opciones.length > 1">desde </span>
+            {{ p.moneda?.simbolo || '' }} {{ p.precioDesde | number:'1.0-2' }}
+          </div>
+        </div>
+        <div class="prod-photo" *ngIf="p.imageUrl | appImg as img" [style.background-image]="'url(' + img + ')'"></div>
+        <div class="prod-add">+</div>
+      </button>
+    </section>
+  </ng-container>
+</div>
+
+<!-- Barra de carrito flotante -->
+<div class="cart-bar" *ngIf="cart.count > 0" (click)="verCarrito()">
+  <span class="cart-count">{{ cart.count }}</span>
+  <span class="cart-label">Ver carrito</span>
+  <span class="cart-total">{{ cart.subtotal | number:'1.0-2' }}</span>
+</div>
