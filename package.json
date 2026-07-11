@@ -41,6 +41,7 @@
     "test:gestion-sabores": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-gestion-sabores-e2e.ts",
     "test:receta-por-variacion": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-receta-por-variacion-e2e.ts",
     "test:reparar-recetas": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-reparar-recetas-e2e.ts",
+    "test:cobro-parcial": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-cobro-parcial-e2e.ts",
     "build:storefront": "ng build storefront --base-href /tienda/",
     "lint": "ng lint",
     "release": "semantic-release",
