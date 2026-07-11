@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { Sabor } from '../../src/app/database/entities/productos/sabor.entity';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
 import { Receta } from '../../src/app/database/entities/productos/receta.entity';
@@ -21,9 +21,28 @@ export const saboresHandlers = {
 
       const sabores = await dataSource.getRepository(Sabor).find({
         where: { producto: { id: productoId } },
-        relations: ['recetas', 'recetas.ingredientes'],
         order: { nombre: 'ASC' }
       });
+
+      // Las recetas de un sabor se alcanzan vía RecetaPresentacion (sabor→rp→receta),
+      // no hay relación directa Sabor.recetas. Adjuntamos las recetas (dedupe) por sabor.
+      const saborIds = sabores.map((s) => s.id!).filter(Boolean);
+      if (saborIds.length) {
+        const rps = await dataSource.getRepository(RecetaPresentacion).find({
+          where: { sabor: { id: In(saborIds) } },
+          relations: ['sabor', 'receta', 'receta.ingredientes'],
+        });
+        const recetasPorSabor = new Map<number, Map<number, Receta>>();
+        for (const rp of rps) {
+          const sid = rp.sabor?.id;
+          if (sid == null || !rp.receta) continue;
+          if (!recetasPorSabor.has(sid)) recetasPorSabor.set(sid, new Map());
+          recetasPorSabor.get(sid)!.set(rp.receta.id!, rp.receta);
+        }
+        for (const s of sabores) {
+          (s as any).recetas = Array.from(recetasPorSabor.get(s.id!)?.values() ?? []);
+        }
+      }
 
       console.log(`✅ Found ${sabores.length} sabores for producto ${productoId}`);
       return sabores;
@@ -91,7 +110,6 @@ export const saboresHandlers = {
       const nuevaReceta = recetaRepo.create({
         nombre: nombreReceta.toUpperCase(),
         descripcion: `Receta base para ${nombreReceta}`,
-        sabor: saborGuardado,
         productoVariacion: { id: saborData.productoId },
         rendimiento: 1,
         unidadRendimiento: 'UNIDADES',
@@ -100,8 +118,11 @@ export const saboresHandlers = {
       });
       const recetaGuardada = await recetaRepo.save(nuevaReceta);
 
-      // 5. Auto-generar variaciones para todas las presentaciones
-      const variacionesGeneradas = await generarVariacionesParaReceta(queryRunner, recetaGuardada.id);
+      // 5. Auto-generar variaciones (RecetaPresentacion) para cada presentación,
+      //    asignando el sabor recién creado (el sabor vive en RecetaPresentacion).
+      const variacionesGeneradas = await generarVariacionesParaReceta(
+        queryRunner, recetaGuardada.id, saborGuardado, producto,
+      );
 
       await queryRunner.commitTransaction();
 
@@ -131,8 +152,7 @@ export const saboresHandlers = {
 
       // Verificar que el sabor existe
       const saborExistente = await saborRepo.findOne({
-        where: { id: saborId },
-        relations: ['recetas']
+        where: { id: saborId }
       });
 
       if (!saborExistente) {
@@ -153,8 +173,7 @@ export const saboresHandlers = {
       }
 
       const saborActualizado = await saborRepo.findOne({
-        where: { id: saborId },
-        relations: ['recetas', 'recetas.variaciones']
+        where: { id: saborId }
       });
 
       console.log(`✅ Sabor ID ${saborId} updated successfully`);
@@ -288,30 +307,32 @@ export const saboresHandlers = {
   }
 };
 
-// ✅ HELPER: Generar variaciones automáticamente para una receta
-async function generarVariacionesParaReceta(queryRunner: any, recetaId: number): Promise<RecetaPresentacion[]> {
+// ✅ HELPER: Generar variaciones automáticamente para una receta (una por presentación).
+// El sabor se asigna en RecetaPresentacion (columna NOT NULL), por eso se recibe explícito.
+async function generarVariacionesParaReceta(
+  queryRunner: any,
+  recetaId: number,
+  sabor: { id: number; nombre: string },
+  producto: { nombre: string; presentaciones?: Presentacion[] },
+): Promise<RecetaPresentacion[]> {
   try {
     console.log(`🔄 Generating variations for receta ID: ${recetaId}`);
 
-    const receta = await queryRunner.manager.getRepository(Receta).findOne({
-      where: { id: recetaId },
-      relations: ['sabor', 'productoVariacion', 'productoVariacion.presentaciones']
-    });
-
-    if (!receta?.productoVariacion?.presentaciones?.length) {
-      console.log(`⚠️ No presentaciones found for receta ${recetaId}`);
+    const presentaciones = producto?.presentaciones || [];
+    if (!presentaciones.length) {
+      console.log(`⚠️ No presentaciones found for producto (receta ${recetaId})`);
       return [];
     }
 
     const variacionesRepo = queryRunner.manager.getRepository(RecetaPresentacion);
     const variaciones: RecetaPresentacion[] = [];
 
-    for (const presentacion of receta.productoVariacion.presentaciones) {
-      // Verificar si ya existe esta variación
+    for (const presentacion of presentaciones) {
+      // Verificar si ya existe esta variación (por presentación + sabor, que es el índice único)
       const variacionExistente = await variacionesRepo.findOne({
         where: {
-          receta: { id: recetaId },
-          presentacion: { id: presentacion.id }
+          presentacion: { id: presentacion.id },
+          sabor: { id: sabor.id }
         }
       });
 
@@ -320,8 +341,8 @@ async function generarVariacionesParaReceta(queryRunner: any, recetaId: number):
         continue;
       }
 
-      const nombreGenerado = generarNombreVariacion(receta.productoVariacion.nombre, presentacion.nombre, receta.sabor?.nombre);
-      const sku = generarSKU(receta.productoVariacion.nombre, receta.sabor?.nombre, presentacion.nombre);
+      const nombreGenerado = generarNombreVariacion(producto.nombre, presentacion.nombre, sabor.nombre);
+      const sku = generarSKU(producto.nombre, sabor.nombre, presentacion.nombre);
 
       const variacion = variacionesRepo.create({
         nombre_generado: nombreGenerado,
@@ -329,7 +350,8 @@ async function generarVariacionesParaReceta(queryRunner: any, recetaId: number):
         costo_calculado: 0,
         activo: true,
         receta: { id: recetaId },
-        presentacion: { id: presentacion.id }
+        presentacion: { id: presentacion.id },
+        sabor: { id: sabor.id }
       });
 
       const variacionGuardada = await variacionesRepo.save(variacion);
@@ -365,43 +387,43 @@ function generarSKU(nombreProducto: string, nombreSabor?: string, nombrePresenta
   return partes.join('-');
 }
 
-// ✅ HELPER: Actualizar nombres de recetas cuando cambia el sabor
+// ✅ HELPER: Actualizar nombres de recetas/variaciones cuando cambia el nombre del sabor.
+// El vínculo receta↔sabor vive en RecetaPresentacion, así que partimos de ahí.
 async function actualizarNombresRecetasPorSabor(saborId: number, nuevoNombreSabor: string): Promise<void> {
   try {
-    const recetas = await dataSource.getRepository(Receta).find({
+    const nombreSabor = nuevoNombreSabor.toUpperCase();
+    const variaciones = await dataSource.getRepository(RecetaPresentacion).find({
       where: { sabor: { id: saborId } },
-      relations: ['productoVariacion', 'variaciones']
+      relations: ['receta', 'receta.productoVariacion', 'presentacion'],
     });
 
-    for (const receta of recetas) {
-      const nuevoNombreReceta = `${receta.productoVariacion?.nombre} ${nuevoNombreSabor}`.toUpperCase();
+    const recetasActualizadas = new Set<number>();
+    for (const variacion of variaciones) {
+      const receta = variacion.receta;
+      const nombreProducto = receta?.productoVariacion?.nombre || '';
 
-      // Actualizar receta
-      await dataSource.getRepository(Receta).update(receta.id!, {
-        nombre: nuevoNombreReceta
-      });
-
-      // Actualizar variaciones
-      for (const variacion of receta.variaciones || []) {
-        const presentacion = await dataSource.getRepository(Presentacion).findOne({
-          where: { id: variacion.presentacion.id }
+      // Renombrar la receta base una sola vez.
+      if (receta?.id != null && !recetasActualizadas.has(receta.id)) {
+        recetasActualizadas.add(receta.id);
+        await dataSource.getRepository(Receta).update(receta.id, {
+          nombre: `${nombreProducto} ${nombreSabor}`.toUpperCase(),
         });
+      }
 
-        if (presentacion) {
-          const nuevoNombreVariacion = generarNombreVariacion(
-            receta.productoVariacion?.nombre || '',
-            presentacion.nombre,
-            nuevoNombreSabor
-          );
-
-          await dataSource.getRepository(RecetaPresentacion).update(variacion.id!, {
-            nombre_generado: nuevoNombreVariacion
-          });
-        }
+      // Renombrar la variación (nombre_generado) según producto + tamaño + sabor.
+      if (variacion.presentacion) {
+        const nuevoNombreVariacion = generarNombreVariacion(
+          nombreProducto,
+          variacion.presentacion.nombre,
+          nombreSabor,
+        );
+        await dataSource.getRepository(RecetaPresentacion).update(variacion.id!, {
+          nombre_generado: nuevoNombreVariacion,
+        });
       }
     }
 
-    console.log(`✅ Updated names for ${recetas.length} recetas after sabor name change`);
+    console.log(`✅ Updated names for ${recetasActualizadas.size} recetas / ${variaciones.length} variaciones after sabor rename`);
 
   } catch (error) {
     console.error('❌ Error updating receta names:', error);
