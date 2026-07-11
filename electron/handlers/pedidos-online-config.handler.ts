@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { TiendaOnlineConfig } from '../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
+import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { registerPublicOperation } from '../server/public-routes';
 
@@ -43,6 +44,23 @@ export function estaAbierta(cfg: TiendaOnlineConfig, now: Date = new Date()): bo
   // Soporta franjas que cruzan la medianoche (ej. abre 20:00, cierra 02:00).
   if (abre > cierra) return hhmm >= abre || hhmm <= cierra;
   return hhmm >= abre && hhmm <= cierra;
+}
+
+/**
+ * Config de pizza (multi-sabor) tomada del PdV, para que el storefront cotice
+ * "mitad y mitad" igual que el mostrador. Defaults seguros si no hay fila.
+ */
+export async function getPizzaConfig(
+  dataSource: DataSource,
+): Promise<{ maxSabores: number; estrategia: 'MAYOR_PRECIO' | 'PROMEDIO' }> {
+  try {
+    const cfg = await dataSource.getRepository(PdvConfig).findOne({ where: {}, order: { id: 'ASC' } });
+    const max = Math.max(1, Number(cfg?.pizzaMaxSabores) || 2);
+    const estr = String(cfg?.pizzaEstrategiaPrecio || 'MAYOR_PRECIO').toUpperCase();
+    return { maxSabores: max, estrategia: estr === 'PROMEDIO' ? 'PROMEDIO' : 'MAYOR_PRECIO' };
+  } catch {
+    return { maxSabores: 2, estrategia: 'MAYOR_PRECIO' };
+  }
 }
 
 function mapConfigPublic(cfg: TiendaOnlineConfig): any {

@@ -15,12 +15,12 @@
 <div class="sticky-nav">
   <div class="search-wrap">
     <span class="search-ic">🔍</span>
-    <input class="search" [(ngModel)]="busqueda" placeholder="Buscar en el menú…" />
+    <input class="search" [(ngModel)]="busqueda" (ngModelChange)="recomputarVista()" placeholder="Buscar en el menú…" />
   </div>
   <div class="tabs" *ngIf="!cargando">
-    <button *ngFor="let cat of categoriasVisibles()"
-            class="sf-chip" [class.active]="categoriaActiva === cat.id"
-            (click)="irACategoria(cat)">{{ cat.nombre }}</button>
+    <button *ngFor="let cv of categoriasView"
+            class="sf-chip" [class.active]="categoriaActiva === cv.cat.id"
+            (click)="irACategoria(cv.cat)">{{ cv.cat.nombre }}</button>
   </div>
 </div>
 
@@ -41,22 +41,22 @@
 
   <!-- Secciones por categoría -->
   <ng-container *ngIf="!cargando && menu">
-    <p class="sf-muted empty" *ngIf="!categoriasVisibles().length">No encontramos productos.</p>
+    <p class="sf-muted empty" *ngIf="!categoriasView.length">No encontramos productos.</p>
 
-    <section *ngFor="let cat of categoriasVisibles()" class="cat-section"
-             [id]="'cat-' + cat.id" [attr.data-cat]="cat.id" #seccion>
-      <h2 class="cat-title">{{ cat.nombre }}</h2>
+    <section *ngFor="let cv of categoriasView" class="cat-section"
+             [id]="'cat-' + cv.cat.id" [attr.data-cat]="cv.cat.id" #seccion>
+      <h2 class="cat-title">{{ cv.cat.nombre }}</h2>
 
-      <button class="prod-card" *ngFor="let p of productosDe(cat)" (click)="abrir(p)">
+      <button class="prod-card" *ngFor="let c of cv.cards" (click)="abrir(c)">
         <div class="prod-info">
-          <div class="prod-nombre">{{ p.nombre }}</div>
-          <div class="prod-desc" *ngIf="p.descripcion">{{ p.descripcion }}</div>
+          <div class="prod-nombre">{{ c.titulo }}</div>
+          <div class="prod-desc" *ngIf="c.descripcion">{{ c.descripcion }}</div>
           <div class="prod-precio">
-            <span class="desde" *ngIf="p.opciones.length > 1">desde </span>
-            {{ p.moneda?.simbolo || '' }} {{ p.precioDesde | number:'1.0-2' }}
+            <span class="desde" *ngIf="c.desde">desde </span>
+            {{ c.monedaSimbolo }} {{ c.precioDesde | number:'1.0-2' }}
           </div>
         </div>
-        <div class="prod-photo" *ngIf="p.imageUrl | appImg as img" [style.background-image]="'url(' + img + ')'"></div>
+        <div class="prod-photo" *ngIf="c.imageUrl | appImg as img" [style.background-image]="'url(' + img + ')'"></div>
         <div class="prod-add">+</div>
       </button>
     </section>

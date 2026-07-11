@@ -55,6 +55,7 @@ export class CartService {
         tipo: i.opcion.tipo,
         presentacionId: i.opcion.presentacionId,
         recetaId: i.opcion.recetaId,
+        saborIds: i.opcion.saborIds,
       },
       cantidad: i.cantidad,
       adicionalIds: i.adicionales.map((a) => a.id),
