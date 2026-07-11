@@ -2,7 +2,7 @@
   <!-- Foto + volver -->
   <div class="pd-hero" [class.no-photo]="!(p.imageUrl | appImg)">
     <div class="pd-photo" *ngIf="p.imageUrl | appImg as img" [style.background-image]="'url(' + img + ')'"></div>
-    <button class="pd-back" (click)="volver()" aria-label="Volver">←</button>
+    <button class="pd-back" (click)="volver()" aria-label="Volver"><sf-icon name="back" [size]="20"></sf-icon></button>
   </div>
 
   <div class="sf-container pd-body">

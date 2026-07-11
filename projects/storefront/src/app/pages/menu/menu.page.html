@@ -6,7 +6,7 @@
       {{ config.config.abiertaAhora ? '● Abierto ahora' : '● Cerrado' }}
     </span>
     <span *ngIf="config.config.prepTimeMinutos" class="dot">·</span>
-    <span *ngIf="config.config.prepTimeMinutos">⏱ {{ config.config.prepTimeMinutos }} min</span>
+    <span *ngIf="config.config.prepTimeMinutos" class="prep-meta"><sf-icon name="clock" [size]="13"></sf-icon>{{ config.config.prepTimeMinutos }} min</span>
   </div>
   <div class="resto-msg" *ngIf="config.config.mensajeBienvenida">{{ config.config.mensajeBienvenida }}</div>
 </div>
@@ -14,7 +14,7 @@
 <!-- Buscador + tabs sticky -->
 <div class="sticky-nav">
   <div class="search-wrap">
-    <span class="search-ic">🔍</span>
+    <span class="search-ic"><sf-icon name="search" [size]="17"></sf-icon></span>
     <input class="search" [(ngModel)]="busqueda" (ngModelChange)="recomputarVista()" placeholder="Buscar en el menú…" />
   </div>
   <div class="tabs" *ngIf="!cargando">

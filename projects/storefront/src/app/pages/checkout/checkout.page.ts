@@ -6,14 +6,15 @@ import { PublicApiService } from '../../core/public-api.service';
 import { CartService } from '../../core/cart.service';
 import { AuthService } from '../../core/auth.service';
 import { ConfigService } from '../../core/config.service';
-import { ZonaDelivery, TipoPedido } from '../../core/models';
+import { IconComponent } from '../../core/icon.component';
+import { TipoPedido } from '../../core/models';
 
 declare const L: any;
 
 @Component({
   selector: 'sf-checkout',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, IconComponent],
   templateUrl: './checkout.page.html',
   styleUrls: ['./checkout.page.scss'],
 })
@@ -26,8 +27,6 @@ export class CheckoutPage implements OnInit, OnDestroy {
   config = inject(ConfigService);
 
   tipo: TipoPedido = 'PICKUP';
-  zonas: ZonaDelivery[] = [];
-  zonaId: number | null = null;
   direccion = '';
   referencia = '';
   notas = '';
@@ -48,10 +47,6 @@ export class CheckoutPage implements OnInit, OnDestroy {
   ngOnInit(): void {
     if (!this.config.config.permitePickup && this.config.config.permiteDelivery) this.tipo = 'DELIVERY';
     this.recomputar();
-    this.api.call<ZonaDelivery[]>('zonas.get').subscribe({
-      next: (z) => (this.zonas = z || []),
-      error: () => {},
-    });
     if (this.tipo === 'DELIVERY') this.initMapaLazy();
   }
 
@@ -112,15 +107,16 @@ export class CheckoutPage implements OnInit, OnDestroy {
     );
   }
 
-  toggleManual(): void {
-    this.manual = !this.manual;
-    if (this.manual && this.map) { this.map.remove(); this.map = null; }
-    else if (!this.manual && this.tipo === 'DELIVERY') this.initMapaLazy();
+  setUbicacion(manual: boolean): void {
+    if (this.manual === manual) return;
+    this.manual = manual;
+    if (this.manual) { if (this.map) { this.map.remove(); this.map = null; } }
+    else if (this.tipo === 'DELIVERY') this.initMapaLazy();
   }
 
   recomputar(): void {
-    const z = this.zonas.find((x) => x.id === this.zonaId);
-    this.costoEnvio = this.tipo === 'DELIVERY' && z ? z.tarifa : 0;
+    // El envío se cotiza cuando la tienda acepta el pedido (según la ubicación).
+    this.costoEnvio = 0;
     this.total = this.cart.subtotal + this.costoEnvio;
   }
 
@@ -130,22 +126,27 @@ export class CheckoutPage implements OnInit, OnDestroy {
 
   confirmar(): void {
     this.error = null;
-    const direccionFinal = this.manual ? this.direccion.trim() : (this.direccionMapa || this.direccion.trim());
+    const coords = this.lat != null && this.lng != null;
+    const direccionFinal = this.manual
+      ? this.direccion.trim()
+      : (this.direccionMapa || (coords ? `UBICACIÓN GPS: ${this.lat!.toFixed(5)}, ${this.lng!.toFixed(5)}` : ''));
     if (this.tipo === 'DELIVERY') {
-      if (!this.zonaId) { this.error = 'Elegí una zona de entrega.'; return; }
-      if (!direccionFinal) { this.error = this.manual ? 'Ingresá la dirección.' : 'Movéel mapa a tu ubicación.'; return; }
+      if (this.manual) {
+        if (!direccionFinal) { this.error = 'Ingresá tu dirección.'; return; }
+      } else if (!coords) {
+        this.error = 'Mové el mapa para marcar tu ubicación.'; return;
+      }
     }
     this.enviando = true;
     const payload: any = {
       tipoPedido: this.tipo,
       items: this.cart.toPedidoItems(),
-      zonaDeliveryId: this.tipo === 'DELIVERY' ? this.zonaId : null,
       direccionEntrega: this.tipo === 'DELIVERY' ? direccionFinal : null,
       referenciaDireccion: this.referencia.trim() || null,
       notas: this.notas.trim() || null,
       metodoPago: 'EFECTIVO',
     };
-    if (this.tipo === 'DELIVERY' && !this.manual && this.lat != null && this.lng != null) {
+    if (this.tipo === 'DELIVERY' && !this.manual && coords) {
       payload.latitud = this.lat; payload.longitud = this.lng;
     }
     this.api.call<any>('pedido.crear', [payload]).subscribe({
@@ -161,6 +162,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
   private mensajeError(res: any): string {
     switch (res?.error) {
       case 'monto_minimo_no_alcanzado': return `El mínimo para esta zona es ${res.montoMinimo}. Tu subtotal es ${res.subtotal}.`;
+      case 'falta_ubicacion': return 'Indicá dónde entregamos: marcá el mapa o escribí tu dirección.';
       case 'falta_zona_delivery': return 'Elegí una zona de entrega.';
       case 'falta_direccion': return 'Ingresá la dirección.';
       case 'monto_minimo_global': return `El pedido mínimo es ${res.montoMinimo}. Tu subtotal es ${res.subtotal}.`;

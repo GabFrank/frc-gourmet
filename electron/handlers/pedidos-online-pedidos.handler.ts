@@ -329,25 +329,34 @@ export function registerPedidosOnlinePedidosHandlers(
       };
     }
 
-    // Delivery: tarifa + validación de monto mínimo.
+    // Delivery: el cliente indica DÓNDE entregar (mapa o dirección escrita); el
+    // costo de envío lo define la tienda al aceptar (no hay selector de zonas).
     let costoEnvio = 0;
     let zona: ZonaDelivery | null = null;
     if (tipoPedido === TipoPedidoOnline.DELIVERY) {
-      if (!data?.zonaDeliveryId) return { success: false, error: 'falta_zona_delivery' };
-      zona = await dataSource
-        .getRepository(ZonaDelivery)
-        .findOne({ where: { id: data.zonaDeliveryId, activa: true } });
-      if (!zona) return { success: false, error: 'zona_delivery_invalida' };
-      if (subtotal < Number(zona.montoMinimo)) {
-        return {
-          success: false,
-          error: 'monto_minimo_no_alcanzado',
-          montoMinimo: Number(zona.montoMinimo),
-          subtotal,
-        };
+      // Ubicación requerida: coordenadas del mapa O dirección escrita.
+      const tieneCoords =
+        typeof data?.latitud === 'number' && typeof data?.longitud === 'number';
+      const tieneDireccion = !!(data?.direccionEntrega && String(data.direccionEntrega).trim());
+      if (!tieneCoords && !tieneDireccion) return { success: false, error: 'falta_ubicacion' };
+
+      // Zona opcional (compat / config avanzada): si el pedido trae una, se aplica
+      // su tarifa y su monto mínimo. Si no, el envío queda "a coordinar" (0).
+      if (data?.zonaDeliveryId) {
+        zona = await dataSource
+          .getRepository(ZonaDelivery)
+          .findOne({ where: { id: data.zonaDeliveryId, activa: true } });
+        if (!zona) return { success: false, error: 'zona_delivery_invalida' };
+        if (subtotal < Number(zona.montoMinimo)) {
+          return {
+            success: false,
+            error: 'monto_minimo_no_alcanzado',
+            montoMinimo: Number(zona.montoMinimo),
+            subtotal,
+          };
+        }
+        costoEnvio = Number(zona.tarifa);
       }
-      if (!data?.direccionEntrega) return { success: false, error: 'falta_direccion' };
-      costoEnvio = Number(zona.tarifa);
     }
 
     const total = subtotal + costoEnvio;

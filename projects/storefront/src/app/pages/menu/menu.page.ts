@@ -6,6 +6,7 @@ import { CartService } from '../../core/cart.service';
 import { ConfigService } from '../../core/config.service';
 import { MenuService } from '../../core/menu.service';
 import { AppImgPipe } from '../../core/app-img.pipe';
+import { IconComponent } from '../../core/icon.component';
 import { MenuSnapshot, MenuProducto, MenuCategoria } from '../../core/models';
 
 /** Tarjeta del menú. Una pizza se expande en una tarjeta POR SABOR (tipo iFood). */
@@ -29,7 +30,7 @@ interface CatView {
 @Component({
   selector: 'sf-menu',
   standalone: true,
-  imports: [CommonModule, FormsModule, AppImgPipe],
+  imports: [CommonModule, FormsModule, AppImgPipe, IconComponent],
   templateUrl: './menu.page.html',
   styleUrls: ['./menu.page.scss'],
 })

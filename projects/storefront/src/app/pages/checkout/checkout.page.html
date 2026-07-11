@@ -9,7 +9,8 @@
   </ng-container>
 
   <div class="sf-card cerrada" *ngIf="config.loaded && !config.config.abiertaAhora">
-    🕒 La tienda está cerrada ahora. No se pueden tomar pedidos.
+    <sf-icon name="clock" [size]="18"></sf-icon>
+    <span>La tienda está cerrada ahora. No se pueden tomar pedidos.</span>
   </div>
 
   <ng-container *ngIf="auth.isAuthenticated && config.config.abiertaAhora">
@@ -17,41 +18,37 @@
     <div class="sf-card">
       <h3>Tipo de pedido</h3>
       <div class="choices">
-        <button class="choice" *ngIf="config.config.permitePickup" [class.active]="tipo === 'PICKUP'" (click)="setTipo('PICKUP')">🏃 Retiro</button>
-        <button class="choice" *ngIf="config.config.permiteDelivery" [class.active]="tipo === 'DELIVERY'" (click)="setTipo('DELIVERY')">🛵 Delivery</button>
+        <button class="choice" *ngIf="config.config.permitePickup" [class.active]="tipo === 'PICKUP'" (click)="setTipo('PICKUP')"><sf-icon name="bag" [size]="18"></sf-icon>Retiro</button>
+        <button class="choice" *ngIf="config.config.permiteDelivery" [class.active]="tipo === 'DELIVERY'" (click)="setTipo('DELIVERY')"><sf-icon name="bike" [size]="18"></sf-icon>Delivery</button>
       </div>
-      <p class="sf-muted prep" *ngIf="config.config.prepTimeMinutos">⏱ Preparación estimada: {{ config.config.prepTimeMinutos }} min.</p>
+      <p class="sf-muted prep" *ngIf="config.config.prepTimeMinutos"><sf-icon name="clock" [size]="14"></sf-icon>Preparación estimada: {{ config.config.prepTimeMinutos }} min.</p>
     </div>
 
     <!-- Delivery -->
     <div class="sf-card" *ngIf="tipo === 'DELIVERY'">
       <h3>¿Dónde entregamos?</h3>
 
-      <label class="lbl">Zona</label>
-      <select class="sf-input" [(ngModel)]="zonaId" (ngModelChange)="recomputar()">
-        <option [ngValue]="null" disabled>Elegí una zona</option>
-        <option *ngFor="let z of zonas" [ngValue]="z.id">
-          {{ z.nombre }} — envío {{ z.tarifa | number:'1.0-2' }}
-          <ng-container *ngIf="z.montoMinimo > 0"> (mín. {{ z.montoMinimo | number:'1.0-2' }})</ng-container>
-        </option>
-      </select>
+      <!-- Toggle: ubicación en el mapa o dirección escrita -->
+      <div class="choices ubic">
+        <button type="button" class="choice" [class.active]="!manual" (click)="setUbicacion(false)"><sf-icon name="pin" [size]="18"></sf-icon>En el mapa</button>
+        <button type="button" class="choice" [class.active]="manual" (click)="setUbicacion(true)"><sf-icon name="pencil" [size]="18"></sf-icon>Escribir dirección</button>
+      </div>
 
       <!-- Mapa -->
       <ng-container *ngIf="!manual">
         <div class="map-wrap">
           <div id="sf-map" class="map"></div>
-          <div class="map-pin">📍</div>
+          <div class="map-pin"><sf-icon name="pin" [size]="34"></sf-icon></div>
           <button type="button" class="map-loc" (click)="usarMiUbicacion()">Usar mi ubicación</button>
         </div>
         <p class="map-dir sf-muted" *ngIf="direccionMapa">{{ direccionMapa }}</p>
-        <button type="button" class="link" (click)="toggleManual()">Agregar dirección manualmente</button>
+        <p class="map-hint sf-muted" *ngIf="!direccionMapa">Mové el mapa para ubicar el pin en tu dirección.</p>
       </ng-container>
 
       <!-- Manual -->
       <ng-container *ngIf="manual">
         <label class="lbl">Dirección</label>
         <input class="sf-input" [(ngModel)]="direccion" placeholder="Calle, número, barrio" />
-        <button type="button" class="link" (click)="toggleManual()">Elegir en el mapa</button>
       </ng-container>
 
       <label class="lbl">Referencia (opcional)</label>
@@ -67,11 +64,12 @@
     <!-- Totales -->
     <div class="sf-card totales">
       <div class="row"><span>Subtotal</span><span>{{ cart.subtotal | number:'1.0-2' }}</span></div>
-      <div class="row" *ngIf="tipo === 'DELIVERY'"><span>Envío</span><span>{{ costoEnvio | number:'1.0-2' }}</span></div>
+      <div class="row" *ngIf="tipo === 'DELIVERY'"><span>Envío</span><span class="acoordinar">A coordinar</span></div>
       <div class="row grand"><strong>Total</strong><strong>{{ total | number:'1.0-2' }}</strong></div>
     </div>
+    <p class="sf-muted envio-nota" *ngIf="tipo === 'DELIVERY'">El costo de envío se confirma cuando la tienda acepta tu pedido.</p>
 
-    <p class="sf-muted pago">💵 Pago: efectivo contra entrega/retiro.</p>
+    <p class="sf-muted pago"><sf-icon name="cash" [size]="15"></sf-icon>Pago: efectivo contra entrega/retiro.</p>
     <p class="sf-error" *ngIf="error">{{ error }}</p>
   </ng-container>
 </div>

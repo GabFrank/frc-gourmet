@@ -2,12 +2,14 @@
 
 .pd-hero { position: relative; }
 .pd-photo { width: 100%; height: 240px; background-size: cover; background-position: center; background-color: var(--sf-surface-alt); }
-.pd-hero.no-photo { height: 8px; }
+/* Sin foto: reservamos una franja para el botón de volver (si no, tapa el título). */
+.pd-hero.no-photo { height: 56px; }
 .pd-back {
   position: absolute; top: 12px; left: 12px;
   width: 40px; height: 40px; border-radius: 50%;
   border: none; background: var(--sf-surface); color: var(--sf-text);
-  font-size: 20px; box-shadow: var(--sf-shadow-card);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--sf-shadow-card);
 }
 
 .pd-body { padding-top: 16px; }
