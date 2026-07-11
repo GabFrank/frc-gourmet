@@ -1,0 +1,83 @@
+:host {
+  display: block;
+  max-width: 480px;
+}
+
+h2[mat-dialog-title] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loading-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  color: var(--text-secondary);
+}
+
+.hint {
+  margin: 0 0 16px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.mode-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+
+  .mode-label {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .mode-desc {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    line-height: 1.2;
+  }
+}
+
+.full-width {
+  width: 100%;
+}
+
+.test-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+
+  .test-result {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.85rem;
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+
+    &.ok {
+      color: var(--success-color);
+    }
+
+    &.err {
+      color: var(--error-color);
+    }
+  }
+}
+
+mat-dialog-actions {
+  button mat-spinner {
+    display: inline-block;
+  }
+}
