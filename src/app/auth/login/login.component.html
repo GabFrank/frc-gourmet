@@ -34,6 +34,10 @@
     <div class="right-panel">
       <div class="login-box-container">
         <mat-card class="login-box">
+          <button mat-icon-button type="button" class="login-config-btn"
+                  matTooltip="Configuración de conexión" (click)="openConexionConfig()">
+            <mat-icon>settings</mat-icon>
+          </button>
           <mat-card-header>
             <mat-card-title>Iniciar Sesión</mat-card-title>
             <mat-card-subtitle>Ingresa tus credenciales para acceder</mat-card-subtitle>

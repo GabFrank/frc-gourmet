@@ -1,0 +1,73 @@
+<h2 mat-dialog-title>
+  <mat-icon color="primary">settings_ethernet</mat-icon>
+  Configuración de conexión
+</h2>
+
+<mat-dialog-content>
+  <div *ngIf="loading" class="loading-row">
+    <mat-spinner diameter="28"></mat-spinner>
+    <span>Cargando…</span>
+  </div>
+
+  <ng-container *ngIf="!loading">
+    <p class="hint">
+      Elegí cómo se conecta esta PC. En modo <strong>cliente</strong> todos los
+      datos vienen de un servidor central por la red.
+    </p>
+
+    <mat-radio-group class="mode-group" [(ngModel)]="mode" (ngModelChange)="onModeChange()">
+      <mat-radio-button value="standalone">
+        <span class="mode-label">Standalone</span>
+        <span class="mode-desc">Todo local en esta PC</span>
+      </mat-radio-button>
+      <mat-radio-button value="server">
+        <span class="mode-label">Servidor</span>
+        <span class="mode-desc">Esta PC expone los datos a la red</span>
+      </mat-radio-button>
+      <mat-radio-button value="client">
+        <span class="mode-label">Cliente</span>
+        <span class="mode-desc">Se conecta a un servidor central</span>
+      </mat-radio-button>
+    </mat-radio-group>
+
+    <!-- Servidor: puerto -->
+    <mat-form-field *ngIf="mode === 'server'" appearance="outline" class="full-width">
+      <mat-label>Puerto del servidor</mat-label>
+      <input matInput type="number" [(ngModel)]="serverPort" min="1" max="65535" />
+      <mat-icon matPrefix>lan</mat-icon>
+    </mat-form-field>
+
+    <!-- Cliente: URL + probar -->
+    <ng-container *ngIf="mode === 'client'">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>URL del servidor</mat-label>
+        <input matInput [(ngModel)]="serverUrl" placeholder="http://192.168.1.10:7070"
+               (ngModelChange)="testResult = null" autocomplete="off" />
+        <mat-icon matPrefix>dns</mat-icon>
+      </mat-form-field>
+
+      <div class="test-row">
+        <button mat-stroked-button type="button" (click)="test()" [disabled]="testing || !serverUrl">
+          <mat-icon>wifi_tethering</mat-icon>
+          Probar conexión
+        </button>
+        <mat-spinner *ngIf="testing" diameter="20"></mat-spinner>
+        <span *ngIf="testResult" class="test-result"
+              [class.ok]="testResult.ok" [class.err]="!testResult.ok">
+          <mat-icon>{{ testResult.ok ? 'check_circle' : 'error' }}</mat-icon>
+          {{ testResult.msg }}
+        </span>
+      </div>
+    </ng-container>
+  </ng-container>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="cerrar()" [disabled]="saving">Cerrar</button>
+  <button mat-raised-button color="primary" type="button"
+          (click)="saveAndRestart()" [disabled]="loading || saving">
+    <mat-icon *ngIf="!saving">restart_alt</mat-icon>
+    <mat-spinner *ngIf="saving" diameter="20"></mat-spinner>
+    <span>Guardar y reiniciar</span>
+  </button>
+</mat-dialog-actions>
