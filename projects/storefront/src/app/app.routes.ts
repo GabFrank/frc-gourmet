@@ -3,6 +3,7 @@ import { Routes } from '@angular/router';
 export const routes: Routes = [
   { path: '', loadComponent: () => import('./pages/menu/menu.page').then((m) => m.MenuPage) },
   { path: 'producto/:id', loadComponent: () => import('./pages/producto/producto-detalle.page').then((m) => m.ProductoDetallePage) },
+  { path: 'pizza/:productoId/:saborId', loadComponent: () => import('./pages/pizza/pizza-detalle.page').then((m) => m.PizzaDetallePage) },
   { path: 'carrito', loadComponent: () => import('./pages/cart/cart.page').then((m) => m.CartPage) },
   { path: 'checkout', loadComponent: () => import('./pages/checkout/checkout.page').then((m) => m.CheckoutPage) },
   { path: 'login', loadComponent: () => import('./pages/login/login.page').then((m) => m.LoginPage) },

@@ -8,6 +8,24 @@ import { MenuService } from '../../core/menu.service';
 import { AppImgPipe } from '../../core/app-img.pipe';
 import { MenuSnapshot, MenuProducto, MenuCategoria } from '../../core/models';
 
+/** Tarjeta del menú. Una pizza se expande en una tarjeta POR SABOR (tipo iFood). */
+interface MenuCard {
+  productoId: number;
+  saborId: number | null;
+  titulo: string;
+  descripcion: string | null;
+  imageUrl: string | null;
+  precioDesde: number;
+  monedaSimbolo: string;
+  desde: boolean;
+  categoriaId: number | string;
+}
+
+interface CatView {
+  cat: MenuCategoria;
+  cards: MenuCard[];
+}
+
 @Component({
   selector: 'sf-menu',
   standalone: true,
@@ -27,6 +45,9 @@ export class MenuPage implements OnInit, AfterViewInit, OnDestroy {
   busqueda = '';
   categoriaActiva: number | string | null = null;
 
+  private allCards: MenuCard[] = [];
+  categoriasView: CatView[] = [];
+
   @ViewChildren('seccion') secciones!: QueryList<ElementRef<HTMLElement>>;
   private observer?: IntersectionObserver;
 
@@ -34,7 +55,9 @@ export class MenuPage implements OnInit, AfterViewInit, OnDestroy {
     this.menuSvc.cargar().subscribe({
       next: (m) => {
         this.menu = m;
-        this.categoriaActiva = m.categorias[0]?.id ?? null;
+        this.allCards = this.construirCards(m.productos);
+        this.recomputarVista();
+        this.categoriaActiva = this.categoriasView[0]?.cat.id ?? null;
         this.cargando = false;
         setTimeout(() => this.setupScrollSpy(), 0);
       },
@@ -51,6 +74,57 @@ export class MenuPage implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.observer?.disconnect();
+  }
+
+  private construirCards(productos: MenuProducto[]): MenuCard[] {
+    const cards: MenuCard[] = [];
+    for (const p of productos) {
+      const simbolo = p.moneda?.simbolo || '';
+      if (p.esPizza && p.sabores?.length) {
+        // Una tarjeta por sabor: "Pizza Calabresa", "Pizza Bacon"…
+        const desde = (p.tamanos?.length || 0) > 1;
+        for (const s of p.sabores) {
+          cards.push({
+            productoId: p.id,
+            saborId: s.saborId,
+            titulo: `${p.nombre} ${s.nombre}`.trim(),
+            descripcion: s.descripcion,
+            imageUrl: s.imageUrl || p.imageUrl,
+            precioDesde: s.precioDesde,
+            monedaSimbolo: simbolo,
+            desde,
+            categoriaId: p.categoriaId,
+          });
+        }
+      } else {
+        cards.push({
+          productoId: p.id,
+          saborId: null,
+          titulo: p.nombre,
+          descripcion: p.descripcion,
+          imageUrl: p.imageUrl,
+          precioDesde: p.precioDesde,
+          monedaSimbolo: simbolo,
+          desde: p.opciones.length > 1,
+          categoriaId: p.categoriaId,
+        });
+      }
+    }
+    return cards;
+  }
+
+  /** Filtra por búsqueda y reagrupa por categoría (búsqueda en vivo, sin funciones en template). */
+  recomputarVista(): void {
+    if (!this.menu) { this.categoriasView = []; return; }
+    const term = this.busqueda.trim().toUpperCase();
+    const filtradas = term ? this.allCards.filter((c) => c.titulo.toUpperCase().includes(term)) : this.allCards;
+    const vista: CatView[] = [];
+    for (const cat of this.menu.categorias) {
+      const cards = filtradas.filter((c) => c.categoriaId === cat.id);
+      if (cards.length) vista.push({ cat, cards });
+    }
+    this.categoriasView = vista;
+    setTimeout(() => this.setupScrollSpy(), 0);
   }
 
   private setupScrollSpy(): void {
@@ -75,18 +149,6 @@ export class MenuPage implements OnInit, AfterViewInit, OnDestroy {
     return String(n) === id ? n : id;
   }
 
-  productosDe(cat: MenuCategoria): MenuProducto[] {
-    const term = this.busqueda.trim().toUpperCase();
-    return (this.menu?.productos || []).filter(
-      (p) => p.categoriaId === cat.id && (!term || p.nombre.toUpperCase().includes(term)),
-    );
-  }
-
-  categoriasVisibles(): MenuCategoria[] {
-    if (!this.menu) return [];
-    return this.menu.categorias.filter((c) => this.productosDe(c).length > 0);
-  }
-
   irACategoria(cat: MenuCategoria): void {
     this.categoriaActiva = cat.id;
     const el = document.getElementById('cat-' + cat.id);
@@ -96,8 +158,9 @@ export class MenuPage implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  abrir(p: MenuProducto): void {
-    this.router.navigate(['/producto', p.id]);
+  abrir(card: MenuCard): void {
+    if (card.saborId != null) this.router.navigate(['/pizza', card.productoId, card.saborId]);
+    else this.router.navigate(['/producto', card.productoId]);
   }
 
   verCarrito(): void {

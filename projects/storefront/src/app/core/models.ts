@@ -24,6 +24,35 @@ export interface MenuAdicional {
   precio: number;
 }
 
+/** Pizza: un tamaño ofertado. */
+export interface MenuTamano {
+  presentacionId: number;
+  nombre: string;
+  orden: number;
+}
+
+/** Pizza: precio de un sabor para un tamaño. */
+export interface MenuSaborPrecio {
+  presentacionId: number;
+  precio: number;
+  recetaPresentacionId: number;
+}
+
+/** Pizza: un sabor con sus precios por tamaño. */
+export interface MenuSaborPizza {
+  saborId: number;
+  nombre: string;
+  descripcion: string | null;
+  imageUrl: string | null;
+  precios: MenuSaborPrecio[];
+  precioDesde: number;
+}
+
+export interface PizzaConfig {
+  maxSabores: number;
+  estrategia: 'MAYOR_PRECIO' | 'PROMEDIO';
+}
+
 export interface MenuObservacion {
   id: number;
   descripcion: string;
@@ -34,11 +63,16 @@ export interface MenuProducto {
   nombre: string;
   descripcion: string | null;
   tipo: string;
+  esPizza?: boolean;
   iva: number;
   imageUrl: string | null;
   categoriaId: number | string;
   categoriaNombre: string;
   opciones: MenuOpcion[];
+  // Pizza (ELABORADO_CON_VARIACION): estructura sabor × tamaño.
+  tamanos?: MenuTamano[] | null;
+  sabores?: MenuSaborPizza[] | null;
+  pizzaConfig?: PizzaConfig | null;
   precioDesde: number;
   moneda: MenuMoneda | null;
   adicionales: MenuAdicional[];
@@ -73,18 +107,27 @@ export interface CuentaCliente {
   clienteId: number | null;
 }
 
+/** Opción elegida de una línea (cubre todos los tipos, incluida pizza). */
+export interface CartOpcion {
+  tipo: 'PRESENTACION' | 'RECETA' | 'VARIACION' | 'COMBO' | 'PIZZA';
+  label: string;
+  presentacionId?: number;
+  recetaId?: number;
+  saborIds?: number[];         // pizza: 1..maxSabores (mitad y mitad)
+}
+
 /** Ítem del carrito con su personalización. */
 export interface CartItem {
   uid: string;                 // id local de la línea (permite repetir el mismo producto con distinta config)
   productoId: number;
   nombreProducto: string;
   imageUrl: string | null;
-  opcion: MenuOpcion;
+  opcion: CartOpcion;
   adicionales: MenuAdicional[];
   observaciones: MenuObservacion[];
   notaLibre: string | null;
   cantidad: number;
-  precioUnitario: number;      // opcion.precio + Σ adicionales
+  precioUnitario: number;      // precio de la opción + Σ adicionales
 }
 
 export type TipoPedido = 'PICKUP' | 'DELIVERY';

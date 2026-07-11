@@ -1,0 +1,96 @@
+<div class="pd-wrap" *ngIf="!cargando && producto as p">
+  <!-- Foto + volver -->
+  <div class="pd-hero" [class.no-photo]="!(saborEntrada?.imageUrl || p.imageUrl | appImg)">
+    <div class="pd-photo" *ngIf="(saborEntrada?.imageUrl || p.imageUrl) | appImg as img" [style.background-image]="'url(' + img + ')'"></div>
+    <button class="pd-back" (click)="volver()" aria-label="Volver">←</button>
+  </div>
+
+  <div class="sf-container pd-body">
+    <h1 class="pd-nombre">{{ p.nombre }} {{ saborEntrada?.nombre }}</h1>
+    <p class="pd-desc" *ngIf="saborEntrada?.descripcion">{{ saborEntrada?.descripcion }}</p>
+
+    <!-- Tamaño -->
+    <div class="pd-group" *ngIf="tamanos.length">
+      <div class="pd-group-head">
+        <span class="pd-group-title">Elegí el tamaño</span>
+        <span class="sf-badge pd-req">Obligatorio</span>
+      </div>
+      <label class="pd-radio" *ngFor="let t of tamanos" [class.sel]="presSel === t.presentacionId">
+        <span class="pd-radio-l">
+          <input type="radio" name="tamano" [value]="t.presentacionId" [ngModel]="presSel" (ngModelChange)="setTamano(t)" />
+          <span>{{ t.nombre }}</span>
+        </span>
+        <span class="pd-radio-precio" *ngIf="precioTamano(t) as pt">{{ monedaSimbolo }} {{ pt | number:'1.0-2' }}</span>
+      </label>
+    </div>
+
+    <!-- Mitad y mitad -->
+    <div class="pd-group" *ngIf="permiteMitad">
+      <div class="pd-group-head">
+        <span class="pd-group-title">Armá mitad y mitad</span>
+        <span class="pd-opt">Opcional · hasta {{ maxSabores }} sabores</span>
+      </div>
+      <p class="pd-mitad-hint" *ngIf="saboresSel.length > 1">
+        {{ resumenSabores }} · el precio toma
+        {{ p.pizzaConfig?.estrategia === 'PROMEDIO' ? 'el promedio' : 'el sabor más caro' }}.
+      </p>
+      <label class="pd-check" *ngFor="let s of saboresParaSumar" [class.sel]="esSaborElegido(s)">
+        <span class="pd-check-l">
+          <input type="checkbox" [checked]="esSaborElegido(s)" [disabled]="!esSaborElegido(s) && saboresSel.length >= maxSabores"
+                 (change)="toggleSaborExtra(s)" />
+          <span>{{ s.nombre }}</span>
+        </span>
+      </label>
+      <p class="sf-muted pd-mitad-max" *ngIf="saboresSel.length >= maxSabores">Alcanzaste el máximo de sabores.</p>
+    </div>
+
+    <!-- Adicionales -->
+    <div class="pd-group" *ngIf="p.adicionales.length">
+      <div class="pd-group-head">
+        <span class="pd-group-title">Adicionales</span>
+        <span class="pd-opt">Opcional</span>
+      </div>
+      <label class="pd-check" *ngFor="let a of p.adicionales" [class.sel]="adicionalesSel.has(a.id)">
+        <span class="pd-check-l">
+          <input type="checkbox" [checked]="adicionalesSel.has(a.id)" (change)="toggleAdicional(a)" />
+          <span>{{ a.nombre }}</span>
+        </span>
+        <span class="pd-check-precio" *ngIf="a.precio > 0">+ {{ a.precio | number:'1.0-2' }}</span>
+      </label>
+    </div>
+
+    <!-- Observaciones predefinidas -->
+    <div class="pd-group" *ngIf="p.observaciones.length">
+      <div class="pd-group-head">
+        <span class="pd-group-title">Preferencias</span>
+        <span class="pd-opt">Opcional</span>
+      </div>
+      <div class="pd-chips">
+        <button *ngFor="let o of p.observaciones" class="sf-chip" [class.active]="observacionesSel.has(o.id)"
+                (click)="toggleObservacion(o)">{{ o.descripcion }}</button>
+      </div>
+    </div>
+
+    <!-- Nota libre -->
+    <div class="pd-group">
+      <div class="pd-group-head"><span class="pd-group-title">Nota para la cocina</span></div>
+      <textarea class="sf-input" rows="2" maxlength="300" [(ngModel)]="notaLibre"
+                placeholder="Ej: bien cocida, sin orégano…"></textarea>
+    </div>
+  </div>
+
+  <!-- Barra fija: cantidad + agregar con total en vivo -->
+  <div class="sf-sticky-bar pd-cta">
+    <div class="sf-stepper">
+      <button (click)="cambiarCantidad(-1)" [disabled]="cantidad <= 1">−</button>
+      <span class="qty">{{ cantidad }}</span>
+      <button (click)="cambiarCantidad(1)">+</button>
+    </div>
+    <button class="sf-btn pd-add" [disabled]="!puedeAgregar" (click)="agregar()">
+      <span *ngIf="config.config.abiertaAhora">Agregar · {{ total | number:'1.0-2' }}</span>
+      <span *ngIf="!config.config.abiertaAhora">Tienda cerrada</span>
+    </button>
+  </div>
+</div>
+
+<p class="sf-container sf-muted" *ngIf="!cargando && !producto">Pizza no encontrada.</p>
