@@ -1,8 +1,33 @@
 # Plan: Marcación de asistencia con reconocimiento facial (PWA)
 
-> Estado: **PLAN** (sin código). Branch: `claude/facial-recognition-attendance-r7ahb0`.
+> Estado: **IMPLEMENTADO (F1–F4)**. Branch: `claude/facial-recognition-attendance-r7ahb0`.
 > Objetivo: que los funcionarios fichen entrada/salida desde un tablet en la entrada usando
 > reconocimiento facial, de la forma más eficiente y confiable, sin exponer imágenes.
+
+## Estado de implementación
+
+- **F1 (datos)** ✅ — `FuncionarioRostro`, columnas `metodo_registro`/`similitud_facial`, migración
+  driver-aware (embedding como `text` JSON en ambos drivers), seeds `FACIAL_*`.
+- **F2 (enrollment)** ✅ — `FaceRecognitionService` (Human lazy) + `FaceCaptureComponent` compartidos;
+  handler `enrolar/get/eliminar-rostro`; tab "Rostros" en desktop + página PWA. Bucket `rostros`.
+- **F3 (fichaje)** ✅ — `fichar-facial`: match coseno 1:N (`elegirMejorMatch`, en `electron/utils/face-match.ts`),
+  entrada/salida automática reusando `crearAsistenciaInterno`; pantalla kiosco PWA con cola offline.
+- **F4 (liveness + tuning + tests)** ✅ — liveness **server-authoritative** con `antispoof`+`liveness`
+  de Human (scores `real`/`live` ≥ `FACIAL_LIVENESS_MIN`); test puro `npm run test:fichaje-facial`.
+
+### Decisiones resueltas (vs. §7 abajo)
+
+1. **Auth del kiosco:** la pantalla de fichaje va detrás de `authGuard` (usuario kiosco logueado en el
+   tablet) y `fichar-facial` exige `RRHH_ASISTENCIA_REGISTRAR` — reusa el auth existente, sin infra nueva.
+   Device-token queda como mejora futura.
+2. **Entrada/salida:** auto-detección (sin registro hoy → ENTRADA; entrada sin salida → SALIDA; ambas →
+   YA_COMPLETO), mostrada en pantalla.
+3. **Liveness MVP:** en vez de blink+Z a mano, se usan los modelos dedicados `antispoof` (foto/pantalla) y
+   `liveness` de Human — cubren el intent de "profundidad/prueba de vida" y son server-authoritative.
+4. **Modelo:** `faceres` 1024-D. Pendiente medir en el tablet real y ajustar `FACIAL_UMBRAL_SIMILITUD`.
+
+> **Requisito operativo:** correr `npm run models:face` una vez por máquina/deploy para bajar los pesos de
+> Human a `assets/models/human/` (no se versionan). Sin eso, las pantallas de rostro muestran error de carga.
 
 ## 1. Decisiones tomadas
 

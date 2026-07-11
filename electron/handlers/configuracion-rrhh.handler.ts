@@ -42,7 +42,8 @@ const SEED_CONFIG: SeedItem[] = [
   // Reconocimiento facial (fichaje de asistencia)
   { clave: 'FACIAL_UMBRAL_SIMILITUD', valor: '0.6', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Similitud minima (0..1) para aceptar un match facial. Mas alto = mas estricto (menos falsos positivos)' },
   { clave: 'FACIAL_MARGEN_MIN', valor: '0.05', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Margen minimo de similitud entre el mejor y el 2do mejor candidato para aceptar el match (evita confundir caras parecidas)' },
-  { clave: 'FACIAL_LIVENESS_OBLIGATORIO', valor: 'true', tipo: ConfiguracionRrhhTipo.BOOLEAN, descripcion: 'Exigir prueba de vida (parpadeo + profundidad) para aceptar el fichaje facial' },
+  { clave: 'FACIAL_LIVENESS_OBLIGATORIO', valor: 'true', tipo: ConfiguracionRrhhTipo.BOOLEAN, descripcion: 'Exigir prueba de vida (antispoof + liveness) para aceptar el fichaje facial' },
+  { clave: 'FACIAL_LIVENESS_MIN', valor: '0.5', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Score minimo (0..1) de antispoof y liveness para considerar el rostro como real/vivo' },
 ];
 
 export async function seedConfiguracionRrhh(dataSource: DataSource) {

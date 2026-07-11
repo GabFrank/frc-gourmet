@@ -11,6 +11,7 @@ import { deleteImageByUrl } from '../utils/image-resize.utils';
 import { getConfigNumber, getConfigBoolean } from './configuracion-rrhh.handler';
 import { crearAsistenciaInterno } from './asistencias.handler';
 import { parseLocalDate } from '../utils/date.utils';
+import { RostroCacheItem, buildRostroCacheItem, elegirMejorMatch } from '../utils/face-match';
 
 /**
  * Reconocimiento facial para fichaje de asistencia.
@@ -34,13 +35,6 @@ export function marcarCacheRostrosLimpio(): void {
   rostrosCacheDirty = false;
 }
 
-interface RostroCacheItem {
-  funcionarioId: number;
-  vector: number[];
-  norm: number;
-  modelo: string;
-  dimension: number;
-}
 let rostrosCache: RostroCacheItem[] = [];
 
 /** Carga (o refresca) en memoria los embeddings activos para el match. */
@@ -56,26 +50,13 @@ async function getRostrosCache(dataSource: DataSource): Promise<RostroCacheItem[
       } catch {
         return null;
       }
-      if (!Array.isArray(vector) || !vector.length) return null;
-      return {
-        funcionarioId: (r.funcionario as any)?.id,
-        vector,
-        norm: Math.sqrt(vector.reduce((s, v) => s + v * v, 0)) || 1,
-        modelo: r.modelo,
-        dimension: r.dimension,
-      } as RostroCacheItem;
+      const funcionarioId = (r.funcionario as any)?.id;
+      if (!Array.isArray(vector) || !vector.length || !funcionarioId) return null;
+      return buildRostroCacheItem(funcionarioId, vector, r.modelo);
     })
-    .filter((x): x is RostroCacheItem => !!x && !!x.funcionarioId);
+    .filter((x): x is RostroCacheItem => !!x);
   marcarCacheRostrosLimpio();
   return rostrosCache;
-}
-
-/** Similitud coseno entre el query (con norma) y un rostro cacheado. */
-function cosineSim(query: number[], queryNorm: number, item: RostroCacheItem): number {
-  if (query.length !== item.vector.length) return -1;
-  let dot = 0;
-  for (let i = 0; i < query.length; i++) dot += query[i] * item.vector[i];
-  return dot / (queryNorm * item.norm);
 }
 
 function pad2(n: number): string {
@@ -162,39 +143,26 @@ export function registerAsistenciaFacialHandlers(
     const query = payload?.embedding;
     if (!Array.isArray(query) || !query.length) throw new Error('Embedding facial invalido');
 
-    // Liveness
+    // Liveness — autoritativo en el server usando los scores del cliente
+    // (antispoof `real` + liveness `live` de Human), tunable por config.
     const livenessObligatorio = await getConfigBoolean(dataSource, 'FACIAL_LIVENESS_OBLIGATORIO', true);
-    if (livenessObligatorio && payload?.livenessOk !== true) {
-      return { matched: false, reason: 'LIVENESS' };
+    if (livenessObligatorio) {
+      const livenessMin = await getConfigNumber(dataSource, 'FACIAL_LIVENESS_MIN', 0.5);
+      const real = Number(payload?.real);
+      const live = Number(payload?.live);
+      const ok = Number.isFinite(real) && Number.isFinite(live) && real >= livenessMin && live >= livenessMin;
+      if (!ok) return { matched: false, reason: 'LIVENESS' };
     }
 
     // Match 1:N (coseno) — mejor por funcionario + margen contra el 2º
     const umbral = await getConfigNumber(dataSource, 'FACIAL_UMBRAL_SIMILITUD', 0.6);
     const margenMin = await getConfigNumber(dataSource, 'FACIAL_MARGEN_MIN', 0.05);
     const cache = await getRostrosCache(dataSource);
-    const queryNorm = Math.sqrt(query.reduce((s: number, v: number) => s + v * v, 0)) || 1;
+    const match = elegirMejorMatch(query, cache, umbral, margenMin);
+    if (!match.matched) return { matched: false, reason: match.reason, similitud: match.similitud };
 
-    const mejorPorFuncionario = new Map<number, number>();
-    for (const item of cache) {
-      if (item.dimension !== query.length) continue;
-      const sim = cosineSim(query, queryNorm, item);
-      const prev = mejorPorFuncionario.get(item.funcionarioId);
-      if (prev === undefined || sim > prev) mejorPorFuncionario.set(item.funcionarioId, sim);
-    }
-    if (mejorPorFuncionario.size === 0) return { matched: false, reason: 'SIN_ROSTROS' };
-
-    const ranking = [...mejorPorFuncionario.entries()].sort((a, b) => b[1] - a[1]);
-    const [mejorFuncId, mejorSim] = ranking[0];
-    const segundoSim = ranking.length > 1 ? ranking[1][1] : -1;
-
-    if (mejorSim < umbral) {
-      return { matched: false, reason: 'NO_MATCH', similitud: +mejorSim.toFixed(4) };
-    }
-    if (ranking.length > 1 && (mejorSim - segundoSim) < margenMin) {
-      return { matched: false, reason: 'BAJO_MARGEN', similitud: +mejorSim.toFixed(4) };
-    }
-
-    const similitud = +mejorSim.toFixed(4);
+    const mejorFuncId = match.funcionarioId!;
+    const similitud = match.similitud;
     const funcionario = await dataSource.getRepository(Funcionario).findOne({
       where: { id: mejorFuncId },
       relations: ['persona'],
