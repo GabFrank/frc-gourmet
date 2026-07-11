@@ -238,6 +238,11 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
     if (!producto?.presentaciones?.length) return [];
 
+    // El nombre/SKU de la variación se arma con el nombre del SABOR, no con el
+    // del producto repetido. Cargamos el sabor una vez para tenerlo disponible.
+    const sabor = await queryRunner.manager.getRepository(Sabor).findOne({ where: { id: saborId } });
+    const nombreSabor = sabor?.nombre;
+
     const repo = queryRunner.manager.getRepository(RecetaPresentacion);
     const variaciones: RecetaPresentacion[] = [];
 
@@ -252,8 +257,8 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
       if (existente) continue;
 
-      const nombre = generarNombreVariacion(producto.nombre, presentacion.nombre, producto.nombre);
-      const sku = generarSKU(producto.nombre, producto.nombre, presentacion.nombre);
+      const nombre = generarNombreVariacion(producto.nombre, presentacion.nombre, nombreSabor);
+      const sku = generarSKU(producto.nombre, nombreSabor, presentacion.nombre);
 
       const nueva = repo.create({
         nombre_generado: nombre,
@@ -1529,6 +1534,10 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   // ✅ NUEVO: CRUD y helpers para Sabores (nueva arquitectura)
   ipcMain.handle('get-sabores-by-producto', async (_e: IpcMainInvokeEvent, productoId: number) => {
+    // Guard: con productoId indefinido, el filtro por relación se descarta y
+    // TypeORM devuelve TODOS los sabores (incluidos huérfanos de otros
+    // productos). Sin id válido no hay sabores que listar.
+    if (!Number.isInteger(productoId)) return [];
     const repo = dataSource.getRepository(Sabor);
     return await repo.find({
       where: { producto: { id: productoId } },
@@ -1538,6 +1547,12 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('create-sabor', async (_e: IpcMainInvokeEvent, saborData: { nombre: string; categoria: string; descripcion?: string; productoId: number; imageUrl?: string; }) => {
     await ensurePermission(dataSource, getCurrentUser, 'SABORES_GESTIONAR');
+    // Guard: sin un productoId válido, findOne({ where: { id: undefined } })
+    // devuelve el PRIMER producto de la tabla (footgun de TypeORM) y termina
+    // creando el sabor huérfano + variaciones contra el producto equivocado.
+    if (!Number.isInteger(saborData?.productoId)) {
+      throw new Error('create-sabor: productoId inválido o ausente');
+    }
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1663,6 +1678,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   // ✅ NUEVO: Variaciones (RecetaPresentacion)
   ipcMain.handle('get-variaciones-by-producto', async (_e: IpcMainInvokeEvent, productoId: number) => {
+    if (!Number.isInteger(productoId)) return [];
     return await dataSource.getRepository(RecetaPresentacion)
       .createQueryBuilder('rp')
       .leftJoinAndSelect('rp.receta', 'receta')
@@ -1865,6 +1881,9 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('generate-variaciones-faltantes', async (_e: IpcMainInvokeEvent, productoId: number) => {
+    if (!Number.isInteger(productoId)) {
+      throw new Error('generate-variaciones-faltantes: productoId inválido o ausente');
+    }
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();

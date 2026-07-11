@@ -395,6 +395,17 @@ export class ProductoSaboresComponent implements OnInit, OnDestroy {
   // ✅ ACCIONES PRINCIPALES
 
   nuevoSabor(): void {
+    // Guard: sin un producto persistido no hay contexto para asociar el sabor.
+    // Evita enviar productoId indefinido al backend (que terminaba creando
+    // sabores huérfanos y variaciones contra el producto equivocado).
+    if (!this.productoId) {
+      this.snackBar.open('Guardá primero el producto antes de agregar sabores', 'Cerrar', {
+        duration: 4000,
+        panelClass: ['snackbar-error']
+      });
+      return;
+    }
+
     const dialogData: SaborDialogData = {
       productoId: this.productoId,
       productoNombre: this.productoNombre,
