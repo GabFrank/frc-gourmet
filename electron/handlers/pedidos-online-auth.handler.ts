@@ -253,7 +253,71 @@ export function registerPedidosOnlineAuthHandlers(
     return { success: true, cuenta: mapCuenta(saved) };
   });
 
+  // ============== REGISTRO POR EMAIL + PASSWORD ==============
+  ipcMain.handle('pub-cliente-registrar', async (_event: any, data: any) => {
+    const email = String(data?.email || '').trim().toLowerCase();
+    const password = String(data?.password || '');
+    const nombre = data?.nombre ? String(data.nombre).toUpperCase() : undefined;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { success: false, error: 'email_invalido' };
+    if (password.length < 6) return { success: false, error: 'password_corto' };
+
+    const existe = await cuentaRepo()
+      .createQueryBuilder('c')
+      .where('LOWER(c.email) = :email', { email })
+      .getOne();
+    if (existe) return { success: false, error: 'email_en_uso' };
+
+    let cuenta = cuentaRepo().create({
+      email,
+      passwordHash: await hashPassword(password),
+      nombre,
+      activo: true,
+      ultimoLogin: new Date(),
+    });
+    cuenta = await cuentaRepo().save(cuenta);
+    return { success: true, ...(await emitirSesion(cuenta)) };
+  });
+
+  // ============== LOGIN CON GOOGLE (credential-ready) ==============
+  ipcMain.handle('pub-cliente-google', async (_event: any, idToken: string) => {
+    const clientId = process.env['GOOGLE_CLIENT_ID'];
+    if (!clientId) return { success: false, error: 'google_no_configurado' };
+    if (!idToken) return { success: false, error: 'token_faltante' };
+    try {
+      // Verificación vía endpoint tokeninfo de Google (sin dependencia extra).
+      const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+      if (!res.ok) return { success: false, error: 'google_token_invalido' };
+      const info: any = await res.json();
+      if (info.aud !== clientId) return { success: false, error: 'google_aud_mismatch' };
+      const email = String(info.email || '').trim().toLowerCase();
+      if (!email || info.email_verified === 'false') return { success: false, error: 'google_email_no_verificado' };
+
+      let cuenta = await cuentaRepo()
+        .createQueryBuilder('c')
+        .leftJoinAndSelect('c.cliente', 'cliente')
+        .where('LOWER(c.email) = :email', { email })
+        .getOne();
+      if (!cuenta) {
+        cuenta = cuentaRepo().create({
+          email,
+          emailVerificado: true,
+          nombre: info.name ? String(info.name).toUpperCase() : undefined,
+          activo: true,
+        });
+      }
+      cuenta.emailVerificado = true;
+      cuenta.ultimoLogin = new Date();
+      cuenta = await cuentaRepo().save(cuenta);
+      return { success: true, ...(await emitirSesion(cuenta)) };
+    } catch (e: any) {
+      console.error('[pub-cliente-google] error:', e?.message || e);
+      return { success: false, error: 'google_error' };
+    }
+  });
+
   // ---- Registrar en la superficie pública ----
+  registerPublicOperation('auth.registrar', { channel: 'pub-cliente-registrar', requiresAuth: false, description: 'Registro por email + password.' });
+  registerPublicOperation('auth.google', { channel: 'pub-cliente-google', requiresAuth: false, description: 'Login con Google (ID token).' });
   registerPublicOperation('auth.otp.request', { channel: 'pub-otp-request', requiresAuth: false, description: 'Solicitar OTP por WhatsApp.' });
   registerPublicOperation('auth.otp.verify', { channel: 'pub-otp-verify', requiresAuth: false, description: 'Verificar OTP y emitir JWT de cliente.' });
   registerPublicOperation('auth.login', { channel: 'pub-cliente-login-password', requiresAuth: false, description: 'Login por teléfono/email + password.' });

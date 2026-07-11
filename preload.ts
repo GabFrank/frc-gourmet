@@ -2299,6 +2299,15 @@ contextBridge.exposeInMainWorld('api', {
   updateTiendaOnlineConfig: async (data: any): Promise<any> => {
     return await ipcRenderer.invoke('update-tienda-online-config', data);
   },
+  getZonasDeliveryAdmin: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-zonas-delivery-admin');
+  },
+  guardarZonaDelivery: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('guardar-zona-delivery', data);
+  },
+  eliminarZonaDelivery: async (zonaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('eliminar-zona-delivery', zonaId);
+  },
 
   // Producción (buffet)
   crearProduccion: async (data: any): Promise<any> => {

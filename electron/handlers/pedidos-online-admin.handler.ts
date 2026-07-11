@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { In } from 'typeorm';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
+import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zona-delivery.entity';
 import { EstadoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { ensurePermission } from '../utils/auth.utils';
 
@@ -41,6 +42,8 @@ function mapPedidoAdmin(p: PedidoOnline): any {
     costoEnvio: Number(p.costoEnvio),
     total: Number(p.total),
     direccionEntrega: p.direccionEntrega ?? null,
+    latitud: p.latitud != null ? Number(p.latitud) : null,
+    longitud: p.longitud != null ? Number(p.longitud) : null,
     referenciaDireccion: p.referenciaDireccion ?? null,
     notas: p.notas ?? null,
     ventaId: p.ventaId ?? null,
@@ -138,6 +141,37 @@ export function registerPedidosOnlineAdminHandlers(
     pedido.motivoRechazo = motivo ? String(motivo).toUpperCase() : 'SIN MOTIVO';
     const saved = await repo().save(pedido);
     return { success: true, pedido: mapPedidoAdmin(saved) };
+  });
+
+  // ============== ZONAS DE DELIVERY (CRUD admin) ==============
+  ipcMain.handle('get-zonas-delivery-admin', async () => {
+    await ensurePermission(dataSource, getCurrentUser, PERM);
+    const zonas = await dataSource.getRepository(ZonaDelivery).find({ order: { orden: 'ASC', nombre: 'ASC' } });
+    return zonas.map((z) => ({
+      id: z.id, nombre: z.nombre, tarifa: Number(z.tarifa), montoMinimo: Number(z.montoMinimo),
+      activa: z.activa, orden: z.orden,
+    }));
+  });
+
+  ipcMain.handle('guardar-zona-delivery', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM);
+    const repoZ = dataSource.getRepository(ZonaDelivery);
+    const zona = data?.id ? await repoZ.findOne({ where: { id: data.id } }) : repoZ.create();
+    if (!zona) return { success: false, error: 'zona_no_encontrada' };
+    zona.nombre = String(data?.nombre || '').trim().toUpperCase();
+    zona.tarifa = Number(data?.tarifa) || 0;
+    zona.montoMinimo = Number(data?.montoMinimo) || 0;
+    zona.activa = data?.activa !== false;
+    zona.orden = Number(data?.orden) || 0;
+    if (!zona.nombre) return { success: false, error: 'nombre_requerido' };
+    const saved = await repoZ.save(zona);
+    return { success: true, zona: { id: saved.id, nombre: saved.nombre, tarifa: Number(saved.tarifa), montoMinimo: Number(saved.montoMinimo), activa: saved.activa, orden: saved.orden } };
+  });
+
+  ipcMain.handle('eliminar-zona-delivery', async (_event: any, zonaId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM);
+    await dataSource.getRepository(ZonaDelivery).delete({ id: zonaId });
+    return { success: true };
   });
 
   // ============== AVANZAR ESTADO ==============

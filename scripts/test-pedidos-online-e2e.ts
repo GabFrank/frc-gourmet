@@ -104,6 +104,29 @@ async function seed(dataSource: DataSource): Promise<any> {
     dataSource.getRepository(PrecioVenta).create({ valor: 9999, principal: true, activo: true, moneda, tipoPrecio, presentacion: presOff } as any),
   );
 
+  // Producto ELABORADO_SIN_VARIACION (precio via receta) + 1 adicional
+  const { Receta } = require('../src/app/database/entities/productos/receta.entity');
+  const { Adicional } = require('../src/app/database/entities/productos/adicional.entity');
+  const { RecetaAdicionalVinculacion } = require('../src/app/database/entities/productos/receta-adicional-vinculacion.entity');
+  const receta = await dataSource.getRepository(Receta).save(
+    dataSource.getRepository(Receta).create({ nombre: 'RECETA LOMITO', activo: true } as any),
+  );
+  const elaborado = await dataSource.getRepository(Producto).save(
+    dataSource.getRepository(Producto).create({
+      nombre: 'LOMITO ARABE', tipo: 'ELABORADO_SIN_VARIACION', activo: true, esVendible: true,
+      disponibleOnline: true, pausadoOnline: false, iva: 10, subfamilia, receta,
+    } as any),
+  );
+  await dataSource.getRepository(PrecioVenta).save(
+    dataSource.getRepository(PrecioVenta).create({ valor: 40000, principal: true, activo: true, moneda, tipoPrecio, receta } as any),
+  );
+  const adicional = await dataSource.getRepository(Adicional).save(
+    dataSource.getRepository(Adicional).create({ nombre: 'EXTRA QUESO', precio: 5000, activo: true } as any),
+  );
+  await dataSource.getRepository(RecetaAdicionalVinculacion).save(
+    dataSource.getRepository(RecetaAdicionalVinculacion).create({ receta, adicional, precioAdicional: 7000, activo: true } as any),
+  );
+
   const zona = await dataSource.getRepository(ZonaDelivery).save(
     dataSource.getRepository(ZonaDelivery).create({ nombre: 'CENTRO', tarifa: 15000, montoMinimo: 50000, activa: true } as any),
   );
@@ -125,7 +148,7 @@ async function seed(dataSource: DataSource): Promise<any> {
     dataSource.getRepository(UsuarioRole).create({ usuario: admin, role } as any),
   );
 
-  return { admin, producto, presentacion, zona };
+  return { admin, producto, presentacion, zona, elaborado, receta, adicional };
 }
 
 async function main() {
@@ -174,10 +197,15 @@ async function main() {
   // 1. Menú
   const menu = await pub('menu.get');
   const nombres = (menu.result?.productos || []).map((p: any) => p.nombre);
-  ok(menu.status === 200 && menu.result?.total === 1, 'menu.get devuelve 1 producto disponible online', menu.result?.total);
-  ok(nombres.includes('HAMBURGUESA COMPLETA'), 'menu incluye el producto online');
+  ok(menu.status === 200 && menu.result?.total === 2, 'menu.get devuelve 2 productos online (RETAIL + elaborado)', menu.result?.total);
+  ok(nombres.includes('HAMBURGUESA COMPLETA'), 'menu incluye el producto RETAIL online');
+  ok(nombres.includes('LOMITO ARABE'), 'menu incluye el ELABORADO_SIN_VARIACION (precio via receta)');
   ok(!nombres.includes('PRODUCTO OCULTO'), 'menu NO incluye el producto no-online');
-  ok(menu.result?.productos?.[0]?.presentaciones?.[0]?.precio === 25000, 'precio publicado correcto', menu.result?.productos?.[0]?.presentaciones?.[0]?.precio);
+  const pRetail = (menu.result?.productos || []).find((x: any) => x.nombre === 'HAMBURGUESA COMPLETA');
+  const pElab = (menu.result?.productos || []).find((x: any) => x.nombre === 'LOMITO ARABE');
+  ok(pRetail?.opciones?.[0]?.precio === 25000, 'RETAIL: precio de opción correcto', pRetail?.opciones?.[0]?.precio);
+  ok(pElab?.opciones?.[0]?.precio === 40000, 'ELABORADO: precio de opción (receta) correcto', pElab?.opciones?.[0]?.precio);
+  ok(pElab?.adicionales?.[0]?.precio === 7000, 'ELABORADO: adicional con precio de vinculación', pElab?.adicionales?.[0]?.precio);
 
   // 2. OTP request
   const tel = '0981123456';
@@ -232,14 +260,22 @@ async function main() {
   ok(deliv.result?.costoEnvio === 15000, 'costo de envío aplicado');
   ok(deliv.result?.total === 90000, 'total DELIVERY = 75000 + 15000', deliv.result?.total);
 
+  // 8b. ELABORADO con adicional: precio del adicional lo pone el SERVER (7000),
+  // aunque el cliente solo manda el id → total = 40000 + 7000 = 47000.
+  const pedElab = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.elaborado.id, opcion: { tipo: 'RECETA' }, cantidad: 1, adicionalIds: [seeded.adicional.id] }],
+  }], token);
+  ok(pedElab.result?.success === true && pedElab.result?.total === 47000, 'ELABORADO + adicional: total server-side = 47000', pedElab.result?.total);
+
   // 9. mis pedidos
   const mis = await pub('pedido.mis', [], token);
-  ok(mis.result?.success === true && mis.result?.pedidos?.length === 2, 'pedido.mis devuelve 2 pedidos', mis.result?.pedidos?.length);
+  ok(mis.result?.success === true && mis.result?.pedidos?.length === 3, 'pedido.mis devuelve 3 pedidos', mis.result?.pedidos?.length);
 
   console.log('\n[e2e] === BANDEJA ADMIN ===');
   // 10. listar (invocación directa del handler admin, getCurrentUser = admin con permiso)
   const lista: any = await invokeHandlerWithContext('get-pedidos-online-admin', undefined, { estado: 'RECIBIDO' });
-  ok(Array.isArray(lista) && lista.length === 2, 'admin ve 2 pedidos RECIBIDO', lista?.length);
+  ok(Array.isArray(lista) && lista.length === 3, 'admin ve 3 pedidos RECIBIDO', lista?.length);
 
   const primero: any = lista[0];
   // 11. aceptar
@@ -256,14 +292,15 @@ async function main() {
   const listo = await invokeHandlerWithContext('avanzar-estado-pedido-online', undefined, primero.id, 'LISTO');
   ok(listo?.success === true && listo?.pedido?.fechaListo, 'EN_PREPARACION → LISTO (con fechaListo)');
 
-  // 14. rechazar el segundo
+  // 14. rechazar el segundo y el tercero
   const segundo: any = lista[1];
   const rech = await invokeHandlerWithContext('rechazar-pedido-online', undefined, segundo.id, 'sin stock');
   ok(rech?.success === true && rech?.pedido?.estado === 'RECHAZADO', 'rechazar → RECHAZADO');
+  await invokeHandlerWithContext('rechazar-pedido-online', undefined, lista[2].id, 'sin stock');
 
-  // 15. pendientes
+  // 15. pendientes (primero=LISTO ya no cuenta, segundo/tercero rechazados) = 0
   const pend = await invokeHandlerWithContext('contar-pedidos-online-pendientes', undefined);
-  ok(pend?.pendientes === 0, 'contar pendientes = 0 (ya no hay RECIBIDO)', pend?.pendientes);
+  ok(pend?.pendientes === 0, 'contar pendientes = 0 (ya no hay RECIBIDO/ACEPTADO)', pend?.pendientes);
 
   console.log('\n[e2e] === CONFIG DE TIENDA + REFRESH TOKEN ===');
   // 16. config pública (default: abierta, ambos tipos)
@@ -307,6 +344,74 @@ async function main() {
   }], token2);
   ok(pedCerrada.result?.error === 'tienda_cerrada', 'tienda inactiva → tienda_cerrada', pedCerrada.result?.error);
   await invokeHandlerWithContext('update-tienda-online-config', undefined, { activa: true });
+
+  console.log('\n[e2e] === AUTH: REGISTRO EMAIL + GOOGLE ===');
+  // 21. registro por email+password (cuenta sin teléfono → migración nullable OK)
+  const reg = await pub('auth.registrar', [{ email: 'Cliente@Mail.com', password: 'secreto123', nombre: 'juan' }]);
+  ok(reg.result?.success === true && !!reg.result?.accessToken, 'auth.registrar crea cuenta por email + token');
+  ok(reg.result?.cuenta?.email === 'cliente@mail.com', 'email normalizado a minúsculas', reg.result?.cuenta?.email);
+  ok(reg.result?.cuenta?.nombre === 'JUAN', 'nombre en UPPERCASE', reg.result?.cuenta?.nombre);
+  // 22. email duplicado
+  const regDup = await pub('auth.registrar', [{ email: 'cliente@mail.com', password: 'otraclave1' }]);
+  ok(regDup.result?.error === 'email_en_uso', 'registro con email duplicado → email_en_uso');
+  // 23. password corto
+  const regShort = await pub('auth.registrar', [{ email: 'otro@mail.com', password: '123' }]);
+  ok(regShort.result?.error === 'password_corto', 'password corto rechazado');
+  // 24. login con el email registrado
+  const logEmail = await pub('auth.login', ['cliente@mail.com', 'secreto123']);
+  ok(logEmail.result?.success === true && !!logEmail.result?.accessToken, 'login por email + password funciona');
+  // 25. Google sin credenciales
+  const g = await pub('auth.google', ['fake-token']);
+  ok(g.result?.error === 'google_no_configurado', 'auth.google sin GOOGLE_CLIENT_ID → no_configurado');
+
+  console.log('\n[e2e] === ZONAS DELIVERY (ADMIN CRUD) + UBICACIÓN ===');
+  // 26. listar zonas (ya hay 1 del seed)
+  const zonasIni: any = await invokeHandlerWithContext('get-zonas-delivery-admin', undefined);
+  ok(Array.isArray(zonasIni) && zonasIni.length === 1, 'admin ve 1 zona inicial', zonasIni?.length);
+
+  // 27. crear una zona nueva
+  const nuevaZona: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, {
+    nombre: 'villa morra', tarifa: 20000, montoMinimo: 60000, activa: true, orden: 2,
+  });
+  ok(nuevaZona?.success === true && !!nuevaZona?.zona?.id, 'guardar-zona-delivery crea zona');
+  ok(nuevaZona?.zona?.nombre === 'VILLA MORRA', 'nombre de zona en UPPERCASE', nuevaZona?.zona?.nombre);
+  ok(nuevaZona?.zona?.tarifa === 20000, 'tarifa persistida', nuevaZona?.zona?.tarifa);
+
+  // 28. editar la zona creada
+  const editZona: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, {
+    id: nuevaZona.zona.id, nombre: 'villa morra norte', tarifa: 22000, montoMinimo: 60000, activa: false, orden: 2,
+  });
+  ok(editZona?.success === true && editZona?.zona?.nombre === 'VILLA MORRA NORTE' && editZona?.zona?.activa === false,
+    'guardar-zona-delivery edita zona existente');
+
+  // 29. nombre requerido
+  const zonaSinNombre: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, { nombre: '   ', tarifa: 1000 });
+  ok(zonaSinNombre?.success === false && zonaSinNombre?.error === 'nombre_requerido', 'zona sin nombre → nombre_requerido');
+
+  // 30. la zona pública (activa) NO incluye la inactiva
+  const zonasPub = await pub('zonas.get');
+  const zonasPubList = zonasPub.result || zonasPub;
+  const nombresPub = (Array.isArray(zonasPubList) ? zonasPubList : []).map((z: any) => z.nombre);
+  ok(nombresPub.includes('CENTRO') && !nombresPub.includes('VILLA MORRA NORTE'),
+    'zonas.get público sólo devuelve zonas activas', nombresPub);
+
+  // 31. eliminar la zona creada → vuelve a quedar 1
+  const del: any = await invokeHandlerWithContext('eliminar-zona-delivery', undefined, nuevaZona.zona.id);
+  ok(del?.success === true, 'eliminar-zona-delivery ok');
+  const zonasFin: any = await invokeHandlerWithContext('get-zonas-delivery-admin', undefined);
+  ok(Array.isArray(zonasFin) && zonasFin.length === 1, 'tras eliminar queda 1 zona', zonasFin?.length);
+
+  // 32. pedido DELIVERY con ubicación (lat/lng) → persiste y la ve el admin
+  const deliGeo = await pub('pedido.crear', [{
+    tipoPedido: 'DELIVERY', zonaDeliveryId: seeded.zona.id, direccionEntrega: 'Av. España 123',
+    latitud: -25.2891, longitud: -57.6109,
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 3 }],
+  }], token2);
+  ok(deliGeo.result?.success === true, 'pedido DELIVERY con ubicación creado', deliGeo.result?.error);
+  const listaGeo: any = await invokeHandlerWithContext('get-pedidos-online-admin', undefined, {});
+  const pedGeo: any = (listaGeo || []).find((p: any) => p.numero === deliGeo.result?.numero);
+  ok(!!pedGeo && Math.abs((pedGeo.latitud ?? 0) - (-25.2891)) < 1e-4 && Math.abs((pedGeo.longitud ?? 0) - (-57.6109)) < 1e-4,
+    'admin ve la ubicación (lat/lng) del pedido', { lat: pedGeo?.latitud, lng: pedGeo?.longitud });
 
   console.log = origLog;
   await fastify.close();

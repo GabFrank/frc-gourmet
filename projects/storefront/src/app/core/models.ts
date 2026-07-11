@@ -1,28 +1,48 @@
-/** Modelos ligeros del storefront (no reusa entities TypeORM; solo DTOs de /pub). */
+/** Modelos ligeros del storefront (DTOs de /pub, no reusa entities TypeORM). */
 
 export interface MenuMoneda {
   id: number;
   denominacion: string | null;
   simbolo: string | null;
+  decimales?: number;
 }
 
-export interface MenuPresentacion {
-  id: number;
-  nombre: string;
-  principal: boolean;
+/** Una opción de precio del producto (presentación, receta, variación o combo). */
+export interface MenuOpcion {
+  key: string;
+  tipo: 'PRESENTACION' | 'RECETA' | 'VARIACION' | 'COMBO';
+  label: string;
   precio: number;
   moneda: MenuMoneda | null;
+  presentacionId?: number;
+  recetaId?: number;
+}
+
+export interface MenuAdicional {
+  id: number;
+  nombre: string;
+  precio: number;
+}
+
+export interface MenuObservacion {
+  id: number;
+  descripcion: string;
 }
 
 export interface MenuProducto {
   id: number;
   nombre: string;
+  descripcion: string | null;
   tipo: string;
   iva: number;
   imageUrl: string | null;
   categoriaId: number | string;
   categoriaNombre: string;
-  presentaciones: MenuPresentacion[];
+  opciones: MenuOpcion[];
+  precioDesde: number;
+  moneda: MenuMoneda | null;
+  adicionales: MenuAdicional[];
+  observaciones: MenuObservacion[];
 }
 
 export interface MenuCategoria {
@@ -53,13 +73,18 @@ export interface CuentaCliente {
   clienteId: number | null;
 }
 
+/** Ítem del carrito con su personalización. */
 export interface CartItem {
+  uid: string;                 // id local de la línea (permite repetir el mismo producto con distinta config)
   productoId: number;
-  presentacionId: number;
   nombreProducto: string;
-  nombrePresentacion: string;
-  precioUnitario: number;
+  imageUrl: string | null;
+  opcion: MenuOpcion;
+  adicionales: MenuAdicional[];
+  observaciones: MenuObservacion[];
+  notaLibre: string | null;
   cantidad: number;
+  precioUnitario: number;      // opcion.precio + Σ adicionales
 }
 
 export type TipoPedido = 'PICKUP' | 'DELIVERY';

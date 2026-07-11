@@ -11,6 +11,7 @@ export interface TiendaConfig {
   permiteDelivery: boolean;
   prepTimeMinutos: number;
   montoMinimoPedido: number;
+  googleClientId?: string | null;
 }
 
 /** Carga la config pública de la tienda y aplica el branding (nombre/color). */

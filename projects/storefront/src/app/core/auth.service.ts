@@ -41,6 +41,27 @@ export class AuthService {
     );
   }
 
+  registrar(email: string, password: string, nombre: string): Observable<any> {
+    return this.api.call<any>('auth.registrar', [{ email, password, nombre }]).pipe(
+      tap((res) => {
+        if (res?.success && res.accessToken) this.setSesion(res);
+      }),
+    );
+  }
+
+  googleLogin(idToken: string): Observable<any> {
+    return this.api.call<any>('auth.google', [idToken]).pipe(
+      tap((res) => {
+        if (res?.success && res.accessToken) this.setSesion(res);
+      }),
+    );
+  }
+
+  /** True si la cuenta aún no completó su nombre (para el onboarding de perfil). */
+  get necesitaPerfil(): boolean {
+    return this.isAuthenticated && !this.cuenta?.nombre;
+  }
+
   refreshMe(): void {
     this.api.call<any>('auth.me', []).subscribe({
       next: (res) => {

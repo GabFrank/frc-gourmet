@@ -1,6 +1,9 @@
 import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
+import { PrecioVenta } from '../../src/app/database/entities/productos/precio-venta.entity';
+import { Receta } from '../../src/app/database/entities/productos/receta.entity';
+import { RecetaAdicionalVinculacion } from '../../src/app/database/entities/productos/receta-adicional-vinculacion.entity';
 import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zona-delivery.entity';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { PedidoOnlineItem } from '../../src/app/database/entities/pedidos-online/pedido-online-item.entity';
@@ -26,13 +29,109 @@ import { getTiendaConfig, estaAbierta } from './pedidos-online-config.handler';
 
 const ONLINE_TIPO = 'ONLINE';
 
-function resolvePrecio(presentacion: any): any | null {
-  const precios = (presentacion?.preciosVenta || []).filter((p: any) => p && p.activo);
-  if (!precios.length) return null;
-  const online = precios.find(
+/** De una lista de PrecioVenta activos elige ONLINE > principal > primero. */
+function pickPrecio(precios: any[]): any | null {
+  const activos = (precios || []).filter((p: any) => p && p.activo);
+  if (!activos.length) return null;
+  const online = activos.find(
     (p: any) => String(p.tipoPrecio?.descripcion || '').toUpperCase() === ONLINE_TIPO,
   );
-  return online || precios.find((p: any) => p.principal) || precios[0];
+  return online || activos.find((p: any) => p.principal) || activos[0];
+}
+
+/**
+ * Resuelve el precio de la OPCIÓN elegida server-side según el tipo de producto.
+ * Devuelve { valor, moneda, label, recetaId? } o null si no hay precio.
+ * Soporta el shape nuevo (`opcion`) y el viejo (`presentacionId`).
+ */
+async function resolveOpcion(
+  dataSource: DataSource,
+  producto: any,
+  it: any,
+): Promise<{ valor: number; moneda: any; label: string; presentacionId?: number; recetaId?: number } | null> {
+  const pvRepo = dataSource.getRepository(PrecioVenta);
+  const opcion = it.opcion || (it.presentacionId ? { tipo: 'PRESENTACION', presentacionId: it.presentacionId } : null);
+  const tipoProd = producto.tipo;
+
+  // RETAIL / presentaciones
+  if (tipoProd === 'RETAIL' || tipoProd === 'RETAIL_INGREDIENTE' || tipoProd === 'BUFFET_POR_PESO') {
+    const presentaciones = producto.presentaciones || [];
+    const presId = opcion?.presentacionId;
+    const pres = presId
+      ? presentaciones.find((p: any) => p.id === presId)
+      : presentaciones.find((p: any) => p.principal) || presentaciones[0];
+    if (!pres) return null;
+    const precio = pickPrecio(pres.preciosVenta);
+    if (!precio) return null;
+    return { valor: Number(precio.valor), moneda: precio.moneda, label: pres.nombre, presentacionId: pres.id };
+  }
+
+  // ELABORADO_SIN_VARIACION → precio de la receta del producto
+  if (tipoProd === 'ELABORADO_SIN_VARIACION') {
+    const recetaId = producto.receta?.id;
+    if (!recetaId) return null;
+    const precios = await pvRepo.find({ where: { receta: { id: recetaId }, activo: true }, relations: ['moneda', 'tipoPrecio'] });
+    const precio = pickPrecio(precios);
+    if (!precio) return null;
+    return { valor: Number(precio.valor), moneda: precio.moneda, label: 'Estándar', recetaId };
+  }
+
+  // ELABORADO_CON_VARIACION → precio de la receta de la variación elegida
+  if (tipoProd === 'ELABORADO_CON_VARIACION') {
+    const recetaId = opcion?.recetaId;
+    if (!recetaId) return null;
+    // La variación debe pertenecer a este producto.
+    const variacion = await dataSource.getRepository(Receta).findOne({
+      where: { id: recetaId, productoVariacion: { id: producto.id }, activo: true } as any,
+    });
+    if (!variacion) return null;
+    const precios = await pvRepo.find({ where: { receta: { id: recetaId }, activo: true }, relations: ['moneda', 'tipoPrecio'] });
+    const precio = pickPrecio(precios);
+    if (!precio) return null;
+    return { valor: Number(precio.valor), moneda: precio.moneda, label: (variacion as any).nombre, recetaId };
+  }
+
+  // COMBO → precio directo del producto
+  if (tipoProd === 'COMBO') {
+    const precios = await pvRepo.find({ where: { producto: { id: producto.id }, activo: true }, relations: ['moneda', 'tipoPrecio'] });
+    const precio = pickPrecio(precios);
+    if (!precio) return null;
+    return { valor: Number(precio.valor), moneda: precio.moneda, label: 'Combo' };
+  }
+
+  return null;
+}
+
+/** Suma el precio de los adicionales elegidos, tomado del CATÁLOGO (no del cliente). */
+async function resolveAdicionales(
+  dataSource: DataSource,
+  producto: any,
+  opcionRecetaId: number | undefined,
+  adicionalIds: number[],
+): Promise<{ total: number; detalle: { id: number; nombre: string; precio: number }[] }> {
+  if (!Array.isArray(adicionalIds) || !adicionalIds.length) return { total: 0, detalle: [] };
+  const recetaIds: number[] = [];
+  if (producto.receta?.id) recetaIds.push(producto.receta.id);
+  if (opcionRecetaId) recetaIds.push(opcionRecetaId);
+  if (!recetaIds.length) return { total: 0, detalle: [] };
+
+  const vincs = await dataSource.getRepository(RecetaAdicionalVinculacion).find({
+    where: recetaIds.map((rid) => ({ receta: { id: rid }, activo: true })) as any,
+    relations: ['adicional'],
+  });
+  const detalle: { id: number; nombre: string; precio: number }[] = [];
+  let total = 0;
+  const wanted = new Set(adicionalIds.map((n) => Number(n)));
+  const vistos = new Set<number>();
+  for (const v of vincs as any[]) {
+    const ad = v.adicional;
+    if (!ad || !ad.activo || !wanted.has(ad.id) || vistos.has(ad.id)) continue;
+    vistos.add(ad.id);
+    const precio = Math.max(0, Number(v.precioAdicional ?? ad.precio ?? 0));
+    total += precio;
+    detalle.push({ id: ad.id, nombre: ad.nombre, precio });
+  }
+  return { total, detalle };
 }
 
 async function siguienteNumero(repo: any): Promise<string> {
@@ -93,6 +192,7 @@ export function registerPedidosOnlinePedidosHandlers(
       const producto = await productoRepo.findOne({
         where: { id: it.productoId },
         relations: [
+          'receta',
           'presentaciones',
           'presentaciones.preciosVenta',
           'presentaciones.preciosVenta.moneda',
@@ -104,42 +204,43 @@ export function registerPedidosOnlinePedidosHandlers(
         return { success: false, error: `producto_no_disponible:${producto.nombre}` };
       }
 
-      const presentaciones = producto.presentaciones || [];
-      const pres = it.presentacionId
-        ? presentaciones.find((p: any) => p.id === it.presentacionId)
-        : presentaciones.find((p: any) => p.principal) || presentaciones[0];
-      if (!pres) return { success: false, error: `presentacion_inexistente:${producto.nombre}` };
+      // Precio de la opción elegida (todos los tipos), recalculado server-side.
+      const opcion = await resolveOpcion(dataSource, producto, it);
+      if (!opcion) return { success: false, error: `opcion_invalida:${producto.nombre}` };
+      if (monedaId == null && opcion.moneda) monedaId = opcion.moneda.id;
 
-      const precio = resolvePrecio(pres);
-      if (!precio) return { success: false, error: `sin_precio_online:${producto.nombre}` };
-      if (monedaId == null && precio.moneda) monedaId = precio.moneda.id;
+      // Adicionales validados contra el catálogo (precio del server, no del cliente).
+      const adicionalIds: number[] = Array.isArray(it.adicionalIds) ? it.adicionalIds : [];
+      const adic = await resolveAdicionales(dataSource, producto, opcion.recetaId, adicionalIds);
+
+      // Observaciones predefinidas elegidas (solo se guardan como snapshot).
+      const observaciones: string[] = Array.isArray(it.observaciones)
+        ? it.observaciones.map((o: any) => String(o)).slice(0, 20)
+        : [];
+      const notaLibre = it.notaLibre ? String(it.notaLibre).slice(0, 300) : undefined;
 
       // Cantidad entera ≥ 1 (no se venden fracciones online).
       const cantidad = Math.max(1, Math.floor(Number(it.cantidad) || 1));
-      // Adicionales del snapshot del cliente. Se CLAMPea a ≥0 para que un POST
-      // directo no pueda inyectar precios negativos y evadir el mínimo. El precio
-      // real de los adicionales se valida contra el catálogo en Fase 5 (cobro
-      // online); hoy el PdV revisa el pedido antes de aceptar.
-      const adicionales = Array.isArray(it.personalizacion?.adicionales)
-        ? it.personalizacion.adicionales
-        : [];
-      const totalAdicionales = adicionales.reduce(
-        (s: number, a: any) => s + Math.max(0, Number(a?.precio) || 0),
-        0,
-      );
-      const precioUnitario = Number(precio.valor) + totalAdicionales;
+      const precioUnitario = opcion.valor + adic.total;
       const itemSubtotal = precioUnitario * cantidad;
       subtotal += itemSubtotal;
 
+      const personalizacion = {
+        opcion: { label: opcion.label, tipo: it.opcion?.tipo ?? 'PRESENTACION' },
+        adicionales: adic.detalle,
+        observaciones,
+        notaLibre,
+      };
+
       const item = new PedidoOnlineItem();
       item.productoId = producto.id;
-      item.presentacionId = pres.id;
+      item.presentacionId = opcion.presentacionId;
       item.nombreProducto = producto.nombre;
-      item.nombrePresentacion = pres.nombre;
+      item.nombrePresentacion = opcion.label;
       item.cantidad = cantidad;
       item.precioUnitario = precioUnitario;
       item.subtotal = itemSubtotal;
-      item.personalizacion = it.personalizacion ? JSON.stringify(it.personalizacion) : undefined;
+      item.personalizacion = JSON.stringify(personalizacion);
       itemsToSave.push(item);
     }
 
@@ -200,6 +301,10 @@ export function registerPedidosOnlinePedidosHandlers(
     if (zona) pedido.zonaDelivery = zona;
     pedido.direccionEntrega = data?.direccionEntrega || undefined;
     pedido.referenciaDireccion = data?.referenciaDireccion || undefined;
+    if (tipoPedido === TipoPedidoOnline.DELIVERY) {
+      if (typeof data?.latitud === 'number') pedido.latitud = data.latitud;
+      if (typeof data?.longitud === 'number') pedido.longitud = data.longitud;
+    }
     pedido.notas = data?.notas || undefined;
     pedido.items = itemsToSave;
 

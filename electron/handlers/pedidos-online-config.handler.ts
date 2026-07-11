@@ -56,6 +56,8 @@ function mapConfigPublic(cfg: TiendaOnlineConfig): any {
     permiteDelivery: cfg.permiteDelivery,
     prepTimeMinutos: cfg.prepTimeMinutos,
     montoMinimoPedido: Number(cfg.montoMinimoPedido),
+    // Client ID de Google OAuth (env). Si está, el storefront muestra el botón.
+    googleClientId: process.env['GOOGLE_CLIENT_ID'] || null,
   };
 }
 
