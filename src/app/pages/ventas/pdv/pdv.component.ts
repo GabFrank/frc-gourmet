@@ -1436,15 +1436,12 @@ export class PdvComponent implements OnInit, OnDestroy {
 
     const venta = await this.getVenta();
 
-    // Calcular precio de adicionales total (por sabor + general)
+    // Calcular precio de adicionales total (personalización por sabor)
     let totalAdicionales = 0;
     for (const sabor of result.sabores) {
       if (sabor.personalizacion) {
         totalAdicionales += sabor.personalizacion.precioAdicionalTotal * sabor.proporcion;
       }
-    }
-    if (result.personalizacionGeneral) {
-      totalAdicionales += result.personalizacionGeneral.precioAdicionalTotal;
     }
 
     // Determinar la RecetaPresentacion principal (mayor precio o primera)
@@ -1495,11 +1492,6 @@ export class PdvComponent implements OnInit, OnDestroy {
         if (sabor.personalizacion) {
           await this.persistirPersonalizacionConSabor(savedItem.id, sabor.personalizacion, savedSabor.id);
         }
-      }
-
-      // Persistir personalización general (sin ventaItemSabor FK)
-      if (result.personalizacionGeneral) {
-        await this.persistirPersonalizacion(savedItem.id, result.personalizacionGeneral);
       }
 
       // Cargar personalizaciones para mostrar en tabla expandible

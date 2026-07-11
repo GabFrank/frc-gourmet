@@ -322,6 +322,66 @@
   }
 }
 
+// Acciones de cada sabor seleccionado (proporción + personalizar)
+.sabor-sel-acciones {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.proporcion-control {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+
+  button {
+    width: 28px;
+    height: 28px;
+    line-height: 28px;
+  }
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.proporcion-pct {
+  min-width: 38px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.proporciones-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+
+  button {
+    font-size: 11px;
+    mat-icon {
+      font-size: 15px;
+      width: 15px;
+      height: 15px;
+      margin-right: 2px;
+    }
+  }
+}
+
+.proporciones-suma {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.6;
+
+  &.warn {
+    color: var(--error-color, #e53935);
+    opacity: 1;
+  }
+}
+
 // Precio parcial
 .precio-parcial {
   display: flex;

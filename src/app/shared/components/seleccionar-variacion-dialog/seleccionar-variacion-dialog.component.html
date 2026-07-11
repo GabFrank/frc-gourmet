@@ -81,23 +81,42 @@
         </button>
       </div>
 
-      <!-- Sabores seleccionados con opción de personalizar -->
+      <!-- Sabores seleccionados con proporción editable + personalizar -->
       <div class="sabores-seleccionados" *ngIf="saboresSeleccionados.length > 0">
         <mat-divider></mat-divider>
         <div class="seleccionados-header">SELECCIONADOS</div>
         <div class="sabor-seleccionado-row" *ngFor="let sabor of saboresSeleccionados; let i = index">
           <div class="sabor-sel-info">
-            <span class="sabor-sel-proporcion" *ngIf="saboresSeleccionados.length > 1">
-              {{ saboresSeleccionados.length === 2 ? '1/2' : saboresSeleccionados.length === 3 ? '1/3' : '1/' + saboresSeleccionados.length }}
-            </span>
+            <span class="sabor-sel-proporcion" *ngIf="saboresSeleccionados.length > 1">{{ etiquetaProporcion(sabor) }}</span>
             <span class="sabor-sel-nombre">{{ sabor.recetaPresentacion.sabor?.nombre }}</span>
             <span class="sabor-personalizado-badge" *ngIf="tienePersonalizacion(sabor)">
               <mat-icon>tune</mat-icon> PERSONALIZADO
             </span>
           </div>
-          <button mat-stroked-button class="btn-personalizar" (click)="personalizarSabor(sabor)">
-            <mat-icon>tune</mat-icon>
-            PERSONALIZAR
+          <div class="sabor-sel-acciones">
+            <!-- Proporción manual (mitad y mitad, 60/40, etc.) -->
+            <div class="proporcion-control" *ngIf="saboresSeleccionados.length > 1">
+              <button mat-icon-button type="button" [disabled]="proporcionPct(sabor) <= 10"
+                      (click)="ajustarProporcion(sabor, -5)" matTooltip="Menos porción">
+                <mat-icon>remove_circle_outline</mat-icon>
+              </button>
+              <span class="proporcion-pct">{{ proporcionPct(sabor) }}%</span>
+              <button mat-icon-button type="button" [disabled]="proporcionPct(sabor) >= 90"
+                      (click)="ajustarProporcion(sabor, 5)" matTooltip="Más porción">
+                <mat-icon>add_circle_outline</mat-icon>
+              </button>
+            </div>
+            <button mat-stroked-button class="btn-personalizar" (click)="personalizarSabor(sabor)">
+              <mat-icon>tune</mat-icon>
+              PERSONALIZAR
+            </button>
+          </div>
+        </div>
+
+        <div class="proporciones-footer" *ngIf="saboresSeleccionados.length > 1">
+          <span class="proporciones-suma" [class.warn]="sumaProporcionesPct !== 100">Suma: {{ sumaProporcionesPct }}%</span>
+          <button mat-button type="button" *ngIf="proporcionesManuales" (click)="restablecerProporciones()">
+            <mat-icon>restart_alt</mat-icon> Partes iguales
           </button>
         </div>
       </div>
@@ -131,9 +150,7 @@
           <span class="resumen-label">{{ labels.variations }}</span>
           <div class="resumen-sabores">
             <div *ngFor="let sabor of saboresSeleccionados" class="resumen-sabor">
-              <span *ngIf="saboresSeleccionados.length > 1" class="resumen-proporcion">
-                {{ saboresSeleccionados.length === 2 ? '1/2' : '1/' + saboresSeleccionados.length }}
-              </span>
+              <span *ngIf="saboresSeleccionados.length > 1" class="resumen-proporcion">{{ etiquetaProporcion(sabor) }}</span>
               <span>{{ sabor.recetaPresentacion.sabor?.nombre }}</span>
               <span class="resumen-personalizado" *ngIf="tienePersonalizacion(sabor)">
                 <mat-icon>tune</mat-icon>
@@ -141,17 +158,7 @@
             </div>
           </div>
         </div>
-        <div class="resumen-item" *ngIf="personalizacionGeneral">
-          <span class="resumen-label">EXTRAS GENERALES</span>
-          <span class="resumen-value"><mat-icon>check</mat-icon> Personalizado</span>
-        </div>
       </div>
-
-      <!-- Botón personalización general -->
-      <button mat-stroked-button class="btn-personalizacion-general" (click)="personalizarGeneral()">
-        <mat-icon>restaurant</mat-icon>
-        {{ personalizacionGeneral ? 'EDITAR EXTRAS GENERALES' : 'AGREGAR EXTRAS GENERALES' }}
-      </button>
 
       <!-- Footer: cantidad + total -->
       <div class="footer-bar">
