@@ -127,6 +127,69 @@ async function seed(dataSource: DataSource): Promise<any> {
     dataSource.getRepository(RecetaAdicionalVinculacion).create({ receta, adicional, precioAdicional: 7000, activo: true } as any),
   );
 
+  // Producto ELABORADO_CON_VARIACION (PIZZA): 2 tamaños × 2 sabores.
+  const { Sabor } = require('../src/app/database/entities/productos/sabor.entity');
+  const { RecetaPresentacion } = require('../src/app/database/entities/productos/receta-presentacion.entity');
+  const { PdvConfig } = require('../src/app/database/entities/ventas/pdv-config.entity');
+  const pizza = await dataSource.getRepository(Producto).save(
+    dataSource.getRepository(Producto).create({
+      nombre: 'PIZZA', tipo: 'ELABORADO_CON_VARIACION', activo: true, esVendible: true,
+      disponibleOnline: true, pausadoOnline: false, iva: 10, subfamilia,
+    } as any),
+  );
+  const presGrande = await dataSource.getRepository(Presentacion).save(
+    dataSource.getRepository(Presentacion).create({ nombre: 'GRANDE', cantidad: 3, principal: true, producto: pizza } as any),
+  );
+  const presMediana = await dataSource.getRepository(Presentacion).save(
+    dataSource.getRepository(Presentacion).create({ nombre: 'MEDIANA', cantidad: 2, principal: false, producto: pizza } as any),
+  );
+  const saborCalabresa = await dataSource.getRepository(Sabor).save(
+    dataSource.getRepository(Sabor).create({ nombre: 'CALABRESA', categoria: 'PIZZA', activo: true, producto: pizza } as any),
+  );
+  const saborBacon = await dataSource.getRepository(Sabor).save(
+    dataSource.getRepository(Sabor).create({ nombre: 'BACON', categoria: 'PIZZA', activo: true, producto: pizza } as any),
+  );
+  const saborMussarela = await dataSource.getRepository(Sabor).save(
+    dataSource.getRepository(Sabor).create({ nombre: 'MUSSARELA', categoria: 'PIZZA', activo: true, producto: pizza } as any),
+  );
+  // Una receta base por sabor (productoVariacion = la pizza).
+  const recCalabresa = await dataSource.getRepository(Receta).save(
+    dataSource.getRepository(Receta).create({ nombre: 'RECETA CALABRESA', activo: true, productoVariacion: pizza } as any),
+  );
+  const recBacon = await dataSource.getRepository(Receta).save(
+    dataSource.getRepository(Receta).create({ nombre: 'RECETA BACON', activo: true, productoVariacion: pizza } as any),
+  );
+  const recMussarela = await dataSource.getRepository(Receta).save(
+    dataSource.getRepository(Receta).create({ nombre: 'RECETA MUSSARELA', activo: true, productoVariacion: pizza } as any),
+  );
+  // Matriz (sabor × tamaño) → RecetaPresentacion + PrecioVenta.
+  //   CALABRESA: GRANDE 60000 / MEDIANA 45000
+  //   BACON:     GRANDE 70000 / MEDIANA 50000
+  //   MUSSARELA: GRANDE 65000 / MEDIANA 48000
+  const matriz: any[] = [
+    { receta: recCalabresa, sabor: saborCalabresa, presentacion: presGrande, precio: 60000 },
+    { receta: recCalabresa, sabor: saborCalabresa, presentacion: presMediana, precio: 45000 },
+    { receta: recBacon, sabor: saborBacon, presentacion: presGrande, precio: 70000 },
+    { receta: recBacon, sabor: saborBacon, presentacion: presMediana, precio: 50000 },
+    { receta: recMussarela, sabor: saborMussarela, presentacion: presGrande, precio: 65000 },
+    { receta: recMussarela, sabor: saborMussarela, presentacion: presMediana, precio: 48000 },
+  ];
+  for (const m of matriz) {
+    const rp = await dataSource.getRepository(RecetaPresentacion).save(
+      dataSource.getRepository(RecetaPresentacion).create({
+        nombre_generado: `PIZZA ${m.presentacion.nombre} ${m.sabor.nombre}`,
+        receta: m.receta, sabor: m.sabor, presentacion: m.presentacion, activo: true,
+      } as any),
+    );
+    await dataSource.getRepository(PrecioVenta).save(
+      dataSource.getRepository(PrecioVenta).create({ valor: m.precio, principal: true, activo: true, moneda, tipoPrecio, recetaPresentacion: rp } as any),
+    );
+  }
+  // Config de pizza del PdV: hasta 2 sabores, estrategia MAYOR_PRECIO.
+  await dataSource.getRepository(PdvConfig).save(
+    dataSource.getRepository(PdvConfig).create({ cantidad_mesas: 0, pizzaMaxSabores: 2, pizzaEstrategiaPrecio: 'MAYOR_PRECIO' } as any),
+  );
+
   const zona = await dataSource.getRepository(ZonaDelivery).save(
     dataSource.getRepository(ZonaDelivery).create({ nombre: 'CENTRO', tarifa: 15000, montoMinimo: 50000, activa: true } as any),
   );
@@ -148,7 +211,10 @@ async function seed(dataSource: DataSource): Promise<any> {
     dataSource.getRepository(UsuarioRole).create({ usuario: admin, role } as any),
   );
 
-  return { admin, producto, presentacion, zona, elaborado, receta, adicional };
+  return {
+    admin, producto, presentacion, zona, elaborado, receta, adicional,
+    pizza, presGrande, presMediana, saborCalabresa, saborBacon, saborMussarela,
+  };
 }
 
 async function main() {
@@ -197,7 +263,7 @@ async function main() {
   // 1. Menú
   const menu = await pub('menu.get');
   const nombres = (menu.result?.productos || []).map((p: any) => p.nombre);
-  ok(menu.status === 200 && menu.result?.total === 2, 'menu.get devuelve 2 productos online (RETAIL + elaborado)', menu.result?.total);
+  ok(menu.status === 200 && menu.result?.total === 3, 'menu.get devuelve 3 productos online (RETAIL + elaborado + pizza)', menu.result?.total);
   ok(nombres.includes('HAMBURGUESA COMPLETA'), 'menu incluye el producto RETAIL online');
   ok(nombres.includes('LOMITO ARABE'), 'menu incluye el ELABORADO_SIN_VARIACION (precio via receta)');
   ok(!nombres.includes('PRODUCTO OCULTO'), 'menu NO incluye el producto no-online');
@@ -206,6 +272,18 @@ async function main() {
   ok(pRetail?.opciones?.[0]?.precio === 25000, 'RETAIL: precio de opción correcto', pRetail?.opciones?.[0]?.precio);
   ok(pElab?.opciones?.[0]?.precio === 40000, 'ELABORADO: precio de opción (receta) correcto', pElab?.opciones?.[0]?.precio);
   ok(pElab?.adicionales?.[0]?.precio === 7000, 'ELABORADO: adicional con precio de vinculación', pElab?.adicionales?.[0]?.precio);
+
+  // PIZZA (ELABORADO_CON_VARIACION): estructura sabor × tamaño.
+  const pPizza = (menu.result?.productos || []).find((x: any) => x.nombre === 'PIZZA');
+  ok(pPizza?.esPizza === true, 'PIZZA: marcada esPizza');
+  ok(Array.isArray(pPizza?.tamanos) && pPizza.tamanos.length === 2, 'PIZZA: 2 tamaños', pPizza?.tamanos?.length);
+  ok(pPizza?.tamanos?.[0]?.nombre === 'MEDIANA', 'PIZZA: tamaños ordenados chico→grande (MEDIANA primero)', pPizza?.tamanos?.[0]?.nombre);
+  ok(Array.isArray(pPizza?.sabores) && pPizza.sabores.length === 3, 'PIZZA: 3 sabores', pPizza?.sabores?.length);
+  const sCal = (pPizza?.sabores || []).find((s: any) => s.nombre === 'CALABRESA');
+  ok(sCal?.precios?.length === 2, 'PIZZA: sabor CALABRESA con 2 precios (por tamaño)', sCal?.precios?.length);
+  ok(sCal?.precioDesde === 45000, 'PIZZA: precioDesde de CALABRESA = 45000 (mediana)', sCal?.precioDesde);
+  ok(pPizza?.precioDesde === 45000, 'PIZZA: precioDesde global = 45000', pPizza?.precioDesde);
+  ok(pPizza?.pizzaConfig?.maxSabores === 2 && pPizza?.pizzaConfig?.estrategia === 'MAYOR_PRECIO', 'PIZZA: pizzaConfig (max 2, MAYOR_PRECIO)', pPizza?.pizzaConfig);
 
   // 2. OTP request
   const tel = '0981123456';
@@ -412,6 +490,50 @@ async function main() {
   const pedGeo: any = (listaGeo || []).find((p: any) => p.numero === deliGeo.result?.numero);
   ok(!!pedGeo && Math.abs((pedGeo.latitud ?? 0) - (-25.2891)) < 1e-4 && Math.abs((pedGeo.longitud ?? 0) - (-57.6109)) < 1e-4,
     'admin ve la ubicación (lat/lng) del pedido', { lat: pedGeo?.latitud, lng: pedGeo?.longitud });
+
+  console.log('\n[e2e] === PIZZA: PEDIDO (tamaño + sabor + mitad y mitad) ===');
+  // 33. pizza de 1 sabor: CALABRESA GRANDE → 60000
+  const pzUno = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.pizza.id, opcion: { tipo: 'PIZZA', presentacionId: seeded.presGrande.id, saborIds: [seeded.saborCalabresa.id] }, cantidad: 1 }],
+  }], token2);
+  ok(pzUno.result?.success === true && pzUno.result?.total === 60000, 'PIZZA 1 sabor (CALABRESA GRANDE) = 60000', pzUno.result?.total ?? pzUno.result?.error);
+
+  // 34. mitad y mitad: CALABRESA + BACON GRANDE → MAYOR_PRECIO = max(60000,70000) = 70000
+  const pzMitad = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.pizza.id, opcion: { tipo: 'PIZZA', presentacionId: seeded.presGrande.id, saborIds: [seeded.saborCalabresa.id, seeded.saborBacon.id] }, cantidad: 1 }],
+  }], token2);
+  ok(pzMitad.result?.success === true && pzMitad.result?.total === 70000, 'PIZZA mitad CALABRESA+BACON GRANDE = 70000 (MAYOR_PRECIO)', pzMitad.result?.total ?? pzMitad.result?.error);
+
+  // 35. tamaño MEDIANA de 1 sabor: BACON MEDIANA → 50000
+  const pzMed = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.pizza.id, opcion: { tipo: 'PIZZA', presentacionId: seeded.presMediana.id, saborIds: [seeded.saborBacon.id] }, cantidad: 1 }],
+  }], token2);
+  ok(pzMed.result?.success === true && pzMed.result?.total === 50000, 'PIZZA BACON MEDIANA = 50000', pzMed.result?.total ?? pzMed.result?.error);
+
+  // 36. exceder maxSabores (3 sabores con max 2) → error
+  const pzMax = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.pizza.id, opcion: { tipo: 'PIZZA', presentacionId: seeded.presGrande.id, saborIds: [seeded.saborCalabresa.id, seeded.saborBacon.id, seeded.saborMussarela.id] }, cantidad: 1 }],
+  }], token2);
+  ok(String(pzMax.result?.error || '').startsWith('demasiados_sabores'), 'PIZZA con 3 sabores (>max) → demasiados_sabores', pzMax.result?.error);
+
+  // 37. combinación inexistente (sabor válido, tamaño no cotizado) → error server-side.
+  //     Usamos un presentacionId ajeno (el de la hamburguesa) que no pertenece a la pizza.
+  const pzBad = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.pizza.id, opcion: { tipo: 'PIZZA', presentacionId: seeded.presentacion.id, saborIds: [seeded.saborCalabresa.id] }, cantidad: 1 }],
+  }], token2);
+  ok(String(pzBad.result?.error || '').startsWith('sabor_o_tamano_invalido'), 'PIZZA con tamaño no cotizado → sabor_o_tamano_invalido', pzBad.result?.error);
+
+  // 38. el desglose de sabores queda en el snapshot del item (para la bandeja).
+  const misPz: any = await invokeHandlerWithContext('get-pedidos-online-admin', undefined, {});
+  const pedMitad: any = (misPz || []).find((p: any) => p.numero === pzMitad.result?.numero);
+  const itMitad = pedMitad?.items?.[0];
+  ok(itMitad?.personalizacion?.sabores?.length === 2 && Math.abs(itMitad.personalizacion.sabores[0].proporcion - 0.5) < 1e-6,
+    'PIZZA mitad: snapshot con 2 sabores y proporción 0.5', itMitad?.personalizacion?.sabores);
 
   console.log = origLog;
   await fastify.close();

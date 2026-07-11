@@ -1,8 +1,9 @@
 import { ipcMain } from 'electron';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
 import { PrecioVenta } from '../../src/app/database/entities/productos/precio-venta.entity';
 import { Receta } from '../../src/app/database/entities/productos/receta.entity';
+import { RecetaPresentacion } from '../../src/app/database/entities/productos/receta-presentacion.entity';
 import { RecetaAdicionalVinculacion } from '../../src/app/database/entities/productos/receta-adicional-vinculacion.entity';
 import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zona-delivery.entity';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
@@ -15,7 +16,7 @@ import {
   MetodoPagoOnline,
 } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { registerPublicOperation } from '../server/public-routes';
-import { getTiendaConfig, estaAbierta } from './pedidos-online-config.handler';
+import { getTiendaConfig, estaAbierta, getPizzaConfig } from './pedidos-online-config.handler';
 
 /**
  * Pedidos online — Fase 3: creación de pedido + zonas de delivery (superficie pública).
@@ -48,7 +49,16 @@ async function resolveOpcion(
   dataSource: DataSource,
   producto: any,
   it: any,
-): Promise<{ valor: number; moneda: any; label: string; presentacionId?: number; recetaId?: number } | null> {
+): Promise<{
+  valor: number;
+  moneda: any;
+  label: string;
+  presentacionId?: number;
+  recetaId?: number;
+  recetaIds?: number[];
+  sabores?: { saborId: number; nombre: string; proporcion: number; recetaPresentacionId: number; precioReferencia: number }[];
+  error?: string;
+} | null> {
   const pvRepo = dataSource.getRepository(PrecioVenta);
   const opcion = it.opcion || (it.presentacionId ? { tipo: 'PRESENTACION', presentacionId: it.presentacionId } : null);
   const tipoProd = producto.tipo;
@@ -76,11 +86,72 @@ async function resolveOpcion(
     return { valor: Number(precio.valor), moneda: precio.moneda, label: 'Estándar', recetaId };
   }
 
-  // ELABORADO_CON_VARIACION → precio de la receta de la variación elegida
+  // ELABORADO_CON_VARIACION (pizza) → tamaño + sabor(es), precio desde RecetaPresentacion.
   if (tipoProd === 'ELABORADO_CON_VARIACION') {
+    // Shape nuevo (pizza): { tipo:'PIZZA', presentacionId, saborIds:[...] }
+    const presentacionId = Number(opcion?.presentacionId) || null;
+    const saborIds: number[] = Array.isArray(opcion?.saborIds)
+      ? opcion.saborIds.map((n: any) => Number(n)).filter((n: number) => n > 0)
+      : [];
+
+    if (presentacionId && saborIds.length) {
+      const { maxSabores, estrategia } = await getPizzaConfig(dataSource);
+      const uniqueSabores = Array.from(new Set(saborIds));
+      if (uniqueSabores.length > maxSabores) return { valor: 0, moneda: null, label: '', error: 'demasiados_sabores' };
+
+      // RecetaPresentacion de (sabor × tamaño) que pertenezcan a este producto.
+      const rps = await dataSource.getRepository(RecetaPresentacion).find({
+        where: {
+          presentacion: { id: presentacionId },
+          sabor: { id: In(uniqueSabores), producto: { id: producto.id } },
+          activo: true,
+        } as any,
+        relations: ['presentacion', 'sabor', 'receta', 'preciosVenta', 'preciosVenta.moneda', 'preciosVenta.tipoPrecio'],
+      });
+      // Todos los sabores elegidos deben existir y tener precio para ese tamaño.
+      const porSabor = new Map<number, any>();
+      for (const rp of rps as any[]) {
+        const precio = pickPrecio(rp.preciosVenta);
+        if (precio) porSabor.set(rp.sabor.id, { rp, precio });
+      }
+      if (porSabor.size !== uniqueSabores.length) return { valor: 0, moneda: null, label: '', error: 'sabor_o_tamano_invalido' };
+
+      const precios = uniqueSabores.map((sid) => Number(porSabor.get(sid).precio.valor));
+      const valor = estrategia === 'PROMEDIO'
+        ? precios.reduce((a, b) => a + b, 0) / precios.length
+        : Math.max(...precios);
+
+      const proporcion = 1 / uniqueSabores.length;
+      const first = porSabor.get(uniqueSabores[0]);
+      const tamanoNombre = first.rp.presentacion?.nombre || '';
+      const saboresSnap = uniqueSabores.map((sid) => {
+        const { rp, precio } = porSabor.get(sid);
+        return {
+          saborId: sid,
+          nombre: rp.sabor?.nombre || '',
+          proporcion,
+          recetaPresentacionId: rp.id,
+          precioReferencia: Number(precio.valor),
+        };
+      });
+      const label = uniqueSabores.length > 1
+        ? `${tamanoNombre} · ${saboresSnap.map((s) => `1/${uniqueSabores.length} ${s.nombre}`).join(' + ')}`
+        : `${tamanoNombre} · ${saboresSnap[0].nombre}`;
+      const recetaIds = Array.from(new Set((rps as any[]).map((r) => r.receta?.id).filter(Boolean)));
+
+      return {
+        valor: Math.round(valor),
+        moneda: first.precio.moneda,
+        label,
+        presentacionId,
+        recetaIds,
+        sabores: saboresSnap,
+      };
+    }
+
+    // Backward-compat: shape viejo { recetaId } (variación con precio en la receta).
     const recetaId = opcion?.recetaId;
     if (!recetaId) return null;
-    // La variación debe pertenecer a este producto.
     const variacion = await dataSource.getRepository(Receta).findOne({
       where: { id: recetaId, productoVariacion: { id: producto.id }, activo: true } as any,
     });
@@ -106,13 +177,13 @@ async function resolveOpcion(
 async function resolveAdicionales(
   dataSource: DataSource,
   producto: any,
-  opcionRecetaId: number | undefined,
+  opcionRecetaIds: number[],
   adicionalIds: number[],
 ): Promise<{ total: number; detalle: { id: number; nombre: string; precio: number }[] }> {
   if (!Array.isArray(adicionalIds) || !adicionalIds.length) return { total: 0, detalle: [] };
   const recetaIds: number[] = [];
   if (producto.receta?.id) recetaIds.push(producto.receta.id);
-  if (opcionRecetaId) recetaIds.push(opcionRecetaId);
+  for (const rid of opcionRecetaIds || []) if (rid) recetaIds.push(rid);
   if (!recetaIds.length) return { total: 0, detalle: [] };
 
   const vincs = await dataSource.getRepository(RecetaAdicionalVinculacion).find({
@@ -207,11 +278,13 @@ export function registerPedidosOnlinePedidosHandlers(
       // Precio de la opción elegida (todos los tipos), recalculado server-side.
       const opcion = await resolveOpcion(dataSource, producto, it);
       if (!opcion) return { success: false, error: `opcion_invalida:${producto.nombre}` };
+      if (opcion.error) return { success: false, error: `${opcion.error}:${producto.nombre}` };
       if (monedaId == null && opcion.moneda) monedaId = opcion.moneda.id;
 
       // Adicionales validados contra el catálogo (precio del server, no del cliente).
       const adicionalIds: number[] = Array.isArray(it.adicionalIds) ? it.adicionalIds : [];
-      const adic = await resolveAdicionales(dataSource, producto, opcion.recetaId, adicionalIds);
+      const opcionRecetaIds = opcion.recetaIds ?? (opcion.recetaId ? [opcion.recetaId] : []);
+      const adic = await resolveAdicionales(dataSource, producto, opcionRecetaIds, adicionalIds);
 
       // Observaciones predefinidas elegidas (solo se guardan como snapshot).
       const observaciones: string[] = Array.isArray(it.observaciones)
@@ -227,6 +300,8 @@ export function registerPedidosOnlinePedidosHandlers(
 
       const personalizacion = {
         opcion: { label: opcion.label, tipo: it.opcion?.tipo ?? 'PRESENTACION' },
+        // Desglose de sabores (pizza mitad y mitad) para la bandeja del PdV.
+        sabores: opcion.sabores ?? null,
         adicionales: adic.detalle,
         observaciones,
         notaLibre,
