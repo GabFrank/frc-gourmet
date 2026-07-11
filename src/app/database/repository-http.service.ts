@@ -1225,6 +1225,10 @@ export class RepositoryHttpService extends RepositoryService {
   validarStockIngrediente(recetaIngredienteId: number): Observable<boolean> {
     return throwError(() => new Error(`RepositoryHttpService.validarStockIngrediente() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getAllSabores(_filtros?: { productoId?: number | null; categoria?: string | null; activo?: boolean | null; texto?: string | null; }): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getAllSabores() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+
   getSaboresByProducto(productoId: number): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getSaboresByProducto() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

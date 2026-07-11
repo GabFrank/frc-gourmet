@@ -2593,6 +2593,9 @@ contextBridge.exposeInMainWorld('api', {
   getSaboresByProducto: async (productoId: number): Promise<any[]> => {
     return await ipcRenderer.invoke('get-sabores-by-producto', productoId);
   },
+  getAllSabores: async (filtros?: { productoId?: number | null; categoria?: string | null; activo?: boolean | null; texto?: string | null; }): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-all-sabores', filtros);
+  },
   createSabor: async (saborData: { nombre: string; categoria: string; descripcion?: string; productoId: number; }): Promise<any> => {
     return await ipcRenderer.invoke('create-sabor', saborData);
   },

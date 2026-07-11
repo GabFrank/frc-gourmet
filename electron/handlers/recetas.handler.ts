@@ -1532,6 +1532,60 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
     }
   });
 
+  // ✅ NUEVO: Listado GLOBAL de sabores (para el módulo "Gestión de Sabores"),
+  // con filtros al padrón de la app (producto, categoría, estado, texto) y el
+  // conteo de variaciones (RecetaPresentacion) de cada sabor.
+  ipcMain.handle('get-all-sabores', async (_e: IpcMainInvokeEvent, filtros?: {
+    productoId?: number | null;
+    categoria?: string | null;
+    activo?: boolean | null;
+    texto?: string | null;
+  }) => {
+    const f = filtros || {};
+    const qb = dataSource.getRepository(Sabor).createQueryBuilder('sabor')
+      .leftJoinAndSelect('sabor.producto', 'producto')
+      .orderBy('sabor.nombre', 'ASC');
+
+    if (Number.isInteger(f.productoId as any)) {
+      qb.andWhere('sabor.producto_id = :pid', { pid: f.productoId });
+    }
+    if (f.categoria && String(f.categoria).trim()) {
+      qb.andWhere('UPPER(sabor.categoria) = :cat', { cat: String(f.categoria).trim().toUpperCase() });
+    }
+    if (typeof f.activo === 'boolean') {
+      qb.andWhere('sabor.activo = :act', { act: f.activo });
+    }
+    if (f.texto && String(f.texto).trim()) {
+      qb.andWhere('UPPER(sabor.nombre) LIKE :txt', { txt: `%${String(f.texto).trim().toUpperCase()}%` });
+    }
+
+    const sabores = await qb.getMany();
+
+    // Conteo de variaciones por sabor.
+    const saborIds = sabores.map(s => s.id!).filter(Boolean);
+    const counts = new Map<number, number>();
+    if (saborIds.length) {
+      const rows = await dataSource.getRepository(RecetaPresentacion).createQueryBuilder('rp')
+        .select('rp.sabor_id', 'saborId')
+        .addSelect('COUNT(*)', 'total')
+        .where('rp.sabor_id IN (:...ids)', { ids: saborIds })
+        .groupBy('rp.sabor_id')
+        .getRawMany();
+      for (const r of rows) counts.set(Number(r.saborId), Number(r.total));
+    }
+
+    return sabores.map(s => ({
+      id: s.id,
+      nombre: s.nombre,
+      categoria: s.categoria,
+      descripcion: s.descripcion ?? null,
+      activo: s.activo,
+      imageUrl: s.imageUrl ?? null,
+      producto: s.producto ? { id: s.producto.id, nombre: s.producto.nombre } : null,
+      variacionesCount: counts.get(s.id!) || 0,
+    }));
+  });
+
   // ✅ NUEVO: CRUD y helpers para Sabores (nueva arquitectura)
   ipcMain.handle('get-sabores-by-producto', async (_e: IpcMainInvokeEvent, productoId: number) => {
     // Guard: con productoId indefinido, el filtro por relación se descarta y
