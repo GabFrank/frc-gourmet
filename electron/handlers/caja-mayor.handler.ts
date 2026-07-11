@@ -16,6 +16,8 @@ import { EntradaVaria } from '../../src/app/database/entities/financiero/entrada
 import { OperacionFinancieraCategoria } from '../../src/app/database/entities/financiero/operacion-financiera-categoria.entity';
 import { OperacionFinanciera } from '../../src/app/database/entities/financiero/operacion-financiera.entity';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
+import { MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
+import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
 import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
 import { CajaMayorEstado, TipoMovimiento, GastoEstado, GastoDestinoTipo, RetiroCajaEstado, RetiroCajaOrigen } from '../../src/app/database/entities/financiero/caja-mayor-enums';
@@ -155,12 +157,26 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       if (cb) {
         cb.saldo = Number(cb.saldo) - Number(op.montoDestino || 0);
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId: cb.id,
+          tipo: MovimientoBancarioTipo.AJUSTE_NEGATIVO,
+          monto: Number(op.montoDestino || 0),
+          observacion: `ANULACION DEPOSITO OP.FIN #${op.id}`,
+          responsable: getEffectiveUser(getCurrentUser),
+        });
       }
     } else if (op.tipoOperacion === TipoOperacionFinanciera.RETIRO_BANCARIO && op.cuentaBancariaOrigen) {
       const cb = await cbRepo.findOne({ where: { id: op.cuentaBancariaOrigen.id } });
       if (cb) {
         cb.saldo = Number(cb.saldo) + Number(op.montoOrigen || 0);
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId: cb.id,
+          tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
+          monto: Number(op.montoOrigen || 0),
+          observacion: `ANULACION RETIRO OP.FIN #${op.id}`,
+          responsable: getEffectiveUser(getCurrentUser),
+        });
       }
     }
   };
@@ -968,6 +984,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         if (!cb) throw new Error(`CuentaBancaria ${cuentaBancariaId} no encontrada`);
         cb.saldo = Number(cb.saldo) - monto;
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId,
+          tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+          monto,
+          observacion: `GASTO #${savedBanco.id}: ${gastoData.descripcion || ''}`,
+          responsable: getEffectiveUser(getCurrentUser),
+        });
 
         await queryRunner.commitTransaction();
         return savedBanco;
@@ -1042,6 +1065,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         if (!cb) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
         cb.saldo = Number(cb.saldo) - montoBanco;
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId: Number(cuentaBancariaId),
+          tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+          monto: montoBanco,
+          observacion: `GASTO #${savedGasto.id}`,
+          responsable: getEffectiveUser(getCurrentUser),
+        });
       }
 
       await queryRunner.commitTransaction();
@@ -1085,6 +1115,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
             const montoBanco = Number(gasto.montoCuentaBancaria) > 0 ? Number(gasto.montoCuentaBancaria) : Number(gasto.monto);
             cb.saldo = Number(cb.saldo) + montoBanco;
             await queryRunner.manager.save(CuentaBancaria, cb);
+            await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+              cuentaBancariaId: cb.id,
+              tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
+              monto: montoBanco,
+              observacion: `ANULACION GASTO #${gasto.id}` + (motivo ? ` - ${motivo}` : ''),
+              responsable: getEffectiveUser(getCurrentUser),
+            });
           }
         }
         await queryRunner.commitTransaction();
@@ -1175,6 +1212,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           const montoBancoOld = Number(gasto.montoCuentaBancaria) > 0 ? Number(gasto.montoCuentaBancaria) : Number(gasto.monto);
           cbOld.saldo = Number(cbOld.saldo) + montoBancoOld;
           await queryRunner.manager.save(CuentaBancaria, cbOld);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: gasto.cuentaBancariaId,
+            tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
+            monto: montoBancoOld,
+            observacion: `EDICION GASTO #${gasto.id} (REVERSO)`,
+            responsable: getEffectiveUser(getCurrentUser),
+          });
         }
       } else {
         const movsViejos = await movRepo.find({
@@ -1245,6 +1289,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         if (!cbNew) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
         cbNew.saldo = Number(cbNew.saldo) - montoBancoNew;
         await queryRunner.manager.save(CuentaBancaria, cbNew);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId: Number(cuentaBancariaId),
+          tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+          monto: montoBancoNew,
+          observacion: `EDICION GASTO #${gasto.id}`,
+          responsable: getEffectiveUser(getCurrentUser),
+        });
       }
 
       await queryRunner.commitTransaction();
@@ -1801,6 +1852,14 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         if (!cb) throw new Error(`CuentaBancaria ${cuentaBancariaId} no encontrada`);
         cb.saldo = Number(cb.saldo) + monto;
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId,
+          tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
+          monto,
+          observacion: `ENTRADA VARIA #${saved.id}: ${data.descripcion || ''}`,
+          numeroComprobante: data.numeroComprobante,
+          responsable: getEffectiveUser(getCurrentUser),
+        });
       }
 
       await queryRunner.commitTransaction();
@@ -1872,6 +1931,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         if (cb) {
           cb.saldo = Number(cb.saldo) - Number(entrada.monto);
           await queryRunner.manager.save(CuentaBancaria, cb);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: entrada.cuentaBancaria.id,
+            tipo: MovimientoBancarioTipo.AJUSTE_NEGATIVO,
+            monto: Number(entrada.monto),
+            observacion: `ANULACION ENTRADA VARIA #${id}` + (motivo ? ` - ${motivo}` : ''),
+            responsable: getEffectiveUser(getCurrentUser),
+          });
         }
       }
 
@@ -2112,6 +2178,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           if (!cb) throw new Error(`Cuenta bancaria destino ${data.cuentaBancariaDestinoId} no encontrada`);
           cb.saldo = Number(cb.saldo) + Number(data.montoDestino);
           await queryRunner.manager.save(CuentaBancaria, cb);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: data.cuentaBancariaDestinoId,
+            tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
+            monto: Number(data.montoDestino),
+            observacion: `DEPOSITO BANCARIO OP.FIN #${opId}`,
+            responsable: getEffectiveUser(getCurrentUser),
+          });
           break;
         }
 
@@ -2122,6 +2195,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           if (!cb) throw new Error(`Cuenta bancaria origen ${data.cuentaBancariaOrigenId} no encontrada`);
           cb.saldo = Number(cb.saldo) - Number(data.montoOrigen);
           await queryRunner.manager.save(CuentaBancaria, cb);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: data.cuentaBancariaOrigenId,
+            tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+            monto: Number(data.montoOrigen),
+            observacion: `RETIRO BANCARIO OP.FIN #${opId}`,
+            responsable: getEffectiveUser(getCurrentUser),
+          });
 
           const movIn = queryRunner.manager.create(CajaMayorMovimiento, {
             cajaMayor: { id: cmId },

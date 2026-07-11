@@ -7,6 +7,8 @@ import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.en
 import { CajaMayor } from '../../src/app/database/entities/financiero/caja-mayor.entity';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
+import { MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
+import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
@@ -182,6 +184,13 @@ export function registerValesHandlers(
 
         cb.saldo = Number(cb.saldo) - montoBanco;
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId: cb.id,
+          tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+          monto: montoBanco,
+          observacion: `VALE #${valeSaved.id} - ${funcionario.persona?.nombre || ''} ${funcionario.persona?.apellido || ''}`.trim(),
+          responsable: userEntity,
+        });
 
         await queryRunner.commitTransaction();
         return valeSaved;
@@ -276,6 +285,13 @@ export function registerValesHandlers(
         const montoBanco = Number(payload?.montoCuentaBancaria) > 0 ? Number(payload.montoCuentaBancaria) : Number(vale.monto);
         cb.saldo = Number(cb.saldo) - montoBanco;
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId: cb.id,
+          tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+          monto: montoBanco,
+          observacion: `VALE #${vale.id}`,
+          responsable: userEntity,
+        });
 
         vale.estado = ValeEstado.CONFIRMADO;
         vale.cuentaBancariaId = cb.id;
@@ -357,6 +373,13 @@ export function registerValesHandlers(
           const montoBanco = Number(vale.montoCuentaBancaria) > 0 ? Number(vale.montoCuentaBancaria) : Number(vale.monto);
           cb.saldo = Number(cb.saldo) + montoBanco;
           await queryRunner.manager.save(CuentaBancaria, cb);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: vale.cuentaBancariaId,
+            tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
+            monto: montoBanco,
+            observacion: `ANULACION VALE #${vale.id}`,
+            responsable: userEntity,
+          });
         }
       }
 

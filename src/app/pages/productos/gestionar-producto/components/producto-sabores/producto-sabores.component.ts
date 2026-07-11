@@ -21,7 +21,10 @@ import { GestionRecetasComponent } from '../../../../gestion-recetas/gestion-rec
   styleUrls: ['./producto-sabores.component.scss'],
   animations: [
     trigger('detailExpand', [
-      state('collapsed', style({ height: '0px', minHeight: '0', display: 'none' })),
+      // `display` no es animable (tiraba el warning "not animatable properties:
+      // display") y rompía el colapso. Patrón estándar de expandable-row: animar
+      // sólo `height`; el clipeo a 0 lo da `overflow: hidden` en .variaciones-detail.
+      state('collapsed', style({ height: '0px', minHeight: '0' })),
       state('expanded', style({ height: '*' })),
       transition('expanded <=> collapsed', animate('225ms cubic-bezier(0.4, 0.0, 0.2, 1)'))
     ])
@@ -227,14 +230,13 @@ export class ProductoSaboresComponent implements OnInit, OnDestroy {
   }
 
   private suscribirAEstadoServicio(): void {
-    // Suscribirse a cambios en el servicio
-    this.saboresService.sabores$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(sabores => {
-        this.sabores = sabores;
-        this.aplicarFiltros();
-      });
-
+    // ⚠️ NO nos suscribimos a `sabores$`: ese BehaviorSubject contiene sabores
+    // SIN el array `variaciones` agrupado (se llena plano en cargarSaboresByProducto
+    // y crearSabor). Sobrescribir `this.sabores` con esa versión plana borraba las
+    // variaciones de la tabla (contadores en 0) al agregar un sabor. La fuente de
+    // verdad de esta vista es `cargarSaboresConVariaciones` (datos agrupados); las
+    // mutaciones (crear/editar/eliminar) recargan explícitamente. Sólo consumimos
+    // acá el estado auxiliar (estadísticas/loading/error).
     this.saboresService.estadisticas$
       .pipe(takeUntil(this.destroy$))
       .subscribe(estadisticas => {
@@ -422,8 +424,11 @@ export class ProductoSaboresComponent implements OnInit, OnDestroy {
     dialogRef.afterClosed().subscribe(result => {
       if (result && result.action === 'created') {
         console.log('✅ Sabor creado desde dialog:', result.sabor.nombre);
-        // El servicio ya actualiza su estado interno
-        this.recargarEstadisticas();
+        // Recarga COMPLETA de datos agrupados: el backend ya generó las
+        // variaciones del nuevo sabor (create-sabor → generarVariacionesParaProducto),
+        // así que la recarga las muestra sin reabrir la pestaña. Antes sólo
+        // recargaba estadísticas → las variaciones desaparecían de la tabla.
+        this.recargarDespuesDeCrearVariaciones();
       }
     });
   }
@@ -446,7 +451,9 @@ export class ProductoSaboresComponent implements OnInit, OnDestroy {
     dialogRef.afterClosed().subscribe(result => {
       if (result && result.action === 'updated') {
         console.log('✅ Sabor actualizado desde dialog:', result.sabor.nombre);
-        // El servicio ya actualiza su estado interno
+        // Recargar datos agrupados para reflejar el cambio en la tabla
+        // (ya no dependemos de la suscripción a sabores$).
+        this.recargarDespuesDeCrearVariaciones();
       }
     });
   }
@@ -477,7 +484,8 @@ export class ProductoSaboresComponent implements OnInit, OnDestroy {
           .subscribe({
             next: () => {
               console.log('✅ Sabor eliminado:', sabor.nombre);
-              this.recargarEstadisticas();
+              // Recarga completa: quita el sabor y refresca variaciones/estadísticas.
+              this.recargarDespuesDeCrearVariaciones();
             },
             error: (error) => {
               console.error('❌ Error eliminando sabor:', error);
@@ -612,19 +620,6 @@ export class ProductoSaboresComponent implements OnInit, OnDestroy {
   }
 
   // ✅ UTILIDADES
-
-  private recargarEstadisticas(): void {
-    this.saboresService.cargarEstadisticas(this.productoId)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (estadisticas) => {
-          this.estadisticas = estadisticas;
-        },
-        error: (error) => {
-          console.error('❌ Error recargando estadísticas:', error);
-        }
-      });
-  }
 
   getIconoCategoria(categoria: string): string {
     const iconos: { [key: string]: string } = {

@@ -405,6 +405,13 @@
                     // Fila expandible (Angular Material pattern)
           .variaciones-detail-row {
             height: 0;
+
+            // La celda de detalle se renderiza siempre (multiTemplateDataRows).
+            // Sin padding ni borde propios, colapsada ocupa 0px (no deja hueco).
+            td {
+              padding: 0;
+              border: 0;
+            }
           }
 
           .sabor-row {
@@ -423,11 +430,16 @@
           }
 
           .variaciones-detail {
+            // Elemento animado (@detailExpand): sólo clipeo. El padding/borde
+            // van en .variaciones-detail-inner para que height:0 = 0px real.
             overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            padding: 24px;
-            border-top: 1px solid var(--border-color);
+
+            .variaciones-detail-inner {
+              display: flex;
+              flex-direction: column;
+              padding: 24px;
+              border-top: 1px solid var(--border-color);
+            }
 
               .variaciones-header {
                 display: flex;

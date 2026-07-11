@@ -147,10 +147,11 @@ export class SaboresVariacionesService {
       tap(result => {
         console.log('✅ Sabor creado:', result.sabor.nombre);
 
-        // Actualizar lista local
-        const saboresActuales = this._sabores$.value;
-        this._sabores$.next([...saboresActuales, result.sabor]);
-
+        // NOTA: no empujamos el sabor recién creado a `_sabores$` porque llega
+        // SIN su array `variaciones` (parcial). La vista de sabores/variaciones
+        // recarga los datos agrupados vía `cargarSaboresConVariaciones` tras crear;
+        // este push sólo dejaba una versión plana que borraba las variaciones de
+        // la tabla.
         this._loading$.next(false);
         this.showSuccess(result.mensaje);
       }),
