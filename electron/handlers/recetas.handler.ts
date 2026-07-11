@@ -22,6 +22,7 @@ import { TipoPrecio } from '../../src/app/database/entities/financiero/tipo-prec
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { Like, IsNull, Not } from 'typeorm';
 import { ensurePermission } from '../utils/auth.utils';
+import { desduplicarRecetasCompartidas } from '../utils/receta-clone.utils';
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
@@ -1653,6 +1654,13 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
     } finally {
       await queryRunner.release();
     }
+  });
+
+  // Reparación de datos: des-comparte las recetas que hoy usan más de una
+  // variación (modelo viejo), clonando la receta para cada tamaño. Manual/opt-in.
+  ipcMain.handle('reparar-recetas-compartidas', async () => {
+    await ensurePermission(dataSource, getCurrentUser, 'SABORES_GESTIONAR');
+    return await dataSource.transaction(async (manager) => desduplicarRecetasCompartidas(manager));
   });
 
   ipcMain.handle('update-sabor', async (_e: IpcMainInvokeEvent, id: number, saborData: Partial<Sabor> & { imageUrl?: string | null }) => {

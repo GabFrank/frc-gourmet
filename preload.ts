@@ -2596,6 +2596,9 @@ contextBridge.exposeInMainWorld('api', {
   getAllSabores: async (filtros?: { productoId?: number | null; categoria?: string | null; activo?: boolean | null; texto?: string | null; }): Promise<any[]> => {
     return await ipcRenderer.invoke('get-all-sabores', filtros);
   },
+  repararRecetasCompartidas: async (): Promise<{ recetasCompartidas: number; variacionesReparadas: number }> => {
+    return await ipcRenderer.invoke('reparar-recetas-compartidas');
+  },
   createSabor: async (saborData: { nombre: string; categoria: string; descripcion?: string; productoId: number; }): Promise<any> => {
     return await ipcRenderer.invoke('create-sabor', saborData);
   },

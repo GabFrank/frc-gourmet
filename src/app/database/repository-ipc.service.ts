@@ -536,6 +536,7 @@ interface ElectronAPI {
   // Sabor methods
   getSaboresByProducto: (productoId: number) => Promise<any[]>;
   getAllSabores: (filtros?: { productoId?: number | null; categoria?: string | null; activo?: boolean | null; texto?: string | null; }) => Promise<any[]>;
+  repararRecetasCompartidas: () => Promise<{ recetasCompartidas: number; variacionesReparadas: number }>;
   createSabor: (saborData: {
     nombre: string;
     categoria: string;
@@ -2738,6 +2739,10 @@ export class RepositoryIpcService extends RepositoryService {
 
   getAllSabores(filtros?: { productoId?: number | null; categoria?: string | null; activo?: boolean | null; texto?: string | null; }): Observable<any[]> {
     return from(this.api.getAllSabores(filtros));
+  }
+
+  repararRecetasCompartidas(): Observable<{ recetasCompartidas: number; variacionesReparadas: number }> {
+    return from(this.api.repararRecetasCompartidas());
   }
 
   createSabor(saborData: {

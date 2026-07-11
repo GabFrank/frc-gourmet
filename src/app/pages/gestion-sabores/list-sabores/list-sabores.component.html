@@ -1,11 +1,21 @@
 <div class="sabores-container">
   <div class="header">
     <h1 class="title">Gestión de Sabores</h1>
-    <button mat-raised-button color="primary" (click)="crearSabor()"
-            *appHasPermission="'SABORES_GESTIONAR'"
-            [matTooltip]="filtroProductoId ? '' : 'Elegí un producto en el filtro para crear un sabor'">
-      <mat-icon>add</mat-icon> Nuevo Sabor
-    </button>
+    <div class="header-acciones" *appHasPermission="'SABORES_GESTIONAR'">
+      <button mat-raised-button color="primary" (click)="crearSabor()"
+              [matTooltip]="filtroProductoId ? '' : 'Elegí un producto en el filtro para crear un sabor'">
+        <mat-icon>add</mat-icon> Nuevo Sabor
+      </button>
+      <button mat-icon-button [matMenuTriggerFor]="masMenu" matTooltip="Más acciones" aria-label="Más acciones">
+        <mat-icon>more_vert</mat-icon>
+      </button>
+      <mat-menu #masMenu="matMenu">
+        <button mat-menu-item (click)="repararRecetasCompartidas()">
+          <mat-icon>healing</mat-icon>
+          <span>Reparar recetas compartidas</span>
+        </button>
+      </mat-menu>
+    </div>
   </div>
 
   <!-- Filtros (se aplican con Buscar) -->

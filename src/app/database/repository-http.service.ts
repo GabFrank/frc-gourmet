@@ -1229,6 +1229,10 @@ export class RepositoryHttpService extends RepositoryService {
     return throwError(() => new Error(`RepositoryHttpService.getAllSabores() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
 
+  repararRecetasCompartidas(): Observable<{ recetasCompartidas: number; variacionesReparadas: number }> {
+    return throwError(() => new Error(`RepositoryHttpService.repararRecetasCompartidas() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+
   getSaboresByProducto(productoId: number): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getSaboresByProducto() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
