@@ -753,6 +753,23 @@ export class PdvComponent implements OnInit, OnDestroy {
     this.hayCobroParcial = false;
   }
 
+  /**
+   * Bloquea acciones sobre un ítem que ya tiene cobertura de pago (parcial o
+   * total): editar, cancelar, personalizar o mover. Hay que anular la ronda de
+   * cobro primero. Devuelve true si está bloqueado (y avisa).
+   */
+  private bloqueadoPorCobro(item: VentaItem, accion: string): boolean {
+    if (Number((item as any)?._montoCubierto || 0) > 0.5) {
+      this.snackBar.open(
+        `No se puede ${accion} un ítem ya pagado. Anulá el cobro parcial primero.`,
+        'OK',
+        { duration: 4000 }
+      );
+      return true;
+    }
+    return false;
+  }
+
   private async cerrarComandaActual(): Promise<void> {
     if (!this.selectedComanda) return;
     try {
@@ -1092,6 +1109,7 @@ export class PdvComponent implements OnInit, OnDestroy {
 
   // Edit item from cart
   async personalizarItem(item: VentaItem): Promise<void> {
+    if (this.bloqueadoPorCobro(item, 'personalizar')) return;
     const recetaId = (item.producto as any)?.receta?.id;
     if (!recetaId) {
       // Si no tiene receta, buscar el producto completo con relación receta
@@ -1182,6 +1200,7 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   editItem(item: VentaItem): void {
+    if (this.bloqueadoPorCobro(item, 'editar')) return;
     const dialogRef = this.dialog.open(EditVentaItemDialogComponent, {
       width: '400px',
       data: { ventaItem: item },
@@ -1255,6 +1274,7 @@ export class PdvComponent implements OnInit, OnDestroy {
 
   // Cancel item from cart
   cancelItem(item: VentaItem): void {
+    if (this.bloqueadoPorCobro(item, 'cancelar')) return;
     // update item with estado = CANCELADO, cancelado_por = current user, cancelado_fecha = current date,
     item.estado = EstadoVentaItem.CANCELADO;
     item.canceladoPor = this.authService.currentUser;
@@ -2352,13 +2372,18 @@ export class PdvComponent implements OnInit, OnDestroy {
     if (this.selectedItemIds.has(itemId)) {
       this.selectedItemIds.delete(itemId);
     } else {
+      const item = this.ventaItemsDataSource.data.find(i => i.id === itemId);
+      if (item && this.bloqueadoPorCobro(item, 'mover')) return;
       this.selectedItemIds.add(itemId);
     }
   }
 
   toggleSelectAll(): void {
-    const activeItems = this.ventaItemsDataSource.data.filter(i => i.estado === EstadoVentaItem.ACTIVO);
-    const allSelected = activeItems.every(i => this.selectedItemIds.has(i.id));
+    // Ítems movibles = ACTIVOS y sin cobertura de pago (los pagados no se mueven).
+    const activeItems = this.ventaItemsDataSource.data.filter(
+      i => i.estado === EstadoVentaItem.ACTIVO && Number((i as any)?._montoCubierto || 0) <= 0.5
+    );
+    const allSelected = activeItems.length > 0 && activeItems.every(i => this.selectedItemIds.has(i.id));
     if (allSelected) {
       this.selectedItemIds.clear();
     } else {
@@ -2367,7 +2392,9 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   isAllSelected(): boolean {
-    const activeItems = this.ventaItemsDataSource.data.filter(i => i.estado === EstadoVentaItem.ACTIVO);
+    const activeItems = this.ventaItemsDataSource.data.filter(
+      i => i.estado === EstadoVentaItem.ACTIVO && Number((i as any)?._montoCubierto || 0) <= 0.5
+    );
     return activeItems.length > 0 && activeItems.every(i => this.selectedItemIds.has(i.id));
   }
 
