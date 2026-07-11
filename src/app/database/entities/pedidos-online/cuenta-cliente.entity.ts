@@ -13,10 +13,13 @@ import { Cliente } from '../personas/cliente.entity';
  */
 @Entity('cuentas_cliente')
 export class CuentaCliente extends BaseModel {
-  /** Teléfono normalizado (solo dígitos, con código de país). Login principal. */
+  /**
+   * Teléfono normalizado (solo dígitos, con código de país). Login por OTP.
+   * Nullable desde Fase C: las cuentas por email/Google pueden no tener teléfono.
+   */
   @Index({ unique: true })
-  @Column({ length: 30 })
-  telefono!: string;
+  @Column({ length: 30, nullable: true })
+  telefono?: string;
 
   @Column({ name: 'telefono_verificado', type: 'boolean', default: false })
   telefonoVerificado!: boolean;

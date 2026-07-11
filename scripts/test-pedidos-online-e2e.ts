@@ -345,6 +345,25 @@ async function main() {
   ok(pedCerrada.result?.error === 'tienda_cerrada', 'tienda inactiva → tienda_cerrada', pedCerrada.result?.error);
   await invokeHandlerWithContext('update-tienda-online-config', undefined, { activa: true });
 
+  console.log('\n[e2e] === AUTH: REGISTRO EMAIL + GOOGLE ===');
+  // 21. registro por email+password (cuenta sin teléfono → migración nullable OK)
+  const reg = await pub('auth.registrar', [{ email: 'Cliente@Mail.com', password: 'secreto123', nombre: 'juan' }]);
+  ok(reg.result?.success === true && !!reg.result?.accessToken, 'auth.registrar crea cuenta por email + token');
+  ok(reg.result?.cuenta?.email === 'cliente@mail.com', 'email normalizado a minúsculas', reg.result?.cuenta?.email);
+  ok(reg.result?.cuenta?.nombre === 'JUAN', 'nombre en UPPERCASE', reg.result?.cuenta?.nombre);
+  // 22. email duplicado
+  const regDup = await pub('auth.registrar', [{ email: 'cliente@mail.com', password: 'otraclave1' }]);
+  ok(regDup.result?.error === 'email_en_uso', 'registro con email duplicado → email_en_uso');
+  // 23. password corto
+  const regShort = await pub('auth.registrar', [{ email: 'otro@mail.com', password: '123' }]);
+  ok(regShort.result?.error === 'password_corto', 'password corto rechazado');
+  // 24. login con el email registrado
+  const logEmail = await pub('auth.login', ['cliente@mail.com', 'secreto123']);
+  ok(logEmail.result?.success === true && !!logEmail.result?.accessToken, 'login por email + password funciona');
+  // 25. Google sin credenciales
+  const g = await pub('auth.google', ['fake-token']);
+  ok(g.result?.error === 'google_no_configurado', 'auth.google sin GOOGLE_CLIENT_ID → no_configurado');
+
   console.log = origLog;
   await fastify.close();
   await dataSource.destroy();
