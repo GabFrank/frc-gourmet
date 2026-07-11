@@ -19,6 +19,7 @@ const RRHH_ITEMS: SectionItem[] = [
   { label: 'Bonos', icon: 'card_giftcard', path: '/rrhh/bonos', enabled: true },
   { label: 'Aguinaldos', icon: 'star', path: '/rrhh/aguinaldos', enabled: true },
   { label: 'Asistencias', icon: 'fact_check', path: '/rrhh/asistencias', enabled: true },
+  { label: 'Fichaje facial', icon: 'face', path: '/rrhh/fichaje', enabled: true },
   { label: 'Horas extra', icon: 'more_time', path: '/rrhh/horas-extra', enabled: true },
   { label: 'Permisos', icon: 'verified_user', path: '/rrhh/permisos', enabled: true },
   { label: 'Notificaciones', icon: 'notifications', path: '/rrhh/notificaciones', enabled: true },
@@ -229,6 +230,11 @@ export const routes: Routes = [
     path: 'rrhh/funcionarios/:id/rostros',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/rrhh/funcionarios/enrolar-rostro.page').then((m) => m.EnrolarRostroPage),
+  },
+  {
+    path: 'rrhh/fichaje',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/rrhh/fichaje/fichaje-facial.page').then((m) => m.FichajeFacialPage),
   },
   {
     path: 'rrhh/funcionarios/:id',
