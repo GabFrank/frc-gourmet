@@ -1970,6 +1970,18 @@ export class RepositoryHttpService extends RepositoryService {
   marcarAsistenciaMasiva(payload: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.marcarAsistenciaMasiva() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  enrolarRostro(data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.enrolarRostro() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getRostrosFuncionario(funcionarioId: number): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getRostrosFuncionario() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  eliminarRostro(id: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.eliminarRostro() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  ficharFacial(payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.ficharFacial() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getPenalizaciones(filtros?: any): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getPenalizaciones() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

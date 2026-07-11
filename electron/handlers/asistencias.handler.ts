@@ -20,7 +20,7 @@ function diffMinutos(horaA: string | undefined, horaB: string | undefined): numb
   return (hA * 60 + mA) - (hB * 60 + mB);
 }
 
-async function crearAsistenciaInterno(
+export async function crearAsistenciaInterno(
   dataSource: DataSource,
   getCurrentUser: () => Usuario | null,
   data: any,
@@ -64,6 +64,8 @@ async function crearAsistenciaInterno(
       horasTrabajadas: data.horasTrabajadas,
       justificada: data.justificada === true,
       observacion: data.observacion,
+      metodoRegistro: data.metodoRegistro,
+      similitudFacial: data.similitudFacial,
       registradoPor: userEntity || undefined,
     });
     await setEntityUserTracking(dataSource, asistencia, userId, false);

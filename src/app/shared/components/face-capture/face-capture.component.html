@@ -1,0 +1,35 @@
+<div class="face-capture">
+  <div class="video-wrap">
+    <video
+      #video
+      autoplay
+      muted
+      playsinline
+      [class.hidden]="!secureContextOk"
+      (loadedmetadata)="registerVideo(video)"
+    ></video>
+    <div class="oval-guide" *ngIf="secureContextOk"></div>
+
+    <div class="overlay" *ngIf="status === 'loading-models' || status === 'detecting'">
+      <mat-spinner diameter="48"></mat-spinner>
+      <span>{{ message }}</span>
+    </div>
+  </div>
+
+  <p class="status-msg" *ngIf="message && status !== 'loading-models' && status !== 'detecting'"
+     [class.error]="status === 'error'">
+    {{ message }}
+  </p>
+
+  <button
+    *ngIf="showCaptureButton"
+    mat-raised-button
+    color="primary"
+    class="capture-btn"
+    [disabled]="status !== 'ready'"
+    (click)="capture()"
+  >
+    <mat-icon>camera_alt</mat-icon>
+    {{ captureLabel }}
+  </button>
+</div>

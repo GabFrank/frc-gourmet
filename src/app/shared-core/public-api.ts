@@ -26,6 +26,9 @@ export { ThemeService } from '../services/theme.service';
 export { AuthService } from '../services/auth.service';
 export type { DeviceInfo } from '../services/auth.service';
 export { PermissionService } from '../services/permission.service';
+export { FaceRecognitionService } from '../services/face-recognition.service';
+export type { FaceCapture } from '../services/face-recognition.service';
+export { FaceCaptureComponent } from '../shared/components/face-capture/face-capture.component';
 export { AppModeService } from '../services/app-mode.service';
 export type { AppMode, AppModeDto } from '../services/app-mode.service';
 
