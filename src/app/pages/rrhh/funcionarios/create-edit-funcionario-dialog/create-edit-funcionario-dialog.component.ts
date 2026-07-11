@@ -92,6 +92,8 @@ export class CreateEditFuncionarioDialogComponent implements OnInit {
       cuentaBancariaPropia: [''],
       observacion: [''],
       activo: [true],
+      // Alta: crear también un cliente conveniado con crédito (% del salario).
+      crearClienteConveniado: [true],
     });
   }
 
@@ -319,6 +321,7 @@ export class CreateEditFuncionarioDialogComponent implements OnInit {
           cuentaBancariaPropia: v.cuentaBancariaPropia,
           observacion: v.observacion,
           activo: v.activo,
+          crearClienteConveniado: v.crearClienteConveniado === true,
         }));
         this.snackBar.open('Funcionario creado', 'Cerrar', { duration: 2500 });
       }

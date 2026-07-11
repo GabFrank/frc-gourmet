@@ -8,6 +8,9 @@ import { Persona } from '../../src/app/database/entities/personas/persona.entity
 import { Cargo as CargoEnt } from '../../src/app/database/entities/rrhh/cargo.entity';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
+import { TipoCliente } from '../../src/app/database/entities/personas/tipo-cliente.entity';
+import { ConfiguracionRrhh } from '../../src/app/database/entities/rrhh/configuracion-rrhh.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { ensurePermission } from '../utils/auth.utils';
@@ -194,6 +197,48 @@ export function registerRrhhFuncionariosHandlers(
       });
       await setEntityUserTracking(dataSource, histSalario, userId, false);
       await histSalarioRepo.save(histSalario);
+
+      // Cliente conveniado con crédito automático (opt-in vía checkbox del alta).
+      // Crea un Cliente para la misma persona, tipo CONVENIADO, con crédito y
+      // límite = un porcentaje del salario base (configurable, default 15%).
+      // Va dentro de la misma transacción para ser atómico con el alta.
+      if (data.crearClienteConveniado === true) {
+        const clienteRepo = queryRunner.manager.getRepository(Cliente);
+        // No duplicar: si la persona ya es cliente, no creamos otro.
+        const clienteExistente = await clienteRepo.findOne({ where: { persona: { id: persona.id } } });
+        if (!clienteExistente) {
+          const tipoConveniado = await queryRunner.manager
+            .getRepository(TipoCliente)
+            .findOne({ where: { descripcion: 'CONVENIADO' } });
+          if (!tipoConveniado) {
+            throw new Error(
+              "No existe el tipo de cliente 'CONVENIADO'. Creelo en Tipos de Cliente antes de dar de alta un funcionario con cliente conveniado.",
+            );
+          }
+
+          // Porcentaje configurable en configuraciones_rrhh; si no está, 15%.
+          const cfgPorc = await queryRunner.manager
+            .getRepository(ConfiguracionRrhh)
+            .findOne({ where: { clave: 'CLIENTE_FUNCIONARIO_PORCENTAJE_CREDITO' } });
+          const porcentaje =
+            cfgPorc?.valor != null && !isNaN(parseFloat(cfgPorc.valor))
+              ? parseFloat(cfgPorc.valor)
+              : 15;
+
+          const salarioNum = Number(saved.salarioBase) || 0;
+          const limiteCredito = Math.round((salarioNum * porcentaje) / 100 * 100) / 100;
+
+          const cliente = clienteRepo.create({
+            persona,
+            tipo_cliente: tipoConveniado,
+            activo: true,
+            credito: true,
+            limite_credito: limiteCredito,
+          });
+          await setEntityUserTracking(dataSource, cliente, userId, false);
+          await clienteRepo.save(cliente);
+        }
+      }
 
       await queryRunner.commitTransaction();
       return saved;
