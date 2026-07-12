@@ -8,20 +8,21 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService, FaceRecognitionService, FaceCaptureComponent, FaceCapture } from '@frc/shared-core';
 
 interface FichajeResultado {
-  ok: boolean;
   clase: 'ok' | 'tardanza' | 'error';
   titulo: string;
   detalle: string;
 }
+
+type Modo = 'ENTRADA' | 'SALIDA';
 
 /** Umbrales de liveness pasivo (antispoof + liveness de Human). */
 const LIVENESS_MIN = 0.5;
 const QUEUE_KEY = 'frc_fichaje_pendientes';
 
 /**
- * Pantalla de fichaje facial (kiosco). Corre en el tablet de la entrada.
- * Detecta on-device, envía el embedding al backend que identifica al funcionario
- * y marca entrada/salida. Cola offline básica en localStorage.
+ * Kiosco de fichaje facial. El tablet queda abierto en esta pantalla. El
+ * funcionario elige ENTRADA (verde) o SALIDA (rojo), la cámara se abre, reconoce
+ * el rostro y marca. Vuelve solo al estado inicial. Cola offline en localStorage.
  */
 @Component({
   selector: 'app-fichaje-facial',
@@ -37,6 +38,7 @@ export class FichajeFacialPage implements OnInit {
   private readonly repo = inject(RepositoryService);
   private readonly location = inject(Location);
 
+  modo: Modo | null = null;
   procesando = false;
   resultado: FichajeResultado | null = null;
   pendientes = 0;
@@ -48,12 +50,26 @@ export class FichajeFacialPage implements OnInit {
     this.flushCola();
   }
 
-  async onCaptured(cap: FaceCapture): Promise<void> {
-    if (this.procesando) return;
-    this.procesando = true;
+  iniciar(modo: Modo): void {
     this.resultado = null;
+    this.modo = modo;
+  }
+
+  cancelar(): void {
+    this.modo = null;
+    this.resultado = null;
+  }
+
+  get captureLabel(): string {
+    return this.modo === 'ENTRADA' ? 'Marcar entrada' : 'Marcar salida';
+  }
+
+  async onCaptured(cap: FaceCapture): Promise<void> {
+    if (this.procesando || !this.modo) return;
+    this.procesando = true;
     const livenessOk = cap.real >= LIVENESS_MIN && cap.live >= LIVENESS_MIN;
     const payload = {
+      tipo: this.modo,
       embedding: cap.embedding,
       dimension: FaceRecognitionService.DIMENSION,
       modelo: FaceRecognitionService.MODEL_NAME,
@@ -65,16 +81,15 @@ export class FichajeFacialPage implements OnInit {
       const res: any = await firstValueFrom(this.repo.ficharFacial(payload));
       this.mostrarResultado(res);
     } catch (e: any) {
-      // Sin conexión → encolar para reintentar
       if (!navigator.onLine) {
         this.encolar(payload);
-        this.resultado = { ok: false, clase: 'error', titulo: 'Sin conexión', detalle: 'Fichaje guardado, se enviará al reconectar.' };
+        this.resultado = { clase: 'error', titulo: 'Sin conexión', detalle: 'Fichaje guardado, se enviará al reconectar.' };
       } else {
-        this.resultado = { ok: false, clase: 'error', titulo: 'Error', detalle: e?.message || 'No se pudo fichar.' };
+        this.resultado = { clase: 'error', titulo: 'Error', detalle: e?.message || 'No se pudo fichar.' };
       }
     } finally {
       this.procesando = false;
-      this.autoLimpiar();
+      this.volverAInicioLuego();
     }
   }
 
@@ -86,27 +101,40 @@ export class FichajeFacialPage implements OnInit {
         BAJO_MARGEN: 'Coincidencia ambigua. Intentá de nuevo.',
         SIN_ROSTROS: 'No hay rostros registrados.',
       };
-      this.resultado = { ok: false, clase: 'error', titulo: 'No reconocido', detalle: motivos[res?.reason] || 'Intentá de nuevo.' };
+      this.resultado = { clase: 'error', titulo: 'No reconocido', detalle: motivos[res?.reason] || 'Intentá de nuevo.' };
       return;
     }
     const nombre = res.funcionario?.nombre || 'Funcionario';
+    if (res.sinEntrada) {
+      this.resultado = { clase: 'error', titulo: nombre, detalle: 'No tenés una entrada abierta hoy.' };
+      return;
+    }
+    if (res.tipo === 'YA_COMPLETO') {
+      this.resultado = { clase: 'error', titulo: nombre, detalle: `Ya fichaste hoy (${res.horaEntrada} - ${res.horaSalida}).` };
+      return;
+    }
+    if (res.yaRegistrado && res.tipo === 'ENTRADA') {
+      this.resultado = { clase: 'error', titulo: nombre, detalle: `Ya marcaste entrada hoy (${res.horaEntrada}).` };
+      return;
+    }
     if (res.tipo === 'ENTRADA') {
       const tarde = res.estado === 'TARDANZA';
       this.resultado = {
-        ok: true, clase: tarde ? 'tardanza' : 'ok',
+        clase: tarde ? 'tardanza' : 'ok',
         titulo: `¡Hola ${nombre}!`,
         detalle: `Entrada ${res.horaEntrada}${tarde ? ' · Llegaste tarde' : ''}`,
       };
-    } else if (res.tipo === 'SALIDA') {
-      this.resultado = { ok: true, clase: 'ok', titulo: `¡Hasta luego ${nombre}!`, detalle: `Salida ${res.horaSalida}` };
     } else {
-      this.resultado = { ok: true, clase: 'ok', titulo: nombre, detalle: `Ya fichaste hoy (${res.horaEntrada} - ${res.horaSalida})` };
+      this.resultado = { clase: 'ok', titulo: `¡Hasta luego ${nombre}!`, detalle: `Salida ${res.horaSalida}` };
     }
   }
 
-  private autoLimpiar(): void {
+  private volverAInicioLuego(): void {
     if (this.limpiarTimer) clearTimeout(this.limpiarTimer);
-    this.limpiarTimer = setTimeout(() => (this.resultado = null), 6000);
+    this.limpiarTimer = setTimeout(() => {
+      this.modo = null;
+      this.resultado = null;
+    }, 5000);
   }
 
   // ---- Cola offline ----

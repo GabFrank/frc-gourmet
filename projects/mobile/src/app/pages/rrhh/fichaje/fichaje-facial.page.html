@@ -10,20 +10,49 @@
 
   <mat-progress-bar *ngIf="procesando" mode="indeterminate"></mat-progress-bar>
 
-  <div class="fichaje-body">
-    <app-face-capture
-      facingMode="user"
-      captureLabel="Fichar"
-      (captured)="onCaptured($event)"
-    ></app-face-capture>
+  <!-- Estado inicial: elegir ENTRADA / SALIDA -->
+  <div class="fichaje-inicio" *ngIf="!modo">
+    <p class="titulo">Marcá tu asistencia</p>
+    <div class="botones">
+      <button class="big-btn entrada" (click)="iniciar('ENTRADA')">
+        <mat-icon>login</mat-icon>
+        <span>ENTRADA</span>
+      </button>
+      <button class="big-btn salida" (click)="iniciar('SALIDA')">
+        <mat-icon>logout</mat-icon>
+        <span>SALIDA</span>
+      </button>
+    </div>
 
     <div class="resultado" *ngIf="resultado" [class.ok]="resultado.clase === 'ok'"
          [class.tardanza]="resultado.clase === 'tardanza'" [class.error]="resultado.clase === 'error'">
-      <mat-icon>{{ resultado.ok ? (resultado.clase === 'tardanza' ? 'schedule' : 'check_circle') : 'error' }}</mat-icon>
+      <mat-icon>{{ resultado.clase === 'error' ? 'error' : (resultado.clase === 'tardanza' ? 'schedule' : 'check_circle') }}</mat-icon>
       <div class="txt">
         <strong>{{ resultado.titulo }}</strong>
         <span>{{ resultado.detalle }}</span>
       </div>
     </div>
+  </div>
+
+  <!-- Cámara activa para el modo elegido -->
+  <div class="fichaje-camara" *ngIf="modo" [class.modo-entrada]="modo === 'ENTRADA'" [class.modo-salida]="modo === 'SALIDA'">
+    <p class="modo-label">{{ modo === 'ENTRADA' ? 'Marcando ENTRADA' : 'Marcando SALIDA' }}</p>
+
+    <app-face-capture
+      facingMode="user"
+      [captureLabel]="captureLabel"
+      (captured)="onCaptured($event)"
+    ></app-face-capture>
+
+    <div class="resultado" *ngIf="resultado" [class.ok]="resultado.clase === 'ok'"
+         [class.tardanza]="resultado.clase === 'tardanza'" [class.error]="resultado.clase === 'error'">
+      <mat-icon>{{ resultado.clase === 'error' ? 'error' : (resultado.clase === 'tardanza' ? 'schedule' : 'check_circle') }}</mat-icon>
+      <div class="txt">
+        <strong>{{ resultado.titulo }}</strong>
+        <span>{{ resultado.detalle }}</span>
+      </div>
+    </div>
+
+    <button mat-stroked-button class="cancelar" (click)="cancelar()">Cancelar</button>
   </div>
 </div>

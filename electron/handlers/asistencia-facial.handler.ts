@@ -179,32 +179,45 @@ export function registerAsistenciaFacialHandlers(
       order: { createdAt: 'DESC' },
     });
 
-    // Salida: ya hay entrada sin salida → cerrar
-    if (existente && existente.horaEntrada && !existente.horaSalida) {
-      existente.horaSalida = horaAhora;
-      existente.horasTrabajadas = diffHoras(existente.horaEntrada, horaAhora);
-      await asistRepo.save(existente);
+    const funcData = { id: mejorFuncId, nombre };
+    const tieneEntrada = !!(existente && existente.horaEntrada);
+    const tieneSalida = !!(existente && existente.horaSalida);
+
+    // Acción efectiva: la que pide el kiosco (ENTRADA/SALIDA) o auto-detección.
+    const tipoPedido = payload?.tipo === 'ENTRADA' || payload?.tipo === 'SALIDA' ? payload.tipo : null;
+    const accion: 'ENTRADA' | 'SALIDA' = tipoPedido || (tieneEntrada && !tieneSalida ? 'SALIDA' : 'ENTRADA');
+
+    if (accion === 'SALIDA') {
+      if (!tieneEntrada) {
+        return { matched: true, tipo: 'SALIDA', sinEntrada: true, similitud, funcionario: funcData };
+      }
+      if (tieneSalida) {
+        return {
+          matched: true, tipo: 'YA_COMPLETO', similitud, funcionario: funcData,
+          asistenciaId: existente!.id, horaEntrada: existente!.horaEntrada, horaSalida: existente!.horaSalida,
+          estado: existente!.estado,
+        };
+      }
+      existente!.horaSalida = horaAhora;
+      existente!.horasTrabajadas = diffHoras(existente!.horaEntrada!, horaAhora);
+      await asistRepo.save(existente!);
       return {
-        matched: true, tipo: 'SALIDA', similitud,
-        funcionario: { id: mejorFuncId, nombre },
-        asistenciaId: existente.id,
-        horaEntrada: existente.horaEntrada, horaSalida: horaAhora,
-        estado: existente.estado,
+        matched: true, tipo: 'SALIDA', similitud, funcionario: funcData,
+        asistenciaId: existente!.id, horaEntrada: existente!.horaEntrada, horaSalida: horaAhora,
+        estado: existente!.estado,
       };
     }
 
-    // Ya fichó entrada y salida hoy
-    if (existente && existente.horaEntrada && existente.horaSalida) {
+    // accion === 'ENTRADA'
+    if (tieneEntrada) {
+      // Ya tiene entrada (abierta o cerrada) → no duplicar
       return {
-        matched: true, tipo: 'YA_COMPLETO', similitud,
-        funcionario: { id: mejorFuncId, nombre },
-        asistenciaId: existente.id,
-        horaEntrada: existente.horaEntrada, horaSalida: existente.horaSalida,
-        estado: existente.estado,
+        matched: true, tipo: tieneSalida ? 'YA_COMPLETO' : 'ENTRADA', yaRegistrado: true, similitud,
+        funcionario: funcData, asistenciaId: existente!.id,
+        horaEntrada: existente!.horaEntrada, horaSalida: existente!.horaSalida, estado: existente!.estado,
       };
     }
-
-    // Entrada: resolver turno vigente para calcular tardanza
+    // Crear entrada: resolver turno vigente para calcular tardanza
     const ft = await dataSource.getRepository(FuncionarioTurno).findOne({
       where: { funcionario: { id: mejorFuncId }, fechaHasta: IsNull() },
       relations: ['turno'],
@@ -219,11 +232,8 @@ export function registerAsistenciaFacialHandlers(
       similitudFacial: similitud,
     });
     return {
-      matched: true, tipo: 'ENTRADA', similitud,
-      funcionario: { id: mejorFuncId, nombre },
-      asistenciaId: asistencia.id,
-      horaEntrada: horaAhora,
-      estado: asistencia.estado,
+      matched: true, tipo: 'ENTRADA', similitud, funcionario: funcData,
+      asistenciaId: asistencia.id, horaEntrada: horaAhora, estado: asistencia.estado,
     };
   });
 }
