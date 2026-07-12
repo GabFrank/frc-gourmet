@@ -25,8 +25,8 @@ export interface FaceCapture {
  * y la PWA (enrollment + fichaje) vía `@frc/shared-core`.
  *
  * Human se importa dinámicamente (lazy chunk) para no inflar el bundle inicial.
- * Los modelos se sirven localmente desde `assets/models/human/`
- * (ver `npm run models:face`).
+ * Los modelos se sirven por HTTP desde el server en `/face-models` (se descargan
+ * in-app desde Configuración → Reconocimiento facial).
  */
 @Injectable({ providedIn: 'root' })
 export class FaceRecognitionService {
@@ -36,7 +36,9 @@ export class FaceRecognitionService {
 
   private human: any = null;
   private loadingPromise: Promise<void> | null = null;
-  private modelBasePath = 'assets/models/human';
+  // Los modelos se sirven por HTTP desde el server en `/face-models` (mismo origen
+  // para la PWA). El desktop setea una URL absoluta al server local vía setModelBasePath.
+  private modelBasePath = '/face-models';
 
   /** Permite override del path de modelos (por si cambia el base-href). */
   setModelBasePath(path: string): void {
@@ -49,7 +51,7 @@ export class FaceRecognitionService {
 
   /**
    * Carga Human + modelos (idempotente). Devuelve cuando está listo para detectar.
-   * Lanza si los modelos no están disponibles (no se corrió `npm run models:face`).
+   * Lanza si los modelos no están disponibles (no se descargaron aún).
    */
   async load(): Promise<void> {
     if (this.human) return;

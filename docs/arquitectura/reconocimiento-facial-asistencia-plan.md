@@ -14,6 +14,12 @@
   entrada/salida automática reusando `crearAsistenciaInterno`; pantalla kiosco PWA con cola offline.
 - **F4 (liveness + tuning + tests)** ✅ — liveness **server-authoritative** con `antispoof`+`liveness`
   de Human (scores `real`/`live` ≥ `FACIAL_LIVENESS_MIN`); test puro `npm run test:fichaje-facial`.
+- **F5 (config in-app + descarga de modelos)** ✅ — los modelos ya **no** viven en los assets del bundle:
+  se descargan **desde un botón in-app** a `userData/face-models/` (escribible en la app empaquetada) y el
+  server los sirve por HTTP en `/face-models/`. Pantalla **RRHH → Reconocimiento facial** con estado de
+  modelos + descarga (con progreso) + ajuste de umbrales (`FACIAL_*`). El desktop carga los modelos vía
+  `get-face-models-base-url` (asegura el server local con `ensurePairingServer`); la PWA los toma same-origin.
+  Se eliminó `npm run models:face` (reemplazado por el botón).
 
 ### Decisiones resueltas (vs. §7 abajo)
 

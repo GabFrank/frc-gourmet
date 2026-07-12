@@ -6,9 +6,22 @@
     Mejora el reconocimiento en el fichaje.
   </p>
 
+  <div class="prep" *ngIf="preparando">
+    <mat-spinner diameter="32"></mat-spinner>
+    <span>Preparando…</span>
+  </div>
+
+  <div class="prep faltan" *ngIf="modelosFaltan">
+    <mat-icon>download_for_offline</mat-icon>
+    <span>Faltan los modelos de reconocimiento. Descargalos en
+      <strong>Configuración → Reconocimiento facial</strong>.</span>
+  </div>
+
   <app-face-capture
+    *ngIf="modelBasePath && !modelosFaltan"
     facingMode="user"
     captureLabel="Capturar rostro"
+    [modelBasePath]="modelBasePath"
     (captured)="onCaptured($event)"
     (cameraError)="onCameraError($event)"
   ></app-face-capture>

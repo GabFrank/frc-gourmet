@@ -805,6 +805,9 @@ export abstract class RepositoryService {
   abstract getRostrosFuncionario(funcionarioId: number): Observable<any[]>;
   abstract eliminarRostro(id: number): Observable<any>;
   abstract ficharFacial(payload: any): Observable<any>;
+  abstract getFaceModelsStatus(): Observable<any>;
+  abstract downloadFaceModels(): Observable<any>;
+  abstract getFaceModelsBaseUrl(): Observable<any>;
   abstract getPenalizaciones(filtros?: any): Observable<any[]>;
   abstract createPenalizacion(data: any): Observable<any>;
   abstract updatePenalizacion(data: any): Observable<any>;

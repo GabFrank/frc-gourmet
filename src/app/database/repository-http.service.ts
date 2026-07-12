@@ -1991,6 +1991,15 @@ export class RepositoryHttpService extends RepositoryService {
   ficharFacial(payload: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.ficharFacial() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getFaceModelsStatus(): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getFaceModelsStatus() no esta implementado todavia.`)) as any;
+  }
+  downloadFaceModels(): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.downloadFaceModels() no esta implementado todavia.`)) as any;
+  }
+  getFaceModelsBaseUrl(): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getFaceModelsBaseUrl() no esta implementado todavia.`)) as any;
+  }
   getPenalizaciones(filtros?: any): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getPenalizaciones() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

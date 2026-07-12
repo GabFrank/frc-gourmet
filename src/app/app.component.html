@@ -330,6 +330,10 @@
               <mat-icon matListItemIcon>tune</mat-icon>
               <span matListItemTitle *ngIf="isMenuExpanded">Config RRHH</span>
             </a>
+            <a *appHasPermission="'RRHH_CONFIG_EDITAR'" mat-list-item (click)="openConfiguracionFacialTab()">
+              <mat-icon matListItemIcon>face</mat-icon>
+              <span matListItemTitle *ngIf="isMenuExpanded">Reconocimiento facial</span>
+            </a>
           </div>
         </mat-expansion-panel>
 

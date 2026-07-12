@@ -18,7 +18,7 @@ import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, mkdirSync } from 'fs';
 import * as path from 'path';
 import { DataSource } from 'typeorm';
 import { handlerRegistryCount } from '../utils/handler-registry';
@@ -148,6 +148,23 @@ async function buildInstance(
     }
   } catch {
     // Sin electron (tests) o sin dir: se omite el serving de imágenes.
+  }
+
+  // Modelos de reconocimiento facial (@vladmandic/human) en `/face-models/`.
+  // Público (no sensible): la PWA y el enrollment desktop los cargan desde acá.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { app } = require('electron');
+    const faceModelsDir = path.join(app.getPath('userData'), 'face-models');
+    if (!existsSync(faceModelsDir)) mkdirSync(faceModelsDir, { recursive: true });
+    await fastify.register(fastifyStatic, {
+      root: faceModelsDir,
+      prefix: '/face-models/',
+      decorateReply: false,
+      wildcard: false,
+    });
+  } catch {
+    // Sin electron (tests): se omite.
   }
 
   // Storefront de pedidos online en `/tienda/` (web pública del cliente).

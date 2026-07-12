@@ -1,0 +1,93 @@
+.config-facial {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  max-width: 720px;
+
+  mat-card { width: 100%; }
+}
+
+.spinner-container {
+  display: flex;
+  justify-content: center;
+  padding: 40px;
+}
+
+.estado {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #fff;
+
+    mat-icon { font-size: 18px; width: 18px; height: 18px; }
+
+    &.ok { background: var(--success, #2e7d32); }
+    &.falta { background: var(--warning, #f39c12); }
+  }
+
+  .tamano {
+    font-size: 13px;
+    color: var(--text-secondary, #666);
+  }
+}
+
+.modelos-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 16px;
+
+  .modelo {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    color: var(--text-secondary, #888);
+
+    mat-icon { font-size: 16px; width: 16px; height: 16px; }
+
+    &.present { color: var(--success, #2e7d32); }
+  }
+}
+
+.descarga {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  .progreso {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary, #666);
+  }
+}
+
+.nota {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+}
+
+.campos {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 380px;
+}
+
+.acciones {
+  margin-top: 16px;
+}
