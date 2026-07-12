@@ -44,7 +44,6 @@
     "test:cobro-parcial": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-cobro-parcial-e2e.ts",
     "test:fichaje-facial": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-fichaje-facial.ts",
     "build:storefront": "ng build storefront --base-href /tienda/",
-    "models:face": "node scripts/download-face-models.js",
     "lint": "ng lint",
     "release": "semantic-release",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/app/database/datasource.ts",

@@ -35,6 +35,7 @@ import { registerRrhhFuncionariosHandlers } from '../handlers/rrhh-funcionarios.
 import { registerFuncionarioDocumentosHandlers } from '../handlers/funcionario-documentos.handler';
 import { registerAsistenciasHandlers } from '../handlers/asistencias.handler';
 import { registerAsistenciaFacialHandlers } from '../handlers/asistencia-facial.handler';
+import { registerFaceModelsHandlers } from '../handlers/face-models.handler';
 import { registerFeriadosHandlers } from '../handlers/feriados.handler';
 import { registerHorasExtraHandlers } from '../handlers/horas-extra.handler';
 import { registerValesHandlers } from '../handlers/vales.handler';
@@ -93,6 +94,7 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerFuncionarioDocumentosHandlers(dataSource, getCurrentUser);
   registerAsistenciasHandlers(dataSource, getCurrentUser);
   registerAsistenciaFacialHandlers(dataSource, getCurrentUser);
+  registerFaceModelsHandlers(dataSource, getCurrentUser);
   registerFeriadosHandlers(dataSource, getCurrentUser);
   registerHorasExtraHandlers(dataSource, getCurrentUser);
   registerValesHandlers(dataSource, getCurrentUser);

@@ -12,6 +12,19 @@ mat-dialog-content {
   color: var(--text-secondary, #666);
 }
 
+.prep {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  font-size: 13px;
+  color: var(--text-secondary, #666);
+
+  &.faltan {
+    color: var(--warning, #f39c12);
+  }
+}
+
 .capturas {
   display: flex;
   align-items: center;

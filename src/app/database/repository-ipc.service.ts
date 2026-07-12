@@ -886,6 +886,9 @@ interface ElectronAPI {
   getRostrosFuncionario: (funcionarioId: number) => Promise<any[]>;
   eliminarRostro: (id: number) => Promise<any>;
   ficharFacial: (payload: any) => Promise<any>;
+  getFaceModelsStatus: () => Promise<any>;
+  downloadFaceModels: () => Promise<any>;
+  getFaceModelsBaseUrl: () => Promise<any>;
 
   // RRHH - Penalizaciones
   getPenalizaciones: (filtros?: any) => Promise<any[]>;
@@ -3632,6 +3635,15 @@ export class RepositoryIpcService extends RepositoryService {
   }
   ficharFacial(payload: any): Observable<any> {
     return from(this.api.ficharFacial(payload));
+  }
+  getFaceModelsStatus(): Observable<any> {
+    return from(this.api.getFaceModelsStatus());
+  }
+  downloadFaceModels(): Observable<any> {
+    return from(this.api.downloadFaceModels());
+  }
+  getFaceModelsBaseUrl(): Observable<any> {
+    return from(this.api.getFaceModelsBaseUrl());
   }
 
   // ===================== RRHH: PENALIZACIONES =====================

@@ -3312,6 +3312,20 @@ contextBridge.exposeInMainWorld('api', {
   ficharFacial: async (payload: any): Promise<any> => {
     return await ipcRenderer.invoke('fichar-facial', payload);
   },
+  getFaceModelsStatus: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-face-models-status');
+  },
+  downloadFaceModels: async (): Promise<any> => {
+    return await ipcRenderer.invoke('download-face-models');
+  },
+  getFaceModelsBaseUrl: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-face-models-base-url');
+  },
+  onFaceModelsProgress: (handler: (p: { model: string; index: number; total: number }) => void) => {
+    const listener = (_event: any, p: any) => handler(p);
+    ipcRenderer.on('face-models-progress', listener);
+    return () => ipcRenderer.removeListener('face-models-progress', listener);
+  },
 
   // =============================================
   // RRHH - Penalizaciones

@@ -26,6 +26,8 @@ export class FaceCaptureComponent implements OnInit, OnDestroy {
   @Input() captureLabel = 'Capturar';
   /** Si true, muestra el botón de captura manual (enrollment). */
   @Input() showCaptureButton = true;
+  /** Base URL de los modelos. Desktop pasa una URL absoluta al server local. */
+  @Input() modelBasePath?: string;
 
   @Output() captured = new EventEmitter<FaceCapture>();
   @Output() cameraError = new EventEmitter<string>();
@@ -46,6 +48,7 @@ export class FaceCaptureComponent implements OnInit, OnDestroy {
       this.message = 'La cámara requiere una conexión segura (HTTPS).';
       return;
     }
+    if (this.modelBasePath) this.faceService.setModelBasePath(this.modelBasePath);
     await this.startCamera();
     await this.loadModels();
   }
@@ -86,7 +89,7 @@ export class FaceCaptureComponent implements OnInit, OnDestroy {
       this.message = '';
     } catch (e: any) {
       this.status = 'error';
-      this.message = 'No se pudieron cargar los modelos faciales. Ejecutá "npm run models:face". ' + (e?.message || '');
+      this.message = 'No se pudieron cargar los modelos faciales. Descargalos en Configuración → Reconocimiento facial. ' + (e?.message || '');
       this.cameraError.emit(this.message);
     }
   }

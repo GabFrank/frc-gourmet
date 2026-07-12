@@ -1,9 +1,10 @@
-import { Component, Inject } from '@angular/core';
+import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
@@ -25,14 +26,18 @@ import { FaceCapture, FaceRecognitionService } from 'src/app/services/face-recog
     MatButtonModule,
     MatIconModule,
     MatChipsModule,
+    MatProgressSpinnerModule,
     MatSnackBarModule,
     FaceCaptureComponent,
   ],
 })
-export class EnrolarRostroDialogComponent {
+export class EnrolarRostroDialogComponent implements OnInit {
   readonly maxCapturas = 5;
   capturas: FaceCapture[] = [];
   saving = false;
+  preparando = true;
+  modelBasePath?: string;
+  modelosFaltan = false;
 
   constructor(
     private dialogRef: MatDialogRef<EnrolarRostroDialogComponent>,
@@ -40,6 +45,24 @@ export class EnrolarRostroDialogComponent {
     private snackBar: MatSnackBar,
     @Inject(MAT_DIALOG_DATA) public data: { funcionarioId: number; funcionarioNombre?: string },
   ) {}
+
+  async ngOnInit(): Promise<void> {
+    try {
+      const status = await firstValueFrom(this.repository.getFaceModelsStatus());
+      if (!status?.installed) {
+        this.modelosFaltan = true;
+        this.preparando = false;
+        return;
+      }
+      const res = await firstValueFrom(this.repository.getFaceModelsBaseUrl());
+      this.modelBasePath = res?.baseUrl;
+    } catch (e: any) {
+      this.snackBar.open('No se pudo preparar el reconocimiento: ' + (e?.message || e), 'OK', { duration: 4000 });
+      this.modelosFaltan = true;
+    } finally {
+      this.preparando = false;
+    }
+  }
 
   onCaptured(cap: FaceCapture): void {
     if (this.capturas.length >= this.maxCapturas) {

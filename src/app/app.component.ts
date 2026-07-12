@@ -70,6 +70,7 @@ import { CajaMayorDashboardComponent } from './pages/financiero/caja-mayor/dashb
 import { ListCuentasPorCobrarComponent } from './pages/financiero/caja-mayor/cuentas-por-cobrar/list-cuentas-por-cobrar/list-cuentas-por-cobrar.component';
 import { ListPermisosComponent } from './pages/personalizacion/permisos/list-permisos/list-permisos.component';
 import { ListConfiguracionRrhhComponent } from './pages/rrhh/configuracion/list-configuracion-rrhh/list-configuracion-rrhh.component';
+import { ConfiguracionFacialComponent } from './pages/rrhh/configuracion-facial/configuracion-facial.component';
 import { BackupRestoreComponent } from './pages/configuracion/backup-restore/backup-restore.component';
 import { IaConfigComponent } from './pages/configuracion/ia-config/ia-config.component';
 import { DbConfigComponent } from './pages/configuracion/db-config/db-config.component';
@@ -692,6 +693,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       ListConfiguracionRrhhComponent,
       { source: 'navigation' },
       'configuracion-rrhh-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openConfiguracionFacialTab() {
+    this.tabsService.openTab(
+      'Reconocimiento facial',
+      ConfiguracionFacialComponent,
+      { source: 'navigation' },
+      'configuracion-facial-tab',
       true
     );
     this.closeMenu();
