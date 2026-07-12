@@ -28,9 +28,15 @@ export class FaceCaptureComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() showCaptureButton = true;
   /** Base URL de los modelos. Desktop pasa una URL absoluta al server local. */
   @Input() modelBasePath?: string;
+  /** Texto grande centrado sobre el video (ej. cuenta regresiva del kiosco). */
+  @Input() overlayText?: string;
 
   @Output() captured = new EventEmitter<FaceCapture>();
   @Output() cameraError = new EventEmitter<string>();
+  /** Se emite una vez cuando la cámara + modelos quedan listos para capturar. */
+  @Output() ready = new EventEmitter<void>();
+  /** Se emite cuando una captura no detectó un rostro claro. */
+  @Output() noFace = new EventEmitter<void>();
 
   @ViewChild('video') videoRef?: ElementRef<HTMLVideoElement>;
 
@@ -89,6 +95,7 @@ export class FaceCaptureComponent implements OnInit, AfterViewInit, OnDestroy {
       await this.faceService.load();
       this.status = 'ready';
       this.message = '';
+      this.ready.emit();
     } catch (e: any) {
       this.status = 'error';
       this.message = 'No se pudieron cargar los modelos faciales. Descargalos en Configuración → Reconocimiento facial. ' + (e?.message || '');
@@ -107,6 +114,7 @@ export class FaceCaptureComponent implements OnInit, AfterViewInit, OnDestroy {
       if (!result) {
         this.status = 'ready';
         this.message = 'No se detectó un rostro claro. Acercate y mirá a la cámara.';
+        this.noFace.emit();
         return;
       }
       this.status = 'ready';

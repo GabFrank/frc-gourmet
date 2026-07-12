@@ -20,6 +20,7 @@ const RRHH_ITEMS: SectionItem[] = [
   { label: 'Aguinaldos', icon: 'star', path: '/rrhh/aguinaldos', enabled: true },
   { label: 'Asistencias', icon: 'fact_check', path: '/rrhh/asistencias', enabled: true },
   { label: 'Fichaje facial', icon: 'face', path: '/rrhh/fichaje', enabled: true },
+  { label: 'Configuración RRHH', icon: 'tune', path: '/rrhh/configuracion', enabled: true },
   { label: 'Horas extra', icon: 'more_time', path: '/rrhh/horas-extra', enabled: true },
   { label: 'Permisos', icon: 'verified_user', path: '/rrhh/permisos', enabled: true },
   { label: 'Notificaciones', icon: 'notifications', path: '/rrhh/notificaciones', enabled: true },
@@ -390,6 +391,11 @@ export const routes: Routes = [
         path: 'rrhh/feriados',
         data: { title: 'Feriados' },
         loadComponent: () => import('./pages/rrhh/feriados/feriados-list.page').then((m) => m.FeriadosListPage),
+      },
+      {
+        path: 'rrhh/configuracion',
+        data: { title: 'Configuración RRHH' },
+        loadComponent: () => import('./pages/rrhh/configuracion/configuracion-rrhh.page').then((m) => m.ConfiguracionRrhhPage),
       },
       {
         path: 'rrhh/personas',

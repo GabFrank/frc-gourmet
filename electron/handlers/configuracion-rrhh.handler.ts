@@ -44,6 +44,7 @@ const SEED_CONFIG: SeedItem[] = [
   { clave: 'FACIAL_MARGEN_MIN', valor: '0.05', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Margen minimo de similitud entre el mejor y el 2do mejor candidato para aceptar el match (evita confundir caras parecidas)' },
   { clave: 'FACIAL_LIVENESS_OBLIGATORIO', valor: 'true', tipo: ConfiguracionRrhhTipo.BOOLEAN, descripcion: 'Exigir prueba de vida (antispoof + liveness) para aceptar el fichaje facial' },
   { clave: 'FACIAL_LIVENESS_MIN', valor: '0.5', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Score minimo (0..1) de antispoof y liveness para considerar el rostro como real/vivo' },
+  { clave: 'FACIAL_PERMITIR_MULTIPLE_DIARIO', valor: 'false', tipo: ConfiguracionRrhhTipo.BOOLEAN, descripcion: 'Permitir que un funcionario fiche mas de una entrada/salida por dia (turnos partidos)' },
 ];
 
 export async function seedConfiguracionRrhh(dataSource: DataSource) {

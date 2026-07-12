@@ -49,6 +49,16 @@
   font-size: 14px;
   text-align: center;
   padding: 12px;
+
+  &.countdown {
+    background: rgba(0, 0, 0, 0.25);
+    .big {
+      font-size: 96px;
+      font-weight: 700;
+      line-height: 1;
+      text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+    }
+  }
 }
 
 .status-msg {

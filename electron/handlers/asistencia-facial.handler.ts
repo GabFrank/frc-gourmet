@@ -180,23 +180,18 @@ export function registerAsistenciaFacialHandlers(
     });
 
     const funcData = { id: mejorFuncId, nombre };
-    const tieneEntrada = !!(existente && existente.horaEntrada);
-    const tieneSalida = !!(existente && existente.horaSalida);
+    // `existente` es el registro más reciente del día. "Abierta" = con entrada sin salida.
+    const abierta = !!(existente && existente.horaEntrada && !existente.horaSalida);
+    const permitirMultiple = await getConfigBoolean(dataSource, 'FACIAL_PERMITIR_MULTIPLE_DIARIO', false);
 
     // Acción efectiva: la que pide el kiosco (ENTRADA/SALIDA) o auto-detección.
     const tipoPedido = payload?.tipo === 'ENTRADA' || payload?.tipo === 'SALIDA' ? payload.tipo : null;
-    const accion: 'ENTRADA' | 'SALIDA' = tipoPedido || (tieneEntrada && !tieneSalida ? 'SALIDA' : 'ENTRADA');
+    const accion: 'ENTRADA' | 'SALIDA' = tipoPedido || (abierta ? 'SALIDA' : 'ENTRADA');
 
     if (accion === 'SALIDA') {
-      if (!tieneEntrada) {
+      if (!abierta) {
+        // No hay una entrada abierta que cerrar
         return { matched: true, tipo: 'SALIDA', sinEntrada: true, similitud, funcionario: funcData };
-      }
-      if (tieneSalida) {
-        return {
-          matched: true, tipo: 'YA_COMPLETO', similitud, funcionario: funcData,
-          asistenciaId: existente!.id, horaEntrada: existente!.horaEntrada, horaSalida: existente!.horaSalida,
-          estado: existente!.estado,
-        };
       }
       existente!.horaSalida = horaAhora;
       existente!.horasTrabajadas = diffHoras(existente!.horaEntrada!, horaAhora);
@@ -209,15 +204,24 @@ export function registerAsistenciaFacialHandlers(
     }
 
     // accion === 'ENTRADA'
-    if (tieneEntrada) {
-      // Ya tiene entrada (abierta o cerrada) → no duplicar
+    if (abierta) {
+      // Ya tiene una entrada abierta → primero debe marcar salida
       return {
-        matched: true, tipo: tieneSalida ? 'YA_COMPLETO' : 'ENTRADA', yaRegistrado: true, similitud,
+        matched: true, tipo: 'ENTRADA', yaRegistrado: true, similitud,
+        funcionario: funcData, asistenciaId: existente!.id,
+        horaEntrada: existente!.horaEntrada, estado: existente!.estado,
+      };
+    }
+    if (existente && !permitirMultiple) {
+      // Ya tiene un registro cerrado hoy y no se permiten marcas múltiples
+      return {
+        matched: true, tipo: 'YA_COMPLETO', yaRegistrado: true, similitud,
         funcionario: funcData, asistenciaId: existente!.id,
         horaEntrada: existente!.horaEntrada, horaSalida: existente!.horaSalida, estado: existente!.estado,
       };
     }
-    // Crear entrada: resolver turno vigente para calcular tardanza
+    // Crear nueva entrada (sin registro hoy, o múltiple habilitado con el anterior cerrado).
+    // Resolver turno vigente para calcular tardanza:
     const ft = await dataSource.getRepository(FuncionarioTurno).findOne({
       where: { funcionario: { id: mejorFuncId }, fechaHasta: IsNull() },
       relations: ['turno'],

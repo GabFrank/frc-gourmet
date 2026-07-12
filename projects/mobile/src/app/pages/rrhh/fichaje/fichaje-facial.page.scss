@@ -86,7 +86,23 @@
   &.modo-entrada .modo-label { color: var(--success, #2e7d32); }
   &.modo-salida .modo-label { color: var(--error, #c0392b); }
 
+  .hint {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text-secondary, #888);
+  }
+
   .cancelar { margin-top: 8px; }
+}
+
+.acciones-fallo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 320px;
+
+  button { width: 100%; }
 }
 
 .resultado {

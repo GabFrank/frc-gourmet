@@ -42,6 +42,7 @@ export class ConfiguracionFacialComponent implements OnInit, OnDestroy {
   margen = 0.05;
   livenessObligatorio = true;
   livenessMin = 0.5;
+  permitirMultiple = false;
 
   private unsub: (() => void) | null = null;
 
@@ -84,6 +85,7 @@ export class ConfiguracionFacialComponent implements OnInit, OnDestroy {
       this.margen = parseFloat(set('FACIAL_MARGEN_MIN')) || 0.05;
       this.livenessObligatorio = String(set('FACIAL_LIVENESS_OBLIGATORIO')).toLowerCase() === 'true';
       this.livenessMin = parseFloat(set('FACIAL_LIVENESS_MIN')) || 0.5;
+      this.permitirMultiple = String(set('FACIAL_PERMITIR_MULTIPLE_DIARIO')).toLowerCase() === 'true';
     } catch (e: any) {
       this.snackBar.open('Error cargando configuración: ' + (e?.message || e), 'Cerrar', { duration: 4000 });
     }
@@ -110,6 +112,7 @@ export class ConfiguracionFacialComponent implements OnInit, OnDestroy {
       await this.guardarClave('FACIAL_MARGEN_MIN', String(this.margen));
       await this.guardarClave('FACIAL_LIVENESS_OBLIGATORIO', this.livenessObligatorio ? 'true' : 'false');
       await this.guardarClave('FACIAL_LIVENESS_MIN', String(this.livenessMin));
+      await this.guardarClave('FACIAL_PERMITIR_MULTIPLE_DIARIO', this.permitirMultiple ? 'true' : 'false');
       this.snackBar.open('Configuración guardada', 'Cerrar', { duration: 2500 });
     } catch (e: any) {
       this.snackBar.open('Error al guardar: ' + (e?.message || e), 'Cerrar', { duration: 4000 });

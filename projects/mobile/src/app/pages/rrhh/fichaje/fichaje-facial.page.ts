@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
@@ -14,15 +14,16 @@ interface FichajeResultado {
 }
 
 type Modo = 'ENTRADA' | 'SALIDA';
+type Fase = 'inicio' | 'preparando' | 'contando' | 'procesando' | 'exito' | 'fallo';
 
-/** Umbrales de liveness pasivo (antispoof + liveness de Human). */
 const LIVENESS_MIN = 0.5;
 const QUEUE_KEY = 'frc_fichaje_pendientes';
+const COUNTDOWN_SEG = 5;
 
 /**
- * Kiosco de fichaje facial. El tablet queda abierto en esta pantalla. El
- * funcionario elige ENTRADA (verde) o SALIDA (rojo), la cámara se abre, reconoce
- * el rostro y marca. Vuelve solo al estado inicial. Cola offline en localStorage.
+ * Kiosco de fichaje facial. El tablet queda abierto. El funcionario elige ENTRADA
+ * (verde) o SALIDA (rojo); la cámara se abre, da 5s para posicionarse y captura
+ * automáticamente. Si falla, ofrece Reintentar / Tomar foto / Cancelar.
  */
 @Component({
   selector: 'app-fichaje-facial',
@@ -34,15 +35,20 @@ const QUEUE_KEY = 'frc_fichaje_pendientes';
   templateUrl: './fichaje-facial.page.html',
   styleUrls: ['./fichaje-facial.page.scss'],
 })
-export class FichajeFacialPage implements OnInit {
+export class FichajeFacialPage implements OnInit, OnDestroy {
   private readonly repo = inject(RepositoryService);
   private readonly location = inject(Location);
 
+  @ViewChild('captura') captura?: FaceCaptureComponent;
+
   modo: Modo | null = null;
-  procesando = false;
+  fase: Fase = 'inicio';
+  countdown = 0;
   resultado: FichajeResultado | null = null;
   pendientes = 0;
-  private limpiarTimer: any = null;
+
+  private countdownTimer: any = null;
+  private resetTimer: any = null;
 
   ngOnInit(): void {
     this.actualizarPendientes();
@@ -50,50 +56,79 @@ export class FichajeFacialPage implements OnInit {
     this.flushCola();
   }
 
+  ngOnDestroy(): void {
+    this.limpiarTimers();
+  }
+
+  get overlayText(): string | undefined {
+    return this.fase === 'contando' && this.countdown > 0 ? String(this.countdown) : undefined;
+  }
+
+  // --- Inicio ---
   iniciar(modo: Modo): void {
+    this.limpiarTimers();
     this.resultado = null;
     this.modo = modo;
+    this.fase = 'preparando';
   }
 
-  cancelar(): void {
-    this.modo = null;
-    this.resultado = null;
+  onCaptureReady(): void {
+    // La cámara + modelos están listos → arrancar la cuenta regresiva.
+    if (this.fase === 'preparando') this.iniciarCuenta();
   }
 
-  get captureLabel(): string {
-    return this.modo === 'ENTRADA' ? 'Marcar entrada' : 'Marcar salida';
+  private iniciarCuenta(): void {
+    this.limpiarTimers();
+    this.fase = 'contando';
+    this.countdown = COUNTDOWN_SEG;
+    this.countdownTimer = setInterval(() => {
+      this.countdown--;
+      if (this.countdown <= 0) {
+        clearInterval(this.countdownTimer);
+        this.countdownTimer = null;
+        this.dispararCaptura();
+      }
+    }, 1000);
   }
 
+  private dispararCaptura(): void {
+    this.fase = 'procesando';
+    this.captura?.capture();
+  }
+
+  // --- Resultado de captura ---
   async onCaptured(cap: FaceCapture): Promise<void> {
-    if (this.procesando || !this.modo) return;
-    this.procesando = true;
+    if (!this.modo) return;
+    this.fase = 'procesando';
     const livenessOk = cap.real >= LIVENESS_MIN && cap.live >= LIVENESS_MIN;
     const payload = {
       tipo: this.modo,
       embedding: cap.embedding,
       dimension: FaceRecognitionService.DIMENSION,
       modelo: FaceRecognitionService.MODEL_NAME,
-      livenessOk,
-      real: cap.real,
-      live: cap.live,
+      livenessOk, real: cap.real, live: cap.live,
     };
     try {
       const res: any = await firstValueFrom(this.repo.ficharFacial(payload));
-      this.mostrarResultado(res);
+      this.procesarResultado(res);
     } catch (e: any) {
       if (!navigator.onLine) {
         this.encolar(payload);
-        this.resultado = { clase: 'error', titulo: 'Sin conexión', detalle: 'Fichaje guardado, se enviará al reconectar.' };
+        this.exito({ clase: 'error', titulo: 'Sin conexión', detalle: 'Fichaje guardado, se enviará al reconectar.' });
       } else {
-        this.resultado = { clase: 'error', titulo: 'Error', detalle: e?.message || 'No se pudo fichar.' };
+        this.fallo({ clase: 'error', titulo: 'Error', detalle: e?.message || 'No se pudo fichar.' });
       }
-    } finally {
-      this.procesando = false;
-      this.volverAInicioLuego();
     }
   }
 
-  private mostrarResultado(res: any): void {
+  onNoFace(): void {
+    // La captura no encontró rostro → ofrecer reintentar / tomar foto / cancelar.
+    if (this.fase === 'procesando' || this.fase === 'contando') {
+      this.fallo({ clase: 'error', titulo: 'No se detectó rostro', detalle: 'Posicionate en el óvalo e intentá de nuevo.' });
+    }
+  }
+
+  private procesarResultado(res: any): void {
     if (!res?.matched) {
       const motivos: Record<string, string> = {
         LIVENESS: 'No se pudo verificar prueba de vida. Mirá a la cámara.',
@@ -101,40 +136,71 @@ export class FichajeFacialPage implements OnInit {
         BAJO_MARGEN: 'Coincidencia ambigua. Intentá de nuevo.',
         SIN_ROSTROS: 'No hay rostros registrados.',
       };
-      this.resultado = { clase: 'error', titulo: 'No reconocido', detalle: motivos[res?.reason] || 'Intentá de nuevo.' };
+      this.fallo({ clase: 'error', titulo: 'No reconocido', detalle: motivos[res?.reason] || 'Intentá de nuevo.' });
       return;
     }
     const nombre = res.funcionario?.nombre || 'Funcionario';
     if (res.sinEntrada) {
-      this.resultado = { clase: 'error', titulo: nombre, detalle: 'No tenés una entrada abierta hoy.' };
+      this.fallo({ clase: 'error', titulo: nombre, detalle: 'No tenés una entrada abierta hoy.' });
       return;
     }
     if (res.tipo === 'YA_COMPLETO') {
-      this.resultado = { clase: 'error', titulo: nombre, detalle: `Ya fichaste hoy (${res.horaEntrada} - ${res.horaSalida}).` };
+      this.fallo({ clase: 'error', titulo: nombre, detalle: `Ya fichaste hoy (${res.horaEntrada} - ${res.horaSalida}).` });
       return;
     }
     if (res.yaRegistrado && res.tipo === 'ENTRADA') {
-      this.resultado = { clase: 'error', titulo: nombre, detalle: `Ya marcaste entrada hoy (${res.horaEntrada}).` };
+      this.fallo({ clase: 'error', titulo: nombre, detalle: `Ya tenés una entrada abierta (${res.horaEntrada}).` });
       return;
     }
     if (res.tipo === 'ENTRADA') {
       const tarde = res.estado === 'TARDANZA';
-      this.resultado = {
+      this.exito({
         clase: tarde ? 'tardanza' : 'ok',
         titulo: `¡Hola ${nombre}!`,
         detalle: `Entrada ${res.horaEntrada}${tarde ? ' · Llegaste tarde' : ''}`,
-      };
+      });
     } else {
-      this.resultado = { clase: 'ok', titulo: `¡Hasta luego ${nombre}!`, detalle: `Salida ${res.horaSalida}` };
+      this.exito({ clase: 'ok', titulo: `¡Hasta luego ${nombre}!`, detalle: `Salida ${res.horaSalida}` });
     }
   }
 
-  private volverAInicioLuego(): void {
-    if (this.limpiarTimer) clearTimeout(this.limpiarTimer);
-    this.limpiarTimer = setTimeout(() => {
-      this.modo = null;
-      this.resultado = null;
-    }, 5000);
+  private exito(r: FichajeResultado): void {
+    this.resultado = r;
+    this.fase = 'exito';
+    this.resetTimer = setTimeout(() => this.volverAInicio(), 5000);
+  }
+
+  private fallo(r: FichajeResultado): void {
+    this.resultado = r;
+    this.fase = 'fallo';
+  }
+
+  // --- Botones de fallback ---
+  reintentar(): void {
+    this.resultado = null;
+    this.iniciarCuenta();
+  }
+
+  tomarFoto(): void {
+    this.resultado = null;
+    this.dispararCaptura();
+  }
+
+  cancelar(): void {
+    this.volverAInicio();
+  }
+
+  private volverAInicio(): void {
+    this.limpiarTimers();
+    this.modo = null;
+    this.fase = 'inicio';
+    this.resultado = null;
+    this.countdown = 0;
+  }
+
+  private limpiarTimers(): void {
+    if (this.countdownTimer) { clearInterval(this.countdownTimer); this.countdownTimer = null; }
+    if (this.resetTimer) { clearTimeout(this.resetTimer); this.resetTimer = null; }
   }
 
   // ---- Cola offline ----
@@ -155,11 +221,7 @@ export class FichajeFacialPage implements OnInit {
     if (!cola.length) return;
     const restantes: any[] = [];
     for (const item of cola) {
-      try {
-        await firstValueFrom(this.repo.ficharFacial(item));
-      } catch {
-        restantes.push(item);
-      }
+      try { await firstValueFrom(this.repo.ficharFacial(item)); } catch { restantes.push(item); }
     }
     localStorage.setItem(QUEUE_KEY, JSON.stringify(restantes));
     this.actualizarPendientes();
