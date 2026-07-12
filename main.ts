@@ -55,6 +55,8 @@ import { registerConfiguracionRrhhHandlers, seedConfiguracionRrhh } from './elec
 import { registerRrhhFuncionariosHandlers } from './electron/handlers/rrhh-funcionarios.handler';
 import { registerFuncionarioDocumentosHandlers } from './electron/handlers/funcionario-documentos.handler';
 import { registerAsistenciasHandlers } from './electron/handlers/asistencias.handler';
+import { registerAsistenciaFacialHandlers } from './electron/handlers/asistencia-facial.handler';
+import { registerFaceModelsHandlers } from './electron/handlers/face-models.handler';
 import { registerFeriadosHandlers } from './electron/handlers/feriados.handler';
 import { registerHorasExtraHandlers } from './electron/handlers/horas-extra.handler';
 import { registerValesHandlers } from './electron/handlers/vales.handler';
@@ -225,6 +227,8 @@ function initializeDatabase() {
       registerRrhhFuncionariosHandlers(dataSource, getCurrentUser); // RRHH Fase 1: Cargos + Funcionarios + Historicos
       registerFuncionarioDocumentosHandlers(dataSource, getCurrentUser); // RRHH Fase 1: Documentos del funcionario (filesystem)
       registerAsistenciasHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Turnos + Asistencias + Penalizaciones
+      registerAsistenciaFacialHandlers(dataSource, getCurrentUser); // RRHH: Reconocimiento facial (rostros + fichaje)
+      registerFaceModelsHandlers(dataSource, getCurrentUser); // RRHH: Modelos de reconocimiento facial (descarga/serve)
       registerFeriadosHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Feriados
       registerHorasExtraHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Horas extra
       registerValesHandlers(dataSource, getCurrentUser); // RRHH Fase 3: Vales + Adelantos
