@@ -1,0 +1,5 @@
+# Pesos de @vladmandic/human descargados con `npm run models:face`.
+# No se versionan (binarios ~7-10 MB). Ejecutar el script en cada deploy/máquina.
+*
+!.gitignore
+!README.md

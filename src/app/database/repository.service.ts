@@ -800,6 +800,11 @@ export abstract class RepositoryService {
   abstract updateAsistencia(id: number, data: any): Observable<any>;
   abstract justificarAsistencia(id: number, data: any): Observable<any>;
   abstract marcarAsistenciaMasiva(payload: any): Observable<any>;
+  // Reconocimiento facial (rostros + fichaje)
+  abstract enrolarRostro(data: any): Observable<any>;
+  abstract getRostrosFuncionario(funcionarioId: number): Observable<any[]>;
+  abstract eliminarRostro(id: number): Observable<any>;
+  abstract ficharFacial(payload: any): Observable<any>;
   abstract getPenalizaciones(filtros?: any): Observable<any[]>;
   abstract createPenalizacion(data: any): Observable<any>;
   abstract updatePenalizacion(data: any): Observable<any>;

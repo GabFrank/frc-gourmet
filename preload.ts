@@ -3298,6 +3298,22 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // =============================================
+  // RRHH - Reconocimiento facial (rostros + fichaje)
+  // =============================================
+  enrolarRostro: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('enrolar-rostro', data);
+  },
+  getRostrosFuncionario: async (funcionarioId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-rostros-funcionario', funcionarioId);
+  },
+  eliminarRostro: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('eliminar-rostro', id);
+  },
+  ficharFacial: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('fichar-facial', payload);
+  },
+
+  // =============================================
   // RRHH - Penalizaciones
   // =============================================
   getPenalizaciones: async (filtros?: any): Promise<any[]> => {

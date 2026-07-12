@@ -1,0 +1,27 @@
+mat-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 420px;
+  max-width: 520px;
+}
+
+.hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary, #666);
+}
+
+.capturas {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  .count {
+    font-size: 13px;
+    color: var(--text-secondary, #666);
+    white-space: nowrap;
+  }
+}

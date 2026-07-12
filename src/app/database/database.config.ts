@@ -36,6 +36,7 @@ import { FuncionarioDocumento } from './entities/rrhh/funcionario-documento.enti
 import { Turno } from './entities/rrhh/turno.entity';
 import { FuncionarioTurno } from './entities/rrhh/funcionario-turno.entity';
 import { Asistencia } from './entities/rrhh/asistencia.entity';
+import { FuncionarioRostro } from './entities/rrhh/funcionario-rostro.entity';
 import { Penalizacion } from './entities/rrhh/penalizacion.entity';
 import { Feriado } from './entities/rrhh/feriado.entity';
 import { HoraExtra } from './entities/rrhh/hora-extra.entity';
@@ -237,6 +238,7 @@ import { AddTiendaConfigYCustomerRefresh1783525141550 } from './migrations/17835
 import { CuentaClienteTelefonoNullable1783740826975 } from './migrations/1783740826975-CuentaClienteTelefonoNullable';
 import { AddUbicacionPedidoOnline1783741165054 } from './migrations/1783741165054-AddUbicacionPedidoOnline';
 import { AddCobroParcialPorItems1783805921597 } from './migrations/1783805921597-AddCobroParcialPorItems';
+import { AddReconocimientoFacial1783808912909 } from './migrations/1783808912909-AddReconocimientoFacial';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -373,6 +375,7 @@ function getEntitiesList(): any[] {
       Turno,
       FuncionarioTurno,
       Asistencia,
+      FuncionarioRostro,
       Penalizacion,
       Feriado,
       HoraExtra,
@@ -603,6 +606,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     CuentaClienteTelefonoNullable1783740826975,
     AddUbicacionPedidoOnline1783741165054,
     AddCobroParcialPorItems1783805921597,
+    AddReconocimientoFacial1783808912909,
   ];
 }
 
