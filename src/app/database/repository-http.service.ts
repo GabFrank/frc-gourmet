@@ -1327,6 +1327,15 @@ export class RepositoryHttpService extends RepositoryService {
   revertirStockVenta(ventaId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.revertirStockVenta() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getEstadoCobroVenta(ventaId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getEstadoCobroVenta() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  registrarCobroParcial(ventaId: number, payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.registrarCobroParcial() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  anularCobroParcial(cobroParcialId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.anularCobroParcial() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   searchProductosByNombre(nombre: string, mode?: 'venta' | 'compra'): Observable<Producto[]> {
     return throwError(() => new Error(`RepositoryHttpService.searchProductosByNombre() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

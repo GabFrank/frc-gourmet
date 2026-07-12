@@ -2540,6 +2540,15 @@ contextBridge.exposeInMainWorld('api', {
   revertirStockVenta: async (ventaId: number): Promise<any> => {
     return await ipcRenderer.invoke('revertirStockVenta', ventaId);
   },
+  getEstadoCobroVenta: async (ventaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('getEstadoCobroVenta', ventaId);
+  },
+  registrarCobroParcial: async (ventaId: number, payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('registrarCobroParcial', ventaId, payload);
+  },
+  anularCobroParcial: async (cobroParcialId: number): Promise<any> => {
+    return await ipcRenderer.invoke('anularCobroParcial', cobroParcialId);
+  },
 
   // Additional helper methods
   searchProductosByNombre: async (nombre: string, mode: 'venta' | 'compra' = 'venta'): Promise<Producto[]> => {

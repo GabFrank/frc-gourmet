@@ -339,6 +339,8 @@
               *ngIf="item.adicionalesVinculados?.length > 0 || item.ingredientesModificados?.length > 0 || item.observacionesVinculadas?.length > 0"
               class="variacion-icon"
               matTooltip="Tiene personalizaciones">tune</mat-icon>
+            <span *ngIf="item._estadoCobro === 'PAGADO'" class="cobro-chip cobro-pagado" matTooltip="Ítem pagado">PAGADO</span>
+            <span *ngIf="item._estadoCobro === 'PARCIAL'" class="cobro-chip cobro-parcial" matTooltip="Parcialmente pagado">PARCIAL</span>
           </td>
         </ng-container>
 
@@ -599,6 +601,13 @@
           <mat-icon>search</mat-icon>
         </button>
       </form>
+    </div>
+
+    <!-- Resumen de cobro (cuando hay cobro parcial en curso) -->
+    <div class="cobro-resumen-bar" *ngIf="hayCobroParcial && !moverItemsMode">
+      <span class="cr-item cr-total">Total <strong>{{ cobroDeudaBruta | number:'1.0-2' }}</strong></span>
+      <span class="cr-item cr-pagado">Pagado <strong>{{ cobroPagado | number:'1.0-2' }}</strong></span>
+      <span class="cr-item cr-saldo"><mat-icon>account_balance_wallet</mat-icon> Saldo <strong>{{ cobroSaldo | number:'1.0-2' }}</strong></span>
     </div>
 
     <!-- Bottom buttons: modo normal -->

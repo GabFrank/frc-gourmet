@@ -237,6 +237,7 @@ import { AddPedidosOnline1783520460212 } from './migrations/1783520460212-AddPed
 import { AddTiendaConfigYCustomerRefresh1783525141550 } from './migrations/1783525141550-AddTiendaConfigYCustomerRefresh';
 import { CuentaClienteTelefonoNullable1783740826975 } from './migrations/1783740826975-CuentaClienteTelefonoNullable';
 import { AddUbicacionPedidoOnline1783741165054 } from './migrations/1783741165054-AddUbicacionPedidoOnline';
+import { AddCobroParcialPorItems1783805921597 } from './migrations/1783805921597-AddCobroParcialPorItems';
 import { AddReconocimientoFacial1783808912909 } from './migrations/1783808912909-AddReconocimientoFacial';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
@@ -251,6 +252,8 @@ import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
 import { PdvAtajoGrupoItem } from './entities/ventas/pdv-atajo-grupo-item.entity';
 import { PdvAtajoItemProducto } from './entities/ventas/pdv-atajo-item-producto.entity';
 import { VentaItemSabor } from './entities/ventas/venta-item-sabor.entity';
+import { CobroParcial } from './entities/ventas/cobro-parcial.entity';
+import { CobroParcialItem } from './entities/ventas/cobro-parcial-item.entity';
 
 // Facturacion entities (modulo de facturacion: pre-impreso, auto-impreso, electronica)
 import { Timbrado } from './entities/facturacion/timbrado.entity';
@@ -527,6 +530,9 @@ function getEntitiesList(): any[] {
       PdvAtajoItemProducto,
       // VentaItem sabores (variaciones multi-sabor)
       VentaItemSabor,
+      // Cobro parcial por items
+      CobroParcial,
+      CobroParcialItem,
       // Facturacion (modulo de facturacion)
       Timbrado,
       TimbradoDetalle,
@@ -599,6 +605,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddTiendaConfigYCustomerRefresh1783525141550,
     CuentaClienteTelefonoNullable1783740826975,
     AddUbicacionPedidoOnline1783741165054,
+    AddCobroParcialPorItems1783805921597,
     AddReconocimientoFacial1783808912909,
   ];
 }

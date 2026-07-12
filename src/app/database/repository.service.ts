@@ -576,6 +576,10 @@ export abstract class RepositoryService {
   abstract deleteStockMovimiento(stockMovimientoId: number): Observable<any>;
   abstract procesarStockVenta(ventaId: number): Observable<any>;
   abstract revertirStockVenta(ventaId: number): Observable<any>;
+  // Cobro parcial por ítems
+  abstract getEstadoCobroVenta(ventaId: number): Observable<any>;
+  abstract registrarCobroParcial(ventaId: number, payload: any): Observable<any>;
+  abstract anularCobroParcial(cobroParcialId: number): Observable<any>;
   abstract searchProductosByNombre(nombre: string, mode?: 'venta' | 'compra'): Observable<Producto[]>;
   abstract getProductosByTipo(tipo: string): Observable<Producto[]>;
   abstract getProductosWithStock(): Observable<Producto[]>;

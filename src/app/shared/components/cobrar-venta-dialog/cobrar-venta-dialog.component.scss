@@ -610,3 +610,125 @@ mat-dialog-actions {
   background: rgba(0, 230, 201, 0.18);
   color: #80cbc4;
 }
+
+/* ─── Panel de ítems (cobro parcial por ítems) ───────────────────────────── */
+.items-cobro-panel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  margin: 8px 0;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.items-cobro-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+
+  &:hover { background: rgba(255, 255, 255, 0.04); }
+
+  .items-cobro-title {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: rgba(255, 255, 255, 0.85);
+    font-weight: 600;
+    font-size: 0.85rem;
+
+    mat-icon { font-size: 20px; width: 20px; height: 20px; }
+  }
+}
+
+.items-cobro-resumen {
+  display: flex;
+  gap: 6px;
+
+  .ic-chip {
+    font-size: 0.72rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.75);
+  }
+  .ic-pagado { background: rgba(76, 175, 80, 0.18); color: #81c784; }
+  .ic-saldo { background: rgba(255, 167, 38, 0.18); color: #ffb74d; }
+  .ic-saldo-cero { background: rgba(76, 175, 80, 0.18); color: #81c784; }
+}
+
+.items-cobro-list {
+  max-height: 190px;
+  overflow-y: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.item-cobro-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+
+  &.pagado { opacity: 0.55; }
+  &.seleccionado { background: rgba(33, 150, 243, 0.08); }
+
+  .item-cobro-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .item-cobro-nombre {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.82rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .item-cobro-sub {
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 0.7rem;
+  }
+
+  .ic-estado {
+    font-weight: 700;
+    &.ic-estado-pagado { color: #81c784; }
+    &.ic-estado-parcial { color: #ffb74d; }
+    &.ic-estado-pendiente { color: #4fc3f7; }
+  }
+
+  .item-cobro-input .bruto-input {
+    width: 90px;
+    padding: 3px 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    color: #fff;
+    text-align: right;
+    font-size: 0.82rem;
+  }
+}
+
+.items-cobro-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 6px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+
+  .a-cobrar-label {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.78rem;
+    strong { color: #fff; }
+  }
+  .btn-cobrar-sel {
+    color: #4fc3f7;
+    border-color: rgba(79, 195, 247, 0.4);
+    line-height: 30px;
+    mat-icon { font-size: 18px; width: 18px; height: 18px; }
+  }
+}

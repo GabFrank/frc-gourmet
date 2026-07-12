@@ -2,6 +2,8 @@
 
 Este documento describe todas las funciones del Punto de Venta y el estado actual de implementacion de cada una.
 
+> **Ultima revision contra codigo: 2026-07-11.** Novedades respecto de la revision anterior (jun 2026): cobro a credito (cuenta por cobrar + cuotas + pagare), Finalizar + Ticket (F11), ajuste global con redondeo a 500 y alerta de venta a perdida, maquina POS / cuenta bancaria por forma de pago, factura desde el cobro, gate de cobro por dispositivo (caja compartida), buffet por peso + balanza EAN-13, Utilitarios (retiros / gastos / ultimas ventas).
+
 ---
 
 ## 1. GESTION DE CAJA
@@ -107,19 +109,26 @@ Este documento describe todas las funciones del Punto de Venta y el estado actua
 ## 4. GESTION DE ITEMS DE VENTA
 
 ### 4.1 Buscar y Agregar Productos
-- **Descripcion:** Busqueda de productos mediante dialogo. Soporta cantidad con atajo de teclado (ej: `3*` para cantidad 3) y Enter para buscar.
+- **Descripcion:** Busqueda de productos mediante dialogo. Soporta cantidad con atajo de teclado (ej: `3*` para cantidad 3) y Enter para buscar. Tras agregar, la cantidad del buscador se resetea a 1.
 - **Estado:** IMPLEMENTADO
-- **Ubicacion:** `pdv.component.ts` - `openProductSearchDialog()`, `onSearchKeyDown()`, `addProduct()`
+- **Ubicacion:** `pdv.component.ts` - `openProductSearchDialog()`, `onSearchKeyDown()`, `addProduct()`, `resetBuscador()`
 - **Componente:** `ProductoSearchDialogComponent`
-- **Notas:** Si no hay mesa seleccionada al agregar, se muestra dialogo de seleccion de mesa. Si el producto tiene receta, se abre el dialogo de personalizacion antes de agregar (ver 4.8).
+- **Despacho por tipo de producto (`addProduct`):**
+  - **BUFFET_POR_PESO** -> `addBuffetPorPesoItem()` (ver 4.10)
+  - **ELABORADO_CON_VARIACION** -> `SeleccionarVariacionDialogComponent` -> `addVariacionItem()` (crea VentaItem + un `VentaItemSabor` por sabor)
+  - Producto con receta (ELABORADO_SIN_VARIACION) -> `PersonalizarProductoDialogComponent` antes de agregar (ver 4.8)
+  - COMBO / RETAIL sin receta -> se agrega directo
+- **Notas:** Si no hay mesa/comanda/venta-rapida seleccionada al agregar, se muestra dialogo de seleccion de mesa. Antes de abrir el buscador se intenta leer una etiqueta de balanza (ver 4.10). Accesos rapidos (atajos): `onAtajoItemClick()` abre `AtajoProductosDialogComponent`.
 
 ### 4.2 Tabla de Items
 - **Descripcion:** Tabla expandible que muestra los items de la venta: producto, presentacion/cantidad, precio unitario (con descuento y adicionales aplicados) y total.
 - **Estado:** IMPLEMENTADO
-- **Ubicacion:** `pdv.component.html` - seccion `sale-table`
-- **Entidad:** `VentaItem` (venta, precioCostoUnitario, precioVentaUnitario, precioAdicionales, cantidad, descuentoUnitario, estado, canceladoPor, horaCancelado, modificado, modificadoPor, horaModificacion, nuevaVersionVentaItem)
-- **Estados de item:** ACTIVO, MODIFICADO, CANCELADO
-- **Indicador de personalizacion:** Icono `tune` junto al nombre del producto si tiene variaciones. Borde lateral celeste en el row via box-shadow.
+- **Ubicacion:** `pdv.component.html` (tabla `pdv-items-table`, `multiTemplateDataRows`)
+- **Columnas:** `productoNombre`, `cantidad`, `precio`, `total`, `actions` (+ `select` al frente en modo mover items)
+- **Entidad:** `VentaItem` (venta, precioCostoUnitario, precioVentaUnitario, precioAdicionales, cantidad, descuentoUnitario, estado, canceladoPor, horaCancelado, modificado, modificadoPor, horaModificacion, nuevaVersionVentaItem, ensambladoDescripcion, recetaPresentacion, cantidadSabores, y campos de buffet)
+- **Nombre mostrado:** `ensambladoDescripcion || producto?.nombre` (la descripcion ensamblada de variaciones tiene prioridad)
+- **Estados de item:** ACTIVO (cuenta al total), MODIFICADO, CANCELADO (no cuenta, fila con clase `item-cancelado`)
+- **Indicador de personalizacion:** Icono `tune` junto al nombre si tiene adicionales/modificaciones/observaciones. Fila con clase `item-personalizado` (resalte).
 - **Calculo de precio:** `(precioVentaUnitario + precioAdicionales - descuentoUnitario) * cantidad`
 
 ### 4.3 Detalle Expandido de Item
@@ -179,7 +188,19 @@ Este documento describe todas las funciones del Punto de Venta y el estado actua
 ### 4.9 Menu de Acciones del Item
 - **Descripcion:** Menu contextual (mat-menu) en cada item con opciones.
 - **Estado:** IMPLEMENTADO
-- **Opciones:** Personalizar, Editar, Cancelar
+- **Opciones:** Personalizar (`tune`), Editar (`edit`), Cancelar (`cancel`). No hay opcion Eliminar en el menu (aunque `removeItem()` existe en el TS).
+
+### 4.10 Buffet por Peso (venta por kilo)
+- **Descripcion:** Productos tipo `BUFFET_POR_PESO` se venden por peso. El item guarda `cantidad = kg neto` y `precioVentaUnitario = precio/kg efectivo`.
+- **Estado:** IMPLEMENTADO
+- **Ubicacion:** `pdv.component.ts` - `addBuffetPorPesoItem()`, `tryHandleBalanzaScan()`; `PesajeBuffetDialogComponent`
+- **Flujo:**
+  - Resuelve el precio vigente con `resolverPrecioVigente` (precios programados por dia/horario)
+  - Abre `PesajeBuffetDialogComponent` (peso bruto/tara -> neto)
+  - Persiste `VentaItem` con campos de peso reales: `pesoBruto`, `pesoTara`, `pesoNeto` (gramos), `precioPorKg`, `aplicoLibre` (true si aplico el tope "buffet libre")
+- **Escaneo de etiqueta de balanza (EAN-13):** `tryHandleBalanzaScan` -> `parseEtiquetaBalanza` usa config de PdvConfig (`balanzaPrefijo` def '2', `balanzaModo` PESO/PRECIO, `balanzaFactorPeso`). Si el codigo resuelve a un producto buffet, agrega el item con el peso de la etiqueta sin abrir el buscador.
+- **Backend:** descuento de stock por `processBuffetPorPeso` (por receta si `descuentaPorReceta`, si no por kg neto del propio producto; stock cargado via Produccion). Metricas en `get-buffet-metricas` -> dashboard buffet.
+- **Detalle:** ver `docs/buffet-por-kilo.md`
 
 ---
 
@@ -206,25 +227,78 @@ Este documento describe todas las funciones del Punto de Venta y el estado actua
 ## 6. COBRAR VENTA
 
 ### 6.1 Dialogo de Cobro
-- **Descripcion:** Dialogo completo de cobro (80vw x 80vh) con soporte multi-pago y multi-moneda.
+- **Descripcion:** Dialogo completo de cobro (~80vw x 80vh) con soporte multi-pago y multi-moneda.
 - **Estado:** IMPLEMENTADO
-- **Ubicacion:** `cobrar-venta-dialog.component.ts`
-- **Funcionalidades:**
-  - Barra superior con totales por moneda, banderas y cotizaciones
-  - Panel izquierdo (55%): tabla de lineas de pago con acciones (observacion, duplicar, editar, eliminar)
-  - Panel derecho (45%): botones de monedas y formas de pago
+- **Ubicacion:** `src/app/shared/components/cobrar-venta-dialog/cobrar-venta-dialog.component.ts` (+ `.html`)
+- **Importante (arquitectura):** el cobro NO crea entidades en `ventas.handler.ts`. Usa `createPago`/`createPagoDetalle`/`updatePago` (definidos en `compras.handler.ts`, compartidos) y cierra la venta con `updateVenta(CONCLUIDA)`.
+- **Estructura:**
+  - Barra de cliente: si no hay cliente, autocomplete de busqueda + boton "Nuevo cliente" (crea Persona+Cliente); el cliente se asigna en vivo con `updateVenta`.
+  - Barra superior con totales por moneda, banderas y cotizaciones (`MonedaCambio.compraLocal`)
+  - Panel izquierdo (55%): tabla de lineas de pago (`numero, moneda, formaPago, valor, tipo, actions`). Menu por linea: observacion, duplicar, editar valor, eliminar (via `edit-detalle-dialog.component.ts`). La columna forma de pago muestra tags de maquina POS / cuenta bancaria.
+  - Panel derecho (45%): botones de monedas (F1-F3), formas de pago (F4-F7), selector de Maquina POS, selector de Cuenta Bancaria, y bloque de division de cuenta.
   - Formulario: select moneda + select forma pago + input valor + indicador PAGO/VUELTO
-  - Atajos F1-F3 para monedas, F4-F7 para formas de pago, F10 para finalizar
-  - Vuelto automatico cuando pago > total
-  - Cobro parcial (guardar lineas sin cerrar venta)
-  - Descuento/Aumento (F9) con dialogo dedicado (%, monto fijo, redondeo)
-  - Division de cuenta (1-20 personas, auto-calculo por persona)
-  - Ver costo (requiere credenciales, muestra costo total y margen)
-  - Cobro rapido (F2): cobra total en moneda principal + forma principal con un click
-  - Lineas de pago se persisten inmediatamente en DB
+- **Atajos de teclado:** F1-F3 monedas, F4-F7 formas de pago, F9 descuento/aumento, F10 Finalizar (sin ticket), F11 Finalizar + Ticket. No hay F8.
+- **Botones de accion:** Finalizar (F10), Finalizar + Ticket (F11), Cobro Parcial, Cobrar a credito, Descuento/Aumento (F9), Factura, Cancelar.
+- **Funcionalidades:**
+  - Multi-pago y multi-moneda; vuelto automatico cuando pago > total; vuelto en cualquier moneda
+  - Cada linea de pago se persiste inmediatamente en DB (`createPagoDetalle` al agregar)
+  - Tolerancia de redondeo en monedas con decimales: un residuo menor a la unidad minima convertida se considera saldo cero (habilita Finalizar aunque pagos en R$/USD no cuadren exacto en Gs)
+  - Cobro parcial: guarda lineas sin cerrar la venta (Pago queda ABIERTO)
+  - Ver costo (requiere credenciales via `edit-detalle-dialog` modo password + `validateCredentials`; muestra costo total y margen)
+  - Cobro rapido (F2, desde `pdv.component`): cobra total en moneda + forma principal con un click
 
-### 6.2 Finalizacion
-- **Al finalizar:** Venta pasa a CONCLUIDA, pago a PAGADO, mesa a DISPONIBLE, fechaCierre se registra, UI se limpia.
+### 6.2 Maquina POS y Cuenta Bancaria por forma de pago
+- **Descripcion:** Las formas de pago pueden tener maquinas POS (`FormasPago.maquinasPos`) y/o cuentas bancarias (`.cuentasBancarias`) asociadas.
+- **Estado:** IMPLEMENTADO
+- **Comportamiento:**
+  - El selector aparece si hay >=1 y es OBLIGATORIO elegir si hay >=2 (con 1 sola se auto-selecciona)
+  - Elegir POS/cuenta ajusta automaticamente la moneda del pago a la de la cuenta bancaria asociada
+  - Al finalizar: cada linea PAGO con POS -> `createAcreditacionPos`; con cuenta bancaria -> `acreditarTransferenciaBancaria` (ambos no bloqueantes, en `banking.handler.ts`)
+
+### 6.3 Descuento / Aumento global (F9)
+- **Descripcion:** Ajuste global sobre el total de la venta.
+- **Estado:** IMPLEMENTADO
+- **Ubicacion:** `ajuste-cobrar-dialog.component.ts` (400px, siempre en moneda principal)
+- **Campos:** tipo descuento|aumento, modo porcentaje|monto (chips 5/10/15/20/25/50%), redondeo a multiplos de 500 Gs (arriba/abajo/exacto)
+- **Alerta:** si es descuento y el nuevo total < costo total, avisa venta a perdida
+- **Resultado:** devuelve `{valor, motivo}` (valor POSITIVO = descuento, NEGATIVO = aumento); se persiste como `PagoDetalle` tipo DESCUENTO/AUMENTO
+- **Nota:** NO pide password (la unica autorizacion por credenciales del flujo es "Ver costo")
+
+### 6.4 Cobro a credito
+- **Descripcion:** Cierra la venta como cuenta por cobrar del cliente, con cuotas.
+- **Estado:** IMPLEMENTADO
+- **Ubicacion:** `cobrar-credito-dialog.component.ts` (720px)
+- **Requisitos:** cliente asignado con `credito` habilitado y saldo pendiente
+- **Formulario:** cantidad de cuotas (1-60), frecuencia (30 mensual / 15 quincenal / 7 semanal), fecha inicio, descripcion; preview de saldo proyectado vs `limite_credito` y de cuotas
+- **Pagare:** pregunta si imprimir pagare (`imprimir-pagare-dialog.component.ts`)
+- **Backend:** llama `cobrarVentaCredito(payload)` (handler en `cuentas-por-cobrar.handler.ts`), que en una transaccion: get-or-create `FormaPago` CREDITO (`movimentaCaja=false`), crea Pago PAGADO + PagoDetalle, cierra la venta CONCLUIDA, crea la `CuentaPorCobrar` (CREDITO_VENTA) + cuotas, imprime ticket/pagare. Si excede el limite devuelve `{requiereConfirmacion:true}` -> confirmacion -> reintento con `forzar`.
+- **Nota:** por este camino el front NO crea Pago/PagoDetalle (lo hace el backend).
+
+### 6.5 Emitir factura desde el cobro
+- **Descripcion:** Boton "Factura" abre el dialogo de facturacion legal precargado con el cliente y los items del cobro.
+- **Estado:** IMPLEMENTADO
+- **Ubicacion:** `facturar()` -> `FacturarDialogComponent` (1000px)
+- **Nota:** NO finaliza el cobro; es una accion independiente.
+
+### 6.6 Division de cuenta
+- **Descripcion:** Campo para dividir el total entre N personas (1-20).
+- **Estado:** INFORMATIVO
+- **Comportamiento:** autocompleta el input con el valor por persona; sugiere registrar cada pago individual con el nombre en la observacion. NO divide realmente el cobro ni crea multiples pagos automaticamente.
+
+### 6.7 Gate de cobro por dispositivo (caja compartida multi-dispositivo)
+- **Descripcion:** Con una caja compartida entre varios dispositivos, solo el dispositivo dueño de la caja puede cobrar.
+- **Estado:** IMPLEMENTADO
+- **Comportamiento:**
+  - `createPago` con flag `validarDispositivoCaja:true` valida que el dispositivo actual sea dueño de la caja; si difiere lanza `COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO`
+  - En el PdV, `puedeCobrar` desactiva el boton Cobrar en dispositivos que no son dueños de la caja: pueden lanzar items pero no cobrar
+
+### 6.8 Finalizacion (contado)
+- **Al finalizar (`finalizar`):**
+  - `Pago.estado` -> PAGADO; `Venta.estado` -> CONCLUIDA, `formaPago` = forma de pago dominante, `pago` vinculado, `fechaCierre` registrado
+  - Flag interno `__imprimirTicketVenta` (F10=false / F11=true) controla la impresion del ticket por encima de `PdvConfig.autoImprimirTicketVenta`
+  - `PdvMesa.estado` -> DISPONIBLE, `venta` -> null (comanda vuelve a DISPONIBLE si aplica)
+  - `procesarStockVenta(ventaId)` fire-and-forget (si falla, la venta NO se revierte)
+  - Hook KDS en `updateVenta`: CONCLUIDA marca `ComandaItem` activos como ENTREGADO; CANCELADA como CANCELADO
 
 ---
 
@@ -307,8 +381,10 @@ Este documento describe todas las funciones del Punto de Venta y el estado actua
   - F1/F2/F3 → Seleccionar moneda por orden
   - F4/F5/F6/F7 → Seleccionar forma de pago por orden
   - F9 → Descuento/Aumento
-  - F10 → Finalizar cobro
-- **Notas:** Atajos NO se disparan cuando hay un dialogo abierto. Tooltips visibles en botones.
+  - F10 → Finalizar cobro (sin ticket)
+  - F11 → Finalizar cobro + imprimir ticket
+  - (No hay F8)
+- **Notas:** Atajos NO se disparan cuando hay un dialogo abierto ni cuando el host del PdV no esta visible (evita fugas entre pestañas). Tooltips visibles en botones.
 
 ---
 
@@ -640,6 +716,41 @@ Este documento describe todas las funciones del Punto de Venta y el estado actua
 
 ---
 
+## 21. UTILITARIOS DEL PdV (RETIROS, GASTOS, ULTIMAS VENTAS)
+
+### 21.1 Acceso
+- **Descripcion:** Boton UTILITARIOS en el panel derecho del PdV abre un dialogo lanzador con tarjetas.
+- **Estado:** IMPLEMENTADO
+- **Ubicacion:** `pdv.component.ts` - `openUtilitarios()`; `utilitarios-dialog.component.ts` (600px)
+- **Requisito:** caja abierta (si no, muestra aviso)
+- **Opciones:** Retiro de Caja, Gastos, Ultimas Ventas, Cierre Parcial (proximamente / deshabilitado)
+
+### 21.2 Retiro de Caja
+- **Descripcion:** Registrar un retiro de efectivo de la caja durante el turno.
+- **Estado:** IMPLEMENTADO
+- **Ubicacion:** `CreateRetiroCajaDialogComponent`
+- **Nota:** los retiros se consideran en el esperado del cierre de caja.
+
+### 21.3 Gastos de Caja
+- **Descripcion:** Registrar un gasto pagado con efectivo de la caja del PdV (descuenta del cajon, aparece en el cierre).
+- **Estado:** IMPLEMENTADO
+- **Ubicacion:** `gasto-caja-dialog.component.ts` (560px)
+- **Campos:** categoria (opcional), descripcion (requerida), monto, moneda, forma de pago (preselecciona EFECTIVO), fecha
+- **Backend:** handler `create-gasto-caja` (`gastos-caja.handler.ts`: `create-gasto-caja` / `get-gastos-caja` / `anular-gasto-caja`)
+
+### 21.4 Ultimas Ventas
+- **Descripcion:** Vista rapida de las ultimas ventas de la caja actual con acciones.
+- **Estado:** IMPLEMENTADO
+- **Ubicacion:** `ultimas-ventas-dialog.component.ts` (560px)
+- **Datos:** `getVentasByCaja(cajaId)`; cada fila muestra #id, hora, forma de pago, total (suma de items ACTIVOS), estado (concluida/cancelada/abierta) y flag de credito
+- **Acciones (mat-menu por venta):**
+  - Ver detalles -> `DetalleVentaDialogComponent`
+  - Reimprimir ticket -> IPC `print-venta-ticket`
+  - Reimprimir pagare (solo credito) -> IPC `get-cpc-by-venta` -> `print-pagare-cpc-ticket`
+  - Cancelar venta (si no esta CANCELADA) -> confirma, `updateVenta(CANCELADA)`, y si estaba CONCLUIDA revierte stock (`revertirStockVenta`)
+
+---
+
 ## RESUMEN DE ESTADO
 
 | Modulo | Implementado | Parcial | Pendiente |
@@ -649,7 +760,7 @@ Este documento describe todas las funciones del Punto de Venta y el estado actua
 | Gestion de Ventas | 5 | 0 | 0 |
 | Items de Venta | 9 | 0 | 0 |
 | Monedas y Totales | 3 | 0 | 0 |
-| Cobrar Venta | 2 | 0 | 0 |
+| Cobrar Venta | 8 | 1 | 0 |
 | Cancelar Venta | 1 | 0 | 0 |
 | Transferir Mesa | 1 | 0 | 0 |
 | Mover Items | 1 | 0 | 0 |
@@ -663,8 +774,9 @@ Este documento describe todas las funciones del Punto de Venta y el estado actua
 | Configuracion PdV | 0 | 1 | 0 |
 | Movimiento de Stock | 7 | 0 | 0 |
 | Comandas | 8 | 0 | 0 |
+| Utilitarios (retiros/gastos/ult. ventas) | 4 | 0 | 1 |
 | Dashboard | 0 | 1 | 0 |
-| **TOTAL** | **60** | **5** | **2** |
+| Buffet por peso | 1 | 0 | 0 |
 
 > **Nota (2026-06-28):** la impresion termica ya esta implementada (`documentos-tickets.handler.ts`,
 > `print-precuenta`/`print-comanda`/`print-venta-ticket`/`print-etiqueta-delivery`, etc.), con ruteo por
@@ -676,11 +788,13 @@ Este documento describe todas las funciones del Punto de Venta y el estado actua
 ## FUNCIONES PENDIENTES GENERALES
 
 1. **Cancelar Caja** — cancela caja con ventas, cobros y movimientos de stock
-2. **Retiros de Efectivo** — registrar retiros de caja durante el turno
-3. **Gastos** — registrar gastos operativos desde el PdV
-4. **Categorias click** — agregar productos al carrito desde items de categoria
-5. **UI Precios de Delivery** — ABM visual (actualmente se gestionan desde crear-delivery dialog)
-6. **UI Configuracion PdV** — dialogo para editar umbrales y parametros de PdvConfig
+2. **Cierre Parcial** — opcion en Utilitarios, deshabilitada ("proximamente")
+3. **Categorias click** — agregar productos al carrito desde items de categoria
+4. **UI Precios de Delivery** — ABM visual (actualmente se gestionan desde crear-delivery dialog)
+5. **UI Configuracion PdV** — dialogo para editar umbrales y parametros de PdvConfig
+6. **Division de cuenta real** — hoy es informativa (autocompleta valor/persona, no divide el cobro)
+
+> **Ya implementados** (antes pendientes): Retiros de Efectivo y Gastos operativos, ambos desde Utilitarios (secciones 21.2 y 21.3).
 
 ---
 
@@ -719,11 +833,12 @@ Este documento describe todas las funciones del Punto de Venta y el estado actua
 
 ---
 
-## BUGS CONOCIDOS
+## BUGS / STUBS CONOCIDOS
 
-1. **findPrecioCosto()**: Retorna 0 hardcodeado en vez de buscar el precio de costo real
+1. **findPrecioPrincipal()**: stub que retorna 0 (no cableado en la plantilla). `findPrecioCosto()` en cambio ya resuelve el costo real por tipo de producto.
 2. **Categorias click**: Los items de categoria se muestran pero no agregan productos al carrito
-3. **Budget CSS**: Varios archivos SCSS exceden el limite de 10kB configurado en angular.json (no afecta funcionalidad)
+3. **Budget CSS**: Varios archivos SCSS exceden el limite configurado en angular.json (no afecta funcionalidad)
+4. **Metodos declarados pero no cableados** en la plantilla actual: `aplicarDescuentoVenta()` (descuento a nivel venta), `dividirCuenta()` (solo loguea), `ventaRapida()`, `removeItem()`.
 
 ---
 

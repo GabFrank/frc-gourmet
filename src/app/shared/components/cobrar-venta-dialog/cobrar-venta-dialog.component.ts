@@ -29,6 +29,7 @@ import { CobrarCreditoDialogComponent, CobrarCreditoDialogData } from './cobrar-
 import { CurrencyInputDirective } from '../../directives/currency-input.directive';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Cliente } from '../../../database/entities/personas/cliente.entity';
 import { CreateEditClienteDialogComponent } from '../../../pages/personas/clientes/create-edit-cliente-dialog/create-edit-cliente-dialog.component';
@@ -56,6 +57,18 @@ interface DetalleRow {
   maquinaPosNombre?: string;
   cuentaBancariaId?: number; // cuenta bancaria elegida (transferencia / PIX). Acreditacion instantanea.
   cuentaBancariaNombre?: string;
+}
+
+interface ItemCobroRow {
+  id: number;
+  nombre: string;
+  cantidad: number;
+  netoBruto: number;      // precio con descuento propio, SIN descuento global
+  cubierto: number;       // ya pagado en rondas previas (bruto)
+  saldoItem: number;      // netoBruto - cubierto
+  estado: 'PENDIENTE' | 'PARCIAL' | 'PAGADO';
+  seleccionado: boolean;  // entra en la ronda actual
+  brutoACobrar: number;   // cuánto de su saldo se cobra en esta ronda (input)
 }
 
 interface CurrencyDisplay {
@@ -90,6 +103,7 @@ interface CurrencyDisplay {
     MatTooltipModule,
     MatSnackBarModule,
     MatAutocompleteModule,
+    MatCheckboxModule,
     ReactiveFormsModule,
     CurrencyInputDirective,
   ],
@@ -121,6 +135,21 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
   totalPrincipal = 0;
   saldoPrincipal = 0;
   vueltoPrincipal = 0;
+
+  // ─── Cobro parcial por ítems ───────────────────────────────────────────
+  itemsCobro: ItemCobroRow[] = [];
+  mostrarItems = true;
+  // Estado de cobro ANTES de las líneas de esta sesión (base del factor).
+  pendienteBrutoInicial = 0;
+  saldoDineroInicial = 0;
+  // IDs de PagoDetalle preexistentes (rondas previas) — para separar lo de esta ronda.
+  private preexistingDetalleIds = new Set<number>();
+  // Totales del panel de ítems (pre-computados para el template).
+  brutoSeleccionado = 0;
+  cashSugeridoRonda = 0;
+  hayItemsPendientes = false;
+  estadoDeudaBruta = 0;
+  estadoTotalCubierto = 0;
 
   // Indicates if the current input line will be PAGO or VUELTO
   currentLineType: 'PAGO' | 'VUELTO' = 'PAGO';
@@ -171,6 +200,10 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     this.calculateTotals();
     await this.loadFormasPago();
     await this.loadExistingPago();
+    // Líneas ya persistidas = rondas previas. Base del factor de esta ronda.
+    this.preexistingDetalleIds = new Set(this.detalleRows.map(r => r.id));
+    this.saldoDineroInicial = this.saldoPrincipal;
+    await this.loadEstadoCobro();
     await this.loadClientes();
     this.setupClienteAutocomplete();
     this.refreshClienteLabel();
@@ -327,6 +360,149 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       const monedaEl = document.querySelector('.moneda-select .mat-mdc-select-trigger') as HTMLElement;
       if (monedaEl) monedaEl.focus();
     }, 300);
+  }
+
+  /**
+   * Carga el estado de cobro por ítem (backend, en bruto) y arma el panel.
+   * Los ítems pendientes/parciales quedan seleccionados por defecto con su saldo
+   * → un cobro total no exige tocar el panel.
+   */
+  private async loadEstadoCobro(): Promise<void> {
+    try {
+      const estado: any = await firstValueFrom(this.repositoryService.getEstadoCobroVenta(this.data.venta.id));
+      if (!estado) return;
+      this.pendienteBrutoInicial = Number(estado.pendienteBruto || 0);
+      this.estadoDeudaBruta = Number(estado.deudaBruta || 0);
+      this.estadoTotalCubierto = Number(estado.totalCubierto || 0);
+      const nombrePorId = new Map<number, { nombre: string; cantidad: number }>();
+      for (const it of this.activeItems) {
+        nombrePorId.set(it.id, {
+          nombre: (it as any).ensambladoDescripcion || (it as any).producto?.nombre || `Ítem #${it.id}`,
+          cantidad: Number(it.cantidad || 0),
+        });
+      }
+      this.itemsCobro = (estado.items || []).map((e: any) => {
+        const meta = nombrePorId.get(e.id) || { nombre: `Ítem #${e.id}`, cantidad: 0 };
+        const netoBruto = Number(e.netoBruto || 0);
+        const cubierto = Number(e.montoCubierto || 0);
+        const saldoItem = Math.max(0, netoBruto - cubierto);
+        const pendiente = e.estado !== 'PAGADO' && saldoItem > 0.5;
+        return {
+          id: e.id,
+          nombre: meta.nombre,
+          cantidad: meta.cantidad,
+          netoBruto,
+          cubierto,
+          saldoItem,
+          estado: e.estado,
+          seleccionado: pendiente,
+          brutoACobrar: pendiente ? saldoItem : 0,
+        } as ItemCobroRow;
+      });
+      this.recomputeSeleccionItems();
+    } catch (e) {
+      console.error('Error cargando estado de cobro por ítems:', e);
+    }
+  }
+
+  /** Factor de la ronda: dinero aún adeudado (antes de los pagos de esta sesión,
+   *  incluyendo ajustes globales F9) / bruto pendiente inicial. */
+  private computeFactorRonda(): number {
+    if (this.pendienteBrutoInicial <= 0) return 1;
+    let priorPaidNet = 0;
+    let descuentos = 0;
+    let aumentos = 0;
+    for (const d of this.detalleRows) {
+      const enPrincipal = this.convertToPrincipal(d.valor, d.moneda.id);
+      if (d.tipo === TipoDetalle.DESCUENTO) descuentos += enPrincipal;
+      else if (d.tipo === TipoDetalle.AUMENTO) aumentos += enPrincipal;
+      else if (this.preexistingDetalleIds.has(d.id)) {
+        if (d.tipo === TipoDetalle.PAGO) priorPaidNet += enPrincipal;
+        else if (d.tipo === TipoDetalle.VUELTO) priorPaidNet -= enPrincipal;
+      }
+    }
+    const totalDeuda = this.totalPrincipal + aumentos - descuentos;
+    const saldoAntesRonda = totalDeuda - priorPaidNet;
+    const factor = saldoAntesRonda / this.pendienteBrutoInicial;
+    return factor > 0 ? factor : 1;
+  }
+
+  /** Cash neto (principal) cobrado en las líneas de ESTA sesión. */
+  private computeCashRonda(): number {
+    let cash = 0;
+    for (const d of this.detalleRows) {
+      if (this.preexistingDetalleIds.has(d.id)) continue;
+      const enPrincipal = this.convertToPrincipal(d.valor, d.moneda.id);
+      if (d.tipo === TipoDetalle.PAGO) cash += enPrincipal;
+      else if (d.tipo === TipoDetalle.VUELTO) cash -= enPrincipal;
+    }
+    return cash;
+  }
+
+  /** Recalcula totales del panel de ítems (bruto seleccionado y cash sugerido). */
+  recomputeSeleccionItems(): void {
+    let bruto = 0;
+    for (const it of this.itemsCobro) {
+      if (it.seleccionado) {
+        const v = Math.min(Math.max(0, Number(it.brutoACobrar) || 0), it.saldoItem);
+        it.brutoACobrar = v;
+        bruto += v;
+      }
+    }
+    this.brutoSeleccionado = bruto;
+    this.cashSugeridoRonda = Math.round(bruto * this.computeFactorRonda());
+    this.hayItemsPendientes = this.itemsCobro.some(i => i.saldoItem > 0.5);
+  }
+
+  toggleItemCobro(it: ItemCobroRow): void {
+    if (it.saldoItem <= 0.5) return;
+    it.seleccionado = !it.seleccionado;
+    it.brutoACobrar = it.seleccionado ? it.saldoItem : 0;
+    this.recomputeSeleccionItems();
+  }
+
+  onBrutoACobrarChange(): void {
+    this.recomputeSeleccionItems();
+  }
+
+  /** Precarga el input de valor con el cash sugerido para los ítems elegidos
+   *  (en la moneda seleccionada, respetando el factor). */
+  cobrarSeleccionados(): void {
+    this.recomputeSeleccionItems();
+    if (!this.selectedMoneda || this.cashSugeridoRonda <= 0) return;
+    const enMoneda = this.convertFromPrincipal(this.cashSugeridoRonda, this.selectedMoneda.id);
+    const dec = Number(this.selectedMoneda.decimales) || 0;
+    this.valorInput = dec > 0 ? Math.round(enMoneda * Math.pow(10, dec)) / Math.pow(10, dec) : Math.round(enMoneda);
+    this.currentLineType = 'PAGO';
+  }
+
+  /**
+   * Construye las imputaciones item→bruto para una ronda, derivadas del cash real
+   * cobrado (cash/factor) y distribuidas entre los ítems seleccionados (proporción
+   * a lo que se pidió cobrar de cada uno, capado a su saldo). Así el bruto cubierto
+   * siempre queda consistente con la plata (money = verdad).
+   */
+  private buildImputaciones(items: ItemCobroRow[], cashRonda: number, factor: number): Array<{ ventaItemId: number; brutoCubierto: number; cantidad?: number }> {
+    const seleccion = items.filter(i => i.saldoItem > 0.5 && (i.brutoACobrar || 0) > 0);
+    const pedidoTotal = seleccion.reduce((s, i) => s + Number(i.brutoACobrar || 0), 0);
+    if (pedidoTotal <= 0) return [];
+    const brutoTotalRonda = factor > 0 ? cashRonda / factor : pedidoTotal;
+    const imps: Array<{ ventaItemId: number; brutoCubierto: number; cantidad?: number }> = [];
+    for (const it of seleccion) {
+      const proporcion = Number(it.brutoACobrar || 0) / pedidoTotal;
+      let bruto = brutoTotalRonda * proporcion;
+      if (bruto > it.saldoItem) bruto = it.saldoItem; // cap
+      bruto = Math.round(bruto * 100) / 100;
+      if (bruto > 0) imps.push({ ventaItemId: it.id, brutoCubierto: bruto });
+    }
+    return imps;
+  }
+
+  /** IDs de PagoDetalle PAGO/VUELTO creados en esta sesión (para taguear la ronda). */
+  private roundPagoDetalleIds(): number[] {
+    return this.detalleRows
+      .filter(d => !this.preexistingDetalleIds.has(d.id) && (d.tipo === TipoDetalle.PAGO || d.tipo === TipoDetalle.VUELTO))
+      .map(d => d.id);
   }
 
   private async loadFormasPago(): Promise<void> {
@@ -878,6 +1054,23 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     this.processing = true;
 
     try {
+      // Ronda final de cobro por ítems: cubre TODO lo pendiente (queda PAGADO)
+      // y taguea las líneas de esta sesión. No bloquea el cierre si falla.
+      try {
+        const pendientes = this.itemsCobro.filter(i => i.saldoItem > 0.5);
+        if (pendientes.length) {
+          const imputaciones = pendientes.map(i => ({ ventaItemId: i.id, brutoCubierto: i.saldoItem }));
+          await firstValueFrom(this.repositoryService.registrarCobroParcial(this.data.venta.id, {
+            imputaciones,
+            pagoDetalleIds: this.roundPagoDetalleIds(),
+            cashTotalPrincipal: this.computeCashRonda(),
+            factorAplicado: this.computeFactorRonda(),
+          }));
+        }
+      } catch (e) {
+        console.error('Error registrando ronda final de cobro por ítems (no-blocking):', e);
+      }
+
       const principalFp = this.detalleRows
         .filter(d => d.tipo === TipoDetalle.PAGO)
         .sort((a, b) => this.convertToPrincipal(b.valor, b.moneda.id) - this.convertToPrincipal(a.valor, a.moneda.id))[0]?.formaPago;
@@ -1045,9 +1238,28 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
 
   async cobroParcial(): Promise<void> {
     if (!this.canCobroParcial) return;
-    // Pago already linked to venta on first line addition
-    // Just close the dialog — lines are already persisted
-    this.dialogRef.close({ success: false, partial: true, pago: this.pago });
+    this.processing = true;
+    try {
+      // Registrar la ronda: imputa la plata de esta sesión a los ítems elegidos
+      // (derivado de cash/factor → coherente con el dinero). Las líneas ya están
+      // persistidas; acá se taguean a la ronda y se actualiza la cobertura.
+      const factor = this.computeFactorRonda();
+      const cashRonda = this.computeCashRonda();
+      const imputaciones = this.buildImputaciones(this.itemsCobro, cashRonda, factor);
+      if (imputaciones.length) {
+        await firstValueFrom(this.repositoryService.registrarCobroParcial(this.data.venta.id, {
+          imputaciones,
+          pagoDetalleIds: this.roundPagoDetalleIds(),
+          cashTotalPrincipal: cashRonda,
+          factorAplicado: factor,
+        }));
+      }
+      this.dialogRef.close({ success: false, partial: true, pago: this.pago });
+    } catch (e) {
+      console.error('Error en cobro parcial:', e);
+      this.snackBar.open('No se pudo registrar el cobro parcial', 'Cerrar', { duration: 3500 });
+      this.processing = false;
+    }
   }
 
   onCancel(): void {

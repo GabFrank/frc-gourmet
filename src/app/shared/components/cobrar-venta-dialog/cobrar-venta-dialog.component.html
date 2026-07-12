@@ -66,6 +66,54 @@
       </div>
     </div>
 
+    <!-- Panel de ítems (cobro parcial por ítems) -->
+    <div class="items-cobro-panel" *ngIf="itemsCobro.length > 0">
+      <div class="items-cobro-header" (click)="mostrarItems = !mostrarItems">
+        <div class="items-cobro-title">
+          <mat-icon>{{ mostrarItems ? 'expand_more' : 'chevron_right' }}</mat-icon>
+          <span>Ítems</span>
+        </div>
+        <div class="items-cobro-resumen">
+          <span class="ic-chip ic-total">Total {{ estadoDeudaBruta | number:'1.0-2' }}</span>
+          <span class="ic-chip ic-pagado">Pagado {{ estadoTotalCubierto | number:'1.0-2' }}</span>
+          <span class="ic-chip ic-saldo" [class.ic-saldo-cero]="pendienteBrutoInicial <= 0">Saldo {{ pendienteBrutoInicial | number:'1.0-2' }}</span>
+        </div>
+      </div>
+
+      <div class="items-cobro-list" *ngIf="mostrarItems">
+        <div class="item-cobro-row" *ngFor="let it of itemsCobro"
+             [class.pagado]="it.estado === 'PAGADO'"
+             [class.seleccionado]="it.seleccionado">
+          <mat-checkbox
+            [disabled]="it.saldoItem <= 0.5"
+            [checked]="it.seleccionado"
+            (change)="toggleItemCobro(it)"></mat-checkbox>
+          <div class="item-cobro-info">
+            <span class="item-cobro-nombre">{{ it.nombre }}</span>
+            <span class="item-cobro-sub">
+              <span class="ic-estado" [ngClass]="'ic-estado-' + it.estado.toLowerCase()">{{ it.estado }}</span>
+              · neto {{ it.netoBruto | number:'1.0-2' }}
+              <ng-container *ngIf="it.cubierto > 0.5"> · cubierto {{ it.cubierto | number:'1.0-2' }}</ng-container>
+              · saldo {{ it.saldoItem | number:'1.0-2' }}
+            </span>
+          </div>
+          <div class="item-cobro-input" *ngIf="it.seleccionado && it.saldoItem > 0.5">
+            <input type="number" min="0" [max]="it.saldoItem"
+                   [(ngModel)]="it.brutoACobrar" (ngModelChange)="onBrutoACobrarChange()"
+                   class="bruto-input" />
+          </div>
+        </div>
+      </div>
+
+      <div class="items-cobro-footer" *ngIf="mostrarItems && hayItemsPendientes">
+        <span class="a-cobrar-label">Seleccionado (bruto): <strong>{{ brutoSeleccionado | number:'1.0-2' }}</strong></span>
+        <span class="a-cobrar-label" *ngIf="cashSugeridoRonda !== brutoSeleccionado">A cobrar ahora: <strong>{{ cashSugeridoRonda | number:'1.0-2' }}</strong></span>
+        <button mat-stroked-button class="btn-cobrar-sel" (click)="cobrarSeleccionados()" [disabled]="brutoSeleccionado <= 0">
+          <mat-icon>south</mat-icon> Cargar valor
+        </button>
+      </div>
+    </div>
+
     <!-- Main content: table + selections -->
     <div class="main-content">
       <!-- Left: Payment lines table -->
