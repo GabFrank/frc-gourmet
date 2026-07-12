@@ -32,8 +32,13 @@
    `liveness` de Human — cubren el intent de "profundidad/prueba de vida" y son server-authoritative.
 4. **Modelo:** `faceres` 1024-D. Pendiente medir en el tablet real y ajustar `FACIAL_UMBRAL_SIMILITUD`.
 
-> **Requisito operativo:** correr `npm run models:face` una vez por máquina/deploy para bajar los pesos de
-> Human a `assets/models/human/` (no se versionan). Sin eso, las pantallas de rostro muestran error de carga.
+- **F6 (mejoras de uso)** ✅ — kiosco con **cuenta regresiva de 5s + auto-captura** (si falla: Intentar
+  nuevamente / Tomar foto / Cancelar); **multi-marca diaria configurable** (`FACIAL_PERMITIR_MULTIPLE_DIARIO`,
+  para turnos partidos); **Configuración RRHH en la PWA** (`/rrhh/configuracion`, edición de todos los
+  parámetros por tipo). Fix previo: cámara negra por deadlock del `@ViewChild` del `<video>`.
+
+> **Requisito operativo:** descargar los modelos una vez desde **RRHH → Reconocimiento facial → Descargar
+> modelos** (van a `userData/face-models/`, servidos por HTTP). Sin eso, las pantallas de rostro muestran error.
 
 ## 1. Decisiones tomadas
 

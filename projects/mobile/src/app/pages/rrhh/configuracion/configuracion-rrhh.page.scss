@@ -1,0 +1,43 @@
+.cfg-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.cfg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+
+  .cfg-clave {
+    font-weight: 600;
+    font-size: 14px;
+    word-break: break-word;
+  }
+
+  .cfg-tipo {
+    font-size: 11px;
+    color: var(--text-secondary, #888);
+    border: 1px solid var(--border, #ccc);
+    border-radius: 10px;
+    padding: 1px 8px;
+    white-space: nowrap;
+  }
+}
+
+.cfg-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+}
+
+.cfg-field {
+  width: 100%;
+}
+
+.cfg-actions {
+  display: flex;
+  justify-content: flex-end;
+}

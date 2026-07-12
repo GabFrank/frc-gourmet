@@ -8,10 +8,10 @@
     </span>
   </mat-toolbar>
 
-  <mat-progress-bar *ngIf="procesando" mode="indeterminate"></mat-progress-bar>
+  <mat-progress-bar *ngIf="fase === 'procesando'" mode="indeterminate"></mat-progress-bar>
 
   <!-- Estado inicial: elegir ENTRADA / SALIDA -->
-  <div class="fichaje-inicio" *ngIf="!modo">
+  <div class="fichaje-inicio" *ngIf="fase === 'inicio'">
     <p class="titulo">Marcá tu asistencia</p>
     <div class="botones">
       <button class="big-btn entrada" (click)="iniciar('ENTRADA')">
@@ -23,25 +23,21 @@
         <span>SALIDA</span>
       </button>
     </div>
-
-    <div class="resultado" *ngIf="resultado" [class.ok]="resultado.clase === 'ok'"
-         [class.tardanza]="resultado.clase === 'tardanza'" [class.error]="resultado.clase === 'error'">
-      <mat-icon>{{ resultado.clase === 'error' ? 'error' : (resultado.clase === 'tardanza' ? 'schedule' : 'check_circle') }}</mat-icon>
-      <div class="txt">
-        <strong>{{ resultado.titulo }}</strong>
-        <span>{{ resultado.detalle }}</span>
-      </div>
-    </div>
   </div>
 
-  <!-- Cámara activa para el modo elegido -->
+  <!-- Cámara activa -->
   <div class="fichaje-camara" *ngIf="modo" [class.modo-entrada]="modo === 'ENTRADA'" [class.modo-salida]="modo === 'SALIDA'">
     <p class="modo-label">{{ modo === 'ENTRADA' ? 'Marcando ENTRADA' : 'Marcando SALIDA' }}</p>
+    <p class="hint" *ngIf="fase === 'contando'">Posicionate en el óvalo…</p>
 
     <app-face-capture
+      #captura
       facingMode="user"
-      [captureLabel]="captureLabel"
+      [showCaptureButton]="false"
+      [overlayText]="overlayText"
+      (ready)="onCaptureReady()"
       (captured)="onCaptured($event)"
+      (noFace)="onNoFace()"
     ></app-face-capture>
 
     <div class="resultado" *ngIf="resultado" [class.ok]="resultado.clase === 'ok'"
@@ -53,6 +49,20 @@
       </div>
     </div>
 
-    <button mat-stroked-button class="cancelar" (click)="cancelar()">Cancelar</button>
+    <!-- Fallback tras fallo -->
+    <div class="acciones-fallo" *ngIf="fase === 'fallo'">
+      <button mat-raised-button color="primary" (click)="reintentar()">
+        <mat-icon>replay</mat-icon> Intentar nuevamente
+      </button>
+      <button mat-stroked-button (click)="tomarFoto()">
+        <mat-icon>camera_alt</mat-icon> Tomar foto
+      </button>
+      <button mat-button (click)="cancelar()">Cancelar</button>
+    </div>
+
+    <!-- Cancelar durante la cuenta / preparación -->
+    <button mat-stroked-button class="cancelar" *ngIf="fase === 'preparando' || fase === 'contando'" (click)="cancelar()">
+      Cancelar
+    </button>
   </div>
 </div>

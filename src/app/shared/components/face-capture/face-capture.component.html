@@ -13,6 +13,10 @@
       <mat-spinner diameter="48"></mat-spinner>
       <span>{{ message }}</span>
     </div>
+
+    <div class="overlay countdown" *ngIf="overlayText && status === 'ready'">
+      <span class="big">{{ overlayText }}</span>
+    </div>
   </div>
 
   <p class="status-msg" *ngIf="message && status !== 'loading-models' && status !== 'detecting'"
