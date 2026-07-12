@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, EventEmitter, Input, OnDestroy, OnInit, Output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -19,7 +19,7 @@ import { FaceCapture, FaceRecognitionService } from 'src/app/services/face-recog
   standalone: true,
   imports: [CommonModule, MatButtonModule, MatIconModule, MatProgressSpinnerModule],
 })
-export class FaceCaptureComponent implements OnInit, OnDestroy {
+export class FaceCaptureComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Cámara a usar: 'user' (frontal, enrollment) o 'environment'. */
   @Input() facingMode: 'user' | 'environment' = 'user';
   /** Texto del botón de captura. */
@@ -32,12 +32,13 @@ export class FaceCaptureComponent implements OnInit, OnDestroy {
   @Output() captured = new EventEmitter<FaceCapture>();
   @Output() cameraError = new EventEmitter<string>();
 
+  @ViewChild('video') videoRef?: ElementRef<HTMLVideoElement>;
+
   status: 'init' | 'loading-models' | 'ready' | 'detecting' | 'error' = 'init';
   message = '';
   secureContextOk = true;
 
   private stream: MediaStream | null = null;
-  private videoEl: HTMLVideoElement | null = null;
 
   constructor(private faceService: FaceRecognitionService) {}
 
@@ -49,20 +50,17 @@ export class FaceCaptureComponent implements OnInit, OnDestroy {
       return;
     }
     if (this.modelBasePath) this.faceService.setModelBasePath(this.modelBasePath);
-    await this.startCamera();
     await this.loadModels();
+  }
+
+  ngAfterViewInit(): void {
+    // La cámara arranca acá, cuando el <video> ya existe en el DOM (evita el
+    // deadlock de asignar el stream a una referencia todavía nula).
+    if (this.secureContextOk) this.startCamera();
   }
 
   ngOnDestroy(): void {
     this.stopCamera();
-  }
-
-  /** Registra el elemento <video> del template. */
-  registerVideo(el: HTMLVideoElement): void {
-    this.videoEl = el;
-    if (this.stream && el && !el.srcObject) {
-      el.srcObject = this.stream;
-    }
   }
 
   private async startCamera(): Promise<void> {
@@ -71,7 +69,11 @@ export class FaceCaptureComponent implements OnInit, OnDestroy {
         video: { facingMode: this.facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
       });
-      if (this.videoEl) this.videoEl.srcObject = this.stream;
+      const el = this.videoRef?.nativeElement;
+      if (el) {
+        el.srcObject = this.stream;
+        try { await el.play(); } catch { /* autoplay ya lo maneja */ }
+      }
     } catch (e: any) {
       this.status = 'error';
       this.message = 'No se pudo acceder a la cámara: ' + (e?.message || e);
@@ -96,11 +98,12 @@ export class FaceCaptureComponent implements OnInit, OnDestroy {
 
   /** Captura un frame, detecta el rostro y emite la captura. */
   async capture(): Promise<void> {
-    if (this.status !== 'ready' || !this.videoEl) return;
+    const el = this.videoRef?.nativeElement;
+    if (this.status !== 'ready' || !el) return;
     this.status = 'detecting';
     this.message = 'Detectando rostro…';
     try {
-      const result = await this.faceService.detect(this.videoEl);
+      const result = await this.faceService.detect(el);
       if (!result) {
         this.status = 'ready';
         this.message = 'No se detectó un rostro claro. Acercate y mirá a la cámara.';
