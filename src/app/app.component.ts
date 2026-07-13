@@ -178,6 +178,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   // que ocultamos los controles custom para no duplicar.
   isWindowMaximized = false;
   isMacOS = false;
+  // true cuando el frontend desktop corre servido como web (/admin) en vez de
+  // dentro de Electron. Lo marca el shim HTTP (main.web.ts). Sirve para ocultar
+  // UI que solo tiene sentido en la ventana nativa (controles de titlebar).
+  isWeb = !!(window as any).__FRC_WEB__;
   private windowStateUnsub: (() => void) | null = null;
 
   // Datos enriquecidos del header.

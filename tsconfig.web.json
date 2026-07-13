@@ -1,0 +1,14 @@
+/* Build del frontend desktop servido como web (/admin). Igual que tsconfig.app.json
+   pero con main.web.ts como entry point (instala el shim HTTP en vez del preload). */
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc/web"
+  },
+  "files": [
+    "src/main.web.ts"
+  ],
+  "include": [
+    "src/**/*.d.ts"
+  ]
+}
