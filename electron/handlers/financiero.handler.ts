@@ -16,6 +16,64 @@ import { generarRetiroDelCierre } from './retiro-cierre.util';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
+import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
+import { generarResumenCajaImagenes, buildResumenCajaCaption } from '../utils/resumen-caja-imagen.util';
+import { buildEvolutionConfig } from '../services/notificacion.service';
+import { getEvolutionApiKey } from '../utils/notificaciones-secrets.util';
+import { sendWhatsappMedia, sendWhatsappText, normalizeWhatsappNumber } from '../services/whatsapp.service';
+
+/**
+ * Envía el resumen de cierre de una caja PdV por WhatsApp como imagen(es), si
+ * está activado en PdvConfig y hay un destino configurado. Reutiliza la conexión
+ * Evolution API de la config de Notificaciones. Best-effort: cualquier fallo se
+ * loguea y no se propaga (el cierre nunca depende de esto).
+ */
+async function enviarCierreCajaWhatsapp(dataSource: DataSource, cajaId: number): Promise<void> {
+  const cfg = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+  if (!cfg?.whatsappCierreCajaActivo) return;
+  const destinoRaw = (cfg.whatsappCierreCajaDestino || '').trim();
+  if (!destinoRaw) return;
+
+  const evolution = await buildEvolutionConfig();
+  const apikey = await getEvolutionApiKey();
+  if (!evolution.url || !evolution.instance || !apikey) {
+    console.warn('[cierre-whatsapp] Evolution API no configurada (URL/instancia/apikey); se omite el envío.');
+    return;
+  }
+  const destino = normalizeWhatsappNumber(destinoRaw);
+
+  let generado: Awaited<ReturnType<typeof generarResumenCajaImagenes>> = null;
+  try {
+    generado = await generarResumenCajaImagenes(dataSource, cajaId);
+  } catch (e) {
+    console.warn(`[cierre-whatsapp] no se pudo generar la imagen del cierre ${cajaId}:`, (e as Error)?.message || e);
+  }
+
+  // Fallback: si no se pudo generar la imagen, mandar al menos el texto.
+  if (!generado || !generado.base64List.length) {
+    try {
+      const { computeResumenCaja } = await import('../utils/resumen-caja.utils');
+      const resumen = await computeResumenCaja(dataSource, cajaId);
+      await sendWhatsappText(evolution, apikey, destino, buildResumenCajaCaption(resumen, ''));
+    } catch (e) {
+      console.warn(`[cierre-whatsapp] fallback de texto falló para caja ${cajaId}:`, (e as Error)?.message || e);
+    }
+    return;
+  }
+
+  const caption = buildResumenCajaCaption(generado.resumen, generado.empresaNombre);
+  for (let i = 0; i < generado.base64List.length; i++) {
+    try {
+      await sendWhatsappMedia(evolution, apikey, destino, generado.base64List[i], {
+        fileName: `cierre-caja-${cajaId}${generado.base64List.length > 1 ? `-${i + 1}` : ''}.png`,
+        // El caption va solo en la primera imagen.
+        caption: i === 0 ? caption : '',
+      });
+    } catch (e) {
+      console.warn(`[cierre-whatsapp] falló el envío de la imagen ${i + 1} del cierre ${cajaId}:`, (e as Error)?.message || e);
+    }
+  }
+}
 
 export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Remove this line - get the current user in each handler instead
@@ -559,6 +617,11 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
         } catch (e) {
           console.error(`[update-caja] no se pudo auto-generar el retiro del cierre de la caja ${id}:`, e);
         }
+        // Envío automático del resumen por WhatsApp (best-effort, no bloquea).
+        setImmediate(() => {
+          enviarCierreCajaWhatsapp(dataSource, id)
+            .catch((e) => console.warn(`[update-caja] envío WhatsApp del cierre ${id} falló:`, e?.message || e));
+        });
       }
       return saved;
     } catch (error) {
