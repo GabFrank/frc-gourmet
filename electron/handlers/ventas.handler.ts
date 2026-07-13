@@ -455,6 +455,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             .select('pd_fp.pago_id')
             .from('pagos_detalles', 'pd_fp')
             .where('pd_fp.forma_pago_id IN (:...formasPagoIds)')
+            .andWhere('pd_fp.activo')
             .getQuery();
           return 'pago.id IN ' + subQuery;
         }).setParameter('formasPagoIds', filtros.formasPagoIds);
@@ -467,6 +468,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             .select('pd_m.pago_id')
             .from('pagos_detalles', 'pd_m')
             .where('pd_m.moneda_id IN (:...monedaIds)')
+            .andWhere('pd_m.activo')
             .getQuery();
           return 'pago.id IN ' + subQuery;
         }).setParameter('monedaIds', filtros.monedaIds);
@@ -480,6 +482,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             .from('pagos_detalles', 'pd_v')
             .where('pd_v.moneda_id = :monedaValorId')
             .andWhere('pd_v.tipo = :tipoPago')
+            .andWhere('pd_v.activo')
             .groupBy('pd_v.pago_id');
           if (filtros.valorMin != null) {
             subQuery = subQuery.having('SUM(pd_v.valor) >= :valorMin');
@@ -504,6 +507,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             .select('pd_a.pago_id')
             .from('pagos_detalles', 'pd_a')
             .where('pd_a.tipo = :tipoAumento')
+            .andWhere('pd_a.activo')
             .getQuery();
           return 'pago.id IN ' + subQuery;
         }).setParameter('tipoAumento', 'AUMENTO');
@@ -573,7 +577,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           pd.moneda_id as "monedaId"
         FROM ventas v
         LEFT JOIN pagos p ON v.pago_id = p.id
-        LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id
+        LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.activo
         WHERE v.caja_id = ? AND v.estado = 'CONCLUIDA'
         GROUP BY pd.moneda_id
       `, [cajaId]);
