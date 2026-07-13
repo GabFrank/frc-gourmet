@@ -68,6 +68,30 @@
               ],
               "outputHashing": "all"
             },
+            "web": {
+              "outputPath": "dist/frc-gourmet-web",
+              "baseHref": "/admin/",
+              "tsConfig": "tsconfig.web.json",
+              "fileReplacements": [
+                {
+                  "replace": "src/main.ts",
+                  "with": "src/main.web.ts"
+                }
+              ],
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "5mb",
+                  "maximumError": "8mb"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "32kb",
+                  "maximumError": "80kb"
+                }
+              ],
+              "outputHashing": "all"
+            },
             "development": {
               "buildOptimizer": false,
               "optimization": false,

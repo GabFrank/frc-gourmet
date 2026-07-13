@@ -113,9 +113,10 @@
       </button>
     </mat-menu>
 
-    <!-- Window controls (custom titlebar). Solo Win/Linux — en macOS los
-         semáforos nativos quedan visibles (titleBarStyle:hiddenInset). -->
-    <div class="window-controls" *ngIf="!isMacOS">
+    <!-- Window controls (custom titlebar). Solo Win/Linux en Electron — en macOS
+         los semáforos nativos quedan visibles (titleBarStyle:hiddenInset) y en la
+         versión web (/admin) no hay ventana que controlar. -->
+    <div class="window-controls" *ngIf="!isMacOS && !isWeb">
       <button type="button" class="window-ctrl-btn"
               (click)="minimizeWindow()"
               aria-label="Minimizar"
