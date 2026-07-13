@@ -27,6 +27,7 @@ import { In as TIn } from 'typeorm';
 import { Venta } from '../../src/app/database/entities/ventas/venta.entity';
 import { VentaItem, EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
 import { VentaItemAdicional } from '../../src/app/database/entities/ventas/venta-item-adicional.entity';
+import { VentaItemSabor } from '../../src/app/database/entities/ventas/venta-item-sabor.entity';
 import { VentaItemObservacion } from '../../src/app/database/entities/ventas/venta-item-observacion.entity';
 import { VentaItemIngredienteModificacion } from '../../src/app/database/entities/ventas/venta-item-ingrediente-modificacion.entity';
 import { Printer } from '../../src/app/database/entities/printer.entity';
@@ -278,6 +279,9 @@ export async function printComandaInternal(
   // darle a cada una el énfasis que corresponde en el ticket de cocina.
   const removidosByItem = new Map<number, string[]>();
   const cambiosByItem = new Map<number, string[]>();
+  // Pizzas (producto con variación): tamaño + sabores por mitad, para imprimirlos
+  // en grande y separados en la comanda.
+  const pizzaByItem = new Map<number, { presentacion: string; sabores: { nombre: string; proporcion: number }[] }>();
   const pushMap = (m: Map<number, string[]>, k: number, v: string) => {
     if (!m.has(k)) m.set(k, []);
     m.get(k)!.push(v);
@@ -321,6 +325,24 @@ export async function printComandaInternal(
           const rep = String((m as any).ingredienteReemplazo?.nombre || '').toUpperCase();
           pushMap(cambiosByItem, iid, rep ? `${ing} POR ${rep}` : ing);
         }
+      }
+
+      // Sabores de pizza (VentaItemSabor): tamaño + cada mitad, para la comanda.
+      const vsabores = await dataSource.getRepository(VentaItemSabor).find({
+        where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+        relations: ['ventaItem', 'recetaPresentacion', 'recetaPresentacion.sabor', 'recetaPresentacion.presentacion'],
+      });
+      for (const vs of vsabores) {
+        const iid = (vs as any).ventaItem?.id;
+        const saborNombre = String((vs as any).recetaPresentacion?.sabor?.nombre || '').toUpperCase().trim();
+        if (!iid || !saborNombre) continue;
+        if (!pizzaByItem.has(iid)) {
+          pizzaByItem.set(iid, {
+            presentacion: String((vs as any).recetaPresentacion?.presentacion?.nombre || '').toUpperCase().trim(),
+            sabores: [],
+          });
+        }
+        pizzaByItem.get(iid)!.sabores.push({ nombre: saborNombre, proporcion: Number((vs as any).proporcion) || 0 });
       }
     } catch (e) {
       // Los modificadores son opcionales: si fallan, se imprime la comanda igual.
@@ -457,7 +479,19 @@ export async function printComandaInternal(
       const nombre = ((v as any).producto?.nombre || 'PRODUCTO').toUpperCase();
       const qty = Number(v.cantidad || 1);
       lines.push(ticketText(`${qty}  ${nombre}`, { bold: true, size: 'tall' }));
-      if (v.ensambladoDescripcion) {
+      const pizza = pizzaByItem.get(v.id);
+      if (pizza && pizza.sabores.length) {
+        // Pizza: tamaño y cada mitad en GRANDE, uno por línea.
+        const tamano = `${nombre} ${pizza.presentacion}`.trim();
+        lines.push(ticketText(tamano, { bold: true, size: 'tall' }));
+        const n = pizza.sabores.length;
+        const iguales = pizza.sabores.every(s => Math.abs(s.proporcion - pizza.sabores[0].proporcion) < 0.001);
+        for (const s of pizza.sabores) {
+          let frac = '';
+          if (n > 1) frac = iguales ? `1/${n}` : `${Math.round(s.proporcion * 100)}%`;
+          lines.push(ticketText(`${frac} ${s.nombre}`.trim(), { bold: true, size: 'tall' }));
+        }
+      } else if (v.ensambladoDescripcion) {
         lines.push(ticketText(`   ${String(v.ensambladoDescripcion).toUpperCase()}`));
       }
       // QUITAR — lo más crítico en cocina: se imprime invertido (fondo negro).
