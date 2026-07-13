@@ -102,7 +102,9 @@ export async function computeResumenCaja(dataSource: DataSource, cajaId: number)
   for (const venta of ventas) {
     if (!venta.pago?.id) continue;
     const detalles = await pagoDetalleRepo.find({
-      where: { pago: { id: venta.pago.id } },
+      // `activo: true` excluye líneas anuladas por `anularCobroParcial` (soft-delete),
+      // que de otro modo inflan el efectivo esperado y generan faltantes falsos.
+      where: { pago: { id: venta.pago.id }, activo: true },
       relations: ['moneda', 'formaPago'],
     });
     for (const d of detalles) {
