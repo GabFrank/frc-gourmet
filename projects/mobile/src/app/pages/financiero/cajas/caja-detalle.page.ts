@@ -12,11 +12,17 @@ function fmt(v: any): string {
   return Number(v || 0).toLocaleString('es-PY', { maximumFractionDigits: 2 });
 }
 
-interface LineaMonto {
-  label: string;
-  sub?: string;
-  valorFmt: string;
-  clase?: 'pos' | 'neg';
+interface MontoItem { simbolo: string; valorFmt: string; }
+interface GrupoForma { forma: string; items: MontoItem[]; }
+interface LineaSimple { label: string; valorFmt: string; }
+interface RetiroGrupo { titulo: string; detalles: LineaSimple[]; }
+interface ArqueoMoneda {
+  simbolo: string;
+  apertura: string;
+  cierre?: string;
+  esperado: string;
+  diferencia?: string;
+  difClase?: 'pos' | 'neg';
 }
 
 /**
@@ -53,11 +59,15 @@ export class CajaDetallePage implements OnInit {
   abierta = false;
   cantidadVentas = 0;
 
-  ventasPorForma: LineaMonto[] = [];
-  ventasPorMoneda: LineaMonto[] = [];
-  conteoApertura: LineaMonto[] = [];
-  conteoCierre: LineaMonto[] = [];
-  diferencias: LineaMonto[] = [];
+  ventasForma: GrupoForma[] = [];
+  totalVentas: MontoItem[] = [];
+  descuentos: MontoItem[] = [];
+  aumentos: MontoItem[] = [];
+  gastos: LineaSimple[] = [];
+  totalGastos: MontoItem[] = [];
+  retiros: RetiroGrupo[] = [];
+  totalRetiros: MontoItem[] = [];
+  arqueo: ArqueoMoneda[] = [];
 
   puedeCerrar = false;
   avisoNoCierre = '';
@@ -85,39 +95,80 @@ export class CajaDetallePage implements OnInit {
 
       const r: any = resumen || {};
       this.cantidadVentas = Number(r.cantidadVentas || 0);
-      this.ventasPorForma = (r.ventasPorFormaPago || []).map((x: any) => ({
-        label: String(x.formaPago || 'SIN FORMA').toUpperCase(),
-        sub: x.monedaSimbolo,
-        valorFmt: `${fmt(x.total)} ${x.monedaSimbolo || ''}`,
-      }));
-      this.ventasPorMoneda = (r.ventasTotalPorMoneda || []).map((x: any) => ({
-        label: String(x.monedaSimbolo || '').toUpperCase(),
-        valorFmt: fmt(x.total),
-      }));
-      this.conteoApertura = (r.conteoApertura || []).map((x: any) => ({
-        label: String(x.monedaDenominacion || x.monedaSimbolo || '').toUpperCase(),
-        valorFmt: `${fmt(x.total)} ${x.monedaSimbolo || ''}`,
-      }));
-      this.conteoCierre = (r.conteoCierre || []).map((x: any) => ({
-        label: String(x.monedaDenominacion || x.monedaSimbolo || '').toUpperCase(),
-        valorFmt: `${fmt(x.total)} ${x.monedaSimbolo || ''}`,
+
+      // Mapa monedaId → símbolo, armado con todas las filas que lo traen.
+      const simbolo: { [id: number]: string } = {};
+      const setSim = (id: any, s: any) => {
+        if (id != null && s && !simbolo[Number(id)]) simbolo[Number(id)] = s;
+      };
+      for (const x of r.conteoApertura || []) setSim(x.monedaId, x.monedaSimbolo);
+      for (const x of r.conteoCierre || []) setSim(x.monedaId, x.monedaSimbolo);
+      for (const x of r.ventasTotalPorMoneda || []) setSim(x.monedaId, x.monedaSimbolo);
+      for (const x of r.ventasPorFormaPago || []) setSim(x.monedaId, x.monedaSimbolo);
+      for (const g of r.gastos || []) setSim(g.monedaId, g.monedaSimbolo);
+      for (const rt of r.retiros || []) for (const d of rt.detalles || []) setSim(d.monedaId, d.monedaSimbolo);
+      const sim = (id: any) => simbolo[Number(id)] || '';
+      const mapAItems = (m: any): MontoItem[] =>
+        Object.keys(m || {}).map(Number).filter((id) => Number(m[id]))
+          .map((id) => ({ simbolo: sim(id), valorFmt: fmt(m[id]) }));
+
+      // Ventas por forma de pago, agrupadas (una forma, N monedas debajo).
+      const grupos = new Map<string, MontoItem[]>();
+      for (const x of r.ventasPorFormaPago || []) {
+        const forma = String(x.formaPago || 'SIN FORMA').toUpperCase();
+        if (!grupos.has(forma)) grupos.set(forma, []);
+        grupos.get(forma)!.push({ simbolo: x.monedaSimbolo || '', valorFmt: fmt(x.total) });
+      }
+      this.ventasForma = [...grupos].map(([forma, items]) => ({ forma, items }));
+      this.totalVentas = (r.ventasTotalPorMoneda || []).map((x: any) => ({
+        simbolo: x.monedaSimbolo || '', valorFmt: fmt(x.total),
       }));
 
-      // Diferencias por moneda (solo con sentido en caja cerrada).
-      const simbolo: { [id: number]: string } = {};
-      for (const x of r.conteoApertura || []) simbolo[Number(x.monedaId)] = x.monedaSimbolo || '';
-      for (const x of r.ventasTotalPorMoneda || []) simbolo[Number(x.monedaId)] = x.monedaSimbolo || simbolo[Number(x.monedaId)] || '';
-      const dif: { [id: number]: number } = r.diferenciaPorMoneda || {};
-      if (!this.abierta) {
-        this.diferencias = Object.keys(dif).map((k) => {
-          const v = Number(dif[Number(k)] || 0);
-          return {
-            label: (simbolo[Number(k)] || '').toUpperCase() || `Moneda ${k}`,
-            valorFmt: fmt(v),
-            clase: v > 0 ? 'pos' : v < 0 ? 'neg' : undefined,
-          } as LineaMonto;
-        });
-      }
+      // Descuentos / aumentos.
+      this.descuentos = mapAItems(r.descuentosPorMoneda);
+      this.aumentos = mapAItems(r.aumentosPorMoneda);
+
+      // Gastos + total por moneda.
+      this.gastos = (r.gastos || []).map((g: any) => ({
+        label: String(g.descripcion || g.categoria || 'GASTO').toUpperCase(),
+        valorFmt: `${fmt(g.monto)} ${g.monedaSimbolo || ''}`.trim(),
+      }));
+      const gastoTot: { [id: number]: number } = {};
+      for (const g of r.gastos || []) gastoTot[Number(g.monedaId)] = (gastoTot[Number(g.monedaId)] || 0) + Number(g.monto || 0);
+      this.totalGastos = mapAItems(gastoTot);
+
+      // Retiros (agrupados por retiro) + total por moneda.
+      this.retiros = (r.retiros || []).map((rt: any) => ({
+        titulo: `RETIRO N° ${rt.id}${rt.responsable ? ' · ' + String(rt.responsable).toUpperCase() : ''}`,
+        detalles: (rt.detalles || []).map((d: any) => ({
+          label: String(d.monedaDenominacion || d.monedaSimbolo || '').toUpperCase(),
+          valorFmt: `${fmt(d.monto)} ${d.monedaSimbolo || ''}`.trim(),
+        })),
+      }));
+      const retiroTot: { [id: number]: number } = {};
+      for (const rt of r.retiros || []) for (const d of rt.detalles || []) retiroTot[Number(d.monedaId)] = (retiroTot[Number(d.monedaId)] || 0) + Number(d.monto || 0);
+      this.totalRetiros = mapAItems(retiroTot);
+
+      // Arqueo por moneda: apertura / cierre / esperado / diferencia.
+      const aperturaMap: { [id: number]: number } = {};
+      for (const x of r.conteoApertura || []) aperturaMap[Number(x.monedaId)] = Number(x.total || 0);
+      const cierreMap: { [id: number]: number } = {};
+      for (const x of r.conteoCierre || []) cierreMap[Number(x.monedaId)] = Number(x.total || 0);
+      const esperadoMap: { [id: number]: number } = r.esperadoPorMoneda || {};
+      const difMap: { [id: number]: number } = r.diferenciaPorMoneda || {};
+      const arqueoIds = new Set<number>();
+      [aperturaMap, cierreMap, esperadoMap, difMap].forEach((m) => Object.keys(m).forEach((k) => arqueoIds.add(Number(k))));
+      this.arqueo = [...arqueoIds].map((id) => {
+        const v = Number(difMap[id] || 0);
+        return {
+          simbolo: (sim(id) || `Moneda ${id}`).toUpperCase(),
+          apertura: fmt(aperturaMap[id] || 0),
+          cierre: this.abierta ? undefined : fmt(cierreMap[id] || 0),
+          esperado: fmt(esperadoMap[id] || 0),
+          diferencia: this.abierta ? undefined : fmt(v),
+          difClase: v > 0 ? 'pos' : v < 0 ? 'neg' : undefined,
+        } as ArqueoMoneda;
+      });
 
       // Cerrar: solo si está abierta y el usuario actual es quien la abrió.
       if (this.abierta) {

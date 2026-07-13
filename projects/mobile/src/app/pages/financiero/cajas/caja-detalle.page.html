@@ -35,50 +35,98 @@
       </div>
     </div>
 
-    <!-- Ventas -->
+    <!-- Ventas (total por moneda) -->
     <section class="block">
       <h3 class="block-title">Ventas ({{ cantidadVentas }})</h3>
-      <div class="line" *ngFor="let l of ventasPorMoneda">
-        <span class="line-label">{{ l.label }}</span>
+      <div class="line" *ngFor="let l of totalVentas">
+        <span class="line-label">{{ l.simbolo }}</span>
         <span class="line-value">{{ l.valorFmt }}</span>
       </div>
-      <p *ngIf="!ventasPorMoneda.length" class="crud-empty">Sin ventas.</p>
+      <p *ngIf="!totalVentas.length" class="crud-empty">Sin ventas.</p>
     </section>
 
-    <!-- Por forma de pago -->
-    <section class="block" *ngIf="ventasPorForma.length">
+    <!-- Por forma de pago (agrupado) -->
+    <section class="block" *ngIf="ventasForma.length">
       <h3 class="block-title">Por forma de pago</h3>
-      <div class="line" *ngFor="let l of ventasPorForma">
-        <span class="line-label">{{ l.label }}</span>
-        <span class="line-value">{{ l.valorFmt }}</span>
+      <ng-container *ngFor="let g of ventasForma">
+        <div class="line" *ngIf="g.items.length === 1">
+          <span class="line-label">{{ g.forma }}</span>
+          <span class="line-value">{{ g.items[0].valorFmt }} {{ g.items[0].simbolo }}</span>
+        </div>
+        <ng-container *ngIf="g.items.length > 1">
+          <div class="group-head">{{ g.forma }}</div>
+          <div class="line sub" *ngFor="let it of g.items">
+            <span class="line-label">{{ it.simbolo }}</span>
+            <span class="line-value">{{ it.valorFmt }}</span>
+          </div>
+        </ng-container>
+      </ng-container>
+    </section>
+
+    <!-- Descuentos / Aumentos -->
+    <section class="block" *ngIf="descuentos.length || aumentos.length">
+      <h3 class="block-title">Descuentos / Aumentos</h3>
+      <div class="line" *ngFor="let l of descuentos">
+        <span class="line-label">Descuento</span>
+        <span class="line-value neg">{{ l.valorFmt }} {{ l.simbolo }}</span>
+      </div>
+      <div class="line" *ngFor="let l of aumentos">
+        <span class="line-label">Aumento</span>
+        <span class="line-value pos">{{ l.valorFmt }} {{ l.simbolo }}</span>
       </div>
     </section>
 
-    <!-- Conteo apertura -->
-    <section class="block" *ngIf="conteoApertura.length">
-      <h3 class="block-title">Conteo de apertura</h3>
-      <div class="line" *ngFor="let l of conteoApertura">
+    <!-- Gastos -->
+    <section class="block" *ngIf="gastos.length">
+      <h3 class="block-title">Gastos</h3>
+      <div class="line" *ngFor="let l of gastos">
         <span class="line-label">{{ l.label }}</span>
         <span class="line-value">{{ l.valorFmt }}</span>
       </div>
-    </section>
-
-    <!-- Conteo cierre -->
-    <section class="block" *ngIf="conteoCierre.length">
-      <h3 class="block-title">Conteo de cierre</h3>
-      <div class="line" *ngFor="let l of conteoCierre">
-        <span class="line-label">{{ l.label }}</span>
-        <span class="line-value">{{ l.valorFmt }}</span>
+      <div class="line total" *ngFor="let t of totalGastos">
+        <span class="line-label">Total gastos</span>
+        <span class="line-value">{{ t.valorFmt }} {{ t.simbolo }}</span>
       </div>
     </section>
 
-    <!-- Diferencias -->
-    <section class="block" *ngIf="diferencias.length">
-      <h3 class="block-title">Diferencia</h3>
-      <div class="line" *ngFor="let l of diferencias">
-        <span class="line-label">{{ l.label }}</span>
-        <span class="line-value" [class.pos]="l.clase === 'pos'" [class.neg]="l.clase === 'neg'">{{ l.valorFmt }}</span>
+    <!-- Retiros -->
+    <section class="block" *ngIf="retiros.length">
+      <h3 class="block-title">Retiros</h3>
+      <ng-container *ngFor="let rt of retiros">
+        <div class="group-head">{{ rt.titulo }}</div>
+        <div class="line sub" *ngFor="let d of rt.detalles">
+          <span class="line-label">{{ d.label }}</span>
+          <span class="line-value">{{ d.valorFmt }}</span>
+        </div>
+      </ng-container>
+      <div class="line total" *ngFor="let t of totalRetiros">
+        <span class="line-label">Total retiros</span>
+        <span class="line-value">{{ t.valorFmt }} {{ t.simbolo }}</span>
       </div>
+    </section>
+
+    <!-- Arqueo por moneda -->
+    <section class="block" *ngIf="arqueo.length">
+      <h3 class="block-title">Arqueo</h3>
+      <ng-container *ngFor="let a of arqueo">
+        <div class="group-head">{{ a.simbolo }}</div>
+        <div class="line sub">
+          <span class="line-label">Apertura</span>
+          <span class="line-value">{{ a.apertura }}</span>
+        </div>
+        <div class="line sub" *ngIf="a.cierre !== undefined">
+          <span class="line-label">Cierre</span>
+          <span class="line-value">{{ a.cierre }}</span>
+        </div>
+        <div class="line sub">
+          <span class="line-label">Esperado</span>
+          <span class="line-value">{{ a.esperado }}</span>
+        </div>
+        <div class="line sub" *ngIf="a.diferencia !== undefined">
+          <span class="line-label">Diferencia</span>
+          <span class="line-value" [class.pos]="a.difClase === 'pos'" [class.neg]="a.difClase === 'neg'">{{ a.diferencia }}</span>
+        </div>
+      </ng-container>
     </section>
 
     <!-- Cerrar -->
