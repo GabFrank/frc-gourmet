@@ -19,7 +19,7 @@ const RRHH_ITEMS: SectionItem[] = [
   { label: 'Bonos', icon: 'card_giftcard', path: '/rrhh/bonos', enabled: true },
   { label: 'Aguinaldos', icon: 'star', path: '/rrhh/aguinaldos', enabled: true },
   { label: 'Asistencias', icon: 'fact_check', path: '/rrhh/asistencias', enabled: true },
-  { label: 'Fichaje facial', icon: 'face', path: '/rrhh/fichaje', enabled: true },
+  { label: 'Marcar Asistencia', icon: 'how_to_reg', path: '/rrhh/fichaje', enabled: true },
   { label: 'Configuración RRHH', icon: 'tune', path: '/rrhh/configuracion', enabled: true },
   { label: 'Horas extra', icon: 'more_time', path: '/rrhh/horas-extra', enabled: true },
   { label: 'Permisos', icon: 'verified_user', path: '/rrhh/permisos', enabled: true },

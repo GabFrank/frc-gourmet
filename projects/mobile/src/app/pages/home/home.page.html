@@ -14,6 +14,11 @@
     <mat-icon>install_mobile</mat-icon> Instalar app
   </button>
 
+  <a class="asistencia-btn" routerLink="/rrhh/fichaje">
+    <mat-icon>how_to_reg</mat-icon>
+    <span>Marcar Asistencia</span>
+  </a>
+
   <section class="quick">
     <a *ngFor="let a of accesos$ | async" class="quick-card" [routerLink]="a.path">
       <mat-icon>{{ a.icon }}</mat-icon>

@@ -45,6 +45,7 @@ const SEED_CONFIG: SeedItem[] = [
   { clave: 'FACIAL_LIVENESS_OBLIGATORIO', valor: 'true', tipo: ConfiguracionRrhhTipo.BOOLEAN, descripcion: 'Exigir prueba de vida (antispoof + liveness) para aceptar el fichaje facial' },
   { clave: 'FACIAL_LIVENESS_MIN', valor: '0.5', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Score minimo (0..1) de antispoof y liveness para considerar el rostro como real/vivo' },
   { clave: 'FACIAL_PERMITIR_MULTIPLE_DIARIO', valor: 'false', tipo: ConfiguracionRrhhTipo.BOOLEAN, descripcion: 'Permitir que un funcionario fiche mas de una entrada/salida por dia (turnos partidos)' },
+  { clave: 'FACIAL_GEOCERCA_ACTIVA', valor: 'false', tipo: ConfiguracionRrhhTipo.BOOLEAN, descripcion: 'Exigir que el dispositivo este dentro del radio de la empresa (ubicacion en Config Empresa) para permitir el fichaje' },
 ];
 
 export async function seedConfiguracionRrhh(dataSource: DataSource) {

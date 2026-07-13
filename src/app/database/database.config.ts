@@ -239,6 +239,7 @@ import { CuentaClienteTelefonoNullable1783740826975 } from './migrations/1783740
 import { AddUbicacionPedidoOnline1783741165054 } from './migrations/1783741165054-AddUbicacionPedidoOnline';
 import { AddCobroParcialPorItems1783805921597 } from './migrations/1783805921597-AddCobroParcialPorItems';
 import { AddReconocimientoFacial1783808912909 } from './migrations/1783808912909-AddReconocimientoFacial';
+import { AddUbicacionEmpresa1783915694893 } from './migrations/1783915694893-AddUbicacionEmpresa';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -607,6 +608,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddUbicacionPedidoOnline1783741165054,
     AddCobroParcialPorItems1783805921597,
     AddReconocimientoFacial1783808912909,
+    AddUbicacionEmpresa1783915694893,
   ];
 }
 

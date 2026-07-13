@@ -4,6 +4,7 @@ import { FuncionarioRostro } from '../../src/app/database/entities/rrhh/funciona
 import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.entity';
 import { FuncionarioTurno } from '../../src/app/database/entities/rrhh/funcionario-turno.entity';
 import { Asistencia } from '../../src/app/database/entities/rrhh/asistencia.entity';
+import { Empresa } from '../../src/app/database/entities/sistema/empresa.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { ensurePermission } from '../utils/auth.utils';
@@ -76,6 +77,17 @@ function diffHoras(horaEntrada: string, horaSalida: string): number {
   return +(mins / 60).toFixed(2);
 }
 
+/** Distancia en metros entre dos coordenadas (Haversine). */
+function distanciaMetros(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000; // radio terrestre en metros
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export function registerAsistenciaFacialHandlers(
   dataSource: DataSource,
   getCurrentUser: () => Usuario | null,
@@ -138,8 +150,9 @@ export function registerAsistenciaFacialHandlers(
   });
 
   // --- Fichaje: identificar por rostro y marcar entrada/salida ---
+  // Disponible para cualquier usuario logueado (la cara identifica a la persona y
+  // la geocerca valida el lugar). Requiere sesión válida (JWT en modo server).
   ipcMain.handle('fichar-facial', async (_e, payload: any) => {
-    await ensurePermission(dataSource, getCurrentUser, 'RRHH_ASISTENCIA_REGISTRAR');
     const query = payload?.embedding;
     if (!Array.isArray(query) || !query.length) throw new Error('Embedding facial invalido');
 
@@ -152,6 +165,27 @@ export function registerAsistenciaFacialHandlers(
       const live = Number(payload?.live);
       const ok = Number.isFinite(real) && Number.isFinite(live) && real >= livenessMin && live >= livenessMin;
       if (!ok) return { matched: false, reason: 'LIVENESS' };
+    }
+
+    // Geocerca — el dispositivo debe estar dentro del radio de la empresa.
+    const geocercaActiva = await getConfigBoolean(dataSource, 'FACIAL_GEOCERCA_ACTIVA', false);
+    if (geocercaActiva) {
+      const empresa = await dataSource.getRepository(Empresa).findOne({ where: {}, order: { id: 'ASC' } });
+      const empLat = empresa?.latitud != null ? Number(empresa.latitud) : null;
+      const empLng = empresa?.longitud != null ? Number(empresa.longitud) : null;
+      // Solo se puede exigir si la empresa tiene ubicación configurada.
+      if (empLat != null && empLng != null) {
+        const lat = Number(payload?.lat);
+        const lng = Number(payload?.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          return { matched: false, reason: 'SIN_UBICACION' };
+        }
+        const radio = empresa?.radioFichajeMetros != null ? Number(empresa.radioFichajeMetros) : 200;
+        const dist = distanciaMetros(lat, lng, empLat, empLng);
+        if (dist > radio) {
+          return { matched: false, reason: 'FUERA_UBICACION', distancia: Math.round(dist), radio };
+        }
+      }
     }
 
     // Match 1:N (coseno) — mejor por funcionario + margen contra el 2º

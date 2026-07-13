@@ -43,6 +43,7 @@ export class ConfiguracionFacialComponent implements OnInit, OnDestroy {
   livenessObligatorio = true;
   livenessMin = 0.5;
   permitirMultiple = false;
+  geocercaActiva = false;
 
   private unsub: (() => void) | null = null;
 
@@ -86,6 +87,7 @@ export class ConfiguracionFacialComponent implements OnInit, OnDestroy {
       this.livenessObligatorio = String(set('FACIAL_LIVENESS_OBLIGATORIO')).toLowerCase() === 'true';
       this.livenessMin = parseFloat(set('FACIAL_LIVENESS_MIN')) || 0.5;
       this.permitirMultiple = String(set('FACIAL_PERMITIR_MULTIPLE_DIARIO')).toLowerCase() === 'true';
+      this.geocercaActiva = String(set('FACIAL_GEOCERCA_ACTIVA')).toLowerCase() === 'true';
     } catch (e: any) {
       this.snackBar.open('Error cargando configuración: ' + (e?.message || e), 'Cerrar', { duration: 4000 });
     }
@@ -113,6 +115,7 @@ export class ConfiguracionFacialComponent implements OnInit, OnDestroy {
       await this.guardarClave('FACIAL_LIVENESS_OBLIGATORIO', this.livenessObligatorio ? 'true' : 'false');
       await this.guardarClave('FACIAL_LIVENESS_MIN', String(this.livenessMin));
       await this.guardarClave('FACIAL_PERMITIR_MULTIPLE_DIARIO', this.permitirMultiple ? 'true' : 'false');
+      await this.guardarClave('FACIAL_GEOCERCA_ACTIVA', this.geocercaActiva ? 'true' : 'false');
       this.snackBar.open('Configuración guardada', 'Cerrar', { duration: 2500 });
     } catch (e: any) {
       this.snackBar.open('Error al guardar: ' + (e?.message || e), 'Cerrar', { duration: 4000 });
