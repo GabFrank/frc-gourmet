@@ -611,40 +611,59 @@ mat-dialog-actions {
   color: #80cbc4;
 }
 
-/* ─── Panel de ítems (cobro parcial por ítems) ───────────────────────────── */
-.items-cobro-panel {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  margin: 8px 0;
-  background: rgba(255, 255, 255, 0.02);
-  overflow: hidden;
-}
-
-.items-cobro-header {
+/* ─── Cobro parcial por ítems: tabs del panel izquierdo ──────────────────── */
+.left-tabs {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 10px;
-  cursor: pointer;
-  user-select: none;
+  gap: 4px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 
-  &:hover { background: rgba(255, 255, 255, 0.04); }
-
-  .items-cobro-title {
+  .left-tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 6px 12px;
+    cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 4px;
-    color: rgba(255, 255, 255, 0.85);
-    font-weight: 600;
-    font-size: 0.85rem;
+    gap: 6px;
 
-    mat-icon { font-size: 20px; width: 20px; height: 20px; }
+    &:hover { color: rgba(255, 255, 255, 0.85); }
+    &.active {
+      color: #fff;
+      border-bottom-color: #4fc3f7;
+    }
+    .tab-count {
+      font-size: 0.68rem;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      padding: 0 6px;
+    }
+    .tab-saldo {
+      font-size: 0.66rem;
+      font-weight: 600;
+      color: #ffb74d;
+      background: rgba(255, 167, 38, 0.16);
+      border-radius: 8px;
+      padding: 0 6px;
+    }
   }
+}
+
+.items-cobro-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
 .items-cobro-resumen {
   display: flex;
   gap: 6px;
+  padding: 2px 0 6px;
 
   .ic-chip {
     font-size: 0.72rem;
@@ -660,7 +679,8 @@ mat-dialog-actions {
 }
 
 .items-cobro-list {
-  max-height: 190px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
