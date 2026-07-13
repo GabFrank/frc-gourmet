@@ -108,17 +108,30 @@ export async function sendWhatsappText(
   return { id };
 }
 
-/** Verifica el estado de conexion de la instancia (connectionState). */
-export async function fetchEvolutionState(cfg: EvolutionConfig, apikey: string): Promise<{ state: string }> {
-  assertEvolutionConfig(cfg, apikey);
-  // GET via postJson no aplica; hacemos un GET simple.
+export interface EvolutionStateResult {
+  /** 'open' | 'close' | 'connecting' | 'unknown' | 'error' */
+  state: string;
+  /** true solo si la instancia esta conectada (state === 'open'). */
+  ok: boolean;
+  /** true si el servidor respondio algo (aunque sea un error HTTP). */
+  reachable: boolean;
+  httpStatus?: number;
+  error?: string;
+  /** Mensaje accionable para el operador segun el tipo de fallo. */
+  hint?: string;
+}
+
+function getJson(
+  endpoint: string,
+  apikey: string,
+  timeoutMs = 10000,
+): Promise<{ status: number; json: any; raw: string }> {
   return new Promise((resolve, reject) => {
     let parsed: URL;
-    const endpoint = `${baseUrl(cfg)}/instance/connectionState/${encodeURIComponent(cfg.instance)}`;
     try {
       parsed = new URL(endpoint);
     } catch {
-      reject(new Error(`URL de Evolution invalida: ${endpoint}`));
+      reject(new Error(`URL invalida: ${endpoint}`));
       return;
     }
     const transport = parsed.protocol === 'https:' ? https : http;
@@ -140,15 +153,55 @@ export async function fetchEvolutionState(cfg: EvolutionConfig, apikey: string):
           } catch {
             /* no-op */
           }
-          const state = json?.instance?.state || json?.state || 'unknown';
-          resolve({ state });
+          resolve({ status: res.statusCode || 0, json, raw: data });
         });
       },
     );
     req.on('error', (err) => reject(err));
-    req.setTimeout(10000, () => req.destroy(new Error('Timeout conectando a Evolution API')));
+    req.setTimeout(timeoutMs, () => req.destroy(new Error('Timeout conectando a Evolution API')));
     req.end();
   });
+}
+
+/**
+ * Verifica el estado de conexion de la instancia con diagnostico accionable.
+ * Distingue: URL inalcanzable, apikey invalida (401/403), instancia inexistente
+ * (404) e instancia desconectada (state != open).
+ */
+export async function fetchEvolutionState(cfg: EvolutionConfig, apikey: string): Promise<EvolutionStateResult> {
+  assertEvolutionConfig(cfg, apikey);
+  const endpoint = `${baseUrl(cfg)}/instance/connectionState/${encodeURIComponent(cfg.instance)}`;
+
+  let resp: { status: number; json: any; raw: string };
+  try {
+    resp = await getJson(endpoint, apikey);
+  } catch (e) {
+    const msg = (e as Error).message || String(e);
+    let hint = `No se pudo conectar a ${cfg.url}. Verifica la URL y que el nodo tenga acceso de red al servidor de Evolution.`;
+    if (/ECONNREFUSED/i.test(msg)) hint = `Conexion rechazada por ${cfg.url}. Evolution no escucha en esa direccion/puerto desde este equipo (revisa el binding: si esta en 127.0.0.1 solo funciona en la misma PC).`;
+    else if (/ENOTFOUND|EAI_AGAIN/i.test(msg)) hint = `No se resolvio el host de ${cfg.url}. Revisa la URL.`;
+    else if (/timeout/i.test(msg)) hint = `Timeout conectando a ${cfg.url}. El equipo no llega al servidor de Evolution (red/ZeroTier/firewall).`;
+    return { state: 'error', ok: false, reachable: false, error: msg, hint };
+  }
+
+  const { status, json, raw } = resp;
+  if (status === 401 || status === 403) {
+    return { state: 'error', ok: false, reachable: true, httpStatus: status, error: raw || `HTTP ${status}`, hint: 'API key invalida o sin permiso. Revisa el apikey de Evolution.' };
+  }
+  if (status === 404) {
+    return { state: 'error', ok: false, reachable: true, httpStatus: status, error: raw || 'HTTP 404', hint: `La instancia "${cfg.instance}" no existe en Evolution. Revisa el nombre de la instancia.` };
+  }
+  if (status < 200 || status >= 300) {
+    const msg = (json && (json.message || json.error)) || raw || `HTTP ${status}`;
+    return { state: 'error', ok: false, reachable: true, httpStatus: status, error: typeof msg === 'string' ? msg : JSON.stringify(msg) };
+  }
+
+  const state = json?.instance?.state || json?.state || 'unknown';
+  const ok = state === 'open';
+  const hint = ok
+    ? undefined
+    : `La instancia respondio pero no esta conectada (estado: ${state}). Escanea el QR / reconecta la instancia en el manager de Evolution.`;
+  return { state, ok, reachable: true, httpStatus: status, hint };
 }
 
 /** Formatea un numero local a formato internacional aceptado por Evolution. */
