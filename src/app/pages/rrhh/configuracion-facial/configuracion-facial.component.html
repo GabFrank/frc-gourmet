@@ -73,6 +73,13 @@
           <mat-slide-toggle [(ngModel)]="permitirMultiple">
             Permitir marcar varias veces por día (turnos partidos)
           </mat-slide-toggle>
+
+          <mat-slide-toggle [(ngModel)]="geocercaActiva">
+            Exigir ubicación en la empresa (geocerca)
+          </mat-slide-toggle>
+          <p class="nota" *ngIf="geocercaActiva">
+            Configurá las coordenadas y el radio en <strong>Configuración de empresa</strong>.
+          </p>
         </div>
 
         <div class="acciones">

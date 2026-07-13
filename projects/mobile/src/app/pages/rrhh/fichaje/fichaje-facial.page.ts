@@ -49,11 +49,22 @@ export class FichajeFacialPage implements OnInit, OnDestroy {
 
   private countdownTimer: any = null;
   private resetTimer: any = null;
+  private coords: { lat: number; lng: number } | null = null;
 
   ngOnInit(): void {
     this.actualizarPendientes();
     window.addEventListener('online', () => this.flushCola());
     this.flushCola();
+    this.obtenerUbicacion();
+  }
+
+  private obtenerUbicacion(): void {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (p) => { this.coords = { lat: p.coords.latitude, lng: p.coords.longitude }; },
+      () => { /* permiso denegado / no disponible — el server decide según geocerca */ },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
+    );
   }
 
   ngOnDestroy(): void {
@@ -70,6 +81,7 @@ export class FichajeFacialPage implements OnInit, OnDestroy {
     this.resultado = null;
     this.modo = modo;
     this.fase = 'preparando';
+    this.obtenerUbicacion(); // refrescar ubicación al iniciar
   }
 
   onCaptureReady(): void {
@@ -107,6 +119,7 @@ export class FichajeFacialPage implements OnInit, OnDestroy {
       dimension: FaceRecognitionService.DIMENSION,
       modelo: FaceRecognitionService.MODEL_NAME,
       livenessOk, real: cap.real, live: cap.live,
+      lat: this.coords?.lat, lng: this.coords?.lng,
     };
     try {
       const res: any = await firstValueFrom(this.repo.ficharFacial(payload));
@@ -130,6 +143,14 @@ export class FichajeFacialPage implements OnInit, OnDestroy {
 
   private procesarResultado(res: any): void {
     if (!res?.matched) {
+      if (res?.reason === 'FUERA_UBICACION') {
+        this.fallo({ clase: 'error', titulo: 'Fuera de la empresa', detalle: `Estás a ${res.distancia} m (máx ${res.radio} m). Acercate para fichar.` });
+        return;
+      }
+      if (res?.reason === 'SIN_UBICACION') {
+        this.fallo({ clase: 'error', titulo: 'Sin ubicación', detalle: 'Activá el GPS y el permiso de ubicación del navegador.' });
+        return;
+      }
       const motivos: Record<string, string> = {
         LIVENESS: 'No se pudo verificar prueba de vida. Mirá a la cámara.',
         NO_MATCH: 'No se reconoció el rostro. Intentá de nuevo.',

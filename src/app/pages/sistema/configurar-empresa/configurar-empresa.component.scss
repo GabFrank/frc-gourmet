@@ -117,3 +117,18 @@
     }
   }
 }
+
+.hint-ubicacion {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-secondary, #666);
+}
+
+.ubicacion-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  mat-icon { margin-right: 6px; }
+}
