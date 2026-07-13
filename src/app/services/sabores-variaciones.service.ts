@@ -618,13 +618,26 @@ export class SaboresVariacionesService {
           const unidadParaGuardar = ingredienteOriginal.unidadOriginal || ingredienteOriginal.unidad;
           const datosNuevoIngrediente: Partial<RecetaIngrediente> = {
             receta: { id: recetaId } as any, // Cast temporal para compatibilidad
-            ingrediente: { id: ingredienteOriginal.ingrediente?.id } as any, // Cast temporal para compatibilidad
             cantidad: nuevoIngrediente.cantidad,
             unidad: unidadParaGuardar, // ✅ Usar unidad original
             unidadOriginal: ingredienteOriginal.unidadOriginal, // ✅ Mantener unidad original
+            // ✅ FIX: propagar descripción (item sin producto) y los flags; sin esto,
+            // un ingrediente "solo descripción" enviaba ni ingredienteId ni descripción
+            // → el backend lanzaba "Debe indicar un ingrediente o una descripción".
+            descripcion: ingredienteOriginal.descripcion,
             costoUnitario: ingredienteOriginal.costoUnitario,
-            costoTotal: nuevoIngrediente.cantidad * (ingredienteOriginal.costoUnitario || 0)
+            costoTotal: nuevoIngrediente.cantidad * (ingredienteOriginal.costoUnitario || 0),
+            esExtra: ingredienteOriginal.esExtra,
+            esOpcional: ingredienteOriginal.esOpcional,
+            esCambiable: ingredienteOriginal.esCambiable,
+            porcentajeAprovechamiento: ingredienteOriginal.porcentajeAprovechamiento,
+            esIngredienteBase: ingredienteOriginal.esIngredienteBase,
           };
+          // Sólo vincular el producto ingrediente si existe (si no, queda "solo descripción").
+          const ingId = ingredienteOriginal.ingrediente?.id ?? (ingredienteOriginal as any).ingredienteId;
+          if (ingId) {
+            (datosNuevoIngrediente as any).ingrediente = { id: ingId };
+          }
 
           // ✅ DEBUG: Log de los datos que se van a enviar
           console.log(`🔍 [agregarIngredienteMultiplesVariaciones] Datos para variación ${nuevoIngrediente.variacionId}:`, {

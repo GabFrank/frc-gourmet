@@ -1474,8 +1474,19 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   private async openSeleccionarVariacionDialog(producto: Producto, cantidad: number): Promise<SeleccionarVariacionDialogResult | null> {
+    // El producto de la búsqueda/atajo/código puede venir como DTO sin la relación
+    // `presentaciones` (el handler search-productos-by-nombre no la incluye), lo que
+    // dejaba el paso 1 en "No hay presentaciones configuradas". Recargamos el producto
+    // completo (presentaciones activas + sabores) antes de abrir el diálogo.
+    let productoCompleto: Producto = producto;
+    try {
+      const full = await firstValueFrom(this.repositoryService.getProducto(producto.id));
+      if (full) productoCompleto = full;
+    } catch {
+      // Si falla la recarga, seguimos con lo que hay (mejor que romper el flujo).
+    }
     const dialogData: SeleccionarVariacionDialogData = {
-      producto,
+      producto: productoCompleto,
       cantidad,
       pdvConfig: this.pdvConfig,
     };
