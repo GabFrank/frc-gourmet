@@ -1250,6 +1250,29 @@ export async function printCierreCajaInternal(
     const info = monedaInfo[monedaId] || { decimales: 0, simbolo: '' };
     return `${info.simbolo} ${ticketFmtMonto(monto, info.decimales)}`.trim();
   };
+  const simboloMoneda = (monedaId: number): string => (monedaInfo[monedaId]?.simbolo || '');
+  const fmtMontoMoneda = (monedaId: number, monto: number): string =>
+    ticketFmtMonto(monto, monedaInfo[monedaId]?.decimales ?? 0);
+
+  // Renderiza un total/rubro etiquetado que puede tener varias monedas:
+  //  - 1 moneda  → una sola línea "ETIQUETA .......... Gs 5.300.000"
+  //  - N monedas → la ETIQUETA va como encabezado y cada moneda indentada
+  //    debajo (sin repetir la etiqueta), igual que el bloque de ARQUEO.
+  const pushTotalMultimoneda = (
+    label: string,
+    montos: { monedaId: number; total: number }[],
+    bold = false,
+  ): void => {
+    if (montos.length === 0) return;
+    if (montos.length === 1) {
+      lines.push(ticketKv(label, fmtMoneda(montos[0].monedaId, montos[0].total), bold));
+      return;
+    }
+    lines.push(ticketText(label, { bold }));
+    for (const m of montos) {
+      lines.push(ticketKv(`  ${simboloMoneda(m.monedaId)}`, fmtMontoMoneda(m.monedaId, m.total), bold));
+    }
+  };
 
   const caja = resumen.caja as any;
   const cajero = caja?.createdBy?.persona?.nombre
@@ -1280,13 +1303,22 @@ export async function printCierreCajaInternal(
   if (resumen.ventasPorFormaPago.length === 0) {
     lines.push(ticketText('Sin ventas', { align: 'C' }));
   } else {
+    // Agrupar por forma de pago para no repetir el nombre en cada moneda.
+    const porForma = new Map<string, { monedaId: number; total: number }[]>();
     for (const fp of resumen.ventasPorFormaPago) {
-      lines.push(ticketKv(`${fp.formaPago}`.toUpperCase(), fmtMoneda(fp.monedaId, fp.total)));
+      const nombre = `${fp.formaPago}`.toUpperCase();
+      if (!porForma.has(nombre)) porForma.set(nombre, []);
+      porForma.get(nombre)!.push({ monedaId: fp.monedaId, total: fp.total });
+    }
+    for (const [nombre, montos] of porForma) {
+      pushTotalMultimoneda(nombre, montos);
     }
     lines.push(ticketSeparador('.'));
-    for (const vt of resumen.ventasTotalPorMoneda) {
-      lines.push(ticketKv('TOTAL VENTAS', fmtMoneda(vt.monedaId, vt.total), true));
-    }
+    pushTotalMultimoneda(
+      'TOTAL VENTAS',
+      resumen.ventasTotalPorMoneda.map(vt => ({ monedaId: vt.monedaId, total: vt.total })),
+      true,
+    );
   }
 
   // ── Descuentos / Aumentos ─────────────────────────────────
@@ -1295,12 +1327,8 @@ export async function printCierreCajaInternal(
   if (descMonedas.length > 0 || aumMonedas.length > 0) {
     lines.push(ticketSeparador('-'));
     lines.push(ticketText('DESCUENTOS / AUMENTOS', { align: 'C', bold: true }));
-    for (const id of descMonedas) {
-      lines.push(ticketKv('TOTAL DESCUENTOS', fmtMoneda(id, resumen.descuentosPorMoneda[id])));
-    }
-    for (const id of aumMonedas) {
-      lines.push(ticketKv('TOTAL AUMENTOS', fmtMoneda(id, resumen.aumentosPorMoneda[id])));
-    }
+    pushTotalMultimoneda('TOTAL DESCUENTOS', descMonedas.map(id => ({ monedaId: id, total: resumen.descuentosPorMoneda[id] })));
+    pushTotalMultimoneda('TOTAL AUMENTOS', aumMonedas.map(id => ({ monedaId: id, total: resumen.aumentosPorMoneda[id] })));
   }
 
   // ── Gastos ────────────────────────────────────────────────
@@ -1314,9 +1342,11 @@ export async function printCierreCajaInternal(
       gastoTotalPorMoneda[g.monedaId] = (gastoTotalPorMoneda[g.monedaId] || 0) + g.monto;
     }
     lines.push(ticketSeparador('.'));
-    for (const id of Object.keys(gastoTotalPorMoneda).map(Number)) {
-      lines.push(ticketKv('TOTAL GASTOS', fmtMoneda(id, gastoTotalPorMoneda[id]), true));
-    }
+    pushTotalMultimoneda(
+      'TOTAL GASTOS',
+      Object.keys(gastoTotalPorMoneda).map(Number).map(id => ({ monedaId: id, total: gastoTotalPorMoneda[id] })),
+      true,
+    );
   }
 
   // ── Retiros ───────────────────────────────────────────────
@@ -1333,9 +1363,11 @@ export async function printCierreCajaInternal(
       }
     }
     lines.push(ticketSeparador('.'));
-    for (const id of Object.keys(retiroTotalPorMoneda).map(Number)) {
-      lines.push(ticketKv('TOTAL RETIROS', fmtMoneda(id, retiroTotalPorMoneda[id]), true));
-    }
+    pushTotalMultimoneda(
+      'TOTAL RETIROS',
+      Object.keys(retiroTotalPorMoneda).map(Number).map(id => ({ monedaId: id, total: retiroTotalPorMoneda[id] })),
+      true,
+    );
   }
 
   // ── Arqueo (apertura / cierre / esperado / diferencia por moneda) ──
