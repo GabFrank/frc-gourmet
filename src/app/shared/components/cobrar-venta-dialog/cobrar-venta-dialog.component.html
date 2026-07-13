@@ -87,6 +87,7 @@
             <span class="ic-chip ic-total">Total {{ estadoDeudaBruta | number:'1.0-0' }}</span>
             <span class="ic-chip ic-pagado">Pagado {{ estadoTotalCubierto | number:'1.0-0' }}</span>
             <span class="ic-chip ic-saldo" [class.ic-saldo-cero]="pendienteBrutoInicial <= 0">Saldo {{ pendienteBrutoInicial | number:'1.0-0' }}</span>
+            <span class="ic-chip ic-sel" *ngIf="brutoSeleccionado > 0">Seleccionado {{ brutoSeleccionado | number:'1.0-0' }}</span>
           </div>
           <div class="items-cobro-list">
             <div class="item-cobro-row" *ngFor="let it of itemsCobro"
@@ -113,16 +114,17 @@
             </div>
           </div>
           <div class="items-cobro-footer" *ngIf="hayItemsPendientes">
-            <span class="a-cobrar-label">Sel. (bruto): <strong>{{ brutoSeleccionado | number:'1.0-0' }}</strong></span>
-            <span class="a-cobrar-label" *ngIf="cashSugeridoRonda !== brutoSeleccionado">A cobrar: <strong>{{ cashSugeridoRonda | number:'1.0-0' }}</strong></span>
-            <button mat-stroked-button class="btn-cobrar-sel" (click)="cobrarSeleccionados()" [disabled]="brutoSeleccionado <= 0">
+            <span class="a-cobrar-label a-cobrar-spacer">Seleccionado: <strong>{{ brutoSeleccionado | number:'1.0-0' }}</strong></span>
+            <span class="a-cobrar-label saldo-tras">Saldo tras cobrar: <strong>{{ saldoTrasCobrar | number:'1.0-0' }}</strong></span>
+            <button mat-flat-button color="primary" class="btn-cobrar-sel" (click)="cobrarSeleccionados()" [disabled]="brutoSeleccionado <= 0"
+                    matTooltip="Carga el valor en la línea de pago y pasa a la pestaña Pagos">
               <mat-icon>south</mat-icon> Cargar valor
             </button>
           </div>
         </div>
 
         <!-- Pagos (líneas de pago) -->
-        <ng-container *ngIf="leftTab === 'pagos' || itemsCobro.length === 0">
+        <div class="pagos-scroll" *ngIf="leftTab === 'pagos' || itemsCobro.length === 0">
         <table mat-table [dataSource]="detalleRows" class="detalles-table" *ngIf="detalleRows.length > 0">
           <ng-container matColumnDef="numero">
             <th mat-header-cell *matHeaderCellDef style="width: 36px">#</th>
@@ -193,7 +195,7 @@
           <span>AGREGUE LÍNEAS DE PAGO</span>
           <span class="empty-hint">Seleccione moneda y forma de pago, ingrese el valor y presione Enter</span>
         </div>
-        </ng-container>
+        </div>
       </div>
 
       <!-- Right: Monedas + Formas de pago buttons -->

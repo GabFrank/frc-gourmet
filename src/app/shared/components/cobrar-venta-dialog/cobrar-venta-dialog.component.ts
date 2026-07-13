@@ -148,6 +148,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
   // Totales del panel de ítems (pre-computados para el template).
   brutoSeleccionado = 0;
   cashSugeridoRonda = 0;
+  saldoTrasCobrar = 0;
   hayItemsPendientes = false;
   estadoDeudaBruta = 0;
   estadoTotalCubierto = 0;
@@ -452,6 +453,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     }
     this.brutoSeleccionado = bruto;
     this.cashSugeridoRonda = Math.round(bruto * this.computeFactorRonda());
+    this.saldoTrasCobrar = Math.max(0, this.pendienteBrutoInicial - bruto);
     this.hayItemsPendientes = this.itemsCobro.some(i => i.saldoItem > 0.5);
   }
 
