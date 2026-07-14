@@ -214,7 +214,13 @@
           <!-- Lista de productos asignados -->
           <div class="productos-list">
             <div class="producto-row" *ngFor="let ip of productosDelItem">
-              <mat-icon class="producto-icon">restaurant</mat-icon>
+              <img
+                *ngIf="ip.producto?.imageUrl"
+                class="producto-thumb"
+                [src]="thumbFor(ip.producto.imageUrl)"
+                (error)="onThumbError($event, ip.producto.imageUrl)"
+                alt="" />
+              <mat-icon *ngIf="!ip.producto?.imageUrl" class="producto-icon">restaurant</mat-icon>
               <span class="producto-name">{{ ip.nombre_alternativo || ip.producto?.nombre }}</span>
               <button mat-icon-button (click)="removeProducto(ip)" matTooltip="Quitar producto">
                 <mat-icon>close</mat-icon>

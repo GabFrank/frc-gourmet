@@ -16,6 +16,7 @@ import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '../../../database/repository.service';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
+import { thumbUrl, resolveAppUrl } from '../../utils/image-url.util';
 
 // Common Material icons for quick selection
 const COMMON_ICONS = [
@@ -403,6 +404,20 @@ export class AtajoConfigDialogComponent implements OnInit {
       this.showSuccess('Producto removido');
     } catch (error) {
       this.showError('Error al remover producto');
+    }
+  }
+
+  /** URL renderizable del thumb (con fallback al original vía proxy en cliente). */
+  thumbFor(url?: string | null): string | undefined {
+    return thumbUrl(url) || resolveAppUrl(url ?? undefined);
+  }
+
+  /** Si el thumb no existe (imágenes legacy), cae al original. */
+  onThumbError(event: Event, originalUrl?: string | null): void {
+    const img = event.target as HTMLImageElement;
+    const fallback = resolveAppUrl(originalUrl);
+    if (fallback && img.src !== fallback) {
+      img.src = fallback;
     }
   }
 
