@@ -42,13 +42,16 @@ export async function generarRetiroDelCierre(
   });
   if (existente) return existente;
 
-  // Efectivo por moneda = suma(valor del billete × cantidad) del conteo de cierre.
+  // Efectivo por moneda del conteo de cierre. Soporta ambos modos: completo
+  // (cantidad × valor del billete) y resumido (total directo en `monto`, con
+  // cantidad 0). Antes solo usaba cantidad × valor, así que un cierre resumido
+  // daba 0 y NO se generaba el retiro del cierre.
   const porMoneda = new Map<number, { moneda: any; monto: number }>();
   for (const d of (caja.conteoCierre.detalles || [])) {
     const mb = (d as any).monedaBillete;
     const moneda = mb?.moneda;
     if (!moneda) continue;
-    const sub = Number(mb.valor) * Number((d as any).cantidad);
+    const sub = Number((d as any).monto) || (Number(mb.valor) * Number((d as any).cantidad));
     const cur = porMoneda.get(moneda.id) || { moneda, monto: 0 };
     cur.monto += sub;
     porMoneda.set(moneda.id, cur);
