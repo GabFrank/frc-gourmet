@@ -197,6 +197,14 @@
             <mat-icon>{{verAnulaciones ? 'visibility' : 'visibility_off'}}</mat-icon>
             {{verAnulaciones ? 'Anulaciones visibles' : 'Ver anulaciones'}}
           </button>
+          <button mat-stroked-button
+                  *ngIf="cuentasBancariasCards.length > 0"
+                  (click)="onToggleVerMovimientosOcultos()"
+                  [class.toggle-active]="verMovimientosOcultos"
+                  [matTooltip]="verMovimientosOcultos ? 'Ocultar movimientos bancarios ruidosos (acreditaciones POS, etc.)' : 'Mostrar movimientos bancarios ocultos por defecto (acreditaciones POS, etc.)'">
+            <mat-icon>{{verMovimientosOcultos ? 'point_of_sale' : 'filter_alt_off'}}</mat-icon>
+            {{verMovimientosOcultos ? 'POS visibles' : 'Ver POS/ocultos'}}
+          </button>
           <button mat-stroked-button (click)="toggleFiltros()" class="filtros-toggle">
             <mat-icon>{{showFiltros ? 'expand_less' : 'filter_list'}}</mat-icon>
             Filtros

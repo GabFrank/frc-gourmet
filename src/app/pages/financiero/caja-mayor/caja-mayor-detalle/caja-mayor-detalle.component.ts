@@ -187,6 +187,10 @@ export class CajaMayorDetalleComponent implements OnInit {
   // Toggle para mostrar tambien las contra-anulaciones (default: ocultas)
   verAnulaciones = false;
 
+  // Toggle para mostrar tambien los movimientos bancarios "ruidosos" (acreditaciones
+  // POS, etc.) que por defecto se ocultan de la consolidada para no poluir la lista.
+  verMovimientosOcultos = false;
+
   constructor(
     private repositoryService: RepositoryService,
     private dialog: MatDialog,
@@ -380,6 +384,7 @@ export class CajaMayorDetalleComponent implements OnInit {
         filtros.esIngreso = f.esIngreso === true || f.esIngreso === 'true';
       }
       if (this.verAnulaciones) filtros.incluirAnulaciones = true;
+      if (this.verMovimientosOcultos) filtros.incluirRuidosos = true;
 
       // Fuente y alcance de cuentas bancarias visibles para esta caja
       filtros.fuente = this.fuenteFilter;
@@ -406,6 +411,12 @@ export class CajaMayorDetalleComponent implements OnInit {
 
   onToggleVerAnulaciones(): void {
     this.verAnulaciones = !this.verAnulaciones;
+    this.pageIndex = 0;
+    this.loadMovimientos();
+  }
+
+  onToggleVerMovimientosOcultos(): void {
+    this.verMovimientosOcultos = !this.verMovimientosOcultos;
     this.pageIndex = 0;
     this.loadMovimientos();
   }
