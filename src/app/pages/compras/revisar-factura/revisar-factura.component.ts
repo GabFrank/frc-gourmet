@@ -26,7 +26,11 @@ import { CrearProveedorInlineDialogComponent } from '../importar-factura-dialog/
 import { CrearProductoInlineDialogComponent } from '../importar-factura-dialog/crear-producto-inline-dialog.component';
 import { CreateEditCompraComponent } from '../create-edit-compra/create-edit-compra.component';
 import { VerFacturaDialogComponent } from './ver-factura-dialog.component';
+import { CrearPresentacionInlineDialogComponent } from './crear-presentacion-inline-dialog.component';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
+
+/** Valor centinela de la opción "Crear presentación" al final del select. */
+const CREAR_PRESENTACION = '__crear_presentacion__';
 
 interface ProductoLite {
   id: number;
@@ -52,6 +56,8 @@ interface ItemVm extends MatchItem {
   rowClass: string;
   selectedProductoId: number | null;
   selectedPresentacionId: number | null;
+  /** Última presentación válida seleccionada (para restaurar tras el centinela "Crear presentación"). */
+  presentacionPrevId: number | null;
   presentacionesDisponibles: { id: number; nombre: string; cantidad: number; principal: boolean }[];
   cantidad: number;
   costoUnitario: number;
@@ -95,6 +101,8 @@ interface ItemVm extends MatchItem {
   styleUrls: ['./revisar-factura.component.scss'],
 })
 export class RevisarFacturaComponent implements OnInit {
+  /** Expone el centinela al template (opción "Crear presentación"). */
+  readonly CREAR_PRESENTACION = CREAR_PRESENTACION;
   documentoId!: number;
   tabId?: string;
 
@@ -221,6 +229,7 @@ export class RevisarFacturaComponent implements OnInit {
             const principal = vm.presentacionesDisponibles.find(p => p.principal);
             vm.selectedPresentacionId = principal?.id ?? vm.presentacionesDisponibles[0]?.id ?? null;
           }
+          vm.presentacionPrevId = vm.selectedPresentacionId;
         }
       }
       this.recalcularTotal();
@@ -244,6 +253,7 @@ export class RevisarFacturaComponent implements OnInit {
       rowClass: '',
       selectedProductoId: item.match?.productoId || null,
       selectedPresentacionId: item.match?.presentacionId || null,
+      presentacionPrevId: item.match?.presentacionId || null,
       presentacionesDisponibles: [],
       cantidad: Number(item.lineaOcr.cantidad) || 0,
       costoUnitario: item.lineaOcr.precioUnitario,
@@ -291,7 +301,11 @@ export class RevisarFacturaComponent implements OnInit {
     }
   }
 
-  displayProducto = (p: ProductoLite | null): string => p?.nombre || '';
+  // Acepta objeto (al seleccionar de la lista) o string (query tipeado / nombre
+  // reasignado tras seleccionar). Si solo manejara objeto, tras la selección el
+  // displayWith recibiría el string reasignado, devolvería '' y borraría el input.
+  displayProducto = (p: ProductoLite | string | null): string =>
+    (p && typeof p === 'object') ? (p.nombre || '') : ((p as string) || '');
 
   async onProductoSeleccionado(vm: ItemVm, p: ProductoLite): Promise<void> {
     vm.productoQuery = p.nombre;
@@ -438,12 +452,51 @@ export class RevisarFacturaComponent implements OnInit {
     } else {
       vm.presentacionesDisponibles = [];
     }
+    vm.presentacionPrevId = vm.selectedPresentacionId;
   }
 
   onPresentacionSeleccion(vm: ItemVm): void {
+    // Opción centinela "Crear presentación" al final del select.
+    if ((vm.selectedPresentacionId as any) === CREAR_PRESENTACION) {
+      this.abrirCrearPresentacion(vm);
+      return;
+    }
     if (vm.selectedPresentacionId) {
+      vm.presentacionPrevId = vm.selectedPresentacionId;
       this.marcarItemValidado(vm);
     }
+  }
+
+  abrirCrearPresentacion(vm: ItemVm): void {
+    // Restaurar la selección previa (el centinela no es una presentación real).
+    vm.selectedPresentacionId = vm.presentacionPrevId ?? null;
+    if (!vm.selectedProductoId) {
+      this.snackBar.open('Primero seleccioná un producto.', 'Cerrar', { duration: 3000 });
+      return;
+    }
+    const productoId = vm.selectedProductoId;
+    const productoNombre = this.productosAll.find(p => p.id === productoId)?.nombre || vm.productoQuery || '';
+    const ref = this.dialog.open(CrearPresentacionInlineDialogComponent, {
+      width: '480px',
+      maxWidth: '95vw',
+      data: { productoId, productoNombre, descripcionOcr: vm.lineaOcr?.descripcion },
+    });
+    ref.afterClosed().subscribe((nueva: any) => {
+      if (!nueva?.id) return;
+      const lite = { id: nueva.id, nombre: nueva.nombre, cantidad: Number(nueva.cantidad) || 1, principal: !!nueva.principal };
+      // Insertar en cache global + en la lista disponible de la fila (evitar duplicados).
+      const cache = this.presentacionesPorProducto[productoId] || [];
+      if (!cache.some(p => p.id === lite.id)) cache.push(lite);
+      this.presentacionesPorProducto[productoId] = cache;
+      if (!vm.presentacionesDisponibles.some(p => p.id === lite.id)) {
+        vm.presentacionesDisponibles = [...vm.presentacionesDisponibles, lite];
+      }
+      // Seleccionarla en el item.
+      vm.selectedPresentacionId = lite.id;
+      vm.presentacionPrevId = lite.id;
+      this.marcarItemValidado(vm);
+      this.snackBar.open('Presentación creada y seleccionada.', 'Cerrar', { duration: 2500 });
+    });
   }
 
   private marcarItemValidado(vm: ItemVm): void {
