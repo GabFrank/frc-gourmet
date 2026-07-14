@@ -224,8 +224,18 @@ export class ConfiguracionNotificacionesComponent implements OnInit {
   verificarEvolution(): void {
     this.evolutionState = '...';
     this.notif.getEvolutionState().subscribe({
-      next: (r) => (this.evolutionState = r?.state || 'desconocido'),
-      error: (e) => (this.evolutionState = 'error: ' + (e?.message || e)),
+      next: (r) => {
+        this.evolutionState = r?.state || 'desconocido';
+        if (r?.ok) {
+          this.notify('WhatsApp conectado: la instancia esta lista para enviar.');
+        } else {
+          this.notify(r?.hint || r?.error || 'La instancia no esta conectada.', true);
+        }
+      },
+      error: (e) => {
+        this.evolutionState = 'error';
+        this.notify('Error: ' + (e?.message || e), true);
+      },
     });
   }
 
