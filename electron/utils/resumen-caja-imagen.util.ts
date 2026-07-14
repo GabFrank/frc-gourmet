@@ -10,12 +10,19 @@
 import { BrowserWindow } from 'electron';
 import { DataSource } from 'typeorm';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
+import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 import { Empresa } from '../../src/app/database/entities/sistema/empresa.entity';
 import { computeResumenCaja, ResumenCaja } from './resumen-caja.utils';
 
 interface MonedaFmt { simbolo: string; decimales: number; }
 interface Row { label: string; value: string; cls?: 'pos' | 'neg' | 'total'; indent?: boolean; head?: boolean; }
 interface Section { title: string; rows: Row[]; }
+/** Datos para convertir ventas de cada moneda a la moneda principal (guaraníes). */
+interface Conversion {
+  principalId: number | null;
+  /** cotizacion[monedaId] = compraLocal de esa moneda → principal (la principal = 1). */
+  cotizacion: { [monedaId: number]: number };
+}
 
 const IMG_WIDTH = 480;
 
@@ -31,7 +38,7 @@ function fmtFecha(d: any): string {
 }
 
 /** Construye las secciones del resumen a partir del ResumenCaja. */
-function armarSecciones(resumen: ResumenCaja, monedaFmt: { [id: number]: MonedaFmt }): {
+function armarSecciones(resumen: ResumenCaja, monedaFmt: { [id: number]: MonedaFmt }, conversion: Conversion): {
   ventasDesc: Section[];
   gastosRetirosArqueo: Section[];
 } {
@@ -59,8 +66,20 @@ function armarSecciones(resumen: ResumenCaja, monedaFmt: { [id: number]: MonedaF
     }
   }
   if (resumen.ventasPorFormaPago.length === 0) ventas.rows.push({ label: 'Sin ventas', value: '' });
-  for (const vt of resumen.ventasTotalPorMoneda) {
-    ventas.rows.push({ label: 'TOTAL VENTAS', value: fmt(vt.monedaId, vt.total), cls: 'total' });
+
+  // ── Total de ventas: agrupador por moneda + total convertido a guaraníes ──
+  if (resumen.ventasTotalPorMoneda.length) {
+    ventas.rows.push({ label: 'Total de ventas', value: '', head: true });
+    let totalEnGs = 0;
+    for (const vt of resumen.ventasTotalPorMoneda) {
+      ventas.rows.push({ label: sim(vt.monedaId) || `Moneda ${vt.monedaId}`, value: fmt(vt.monedaId, vt.total), indent: true });
+      const cotiz = conversion.principalId != null && Number(vt.monedaId) === conversion.principalId
+        ? 1
+        : (conversion.cotizacion[Number(vt.monedaId)] || 0);
+      totalEnGs += Number(vt.total || 0) * cotiz;
+    }
+    const totalLabel = conversion.principalId != null ? `Total en ${sim(conversion.principalId) || 'Gs'}` : 'Total';
+    ventas.rows.push({ label: totalLabel, value: fmt(conversion.principalId ?? -1, Math.round(totalEnGs)), cls: 'total' });
   }
 
   // ── Descuentos / Aumentos ──
@@ -229,6 +248,28 @@ export async function generarResumenCajaImagenes(
   const monedaFmt: { [id: number]: MonedaFmt } = {};
   for (const m of monedas) monedaFmt[m.id] = { simbolo: (m as any).simbolo || '', decimales: Number((m as any).decimales) || 0 };
 
+  // Moneda principal (para convertir ventas de otras monedas a guaraníes en el
+  // total). Prioriza el flag `principal`; si no hay, cae a GUARANI/PYG.
+  const monedaPrincipal = monedas.find((m: any) => m.principal)
+    || monedas.find((m: any) => String(m.denominacion || '').toUpperCase() === 'GUARANI')
+    || monedas.find((m: any) => String(m.simbolo || '').toUpperCase() === 'PYG')
+    || null;
+  const principalId = monedaPrincipal?.id ?? null;
+  const cotizacion: { [monedaId: number]: number } = {};
+  if (principalId != null) {
+    // compraLocal más reciente de cada moneda origen → principal.
+    const cambios = await dataSource.getRepository(MonedaCambio).find({
+      where: { monedaDestino: { id: principalId } as any, activo: true },
+      relations: ['monedaOrigen'],
+      order: { createdAt: 'DESC' as any },
+    });
+    for (const c of cambios) {
+      const oid = (c as any).monedaOrigen?.id;
+      if (oid != null && cotizacion[Number(oid)] == null) cotizacion[Number(oid)] = Number((c as any).compraLocal || 0);
+    }
+  }
+  const conversion: Conversion = { principalId, cotizacion };
+
   let empresaNombre = '';
   try {
     const empresa = await dataSource.getRepository(Empresa).find();
@@ -236,7 +277,7 @@ export async function generarResumenCajaImagenes(
   } catch { /* sin empresa */ }
 
   const header = renderHeaderHtml(empresaNombre, resumen);
-  const { ventasDesc, gastosRetirosArqueo } = armarSecciones(resumen, monedaFmt);
+  const { ventasDesc, gastosRetirosArqueo } = armarSecciones(resumen, monedaFmt, conversion);
 
   // Decidir 1 o 2 imágenes según volumen (gastos/retiros hacen el resumen largo).
   const hayExtra = resumen.gastos.length > 0 || resumen.retiros.length > 0;

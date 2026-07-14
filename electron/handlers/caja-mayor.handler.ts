@@ -31,6 +31,8 @@ import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { esIngreso, actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { ensurePermission, getEffectiveUser } from '../utils/auth.utils';
+import { Vale } from '../../src/app/database/entities/rrhh/vale.entity';
+import { ValeEstado } from '../../src/app/database/entities/rrhh/vale-estado.enum';
 import { generarRetiroDelCierre } from './retiro-cierre.util';
 import { getMovimientosBancariosUnificados } from '../utils/movimientos-bancarios';
 import { dispatchEvento } from '../services/notificacion.service';
@@ -730,11 +732,58 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           `Anular desde el modulo de Cuentas por Pagar (revierte el estado de la cuota y el saldo del CPP).`
         );
       }
+      // Vale: anular desde Caja Mayor revierte el movimiento Y deja el vale en
+      // ANULADO (para que entre en la liquidacion del mes). Misma logica que el
+      // handler 'anular-vale' del modulo Vales, unificada en un solo click.
       if (original.valeId) {
-        throw new Error(
-          `Este movimiento corresponde al vale #${original.valeId}. ` +
-          `Anular desde el modulo de Vales.`
+        if (!original.cajaMayor || !original.moneda || !original.formaPago) {
+          throw new Error(`El movimiento del vale #${original.valeId} no tiene caja/moneda/forma de pago para revertir.`);
+        }
+        const valeRepo = queryRunner.manager.getRepository(Vale);
+        const vale = await valeRepo.findOne({ where: { id: original.valeId } });
+        if (!vale) throw new Error(`Vale #${original.valeId} no encontrado`);
+        if (vale.estado === ValeEstado.ANULADO) {
+          throw new Error(`El vale #${original.valeId} ya fue anulado previamente.`);
+        }
+        // Idempotencia: no anular dos veces el mismo movimiento
+        const yaAnuladoVale = await repo.findOne({
+          where: { referenciaAnulacion: { id: original.id } as any },
+        });
+        if (yaAnuladoVale) {
+          throw new Error(`El movimiento ID ${id} ya fue anulado previamente (anulacion ID ${yaAnuladoVale.id})`);
+        }
+
+        const currentUserVale = getEffectiveUser(getCurrentUser);
+        const contraVale = queryRunner.manager.create(CajaMayorMovimiento, {
+          cajaMayor: original.cajaMayor,
+          tipoMovimiento: TipoMovimiento.AJUSTE_POSITIVO,
+          moneda: original.moneda,
+          formaPago: original.formaPago,
+          monto: original.monto,
+          fecha: new Date(),
+          observacion: `ANULACION VALE #${vale.id}` + (motivo ? ` - ${motivo}` : ''),
+          referenciaAnulacion: original,
+          valeId: vale.id,
+        });
+        if (currentUserVale) contraVale.responsable = currentUserVale;
+        await setEntityUserTracking(dataSource, contraVale, currentUserVale?.id, false);
+        await queryRunner.manager.save(CajaMayorMovimiento, contraVale);
+
+        await actualizarSaldo(
+          queryRunner,
+          original.cajaMayor.id,
+          original.moneda.id,
+          original.formaPago.id,
+          Number(original.monto),
+          TipoMovimiento.AJUSTE_POSITIVO,
         );
+
+        vale.estado = ValeEstado.ANULADO;
+        await setEntityUserTracking(dataSource, vale, currentUserVale?.id, true);
+        await valeRepo.save(vale);
+
+        await queryRunner.commitTransaction();
+        return { success: true };
       }
       if (original.liquidacionComisionId) {
         throw new Error(

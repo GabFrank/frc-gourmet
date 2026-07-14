@@ -191,7 +191,10 @@ export function buildMatchResult(opts: BuildOpts): MatchResult {
           presentacionId: alias.presentacion?.id || null,
           nombre: alias.producto.nombre,
         };
-        itemConfianza = (alias.vecesUsado || 0) >= 2 ? 'ALTA' : 'MEDIA';
+        // Un alias existe recien cuando una importacion previa fue verificada para
+        // este (proveedor, producto). Con eso ya alcanza para auto-vincular ALTA
+        // desde la 2da importacion (mismo criterio que el alias de proveedor).
+        itemConfianza = (alias.vecesUsado || 0) >= 1 ? 'ALTA' : 'MEDIA';
       }
     }
 
