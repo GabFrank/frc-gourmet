@@ -21,6 +21,7 @@
   // Colores de hover
   --hover-bg: rgba(0, 0, 0, 0.04);
   --hover-bg-light: rgba(0, 0, 0, 0.08);
+  --surface-hover: rgba(0, 0, 0, 0.03);
 
   // Colores de sombra
   --shadow-color: rgba(0, 0, 0, 0.1);
@@ -49,6 +50,7 @@
   // Colores de hover
   --hover-bg: rgba(255, 255, 255, 0.04);
   --hover-bg-light: rgba(255, 255, 255, 0.08);
+  --surface-hover: rgba(255, 255, 255, 0.05);
 
   // Colores de sombra
   --shadow-color: rgba(0, 0, 0, 0.3);
@@ -76,6 +78,7 @@
     // Colores de hover
     --hover-bg: rgba(255, 255, 255, 0.04);
     --hover-bg-light: rgba(255, 255, 255, 0.08);
+    --surface-hover: rgba(255, 255, 255, 0.05);
 
     // Colores de sombra
     --shadow-color: rgba(0, 0, 0, 0.3);

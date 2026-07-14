@@ -52,13 +52,13 @@
     .loading-message, .error-container {
       padding: 20px;
       text-align: center;
-      background-color: #f5f5f5;
+      background-color: var(--surface-variant);
       border-radius: 4px;
       margin: 20px 0;
     }
 
     .error-container {
-      color: #f44336;
+      color: var(--error-color);
     }
   }
 }
@@ -73,14 +73,5 @@
     display: flex;
     justify-content: center;
     align-items: center;
-  }
-}
-
-/* Dark theme adjustments */
-:host-context(.dark-theme) {
-  .table-container {
-    .loading-message, .error-container {
-      background-color: #424242;
-    }
   }
 }
