@@ -22,56 +22,96 @@ import { buildEvolutionConfig } from '../services/notificacion.service';
 import { getEvolutionApiKey } from '../utils/notificaciones-secrets.util';
 import { sendWhatsappMedia, sendWhatsappText, normalizeWhatsappNumber } from '../services/whatsapp.service';
 
+interface EnvioCierreResult {
+  ok: boolean;
+  cajaId: number | null;
+  omitido?: string;       // motivo por el que no se envió (config off, sin destino, etc.)
+  imagenes: number;
+  enviados: number;
+  errores: string[];
+}
+
 /**
  * Envía el resumen de cierre de una caja PdV por WhatsApp como imagen(es), si
  * está activado en PdvConfig y hay un destino configurado. Reutiliza la conexión
- * Evolution API de la config de Notificaciones. Best-effort: cualquier fallo se
- * loguea y no se propaga (el cierre nunca depende de esto).
+ * Evolution API de la config de Notificaciones. Best-effort: nunca lanza; el
+ * resultado sirve para diagnóstico (uso automático al cerrar y manual/test).
+ *
+ * opts.forzar        → ignora el flag whatsappCierreCajaActivo (para test manual).
+ * opts.destinoOverride → usa este destino en vez del de PdvConfig (para test).
  */
-async function enviarCierreCajaWhatsapp(dataSource: DataSource, cajaId: number): Promise<void> {
-  const cfg = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
-  if (!cfg?.whatsappCierreCajaActivo) return;
-  const destinoRaw = (cfg.whatsappCierreCajaDestino || '').trim();
-  if (!destinoRaw) return;
-
-  const evolution = await buildEvolutionConfig();
-  const apikey = await getEvolutionApiKey();
-  if (!evolution.url || !evolution.instance || !apikey) {
-    console.warn('[cierre-whatsapp] Evolution API no configurada (URL/instancia/apikey); se omite el envío.');
-    return;
-  }
-  const destino = normalizeWhatsappNumber(destinoRaw);
-
-  let generado: Awaited<ReturnType<typeof generarResumenCajaImagenes>> = null;
+async function enviarCierreCajaWhatsapp(
+  dataSource: DataSource,
+  cajaId: number,
+  opts: { forzar?: boolean; destinoOverride?: string } = {},
+): Promise<EnvioCierreResult> {
+  const result: EnvioCierreResult = { ok: false, cajaId, imagenes: 0, enviados: 0, errores: [] };
   try {
-    generado = await generarResumenCajaImagenes(dataSource, cajaId);
+    const cfg = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+    if (!opts.forzar && !cfg?.whatsappCierreCajaActivo) {
+      result.omitido = 'Envío de WhatsApp desactivado en la config del PdV';
+      return result;
+    }
+    const destinoRaw = (opts.destinoOverride || cfg?.whatsappCierreCajaDestino || '').trim();
+    if (!destinoRaw) {
+      result.omitido = 'Sin destino de WhatsApp configurado';
+      return result;
+    }
+
+    const evolution = await buildEvolutionConfig();
+    const apikey = await getEvolutionApiKey();
+    if (!evolution.url || !evolution.instance || !apikey) {
+      result.omitido = 'Evolution API no configurada (URL/instancia/apikey en Notificaciones)';
+      console.warn('[cierre-whatsapp] ' + result.omitido);
+      return result;
+    }
+    const destino = normalizeWhatsappNumber(destinoRaw);
+
+    let generado: Awaited<ReturnType<typeof generarResumenCajaImagenes>> = null;
+    try {
+      generado = await generarResumenCajaImagenes(dataSource, cajaId);
+    } catch (e) {
+      const msg = (e as Error)?.message || String(e);
+      result.errores.push(`Render de imagen: ${msg}`);
+      console.warn(`[cierre-whatsapp] no se pudo generar la imagen del cierre ${cajaId}:`, msg);
+    }
+
+    // Fallback: si no se pudo generar la imagen, mandar al menos el texto.
+    if (!generado || !generado.base64List.length) {
+      try {
+        const { computeResumenCaja } = await import('../utils/resumen-caja.utils');
+        const resumen = await computeResumenCaja(dataSource, cajaId);
+        await sendWhatsappText(evolution, apikey, destino, buildResumenCajaCaption(resumen, ''));
+        result.ok = true;
+        result.enviados = 1;
+      } catch (e) {
+        const msg = (e as Error)?.message || String(e);
+        result.errores.push(`Fallback texto: ${msg}`);
+        console.warn(`[cierre-whatsapp] fallback de texto falló para caja ${cajaId}:`, msg);
+      }
+      return result;
+    }
+
+    result.imagenes = generado.base64List.length;
+    const caption = buildResumenCajaCaption(generado.resumen, generado.empresaNombre);
+    for (let i = 0; i < generado.base64List.length; i++) {
+      try {
+        await sendWhatsappMedia(evolution, apikey, destino, generado.base64List[i], {
+          fileName: `cierre-caja-${cajaId}${generado.base64List.length > 1 ? `-${i + 1}` : ''}.png`,
+          caption: i === 0 ? caption : '', // el caption va solo en la primera imagen
+        });
+        result.enviados++;
+      } catch (e) {
+        const msg = (e as Error)?.message || String(e);
+        result.errores.push(`Imagen ${i + 1}: ${msg}`);
+        console.warn(`[cierre-whatsapp] falló el envío de la imagen ${i + 1} del cierre ${cajaId}:`, msg);
+      }
+    }
+    result.ok = result.enviados > 0;
+    return result;
   } catch (e) {
-    console.warn(`[cierre-whatsapp] no se pudo generar la imagen del cierre ${cajaId}:`, (e as Error)?.message || e);
-  }
-
-  // Fallback: si no se pudo generar la imagen, mandar al menos el texto.
-  if (!generado || !generado.base64List.length) {
-    try {
-      const { computeResumenCaja } = await import('../utils/resumen-caja.utils');
-      const resumen = await computeResumenCaja(dataSource, cajaId);
-      await sendWhatsappText(evolution, apikey, destino, buildResumenCajaCaption(resumen, ''));
-    } catch (e) {
-      console.warn(`[cierre-whatsapp] fallback de texto falló para caja ${cajaId}:`, (e as Error)?.message || e);
-    }
-    return;
-  }
-
-  const caption = buildResumenCajaCaption(generado.resumen, generado.empresaNombre);
-  for (let i = 0; i < generado.base64List.length; i++) {
-    try {
-      await sendWhatsappMedia(evolution, apikey, destino, generado.base64List[i], {
-        fileName: `cierre-caja-${cajaId}${generado.base64List.length > 1 ? `-${i + 1}` : ''}.png`,
-        // El caption va solo en la primera imagen.
-        caption: i === 0 ? caption : '',
-      });
-    } catch (e) {
-      console.warn(`[cierre-whatsapp] falló el envío de la imagen ${i + 1} del cierre ${cajaId}:`, (e as Error)?.message || e);
-    }
+    result.errores.push((e as Error)?.message || String(e));
+    return result;
   }
 }
 
@@ -628,6 +668,31 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
       console.error(`Error updating caja ${id}:`, error);
       throw error;
     }
+  });
+
+  // Envío manual / test del resumen de cierre por WhatsApp. Dispara la MISMA
+  // lógica que el envío automático al cerrar. Sin `cajaId`, usa la última caja
+  // CERRADA. `forzar` ignora el flag de PdvConfig (útil para probar); `destino`
+  // permite mandar a otro número/grupo sin tocar la config.
+  ipcMain.handle('enviar-resumen-cierre-whatsapp', async (
+    _event: IpcMainInvokeEvent,
+    params?: { cajaId?: number; forzar?: boolean; destino?: string },
+  ) => {
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+    const repo = dataSource.getRepository(Caja);
+    let cajaId = params?.cajaId ?? null;
+    if (!cajaId) {
+      const ultima = await repo.findOne({
+        where: { estado: CajaEstado.CERRADO },
+        order: { fechaCierre: 'DESC', id: 'DESC' },
+      });
+      if (!ultima) throw new Error('No hay ninguna caja cerrada');
+      cajaId = ultima.id;
+    }
+    return await enviarCierreCajaWhatsapp(dataSource, cajaId, {
+      forzar: params?.forzar,
+      destinoOverride: params?.destino,
+    });
   });
 
   ipcMain.handle('delete-caja', async (_event: IpcMainInvokeEvent, id: number) => {
