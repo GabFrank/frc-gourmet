@@ -19,8 +19,21 @@ export interface MovimientoBancarioUnificado {
   fuenteCuentaId?: number;
 }
 
+/**
+ * Tipos de movimiento bancario considerados "ruidosos": son de alto volumen y
+ * poluyen la lista consolidada de Caja Mayor, por lo que se ocultan por defecto
+ * (mostrables con un toggle). Agregar acá cualquier tipo futuro que deba
+ * ocultarse por defecto en la consolidada.
+ */
+export const TIPOS_BANCARIOS_RUIDOSOS = ['ACREDITACION_POS'];
+
 export interface MovimientosBancariosOpts {
-  excludePos?: boolean;
+  /**
+   * Si es true, excluye los tipos de TIPOS_BANCARIOS_RUIDOSOS del resultado.
+   * Default false (= devuelve todo). La vista de cuenta bancaria individual no lo
+   * setea; la consolidada de Caja Mayor lo activa salvo que el toggle pida verlos.
+   */
+  excluirRuidosos?: boolean;
   fechaDesde?: any;
   fechaHasta?: any;
   /** Estampa monedaSimbolo / fuenteLabel (nombre de cuenta) / fuenteCuentaId en cada item. */
@@ -112,8 +125,9 @@ export async function getMovimientosBancariosUnificados(
       }
     }
 
-    // 3. Acreditaciones POS (ingresos cuando se acreditan) — opcional
-    if (!opts.excludePos) {
+    // 3. Acreditaciones POS (ingresos cuando se acreditan) — tipo "ruidoso",
+    //    se saltea la query (la mas pesada) cuando se excluyen los ruidosos.
+    if (!(opts.excluirRuidosos && TIPOS_BANCARIOS_RUIDOSOS.includes('ACREDITACION_POS'))) {
       const acredRows = await dbQuery(dataSource,
         `SELECT a.id, a.monto_acreditado AS "montoAcreditado", a.monto_esperado AS "montoEsperado",
                 a.fecha_acreditacion_real AS "fechaReal", a.fecha_transaccion AS "fechaTrans",
@@ -291,6 +305,12 @@ export async function getMovimientosBancariosUnificados(
         items[i].fuenteCuentaId = cuentaBancariaId;
       }
     }
+  }
+
+  // Filtro generico de tipos ruidosos (la query POS ya se saltea arriba; esto
+  // cubre cualquier otro tipo agregado a TIPOS_BANCARIOS_RUIDOSOS en el futuro).
+  if (opts.excluirRuidosos) {
+    return items.filter((i) => !TIPOS_BANCARIOS_RUIDOSOS.includes(i.tipo));
   }
 
   return items;

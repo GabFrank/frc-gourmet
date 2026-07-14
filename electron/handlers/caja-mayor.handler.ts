@@ -448,6 +448,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     AJUSTE_POSITIVO: 'Ajuste (+)',
     AJUSTE_NEGATIVO: 'Ajuste (-)',
     CHEQUE_COBRADO: 'Cheque cobrado',
+    ACREDITACION_POS: 'Acreditacion POS',
     DEPOSITO: 'Deposito bancario',
     RETIRO: 'Retiro bancario',
     ENTRADA_VARIA: 'Entrada Varia',
@@ -604,7 +605,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         const accountIds = fuenteEsCuenta ? [Number(fuente)] : cuentasVisibles;
         if (accountIds.length > 0) {
           const bancoItems = await getMovimientosBancariosUnificados(dataSource, accountIds, {
-            excludePos: true,
+            // Ocultar tipos ruidosos (POS, etc.) salvo que el toggle pida verlos.
+            excluirRuidosos: !filtros?.incluirRuidosos,
             stampFuente: true,
             fechaDesde: filtros?.fechaDesde,
             fechaHasta: filtros?.fechaHasta,
