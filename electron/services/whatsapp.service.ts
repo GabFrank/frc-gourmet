@@ -108,6 +108,44 @@ export async function sendWhatsappText(
   return { id };
 }
 
+/**
+ * Envia una imagen (u otro media) por WhatsApp via Evolution API.
+ * Contrato: POST {baseUrl}/message/sendMedia/{instance}
+ *   { number, mediatype: 'image', mimetype, media: <base64 sin prefijo>, fileName, caption }
+ * `base64` es el contenido puro (sin `data:image/png;base64,`).
+ */
+export async function sendWhatsappMedia(
+  cfg: EvolutionConfig,
+  apikey: string,
+  numberOrJid: string,
+  base64: string,
+  opts: { fileName?: string; caption?: string; mimetype?: string } = {},
+): Promise<SendWhatsappResult> {
+  assertEvolutionConfig(cfg, apikey);
+  if (!numberOrJid) throw new Error('Numero/grupo de WhatsApp vacio');
+  if (!base64) throw new Error('Imagen (base64) vacia');
+  const endpoint = `${baseUrl(cfg)}/message/sendMedia/${encodeURIComponent(cfg.instance)}`;
+  const { status, json, raw } = await postJson(
+    endpoint,
+    apikey,
+    {
+      number: numberOrJid,
+      mediatype: 'image',
+      mimetype: opts.mimetype || 'image/png',
+      media: base64,
+      fileName: opts.fileName || 'cierre-caja.png',
+      caption: opts.caption || '',
+    },
+    30000,
+  );
+  if (status < 200 || status >= 300) {
+    const msg = (json && (json.message || json.error)) || raw || `HTTP ${status}`;
+    throw new Error(`Evolution API error (${status}): ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`);
+  }
+  const id = json?.key?.id || json?.id || '';
+  return { id };
+}
+
 export interface EvolutionStateResult {
   /** 'open' | 'close' | 'connecting' | 'unknown' | 'error' */
   state: string;

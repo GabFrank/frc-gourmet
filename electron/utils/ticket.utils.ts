@@ -209,16 +209,23 @@ export function printerWidthToChars(width?: number | null): number {
  */
 export function monedaSimboloAscii(moneda?: any): string {
   if (!moneda) return 'Gs.';
-  const codigo = String(moneda.codigo || '').toUpperCase();
-  switch (codigo) {
-    case 'PYG': return 'Gs.';
-    case 'USD': return '$';
-    case 'BRL': return 'R$';
-    case 'ARS': return '$';
-    case 'EUR': return 'EUR';
-    default:
-      return codigo || String(moneda.nombre || 'Gs.').toUpperCase().slice(0, 6);
+  // La entidad Moneda no tiene `codigo`/`nombre`: los campos reales son
+  // `countryCode` (PY/US/BR...), `simbolo` (puede ser no-ASCII, ej. '₲') y
+  // `denominacion`. Mapear por countryCode da un símbolo ASCII estable para la
+  // impresora térmica; si no matchea, se usa el símbolo guardado sanitizado a
+  // ASCII y, como último recurso, la denominación.
+  const cc = String(moneda.countryCode || '').toUpperCase();
+  switch (cc) {
+    case 'PY': return 'Gs.';
+    case 'US': return '$';
+    case 'BR': return 'R$';
+    case 'AR': return '$';
+    case 'EU':
+    case 'ES': return 'EUR';
   }
+  const sim = String(moneda.simbolo || '').replace(/[^\x20-\x7E]/g, '').trim();
+  if (sim) return sim;
+  return String(moneda.denominacion || 'Gs.').toUpperCase().slice(0, 6);
 }
 
 /**

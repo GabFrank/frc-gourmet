@@ -166,6 +166,42 @@
   color: var(--error-color);
 }
 
+/* Encabezado de grupo (forma de pago, moneda del arqueo, retiro). */
+.group-head {
+  margin-top: 8px;
+  padding: 4px 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.group-head:first-of-type {
+  margin-top: 0;
+}
+
+/* Línea indentada dentro de un grupo. */
+.line.sub {
+  padding-left: 12px;
+  border-top: none;
+}
+
+.line.sub .line-label {
+  color: var(--text-secondary);
+}
+
+/* Línea de total dentro de un bloque. */
+.line.total {
+  border-top: 1px solid var(--border-color);
+  margin-top: 2px;
+}
+
+.line.total .line-label,
+.line.total .line-value {
+  font-weight: 700;
+}
+
 .caja-section-head {
   display: flex;
   align-items: center;

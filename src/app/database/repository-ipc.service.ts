@@ -3215,6 +3215,9 @@ export class RepositoryIpcService extends RepositoryService {
   generarRetiroCierreCaja(cajaId: number): Observable<any> {
     return from(this.api.generarRetiroCierreCaja(cajaId));
   }
+  enviarResumenCierreWhatsapp(cajaId: number, opts?: { forzar?: boolean; destino?: string }): Observable<any> {
+    return from(this.api.callIpc('enviar-resumen-cierre-whatsapp', { cajaId, ...(opts || {}) }));
+  }
   egresoCajaInicial(data: any): Observable<any> {
     return from(this.api.egresoCajaInicial(data));
   }

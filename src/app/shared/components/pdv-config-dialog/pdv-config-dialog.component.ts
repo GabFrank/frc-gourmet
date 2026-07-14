@@ -58,6 +58,8 @@ export class PdvConfigDialogComponent implements OnInit {
       umbralDiferenciaAlta: [15],
       deliveryTiempoAmarillo: [30],
       deliveryTiempoRojo: [60],
+      whatsappCierreCajaActivo: [false],
+      whatsappCierreCajaDestino: [''],
     });
   }
 
@@ -77,6 +79,8 @@ export class PdvConfigDialogComponent implements OnInit {
           umbralDiferenciaAlta: cfg.umbralDiferenciaAlta || 15,
           deliveryTiempoAmarillo: cfg.deliveryTiempoAmarillo || 30,
           deliveryTiempoRojo: cfg.deliveryTiempoRojo || 60,
+          whatsappCierreCajaActivo: cfg.whatsappCierreCajaActivo || false,
+          whatsappCierreCajaDestino: cfg.whatsappCierreCajaDestino || '',
         });
       }
     } catch (error) {

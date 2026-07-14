@@ -62,7 +62,7 @@ async function sumaVentasRango(
          - COALESCE(SUM(CASE WHEN pd.tipo = 'VUELTO' THEN pd.valor ELSE 0 END), 0) as suma
     FROM ventas v
     LEFT JOIN pagos p ON v.pago_id = p.id
-    LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.moneda_id = ?
+    LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.moneda_id = ? AND pd.activo
     WHERE v.estado = ? AND ${filtro.sql}
   `, [monedaPrincipalId, VentaEstado.CONCLUIDA, ...filtro.params]);
   return { cnt: Number(rows?.[0]?.cnt || 0), suma: Number(rows?.[0]?.suma || 0) };
@@ -94,7 +94,7 @@ async function desgloseVentasRango(
          - COALESCE(SUM(CASE WHEN pd.tipo = 'VUELTO' THEN pd.valor ELSE 0 END), 0) as total
     FROM ventas v
     JOIN pagos p ON v.pago_id = p.id
-    JOIN pagos_detalles pd ON pd.pago_id = p.id
+    JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.activo
     JOIN monedas m ON m.id = pd.moneda_id
     LEFT JOIN formas_pago fp ON fp.id = pd.forma_pago_id
     WHERE v.estado = ? AND ${filtro.sql}
@@ -241,7 +241,7 @@ export function registerDashboardVentasHandlers(
                - COALESCE(SUM(CASE WHEN pd.tipo = 'VUELTO' THEN pd.valor ELSE 0 END), 0) as suma
           FROM ventas v
           LEFT JOIN pagos p ON v.pago_id = p.id
-          LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.moneda_id = ?
+          LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.moneda_id = ? AND pd.activo
           WHERE v.caja_id = ? AND v.estado = ?
         `, [monedaPrincipalId, caja.id, VentaEstado.CONCLUIDA]);
         const cantidadVentas = Number(cajaTotalsRows?.[0]?.cnt || 0);
@@ -302,7 +302,7 @@ export function registerDashboardVentasHandlers(
              - COALESCE(SUM(CASE WHEN pd.tipo = 'VUELTO' THEN pd.valor ELSE 0 END), 0) as total
         FROM ventas v
         LEFT JOIN pagos p ON v.pago_id = p.id
-        LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.moneda_id = ?
+        LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.moneda_id = ? AND pd.activo
         LEFT JOIN usuarios u ON u.id = v.created_by
         LEFT JOIN personas per ON per.id = u.persona_id
         WHERE v.estado = ? AND ${filtroHoy.sql}

@@ -89,4 +89,15 @@ export class PdvConfig extends BaseModel {
   // Factor para convertir el valor embebido a gramos (gramos = valor * factor).
   @Column({ name: 'balanza_factor_peso', type: 'decimal', precision: 10, scale: 3, default: 1 })
   balanzaFactorPeso!: number;
+
+  // ─── WhatsApp: envío automático del resumen al cerrar caja ───────────────
+  // Si está activo y hay un destino configurado, al cerrar una caja PdV se
+  // envía por WhatsApp (Evolution API, config de Notificaciones) una imagen con
+  // el resumen del cierre. Best-effort: si falla, no bloquea el cierre.
+  @Column({ name: 'whatsapp_cierre_caja_activo', default: false })
+  whatsappCierreCajaActivo!: boolean;
+
+  // Número internacional (ej. 595991123456) o JID de grupo (…@g.us).
+  @Column({ name: 'whatsapp_cierre_caja_destino', type: 'varchar', length: 120, nullable: true })
+  whatsappCierreCajaDestino?: string | null;
 }
