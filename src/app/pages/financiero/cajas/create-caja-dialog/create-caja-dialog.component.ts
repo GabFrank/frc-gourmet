@@ -1453,14 +1453,28 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
             console.log('Conteo detalles loaded:', detalles);
             this.conteoDetalles = detalles;
 
-            // Store the billete values from conteo detalles BEFORE initializing form
-            this.conteoDetalles.forEach(detalle => {
-              if (detalle.monedaBillete && detalle.monedaBillete.id) {
-                const controlName = `billete_${detalle.monedaBillete.id}`;
-                this.billeteValuesStore[controlName] = detalle.cantidad;
-                console.log(`Setting value for ${controlName}: ${detalle.cantidad}`);
-              }
-            });
+            // Detectar modo resumido: esos detalles guardan el total por moneda en
+            // `monto` (cantidad 0, billete portador). Antes solo se leía `cantidad`,
+            // así que un conteo resumido cargaba 0 y no figuraba la apertura.
+            const esResumido = detalles.some((d: any) => Number(d.monto) > 0);
+            if (esResumido) {
+              this.conteoResumido = true;
+              this.resumidoTotals = {};
+              detalles.forEach((d: any) => {
+                const monedaId = d.monedaBillete?.moneda?.id;
+                if (monedaId != null && Number(d.monto) > 0) {
+                  this.resumidoTotals[monedaId] = (this.resumidoTotals[monedaId] || 0) + Number(d.monto);
+                }
+              });
+            } else {
+              // Modo completo: valores por denominación.
+              this.conteoDetalles.forEach(detalle => {
+                if (detalle.monedaBillete && detalle.monedaBillete.id) {
+                  const controlName = `billete_${detalle.monedaBillete.id}`;
+                  this.billeteValuesStore[controlName] = detalle.cantidad;
+                }
+              });
+            }
 
             console.log('All billete values loaded to store:', {...this.billeteValuesStore});
 
@@ -1514,14 +1528,28 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
             console.log('Conteo cierre detalles loaded:', detalles);
             this.conteoCierreDetalles = detalles;
 
-            // Store the billete values from conteo cierre detalles
-            this.conteoCierreDetalles.forEach(detalle => {
-              if (detalle.monedaBillete && detalle.monedaBillete.id) {
-                const controlName = `cierre_billete_${detalle.monedaBillete.id}`;
-                this.cierreBilleteValuesStore[controlName] = detalle.cantidad;
-                console.log(`Setting cierre value for ${controlName}: ${detalle.cantidad}`);
-              }
-            });
+            // Igual que en apertura: soportar conteo de cierre resumido (total en
+            // `monto`). Antes solo se leía `cantidad`, así que el cierre real
+            // resumido cargaba 0 y no figuraba en el diálogo.
+            const esResumido = detalles.some((d: any) => Number(d.monto) > 0);
+            if (esResumido) {
+              this.cierreResumido = true;
+              this.cierreResumidoTotals = {};
+              detalles.forEach((d: any) => {
+                const monedaId = d.monedaBillete?.moneda?.id;
+                if (monedaId != null && Number(d.monto) > 0) {
+                  this.cierreResumidoTotals[monedaId] = (this.cierreResumidoTotals[monedaId] || 0) + Number(d.monto);
+                }
+              });
+            } else {
+              // Modo completo: valores por denominación.
+              this.conteoCierreDetalles.forEach(detalle => {
+                if (detalle.monedaBillete && detalle.monedaBillete.id) {
+                  const controlName = `cierre_billete_${detalle.monedaBillete.id}`;
+                  this.cierreBilleteValuesStore[controlName] = detalle.cantidad;
+                }
+              });
+            }
 
             console.log('All cierre billete values loaded to store:', {...this.cierreBilleteValuesStore});
 
