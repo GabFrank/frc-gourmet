@@ -242,6 +242,7 @@ import { AddReconocimientoFacial1783808912909 } from './migrations/1783808912909
 import { AddUbicacionEmpresa1783915694893 } from './migrations/1783915694893-AddUbicacionEmpresa';
 import { AddNotificaciones1782606189440 } from './migrations/1782606189440-AddNotificaciones';
 import { AddWhatsappCierreCajaConfig1783975019373 } from './migrations/1783975019373-AddWhatsappCierreCajaConfig';
+import { ReclasificarMovimientosAcreditacionPos1784049746457 } from './migrations/1784049746457-ReclasificarMovimientosAcreditacionPos';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -616,6 +617,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     // arriba, pero TypeORM corre toda migracion no-ejecutada igual.
     AddNotificaciones1782606189440,
     AddWhatsappCierreCajaConfig1783975019373,
+    ReclasificarMovimientosAcreditacionPos1784049746457,
   ];
 }
 
