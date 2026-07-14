@@ -125,6 +125,14 @@
             <mat-icon>move_up</mat-icon>
             <span>GENERAR RETIRO DEL CIERRE</span>
           </button>
+          <button
+            mat-menu-item
+            *ngIf="row.caja.estado === 'CERRADO'"
+            (click)="reenviarResumenWhatsapp(row.caja)"
+          >
+            <mat-icon>send</mat-icon>
+            <span>REENVIAR RESUMEN POR WHATSAPP</span>
+          </button>
           <button mat-menu-item disabled matTooltip="Próximamente">
             <mat-icon>cancel</mat-icon>
             <span>CANCELAR CAJA</span>

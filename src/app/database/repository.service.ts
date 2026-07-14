@@ -675,6 +675,7 @@ export abstract class RepositoryService {
   abstract createRetiroCaja(data: any): Observable<any>;
   abstract ingresarRetiroCaja(retiroId: number, cajaMayorId: number): Observable<any>;
   abstract generarRetiroCierreCaja(cajaId: number): Observable<any>;
+  abstract enviarResumenCierreWhatsapp(cajaId: number, opts?: { forzar?: boolean; destino?: string }): Observable<any>;
   abstract egresoCajaInicial(data: any): Observable<any>;
   abstract abrirCajaDesdeConteo(conteoId: number, dispositivoId: number): Observable<any>;
   abstract getCuentasBancarias(): Observable<any[]>;

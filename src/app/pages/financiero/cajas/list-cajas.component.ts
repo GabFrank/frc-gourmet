@@ -339,6 +339,43 @@ export class ListCajasComponent implements OnInit {
     }
   }
 
+  /**
+   * Reenvía el resumen del cierre por WhatsApp (imagen), al destino configurado
+   * en la config del PdV. `forzar: true` para que funcione aunque el envío
+   * automático esté desactivado (es una acción manual explícita).
+   */
+  async reenviarResumenWhatsapp(caja: Caja): Promise<void> {
+    const ok = await firstValueFrom(
+      this.dialog
+        .open(ConfirmationDialogComponent, {
+          width: '440px',
+          data: {
+            title: 'Reenviar resumen por WhatsApp',
+            message:
+              `Se enviará el resumen del cierre de la caja #${caja.id} por WhatsApp ` +
+              `al destino configurado en la configuración del PdV. ¿Continuar?`,
+          },
+        })
+        .afterClosed(),
+    );
+    if (!ok) return;
+    try {
+      const res = await firstValueFrom(
+        this.repositoryService.enviarResumenCierreWhatsapp(caja.id!, { forzar: true }),
+      );
+      if (res?.ok) {
+        const imgs = res.enviados > 1 ? `${res.enviados} imágenes` : 'el resumen';
+        this.snackBar.open(`WhatsApp enviado (${imgs})`, 'CERRAR', { duration: 4000 });
+      } else {
+        const motivo = res?.omitido || (res?.errores?.length ? res.errores.join(' · ') : 'motivo desconocido');
+        this.snackBar.open(`No se envió: ${motivo}`, 'CERRAR', { duration: 6000 });
+      }
+    } catch (e: any) {
+      console.error('Error reenviando resumen por WhatsApp:', e);
+      this.snackBar.open(e?.message || 'No se pudo enviar el resumen por WhatsApp', 'CERRAR', { duration: 5000 });
+    }
+  }
+
   openCaja(): void {
     if (!this.currentUser) return;
     const openCaja = this.allCajaRows.find(r =>
