@@ -6,9 +6,9 @@
     margin: 0;
     font-size: 20px;
     font-weight: 500;
-    color: #333;
+    color: var(--text-primary);
     padding: 16px 24px;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid var(--border-color);
   }
   
   .mat-dialog-content {
@@ -47,7 +47,7 @@
             display: block;
             margin-bottom: 8px;
             font-weight: 500;
-            color: rgba(0, 0, 0, 0.6);
+            color: var(--text-secondary);
           }
           
           .image-preview-container {
@@ -59,7 +59,7 @@
               border-radius: 4px;
               overflow: hidden;
               position: relative;
-              border: 1px solid #e0e0e0;
+              border: 1px solid var(--border-color);
               
               img {
                 width: 100%;
@@ -102,7 +102,7 @@
   .mat-dialog-actions {
     padding: 12px 24px;
     margin-bottom: 0;
-    border-top: 1px solid #e0e0e0;
+    border-top: 1px solid var(--border-color);
     
     button {
       position: relative;
@@ -120,7 +120,7 @@
   .mat-form-field-suffix {
     .mat-icon {
       margin-right: 4px;
-      color: rgba(0, 0, 0, 0.54);
+      color: var(--text-secondary);
     }
   }
   

@@ -166,7 +166,7 @@
   gap: 16px;
   margin-bottom: 12px;
   padding: 16px;
-  background-color: rgba(0, 0, 0, 0.03);
+  background-color: var(--surface-hover);
   border-radius: 4px;
 }
 
@@ -300,7 +300,7 @@
 // Billete summary list
 .billete-summary-list {
   padding: 12px;
-  background-color: rgba(0, 0, 0, 0.03);
+  background-color: var(--surface-hover);
   border-radius: 4px;
   margin-bottom: 12px;
 }
@@ -465,7 +465,7 @@
       font-size: 16px;
       height: 16px;
       width: 16px;
-      color: #ffc107;
+      color: var(--warning-color);
       margin-left: 6px;
     }
   }
@@ -635,7 +635,7 @@
 .denomination-cell {
   width: 120px;
   font-weight: 500;
-  color: rgba(0, 0, 0, 0.87);
+  color: var(--text-primary);
 }
 
 // Overall more compact dialog title
@@ -747,12 +747,12 @@
 }
 
 .positive-amount {
-  color: #4caf50;
+  color: var(--success-color);
   font-weight: 700;
 }
 
 .negative-amount {
-  color: #f44336;
+  color: var(--error-color);
   font-weight: 700;
 }
 
@@ -859,7 +859,7 @@
     font-size: 32px;
     width: 32px;
     height: 32px;
-    color: #4caf50;
+    color: var(--success-color);
   }
 
   h3 {

@@ -55,7 +55,7 @@
   align-items: center;
   width: 64px;
   height: 48px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -78,7 +78,7 @@ mat-hint {
   margin-top: 4px;
   margin-left: 4px;
   font-size: 12px;
-  color: rgba(0, 0, 0, 0.6);
+  color: var(--text-secondary);
 }
 
 /* Dark theme adjustments */

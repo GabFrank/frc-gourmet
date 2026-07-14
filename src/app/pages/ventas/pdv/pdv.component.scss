@@ -343,7 +343,7 @@
       .currency-code {
         font-size: 14px;
         font-weight: 500;
-        color: rgba(0, 0, 0, 0.7);
+        color: var(--text-secondary);
       }
     }
 
@@ -355,12 +355,12 @@
         font-size: 16px;
         font-weight: 600;
         margin-right: 4px;
-        color: #000;
+        color: var(--text-primary);
       }
 
       .currency-denomination {
         font-size: 14px;
-        color: rgba(0, 0, 0, 0.6);
+        color: var(--text-secondary);
       }
     }
   }

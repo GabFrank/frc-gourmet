@@ -196,7 +196,7 @@
             <td mat-cell *matCellDef="let variacion" class="nombre-column">
               <div class="nombre-cell">
                 <span class="nombre-principal">{{ variacion.nombre_generado }}</span>
-                <div style="display: flex; flex-direction: row; gap: 10px; font-size: smaller; color: #9e9e9e;">
+                <div style="display: flex; flex-direction: row; gap: 10px; font-size: smaller; color: var(--text-secondary);">
                   <span class="sabor-nombre">{{ variacion.receta?.sabor?.nombre || '-' }}</span> -
                   <span class="sabor-categoria">{{ variacion.receta?.sabor?.categoria || '-' }}</span>
                 </div>
