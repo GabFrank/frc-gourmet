@@ -24,8 +24,9 @@
     "start": "npm-run-all -p electron:serve ng:serve",
     "build": "npm run electron:serve-tsc && ng build --base-href ./",
     "build:mobile": "ng build mobile",
+    "build:web": "ng build frc-gourmet --configuration web",
     "build:dev": "npm run build -- -c dev && npm run build:mobile",
-    "build:prod": "npm run build -- -c production && npm run build:mobile && npm run build:storefront",
+    "build:prod": "npm run build -- -c production && npm run build:mobile && npm run build:web && npm run build:storefront",
     "check": "npm run electron:serve-tsc && ng build --configuration production --base-href ./",
     "ng:serve": "ng serve --port 4201",
     "electron:serve-tsc": "tsc -p tsconfig.electron.json",
@@ -54,6 +55,7 @@
     "migration:show": "typeorm-ts-node-commonjs migration:show -d src/app/database/datasource.ts",
     "icons": "node scripts/generate-icons.js",
     "generate:mobile-api": "node scripts/generate-mobile-api-map.js",
+    "generate:web-api": "node scripts/generate-mobile-api-map.js",
     "prepare": "husky || true"
   },
   "private": true,
@@ -189,7 +191,8 @@
       "**/node_modules/keytar/**",
       "**/node_modules/@napi-rs/canvas/**",
       "dist/mobile/**",
-      "dist/storefront/**"
+      "dist/storefront/**",
+      "dist/frc-gourmet-web/**"
     ],
     "publish": [
       {

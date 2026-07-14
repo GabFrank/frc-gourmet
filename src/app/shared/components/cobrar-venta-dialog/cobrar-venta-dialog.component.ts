@@ -138,7 +138,8 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
 
   // ─── Cobro parcial por ítems ───────────────────────────────────────────
   itemsCobro: ItemCobroRow[] = [];
-  mostrarItems = true;
+  // Tab del panel izquierdo: 'pagos' (default) | 'items' (cobro parcial).
+  leftTab: 'pagos' | 'items' = 'pagos';
   // Estado de cobro ANTES de las líneas de esta sesión (base del factor).
   pendienteBrutoInicial = 0;
   saldoDineroInicial = 0;
@@ -147,6 +148,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
   // Totales del panel de ítems (pre-computados para el template).
   brutoSeleccionado = 0;
   cashSugeridoRonda = 0;
+  saldoTrasCobrar = 0;
   hayItemsPendientes = false;
   estadoDeudaBruta = 0;
   estadoTotalCubierto = 0;
@@ -451,6 +453,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     }
     this.brutoSeleccionado = bruto;
     this.cashSugeridoRonda = Math.round(bruto * this.computeFactorRonda());
+    this.saldoTrasCobrar = Math.max(0, this.pendienteBrutoInicial - bruto);
     this.hayItemsPendientes = this.itemsCobro.some(i => i.saldoItem > 0.5);
   }
 
@@ -474,6 +477,8 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     const dec = Number(this.selectedMoneda.decimales) || 0;
     this.valorInput = dec > 0 ? Math.round(enMoneda * Math.pow(10, dec)) / Math.pow(10, dec) : Math.round(enMoneda);
     this.currentLineType = 'PAGO';
+    // Volver a Pagos para agregar/ver la línea con el valor ya cargado.
+    this.leftTab = 'pagos';
   }
 
   /**

@@ -53,6 +53,14 @@ export interface ServerOptions {
    */
   storefrontRoot?: string;
   /**
+   * Frontend desktop servido como web (`dist/frc-gourmet-web`). Es el mismo
+   * bundle Angular del desktop, buildeado con `--base-href /admin/` y un shim
+   * HTTP en vez del preload de Electron. Si existe, se sirve en `/admin/` para
+   * abrir el panel administrativo completo desde un browser (misma sesión y
+   * `/api/*` que la PWA). Debe buildearse con `--configuration web`.
+   */
+  adminRoot?: string;
+  /**
    * HTTPS directo en LAN. Si `certPath`/`keyPath` existen, se abre un segundo
    * listener HTTPS en `httpsPort` (default 7443) con el mismo set de rutas, para
    * que los dispositivos del local peguen directo al server (sin pasar por el
@@ -183,6 +191,23 @@ async function buildInstance(
     });
   }
 
+  // Panel administrativo desktop servido como web en `/admin/` (bundle
+  // `dist/frc-gourmet-web`, base-href `/admin/`). Se registra ANTES del static de
+  // mobile (`/`) para que su prefijo matchee primero.
+  const adminIndex =
+    opts.adminRoot && existsSync(opts.adminRoot)
+      ? path.join(opts.adminRoot, 'index.html')
+      : null;
+  if (opts.adminRoot && adminIndex && existsSync(adminIndex)) {
+    await fastify.register(fastifyStatic, {
+      root: opts.adminRoot,
+      prefix: '/admin/',
+      decorateReply: false, // el static de mobile ya decora reply.sendFile
+      wildcard: false,
+      index: ['index.html'],
+    });
+  }
+
   // F2 (mobile PWA): servir el bundle estático de projects/mobile en `/`.
   if (opts.staticRoot && existsSync(opts.staticRoot)) {
     await fastify.register(fastifyStatic, {
@@ -204,6 +229,10 @@ async function buildInstance(
         // Deep-links del storefront → su propio index (SPA fallback).
         if (storefrontIndex && request.url.startsWith('/tienda')) {
           return reply.type('text/html').send(readFileSync(storefrontIndex));
+        }
+        // Deep-links del panel admin desktop-web → su propio index (SPA fallback).
+        if (adminIndex && request.url.startsWith('/admin')) {
+          return reply.type('text/html').send(readFileSync(adminIndex));
         }
         return (reply as any).sendFile('index.html');
       }

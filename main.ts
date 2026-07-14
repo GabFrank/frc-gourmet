@@ -368,8 +368,18 @@ function initializeDatabase() {
           if (fs.existsSync(unpackedSf)) storefrontRoot = unpackedSf;
         }
         if (!fs.existsSync(storefrontRoot)) storefrontRoot = undefined;
+        // Panel admin desktop-web (dist/frc-gourmet-web) — se sirve en /admin si existe.
+        let adminRoot: string | undefined = path.join(__dirname, 'dist', 'frc-gourmet-web');
+        if (
+          adminRoot.includes(`app.asar${path.sep}`) &&
+          !adminRoot.includes('app.asar.unpacked')
+        ) {
+          const unpackedAdmin = adminRoot.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+          if (fs.existsSync(unpackedAdmin)) adminRoot = unpackedAdmin;
+        }
+        if (!fs.existsSync(adminRoot)) adminRoot = undefined;
         startServer({
-          port, appVersion, schemaVersion, driver, dataSource, staticRoot, storefrontRoot,
+          port, appVersion, schemaVersion, driver, dataSource, staticRoot, storefrontRoot, adminRoot,
           httpsPort: settings.network?.httpsPort,
           certPath: settings.network?.certPath,
           keyPath: settings.network?.keyPath,

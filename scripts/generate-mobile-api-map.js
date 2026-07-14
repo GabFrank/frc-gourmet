@@ -22,7 +22,14 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const PRELOAD = path.join(ROOT, 'preload.ts');
-const OUT = path.join(ROOT, 'projects/mobile/src/app/core/data/api-channel-map.generated.ts');
+// El mismo mapa alimenta dos shims HTTP: la PWA mobile (projects/mobile) y el
+// frontend desktop servido como web en /admin (src/app/web). Ambos rutean las
+// llamadas de RepositoryIpcService a POST /api/rpc, así que comparten el mapeo
+// método→canal extraído de preload.ts (única fuente de verdad de window.api).
+const OUTS = [
+  path.join(ROOT, 'projects/mobile/src/app/core/data/api-channel-map.generated.ts'),
+  path.join(ROOT, 'src/app/web/api-channel-map.generated.ts'),
+];
 
 const src = fs.readFileSync(PRELOAD, 'utf8');
 
@@ -66,6 +73,8 @@ ${body}
 };
 `;
 
-fs.mkdirSync(path.dirname(OUT), { recursive: true });
-fs.writeFileSync(OUT, out, 'utf8');
-console.log(`[gen] ${entries.length} métodos → ${path.relative(ROOT, OUT)}`);
+for (const OUT of OUTS) {
+  fs.mkdirSync(path.dirname(OUT), { recursive: true });
+  fs.writeFileSync(OUT, out, 'utf8');
+  console.log(`[gen] ${entries.length} métodos → ${path.relative(ROOT, OUT)}`);
+}
