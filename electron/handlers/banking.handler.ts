@@ -60,7 +60,7 @@ export async function procesarAcreditacionesPendientes(dataSource: DataSource): 
       await queryRunner.manager.save(CuentaBancaria, cb);
       await registrarMovimientoBancario(queryRunner.manager, dataSource, {
         cuentaBancariaId: cb.id,
-        tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
+        tipo: MovimientoBancarioTipo.ACREDITACION_POS,
         monto: Number(acred.montoEsperado),
         observacion: `ACREDITACION POS AUTO #${acred.id}`,
       });
@@ -434,7 +434,7 @@ export function registerBankingHandlers(
         await queryRunner.manager.save(CuentaBancaria, cb);
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId: cb.id,
-          tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
+          tipo: MovimientoBancarioTipo.ACREDITACION_POS,
           monto: montoReal,
           observacion: `ACREDITACION POS VERIFICADA #${acred.id}`,
           responsable: getCurrentUser(),

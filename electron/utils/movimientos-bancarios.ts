@@ -87,15 +87,18 @@ export async function getMovimientosBancariosUnificados(
     if (opts.fechaHasta) mbQb.andWhere('mb.fecha <= :fh', { fh: opts.fechaHasta });
     const movs = await mbQb.getMany();
     for (const m of movs) {
+      const esAcredPos = m.tipoMovimiento === MovimientoBancarioTipo.ACREDITACION_POS;
       items.push({
         fecha: m.fecha,
         tipo: m.tipoMovimiento,
         monto: Number(m.monto),
-        esIngreso: m.tipoMovimiento === MovimientoBancarioTipo.ENTRADA_MANUAL || m.tipoMovimiento === MovimientoBancarioTipo.AJUSTE_POSITIVO,
+        esIngreso: m.tipoMovimiento === MovimientoBancarioTipo.ENTRADA_MANUAL
+          || m.tipoMovimiento === MovimientoBancarioTipo.AJUSTE_POSITIVO
+          || esAcredPos,
         descripcion: m.observacion || '-',
         numeroComprobante: m.numeroComprobante,
         responsable: m.responsable?.persona?.nombre || m.responsable?.nickname || '-',
-        origen: 'MANUAL',
+        origen: esAcredPos ? 'POS' : 'MANUAL',
         id: m.id,
         anulado: m.anulado,
       });
@@ -125,35 +128,12 @@ export async function getMovimientosBancariosUnificados(
       }
     }
 
-    // 3. Acreditaciones POS (ingresos cuando se acreditan) — tipo "ruidoso",
-    //    se saltea la query (la mas pesada) cuando se excluyen los ruidosos.
-    if (!(opts.excluirRuidosos && TIPOS_BANCARIOS_RUIDOSOS.includes('ACREDITACION_POS'))) {
-      const acredRows = await dbQuery(dataSource,
-        `SELECT a.id, a.monto_acreditado AS "montoAcreditado", a.monto_esperado AS "montoEsperado",
-                a.fecha_acreditacion_real AS "fechaReal", a.fecha_transaccion AS "fechaTrans",
-                a.estado, mp.nombre AS "maquinaNombre"
-         FROM acreditaciones_pos a
-         LEFT JOIN maquinas_pos mp ON a.maquina_pos_id = mp.id
-         WHERE a.cuenta_bancaria_id = ?`,
-        [cuentaBancariaId],
-      );
-      for (const a of acredRows) {
-        if (a.estado === 'ACREDITADO_AUTO' || a.estado === 'VERIFICADO' || a.estado === 'CON_DIFERENCIA') {
-          items.push({
-            fecha: a.fechaReal || a.fechaTrans,
-            tipo: 'ACREDITACION_POS',
-            monto: Number(a.montoAcreditado || a.montoEsperado),
-            esIngreso: true,
-            descripcion: `Acreditacion POS - ${a.maquinaNombre || ''}`,
-            numeroComprobante: null,
-            responsable: '-',
-            origen: 'POS',
-            id: a.id,
-            anulado: false,
-          });
-        }
-      }
-    }
+    // 3. Acreditaciones POS: NO se listan desde la entidad AcreditacionPos. Al
+    //    acreditar (auto o verificada) se crea un MovimientoBancario con
+    //    tipo = ACREDITACION_POS (ver banking.handler), que YA se incluye en la
+    //    sección 1. Listar también la entidad duplicaba cada acreditación. El
+    //    tipo ACREDITACION_POS está en TIPOS_BANCARIOS_RUIDOSOS, así que el
+    //    filtro genérico de abajo lo oculta por defecto en la consolidada.
 
     // 4. Operaciones financieras (DEPOSITO_BANCARIO destino, RETIRO_BANCARIO origen)
     const opRows = await dbQuery(dataSource,
