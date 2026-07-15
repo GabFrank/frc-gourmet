@@ -1,0 +1,64 @@
+<div class="crud-page">
+  <!-- Filtro por estado -->
+  <div class="vl-estados">
+    <button
+      *ngFor="let e of estados"
+      class="vl-estado-chip"
+      [class.active]="estadoActivo === e"
+      (click)="filtrarEstado(e)"
+    >
+      {{ e === 'TODOS' ? 'Todos' : (e | titlecase) }}
+    </button>
+  </div>
+
+  <!-- Búsqueda por funcionario -->
+  <div class="crud-filterbar">
+    <mat-form-field appearance="outline" class="crud-search">
+      <mat-label>Buscar funcionario</mat-label>
+      <input matInput [formControl]="busqueda" (keyup.enter)="aplicarFiltro()" />
+      <button *ngIf="busqueda.value" matSuffix mat-icon-button (click)="limpiarBusqueda()" aria-label="Limpiar">
+        <mat-icon>close</mat-icon>
+      </button>
+    </mat-form-field>
+    <button mat-flat-button color="primary" class="crud-filter-btn" (click)="aplicarFiltro()">Filtrar</button>
+  </div>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <div class="crud-list" *ngIf="!loading && !error">
+    <mat-card *ngFor="let v of items" class="crud-card" appearance="outlined">
+      <div class="crud-card-body">
+        <div class="crud-card-main">
+          <span class="crud-name">{{ v.funcionario }}</span>
+          <div class="vl-row2">
+            <span class="vl-monto">{{ v.simbolo }} {{ v.monto | number: '1.0-2' }}</span>
+            <span *ngIf="v.esAdelanto" class="vl-tag">Adelanto</span>
+            <span *ngIf="v.motivo" class="vl-motivo">· {{ v.motivo }}</span>
+          </div>
+          <span class="crud-sub">
+            {{ v.fecha | date: 'dd/MM/yy' }}<span *ngIf="v.descripcion"> · {{ v.descripcion }}</span>
+          </span>
+        </div>
+        <span class="crud-chip" [ngClass]="v.estadoClase">{{ v.estado | titlecase }}</span>
+        <button
+          *ngIf="canConfirmar && (v.puedeConfirmar || v.puedeAnular)"
+          mat-icon-button
+          [matMenuTriggerFor]="menu"
+          aria-label="Acciones"
+        >
+          <mat-icon>more_vert</mat-icon>
+        </button>
+        <mat-menu #menu="matMenu">
+          <button mat-menu-item *ngIf="v.puedeConfirmar" (click)="confirmar(v)">
+            <mat-icon color="primary">check_circle</mat-icon><span>Confirmar</span>
+          </button>
+          <button mat-menu-item *ngIf="v.puedeAnular" (click)="anular(v)">
+            <mat-icon color="warn">block</mat-icon><span>Anular</span>
+          </button>
+        </mat-menu>
+      </div>
+    </mat-card>
+    <p *ngIf="items.length === 0" class="crud-empty">No hay vales.</p>
+  </div>
+</div>

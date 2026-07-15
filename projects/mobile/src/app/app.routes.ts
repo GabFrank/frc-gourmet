@@ -429,8 +429,8 @@ export const routes: Routes = [
       },
       {
         path: 'rrhh/vales',
-        data: { title: 'Vales', source: 'vales' },
-        loadComponent: () => import('./pages/rrhh/ops/rrhh-ops-list.page').then((m) => m.RrhhOpsListPage),
+        data: { title: 'Vales' },
+        loadComponent: () => import('./pages/rrhh/vales/vales-list.page').then((m) => m.ValesListPage),
       },
       {
         path: 'rrhh/liquidaciones',
