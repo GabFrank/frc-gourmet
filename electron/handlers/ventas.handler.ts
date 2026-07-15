@@ -51,6 +51,30 @@ import { CobroParcial } from '../../src/app/database/entities/ventas/cobro-parci
 import { CobroParcialItem } from '../../src/app/database/entities/ventas/cobro-parcial-item.entity';
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
 
+/**
+ * M-04: mutex por-venta para serializar procesarStockVenta. El chequeo de
+ * idempotencia (contar StockMovimiento existentes) y la escritura ocurren en
+ * pasos separados; dos llamadas concurrentes para la misma venta podían pasar
+ * ambas el chequeo y duplicar el descuento de stock. En cualquier modo
+ * (standalone/server/client) hay UN solo proceso Node que escribe la BD, así
+ * que un candado en memoria por ventaId serializa correctamente.
+ */
+const procesarStockTails = new Map<number, Promise<void>>();
+async function withVentaStockLock<T>(ventaId: number, fn: () => Promise<T>): Promise<T> {
+  const prev = procesarStockTails.get(ventaId) ?? Promise.resolve();
+  let release!: () => void;
+  const myTurn = new Promise<void>((res) => (release = res));
+  const composed = prev.then(() => myTurn);
+  procesarStockTails.set(ventaId, composed);
+  await prev.catch(() => {});
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (procesarStockTails.get(ventaId) === composed) procesarStockTails.delete(ventaId);
+  }
+}
+
 export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Remove this line - get the current user in each handler instead
   // const currentUser = getCurrentUser(); // Get user for tracking
@@ -1940,6 +1964,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   // --- Stock: Procesar movimientos de stock al finalizar venta ---
   ipcMain.handle('procesarStockVenta', async (_event: any, ventaId: number) => {
+   return withVentaStockLock(ventaId, async () => {
     const stockRepo = dataSource.getRepository(StockMovimiento);
     const ventaItemRepo = dataSource.getRepository(VentaItem);
     const recetaIngRepo = dataSource.getRepository(RecetaIngrediente);
@@ -2327,6 +2352,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       console.error(`Error procesando stock para venta #${ventaId}:`, error);
       return { success: false, error: (error as any).message };
     }
+   });
   });
 
   // --- Stock: Revertir movimientos de stock al cancelar venta finalizada ---
