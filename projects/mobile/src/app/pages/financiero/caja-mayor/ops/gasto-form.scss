@@ -1,0 +1,26 @@
+.gf-destino {
+  align-self: stretch;
+  margin-bottom: 4px;
+}
+.gf-destino mat-button-toggle {
+  flex: 1;
+}
+.gf-hint {
+  margin: 0 4px 8px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.gf-toggle {
+  margin: 4px 4px 8px;
+}
+.gf-bloqueo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 16px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: var(--warning-color);
+  background: color-mix(in srgb, var(--warning-color) 14%, transparent);
+}
