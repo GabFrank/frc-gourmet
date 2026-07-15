@@ -167,6 +167,7 @@ export function registerAsistenciasHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_ASISTENCIA_REGISTRAR');
       const repo = queryRunner.manager.getRepository(FuncionarioTurno);
       const funcionario = await queryRunner.manager.findOne(Funcionario, { where: { id: data.funcionarioId } });
       const turno = await queryRunner.manager.findOne(Turno, { where: { id: data.turnoId } });
@@ -208,6 +209,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('cerrar-funcionario-turno', async (_e, id: number, fechaHasta?: Date) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_ASISTENCIA_REGISTRAR');
     const repo = dataSource.getRepository(FuncionarioTurno);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Asignacion de turno ${id} no encontrada`);
@@ -304,6 +306,7 @@ export function registerAsistenciasHandlers(
   });
 
   ipcMain.handle('marcar-asistencia-masiva', async (_e, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_ASISTENCIA_REGISTRAR');
     const results: any[] = [];
     for (const item of payload?.items || []) {
       try {

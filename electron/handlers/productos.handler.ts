@@ -1093,6 +1093,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-stock-movimiento', async (_event: any, stockMovimientoData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'STOCK_MOVIMIENTO_REGISTRAR');
       const stockMovimientoRepository = dataSource.getRepository(StockMovimiento);
       const productoRepository = dataSource.getRepository(Producto);
       const currentUser = getCurrentUser();
@@ -1138,6 +1139,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('update-stock-movimiento', async (_event: any, stockMovimientoId: number, stockMovimientoData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'STOCK_MOVIMIENTO_REGISTRAR');
       const stockMovimientoRepository = dataSource.getRepository(StockMovimiento);
       const stockMovimiento = await stockMovimientoRepository.findOneBy({ id: stockMovimientoId });
 
@@ -1943,6 +1945,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-precio-venta', async (_event: any, precioVentaData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       if (!(Number(precioVentaData?.valor) > 0)) {
         throw new Error('El precio de venta debe ser mayor a 0');
       }
@@ -2067,6 +2070,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('update-precio-venta', async (_event: any, precioVentaId: number, precioVentaData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const repo = dataSource.getRepository(PrecioVenta);
       const monedaRepo = dataSource.getRepository(Moneda);
       const tipoPrecioRepo = dataSource.getRepository(TipoPrecio);
@@ -2163,6 +2167,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('delete-precio-venta', async (_event: any, precioVentaId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const repo = dataSource.getRepository(PrecioVenta);
       const currentUser = getCurrentUser();
 
@@ -2212,6 +2217,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-precio-costo', async (_event: any, precioCostoData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       if (!(Number(precioCostoData?.valor) > 0)) {
         throw new Error('El costo debe ser mayor a 0');
       }
@@ -2251,6 +2257,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('update-precio-costo', async (_event: any, precioCostoId: number, precioCostoData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const repo = dataSource.getRepository(PrecioCosto);
       const monedaRepo = dataSource.getRepository(Moneda);
       const currentUser = getCurrentUser();
@@ -2289,6 +2296,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('delete-precio-costo', async (_event: any, precioCostoId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const repo = dataSource.getRepository(PrecioCosto);
       const currentUser = getCurrentUser();
 

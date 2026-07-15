@@ -99,6 +99,7 @@ export function registerLiquidacionSueldoHandlers(
   });
 
   ipcMain.handle('update-liquidacion-concepto', async (_e, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     const repo = dataSource.getRepository(LiquidacionConcepto);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Concepto ${id} no encontrado`);
@@ -156,6 +157,7 @@ export function registerLiquidacionSueldoHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_LIQUIDACION_GENERAR');
       const funcionario = await queryRunner.manager.findOne(Funcionario, {
         where: { id: funcionarioId },
         relations: ['persona', 'monedaSalario'],
@@ -439,6 +441,7 @@ export function registerLiquidacionSueldoHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_LIQUIDACION_GENERAR');
       const liqRepo = queryRunner.manager.getRepository(LiquidacionSueldo);
       const itemRepo = queryRunner.manager.getRepository(LiquidacionItem);
       const liq = await liqRepo.findOne({ where: { id: liquidacionId } });
@@ -482,6 +485,7 @@ export function registerLiquidacionSueldoHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_LIQUIDACION_GENERAR');
       const itemRepo = queryRunner.manager.getRepository(LiquidacionItem);
       const liqRepo = queryRunner.manager.getRepository(LiquidacionSueldo);
       const item = await itemRepo.findOne({ where: { id: itemId }, relations: ['liquidacion'] });
@@ -909,6 +913,7 @@ export function registerLiquidacionSueldoHandlers(
   });
 
   ipcMain.handle('create-bono', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_BONO_OTORGAR');
     const repo = dataSource.getRepository(Bono);
     const funcionario = await dataSource.getRepository(Funcionario).findOne({ where: { id: data.funcionarioId } });
     if (!funcionario) throw new Error(`Funcionario ${data.funcionarioId} no encontrado`);
@@ -927,6 +932,7 @@ export function registerLiquidacionSueldoHandlers(
   });
 
   ipcMain.handle('anular-bono', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_BONO_OTORGAR');
     const repo = dataSource.getRepository(Bono);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Bono ${id} no encontrado`);
@@ -952,6 +958,7 @@ export function registerLiquidacionSueldoHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_LIQUIDACION_GENERAR');
       const aguiRepo = queryRunner.manager.getRepository(Aguinaldo);
       const liqRepo = queryRunner.manager.getRepository(LiquidacionSueldo);
       const funcRepo = queryRunner.manager.getRepository(Funcionario);

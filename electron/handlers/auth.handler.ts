@@ -75,7 +75,7 @@ export function registerAuthHandlers(
 
       return {
         success: true,
-        usuario: usuario, // Return user details (consider sanitizing)
+        usuario: { ...usuario, password: undefined }, // no exponer el hash al renderer
         token: token,
         sessionId: savedSession.id,
         message: 'Inicio de sesión exitoso'
@@ -164,7 +164,8 @@ export function registerAuthHandlers(
 
   // Handler to get the currently logged-in user state from main process
   ipcMain.handle('getCurrentUser', async () => {
-    return getCurrentUser();
+    const user = getCurrentUser();
+    return user ? { ...user, password: undefined } : user;
   });
 
   // P0-2: reemplaza el viejo `setCurrentUser` (que aceptaba cualquier
@@ -203,7 +204,7 @@ export function registerAuthHandlers(
       }
 
       setCurrentUser(session.usuario);
-      return { success: true, usuario: session.usuario };
+      return { success: true, usuario: { ...session.usuario, password: undefined } };
     } catch (error) {
       console.error('restoreSession error:', error);
       return { success: false, message: 'ERROR INTERNO' };

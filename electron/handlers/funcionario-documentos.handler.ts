@@ -9,6 +9,7 @@ import {
   deleteFuncionarioDocumento,
   readFuncionarioDocumentoBase64,
 } from '../utils/document-handler.utils';
+import { ensurePermission } from '../utils/auth.utils';
 
 /**
  * Convierte una `rutaRelativa` (ej `funcionario-documentos/3/contrato.pdf`) en
@@ -46,6 +47,7 @@ export function registerFuncionarioDocumentosHandlers(
 
   ipcMain.handle('upload-funcionario-documento', async (_event, payload: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_FUNCIONARIO_EDITAR');
       const { funcionarioId, tipo, nombreArchivo, mimeType, base64, vencimiento, observacion } = payload || {};
       if (!funcionarioId || !nombreArchivo || !base64) {
         throw new Error('Datos incompletos para subir el documento');
@@ -80,6 +82,7 @@ export function registerFuncionarioDocumentosHandlers(
 
   ipcMain.handle('delete-funcionario-documento', async (_event, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_FUNCIONARIO_EDITAR');
       const repo = dataSource.getRepository(FuncionarioDocumento);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) return { success: false, message: 'Documento no encontrado' };
@@ -107,6 +110,7 @@ export function registerFuncionarioDocumentosHandlers(
 
   ipcMain.handle('update-funcionario-documento', async (_event, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_FUNCIONARIO_EDITAR');
       const repo = dataSource.getRepository(FuncionarioDocumento);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`Documento ${id} no encontrado`);
