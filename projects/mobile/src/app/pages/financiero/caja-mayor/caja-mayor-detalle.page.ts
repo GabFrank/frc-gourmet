@@ -308,6 +308,9 @@ export class CajaMayorDetallePage implements OnInit {
   registrarVale(): void {
     this.router.navigate(['/financiero/caja-mayor', this.id, 'vale']);
   }
+  pagarCompras(): void {
+    this.router.navigate(['/financiero/caja-mayor', this.id, 'pagar-compras']);
+  }
   ajuste(signo: 'ingreso' | 'egreso'): void {
     this.router.navigate(['/financiero/caja-mayor', this.id, 'ajuste', signo]);
   }

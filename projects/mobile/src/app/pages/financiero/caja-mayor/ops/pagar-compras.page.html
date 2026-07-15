@@ -1,0 +1,99 @@
+<div class="crud-edit pc-page">
+  <mat-toolbar color="primary" class="crud-edit-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="crud-edit-title">Pagar compras</span>
+    <span class="crud-spacer"></span>
+    <button mat-button (click)="pagar()" [disabled]="!puedePagar || saving">Pagar</button>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
+
+  <div class="pc-body" *ngIf="!loading">
+    <!-- Fuente del pago -->
+    <mat-button-toggle-group [formControl]="form.controls.fuente" class="pc-fuente">
+      <mat-button-toggle value="CAJA_MAYOR">
+        <mat-icon>account_balance_wallet</mat-icon> Caja Mayor
+      </mat-button-toggle>
+      <mat-button-toggle value="CUENTA_BANCARIA" [disabled]="cuentasBancarias.length === 0">
+        <mat-icon>account_balance</mat-icon> Cuenta bancaria
+      </mat-button-toggle>
+    </mat-button-toggle-group>
+
+    <div class="pc-pagoform">
+      <ng-container *ngIf="!esBanco">
+        <mat-form-field appearance="outline" class="pc-field">
+          <mat-label>Moneda</mat-label>
+          <mat-select [formControl]="form.controls.monedaId">
+            <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.label }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="pc-field">
+          <mat-label>Forma de pago</mat-label>
+          <mat-select [formControl]="form.controls.formaPagoId">
+            <mat-option *ngFor="let f of formasPago" [value]="f.id">{{ f.label }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </ng-container>
+
+      <mat-form-field appearance="outline" class="pc-field" *ngIf="esBanco">
+        <mat-label>Cuenta bancaria</mat-label>
+        <mat-select [formControl]="form.controls.cuentaBancariaId">
+          <mat-option *ngFor="let c of cuentasBancarias" [value]="c.id">{{ c.label }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    <!-- Filtro por proveedor -->
+    <mat-form-field appearance="outline" class="pc-field pc-filtro" *ngIf="proveedoresFiltro.length > 1">
+      <mat-label>Proveedor</mat-label>
+      <mat-select [value]="filtroProveedorId" (selectionChange)="filtroProveedorId = $event.value; aplicarFiltro()">
+        <mat-option [value]="null">Todos</mat-option>
+        <mat-option *ngFor="let p of proveedoresFiltro" [value]="p.id">{{ p.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <!-- Cuotas pendientes -->
+    <div class="pc-cuotas">
+      <div class="pc-cuota" *ngFor="let c of cuotas" [class.sel]="c.selected">
+        <mat-checkbox color="primary" [checked]="c.selected" (change)="onToggleCuota(c)"></mat-checkbox>
+        <div class="pc-cuota-main">
+          <div class="pc-cuota-row1">
+            <span class="pc-prov">{{ c.proveedorNombre }}</span>
+            <span class="pc-saldo">{{ c.simbolo }} {{ c.saldoPendiente | number: '1.0-' + c.decimales }}</span>
+          </div>
+          <div class="pc-cuota-row2">
+            <span>{{ c.compraNota }} · {{ c.cuotaLabel }}</span>
+            <span *ngIf="c.vencimiento">· vence {{ c.vencimiento | date: 'dd/MM/yy' }}</span>
+          </div>
+          <mat-form-field appearance="outline" class="pc-monto" *ngIf="c.selected">
+            <mat-label>Monto a pagar</mat-label>
+            <input
+              matInput
+              type="number"
+              inputmode="decimal"
+              [(ngModel)]="c.montoAPagar"
+              (ngModelChange)="recalcular()"
+              min="0.01"
+              [max]="c.saldoPendiente"
+              step="any"
+            />
+            <span matTextSuffix>{{ c.simbolo }}</span>
+          </mat-form-field>
+        </div>
+      </div>
+
+      <p *ngIf="cuotas.length === 0" class="crud-empty">No hay cuotas pendientes de compras.</p>
+    </div>
+  </div>
+
+  <!-- Barra de total + acción -->
+  <div class="pc-footer" *ngIf="!loading && cuotas.length > 0">
+    <div class="pc-total">
+      <span>{{ cantSeleccionadas }} seleccionada(s)</span>
+      <strong>{{ subtotal | number: '1.0-2' }}</strong>
+    </div>
+    <button mat-flat-button color="primary" (click)="pagar()" [disabled]="!puedePagar || saving">
+      {{ saving ? 'Pagando…' : 'Pagar seleccionadas' }}
+    </button>
+  </div>
+</div>
