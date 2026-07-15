@@ -1179,15 +1179,18 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         return { success: true };
       }
 
-      // Buscar movimiento original del gasto
+      // Buscar TODOS los movimientos del gasto. Un gasto multi-detalle crea un
+      // EGRESO_GASTO por línea (moneda/forma de pago), así que hay que revertir
+      // todos (antes se usaba findOne y quedaba el saldo descuadrado). Mismo
+      // criterio que edit-gasto, que usa find().
       const movRepo = queryRunner.manager.getRepository(CajaMayorMovimiento);
-      const movOriginal = await movRepo.findOne({
+      const movimientos = await movRepo.find({
         where: { gasto: { id }, tipoMovimiento: TipoMovimiento.EGRESO_GASTO },
         relations: ['cajaMayor', 'moneda', 'formaPago'],
       });
 
-      if (movOriginal) {
-        // Crear contra-movimiento
+      for (const movOriginal of movimientos) {
+        // Crear contra-movimiento por cada egreso
         const contraMovimiento = queryRunner.manager.create(CajaMayorMovimiento, {
           cajaMayor: movOriginal.cajaMayor,
           tipoMovimiento: TipoMovimiento.ANULACION,
