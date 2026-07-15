@@ -479,6 +479,7 @@ export function registerBackupHandlers(
 
   ipcMain.handle('backup-db-reset', async (_e, opts: { confirmation: string }) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_BACKUP');
       if (opts?.confirmation !== 'RESET') {
         return { success: false, message: 'Confirmación incorrecta. Debe escribir RESET.' };
       }
@@ -525,6 +526,7 @@ export function registerBackupHandlers(
 
   ipcMain.handle('backup-clear-images', async (_e, opts: { confirmation: string }) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_BACKUP');
       if (opts?.confirmation !== 'BORRAR IMAGENES') {
         return { success: false, message: 'Confirmación incorrecta.' };
       }
