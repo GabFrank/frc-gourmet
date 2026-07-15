@@ -212,6 +212,22 @@ export function registerLiquidacionSueldoHandlers(
         .where('liquidacion_id = :lid AND manual = :m', { lid: liq.id, m: false })
         .execute();
 
+      // C-04: liberar vales / ventas de vacaciones enlazados a ESTA liquidación
+      // (aún no pagados) antes de regenerar, para que la regeneración pueda volver
+      // a tomarlos sin fugarlos. El enlace se re-crea abajo al insertar cada item.
+      await queryRunner.manager.getRepository(Vale)
+        .createQueryBuilder()
+        .update(Vale)
+        .set({ liquidacionId: null as any })
+        .where('liquidacion_id = :lid AND estado = :est', { lid: liq.id, est: ValeEstado.CONFIRMADO })
+        .execute();
+      await queryRunner.manager.getRepository(VacacionVenta)
+        .createQueryBuilder()
+        .update(VacacionVenta)
+        .set({ liquidacionId: null as any })
+        .where('liquidacion_id = :lid AND estado = :est', { lid: liq.id, est: VacacionVentaEstado.PENDIENTE })
+        .execute();
+
       // Helpers para crear items
       const conceptoMap = new Map<string, LiquidacionConcepto>();
       const conceptos = await conceptoRepo.find();
@@ -269,16 +285,23 @@ export function registerLiquidacionSueldoHandlers(
 
       // 5) Vales y adelantos pendientes (CONFIRMADO + (esAdelanto || vale))
       const valeRepo = queryRunner.manager.getRepository(Vale);
-      const valesPendientes = await valeRepo.find({
-        where: {
-          funcionario: { id: funcionarioId } as any,
-          estado: ValeEstado.CONFIRMADO,
-        },
-      });
+      // C-04: además del estado, exigir que el vale no esté ya enlazado a OTRA
+      // liquidación (liquidacion_id NULL o = esta). Antes se tomaban todos los
+      // CONFIRMADO sin importar el periodo, así que un vale podía descontarse en
+      // dos liquidaciones distintas (una por periodo) hasta que se pagara.
+      const valesPendientes = await valeRepo.createQueryBuilder('v')
+        .where('v.funcionario_id = :fid', { fid: funcionarioId })
+        .andWhere('v.estado = :est', { est: ValeEstado.CONFIRMADO })
+        .andWhere('(v.liquidacion_id IS NULL OR v.liquidacion_id = :lid)', { lid: liq.id })
+        .getMany();
       for (const v of valesPendientes) {
+        if (!(Number(v.monto) > 0)) continue;
         const concepto = v.esAdelanto ? 'ADELANTO_DESCUENTO' : 'VALE_DESCUENTO';
         const desc = v.esAdelanto ? `Adelanto #${v.id}` : `Vale #${v.id}`;
         await crearItem(concepto, desc, Number(v.monto), LiquidacionItemTipo.DESCUENTO, v.id, 'VALE');
+        // Enlazar el vale a esta liquidación para que otro periodo no lo tome.
+        v.liquidacionId = liq.id;
+        await valeRepo.save(v);
       }
 
       // 6) Cuotas de prestamo del periodo (PRESTAMO_FUNCIONARIO + cuotas pendientes/parciales con vencimiento dentro del periodo)
@@ -373,15 +396,21 @@ export function registerLiquidacionSueldoHandlers(
 
       // 10) Ventas de vacaciones pendientes (pago al funcionario como HABER)
       const ventaVacRepo = queryRunner.manager.getRepository(VacacionVenta);
+      // C-04: mismo guard que los vales — no tomar una venta de vacaciones ya
+      // enlazada a otra liquidación (evita el doble crédito entre periodos).
       const ventasVacPend = await ventaVacRepo.createQueryBuilder('vv')
         .leftJoin('vv.vacacion', 'vac')
         .leftJoin('vac.funcionario', 'vf')
         .where('vf.id = :fid', { fid: funcionarioId })
         .andWhere('vv.estado = :est', { est: VacacionVentaEstado.PENDIENTE })
+        .andWhere('(vv.liquidacion_id IS NULL OR vv.liquidacion_id = :lid)', { lid: liq.id })
         .getMany();
       for (const vv of ventasVacPend) {
         if (Number(vv.monto) > 0) {
           await crearItem('VACACION_VENTA', `Venta de ${vv.dias} dia(s) de vacaciones`, Number(vv.monto), LiquidacionItemTipo.HABER, vv.id, 'VACACION_VENTA');
+          // Enlazar a esta liquidación para que otro periodo no la tome.
+          vv.liquidacionId = liq.id;
+          await ventaVacRepo.save(vv);
         }
       }
 
