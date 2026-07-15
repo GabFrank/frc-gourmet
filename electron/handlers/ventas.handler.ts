@@ -2100,7 +2100,33 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       async function processElaboradoConVariacion(item: VentaItem, out: PendingMovement[]): Promise<void> {
         if (!item.presentacion?.id) return;
 
-        // Buscar RecetaPresentacion que coincida con la presentación vendida y el producto
+        // C-02: una pizza multi-sabor tiene N VentaItemSabor, cada uno con su
+        // RecetaPresentacion y su proporcion (1.0 entera, 0.5 mitad, ...). Antes
+        // se resolvía UN solo RecetaPresentacion con .getOne() (sabor arbitrario)
+        // y se descontaba al 100%, ignorando los demás sabores y la proporción.
+        // Ahora se descuenta la receta de CADA sabor escalada por su proporción,
+        // igual que el cálculo de costo (costo_calculado × proporcion).
+        const sabores = await dataSource.getRepository(VentaItemSabor).find({
+          where: { ventaItem: { id: item.id }, activo: true },
+          relations: ['recetaPresentacion', 'recetaPresentacion.receta'],
+        });
+
+        if (sabores.length > 0) {
+          for (const vis of sabores) {
+            const receta = vis.recetaPresentacion?.receta;
+            if (!receta) continue;
+            const proporcion = Number(vis.proporcion) || 0;
+            if (proporcion <= 0) continue;
+            const itemEscalado = { ...item, cantidad: Number(item.cantidad) * proporcion } as VentaItem;
+            // Ingredientes + modificaciones por sabor; adicionales una sola vez (abajo).
+            await processReceta(receta, itemEscalado, out, false);
+          }
+          // Los adicionales del item se descuentan una sola vez (no por sabor).
+          await processAdicionalesItem(item, out);
+          return;
+        }
+
+        // Fallback (data antigua / item sin sabores persistidos): comportamiento previo.
         const recetaPres = await recetaPresRepo.createQueryBuilder('rp')
           .innerJoinAndSelect('rp.receta', 'receta')
           .innerJoin('rp.sabor', 'sabor')
@@ -2186,8 +2212,10 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         }
       }
 
-      // Procesa receta completa: con modificaciones del VentaItem + adicionales
-      async function processReceta(receta: Receta, item: VentaItem, out: PendingMovement[]): Promise<void> {
+      // Procesa receta completa: con modificaciones del VentaItem + adicionales.
+      // incluirAdicionales=false para el caso multi-sabor (los adicionales se
+      // procesan una sola vez aparte, no por cada sabor).
+      async function processReceta(receta: Receta, item: VentaItem, out: PendingMovement[], incluirAdicionales = true): Promise<void> {
         const rendimiento = Number(receta.rendimiento) || 1;
         const cantidadVendida = Number(item.cantidad);
 
@@ -2248,7 +2276,18 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           }
         }
 
-        // Procesar adicionales del item
+        // Adicionales del item: se procesan una sola vez por item. En pizzas
+        // multi-sabor la receta se procesa por-sabor, pero los adicionales no
+        // deben multiplicarse por la cantidad de sabores (C-02).
+        if (incluirAdicionales) {
+          await processAdicionalesItem(item, out);
+        }
+      }
+
+      // Procesa los adicionales de un VentaItem (extraído de processReceta para
+      // poder llamarlo una sola vez cuando la receta se procesa por-sabor).
+      async function processAdicionalesItem(item: VentaItem, out: PendingMovement[]): Promise<void> {
+        const cantidadVendida = Number(item.cantidad);
         const adicionales = await adicRepo.find({
           where: { ventaItem: { id: item.id }, activo: true },
           relations: ['adicional'],
