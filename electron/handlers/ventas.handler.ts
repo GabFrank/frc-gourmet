@@ -55,6 +55,30 @@ import { CobroParcial } from '../../src/app/database/entities/ventas/cobro-parci
 import { CobroParcialItem } from '../../src/app/database/entities/ventas/cobro-parcial-item.entity';
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
 
+/**
+ * M-04: mutex por-venta para serializar procesarStockVenta. El chequeo de
+ * idempotencia (contar StockMovimiento existentes) y la escritura ocurren en
+ * pasos separados; dos llamadas concurrentes para la misma venta podían pasar
+ * ambas el chequeo y duplicar el descuento de stock. En cualquier modo
+ * (standalone/server/client) hay UN solo proceso Node que escribe la BD, así
+ * que un candado en memoria por ventaId serializa correctamente.
+ */
+const procesarStockTails = new Map<number, Promise<void>>();
+async function withVentaStockLock<T>(ventaId: number, fn: () => Promise<T>): Promise<T> {
+  const prev = procesarStockTails.get(ventaId) ?? Promise.resolve();
+  let release!: () => void;
+  const myTurn = new Promise<void>((res) => (release = res));
+  const composed = prev.then(() => myTurn);
+  procesarStockTails.set(ventaId, composed);
+  await prev.catch(() => {});
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (procesarStockTails.get(ventaId) === composed) procesarStockTails.delete(ventaId);
+  }
+}
+
 export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Remove this line - get the current user in each handler instead
   // const currentUser = getCurrentUser(); // Get user for tracking
@@ -2002,6 +2026,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   // --- Stock: Procesar movimientos de stock al finalizar venta ---
   ipcMain.handle('procesarStockVenta', async (_event: any, ventaId: number) => {
+   return withVentaStockLock(ventaId, async () => {
     const stockRepo = dataSource.getRepository(StockMovimiento);
     const ventaItemRepo = dataSource.getRepository(VentaItem);
     const recetaIngRepo = dataSource.getRepository(RecetaIngrediente);
@@ -2162,7 +2187,33 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       async function processElaboradoConVariacion(item: VentaItem, out: PendingMovement[]): Promise<void> {
         if (!item.presentacion?.id) return;
 
-        // Buscar RecetaPresentacion que coincida con la presentación vendida y el producto
+        // C-02: una pizza multi-sabor tiene N VentaItemSabor, cada uno con su
+        // RecetaPresentacion y su proporcion (1.0 entera, 0.5 mitad, ...). Antes
+        // se resolvía UN solo RecetaPresentacion con .getOne() (sabor arbitrario)
+        // y se descontaba al 100%, ignorando los demás sabores y la proporción.
+        // Ahora se descuenta la receta de CADA sabor escalada por su proporción,
+        // igual que el cálculo de costo (costo_calculado × proporcion).
+        const sabores = await dataSource.getRepository(VentaItemSabor).find({
+          where: { ventaItem: { id: item.id }, activo: true },
+          relations: ['recetaPresentacion', 'recetaPresentacion.receta'],
+        });
+
+        if (sabores.length > 0) {
+          for (const vis of sabores) {
+            const receta = vis.recetaPresentacion?.receta;
+            if (!receta) continue;
+            const proporcion = Number(vis.proporcion) || 0;
+            if (proporcion <= 0) continue;
+            const itemEscalado = { ...item, cantidad: Number(item.cantidad) * proporcion } as VentaItem;
+            // Ingredientes + modificaciones por sabor; adicionales una sola vez (abajo).
+            await processReceta(receta, itemEscalado, out, false);
+          }
+          // Los adicionales del item se descuentan una sola vez (no por sabor).
+          await processAdicionalesItem(item, out);
+          return;
+        }
+
+        // Fallback (data antigua / item sin sabores persistidos): comportamiento previo.
         const recetaPres = await recetaPresRepo.createQueryBuilder('rp')
           .innerJoinAndSelect('rp.receta', 'receta')
           .innerJoin('rp.sabor', 'sabor')
@@ -2248,8 +2299,10 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         }
       }
 
-      // Procesa receta completa: con modificaciones del VentaItem + adicionales
-      async function processReceta(receta: Receta, item: VentaItem, out: PendingMovement[]): Promise<void> {
+      // Procesa receta completa: con modificaciones del VentaItem + adicionales.
+      // incluirAdicionales=false para el caso multi-sabor (los adicionales se
+      // procesan una sola vez aparte, no por cada sabor).
+      async function processReceta(receta: Receta, item: VentaItem, out: PendingMovement[], incluirAdicionales = true): Promise<void> {
         const rendimiento = Number(receta.rendimiento) || 1;
         const cantidadVendida = Number(item.cantidad);
 
@@ -2310,7 +2363,18 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           }
         }
 
-        // Procesar adicionales del item
+        // Adicionales del item: se procesan una sola vez por item. En pizzas
+        // multi-sabor la receta se procesa por-sabor, pero los adicionales no
+        // deben multiplicarse por la cantidad de sabores (C-02).
+        if (incluirAdicionales) {
+          await processAdicionalesItem(item, out);
+        }
+      }
+
+      // Procesa los adicionales de un VentaItem (extraído de processReceta para
+      // poder llamarlo una sola vez cuando la receta se procesa por-sabor).
+      async function processAdicionalesItem(item: VentaItem, out: PendingMovement[]): Promise<void> {
+        const cantidadVendida = Number(item.cantidad);
         const adicionales = await adicRepo.find({
           where: { ventaItem: { id: item.id }, activo: true },
           relations: ['adicional'],
@@ -2350,6 +2414,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       console.error(`Error procesando stock para venta #${ventaId}:`, error);
       return { success: false, error: (error as any).message };
     }
+   });
   });
 
   // --- Stock: Revertir movimientos de stock al cancelar venta finalizada ---

@@ -683,6 +683,21 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       const eraFinalizada = compra.estado === CompraEstado.FINALIZADO;
 
       if (eraFinalizada) {
+        // A-03: no permitir anular si parte del stock comprado ya fue
+        // consumido/vendido — revertirlo dejaría el stock en negativo. Se chequea
+        // ANTES de cualquier escritura para que la anulación falle limpia.
+        for (const det of compra.detalles || []) {
+          if (!det.producto?.controlaStock) continue;
+          const stockActual = await getStockActualUnidadBase(qr, det.producto.id);
+          const aRevertir = Number(det.cantidadUnidadBase);
+          if (stockActual + 1e-9 < aRevertir) {
+            throw new Error(
+              `No se puede anular: el stock de "${(det.producto as any).nombre || det.producto.id}" ya fue ` +
+              `consumido/vendido (disponible ${stockActual}, compra ${aRevertir}). Anule primero los movimientos que lo consumieron.`,
+            );
+          }
+        }
+
         // Si tiene CPP a credito: validar que ninguna cuota este pagada (parcial o total)
         if (compra.cuentaPorPagar?.id) {
           const cuotas = await qr.manager.getRepository(CuentaPorPagarCuota).find({
@@ -751,7 +766,14 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
           }
         }
 
-        // Revertir stock por cada detalle (solo los que controlan stock)
+        // Revertir stock por cada detalle (solo los que controlan stock).
+        // NOTA (A-03): el COSTO promedio ponderado NO se revierte aquí. Es
+        // dependiente del camino: si hubo compras/ventas posteriores, el aporte
+        // de esta compra al promedio no es recuperable por resta simple, y no se
+        // guarda un snapshot del costo previo al finalizar. Revertirlo requiere
+        // persistir el (stock, costo) previos al aplicar el promedio (cambio de
+        // esquema) — queda como follow-up. El guard de arriba evita al menos que
+        // el stock quede negativo.
         for (const det of compra.detalles || []) {
           if (!det.producto?.controlaStock) continue;
           const sm = qr.manager.create(StockMovimiento, {
