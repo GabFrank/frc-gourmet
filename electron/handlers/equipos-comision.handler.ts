@@ -197,8 +197,15 @@ export function registerEquiposComisionHandlers(
       });
       if (!miembros.length) throw new Error('El equipo no tiene miembros');
 
-      // Verificar que la suma de porcentajes es 100
+      // M-06: verificar que la suma de porcentajes de reparto sea 100%. Antes se
+      // calculaba pero no se validaba, permitiendo repartos que no suman 100 (los
+      // miembros quedaban sub/sobre-pagados sin aviso).
       const sumaPorc = miembros.reduce((s, m) => s + Number(m.porcentajeReparto), 0);
+      if (Math.abs(sumaPorc - 100) > 0.01) {
+        throw new Error(
+          `La suma de los porcentajes de reparto del equipo debe ser 100% (actual: ${+sumaPorc.toFixed(2)}%).`,
+        );
+      }
 
       // Obtener reglas del equipo activas en el periodo
       const reglasEquipo = await queryRunner.manager.getRepository(EquipoComisionRegla).find({
@@ -306,6 +313,24 @@ export function registerEquiposComisionHandlers(
           });
           await setEntityUserTracking(dataSource, liq, userId, false);
           liq = await liqRepo.save(liq);
+        }
+
+        // A-04: si el periodo se re-evalúa, reemplazar (no duplicar) el item
+        // auto-generado de ESTE equipo+periodo. Se identifican por observacion
+        // (JSON con equipoId+periodo) y esManual=false; los items de otros equipos
+        // o manuales no se tocan.
+        const itemsPrevios = await itemRepo.find({
+          where: { liquidacion: { id: liq.id } as any, esManual: false },
+        });
+        for (const ip of itemsPrevios) {
+          try {
+            const obs = ip.observacion ? JSON.parse(ip.observacion) : null;
+            if (obs && Number(obs.equipoId) === Number(equipoId) && obs.periodo === periodo) {
+              await itemRepo.remove(ip);
+            }
+          } catch {
+            // observacion no-JSON (item viejo): no se puede identificar, se deja.
+          }
         }
 
         const item = itemRepo.create({

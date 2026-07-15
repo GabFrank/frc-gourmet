@@ -132,7 +132,12 @@ async function aplicarPagoCpoCuota(
 
   const cpp = await cppRepo.findOne({ where: { id: cuota.cuentaPorPagar.id }, relations: ['cuotas'] });
   if (cpp) {
-    cpp.montoPagado = +(Number(cpp.montoPagado) + monto).toFixed(2);
+    // A-05: recomputar montoPagado como la SUMA de las cuotas, no acumular +monto.
+    // La acumulación se sobre-sumaba (un pago reintentado, o una anulación que
+    // reducía la cuota pero no el cpp, dejaban el cpp "más pagado" de lo real).
+    // cpp.cuotas se lee recién ahora, después de guardar la cuota actual, así que
+    // la suma ya incluye este pago y es la fuente de verdad. Idempotente.
+    cpp.montoPagado = +(cpp.cuotas || []).reduce((s: number, c: any) => s + Number(c.montoPagado), 0).toFixed(2);
     const todasPagadas = (cpp.cuotas || []).every((c: any) => Number(c.montoPagado) >= Number(c.monto) - 0.005);
     if (todasPagadas) cpp.estado = CuentaPorPagarEstado.PAGADO;
     await queryRunner.manager.save(CuentaPorPagar, cpp);
