@@ -1,0 +1,68 @@
+<div class="crud-edit">
+  <mat-toolbar color="primary" class="crud-edit-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="crud-edit-title">{{ titulo }}</span>
+    <span class="crud-spacer"></span>
+    <button mat-button (click)="guardar()" [disabled]="saving || loading">Guardar</button>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
+
+  <form class="crud-form" [formGroup]="form" (ngSubmit)="guardar()" *ngIf="!loading">
+    <mat-form-field appearance="outline">
+      <mat-label>Nombre</mat-label>
+      <input matInput formControlName="nombre" autocapitalize="characters" />
+      <mat-error *ngIf="form.controls.nombre.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Banco</mat-label>
+      <input matInput formControlName="banco" autocapitalize="characters" />
+      <mat-error *ngIf="form.controls.banco.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Número de cuenta</mat-label>
+      <input matInput formControlName="numeroCuenta" autocapitalize="characters" />
+      <mat-error *ngIf="form.controls.numeroCuenta.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Tipo de cuenta</mat-label>
+      <mat-select formControlName="tipoCuenta">
+        <mat-option *ngFor="let t of tiposCuenta" [value]="t">{{ t | titlecase }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Moneda</mat-label>
+      <mat-select formControlName="monedaId">
+        <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.monedaId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Titular (opcional)</mat-label>
+      <input matInput formControlName="titular" autocapitalize="characters" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Alias (opcional)</mat-label>
+      <input matInput formControlName="alias" autocapitalize="characters" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Saldo</mat-label>
+      <input matInput type="number" inputmode="decimal" formControlName="saldo" min="0" step="any" />
+      <mat-error *ngIf="form.controls.saldo.hasError('required')">Requerido</mat-error>
+      <mat-error *ngIf="form.controls.saldo.hasError('min')">No puede ser negativo</mat-error>
+    </mat-form-field>
+
+    <mat-slide-toggle formControlName="activo" color="primary" style="margin: 4px 4px 8px">Activa</mat-slide-toggle>
+
+    <button type="submit" mat-flat-button color="primary" class="crud-save-btn" [disabled]="saving">
+      {{ saving ? 'Guardando…' : 'Guardar' }}
+    </button>
+  </form>
+</div>

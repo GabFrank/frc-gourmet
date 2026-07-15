@@ -1,0 +1,40 @@
+<div class="ir-page">
+  <mat-toolbar color="primary" class="crud-edit-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="crud-edit-title">Ingresar retiro</span>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error ir-pad">{{ error }}</p>
+
+  <div class="ir-body" *ngIf="!loading && !error">
+    <div class="ir-card" *ngFor="let r of retiros">
+      <div class="ir-card-head">
+        <span class="ir-origen">{{ r.origenCaja }}</span>
+        <span class="crud-chip" [ngClass]="r.estadoClase">{{ r.estadoLabel }}</span>
+      </div>
+      <div class="ir-totales">
+        <span class="ir-total" *ngFor="let t of r.totales">
+          {{ t.simbolo }} {{ t.monto | number: '1.0-' + t.decimales }}
+        </span>
+      </div>
+      <div class="ir-sub">
+        <span>N° {{ r.id }}</span>
+        <span *ngIf="r.fecha">· {{ r.fecha | date: 'dd/MM/yy HH:mm' }}</span>
+        <span *ngIf="r.responsable">· {{ r.responsable }}</span>
+      </div>
+      <div class="ir-obs" *ngIf="r.observaciones">{{ r.observaciones }}</div>
+      <button
+        mat-flat-button
+        color="primary"
+        class="ir-btn"
+        [disabled]="procesandoId !== null"
+        (click)="ingresar(r)"
+      >
+        <mat-icon>south_west</mat-icon> Ingresar
+      </button>
+    </div>
+
+    <p *ngIf="retiros.length === 0" class="crud-empty">No hay retiros pendientes de ingreso.</p>
+  </div>
+</div>

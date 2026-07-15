@@ -1,0 +1,63 @@
+<div class="mc-page">
+  <mat-toolbar color="primary" class="mc-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="mc-title">{{ titulo }}</span>
+    <span class="mc-spacer"></span>
+    <button *ngIf="canEdit" mat-button (click)="nuevoMovimiento()">
+      <mat-icon>add</mat-icon> Nuevo
+    </button>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error mc-pad">{{ error }}</p>
+
+  <div class="mc-content" *ngIf="!loading && !error">
+    <!-- Filtros -->
+    <div class="mc-filtros">
+      <mat-form-field appearance="outline" class="mc-filtro">
+        <mat-label>Tipo</mat-label>
+        <mat-select [formControl]="filtroTipo">
+          <mat-option [value]="null">Todos</mat-option>
+          <mat-option *ngFor="let t of tiposFiltro" [value]="t">{{ tipoLabels[t] || t }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="mc-filtro">
+        <mat-label>Movimiento</mat-label>
+        <mat-select [formControl]="filtroSigno">
+          <mat-option value="TODOS">Todos</mat-option>
+          <mat-option value="INGRESO">Ingresos</mat-option>
+          <mat-option value="EGRESO">Egresos</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <button mat-flat-button color="primary" class="mc-filtrar" (click)="recargar()">Filtrar</button>
+    </div>
+
+    <!-- Movimientos -->
+    <div class="mc-list">
+      <div class="mc-mov" *ngFor="let m of movimientos" [class.anulado]="m.anulado">
+        <div class="mc-mov-icon" [class.in]="m.esIngreso" [class.out]="!m.esIngreso">
+          <mat-icon>{{ m.esIngreso ? 'south_west' : 'north_east' }}</mat-icon>
+        </div>
+        <div class="mc-mov-main">
+          <div class="mc-mov-row1">
+            <span class="mc-mov-tipo">{{ m.tipoLabel }}</span>
+            <span class="mc-mov-monto" [class.in]="m.esIngreso" [class.out]="!m.esIngreso">
+              {{ m.esIngreso ? '+' : '−' }}{{ simbolo }} {{ m.monto | number: '1.0-' + decimales }}
+            </span>
+          </div>
+          <div class="mc-mov-row2">
+            <span>{{ m.fecha | date: 'dd/MM/yy HH:mm' }}</span>
+            <span *ngIf="m.origen">· {{ m.origen }}</span>
+            <span *ngIf="m.numeroComprobante">· {{ m.numeroComprobante }}</span>
+          </div>
+          <div class="mc-mov-obs" *ngIf="m.descripcion">{{ m.descripcion }}</div>
+          <div class="mc-mov-anulado" *ngIf="m.anulado"><mat-icon>info</mat-icon><span>Anulado</span></div>
+        </div>
+      </div>
+
+      <p *ngIf="movimientos.length === 0 && !loadingMov" class="crud-empty">No hay movimientos.</p>
+      <mat-progress-bar *ngIf="loadingMov" mode="indeterminate"></mat-progress-bar>
+      <button *ngIf="hayMas && !loadingMov" mat-stroked-button class="mc-mas" (click)="cargarMas()">Cargar más</button>
+    </div>
+  </div>
+</div>

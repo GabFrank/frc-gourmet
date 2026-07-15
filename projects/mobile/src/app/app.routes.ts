@@ -48,9 +48,11 @@ const COMPRAS_ITEMS: SectionItem[] = [
 const FINANCIERO_ITEMS: SectionItem[] = [
   { label: 'Cajas', icon: 'point_of_sale', path: '/financiero/cajas', enabled: true },
   { label: 'Cuentas por Cobrar', icon: 'request_quote', path: '/financiero/cxc', enabled: true },
+  { label: 'Gastos', icon: 'receipt_long', path: '/financiero/gastos', enabled: true },
   { label: 'Categorías de gasto', icon: 'sell', path: '/financiero/gasto-categorias', enabled: true },
   { label: 'Monedas', icon: 'monetization_on', path: '/financiero/monedas', enabled: false },
   { label: 'Caja Mayor', icon: 'account_balance', path: '/financiero/caja-mayor', enabled: true },
+  { label: 'Cuentas bancarias', icon: 'savings', path: '/financiero/cuentas-bancarias', enabled: true },
   { label: 'Reglas de comisión', icon: 'percent', path: '/financiero/comisiones-reglas', enabled: true },
   { label: 'Equipos de comisión', icon: 'groups', path: '/financiero/comisiones-equipos', enabled: true },
   { label: 'Liq. de comisión', icon: 'receipt', path: '/financiero/comisiones-liquidaciones', enabled: true },
@@ -324,7 +326,17 @@ export const routes: Routes = [
   {
     path: 'financiero/caja-mayor/:id/gasto',
     canActivate: [authGuard],
-    loadComponent: () => import('./pages/financiero/caja-mayor/ops/gasto-nuevo.page').then((m) => m.GastoNuevoPage),
+    loadComponent: () => import('./pages/financiero/caja-mayor/ops/gasto-form.page').then((m) => m.GastoFormPage),
+  },
+  {
+    path: 'financiero/gastos/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/caja-mayor/ops/gasto-form.page').then((m) => m.GastoFormPage),
+  },
+  {
+    path: 'financiero/gastos/:gastoId/editar',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/caja-mayor/ops/gasto-form.page').then((m) => m.GastoFormPage),
   },
   {
     path: 'financiero/caja-mayor/:id/entrada-varia',
@@ -335,6 +347,21 @@ export const routes: Routes = [
     path: 'financiero/caja-mayor/:id/ajuste/:signo',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/financiero/caja-mayor/ops/ajuste-nuevo.page').then((m) => m.AjusteNuevoPage),
+  },
+  {
+    path: 'financiero/caja-mayor/:id/vale',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/caja-mayor/ops/vale-nuevo.page').then((m) => m.ValeNuevoPage),
+  },
+  {
+    path: 'financiero/caja-mayor/:id/pagar-compras',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/caja-mayor/ops/pagar-compras.page').then((m) => m.PagarComprasPage),
+  },
+  {
+    path: 'financiero/caja-mayor/:id/ingresar-retiro',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/caja-mayor/ops/ingresar-retiro.page').then((m) => m.IngresarRetiroPage),
   },
   // Cajas: apertura, detalle/resumen y cierre (full-screen). 'abrir' debe ir
   // ANTES de ':id' para no matchearse como un id.
@@ -352,6 +379,22 @@ export const routes: Routes = [
     path: 'financiero/cajas/:id',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/financiero/cajas/caja-detalle.page').then((m) => m.CajaDetallePage),
+  },
+  // Cuentas bancarias: alta ('nuevo' antes de ':id'), movimientos y edición (full-screen).
+  {
+    path: 'financiero/cuentas-bancarias/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/cuentas-bancarias/cuenta-bancaria-edit.page').then((m) => m.CuentaBancariaEditPage),
+  },
+  {
+    path: 'financiero/cuentas-bancarias/:id/movimientos',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/cuentas-bancarias/movimientos-cuenta.page').then((m) => m.MovimientosCuentaPage),
+  },
+  {
+    path: 'financiero/cuentas-bancarias/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/cuentas-bancarias/cuenta-bancaria-edit.page').then((m) => m.CuentaBancariaEditPage),
   },
 
   // --- Shell autenticado (listados / índices) ---
@@ -424,8 +467,8 @@ export const routes: Routes = [
       },
       {
         path: 'rrhh/vales',
-        data: { title: 'Vales', source: 'vales' },
-        loadComponent: () => import('./pages/rrhh/ops/rrhh-ops-list.page').then((m) => m.RrhhOpsListPage),
+        data: { title: 'Vales' },
+        loadComponent: () => import('./pages/rrhh/vales/vales-list.page').then((m) => m.ValesListPage),
       },
       {
         path: 'rrhh/liquidaciones',
@@ -482,6 +525,16 @@ export const routes: Routes = [
         path: 'financiero/cajas',
         data: { title: 'Cajas' },
         loadComponent: () => import('./pages/financiero/cajas/cajas-list.page').then((m) => m.CajasListPage),
+      },
+      {
+        path: 'financiero/cuentas-bancarias',
+        data: { title: 'Cuentas bancarias' },
+        loadComponent: () => import('./pages/financiero/cuentas-bancarias/cuentas-bancarias-list.page').then((m) => m.CuentasBancariasListPage),
+      },
+      {
+        path: 'financiero/gastos',
+        data: { title: 'Gastos' },
+        loadComponent: () => import('./pages/financiero/gastos/gastos-list.page').then((m) => m.GastosListPage),
       },
       {
         path: 'financiero/cxc',

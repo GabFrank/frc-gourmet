@@ -78,6 +78,7 @@ interface MovimientoVM {
   observacion?: string;
   gastoId?: number;
   entradaVariaId?: number;
+  valeId?: number;
   puedeAnular: boolean;
 }
 
@@ -120,6 +121,7 @@ export class CajaMayorDetallePage implements OnInit {
   nombre = '';
   abierta = true;
   canOperar = false;
+  canPagarCompras = false;
 
   saldos: SaldoMonedaVM[] = [];
   cuentasBancariasCards: CuentaBancariaCardVM[] = [];
@@ -136,7 +138,10 @@ export class CajaMayorDetallePage implements OnInit {
   error: string | null = null;
 
   ngOnInit(): void {
-    this.perm.codigos$.subscribe(() => (this.canOperar = this.perm.has('CAJA_MAYOR_OPERAR')));
+    this.perm.codigos$.subscribe(() => {
+      this.canOperar = this.perm.has('CAJA_MAYOR_OPERAR');
+      this.canPagarCompras = this.perm.has('COMPRAS_GESTIONAR');
+    });
     this.id = Number(this.route.snapshot.paramMap.get('id'));
     this.cargar();
   }
@@ -276,6 +281,12 @@ export class CajaMayorDetallePage implements OnInit {
     const tipo = (m.tipoMovimiento || '').toUpperCase();
     const esAnulacion = tipo === 'ANULACION';
     const anulado = !!m.anulacion;
+    // Solo se puede anular desde la PWA lo que sabemos revertir bien: gastos,
+    // entradas varias, vales (todos vía sus flujos) y ajustes manuales. Retiros/
+    // cierres, cuotas de compra, salarios, cobros, etc. se anulan en su módulo
+    // (el backend los bloquea o dejaría estados cruzados inconsistentes).
+    const anulable =
+      !!m.gasto?.id || !!m.entradaVariaId || !!m.valeId || tipo === 'AJUSTE_POSITIVO' || tipo === 'AJUSTE_NEGATIVO';
     return {
       id: m.id,
       tipoLabel: TIPO_LABELS[tipo] || tipo,
@@ -292,7 +303,8 @@ export class CajaMayorDetallePage implements OnInit {
       observacion: m.observacion || undefined,
       gastoId: m.gasto?.id || undefined,
       entradaVariaId: m.entradaVariaId || undefined,
-      puedeAnular: !esAnulacion && !anulado,
+      valeId: m.valeId || undefined,
+      puedeAnular: !esAnulacion && !anulado && anulable,
     };
   }
 
@@ -302,6 +314,15 @@ export class CajaMayorDetallePage implements OnInit {
   }
   registrarEntradaVaria(): void {
     this.router.navigate(['/financiero/caja-mayor', this.id, 'entrada-varia']);
+  }
+  ingresarRetiro(): void {
+    this.router.navigate(['/financiero/caja-mayor', this.id, 'ingresar-retiro']);
+  }
+  registrarVale(): void {
+    this.router.navigate(['/financiero/caja-mayor', this.id, 'vale']);
+  }
+  pagarCompras(): void {
+    this.router.navigate(['/financiero/caja-mayor', this.id, 'pagar-compras']);
   }
   ajuste(signo: 'ingreso' | 'egreso'): void {
     this.router.navigate(['/financiero/caja-mayor', this.id, 'ajuste', signo]);
@@ -329,6 +350,10 @@ export class CajaMayorDetallePage implements OnInit {
     if (!motivo) return;
 
     // Enrutar la anulación al módulo de origen (revierte estados cruzados).
+    // Los vales NO se rutean a anularVale: el handler genérico
+    // anular-caja-mayor-movimiento ya revierte el vale a ANULADO y solo exige
+    // CAJA_MAYOR_OPERAR (mismo permiso que el botón); anularVale pediría
+    // RRHH_VALE_CONFIRMAR de más.
     const op$ = mov.gastoId
       ? this.repo.anularGasto(mov.gastoId, motivo)
       : mov.entradaVariaId
