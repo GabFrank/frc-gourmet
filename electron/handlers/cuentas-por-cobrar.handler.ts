@@ -455,6 +455,12 @@ export function registerCuentasPorCobrarHandlers(
         order: { id: 'DESC' },
       });
       if (ultimoPago?.cuentaBancariaId) {
+        // Idempotencia (M-01): si este cobro ya fue revertido, no volver a
+        // ajustar saldos. Sin esta marca, una segunda llamada reencontraba el
+        // mismo PAGO y revertía de nuevo la cuenta/cuota/cpc/cliente.
+        if ((ultimoPago as any).anulado) {
+          throw new Error('El cobro ya fue anulado');
+        }
         // Reversión bancaria: debita la cuenta (en SU moneda) y revierte cuota/cpc/cliente
         // por el monto del cobro (en la moneda de la CPC).
         const montoAnuladoBanco = Number(ultimoPago.monto);
@@ -507,6 +513,10 @@ export function registerCuentasPorCobrarHandlers(
             await queryRunner.manager.save(MovimientoCliente, movAjusteB);
           }
         }
+
+        // Marcar el PAGO como revertido para que la anulación sea idempotente (M-01).
+        (ultimoPago as any).anulado = true;
+        await queryRunner.manager.save(MovimientoCliente, ultimoPago);
 
         await queryRunner.commitTransaction();
         return { success: true };
