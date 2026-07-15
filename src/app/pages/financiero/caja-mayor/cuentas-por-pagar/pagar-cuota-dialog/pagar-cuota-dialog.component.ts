@@ -65,6 +65,8 @@ export class PagarCuotaDialogComponent implements OnInit {
   cuentasBancarias: any[] = [];
   monedas: any[] = [];
   formasPago: any[] = [];
+  // Fuente Caja Mayor = siempre efectivo (regla de negocio).
+  formasPagoEfectivo: any[] = [];
 
   constructor(
     private fb: FormBuilder,
@@ -162,6 +164,8 @@ export class PagarCuotaDialogComponent implements OnInit {
       this.cuentasBancarias = (cuentas || []).filter((c: any) => c.activo !== false);
       this.monedas = monedas || [];
       this.formasPago = (formas || []).filter((f: any) => f.movimentaCaja);
+      // Para pagar/cobrar desde Caja Mayor solo se ofrece efectivo (por nombre).
+      this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
       this.aplicarPreselecciones();
       this.recalcDecimalesMoneda();
     } catch (e) { console.error(e); }
@@ -179,8 +183,7 @@ export class PagarCuotaDialogComponent implements OnInit {
       if (target) this.form.patchValue({ monedaId: target.id });
     }
     if (!this.form.get('formaPagoId')?.value) {
-      const efectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
-      const fp = preselectSingleOrPrincipal(efectivo) || preselectSingleOrPrincipal(this.formasPago);
+      const fp = preselectSingleOrPrincipal(this.formasPagoEfectivo);
       if (fp) this.form.patchValue({ formaPagoId: fp.id });
     }
   }

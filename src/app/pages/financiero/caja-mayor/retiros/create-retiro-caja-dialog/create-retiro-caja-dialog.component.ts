@@ -110,7 +110,9 @@ export class CreateRetiroCajaDialogComponent implements OnInit {
         firstValueFrom(this.repositoryService.getCajasMayor()),
       ]);
       this.monedas = monedas || [];
-      this.formasPagoEfectivo = (formasPago || []).filter((fp: any) => fp.movimentaCaja === true);
+      // El retiro se ingresa a Caja Mayor en efectivo: filtrar por EFECTIVO (por
+      // nombre), no solo por movimentaCaja (que dejaba pasar tarjeta/transferencia).
+      this.formasPagoEfectivo = (formasPago || []).filter((fp: any) => (fp.nombre || '').toUpperCase().includes('EFECTIVO'));
       this.cajasMayor = (cajasMayor || []).filter((c: any) => c.estado === 'ABIERTA');
       this.preseleccionarDetalle();
     } catch (error) {

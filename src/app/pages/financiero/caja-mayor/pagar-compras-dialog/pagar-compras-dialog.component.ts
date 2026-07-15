@@ -95,6 +95,8 @@ export class PagarComprasDialogComponent implements OnInit {
   cuentasBancarias: any[] = [];
   monedas: any[] = [];
   formasPago: any[] = [];
+  // Fuente Caja Mayor = siempre efectivo (regla de negocio).
+  formasPagoEfectivo: any[] = [];
 
   form!: FormGroup;
 
@@ -160,6 +162,8 @@ export class PagarComprasDialogComponent implements OnInit {
       this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
       this.monedas = (monedas as any[]) || [];
       this.formasPago = ((formas as any[]) || []).filter((f: any) => f.movimentaCaja);
+      // Para pagar desde Caja Mayor solo se ofrece efectivo (por nombre).
+      this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
 
       const preIds = new Set<number>(this.data?.cuotaIdsPreseleccionadas || []);
 
@@ -208,9 +212,7 @@ export class PagarComprasDialogComponent implements OnInit {
       if (m) this.form.patchValue({ monedaId: m.id });
     }
     if (!this.form.value.formaPagoId) {
-      const fp = preselectSingleOrPrincipal(this.formasPago)
-        || this.formasPago.find((f: any) => /EFECTIVO/i.test(f.nombre || ''))
-        || this.formasPago[0];
+      const fp = preselectSingleOrPrincipal(this.formasPagoEfectivo) || this.formasPagoEfectivo[0];
       if (fp) this.form.patchValue({ formaPagoId: fp.id });
     }
   }

@@ -41,6 +41,8 @@ export class CreateEditEntradaVariaDialogComponent implements OnInit {
   categorias: any[] = [];
   monedas: any[] = [];
   formasPago: any[] = [];
+  // Fuente Caja Mayor = siempre efectivo (regla de negocio).
+  formasPagoEfectivo: any[] = [];
   cajasMayor: any[] = [];
   cuentasBancarias: any[] = [];
 
@@ -134,6 +136,8 @@ export class CreateEditEntradaVariaDialogComponent implements OnInit {
       this.categorias = (categorias || []).filter((c: any) => c.activo);
       this.monedas = monedas || [];
       this.formasPago = formasPago || [];
+      // Fuente Caja Mayor: solo efectivo (por nombre "EFECTIVO"), como registrar-ingreso/egreso.
+      this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
       this.cajasMayor = (cajasMayor || []).filter((cm: any) => cm.estado === 'ABIERTA');
       this.cuentasBancarias = (cuentasBancarias || []).filter((cb: any) => cb.activo);
       this.aplicarPreselecciones();
@@ -150,8 +154,7 @@ export class CreateEditEntradaVariaDialogComponent implements OnInit {
       if (m) this.form.get('monedaId')?.setValue(m.id, { emitEvent: false });
     }
     if (!this.form.get('formaPagoId')?.value) {
-      const efectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
-      const fp = preselectSingleOrPrincipal(efectivo) || preselectSingleOrPrincipal(this.formasPago);
+      const fp = preselectSingleOrPrincipal(this.formasPagoEfectivo);
       if (fp) this.form.get('formaPagoId')?.setValue(fp.id, { emitEvent: false });
     }
     if (!this.form.get('cajaMayorId')?.value && this.cajasMayor.length === 1) {

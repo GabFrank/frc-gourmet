@@ -50,6 +50,8 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
   categorias: any[] = [];
   monedas: any[] = [];
   formasPago: any[] = [];
+  // Tramos contra Caja Mayor = siempre efectivo (regla de negocio).
+  formasPagoEfectivo: any[] = [];
   cajasMayor: any[] = [];
   cuentasBancarias: any[] = [];
 
@@ -265,6 +267,8 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
       this.categorias = (categorias || []).filter((c: any) => c.activo);
       this.monedas = monedas || [];
       this.formasPago = formasPago || [];
+      // Los selects de forma de pago (tramos de Caja Mayor) solo ofrecen efectivo.
+      this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
       this.cajasMayor = (cajasMayor || []).filter((cm: any) => cm.estado === 'ABIERTA');
       this.cuentasBancarias = (cuentasBancarias || []).filter((cb: any) => cb.activo);
       this.recalcDecimales();
