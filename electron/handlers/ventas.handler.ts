@@ -19,6 +19,10 @@ import { Not, IsNull, In } from 'typeorm';
 import { DeepPartial } from 'typeorm';
 import { Reserva } from '../../src/app/database/entities/ventas/reserva.entity';
 import { ensurePermission } from '../utils/auth.utils';
+import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
+import { MovimientoCliente } from '../../src/app/database/entities/financiero/movimiento-cliente.entity';
+import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
+import { CuentaPorCobrarEstado, MovimientoClienteTipo } from '../../src/app/database/entities/financiero/cuentas-por-cobrar-enums';
 import { PdvMesa, PdvMesaEstado } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { Comanda, ComandaEstado } from '../../src/app/database/entities/ventas/comanda.entity';
 import { printComandaInternal, printVentaTicketInternal } from './documentos-tickets.handler';
@@ -630,9 +634,67 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       }
 
       const estadoAnterior = entity.estado;
+
+      // A-01: al cancelar una venta a crédito hay que revertir la Cuenta Por
+      // Cobrar y el saldoActual del cliente; antes quedaban vivos (cobros
+      // fantasma). Pre-chequeo ANTES de guardar el estado para poder rechazar
+      // limpiamente si la CPC ya tiene cobros.
+      const willCancel =
+        data?.estado === VentaEstado.CANCELADA && estadoAnterior !== VentaEstado.CANCELADA;
+      let cpcToReverse: CuentaPorCobrar | null = null;
+      if (willCancel) {
+        cpcToReverse = await dataSource.getRepository(CuentaPorCobrar).findOne({
+          where: { ventaId: id, estado: CuentaPorCobrarEstado.ACTIVO },
+          relations: ['cliente'],
+        });
+        if (cpcToReverse && Number(cpcToReverse.montoCobrado) > 0) {
+          throw new Error(
+            'No se puede cancelar una venta a crédito con cobros registrados. Anule primero los cobros de la cuenta por cobrar.',
+          );
+        }
+      }
+
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
+
+      // A-01: revertir la CPC (sin cobros, garantizado por el pre-chequeo) y el
+      // saldo del cliente en una transacción atómica.
+      if (willCancel && cpcToReverse) {
+        const cu = getCurrentUser();
+        const cpcId = cpcToReverse.id;
+        const montoOriginal = Number(cpcToReverse.montoTotal);
+        const clienteId = cpcToReverse.cliente?.id;
+        await dataSource.transaction(async (m) => {
+          const cpc = await m.getRepository(CuentaPorCobrar).findOne({ where: { id: cpcId } });
+          if (!cpc || cpc.estado !== CuentaPorCobrarEstado.ACTIVO) return; // ya revertida
+          cpc.estado = CuentaPorCobrarEstado.CANCELADO;
+          cpc.fechaCancelacion = new Date();
+          cpc.motivoCancelacion = 'CANCELACION DE VENTA';
+          await setEntityUserTracking(dataSource, cpc, cu?.id, true);
+          await m.save(CuentaPorCobrar, cpc);
+
+          if (clienteId) {
+            const cliente = await m.getRepository(Cliente).findOne({ where: { id: clienteId } });
+            if (cliente) {
+              cliente.saldoActual = +(Number(cliente.saldoActual) - montoOriginal).toFixed(2);
+              await m.save(Cliente, cliente);
+            }
+            const mov = m.getRepository(MovimientoCliente).create({
+              cliente: { id: clienteId } as any,
+              tipo: MovimientoClienteTipo.AJUSTE_NEGATIVO,
+              monto: montoOriginal,
+              fecha: new Date(),
+              cuentaPorCobrarId: cpcId,
+              ventaId: id,
+              observacion: `CANCELACION VENTA #${id} - REVERSION CPC #${cpcId}`,
+              registradoPor: cu || undefined,
+            });
+            await setEntityUserTracking(dataSource, mov, cu?.id, false);
+            await m.save(MovimientoCliente, mov);
+          }
+        });
+      }
 
       // ─── Hook E2.3: auto-imprimir ticket cuando la venta pasa a CONCLUIDA
       // Fire-and-forget. NUNCA bloquea ni revierte la transición de estado.
