@@ -1,7 +1,7 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
-import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormArray, FormBuilder, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
@@ -26,6 +26,12 @@ interface CuentaOpcion extends Opcion {
   monedaId: number;
 }
 
+interface TotalMoneda {
+  simbolo: string;
+  monto: number;
+  decimales: number;
+}
+
 const FRECUENCIAS = ['DIARIO', 'SEMANAL', 'QUINCENAL', 'MENSUAL', 'BIMESTRAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL'];
 const TIPOS_BOLETA = ['LEGAL', 'COMUN', 'OTRO', 'SIN_COMPROBANTE'];
 
@@ -34,10 +40,10 @@ const TIPOS_BOLETA = ['LEGAL', 'COMUN', 'OTRO', 'SIN_COMPROBANTE'];
  * (caja preseleccionada), desde la lista de gastos (elige caja mayor) o en modo
  * edición (financiero/gastos/:gastoId/editar).
  *
- * Fuente CAJA_MAYOR = siempre efectivo; CUENTA_BANCARIA = moneda de la cuenta.
- * Es de una sola línea (el split multi-moneda se edita en el escritorio: si un
- * gasto tiene varias líneas, el modo edición se bloquea). Soporta recurrencia,
- * proveedor y comprobante. Escritura requiere CAJA_MAYOR_OPERAR.
+ * Fuente CAJA_MAYOR = siempre efectivo, y admite MULTI-DETALLE (varias líneas
+ * moneda + monto). Fuente CUENTA_BANCARIA = una sola línea, moneda de la cuenta.
+ * La edición de gastos bancarios se bloquea (el backend la rechaza).
+ * Escritura requiere CAJA_MAYOR_OPERAR.
  */
 @Component({
   selector: 'app-gasto-form',
@@ -62,17 +68,19 @@ export class GastoFormPage implements OnInit {
 
   gastoId: number | null = null;
   cajaPreseleccionada = false;
-  bloqueadoMultiDetalle = false;
+  bloqueadoBanco = false;
   efectivoLabel = 'Efectivo';
   private efectivoFormaId: number | null = null;
 
   categorias: Opcion[] = [];
   categoriasFiltradas: Opcion[] = [];
   monedas: Opcion[] = [];
+  private monedaInfo = new Map<number, { simbolo: string; decimales: number }>();
   cuentasBancarias: CuentaOpcion[] = [];
   cajasMayor: Opcion[] = [];
   proveedores: Opcion[] = [];
   proveedoresFiltrados: Opcion[] = [];
+  totales: TotalMoneda[] = [];
 
   loading = true;
   saving = false;
@@ -80,13 +88,14 @@ export class GastoFormPage implements OnInit {
   readonly categoriaInput = new FormControl<Opcion | string>('', { nonNullable: true });
   readonly proveedorInput = new FormControl<Opcion | string>('', { nonNullable: true });
 
+  /** Líneas del gasto (moneda + monto). En banco queda una sola. */
+  readonly detalles = this.fb.array<FormGroup>([]);
+
   readonly form = this.fb.nonNullable.group({
     destinoTipo: ['CAJA_MAYOR' as 'CAJA_MAYOR' | 'CUENTA_BANCARIA', Validators.required],
     cajaMayorId: [null as number | null, Validators.required],
     gastoCategoriaId: [null as number | null, Validators.required],
     descripcion: ['', Validators.required],
-    monto: [null as number | null, [Validators.required, Validators.min(0.01)]],
-    monedaId: [null as number | null, Validators.required],
     cuentaBancariaId: [null as number | null],
     fecha: [this.hoy(), Validators.required],
     proveedorId: [null as number | null],
@@ -106,18 +115,27 @@ export class GastoFormPage implements OnInit {
   }
 
   private hoy(): string {
-    // yyyy-mm-dd para el input date, sin depender de Date.now en template.
     return new Date().toISOString().slice(0, 10);
+  }
+
+  private nuevaLinea(monedaId: number | null = null, monto: number | null = null): FormGroup {
+    return this.fb.group({
+      monedaId: this.fb.control(monedaId, Validators.required),
+      monto: this.fb.control(monto, [Validators.required, Validators.min(0.01)]),
+    });
   }
 
   ngOnInit(): void {
     const gastoIdParam = this.route.snapshot.paramMap.get('gastoId');
-    const cajaIdParam = this.route.snapshot.paramMap.get('id'); // ruta bajo caja-mayor
+    const cajaIdParam = this.route.snapshot.paramMap.get('id');
     this.gastoId = gastoIdParam ? Number(gastoIdParam) : null;
     if (cajaIdParam && !this.gastoId) {
       this.form.controls.cajaMayorId.setValue(Number(cajaIdParam));
       this.cajaPreseleccionada = true;
     }
+
+    this.detalles.push(this.nuevaLinea());
+    this.detalles.valueChanges.subscribe(() => this.recomputeTotales());
 
     this.categoriaInput.valueChanges.subscribe((v) => {
       const q = (typeof v === 'string' ? v : v?.label || '').toLowerCase().trim();
@@ -131,23 +149,49 @@ export class GastoFormPage implements OnInit {
     });
     this.form.controls.destinoTipo.valueChanges.subscribe((v) => this.aplicarValidadoresDestino(v));
     this.form.controls.esRecurrente.valueChanges.subscribe((v) => this.aplicarValidadoresRecurrencia(!!v));
-    this.aplicarValidadoresDestino('CAJA_MAYOR');
     this.aplicarValidadoresRecurrencia(false);
 
     this.cargar();
   }
 
+  // --- Detalles (multi-línea) ---
+  addDetalle(): void {
+    if (this.esBanco) return;
+    this.detalles.push(this.nuevaLinea());
+  }
+
+  removeDetalle(i: number): void {
+    if (this.detalles.length <= 1) return;
+    this.detalles.removeAt(i);
+  }
+
+  private recomputeTotales(): void {
+    const map = new Map<number, TotalMoneda>();
+    for (const g of this.detalles.controls) {
+      const monedaId = g.get('monedaId')?.value as number | null;
+      const monto = Number(g.get('monto')?.value) || 0;
+      if (monedaId == null || !monto) continue;
+      const info = this.monedaInfo.get(monedaId);
+      const acc = map.get(monedaId) ?? { simbolo: info?.simbolo || '', monto: 0, decimales: info?.decimales ?? 0 };
+      acc.monto += monto;
+      map.set(monedaId, acc);
+    }
+    this.totales = [...map.values()];
+  }
+
   private aplicarValidadoresDestino(destino: 'CAJA_MAYOR' | 'CUENTA_BANCARIA'): void {
     const cb = this.form.controls.cuentaBancariaId;
-    const mon = this.form.controls.monedaId;
     if (destino === 'CUENTA_BANCARIA') {
       cb.setValidators([Validators.required]);
+      // Banco: una sola línea, moneda de la cuenta (bloqueada).
+      while (this.detalles.length > 1) this.detalles.removeAt(1);
+      const monedaCtrl = this.detalles.at(0).get('monedaId');
+      monedaCtrl?.disable({ emitEvent: false });
       if (cb.value) this.alinearMonedaConCuenta(cb.value);
-      mon.disable({ emitEvent: false });
     } else {
       cb.clearValidators();
       cb.setValue(null, { emitEvent: false });
-      mon.enable({ emitEvent: false });
+      this.detalles.at(0).get('monedaId')?.enable({ emitEvent: false });
     }
     cb.updateValueAndValidity({ emitEvent: false });
   }
@@ -174,7 +218,8 @@ export class GastoFormPage implements OnInit {
 
   private alinearMonedaConCuenta(cuentaId: number): void {
     const c = this.cuentasBancarias.find((x) => x.id === cuentaId);
-    if (c) this.form.controls.monedaId.setValue(c.monedaId, { emitEvent: false });
+    if (c) this.detalles.at(0).get('monedaId')?.setValue(c.monedaId, { emitEvent: false });
+    this.recomputeTotales();
   }
 
   displayCategoria = (c: Opcion | null): string => c?.label || '';
@@ -201,7 +246,7 @@ export class GastoFormPage implements OnInit {
         this.categorias = (cats || []).filter((c) => c.activo !== false).map((c) => ({ id: c.id, label: c.nombre }));
         this.categoriasFiltradas = [...this.categorias];
         this.monedas = (monedas || []).filter((m) => m.activo !== false).map((m) => ({ id: m.id, label: `${m.simbolo} · ${m.denominacion}` }));
-        // Fuente Caja Mayor = siempre efectivo.
+        (monedas || []).forEach((m) => this.monedaInfo.set(m.id, { simbolo: m.simbolo || '', decimales: m.decimales ?? 0 }));
         const efectivo = formaPagoEfectivo(formas || []);
         this.efectivoFormaId = efectivo?.id ?? null;
         this.efectivoLabel = efectivo?.nombre || 'Efectivo';
@@ -211,16 +256,13 @@ export class GastoFormPage implements OnInit {
         this.cajasMayor = (cajas || [])
           .filter((c) => (c.estado || '').toUpperCase().includes('ABIERT'))
           .map((c) => ({ id: c.id, label: c.nombre || `Caja Mayor #${c.id}` }));
-        this.proveedores = (provs || []).map((p) => ({
-          id: p.id,
-          label: p.nombre || p.razonSocial || p.persona?.nombre || `Proveedor #${p.id}`,
-        }));
+        this.proveedores = (provs || []).map((p) => ({ id: p.id, label: p.nombre || p.razonSocial || p.persona?.nombre || `Proveedor #${p.id}` }));
         this.proveedoresFiltrados = [...this.proveedores];
 
         const principal = (monedas || []).find((m) => m.principal);
         if (!this.gastoId) {
-          if (principal) this.form.controls.monedaId.setValue(principal.id);
-          else if (this.monedas.length === 1) this.form.controls.monedaId.setValue(this.monedas[0].id);
+          const monedaDefault = principal?.id ?? (this.monedas.length === 1 ? this.monedas[0].id : null);
+          if (monedaDefault) this.detalles.at(0).get('monedaId')?.setValue(monedaDefault);
           if (!this.cajaPreseleccionada && this.cajasMayor.length === 1) this.form.controls.cajaMayorId.setValue(this.cajasMayor[0].id);
           if (this.cuentasBancarias.length === 1) this.form.controls.cuentaBancariaId.setValue(this.cuentasBancarias[0].id);
           if (this.categorias.length === 1) {
@@ -247,10 +289,16 @@ export class GastoFormPage implements OnInit {
           return;
         }
         const destino = (g.destinoTipo || 'CAJA_MAYOR').toUpperCase();
-        // El backend rechaza editar gastos bancarios; y no editamos multi-línea.
-        if (destino === 'CUENTA_BANCARIA' || (g.detalles && g.detalles.length > 1)) {
-          this.bloqueadoMultiDetalle = true;
+        if (destino === 'CUENTA_BANCARIA') {
+          this.bloqueadoBanco = true; // el backend rechaza editar gastos bancarios
         }
+        // Reconstruir las líneas desde los detalles (o una sola con moneda/monto).
+        this.detalles.clear();
+        const lineas = (g.detalles && g.detalles.length)
+          ? g.detalles.map((d: any) => ({ monedaId: d.moneda?.id ?? null, monto: Number(d.monto) || null }))
+          : [{ monedaId: g.moneda?.id ?? null, monto: Number(g.monto) || null }];
+        lineas.forEach((l: any) => this.detalles.push(this.nuevaLinea(l.monedaId, l.monto)));
+
         const cat = this.categorias.find((c) => c.id === g.gastoCategoria?.id);
         const prov = this.proveedores.find((p) => p.id === g.proveedor?.id);
         this.form.patchValue({
@@ -258,8 +306,6 @@ export class GastoFormPage implements OnInit {
           cajaMayorId: g.cajaMayor?.id ?? null,
           gastoCategoriaId: g.gastoCategoria?.id ?? null,
           descripcion: g.descripcion || '',
-          monto: Number(g.monto) || null,
-          monedaId: g.moneda?.id ?? null,
           fecha: g.fecha ? String(g.fecha).slice(0, 10) : this.hoy(),
           proveedorId: g.proveedor?.id ?? null,
           numeroComprobante: g.numeroComprobante || '',
@@ -270,6 +316,7 @@ export class GastoFormPage implements OnInit {
         });
         if (cat) this.categoriaInput.setValue(cat, { emitEvent: false });
         if (prov) this.proveedorInput.setValue(prov, { emitEvent: false });
+        this.recomputeTotales();
         this.loading = false;
       })
       .catch(() => {
@@ -283,16 +330,21 @@ export class GastoFormPage implements OnInit {
   }
 
   async guardar(): Promise<void> {
-    if (this.bloqueadoMultiDetalle) {
-      this.snack.open('Este gasto se edita en el escritorio (banco o multi-línea).', 'OK', { duration: 4000 });
+    if (this.bloqueadoBanco) {
+      this.snack.open('Los gastos bancarios se editan en el escritorio.', 'OK', { duration: 4000 });
       return;
     }
-    if (this.form.invalid || this.saving) {
+    if (this.form.invalid || this.detalles.invalid || this.detalles.length === 0 || this.saving) {
       this.form.markAllAsTouched();
+      this.detalles.markAllAsTouched();
       return;
     }
     this.saving = true;
     const v = this.form.getRawValue();
+    const lineas = this.detalles.controls.map((g) => ({
+      monedaId: g.get('monedaId')?.value as number,
+      monto: Number(g.get('monto')?.value),
+    }));
     const base: any = {
       gastoCategoria: { id: v.gastoCategoriaId },
       descripcion: (v.descripcion || '').toUpperCase(),
@@ -307,8 +359,8 @@ export class GastoFormPage implements OnInit {
       proximoVencimiento: v.esRecurrente ? v.proximoVencimiento : null,
     };
     const payload = v.destinoTipo === 'CUENTA_BANCARIA'
-      ? { ...base, cuentaBancariaId: v.cuentaBancariaId, monto: v.monto, monedaId: v.monedaId, montoCuentaBancaria: null, cotizacion: null }
-      : { ...base, detalles: [{ monedaId: v.monedaId, formaPagoId: this.efectivoFormaId, monto: v.monto }] };
+      ? { ...base, cuentaBancariaId: v.cuentaBancariaId, monto: lineas[0].monto, monedaId: lineas[0].monedaId, montoCuentaBancaria: null, cotizacion: null }
+      : { ...base, detalles: lineas.map((l) => ({ monedaId: l.monedaId, formaPagoId: this.efectivoFormaId, monto: l.monto })) };
 
     const op$ = this.gastoId ? this.repo.editGasto(this.gastoId, payload) : this.repo.createGasto(payload);
     try {

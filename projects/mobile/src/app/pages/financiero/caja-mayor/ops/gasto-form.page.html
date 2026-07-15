@@ -3,17 +3,17 @@
     <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
     <span class="crud-edit-title">{{ titulo }}</span>
     <span class="crud-spacer"></span>
-    <button mat-button (click)="guardar()" [disabled]="saving || loading || bloqueadoMultiDetalle">Guardar</button>
+    <button mat-button (click)="guardar()" [disabled]="saving || loading || bloqueadoBanco">Guardar</button>
   </mat-toolbar>
 
   <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
 
-  <p *ngIf="bloqueadoMultiDetalle" class="gf-bloqueo">
+  <p *ngIf="bloqueadoBanco" class="gf-bloqueo">
     <mat-icon>info</mat-icon>
-    Este gasto es bancario o tiene varias líneas: editalo en el escritorio.
+    Los gastos bancarios se editan en el escritorio.
   </p>
 
-  <form class="crud-form" [formGroup]="form" (ngSubmit)="guardar()" *ngIf="!loading && !bloqueadoMultiDetalle">
+  <form class="crud-form" [formGroup]="form" (ngSubmit)="guardar()" *ngIf="!loading && !bloqueadoBanco">
     <!-- Destino -->
     <mat-button-toggle-group formControlName="destinoTipo" class="gf-destino">
       <mat-button-toggle value="CAJA_MAYOR"><mat-icon>account_balance_wallet</mat-icon> Caja Mayor</mat-button-toggle>
@@ -51,25 +51,6 @@
       <mat-error *ngIf="form.controls.descripcion.hasError('required')">Requerido</mat-error>
     </mat-form-field>
 
-    <mat-form-field appearance="outline">
-      <mat-label>Monto</mat-label>
-      <input matInput type="number" inputmode="decimal" formControlName="monto" min="0.01" step="any" />
-      <mat-error *ngIf="form.controls.monto.hasError('required')">Requerido</mat-error>
-      <mat-error *ngIf="form.controls.monto.hasError('min')">Debe ser mayor a 0</mat-error>
-    </mat-form-field>
-
-    <mat-form-field appearance="outline">
-      <mat-label>Moneda</mat-label>
-      <mat-select formControlName="monedaId">
-        <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.label }}</mat-option>
-      </mat-select>
-      <mat-hint *ngIf="esBanco">Tomada de la cuenta bancaria</mat-hint>
-      <mat-error *ngIf="form.controls.monedaId.hasError('required')">Requerido</mat-error>
-    </mat-form-field>
-
-    <!-- Caja Mayor: efectivo fijo -->
-    <p class="gf-hint" *ngIf="!esBanco">Se registra en <strong>{{ efectivoLabel }}</strong>.</p>
-
     <!-- Cuenta bancaria -->
     <mat-form-field *ngIf="esBanco" appearance="outline">
       <mat-label>Cuenta bancaria</mat-label>
@@ -78,6 +59,37 @@
       </mat-select>
       <mat-error *ngIf="form.controls.cuentaBancariaId.hasError('required')">Requerido</mat-error>
     </mat-form-field>
+
+    <!-- Detalles (líneas moneda + monto) -->
+    <div class="gf-detalles">
+      <div class="gf-detalle" *ngFor="let d of detalles.controls; let i = index" [formGroup]="$any(d)">
+        <mat-form-field appearance="outline" class="gf-det-moneda">
+          <mat-label>Moneda</mat-label>
+          <mat-select formControlName="monedaId">
+            <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.label }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="gf-det-monto">
+          <mat-label>Monto</mat-label>
+          <input matInput type="number" inputmode="decimal" formControlName="monto" min="0.01" step="any" />
+        </mat-form-field>
+        <button *ngIf="!esBanco && detalles.length > 1" mat-icon-button type="button" (click)="removeDetalle(i)" aria-label="Quitar línea">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+
+      <button *ngIf="!esBanco" mat-stroked-button type="button" class="gf-add" (click)="addDetalle()">
+        <mat-icon>add</mat-icon> Agregar línea
+      </button>
+
+      <p class="gf-hint" *ngIf="!esBanco">Se registra en <strong>{{ efectivoLabel }}</strong>.</p>
+      <p class="gf-hint" *ngIf="esBanco">Moneda tomada de la cuenta bancaria.</p>
+
+      <div class="gf-totales" *ngIf="totales.length && detalles.length > 1">
+        <span class="gf-total-label">Total:</span>
+        <span class="gf-total" *ngFor="let t of totales">{{ t.simbolo }} {{ t.monto | number: '1.0-' + t.decimales }}</span>
+      </div>
+    </div>
 
     <mat-form-field appearance="outline">
       <mat-label>Fecha</mat-label>

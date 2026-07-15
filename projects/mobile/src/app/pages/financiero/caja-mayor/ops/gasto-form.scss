@@ -24,3 +24,38 @@
   color: var(--warning-color);
   background: color-mix(in srgb, var(--warning-color) 14%, transparent);
 }
+
+.gf-detalles {
+  display: flex;
+  flex-direction: column;
+}
+.gf-detalle {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.gf-det-moneda {
+  flex: 1 1 45%;
+}
+.gf-det-monto {
+  flex: 1 1 45%;
+}
+.gf-add {
+  align-self: flex-start;
+  margin: 0 0 8px 4px;
+}
+.gf-totales {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 4px 8px;
+}
+.gf-total-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.gf-total {
+  font-weight: 700;
+  color: var(--text-primary);
+}
