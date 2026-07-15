@@ -451,6 +451,7 @@ export function registerComisionesHandlers(
   });
 
   ipcMain.handle('desasignar-funcionario-regla', async (_e, asignacionId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_REGLA_GESTIONAR');
     await dataSource.getRepository(FuncionarioReglaComision).delete(asignacionId);
     return { success: true };
   });
@@ -648,6 +649,7 @@ export function registerComisionesHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'COMISION_LIQUIDACION_GENERAR');
       const userId = getCurrentUser()?.id;
       const liqRepo = queryRunner.manager.getRepository(LiquidacionComision);
       const itemRepo = queryRunner.manager.getRepository(LiquidacionComisionItem);
@@ -688,6 +690,7 @@ export function registerComisionesHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'COMISION_LIQUIDACION_GENERAR');
       const userId = getCurrentUser()?.id;
       const itemRepo = queryRunner.manager.getRepository(LiquidacionComisionItem);
       const liqRepo = queryRunner.manager.getRepository(LiquidacionComision);
@@ -713,6 +716,7 @@ export function registerComisionesHandlers(
   });
 
   ipcMain.handle('anular-liquidacion-comision', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_LIQUIDACION_ANULAR');
     const repo = dataSource.getRepository(LiquidacionComision);
     const liq = await repo.findOne({ where: { id } });
     if (!liq) throw new Error(`Liquidacion comision ${id} no encontrada`);
