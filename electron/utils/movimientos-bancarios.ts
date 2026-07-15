@@ -104,6 +104,31 @@ export async function getMovimientosBancariosUnificados(
       });
     }
 
+    // C-01: dedupe. Todo gasto/vale/entrada/cobro/operación pagado desde/hacia una
+    // cuenta bancaria crea un MovimientoBancario (helper registrarMovimientoBancario),
+    // que la sección 1 ya lista. Sin filtrar, las secciones 4-8 (que listan de la
+    // tabla origen) duplicarían cada evento. Solución sin migración: saltar en 4-8
+    // la fila origen SI ya existe su MovimientoBancario, detectado por el token
+    // "#<id>" de la observación (uppercased por el helper). Las filas históricas
+    // previas al helper NO tienen MovimientoBancario y se siguen listando por origen,
+    // así el ledger nunca pierde movimientos ni deja de cuadrar con el saldo.
+    const gastoConMB = new Set<number>();
+    const valeConMB = new Set<number>();
+    const entradaConMB = new Set<number>();
+    const opfinConMB = new Set<number>();
+    const cobroConMB = new Set<string>();      // key `${cpcId}:${cuotaNumero}`
+    const anulCobroConMB = new Set<number>();  // cuotaId
+    for (const m of movs) {
+      const obs = (m.observacion || '').toUpperCase();
+      let mm: RegExpMatchArray | null;
+      if ((mm = obs.match(/^GASTO #(\d+)/))) gastoConMB.add(Number(mm[1]));
+      else if ((mm = obs.match(/^VALE #(\d+)/))) valeConMB.add(Number(mm[1]));
+      else if ((mm = obs.match(/^ENTRADA VARIA #(\d+)/))) entradaConMB.add(Number(mm[1]));
+      else if ((mm = obs.match(/^(?:DEPOSITO|RETIRO) BANCARIO OP\.FIN #(\d+)/))) opfinConMB.add(Number(mm[1]));
+      else if ((mm = obs.match(/^COBRO #(\d+) - CPC #(\d+)/))) cobroConMB.add(`${Number(mm[2])}:${Number(mm[1])}`);
+      else if ((mm = obs.match(/^ANULACION COBRO CPC CUOTA #(\d+)/))) anulCobroConMB.add(Number(mm[1]));
+    }
+
     // 2. Cheques (egresos cuando son cobrados)
     const chequeRows = await dbQuery(dataSource,
       `SELECT id, monto, estado, fecha_cobro AS "fechaCobro", fecha_emision AS "fechaEmision",
@@ -146,6 +171,7 @@ export async function getMovimientosBancariosUnificados(
       [cuentaBancariaId, cuentaBancariaId],
     );
     for (const op of opRows) {
+      if (opfinConMB.has(Number(op.id))) continue; // ya listado como MovimientoBancario (sección 1)
       if (op.tipoOp === 'DEPOSITO_BANCARIO' && Number(op.cbDestinoId) === cuentaBancariaId) {
         items.push({
           fecha: op.fecha,
@@ -185,6 +211,7 @@ export async function getMovimientosBancariosUnificados(
       [cuentaBancariaId],
     );
     for (const ev of evRows) {
+      if (entradaConMB.has(Number(ev.id))) continue; // ya listado como MovimientoBancario (sección 1)
       items.push({
         fecha: ev.fecha,
         tipo: 'ENTRADA_VARIA',
@@ -210,6 +237,7 @@ export async function getMovimientosBancariosUnificados(
       [cuentaBancariaId],
     );
     for (const g of gastoRows) {
+      if (gastoConMB.has(Number(g.id))) continue; // ya listado como MovimientoBancario (sección 1)
       items.push({
         fecha: g.createdAt || g.fecha,
         tipo: 'GASTO',
@@ -236,6 +264,7 @@ export async function getMovimientosBancariosUnificados(
       [cuentaBancariaId],
     );
     for (const v of valeRows) {
+      if (valeConMB.has(Number(v.id))) continue; // ya listado como MovimientoBancario (sección 1)
       const func = `${v.nombre || ''} ${v.apellido || ''}`.trim();
       items.push({
         fecha: v.createdAt || v.fecha,
@@ -255,13 +284,22 @@ export async function getMovimientosBancariosUnificados(
     //    los AJUSTE_NEGATIVO (anulaciones de cobro) figuran como egresos para
     //    que el neto coincida con el saldo.
     const cobroRows = await dbQuery(dataSource,
-      `SELECT mc.id, mc.fecha, COALESCE(mc.monto_cuenta_bancaria, mc.monto) AS monto, mc.tipo, mc.observacion
+      `SELECT mc.id, mc.fecha, COALESCE(mc.monto_cuenta_bancaria, mc.monto) AS monto, mc.tipo, mc.observacion,
+              mc.cuenta_por_cobrar_id AS "cpcId", mc.cuenta_por_cobrar_cuota_id AS "cuotaId",
+              cu.numero AS "cuotaNumero"
        FROM movimientos_cliente mc
+       LEFT JOIN cuentas_por_cobrar_cuotas cu ON mc.cuenta_por_cobrar_cuota_id = cu.id
        WHERE mc.cuenta_bancaria_id = ? AND mc.tipo IN ('PAGO', 'AJUSTE_NEGATIVO')`,
       [cuentaBancariaId],
     );
     for (const mc of cobroRows) {
       const esPago = mc.tipo === 'PAGO';
+      // C-01 dedupe: saltar si el cobro/anulación ya figura como MovimientoBancario.
+      if (esPago) {
+        if (cobroConMB.has(`${Number(mc.cpcId)}:${Number(mc.cuotaNumero)}`)) continue;
+      } else if (anulCobroConMB.has(Number(mc.cuotaId))) {
+        continue;
+      }
       items.push({
         fecha: mc.fecha,
         tipo: 'COBRO_CLIENTE',

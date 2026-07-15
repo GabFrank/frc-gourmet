@@ -120,10 +120,12 @@ import { DataSource, Not } from 'typeorm';
 import { MiEntidad } from '../../src/app/database/entities/<dominio>/mi-entidad.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { ensurePermission } from '../utils/auth.utils'; // ← guard de autorización
 
+// getCurrentUser es REQUERIDO (no opcional): ensurePermission lo necesita.
 export function registerMiDominioHandlers(
   dataSource: DataSource,
-  getCurrentUser?: () => Usuario | null,
+  getCurrentUser: () => Usuario | null,
 ) {
   // GET ALL
   ipcMain.handle('get-mi-entidades', async () => {
@@ -154,6 +156,7 @@ export function registerMiDominioHandlers(
   // CREATE
   ipcMain.handle('create-mi-entidad', async (_event, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MI_DOMINIO_GESTIONAR'); // ← OBLIGATORIO en handlers que mutan
       const repo = dataSource.getRepository(MiEntidad);
       const otraRepo = dataSource.getRepository(OtraEntidad);
 
@@ -181,6 +184,7 @@ export function registerMiDominioHandlers(
   // UPDATE
   ipcMain.handle('update-mi-entidad', async (_event, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MI_DOMINIO_GESTIONAR'); // ← OBLIGATORIO en handlers que mutan
       const repo = dataSource.getRepository(MiEntidad);
       const entity = await repo.findOne({ where: { id }, relations: ['otraEntidad'] });
       if (!entity) return { success: false, message: 'No encontrada' };
@@ -208,6 +212,7 @@ export function registerMiDominioHandlers(
   // DELETE (soft delete por default)
   ipcMain.handle('delete-mi-entidad', async (_event, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MI_DOMINIO_GESTIONAR'); // ← OBLIGATORIO en handlers que mutan
       const repo = dataSource.getRepository(MiEntidad);
       const result = await repo.update(id, { activo: false });
       return result.affected ? { success: true } : { success: false, message: 'No encontrada' };
@@ -363,7 +368,7 @@ openMiEntidadesTab() {
 </a>
 ```
 
-Si la funcionalidad requiere permisos, agregarlos al catálogo `SEED_PERMISOS` en `electron/handlers/permissions.handler.ts` (`{ codigo, descripcion, modulo }`) y chequearlos también en el handler con `ensurePermission`.
+**Autorización (obligatorio, no opcional).** Gatear el menú con `*appHasPermission` es sólo cosmético — `/api/rpc` es default-allow, así que cualquier cliente con un JWT puede invocar el handler directo, salteándose la UI. Por eso **todo handler que muta datos** (create/update/delete/anular/aprobar/confirmar/generar/pagar/…) DEBE llamar `ensurePermission(dataSource, getCurrentUser, 'CODIGO')` como primera sentencia del `try` (ver ejemplos arriba). Los `get-*`/`list-*` de sólo lectura no. Agregar el código de permiso a `SEED_PERMISOS` en `electron/handlers/permissions.handler.ts` (`{ codigo, descripcion, modulo }`).
 
 ## 10. Reiniciar la app
 
@@ -383,7 +388,8 @@ Cambios en `electron/handlers/`, `preload.ts`, `main.ts`, nueva entidad, nueva m
 - [ ] Entity creada con `BaseModel`, decoradores, relaciones
 - [ ] Registrada en `getEntitiesList()` de `database.config.ts`
 - [ ] **Migración** creada (timestamp epoch-ms real, driver-aware) y registrada en `getMigrations()`
-- [ ] Handler con CRUD + paginated, UPPERCASE, `setEntityUserTracking`, `ensurePermission` si aplica
+- [ ] Handler con CRUD + paginated, UPPERCASE, `setEntityUserTracking`
+- [ ] **`ensurePermission` en TODOS los handlers que mutan** (create/update/delete/anular/…) — primera sentencia del `try`; código en `SEED_PERMISOS`. Los `get-*`/`list-*` no lo llevan.
 - [ ] Handler registrado en `main.ts`
 - [ ] Preload expone métodos en `window.api`
 - [ ] Métodos en `repository-ipc.service.ts` + `repository-http.service.ts` + firma abstract en `repository.service.ts` (regenerar con el script)

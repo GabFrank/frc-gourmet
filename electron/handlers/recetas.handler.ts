@@ -169,10 +169,18 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         }
       }
 
-      console.log(`💵 Costo total calculado: ${costoTotal}`);
+      // A-02: costoTotal es el costo del LOTE completo (suma de ingredientes según
+      // las cantidades de la receta, que producen `rendimiento` unidades). El costo
+      // por UNIDAD — que es como se consume costoCalculado (ver ingrediente
+      // ELABORADO más arriba) y como debe guardarse el PrecioCosto — es
+      // costoTotal / rendimiento. Antes se guardaba el costo del lote como si fuera
+      // unitario, sobreestimando el costo de recetas con rendimiento>1.
+      const rendimiento = Number(receta.rendimiento) > 0 ? Number(receta.rendimiento) : 1;
+      const costoUnitario = +(costoTotal / rendimiento).toFixed(2);
+      console.log(`💵 Costo total del lote: ${costoTotal} / rendimiento ${rendimiento} = costo unitario ${costoUnitario}`);
 
-      // Update recipe total cost in the entity
-      await recetaRepository.update(recetaId, { costoCalculado: costoTotal });
+      // Update recipe unit cost in the entity
+      await recetaRepository.update(recetaId, { costoCalculado: costoUnitario });
 
       // ✅ MEJORA: Verificar si el precio anterior es igual al nuevo antes de crear registro
       const monedaRepository = dataSource.getRepository(Moneda);
@@ -193,14 +201,14 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
         // Solo crear nuevo registro si el precio ha cambiado o no existe precio anterior
         const precioHaCambiado = !precioCostoAnterior ||
-                                Math.abs(precioCostoAnterior.valor - costoTotal) > 0.01; // Tolerancia de 0.01
+                                Math.abs(precioCostoAnterior.valor - costoUnitario) > 0.01; // Tolerancia de 0.01
 
         if (precioHaCambiado) {
-          console.log(`💾 Creando nuevo registro de PrecioCosto - Valor anterior: ${precioCostoAnterior?.valor || 'N/A'}, Nuevo valor: ${costoTotal}`);
+          console.log(`💾 Creando nuevo registro de PrecioCosto - Valor anterior: ${precioCostoAnterior?.valor || 'N/A'}, Nuevo valor: ${costoUnitario}`);
 
           const precioCostoData: any = {
             fuente: FuenteCosto.AJUSTE_RECETA,
-            valor: costoTotal,
+            valor: costoUnitario,
             fecha: new Date(),
             activo: true,
             moneda: monedaPrincipal
@@ -223,7 +231,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       }
 
       console.log(`✅ Cálculo de costo completado para receta: ${receta.nombre}`);
-      return costoTotal;
+      return costoUnitario;
     } catch (error) {
       console.error('❌ Error calculating recipe cost:', error);
       throw error;
