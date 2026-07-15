@@ -346,6 +346,11 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./pages/financiero/caja-mayor/ops/pagar-compras.page').then((m) => m.PagarComprasPage),
   },
+  {
+    path: 'financiero/caja-mayor/:id/ingresar-retiro',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/caja-mayor/ops/ingresar-retiro.page').then((m) => m.IngresarRetiroPage),
+  },
   // Cajas: apertura, detalle/resumen y cierre (full-screen). 'abrir' debe ir
   // ANTES de ':id' para no matchearse como un id.
   {

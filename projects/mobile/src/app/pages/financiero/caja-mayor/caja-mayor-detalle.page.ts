@@ -305,6 +305,9 @@ export class CajaMayorDetallePage implements OnInit {
   registrarEntradaVaria(): void {
     this.router.navigate(['/financiero/caja-mayor', this.id, 'entrada-varia']);
   }
+  ingresarRetiro(): void {
+    this.router.navigate(['/financiero/caja-mayor', this.id, 'ingresar-retiro']);
+  }
   registrarVale(): void {
     this.router.navigate(['/financiero/caja-mayor', this.id, 'vale']);
   }
