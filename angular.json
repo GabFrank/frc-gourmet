@@ -254,7 +254,8 @@
             "styles": [
               "projects/mobile/src/styles.scss"
             ],
-            "scripts": []
+            "scripts": [],
+            "karmaConfig": "projects/mobile/karma.conf.js"
           }
         },
         "lint": {

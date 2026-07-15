@@ -5,15 +5,17 @@ import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angu
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
-import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '@frc/shared-core';
+import { formaPagoEfectivo } from '../../forma-pago-efectivo.util';
 
 interface Opcion {
   id: number;
@@ -25,37 +27,45 @@ interface CuentaOpcion extends Opcion {
 }
 
 /**
- * Registrar Gasto (egreso categorizado) desde la Caja Mayor — operación
- * full-screen. Envía un único detalle (moneda + forma de pago + monto); el
- * split multi-moneda queda para el escritorio. La fecha es la del día.
+ * Registrar Vale confirmado (egreso a funcionario) desde la Caja Mayor —
+ * operación full-screen. Replica el "Registrar Vale" del escritorio
+ * (create-edit-vale-dialog en modo confirmar): crea el vale ya CONFIRMADO y
+ * egresa de caja (EGRESO_VALE) o debita una cuenta bancaria, en un handler
+ * atómico. Requiere RRHH_VALE_CREAR + RRHH_VALE_CONFIRMAR.
+ *
+ * En modo banco la moneda la dicta la cuenta (sin cotización) — el split
+ * multi-moneda con cotización queda para el escritorio.
  */
 @Component({
-  selector: 'app-gasto-nuevo',
+  selector: 'app-vale-nuevo',
   standalone: true,
   imports: [
     CommonModule, ReactiveFormsModule, MatToolbarModule, MatIconModule, MatButtonModule,
-    MatFormFieldModule, MatInputModule, MatSelectModule, MatAutocompleteModule,
-    MatButtonToggleModule, MatProgressBarModule, MatSnackBarModule,
+    MatButtonToggleModule, MatFormFieldModule, MatInputModule, MatSelectModule,
+    MatAutocompleteModule, MatSlideToggleModule, MatProgressBarModule, MatSnackBarModule,
   ],
-  templateUrl: './gasto-nuevo.page.html',
+  templateUrl: './vale-nuevo.page.html',
   styles: [
     `
-      .gn-destino {
+      .vn-destino {
         align-self: stretch;
         margin-bottom: 4px;
       }
-      .gn-destino mat-button-toggle {
+      .vn-destino mat-button-toggle {
         flex: 1;
       }
-      .gn-hint {
+      .vn-hint {
         margin: 0 4px 8px;
         font-size: 0.8rem;
         color: var(--text-secondary);
       }
+      .vn-toggle {
+        margin: 4px 4px 8px;
+      }
     `,
   ],
 })
-export class GastoNuevoPage implements OnInit {
+export class ValeNuevoPage implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly repo = inject(RepositoryService);
   private readonly route = inject(ActivatedRoute);
@@ -64,61 +74,63 @@ export class GastoNuevoPage implements OnInit {
 
   cajaMayorId = 0;
 
-  categorias: Opcion[] = [];
-  categoriasFiltradas: Opcion[] = [];
+  funcionarios: Opcion[] = [];
+  funcionariosFiltrados: Opcion[] = [];
+  motivos: Opcion[] = [];
   monedas: Opcion[] = [];
-  formasPago: Opcion[] = [];
+  /** Forma de pago fija para fuente Caja Mayor (siempre efectivo). */
+  efectivoLabel = 'Efectivo';
   cuentasBancarias: CuentaOpcion[] = [];
   loading = true;
   saving = false;
 
-  /** Input texto del autocomplete de categoría (separado del id en el form). */
-  readonly categoriaInput = new FormControl<Opcion | string>('', { nonNullable: true });
+  /** Input texto del autocomplete de funcionario (separado del id en el form). */
+  readonly funcionarioInput = new FormControl<Opcion | string>('', { nonNullable: true });
 
   readonly form = this.fb.nonNullable.group({
-    destinoTipo: ['CAJA_MAYOR' as 'CAJA_MAYOR' | 'CUENTA_BANCARIA', Validators.required],
-    gastoCategoriaId: [null as number | null, Validators.required],
-    descripcion: ['', Validators.required],
+    fuente: ['CAJA_MAYOR' as 'CAJA_MAYOR' | 'CUENTA_BANCARIA', Validators.required],
+    funcionarioId: [null as number | null, Validators.required],
+    motivoId: [null as number | null],
+    descripcion: [''],
+    esAdelanto: [true],
     monto: [null as number | null, [Validators.required, Validators.min(0.01)]],
     monedaId: [null as number | null, Validators.required],
-    // Validadores condicionales: requerido segun destinoTipo (setup en ngOnInit).
+    // Validadores condicionales según fuente (setup en ngOnInit).
     formaPagoId: [null as number | null],
     cuentaBancariaId: [null as number | null],
   });
 
   get esBanco(): boolean {
-    return this.form.controls.destinoTipo.value === 'CUENTA_BANCARIA';
+    return this.form.controls.fuente.value === 'CUENTA_BANCARIA';
   }
 
   ngOnInit(): void {
     this.cajaMayorId = Number(this.route.snapshot.paramMap.get('id'));
     this.cargarCatalogos();
-    // Filtrar categorías a medida que el usuario tipea; si limpia o reescribe,
-    // se desvincula la selección (se exige elegir una opción de la lista).
-    this.categoriaInput.valueChanges.subscribe((v) => {
+    // Filtrar funcionarios a medida que el usuario tipea; si limpia o reescribe,
+    // se desvincula la selección (se exige elegir uno de la lista).
+    this.funcionarioInput.valueChanges.subscribe((v) => {
       const text = typeof v === 'string' ? v : v?.label || '';
       const q = text.toLowerCase().trim();
-      this.categoriasFiltradas = q
-        ? this.categorias.filter((c) => c.label.toLowerCase().includes(q))
-        : [...this.categorias];
-      if (typeof v === 'string') this.form.controls.gastoCategoriaId.setValue(null);
+      this.funcionariosFiltrados = q
+        ? this.funcionarios.filter((f) => f.label.toLowerCase().includes(q))
+        : [...this.funcionarios];
+      if (typeof v === 'string') this.form.controls.funcionarioId.setValue(null);
     });
-    // Validadores condicionales: el campo "irrelevante" se limpia y deja de
-    // ser requerido cuando se cambia el destino.
-    this.form.controls.destinoTipo.valueChanges.subscribe((v) => this.aplicarValidadoresDestino(v));
-    this.aplicarValidadoresDestino(this.form.controls.destinoTipo.value);
+    // Validadores condicionales por fuente.
+    this.form.controls.fuente.valueChanges.subscribe((v) => this.aplicarValidadoresFuente(v));
+    this.aplicarValidadoresFuente(this.form.controls.fuente.value);
   }
 
-  private aplicarValidadoresDestino(destino: 'CAJA_MAYOR' | 'CUENTA_BANCARIA'): void {
+  private aplicarValidadoresFuente(fuente: 'CAJA_MAYOR' | 'CUENTA_BANCARIA'): void {
     const fp = this.form.controls.formaPagoId;
     const cb = this.form.controls.cuentaBancariaId;
     const mon = this.form.controls.monedaId;
-    if (destino === 'CUENTA_BANCARIA') {
+    if (fuente === 'CUENTA_BANCARIA') {
       cb.setValidators([Validators.required]);
       fp.clearValidators();
       fp.setValue(null, { emitEvent: false });
-      // En modo banco, la moneda la dicta la cuenta -> deshabilitar el select.
-      // Si solo hay 1 cuenta, ya viene preseleccionada -> autoset.
+      // En modo banco la moneda la dicta la cuenta -> deshabilitar el select.
       if (cb.value) this.alinearMonedaConCuenta(cb.value);
       mon.disable({ emitEvent: false });
     } else {
@@ -131,7 +143,6 @@ export class GastoNuevoPage implements OnInit {
     cb.updateValueAndValidity({ emitEvent: false });
   }
 
-  /** Al elegir una cuenta bancaria, fuerza la moneda del form a la de la cuenta. */
   onCuentaBancariaSelected(cuentaId: number): void {
     this.alinearMonedaConCuenta(cuentaId);
   }
@@ -141,31 +152,38 @@ export class GastoNuevoPage implements OnInit {
     if (c) this.form.controls.monedaId.setValue(c.monedaId, { emitEvent: false });
   }
 
-  /** Para que el input muestre el label de la opción seleccionada. */
-  displayCategoria = (c: Opcion | null): string => (c?.label || '');
+  displayFuncionario = (f: Opcion | null): string => (f?.label || '');
 
-  onCategoriaSelected(opt: Opcion): void {
-    this.form.controls.gastoCategoriaId.setValue(opt.id);
+  onFuncionarioSelected(opt: Opcion): void {
+    this.form.controls.funcionarioId.setValue(opt.id);
   }
 
   private cargarCatalogos(): void {
     this.loading = true;
     Promise.all([
-      firstValueFrom(this.repo.getGastoCategorias()),
+      firstValueFrom(this.repo.getFuncionarios({ soloActivos: true })),
+      firstValueFrom(this.repo.getMotivosVale()),
       firstValueFrom(this.repo.getMonedas()),
       firstValueFrom(this.repo.getFormasPago()),
       firstValueFrom(this.repo.getCuentasBancarias()),
     ])
-      .then(([cats, monedas, formas, cuentas]: [any[], any[], any[], any[]]) => {
-        this.categorias = (cats || [])
-          .filter((c) => c.activo !== false)
-          .map((c) => ({ id: c.id, label: c.nombre }));
+      .then(([funcs, motivos, monedas, formas, cuentas]: [any[], any[], any[], any[], any[]]) => {
+        this.funcionarios = (funcs || [])
+          .filter((f) => f.activo !== false)
+          .map((f) => ({
+            id: f.id,
+            label: `${f.persona?.nombre || ''} ${f.persona?.apellido || ''}`.trim() || `Funcionario #${f.id}`,
+          }));
+        this.motivos = (motivos || [])
+          .filter((m) => m.activo !== false)
+          .map((m) => ({ id: m.id, label: m.nombre }));
         this.monedas = (monedas || [])
           .filter((m) => m.activo !== false)
           .map((m) => ({ id: m.id, label: `${m.simbolo} · ${m.denominacion}` }));
-        this.formasPago = (formas || [])
-          .filter((f) => f.activo !== false)
-          .map((f) => ({ id: f.id, label: f.nombre }));
+        // Fuente Caja Mayor = siempre efectivo (no se elige forma de pago).
+        const efectivo = formaPagoEfectivo(formas || []);
+        this.efectivoLabel = efectivo?.nombre || 'Efectivo';
+        if (efectivo) this.form.controls.formaPagoId.setValue(efectivo.id);
         this.cuentasBancarias = (cuentas || [])
           .filter((c) => c.activo !== false && c.moneda?.id)
           .map((c) => ({
@@ -173,17 +191,12 @@ export class GastoNuevoPage implements OnInit {
             label: `${c.banco ? c.banco + ' · ' : ''}${c.nombre} (${c.moneda?.simbolo || ''})`,
             monedaId: c.moneda.id,
           }));
+        this.funcionariosFiltrados = [...this.funcionarios];
+        // Preselección: moneda principal, forma de pago / cuenta única.
         const principal = (monedas || []).find((m) => m.principal);
         if (principal) this.form.controls.monedaId.setValue(principal.id);
         else if (this.monedas.length === 1) this.form.controls.monedaId.setValue(this.monedas[0].id);
-        if (this.formasPago.length === 1) this.form.controls.formaPagoId.setValue(this.formasPago[0].id);
         if (this.cuentasBancarias.length === 1) this.form.controls.cuentaBancariaId.setValue(this.cuentasBancarias[0].id);
-        this.categoriasFiltradas = [...this.categorias];
-        if (this.categorias.length === 1) {
-          const c = this.categorias[0];
-          this.form.controls.gastoCategoriaId.setValue(c.id);
-          this.categoriaInput.setValue(c, { emitEvent: false });
-        }
         this.loading = false;
       })
       .catch(() => {
@@ -204,33 +217,39 @@ export class GastoNuevoPage implements OnInit {
     this.saving = true;
     const v = this.form.getRawValue();
     const base = {
-      cajaMayor: { id: this.cajaMayorId },  // metadata: desde qué caja se registró
-      gastoCategoria: { id: v.gastoCategoriaId },
-      descripcion: (v.descripcion || '').toUpperCase(),
+      funcionarioId: v.funcionarioId,
+      monedaId: v.monedaId,
+      monto: v.monto,
+      motivoId: v.motivoId || null,
+      descripcion: v.descripcion ? v.descripcion.toUpperCase() : null,
+      esAdelanto: !!v.esAdelanto,
       fecha: new Date(),
-      destinoTipo: v.destinoTipo,
+      cajaMayorId: this.cajaMayorId, // informativo en banco; obligatorio en caja
     };
-    const payload = v.destinoTipo === 'CUENTA_BANCARIA'
+    const payload = v.fuente === 'CUENTA_BANCARIA'
       ? {
           ...base,
-          cuentaBancaria: { id: v.cuentaBancariaId },
-          monto: v.monto,
-          monedaId: v.monedaId,
+          fuente: 'CUENTA_BANCARIA',
+          cuentaBancariaId: v.cuentaBancariaId,
+          // moneda == moneda de la cuenta -> sin conversión (montoCuentaBancaria = monto).
+          montoCuentaBancaria: null,
+          cotizacion: null,
         }
       : {
           ...base,
-          detalles: [{ monedaId: v.monedaId, formaPagoId: v.formaPagoId, monto: v.monto }],
+          fuente: 'CAJA_MAYOR',
+          formaPagoId: v.formaPagoId,
         };
     try {
-      await firstValueFrom(this.repo.createGasto(payload));
-      this.snack.open('Gasto registrado', 'OK', { duration: 2500 });
+      await firstValueFrom(this.repo.crearValeConfirmado(payload));
+      this.snack.open('Vale registrado', 'OK', { duration: 2500 });
       this.location.back();
     } catch (e) {
-      this.snack.open(
-        /PERMISO/.test(String((e as Error)?.message)) ? 'Sin permiso para operar' : 'No se pudo registrar',
-        'OK',
-        { duration: 3500 },
-      );
+      const raw = String((e as Error)?.message || '');
+      const msg = /PERMISO/.test(raw)
+        ? 'Sin permiso para registrar vales'
+        : raw.replace(/^Error:\s*/, '') || 'No se pudo registrar el vale';
+      this.snack.open(msg, 'OK', { duration: 4000 });
       this.saving = false;
     }
   }

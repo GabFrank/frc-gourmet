@@ -117,6 +117,9 @@
       <button mat-menu-item (click)="registrarEntradaVaria()">
         <mat-icon>savings</mat-icon><span>Entrada varia</span>
       </button>
+      <button mat-menu-item (click)="ingresarRetiro()">
+        <mat-icon>move_to_inbox</mat-icon><span>Ingresar retiro</span>
+      </button>
       <button mat-menu-item (click)="ajuste('ingreso')">
         <mat-icon>tune</mat-icon><span>Ajuste positivo</span>
       </button>
@@ -128,6 +131,12 @@
     <mat-menu #egresoMenu="matMenu">
       <button mat-menu-item (click)="registrarGasto()">
         <mat-icon>receipt_long</mat-icon><span>Gasto</span>
+      </button>
+      <button mat-menu-item (click)="registrarVale()">
+        <mat-icon>badge</mat-icon><span>Registrar vale</span>
+      </button>
+      <button mat-menu-item *ngIf="canPagarCompras" (click)="pagarCompras()">
+        <mat-icon>shopping_cart_checkout</mat-icon><span>Pagar compras</span>
       </button>
       <button mat-menu-item (click)="ajuste('egreso')">
         <mat-icon>tune</mat-icon><span>Ajuste negativo</span>

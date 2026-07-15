@@ -1,0 +1,73 @@
+<div class="crud-page">
+  <!-- Filtros -->
+  <form class="gl-filtros" [formGroup]="filtros">
+    <mat-form-field appearance="outline">
+      <mat-label>Desde</mat-label>
+      <input matInput type="date" formControlName="fechaDesde" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Hasta</mat-label>
+      <input matInput type="date" formControlName="fechaHasta" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Categoría</mat-label>
+      <mat-select formControlName="gastoCategoriaId">
+        <mat-option [value]="null">Todas</mat-option>
+        <mat-option *ngFor="let c of categorias" [value]="c.id">{{ c.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Estado</mat-label>
+      <mat-select formControlName="estado">
+        <mat-option [value]="null">Todos</mat-option>
+        <mat-option *ngFor="let e of estados" [value]="e">{{ e | titlecase }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </form>
+  <div class="crud-filterbar">
+    <button mat-stroked-button (click)="limpiar()">Limpiar</button>
+    <button mat-flat-button color="primary" class="crud-filter-btn" (click)="buscar()">Filtrar</button>
+  </div>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <div class="crud-list" *ngIf="!loading && !error">
+    <mat-card *ngFor="let g of items" class="crud-card" appearance="outlined">
+      <div class="crud-card-body">
+        <div class="crud-card-main">
+          <span class="crud-name">{{ g.descripcion }}</span>
+          <span class="crud-sub">
+            {{ g.categoria }}<span *ngIf="g.recurrente"> · recurrente</span>
+          </span>
+          <span class="crud-sub">
+            <span class="gl-monto">{{ g.simbolo }} {{ g.monto | number: '1.0-' + g.decimales }}</span>
+            · {{ g.fecha | date: 'dd/MM/yy' }}
+          </span>
+        </div>
+        <span class="crud-chip gl-chip" [ngClass]="g.estadoClase">{{ g.estado | titlecase }}</span>
+        <button
+          *ngIf="canOperar && g.estado !== 'CANCELADO'"
+          mat-icon-button
+          [matMenuTriggerFor]="menu"
+          aria-label="Acciones"
+        >
+          <mat-icon>more_vert</mat-icon>
+        </button>
+        <mat-menu #menu="matMenu">
+          <a mat-menu-item *ngIf="g.esCaja" [routerLink]="['/financiero/gastos', g.id, 'editar']">
+            <mat-icon>edit</mat-icon><span>Editar</span>
+          </a>
+          <button mat-menu-item (click)="anular(g)">
+            <mat-icon color="warn">block</mat-icon><span>Anular</span>
+          </button>
+        </mat-menu>
+      </div>
+    </mat-card>
+    <p *ngIf="items.length === 0" class="crud-empty">No hay gastos.</p>
+  </div>
+
+  <a *ngIf="canOperar" class="crud-fab" mat-fab color="primary" routerLink="/financiero/gastos/nuevo" aria-label="Nuevo">
+    <mat-icon>add</mat-icon>
+  </a>
+</div>
