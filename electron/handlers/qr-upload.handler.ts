@@ -33,6 +33,18 @@ async function toQrDataUrl(url: string): Promise<string | null> {
   }
 }
 
+/**
+ * El sessionId puede llegar como objeto `{ sessionId }` (el preload de Electron
+ * envuelve el arg antes del invoke) o como string posicional (los shims HTTP de
+ * web /admin y mobile pasan los args verbatim a `/api/rpc`, sin ese wrapping).
+ * Aceptar ambas formas para que el handler funcione por IPC y por RPC. Sin esto,
+ * por /admin `input.sessionId` era undefined y el poll devolvia `expired: true`.
+ */
+function resolveSessionId(input: any): string | undefined {
+  if (typeof input === 'string') return input;
+  return input?.sessionId;
+}
+
 export function registerQrUploadHandler(dataSource: DataSource): void {
   // Crea la sesión + asegura el server LAN + genera el QR (URL LAN por defecto).
   ipcMain.handle(
@@ -76,8 +88,8 @@ export function registerQrUploadHandler(dataSource: DataSource): void {
 
   // Activa el túnel HTTPS (acceso remoto + escáner de cámara en vivo) y
   // regenera el QR apuntando a la URL pública, manteniendo la misma sesión.
-  ipcMain.handle('qr-upload-enable-remote', async (_event, input: { sessionId: string }) => {
-    const session = getQrUploadSession(input?.sessionId);
+  ipcMain.handle('qr-upload-enable-remote', async (_event, input: { sessionId: string } | string) => {
+    const session = getQrUploadSession(resolveSessionId(input));
     if (!session) {
       return { ok: false, error: 'sesion_invalida_o_expirada' };
     }
@@ -97,16 +109,17 @@ export function registerQrUploadHandler(dataSource: DataSource): void {
   });
 
   // Polling del desktop — devuelve los archivos subidos hasta el momento.
-  ipcMain.handle('qr-upload-poll', async (_event, input: { sessionId: string }) => {
-    const session = getQrUploadSession(input?.sessionId);
+  ipcMain.handle('qr-upload-poll', async (_event, input: { sessionId: string } | string) => {
+    const session = getQrUploadSession(resolveSessionId(input));
     if (!session) {
       return { ok: false, expired: true, files: [] };
     }
     return { ok: true, expired: false, files: session.files, expiresAt: session.expiresAt };
   });
 
-  ipcMain.handle('qr-upload-close', async (_event, input: { sessionId: string }) => {
-    if (input?.sessionId) closeQrUploadSession(input.sessionId);
+  ipcMain.handle('qr-upload-close', async (_event, input: { sessionId: string } | string) => {
+    const sessionId = resolveSessionId(input);
+    if (sessionId) closeQrUploadSession(sessionId);
     return { ok: true };
   });
 }
