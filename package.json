@@ -45,6 +45,7 @@
     "test:receta-ingrediente": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-receta-ingrediente-e2e.ts",
     "test:cobro-parcial": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-cobro-parcial-e2e.ts",
     "test:fichaje-facial": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-fichaje-facial.ts",
+    "test:forma-pago-efectivo": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-forma-pago-efectivo.ts",
     "build:storefront": "ng build storefront --base-href /tienda/",
     "lint": "ng lint",
     "release": "semantic-release",
