@@ -124,7 +124,7 @@ documentarlos. `ID` es una etiqueta estable para referirlos en tickets.
 | C-02 | Productos | Descuento de stock de pizza multi-sabor ignora `VentaItemSabor` | Vender una pizza de varios sabores **descuenta stock del sabor equivocado** (o de más/menos) → inventario desviado. |
 | C-03 | Seguridad | Handlers de stock/precio sin `ensurePermission` | Cualquier sesión con JWT puede **crear/alterar precios y stock** vía `/api/rpc` sin permiso. |
 | C-04 | RRHH | Vale CONFIRMADO + `VacacionVenta` se descuentan en dos periodos | El mismo monto se **descuenta dos veces** al funcionario (en periodos distintos) → liquidación incorrecta. |
-| C-05 | Seguridad | `/api/rpc` es default-allow (`BLOCKED_CHANNELS` sólo cubre 3) | **Toda** la superficie de handlers queda expuesta con un JWT válido; un permiso olvidado = acceso total a ese handler. |
+| C-05 | Seguridad | `/api/rpc` es default-allow (`BLOCKED_CHANNELS` sólo cubre 3) | **Toda** la superficie de handlers queda expuesta con un JWT válido; un permiso olvidado = acceso total a ese handler. **Resuelto parcialmente:** el mapeo mostró que la allowlist para default-deny sería ~830 canales (casi todo el registro), alto costo/riesgo y poco valor marginal. Se optó por ampliar `BLOCKED_CHANNELS` a ~30 canales de infraestructura (backups/reset BD, config/reinicio, secretos, seeds, túnel/MAC del servidor). El default-deny estructural queda como follow-up (requiere fase fail-open + prueba en cliente/PWA). |
 
 ### 🟠 ALTO (5)
 
