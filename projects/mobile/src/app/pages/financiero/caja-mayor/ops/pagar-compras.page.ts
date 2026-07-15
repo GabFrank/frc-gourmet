@@ -22,6 +22,10 @@ interface Opcion {
   label: string;
 }
 
+interface CuentaOpcion extends Opcion {
+  monedaId: number;
+}
+
 interface CuotaVM {
   id: number;
   proveedorId: number | null;
@@ -29,6 +33,7 @@ interface CuotaVM {
   compraNota: string;
   cuotaLabel: string;
   vencimiento: string;
+  monedaId: number | null;
   simbolo: string;
   decimales: number;
   saldoPendiente: number;
@@ -72,7 +77,7 @@ export class PagarComprasPage implements OnInit {
   monedas: Opcion[] = [];
   /** Forma de pago fija para fuente Caja Mayor (siempre efectivo). */
   efectivoLabel = 'Efectivo';
-  cuentasBancarias: Opcion[] = [];
+  cuentasBancarias: CuentaOpcion[] = [];
   proveedoresFiltro: Opcion[] = [];
   filtroProveedorId: number | null = null;
 
@@ -104,6 +109,11 @@ export class PagarComprasPage implements OnInit {
     this.form.controls.fuente.valueChanges.subscribe((v) => this.aplicarValidadores(v));
     // Recalcular validez del botón cuando cambian moneda/forma/cuenta de pago.
     this.form.valueChanges.subscribe(() => this.recalcular());
+    // La moneda del lote es única: al cambiarla (o la cuenta/fuente) re-filtramos
+    // las cuotas a esa moneda y deseleccionamos las que ya no aplican.
+    this.form.controls.monedaId.valueChanges.subscribe(() => this.aplicarFiltro());
+    this.form.controls.cuentaBancariaId.valueChanges.subscribe(() => this.aplicarFiltro());
+    this.form.controls.fuente.valueChanges.subscribe(() => this.aplicarFiltro());
     this.aplicarValidadores('CAJA_MAYOR');
     this.cargar();
   }
@@ -143,6 +153,7 @@ export class PagarComprasPage implements OnInit {
           compraNota: c.compraNumeroNota ? `Nota ${c.compraNumeroNota}` : `Compra #${c.compraId ?? ''}`,
           cuotaLabel: `Cuota ${c.numero || 1}/${c.cantidadCuotas || 1}`,
           vencimiento: c.fechaVencimiento,
+          monedaId: c.monedaId ?? null,
           simbolo: c.monedaSimbolo || '',
           decimales: decimalesPorMoneda.get(c.monedaId) ?? 0,
           saldoPendiente: Number(c.saldoPendiente) || 0,
@@ -165,7 +176,7 @@ export class PagarComprasPage implements OnInit {
         if (efectivo) this.form.controls.formaPagoId.setValue(efectivo.id);
         this.cuentasBancarias = (cuentas || [])
           .filter((c) => c.activo !== false && c.moneda?.id)
-          .map((c) => ({ id: c.id, label: `${c.banco ? c.banco + ' · ' : ''}${c.nombre} (${c.moneda?.simbolo || ''})` }));
+          .map((c) => ({ id: c.id, label: `${c.banco ? c.banco + ' · ' : ''}${c.nombre} (${c.moneda?.simbolo || ''})`, monedaId: c.moneda.id }));
 
         const principal = (monedas || []).find((m) => m.principal);
         if (principal) this.form.controls.monedaId.setValue(principal.id);
@@ -181,10 +192,27 @@ export class PagarComprasPage implements OnInit {
       });
   }
 
+  /** Moneda con la que se pagará el lote: la del form (caja) o la de la cuenta (banco). */
+  private monedaActual(): number | null {
+    if (this.esBanco) {
+      const c = this.cuentasBancarias.find((x) => x.id === this.form.controls.cuentaBancariaId.value);
+      return c?.monedaId ?? null;
+    }
+    return this.form.controls.monedaId.value ?? null;
+  }
+
   aplicarFiltro(): void {
-    this.cuotas = this.filtroProveedorId == null
-      ? [...this.todasCuotas]
-      : this.todasCuotas.filter((c) => c.proveedorId === this.filtroProveedorId);
+    const moneda = this.monedaActual();
+    this.cuotas = this.todasCuotas.filter(
+      (c) =>
+        (this.filtroProveedorId == null || c.proveedorId === this.filtroProveedorId) &&
+        (moneda == null || c.monedaId === moneda),
+    );
+    // Deseleccionar cuotas que ya no están visibles (evita pagar en otra moneda).
+    const visibles = new Set(this.cuotas.map((c) => c.id));
+    this.todasCuotas.forEach((c) => {
+      if (!visibles.has(c.id)) c.selected = false;
+    });
     this.recalcular();
   }
 

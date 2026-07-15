@@ -76,9 +76,9 @@ const ESTADO_FILTROS = ['TODOS', 'SOLICITADO', 'CONFIRMADO', 'DESCONTADO', 'ANUL
         cursor: pointer;
       }
       .vl-estado-chip.active {
-        background: var(--info-color);
+        background: color-mix(in srgb, var(--info-color) 22%, transparent);
         border-color: var(--info-color);
-        color: #fff;
+        color: var(--info-color);
       }
       .vl-row2 {
         display: flex;

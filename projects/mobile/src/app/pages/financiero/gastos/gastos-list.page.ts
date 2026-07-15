@@ -155,7 +155,10 @@ export class GastosListPage implements OnInit {
       fecha: g.fecha,
       estado,
       estadoClase: ESTADO_CLASE[estado] || 'off',
-      esCaja: destino !== 'CUENTA_BANCARIA',
+      // Solo los gastos puramente de caja se editan en la PWA; los bancarios
+      // (destinoTipo CUENTA_BANCARIA o con cuentaBancariaId, como los del
+      // escritorio) se editan allá para no romper la contabilidad bancaria.
+      esCaja: destino !== 'CUENTA_BANCARIA' && !g.cuentaBancariaId,
       recurrente: !!g.esRecurrente,
     };
   }

@@ -76,7 +76,11 @@ export class IngresarRetiroPage implements OnInit {
       firstValueFrom(this.repo.getRetirosCaja({ estado: 'VINCULADO_PENDIENTE' })),
     ])
       .then(([flotantes, vinculados]: [any[], any[]]) => {
-        this.retiros = [...(flotantes || []), ...(vinculados || [])].map((r) => this.toVM(r));
+        // Los VINCULADO_PENDIENTE ya tienen una caja mayor destino asignada:
+        // solo mostrar los de ESTA caja (los flotantes son libres). Evita
+        // ingresar a esta caja un retiro destinado a otra.
+        const vinculadosDeEsta = (vinculados || []).filter((r) => r.cajaMayor?.id === this.cajaMayorId);
+        this.retiros = [...(flotantes || []), ...vinculadosDeEsta].map((r) => this.toVM(r));
         this.loading = false;
       })
       .catch(() => {

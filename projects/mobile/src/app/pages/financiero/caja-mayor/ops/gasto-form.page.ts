@@ -115,7 +115,10 @@ export class GastoFormPage implements OnInit {
   }
 
   private hoy(): string {
-    return new Date().toISOString().slice(0, 10);
+    // Fecha LOCAL en yyyy-mm-dd (no UTC, para no quedar un día adelantado).
+    const d = new Date();
+    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
   }
 
   private nuevaLinea(monedaId: number | null = null, monto: number | null = null): FormGroup {
@@ -289,8 +292,12 @@ export class GastoFormPage implements OnInit {
           return;
         }
         const destino = (g.destinoTipo || 'CAJA_MAYOR').toUpperCase();
-        if (destino === 'CUENTA_BANCARIA') {
-          this.bloqueadoBanco = true; // el backend rechaza editar gastos bancarios
+        // Los gastos bancarios (destinoTipo CUENTA_BANCARIA o con cuentaBancariaId
+        // seteado — como los que crea el escritorio) NO se editan en la PWA: al
+        // guardar se revertiría el débito bancario y se convertiría en gasto de
+        // caja. Se editan en el escritorio.
+        if (destino === 'CUENTA_BANCARIA' || g.cuentaBancariaId) {
+          this.bloqueadoBanco = true;
         }
         // Reconstruir las líneas desde los detalles (o una sola con moneda/monto).
         this.detalles.clear();
@@ -339,6 +346,11 @@ export class GastoFormPage implements OnInit {
       this.detalles.markAllAsTouched();
       return;
     }
+    // Fuente Caja Mayor exige una forma de pago EFECTIVO configurada.
+    if (this.form.controls.destinoTipo.value === 'CAJA_MAYOR' && this.efectivoFormaId == null) {
+      this.snack.open('No hay una forma de pago EFECTIVO configurada. Creala en el escritorio.', 'OK', { duration: 4000 });
+      return;
+    }
     this.saving = true;
     const v = this.form.getRawValue();
     const lineas = this.detalles.controls.map((g) => ({
@@ -358,8 +370,10 @@ export class GastoFormPage implements OnInit {
       frecuencia: v.esRecurrente ? v.frecuencia : null,
       proximoVencimiento: v.esRecurrente ? v.proximoVencimiento : null,
     };
+    // Banco: rama CUENTA_BANCARIA del handler → espera cuentaBancaria:{id} anidado
+    // + monto/monedaId (una sola línea, moneda de la cuenta). Caja: detalles[] en efectivo.
     const payload = v.destinoTipo === 'CUENTA_BANCARIA'
-      ? { ...base, cuentaBancariaId: v.cuentaBancariaId, monto: lineas[0].monto, monedaId: lineas[0].monedaId, montoCuentaBancaria: null, cotizacion: null }
+      ? { ...base, cuentaBancaria: { id: v.cuentaBancariaId }, monto: lineas[0].monto, monedaId: lineas[0].monedaId }
       : { ...base, detalles: lineas.map((l) => ({ monedaId: l.monedaId, formaPagoId: this.efectivoFormaId, monto: l.monto })) };
 
     const op$ = this.gastoId ? this.repo.editGasto(this.gastoId, payload) : this.repo.createGasto(payload);

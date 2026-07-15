@@ -135,7 +135,7 @@
       <button mat-menu-item (click)="registrarVale()">
         <mat-icon>badge</mat-icon><span>Registrar vale</span>
       </button>
-      <button mat-menu-item (click)="pagarCompras()">
+      <button mat-menu-item *ngIf="canPagarCompras" (click)="pagarCompras()">
         <mat-icon>shopping_cart_checkout</mat-icon><span>Pagar compras</span>
       </button>
       <button mat-menu-item (click)="ajuste('egreso')">
