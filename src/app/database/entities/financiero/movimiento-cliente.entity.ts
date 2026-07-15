@@ -51,6 +51,12 @@ export class MovimientoCliente extends BaseModel {
   @Column({ type: 'text', nullable: true })
   observacion?: string;
 
+  // Marca de reversión: un cobro (PAGO) acreditado a cuenta bancaria queda en
+  // true cuando fue anulado, para que anular-cobro-cpc-cuota sea idempotente y
+  // no revierta el mismo cobro dos veces (M-01).
+  @Column({ type: 'boolean', default: false })
+  anulado!: boolean;
+
   @ManyToOne(() => Usuario, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'registrado_por_id' })
   registradoPor?: Usuario;
