@@ -78,6 +78,7 @@ interface MovimientoVM {
   observacion?: string;
   gastoId?: number;
   entradaVariaId?: number;
+  valeId?: number;
   puedeAnular: boolean;
 }
 
@@ -292,6 +293,7 @@ export class CajaMayorDetallePage implements OnInit {
       observacion: m.observacion || undefined,
       gastoId: m.gasto?.id || undefined,
       entradaVariaId: m.entradaVariaId || undefined,
+      valeId: m.valeId || undefined,
       puedeAnular: !esAnulacion && !anulado,
     };
   }
@@ -302,6 +304,9 @@ export class CajaMayorDetallePage implements OnInit {
   }
   registrarEntradaVaria(): void {
     this.router.navigate(['/financiero/caja-mayor', this.id, 'entrada-varia']);
+  }
+  registrarVale(): void {
+    this.router.navigate(['/financiero/caja-mayor', this.id, 'vale']);
   }
   ajuste(signo: 'ingreso' | 'egreso'): void {
     this.router.navigate(['/financiero/caja-mayor', this.id, 'ajuste', signo]);
@@ -333,7 +338,9 @@ export class CajaMayorDetallePage implements OnInit {
       ? this.repo.anularGasto(mov.gastoId, motivo)
       : mov.entradaVariaId
         ? this.repo.anularEntradaVaria(mov.entradaVariaId, motivo)
-        : this.repo.anularCajaMayorMovimiento(mov.id, motivo);
+        : mov.valeId
+          ? this.repo.anularVale(mov.valeId, motivo)
+          : this.repo.anularCajaMayorMovimiento(mov.id, motivo);
 
     try {
       await firstValueFrom(op$);
