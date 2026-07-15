@@ -133,6 +133,17 @@ PdV refresca el estado de las mesas cada 1 segundo. Con 50 mesas, son ~50 querie
 
 → Archivo con registro de errores históricos del PdV. Mayoría resueltos, pero algunos pueden seguir pendientes. Chequear antes de "redescubrir" un bug.
 
+## Gotchas de handlers / arquitectura (auditoría 2026-07)
+
+Aprendidos en la auditoría de bugs de julio 2026 (rama `claude/desktop-forma-pago-efectivo`, PR #181). Ver `docs/HALLAZGOS-AUDITORIA-DESKTOP.md` para la lista completa de bugs clasificados por severidad.
+
+- **Los handlers NO quedan como listeners de `ipcMain`.** `electron/utils/handler-registry.ts` hace **monkey-patch de `ipcMain.handle`** y guarda cada canal en un registro propio. Por eso `ipcMain.listeners('canal')` devuelve `[]`. Llamar `ipcMain.listeners('canal')[0]?.(...)` es un **no-op silencioso** (patrón que dejó a `generar-liquidaciones-comision-mes` sin hacer nada). Para invocar otro handler desde dentro de un handler, **usar `invokeHandler(canal, ...args)`** de `../utils/handler-registry`.
+- **`/api/rpc` es default-allow.** En `mode=server` expone **todos** los handlers con sólo un JWT válido; `BLOCKED_CHANNELS` bloquea apenas 3 canales. La capa de transporte **no** protege nada: cada handler sensible debe traer su propio `ensurePermission(dataSource, getCurrentUser, 'CODIGO')`. No asumir que estar detrás de `/api/rpc` = protegido.
+- **Payload de cuenta bancaria va anidado**: los handlers esperan `{ cuentaBancaria: { id } }`, **no** un `cuentaBancariaId` plano (lo descartan al desestructurar). (Ojo: esto es lo contrario de `create-presentacion`/`create-codigo-barra`, que sí toleran ambas formas — no generalizar.)
+- **Anulaciones deben ser multi-detalle.** Documentos como gasto/retiro generan **N** movimientos de caja mayor. Anular debe recorrer **todos** con `find(...)` + contra-balancear cada uno (`actualizarSaldo`), nunca `findOne(...)` (dejaba movimientos sin revertir).
+- **Regla fuente Caja Mayor ⇒ EFECTIVO.** En todo formulario con selector de fuente de pago: si la fuente es Caja Mayor, la forma de pago debe ser EFECTIVO (filtrar `formasPago` a las que contienen `"EFECTIVO"`). Si la fuente es una cuenta bancaria, **no** se pide forma de pago (siempre es transferencia; la moneda la define el banco).
+- **Regla dura que sólo caza el AOT (`npm run check`), no el dev build**: strings UPPERCASE, sin funciones/getters en templates, sin colores hardcodeados, filtros con botón explícito (sin filtrado en vivo). Correr `npm run check` antes de pushear.
+
 ## Trampas que parecen bugs pero no son
 
 - **`getPdvConfig` retorna array** con un solo elemento (legacy). Usar `result[0]`.
