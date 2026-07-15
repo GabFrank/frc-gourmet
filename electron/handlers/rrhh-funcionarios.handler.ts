@@ -292,6 +292,7 @@ export function registerRrhhFuncionariosHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_FUNCIONARIO_EDITAR');
       const funcRepo = queryRunner.manager.getRepository(Funcionario);
       const histRepo = queryRunner.manager.getRepository(HistoricoCargo);
 
@@ -342,6 +343,7 @@ export function registerRrhhFuncionariosHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_FUNCIONARIO_EDITAR');
       const funcRepo = queryRunner.manager.getRepository(Funcionario);
       const histRepo = queryRunner.manager.getRepository(HistoricoSalario);
 
@@ -387,6 +389,7 @@ export function registerRrhhFuncionariosHandlers(
 
   ipcMain.handle('egresar-funcionario', async (_event, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_FUNCIONARIO_EGRESAR');
       const repo = dataSource.getRepository(Funcionario);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`Funcionario ${id} no encontrado`);
