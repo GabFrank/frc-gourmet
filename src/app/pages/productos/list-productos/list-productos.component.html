@@ -19,10 +19,15 @@
     <div class="search-row">
       <mat-form-field appearance="outline" class="search-field">
         <mat-label>Buscar productos</mat-label>
-        <input matInput [formControl]="searchControl" placeholder="Nombre, descripción...">
+        <input matInput [formControl]="searchControl" placeholder="Nombre, descripción..." (keyup.enter)="applyFilters()">
         <mat-icon matSuffix>search</mat-icon>
       </mat-form-field>
-      
+
+      <button mat-raised-button color="primary" (click)="applyFilters()">
+        <mat-icon>filter_list</mat-icon>
+        Filtrar
+      </button>
+
       <button mat-button color="warn" (click)="clearFilters()">
         <mat-icon>clear</mat-icon>
         Limpiar Filtros

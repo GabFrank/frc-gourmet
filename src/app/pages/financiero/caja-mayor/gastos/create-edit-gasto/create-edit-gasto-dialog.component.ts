@@ -74,6 +74,8 @@ export class CreateEditGastoDialogComponent implements OnInit {
   categoriasFiltradas: any[] = [];
   monedas: any[] = [];
   formasPago: any[] = [];
+  // Fuente Caja Mayor = siempre efectivo (regla de negocio).
+  formasPagoEfectivo: any[] = [];
   cajasMayor: any[] = [];
   cuentasBancarias: any[] = [];
   proveedores: any[] = [];
@@ -165,6 +167,8 @@ export class CreateEditGastoDialogComponent implements OnInit {
       this.categoriasFiltradas = [];
       this.monedas = monedas || [];
       this.formasPago = formasPago || [];
+      // La línea de detalle (Caja Mayor) solo ofrece efectivo.
+      this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
       this.cajasMayor = (cajasMayor || []).filter((c: any) => c.estado === 'ABIERTA');
       this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
       this.proveedores = proveedores || [];
@@ -393,8 +397,7 @@ export class CreateEditGastoDialogComponent implements OnInit {
       if (m) this.detalleForm.get('monedaId')?.setValue(m.id, { emitEvent: false });
     }
     if (!this.detalleForm.get('formaPagoId')?.value) {
-      const efectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
-      const fp = preselectSingleOrPrincipal(efectivo) || preselectSingleOrPrincipal(this.formasPago);
+      const fp = preselectSingleOrPrincipal(this.formasPagoEfectivo);
       if (fp) this.detalleForm.get('formaPagoId')?.setValue(fp.id, { emitEvent: false });
     }
     this.recalcDecimalesMoneda();

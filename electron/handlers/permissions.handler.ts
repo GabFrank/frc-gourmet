@@ -6,6 +6,7 @@ import { UsuarioRole } from '../../src/app/database/entities/personas/usuario-ro
 import { Role } from '../../src/app/database/entities/personas/role.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { ensurePermission } from '../utils/auth.utils';
 
 const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string }> = [
   // RRHH - Funcionarios
@@ -172,6 +173,7 @@ export function registerPermissionsHandlers(
 
   ipcMain.handle('create-permission', async (_event, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_PERMISO_GESTIONAR');
       const repo = dataSource.getRepository(Permission);
       const entity = repo.create({
         codigo: (data.codigo || '').toUpperCase(),
@@ -189,6 +191,7 @@ export function registerPermissionsHandlers(
 
   ipcMain.handle('update-permission', async (_event, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_PERMISO_GESTIONAR');
       const repo = dataSource.getRepository(Permission);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`Permission ${id} no encontrado`);
@@ -205,6 +208,7 @@ export function registerPermissionsHandlers(
 
   ipcMain.handle('delete-permission', async (_event, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_PERMISO_GESTIONAR');
       const repo = dataSource.getRepository(Permission);
       await repo.delete(id);
       return { success: true };
@@ -228,6 +232,7 @@ export function registerPermissionsHandlers(
   });
 
   ipcMain.handle('set-role-permissions', async (_event, roleId: number, permissionIds: number[]) => {
+    await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_PERMISO_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();

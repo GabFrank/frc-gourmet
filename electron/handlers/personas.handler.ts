@@ -499,6 +499,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('assign-role-to-usuario', async (_event: any, usuarioId: number, roleId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'USUARIOS_GESTIONAR');
       const usuarioRoleRepository = dataSource.getRepository(UsuarioRole);
       const usuarioRepository = dataSource.getRepository(Usuario);
       const roleRepository = dataSource.getRepository(Role);
@@ -536,6 +537,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('remove-role-from-usuario', async (_event: any, usuarioRoleId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'USUARIOS_GESTIONAR');
       const usuarioRoleRepository = dataSource.getRepository(UsuarioRole);
       const result = await usuarioRoleRepository.delete(usuarioRoleId);
       return { success: result.affected && result.affected > 0 };

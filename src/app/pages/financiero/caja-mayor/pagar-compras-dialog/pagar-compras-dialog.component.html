@@ -140,7 +140,7 @@
       <mat-form-field appearance="outline">
         <mat-label>Forma de pago *</mat-label>
         <mat-select formControlName="formaPagoId">
-          <mat-option *ngFor="let fp of formasPago" [value]="fp.id">{{ fp.nombre }}</mat-option>
+          <mat-option *ngFor="let fp of formasPagoEfectivo" [value]="fp.id">{{ fp.nombre }}</mat-option>
         </mat-select>
       </mat-form-field>
     </div>

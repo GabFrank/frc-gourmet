@@ -626,6 +626,7 @@ export function registerCuentasPorCobrarHandlers(
   // F2-extra: cerrar venta como crédito (atómico)
   // Recibe: { ventaId, clienteId, montoTotal, monedaId, cantidadCuotas?, frecuenciaDias?, fechaInicio?, descripcion?, forzar? }
   ipcMain.handle('cobrar-venta-credito', async (_event, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();

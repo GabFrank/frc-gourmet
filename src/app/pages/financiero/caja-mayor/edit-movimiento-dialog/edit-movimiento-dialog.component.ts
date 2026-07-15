@@ -35,6 +35,8 @@ export class EditMovimientoDialogComponent implements OnInit {
   form!: FormGroup;
   monedas: any[] = [];
   formasPago: any[] = [];
+  // Movimiento de Caja Mayor = siempre efectivo (regla de negocio).
+  formasPagoEfectivo: any[] = [];
   saving = false;
   decimalesMoneda = 0;
   movimientoId: number = 0;
@@ -89,6 +91,8 @@ export class EditMovimientoDialogComponent implements OnInit {
       ]);
       this.monedas = monedas || [];
       this.formasPago = formasPago || [];
+      // El select de forma de pago (Caja Mayor) solo ofrece efectivo.
+      this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
       this.recalcDecimalesMoneda();
     } catch (error) {
       console.error('Error loading lookups:', error);

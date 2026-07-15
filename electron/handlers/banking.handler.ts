@@ -404,6 +404,14 @@ export function registerBankingHandlers(
         relations: ['cuentaBancaria'],
       });
       if (!acred) throw new Error(`AcreditacionPos ${id} no encontrada`);
+      // Evitar doble acreditación: si ya fue verificada, no se puede re-verificar
+      // (volvería a sumar el monto al saldo bancario).
+      if (
+        acred.estado === AcreditacionPosEstado.VERIFICADO ||
+        acred.estado === AcreditacionPosEstado.CON_DIFERENCIA
+      ) {
+        throw new Error(`La acreditación POS #${acred.id} ya fue verificada.`);
+      }
 
       const cb = await cbRepo.findOne({ where: { id: acred.cuentaBancaria.id } });
       if (!cb) throw new Error('Cuenta bancaria no encontrada');

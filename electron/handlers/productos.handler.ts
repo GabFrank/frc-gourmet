@@ -1943,6 +1943,9 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-precio-venta', async (_event: any, precioVentaData: any) => {
     try {
+      if (!(Number(precioVentaData?.valor) > 0)) {
+        throw new Error('El precio de venta debe ser mayor a 0');
+      }
       const repo = dataSource.getRepository(PrecioVenta);
       const presentacionRepo = dataSource.getRepository(Presentacion);
       const recetaRepo = dataSource.getRepository(Receta);
@@ -2209,6 +2212,9 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-precio-costo', async (_event: any, precioCostoData: any) => {
     try {
+      if (!(Number(precioCostoData?.valor) > 0)) {
+        throw new Error('El costo debe ser mayor a 0');
+      }
       const repo = dataSource.getRepository(PrecioCosto);
       const productoRepo = dataSource.getRepository(Producto);
       const monedaRepo = dataSource.getRepository(Moneda);
