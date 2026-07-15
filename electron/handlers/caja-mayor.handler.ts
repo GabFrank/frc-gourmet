@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { CajaMayor } from '../../src/app/database/entities/financiero/caja-mayor.entity';
 import { CajaMayorSaldo } from '../../src/app/database/entities/financiero/caja-mayor-saldo.entity';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
@@ -663,6 +663,12 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-caja-mayor-movimiento', async (_event: any, data: any) => {
     await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
+    if (!(Number(data?.monto) > 0)) {
+      throw new Error('El monto del movimiento debe ser mayor a 0');
+    }
+    if (!data?.tipoMovimiento) {
+      throw new Error('Falta el tipo de movimiento');
+    }
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -710,7 +716,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       const repo = queryRunner.manager.getRepository(CajaMayorMovimiento);
       const original = await repo.findOne({
         where: { id },
-        relations: ['cajaMayor', 'moneda', 'formaPago'],
+        relations: ['cajaMayor', 'moneda', 'formaPago', 'retiroCaja'],
       });
       if (!original) throw new Error(`Movimiento ID ${id} not found`);
 
@@ -815,6 +821,57 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       // completa (ambos lados + saldo bancario si aplica), no solo este movimiento.
       if (original.operacionFinancieraId) {
         await anularOperacionFinancieraTx(queryRunner, original.operacionFinancieraId, motivo, getCurrentUser());
+        await queryRunner.commitTransaction();
+        return { success: true };
+      }
+
+      // Retiro/cierre de caja: el ingreso a caja mayor pudo crear N movimientos
+      // (uno por detalle/moneda). Anular cualquiera de ellos revierte TODO el
+      // ingreso del retiro (todos sus movimientos + saldo) y deja el retiro
+      // re-ingresable (FLOTANTE); antes el saldo se revertía pero el RetiroCaja
+      // quedaba INGRESADO (huérfano, no re-ingresable).
+      if (original.retiroCaja) {
+        const retiroRepo = queryRunner.manager.getRepository(RetiroCaja);
+        const retiro = await retiroRepo.findOne({ where: { id: original.retiroCaja.id } });
+        if (!retiro) throw new Error(`RetiroCaja #${original.retiroCaja.id} no encontrado`);
+
+        const movsRetiro = await repo.find({
+          where: {
+            retiroCaja: { id: original.retiroCaja.id } as any,
+            tipoMovimiento: In([TipoMovimiento.INGRESO_RETIRO_CAJA, TipoMovimiento.INGRESO_CIERRE_CAJA]),
+          },
+          relations: ['cajaMayor', 'moneda', 'formaPago'],
+        });
+        const currentUserRet = getEffectiveUser(getCurrentUser);
+        for (const mov of movsRetiro) {
+          // Saltar los ya anulados (idempotencia)
+          const yaAnul = await repo.findOne({ where: { referenciaAnulacion: { id: mov.id } as any } });
+          if (yaAnul) continue;
+          const contra = queryRunner.manager.create(CajaMayorMovimiento, {
+            cajaMayor: mov.cajaMayor,
+            tipoMovimiento: TipoMovimiento.ANULACION,
+            moneda: mov.moneda,
+            formaPago: mov.formaPago,
+            monto: mov.monto,
+            fecha: new Date(),
+            observacion: `ANULACION RETIRO #${retiro.id}` + (motivo ? ` - ${motivo}` : ''),
+            referenciaAnulacion: mov,
+            retiroCaja: retiro,
+          });
+          if (currentUserRet) contra.responsable = currentUserRet;
+          await setEntityUserTracking(dataSource, contra, currentUserRet?.id, false);
+          await queryRunner.manager.save(CajaMayorMovimiento, contra);
+          // INGRESO_* → revertir restando (AJUSTE_NEGATIVO)
+          await actualizarSaldo(queryRunner, mov.cajaMayor.id, mov.moneda.id, mov.formaPago.id, Number(mov.monto), TipoMovimiento.AJUSTE_NEGATIVO);
+        }
+        // Dejar el retiro re-ingresable (nulear con `as any = null`, no undefined).
+        (retiro as any).cajaMayor = null;
+        (retiro as any).responsableIngreso = null;
+        (retiro as any).fechaIngreso = null;
+        retiro.estado = RetiroCajaEstado.FLOTANTE;
+        await setEntityUserTracking(dataSource, retiro, currentUserRet?.id, true);
+        await retiroRepo.save(retiro);
+
         await queryRunner.commitTransaction();
         return { success: true };
       }
