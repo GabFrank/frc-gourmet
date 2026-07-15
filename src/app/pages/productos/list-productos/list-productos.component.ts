@@ -103,7 +103,6 @@ export class ListProductosComponent implements OnInit {
   
   ngOnInit(): void {
     this.loadProductos();
-    this.setupFilterListeners();
   }
   
   // Method used by the tab service to set data
@@ -115,18 +114,6 @@ export class ListProductosComponent implements OnInit {
   ngAfterViewInit() {
     this.dataSource.paginator = this.paginator;
     this.dataSource.sort = this.sort;
-  }
-  
-  setupFilterListeners(): void {
-    // Listen to filter changes
-    this.searchControl.valueChanges.subscribe(() => this.applyFilters());
-    this.tipoFilter.valueChanges.subscribe(() => this.applyFilters());
-    this.activoFilter.valueChanges.subscribe(() => this.applyFilters());
-    this.esVendibleFilter.valueChanges.subscribe(() => this.applyFilters());
-    this.esComprableFilter.valueChanges.subscribe(() => this.applyFilters());
-    this.controlaStockFilter.valueChanges.subscribe(() => this.applyFilters());
-    this.esIngredienteFilter.valueChanges.subscribe(() => this.applyFilters());
-    this.registroCompletoFilter.valueChanges.subscribe(() => this.applyFilters());
   }
   
   loadProductos(): void {

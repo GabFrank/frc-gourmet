@@ -64,9 +64,13 @@ export class ListGastosComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    // Carga inicial acotada: primer dia del mes actual -> hoy
+    const hoy = new Date();
+    const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+
     this.filterForm = this.fb.group({
-      fechaDesde: [null],
-      fechaHasta: [null],
+      fechaDesde: [primerDiaMes],
+      fechaHasta: [hoy],
       gastoCategoriaId: [null],
       estado: [null],
     });

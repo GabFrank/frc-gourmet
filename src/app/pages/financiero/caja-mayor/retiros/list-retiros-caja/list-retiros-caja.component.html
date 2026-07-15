@@ -7,6 +7,20 @@
   <mat-card class="filter-card">
     <div class="filter-row">
       <mat-form-field appearance="outline">
+        <mat-label>Desde</mat-label>
+        <input matInput [matDatepicker]="pickerDesde" [formControl]="fechaDesde">
+        <mat-datepicker-toggle matSuffix [for]="pickerDesde"></mat-datepicker-toggle>
+        <mat-datepicker #pickerDesde></mat-datepicker>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Hasta</mat-label>
+        <input matInput [matDatepicker]="pickerHasta" [formControl]="fechaHasta">
+        <mat-datepicker-toggle matSuffix [for]="pickerHasta"></mat-datepicker-toggle>
+        <mat-datepicker #pickerHasta></mat-datepicker>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
         <mat-label>Estado</mat-label>
         <mat-select [formControl]="estadoFilter">
           <mat-option [value]="null">Todos</mat-option>

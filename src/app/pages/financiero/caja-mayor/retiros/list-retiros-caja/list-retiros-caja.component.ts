@@ -11,6 +11,9 @@ import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule } from '@angular/material/core';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ReactiveFormsModule, FormControl } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -41,6 +44,9 @@ interface RetiroRow {
     MatSnackBarModule,
     MatSelectModule,
     MatFormFieldModule,
+    MatInputModule,
+    MatDatepickerModule,
+    MatNativeDateModule,
     MatTooltipModule,
     DatePipe,
   ]
@@ -51,6 +57,9 @@ export class ListRetirosCajaComponent implements OnInit {
   displayedColumns = ['id', 'caja', 'origen', 'estado', 'fechaRetiro', 'cajaMayor', 'responsable', 'total', 'actions'];
 
   estadoFilter = new FormControl(null);
+  // Filtros de fecha (aplicados client-side; el handler no soporta filtro por fecha)
+  fechaDesde = new FormControl<Date | null>(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  fechaHasta = new FormControl<Date | null>(null);
   estadoOptions = ['FLOTANTE', 'VINCULADO_PENDIENTE', 'INGRESADO'];
 
   constructor(
@@ -73,7 +82,22 @@ export class ListRetirosCajaComponent implements OnInit {
         filtros.estado = this.estadoFilter.value;
       }
       const retiros = await firstValueFrom(this.repositoryService.getRetirosCaja(filtros));
-      this.retiroRows = (retiros || []).map((retiro: any) => {
+
+      // Filtro por fecha client-side (el handler no lo soporta)
+      const desde = this.fechaDesde.value ? new Date(this.fechaDesde.value) : null;
+      if (desde) desde.setHours(0, 0, 0, 0);
+      const hasta = this.fechaHasta.value ? new Date(this.fechaHasta.value) : null;
+      if (hasta) hasta.setHours(23, 59, 59, 999);
+
+      const retirosFiltrados = (retiros || []).filter((retiro: any) => {
+        if (!retiro.fechaRetiro) return true;
+        const fecha = new Date(retiro.fechaRetiro);
+        if (desde && fecha < desde) return false;
+        if (hasta && fecha > hasta) return false;
+        return true;
+      });
+
+      this.retiroRows = retirosFiltrados.map((retiro: any) => {
         const totalRetiro = (retiro.detalles || []).reduce((sum: number, d: any) => sum + (d.monto || 0), 0);
         return { retiro, totalRetiro };
       });
@@ -91,6 +115,8 @@ export class ListRetirosCajaComponent implements OnInit {
 
   limpiarFiltro(): void {
     this.estadoFilter.reset();
+    this.fechaDesde.reset();
+    this.fechaHasta.reset();
     this.loadData();
   }
 
