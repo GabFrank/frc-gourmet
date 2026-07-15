@@ -333,6 +333,10 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
       await setEntityUserTracking(dataSource, usuario, currentUser.id, true);
       const updated = await usuarioRepository.save(usuario);
 
+      // Reflejar el cambio en el usuario en memoria del main process para que el
+      // gate de must-change-password (auth.utils) se levante sin re-login.
+      (currentUser as any).mustChangePassword = false;
+
       return { success: true, usuario: { ...updated, password: undefined } };
     } catch (error) {
       console.error('change-password error:', error);
