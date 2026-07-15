@@ -839,15 +839,18 @@ export class ProductoSaboresComponent implements OnInit, OnDestroy {
    * Calcular margen de una variación
    */
   calcularMargen(variacion: RecetaPresentacion): number {
-    if (!variacion.precio_ajuste || !variacion.costo_calculado) return 0;
-    return variacion.precio_ajuste - variacion.costo_calculado;
+    // M-03: usar el costo total de la variación (mismo cálculo que el diálogo),
+    // no el costo_calculado crudo, para que el margen sea consistente en toda la UI.
+    const costo = this.saboresService.calcularCostoTotalVariacion(variacion);
+    if (!variacion.precio_ajuste || !costo) return 0;
+    return variacion.precio_ajuste - costo;
   }
 
   /**
    * Calcular porcentaje de margen
    */
   calcularPorcentajeMargen(variacion: RecetaPresentacion): number {
-    if (!variacion.precio_ajuste || !variacion.costo_calculado) return 0;
+    if (!variacion.precio_ajuste) return 0;
     const margen = this.calcularMargen(variacion);
     return (margen / variacion.precio_ajuste) * 100;
   }
