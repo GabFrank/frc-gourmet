@@ -172,6 +172,7 @@ export function registerEquiposComisionHandlers(
   });
 
   ipcMain.handle('desasignar-regla-equipo', async (_e, asignacionId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_EQUIPO_GESTIONAR');
     await dataSource.getRepository(EquipoComisionRegla).delete(asignacionId);
     return { success: true };
   });
@@ -184,6 +185,7 @@ export function registerEquiposComisionHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'COMISION_LIQUIDACION_GENERAR');
       const userId = getCurrentUser()?.id;
       const { fechaInicio, fechaFin } = getPeriodoBounds(periodo);
       const fdStr = isoDate(fechaInicio);

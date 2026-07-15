@@ -429,6 +429,7 @@ export function registerValesHandlers(
   });
 
   ipcMain.handle('marcar-vale-descontado', async (_e, id: number, liquidacionId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VALE_CONFIRMAR');
     const repo = dataSource.getRepository(Vale);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Vale ${id} no encontrado`);

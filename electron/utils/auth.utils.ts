@@ -157,6 +157,17 @@ export async function checkPermission(
   if (!user) {
     return { ok: false, message: 'NO AUTENTICADO', code: 'UNAUTHORIZED' };
   }
+  // P0: si el usuario tiene un cambio de contraseña forzado pendiente, no puede
+  // operar ningún handler sensible hasta cambiarla. El frontend ya lo bloquea con
+  // un diálogo, pero un cliente crudo (DevTools / HTTP directo) se lo saltaría.
+  // `change-password` no pasa por acá (es self-service), así que puede cumplir.
+  if ((user as any).mustChangePassword === true) {
+    return {
+      ok: false,
+      message: 'DEBE CAMBIAR SU CONTRASEÑA ANTES DE CONTINUAR',
+      code: 'FORBIDDEN',
+    };
+  }
   const codes = Array.isArray(codigo) ? codigo : [codigo];
   const userPerms = await getUserPermissionCodes(dataSource, user.id);
   const allowed = codes.some((c) => userPerms.has(c));
