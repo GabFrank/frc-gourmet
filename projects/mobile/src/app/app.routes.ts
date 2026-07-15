@@ -51,6 +51,7 @@ const FINANCIERO_ITEMS: SectionItem[] = [
   { label: 'Categorías de gasto', icon: 'sell', path: '/financiero/gasto-categorias', enabled: true },
   { label: 'Monedas', icon: 'monetization_on', path: '/financiero/monedas', enabled: false },
   { label: 'Caja Mayor', icon: 'account_balance', path: '/financiero/caja-mayor', enabled: true },
+  { label: 'Cuentas bancarias', icon: 'savings', path: '/financiero/cuentas-bancarias', enabled: true },
   { label: 'Reglas de comisión', icon: 'percent', path: '/financiero/comisiones-reglas', enabled: true },
   { label: 'Equipos de comisión', icon: 'groups', path: '/financiero/comisiones-equipos', enabled: true },
   { label: 'Liq. de comisión', icon: 'receipt', path: '/financiero/comisiones-liquidaciones', enabled: true },
@@ -368,6 +369,22 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./pages/financiero/cajas/caja-detalle.page').then((m) => m.CajaDetallePage),
   },
+  // Cuentas bancarias: alta ('nuevo' antes de ':id'), movimientos y edición (full-screen).
+  {
+    path: 'financiero/cuentas-bancarias/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/cuentas-bancarias/cuenta-bancaria-edit.page').then((m) => m.CuentaBancariaEditPage),
+  },
+  {
+    path: 'financiero/cuentas-bancarias/:id/movimientos',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/cuentas-bancarias/movimientos-cuenta.page').then((m) => m.MovimientosCuentaPage),
+  },
+  {
+    path: 'financiero/cuentas-bancarias/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/cuentas-bancarias/cuenta-bancaria-edit.page').then((m) => m.CuentaBancariaEditPage),
+  },
 
   // --- Shell autenticado (listados / índices) ---
   {
@@ -497,6 +514,11 @@ export const routes: Routes = [
         path: 'financiero/cajas',
         data: { title: 'Cajas' },
         loadComponent: () => import('./pages/financiero/cajas/cajas-list.page').then((m) => m.CajasListPage),
+      },
+      {
+        path: 'financiero/cuentas-bancarias',
+        data: { title: 'Cuentas bancarias' },
+        loadComponent: () => import('./pages/financiero/cuentas-bancarias/cuentas-bancarias-list.page').then((m) => m.CuentasBancariasListPage),
       },
       {
         path: 'financiero/cxc',
