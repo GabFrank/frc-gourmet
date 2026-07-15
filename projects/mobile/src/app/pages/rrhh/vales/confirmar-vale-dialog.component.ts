@@ -9,6 +9,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '@frc/shared-core';
+import { formaPagoEfectivo } from '../../financiero/forma-pago-efectivo.util';
 
 export interface ConfirmarValeData {
   vale: any;
@@ -62,12 +63,7 @@ interface Opcion {
               <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{ c.label }}</mat-option>
             </mat-select>
           </mat-form-field>
-          <mat-form-field appearance="outline" class="cv-field">
-            <mat-label>Forma de pago</mat-label>
-            <mat-select formControlName="formaPagoId">
-              <mat-option *ngFor="let f of formasPago" [value]="f.id">{{ f.label }}</mat-option>
-            </mat-select>
-          </mat-form-field>
+          <p class="cv-efectivo">Egreso en <strong>{{ efectivoLabel }}</strong>.</p>
         </ng-container>
 
         <mat-form-field appearance="outline" class="cv-field" *ngIf="esBanco">
@@ -102,6 +98,11 @@ interface Opcion {
       .cv-field {
         width: 100%;
       }
+      .cv-efectivo {
+        margin: 0 0 8px;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+      }
     `,
   ],
 })
@@ -115,7 +116,8 @@ export class ConfirmarValeDialogComponent implements OnInit {
   monedaId: number | null = null;
 
   cajasMayor: Opcion[] = [];
-  formasPago: Opcion[] = [];
+  /** Forma de pago fija para fuente Caja Mayor (siempre efectivo). */
+  efectivoLabel = 'Efectivo';
   cuentasBancarias: Opcion[] = [];
   loading = true;
 
@@ -174,16 +176,16 @@ export class ConfirmarValeDialogComponent implements OnInit {
         this.cajasMayor = (cajas || [])
           .filter((c) => (c.estado || '').toUpperCase().includes('ABIERT'))
           .map((c) => ({ id: c.id, label: c.nombre || `Caja Mayor #${c.id}` }));
-        this.formasPago = (formas || [])
-          .filter((f) => f.activo !== false)
-          .map((f) => ({ id: f.id, label: f.nombre }));
+        // Fuente Caja Mayor = siempre efectivo (no se elige forma de pago).
+        const efectivo = formaPagoEfectivo(formas || []);
+        this.efectivoLabel = efectivo?.nombre || 'Efectivo';
+        if (efectivo) this.form.controls.formaPagoId.setValue(efectivo.id);
         // Solo cuentas de la misma moneda del vale (evita cotización).
         this.cuentasBancarias = (cuentas || [])
           .filter((c) => c.activo !== false && c.moneda?.id && (this.monedaId == null || c.moneda.id === this.monedaId))
           .map((c) => ({ id: c.id, label: `${c.banco ? c.banco + ' · ' : ''}${c.nombre} (${c.moneda?.simbolo || ''})` }));
         // Preselección de únicos.
         if (this.cajasMayor.length === 1) this.form.controls.cajaMayorId.setValue(this.cajasMayor[0].id);
-        if (this.formasPago.length === 1) this.form.controls.formaPagoId.setValue(this.formasPago[0].id);
         if (this.cuentasBancarias.length === 1) this.form.controls.cuentaBancariaId.setValue(this.cuentasBancarias[0].id);
         this.loading = false;
       })

@@ -15,6 +15,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '@frc/shared-core';
+import { formaPagoEfectivo } from '../../forma-pago-efectivo.util';
 
 interface Opcion {
   id: number;
@@ -69,7 +70,8 @@ export class PagarComprasPage implements OnInit {
   cajaMayorId = 0;
 
   monedas: Opcion[] = [];
-  formasPago: Opcion[] = [];
+  /** Forma de pago fija para fuente Caja Mayor (siempre efectivo). */
+  efectivoLabel = 'Efectivo';
   cuentasBancarias: Opcion[] = [];
   proveedoresFiltro: Opcion[] = [];
   filtroProveedorId: number | null = null;
@@ -157,9 +159,10 @@ export class PagarComprasPage implements OnInit {
         this.monedas = (monedas || [])
           .filter((m) => m.activo !== false)
           .map((m) => ({ id: m.id, label: `${m.simbolo} · ${m.denominacion}` }));
-        this.formasPago = (formas || [])
-          .filter((f) => f.activo !== false && f.movimentaCaja !== false)
-          .map((f) => ({ id: f.id, label: f.nombre }));
+        // Fuente Caja Mayor = siempre efectivo (no se elige forma de pago).
+        const efectivo = formaPagoEfectivo(formas || []);
+        this.efectivoLabel = efectivo?.nombre || 'Efectivo';
+        if (efectivo) this.form.controls.formaPagoId.setValue(efectivo.id);
         this.cuentasBancarias = (cuentas || [])
           .filter((c) => c.activo !== false && c.moneda?.id)
           .map((c) => ({ id: c.id, label: `${c.banco ? c.banco + ' · ' : ''}${c.nombre} (${c.moneda?.simbolo || ''})` }));
@@ -167,7 +170,6 @@ export class PagarComprasPage implements OnInit {
         const principal = (monedas || []).find((m) => m.principal);
         if (principal) this.form.controls.monedaId.setValue(principal.id);
         else if (this.monedas.length === 1) this.form.controls.monedaId.setValue(this.monedas[0].id);
-        if (this.formasPago.length === 1) this.form.controls.formaPagoId.setValue(this.formasPago[0].id);
         if (this.cuentasBancarias.length === 1) this.form.controls.cuentaBancariaId.setValue(this.cuentasBancarias[0].id);
 
         this.aplicarFiltro();

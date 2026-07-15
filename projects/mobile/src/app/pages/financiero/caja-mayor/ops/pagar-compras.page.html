@@ -27,12 +27,7 @@
             <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.label }}</mat-option>
           </mat-select>
         </mat-form-field>
-        <mat-form-field appearance="outline" class="pc-field">
-          <mat-label>Forma de pago</mat-label>
-          <mat-select [formControl]="form.controls.formaPagoId">
-            <mat-option *ngFor="let f of formasPago" [value]="f.id">{{ f.label }}</mat-option>
-          </mat-select>
-        </mat-form-field>
+        <p class="pc-efectivo-hint">Pago en <strong>{{ efectivoLabel }}</strong>.</p>
       </ng-container>
 
       <mat-form-field appearance="outline" class="pc-field" *ngIf="esBanco">

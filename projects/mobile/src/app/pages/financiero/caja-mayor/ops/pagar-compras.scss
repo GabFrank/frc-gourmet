@@ -28,6 +28,12 @@
 .pc-field {
   flex: 1 1 160px;
 }
+.pc-efectivo-hint {
+  align-self: center;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
 .pc-filtro {
   width: 100%;
 }

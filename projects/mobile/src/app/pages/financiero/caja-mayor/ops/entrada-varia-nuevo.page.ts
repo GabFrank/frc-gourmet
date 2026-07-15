@@ -13,6 +13,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '@frc/shared-core';
+import { formaPagoEfectivo } from '../../forma-pago-efectivo.util';
 
 interface Opcion {
   id: number;
@@ -46,7 +47,8 @@ export class EntradaVariaNuevoPage implements OnInit {
   categorias: Opcion[] = [];
   categoriasFiltradas: Opcion[] = [];
   monedas: Opcion[] = [];
-  formasPago: Opcion[] = [];
+  /** Entrada varia siempre es a Caja Mayor → forma de pago fija efectivo. */
+  efectivoLabel = 'Efectivo';
   loading = true;
   saving = false;
 
@@ -94,13 +96,13 @@ export class EntradaVariaNuevoPage implements OnInit {
         this.monedas = (monedas || [])
           .filter((m) => m.activo !== false)
           .map((m) => ({ id: m.id, label: `${m.simbolo} · ${m.denominacion}` }));
-        this.formasPago = (formas || [])
-          .filter((f) => f.activo !== false)
-          .map((f) => ({ id: f.id, label: f.nombre }));
+        // Entrada varia siempre es a Caja Mayor → forma de pago efectivo fija.
+        const efectivo = formaPagoEfectivo(formas || []);
+        this.efectivoLabel = efectivo?.nombre || 'Efectivo';
+        if (efectivo) this.form.controls.formaPagoId.setValue(efectivo.id);
         const principal = (monedas || []).find((m) => m.principal);
         if (principal) this.form.controls.monedaId.setValue(principal.id);
         else if (this.monedas.length === 1) this.form.controls.monedaId.setValue(this.monedas[0].id);
-        if (this.formasPago.length === 1) this.form.controls.formaPagoId.setValue(this.formasPago[0].id);
         this.categoriasFiltradas = [...this.categorias];
         if (this.categorias.length === 1) {
           const c = this.categorias[0];
