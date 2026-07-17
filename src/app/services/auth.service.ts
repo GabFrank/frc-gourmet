@@ -33,6 +33,7 @@ export class AuthService {
   private readonly TOKEN_KEY = 'auth_token';
   private readonly USER_KEY = 'current_user';
   private readonly SESSION_ID_KEY = 'session_id';
+  private handlingAuthExpired = false;
 
   constructor(
     private repositoryService: RepositoryService,
@@ -40,6 +41,20 @@ export class AuthService {
     private appModeService: AppModeService
   ) {
     this.loadFromLocalStorage();
+
+    // Web /admin: el shim HTTP (api-http.ts) emite 'frc-web-auth-expired' cuando
+    // el refresh token venció / es inválido y no se pudo renovar la sesión. Sin
+    // un interceptor global, la UI quedaba "logueada sin token"; acá cerramos
+    // sesión y vamos al login. En Electron el evento nunca se emite (no-op).
+    if (typeof window !== 'undefined') {
+      window.addEventListener('frc-web-auth-expired', () => {
+        // Guard: logout() hace un RPC que podría volver a 401 y re-emitir el
+        // evento; el flag evita el logout re-entrante en loop.
+        if (this.handlingAuthExpired || !this.currentUserSubject.value) return;
+        this.handlingAuthExpired = true;
+        this.logout().finally(() => { this.handlingAuthExpired = false; });
+      });
+    }
   }
 
   // Check if user is logged in
