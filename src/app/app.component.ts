@@ -370,6 +370,13 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   private initHeaderEnriched(): void {
     const api: any = (window as any).api;
     this.appVersion = api?.getAppVersion?.() || '';
+    // Web /admin: la versión llega por un fetch async del shim; si el read sync
+    // llegó antes de que resuelva (típico al reabrir), esperarla y actualizar.
+    if (!this.appVersion && typeof api?.getAppVersionAsync === 'function') {
+      api.getAppVersionAsync()
+        .then((v: string) => { if (v) this.ngZone.run(() => { this.appVersion = v; }); })
+        .catch(() => { /* ignore */ });
+    }
     this.appMode = api?.getAppMode?.() || 'standalone';
     // Reloj: tick cada 1s. ngZone.runOutsideAngular para no disparar CD
     // global cada segundo; el binding se actualiza al asignar dentro de
