@@ -24,6 +24,9 @@ import { RepositoryService } from 'src/app/database/repository.service';
 import { CreateCajaDialogComponent } from './create-caja-dialog/create-caja-dialog.component';
 import { ResumenCajaDialogComponent } from 'src/app/shared/components/resumen-caja-dialog/resumen-caja-dialog.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { PromptDialogComponent } from 'src/app/shared/components/prompt-dialog/prompt-dialog.component';
+import { CreateGastoCajaDialogComponent } from 'src/app/pages/ventas/pdv/gasto-caja-dialog/gasto-caja-dialog.component';
+import { CreateRetiroCajaDialogComponent } from 'src/app/pages/financiero/caja-mayor/retiros/create-retiro-caja-dialog/create-retiro-caja-dialog.component';
 import { AuthService } from 'src/app/services/auth.service';
 
 // Confirmation dialog for existing open caja
@@ -304,6 +307,81 @@ export class ListCajasComponent implements OnInit {
     dialogRef.afterClosed().subscribe(result => {
       if (result?.success) {
         this.snackBar.open('CONTEO ACTUALIZADO', 'CERRAR', { duration: 3000 });
+        this.loadCajas();
+      }
+    });
+  }
+
+  /**
+   * Ajusta el conteo de una caja YA CERRADA (corregir apertura/cierre) sin
+   * reabrirla. Guarda el motivo, regenera el retiro del cierre y deja traza.
+   * Bloqueado si el retiro del cierre ya fue ingresado a Caja Mayor.
+   */
+  async ajustarConteo(caja: Caja): Promise<void> {
+    if (!caja.id) return;
+    const permiso = await firstValueFrom(this.repositoryService.puedeAjustarCaja(caja.id));
+    if (!permiso?.editable) {
+      this.snackBar.open(permiso?.motivoBloqueo || 'No se puede ajustar esta caja.', 'CERRAR', { duration: 6000 });
+      return;
+    }
+    const motivo = await firstValueFrom(
+      this.dialog.open(PromptDialogComponent, {
+        width: '460px',
+        data: {
+          title: 'Ajustar caja cerrada',
+          message: `Vas a corregir el conteo de la caja #${caja.id}. Indicá el motivo del ajuste (queda registrado).`,
+          label: 'Motivo del ajuste',
+          required: true,
+          confirmText: 'Continuar',
+        },
+      }).afterClosed(),
+    );
+    if (!motivo) return;
+
+    const dialogRef = this.dialog.open(CreateCajaDialogComponent, {
+      width: '80vw',
+      height: '80vh',
+      disableClose: true,
+      data: { cajaId: caja.id, mode: 'conteo', ajuste: true },
+    });
+    dialogRef.afterClosed().subscribe(async result => {
+      if (result?.success) {
+        try {
+          await firstValueFrom(this.repositoryService.finalizarAjusteCaja(caja.id!, motivo));
+          this.snackBar.open('CAJA AJUSTADA', 'CERRAR', { duration: 3000 });
+        } catch (e: any) {
+          this.snackBar.open(e?.message || 'Error al finalizar el ajuste', 'CERRAR', { duration: 6000 });
+        }
+        this.loadCajas();
+      }
+    });
+  }
+
+  /** Agrega un gasto que faltó registrar a una caja (incl. ya cerrada). */
+  agregarGasto(caja: Caja): void {
+    const ref = this.dialog.open(CreateGastoCajaDialogComponent, {
+      width: '560px',
+      disableClose: true,
+      data: { cajaId: caja.id },
+    });
+    ref.afterClosed().subscribe(result => {
+      if (result?.success || result?.saved || result === true) {
+        this.snackBar.open('GASTO REGISTRADO', 'CERRAR', { duration: 3000 });
+        this.loadCajas();
+      }
+    });
+  }
+
+  /** Agrega un retiro que faltó registrar a una caja (incl. ya cerrada). */
+  agregarRetiro(caja: Caja): void {
+    const ref = this.dialog.open(CreateRetiroCajaDialogComponent, {
+      width: '620px',
+      disableClose: true,
+      data: { cajaId: caja.id },
+    });
+    ref.afterClosed().subscribe(result => {
+      if (result?.success || result?.saved || result === true) {
+        this.snackBar.open('RETIRO REGISTRADO', 'CERRAR', { duration: 3000 });
         this.loadCajas();
       }
     });

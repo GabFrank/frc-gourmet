@@ -111,7 +111,8 @@ export function buildLineDataset(
   data: number[],
   color: string,
   softColor: string,
-  fill = true
+  fill = true,
+  yAxisID?: string
 ): any {
   return {
     data,
@@ -125,5 +126,6 @@ export function buildLineDataset(
     borderWidth: 2.2,
     fill,
     tension: 0.35,
+    ...(yAxisID ? { yAxisID } : {}),
   };
 }

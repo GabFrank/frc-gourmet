@@ -51,21 +51,70 @@ function filtroCajas(cajaIds: number[]): VentaFiltro {
   return { sql: `v.caja_id IN (${placeholders})`, params: [...cajaIds] };
 }
 
+// Cotización (compraLocal) más reciente de cada moneda origen → principal.
+// { monedaOrigenId: cotizacion }. La principal cotiza en 1 implícitamente.
+async function getCotizacionMap(
+  dataSource: DataSource,
+  monedaPrincipalId: number,
+): Promise<{ [monedaId: number]: number }> {
+  const cambioRows: any[] = await dbQuery(dataSource, `
+    SELECT moneda_origen_id, "compraLocal" AS compra_local, created_at
+    FROM monedas_cambio
+    WHERE moneda_destino_id = ? AND activo = true
+    ORDER BY created_at DESC
+  `, [monedaPrincipalId]);
+  const map: { [monedaId: number]: number } = {};
+  for (const c of cambioRows) {
+    const oid = Number(c.moneda_origen_id);
+    if (map[oid] == null) map[oid] = Number(c.compra_local || 0);
+  }
+  return map;
+}
+
+// Total (PAGO - VUELTO) de ventas concluidas en un rango + cantidad de ventas.
+// El total se convierte a la moneda principal (Gs) sumando TODAS las monedas con
+// su cotización compraLocal — antes solo sumaba la moneda principal, así que el
+// gráfico no reflejaba las ventas cobradas en USD/BRL. `cotizacionMap` se puede
+// precomputar (buildVentasPorPeriodo) o se resuelve internamente si se omite.
 async function sumaVentasRango(
   dataSource: DataSource,
   monedaPrincipalId: number,
   filtro: VentaFiltro,
+  cotizacionMap?: { [monedaId: number]: number },
 ): Promise<{ cnt: number; suma: number }> {
+  const map = cotizacionMap || (await getCotizacionMap(dataSource, monedaPrincipalId));
+
+  // Totales por moneda (para poder convertir cada una a Gs antes de sumar).
   const rows: any[] = await dbQuery(dataSource, `
-    SELECT COUNT(DISTINCT v.id) as cnt,
+    SELECT pd.moneda_id as moneda_id,
+           m.principal   as principal,
            COALESCE(SUM(CASE WHEN pd.tipo = 'PAGO' THEN pd.valor ELSE 0 END), 0)
-         - COALESCE(SUM(CASE WHEN pd.tipo = 'VUELTO' THEN pd.valor ELSE 0 END), 0) as suma
+         - COALESCE(SUM(CASE WHEN pd.tipo = 'VUELTO' THEN pd.valor ELSE 0 END), 0) as total
     FROM ventas v
     LEFT JOIN pagos p ON v.pago_id = p.id
-    LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.moneda_id = ? AND pd.activo
+    LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.activo
+    LEFT JOIN monedas m ON m.id = pd.moneda_id
     WHERE v.estado = ? AND ${filtro.sql}
-  `, [monedaPrincipalId, VentaEstado.CONCLUIDA, ...filtro.params]);
-  return { cnt: Number(rows?.[0]?.cnt || 0), suma: Number(rows?.[0]?.suma || 0) };
+    GROUP BY pd.moneda_id, m.principal
+  `, [VentaEstado.CONCLUIDA, ...filtro.params]);
+
+  let suma = 0;
+  for (const r of rows) {
+    if (r.moneda_id == null) continue;
+    const monedaId = Number(r.moneda_id);
+    const esPrincipal = r.principal === true || r.principal === 1 || r.principal === '1';
+    const cotizacion = esPrincipal ? 1 : (map[monedaId] || 0);
+    suma += Math.round(Number(r.total || 0) * cotizacion);
+  }
+
+  // Cantidad de ventas concluidas en el rango (independiente de la moneda).
+  const cntRows: any[] = await dbQuery(dataSource, `
+    SELECT COUNT(DISTINCT v.id) as cnt
+    FROM ventas v
+    WHERE v.estado = ? AND ${filtro.sql}
+  `, [VentaEstado.CONCLUIDA, ...filtro.params]);
+
+  return { cnt: Number(cntRows?.[0]?.cnt || 0), suma };
 }
 
 // Desglose del total cobrado en un rango: por moneda y por forma de pago, con
@@ -358,6 +407,7 @@ async function buildVentasPorPeriodo(
   const cantidades: number[] = [];
 
   const monedaPrincipalId = await getMonedaPrincipalId(dataSource);
+  const cotizacionMap = await getCotizacionMap(dataSource, monedaPrincipalId);
   const now = new Date();
   if (rango === 'today' || rango === 'week') {
     const diasNombre = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
@@ -366,7 +416,7 @@ async function buildVentasPorPeriodo(
       d.setDate(d.getDate() - i);
       d.setHours(0, 0, 0, 0);
       const f = new Date(d); f.setHours(23, 59, 59, 999);
-      const r = await sumaVentasRango(dataSource, monedaPrincipalId, filtroRango(d.toISOString(), f.toISOString()));
+      const r = await sumaVentasRango(dataSource, monedaPrincipalId, filtroRango(d.toISOString(), f.toISOString()), cotizacionMap);
       labels.push(diasNombre[d.getDay()]);
       ventas.push(r.suma);
       cantidades.push(r.cnt);
@@ -377,7 +427,7 @@ async function buildVentasPorPeriodo(
       d.setDate(d.getDate() - i);
       d.setHours(0, 0, 0, 0);
       const f = new Date(d); f.setHours(23, 59, 59, 999);
-      const r = await sumaVentasRango(dataSource, monedaPrincipalId, filtroRango(d.toISOString(), f.toISOString()));
+      const r = await sumaVentasRango(dataSource, monedaPrincipalId, filtroRango(d.toISOString(), f.toISOString()), cotizacionMap);
       labels.push(`${d.getDate()}`);
       ventas.push(r.suma);
       cantidades.push(r.cnt);
@@ -388,7 +438,7 @@ async function buildVentasPorPeriodo(
       d.setDate(d.getDate() - (i * 7) - 6);
       d.setHours(0, 0, 0, 0);
       const f = new Date(d); f.setDate(f.getDate() + 6); f.setHours(23, 59, 59, 999);
-      const r = await sumaVentasRango(dataSource, monedaPrincipalId, filtroRango(d.toISOString(), f.toISOString()));
+      const r = await sumaVentasRango(dataSource, monedaPrincipalId, filtroRango(d.toISOString(), f.toISOString()), cotizacionMap);
       labels.push(`S${12 - i}`);
       ventas.push(r.suma);
       cantidades.push(r.cnt);
@@ -398,7 +448,7 @@ async function buildVentasPorPeriodo(
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const f = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
-      const r = await sumaVentasRango(dataSource, monedaPrincipalId, filtroRango(d.toISOString(), f.toISOString()));
+      const r = await sumaVentasRango(dataSource, monedaPrincipalId, filtroRango(d.toISOString(), f.toISOString()), cotizacionMap);
       labels.push(meses[d.getMonth()]);
       ventas.push(r.suma);
       cantidades.push(r.cnt);

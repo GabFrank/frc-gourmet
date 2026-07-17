@@ -2862,6 +2862,12 @@ contextBridge.exposeInMainWorld('api', {
   generarRetiroCierreCaja: async (cajaId: number): Promise<any> => {
     return await ipcRenderer.invoke('generar-retiro-cierre-caja', cajaId);
   },
+  puedeAjustarCaja: async (cajaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('puede-ajustar-caja', cajaId);
+  },
+  finalizarAjusteCaja: async (cajaId: number, motivo?: string): Promise<any> => {
+    return await ipcRenderer.invoke('finalizar-ajuste-caja', cajaId, motivo);
+  },
   egresoCajaInicial: async (data: any): Promise<any> => {
     return await ipcRenderer.invoke('egreso-caja-inicial', data);
   },

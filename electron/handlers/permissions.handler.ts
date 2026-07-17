@@ -100,6 +100,7 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   // Financiero
   { codigo: 'FINANCIERO_CAJA_VER', descripcion: 'Ver cajas y conteos', modulo: 'FINANCIERO' },
   { codigo: 'FINANCIERO_CAJA_GESTIONAR', descripcion: 'Crear/editar/cerrar cajas y conteos', modulo: 'FINANCIERO' },
+  { codigo: 'FINANCIERO_CAJA_AJUSTAR', descripcion: 'Ajustar una caja ya cerrada (corregir conteo, agregar gasto/retiro)', modulo: 'FINANCIERO' },
   { codigo: 'CAJA_MAYOR_OPERAR', descripcion: 'Registrar movimientos/gastos/retiros en caja mayor', modulo: 'FINANCIERO' },
   { codigo: 'MONEDAS_GESTIONAR', descripcion: 'Gestionar monedas y cotizaciones', modulo: 'FINANCIERO' },
   { codigo: 'BANCOS_VER', descripcion: 'Ver cuentas bancarias, cheques y POS', modulo: 'FINANCIERO' },

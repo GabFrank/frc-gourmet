@@ -243,6 +243,7 @@ import { AddUbicacionEmpresa1783915694893 } from './migrations/1783915694893-Add
 import { AddNotificaciones1782606189440 } from './migrations/1782606189440-AddNotificaciones';
 import { AddWhatsappCierreCajaConfig1783975019373 } from './migrations/1783975019373-AddWhatsappCierreCajaConfig';
 import { ReclasificarMovimientosAcreditacionPos1784049746457 } from './migrations/1784049746457-ReclasificarMovimientosAcreditacionPos';
+import { AddMotivoAjusteToCaja1784316132819 } from './migrations/1784316132819-AddMotivoAjusteToCaja';
 import { AddAnuladoToMovimientoCliente1784136362576 } from './migrations/1784136362576-AddAnuladoToMovimientoCliente';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
