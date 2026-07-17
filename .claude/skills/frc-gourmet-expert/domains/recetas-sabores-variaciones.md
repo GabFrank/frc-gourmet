@@ -37,7 +37,7 @@ Cada combinación `(presentación, sabor)` es una `RecetaPresentacion` con:
 - Sus propios precios (`PrecioVenta` con `receta_presentacion_id`)
 - Una `Receta` asociada (FK `receta_id`)
 
-⚠️ **Matiz importante (verificado en código)**: `RecetaPresentacion.receta` es `@ManyToOne` (NO OneToOne) y la creación automática (`generarVariacionesParaProducto` en `recetas.handler.ts`) hace que **todas las variaciones de un mismo sabor compartan la MISMA `Receta` base** (mismo `receta_id`). Es decir, al crear un sabor se crea **una** receta y se enlaza a cada presentación. Por lo tanto, "out of the box", la pizza grande y la mediana de un sabor comparten ingredientes salvo que el flujo cree/asigne recetas distintas por variación. La flexibilidad por (presentación, sabor) existe a nivel de modelo (cada `RecetaPresentacion` puede apuntar a una receta distinta), pero el alta automática no genera una receta por variación. (Marcado para revisión humana: confirmar si la UI de variaciones asigna recetas independientes al editarlas.)
+⚠️ **Matiz importante (verificado en código)**: `RecetaPresentacion.receta` es `@ManyToOne` (NO OneToOne), pero la creación automática (`generarVariacionesParaProducto` en `recetas.handler.ts`) genera **una `Receta` propia por cada variación** (sabor × tamaño): el loop recorre las `Presentacion` del producto y hace `recetaRepo.save(...)` dentro del for (comentario en código: *"Receta propia de esta variación (sabor × tamaño)"*). Es decir, la pizza grande y la mediana de un mismo sabor arrancan con recetas **independientes** — modificar una NO afecta a la otra. El modelo `@ManyToOne` permitiría compartir, pero el alta automática no comparte. Datos viejos con recetas compartidas (modelo anterior) se pueden des-compartir con el handler opt-in `reparar-recetas-compartidas` (`desduplicarRecetasCompartidas`).
 
 ## Entidades
 
@@ -259,14 +259,12 @@ calcularCostoReceta(recetaId):
 
 Cuando se crea un Sabor nuevo (desde `producto-sabores.component`):
 
-1. `create-sabor` (**`recetas.handler.ts`, ~línea 1527**, NO sabores.handler.ts) crea el `Sabor` vinculado al producto (todo en una transacción con `ensurePermission('SABORES_GESTIONAR')`).
-2. Crea **una sola** `Receta` base para ese sabor (`<producto> <sabor>`, rendimiento 1, costo 0). El alta NO copia ingredientes de otro sabor.
-3. Llama `generarVariacionesParaProducto`: por cada `Presentacion` del producto crea un `RecetaPresentacion` (si no existe ya para esa presentación+sabor) con:
-   - `nombre_generado = generarNombreVariacion(producto.nombre, presentacion.nombre, producto.nombre)`
-   - `sku = generarSKU(producto.nombre, producto.nombre, presentacion.nombre)`
-   - `receta_id` = **la misma** receta base creada en el paso 2 (todas las variaciones del sabor comparten esa receta).
+1. `create-sabor` (**`recetas.handler.ts`, ~línea 1626**, NO sabores.handler.ts) crea el `Sabor` vinculado al producto (todo en una transacción con `ensurePermission('SABORES_GESTIONAR')`). NO crea ninguna "receta base" aparte.
+2. Llama `generarVariacionesParaProducto`: por cada `Presentacion` del producto (si no existe ya un `RecetaPresentacion` para esa presentación+sabor) crea:
+   - Una **`Receta` propia** de esa variación (`recetaRepo.save(...)` dentro del loop; rendimiento 1, costo 0, `descripcion = "Receta para <nombre variación>"`). El alta NO copia ingredientes de otro sabor.
+   - El `RecetaPresentacion` con `nombre_generado = generarNombreVariacion(producto.nombre, presentacion.nombre, nombreSabor)`, `sku = generarSKU(producto.nombre, nombreSabor, presentacion.nombre)` y `receta_id` = **la receta recién creada para esa variación** (cada variación tiene la suya, no se comparte).
 
-Funciones helper: `generarVariacionesParaProducto`, `generarNombreVariacion`, `generarSKU` viven en **`recetas.handler.ts`** (~líneas 226-280), NO en `receta-presentacion.handler.ts`.
+Funciones helper: `generarVariacionesParaProducto`, `generarNombreVariacion`, `generarSKU` viven en **`recetas.handler.ts`** (~líneas 245-302), NO en `receta-presentacion.handler.ts`.
 
 ## ⚠️ Trampa: handlers en `recetas.handler.ts`, NO en `receta-presentacion.handler.ts` ni `sabores.handler.ts`
 
@@ -317,8 +315,7 @@ Dialogs:
 2. Crear Presentaciones: "Mediana" (cantidad=1), "Grande" (cantidad=1).
 3. Crear Sabor "Calabresa":
    - Crea Sabor.
-   - Crea Receta "Pizza Calabresa Base".
-   - Auto-genera RecetaPresentacion: "PIZZA MEDIANA CALABRESA" + "PIZZA GRANDE CALABRESA", cada uno con su propia Receta inicial vacía o copiada.
+   - Auto-genera RecetaPresentacion: "PIZZA MEDIANA CALABRESA" + "PIZZA GRANDE CALABRESA", cada uno con **su propia `Receta` inicial vacía e independiente** (no hay receta base compartida).
 4. Crear Sabor "Pepperoni" — análogo. Total: 4 RecetaPresentacion.
 5. Para cada variación, agregar ingredientes a su Receta única:
    - "PIZZA MEDIANA CALABRESA": Masa 200g, Salsa 80g, Mozzarella 100g, Calabresa 60g.

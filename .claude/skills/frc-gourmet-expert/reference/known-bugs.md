@@ -28,6 +28,14 @@ Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo
 
 **Fix pendiente:** rediseñar usando `mat-table` o grid responsive con columnas (Funcionario, Estado, Entrada, Salida, Turno) y permitir cambio de tamaño del dialog.
 
+### Dark mode: overrides con sólo `prefers-color-scheme` (patrón corregido)
+
+**Síntoma:** un panel/diálogo con fondo claro hardcodeado + texto oscuro queda ilegible en el **modo oscuro de la app** (no del SO). Caso concreto: diálogo "Nuevo Sabor".
+
+**Causa:** el componente overrideaba colores sólo con `@media (prefers-color-scheme: dark)`, que responde al tema del **sistema operativo**, no al toggle interno de la app (que togglea la clase `.dark-theme` / `[data-theme="dark"]`).
+
+**Fix (barrido de colores hardcodeados):** usar `var(--...)` siempre; para overrides de dark, `:host-context(.dark-theme), :host-context([data-theme="dark"])`. Detalle → [conventions/coding-rules.md](../conventions/coding-rules.md) sección 5.
+
 ### Mat-chip standalone fuera de chip-listbox
 
 **Síntoma:** `<mat-chip>` suelto se renderiza con layout block/flex propio que no respeta `inline-flex`. Aparece pegado al borde derecho del cell o cubriendo ancho completo.

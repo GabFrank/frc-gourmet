@@ -68,11 +68,31 @@ Para moneda PYG (sin decimales): el pipe `'1.0-0'` o usar `CurrencyConfigService
 .card { background: var(--surface); color: var(--text-primary); }
 ```
 
-Variables disponibles (`src/styles/theme-variables.scss`):
-- `--text-primary`, `--text-secondary`
-- `--surface`, `--surface-variant`
-- `--border-color`, `--hover-bg`, `--shadow-color`
-- Estados: `--success-color`, `--warning-color`, `--error-color`, `--info-color`
+Variables disponibles — set **completo** (`src/styles/theme-variables.scss`, fuente de verdad):
+- **Texto:** `--text-primary`, `--text-secondary`, `--text-disabled`
+- **Superficie:** `--surface`, `--surface-variant`, `--card-background`, `--background-color`
+- **Bordes:** `--border-color`, `--border-light`
+- **Hover:** `--hover-bg`, `--hover-bg-light`, `--surface-hover`
+- **Sombra:** `--shadow-color`, `--shadow-color-medium`
+- **Estados:** `--success-color`, `--warning-color`, `--error-color`, `--info-color` (+ variantes de texto sobre el estado: `--success-text`, `--warning-text`, `--error-text`, `--info-text`, todas `#fff`)
+
+> `--surface-hover` (`rgba(0,0,0,0.03)` claro / `rgba(255,255,255,0.05)` oscuro) se agregó hace poco y se usa **sin fallback** en varios componentes (`create-caja-dialog`, `delivery-dialog`, `resumen-caja-dialog`, KDS, etc.) — por eso debe existir en el tema. Si agregás una variable nueva usada sin fallback, definila en `theme-variables.scss` para claro **y** oscuro.
+
+#### ⚠️ Dark mode se togglea por CLASE, no por preferencia del SO
+
+El modo oscuro se activa con las clases **`.dark-theme` / `[data-theme="dark"]`** (y `.mat-app-background.mat-app-background`), definidas en `theme-variables.scss`. El toggle interno de la app agrega/quita esa clase — **no** cambia la preferencia del sistema operativo.
+
+Por eso, en un componente, usar **sólo** `@media (prefers-color-scheme: dark)` para overridear colores es un **BUG**: dispara únicamente con el tema oscuro del SO, no con el toggle interno. Síntoma real: cajas/paneles con fondo claro hardcodeado + texto/iconos oscuros ilegibles en modo oscuro de la app (caso concreto: diálogo "Nuevo Sabor").
+
+**Regla:** usar SIEMPRE `var(--...)` (las variables ya cambian con la clase). Si necesitás un override específico de dark en un componente, hacelo con:
+
+```scss
+:host-context(.dark-theme), :host-context([data-theme="dark"]) {
+  .panel { background: var(--surface); }
+}
+```
+
+**NUNCA** apoyarte sólo en `@media (prefers-color-scheme: dark)`.
 
 ### 6. Paleta de estados (verde/amarillo/naranja/rojo/celeste)
 
