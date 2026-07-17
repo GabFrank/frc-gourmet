@@ -26,9 +26,6 @@ const REFRESH_KEY = 'frc_admin_refresh_token';
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
 let appVersion = '';
-// Promesa del fetch de versión: el header la await-ea porque getAppVersion() sync
-// devuelve '' hasta que /api/version resuelve (carrera al arrancar).
-let appVersionPromise: Promise<string> | null = null;
 
 /** Base same-origin: el mismo Fastify sirve /admin y /api. */
 function currentBase(): string {
@@ -77,34 +74,16 @@ async function httpFetch(path: string, body: unknown, withAuth = true): Promise<
   return res.json();
 }
 
-// Single-flight: al reabrir el navegador con el access token vencido, arranca
-// un burst de RPCs que dan 401 casi simultáneos. Sin deduplicar, cada uno
-// mandaba el MISMO refresh token (que es de un solo uso): el primero rotaba y
-// los demás enviaban el token ya revocado → 401 → se borraban ambos tokens,
-// pisando incluso el token nuevo del ganador. Resultado: empresa/cotización (y
-// cualquier otra llamada perdedora) fallaban al azar. Ahora todos los 401
-// concurrentes comparten UNA sola promesa de refresh.
-let inFlightRefresh: Promise<boolean> | null = null;
-
-function refreshAccessIfPossible(): Promise<boolean> {
-  if (inFlightRefresh) return inFlightRefresh;
-  const tokenAtStart = refreshToken;
-  if (!tokenAtStart) return Promise.resolve(false);
-  inFlightRefresh = (async () => {
-    try {
-      const data = await httpFetch('/api/auth/refresh', { refreshToken: tokenAtStart }, false);
-      storeTokens(data.accessToken, data.refreshToken || tokenAtStart);
-      return true;
-    } catch {
-      // Solo limpiar si nadie más ya obtuvo un token nuevo mientras tanto
-      // (evita borrar el token recién rotado por otra tanda).
-      if (refreshToken === tokenAtStart) storeTokens(null, null);
-      return false;
-    } finally {
-      inFlightRefresh = null;
-    }
-  })();
-  return inFlightRefresh;
+async function refreshAccessIfPossible(): Promise<boolean> {
+  if (!refreshToken) return false;
+  try {
+    const data = await httpFetch('/api/auth/refresh', { refreshToken }, false);
+    storeTokens(data.accessToken, data.refreshToken || refreshToken);
+    return true;
+  } catch {
+    storeTokens(null, null);
+    return false;
+  }
 }
 
 /** Núcleo del transporte: traduce un canal IPC a la llamada HTTP correspondiente. */
@@ -158,10 +137,9 @@ async function invokeRouter(channel: string, ...args: any[]): Promise<any> {
   } catch (err) {
     const e = err as HttpError;
     if (e.status === 401) {
-      const ok = await refreshAccessIfPossible();
+      const ok = refreshToken ? await refreshAccessIfPossible() : false;
       if (ok) return await doRpc();
-      // No limpiar acá: refreshAccessIfPossible ya decide si borrar los tokens.
-      // Borrar por cada llamada perdedora pisaba el token nuevo del ganador.
+      storeTokens(null, null);
     }
     throw err;
   }
@@ -190,7 +168,6 @@ function buildExplicit(): Record<string, unknown> {
   return {
     // Entorno
     getAppVersion: (): string => appVersion,
-    getAppVersionAsync: (): Promise<string> => appVersionPromise || Promise.resolve(appVersion),
     getAppMode: (): 'client' => 'client',
     getServerUrl: (): string => currentBase() || window.location.origin,
     getDeviceId: (): number | null => null,
@@ -250,10 +227,8 @@ export function installApiHttp(): void {
   console.log('[api-http] window.api (web /admin) instalado (same-origin)');
 
   // Versión del server para el header (best-effort, no bloquea el arranque).
-  // Se guarda la promesa para que el header pueda await-earla vía
-  // getAppVersionAsync (getAppVersion() sync devuelve '' hasta que resuelve).
-  appVersionPromise = fetch('/api/version')
+  fetch('/api/version')
     .then((r) => (r.ok ? r.json() : null))
-    .then((v) => { if (v?.appVersion) appVersion = String(v.appVersion); return appVersion; })
-    .catch(() => appVersion);
+    .then((v) => { if (v?.appVersion) appVersion = String(v.appVersion); })
+    .catch(() => { /* ignore */ });
 }
