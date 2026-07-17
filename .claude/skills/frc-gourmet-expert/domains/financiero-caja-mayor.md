@@ -290,6 +290,8 @@ RetiroCajaDetalle {
    - Para cada detalle: crear `CajaMayorMovimiento` INGRESO_RETIRO_CAJA + `actualizarSaldo`.
    - Estado → INGRESADO.
 
+> **Retiro del cierre.** Al cerrar una caja PdV se **auto-genera** un `RetiroCaja` FLOTANTE con el efectivo del cierre (`generarRetiroDelCierre`, `electron/handlers/retiro-cierre.util.ts`) — usa `COALESCE(monto, cantidad*valor)` para soportar conteos resumidos (PR #179). Para ingresarlo a la Caja Mayor: *Detalle de Caja Mayor → "Registrar Ingreso" → "Retiro de Caja de Venta"* (o *Dashboard Caja Mayor → "Retiros"*). El botón "Generar retiro del cierre" en `list-cajas` lo backfillea (idempotente) para cierres viejos que no lo tengan.
+
 ## Entradas Varias
 
 `EntradaVaria` + `EntradaVariaCategoria`:

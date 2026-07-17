@@ -61,6 +61,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | **Importación de facturas con OCR + IA** (GPT-4o vision, aliases, revisor en tab) | [domains/importacion-facturas-ocr.md](domains/importacion-facturas-ocr.md) |
 | **Caja Mayor** (movimientos, anulaciones, configuración) | [domains/financiero-caja-mayor.md](domains/financiero-caja-mayor.md) |
 | **Bancos, cheques, POS** (cuentas bancarias, acreditaciones) | [domains/financiero-bancos-pos.md](domains/financiero-bancos-pos.md) |
+| **Notificaciones (Email/WhatsApp)** (Evolution API, dispatchEvento, envío del cierre de caja por WhatsApp) | [domains/notificaciones-whatsapp.md](domains/notificaciones-whatsapp.md) |
 | **CPP / CPC** (dirección de flujo, préstamos a funcionarios) | [domains/financiero-cpp-cpc.md](domains/financiero-cpp-cpc.md) |
 | **RRHH** (funcionarios, asistencias, vales, vacaciones) | [domains/rrhh.md](domains/rrhh.md) |
 | **Liquidaciones, comisiones** (sueldo, aguinaldo, equipos) | [domains/rrhh-liquidaciones.md](domains/rrhh-liquidaciones.md) |
@@ -111,9 +112,20 @@ Estas las debo respetar SIEMPRE, sin que el usuario las repita:
 
 ---
 
-## 4. Estado actual del repo (snapshot 2026-05-15)
+## 4. Estado actual del repo (snapshot 2026-07-14)
 
 > Esta sección puede quedar desactualizada. Si el usuario pregunta por estado actual, **revisar `git log` y memorias antes de responder**.
+
+**Sesión 2026-07-14 (PRs #172, #173, #176, #177, #179) — cierre de caja, conteos, WhatsApp, POS:**
+
+- **Conteos completo vs resumido** — un `Conteo` puede guardarse por denominación (`cantidad>0`) o **resumido** (una fila por moneda con el total en `ConteoDetalle.monto`, `cantidad=0`). Columna `monto` en migración `AddMontoToConteoDetalle`. **Regla: todo lector de conteo usa `COALESCE(monto, cantidad*valor)`** — sino da 0 para resumidos. Causó 3 bugs corregidos (create-caja-dialog #177, `generarRetiroDelCierre` #179). → [pitfalls](conventions/pitfalls-typeorm-electron.md).
+- **Faltantes falsos en el cierre (PR #172)** — `computeResumenCaja` ahora filtra `PagoDetalle.activo=true`; antes sumaba líneas anuladas por `anularCobroParcial`. Mismo filtro en `getVentasTotalByCaja`, `dashboard-ventas.handler.ts`, `getVentasByDateRange`.
+- **Símbolo de moneda en tickets** — `monedaSimboloAscii` leía `moneda.codigo`/`moneda.nombre` (inexistentes) → imprimía todo como "Gs.". La entity `Moneda` usa `countryCode`/`simbolo`/`denominacion`. Ahora mapea por `countryCode`.
+- **Ticket de cierre + resumen mobile (PR #172)** — ticket de cierre con totales multi-moneda agrupados; resumen de caja en la PWA con gastos, retiros, descuentos/aumentos y arqueo por moneda.
+- **NUEVO: envío del cierre por WhatsApp (PR #172)** — Evolution API (`sendWhatsappMedia`), imagen renderizada offscreen (`resumen-caja-imagen.util.ts`), hook en `update-caja`, handler `enviar-resumen-cierre-whatsapp`, botón "Reenviar" en list-cajas. → [notificaciones-whatsapp.md](domains/notificaciones-whatsapp.md).
+- **Acreditaciones POS en bancos (PR #176)** — nuevo `MovimientoBancarioTipo.ACREDITACION_POS` (ruidoso, oculto por defecto). Se eliminó la fuente duplicada en `getMovimientosBancariosUnificados`. Migración `ReclasificarMovimientosAcreditacionPos` reconstruye la tabla SQLite (CHECK del baseline) + backfillea históricos.
+- **Imágenes de producto (PR #173)** — `imageUrl` en Producto/Persona/Sabor/Receta/Presentacion (`imagen` en pdv-categoria-item). Render vía `thumbUrl()`/`resolveAppUrl()`/pipe `appUrl`, nunca `app://` cruda en `[src]`. Fix: atajo-productos-dialog / atajo-config-dialog bindean `producto.imageUrl`.
+- **Código muerto** — `shared/components/cierre-caja-dialog/` sin usos; el cierre real lo hace `create-caja-dialog` (modo 'conteo').
 
 - **Branches de larga duración:** `develop` (working) y **`master`** (releases). `origin/main` está obsoleta (`gone`). El skill viejo decía "main (releases)" — ignorar, es `master`.
 - **Primer release stable publicado: `v1.1.0` (2026-05-15)**. Sucesión rápida hasta `v1.5.0` el mismo día. **Auto-update totalmente funcional** desde v1.4.0; segundo update consecutivo (v1.4.0 → v1.5.0) sin intervención manual confirma la estabilidad del flujo. Si en el futuro un update falla, es bug a investigar — no comportamiento esperado. Bugs históricos ya cerrados: `pg` faltante en bundle (fix v1.1.1) y `verifyUpdateCodeSignature` que en electron-updater 6.x es función no boolean (fix v1.3.0). Ver [conventions/pitfalls-typeorm-electron.md](conventions/pitfalls-typeorm-electron.md) y [workflows/release-y-deploy.md](workflows/release-y-deploy.md) sección "Historial de validación".

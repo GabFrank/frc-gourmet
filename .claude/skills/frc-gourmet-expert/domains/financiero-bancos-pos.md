@@ -40,13 +40,19 @@ Anotación manual de movimientos en cuenta bancaria (separado de Caja Mayor):
 ```typescript
 {
   cuentaBancaria
-  tipoMovimiento: ENTRADA_MANUAL | SALIDA_MANUAL | AJUSTE_POSITIVO | AJUSTE_NEGATIVO
+  tipoMovimiento: ENTRADA_MANUAL | SALIDA_MANUAL | AJUSTE_POSITIVO | AJUSTE_NEGATIVO | ACREDITACION_POS
   monto, fecha, numeroComprobante
   anulado: boolean
 }
 ```
 
 No se vincula a CajaMayorMovimiento → reconciliación manual con extracto bancario.
+
+> **`ACREDITACION_POS` (PR #176).** Tipo nuevo: la auto-acreditación (scheduler) y la verificación manual (`banking.handler.ts`) crean el asiento del movimiento con este tipo (antes era `ENTRADA_MANUAL` con observación `"ACREDITACION POS AUTO #id"`). Está en `TIPOS_BANCARIOS_RUIDOSOS` (`electron/utils/movimientos-bancarios.ts`) → se **oculta por defecto** en la vista consolidada; aparece con el toggle "Ver POS/ocultos".
+>
+> **Fuente única.** `getMovimientosBancariosUnificados` ya **NO** lista la entidad `AcreditacionPos` por separado — el asiento la representa. Antes cada acreditación salía **dos veces** (asiento + entidad).
+>
+> **PITFALL de migración.** En SQLite `movimientos_bancarios.tipo_movimiento` tiene un `CHECK` (del baseline) con los 4 tipos originales; agregar el tipo nuevo exige **rebuild de la tabla** para soltar el CHECK (migración `ReclasificarMovimientosAcreditacionPos`). En Postgres es `varchar` sin constraint. La migración además reclasifica los asientos POS existentes y **backfillea** los históricos (acreditaciones acreditadas sin asiento) — sólo registro contable, **no** toca `cuenta.saldo` (columna incremental, nunca se recalcula sumando movimientos).
 
 ## Chequeras
 

@@ -395,6 +395,13 @@ Dialog cierre:
 Al confirmar:
 - `Caja.estado = CERRADO`, `fechaCierre`.
 - Muestra resumen post-cierre con diferencias (verde/amarillo/rojo según `umbralDiferenciaBaja/Alta`).
+- Si `PdvConfig.whatsappCierreCajaActivo`, se dispara el envío del resumen por WhatsApp (hook en `update-caja`) → ver [notificaciones-whatsapp.md](notificaciones-whatsapp.md).
+
+> **Conteo completo vs resumido.** El conteo (apertura y cierre) puede cargarse por denominación (`cantidad>0`) o **resumido** (una fila por moneda con el total en `ConteoDetalle.monto`, `cantidad=0`). Todo cálculo sobre el conteo debe usar `COALESCE(monto, cantidad*valor)` — leer sólo `cantidad*valor` da 0 para conteos resumidos. Regla y bugs históricos → [conventions/pitfalls-typeorm-electron.md](../conventions/pitfalls-typeorm-electron.md#conteos-de-caja-resumidos-leer-monto-no-sólo-cantidadvalor).
+
+> **Diferencias falsas (resuelto, PR #172).** `computeResumenCaja` (`electron/utils/resumen-caja.utils.ts`) filtra `PagoDetalle.activo = true`: antes sumaba líneas anuladas por `anularCobroParcial` (cobro parcial por ítems), inflando el "esperado" y generando **faltantes falsos**. El mismo filtro se aplicó en `getVentasTotalByCaja`, `dashboard-ventas.handler.ts` y las subqueries de `getVentasByDateRange`.
+
+**Ticket de cierre** (`printCierreCajaInternal` en `documentos-tickets.handler.ts`): totales multi-moneda **agrupados** (etiqueta una vez, monedas indentadas debajo). **Resumen de caja en la PWA mobile** (`projects/mobile/.../caja-detalle.page`): incluye gastos, retiros, descuentos/aumentos y un bloque de **arqueo por moneda** (apertura/cierre/esperado/diferencia), con ventas por forma de pago agrupadas (PR #172).
 
 ## Procesamiento de stock automático
 

@@ -131,9 +131,15 @@ IPCs polimórficos — toda entidad que adjunte archivos usa estos, no se crean 
 
 **Seguridad:** `create/update/delete` chequean el permiso base (`DOCUMENTOS_ADJUNTAR` / `DOCUMENTOS_ADJUNTOS_ELIMINAR`) más el permiso del dominio resuelto por `getPermisoAdjuntarPorTipo(entidadTipo)` en `electron/handlers/documentos-permissions.config.ts`. Los `get-*` no chequean (se asume que ya pasaste por el listado del dominio padre). Strings se guardan UPPERCASE (`entidadTipo`, `tipo`, `observacion`).
 
-## 6. Patrón "una imagen principal" (Producto, Persona, Presentación, Sabor)
+## 6. Patrón "una imagen principal" (Producto, Persona, Presentación, Sabor, Receta)
 
-Para entidades donde la foto se consulta mucho en listados (PDV, lista de productos), usamos columna `imageUrl varchar(500) nullable` directo en la entity. Es **la imagen destacada**. Si en el futuro la entidad necesita **galería**, usamos `Adjunto(entidadTipo='PRODUCTO', entidadId=X)` para las secundarias y la columna queda como destacada. Es el patrón de Shopify/Odoo/Magento.
+Para entidades donde la foto se consulta mucho en listados (PDV, lista de productos), usamos columna `imageUrl varchar(500) nullable` (columna `image_url`) directo en la entity. Es **la imagen destacada**. La usan **`Producto`, `Persona`, `Sabor`, `Receta` y `Presentacion`**. Si en el futuro la entidad necesita **galería**, usamos `Adjunto(entidadTipo='PRODUCTO', entidadId=X)` para las secundarias y la columna queda como destacada. Es el patrón de Shopify/Odoo/Magento.
+
+> **Excepción:** la categoría PdV (`pdv-categoria-item.entity.ts`) usa el campo **`imagen`**, no `imageUrl` (y es legacy base64, ver regla 1). No generalizar el nombre `imageUrl` a esta entidad.
+
+**Render correcto (SIEMPRE):** pasar la URL cruda `app://...` por `thumbUrl()` / `resolveAppUrl()` (`shared/utils/image-url.util.ts`) o el pipe **`appUrl`** (`shared/pipes/app-url.pipe.ts`) antes de bindearla en `[src]`. **Nunca** poner la URL `app://` cruda directo en `[src]`. Patrón de referencia: `list-productos` (`thumbFor(url) = thumbUrl(url) || resolveAppUrl(url)` + `(error)="onThumbError(...)"` que cae al original).
+
+**Bug histórico (PR #173):** `atajo-productos-dialog` y `atajo-config-dialog` mostraban un `mat-icon` fijo sin bindear `producto.imageUrl`. Ahora ambos usan `[src]="thumbFor(item.producto.imageUrl)"` con fallback al ícono `restaurant` cuando no hay imagen.
 
 **Cuando hagas update**: hay que borrar el archivo del filesystem viejo. Patrón en `productos.handler.ts:update-producto` y `personas.handler.ts:update-persona`.
 

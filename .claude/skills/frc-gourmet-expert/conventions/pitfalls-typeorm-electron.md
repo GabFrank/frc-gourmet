@@ -56,6 +56,30 @@ El cast `as any` es necesario porque las entities tipan los campos como `Type | 
 
 **Bug original**: en `anular-liquidacion-sueldo`, los vales quedaban en estado DESCONTADO sin liquidación asociada porque el `liquidacionId = undefined` no se nuleaba en BD. (`feedback_typeorm_null_undefined`)
 
+## Conteos de caja "resumidos": leer `monto`, no sólo `cantidad*valor`
+
+Un `Conteo` (apertura/cierre de caja) puede guardarse en **dos modos**:
+
+- **COMPLETO** — una fila `ConteoDetalle` por denominación, con `cantidad > 0` y `monto = NULL`. El total se deriva de `cantidad * billete.valor`.
+- **RESUMIDO / simplificado** — **una fila por moneda** con el total directo en `cd.monto`, `cantidad = 0`, apuntando a un billete cualquiera de esa moneda como *portador*.
+
+La columna `monto numeric(18,2) NULL` se agregó en la migración **`AddMontoToConteoDetalle1783173960142`**; el feature entró en el commit `b4f43ae` ("factura resumida + conteo de caja simplificado").
+
+**REGLA:** TODO código que lea detalles de conteo debe usar el fallback:
+
+```typescript
+// Backend SQL
+COALESCE(cd.monto, cd.cantidad * mb.valor)
+// TypeScript
+const sub = Number(d.monto) || (Number(mb.valor) * Number(d.cantidad));
+```
+
+Leer sólo `cantidad * valor` devuelve **0** para conteos resumidos (su `cantidad` es 0). Este olvido causó 3 bugs ya corregidos:
+
+- `create-caja-dialog` `loadConteoData` / `loadConteoCierreData` no mostraban apertura/cierre (PR #177).
+- `generarRetiroDelCierre` (`electron/handlers/retiro-cierre.util.ts`) no generaba el retiro del cierre para cierres resumidos (PR #179).
+- El resumen (`electron/utils/resumen-caja.utils.ts`) ya lo hacía bien — usarlo de referencia.
+
 ## TypeORM: leftJoin a tabla sin relación @ManyToOne
 
 Si una entidad tiene **columna plana** (`compraId: int`) pero no `@ManyToOne compra`, no se puede hacer `leftJoinAndSelect('cpp.compra', ...)`. Hay que joinear con la tabla raw:
@@ -214,6 +238,12 @@ safeUrl(url: string): SafeUrl {
 ```
 
 Si `app://` ya está registrado en allow-list de Angular (puede estar implícito), no necesita sanitize. Probar antes de añadir.
+
+## Moneda: los campos son `countryCode`/`simbolo`/`denominacion` (NO `codigo`/`nombre`)
+
+La entity `Moneda` (`entities/financiero/moneda.entity.ts`) tiene: `denominacion`, `simbolo` (puede ser no-ASCII, ej. `₲`), `flagIcon`, `countryCode` (`PY`/`US`/`BR`…), `flagIconBase64`, `activo`, `principal`, `decimales`. **No existen `codigo` ni `nombre`.**
+
+**Bug histórico:** `monedaSimboloAscii` (`electron/utils/ticket.utils.ts`) leía `moneda.codigo` y `moneda.nombre` — ambos `undefined` — así que imprimía **todo** como `"Gs."` en los tickets térmicos. El fix mapea por `countryCode` (símbolo ASCII estable, seguro para impresoras que no manejan Unicode). Si necesitás el símbolo en un ticket, mapeá por `countryCode`, no confíes en `simbolo` (que puede ser Unicode).
 
 ## Custom currency mask: PYG sin decimales
 
