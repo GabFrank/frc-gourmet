@@ -53,6 +53,16 @@ interface HttpError extends Error {
   status?: number;
 }
 
+/** Evento global consumido por AuthService (Angular) para forzar logout web. */
+export const AUTH_EXPIRED_EVENT = 'frc-web-auth-expired';
+function notifyAuthExpired(): void {
+  try {
+    window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
+  } catch {
+    /* ignore */
+  }
+}
+
 async function httpFetch(path: string, body: unknown, withAuth = true): Promise<any> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (withAuth && accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
@@ -98,7 +108,13 @@ function refreshAccessIfPossible(): Promise<boolean> {
     } catch {
       // Solo limpiar si nadie más ya obtuvo un token nuevo mientras tanto
       // (evita borrar el token recién rotado por otra tanda).
-      if (refreshToken === tokenAtStart) storeTokens(null, null);
+      if (refreshToken === tokenAtStart) {
+        storeTokens(null, null);
+        // Follow-up: el refresh token venció / es inválido → no hay forma de
+        // renovar. Avisar a la app para cerrar sesión e ir al login, en vez de
+        // dejar la UI "logueada sin token" (no hay interceptor global 401).
+        notifyAuthExpired();
+      }
       return false;
     } finally {
       inFlightRefresh = null;
