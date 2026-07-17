@@ -621,6 +621,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddWhatsappCierreCajaConfig1783975019373,
     ReclasificarMovimientosAcreditacionPos1784049746457,
     AddAnuladoToMovimientoCliente1784136362576,
+    AddMotivoAjusteToCaja1784316132819,
   ];
 }
 
