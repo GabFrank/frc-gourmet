@@ -31,7 +31,8 @@ Migración base: `1782606189440-AddNotificaciones`. Entities en `entities/notifi
 
 Al **cerrar una caja PdV** — hook en `financiero.handler.ts` `update-caja`, cubre **desktop y PWA** — si `PdvConfig.whatsappCierreCajaActivo` y hay `PdvConfig.whatsappCierreCajaDestino`, se envía una imagen (o 2) con el resumen del cierre.
 
-- **Render de la imagen:** `electron/utils/resumen-caja-imagen.util.ts` (`generarResumenCajaImagenes`) — arma un HTML self-contained, lo renderiza con una **`BrowserWindow` offscreen** (Chromium ya embebido en Electron), `capturePage → toPNG → base64`. Devuelve 1 o 2 imágenes base64. `buildResumenCajaCaption` arma el texto.
+- **Render de la imagen:** `electron/utils/resumen-caja-imagen.util.ts` (`generarResumenCajaImagenes`) — arma un HTML self-contained (datos de `resumen-caja.utils.ts`; config en la migración `AddWhatsappCierreCajaConfig`), lo renderiza con una **`BrowserWindow` offscreen** (Chromium ya embebido en Electron), `capturePage → toPNG → base64`. Devuelve 1 o 2 imágenes base64. `buildResumenCajaCaption` arma el texto.
+- **"Total de ventas"** es un **agrupador**: fila head + una fila por moneda + fila total **"Total en Gs"** = suma de cada moneda × su cotización `compraLocal` más reciente. La moneda principal se elige por el flag `principal` (fallback GUARANI/PYG) y cotiza en 1 (PR #178).
 - **Config en el diálogo de PdV:** `pdv-config-dialog` sección "Cierre de caja" → `whatsappCierreCajaActivo` (checkbox) + `whatsappCierreCajaDestino` (input).
 - **Destino:** número internacional **o** JID de grupo (`…@g.us`, obtenible con `GET /group/fetchAllGroups/{instance}`). Se normaliza con `normalizeWhatsappNumber`.
 

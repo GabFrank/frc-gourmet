@@ -163,13 +163,17 @@ Si el movimiento tiene una columna de trazabilidad a otro módulo, bloquea con m
 |---|---|
 | `liquidacionSueldoId` | "Anular desde Liquidaciones de Sueldo" |
 | `cuentaPorPagarCuotaId` | "Anular desde Cuentas por Pagar (cuota)" |
-| `valeId` | "Anular desde Vales" |
+| `valeId` | **YA NO bloquea (PR #178)** — anula el vale en un click (ver "Caso especial: vale") |
 | `liquidacionComisionId` | "Anular desde Comisiones" |
 | `cuentaPorCobrarCuotaId` | "Anular desde Cuentas por Cobrar" |
 | `cuentaPorPagarId` | "Anular CPP completo" |
 | `compraId` | "Anular desde módulo Compras" |
 | `tipoMovimiento === ANULACION` | "No se puede anular un movimiento de tipo ANULACION" |
 | Ya tiene contra-movimiento | "ya fue anulado previamente" (idempotencia) |
+
+### Caso especial: vale (PR #178)
+
+Si el movimiento tiene `valeId`, ya **no** se bloquea: `anular-caja-mayor-movimiento` **delega** la anulación del vale en un solo click (misma lógica que el handler `anular-vale` del módulo Vales). En la misma transacción: crea un contra-movimiento `AJUSTE_POSITIVO` con `referenciaAnulacion` + `valeId`, revierte el saldo con `actualizarSaldo`, y deja el `Vale` en estado **ANULADO** (para que entre en la liquidación del mes). Valida que el movimiento tenga caja/moneda/formaPago y que el vale no esté ya ANULADO (idempotencia por `referenciaAnulacion`).
 
 ### Caso especial: operación financiera
 
@@ -191,6 +195,16 @@ Transacción atómica:
 `get-caja-mayor-movimientos` acepta `incluirAnulaciones` (default false):
 - **Default**: oculta contra-movimientos. Filas originales anuladas se muestran con texto/monto **tachado** + chip rojo `🚫 ANULADO` (en columna observación) + tooltip con motivo, responsable, fecha.
 - **Toggle ON**: muestra contra-movimientos con chip naranja `↩ ANULACION DE #X`.
+
+### Tipos bancarios "ruidosos" (POS) ocultos por defecto (PR #175)
+
+`electron/utils/movimientos-bancarios.ts` exporta `TIPOS_BANCARIOS_RUIDOSOS` (hoy `['ACREDITACION_POS']`) y el opt `excluirRuidosos` (reemplazó al viejo `excludePos`): `getMovimientosBancariosUnificados` filtra esos tipos cuando `excluirRuidosos=true`.
+
+- `get-movimientos-caja-mayor-consolidados` pasa `excluirRuidosos = !filtros.incluirRuidosos` → **por defecto oculta las acreditaciones POS** en la vista consolidada.
+- La vista de **cuenta bancaria individual** NO setea el opt → muestra todo.
+- En `caja-mayor-detalle` hay un toggle **"Ver POS/ocultos"** (`verMovimientosOcultos`, junto a "Ver anulaciones") que setea `filtros.incluirRuidosos = true`. Visible sólo si la caja tiene cuentas bancarias visibles.
+
+> Las acreditaciones POS se persisten como `MovimientoBancario` tipo `ACREDITACION_POS` (PR #176) y se listan desde la sección de movimientos manuales — ver [financiero-bancos-pos.md](financiero-bancos-pos.md).
 
 ## Caja Mayor Detalle (UI)
 

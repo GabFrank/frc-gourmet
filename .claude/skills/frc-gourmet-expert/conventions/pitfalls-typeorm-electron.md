@@ -189,6 +189,20 @@ ipcMain.handle('bar', async (_e, data) => {
 
 **Implicación**: si se borra la compra/vale/etc., el movimiento queda con id huérfano. La validación de "no anular si tiene FK" depende del handler chequear estos campos manualmente.
 
+## mat-autocomplete: `displayWith` borra el input tras seleccionar
+
+Si un `mat-autocomplete` usa `[(ngModel)]` + `displayWith` y la función espera **objeto** pero el handler de selección reasigna el modelo a un **string** (ej. el nombre elegido), `displayWith(string)` cae al `else` y devuelve `''` → **borra el input** justo después de seleccionar.
+
+**Fix:** que `displayWith` tolere objeto **o** string:
+
+```typescript
+// revisar-factura.component.ts
+displayProducto = (p: ProductoLite | string | null): string =>
+  (p && typeof p === 'object') ? (p.nombre || '') : ((p as string) || '');
+```
+
+Aplicado en `revisar-factura`. Gotcha reutilizable para cualquier autocomplete cuyo modelo se reasigne a string tras la selección.
+
 ## ngModel dentro de [formGroup] = NG01350
 
 Mezclar `[(ngModel)]` con `[formGroup]` rompe Angular con error `NG01350`. Migrar a Reactive Forms (`FormControl`, `FormArray`).

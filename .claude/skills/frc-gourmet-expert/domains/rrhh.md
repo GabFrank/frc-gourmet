@@ -312,6 +312,8 @@ UI: `create-edit-vale-dialog` en modo `mode = 'confirmar'` con caja preseleccion
 - Si CONFIRMADO: crear contra-mov AJUSTE_POSITIVO (o reacreditar la cuenta bancaria si el egreso salió de allí) + revertir saldo.
 - `vale.estado = ANULADO`.
 
+> **También se puede anular desde Caja Mayor (PR #178):** `anular-caja-mayor-movimiento`, para un movimiento con `valeId`, delega la misma lógica en un click (contra-mov `AJUSTE_POSITIVO` + revertir saldo + `Vale` a ANULADO). Antes estaba bloqueado ("Anular desde Vales"). → [financiero-caja-mayor.md](../domains/financiero-caja-mayor.md) "Caso especial: vale".
+
 ### MotivoVale
 
 Catálogo plano: ejemplo `nombre = "ANTICIPO SUELDO", "EMERGENCIA MEDICA", "PRESTAMO COMPRA INSUMOS"`.

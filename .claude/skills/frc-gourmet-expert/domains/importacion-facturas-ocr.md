@@ -180,8 +180,7 @@ queryRunner.transaction(qr =>
 
 1. Si `codigoProveedor` parece GTIN (8-14 dígitos) → buscar `CodigoBarra.codigo` exacto. Hit → ALTA, vincula Producto+Presentacion del código.
 2. Buscar `OcrAliasProducto` con `(proveedor_id, UPPER(descripcion))`:
-   - Hit con `vecesUsado >= 2` → **ALTA**, auto-vincular.
-   - Hit con `vecesUsado == 1` → **MEDIA**, sugerir.
+   - Hit con `vecesUsado >= 1` → **ALTA**, auto-vincular (PR #178, antes era `>= 2`). Como `vecesUsado` arranca en 1, un producto verificado **una vez** queda auto-vinculado desde la 2da importación — mismo criterio que el alias de proveedor. Los aliases se **crean al confirmar** (`factura-import-confirm`) y se **consultan al matchear** (`factura-import-match`).
 3. Sin alias → fuzzy contra `Producto.nombre` activos + `esComprable=true`:
    - score ≥0.85 → MEDIA + top sugerencia (presentación principal).
    - score 0.5-0.85 → MEDIA sin match auto.
@@ -221,6 +220,7 @@ Orden de columnas: **Estado | Producto | Descripción OCR | Presentación | Cant
 Por fila:
 - Chip de confianza (mismo sistema que proveedor + extra label "Producto nuevo" para los creados inline).
 - `<mat-select>` Producto con `(selectionChange)` → `onProductoChange()` carga presentaciones, auto-selecciona principal, marca chip "Validado".
+- `<mat-select>` **Presentación** con una opción centinela **"Crear presentación"** al final que abre `crear-presentacion-inline-dialog.component.ts` (form nombre/cantidad/principal + lista de presentaciones existentes del producto). Al crear/elegir, se inserta en el select y queda seleccionada (PR #178).
 - Botón **+** abre `CrearProductoInlineDialogComponent` con `descripcionOcr`, `codigoProveedorOcr`, `ivaOcr`. **Importante**: el producto creado se prepende a `vm.candidatos` ANTES de setear `selectedProductoId`, vía `setTimeout(0)`, para que mat-select tenga la `<mat-option>` cuando reciba el valor — sino emite `null` por race con DOM.
 - Input precio editable con `(ngModelChange)="onCostoChange()"` recalcula total ajustado en vivo.
 - Botón omitir (mat-icon `remove_circle_outline` ↔ `replay`); fila tachada vía `.row-omitida { text-decoration: line-through; opacity: 0.5 }`.
@@ -278,7 +278,9 @@ Acciones: **Revisar** (abre `RevisarFacturaComponent` como tab), **Reprocesar IA
 
 Filtro por estado con botón **Filtrar** explícito (no live).
 
-Botón **+ Nueva importación** dispara el flow completo: pickFile → process → abrir tab de revisión.
+Botón **+ Nueva importación** es un **mat-menu** con dos entradas: **Desde archivo** (pickFile) y **Desde el celular (QR)** (`QrUploadDialogComponent` → `processFromUrl(url)`). Ambas terminan en process → abrir tab de revisión.
+
+> El **mismo patrón** está en `list-compras`: el botón **"Importar con IA"** es un mat-menu con "Desde archivo" (`importarConIA()`) y "Desde el celular (QR)" (`importarConIAQr()` → `QrUploadDialog` + `processFromUrl`) (PR #178).
 
 ## Configuración IA: storage
 
