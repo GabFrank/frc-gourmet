@@ -6,6 +6,7 @@ import { Role } from '../../src/app/database/entities/personas/role.entity';
 import { UsuarioRole } from '../../src/app/database/entities/personas/usuario-role.entity';
 import { TipoCliente } from '../../src/app/database/entities/personas/tipo-cliente.entity';
 import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
+import { Convenio } from '../../src/app/database/entities/personas/convenio.entity';
 import { setEntityUserTracking } from '../utils/entity.utils'; // Import the utility function
 import { hashPassword, verifyPassword } from '../utils/password.utils';
 import { ensurePermission } from '../utils/auth.utils';
@@ -699,7 +700,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
       const clienteRepository = dataSource.getRepository(Cliente);
       return await clienteRepository.findOne({
         where: { id: clienteId },
-        relations: ['persona', 'tipo_cliente']
+        relations: ['persona', 'tipo_cliente', 'convenios']
       });
     } catch (error) {
       console.error('Error getting cliente:', error);
@@ -732,13 +733,19 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
         limite_credito: clienteData.limite_credito || 0
       });
 
+      // Convenio (opcional): vincula el cliente al convenio elegido en el alta (M2M).
+      if (clienteData.convenioId) {
+        const convenio = await dataSource.getRepository(Convenio).findOneBy({ id: clienteData.convenioId });
+        if (convenio) cliente.convenios = [convenio];
+      }
+
       await setEntityUserTracking(dataSource, cliente, currentUser?.id, false);
       const savedCliente = await clienteRepository.save(cliente);
 
       // Fetch the complete cliente with relations
       const completeCliente = await clienteRepository.findOne({
           where: { id: savedCliente.id },
-          relations: ['persona', 'tipo_cliente']
+          relations: ['persona', 'tipo_cliente', 'convenios']
       });
       return completeCliente;
     } catch (error) {
@@ -757,7 +764,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
       const cliente = await clienteRepository.findOne({
         where: { id: clienteId },
-        relations: ['persona', 'tipo_cliente'] // Load existing relations
+        relations: ['persona', 'tipo_cliente', 'convenios'] // Load existing relations
       });
       if (!cliente) return { success: false, message: 'No cliente found with that ID' };
 
@@ -780,6 +787,18 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
       if (clienteData.activo !== undefined) cliente.activo = clienteData.activo;
       if (clienteData.credito !== undefined) cliente.credito = clienteData.credito;
       if (clienteData.limite_credito !== undefined) cliente.limite_credito = clienteData.limite_credito;
+
+      // Convenio (opcional): merge aditivo — agrega el convenio elegido sin borrar
+      // otras membresías del cliente. `convenioId === null` no toca nada (no destructivo).
+      if (clienteData.convenioId) {
+        const convenio = await dataSource.getRepository(Convenio).findOneBy({ id: clienteData.convenioId });
+        if (convenio) {
+          const actuales: Convenio[] = (cliente as any).convenios || [];
+          if (!actuales.some((c) => c.id === convenio.id)) {
+            (cliente as any).convenios = [...actuales, convenio];
+          }
+        }
+      }
 
       await setEntityUserTracking(dataSource, cliente, currentUser?.id, true);
       const updatedCliente = await clienteRepository.save(cliente);
