@@ -154,8 +154,10 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
     this.initForms();
 
     if (this.dialogMode === 'conteo' && this.data && this.data.cajaId) {
-      // Load existing caja and conteo data
-      this.isViewMode = true; // Set view mode to true for conteo
+      // Load existing caja and conteo data. En modo ajuste (caja cerrada que se
+      // corrige) los campos quedan editables; en modo conteo normal, solo lectura.
+      this.isViewMode = !this.data.ajuste;
+      if (this.data.ajuste) this.dialogTitle = 'Ajustar conteo de caja';
       this.loadExistingCajaData(this.data.cajaId);
     } else {
       // Regular flow for creating a new caja

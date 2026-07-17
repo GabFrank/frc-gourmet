@@ -1607,6 +1607,12 @@ export class RepositoryHttpService extends RepositoryService {
   generarRetiroCierreCaja(cajaId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.generarRetiroCierreCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  puedeAjustarCaja(_cajaId: number): Observable<{ editable: boolean; motivoBloqueo?: string }> {
+    return throwError(() => new Error(`RepositoryHttpService.puedeAjustarCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  finalizarAjusteCaja(_cajaId: number, _motivo?: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.finalizarAjusteCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   enviarResumenCierreWhatsapp(_cajaId: number, _opts?: { forzar?: boolean; destino?: string }): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.enviarResumenCierreWhatsapp() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

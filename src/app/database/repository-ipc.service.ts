@@ -714,6 +714,8 @@ interface ElectronAPI {
   createRetiroCaja: (data: any) => Promise<any>;
   ingresarRetiroCaja: (retiroId: number, cajaMayorId: number) => Promise<any>;
   generarRetiroCierreCaja: (cajaId: number) => Promise<any>;
+  puedeAjustarCaja: (cajaId: number) => Promise<any>;
+  finalizarAjusteCaja: (cajaId: number, motivo?: string) => Promise<any>;
   egresoCajaInicial: (data: any) => Promise<any>;
   abrirCajaDesdeConteo: (conteoId: number, dispositivoId: number) => Promise<any>;
 
@@ -3214,6 +3216,12 @@ export class RepositoryIpcService extends RepositoryService {
   }
   generarRetiroCierreCaja(cajaId: number): Observable<any> {
     return from(this.api.generarRetiroCierreCaja(cajaId));
+  }
+  puedeAjustarCaja(cajaId: number): Observable<{ editable: boolean; motivoBloqueo?: string }> {
+    return from(this.api.puedeAjustarCaja(cajaId));
+  }
+  finalizarAjusteCaja(cajaId: number, motivo?: string): Observable<any> {
+    return from(this.api.finalizarAjusteCaja(cajaId, motivo));
   }
   enviarResumenCierreWhatsapp(cajaId: number, opts?: { forzar?: boolean; destino?: string }): Observable<any> {
     return from(this.api.callIpc('enviar-resumen-cierre-whatsapp', { cajaId, ...(opts || {}) }));

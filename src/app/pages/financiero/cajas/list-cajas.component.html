@@ -120,6 +120,30 @@
           <button
             mat-menu-item
             *ngIf="row.caja.estado === 'CERRADO'"
+            (click)="ajustarConteo(row.caja)"
+          >
+            <mat-icon>edit</mat-icon>
+            <span>AJUSTAR CONTEO</span>
+          </button>
+          <button
+            mat-menu-item
+            *ngIf="row.caja.estado === 'CERRADO'"
+            (click)="agregarGasto(row.caja)"
+          >
+            <mat-icon>receipt_long</mat-icon>
+            <span>AGREGAR GASTO</span>
+          </button>
+          <button
+            mat-menu-item
+            *ngIf="row.caja.estado === 'CERRADO'"
+            (click)="agregarRetiro(row.caja)"
+          >
+            <mat-icon>payments</mat-icon>
+            <span>AGREGAR RETIRO</span>
+          </button>
+          <button
+            mat-menu-item
+            *ngIf="row.caja.estado === 'CERRADO'"
             (click)="generarRetiroCierre(row.caja)"
           >
             <mat-icon>move_up</mat-icon>

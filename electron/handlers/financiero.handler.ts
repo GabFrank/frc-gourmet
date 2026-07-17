@@ -13,6 +13,8 @@ import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta
 import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { generarRetiroDelCierre } from './retiro-cierre.util';
+import { RetiroCaja } from '../../src/app/database/entities/financiero/retiro-caja.entity';
+import { RetiroCajaEstado, RetiroCajaOrigen } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
@@ -668,6 +670,72 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
       console.error(`Error updating caja ${id}:`, error);
       throw error;
     }
+  });
+
+  // --- Ajuste de caja cerrada -------------------------------------------------
+  // Permite corregir el conteo o agregar un gasto/retiro que faltó, en una caja
+  // ya CERRADA, SIN reabrirla. Límite natural: solo mientras el retiro del cierre
+  // NO haya sido ingresado a Caja Mayor (ahí ya movió saldos reales).
+
+  /** Busca el retiro del cierre (origen=CIERRE) de una caja, si existe. */
+  async function findRetiroDelCierre(cajaId: number): Promise<RetiroCaja | null> {
+    return dataSource.getRepository(RetiroCaja).findOne({
+      where: { caja: { id: cajaId }, origen: RetiroCajaOrigen.CIERRE } as any,
+      relations: ['detalles'],
+      order: { id: 'DESC' },
+    });
+  }
+
+  // Indica si una caja cerrada se puede ajustar (y por qué no, si aplica).
+  ipcMain.handle('puede-ajustar-caja', async (_event: IpcMainInvokeEvent, cajaId: number) => {
+    const caja = await dataSource.getRepository(Caja).findOne({ where: { id: cajaId } });
+    if (!caja) return { editable: false, motivoBloqueo: 'La caja no existe.' };
+    if (caja.estado !== CajaEstado.CERRADO) {
+      return { editable: false, motivoBloqueo: 'La caja no está cerrada.' };
+    }
+    const retiroCierre = await findRetiroDelCierre(cajaId);
+    if (retiroCierre && retiroCierre.estado === RetiroCajaEstado.INGRESADO) {
+      return {
+        editable: false,
+        motivoBloqueo:
+          'El retiro del cierre ya fue ingresado a Caja Mayor. Revertí ese ingreso desde Caja Mayor antes de ajustar la caja.',
+      };
+    }
+    return { editable: true };
+  });
+
+  // Cierra el ajuste de una caja cerrada: regenera el retiro del cierre (para que
+  // refleje el conteo corregido) y deja traza (revisado + motivo). Se llama DESPUÉS
+  // de haber corregido el conteo / agregado el gasto o retiro.
+  ipcMain.handle('finalizar-ajuste-caja', async (_event: IpcMainInvokeEvent, cajaId: number, motivo?: string) => {
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_AJUSTAR');
+    const cajaRepo = dataSource.getRepository(Caja);
+    const caja = await cajaRepo.findOne({ where: { id: cajaId } });
+    if (!caja) throw new Error(`Caja ID ${cajaId} no encontrada`);
+    if (caja.estado !== CajaEstado.CERRADO) throw new Error('Solo se puede ajustar una caja cerrada.');
+
+    // Guard: si el retiro del cierre ya se ingresó a Caja Mayor, no tocar.
+    const retiroCierre = await findRetiroDelCierre(cajaId);
+    if (retiroCierre && retiroCierre.estado === RetiroCajaEstado.INGRESADO) {
+      throw new Error(
+        'El retiro del cierre ya fue ingresado a Caja Mayor. Revertí ese ingreso antes de ajustar la caja.',
+      );
+    }
+
+    // Regenerar el retiro del cierre desde el conteo (posiblemente) corregido:
+    // borrar el FLOTANTE/VINCULADO_PENDIENTE existente y volver a generarlo.
+    if (retiroCierre) {
+      await dataSource.getRepository(RetiroCaja).remove(retiroCierre);
+    }
+    await generarRetiroDelCierre(dataSource, cajaId, getCurrentUser()?.id);
+
+    // Traza del ajuste.
+    (caja as any).revisado = true;
+    if (getCurrentUser()?.id) (caja as any).revisadoPor = { id: getCurrentUser()!.id } as any;
+    (caja as any).motivoAjuste = (motivo || '').trim().toUpperCase() || null;
+    await setEntityUserTracking(dataSource, caja, getCurrentUser()?.id, true);
+    await cajaRepo.save(caja);
+    return { success: true };
   });
 
   // Envío manual / test del resumen de cierre por WhatsApp. Dispara la MISMA
