@@ -119,7 +119,23 @@ export class VentasDashboardComponent implements OnInit {
 
   // --- Chart ---
   chartData: ChartData<'line'> = { labels: [], datasets: [] };
-  chartOptions: ChartConfiguration<'line'>['options'] = getDashboardChartOptions('line');
+  // Eje secundario `y1` (derecha) para la serie "Cantidad": comparte el chart con
+  // "Ventas (Gs)" (millones) pero en su propia escala, si no queda aplastada en 0.
+  chartOptions: ChartConfiguration<'line'>['options'] = (() => {
+    const opts: any = getDashboardChartOptions('line');
+    opts.scales = opts.scales || {};
+    opts.scales.y1 = {
+      position: 'right',
+      beginAtZero: true,
+      grid: { drawOnChartArea: false },
+      ticks: {
+        precision: 0,
+        color: (opts.scales.y?.ticks?.color) || undefined,
+        font: { size: 11 },
+      },
+    };
+    return opts;
+  })();
 
   constructor(
     private repository: RepositoryService,
@@ -160,8 +176,8 @@ export class VentasDashboardComponent implements OnInit {
         this.chartData = {
           labels: periodo.labels || [],
           datasets: [
-            buildLineDataset('Ventas (Gs)', periodo.ventas || [], DASHBOARD_CHART_COLORS.primary, DASHBOARD_CHART_COLORS.primarySoft, true),
-            buildLineDataset('Cantidad', periodo.cantidades || [], DASHBOARD_CHART_COLORS.cyan, DASHBOARD_CHART_COLORS.cyanSoft, false),
+            buildLineDataset('Ventas (Gs)', periodo.ventas || [], DASHBOARD_CHART_COLORS.primary, DASHBOARD_CHART_COLORS.primarySoft, true, 'y'),
+            buildLineDataset('Cantidad', periodo.cantidades || [], DASHBOARD_CHART_COLORS.cyan, DASHBOARD_CHART_COLORS.cyanSoft, false, 'y1'),
           ],
         };
       }
