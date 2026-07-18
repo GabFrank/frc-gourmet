@@ -615,11 +615,19 @@ export class CajaMayorDetalleComponent implements OnInit {
       const detalle = mov.detalles[0];
 
       const dialogRef = this.dialog.open(EditMovimientoDialogComponent, {
-        width: '450px',
+        width: '460px',
         data: {
           movimientoId: mov.movimientoIds[0],
           tipoMovimiento: mov.tipoMovimiento,
           cajaMayorId: this.cajaMayor?.id,
+          // Todas las monedas del grupo (ej. egreso de caja inicial = N filas),
+          // cada una con su movimientoId para editarlas todas.
+          detalles: mov.detalles.map((d, i) => ({
+            movimientoId: mov.movimientoIds[i],
+            monedaId: d?.monedaId ?? null,
+            formaPagoId: d?.formaPagoId ?? null,
+            monto: d?.monto,
+          })),
           detalle: {
             monedaId: detalle?.monedaId ?? null,
             formaPagoId: detalle?.formaPagoId ?? null,

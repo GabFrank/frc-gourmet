@@ -3,24 +3,36 @@
 <mat-dialog-content>
   <p class="tipo-label">{{tipoMovimiento}}</p>
   <form [formGroup]="form" class="form-container">
-    <mat-form-field appearance="outline" class="full-width">
-      <mat-label>Moneda</mat-label>
-      <mat-select formControlName="monedaId">
-        <mat-option *ngFor="let m of monedas" [value]="m.id">{{m.simbolo}} {{m.denominacion}}</mat-option>
-      </mat-select>
-    </mat-form-field>
+    <ng-container formArrayName="rows">
+      <div *ngFor="let row of rows.controls; let i = index" [formGroupName]="i"
+           class="fila-moneda" [class.multi]="esMultiMoneda">
+        <p *ngIf="esMultiMoneda" class="fila-titulo">Moneda {{ i + 1 }}</p>
 
-    <mat-form-field appearance="outline" class="full-width">
-      <mat-label>Forma de Pago</mat-label>
-      <mat-select formControlName="formaPagoId">
-        <mat-option *ngFor="let fp of formasPagoEfectivo" [value]="fp.id">{{fp.nombre}}</mat-option>
-      </mat-select>
-    </mat-form-field>
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Moneda</mat-label>
+          <mat-select formControlName="monedaId">
+            <mat-option *ngFor="let m of monedas" [value]="m.id">{{m.simbolo}} {{m.denominacion}}</mat-option>
+          </mat-select>
+          <mat-error *ngIf="row.get('monedaId')?.hasError('required')">Seleccioná una moneda</mat-error>
+        </mat-form-field>
 
-    <mat-form-field appearance="outline" class="full-width">
-      <mat-label>Monto</mat-label>
-      <input matInput type="text" inputmode="decimal" formControlName="monto" appCurrencyInput [decimals]="decimalesMoneda">
-    </mat-form-field>
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Forma de Pago</mat-label>
+          <mat-select formControlName="formaPagoId">
+            <mat-option *ngFor="let fp of formasPagoEfectivo" [value]="fp.id">{{fp.nombre}}</mat-option>
+          </mat-select>
+          <mat-error *ngIf="row.get('formaPagoId')?.hasError('required')">Seleccioná la forma de pago</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Monto</mat-label>
+          <input matInput type="text" inputmode="decimal" formControlName="monto"
+                 appCurrencyInput [decimals]="decimalesFila[i]">
+          <mat-error *ngIf="row.get('monto')?.hasError('required')">Ingresá el monto</mat-error>
+          <mat-error *ngIf="row.get('monto')?.hasError('min')">El monto debe ser mayor a 0</mat-error>
+        </mat-form-field>
+      </div>
+    </ng-container>
 
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>Observacion</mat-label>
@@ -31,7 +43,7 @@
 
 <mat-dialog-actions align="end">
   <button mat-button (click)="cancel()">CANCELAR</button>
-  <button mat-raised-button color="primary" (click)="guardar()" [disabled]="form.invalid || saving">
+  <button mat-raised-button color="primary" (click)="guardar()" [disabled]="saving">
     <mat-spinner *ngIf="saving" diameter="20"></mat-spinner>
     <span *ngIf="!saving">GUARDAR</span>
   </button>
