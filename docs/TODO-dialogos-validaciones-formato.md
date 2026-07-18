@@ -94,13 +94,17 @@ inputs con la directiva `appCurrencyInput` (46 usos) también. Problemas puntual
   `lista-billetes-dialog.component.ts` → ahora `'es-PY'`.
 - [ ] **Revisar fallbacks de `formatCurrencyByMoneda`/`formatValue`** en
   `currency-config.service.ts` (sin moneda usa `en-US`/`toFixed`, inconsistente).
-- [ ] **Migrar inputs `type="number"` de monto/precio/cotización a máscara**
+- [~] **Migrar inputs `type="number"` de monto/precio/cotización a máscara**
   (`appCurrencyInput`). Prioridad montos:
-  - [ ] `gasto-caja-dialog` (monto), `egreso-caja-inicial-dialog` (monto)
+  - [x] `gasto-caja-dialog` (PdV) — monto
+  - [x] `list-cargos` (salarioReferencia)
   - [ ] `facturar-dialog` (precioUnitario, descuento), `edit-venta-item-dialog` (descuentoUnitario)
-  - [ ] `list-cargos` (salarioReferencia), `create-edit-regla-dialog` (meta)
-  - [ ] `create-caja-dialog` (conteo de billetes, varios)
-  - [ ] cotizaciones: `create-operacion-financiera`, `create-edit-gasto`, `cobrar-cuota-dialog`
+    — **con cuidado**: tocan el flujo de venta/factura; necesitan `decimales` de la moneda de la venta.
+  - [ ] `create-edit-regla-dialog` (meta) — meta es cantidad de unidades, quizá dejar `type=number`.
+  - [~] `egreso-caja-inicial` / `create-caja-dialog` (conteo de billetes): son **cantidades enteras**
+    (conteo), NO montos → se dejan `type=number` (no aplica la máscara de moneda).
+  - [ ] cotizaciones (`create-operacion-financiera`, `create-edit-gasto`, `cobrar-cuota-dialog`):
+    son **tasas** con precisión variable, no montos; migrar solo si se decide un `decimales` fijo.
   - [ ] cantidades con decimales (pdv, compras, recetas, producción) — menor prioridad
 - [ ] **Parseo frágil**: `producto-inference.util.ts:147` (`replace(',', '.')` no
   descarta separador de miles).

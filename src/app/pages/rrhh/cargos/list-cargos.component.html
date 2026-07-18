@@ -30,7 +30,7 @@
         </mat-form-field>
         <mat-form-field appearance="outline">
           <mat-label>Salario referencia</mat-label>
-          <input matInput type="number" formControlName="salarioReferencia" />
+          <input matInput type="text" inputmode="decimal" formControlName="salarioReferencia" appCurrencyInput [decimals]="0" />
         </mat-form-field>
         <mat-slide-toggle formControlName="activo">Activo</mat-slide-toggle>
         <div class="form-actions">
