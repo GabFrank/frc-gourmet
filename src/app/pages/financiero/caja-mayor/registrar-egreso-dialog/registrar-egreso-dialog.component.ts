@@ -245,7 +245,11 @@ export class RegistrarEgresoDialogComponent implements OnInit {
   }
 
   async guardarAjuste(): Promise<void> {
-    if (this.ajusteForm.invalid) return;
+    if (this.ajusteForm.invalid) {
+      this.ajusteForm.markAllAsTouched();
+      this.snackBar.open('Completá los campos obligatorios marcados.', 'Cerrar', { duration: 3500 });
+      return;
+    }
 
     const form = this.ajusteForm.value;
     const monto = Number(form.monto);

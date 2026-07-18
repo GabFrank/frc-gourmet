@@ -37,25 +37,17 @@
         </mat-button-toggle>
       </mat-button-toggle-group>
 
-      <ng-container *ngIf="ajusteForm.get('fuente')?.value === 'CAJA_MAYOR'">
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>Moneda</mat-label>
-          <mat-select formControlName="moneda">
-            <mat-option *ngFor="let m of monedas" [value]="m.id">
-              {{m.simbolo}} - {{m.denominacion}}
-            </mat-option>
-          </mat-select>
-        </mat-form-field>
-
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>Forma de Pago</mat-label>
-          <mat-select formControlName="formaPago">
-            <mat-option *ngFor="let fp of formasPagoEfectivo" [value]="fp.id">
-              {{fp.nombre}}
-            </mat-option>
-          </mat-select>
-        </mat-form-field>
-      </ng-container>
+      <!-- Caja Mayor = efectivo (la forma de pago se define sola, no se elige). -->
+      <mat-form-field *ngIf="ajusteForm.get('fuente')?.value === 'CAJA_MAYOR'" appearance="outline" class="full-width">
+        <mat-label>Moneda</mat-label>
+        <mat-select formControlName="moneda">
+          <mat-option *ngFor="let m of monedas" [value]="m.id">
+            {{m.simbolo}} - {{m.denominacion}}
+          </mat-option>
+        </mat-select>
+        <mat-hint>Ingresa en efectivo</mat-hint>
+        <mat-error *ngIf="ajusteForm.get('moneda')?.hasError('required')">Seleccioná la moneda</mat-error>
+      </mat-form-field>
 
       <mat-form-field *ngIf="ajusteForm.get('fuente')?.value === 'CUENTA_BANCARIA'" appearance="outline" class="full-width">
         <mat-label>Cuenta Bancaria</mat-label>
@@ -64,16 +56,21 @@
             {{cb.nombre}} <span *ngIf="cb.banco">- {{cb.banco}}</span>
           </mat-option>
         </mat-select>
+        <mat-hint>Ingresa por transferencia</mat-hint>
+        <mat-error *ngIf="ajusteForm.get('cuentaBancariaId')?.hasError('required')">Seleccioná la cuenta bancaria</mat-error>
       </mat-form-field>
 
       <mat-form-field appearance="outline" class="full-width">
         <mat-label>Monto</mat-label>
         <input matInput type="text" inputmode="decimal" formControlName="monto" appCurrencyInput [decimals]="decimalesMoneda">
+        <mat-error *ngIf="ajusteForm.get('monto')?.hasError('required')">Ingresá el monto</mat-error>
+        <mat-error *ngIf="ajusteForm.get('monto')?.hasError('min')">El monto debe ser mayor a 0</mat-error>
       </mat-form-field>
 
       <mat-form-field appearance="outline" class="full-width">
         <mat-label>Motivo</mat-label>
         <input matInput formControlName="motivo" placeholder="Ej: CAJA INICIAL, SOBRANTE CONTEO...">
+        <mat-error *ngIf="ajusteForm.get('motivo')?.hasError('required')">Ingresá el motivo</mat-error>
       </mat-form-field>
     </form>
   </div>
@@ -153,7 +150,7 @@
   <button mat-raised-button color="primary"
           *ngIf="tipoSeleccionado === 'AJUSTE'"
           (click)="guardarAjuste()"
-          [disabled]="saving || ajusteForm.invalid">
+          [disabled]="saving">
     <mat-spinner *ngIf="saving" diameter="20"></mat-spinner>
     <span *ngIf="!saving">GUARDAR</span>
   </button>

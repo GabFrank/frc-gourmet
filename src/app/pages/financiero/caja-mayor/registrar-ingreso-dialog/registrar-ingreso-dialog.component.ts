@@ -216,7 +216,11 @@ export class RegistrarIngresoDialogComponent implements OnInit {
   }
 
   async guardarAjuste(): Promise<void> {
-    if (this.ajusteForm.invalid) return;
+    if (this.ajusteForm.invalid) {
+      this.ajusteForm.markAllAsTouched();
+      this.snackBar.open('Completá los campos obligatorios marcados.', 'Cerrar', { duration: 3500 });
+      return;
+    }
 
     this.saving = true;
     try {

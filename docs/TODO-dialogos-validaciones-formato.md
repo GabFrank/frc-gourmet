@@ -15,12 +15,10 @@ Componentes: `caja-mayor-detalle.component.ts` (dispara el editar) →
   `findMonedaBySimbolo` objetos sin `id`), así que el diálogo abría sin
   preseleccionar. Fix: `consolidarCaja` ahora incluye `monedaId`/`formaPagoId` en
   cada detalle y el componente los pasa directo.
-- [ ] **Egreso de caja inicial = multi-moneda.** Un `EGRESO_CAJA_INICIAL` es en
-  realidad **N movimientos** (uno por moneda) agrupados por `conteo_id` en
-  `consolidarCaja`. El diálogo de edición es **mono-moneda** y solo edita
-  `detalles[0]`/`movimientoIds[0]`. **Decisión de diseño pendiente** (ver opciones
-  en el chat): (a) diálogo multi-moneda (un bloque por moneda), (b) bloquear la
-  edición directa y redirigir a "re-hacer el egreso inicial", (c) editor dedicado.
+- [x] **Egreso de caja inicial = multi-moneda.** El diálogo de edición ahora edita
+  TODAS las monedas del grupo (FormArray, un bloque por moneda, cada una con su
+  `movimientoId`); la validación de saldo negativo agrega los deltas de todas las
+  filas. Retrocompatible con movimientos de una sola moneda.
 
 ---
 
@@ -34,21 +32,21 @@ se pide forma de pago** (siempre transferencia). Convención nueva a agregar:
 12 formularios afectados:
 
 - [ ] **Quitar el `mat-select` manual de forma de pago** (redundante con la fuente):
-  - [ ] `rrhh/vales/create-edit-vale-dialog.component.ts` (modo Caja Mayor)
+  - [x] `rrhh/vales/create-edit-vale-dialog.component.ts` (modo Caja Mayor)
   - [ ] `rrhh/vales/confirmar-vale-dialog.component.ts`
   - [ ] `financiero/caja-mayor/entradas-varias/create-edit-entrada-varia-dialog`
   - [ ] `financiero/caja-mayor/gastos/create-edit-gasto-dialog` (no pedir FP cuando fuente = CUENTA_BANCARIA)
   - [ ] `financiero/caja-mayor/pagar-compras-dialog`
   - [ ] `financiero/caja-mayor/cuentas-por-pagar/pagar-cuota-dialog`
   - [ ] `financiero/caja-mayor/cuentas-por-cobrar/cobrar-cuota-dialog`
-  - [ ] `financiero/caja-mayor/registrar-ingreso-dialog`
-  - [ ] `financiero/caja-mayor/registrar-egreso-dialog`
+  - [x] `financiero/caja-mayor/registrar-ingreso-dialog`
+  - [x] `financiero/caja-mayor/registrar-egreso-dialog`
 - [ ] **Filtrar formas de pago a EFECTIVO (hoy usan la lista completa, violan la regla)**:
   - [ ] `rrhh/prestamos-funcionarios/crear-prestamo-funcionario-dialog.component.ts:90`
   - [ ] `rrhh/liquidaciones-sueldo/pagar-dialog/pagar-liquidacion-dialog.component.ts:67`
   - [ ] `personas/convenios/cobro-consolidado/cobro-consolidado.component.html:57`
 - [ ] **Reordenar fuente ANTES de monto/moneda**:
-  - [ ] `create-edit-vale-dialog` (modo Caja Mayor)
+  - [x] `create-edit-vale-dialog` (modo Caja Mayor)
   - [ ] `cobrar-cuota-dialog`
   - [ ] `crear-prestamo-funcionario-dialog`
 - [ ] **Normalizar nombre de control** `destinoTipo` → `fuente` en `create-edit-entrada-varia`.
@@ -71,9 +69,9 @@ Estado actual: no hay patrón único ni helper reutilizable. Lo único universal
   al primer error, o componente `<app-form-errors>`), y documentarlo en
   `conventions/ui-patterns.md`.
 - [ ] **Prioridad 1 — required sin ningún feedback (retorno silencioso)**:
-  - [ ] `rrhh/vales/create-edit-vale-dialog` (sin `mat-error`, submit sin `markAllAsTouched`)
-  - [ ] `financiero/caja-mayor/registrar-egreso-dialog`
-  - [ ] `financiero/caja-mayor/registrar-ingreso-dialog`
+  - [x] `rrhh/vales/create-edit-vale-dialog` (mat-error + markAllAsTouched + snackbar)
+  - [x] `financiero/caja-mayor/registrar-egreso-dialog`
+  - [x] `financiero/caja-mayor/registrar-ingreso-dialog`
   - [ ] `financiero/caja-mayor/bancos/create-edit-cuenta-bancaria`
 - [ ] **Prioridad 2 — falta `mat-error` por campo**:
   - [ ] `personas/clientes/create-edit-cliente-dialog`
