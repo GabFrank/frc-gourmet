@@ -39,24 +39,13 @@ import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/a
           <mat-button-toggle value="CAJA_MAYOR">Caja Mayor (efectivo)</mat-button-toggle>
           <mat-button-toggle value="CUENTA_BANCARIA">Cuenta Bancaria</mat-button-toggle>
         </mat-button-toggle-group>
-        <mat-form-field appearance="outline">
-          <mat-label>Moneda</mat-label>
-          <mat-select formControlName="monedaId">
-            <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
-          </mat-select>
-        </mat-form-field>
         <ng-container *ngIf="form.get('fuente')?.value === 'CAJA_MAYOR'">
           <mat-form-field appearance="outline">
             <mat-label>Caja mayor</mat-label>
             <mat-select formControlName="cajaMayorId">
               <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{ c.nombre }}</mat-option>
             </mat-select>
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Forma de pago</mat-label>
-            <mat-select formControlName="formaPagoId">
-              <mat-option *ngFor="let f of formasPagoEfectivo" [value]="f.id">{{ f.descripcion || f.nombre }}</mat-option>
-            </mat-select>
+            <mat-error *ngIf="form.get('cajaMayorId')?.hasError('required')">La caja mayor es requerida</mat-error>
           </mat-form-field>
         </ng-container>
         <mat-form-field appearance="outline" *ngIf="form.get('fuente')?.value === 'CUENTA_BANCARIA'">
@@ -64,6 +53,14 @@ import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/a
           <mat-select formControlName="cuentaBancariaId">
             <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">{{ cb.nombre }} <span *ngIf="cb.banco">- {{ cb.banco }}</span><span *ngIf="cb.moneda"> ({{ cb.moneda.simbolo }})</span></mat-option>
           </mat-select>
+          <mat-error *ngIf="form.get('cuentaBancariaId')?.hasError('required')">La cuenta bancaria es requerida</mat-error>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Moneda</mat-label>
+          <mat-select formControlName="monedaId">
+            <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
+          </mat-select>
+          <mat-error *ngIf="form.get('monedaId')?.hasError('required')">La moneda es requerida</mat-error>
         </mat-form-field>
         <mat-form-field appearance="outline" *ngIf="requiereCotiz">
           <mat-label>Cotización</mat-label>
@@ -74,7 +71,7 @@ import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/a
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button (click)="cancel()" [disabled]="saving">Cancelar</button>
-      <button mat-flat-button color="primary" (click)="submit()" [disabled]="form.invalid || saving">
+      <button mat-flat-button color="primary" (click)="submit()" [disabled]="saving">
         Confirmar y descontar saldo
       </button>
     </mat-dialog-actions>
@@ -177,9 +174,8 @@ export class ConfirmarValeDialogComponent implements OnInit {
   }
 
   private preseleccionarEfectivo(): void {
-    if (this.formasPagoEfectivo.length === 1) {
-      this.form.get('formaPagoId')!.setValue(this.formasPagoEfectivo[0].id, { emitEvent: false });
-    }
+    const fp = this.formasPagoEfectivo.find((f: any) => f.principal) || this.formasPagoEfectivo[0];
+    if (fp) this.form.get('formaPagoId')!.setValue(fp.id, { emitEvent: false });
   }
 
   async ngOnInit(): Promise<void> {
@@ -195,6 +191,7 @@ export class ConfirmarValeDialogComponent implements OnInit {
       this.formasPago = formasPago || [];
       this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
       this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
+      if (this.form.get('fuente')!.value === 'CAJA_MAYOR') this.preseleccionarEfectivo();
       this.repositoryService.getCotizacionMercado().subscribe({
         next: (r) => { this.cotizMercado = r; },
         error: () => { this.cotizMercado = null; },
@@ -207,7 +204,11 @@ export class ConfirmarValeDialogComponent implements OnInit {
   cancel(): void { this.dialogRef.close(); }
 
   async submit(): Promise<void> {
-    if (this.form.invalid) return;
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      this.snackBar.open('Completá los campos obligatorios marcados.', 'Cerrar', { duration: 3500 });
+      return;
+    }
     this.saving = true;
     try {
       await firstValueFrom(this.repositoryService.confirmarVale(this.data.vale.id, {

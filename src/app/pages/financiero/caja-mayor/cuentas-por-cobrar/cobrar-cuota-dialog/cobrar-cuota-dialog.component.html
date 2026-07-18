@@ -10,14 +10,10 @@
   </div>
   <mat-divider style="margin: 8px 0 16px"></mat-divider>
 
-  <mat-form-field appearance="outline" class="full-width">
-    <mat-label>Monto a cobrar</mat-label>
-    <input matInput type="text" inputmode="decimal" formControlName="montoCobrar" appCurrencyInput [decimals]="decimalesMoneda">
-  </mat-form-field>
-
+  <!-- Fuente PRIMERO: define la forma de pago (Caja Mayor = efectivo, auto). -->
   <mat-button-toggle-group formControlName="fuente" class="full-width fuente-toggle">
     <mat-button-toggle value="CAJA_MAYOR">Caja Mayor (efectivo)</mat-button-toggle>
-    <mat-button-toggle value="CUENTA_BANCARIA">Cuenta Bancaria</mat-button-toggle>
+    <mat-button-toggle value="CUENTA_BANCARIA">Cuenta Bancaria (transferencia)</mat-button-toggle>
   </mat-button-toggle-group>
 
   <ng-container *ngIf="form.get('fuente')?.value === 'CAJA_MAYOR'">
@@ -26,22 +22,17 @@
       <mat-select formControlName="cajaMayorId">
         <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{c.nombre}}</mat-option>
       </mat-select>
+      <mat-error *ngIf="form.get('cajaMayorId')?.hasError('required')">Seleccioná la caja mayor</mat-error>
     </mat-form-field>
 
-    <div class="two-col">
-      <mat-form-field appearance="outline">
-        <mat-label>Moneda</mat-label>
-        <mat-select formControlName="monedaId">
-          <mat-option *ngFor="let m of monedas" [value]="m.id">{{m.denominacion}} ({{m.simbolo}})</mat-option>
-        </mat-select>
-      </mat-form-field>
-      <mat-form-field appearance="outline">
-        <mat-label>Forma de Pago</mat-label>
-        <mat-select formControlName="formaPagoId">
-          <mat-option *ngFor="let f of formasPagoEfectivo" [value]="f.id">{{f.nombre}}</mat-option>
-        </mat-select>
-      </mat-form-field>
-    </div>
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Moneda</mat-label>
+      <mat-select formControlName="monedaId">
+        <mat-option *ngFor="let m of monedas" [value]="m.id">{{m.denominacion}} ({{m.simbolo}})</mat-option>
+      </mat-select>
+      <mat-hint>Ingresa en efectivo</mat-hint>
+      <mat-error *ngIf="form.get('monedaId')?.hasError('required')">Seleccioná la moneda</mat-error>
+    </mat-form-field>
   </ng-container>
 
   <mat-form-field appearance="outline" class="full-width" *ngIf="form.get('fuente')?.value === 'CUENTA_BANCARIA'">
@@ -49,6 +40,14 @@
     <mat-select formControlName="cuentaBancariaId">
       <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">{{cb.nombre}}<span *ngIf="cb.banco"> - {{cb.banco}}</span><span *ngIf="cb.moneda"> ({{cb.moneda.simbolo}})</span></mat-option>
     </mat-select>
+    <mat-hint>Se acredita por transferencia</mat-hint>
+    <mat-error *ngIf="form.get('cuentaBancariaId')?.hasError('required')">Seleccioná la cuenta bancaria</mat-error>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>Monto a cobrar</mat-label>
+    <input matInput type="text" inputmode="decimal" formControlName="montoCobrar" appCurrencyInput [decimals]="decimalesMoneda">
+    <mat-error *ngIf="form.get('montoCobrar')?.hasError('required')">Ingresá el monto</mat-error>
   </mat-form-field>
 
   <div *ngIf="requiereCotiz" class="cotiz-row">
@@ -67,7 +66,7 @@
 </mat-dialog-content>
 <mat-dialog-actions align="end">
   <button mat-button (click)="onCancel()">Cancelar</button>
-  <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="form.invalid || saving">
+  <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="saving">
     <mat-spinner *ngIf="saving" diameter="18" style="display:inline-block;margin-right:8px"></mat-spinner>
     Registrar Cobro
   </button>

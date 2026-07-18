@@ -54,18 +54,14 @@ import { RepositoryService } from 'src/app/database/repository.service';
             <mat-select formControlName="cajaMayorId">
               <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{ c.nombre }}</mat-option>
             </mat-select>
+            <mat-error *ngIf="form.get('cajaMayorId')?.hasError('required')">Seleccione una caja mayor</mat-error>
           </mat-form-field>
           <mat-form-field appearance="outline">
             <mat-label>Moneda</mat-label>
             <mat-select formControlName="monedaId">
               <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
             </mat-select>
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Forma de pago</mat-label>
-            <mat-select formControlName="formaPagoId">
-              <mat-option *ngFor="let f of formasPago" [value]="f.id">{{ f.descripcion || f.nombre }}</mat-option>
-            </mat-select>
+            <mat-error *ngIf="form.get('monedaId')?.hasError('required')">Seleccione una moneda</mat-error>
           </mat-form-field>
         </div>
 
@@ -77,13 +73,14 @@ import { RepositoryService } from 'src/app/database/repository.service';
                 {{ cb.nombre }} ({{ cb.moneda?.denominacion || cb.moneda?.simbolo }})
               </mat-option>
             </mat-select>
+            <mat-error *ngIf="form.get('cuentaBancariaId')?.hasError('required')">Seleccione una cuenta bancaria</mat-error>
           </mat-form-field>
         </div>
       </form>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button (click)="cancel()" [disabled]="saving">Cancelar</button>
-      <button mat-flat-button color="primary" (click)="submit()" [disabled]="form.invalid || saving">
+      <button mat-flat-button color="primary" (click)="submit()" [disabled]="saving">
         Pagar y descontar saldo
       </button>
     </mat-dialog-actions>
@@ -108,6 +105,7 @@ export class PagarLiquidacionDialogComponent implements OnInit {
   cajasMayor: any[] = [];
   monedas: any[] = [];
   formasPago: any[] = [];
+  formasPagoEfectivo: any[] = [];
   cuentasBancarias: any[] = [];
 
   constructor(
@@ -137,10 +135,13 @@ export class PagarLiquidacionDialogComponent implements OnInit {
       this.cajasMayor = (cajasMayor || []).filter((c: any) => c.estado === 'ABIERTA');
       this.monedas = monedas || [];
       this.formasPago = formasPago || [];
+      this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
       this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
     } catch (e) {
       console.error(e);
     }
+
+    if (this.form.get('fuente')!.value === 'CAJA_MAYOR') this.preseleccionarEfectivo();
 
     this.form.get('fuente')!.valueChanges.subscribe(() => this.aplicarValidadoresFuente());
     this.aplicarValidadoresFuente();
@@ -157,6 +158,7 @@ export class PagarLiquidacionDialogComponent implements OnInit {
       mon.setValidators([Validators.required]);
       fp.setValidators([Validators.required]);
       cb.clearValidators();
+      this.preseleccionarEfectivo();
     } else {
       cm.clearValidators();
       mon.clearValidators();
@@ -169,10 +171,15 @@ export class PagarLiquidacionDialogComponent implements OnInit {
     cb.updateValueAndValidity({ emitEvent: false });
   }
 
+  private preseleccionarEfectivo(): void {
+    const fp = this.formasPagoEfectivo.find((f: any) => f.principal) || this.formasPagoEfectivo[0];
+    if (fp) this.form.get('formaPagoId')!.setValue(fp.id, { emitEvent: false });
+  }
+
   cancel(): void { this.dialogRef.close(); }
 
   async submit(): Promise<void> {
-    if (this.form.invalid) return;
+    if (this.form.invalid) { this.form.markAllAsTouched(); this.snackBar.open('Completá los campos obligatorios marcados.', 'Cerrar', { duration: 3500 }); return; }
     this.saving = true;
     try {
       const v = this.form.value;

@@ -103,9 +103,10 @@ export class PagarCuotaDialogComponent implements OnInit {
     });
 
     this.loadLookups();
-    this.form.get('fuente')!.valueChanges.subscribe(() => {
+    this.form.get('fuente')!.valueChanges.subscribe((val) => {
       this.applyValidators();
       this.recalcDecimalesMoneda();
+      if (val === 'CAJA_MAYOR') this.preseleccionarEfectivo();
     });
     this.form.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
     this.form.get('cuentaBancariaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
@@ -168,7 +169,15 @@ export class PagarCuotaDialogComponent implements OnInit {
       this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
       this.aplicarPreselecciones();
       this.recalcDecimalesMoneda();
+      if (this.form.get('fuente')!.value === 'CAJA_MAYOR') this.preseleccionarEfectivo();
     } catch (e) { console.error(e); }
+  }
+
+  // Fuente Caja Mayor => siempre efectivo: setea la forma de pago efectivo principal/primera.
+  // La forma de pago no es seleccionable en la UI (regla de negocio).
+  preseleccionarEfectivo(): void {
+    const fp = this.formasPagoEfectivo.find((f: any) => f.principal) || this.formasPagoEfectivo[0];
+    if (fp) this.form.get('formaPagoId')!.setValue(fp.id, { emitEvent: false });
   }
 
   /** Pre-selecciona única caja abierta, moneda de la cuota (sino principal/única) y forma de pago efectivo/principal/única. */
@@ -189,7 +198,12 @@ export class PagarCuotaDialogComponent implements OnInit {
   }
 
   async onSubmit(): Promise<void> {
-    if (this.form.invalid || !this.cuota?.id) return;
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      this.snackBar.open('Completá los campos obligatorios marcados.', 'Cerrar', { duration: 3500 });
+      return;
+    }
+    if (!this.cuota?.id) return;
     const f = this.form.value;
     const monto = Number(f.monto);
     if (monto > this.restante + 0.005) {

@@ -44,26 +44,12 @@ import { RepositoryService } from 'src/app/database/repository.service';
               {{ f.persona?.nombre }} {{ f.persona?.apellido || '' }}
             </mat-option>
           </mat-select>
+          <mat-error *ngIf="form.get('funcionarioId')?.hasError('required')">Seleccione un funcionario</mat-error>
         </mat-form-field>
         <mat-form-field appearance="outline" class="full">
           <mat-label>Descripcion</mat-label>
           <input matInput formControlName="descripcion" />
         </mat-form-field>
-        <mat-form-field appearance="outline">
-          <mat-label>Monto total</mat-label>
-          <input matInput type="number" formControlName="montoTotal" />
-        </mat-form-field>
-        <mat-form-field appearance="outline">
-          <mat-label>Cantidad de cuotas</mat-label>
-          <input matInput type="number" formControlName="cantidadCuotas" />
-        </mat-form-field>
-        <mat-form-field appearance="outline">
-          <mat-label>Fecha primera cuota</mat-label>
-          <input matInput [matDatepicker]="p" formControlName="fechaInicio" />
-          <mat-datepicker-toggle matSuffix [for]="p"></mat-datepicker-toggle>
-          <mat-datepicker #p></mat-datepicker>
-        </mat-form-field>
-
         <div class="separator full">Origen del desembolso</div>
 
         <mat-button-toggle-group formControlName="fuente" class="full toggle">
@@ -77,18 +63,14 @@ import { RepositoryService } from 'src/app/database/repository.service';
             <mat-select formControlName="cajaMayorId">
               <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{ c.nombre }}</mat-option>
             </mat-select>
+            <mat-error *ngIf="form.get('cajaMayorId')?.hasError('required')">Seleccione una caja mayor</mat-error>
           </mat-form-field>
           <mat-form-field appearance="outline">
             <mat-label>Moneda</mat-label>
             <mat-select formControlName="monedaId">
               <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
             </mat-select>
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Forma de pago</mat-label>
-            <mat-select formControlName="formaPagoId">
-              <mat-option *ngFor="let f of formasPago" [value]="f.id">{{ f.descripcion || f.nombre }}</mat-option>
-            </mat-select>
+            <mat-error *ngIf="form.get('monedaId')?.hasError('required')">Seleccione una moneda</mat-error>
           </mat-form-field>
         </ng-container>
 
@@ -100,8 +82,28 @@ import { RepositoryService } from 'src/app/database/repository.service';
                 {{ cb.nombre }} ({{ cb.moneda?.denominacion || cb.moneda?.simbolo }})
               </mat-option>
             </mat-select>
+            <mat-error *ngIf="form.get('cuentaBancariaId')?.hasError('required')">Seleccione una cuenta bancaria</mat-error>
           </mat-form-field>
         </ng-container>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Monto total</mat-label>
+          <input matInput type="number" formControlName="montoTotal" />
+          <mat-error *ngIf="form.get('montoTotal')?.hasError('required')">Ingrese el monto</mat-error>
+          <mat-error *ngIf="form.get('montoTotal')?.hasError('min')">El monto debe ser mayor a 0</mat-error>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Cantidad de cuotas</mat-label>
+          <input matInput type="number" formControlName="cantidadCuotas" />
+          <mat-error *ngIf="form.get('cantidadCuotas')?.hasError('required')">Ingrese la cantidad de cuotas</mat-error>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Fecha primera cuota</mat-label>
+          <input matInput [matDatepicker]="p" formControlName="fechaInicio" />
+          <mat-datepicker-toggle matSuffix [for]="p"></mat-datepicker-toggle>
+          <mat-datepicker #p></mat-datepicker>
+          <mat-error *ngIf="form.get('fechaInicio')?.hasError('required')">Seleccione la fecha</mat-error>
+        </mat-form-field>
 
         <mat-form-field appearance="outline" class="full">
           <mat-label>Observacion</mat-label>
@@ -111,7 +113,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button (click)="cancel()" [disabled]="saving">Cancelar</button>
-      <button mat-flat-button color="primary" (click)="submit()" [disabled]="form.invalid || saving">
+      <button mat-flat-button color="primary" (click)="submit()" [disabled]="saving">
         Crear prestamo
       </button>
     </mat-dialog-actions>
@@ -133,6 +135,7 @@ export class CrearPrestamoFuncionarioDialogComponent implements OnInit {
   monedas: any[] = [];
   cajasMayor: any[] = [];
   formasPago: any[] = [];
+  formasPagoEfectivo: any[] = [];
   cuentasBancarias: any[] = [];
 
   constructor(
@@ -170,12 +173,15 @@ export class CrearPrestamoFuncionarioDialogComponent implements OnInit {
       this.monedas = monedas || [];
       this.cajasMayor = (cajas || []).filter((c: any) => c.estado === 'ABIERTA');
       this.formasPago = formas || [];
+      this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
       this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
     } catch (e) {
       console.error(e);
     } finally {
       this.loading = false;
     }
+
+    if (this.form.get('fuente')!.value === 'CAJA_MAYOR') this.preseleccionarEfectivo();
 
     this.form.get('fuente')!.valueChanges.subscribe(() => this.aplicarValidadoresFuente());
     // Al elegir cuenta bancaria, la moneda del prestamo se alinea con la de la cuenta.
@@ -195,6 +201,7 @@ export class CrearPrestamoFuncionarioDialogComponent implements OnInit {
       cm.setValidators([Validators.required]);
       fp.setValidators([Validators.required]);
       cb.clearValidators();
+      this.preseleccionarEfectivo();
     } else {
       cm.clearValidators();
       fp.clearValidators();
@@ -205,10 +212,15 @@ export class CrearPrestamoFuncionarioDialogComponent implements OnInit {
     cb.updateValueAndValidity({ emitEvent: false });
   }
 
+  private preseleccionarEfectivo(): void {
+    const fp = this.formasPagoEfectivo.find((f: any) => f.principal) || this.formasPagoEfectivo[0];
+    if (fp) this.form.get('formaPagoId')!.setValue(fp.id, { emitEvent: false });
+  }
+
   cancel(): void { this.dialogRef.close(); }
 
   async submit(): Promise<void> {
-    if (this.form.invalid) return;
+    if (this.form.invalid) { this.form.markAllAsTouched(); this.snackBar.open('Completá los campos obligatorios marcados.', 'Cerrar', { duration: 3500 }); return; }
     this.saving = true;
     try {
       const v = this.form.value;

@@ -18,13 +18,13 @@
             {{cat.padre?.nombre ? cat.padre.nombre + ' / ' : ''}}{{cat.nombre}}
           </mat-option>
         </mat-select>
-        <mat-error>La categoria es requerida</mat-error>
+        <mat-error *ngIf="form.get('entradaVariaCategoriaId')?.hasError('required')">La categoria es requerida</mat-error>
       </mat-form-field>
 
       <mat-form-field appearance="outline" class="span-2">
         <mat-label>Descripcion</mat-label>
         <input matInput formControlName="descripcion" required>
-        <mat-error>La descripcion es requerida</mat-error>
+        <mat-error *ngIf="form.get('descripcion')?.hasError('required')">La descripcion es requerida</mat-error>
       </mat-form-field>
 
       <!-- Destino: Caja Mayor -->
@@ -34,6 +34,7 @@
           <mat-select formControlName="cajaMayorId" required>
             <mat-option *ngFor="let cm of cajasMayor" [value]="cm.id">{{cm.nombre}}</mat-option>
           </mat-select>
+          <mat-error *ngIf="form.get('cajaMayorId')?.hasError('required')">La caja mayor es requerida</mat-error>
         </mat-form-field>
 
         <mat-form-field appearance="outline">
@@ -41,13 +42,7 @@
           <mat-select formControlName="monedaId" required>
             <mat-option *ngFor="let m of monedas" [value]="m.id">{{m.simbolo}} - {{m.denominacion}}</mat-option>
           </mat-select>
-        </mat-form-field>
-
-        <mat-form-field appearance="outline">
-          <mat-label>Forma de Pago</mat-label>
-          <mat-select formControlName="formaPagoId" required>
-            <mat-option *ngFor="let fp of formasPagoEfectivo" [value]="fp.id">{{fp.nombre}}</mat-option>
-          </mat-select>
+          <mat-error *ngIf="form.get('monedaId')?.hasError('required')">La moneda es requerida</mat-error>
         </mat-form-field>
       </ng-container>
 
@@ -60,6 +55,7 @@
               {{cb.nombre}} - {{cb.banco}} ({{cb.moneda?.simbolo}})
             </mat-option>
           </mat-select>
+          <mat-error *ngIf="form.get('cuentaBancariaId')?.hasError('required')">La cuenta bancaria es requerida</mat-error>
         </mat-form-field>
 
         <div class="moneda-fija-info span-2" *ngIf="monedaFija()">
@@ -98,7 +94,7 @@
 
 <mat-dialog-actions align="end">
   <button mat-button (click)="cancel()" [disabled]="saving">Cancelar</button>
-  <button mat-raised-button color="primary" (click)="save()" [disabled]="saving || form.invalid">
+  <button mat-raised-button color="primary" (click)="save()" [disabled]="saving">
     <mat-spinner *ngIf="saving" diameter="20"></mat-spinner>
     <span *ngIf="!saving">Registrar</span>
   </button>

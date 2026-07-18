@@ -219,7 +219,12 @@ export class CobrarCuotaDialogComponent implements OnInit {
   }
 
   async onSubmit(): Promise<void> {
-    if (this.form.invalid || !this.cuota?.id) return;
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      this.snackBar.open('Completá los campos obligatorios marcados.', 'Cerrar', { duration: 3500 });
+      return;
+    }
+    if (!this.cuota?.id) return;
     const f = this.form.value;
     const monto = Number(f.montoCobrar);
     if (monto > this.restante + 0.005) {

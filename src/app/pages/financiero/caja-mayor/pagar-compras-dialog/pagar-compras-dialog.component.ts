@@ -118,7 +118,10 @@ export class PagarComprasDialogComponent implements OnInit {
       cuentaBancariaId: [null],
       observacion: [''],
     });
-    this.form.get('fuente')!.valueChanges.subscribe(() => this.applyValidators());
+    this.form.get('fuente')!.valueChanges.subscribe((val) => {
+      this.applyValidators();
+      if (val === 'CAJA_MAYOR') this.preseleccionarEfectivo();
+    });
     this.applyValidators();
 
     this.loadAll();
@@ -194,6 +197,7 @@ export class PagarComprasDialogComponent implements OnInit {
 
       this.aplicarFiltro();
       this.applyDefaultFuente();
+      if (this.form.get('fuente')!.value === 'CAJA_MAYOR') this.preseleccionarEfectivo();
     } catch (e: any) {
       console.error('Error cargando cuotas pendientes', e);
       this.snackBar.open('Error al cargar cuotas', 'Cerrar', { duration: 4000 });
@@ -215,6 +219,13 @@ export class PagarComprasDialogComponent implements OnInit {
       const fp = preselectSingleOrPrincipal(this.formasPagoEfectivo) || this.formasPagoEfectivo[0];
       if (fp) this.form.patchValue({ formaPagoId: fp.id });
     }
+  }
+
+  // Fuente Caja Mayor => siempre efectivo: setea la forma de pago efectivo principal/primera.
+  // La forma de pago no es seleccionable en la UI (regla de negocio).
+  preseleccionarEfectivo(): void {
+    const fp = this.formasPagoEfectivo.find((f: any) => f.principal) || this.formasPagoEfectivo[0];
+    if (fp) this.form.get('formaPagoId')!.setValue(fp.id, { emitEvent: false });
   }
 
   aplicarFiltro(): void {
@@ -280,7 +291,11 @@ export class PagarComprasDialogComponent implements OnInit {
   }
 
   async confirmar(): Promise<void> {
-    if (!this.isValido()) return;
+    if (!this.isValido()) {
+      this.form.markAllAsTouched();
+      this.snackBar.open('Completá los campos obligatorios marcados.', 'Cerrar', { duration: 3500 });
+      return;
+    }
     const f = this.form.value;
     const pagos = this.seleccionadas.map(c => ({
       cuotaId: c.id,

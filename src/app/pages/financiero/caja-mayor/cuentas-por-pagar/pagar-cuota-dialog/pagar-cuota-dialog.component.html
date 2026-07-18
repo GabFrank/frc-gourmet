@@ -26,6 +26,7 @@
         <mat-select formControlName="cajaMayorId">
           <mat-option *ngFor="let cm of cajasMayor" [value]="cm.id">{{cm.nombre}}</mat-option>
         </mat-select>
+        <mat-error *ngIf="form.get('cajaMayorId')?.hasError('required')">Seleccioná una caja mayor</mat-error>
       </mat-form-field>
       <div class="row">
         <mat-form-field appearance="outline" class="flex">
@@ -33,12 +34,7 @@
           <mat-select formControlName="monedaId">
             <mat-option *ngFor="let m of monedas" [value]="m.id">{{m.simbolo}} {{m.denominacion}}</mat-option>
           </mat-select>
-        </mat-form-field>
-        <mat-form-field appearance="outline" class="flex">
-          <mat-label>Forma de Pago</mat-label>
-          <mat-select formControlName="formaPagoId">
-            <mat-option *ngFor="let f of formasPagoEfectivo" [value]="f.id">{{f.nombre}}</mat-option>
-          </mat-select>
+          <mat-error *ngIf="form.get('monedaId')?.hasError('required')">Seleccioná una moneda</mat-error>
         </mat-form-field>
       </div>
     </ng-container>
@@ -51,12 +47,15 @@
             {{cb.nombre}} — {{cb.banco}} ({{cb.saldo | number:'1.0-2'}} {{cb.moneda?.simbolo}})
           </mat-option>
         </mat-select>
+        <mat-error *ngIf="form.get('cuentaBancariaId')?.hasError('required')">Seleccioná una cuenta bancaria</mat-error>
       </mat-form-field>
     </ng-container>
 
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>{{ montoLabel }}</mat-label>
       <input matInput type="text" inputmode="decimal" formControlName="monto" appCurrencyInput [decimals]="decimalesMoneda">
+      <mat-error *ngIf="form.get('monto')?.hasError('required')">Ingresá un monto</mat-error>
+      <mat-error *ngIf="form.get('monto')?.hasError('min')">El monto debe ser mayor a 0</mat-error>
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="full-width">
@@ -68,7 +67,7 @@
 
 <mat-dialog-actions align="end">
   <button mat-button (click)="onCancel()" [disabled]="saving">Cancelar</button>
-  <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="form.invalid || saving">
+  <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="saving">
     <mat-spinner *ngIf="saving" diameter="20"></mat-spinner>
     <span *ngIf="!saving">{{ accionLabel }}</span>
   </button>

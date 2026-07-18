@@ -44,18 +44,14 @@
             <mat-select formControlName="cajaMayorId">
               <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{ c.nombre }}</mat-option>
             </mat-select>
+            <mat-error *ngIf="form.get('cajaMayorId')?.hasError('required')">Seleccione una caja mayor</mat-error>
           </mat-form-field>
           <mat-form-field appearance="outline">
             <mat-label>Moneda</mat-label>
             <mat-select formControlName="monedaId">
               <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
             </mat-select>
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Forma de pago</mat-label>
-            <mat-select formControlName="formaPagoId">
-              <mat-option *ngFor="let f of formasPago" [value]="f.id">{{ f.descripcion || f.nombre }}</mat-option>
-            </mat-select>
+            <mat-error *ngIf="form.get('monedaId')?.hasError('required')">Seleccione una moneda</mat-error>
           </mat-form-field>
         </ng-container>
 
@@ -67,6 +63,7 @@
                 {{ cb.nombre }} ({{ cb.moneda?.denominacion || cb.moneda?.simbolo }})
               </mat-option>
             </mat-select>
+            <mat-error *ngIf="form.get('cuentaBancariaId')?.hasError('required')">Seleccione una cuenta bancaria</mat-error>
           </mat-form-field>
         </ng-container>
 
@@ -78,7 +75,7 @@
         <div class="cc-form-actions">
           <button mat-button (click)="mostrarFormCobro = false" [disabled]="registrando">Cancelar</button>
           <button mat-flat-button color="primary" (click)="registrar()"
-                  [disabled]="form.invalid || registrando || preview.total <= 0">
+                  [disabled]="registrando || preview.total <= 0">
             Confirmar y generar recibos
           </button>
         </div>

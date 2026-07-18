@@ -108,6 +108,7 @@ export class CreateEditEntradaVariaDialogComponent implements OnInit {
     if (tipo === 'CAJA_MAYOR') {
       ctrl('cajaMayorId')?.setValidators([Validators.required]);
       ctrl('formaPagoId')?.setValidators([Validators.required]);
+      this.preseleccionarEfectivo();
     } else {
       ctrl('cuentaBancariaId')?.setValidators([Validators.required]);
     }
@@ -115,6 +116,12 @@ export class CreateEditEntradaVariaDialogComponent implements OnInit {
     ctrl('cajaMayorId')?.updateValueAndValidity({ emitEvent: false });
     ctrl('cuentaBancariaId')?.updateValueAndValidity({ emitEvent: false });
     ctrl('formaPagoId')?.updateValueAndValidity({ emitEvent: false });
+  }
+
+  /** Fuente Caja Mayor = siempre efectivo: forma de pago efectivo principal/única, auto y no seleccionable. */
+  private preseleccionarEfectivo(): void {
+    const fp = this.formasPagoEfectivo.find((f: any) => f.principal) || this.formasPagoEfectivo[0];
+    if (fp) this.form.get('formaPagoId')!.setValue(fp.id, { emitEvent: false });
   }
 
   monedaFija(): any {
@@ -166,6 +173,7 @@ export class CreateEditEntradaVariaDialogComponent implements OnInit {
   async save(): Promise<void> {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
+      this.snackBar.open('Completá los campos obligatorios marcados.', 'Cerrar', { duration: 3500 });
       return;
     }
 

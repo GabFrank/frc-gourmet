@@ -31,25 +31,25 @@ se pide forma de pago** (siempre transferencia). Convención nueva a agregar:
 
 12 formularios afectados:
 
-- [ ] **Quitar el `mat-select` manual de forma de pago** (redundante con la fuente):
+- [x] **Quitar el `mat-select` manual de forma de pago** (redundante con la fuente):
   - [x] `rrhh/vales/create-edit-vale-dialog.component.ts` (modo Caja Mayor)
-  - [ ] `rrhh/vales/confirmar-vale-dialog.component.ts`
-  - [ ] `financiero/caja-mayor/entradas-varias/create-edit-entrada-varia-dialog`
-  - [ ] `financiero/caja-mayor/gastos/create-edit-gasto-dialog` (no pedir FP cuando fuente = CUENTA_BANCARIA)
-  - [ ] `financiero/caja-mayor/pagar-compras-dialog`
-  - [ ] `financiero/caja-mayor/cuentas-por-pagar/pagar-cuota-dialog`
-  - [ ] `financiero/caja-mayor/cuentas-por-cobrar/cobrar-cuota-dialog`
+  - [x] `rrhh/vales/confirmar-vale-dialog.component.ts`
+  - [x] `financiero/caja-mayor/entradas-varias/create-edit-entrada-varia-dialog`
+  - [ ] `financiero/caja-mayor/gastos/create-edit-gasto-dialog` — **DIFERIDO**: usa una tabla de detalles de pago (multi-línea) compartida entre CAJA_MAYOR y CUENTA_BANCARIA; su FP ya está filtrada a EFECTIVO (no viola la regla). Ocultar la FP solo para banco requiere restructurar los detalles — bajo riesgo/valor, no urgente.
+  - [x] `financiero/caja-mayor/pagar-compras-dialog`
+  - [x] `financiero/caja-mayor/cuentas-por-pagar/pagar-cuota-dialog`
+  - [x] `financiero/caja-mayor/cuentas-por-cobrar/cobrar-cuota-dialog`
   - [x] `financiero/caja-mayor/registrar-ingreso-dialog`
   - [x] `financiero/caja-mayor/registrar-egreso-dialog`
-- [ ] **Filtrar formas de pago a EFECTIVO (hoy usan la lista completa, violan la regla)**:
-  - [ ] `rrhh/prestamos-funcionarios/crear-prestamo-funcionario-dialog.component.ts:90`
-  - [ ] `rrhh/liquidaciones-sueldo/pagar-dialog/pagar-liquidacion-dialog.component.ts:67`
-  - [ ] `personas/convenios/cobro-consolidado/cobro-consolidado.component.html:57`
-- [ ] **Reordenar fuente ANTES de monto/moneda**:
+- [x] **Filtrar formas de pago a EFECTIVO (hoy usan la lista completa, violan la regla)** — resuelto quitando el select y auto-seteando EFECTIVO:
+  - [x] `rrhh/prestamos-funcionarios/crear-prestamo-funcionario-dialog.component.ts`
+  - [x] `rrhh/liquidaciones-sueldo/pagar-dialog/pagar-liquidacion-dialog.component.ts`
+  - [x] `personas/convenios/cobro-consolidado/cobro-consolidado.component.html`
+- [x] **Reordenar fuente ANTES de monto/moneda**:
   - [x] `create-edit-vale-dialog` (modo Caja Mayor)
-  - [ ] `cobrar-cuota-dialog`
-  - [ ] `crear-prestamo-funcionario-dialog`
-- [ ] **Normalizar nombre de control** `destinoTipo` → `fuente` en `create-edit-entrada-varia`.
+  - [x] `cobrar-cuota-dialog`
+  - [x] `crear-prestamo-funcionario-dialog`
+- [ ] **Normalizar nombre de control** `destinoTipo` → `fuente` en `create-edit-entrada-varia` — decidido **NO** renombrar por ahora (evita tocar el payload/backend); el patrón se aplicó igual usando `destinoTipo`.
 
 > Nota: el diálogo de alta de Vale (lista) y el de Caja Mayor son **el mismo
 > componente** (`CreateEditValeDialogComponent`) con flag `modoConfirmar`. El modo

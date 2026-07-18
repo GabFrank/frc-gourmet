@@ -55,6 +55,7 @@ export class CobroConsolidadoComponent {
   cajasMayor: any[] = [];
   monedas: any[] = [];
   formasPago: any[] = [];
+  formasPagoEfectivo: any[] = [];
   cuentasBancarias: any[] = [];
 
   form!: FormGroup;
@@ -104,7 +105,13 @@ export class CobroConsolidadoComponent {
       fp.clearValidators();
       cb.setValidators([Validators.required]);
     }
+    if (fuente === 'CAJA_MAYOR') this.preseleccionarEfectivo();
     [cm, mon, fp, cb].forEach((c) => c.updateValueAndValidity({ emitEvent: false }));
+  }
+
+  private preseleccionarEfectivo(): void {
+    const fp = this.formasPagoEfectivo.find((f: any) => f.principal) || this.formasPagoEfectivo[0];
+    if (fp) this.form.get('formaPagoId')!.setValue(fp.id, { emitEvent: false });
   }
 
   async cargar(): Promise<void> {
@@ -122,8 +129,10 @@ export class CobroConsolidadoComponent {
       this.cajasMayor = ((cajas as any[]) || []).filter((c: any) => c.estado === 'ABIERTA');
       this.monedas = (monedas as any[]) || [];
       this.formasPago = ((formas as any[]) || []).filter((f: any) => f.movimentaCaja);
+      this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
       this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
       this.historial = (historial as any[]) || [];
+      if (this.form.get('fuente')!.value === 'CAJA_MAYOR') this.preseleccionarEfectivo();
     } catch (e: any) {
       this.snackBar.open('Error al cargar: ' + (e?.message || ''), 'Cerrar', { duration: 5000 });
     } finally {
@@ -144,7 +153,8 @@ export class CobroConsolidadoComponent {
   }
 
   async registrar(): Promise<void> {
-    if (this.form.invalid || !this.preview || this.preview.total <= 0) return;
+    if (this.form.invalid) { this.form.markAllAsTouched(); this.snackBar.open('Completá los campos obligatorios marcados.', 'Cerrar', { duration: 3500 }); return; }
+    if (!this.preview || this.preview.total <= 0) return;
     const ref = this.dialog.open(ConfirmationDialogComponent, {
       data: {
         title: 'Registrar cobro consolidado',

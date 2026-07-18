@@ -130,18 +130,14 @@
         <mat-select formControlName="cajaMayorId">
           <mat-option *ngFor="let cm of cajasMayor" [value]="cm.id">{{ cm.nombre }}</mat-option>
         </mat-select>
+        <mat-error *ngIf="form.get('cajaMayorId')?.hasError('required')">Seleccioná una caja mayor</mat-error>
       </mat-form-field>
       <mat-form-field appearance="outline">
         <mat-label>Moneda *</mat-label>
         <mat-select formControlName="monedaId">
           <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }} ({{ m.simbolo }})</mat-option>
         </mat-select>
-      </mat-form-field>
-      <mat-form-field appearance="outline">
-        <mat-label>Forma de pago *</mat-label>
-        <mat-select formControlName="formaPagoId">
-          <mat-option *ngFor="let fp of formasPagoEfectivo" [value]="fp.id">{{ fp.nombre }}</mat-option>
-        </mat-select>
+        <mat-error *ngIf="form.get('monedaId')?.hasError('required')">Seleccioná una moneda</mat-error>
       </mat-form-field>
     </div>
 
@@ -155,6 +151,7 @@
             <span *ngIf="cb.moneda?.simbolo"> · {{ cb.moneda.simbolo }}</span>
           </mat-option>
         </mat-select>
+        <mat-error *ngIf="form.get('cuentaBancariaId')?.hasError('required')">Seleccioná una cuenta bancaria</mat-error>
       </mat-form-field>
     </div>
   </div>
@@ -163,7 +160,7 @@
 
 <mat-dialog-actions align="end">
   <button mat-button (click)="cancelar()" [disabled]="saving">Cancelar</button>
-  <button mat-flat-button color="primary" (click)="confirmar()" [disabled]="!isValido() || saving">
+  <button mat-flat-button color="primary" (click)="confirmar()" [disabled]="saving">
     <span *ngIf="!saving">Confirmar pago ({{ subtotal | number:'1.0-2' }})</span>
     <span *ngIf="saving">Procesando…</span>
   </button>
