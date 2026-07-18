@@ -104,10 +104,14 @@ export class CreateEditEntradaVariaDialogComponent implements OnInit {
     ctrl('cajaMayorId')?.clearValidators();
     ctrl('cuentaBancariaId')?.clearValidators();
     ctrl('formaPagoId')?.clearValidators();
+    ctrl('monedaId')?.clearValidators();
 
     if (tipo === 'CAJA_MAYOR') {
       ctrl('cajaMayorId')?.setValidators([Validators.required]);
       ctrl('formaPagoId')?.setValidators([Validators.required]);
+      // La moneda solo se elige en Caja Mayor; en Cuenta Bancaria la define la
+      // cuenta (input oculto) → no debe quedar required e invisible.
+      ctrl('monedaId')?.setValidators([Validators.required]);
       this.preseleccionarEfectivo();
     } else {
       ctrl('cuentaBancariaId')?.setValidators([Validators.required]);
@@ -116,6 +120,7 @@ export class CreateEditEntradaVariaDialogComponent implements OnInit {
     ctrl('cajaMayorId')?.updateValueAndValidity({ emitEvent: false });
     ctrl('cuentaBancariaId')?.updateValueAndValidity({ emitEvent: false });
     ctrl('formaPagoId')?.updateValueAndValidity({ emitEvent: false });
+    ctrl('monedaId')?.updateValueAndValidity({ emitEvent: false });
   }
 
   /** Fuente Caja Mayor = siempre efectivo: forma de pago efectivo principal/única, auto y no seleccionable. */

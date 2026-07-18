@@ -197,18 +197,24 @@ export class CrearPrestamoFuncionarioDialogComponent implements OnInit {
     const cm = this.form.get('cajaMayorId')!;
     const fp = this.form.get('formaPagoId')!;
     const cb = this.form.get('cuentaBancariaId')!;
+    const mon = this.form.get('monedaId')!;
     if (fuente === 'CAJA_MAYOR') {
       cm.setValidators([Validators.required]);
       fp.setValidators([Validators.required]);
+      // La moneda solo se elige en el camino Caja Mayor; en Cuenta Bancaria la
+      // define la cuenta, así que su input está oculto → no debe ser required.
+      mon.setValidators([Validators.required]);
       cb.clearValidators();
       this.preseleccionarEfectivo();
     } else {
       cm.clearValidators();
       fp.clearValidators();
+      mon.clearValidators();
       cb.setValidators([Validators.required]);
     }
     cm.updateValueAndValidity({ emitEvent: false });
     fp.updateValueAndValidity({ emitEvent: false });
+    mon.updateValueAndValidity({ emitEvent: false });
     cb.updateValueAndValidity({ emitEvent: false });
   }
 

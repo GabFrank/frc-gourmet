@@ -80,6 +80,21 @@ Estado actual: no hay patrón único ni helper reutilizable. Lo único universal
 - Referencias a replicar (ya bien hechos): `gasto-caja-dialog`, `create-edit-entrada-varia`,
   `emitir-cheque`, `prompt-dialog`.
 
+### Edge conocido tras quitar el select de forma de pago (revisión adversarial)
+
+- [ ] **`formaPagoId` required-pero-invisible en el camino CAJA_MAYOR.** Al quitar el
+  select, `formaPagoId` sólo se auto-setea desde `formasPagoEfectivo` (formas cuyo
+  nombre contiene "EFECTIVO"; en cobrar-cuota/pagar-cuota/pagar-compras/cobro-consolidado
+  además pre-filtradas por `movimentaCaja`). **Si esa lista queda vacía** (dato mal
+  configurado: no hay forma EFECTIVO / sin `movimentaCaja`), el submit se bloquea con
+  el snackbar genérico sin campo visible que corregir. No se dispara con los seeds
+  normales (traen EFECTIVO con movimentaCaja). **Fix recomendado**: derivar la forma
+  de pago efectivo en el backend (no exigirla en el front), o mostrar un aviso inline
+  cuando no se pueda resolver una forma efectivo. Aplica a los ~11 diálogos.
+- [x] **`monedaId` required-pero-invisible en el camino CUENTA_BANCARIA** en
+  `crear-prestamo-funcionario` y `create-edit-entrada-varia`: se limpiaba el validador
+  en el resto pero no en estos dos. Corregido (clearValidators en la rama banco).
+
 ---
 
 ## 4. Formato numérico (separador de miles `.`, decimal `,`)
