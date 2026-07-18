@@ -1589,6 +1589,9 @@ export class RepositoryHttpService extends RepositoryService {
   editCajaMayorMovimiento(movId: number, data: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.editCajaMayorMovimiento() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  editCajaMayorMovimientos(_ediciones: any[]): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.editCajaMayorMovimientos() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getGastosProgramados(): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getGastosProgramados() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

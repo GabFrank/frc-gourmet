@@ -145,14 +145,16 @@ export class EditMovimientoDialogComponent implements OnInit {
     this.saving = true;
     try {
       const obs = this.form.value.observacion?.toUpperCase() || null;
-      for (const r of this.rows.value) {
-        await firstValueFrom(this.repositoryService.editCajaMayorMovimiento(r.movimientoId, {
-          monedaId: r.monedaId,
-          formaPagoId: r.formaPagoId,
-          monto: r.monto,
-          observacion: obs,
-        }));
-      }
+      // Editar todas las monedas en UNA transacción (atómico: o todas o ninguna),
+      // así un fallo a mitad no deja el grupo (ej. egreso inicial) parcialmente editado.
+      const ediciones = this.rows.value.map((r: any) => ({
+        movimientoId: r.movimientoId,
+        monedaId: r.monedaId,
+        formaPagoId: r.formaPagoId,
+        monto: r.monto,
+        observacion: obs,
+      }));
+      await firstValueFrom(this.repositoryService.editCajaMayorMovimientos(ediciones));
       this.snackBar.open('Movimiento actualizado correctamente', 'Cerrar', { duration: 3000 });
       this.dialogRef?.close(true);
     } catch (error) {

@@ -1422,6 +1422,42 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     }
   });
 
+  // Lógica de edición de UN movimiento dentro de un queryRunner ya abierto
+  // (revertir saldo viejo + actualizar + aplicar nuevo). NO abre/cierra la
+  // transacción: la maneja el caller (para poder editar N monedas atómicamente).
+  const editMovimientoTx = async (queryRunner: any, movId: number, data: any) => {
+    const movRepo = queryRunner.manager.getRepository(CajaMayorMovimiento);
+    const original = await movRepo.findOne({
+      where: { id: movId },
+      relations: ['cajaMayor', 'moneda', 'formaPago'],
+    });
+    if (!original) throw new Error(`Movimiento ID ${movId} not found`);
+
+    const cajaMayorId = original.cajaMayor.id;
+
+    // 1. Revertir saldo del movimiento original
+    const tipoContrario = esIngreso(original.tipoMovimiento)
+      ? TipoMovimiento.AJUSTE_NEGATIVO
+      : TipoMovimiento.AJUSTE_POSITIVO;
+    await actualizarSaldo(queryRunner, cajaMayorId, original.moneda.id, original.formaPago.id, Number(original.monto), tipoContrario);
+
+    // 2. Actualizar el movimiento
+    const monedaId = data.moneda?.id || data.monedaId || original.moneda.id;
+    const formaPagoId = data.formaPago?.id || data.formaPagoId || original.formaPago.id;
+    const monto = data.monto !== undefined ? data.monto : original.monto;
+
+    original.moneda = { id: monedaId } as any;
+    original.formaPago = { id: formaPagoId } as any;
+    original.monto = monto;
+    if (data.observacion !== undefined) original.observacion = data.observacion;
+    await setEntityUserTracking(dataSource, original, getCurrentUser()?.id, true);
+    await queryRunner.manager.save(CajaMayorMovimiento, original);
+
+    // 3. Aplicar nuevo saldo
+    await actualizarSaldo(queryRunner, cajaMayorId, monedaId, formaPagoId, Number(monto), original.tipoMovimiento);
+    return original;
+  };
+
   // Editar movimiento suelto (ajustes): revertir viejo + crear nuevo
   ipcMain.handle('edit-caja-mayor-movimiento', async (_event: any, movId: number, data: any) => {
     await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
@@ -1429,41 +1465,36 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      const movRepo = queryRunner.manager.getRepository(CajaMayorMovimiento);
-      const original = await movRepo.findOne({
-        where: { id: movId },
-        relations: ['cajaMayor', 'moneda', 'formaPago'],
-      });
-      if (!original) throw new Error(`Movimiento ID ${movId} not found`);
-
-      const cajaMayorId = original.cajaMayor.id;
-
-      // 1. Revertir saldo del movimiento original
-      const tipoContrario = esIngreso(original.tipoMovimiento)
-        ? TipoMovimiento.AJUSTE_NEGATIVO
-        : TipoMovimiento.AJUSTE_POSITIVO;
-      await actualizarSaldo(queryRunner, cajaMayorId, original.moneda.id, original.formaPago.id, Number(original.monto), tipoContrario);
-
-      // 2. Actualizar el movimiento
-      const monedaId = data.moneda?.id || data.monedaId || original.moneda.id;
-      const formaPagoId = data.formaPago?.id || data.formaPagoId || original.formaPago.id;
-      const monto = data.monto !== undefined ? data.monto : original.monto;
-
-      original.moneda = { id: monedaId } as any;
-      original.formaPago = { id: formaPagoId } as any;
-      original.monto = monto;
-      if (data.observacion !== undefined) original.observacion = data.observacion;
-      await setEntityUserTracking(dataSource, original, getCurrentUser()?.id, true);
-      await queryRunner.manager.save(CajaMayorMovimiento, original);
-
-      // 3. Aplicar nuevo saldo
-      await actualizarSaldo(queryRunner, cajaMayorId, monedaId, formaPagoId, Number(monto), original.tipoMovimiento);
-
+      const original = await editMovimientoTx(queryRunner, movId, data);
       await queryRunner.commitTransaction();
       return original;
     } catch (error) {
       await queryRunner.rollbackTransaction();
       console.error(`Error editing movimiento ID ${movId}:`, error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  // Editar VARIOS movimientos (ej. las N monedas de un egreso de caja inicial)
+  // en UNA sola transacción: o se aplican todos o ninguno.
+  ipcMain.handle('edit-caja-mayor-movimientos', async (_event: any, ediciones: Array<{ movimientoId: number } & any>) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
+    if (!Array.isArray(ediciones) || ediciones.length === 0) return [];
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const resultados = [];
+      for (const ed of ediciones) {
+        resultados.push(await editMovimientoTx(queryRunner, ed.movimientoId, ed));
+      }
+      await queryRunner.commitTransaction();
+      return resultados;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error editing movimientos (batch):', error);
       throw error;
     } finally {
       await queryRunner.release();

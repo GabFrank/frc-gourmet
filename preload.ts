@@ -2842,6 +2842,9 @@ contextBridge.exposeInMainWorld('api', {
   editCajaMayorMovimiento: async (movId: number, data: any): Promise<any> => {
     return await ipcRenderer.invoke('edit-caja-mayor-movimiento', movId, data);
   },
+  editCajaMayorMovimientos: async (ediciones: any[]): Promise<any> => {
+    return await ipcRenderer.invoke('edit-caja-mayor-movimientos', ediciones);
+  },
   getGastosProgramados: async (): Promise<any[]> => {
     return await ipcRenderer.invoke('get-gastos-programados');
   },
