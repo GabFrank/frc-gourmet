@@ -200,13 +200,13 @@ export class ListCajasComponent implements OnInit {
               diferenciaPct = Math.abs(diferencia / esperado * 100);
               if (diferenciaPct <= this.umbralBaja) {
                 saludColor = 'green';
-                saludTooltip = `Diferencia: ${diferenciaPct.toFixed(1)}% (${diferencia >= 0 ? '+' : ''}${diferencia.toLocaleString()})`;
+                saludTooltip = `Diferencia: ${diferenciaPct.toFixed(1)}% (${diferencia >= 0 ? '+' : ''}${diferencia.toLocaleString('es-PY')})`;
               } else if (diferenciaPct <= this.umbralAlta) {
                 saludColor = 'yellow';
-                saludTooltip = `Diferencia: ${diferenciaPct.toFixed(1)}% (${diferencia >= 0 ? '+' : ''}${diferencia.toLocaleString()})`;
+                saludTooltip = `Diferencia: ${diferenciaPct.toFixed(1)}% (${diferencia >= 0 ? '+' : ''}${diferencia.toLocaleString('es-PY')})`;
               } else {
                 saludColor = 'red';
-                saludTooltip = `Diferencia: ${diferenciaPct.toFixed(1)}% (${diferencia >= 0 ? '+' : ''}${diferencia.toLocaleString()})`;
+                saludTooltip = `Diferencia: ${diferenciaPct.toFixed(1)}% (${diferencia >= 0 ? '+' : ''}${diferencia.toLocaleString('es-PY')})`;
               }
             } else {
               saludColor = 'green';

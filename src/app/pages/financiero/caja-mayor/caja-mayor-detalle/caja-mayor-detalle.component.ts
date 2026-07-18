@@ -47,7 +47,7 @@ interface MovimientoConsolidado {
   tipoMovimiento: string;
   tipoLabel: string;
   tipoIsIngreso: boolean;
-  detalles: { monedaSimbolo: string; formaPagoNombre?: string; monto: number }[];
+  detalles: { monedaId?: number | null; formaPagoId?: number | null; monedaSimbolo: string; formaPagoNombre?: string; monto: number }[];
   responsableNombre: string;
   observacion: string;
   anulado: boolean;
@@ -609,10 +609,10 @@ export class CajaMayorDetalleComponent implements OnInit {
         if (result) this.loadData();
       });
     } else {
-      // Editar movimiento suelto (ajuste)
+      // Editar movimiento suelto (ajuste). El detalle consolidado ya trae
+      // monedaId/formaPagoId desde el backend, así que el diálogo preselecciona
+      // moneda y forma de pago correctamente.
       const detalle = mov.detalles[0];
-      const moneda = this.findMonedaBySimbolo(detalle?.monedaSimbolo);
-      const formaPago = this.findFormaPagoByNombre(detalle?.formaPagoNombre || '');
 
       const dialogRef = this.dialog.open(EditMovimientoDialogComponent, {
         width: '450px',
@@ -621,8 +621,8 @@ export class CajaMayorDetalleComponent implements OnInit {
           tipoMovimiento: mov.tipoMovimiento,
           cajaMayorId: this.cajaMayor?.id,
           detalle: {
-            monedaId: moneda?.id,
-            formaPagoId: formaPago?.id,
+            monedaId: detalle?.monedaId ?? null,
+            formaPagoId: detalle?.formaPagoId ?? null,
             monto: detalle?.monto,
           },
           observacion: mov.observacion !== '-' ? mov.observacion : '',
@@ -632,20 +632,6 @@ export class CajaMayorDetalleComponent implements OnInit {
         if (result) this.loadData();
       });
     }
-  }
-
-  private findMonedaBySimbolo(simbolo: string): any {
-    // Buscar en saldos cargados
-    for (const grupo of this.saldosPorFormaPago) {
-      for (const m of grupo.monedas) {
-        if (m.simbolo === simbolo) return m;
-      }
-    }
-    return null;
-  }
-
-  private findFormaPagoByNombre(nombre: string): any {
-    return null; // Se resuelve en el diálogo cargando lookups
   }
 
   async anularMovimiento(mov: MovimientoConsolidado): Promise<void> {

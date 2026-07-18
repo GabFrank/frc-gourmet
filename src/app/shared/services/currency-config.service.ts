@@ -11,11 +11,13 @@ export class CurrencyConfigService {
     align: 'right',
     allowNegative: true,
     allowZero: true,
-    decimal: '.',
+    // Convención local (es-PY): separador de miles '.' y decimal ','. Las monedas
+    // con formato US (USD/DOLAR) lo sobreescriben en currencyConfigs.
+    decimal: ',',
     precision: 2,
     prefix: '',
     suffix: '',
-    thousands: ',',
+    thousands: '.',
     nullable: true,
     min: 0,
     max: Number.MAX_SAFE_INTEGER,

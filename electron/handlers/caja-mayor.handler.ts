@@ -488,6 +488,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       }
 
       const detalle = {
+        monedaId: mov.moneda?.id ?? null,
+        formaPagoId: mov.formaPago?.id ?? null,
         monedaSimbolo: mov.moneda?.simbolo || '-',
         formaPagoNombre: mov.formaPago?.nombre || '-',
         monto: Number(mov.monto),

@@ -209,7 +209,7 @@ export class ListaBilletesDialogComponent implements OnInit {
       width: '400px',
       data: {
         title: 'Eliminar Billete',
-        message: `¿Está seguro que desea eliminar el billete de valor ${this.moneda.simbolo} ${billete.valor.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2})}?`
+        message: `¿Está seguro que desea eliminar el billete de valor ${this.moneda.simbolo} ${billete.valor.toLocaleString('es-PY', {minimumFractionDigits: 0, maximumFractionDigits: 2})}?`
       }
     });
 
