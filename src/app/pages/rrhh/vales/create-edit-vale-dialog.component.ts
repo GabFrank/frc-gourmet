@@ -16,6 +16,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
 import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/app/shared/utils/conversion-moneda';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 @Component({
   selector: 'app-create-edit-vale-dialog',
@@ -34,6 +35,7 @@ import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/a
     MatSlideToggleModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    CurrencyInputDirective,
   ],
   template: `
     <h2 mat-dialog-title>{{ modoConfirmar ? 'Registrar egreso por vale' : 'Crear vale / adelanto' }}</h2>
@@ -47,6 +49,7 @@ import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/a
               {{ f.persona?.nombre }} {{ f.persona?.apellido || '' }}
             </mat-option>
           </mat-select>
+          <mat-error *ngIf="form.get('funcionarioId')?.hasError('required')">Seleccioná el funcionario</mat-error>
         </mat-form-field>
 
         <mat-form-field appearance="outline">
@@ -58,15 +61,44 @@ import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/a
         </mat-form-field>
 
         <mat-form-field appearance="outline">
-          <mat-label>Monto</mat-label>
-          <input matInput type="number" formControlName="monto" />
-        </mat-form-field>
-
-        <mat-form-field appearance="outline">
           <mat-label>Fecha</mat-label>
           <input matInput [matDatepicker]="p" formControlName="fecha" />
           <mat-datepicker-toggle matSuffix [for]="p"></mat-datepicker-toggle>
           <mat-datepicker #p></mat-datepicker>
+          <mat-error *ngIf="form.get('fecha')?.hasError('required')">Ingresá la fecha</mat-error>
+        </mat-form-field>
+
+        <!-- Fuente del pago PRIMERO: define implícitamente la forma de pago
+             (Caja Mayor = efectivo, Cuenta Bancaria = transferencia). -->
+        <mat-button-toggle-group *ngIf="modoConfirmar" formControlName="fuente" class="full fuente-toggle">
+          <mat-button-toggle value="CAJA_MAYOR">Caja Mayor (efectivo)</mat-button-toggle>
+          <mat-button-toggle value="CUENTA_BANCARIA">Cuenta Bancaria (transferencia)</mat-button-toggle>
+        </mat-button-toggle-group>
+
+        <mat-form-field appearance="outline" class="full" *ngIf="!modoConfirmar || form.get('fuente')?.value === 'CAJA_MAYOR'">
+          <mat-label>{{ modoConfirmar ? 'Caja Mayor' : 'Caja Mayor (opcional)' }}</mat-label>
+          <mat-select formControlName="cajaMayorId">
+            <mat-option *ngIf="!modoConfirmar" [value]="null">-- Definir luego --</mat-option>
+            <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{ c.nombre }}</mat-option>
+          </mat-select>
+          <mat-hint *ngIf="modoConfirmar">Se paga en efectivo desde esta caja</mat-hint>
+          <mat-error *ngIf="form.get('cajaMayorId')?.hasError('required')">Seleccioná la caja mayor</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full" *ngIf="modoConfirmar && form.get('fuente')?.value === 'CUENTA_BANCARIA'">
+          <mat-label>Cuenta Bancaria</mat-label>
+          <mat-select formControlName="cuentaBancariaId">
+            <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">{{ cb.nombre }} <span *ngIf="cb.banco">- {{ cb.banco }}</span><span *ngIf="cb.moneda"> ({{ cb.moneda.simbolo }})</span></mat-option>
+          </mat-select>
+          <mat-hint>Se paga por transferencia; la moneda la define la cuenta</mat-hint>
+          <mat-error *ngIf="form.get('cuentaBancariaId')?.hasError('required')">Seleccioná la cuenta bancaria</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Monto</mat-label>
+          <input matInput type="text" inputmode="decimal" formControlName="monto" appCurrencyInput [decimals]="decimalesMoneda" />
+          <mat-error *ngIf="form.get('monto')?.hasError('required')">Ingresá el monto</mat-error>
+          <mat-error *ngIf="form.get('monto')?.hasError('min')">El monto debe ser mayor a 0</mat-error>
         </mat-form-field>
 
         <mat-form-field appearance="outline">
@@ -74,34 +106,7 @@ import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/a
           <mat-select formControlName="monedaId">
             <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
           </mat-select>
-        </mat-form-field>
-
-        <mat-button-toggle-group *ngIf="modoConfirmar" formControlName="fuente" class="full fuente-toggle">
-          <mat-button-toggle value="CAJA_MAYOR">Caja Mayor (efectivo)</mat-button-toggle>
-          <mat-button-toggle value="CUENTA_BANCARIA">Cuenta Bancaria</mat-button-toggle>
-        </mat-button-toggle-group>
-
-        <mat-form-field appearance="outline" *ngIf="!modoConfirmar || form.get('fuente')?.value === 'CAJA_MAYOR'">
-          <mat-label>{{ modoConfirmar ? 'Caja Mayor' : 'Caja Mayor (opcional)' }}</mat-label>
-          <mat-select formControlName="cajaMayorId">
-            <mat-option *ngIf="!modoConfirmar" [value]="null">-- Definir luego --</mat-option>
-            <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{ c.nombre }}</mat-option>
-          </mat-select>
-        </mat-form-field>
-
-        <mat-form-field appearance="outline" *ngIf="!modoConfirmar || form.get('fuente')?.value === 'CAJA_MAYOR'">
-          <mat-label>{{ modoConfirmar ? 'Forma de pago' : 'Forma de pago (opcional)' }}</mat-label>
-          <mat-select formControlName="formaPagoId">
-            <mat-option *ngIf="!modoConfirmar" [value]="null">-- Definir luego --</mat-option>
-            <mat-option *ngFor="let f of (modoConfirmar ? formasPagoEfectivo : formasPago)" [value]="f.id">{{ f.descripcion || f.nombre }}</mat-option>
-          </mat-select>
-        </mat-form-field>
-
-        <mat-form-field appearance="outline" *ngIf="modoConfirmar && form.get('fuente')?.value === 'CUENTA_BANCARIA'">
-          <mat-label>Cuenta Bancaria</mat-label>
-          <mat-select formControlName="cuentaBancariaId">
-            <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">{{ cb.nombre }} <span *ngIf="cb.banco">- {{ cb.banco }}</span><span *ngIf="cb.moneda"> ({{ cb.moneda.simbolo }})</span></mat-option>
-          </mat-select>
+          <mat-error *ngIf="form.get('monedaId')?.hasError('required')">Seleccioná la moneda</mat-error>
         </mat-form-field>
 
         <ng-container *ngIf="requiereCotiz">
@@ -125,7 +130,7 @@ import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/a
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button (click)="cancel()" [disabled]="saving">Cancelar</button>
-      <button mat-flat-button color="primary" (click)="submit()" [disabled]="form.invalid || saving">
+      <button mat-flat-button color="primary" (click)="submit()" [disabled]="saving">
         {{ modoConfirmar ? 'Registrar egreso (CONFIRMADO)' : 'Crear (estado SOLICITADO)' }}
       </button>
     </mat-dialog-actions>
@@ -155,6 +160,7 @@ export class CreateEditValeDialogComponent implements OnInit {
   requiereCotiz = false;
   montoConvertido = 0;
   monedaCuentaSimbolo = '';
+  decimalesMoneda = 0;
   private cotizMercado: any = null;
 
   constructor(
@@ -180,6 +186,7 @@ export class CreateEditValeDialogComponent implements OnInit {
       descripcion: [''],
       esAdelanto: [true],
     });
+    this.form.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
     if (this.modoConfirmar) {
       this.form.get('fuente')!.valueChanges.subscribe(() => this.aplicarValidadoresFuente());
       this.form.get('cuentaBancariaId')!.valueChanges.subscribe(() => this.recalcularCotizacion());
@@ -187,6 +194,12 @@ export class CreateEditValeDialogComponent implements OnInit {
       this.form.get('cotizacion')!.valueChanges.subscribe(() => this.recalcularConvertido());
       this.form.get('monto')!.valueChanges.subscribe(() => this.recalcularConvertido());
     }
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const m = this.monedas.find((x: any) => x.id === this.form.get('monedaId')?.value);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   private recalcularCotizacion(): void {
@@ -248,9 +261,11 @@ export class CreateEditValeDialogComponent implements OnInit {
   }
 
   private preseleccionarEfectivo(): void {
-    if (this.formasPagoEfectivo.length === 1) {
-      this.form.get('formaPagoId')!.setValue(this.formasPagoEfectivo[0].id, { emitEvent: false });
-    }
+    // La forma de pago ya no se elige a mano: Caja Mayor = efectivo. Se auto-setea
+    // la forma de pago efectivo (preferir la principal si hay varias).
+    if (!this.formasPagoEfectivo.length) return;
+    const principal = this.formasPagoEfectivo.find((f: any) => f.principal) || this.formasPagoEfectivo[0];
+    this.form.get('formaPagoId')!.setValue(principal.id, { emitEvent: false });
   }
 
   async ngOnInit(): Promise<void> {
@@ -289,7 +304,11 @@ export class CreateEditValeDialogComponent implements OnInit {
   cancel(): void { this.dialogRef.close(); }
 
   async submit(): Promise<void> {
-    if (this.form.invalid) return;
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      this.snackBar.open('Completá los campos obligatorios marcados.', 'Cerrar', { duration: 3500 });
+      return;
+    }
     const value = this.form.value;
 
     if (this.modoConfirmar && value.fuente !== 'CUENTA_BANCARIA') {
