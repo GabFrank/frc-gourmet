@@ -3230,6 +3230,9 @@ contextBridge.exposeInMainWorld('api', {
   getHistoricoSalarios: async (funcionarioId: number): Promise<any[]> => {
     return await ipcRenderer.invoke('get-historico-salarios', funcionarioId);
   },
+  getFuncionarioResumenFinanciero: async (funcionarioId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-funcionario-resumen-financiero', funcionarioId);
+  },
 
   // =============================================
   // RRHH - Documentos del funcionario

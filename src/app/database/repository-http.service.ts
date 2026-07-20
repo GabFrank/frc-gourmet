@@ -1928,6 +1928,9 @@ export class RepositoryHttpService extends RepositoryService {
   getHistoricoSalarios(funcionarioId: number): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getHistoricoSalarios() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getFuncionarioResumenFinanciero(funcionarioId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getFuncionarioResumenFinanciero() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getFuncionarioDocumentos(funcionarioId: number): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getFuncionarioDocumentos() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

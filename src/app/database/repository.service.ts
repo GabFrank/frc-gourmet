@@ -783,6 +783,7 @@ export abstract class RepositoryService {
   abstract egresarFuncionario(id: number, data: any): Observable<any>;
   abstract getHistoricoCargos(funcionarioId: number): Observable<any[]>;
   abstract getHistoricoSalarios(funcionarioId: number): Observable<any[]>;
+  abstract getFuncionarioResumenFinanciero(funcionarioId: number): Observable<any>;
   abstract getFuncionarioDocumentos(funcionarioId: number): Observable<any[]>;
   abstract uploadFuncionarioDocumento(payload: any): Observable<any>;
   abstract deleteFuncionarioDocumento(id: number): Observable<any>;

@@ -11,6 +11,14 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
 import { TipoCliente } from '../../src/app/database/entities/personas/tipo-cliente.entity';
 import { ConfiguracionRrhh } from '../../src/app/database/entities/rrhh/configuracion-rrhh.entity';
+import { Vale } from '../../src/app/database/entities/rrhh/vale.entity';
+import { ValeEstado } from '../../src/app/database/entities/rrhh/vale-estado.enum';
+import { CuentaPorPagar } from '../../src/app/database/entities/financiero/cuenta-por-pagar.entity';
+import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
+import { CuentaPorPagarTipo, CuentaPorPagarEstado, CuotaEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
+import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
+import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
+import { CuentaPorCobrarEstado, CuentaPorCobrarCuotaEstado } from '../../src/app/database/entities/financiero/cuentas-por-cobrar-enums';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { ensurePermission } from '../utils/auth.utils';
@@ -428,6 +436,102 @@ export function registerRrhhFuncionariosHandlers(
       });
     } catch (error) {
       console.error('Error getting historico salarios:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Resumen financiero del funcionario: deudas con el negocio (vales pendientes,
+   * saldo de préstamos y consumo a crédito del cliente vinculado por persona),
+   * total adeudado y próximos vencimientos. Solo lectura.
+   */
+  ipcMain.handle('get-funcionario-resumen-financiero', async (_event, funcionarioId: number) => {
+    try {
+      const funcionario = await dataSource.getRepository(Funcionario).findOne({
+        where: { id: funcionarioId },
+        relations: ['persona'],
+      });
+      if (!funcionario) throw new Error(`Funcionario ${funcionarioId} no encontrado`);
+
+      const proximos: Array<{ tipo: string; numero: number; fechaVencimiento: any; saldo: number; descripcion: string }> = [];
+
+      // Vales CONFIRMADO (pendientes de descontar)
+      const vales = await dataSource.getRepository(Vale).createQueryBuilder('v')
+        .where('v.funcionario_id = :fid', { fid: funcionarioId })
+        .andWhere('v.estado = :est', { est: ValeEstado.CONFIRMADO })
+        .getMany();
+      const valesTotal = vales.reduce((s, v) => s + Number(v.monto), 0);
+
+      // Préstamos (CPP PRESTAMO_FUNCIONARIO ACTIVO)
+      const prestamos = await dataSource.getRepository(CuentaPorPagar).find({
+        where: { funcionario: { id: funcionarioId } as any, tipo: CuentaPorPagarTipo.PRESTAMO_FUNCIONARIO, estado: CuentaPorPagarEstado.ACTIVO },
+      });
+      const prestamosSaldo = prestamos.reduce((s, p) => s + (Number(p.montoTotal) - Number(p.montoPagado)), 0);
+      const cuotaCppRepo = dataSource.getRepository(CuentaPorPagarCuota);
+      for (const p of prestamos) {
+        const cuotas = await cuotaCppRepo.createQueryBuilder('c')
+          .where('c.cuenta_por_pagar_id = :pid', { pid: p.id })
+          .andWhere('c.estado IN (:...ests)', { ests: [CuotaEstado.PENDIENTE, CuotaEstado.PARCIAL, CuotaEstado.VENCIDA] })
+          .getMany();
+        for (const c of cuotas) {
+          const saldo = +(Number(c.monto) - Number(c.montoPagado)).toFixed(2);
+          if (saldo > 0) proximos.push({ tipo: 'PRESTAMO', numero: c.numero, fechaVencimiento: c.fechaVencimiento, saldo, descripcion: p.descripcion });
+        }
+      }
+
+      // Cliente vinculado + consumo a crédito (CPC)
+      let cliente: any = null;
+      let creditoSaldo = 0;
+      let cpcActivas = 0;
+      const personaId = funcionario.persona?.id;
+      if (personaId) {
+        const clienteEnt = await dataSource.getRepository(Cliente).findOne({
+          where: { persona: { id: personaId } as any },
+          relations: ['tipo_cliente'],
+        });
+        if (clienteEnt) {
+          cliente = {
+            id: clienteEnt.id,
+            saldoActual: Number(clienteEnt.saldoActual) || 0,
+            limiteCredito: Number(clienteEnt.limite_credito) || 0,
+            tieneCredito: !!clienteEnt.credito,
+            tipoClienteDescripcion: clienteEnt.tipo_cliente?.descripcion || null,
+          };
+          const cpcs = await dataSource.getRepository(CuentaPorCobrar).find({
+            where: { cliente: { id: clienteEnt.id } as any, estado: CuentaPorCobrarEstado.ACTIVO },
+          });
+          cpcActivas = cpcs.length;
+          const cuotaCpcRepo = dataSource.getRepository(CuentaPorCobrarCuota);
+          for (const cpc of cpcs) {
+            const cuotas = await cuotaCpcRepo.createQueryBuilder('c')
+              .where('c.cuenta_por_cobrar_id = :cid', { cid: cpc.id })
+              .andWhere('c.estado IN (:...ests)', { ests: [CuentaPorCobrarCuotaEstado.PENDIENTE, CuentaPorCobrarCuotaEstado.PARCIAL] })
+              .getMany();
+            for (const c of cuotas) {
+              const saldo = +(Number(c.monto) - Number(c.montoCobrado)).toFixed(2);
+              if (saldo > 0) {
+                creditoSaldo += saldo;
+                proximos.push({ tipo: 'CREDITO', numero: c.numero, fechaVencimiento: c.fechaVencimiento, saldo, descripcion: cpc.descripcion || 'Consumo a crédito' });
+              }
+            }
+          }
+        }
+      }
+      creditoSaldo = +creditoSaldo.toFixed(2);
+
+      proximos.sort((a, b) => new Date(a.fechaVencimiento).getTime() - new Date(b.fechaVencimiento).getTime());
+      const totalAdeudado = +(valesTotal + prestamosSaldo + creditoSaldo).toFixed(2);
+
+      return {
+        cliente,
+        vales: { count: vales.length, total: +valesTotal.toFixed(2) },
+        prestamos: { count: prestamos.length, saldo: +prestamosSaldo.toFixed(2) },
+        credito: { saldo: creditoSaldo, cpcActivas },
+        totalAdeudado,
+        proximosVencimientos: proximos.slice(0, 5),
+      };
+    } catch (error) {
+      console.error('Error getting resumen financiero funcionario:', error);
       throw error;
     }
   });
