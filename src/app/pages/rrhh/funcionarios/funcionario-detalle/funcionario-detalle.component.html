@@ -1,301 +1,360 @@
-<div class="detalle-page" *ngIf="!loading; else loadingTpl">
-  <mat-card class="header-card" *ngIf="funcionario">
-    <mat-card-content>
-      <div class="header">
-        <div class="header-left">
-          <h2>
-            {{ funcionario.persona?.nombre }} {{ funcionario.persona?.apellido || '' }}
-            <mat-chip-listbox class="estado-chip">
-              <mat-chip [color]="funcionario.activo ? 'primary' : ''" highlighted>
-                {{ funcionario.activo ? 'ACTIVO' : 'EGRESADO' }}
-              </mat-chip>
-            </mat-chip-listbox>
-          </h2>
-          <div class="meta">
-            <span><mat-icon>work</mat-icon> {{ funcionario.cargo?.nombre || '-' }}</span>
-            <span><mat-icon>event</mat-icon> Ingreso: {{ funcionario.fechaIngreso | date:'shortDate' }}</span>
-            <span *ngIf="funcionario.fechaEgreso">
-              <mat-icon>event_busy</mat-icon>
-              Egreso: {{ funcionario.fechaEgreso | date:'shortDate' }} ({{ funcionario.motivoEgreso }})
-            </span>
-            <span><mat-icon>payments</mat-icon> {{ funcionario.salarioBase | number:'1.0-2' }} {{ funcionario.monedaSalario?.simbolo || '' }}</span>
-          </div>
+<div class="dashboard-container" *ngIf="!loading; else loadingTpl">
+
+  <!-- Header -->
+  <div class="dashboard-header" *ngIf="funcionario">
+    <div class="dashboard-header-title">
+      <h1 class="dashboard-title">
+        {{ funcionario.persona?.nombre }} {{ funcionario.persona?.apellido || '' }}
+        <span class="estado-badge" [ngClass]="funcionario.activo ? 'badge-activo' : 'badge-egresado'">
+          {{ funcionario.activo ? 'ACTIVO' : 'EGRESADO' }}
+        </span>
+      </h1>
+      <span class="dashboard-subtitle">
+        {{ funcionario.cargo?.nombre || 'Sin cargo' }}
+        · Ingreso {{ funcionario.fechaIngreso | date:'shortDate' }}
+        <ng-container *ngIf="funcionario.fechaEgreso">
+          · Egreso {{ funcionario.fechaEgreso | date:'shortDate' }} ({{ funcionario.motivoEgreso }})
+        </ng-container>
+      </span>
+    </div>
+    <div class="dashboard-header-actions">
+      <button mat-icon-button (click)="loadFuncionario()" [disabled]="loadingResumen" matTooltip="Actualizar">
+        <mat-icon>refresh</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <!-- Resumen financiero -->
+  <div class="dashboard-stats-row stats-5" *ngIf="funcionario">
+    <app-dash-stat-chip
+      icon="payments"
+      [value]="(funcionario.salarioBase | number:'1.0-2') + ' ' + (funcionario.monedaSalario?.simbolo || 'Gs')"
+      label="Salario base">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="receipt_long"
+      [color]="(resumen?.vales?.total || 0) > 0 ? 'warning' : 'success'"
+      [value]="(resumen?.vales?.total || 0 | number:'1.0-2') + ' Gs'"
+      label="Vales pendientes"
+      [loading]="loadingResumen">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="account_balance"
+      [color]="(resumen?.prestamos?.saldo || 0) > 0 ? 'warning' : 'success'"
+      [value]="(resumen?.prestamos?.saldo || 0 | number:'1.0-2') + ' Gs'"
+      label="Préstamos activos"
+      [loading]="loadingResumen">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="shopping_cart"
+      [color]="(resumen?.credito?.saldo || 0) > 0 ? 'warning' : 'success'"
+      [value]="(resumen?.credito?.saldo || 0 | number:'1.0-2') + ' Gs'"
+      label="Consumo a crédito"
+      [loading]="loadingResumen">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="account_balance_wallet"
+      [color]="(resumen?.totalAdeudado || 0) > 0 ? 'error' : 'success'"
+      [value]="(resumen?.totalAdeudado || 0 | number:'1.0-2') + ' Gs'"
+      label="Total adeudado"
+      [loading]="loadingResumen">
+    </app-dash-stat-chip>
+  </div>
+
+  <!-- Acciones rápidas -->
+  <div class="dashboard-quick-actions" *ngIf="funcionario">
+    <app-dash-quick-action icon="edit" title="Editar datos" color="#7c4dff" (action)="abrirEditar()"></app-dash-quick-action>
+    <app-dash-quick-action icon="swap_horiz" title="Cambiar cargo" color="#2196f3" [disabled]="!funcionario.activo" (action)="abrirCambioCargo()"></app-dash-quick-action>
+    <app-dash-quick-action icon="attach_money" title="Ajustar salario" color="#4caf50" [disabled]="!funcionario.activo" (action)="abrirCambioSalario()"></app-dash-quick-action>
+    <app-dash-quick-action icon="person_off" title="Registrar egreso" color="#f44336" [disabled]="!funcionario.activo" (action)="abrirEgreso()"></app-dash-quick-action>
+  </div>
+
+  <!-- Contenido principal: tabs (izq) + próximos vencimientos (der) -->
+  <div class="dashboard-main-content" *ngIf="funcionario">
+
+    <div class="dashboard-col-left">
+      <div class="dashboard-card tabs-card">
+        <mat-tab-group class="tabs">
+          <mat-tab label="Datos">
+            <div class="tab-body">
+              <div class="datos-grid">
+                <div><strong>Codigo interno:</strong> {{ funcionario.codigoInterno || '-' }}</div>
+                <div><strong>Documento:</strong> {{ funcionario.persona?.tipoDocumento }} {{ funcionario.persona?.documento }}</div>
+                <div><strong>Email:</strong> {{ funcionario.persona?.email || '-' }}</div>
+                <div><strong>Telefono:</strong> {{ funcionario.persona?.telefono || '-' }}</div>
+                <div><strong>Fecha nacimiento:</strong> {{ (funcionario.persona?.fechaNacimiento | date:'shortDate') || '-' }}</div>
+                <div><strong>Sexo:</strong> {{ funcionario.persona?.sexo || '-' }}</div>
+                <div><strong>Estado civil:</strong> {{ funcionario.persona?.estadoCivil || '-' }}</div>
+                <div><strong>Direccion:</strong> {{ funcionario.persona?.direccion || '-' }}</div>
+                <div><strong>Es jornalero:</strong> {{ funcionario.esJornalero ? 'Si' : 'No' }}</div>
+                <div *ngIf="funcionario.esJornalero"><strong>Valor jornal:</strong> {{ funcionario.valorJornal | number:'1.0-2' }}</div>
+                <div><strong>IPS activo:</strong> {{ funcionario.ipsActivo ? 'Si' : 'No' }}</div>
+                <div *ngIf="funcionario.ipsActivo"><strong>Numero IPS:</strong> {{ funcionario.numeroIps || '-' }}</div>
+                <div class="full"><strong>Cuenta bancaria:</strong> {{ funcionario.cuentaBancariaPropia || '-' }}</div>
+                <div class="full"><strong>Usuario login:</strong> {{ funcionario.usuario?.nickname || '-' }}</div>
+                <div class="full"><strong>Observacion:</strong> {{ funcionario.observacion || '-' }}</div>
+              </div>
+            </div>
+          </mat-tab>
+
+          <mat-tab label="Historial Cargo">
+            <div class="tab-body">
+              <div *ngIf="loadingHistorico" class="spinner-container">
+                <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
+              </div>
+              <div class="table-scroll" *ngIf="!loadingHistorico">
+                <table mat-table [dataSource]="historicoCargos" class="full-width">
+                  <ng-container matColumnDef="fechaDesde">
+                    <th mat-header-cell *matHeaderCellDef>Desde</th>
+                    <td mat-cell *matCellDef="let h">{{ h.fechaDesde | date:'shortDate' }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="fechaHasta">
+                    <th mat-header-cell *matHeaderCellDef>Hasta</th>
+                    <td mat-cell *matCellDef="let h">{{ (h.fechaHasta | date:'shortDate') || 'Vigente' }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="cargo">
+                    <th mat-header-cell *matHeaderCellDef>Cargo</th>
+                    <td mat-cell *matCellDef="let h">{{ h.cargo?.nombre }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="motivo">
+                    <th mat-header-cell *matHeaderCellDef>Motivo</th>
+                    <td mat-cell *matCellDef="let h">{{ h.motivo || '-' }}</td>
+                  </ng-container>
+                  <tr mat-header-row *matHeaderRowDef="cargosColumns"></tr>
+                  <tr mat-row *matRowDef="let r; columns: cargosColumns"></tr>
+                </table>
+              </div>
+              <div *ngIf="!loadingHistorico && historicoCargos.length === 0" class="empty">Sin historico.</div>
+            </div>
+          </mat-tab>
+
+          <mat-tab label="Historial Salario">
+            <div class="tab-body">
+              <div *ngIf="loadingHistorico" class="spinner-container">
+                <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
+              </div>
+              <div class="table-scroll" *ngIf="!loadingHistorico">
+                <table mat-table [dataSource]="historicoSalarios" class="full-width">
+                  <ng-container matColumnDef="fechaVigencia">
+                    <th mat-header-cell *matHeaderCellDef>Vigencia</th>
+                    <td mat-cell *matCellDef="let h">{{ h.fechaVigencia | date:'shortDate' }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="salarioAnterior">
+                    <th mat-header-cell *matHeaderCellDef>Anterior</th>
+                    <td mat-cell *matCellDef="let h">{{ (h.salarioAnterior | number:'1.0-2') || '-' }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="salarioNuevo">
+                    <th mat-header-cell *matHeaderCellDef>Nuevo</th>
+                    <td mat-cell *matCellDef="let h">{{ h.salarioNuevo | number:'1.0-2' }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="moneda">
+                    <th mat-header-cell *matHeaderCellDef>Moneda</th>
+                    <td mat-cell *matCellDef="let h">{{ h.moneda?.simbolo || h.moneda?.denominacion }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="motivo">
+                    <th mat-header-cell *matHeaderCellDef>Motivo</th>
+                    <td mat-cell *matCellDef="let h">{{ h.motivo || '-' }}</td>
+                  </ng-container>
+                  <tr mat-header-row *matHeaderRowDef="salariosColumns"></tr>
+                  <tr mat-row *matRowDef="let r; columns: salariosColumns"></tr>
+                </table>
+              </div>
+              <div *ngIf="!loadingHistorico && historicoSalarios.length === 0" class="empty">Sin historico.</div>
+            </div>
+          </mat-tab>
+
+          <mat-tab label="Turnos">
+            <div class="tab-body">
+              <div class="tab-actions">
+                <button mat-flat-button color="primary" (click)="abrirAsignarTurno()" [disabled]="!funcionario.activo">
+                  <mat-icon>schedule</mat-icon>
+                  Asignar nuevo turno
+                </button>
+              </div>
+              <div *ngIf="loadingTurnos" class="spinner-container">
+                <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
+              </div>
+              <div class="table-scroll" *ngIf="!loadingTurnos">
+                <table mat-table [dataSource]="turnos" class="full-width">
+                  <ng-container matColumnDef="turno">
+                    <th mat-header-cell *matHeaderCellDef>Turno</th>
+                    <td mat-cell *matCellDef="let t">{{ t.turno?.nombre || '-' }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="horario">
+                    <th mat-header-cell *matHeaderCellDef>Horario</th>
+                    <td mat-cell *matCellDef="let t">{{ t.turno?.horaEntrada || '-' }} - {{ t.turno?.horaSalida || '-' }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="fechaDesde">
+                    <th mat-header-cell *matHeaderCellDef>Desde</th>
+                    <td mat-cell *matCellDef="let t">{{ t.fechaDesde | date:'shortDate' }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="fechaHasta">
+                    <th mat-header-cell *matHeaderCellDef>Hasta</th>
+                    <td mat-cell *matCellDef="let t">{{ (t.fechaHasta | date:'shortDate') || 'Vigente' }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="actions">
+                    <th mat-header-cell *matHeaderCellDef class="acc-col">Acciones</th>
+                    <td mat-cell *matCellDef="let t">
+                      <button mat-icon-button [matMenuTriggerFor]="menuT">
+                        <mat-icon>more_vert</mat-icon>
+                      </button>
+                      <mat-menu #menuT="matMenu">
+                        <button mat-menu-item (click)="editarTurno(t)">
+                          <mat-icon>edit</mat-icon><span>Editar fecha desde</span>
+                        </button>
+                        <button mat-menu-item (click)="cerrarTurno(t)" *ngIf="!t.fechaHasta">
+                          <mat-icon>event_busy</mat-icon><span>Cerrar asignacion</span>
+                        </button>
+                      </mat-menu>
+                    </td>
+                  </ng-container>
+                  <tr mat-header-row *matHeaderRowDef="turnosColumns"></tr>
+                  <tr mat-row *matRowDef="let r; columns: turnosColumns"></tr>
+                </table>
+              </div>
+              <div *ngIf="!loadingTurnos && turnos.length === 0" class="empty">Sin turnos asignados.</div>
+            </div>
+          </mat-tab>
+
+          <mat-tab label="Rostros">
+            <div class="tab-body">
+              <div class="tab-actions">
+                <button mat-flat-button color="primary" (click)="abrirEnrolarRostro()" [disabled]="!funcionario.activo">
+                  <mat-icon>face</mat-icon>
+                  Registrar rostro
+                </button>
+              </div>
+              <div *ngIf="loadingRostros" class="spinner-container">
+                <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
+              </div>
+              <div class="table-scroll" *ngIf="!loadingRostros">
+                <table mat-table [dataSource]="rostros" class="full-width">
+                  <ng-container matColumnDef="createdAt">
+                    <th mat-header-cell *matHeaderCellDef>Registrado</th>
+                    <td mat-cell *matCellDef="let r">{{ r.createdAt | date:'short' }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="modelo">
+                    <th mat-header-cell *matHeaderCellDef>Modelo</th>
+                    <td mat-cell *matCellDef="let r">{{ r.modelo }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="actions">
+                    <th mat-header-cell *matHeaderCellDef class="acc-col">Acciones</th>
+                    <td mat-cell *matCellDef="let r">
+                      <button mat-icon-button [matMenuTriggerFor]="menuR">
+                        <mat-icon>more_vert</mat-icon>
+                      </button>
+                      <mat-menu #menuR="matMenu">
+                        <button mat-menu-item (click)="eliminarRostro(r)">
+                          <mat-icon>delete</mat-icon><span>Eliminar</span>
+                        </button>
+                      </mat-menu>
+                    </td>
+                  </ng-container>
+                  <tr mat-header-row *matHeaderRowDef="rostrosColumns"></tr>
+                  <tr mat-row *matRowDef="let row; columns: rostrosColumns"></tr>
+                </table>
+              </div>
+              <div *ngIf="!loadingRostros && rostros.length === 0" class="empty">
+                Sin rostros registrados. Registrá al menos uno para habilitar el fichaje facial.
+              </div>
+            </div>
+          </mat-tab>
+
+          <mat-tab label="Documentos">
+            <div class="tab-body">
+              <div class="tab-actions">
+                <button mat-flat-button color="primary" (click)="abrirSubirDocumento()">
+                  <mat-icon>upload_file</mat-icon>
+                  Subir documento
+                </button>
+              </div>
+              <div *ngIf="loadingDocumentos" class="spinner-container">
+                <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
+              </div>
+              <div class="table-scroll" *ngIf="!loadingDocumentos">
+                <table mat-table [dataSource]="documentos" class="full-width">
+                  <ng-container matColumnDef="tipo">
+                    <th mat-header-cell *matHeaderCellDef>Tipo</th>
+                    <td mat-cell *matCellDef="let d">{{ d.tipo }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="nombre">
+                    <th mat-header-cell *matHeaderCellDef>Nombre</th>
+                    <td mat-cell *matCellDef="let d">{{ d.nombreArchivo }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="tamano">
+                    <th mat-header-cell *matHeaderCellDef>Tamano</th>
+                    <td mat-cell *matCellDef="let d">{{ (d.tamanoBytes/1024) | number:'1.0-2' }} KB</td>
+                  </ng-container>
+                  <ng-container matColumnDef="fechaSubida">
+                    <th mat-header-cell *matHeaderCellDef>Subido</th>
+                    <td mat-cell *matCellDef="let d">{{ d.fechaSubida | date:'short' }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="vencimiento">
+                    <th mat-header-cell *matHeaderCellDef>Vencimiento</th>
+                    <td mat-cell *matCellDef="let d">{{ (d.vencimiento | date:'shortDate') || '-' }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="actions">
+                    <th mat-header-cell *matHeaderCellDef class="acc-col">Acciones</th>
+                    <td mat-cell *matCellDef="let d">
+                      <button mat-icon-button [matMenuTriggerFor]="docMenu">
+                        <mat-icon>more_vert</mat-icon>
+                      </button>
+                      <mat-menu #docMenu="matMenu">
+                        <button mat-menu-item (click)="verDocumento(d)">
+                          <mat-icon>visibility</mat-icon><span>Ver</span>
+                        </button>
+                        <button mat-menu-item (click)="descargarDocumento(d)">
+                          <mat-icon>download</mat-icon><span>Descargar</span>
+                        </button>
+                        <button mat-menu-item (click)="eliminarDocumento(d)">
+                          <mat-icon>delete</mat-icon><span>Eliminar</span>
+                        </button>
+                      </mat-menu>
+                    </td>
+                  </ng-container>
+                  <tr mat-header-row *matHeaderRowDef="documentosColumns"></tr>
+                  <tr mat-row *matRowDef="let r; columns: documentosColumns"></tr>
+                </table>
+              </div>
+              <div *ngIf="!loadingDocumentos && documentos.length === 0" class="empty">Sin documentos cargados.</div>
+            </div>
+          </mat-tab>
+        </mat-tab-group>
+      </div>
+    </div>
+
+    <div class="dashboard-col-right">
+      <div class="dashboard-card">
+        <app-dash-section-header
+          icon="event"
+          title="Próximos vencimientos"
+          [badge]="resumen?.proximosVencimientos?.length || 0"
+          badgeColor="warning">
+        </app-dash-section-header>
+        <mat-divider></mat-divider>
+
+        <div *ngIf="!loadingResumen && (resumen?.proximosVencimientos?.length || 0) === 0" class="dashboard-empty-state">
+          <mat-icon>info_outline</mat-icon>
+          <span>Sin deudas próximas a vencer</span>
         </div>
-        <div class="header-actions">
-          <button mat-flat-button color="primary" [matMenuTriggerFor]="acciones">
-            <mat-icon>more_vert</mat-icon>
-            Acciones
-          </button>
-          <mat-menu #acciones="matMenu">
-            <button mat-menu-item (click)="abrirEditar()">
-              <mat-icon>edit</mat-icon> Editar datos
-            </button>
-            <button mat-menu-item (click)="abrirCambioCargo()" [disabled]="!funcionario.activo">
-              <mat-icon>swap_horiz</mat-icon> Cambiar cargo
-            </button>
-            <button mat-menu-item (click)="abrirCambioSalario()" [disabled]="!funcionario.activo">
-              <mat-icon>attach_money</mat-icon> Ajustar salario
-            </button>
-            <button mat-menu-item (click)="abrirEgreso()" [disabled]="!funcionario.activo">
-              <mat-icon>person_off</mat-icon> Registrar egreso
-            </button>
-          </mat-menu>
+
+        <div class="dashboard-alert-list" *ngIf="(resumen?.proximosVencimientos?.length || 0) > 0">
+          <div *ngFor="let v of resumen.proximosVencimientos"
+               class="dashboard-alert-item alert-warning">
+            <mat-icon>{{ v.tipo === 'CREDITO' ? 'shopping_cart' : 'account_balance' }}</mat-icon>
+            <div class="dashboard-alert-info">
+              <span class="dashboard-alert-title">
+                {{ v.tipo === 'CREDITO' ? 'Crédito' : 'Préstamo' }} · Cuota #{{ v.numero }}
+              </span>
+              <span class="dashboard-alert-detail">
+                {{ v.saldo | number:'1.0-2' }} Gs · vence {{ v.fechaVencimiento | date:'shortDate' }}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
-    </mat-card-content>
-  </mat-card>
-
-  <mat-tab-group class="tabs" *ngIf="funcionario">
-    <mat-tab label="Datos">
-      <mat-card>
-        <mat-card-content>
-          <div class="datos-grid">
-            <div><strong>Codigo interno:</strong> {{ funcionario.codigoInterno || '-' }}</div>
-            <div><strong>Documento:</strong> {{ funcionario.persona?.tipoDocumento }} {{ funcionario.persona?.documento }}</div>
-            <div><strong>Email:</strong> {{ funcionario.persona?.email || '-' }}</div>
-            <div><strong>Telefono:</strong> {{ funcionario.persona?.telefono || '-' }}</div>
-            <div><strong>Fecha nacimiento:</strong> {{ (funcionario.persona?.fechaNacimiento | date:'shortDate') || '-' }}</div>
-            <div><strong>Sexo:</strong> {{ funcionario.persona?.sexo || '-' }}</div>
-            <div><strong>Estado civil:</strong> {{ funcionario.persona?.estadoCivil || '-' }}</div>
-            <div><strong>Direccion:</strong> {{ funcionario.persona?.direccion || '-' }}</div>
-            <div><strong>Es jornalero:</strong> {{ funcionario.esJornalero ? 'Si' : 'No' }}</div>
-            <div *ngIf="funcionario.esJornalero"><strong>Valor jornal:</strong> {{ funcionario.valorJornal | number:'1.0-2' }}</div>
-            <div><strong>IPS activo:</strong> {{ funcionario.ipsActivo ? 'Si' : 'No' }}</div>
-            <div *ngIf="funcionario.ipsActivo"><strong>Numero IPS:</strong> {{ funcionario.numeroIps || '-' }}</div>
-            <div class="full"><strong>Cuenta bancaria:</strong> {{ funcionario.cuentaBancariaPropia || '-' }}</div>
-            <div class="full"><strong>Usuario login:</strong> {{ funcionario.usuario?.nickname || '-' }}</div>
-            <div class="full"><strong>Observacion:</strong> {{ funcionario.observacion || '-' }}</div>
-          </div>
-        </mat-card-content>
-      </mat-card>
-    </mat-tab>
-
-    <mat-tab label="Historial Cargo">
-      <mat-card>
-        <mat-card-content>
-          <div *ngIf="loadingHistorico" class="spinner-container">
-            <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
-          </div>
-          <table mat-table [dataSource]="historicoCargos" class="full-width" *ngIf="!loadingHistorico">
-            <ng-container matColumnDef="fechaDesde">
-              <th mat-header-cell *matHeaderCellDef>Desde</th>
-              <td mat-cell *matCellDef="let h">{{ h.fechaDesde | date:'shortDate' }}</td>
-            </ng-container>
-            <ng-container matColumnDef="fechaHasta">
-              <th mat-header-cell *matHeaderCellDef>Hasta</th>
-              <td mat-cell *matCellDef="let h">{{ (h.fechaHasta | date:'shortDate') || 'Vigente' }}</td>
-            </ng-container>
-            <ng-container matColumnDef="cargo">
-              <th mat-header-cell *matHeaderCellDef>Cargo</th>
-              <td mat-cell *matCellDef="let h">{{ h.cargo?.nombre }}</td>
-            </ng-container>
-            <ng-container matColumnDef="motivo">
-              <th mat-header-cell *matHeaderCellDef>Motivo</th>
-              <td mat-cell *matCellDef="let h">{{ h.motivo || '-' }}</td>
-            </ng-container>
-            <tr mat-header-row *matHeaderRowDef="cargosColumns"></tr>
-            <tr mat-row *matRowDef="let r; columns: cargosColumns"></tr>
-          </table>
-          <div *ngIf="!loadingHistorico && historicoCargos.length === 0" class="empty">Sin historico.</div>
-        </mat-card-content>
-      </mat-card>
-    </mat-tab>
-
-    <mat-tab label="Historial Salario">
-      <mat-card>
-        <mat-card-content>
-          <div *ngIf="loadingHistorico" class="spinner-container">
-            <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
-          </div>
-          <table mat-table [dataSource]="historicoSalarios" class="full-width" *ngIf="!loadingHistorico">
-            <ng-container matColumnDef="fechaVigencia">
-              <th mat-header-cell *matHeaderCellDef>Vigencia</th>
-              <td mat-cell *matCellDef="let h">{{ h.fechaVigencia | date:'shortDate' }}</td>
-            </ng-container>
-            <ng-container matColumnDef="salarioAnterior">
-              <th mat-header-cell *matHeaderCellDef>Anterior</th>
-              <td mat-cell *matCellDef="let h">{{ (h.salarioAnterior | number:'1.0-2') || '-' }}</td>
-            </ng-container>
-            <ng-container matColumnDef="salarioNuevo">
-              <th mat-header-cell *matHeaderCellDef>Nuevo</th>
-              <td mat-cell *matCellDef="let h">{{ h.salarioNuevo | number:'1.0-2' }}</td>
-            </ng-container>
-            <ng-container matColumnDef="moneda">
-              <th mat-header-cell *matHeaderCellDef>Moneda</th>
-              <td mat-cell *matCellDef="let h">{{ h.moneda?.simbolo || h.moneda?.denominacion }}</td>
-            </ng-container>
-            <ng-container matColumnDef="motivo">
-              <th mat-header-cell *matHeaderCellDef>Motivo</th>
-              <td mat-cell *matCellDef="let h">{{ h.motivo || '-' }}</td>
-            </ng-container>
-            <tr mat-header-row *matHeaderRowDef="salariosColumns"></tr>
-            <tr mat-row *matRowDef="let r; columns: salariosColumns"></tr>
-          </table>
-          <div *ngIf="!loadingHistorico && historicoSalarios.length === 0" class="empty">Sin historico.</div>
-        </mat-card-content>
-      </mat-card>
-    </mat-tab>
-
-    <mat-tab label="Turnos">
-      <mat-card>
-        <mat-card-content>
-          <div class="docs-header">
-            <button mat-flat-button color="primary" (click)="abrirAsignarTurno()" [disabled]="!funcionario.activo">
-              <mat-icon>schedule</mat-icon>
-              Asignar nuevo turno
-            </button>
-          </div>
-          <div *ngIf="loadingTurnos" class="spinner-container">
-            <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
-          </div>
-          <table mat-table [dataSource]="turnos" class="full-width" *ngIf="!loadingTurnos">
-            <ng-container matColumnDef="turno">
-              <th mat-header-cell *matHeaderCellDef>Turno</th>
-              <td mat-cell *matCellDef="let t">{{ t.turno?.nombre || '-' }}</td>
-            </ng-container>
-            <ng-container matColumnDef="horario">
-              <th mat-header-cell *matHeaderCellDef>Horario</th>
-              <td mat-cell *matCellDef="let t">{{ t.turno?.horaEntrada || '-' }} - {{ t.turno?.horaSalida || '-' }}</td>
-            </ng-container>
-            <ng-container matColumnDef="fechaDesde">
-              <th mat-header-cell *matHeaderCellDef>Desde</th>
-              <td mat-cell *matCellDef="let t">{{ t.fechaDesde | date:'shortDate' }}</td>
-            </ng-container>
-            <ng-container matColumnDef="fechaHasta">
-              <th mat-header-cell *matHeaderCellDef>Hasta</th>
-              <td mat-cell *matCellDef="let t">{{ (t.fechaHasta | date:'shortDate') || 'Vigente' }}</td>
-            </ng-container>
-            <ng-container matColumnDef="actions">
-              <th mat-header-cell *matHeaderCellDef class="acc-col">Acciones</th>
-              <td mat-cell *matCellDef="let t">
-                <button mat-icon-button [matMenuTriggerFor]="menuT">
-                  <mat-icon>more_vert</mat-icon>
-                </button>
-                <mat-menu #menuT="matMenu">
-                  <button mat-menu-item (click)="editarTurno(t)">
-                    <mat-icon>edit</mat-icon><span>Editar fecha desde</span>
-                  </button>
-                  <button mat-menu-item (click)="cerrarTurno(t)" *ngIf="!t.fechaHasta">
-                    <mat-icon>event_busy</mat-icon><span>Cerrar asignacion</span>
-                  </button>
-                </mat-menu>
-              </td>
-            </ng-container>
-            <tr mat-header-row *matHeaderRowDef="turnosColumns"></tr>
-            <tr mat-row *matRowDef="let r; columns: turnosColumns"></tr>
-          </table>
-          <div *ngIf="!loadingTurnos && turnos.length === 0" class="empty">Sin turnos asignados.</div>
-        </mat-card-content>
-      </mat-card>
-    </mat-tab>
-
-    <mat-tab label="Rostros">
-      <mat-card>
-        <mat-card-content>
-          <div class="docs-header">
-            <button mat-flat-button color="primary" (click)="abrirEnrolarRostro()" [disabled]="!funcionario.activo">
-              <mat-icon>face</mat-icon>
-              Registrar rostro
-            </button>
-          </div>
-          <div *ngIf="loadingRostros" class="spinner-container">
-            <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
-          </div>
-          <table mat-table [dataSource]="rostros" class="full-width" *ngIf="!loadingRostros">
-            <ng-container matColumnDef="createdAt">
-              <th mat-header-cell *matHeaderCellDef>Registrado</th>
-              <td mat-cell *matCellDef="let r">{{ r.createdAt | date:'short' }}</td>
-            </ng-container>
-            <ng-container matColumnDef="modelo">
-              <th mat-header-cell *matHeaderCellDef>Modelo</th>
-              <td mat-cell *matCellDef="let r">{{ r.modelo }}</td>
-            </ng-container>
-            <ng-container matColumnDef="actions">
-              <th mat-header-cell *matHeaderCellDef class="acc-col">Acciones</th>
-              <td mat-cell *matCellDef="let r">
-                <button mat-icon-button [matMenuTriggerFor]="menuR">
-                  <mat-icon>more_vert</mat-icon>
-                </button>
-                <mat-menu #menuR="matMenu">
-                  <button mat-menu-item (click)="eliminarRostro(r)">
-                    <mat-icon>delete</mat-icon><span>Eliminar</span>
-                  </button>
-                </mat-menu>
-              </td>
-            </ng-container>
-            <tr mat-header-row *matHeaderRowDef="rostrosColumns"></tr>
-            <tr mat-row *matRowDef="let row; columns: rostrosColumns"></tr>
-          </table>
-          <div *ngIf="!loadingRostros && rostros.length === 0" class="empty">
-            Sin rostros registrados. Registrá al menos uno para habilitar el fichaje facial.
-          </div>
-        </mat-card-content>
-      </mat-card>
-    </mat-tab>
-
-    <mat-tab label="Documentos">
-      <mat-card>
-        <mat-card-content>
-          <div class="docs-header">
-            <button mat-flat-button color="primary" (click)="abrirSubirDocumento()">
-              <mat-icon>upload_file</mat-icon>
-              Subir documento
-            </button>
-          </div>
-          <div *ngIf="loadingDocumentos" class="spinner-container">
-            <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
-          </div>
-          <table mat-table [dataSource]="documentos" class="full-width" *ngIf="!loadingDocumentos">
-            <ng-container matColumnDef="tipo">
-              <th mat-header-cell *matHeaderCellDef>Tipo</th>
-              <td mat-cell *matCellDef="let d">{{ d.tipo }}</td>
-            </ng-container>
-            <ng-container matColumnDef="nombre">
-              <th mat-header-cell *matHeaderCellDef>Nombre</th>
-              <td mat-cell *matCellDef="let d">{{ d.nombreArchivo }}</td>
-            </ng-container>
-            <ng-container matColumnDef="tamano">
-              <th mat-header-cell *matHeaderCellDef>Tamano</th>
-              <td mat-cell *matCellDef="let d">{{ (d.tamanoBytes/1024) | number:'1.0-2' }} KB</td>
-            </ng-container>
-            <ng-container matColumnDef="fechaSubida">
-              <th mat-header-cell *matHeaderCellDef>Subido</th>
-              <td mat-cell *matCellDef="let d">{{ d.fechaSubida | date:'short' }}</td>
-            </ng-container>
-            <ng-container matColumnDef="vencimiento">
-              <th mat-header-cell *matHeaderCellDef>Vencimiento</th>
-              <td mat-cell *matCellDef="let d">{{ (d.vencimiento | date:'shortDate') || '-' }}</td>
-            </ng-container>
-            <ng-container matColumnDef="actions">
-              <th mat-header-cell *matHeaderCellDef class="acciones-col">Acciones</th>
-              <td mat-cell *matCellDef="let d">
-                <button mat-icon-button [matMenuTriggerFor]="docMenu">
-                  <mat-icon>more_vert</mat-icon>
-                </button>
-                <mat-menu #docMenu="matMenu">
-                  <button mat-menu-item (click)="verDocumento(d)">
-                    <mat-icon>visibility</mat-icon>
-                    <span>Ver</span>
-                  </button>
-                  <button mat-menu-item (click)="descargarDocumento(d)">
-                    <mat-icon>download</mat-icon>
-                    <span>Descargar</span>
-                  </button>
-                  <button mat-menu-item (click)="eliminarDocumento(d)">
-                    <mat-icon>delete</mat-icon>
-                    <span>Eliminar</span>
-                  </button>
-                </mat-menu>
-              </td>
-            </ng-container>
-            <tr mat-header-row *matHeaderRowDef="documentosColumns"></tr>
-            <tr mat-row *matRowDef="let r; columns: documentosColumns"></tr>
-          </table>
-          <div *ngIf="!loadingDocumentos && documentos.length === 0" class="empty">Sin documentos cargados.</div>
-        </mat-card-content>
-      </mat-card>
-    </mat-tab>
-  </mat-tab-group>
+    </div>
+  </div>
 </div>
 
 <ng-template #loadingTpl>
