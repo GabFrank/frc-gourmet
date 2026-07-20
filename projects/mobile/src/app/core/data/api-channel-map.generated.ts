@@ -3,7 +3,7 @@
  * AUTO-GENERADO por scripts/generate-mobile-api-map.js — NO editar a mano.
  * Mapa método de window.api → canal IPC (extraído de preload.ts).
  * Regenerar tras tocar preload.ts: `node scripts/generate-mobile-api-map.js`.
- * Total: 810 métodos.
+ * Total: 813 métodos.
  */
 export const API_CHANNEL_MAP: Record<string, string> = {
   "abrirCajaDesdeConteo": "abrir-caja-desde-conteo",
@@ -647,6 +647,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "iaPromptSugerenciaRechazar": "ia-prompt-sugerencia-rechazar",
   "ingresarRetiroCaja": "ingresar-retiro-caja",
   "justificarAsistencia": "justificar-asistencia",
+  "listSystemPrinters": "list-system-printers",
   "login": "login",
   "logout": "logout",
   "marcarAsistenciaMasiva": "marcar-asistencia-masiva",
@@ -695,6 +696,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "saveCajasMonedas": "save-cajas-monedas",
   "saveFile": "save-file",
   "saveProfileImage": "save-profile-image",
+  "scanNetworkPrinters": "scan-network-printers",
   "searchIngredientes": "searchIngredientes",
   "searchObservaciones": "searchObservaciones",
   "searchProductosByCodigo": "search-productos-by-codigo",
@@ -709,6 +711,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "setPresentacionPrincipal": "set-presentacion-principal",
   "setRecetaFaseIngredientes": "set-receta-fase-ingredientes",
   "setRolePermissions": "set-role-permissions",
+  "testPrinterConnection": "test-printer-connection",
   "togglePresentacionActivo": "toggle-presentacion-activo",
   "updateAdicional": "update-adicional",
   "updateAdjunto": "update-adjunto",
