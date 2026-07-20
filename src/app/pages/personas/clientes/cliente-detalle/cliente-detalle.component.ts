@@ -21,6 +21,7 @@ import { firstValueFrom } from 'rxjs';
 import type { ChartConfiguration, ChartData } from 'chart.js';
 
 import { RepositoryService } from 'src/app/database/repository.service';
+import { TabsService } from 'src/app/services/tabs.service';
 import { DashStatChipComponent } from 'src/app/shared/components/dashboard/stat-chip/dash-stat-chip.component';
 import { DashSectionHeaderComponent } from 'src/app/shared/components/dashboard/section-header/dash-section-header.component';
 import { DashChartCardComponent } from 'src/app/shared/components/dashboard/chart-card/dash-chart-card.component';
@@ -88,6 +89,9 @@ export class ClienteDetalleComponent implements OnInit {
   cpcAbiertas: any[] = [];
   ultimasVentas: any[] = [];
 
+  // Aviso cruzado: funcionario vinculado a la misma persona (o null)
+  funcionarioVinculado: any = null;
+
   // Movimientos paginados con filtros
   filterForm!: FormGroup;
   movimientos: any[] = [];
@@ -115,6 +119,7 @@ export class ClienteDetalleComponent implements OnInit {
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
     private fb: FormBuilder,
+    private tabsService: TabsService,
   ) {
     this.filterForm = this.fb.group({
       fechaInicio: [null],
@@ -132,6 +137,31 @@ export class ClienteDetalleComponent implements OnInit {
     if (this.clienteId) this.loadAll();
   }
 
+  private async loadFuncionarioVinculado(): Promise<void> {
+    if (!this.clienteId) { this.funcionarioVinculado = null; return; }
+    try {
+      this.funcionarioVinculado = await firstValueFrom(this.repositoryService.getFuncionarioDeCliente(this.clienteId));
+    } catch (e) {
+      console.error('Error cargando funcionario vinculado:', e);
+      this.funcionarioVinculado = null;
+    }
+  }
+
+  /** Abre la ficha del funcionario vinculado a esta persona (aviso cruzado). */
+  async abrirFuncionarioVinculado(): Promise<void> {
+    const funcionarioId = this.funcionarioVinculado?.id;
+    if (!funcionarioId) return;
+    const nombre = this.funcionarioVinculado?.nombre || this.clienteNombreStr;
+    const mod = await import('src/app/pages/rrhh/funcionarios/funcionario-detalle/funcionario-detalle.component');
+    this.tabsService.openTab(
+      `Funcionario: ${nombre}`,
+      mod.FuncionarioDetalleComponent,
+      { funcionarioId },
+      `funcionario-detalle-${funcionarioId}`,
+      true,
+    );
+  }
+
   async loadAll(): Promise<void> {
     if (!this.clienteId) return;
     this.loading = true;
@@ -142,6 +172,7 @@ export class ClienteDetalleComponent implements OnInit {
       ]);
       this.applyEstadoCuenta(estado);
       this.applyStats(stats);
+      this.loadFuncionarioVinculado();
       await this.loadMovimientos();
     } catch (e) {
       console.error(e);

@@ -535,4 +535,32 @@ export function registerRrhhFuncionariosHandlers(
       throw error;
     }
   });
+
+  /**
+   * Dado un cliente, devuelve el funcionario vinculado por la misma persona
+   * (o null). Usado para el aviso cruzado "También es funcionario". Solo lectura.
+   */
+  ipcMain.handle('get-funcionario-de-cliente', async (_event, clienteId: number) => {
+    try {
+      const cliente = await dataSource.getRepository(Cliente).findOne({
+        where: { id: clienteId },
+        relations: ['persona'],
+      });
+      if (!cliente?.persona?.id) return null;
+      const funcionario = await dataSource.getRepository(Funcionario).findOne({
+        where: { persona: { id: cliente.persona.id } as any },
+        relations: ['persona', 'cargo'],
+      });
+      if (!funcionario) return null;
+      return {
+        id: funcionario.id,
+        activo: funcionario.activo,
+        nombre: `${funcionario.persona?.nombre || ''} ${funcionario.persona?.apellido || ''}`.trim(),
+        cargo: funcionario.cargo?.nombre || null,
+      };
+    } catch (error) {
+      console.error('Error getting funcionario de cliente:', error);
+      throw error;
+    }
+  });
 }

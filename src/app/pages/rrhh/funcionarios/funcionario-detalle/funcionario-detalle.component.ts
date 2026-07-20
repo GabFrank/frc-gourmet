@@ -14,6 +14,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { TabsService } from 'src/app/services/tabs.service';
 import { DashStatChipComponent } from 'src/app/shared/components/dashboard/stat-chip/dash-stat-chip.component';
 import { DashQuickActionComponent } from 'src/app/shared/components/dashboard/quick-action/dash-quick-action.component';
 import { DashSectionHeaderComponent } from 'src/app/shared/components/dashboard/section-header/dash-section-header.component';
@@ -82,7 +83,23 @@ export class FuncionarioDetalleComponent implements OnInit {
     private repositoryService: RepositoryService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
+    private tabsService: TabsService,
   ) {}
+
+  /** Abre el detalle del cliente vinculado a esta persona (aviso cruzado). */
+  async abrirClienteVinculado(): Promise<void> {
+    const clienteId = this.resumen?.cliente?.id;
+    if (!clienteId) return;
+    const nombre = `${this.funcionario?.persona?.nombre || ''} ${this.funcionario?.persona?.apellido || ''}`.trim();
+    const mod = await import('src/app/pages/personas/clientes/cliente-detalle/cliente-detalle.component');
+    this.tabsService.openTab(
+      `Cliente: ${nombre}`,
+      mod.ClienteDetalleComponent,
+      { clienteId },
+      `cliente-detalle-${clienteId}`,
+      true,
+    );
+  }
 
   setData(data: any): void {
     this.data = data;

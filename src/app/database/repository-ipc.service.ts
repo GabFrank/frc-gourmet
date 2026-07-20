@@ -857,6 +857,7 @@ interface ElectronAPI {
   getHistoricoCargos: (funcionarioId: number) => Promise<any[]>;
   getHistoricoSalarios: (funcionarioId: number) => Promise<any[]>;
   getFuncionarioResumenFinanciero: (funcionarioId: number) => Promise<any>;
+  getFuncionarioDeCliente: (clienteId: number) => Promise<any>;
 
   // RRHH - Documentos
   getFuncionarioDocumentos: (funcionarioId: number) => Promise<any[]>;
@@ -3570,6 +3571,9 @@ export class RepositoryIpcService extends RepositoryService {
   }
   getFuncionarioResumenFinanciero(funcionarioId: number): Observable<any> {
     return from(this.api.getFuncionarioResumenFinanciero(funcionarioId));
+  }
+  getFuncionarioDeCliente(clienteId: number): Observable<any> {
+    return from(this.api.getFuncionarioDeCliente(clienteId));
   }
 
   // ===================== RRHH: DOCUMENTOS =====================

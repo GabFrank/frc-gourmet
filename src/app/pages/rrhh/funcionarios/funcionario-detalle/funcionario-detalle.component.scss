@@ -79,6 +79,14 @@
 .full-width { width: 100%; }
 .acc-col { width: 60px; }
 
+// Chip de vínculo cruzado (También es cliente)
+.vinculo-chip {
+  margin-right: 8px;
+  line-height: 32px;
+  color: var(--info-color);
+  border-color: var(--info-color);
+}
+
 .spinner-container {
   display: flex;
   justify-content: center;

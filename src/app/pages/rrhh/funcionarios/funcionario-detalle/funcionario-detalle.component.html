@@ -18,6 +18,14 @@
       </span>
     </div>
     <div class="dashboard-header-actions">
+      <button *ngIf="resumen?.cliente?.id"
+              mat-stroked-button
+              class="vinculo-chip"
+              matTooltip="Ver estado de cuenta del cliente"
+              (click)="abrirClienteVinculado()">
+        <mat-icon>account_circle</mat-icon>
+        También es cliente
+      </button>
       <button mat-icon-button (click)="loadFuncionario()" [disabled]="loadingResumen" matTooltip="Actualizar">
         <mat-icon>refresh</mat-icon>
       </button>
