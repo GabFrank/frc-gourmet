@@ -168,6 +168,11 @@
             <button mat-raised-button color="primary" type="submit" [disabled]="printerForm.invalid || isLoading">
               {{ editingPrinterId ? 'Actualizar impresora' : 'Agregar impresora' }}
             </button>
+            <button mat-stroked-button type="button" (click)="testConnection()"
+                    [disabled]="testingConnection || !printerForm.get('address')?.value">
+              <mat-icon>{{ testingConnection ? 'hourglass_empty' : 'network_check' }}</mat-icon>
+              {{ testingConnection ? 'Probando…' : 'Probar conexión' }}
+            </button>
             <button mat-button type="button" (click)="resetForm()" *ngIf="editingPrinterId">Cancelar</button>
           </div>
         </form>

@@ -75,6 +75,9 @@ export class PrinterSettingsComponent implements OnInit {
   deepScan = false;
   scannedOnce = false;
 
+  // Prueba de conexión (pre-guardado).
+  testingConnection = false;
+
   // La cantidad de columnas depende de la tecnología + fuente de la impresora,
   // no solo del ancho en mm. Se configura directamente (se guarda en `width`).
   columnOptions = [
@@ -132,6 +135,30 @@ export class PrinterSettingsComponent implements OnInit {
         this.scannedOnce = true;
         this.scanningNetwork = false;
         this.snackBar.open('Error al buscar impresoras en la red', 'CERRAR', { duration: 3000 });
+      },
+    });
+  }
+
+  /** Prueba la conexión con la config actual del form, sin guardar ni imprimir. */
+  testConnection(): void {
+    const cfg = this.printerForm.value;
+    if (!cfg.connectionType || !cfg.address) {
+      this.snackBar.open('Completá tipo de conexión y dirección primero', 'CERRAR', { duration: 3000 });
+      return;
+    }
+    this.testingConnection = true;
+    this.printerService.testPrinterConnection(cfg).subscribe({
+      next: (res) => {
+        this.testingConnection = false;
+        if (res?.ok) {
+          this.snackBar.open('Conexión OK ✓', 'CERRAR', { duration: 3000 });
+        } else {
+          this.snackBar.open(`Sin conexión: ${res?.error || 'no responde'}`, 'CERRAR', { duration: 5000 });
+        }
+      },
+      error: (e) => {
+        this.testingConnection = false;
+        this.snackBar.open(`Error al probar: ${e?.message || e}`, 'CERRAR', { duration: 4000 });
       },
     });
   }

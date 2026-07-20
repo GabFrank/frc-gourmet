@@ -81,7 +81,7 @@ function getLocalV24Prefixes(): string[] {
   return Array.from(prefixes);
 }
 
-function probeTcp(host: string, port: number, timeoutMs: number): Promise<boolean> {
+export function probeTcp(host: string, port: number, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = new net.Socket();
     let done = false;

@@ -66,6 +66,11 @@ export class PrinterService {
     return from(this.dbService.scanNetworkPrinters(opts));
   }
 
+  /** Prueba la conectividad de una config de impresora sin guardar ni imprimir. */
+  testPrinterConnection(config: any): Observable<{ ok: boolean; error?: string }> {
+    return from(this.dbService.testPrinterConnection(config));
+  }
+
   /**
    * Get default printer
    */

@@ -1,7 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { DataSource, Not } from 'typeorm';
 import { Printer } from '../../src/app/database/entities/printer.entity';
-import { printTestTicket } from '../utils/ticket.utils';
+import { printTestTicket, probePrinterConnection } from '../utils/ticket.utils';
 import { ensurePermission } from '../utils/auth.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { scanNetworkPrinters } from '../utils/network-printer-scan.utils';
@@ -63,6 +63,16 @@ export function registerPrinterHandlers(
     } catch (error) {
       console.error('Error scanning network printers:', error);
       return [];
+    }
+  });
+
+  // IPC handler: prueba la conectividad de una config de impresora sin guardar
+  // ni imprimir. Devuelve { ok, error? }.
+  ipcMain.handle('test-printer-connection', async (_event: any, config: any) => {
+    try {
+      return await probePrinterConnection(config);
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
 

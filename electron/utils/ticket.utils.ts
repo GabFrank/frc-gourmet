@@ -29,6 +29,7 @@ import { Empresa } from '../../src/app/database/entities/sistema/empresa.entity'
 import { getPrinterType, getCharacterSet } from './printer.utils';
 import { sendLprJob, parseLprAddress } from './lpr.utils';
 import { getSystemPrinterDriver } from './system-printer.utils';
+import { probeTcp } from './network-printer-scan.utils';
 
 // ============================================================
 // SPEC
@@ -477,6 +478,39 @@ export async function printTestTicket(printer: any): Promise<{ ok: boolean; erro
  *
  * Retorna `{ ok, error? }`. NUNCA hace throw — el caller decide si bloquear o continuar.
  */
+/**
+ * Prueba la conectividad de una configuración de impresora SIN imprimir.
+ * Útil para validar antes de guardar (botón "Probar conexión").
+ */
+export async function probePrinterConnection(printer: any): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (printer.connectionType === 'lpr') {
+      const { host, port } = parseLprAddress(printer.address || '');
+      if (!host) return { ok: false, error: 'Falta el host en la dirección' };
+      const ok = await probeTcp(host, port || printer.port || 515, 4000);
+      return ok ? { ok: true } : { ok: false, error: `No se pudo conectar a ${host}:${port || printer.port || 515}` };
+    }
+    if (printer.connectionType === 'usb' && printer.address && printer.address.startsWith('ticket-')) {
+      return { ok: true }; // CUPS: sin prueba simple, se asume disponible
+    }
+    if (printer.connectionType === 'usb' || printer.connectionType === 'serial' || printer.connectionType === 'bluetooth') {
+      // Estas vías no tienen un chequeo de conectividad fiable previo a imprimir.
+      return { ok: true };
+    }
+    // network / system: build + isPrinterConnected (throw-safe)
+    const tp = buildThermalPrinter(printer);
+    let connected = false;
+    try {
+      connected = await tp.isPrinterConnected();
+    } catch {
+      connected = false;
+    }
+    return connected ? { ok: true } : { ok: false, error: `La impresora "${printer.address}" no responde` };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
 export async function printTicketSpec(
   printer: any,
   spec: TicketSpec
