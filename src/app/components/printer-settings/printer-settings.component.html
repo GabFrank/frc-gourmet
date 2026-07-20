@@ -53,7 +53,31 @@
 
           <!-- Configuración de conexión -->
           <div class="form-row">
-            <mat-form-field appearance="outline" class="form-field-half">
+            <!-- Impresora del sistema: selección desde el spooler del SO -->
+            <mat-form-field appearance="outline" class="form-field-half"
+                          *ngIf="printerForm.get('connectionType')?.value === 'system'">
+              <mat-label>Impresora instalada</mat-label>
+              <mat-select formControlName="address" required>
+                <mat-option *ngFor="let sp of systemPrinters" [value]="sp.name">{{ sp.label }}</mat-option>
+              </mat-select>
+              <button mat-icon-button matSuffix type="button" (click)="loadSystemPrinters()"
+                      matTooltip="Actualizar lista" [disabled]="loadingSystemPrinters">
+                <mat-icon>refresh</mat-icon>
+              </button>
+              <mat-hint *ngIf="!loadingSystemPrinters && systemPrinters.length === 0">
+                No se detectaron impresoras instaladas en este equipo.
+              </mat-hint>
+              <mat-hint *ngIf="systemPrinters.length > 0">
+                Se imprime por el spooler del sistema — sin IP ni configuración de red.
+              </mat-hint>
+              <mat-error *ngIf="printerForm.get('address')?.hasError('required')">
+                Elegí una impresora
+              </mat-error>
+            </mat-form-field>
+
+            <!-- Dirección manual (red / lpr / usb / bluetooth) -->
+            <mat-form-field appearance="outline" class="form-field-half"
+                          *ngIf="printerForm.get('connectionType')?.value !== 'system'">
               <mat-label>Dirección</mat-label>
               <input matInput formControlName="address"
                     [placeholder]="printerForm.get('connectionType')?.value === 'network' ? 'Dirección IP (ej: 192.168.1.100)' :

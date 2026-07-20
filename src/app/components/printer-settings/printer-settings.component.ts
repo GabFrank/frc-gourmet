@@ -58,11 +58,16 @@ export class PrinterSettingsComponent implements OnInit {
   ];
 
   connectionTypes = [
+    { value: 'system', displayName: 'Impresora del sistema (local / Windows)' },
     { value: 'network', displayName: 'Red / IP' },
     { value: 'lpr', displayName: 'LPR/LPD (Windows compartida)' },
     { value: 'usb', displayName: 'USB' },
     { value: 'bluetooth', displayName: 'Bluetooth' }
   ];
+
+  // Impresoras instaladas en el SO (para el tipo de conexión 'system').
+  systemPrinters: any[] = [];
+  loadingSystemPrinters = false;
 
   // La cantidad de columnas depende de la tecnología + fuente de la impresora,
   // no solo del ancho en mm. Se configura directamente (se guarda en `width`).
@@ -98,6 +103,28 @@ export class PrinterSettingsComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadPrinters();
+    this.loadSystemPrinters();
+  }
+
+  /**
+   * Carga las impresoras instaladas en el sistema operativo para el selector
+   * del tipo de conexión 'system'.
+   */
+  loadSystemPrinters(): void {
+    this.loadingSystemPrinters = true;
+    this.printerService.listSystemPrinters().subscribe({
+      next: (list) => {
+        this.systemPrinters = (list || []).map((p: any) => ({
+          ...p,
+          label: p.displayName && p.displayName !== p.name ? `${p.displayName} (${p.name})` : p.name,
+        }));
+        this.loadingSystemPrinters = false;
+      },
+      error: () => {
+        this.systemPrinters = [];
+        this.loadingSystemPrinters = false;
+      },
+    });
   }
 
   /**

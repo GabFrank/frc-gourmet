@@ -21,6 +21,7 @@ declare global {
     api: {
       // Printer-related API methods
       getPrinters(): Promise<PrinterConfig[]>;
+      listSystemPrinters(): Promise<any[]>;
       addPrinter(printer: PrinterConfig): Promise<{ success: boolean, printer: PrinterConfig }>;
       updatePrinter(printerId: number, printer: PrinterConfig): Promise<{ success: boolean, printer: PrinterConfig }>;
       deletePrinter(printerId: number): Promise<{ success: boolean }>;
@@ -51,6 +52,11 @@ export class DatabaseService {
   // Printer related methods
   getPrinters(): Promise<PrinterConfig[]> {
     return window.api.getPrinters();
+  }
+
+  /** Impresoras instaladas en el sistema operativo (spooler). */
+  listSystemPrinters(): Promise<any[]> {
+    return window.api.listSystemPrinters();
   }
 
   addPrinter(printer: PrinterConfig): Promise<{ success: boolean, printer: PrinterConfig }> {

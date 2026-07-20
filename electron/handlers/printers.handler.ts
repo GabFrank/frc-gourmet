@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain, BrowserWindow } from 'electron';
 import { DataSource, Not } from 'typeorm';
 import { Printer } from '../../src/app/database/entities/printer.entity';
 import { printTestTicket } from '../utils/ticket.utils';
@@ -19,6 +19,34 @@ export function registerPrinterHandlers(
     } catch (error) {
       console.error('Error getting printers:', error);
       throw error;
+    }
+  });
+
+  // IPC handler: enumera las impresoras instaladas en el sistema operativo
+  // (spooler). Permite elegir una impresora local por nombre sin configurar
+  // paths de dispositivo ni red. Usa la API nativa de Electron.
+  ipcMain.handle('list-system-printers', async (event: any) => {
+    try {
+      let printers: any[] = [];
+      const wc = event?.sender && typeof event.sender.getPrintersAsync === 'function' ? event.sender : null;
+      if (wc) {
+        printers = await wc.getPrintersAsync();
+      } else {
+        // En modo server (HTTP /api/rpc) no hay sender con webContents; usamos
+        // la primera ventana disponible como fallback.
+        const win = BrowserWindow.getAllWindows()[0];
+        if (win) printers = await win.webContents.getPrintersAsync();
+      }
+      return (printers || []).map((p: any) => ({
+        name: p.name,
+        displayName: p.displayName || p.name,
+        description: p.description || '',
+        status: p.status,
+        isDefault: !!p.isDefault,
+      }));
+    } catch (error) {
+      console.error('Error listing system printers:', error);
+      return [];
     }
   });
 

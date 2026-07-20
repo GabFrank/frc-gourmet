@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { BehaviorSubject, Observable, from } from 'rxjs';
 import { DatabaseService, PrinterConfig } from './database.service';
 
 @Injectable({
@@ -48,6 +48,14 @@ export class PrinterService {
    */
   getPrinters(): Observable<PrinterConfig[]> {
     return this.printersSubject.asObservable();
+  }
+
+  /**
+   * Impresoras instaladas en el sistema operativo (spooler), para elegir una
+   * impresora local por nombre sin configurar paths ni red.
+   */
+  listSystemPrinters(): Observable<any[]> {
+    return from(this.dbService.listSystemPrinters());
   }
 
   /**
