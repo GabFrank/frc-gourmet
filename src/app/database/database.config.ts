@@ -245,6 +245,7 @@ import { AddWhatsappCierreCajaConfig1783975019373 } from './migrations/178397501
 import { ReclasificarMovimientosAcreditacionPos1784049746457 } from './migrations/1784049746457-ReclasificarMovimientosAcreditacionPos';
 import { AddMotivoAjusteToCaja1784316132819 } from './migrations/1784316132819-AddMotivoAjusteToCaja';
 import { AddLiquidacionIdToCpcCuota1784554795703 } from './migrations/1784554795703-AddLiquidacionIdToCpcCuota';
+import { AddNeteoDeudasLiquidacionFinal1784555556082 } from './migrations/1784555556082-AddNeteoDeudasLiquidacionFinal';
 import { AddAnuladoToMovimientoCliente1784136362576 } from './migrations/1784136362576-AddAnuladoToMovimientoCliente';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
@@ -624,6 +625,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddAnuladoToMovimientoCliente1784136362576,
     AddMotivoAjusteToCaja1784316132819,
     AddLiquidacionIdToCpcCuota1784554795703,
+    AddNeteoDeudasLiquidacionFinal1784555556082,
   ];
 }
 
