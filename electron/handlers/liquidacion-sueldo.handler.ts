@@ -19,6 +19,15 @@ import { CuentaPorPagar } from '../../src/app/database/entities/financiero/cuent
 import { CuentaPorPagarTipo, CuentaPorPagarEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
 import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
 import { CuotaEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
+import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
+import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
+import { MovimientoCliente } from '../../src/app/database/entities/financiero/movimiento-cliente.entity';
+import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
+import {
+  CuentaPorCobrarEstado,
+  CuentaPorCobrarCuotaEstado,
+  MovimientoClienteTipo,
+} from '../../src/app/database/entities/financiero/cuentas-por-cobrar-enums';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
@@ -43,6 +52,7 @@ const SEED_CONCEPTOS: Array<{ codigo: string; descripcion: string; esHaber: bool
   { codigo: 'AGUINALDO', descripcion: 'Aguinaldo', esHaber: true, esCalculadoAuto: true },
   { codigo: 'COMISION', descripcion: 'Comision por ventas', esHaber: true, esCalculadoAuto: true },
   { codigo: 'PRESTAMO_CUOTA', descripcion: 'Cuota de prestamo', esHaber: false, esCalculadoAuto: true },
+  { codigo: 'CREDITO_CONSUMO', descripcion: 'Consumo a credito (cliente)', esHaber: false, esCalculadoAuto: true },
 ];
 
 export async function seedLiquidacionConceptos(dataSource: DataSource) {
@@ -229,6 +239,17 @@ export function registerLiquidacionSueldoHandlers(
         .set({ liquidacionId: null as any })
         .where('liquidacion_id = :lid AND estado = :est', { lid: liq.id, est: VacacionVentaEstado.PENDIENTE })
         .execute();
+      // C-04 (CPC): liberar cuotas de consumo a crédito enlazadas a ESTA
+      // liquidación (aún no cobradas) para que la regeneración pueda re-tomarlas.
+      await queryRunner.manager.getRepository(CuentaPorCobrarCuota)
+        .createQueryBuilder()
+        .update(CuentaPorCobrarCuota)
+        .set({ liquidacionId: null as any })
+        .where('liquidacion_id = :lid AND estado IN (:...ests)', {
+          lid: liq.id,
+          ests: [CuentaPorCobrarCuotaEstado.PENDIENTE, CuentaPorCobrarCuotaEstado.PARCIAL],
+        })
+        .execute();
 
       // Helpers para crear items
       const conceptoMap = new Map<string, LiquidacionConcepto>();
@@ -413,6 +434,41 @@ export function registerLiquidacionSueldoHandlers(
           // Enlazar a esta liquidación para que otro periodo no la tome.
           vv.liquidacionId = liq.id;
           await ventaVacRepo.save(vv);
+        }
+      }
+
+      // 11) Consumo a crédito del periodo (CPC del cliente vinculado a la misma
+      // persona del funcionario). Descontamos las cuotas que vencen en el periodo,
+      // análogo a las cuotas de préstamo. El cobro efectivo de la CPC ocurre al
+      // pagar la liquidación (queda neteado dentro del EGRESO_SALARIO).
+      const personaId = funcionario.persona?.id;
+      if (personaId) {
+        const clienteRepoLiq = queryRunner.manager.getRepository(Cliente);
+        const clienteFunc = await clienteRepoLiq.findOne({ where: { persona: { id: personaId } as any } });
+        if (clienteFunc) {
+          const cpcRepoLiq = queryRunner.manager.getRepository(CuentaPorCobrar);
+          const cpcCuotaRepo = queryRunner.manager.getRepository(CuentaPorCobrarCuota);
+          const cpcsActivas = await cpcRepoLiq.find({
+            where: { cliente: { id: clienteFunc.id } as any, estado: CuentaPorCobrarEstado.ACTIVO },
+          });
+          for (const cpc of cpcsActivas) {
+            const cpcCuotas = await cpcCuotaRepo.createQueryBuilder('c')
+              .where('c.cuenta_por_cobrar_id = :cpcid', { cpcid: cpc.id })
+              .andWhere('c.estado IN (:...ests)', {
+                ests: [CuentaPorCobrarCuotaEstado.PENDIENTE, CuentaPorCobrarCuotaEstado.PARCIAL],
+              })
+              .andWhere('c.fechaVencimiento BETWEEN :fd AND :ff', { fd: isoDate(fechaInicio), ff: isoDate(fechaFin) })
+              .andWhere('(c.liquidacion_id IS NULL OR c.liquidacion_id = :lid)', { lid: liq.id })
+              .getMany();
+            for (const c of cpcCuotas) {
+              const saldo = +(Number(c.monto) - Number(c.montoCobrado)).toFixed(2);
+              if (saldo > 0) {
+                await crearItem('CREDITO_CONSUMO', `Cuota #${c.numero} - ${cpc.descripcion || 'consumo a crédito'}`, saldo, LiquidacionItemTipo.DESCUENTO, c.id, 'CPC_CUOTA');
+                c.liquidacionId = liq.id;
+                await cpcCuotaRepo.save(c);
+              }
+            }
+          }
         }
       }
 
@@ -651,6 +707,63 @@ export function registerLiquidacionSueldoHandlers(
         }
       }
 
+      // Cobrar cuotas de CPC (consumo a crédito del funcionario-cliente).
+      // Va neteado dentro del EGRESO_SALARIO: NO se crea INGRESO_COBRO_CLIENTE
+      // en Caja Mayor (mismo criterio que las cuotas de préstamo).
+      const cpcItems = items.filter((i) => i.referenciaTipo === 'CPC_CUOTA' && i.referenciaId);
+      if (cpcItems.length) {
+        const cpcCuotaRepo = queryRunner.manager.getRepository(CuentaPorCobrarCuota);
+        const cpcRepo = queryRunner.manager.getRepository(CuentaPorCobrar);
+        const clienteRepoPago = queryRunner.manager.getRepository(Cliente);
+        const movClienteRepo = queryRunner.manager.getRepository(MovimientoCliente);
+        for (const it of cpcItems) {
+          const cuota = await cpcCuotaRepo.findOne({ where: { id: it.referenciaId! }, relations: ['cuentaPorCobrar'] });
+          if (!cuota) continue;
+          if (cuota.estado === CuentaPorCobrarCuotaEstado.COBRADO || cuota.estado === CuentaPorCobrarCuotaEstado.CANCELADO) continue;
+          const restante = +(Number(cuota.monto) - Number(cuota.montoCobrado)).toFixed(2);
+          const montoCobrar = Math.min(Number(it.monto), restante);
+          if (montoCobrar <= 0) continue;
+          cuota.montoCobrado = +(Number(cuota.montoCobrado) + montoCobrar).toFixed(2);
+          cuota.estado = cuota.montoCobrado >= Number(cuota.monto) - 0.005
+            ? CuentaPorCobrarCuotaEstado.COBRADO
+            : CuentaPorCobrarCuotaEstado.PARCIAL;
+          if (cuota.estado === CuentaPorCobrarCuotaEstado.COBRADO) cuota.fechaCobro = new Date();
+          cuota.liquidacionId = liq.id;
+          await cpcCuotaRepo.save(cuota);
+
+          const cpc = await cpcRepo.findOne({ where: { id: cuota.cuentaPorCobrar.id }, relations: ['cuotas', 'cliente'] });
+          if (!cpc) continue;
+          cpc.montoCobrado = +(Number(cpc.montoCobrado) + montoCobrar).toFixed(2);
+          const todasCobradas = (cpc.cuotas || []).every((c: any) =>
+            c.id === cuota.id
+              ? cuota.estado === CuentaPorCobrarCuotaEstado.COBRADO
+              : Number(c.montoCobrado) >= Number(c.monto) - 0.005);
+          if (todasCobradas) cpc.estado = CuentaPorCobrarEstado.COBRADO;
+          await cpcRepo.save(cpc);
+
+          const clienteId = cpc.cliente?.id;
+          if (clienteId) {
+            const cliente = await clienteRepoPago.findOne({ where: { id: clienteId } });
+            if (cliente) {
+              cliente.saldoActual = +(Number(cliente.saldoActual) - montoCobrar).toFixed(2);
+              await clienteRepoPago.save(cliente);
+            }
+            const movCliente = movClienteRepo.create({
+              cliente: { id: clienteId } as any,
+              tipo: MovimientoClienteTipo.PAGO,
+              monto: montoCobrar,
+              fecha: new Date(),
+              cuentaPorCobrarId: cpc.id,
+              cuentaPorCobrarCuotaId: cuota.id,
+              observacion: `LIQUIDACION ${liq.periodo} #${liq.id} - COBRO CUOTA #${cuota.numero}`,
+              registradoPor: userEntity || undefined,
+            });
+            await setEntityUserTracking(dataSource, movCliente, userId, false);
+            await movClienteRepo.save(movCliente);
+          }
+        }
+      }
+
       // Marcar aguinaldo asociado como PAGADO
       const aguiIds = items
         .filter((i) => i.referenciaTipo === 'AGUINALDO' && i.referenciaId)
@@ -779,6 +892,56 @@ export function registerLiquidacionSueldoHandlers(
               if (cpp.estado === CuentaPorPagarEstado.PAGADO) cpp.estado = CuentaPorPagarEstado.ACTIVO;
               await setEntityUserTracking(dataSource, cpp, userId, true);
               await cppRepo.save(cpp);
+            }
+          }
+        }
+
+        // CPC cuotas: revertir el cobro hecho por esta liquidación. La cuota
+        // vuelve a PENDIENTE/PARCIAL, se restaura el saldo del cliente y se borra
+        // el MovimientoCliente PAGO generado.
+        const cpcItemsAnular = items.filter((i) => i.referenciaTipo === 'CPC_CUOTA' && i.referenciaId);
+        if (cpcItemsAnular.length) {
+          const cpcCuotaRepo = queryRunner.manager.getRepository(CuentaPorCobrarCuota);
+          const cpcRepo = queryRunner.manager.getRepository(CuentaPorCobrar);
+          const clienteRepoAnular = queryRunner.manager.getRepository(Cliente);
+          const movClienteRepo = queryRunner.manager.getRepository(MovimientoCliente);
+          for (const it of cpcItemsAnular) {
+            const cuota = await cpcCuotaRepo.findOne({ where: { id: it.referenciaId! }, relations: ['cuentaPorCobrar'] });
+            if (!cuota || cuota.liquidacionId !== liq.id) continue;
+            const montoRevertir = Math.min(Number(it.monto), Number(cuota.montoCobrado));
+            cuota.montoCobrado = Math.max(0, +(Number(cuota.montoCobrado) - montoRevertir).toFixed(2));
+            cuota.estado = cuota.montoCobrado <= 0
+              ? CuentaPorCobrarCuotaEstado.PENDIENTE
+              : CuentaPorCobrarCuotaEstado.PARCIAL;
+            if (cuota.montoCobrado <= 0) (cuota as any).fechaCobro = null;
+            (cuota as any).liquidacionId = null;
+            await setEntityUserTracking(dataSource, cuota, userId, true);
+            await cpcCuotaRepo.save(cuota);
+
+            const cpc = await cpcRepo.findOne({ where: { id: cuota.cuentaPorCobrar.id }, relations: ['cliente'] });
+            if (cpc) {
+              cpc.montoCobrado = Math.max(0, +(Number(cpc.montoCobrado) - montoRevertir).toFixed(2));
+              if (cpc.estado === CuentaPorCobrarEstado.COBRADO) cpc.estado = CuentaPorCobrarEstado.ACTIVO;
+              await setEntityUserTracking(dataSource, cpc, userId, true);
+              await cpcRepo.save(cpc);
+
+              const clienteId = cpc.cliente?.id;
+              if (clienteId) {
+                const cliente = await clienteRepoAnular.findOne({ where: { id: clienteId } });
+                if (cliente) {
+                  cliente.saldoActual = +(Number(cliente.saldoActual) + montoRevertir).toFixed(2);
+                  await clienteRepoAnular.save(cliente);
+                }
+              }
+            }
+            // Borrar el MovimientoCliente PAGO generado por esta liquidación.
+            const movsPago = await movClienteRepo.find({
+              where: { cuentaPorCobrarCuotaId: cuota.id, tipo: MovimientoClienteTipo.PAGO },
+            });
+            for (const m of movsPago) {
+              if ((m.observacion || '').includes(`#${liq.id} `)) {
+                await movClienteRepo.remove(m);
+              }
             }
           }
         }
