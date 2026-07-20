@@ -92,6 +92,7 @@
     "ng2-charts": "^4.1.1",
     "ngx-currency": "^2.5.3",
     "node-thermal-printer": "^4.4.4",
+    "@thiagoelg/node-printer": "^0.6.2",
     "nodemailer": "^6.10.1",
     "pdfjs-dist": "^3.11.174",
     "pdfmake": "^0.2.10",
@@ -192,6 +193,7 @@
     "asarUnpack": [
       "**/node_modules/sqlite3/**",
       "**/node_modules/keytar/**",
+      "**/node_modules/@thiagoelg/node-printer/**",
       "**/node_modules/@napi-rs/canvas/**",
       "dist/mobile/**",
       "dist/storefront/**",
