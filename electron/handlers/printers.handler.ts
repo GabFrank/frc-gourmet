@@ -4,6 +4,7 @@ import { Printer } from '../../src/app/database/entities/printer.entity';
 import { printTestTicket } from '../utils/ticket.utils';
 import { ensurePermission } from '../utils/auth.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { scanNetworkPrinters } from '../utils/network-printer-scan.utils';
 
 export function registerPrinterHandlers(
   dataSource: DataSource,
@@ -46,6 +47,21 @@ export function registerPrinterHandlers(
       }));
     } catch (error) {
       console.error('Error listing system printers:', error);
+      return [];
+    }
+  });
+
+  // IPC handler: descubre impresoras en la red local (mDNS + barrido TCP
+  // opcional). Devuelve candidatos { name, address, port, source, protocol }.
+  ipcMain.handle('scan-network-printers', async (_event: any, opts?: any) => {
+    try {
+      return await scanNetworkPrinters({
+        mdns: opts?.mdns !== false,
+        tcpScan: opts?.tcpScan === true,
+        tcpPort: opts?.tcpPort || 9100,
+      });
+    } catch (error) {
+      console.error('Error scanning network printers:', error);
       return [];
     }
   });

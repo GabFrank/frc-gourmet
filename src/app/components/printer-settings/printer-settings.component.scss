@@ -145,3 +145,47 @@ mat-card {
     font-size: 16px;
   }
 }
+
+// Descubrimiento de impresoras en red
+.scan-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+
+  .scan-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .scan-results {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .scan-candidate {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-start;
+    text-align: left;
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+
+    .scan-candidate-main { font-weight: 600; }
+    .scan-candidate-sub {
+      margin-left: auto;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+  }
+
+  .scan-empty {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin: 0;
+  }
+}

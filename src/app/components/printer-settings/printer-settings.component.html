@@ -106,6 +106,31 @@
             </mat-form-field>
           </div>
 
+          <!-- Descubrimiento de impresoras en red -->
+          <div class="form-row scan-row" *ngIf="printerForm.get('connectionType')?.value === 'network'">
+            <div class="scan-controls">
+              <button mat-stroked-button type="button" (click)="scanNetwork()" [disabled]="scanningNetwork">
+                <mat-icon>{{ scanningNetwork ? 'hourglass_empty' : 'wifi_find' }}</mat-icon>
+                {{ scanningNetwork ? 'Buscando…' : 'Buscar impresoras en red' }}
+              </button>
+              <mat-slide-toggle [(ngModel)]="deepScan" [ngModelOptions]="{standalone: true}" color="primary"
+                                matTooltip="Escanea todo el segmento en el puerto 9100 (más lento)">
+                Escaneo profundo (TCP)
+              </mat-slide-toggle>
+            </div>
+            <div class="scan-results" *ngIf="networkCandidates.length > 0">
+              <button mat-button type="button" class="scan-candidate" *ngFor="let c of networkCandidates"
+                      (click)="usarCandidato(c)">
+                <mat-icon>print</mat-icon>
+                <span class="scan-candidate-main">{{ c.name }}</span>
+                <span class="scan-candidate-sub">{{ c.address }}:{{ c.port }} · {{ c.source }}</span>
+              </button>
+            </div>
+            <p class="scan-empty" *ngIf="scannedOnce && !scanningNetwork && networkCandidates.length === 0">
+              No se encontraron impresoras. Probá el escaneo profundo o cargá la IP a mano.
+            </p>
+          </div>
+
           <!-- Configuración avanzada -->
           <div class="form-row">
             <mat-form-field appearance="outline" class="form-field-third">

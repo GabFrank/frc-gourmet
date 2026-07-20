@@ -93,6 +93,7 @@
     "ngx-currency": "^2.5.3",
     "node-thermal-printer": "^4.4.4",
     "@thiagoelg/node-printer": "^0.6.2",
+    "bonjour-service": "^1.2.1",
     "nodemailer": "^6.10.1",
     "pdfjs-dist": "^3.11.174",
     "pdfmake": "^0.2.10",

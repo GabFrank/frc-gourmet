@@ -59,6 +59,14 @@ export class PrinterService {
   }
 
   /**
+   * Descubre impresoras en la red local. `tcpScan` habilita el barrido del /24
+   * (más lento) además del descubrimiento mDNS.
+   */
+  scanNetworkPrinters(opts?: { mdns?: boolean; tcpScan?: boolean; tcpPort?: number }): Observable<any[]> {
+    return from(this.dbService.scanNetworkPrinters(opts));
+  }
+
+  /**
    * Get default printer
    */
   getDefaultPrinter(): PrinterConfig | null {

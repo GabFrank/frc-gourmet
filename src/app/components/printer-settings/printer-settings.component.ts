@@ -69,6 +69,12 @@ export class PrinterSettingsComponent implements OnInit {
   systemPrinters: any[] = [];
   loadingSystemPrinters = false;
 
+  // Descubrimiento de impresoras en red (para el tipo 'network').
+  networkCandidates: any[] = [];
+  scanningNetwork = false;
+  deepScan = false;
+  scannedOnce = false;
+
   // La cantidad de columnas depende de la tecnología + fuente de la impresora,
   // no solo del ancho en mm. Se configura directamente (se guarda en `width`).
   columnOptions = [
@@ -104,6 +110,40 @@ export class PrinterSettingsComponent implements OnInit {
   ngOnInit(): void {
     this.loadPrinters();
     this.loadSystemPrinters();
+  }
+
+  /**
+   * Descubre impresoras en la red local (mDNS + barrido TCP opcional) y las
+   * ofrece como candidatos para autocompletar el form.
+   */
+  scanNetwork(): void {
+    this.scanningNetwork = true;
+    this.printerService.scanNetworkPrinters({ mdns: true, tcpScan: this.deepScan }).subscribe({
+      next: (list) => {
+        this.networkCandidates = list || [];
+        this.scannedOnce = true;
+        this.scanningNetwork = false;
+        if (this.networkCandidates.length === 0) {
+          this.snackBar.open('No se encontraron impresoras en la red', 'CERRAR', { duration: 3000 });
+        }
+      },
+      error: () => {
+        this.networkCandidates = [];
+        this.scannedOnce = true;
+        this.scanningNetwork = false;
+        this.snackBar.open('Error al buscar impresoras en la red', 'CERRAR', { duration: 3000 });
+      },
+    });
+  }
+
+  /** Autocompleta el form con una impresora descubierta en red. */
+  usarCandidato(c: any): void {
+    this.printerForm.patchValue({
+      connectionType: 'network',
+      address: c.address,
+      port: c.port || 9100,
+      name: this.printerForm.get('name')?.value || c.name,
+    });
   }
 
   /**
