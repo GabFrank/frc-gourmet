@@ -98,3 +98,17 @@
   text-align: center;
   color: var(--text-secondary);
 }
+
+// Aviso de cotización faltante (totales parciales)
+.cotizacion-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(255, 152, 0, 0.12);
+  color: var(--warning-color);
+  font-size: 0.85rem;
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+}

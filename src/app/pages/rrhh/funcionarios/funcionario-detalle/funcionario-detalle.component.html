@@ -42,31 +42,36 @@
     <app-dash-stat-chip
       icon="receipt_long"
       [color]="(resumen?.vales?.total || 0) > 0 ? 'warning' : 'success'"
-      [value]="(resumen?.vales?.total || 0 | number:'1.0-2') + ' Gs'"
+      [value]="(resumen?.vales?.total || 0 | number:'1.0-2') + ' ' + (resumen?.monedaPrincipalSimbolo || 'Gs')"
       label="Vales pendientes"
       [loading]="loadingResumen">
     </app-dash-stat-chip>
     <app-dash-stat-chip
       icon="account_balance"
       [color]="(resumen?.prestamos?.saldo || 0) > 0 ? 'warning' : 'success'"
-      [value]="(resumen?.prestamos?.saldo || 0 | number:'1.0-2') + ' Gs'"
+      [value]="(resumen?.prestamos?.saldo || 0 | number:'1.0-2') + ' ' + (resumen?.monedaPrincipalSimbolo || 'Gs')"
       label="Préstamos activos"
       [loading]="loadingResumen">
     </app-dash-stat-chip>
     <app-dash-stat-chip
       icon="shopping_cart"
       [color]="(resumen?.credito?.saldo || 0) > 0 ? 'warning' : 'success'"
-      [value]="(resumen?.credito?.saldo || 0 | number:'1.0-2') + ' Gs'"
+      [value]="(resumen?.credito?.saldo || 0 | number:'1.0-2') + ' ' + (resumen?.monedaPrincipalSimbolo || 'Gs')"
       label="Consumo a crédito"
       [loading]="loadingResumen">
     </app-dash-stat-chip>
     <app-dash-stat-chip
       icon="account_balance_wallet"
       [color]="(resumen?.totalAdeudado || 0) > 0 ? 'error' : 'success'"
-      [value]="(resumen?.totalAdeudado || 0 | number:'1.0-2') + ' Gs'"
+      [value]="(resumen?.totalAdeudado || 0 | number:'1.0-2') + ' ' + (resumen?.monedaPrincipalSimbolo || 'Gs')"
       label="Total adeudado"
       [loading]="loadingResumen">
     </app-dash-stat-chip>
+  </div>
+
+  <div class="cotizacion-warning" *ngIf="resumen?.sinCotizacion">
+    <mat-icon>warning</mat-icon>
+    <span>Hay montos en monedas sin cotización registrada — los totales en {{ resumen?.monedaPrincipalSimbolo || 'Gs' }} son parciales.</span>
   </div>
 
   <!-- Acciones rápidas -->
@@ -355,7 +360,7 @@
                 {{ v.tipo === 'CREDITO' ? 'Crédito' : 'Préstamo' }} · Cuota #{{ v.numero }}
               </span>
               <span class="dashboard-alert-detail">
-                {{ v.saldo | number:'1.0-2' }} Gs · vence {{ v.fechaVencimiento | date:'shortDate' }}
+                {{ v.saldo | number:'1.0-2' }} {{ v.monedaSimbolo }} · vence {{ v.fechaVencimiento | date:'shortDate' }}
               </span>
             </div>
           </div>
