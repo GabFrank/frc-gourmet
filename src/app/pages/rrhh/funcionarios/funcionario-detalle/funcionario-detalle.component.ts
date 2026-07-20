@@ -8,10 +8,16 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTableModule } from '@angular/material/table';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatDividerModule } from '@angular/material/divider';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { TabsService } from 'src/app/services/tabs.service';
+import { DashStatChipComponent } from 'src/app/shared/components/dashboard/stat-chip/dash-stat-chip.component';
+import { DashQuickActionComponent } from 'src/app/shared/components/dashboard/quick-action/dash-quick-action.component';
+import { DashSectionHeaderComponent } from 'src/app/shared/components/dashboard/section-header/dash-section-header.component';
 import { CreateEditFuncionarioDialogComponent } from '../create-edit-funcionario-dialog/create-edit-funcionario-dialog.component';
 import { DocumentViewerDialogComponent } from 'src/app/shared/components/document-viewer-dialog/document-viewer-dialog.component';
 import { CambioCargoDialogComponent } from '../cambio-cargo-dialog/cambio-cargo-dialog.component';
@@ -37,9 +43,14 @@ import { EnrolarRostroDialogComponent } from '../enrolar-rostro-dialog/enrolar-r
     MatTableModule,
     MatProgressSpinnerModule,
     MatChipsModule,
+    MatDividerModule,
+    MatTooltipModule,
     MatDialogModule,
     MatSnackBarModule,
     AsignarTurnoFuncionarioDialogComponent,
+    DashStatChipComponent,
+    DashQuickActionComponent,
+    DashSectionHeaderComponent,
   ],
 })
 export class FuncionarioDetalleComponent implements OnInit {
@@ -47,6 +58,10 @@ export class FuncionarioDetalleComponent implements OnInit {
   funcionarioId: number | null = null;
   funcionario: any = null;
   loading = false;
+
+  // Resumen financiero (deudas del funcionario con el negocio).
+  resumen: any = null;
+  loadingResumen = false;
 
   historicoCargos: any[] = [];
   historicoSalarios: any[] = [];
@@ -68,7 +83,23 @@ export class FuncionarioDetalleComponent implements OnInit {
     private repositoryService: RepositoryService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
+    private tabsService: TabsService,
   ) {}
+
+  /** Abre el detalle del cliente vinculado a esta persona (aviso cruzado). */
+  async abrirClienteVinculado(): Promise<void> {
+    const clienteId = this.resumen?.cliente?.id;
+    if (!clienteId) return;
+    const nombre = `${this.funcionario?.persona?.nombre || ''} ${this.funcionario?.persona?.apellido || ''}`.trim();
+    const mod = await import('src/app/pages/personas/clientes/cliente-detalle/cliente-detalle.component');
+    this.tabsService.openTab(
+      `Cliente: ${nombre}`,
+      mod.ClienteDetalleComponent,
+      { clienteId },
+      `cliente-detalle-${clienteId}`,
+      true,
+    );
+  }
 
   setData(data: any): void {
     this.data = data;
@@ -90,6 +121,7 @@ export class FuncionarioDetalleComponent implements OnInit {
     this.loading = true;
     try {
       this.funcionario = await firstValueFrom(this.repositoryService.getFuncionario(this.funcionarioId));
+      this.loadResumenFinanciero();
       this.loadHistoricos();
       this.loadDocumentos();
       this.loadTurnos();
@@ -99,6 +131,19 @@ export class FuncionarioDetalleComponent implements OnInit {
       this.snackBar.open('Error al cargar funcionario', 'Cerrar', { duration: 3500 });
     } finally {
       this.loading = false;
+    }
+  }
+
+  async loadResumenFinanciero(): Promise<void> {
+    if (!this.funcionarioId) return;
+    this.loadingResumen = true;
+    try {
+      this.resumen = await firstValueFrom(this.repositoryService.getFuncionarioResumenFinanciero(this.funcionarioId));
+    } catch (e) {
+      console.error('Error cargando resumen financiero:', e);
+      this.resumen = null;
+    } finally {
+      this.loadingResumen = false;
     }
   }
 

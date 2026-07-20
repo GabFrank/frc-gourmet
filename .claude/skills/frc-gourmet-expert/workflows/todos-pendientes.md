@@ -228,6 +228,7 @@ Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `proje
 - **Adjuntos UI por entidad** (backend genérico + permisos listos; UI solo en GASTO).
 
 ### P4 — Completar features con base existente
+- **UI de Liquidación Final (egreso)**: el backend existe y ahora **netea deudas** del funcionario (vales + préstamos + consumo a crédito CPC, prioridad vales→préstamo→crédito, neto topado en 0, residual queda a cobrar — ver `liquidacion-final.handler.ts` `generar`/`pagar` + entidad con `totalHaberes/Descuentos/Neto` y `tipo`/`referencia_*` en items). **Falta la pantalla**: ningún componente invoca `generar/aprobar/pagar-liquidacion-final`. Al construirla mostrar haberes, descuentos neteados y neto; disparar desde el egreso del funcionario.
 - **Caja Mayor Fase 5**: arqueos/cortes formales + reportes imprimibles.
 - UI de **Combos / Promociones / Producción** (entidades existen, sin UI).
 - **Reportes** Ventas/Compras con exports PDF/Excel.

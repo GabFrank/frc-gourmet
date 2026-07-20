@@ -3,7 +3,7 @@
  * AUTO-GENERADO por scripts/generate-mobile-api-map.js — NO editar a mano.
  * Mapa método de window.api → canal IPC (extraído de preload.ts).
  * Regenerar tras tocar preload.ts: `node scripts/generate-mobile-api-map.js`.
- * Total: 806 métodos.
+ * Total: 810 métodos.
  */
 export const API_CHANNEL_MAP: Record<string, string> = {
   "abrirCajaDesdeConteo": "abrir-caja-desde-conteo",
@@ -322,6 +322,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "facturaImportProcess": "factura-import-process",
   "facturaImportReprocess": "factura-import-reprocess",
   "ficharFacial": "fichar-facial",
+  "finalizarAjusteCaja": "finalizar-ajuste-caja",
   "finalizarCompra": "finalizar-compra",
   "generarLiquidacionBorrador": "generar-liquidacion-borrador",
   "generarLiquidacionComision": "generar-liquidacion-comision",
@@ -446,8 +447,10 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getFormaPago": "getFormaPago",
   "getFormasPago": "getFormasPago",
   "getFuncionario": "get-funcionario",
+  "getFuncionarioDeCliente": "get-funcionario-de-cliente",
   "getFuncionarioDocumentoBase64": "get-funcionario-documento-base64",
   "getFuncionarioDocumentos": "get-funcionario-documentos",
+  "getFuncionarioResumenFinanciero": "get-funcionario-resumen-financiero",
   "getFuncionarioTurnos": "get-funcionario-turnos",
   "getFuncionarios": "get-funcionarios",
   "getFuncionariosRegla": "get-funcionarios-regla",
@@ -664,6 +667,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "procesarAcreditacionesAuto": "procesar-acreditaciones-auto",
   "procesarStockVenta": "procesarStockVenta",
   "programarVacacionPeriodo": "programar-vacacion-periodo",
+  "puedeAjustarCaja": "puede-ajustar-caja",
   "qrUploadClose": "qr-upload-close",
   "qrUploadCreateSession": "qr-upload-create-session",
   "qrUploadEnableRemote": "qr-upload-enable-remote",

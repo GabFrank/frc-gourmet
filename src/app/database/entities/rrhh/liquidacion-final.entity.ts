@@ -88,6 +88,19 @@ export class LiquidacionFinal extends BaseModel {
   })
   totalLiquidado!: number;
 
+  // Total de haberes (indemnización + vacaciones + aguinaldo). Igual a
+  // totalLiquidado (se mantiene por claridad y retrocompatibilidad).
+  @Column({ name: 'total_haberes', type: 'decimal', precision: 18, scale: 2, default: 0 })
+  totalHaberes!: number;
+
+  // Deudas del funcionario neteadas contra los haberes (vales + préstamos + crédito).
+  @Column({ name: 'total_descuentos', type: 'decimal', precision: 18, scale: 2, default: 0 })
+  totalDescuentos!: number;
+
+  // Neto a pagar = totalHaberes - totalDescuentos (topado en 0).
+  @Column({ name: 'total_neto', type: 'decimal', precision: 18, scale: 2, default: 0 })
+  totalNeto!: number;
+
   @ManyToOne(() => Moneda)
   @JoinColumn({ name: 'moneda_id' })
   moneda!: Moneda;

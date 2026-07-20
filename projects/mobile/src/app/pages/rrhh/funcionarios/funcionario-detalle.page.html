@@ -1,0 +1,78 @@
+<div class="crud-page">
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <ng-container *ngIf="!loading && funcionario">
+    <!-- Cabecera -->
+    <mat-card class="crud-card det-header" appearance="outlined">
+      <div class="det-header-body">
+        <div class="det-header-main">
+          <span class="crud-name">{{ funcionario.persona?.nombre }} {{ funcionario.persona?.apellido }}</span>
+          <span class="crud-sub">
+            {{ funcionario.cargo?.nombre || 'Sin cargo' }}
+            · {{ funcionario.salarioBase | number:'1.0-2' }} {{ funcionario.monedaSalario?.simbolo || 'Gs' }}
+          </span>
+        </div>
+        <span class="crud-chip" [class.off]="!funcionario.activo">{{ funcionario.activo ? 'Activo' : 'Inactivo' }}</span>
+      </div>
+      <div class="det-header-actions">
+        <span *ngIf="resumen?.cliente" class="crud-chip vinc">
+          <mat-icon>account_circle</mat-icon> También es cliente
+        </span>
+        <a mat-stroked-button [routerLink]="['/rrhh/funcionarios', id]">
+          <mat-icon>edit</mat-icon> Editar
+        </a>
+      </div>
+    </mat-card>
+
+    <!-- Resumen financiero -->
+    <div class="det-stats">
+      <div class="det-stat">
+        <span class="det-stat-label">Vales pendientes</span>
+        <span class="det-stat-value" [class.warn]="(resumen?.vales?.total || 0) > 0">
+          {{ (resumen?.vales?.total || 0) | number:'1.0-2' }} Gs
+        </span>
+        <span class="det-stat-sub">{{ resumen?.vales?.count || 0 }} vale(s)</span>
+      </div>
+      <div class="det-stat">
+        <span class="det-stat-label">Préstamos</span>
+        <span class="det-stat-value" [class.warn]="(resumen?.prestamos?.saldo || 0) > 0">
+          {{ (resumen?.prestamos?.saldo || 0) | number:'1.0-2' }} Gs
+        </span>
+        <span class="det-stat-sub">{{ resumen?.prestamos?.count || 0 }} activo(s)</span>
+      </div>
+      <div class="det-stat">
+        <span class="det-stat-label">Consumo a crédito</span>
+        <span class="det-stat-value" [class.warn]="(resumen?.credito?.saldo || 0) > 0">
+          {{ (resumen?.credito?.saldo || 0) | number:'1.0-2' }} Gs
+        </span>
+        <span class="det-stat-sub">{{ resumen?.credito?.cpcActivas || 0 }} cuenta(s)</span>
+      </div>
+      <div class="det-stat">
+        <span class="det-stat-label">Total adeudado</span>
+        <span class="det-stat-value" [class.err]="(resumen?.totalAdeudado || 0) > 0">
+          {{ (resumen?.totalAdeudado || 0) | number:'1.0-2' }} Gs
+        </span>
+        <span class="det-stat-sub">con el negocio</span>
+      </div>
+    </div>
+
+    <!-- Próximos vencimientos -->
+    <mat-card class="crud-card det-venc" appearance="outlined">
+      <div class="det-section-title">
+        <mat-icon>event</mat-icon> Próximos vencimientos
+      </div>
+      <div *ngIf="(resumen?.proximosVencimientos?.length || 0) === 0" class="crud-empty">
+        Sin deudas próximas a vencer.
+      </div>
+      <div *ngFor="let v of resumen?.proximosVencimientos" class="det-venc-item">
+        <mat-icon>{{ v.tipo === 'CREDITO' ? 'shopping_cart' : 'account_balance' }}</mat-icon>
+        <div class="det-venc-info">
+          <span class="det-venc-title">{{ v.tipo === 'CREDITO' ? 'Crédito' : 'Préstamo' }} · Cuota #{{ v.numero }}</span>
+          <span class="det-venc-sub">vence {{ v.fechaVencimiento | date:'shortDate' }}</span>
+        </div>
+        <span class="det-venc-monto">{{ v.saldo | number:'1.0-2' }} Gs</span>
+      </div>
+    </mat-card>
+  </ng-container>
+</div>
