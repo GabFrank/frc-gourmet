@@ -235,6 +235,12 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/rrhh/funcionarios/enrolar-rostro.page').then((m) => m.EnrolarRostroPage),
   },
   {
+    path: 'rrhh/funcionarios/:id/detalle',
+    canActivate: [authGuard],
+    data: { title: 'Funcionario' },
+    loadComponent: () => import('./pages/rrhh/funcionarios/funcionario-detalle.page').then((m) => m.FuncionarioDetallePage),
+  },
+  {
     path: 'rrhh/fichaje',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/rrhh/fichaje/fichaje-facial.page').then((m) => m.FichajeFacialPage),
