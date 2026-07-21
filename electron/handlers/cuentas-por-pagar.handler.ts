@@ -84,29 +84,17 @@ function calcularEstadoCuota(monto: number, montoPagado: number): CuotaEstado {
   return CuotaEstado.PENDIENTE;
 }
 
-// Aplica el pago de una cuota CPP dentro de una transaccion existente.
-// Reutilizado por `pagar-cpp-cuota` (1 cuota) y `pagar-cuotas-compras-lote` (N cuotas).
-// NO commitea la transaccion: el caller maneja commit/rollback.
-export async function aplicarPagoCpoCuota(
+// Aplica SOLO el estado de dominio del pago de una cuota (cuota + CPP), sin
+// asentar en Caja Mayor ni banco. Lo usan `aplicarPagoCpoCuota` (que luego
+// asienta el egreso en Caja Mayor / banco) y el pago desde el cajón del PdV
+// (que asienta un EgresoCaja). NO commitea la transacción.
+export async function aplicarEstadoPagoCuota(
   queryRunner: any,
-  payload: {
-    cuotaId: number;
-    monto: number;
-    fuente: 'CAJA_MAYOR' | 'CUENTA_BANCARIA';
-    cajaMayorId?: number;
-    monedaId?: number;
-    formaPagoId?: number;
-    cuentaBancariaId?: number;
-    observacion?: string;
-  },
+  cuotaId: number,
+  monto: number,
   currentUser: Usuario | null,
   dataSource: DataSource,
-): Promise<{ cuota: CuentaPorPagarCuota; cpp: CuentaPorPagar | null; tipoMov: TipoMovimiento }> {
-  const cuotaId = payload.cuotaId;
-  const monto = Number(payload.monto);
-  const fuente = payload.fuente;
-  const observacion: string = (payload.observacion || '').toUpperCase();
-
+): Promise<{ cuota: CuentaPorPagarCuota; cpp: CuentaPorPagar | null }> {
   const cuotaRepo = queryRunner.manager.getRepository(CuentaPorPagarCuota);
   const cppRepo = queryRunner.manager.getRepository(CuentaPorPagar);
   const cuota = await cuotaRepo.findOne({
@@ -142,6 +130,76 @@ export async function aplicarPagoCpoCuota(
     if (todasPagadas) cpp.estado = CuentaPorPagarEstado.PAGADO;
     await queryRunner.manager.save(CuentaPorPagar, cpp);
   }
+
+  return { cuota, cpp };
+}
+
+// Revierte SOLO el estado de dominio de un pago de cuota: resta `monto` (el monto
+// exacto de ese pago, para no pisar otros pagos parciales que la cuota pueda tener)
+// y recalcula estados. Lo usa la anulación de un EgresoCaja tipo COMPRA. NO commitea.
+export async function revertirEstadoPagoCuota(
+  queryRunner: any,
+  cuotaId: number,
+  monto: number,
+  currentUser: Usuario | null,
+  dataSource: DataSource,
+): Promise<{ cuota: CuentaPorPagarCuota; cpp: CuentaPorPagar | null }> {
+  const cuotaRepo = queryRunner.manager.getRepository(CuentaPorPagarCuota);
+  const cppRepo = queryRunner.manager.getRepository(CuentaPorPagar);
+  const cuota = await cuotaRepo.findOne({
+    where: { id: cuotaId },
+    relations: ['cuentaPorPagar'],
+  });
+  if (!cuota) throw new Error(`CuentaPorPagarCuota ${cuotaId} no encontrada`);
+  if (cuota.estado === CuotaEstado.CANCELADA) throw new Error(`Cuota #${cuota.numero} esta anulada`);
+
+  const nuevoPagado = +(Number(cuota.montoPagado) - Number(monto)).toFixed(2);
+  cuota.montoPagado = nuevoPagado < 0 ? 0 : nuevoPagado;
+  cuota.estado = calcularEstadoCuota(Number(cuota.monto), Number(cuota.montoPagado));
+  if (cuota.estado !== CuotaEstado.PAGADA) {
+    cuota.fechaPago = null as any;
+  }
+  await setEntityUserTracking(dataSource, cuota, currentUser?.id, true);
+  await queryRunner.manager.save(CuentaPorPagarCuota, cuota);
+
+  const cpp = await cppRepo.findOne({ where: { id: cuota.cuentaPorPagar.id }, relations: ['cuotas'] });
+  if (cpp) {
+    cpp.montoPagado = +(cpp.cuotas || []).reduce((s: number, c: any) => s + Number(c.montoPagado), 0).toFixed(2);
+    const todasPagadas = (cpp.cuotas || []).length > 0
+      && (cpp.cuotas || []).every((c: any) => Number(c.montoPagado) >= Number(c.monto) - 0.005);
+    cpp.estado = todasPagadas ? CuentaPorPagarEstado.PAGADO : CuentaPorPagarEstado.ACTIVO;
+    await queryRunner.manager.save(CuentaPorPagar, cpp);
+  }
+
+  return { cuota, cpp };
+}
+
+// Aplica el pago de una cuota CPP dentro de una transaccion existente.
+// Reutilizado por `pagar-cpp-cuota` (1 cuota) y `pagar-cuotas-compras-lote` (N cuotas).
+// NO commitea la transaccion: el caller maneja commit/rollback.
+export async function aplicarPagoCpoCuota(
+  queryRunner: any,
+  payload: {
+    cuotaId: number;
+    monto: number;
+    fuente: 'CAJA_MAYOR' | 'CUENTA_BANCARIA';
+    cajaMayorId?: number;
+    monedaId?: number;
+    formaPagoId?: number;
+    cuentaBancariaId?: number;
+    observacion?: string;
+  },
+  currentUser: Usuario | null,
+  dataSource: DataSource,
+): Promise<{ cuota: CuentaPorPagarCuota; cpp: CuentaPorPagar | null; tipoMov: TipoMovimiento }> {
+  const monto = Number(payload.monto);
+  const fuente = payload.fuente;
+  const observacion: string = (payload.observacion || '').toUpperCase();
+
+  // Estado de dominio (cuota + CPP). Extraído para poder reutilizarlo desde el
+  // pago del cajón del PdV (que asienta un EgresoCaja en vez de un movimiento
+  // de Caja Mayor).
+  const { cuota, cpp } = await aplicarEstadoPagoCuota(queryRunner, payload.cuotaId, monto, currentUser, dataSource);
 
   const esPrestamoFuncionario = cpp?.tipo === CuentaPorPagarTipo.PRESTAMO_FUNCIONARIO;
   const obsPrefix = esPrestamoFuncionario ? 'COBRO' : 'PAGO';

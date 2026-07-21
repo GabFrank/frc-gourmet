@@ -122,6 +122,7 @@ import { Gasto } from './entities/financiero/gasto.entity';
 import { RetiroCaja } from './entities/financiero/retiro-caja.entity';
 import { RetiroCajaDetalle } from './entities/financiero/retiro-caja-detalle.entity';
 import { GastoCaja } from './entities/financiero/gasto-caja.entity';
+import { EgresoCaja } from './entities/financiero/egreso-caja.entity';
 import { GastoDetalle } from './entities/financiero/gasto-detalle.entity';
 
 // Banking entities (Fase 2)
@@ -247,6 +248,7 @@ import { AddMotivoAjusteToCaja1784316132819 } from './migrations/1784316132819-A
 import { AddLiquidacionIdToCpcCuota1784554795703 } from './migrations/1784554795703-AddLiquidacionIdToCpcCuota';
 import { AddNeteoDeudasLiquidacionFinal1784555556082 } from './migrations/1784555556082-AddNeteoDeudasLiquidacionFinal';
 import { AddSimplificadaToCompra1784652193704 } from './migrations/1784652193704-AddSimplificadaToCompra';
+import { AddEgresoCaja1784664715714 } from './migrations/1784664715714-AddEgresoCaja';
 import { AddAnuladoToMovimientoCliente1784136362576 } from './migrations/1784136362576-AddAnuladoToMovimientoCliente';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
@@ -433,6 +435,7 @@ function getEntitiesList(): any[] {
       RetiroCaja,
       RetiroCajaDetalle,
       GastoCaja,
+      EgresoCaja,
       // Banking (Fase 2)
       CuentaBancaria,
       MaquinaPos,
@@ -628,6 +631,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddLiquidacionIdToCpcCuota1784554795703,
     AddNeteoDeudasLiquidacionFinal1784555556082,
     AddSimplificadaToCompra1784652193704,
+    AddEgresoCaja1784664715714,
   ];
 }
 

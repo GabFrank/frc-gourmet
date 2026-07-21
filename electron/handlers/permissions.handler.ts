@@ -83,6 +83,9 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   // Ventas
   { codigo: 'VENTAS_PDV', descripcion: 'Operar punto de venta (PdV/mesas/comandas)', modulo: 'VENTAS' },
   { codigo: 'VENTAS_HISTORICO_VER', descripcion: 'Ver historico de ventas concluidas', modulo: 'VENTAS' },
+  { codigo: 'PDV_PAGAR_VALE', descripcion: 'Crear/pagar vales de funcionario desde el cajón del PdV', modulo: 'VENTAS' },
+  { codigo: 'PDV_PAGAR_COMPRA', descripcion: 'Crear/pagar compras desde el cajón del PdV', modulo: 'VENTAS' },
+  { codigo: 'PDV_ANULAR_EGRESO', descripcion: 'Anular egresos de caja (vales/compras) del PdV', modulo: 'VENTAS' },
 
   // Compras / Proveedores
   { codigo: 'COMPRAS_VER', descripcion: 'Ver lista de compras', modulo: 'COMPRAS' },

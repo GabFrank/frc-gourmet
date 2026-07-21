@@ -1349,6 +1349,24 @@ export async function printCierreCajaInternal(
     );
   }
 
+  // ── Egresos (Vales / Compras pagados del cajón) ───────────
+  if ((resumen.egresos || []).length > 0) {
+    lines.push(ticketSeparador('-'));
+    lines.push(ticketText('EGRESOS (VALES / COMPRAS)', { align: 'C', bold: true }));
+    const egresoTotalPorMoneda: { [id: number]: number } = {};
+    for (const e of resumen.egresos) {
+      const desc = `${e.tipo || 'EGRESO'}: ${e.descripcion || ''}`.toUpperCase().slice(0, width - 14);
+      lines.push(ticketKv(desc, fmtMoneda(e.monedaId, e.monto)));
+      egresoTotalPorMoneda[e.monedaId] = (egresoTotalPorMoneda[e.monedaId] || 0) + e.monto;
+    }
+    lines.push(ticketSeparador('.'));
+    pushTotalMultimoneda(
+      'TOTAL EGRESOS',
+      Object.keys(egresoTotalPorMoneda).map(Number).map(id => ({ monedaId: id, total: egresoTotalPorMoneda[id] })),
+      true,
+    );
+  }
+
   // ── Retiros ───────────────────────────────────────────────
   if (resumen.retiros.length > 0) {
     lines.push(ticketSeparador('-'));

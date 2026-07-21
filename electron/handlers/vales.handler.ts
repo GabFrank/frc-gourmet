@@ -7,6 +7,7 @@ import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.en
 import { CajaMayor } from '../../src/app/database/entities/financiero/caja-mayor.entity';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
+import { EgresoCaja } from '../../src/app/database/entities/financiero/egreso-caja.entity';
 import { MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
 import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
@@ -411,6 +412,19 @@ export function registerValesHandlers(
             await actualizarSaldoCajaMayor(queryRunner, cajaMayorId, monedaId, formaPagoId, Number(movOriginal.monto), TipoMovimiento.AJUSTE_POSITIVO);
           }
         }
+      }
+
+      // Conciliación con el cajón del PdV: si el vale se pagó/creó desde una
+      // caja de venta (EgresoCaja ACTIVO), anular ese egreso para que el cierre
+      // deje de descontarlo (si no, quedaría un faltante fantasma en la caja).
+      const egresosCaja = await queryRunner.manager.getRepository(EgresoCaja).find({
+        where: { valeId: vale.id, estado: 'ACTIVO' } as any,
+      });
+      for (const eg of egresosCaja) {
+        eg.estado = 'ANULADO';
+        eg.motivoAnulacion = `ANULACION VALE #${vale.id}` + (motivo ? ` - ${String(motivo).toUpperCase()}` : '');
+        await setEntityUserTracking(dataSource, eg, userId, true);
+        await queryRunner.manager.save(EgresoCaja, eg);
       }
 
       vale.estado = ValeEstado.ANULADO;

@@ -670,6 +670,14 @@ export abstract class RepositoryService {
   abstract createGastoCaja(data: any): Observable<any>;
   abstract getGastosCaja(cajaId: number, incluirAnulados?: boolean): Observable<any[]>;
   abstract anularGastoCaja(gastoId: number, motivo?: string): Observable<any>;
+  // Egresos de caja PdV (vales/compras pagados desde el cajón)
+  abstract crearValeCaja(data: any): Observable<any>;
+  abstract pagarValeCaja(data: any): Observable<any>;
+  abstract crearCompraSimplificadaCaja(data: any): Observable<any>;
+  abstract pagarCompraCuotaCaja(data: any): Observable<any>;
+  abstract anularEgresoCaja(egresoId: number, motivo?: string): Observable<any>;
+  abstract getEgresosCaja(cajaId: number, incluirAnulados?: boolean): Observable<any[]>;
+  abstract getValesPendientesFuncionario(funcionarioId: number): Observable<any[]>;
   abstract editCajaMayorMovimiento(movId: number, data: any): Observable<any>;
   abstract getGastosProgramados(): Observable<any[]>;
   abstract getRetirosCaja(filtros?: any): Observable<any[]>;

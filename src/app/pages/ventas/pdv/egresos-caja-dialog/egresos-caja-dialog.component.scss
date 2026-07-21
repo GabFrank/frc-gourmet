@@ -1,0 +1,54 @@
+h2[mat-dialog-title] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .title-icon {
+    color: var(--primary-color, #00838f);
+  }
+}
+
+.loading-box {
+  display: flex;
+  justify-content: center;
+  padding: 32px 0;
+}
+
+.empty-text {
+  padding: 24px 8px;
+  text-align: center;
+  color: var(--text-secondary, #90a4ae);
+}
+
+.egresos-table {
+  width: 100%;
+  min-width: 460px;
+  background: transparent;
+
+  .text-right {
+    text-align: right;
+  }
+
+  .fila-anulada {
+    opacity: 0.55;
+    text-decoration: line-through;
+  }
+}
+
+.chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+
+  &.chip-verde { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+  &.chip-rojo { background: #ffebee; color: #b71c1c; border: 1px solid #ef9a9a; }
+  &.chip-celeste { background: #e1f5fe; color: #01579b; border: 1px solid #81d4fa; }
+}
+
+@media (max-width: 560px) {
+  .egresos-table {
+    min-width: unset;
+  }
+}

@@ -13,6 +13,7 @@ import { Caja } from '../../src/app/database/entities/financiero/caja.entity';
 import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
 import { GastoCaja } from '../../src/app/database/entities/financiero/gasto-caja.entity';
+import { EgresoCaja } from '../../src/app/database/entities/financiero/egreso-caja.entity';
 import { RetiroCaja } from '../../src/app/database/entities/financiero/retiro-caja.entity';
 import { RetiroCajaOrigen } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { dbQuery } from './db-query';
@@ -37,6 +38,7 @@ export interface ResumenCaja {
   descuentosPorMoneda: { [monedaId: number]: number };
   aumentosPorMoneda: { [monedaId: number]: number };
   gastos: any[];
+  egresos: any[];
   retiros: any[];
 }
 
@@ -173,6 +175,34 @@ export async function computeResumenCaja(dataSource: DataSource, cajaId: number)
     };
   });
 
+  // Egresos de esta caja por vales/compras pagados desde el cajón (ACTIVOS).
+  // Mismo tratamiento que los gastos: solo reducen el esperado si la forma de
+  // pago mueve caja (efectivo). Los pagos con banco no descuentan del cajón.
+  const egresosCaja = await dataSource.getRepository(EgresoCaja).find({
+    where: { caja: { id: cajaId } as any, estado: 'ACTIVO' },
+    relations: ['moneda', 'formaPago'],
+    order: { fecha: 'DESC', id: 'DESC' } as any,
+  });
+  const egresosEfectivoPorMoneda: { [monedaId: number]: number } = {};
+  const egresos = egresosCaja.map(e => {
+    const monedaId = (e.moneda as any)?.id;
+    const monto = Number(e.monto || 0);
+    if (monedaId && (e.formaPago as any)?.movimentaCaja) {
+      egresosEfectivoPorMoneda[monedaId] = (egresosEfectivoPorMoneda[monedaId] || 0) + monto;
+    }
+    return {
+      id: e.id,
+      tipo: e.tipo,
+      descripcion: e.descripcion,
+      monto,
+      monedaId,
+      monedaSimbolo: (e.moneda as any)?.simbolo || '',
+      monedaDenominacion: (e.moneda as any)?.denominacion || '',
+      formaPago: (e.formaPago as any)?.nombre || '',
+      fecha: e.fecha,
+    };
+  });
+
   // Retiros MANUALES de esta caja. El retiro de CIERRE se genera del propio
   // conteo (mueve el efectivo contado a caja mayor) y NO debe descontarse del
   // esperado; solo los manuales, que salieron del cajón durante el turno.
@@ -215,6 +245,7 @@ export async function computeResumenCaja(dataSource: DataSource, cajaId: number)
   conteoCierre.forEach(c => allMonedaIds.add(c.monedaId));
   Object.keys(efectivoPorMoneda).forEach(k => allMonedaIds.add(Number(k)));
   Object.keys(gastosEfectivoPorMoneda).forEach(k => allMonedaIds.add(Number(k)));
+  Object.keys(egresosEfectivoPorMoneda).forEach(k => allMonedaIds.add(Number(k)));
   Object.keys(retirosEfectivoPorMoneda).forEach(k => allMonedaIds.add(Number(k)));
 
   for (const monedaId of allMonedaIds) {
@@ -222,8 +253,9 @@ export async function computeResumenCaja(dataSource: DataSource, cajaId: number)
     const cierre = conteoCierre.find(c => c.monedaId === monedaId)?.total || 0;
     const efectivo = efectivoPorMoneda[monedaId] || 0;
     const gastoEfectivo = gastosEfectivoPorMoneda[monedaId] || 0;
+    const egresoEfectivo = egresosEfectivoPorMoneda[monedaId] || 0;
     const retiroEfectivo = retirosEfectivoPorMoneda[monedaId] || 0;
-    esperadoPorMoneda[monedaId] = apertura + efectivo - gastoEfectivo - retiroEfectivo;
+    esperadoPorMoneda[monedaId] = apertura + efectivo - gastoEfectivo - egresoEfectivo - retiroEfectivo;
     diferenciaPorMoneda[monedaId] = cierre - esperadoPorMoneda[monedaId];
   }
 
@@ -240,6 +272,7 @@ export async function computeResumenCaja(dataSource: DataSource, cajaId: number)
     descuentosPorMoneda,
     aumentosPorMoneda,
     gastos,
+    egresos,
     retiros,
   };
 }

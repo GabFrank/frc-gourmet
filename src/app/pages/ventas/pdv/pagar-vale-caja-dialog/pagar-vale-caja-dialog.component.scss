@@ -1,0 +1,82 @@
+h2[mat-dialog-title] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .title-icon {
+    color: var(--primary-color, #2e7d32);
+  }
+}
+
+.loading-box {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 0;
+}
+
+.form-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 480px;
+  max-width: 560px;
+}
+
+.modo-toggle {
+  margin-bottom: 12px;
+
+  mat-button-toggle {
+    flex: 1;
+  }
+
+  mat-icon {
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+
+  .flex-field {
+    flex: 1;
+  }
+}
+
+.full-width {
+  width: 100%;
+}
+
+.warn-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-top: 4px;
+  border-radius: 6px;
+  background: var(--surface-hover, #fff8e1);
+  color: var(--text-secondary, #bf360c);
+  font-size: 13px;
+
+  mat-icon {
+    color: var(--warning-color, #ff9800);
+  }
+}
+
+.btn-spinner {
+  display: inline-block;
+  margin-right: 6px;
+}
+
+@media (max-width: 560px) {
+  .form-container {
+    min-width: unset;
+    width: 100%;
+  }
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+}

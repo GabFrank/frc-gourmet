@@ -136,6 +136,22 @@
       </div>
     </div>
 
+    <!-- Card: Egresos (Vales / Compras pagados del cajón) -->
+    <div class="resumen-card" *ngIf="resumen.egresos?.length">
+      <div class="resumen-card-header">
+        <mat-icon>payments</mat-icon>
+        <h3>EGRESOS (VALES / COMPRAS)</h3>
+      </div>
+      <div class="resumen-card-body">
+        <div class="tile-grid">
+          <div class="tile" *ngFor="let e of resumen.egresos">
+            <span class="tile-label">{{ e.tipo }}{{ e.descripcion ? ' · ' + e.descripcion : '' }}</span>
+            <span class="tile-value">{{ e.monedaSimbolo }} {{ e.monto | number:'1.0-2' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Card: Diferencias -->
     <div class="resumen-card resumen-card-diferencia" *ngIf="resumen.conteoCierre.length > 0">
       <div class="resumen-card-header">

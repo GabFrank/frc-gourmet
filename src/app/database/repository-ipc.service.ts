@@ -709,6 +709,13 @@ interface ElectronAPI {
   createGastoCaja: (data: any) => Promise<any>;
   getGastosCaja: (cajaId: number, incluirAnulados?: boolean) => Promise<any[]>;
   anularGastoCaja: (gastoId: number, motivo?: string) => Promise<any>;
+  crearValeCaja: (data: any) => Promise<any>;
+  pagarValeCaja: (data: any) => Promise<any>;
+  crearCompraSimplificadaCaja: (data: any) => Promise<any>;
+  pagarCompraCuotaCaja: (data: any) => Promise<any>;
+  anularEgresoCaja: (egresoId: number, motivo?: string) => Promise<any>;
+  getEgresosCaja: (cajaId: number, incluirAnulados?: boolean) => Promise<any[]>;
+  getValesPendientesFuncionario: (funcionarioId: number) => Promise<any[]>;
   editCajaMayorMovimiento: (movId: number, data: any) => Promise<any>;
   getGastosProgramados: () => Promise<any[]>;
   getRetirosCaja: (filtros?: any) => Promise<any[]>;
@@ -3201,6 +3208,27 @@ export class RepositoryIpcService extends RepositoryService {
   }
   anularGastoCaja(gastoId: number, motivo?: string): Observable<any> {
     return from(this.api.anularGastoCaja(gastoId, motivo));
+  }
+  crearValeCaja(data: any): Observable<any> {
+    return from(this.api.crearValeCaja(data));
+  }
+  pagarValeCaja(data: any): Observable<any> {
+    return from(this.api.pagarValeCaja(data));
+  }
+  crearCompraSimplificadaCaja(data: any): Observable<any> {
+    return from(this.api.crearCompraSimplificadaCaja(data));
+  }
+  pagarCompraCuotaCaja(data: any): Observable<any> {
+    return from(this.api.pagarCompraCuotaCaja(data));
+  }
+  anularEgresoCaja(egresoId: number, motivo?: string): Observable<any> {
+    return from(this.api.anularEgresoCaja(egresoId, motivo));
+  }
+  getEgresosCaja(cajaId: number, incluirAnulados?: boolean): Observable<any[]> {
+    return from(this.api.getEgresosCaja(cajaId, incluirAnulados));
+  }
+  getValesPendientesFuncionario(funcionarioId: number): Observable<any[]> {
+    return from(this.api.getValesPendientesFuncionario(funcionarioId));
   }
   editGasto(gastoId: number, data: any): Observable<any> {
     return from(this.api.editGasto(gastoId, data));

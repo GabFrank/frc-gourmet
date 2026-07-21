@@ -1594,6 +1594,27 @@ export class RepositoryHttpService extends RepositoryService {
   anularGastoCaja(gastoId: number, motivo?: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.anularGastoCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  crearValeCaja(data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.crearValeCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  pagarValeCaja(data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.pagarValeCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  crearCompraSimplificadaCaja(data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.crearCompraSimplificadaCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  pagarCompraCuotaCaja(data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.pagarCompraCuotaCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  anularEgresoCaja(egresoId: number, motivo?: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.anularEgresoCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getEgresosCaja(cajaId: number, incluirAnulados?: boolean): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getEgresosCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getValesPendientesFuncionario(funcionarioId: number): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getValesPendientesFuncionario() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   editCajaMayorMovimiento(movId: number, data: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.editCajaMayorMovimiento() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
