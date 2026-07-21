@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { BehaviorSubject, Observable, from } from 'rxjs';
 import { DatabaseService, PrinterConfig } from './database.service';
 
 @Injectable({
@@ -48,6 +48,27 @@ export class PrinterService {
    */
   getPrinters(): Observable<PrinterConfig[]> {
     return this.printersSubject.asObservable();
+  }
+
+  /**
+   * Impresoras instaladas en el sistema operativo (spooler), para elegir una
+   * impresora local por nombre sin configurar paths ni red.
+   */
+  listSystemPrinters(): Observable<any[]> {
+    return from(this.dbService.listSystemPrinters());
+  }
+
+  /**
+   * Descubre impresoras en la red local. `tcpScan` habilita el barrido del /24
+   * (más lento) además del descubrimiento mDNS.
+   */
+  scanNetworkPrinters(opts?: { mdns?: boolean; tcpScan?: boolean; tcpPort?: number }): Observable<any[]> {
+    return from(this.dbService.scanNetworkPrinters(opts));
+  }
+
+  /** Prueba la conectividad de una config de impresora sin guardar ni imprimir. */
+  testPrinterConnection(config: any): Observable<{ ok: boolean; error?: string }> {
+    return from(this.dbService.testPrinterConnection(config));
   }
 
   /**

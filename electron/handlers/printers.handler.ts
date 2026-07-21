@@ -1,9 +1,10 @@
-import { ipcMain } from 'electron';
+import { ipcMain, BrowserWindow } from 'electron';
 import { DataSource, Not } from 'typeorm';
 import { Printer } from '../../src/app/database/entities/printer.entity';
-import { printTestTicket } from '../utils/ticket.utils';
+import { printTestTicket, probePrinterConnection } from '../utils/ticket.utils';
 import { ensurePermission } from '../utils/auth.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { scanNetworkPrinters } from '../utils/network-printer-scan.utils';
 
 export function registerPrinterHandlers(
   dataSource: DataSource,
@@ -19,6 +20,59 @@ export function registerPrinterHandlers(
     } catch (error) {
       console.error('Error getting printers:', error);
       throw error;
+    }
+  });
+
+  // IPC handler: enumera las impresoras instaladas en el sistema operativo
+  // (spooler). Permite elegir una impresora local por nombre sin configurar
+  // paths de dispositivo ni red. Usa la API nativa de Electron.
+  ipcMain.handle('list-system-printers', async (event: any) => {
+    try {
+      let printers: any[] = [];
+      const wc = event?.sender && typeof event.sender.getPrintersAsync === 'function' ? event.sender : null;
+      if (wc) {
+        printers = await wc.getPrintersAsync();
+      } else {
+        // En modo server (HTTP /api/rpc) no hay sender con webContents; usamos
+        // la primera ventana disponible como fallback.
+        const win = BrowserWindow.getAllWindows()[0];
+        if (win) printers = await win.webContents.getPrintersAsync();
+      }
+      return (printers || []).map((p: any) => ({
+        name: p.name,
+        displayName: p.displayName || p.name,
+        description: p.description || '',
+        status: p.status,
+        isDefault: !!p.isDefault,
+      }));
+    } catch (error) {
+      console.error('Error listing system printers:', error);
+      return [];
+    }
+  });
+
+  // IPC handler: descubre impresoras en la red local (mDNS + barrido TCP
+  // opcional). Devuelve candidatos { name, address, port, source, protocol }.
+  ipcMain.handle('scan-network-printers', async (_event: any, opts?: any) => {
+    try {
+      return await scanNetworkPrinters({
+        mdns: opts?.mdns !== false,
+        tcpScan: opts?.tcpScan === true,
+        tcpPort: opts?.tcpPort || 9100,
+      });
+    } catch (error) {
+      console.error('Error scanning network printers:', error);
+      return [];
+    }
+  });
+
+  // IPC handler: prueba la conectividad de una config de impresora sin guardar
+  // ni imprimir. Devuelve { ok, error? }.
+  ipcMain.handle('test-printer-connection', async (_event: any, config: any) => {
+    try {
+      return await probePrinterConnection(config);
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
 

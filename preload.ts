@@ -38,6 +38,9 @@ const ALWAYS_LOCAL_CHANNELS = new Set<string>([
   'print-receipt',
   'print-test-page',
   'get-printers',
+  'list-system-printers',
+  'scan-network-printers',
+  'test-printer-connection',
   // User session local (no JWT — el current-user se setea local tras login)
   'getCurrentUser',
   'restoreSession',
@@ -1252,6 +1255,15 @@ contextBridge.exposeInMainWorld('api', {
   // Printer operations
   getPrinters: async (): Promise<PrinterConfig[]> => {
     return await ipcRenderer.invoke('get-printers');
+  },
+  listSystemPrinters: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('list-system-printers');
+  },
+  scanNetworkPrinters: async (opts?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('scan-network-printers', opts);
+  },
+  testPrinterConnection: async (config: any): Promise<{ ok: boolean; error?: string }> => {
+    return await ipcRenderer.invoke('test-printer-connection', config);
   },
   addPrinter: async (printer: PrinterConfig): Promise<{ success: boolean, printer: PrinterConfig }> => {
     return await ipcRenderer.invoke('add-printer', printer);

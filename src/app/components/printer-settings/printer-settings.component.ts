@@ -58,11 +58,25 @@ export class PrinterSettingsComponent implements OnInit {
   ];
 
   connectionTypes = [
+    { value: 'system', displayName: 'Impresora del sistema (local / Windows)' },
     { value: 'network', displayName: 'Red / IP' },
     { value: 'lpr', displayName: 'LPR/LPD (Windows compartida)' },
     { value: 'usb', displayName: 'USB' },
     { value: 'bluetooth', displayName: 'Bluetooth' }
   ];
+
+  // Impresoras instaladas en el SO (para el tipo de conexión 'system').
+  systemPrinters: any[] = [];
+  loadingSystemPrinters = false;
+
+  // Descubrimiento de impresoras en red (para el tipo 'network').
+  networkCandidates: any[] = [];
+  scanningNetwork = false;
+  deepScan = false;
+  scannedOnce = false;
+
+  // Prueba de conexión (pre-guardado).
+  testingConnection = false;
 
   // La cantidad de columnas depende de la tecnología + fuente de la impresora,
   // no solo del ancho en mm. Se configura directamente (se guarda en `width`).
@@ -98,6 +112,86 @@ export class PrinterSettingsComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadPrinters();
+    this.loadSystemPrinters();
+  }
+
+  /**
+   * Descubre impresoras en la red local (mDNS + barrido TCP opcional) y las
+   * ofrece como candidatos para autocompletar el form.
+   */
+  scanNetwork(): void {
+    this.scanningNetwork = true;
+    this.printerService.scanNetworkPrinters({ mdns: true, tcpScan: this.deepScan }).subscribe({
+      next: (list) => {
+        this.networkCandidates = list || [];
+        this.scannedOnce = true;
+        this.scanningNetwork = false;
+        if (this.networkCandidates.length === 0) {
+          this.snackBar.open('No se encontraron impresoras en la red', 'CERRAR', { duration: 3000 });
+        }
+      },
+      error: () => {
+        this.networkCandidates = [];
+        this.scannedOnce = true;
+        this.scanningNetwork = false;
+        this.snackBar.open('Error al buscar impresoras en la red', 'CERRAR', { duration: 3000 });
+      },
+    });
+  }
+
+  /** Prueba la conexión con la config actual del form, sin guardar ni imprimir. */
+  testConnection(): void {
+    const cfg = this.printerForm.value;
+    if (!cfg.connectionType || !cfg.address) {
+      this.snackBar.open('Completá tipo de conexión y dirección primero', 'CERRAR', { duration: 3000 });
+      return;
+    }
+    this.testingConnection = true;
+    this.printerService.testPrinterConnection(cfg).subscribe({
+      next: (res) => {
+        this.testingConnection = false;
+        if (res?.ok) {
+          this.snackBar.open('Conexión OK ✓', 'CERRAR', { duration: 3000 });
+        } else {
+          this.snackBar.open(`Sin conexión: ${res?.error || 'no responde'}`, 'CERRAR', { duration: 5000 });
+        }
+      },
+      error: (e) => {
+        this.testingConnection = false;
+        this.snackBar.open(`Error al probar: ${e?.message || e}`, 'CERRAR', { duration: 4000 });
+      },
+    });
+  }
+
+  /** Autocompleta el form con una impresora descubierta en red. */
+  usarCandidato(c: any): void {
+    this.printerForm.patchValue({
+      connectionType: 'network',
+      address: c.address,
+      port: c.port || 9100,
+      name: this.printerForm.get('name')?.value || c.name,
+    });
+  }
+
+  /**
+   * Carga las impresoras instaladas en el sistema operativo para el selector
+   * del tipo de conexión 'system'.
+   */
+  loadSystemPrinters(): void {
+    this.loadingSystemPrinters = true;
+    this.printerService.listSystemPrinters().subscribe({
+      next: (list) => {
+        this.systemPrinters = (list || []).map((p: any) => ({
+          ...p,
+          label: p.displayName && p.displayName !== p.name ? `${p.displayName} (${p.name})` : p.name,
+        }));
+        this.loadingSystemPrinters = false;
+      },
+      error: () => {
+        this.systemPrinters = [];
+        this.loadingSystemPrinters = false;
+      },
+    });
   }
 
   /**

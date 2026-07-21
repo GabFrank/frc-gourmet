@@ -184,6 +184,11 @@ export class RepositoryHttpService extends RepositoryService {
   getPrinters(): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getPrinters() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  listSystemPrinters(): Observable<any[]> {
+    // Hardware local del cliente: en modo cliente esto se resuelve localmente
+    // vía ALWAYS_LOCAL_CHANNELS, no por HTTP al server.
+    return throwError(() => new Error(`RepositoryHttpService.listSystemPrinters() se resuelve localmente (ALWAYS_LOCAL_CHANNELS).`)) as any;
+  }
   addPrinter(printer: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.addPrinter() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
