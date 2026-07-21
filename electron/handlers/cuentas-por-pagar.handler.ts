@@ -87,7 +87,7 @@ function calcularEstadoCuota(monto: number, montoPagado: number): CuotaEstado {
 // Aplica el pago de una cuota CPP dentro de una transaccion existente.
 // Reutilizado por `pagar-cpp-cuota` (1 cuota) y `pagar-cuotas-compras-lote` (N cuotas).
 // NO commitea la transaccion: el caller maneja commit/rollback.
-async function aplicarPagoCpoCuota(
+export async function aplicarPagoCpoCuota(
   queryRunner: any,
   payload: {
     cuotaId: number;

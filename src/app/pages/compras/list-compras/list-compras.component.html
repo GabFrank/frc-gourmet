@@ -20,6 +20,10 @@
         <span>Desde el celular (QR)</span>
       </button>
     </mat-menu>
+    <button *appHasPermission="'COMPRAS_GESTIONAR'" mat-stroked-button color="primary" (click)="compraSimplificada()" matTooltip="Compra sin ítems: solo deuda + pago (no mueve stock)">
+      <mat-icon>shopping_bag</mat-icon>
+      Compra simplificada
+    </button>
     <button *appHasPermission="'COMPRAS_GESTIONAR'" mat-flat-button color="primary" (click)="nuevaCompra()">
       <mat-icon>add</mat-icon>
       Nueva compra
@@ -118,6 +122,7 @@
         <th mat-header-cell *matHeaderCellDef>Proveedor</th>
         <td mat-cell *matCellDef="let c" class="prov-cell" [matTooltip]="c.proveedor?.nombre || ''">
           {{ c.proveedor?.nombre || '-' }}
+          <span *ngIf="c.simplificada" class="chip chip-celeste chip-mini" matTooltip="Compra simplificada: sin ítems, no mueve stock">SIN STOCK</span>
         </td>
       </ng-container>
 

@@ -1,0 +1,113 @@
+h2[mat-dialog-title] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .title-icon {
+    color: var(--primary-color, #1565c0);
+  }
+}
+
+.loading-box {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 0;
+}
+
+.form-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 520px;
+  max-width: 640px;
+}
+
+.info-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  background: var(--surface-hover, rgba(21, 101, 192, 0.08));
+  color: var(--text-secondary, #607d8b);
+  font-size: 13px;
+
+  mat-icon {
+    color: var(--primary-color, #1565c0);
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary, #78909c);
+  margin: 10px 0 6px;
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+
+  .flex-field {
+    flex: 1;
+  }
+}
+
+.full-width {
+  width: 100%;
+}
+
+.fuente-toggle {
+  margin: 4px 0 12px;
+
+  mat-button-toggle {
+    flex: 1;
+  }
+
+  mat-icon {
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+}
+
+.pagar-ahora-check {
+  margin: 4px 0 8px;
+}
+
+.hint-text {
+  font-size: 12px;
+  color: var(--text-secondary, #90a4ae);
+  margin: 2px 0 10px;
+}
+
+.cat-padre {
+  opacity: 0.6;
+}
+
+mat-divider {
+  margin: 8px 0;
+}
+
+.btn-spinner {
+  display: inline-block;
+  margin-right: 6px;
+}
+
+@media (max-width: 600px) {
+  .form-container {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+}

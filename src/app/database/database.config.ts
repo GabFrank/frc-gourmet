@@ -246,6 +246,7 @@ import { ReclasificarMovimientosAcreditacionPos1784049746457 } from './migration
 import { AddMotivoAjusteToCaja1784316132819 } from './migrations/1784316132819-AddMotivoAjusteToCaja';
 import { AddLiquidacionIdToCpcCuota1784554795703 } from './migrations/1784554795703-AddLiquidacionIdToCpcCuota';
 import { AddNeteoDeudasLiquidacionFinal1784555556082 } from './migrations/1784555556082-AddNeteoDeudasLiquidacionFinal';
+import { AddSimplificadaToCompra1784652193704 } from './migrations/1784652193704-AddSimplificadaToCompra';
 import { AddAnuladoToMovimientoCliente1784136362576 } from './migrations/1784136362576-AddAnuladoToMovimientoCliente';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
@@ -626,6 +627,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddMotivoAjusteToCaja1784316132819,
     AddLiquidacionIdToCpcCuota1784554795703,
     AddNeteoDeudasLiquidacionFinal1784555556082,
+    AddSimplificadaToCompra1784652193704,
   ];
 }
 

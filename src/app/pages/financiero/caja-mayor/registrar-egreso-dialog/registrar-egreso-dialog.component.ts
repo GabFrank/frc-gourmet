@@ -20,10 +20,11 @@ import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financi
 import { EmitirChequeDialogComponent } from '../cheques/emitir-cheque/emitir-cheque-dialog.component';
 import { PagarComprasDialogComponent } from '../pagar-compras-dialog/pagar-compras-dialog.component';
 import { CreateEditValeDialogComponent } from 'src/app/pages/rrhh/vales/create-edit-vale-dialog.component';
+import { CrearCompraSimplificadaDialogComponent } from 'src/app/pages/compras/crear-compra-simplificada-dialog/crear-compra-simplificada-dialog.component';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
 
-type EgresoTipo = 'GASTO' | 'AJUSTE' | 'OPERACION_FINANCIERA' | 'EMITIR_CHEQUE' | 'PAGAR_COMPRAS' | 'REGISTRAR_VALE' | null;
+type EgresoTipo = 'GASTO' | 'AJUSTE' | 'OPERACION_FINANCIERA' | 'EMITIR_CHEQUE' | 'PAGAR_COMPRAS' | 'REGISTRAR_VALE' | 'COMPRA_SIMPLIFICADA' | null;
 
 @Component({
   selector: 'app-registrar-egreso-dialog',
@@ -66,6 +67,13 @@ export class RegistrarEgresoDialogComponent implements OnInit {
       descripcion: 'Pagar una o varias cuotas pendientes de compras (contado o crédito)',
       icono: 'shopping_cart_checkout',
       color: '#1565c0',
+    },
+    {
+      tipo: 'COMPRA_SIMPLIFICADA' as EgresoTipo,
+      titulo: 'Compra Simplificada',
+      descripcion: 'Compra sin ítems: genera la deuda al proveedor y el pago (no mueve stock)',
+      icono: 'shopping_bag',
+      color: '#00838f',
     },
     {
       tipo: 'GASTO' as EgresoTipo,
@@ -223,6 +231,15 @@ export class RegistrarEgresoDialogComponent implements OnInit {
       this.dialogRef?.close(false);
       this.dialog.open(PagarComprasDialogComponent, {
         width: '900px',
+        maxWidth: '95vw',
+        data: { cajaMayorId: this.cajaMayorId },
+      });
+      return;
+    }
+    if (tipo === 'COMPRA_SIMPLIFICADA') {
+      this.dialogRef?.close(false);
+      this.dialog.open(CrearCompraSimplificadaDialogComponent, {
+        width: '680px',
         maxWidth: '95vw',
         data: { cajaMayorId: this.cajaMayorId },
       });

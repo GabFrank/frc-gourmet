@@ -1,0 +1,175 @@
+<h2 mat-dialog-title>
+  <mat-icon class="title-icon">shopping_bag</mat-icon>
+  Compra Simplificada
+</h2>
+
+<mat-dialog-content>
+  <div *ngIf="loading" class="loading-box">
+    <mat-spinner diameter="36"></mat-spinner>
+  </div>
+
+  <form *ngIf="!loading" [formGroup]="form" class="form-container">
+
+    <div class="info-banner">
+      <mat-icon>info</mat-icon>
+      <span>Registra la deuda al proveedor sin cargar ítems. <strong>No mueve stock ni costo.</strong></span>
+    </div>
+
+    <!-- ===== Datos de la compra ===== -->
+    <div class="section-title">Datos de la compra</div>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Proveedor</mat-label>
+      <mat-select formControlName="proveedorId">
+        <mat-option *ngFor="let p of proveedores" [value]="p.id">{{ p.nombre }}</mat-option>
+      </mat-select>
+      <mat-error>El proveedor es requerido</mat-error>
+    </mat-form-field>
+
+    <div class="form-row">
+      <mat-form-field appearance="outline" class="flex-field">
+        <mat-label>Categoría</mat-label>
+        <mat-select formControlName="compraCategoriaId">
+          <mat-option [value]="null">— Sin categoría —</mat-option>
+          <mat-option *ngFor="let c of categorias" [value]="c.id">
+            <span *ngIf="c.padre" class="cat-padre">{{ c.padre.nombre }} > </span>{{ c.nombre }}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="flex-field">
+        <mat-label>Fecha de compra</mat-label>
+        <input matInput [matDatepicker]="pickerFecha" formControlName="fechaCompra">
+        <mat-datepicker-toggle matSuffix [for]="pickerFecha"></mat-datepicker-toggle>
+        <mat-datepicker #pickerFecha></mat-datepicker>
+        <mat-error>La fecha es requerida</mat-error>
+      </mat-form-field>
+    </div>
+
+    <div class="form-row">
+      <mat-form-field appearance="outline" class="flex-field">
+        <mat-label>N° Nota / Comprobante</mat-label>
+        <input matInput formControlName="numeroNota" placeholder="Opcional">
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="flex-field">
+        <mat-label>Tipo de boleta</mat-label>
+        <mat-select formControlName="tipoBoleta">
+          <mat-option [value]="null">— Sin especificar —</mat-option>
+          <mat-option *ngFor="let t of tiposBoleta" [value]="t.value">{{ t.label }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    <div class="form-row">
+      <mat-form-field appearance="outline" class="flex-field">
+        <mat-label>Moneda</mat-label>
+        <mat-select formControlName="monedaId">
+          <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
+        </mat-select>
+        <mat-error>La moneda es requerida</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="flex-field">
+        <mat-label>Total</mat-label>
+        <input matInput type="text" formControlName="total" appCurrencyInput [decimals]="decimalesMoneda" placeholder="0">
+        <mat-error>El total es requerido</mat-error>
+      </mat-form-field>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <!-- ===== Datos de pago ===== -->
+    <div class="section-title">Pago</div>
+
+    <mat-button-toggle-group formControlName="credito" class="full-width fuente-toggle">
+      <mat-button-toggle [value]="false">
+        <mat-icon>payments</mat-icon> Contado
+      </mat-button-toggle>
+      <mat-button-toggle [value]="true">
+        <mat-icon>calendar_month</mat-icon> Crédito
+      </mat-button-toggle>
+    </mat-button-toggle-group>
+
+    <!-- CRÉDITO: cuotas + fecha 1ra cuota. Queda como deuda para "Pagar compras". -->
+    <ng-container *ngIf="esCredito">
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="flex-field">
+          <mat-label>Cantidad de cuotas</mat-label>
+          <input matInput type="number" min="1" formControlName="cantidadCuotas">
+          <mat-error>Requerido (mínimo 1)</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="flex-field">
+          <mat-label>Fecha 1ra cuota</mat-label>
+          <input matInput [matDatepicker]="pickerCred" formControlName="fechaCreditoInicio">
+          <mat-datepicker-toggle matSuffix [for]="pickerCred"></mat-datepicker-toggle>
+          <mat-datepicker #pickerCred></mat-datepicker>
+          <mat-error>Requerido</mat-error>
+        </mat-form-field>
+      </div>
+      <div class="hint-text">La deuda queda pendiente. Se paga luego desde Caja Mayor → Pagar compras.</div>
+    </ng-container>
+
+    <!-- CONTADO: opción de pagar ahora -->
+    <ng-container *ngIf="!esCredito">
+      <mat-checkbox formControlName="pagarAhora" class="pagar-ahora-check">
+        Pagar ahora
+      </mat-checkbox>
+      <div *ngIf="!pagaAhora" class="hint-text">
+        Sin pagar: queda como deuda contado pendiente (se paga luego desde Pagar compras).
+      </div>
+
+      <ng-container *ngIf="pagaAhora">
+        <mat-button-toggle-group formControlName="fuente" class="full-width fuente-toggle">
+          <mat-button-toggle value="CAJA_MAYOR">
+            <mat-icon>point_of_sale</mat-icon> Caja Mayor
+          </mat-button-toggle>
+          <mat-button-toggle value="CUENTA_BANCARIA">
+            <mat-icon>account_balance</mat-icon> Cuenta Bancaria
+          </mat-button-toggle>
+        </mat-button-toggle-group>
+
+        <!-- Pago desde Caja Mayor -->
+        <ng-container *ngIf="!esBanco">
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Caja Mayor</mat-label>
+            <mat-select formControlName="cajaMayorId">
+              <mat-option *ngFor="let cm of cajasMayor" [value]="cm.id">{{ cm.nombre }}</mat-option>
+            </mat-select>
+            <mat-error>La caja mayor es requerida</mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Forma de pago</mat-label>
+            <mat-select formControlName="formaPagoId">
+              <mat-option *ngFor="let fp of formasPago" [value]="fp.id">{{ fp.nombre }}</mat-option>
+            </mat-select>
+            <mat-error>La forma de pago es requerida</mat-error>
+          </mat-form-field>
+        </ng-container>
+
+        <!-- Pago desde Cuenta Bancaria -->
+        <mat-form-field appearance="outline" class="full-width" *ngIf="esBanco">
+          <mat-label>Cuenta Bancaria</mat-label>
+          <mat-select formControlName="cuentaBancariaId">
+            <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">
+              {{ cb.nombre }} <span *ngIf="cb.banco"> — {{ cb.banco }}</span>
+            </mat-option>
+          </mat-select>
+          <mat-error>La cuenta bancaria es requerida</mat-error>
+        </mat-form-field>
+      </ng-container>
+    </ng-container>
+
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()" [disabled]="saving">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="guardar()" [disabled]="saving || loading">
+    <mat-icon *ngIf="!saving">check</mat-icon>
+    <mat-spinner *ngIf="saving" diameter="18" class="btn-spinner"></mat-spinner>
+    Registrar compra
+  </button>
+</mat-dialog-actions>

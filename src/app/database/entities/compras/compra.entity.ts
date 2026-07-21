@@ -22,6 +22,11 @@ export class Compra extends BaseModel {
   @Column({ default: false, name: 'is_recepcion_mercaderia' })
   isRecepcionMercaderia!: boolean;
 
+  // Compra simplificada: sin detalles, no mueve stock ni costo. Solo genera la deuda (CPP)
+  // y el pago opcional en Caja Mayor / Cuenta Bancaria. total se carga a mano.
+  @Column({ default: false })
+  simplificada!: boolean;
+
   @Column({ default: true })
   activo!: boolean;
 
