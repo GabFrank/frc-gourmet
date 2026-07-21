@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import { app } from 'electron';
 import { sendLprJob, parseLprAddress } from './lpr.utils';
 import { printerWidthToChars } from './ticket.utils';
+import { getSystemPrinterDriver } from './system-printer.utils';
 
 // Helper function to generate test page content
 export function generateTestPageContent(printer: any): string {
@@ -71,8 +72,13 @@ export async function printPosReceipt(printer: any, content: string): Promise<bo
 
     // Regular thermal printer printing for network/other USB/Bluetooth printers
     let interfaceConfig;
+    let systemDriver: any;
     if (printer.connectionType === 'network') {
       interfaceConfig = `tcp://${printer.address}:${printer.port || 9100}`;
+    } else if (printer.connectionType === 'system') {
+      // Impresora instalada en el SO: RAW por spooler usando el nombre.
+      interfaceConfig = `printer:${printer.address}`;
+      systemDriver = getSystemPrinterDriver();
     } else if (printer.connectionType === 'usb' || printer.connectionType === 'serial') {
       interfaceConfig = printer.address; // For USB/Serial, address is usually the path
     } else if (printer.connectionType === 'bluetooth') {
@@ -94,6 +100,7 @@ export async function printPosReceipt(printer: any, content: string): Promise<bo
     const thermalPrinter = new ThermalPrinter({
       type: printerType,
       interface: interfaceConfig,
+      driver: systemDriver,
       options: {
         timeout: 5000 // Network timeout
       },
@@ -101,7 +108,7 @@ export async function printPosReceipt(printer: any, content: string): Promise<bo
       characterSet: characterSet,
       removeSpecialCharacters: false, // Keep special characters if needed
       // lineCharacter: "=", // Optional: Custom line character
-    });
+    } as any);
 
     // LPR: armar buffer ESC/POS y enviarlo vía LPR (no usa execute()).
     if (printer.connectionType === 'lpr') {
@@ -134,7 +141,14 @@ export async function printPosReceipt(printer: any, content: string): Promise<bo
       return true;
     }
 
-    const isConnected = await thermalPrinter.isPrinterConnected();
+    // isPrinterConnected puede lanzar (interface 'printer:' hace `throw false`);
+    // lo tratamos como no conectada.
+    let isConnected = false;
+    try {
+      isConnected = await thermalPrinter.isPrinterConnected();
+    } catch {
+      isConnected = false;
+    }
     if (!isConnected) {
       console.error('Printer is not connected. Interface:', interfaceConfig);
       return false;

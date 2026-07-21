@@ -28,6 +28,8 @@ import { DataSource } from 'typeorm';
 import { Empresa } from '../../src/app/database/entities/sistema/empresa.entity';
 import { getPrinterType, getCharacterSet } from './printer.utils';
 import { sendLprJob, parseLprAddress } from './lpr.utils';
+import { getSystemPrinterDriver } from './system-printer.utils';
+import { probeTcp } from './network-printer-scan.utils';
 
 // ============================================================
 // SPEC
@@ -233,10 +235,16 @@ export function monedaSimboloAscii(moneda?: any): string {
  */
 function buildThermalPrinter(printer: any): ThermalPrinter {
   let interfaceConfig: string;
+  let driver: any;
   if (printer.connectionType === 'network') {
     interfaceConfig = `tcp://${printer.address}:${printer.port || 9100}`;
   } else if (printer.connectionType === 'bluetooth') {
     interfaceConfig = `bt:${printer.address}`;
+  } else if (printer.connectionType === 'system') {
+    // Impresora instalada en el SO: se imprime RAW por el spooler usando el
+    // nombre. Requiere el driver nativo (@thiagoelg/node-printer).
+    interfaceConfig = `printer:${printer.address}`;
+    driver = getSystemPrinterDriver();
   } else if (printer.connectionType === 'lpr') {
     // Dummy interface: solo se usa el ThermalPrinter para acumular bytes
     // en su buffer interno y extraerlos con getBuffer() — nunca se llama
@@ -249,11 +257,12 @@ function buildThermalPrinter(printer: any): ThermalPrinter {
   return new ThermalPrinter({
     type: getPrinterType(printer.type) as PrinterTypes,
     interface: interfaceConfig,
+    driver,
     options: { timeout: 5000 },
     width: printerWidthToChars(printer.width),
     characterSet: (printer.characterSet ? getCharacterSet(printer.characterSet) : CharacterSet.PC437_USA) as CharacterSet,
     removeSpecialCharacters: false,
-  });
+  } as any);
 }
 
 /**
@@ -469,6 +478,39 @@ export async function printTestTicket(printer: any): Promise<{ ok: boolean; erro
  *
  * Retorna `{ ok, error? }`. NUNCA hace throw — el caller decide si bloquear o continuar.
  */
+/**
+ * Prueba la conectividad de una configuración de impresora SIN imprimir.
+ * Útil para validar antes de guardar (botón "Probar conexión").
+ */
+export async function probePrinterConnection(printer: any): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (printer.connectionType === 'lpr') {
+      const { host, port } = parseLprAddress(printer.address || '');
+      if (!host) return { ok: false, error: 'Falta el host en la dirección' };
+      const ok = await probeTcp(host, port || printer.port || 515, 4000);
+      return ok ? { ok: true } : { ok: false, error: `No se pudo conectar a ${host}:${port || printer.port || 515}` };
+    }
+    if (printer.connectionType === 'usb' && printer.address && printer.address.startsWith('ticket-')) {
+      return { ok: true }; // CUPS: sin prueba simple, se asume disponible
+    }
+    if (printer.connectionType === 'usb' || printer.connectionType === 'serial' || printer.connectionType === 'bluetooth') {
+      // Estas vías no tienen un chequeo de conectividad fiable previo a imprimir.
+      return { ok: true };
+    }
+    // network / system: build + isPrinterConnected (throw-safe)
+    const tp = buildThermalPrinter(printer);
+    let connected = false;
+    try {
+      connected = await tp.isPrinterConnected();
+    } catch {
+      connected = false;
+    }
+    return connected ? { ok: true } : { ok: false, error: `La impresora "${printer.address}" no responde` };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
 export async function printTicketSpec(
   printer: any,
   spec: TicketSpec
@@ -524,7 +566,14 @@ export async function printTicketSpec(
       });
     }
 
-    const connected = await tp.isPrinterConnected();
+    // isPrinterConnected puede lanzar (el interface 'printer:' hace `throw false`
+    // cuando la impresora no está disponible); lo tratamos como no conectada.
+    let connected = false;
+    try {
+      connected = await tp.isPrinterConnected();
+    } catch {
+      connected = false;
+    }
     if (!connected) {
       return { ok: false, error: `Impresora "${printer.name}" no responde (${printer.address})` };
     }

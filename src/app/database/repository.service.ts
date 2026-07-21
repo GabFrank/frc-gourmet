@@ -161,6 +161,7 @@ export abstract class RepositoryService {
   abstract updateCliente(clienteId: number, clienteData: Partial<Cliente>): Observable<any>;
   abstract deleteCliente(clienteId: number): Observable<any>;
   abstract getPrinters(): Observable<any[]>;
+  abstract listSystemPrinters(): Observable<any[]>;
   abstract addPrinter(printer: any): Observable<any>;
   abstract updatePrinter(printerId: number, printer: any): Observable<any>;
   abstract deletePrinter(printerId: number): Observable<any>;

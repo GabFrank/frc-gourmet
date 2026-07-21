@@ -109,6 +109,7 @@ interface ElectronAPI {
   deleteCliente: (clienteId: number) => Promise<any>;
   // Printer operations
   getPrinters: () => Promise<any[]>;
+  listSystemPrinters: () => Promise<any[]>;
   addPrinter: (printer: any) => Promise<any>;
   updatePrinter: (printerId: number, printer: any) => Promise<any>;
   deletePrinter: (printerId: number) => Promise<any>;
@@ -1266,6 +1267,9 @@ export class RepositoryIpcService extends RepositoryService {
   // Printer methods
   getPrinters(): Observable<any[]> {
     return from(this.api.getPrinters());
+  }
+  listSystemPrinters(): Observable<any[]> {
+    return from(this.api.listSystemPrinters());
   }
 
   addPrinter(printer: any): Observable<any> {
