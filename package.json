@@ -46,6 +46,7 @@
     "test:cobro-parcial": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-cobro-parcial-e2e.ts",
     "test:funcionario-vales": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-funcionario-vales-e2e.ts",
     "test:resumen-multimoneda": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-resumen-multimoneda-e2e.ts",
+    "test:operacion-financiera": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-operacion-financiera-validacion-e2e.ts",
     "test:fichaje-facial": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-fichaje-facial.ts",
     "test:mobile": "ng test mobile --watch=false",
     "build:storefront": "ng build storefront --base-href /tienda/",
