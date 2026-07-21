@@ -30,28 +30,28 @@
       <div class="det-stat">
         <span class="det-stat-label">Vales pendientes</span>
         <span class="det-stat-value" [class.warn]="(resumen?.vales?.total || 0) > 0">
-          {{ (resumen?.vales?.total || 0) | number:'1.0-2' }} Gs
+          {{ (resumen?.vales?.total || 0) | number:'1.0-2' }} {{ resumen?.monedaPrincipalSimbolo || 'Gs' }}
         </span>
         <span class="det-stat-sub">{{ resumen?.vales?.count || 0 }} vale(s)</span>
       </div>
       <div class="det-stat">
         <span class="det-stat-label">Préstamos</span>
         <span class="det-stat-value" [class.warn]="(resumen?.prestamos?.saldo || 0) > 0">
-          {{ (resumen?.prestamos?.saldo || 0) | number:'1.0-2' }} Gs
+          {{ (resumen?.prestamos?.saldo || 0) | number:'1.0-2' }} {{ resumen?.monedaPrincipalSimbolo || 'Gs' }}
         </span>
         <span class="det-stat-sub">{{ resumen?.prestamos?.count || 0 }} activo(s)</span>
       </div>
       <div class="det-stat">
         <span class="det-stat-label">Consumo a crédito</span>
         <span class="det-stat-value" [class.warn]="(resumen?.credito?.saldo || 0) > 0">
-          {{ (resumen?.credito?.saldo || 0) | number:'1.0-2' }} Gs
+          {{ (resumen?.credito?.saldo || 0) | number:'1.0-2' }} {{ resumen?.monedaPrincipalSimbolo || 'Gs' }}
         </span>
         <span class="det-stat-sub">{{ resumen?.credito?.cpcActivas || 0 }} cuenta(s)</span>
       </div>
       <div class="det-stat">
         <span class="det-stat-label">Total adeudado</span>
         <span class="det-stat-value" [class.err]="(resumen?.totalAdeudado || 0) > 0">
-          {{ (resumen?.totalAdeudado || 0) | number:'1.0-2' }} Gs
+          {{ (resumen?.totalAdeudado || 0) | number:'1.0-2' }} {{ resumen?.monedaPrincipalSimbolo || 'Gs' }}
         </span>
         <span class="det-stat-sub">con el negocio</span>
       </div>
@@ -71,7 +71,7 @@
           <span class="det-venc-title">{{ v.tipo === 'CREDITO' ? 'Crédito' : 'Préstamo' }} · Cuota #{{ v.numero }}</span>
           <span class="det-venc-sub">vence {{ v.fechaVencimiento | date:'shortDate' }}</span>
         </div>
-        <span class="det-venc-monto">{{ v.saldo | number:'1.0-2' }} Gs</span>
+        <span class="det-venc-monto">{{ v.saldo | number:'1.0-2' }} {{ v.monedaSimbolo }}</span>
       </div>
     </mat-card>
   </ng-container>

@@ -12,6 +12,7 @@ import { CuentaPorPagar } from '../../src/app/database/entities/financiero/cuent
 import { CuentaPorPagarTipo, CuentaPorPagarEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { dbQuery } from '../utils/db-query';
+import { getMonedaPrincipal, getCotizacionCompraLocal } from '../utils/moneda.utils';
 
 export function registerDashboardRrhhHandlers(
   dataSource: DataSource,
@@ -25,11 +26,29 @@ export function registerDashboardRrhhHandlers(
       const fechaFin = new Date(anio, mes, 0);
       const hoy = new Date();
 
-      // 1. totalNominaMes
+      // 1. totalNominaMes — convertido a la moneda principal (cada liquidación
+      // puede pagarse en distinta moneda; sumar crudo mezclaría monedas).
       const liquidaciones = await dataSource.getRepository(LiquidacionSueldo).find({
         where: { periodo },
+        relations: ['monedaPago'],
       });
-      const totalNominaMes = liquidaciones.reduce((sum, l) => sum + Number(l.totalNeto || 0), 0);
+      const principal = await getMonedaPrincipal(dataSource);
+      const rateCache = new Map<number, number | null>();
+      let totalNominaMes = 0;
+      for (const l of liquidaciones) {
+        const monto = Number(l.totalNeto || 0);
+        const monedaId = (l as any).monedaPago?.id;
+        if (!principal || !monedaId || monedaId === principal.id) {
+          totalNominaMes += monto;
+          continue;
+        }
+        if (!rateCache.has(monedaId)) {
+          rateCache.set(monedaId, await getCotizacionCompraLocal(dataSource, monedaId, principal.id));
+        }
+        const tasa = rateCache.get(monedaId) ?? null;
+        if (tasa != null) totalNominaMes += +(monto * tasa).toFixed(2);
+      }
+      totalNominaMes = +totalNominaMes.toFixed(2);
 
       // 2. totalFuncionariosActivos
       const totalFuncionariosActivos = await dataSource.getRepository(Funcionario).count({

@@ -19,6 +19,7 @@ import { CuentaPorPagarTipo, CuentaPorPagarEstado, CuotaEstado } from '../../src
 import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
 import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
 import { CuentaPorCobrarEstado, CuentaPorCobrarCuotaEstado } from '../../src/app/database/entities/financiero/cuentas-por-cobrar-enums';
+import { getMonedaPrincipal, getCotizacionCompraLocal } from '../utils/moneda.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { ensurePermission } from '../utils/auth.utils';
@@ -453,31 +454,63 @@ export function registerRrhhFuncionariosHandlers(
       });
       if (!funcionario) throw new Error(`Funcionario ${funcionarioId} no encontrado`);
 
-      const proximos: Array<{ tipo: string; numero: number; fechaVencimiento: any; saldo: number; descripcion: string }> = [];
+      // Todos los montos se convierten a la moneda principal (PYG) usando la
+      // cotización, porque vales/préstamos/créditos pueden estar en distintas
+      // monedas. `sinCotizacion` marca si faltó alguna cotización (total parcial).
+      const principal = await getMonedaPrincipal(dataSource);
+      const rateCache = new Map<number, number | null>();
+      let sinCotizacion = false;
+      // Convierte un monto de `monedaId` a principal; null si falta cotización.
+      const toPrincipal = async (monto: number, monedaId: number | null | undefined): Promise<number | null> => {
+        const m = Number(monto) || 0;
+        if (!principal || !monedaId || monedaId === principal.id) return m;
+        if (!rateCache.has(monedaId)) {
+          rateCache.set(monedaId, await getCotizacionCompraLocal(dataSource, monedaId, principal.id));
+        }
+        const tasa = rateCache.get(monedaId) ?? null;
+        if (tasa == null) { sinCotizacion = true; return null; }
+        return +(m * tasa).toFixed(2);
+      };
 
-      // Vales CONFIRMADO (pendientes de descontar)
+      const proximos: Array<{ tipo: string; numero: number; fechaVencimiento: any; saldo: number; monedaSimbolo: string; saldoPrincipal: number | null; descripcion: string }> = [];
+
+      // Vales CONFIRMADO (pendientes de descontar) — con su moneda
       const vales = await dataSource.getRepository(Vale).createQueryBuilder('v')
+        .leftJoinAndSelect('v.moneda', 'moneda')
         .where('v.funcionario_id = :fid', { fid: funcionarioId })
         .andWhere('v.estado = :est', { est: ValeEstado.CONFIRMADO })
         .getMany();
-      const valesTotal = vales.reduce((s, v) => s + Number(v.monto), 0);
+      let valesTotal = 0;
+      for (const v of vales) {
+        const conv = await toPrincipal(Number(v.monto), (v as any).moneda?.id);
+        if (conv != null) valesTotal += conv;
+      }
+      valesTotal = +valesTotal.toFixed(2);
 
-      // Préstamos (CPP PRESTAMO_FUNCIONARIO ACTIVO)
+      // Préstamos (CPP PRESTAMO_FUNCIONARIO ACTIVO) — con su moneda
       const prestamos = await dataSource.getRepository(CuentaPorPagar).find({
         where: { funcionario: { id: funcionarioId } as any, tipo: CuentaPorPagarTipo.PRESTAMO_FUNCIONARIO, estado: CuentaPorPagarEstado.ACTIVO },
+        relations: ['moneda'],
       });
-      const prestamosSaldo = prestamos.reduce((s, p) => s + (Number(p.montoTotal) - Number(p.montoPagado)), 0);
+      let prestamosSaldo = 0;
       const cuotaCppRepo = dataSource.getRepository(CuentaPorPagarCuota);
       for (const p of prestamos) {
+        const simbolo = (p as any).moneda?.simbolo || (principal?.simbolo || 'Gs');
+        const convPrestamo = await toPrincipal(Number(p.montoTotal) - Number(p.montoPagado), (p as any).moneda?.id);
+        if (convPrestamo != null) prestamosSaldo += convPrestamo;
         const cuotas = await cuotaCppRepo.createQueryBuilder('c')
           .where('c.cuenta_por_pagar_id = :pid', { pid: p.id })
           .andWhere('c.estado IN (:...ests)', { ests: [CuotaEstado.PENDIENTE, CuotaEstado.PARCIAL, CuotaEstado.VENCIDA] })
           .getMany();
         for (const c of cuotas) {
           const saldo = +(Number(c.monto) - Number(c.montoPagado)).toFixed(2);
-          if (saldo > 0) proximos.push({ tipo: 'PRESTAMO', numero: c.numero, fechaVencimiento: c.fechaVencimiento, saldo, descripcion: p.descripcion });
+          if (saldo > 0) {
+            const saldoPrincipal = await toPrincipal(saldo, (p as any).moneda?.id);
+            proximos.push({ tipo: 'PRESTAMO', numero: c.numero, fechaVencimiento: c.fechaVencimiento, saldo, monedaSimbolo: simbolo, saldoPrincipal, descripcion: p.descripcion });
+          }
         }
       }
+      prestamosSaldo = +prestamosSaldo.toFixed(2);
 
       // Cliente vinculado + consumo a crédito (CPC)
       let cliente: any = null;
@@ -499,10 +532,12 @@ export function registerRrhhFuncionariosHandlers(
           };
           const cpcs = await dataSource.getRepository(CuentaPorCobrar).find({
             where: { cliente: { id: clienteEnt.id } as any, estado: CuentaPorCobrarEstado.ACTIVO },
+            relations: ['moneda'],
           });
           cpcActivas = cpcs.length;
           const cuotaCpcRepo = dataSource.getRepository(CuentaPorCobrarCuota);
           for (const cpc of cpcs) {
+            const simbolo = (cpc as any).moneda?.simbolo || (principal?.simbolo || 'Gs');
             const cuotas = await cuotaCpcRepo.createQueryBuilder('c')
               .where('c.cuenta_por_cobrar_id = :cid', { cid: cpc.id })
               .andWhere('c.estado IN (:...ests)', { ests: [CuentaPorCobrarCuotaEstado.PENDIENTE, CuentaPorCobrarCuotaEstado.PARCIAL] })
@@ -510,8 +545,9 @@ export function registerRrhhFuncionariosHandlers(
             for (const c of cuotas) {
               const saldo = +(Number(c.monto) - Number(c.montoCobrado)).toFixed(2);
               if (saldo > 0) {
-                creditoSaldo += saldo;
-                proximos.push({ tipo: 'CREDITO', numero: c.numero, fechaVencimiento: c.fechaVencimiento, saldo, descripcion: cpc.descripcion || 'Consumo a crédito' });
+                const saldoPrincipal = await toPrincipal(saldo, (cpc as any).moneda?.id);
+                if (saldoPrincipal != null) creditoSaldo += saldoPrincipal;
+                proximos.push({ tipo: 'CREDITO', numero: c.numero, fechaVencimiento: c.fechaVencimiento, saldo, monedaSimbolo: simbolo, saldoPrincipal, descripcion: cpc.descripcion || 'Consumo a crédito' });
               }
             }
           }
@@ -524,8 +560,10 @@ export function registerRrhhFuncionariosHandlers(
 
       return {
         cliente,
-        vales: { count: vales.length, total: +valesTotal.toFixed(2) },
-        prestamos: { count: prestamos.length, saldo: +prestamosSaldo.toFixed(2) },
+        monedaPrincipalSimbolo: principal?.simbolo || 'Gs',
+        sinCotizacion,
+        vales: { count: vales.length, total: valesTotal },
+        prestamos: { count: prestamos.length, saldo: prestamosSaldo },
         credito: { saldo: creditoSaldo, cpcActivas },
         totalAdeudado,
         proximosVencimientos: proximos.slice(0, 5),
