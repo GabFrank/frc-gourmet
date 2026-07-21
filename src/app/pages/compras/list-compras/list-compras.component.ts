@@ -24,6 +24,7 @@ import { QrUploadDialogComponent } from 'src/app/shared/components/qr-upload-dia
 import { PromptDialogComponent, PromptDialogData } from 'src/app/shared/components/prompt-dialog/prompt-dialog.component';
 import { TabsService } from 'src/app/services/tabs.service';
 import { CreateEditCompraComponent } from '../create-edit-compra/create-edit-compra.component';
+import { CrearCompraSimplificadaDialogComponent } from '../crear-compra-simplificada-dialog/crear-compra-simplificada-dialog.component';
 import { CompraDetalleComponent } from '../compra-detalle/compra-detalle.component';
 import { RevisarFacturaComponent } from '../revisar-factura/revisar-factura.component';
 import { FacturaImportService } from 'src/app/services/factura-import.service';
@@ -233,6 +234,16 @@ export class ListComprasComponent implements OnInit {
       `nueva-compra-${Date.now()}`,
       true,
     );
+  }
+
+  compraSimplificada(): void {
+    const ref = this.dialog.open(CrearCompraSimplificadaDialogComponent, {
+      width: '680px',
+      maxWidth: '95vw',
+    });
+    ref.afterClosed().subscribe((ok: boolean) => {
+      if (ok) this.loadData();
+    });
   }
 
   async importarConIA(): Promise<void> {

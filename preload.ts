@@ -1649,6 +1649,9 @@ contextBridge.exposeInMainWorld('api', {
   finalizarCompra: async (id: number, payload: any) => {
     return await ipcRenderer.invoke('finalizar-compra', id, payload);
   },
+  crearCompraSimplificada: async (payload: any) => {
+    return await ipcRenderer.invoke('crear-compra-simplificada', payload);
+  },
   anularCompra: async (id: number, motivo: string) => {
     return await ipcRenderer.invoke('anular-compra', id, motivo);
   },
