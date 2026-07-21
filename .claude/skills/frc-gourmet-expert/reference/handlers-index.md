@@ -47,7 +47,7 @@
 | **onboarding.handler.ts** | 161 | Tareas guiadas de onboarding en Home |
 | **permissions.handler.ts** | 313 | Permission, RolePermission, `get-permissions-by-user` + `seedPermissions` (94 códigos) |
 | **personas.handler.ts** | 927 | Persona, Usuario, Role, UsuarioRole, TipoCliente, Cliente + búsqueda por teléfono |
-| **printers.handler.ts** | 137 | Printer (epson/star/thermal; network/usb/bluetooth) |
+| **printers.handler.ts** | ~180 | Printer (epson/star; system/network/lpr/usb/bluetooth). 2026-07: `list-system-printers`, `scan-network-printers`, `test-printer-connection` |
 | **producto-sectores.handler.ts** | 107 | M2M Producto↔Sector (routing de comanda por producto) |
 | **productos.handler.ts** | 2275 | Familia, Subfamilia, Producto, Presentacion, CodigoBarra, PrecioVenta, PrecioCosto, Adicional, Observacion + search por modo venta/compra |
 | **qr-upload.handler.ts** | ~110 | Emparejamiento QR → subida desde la PWA mobile (`qr-upload-{create-session,enable-remote,poll,close}`). Store en `server/qr-upload-store.ts`, rutas Fastify en `server/qr-upload-routes.ts`, arranque on-demand en `server/pairing.ts`. Detalles → [domains/archivos-y-adjuntos.md](../domains/archivos-y-adjuntos.md) §8 |
@@ -55,7 +55,7 @@
 | **recetas.handler.ts** | 2427 | Receta, RecetaIngrediente*, RecetaAdicionalVinculacion **+ RecetaPresentacion (variaciones) + Sabores** (unificado) |
 | **remote-tunnel.handler.ts** | 172 | Acceso remoto vía Cloudflare quick tunnel |
 | **reportes-rrhh.handler.ts** | 472 | Exports PDF/Excel (pdfmake + exceljs) |
-| **rrhh-funcionarios.handler.ts** | 386 | Cargo, Funcionario, HistoricoCargo, HistoricoSalario + alta transaccional |
+| **rrhh-funcionarios.handler.ts** | ~530 | Cargo, Funcionario, HistoricoCargo/Salario + alta transaccional. 2026-07: `get-funcionario-resumen-financiero` (deudas convertidas a PYG), `get-funcionario-de-cliente` (vínculo cruzado) |
 | **sabores.handler.ts** | 437 | Sabor + auto-generación de variaciones al crear sabor |
 | **sectores-impresoras.handler.ts** | 135 | M2M Sector↔Printer con rol (COMANDA / TICKET_VENTA / PRECUENTA) |
 | **system.handler.ts** | 68 | OS info / MAC address. No necesita DB |

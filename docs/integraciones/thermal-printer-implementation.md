@@ -2,6 +2,14 @@
 
 This guide explains how to implement thermal printer functionality in an Electron application using the `node-thermal-printer` library. The code below is a generic reference; for the **actual FRC Gourmet implementation** see the note at the end.
 
+> **Actualización 2026-07:** se agregó la conexión **`system`** (impresión RAW por el
+> spooler del SO usando el nombre de la impresora instalada, vía `interface: 'printer:<n>'`
+> + el módulo nativo opcional `@thiagoelg/node-printer`), más el descubrimiento de
+> impresoras del SO (`list-system-printers`) y de red (`scan-network-printers`: mDNS +
+> barrido TCP) y `test-printer-connection`. Es la vía recomendada para una USB local en
+> Windows (sin LPD/share/firewall). Detalle en la skill:
+> `.claude/skills/frc-gourmet-expert/domains/cocina-impresion.md`.
+
 ## Dependencies
 
 ```json

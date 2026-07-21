@@ -206,7 +206,7 @@ Header del dialog tiene autocomplete de Cliente + botón "Nuevo cliente" (reusa 
 - `personas/list-personas.component`: tabla con filtros, CRUD.
 - `usuarios/list-usuarios.component`: tabla con paginación, asignación de roles.
 - `clientes/list-clientes.component`: tabla con saldoActual, crédito.
-- `clientes/cliente-detalle/`: detalle con histórico de movimientos.
+- `clientes/cliente-detalle/`: detalle con histórico de movimientos. **(2026-07)** muestra chip **"También es funcionario"** si la persona tiene un funcionario vinculado (handler `get-funcionario-de-cliente(clienteId)` en `rrhh-funcionarios.handler.ts`, cruza por `persona_id`); el chip abre `funcionario-detalle`. El vínculo inverso (chip "También es cliente") está en la ficha de funcionario. Ver [rrhh.md](rrhh.md).
 - `convenios/`: CRUD de convenios (agrupación de clientes por empresa/acuerdo).
 - `rrhhDash/`: placeholder legacy. El dashboard real de RRHH ya existe en `pages/rrhh/dashboard/`.
 

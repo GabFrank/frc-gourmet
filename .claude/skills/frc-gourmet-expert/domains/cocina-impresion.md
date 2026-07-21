@@ -1,6 +1,6 @@
 # Dominio: Cocina e impresión térmica
 
-Sistema de impresoras térmicas configurables (driver `epson` / `star`, default EPSON) con `node-thermal-printer`. Conexiones: network (TCP raw), lpr (LPD), usb/serial, bluetooth. Impresión de tickets estructurados (`TicketSpec`), comandas de cocina multi-sector, y KDS digital como alternativa.
+Sistema de impresoras térmicas configurables (driver `epson` / `star`, default EPSON) con `node-thermal-printer`. Conexiones: **system** (spooler del SO por nombre — 2026-07), network (TCP raw), lpr (LPD), usb/serial, bluetooth. Impresión de tickets estructurados (`TicketSpec`), comandas de cocina multi-sector, y KDS digital como alternativa. Descubrimiento de impresoras del SO y de la red (2026-07).
 
 ## Entidad Printer
 
@@ -28,6 +28,7 @@ Sistema de impresoras térmicas configurables (driver `epson` / `star`, default 
 
 | Conexión | address | Driver real |
 |---|---|---|
+| **`system`** (2026-07) | **nombre de la impresora instalada en el SO** | RAW por el **spooler del SO** vía `interface: 'printer:<nombre>'` de node-thermal-printer + driver nativo **`@thiagoelg/node-printer`** (`printDirect` type RAW). Es la vía recomendada para una **USB local en Windows** — sin LPD/share/ANONYMOUS LOGON/firewall. El usuario elige de una lista (dropdown poblado con `list-system-printers`). |
 | `network` | `IP` + campo `port` (default 9100) | TCP raw vía `node-thermal-printer` (`tcp://<IP>:<port>`) |
 | `lpr` | `IP/QueueName` + campo `port` (default 515) | Cliente LPR propio (RFC 1179) en `electron/utils/lpr.utils.ts`. Usa `node-thermal-printer` solo para armar el buffer ESC/POS en memoria, después envía vía LPR. Pensado para impresoras USB compartidas en otra PC Windows. |
 | `usb` / `serial` | path device (`/dev/usb/lp0` Linux, `\\.\COM3` Windows). Caso especial: si `connectionType==='usb'` y `address` empieza con `'ticket-'` → usa `lp -d <name>` (CUPS local) en vez de `node-thermal-printer` | `node-thermal-printer` con path directo |
@@ -76,6 +77,11 @@ printf '\x02barra\n' | nc -w 3 <ip-windows> 515 | xxd
 - `update-printer`: editar (usa `Not(printerId)` para no desmarcarse a sí misma al setear default)
 - `delete-printer`
 - `print-test-page(printerId)`: genera contenido de prueba y llama `printPosReceipt()` (utility)
+- **`list-system-printers`** (2026-07): impresoras instaladas en el SO vía `event.sender.getPrintersAsync()` (Electron). Sin dependencias. En `ALWAYS_LOCAL_CHANNELS` (hardware local del cliente).
+- **`scan-network-printers({mdns?, tcpScan?, tcpPort?})`** (2026-07): descubre impresoras de red — mDNS (`bonjour-service`, JS puro) de `_pdl-datastream/_printer/_ipp` + barrido TCP opcional del /24 local en `:9100`. Util en `electron/utils/network-printer-scan.utils.ts`. Best-effort, nunca lanza.
+- **`test-printer-connection(config)`** (2026-07): prueba conectividad sin guardar ni imprimir (`probePrinterConnection` en `ticket.utils.ts`). network/system → build + isPrinterConnected; lpr → TCP a `:515`; usb/serial/bluetooth → ok optimista.
+
+**Spooler del SO (`system`):** `electron/utils/system-printer.utils.ts` → `getSystemPrinterDriver()` hace `require('@thiagoelg/node-printer')` **lazy + tolerante a fallos** (no rompe dev/Linux; falla con mensaje claro solo al imprimir). El módulo es **`optionalDependency`** con `asarUnpack` — se compila en el release de Windows; en Linux necesita CUPS para compilar (si no compila, la vía `system` degrada). `buildThermalPrinter` (ticket.utils) y `printPosReceipt` (printer.utils) tienen branch `system` que pasa `interface: 'printer:<addr>'` + `driver`, con `isPrinterConnected` envuelto en try/catch (el interface `printer:` hace `throw false` si no está disponible).
 
 ### `electron/handlers/documentos-tickets.handler.ts` (impresión de tickets — implementado)
 
@@ -229,7 +235,7 @@ El enrutamiento a estación (cocina, barra, parrilla, etc.) es **100% por la M2M
 
 ## Pendientes (TODO)
 
-- [ ] **Wizard de configuración LPR** (UI guiada). Hoy LPR es solo una opción más del form. Falta el diálogo con los pasos para configurar la PC Windows: activar feature LPD, driver Generic/Text Only, compartir con share name sin espacios, firewall TCP 515, **agregar ACE ANONYMOUS LOGON** (paso más fácil de olvidar; sin él LPDSVC rechaza con código `\x01`). Y un botón "Probar conexión" que haga el handshake `\x02<queue>\n` antes de guardar.
+- [~] **Wizard de configuración LPR** (UI guiada). **Parcialmente superado (2026-07):** para una USB local en Windows ahora conviene la conexión **`system`** (spooler por nombre, sin LPD ni ACE). El botón **"Probar conexión"** ya existe (`test-printer-connection`). El wizard LPR guiado sigue pendiente para el caso de impresora compartida en OTRA PC. ⚠️ **Validación funcional de `system`/mDNS pendiente en Windows real** (no testeable en CI Linux; solo se verificó compilación).
 - [ ] Templates ESC/POS configurables por tipo de impresora.
 - [ ] Recibos de liquidación RRHH PDF (campo `comprobante_url` ya existe).
 - [ ] Resumen completo de cierre de caja imprimible (hoy existe `print-conteo-caja-ticket`, acta breve de conteo).

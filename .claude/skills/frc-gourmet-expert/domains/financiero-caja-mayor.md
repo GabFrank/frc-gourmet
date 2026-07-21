@@ -349,6 +349,8 @@ Nunca ambas a la vez.
 - VALE → crea `Vale` RRHH.
 - IGNORAR → solo registra en observación.
 
+**Diálogo `create-operacion-financiera-dialog` (form único con validators por tipo).** En DEPOSITO/RETIRO la moneda **se hereda de la cuenta bancaria** (no se elige en la UI). Reglas de campos requeridos por tipo en `operacion-financiera-validacion.util.ts` (fuente única para validador + test). **Fix 2026-07 (PR #199):** el botón "Registrar" quedaba deshabilitado en Retiro/Depósito porque solo se seteaba UNA de las dos monedas (la requerida del otro lado quedaba `null`). Ahora al elegir la cuenta bancaria se setean **ambas** monedas (origen y destino) — misma divisa a los dos lados en efectivo. Test: `npm run test:operacion-financiera`.
+
 ## Cuentas Por Pagar / Cobrar
 
 → Detalle separado: [financiero-cpp-cpc.md](financiero-cpp-cpc.md).
