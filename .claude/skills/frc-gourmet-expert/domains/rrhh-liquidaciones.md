@@ -42,9 +42,9 @@ LiquidacionConcepto {
 
 ### Conceptos seed
 
-`seedLiquidacionConceptos()` (10 conceptos):
+`seedLiquidacionConceptos()` (11 conceptos):
 - HABER: SALARIO_BASE, HORA_EXTRA, BONO_MANUAL, AGUINALDO, COMISION
-- DESCUENTO: IPS_DESCUENTO, ADELANTO_DESCUENTO, VALE_DESCUENTO, PENALIZACION, PRESTAMO_CUOTA
+- DESCUENTO: IPS_DESCUENTO, ADELANTO_DESCUENTO, VALE_DESCUENTO, PENALIZACION, PRESTAMO_CUOTA, **CREDITO_CONSUMO** (consumo a crédito del funcionario-cliente, agregado 2026-07)
 
 > `VACACION_VENTA` se usa como `referenciaTipo`/código de item HABER pero **no está en el seed de conceptos** (el item se crea sin `concepto`).
 
@@ -67,6 +67,7 @@ LiquidacionConcepto {
    8. AGUINALDO (HABER): solo si `periodo` termina en `-12` (**hardcodeado a diciembre**); calcula/usa el Aguinaldo del año si su estado ≠ PAGADO (referenciaTipo=AGUINALDO)
    9. COMISION (HABER): si existe LiquidacionComision **APROBADA** del período
    10. VACACION_VENTA (HABER): cada VacacionVenta PENDIENTE del funcionario (referenciaTipo=VACACION_VENTA). No tiene concepto seedeado → el item se crea con `concepto=null`.
+   11. **CREDITO_CONSUMO (DESCUENTO) — agregado 2026-07:** busca el `Cliente` con el mismo `persona_id` del funcionario; de sus CPC ACTIVAS toma las **cuotas que vencen en el período** (PENDIENTE/PARCIAL) con saldo > 0 (referenciaTipo=CPC_CUOTA). Guard anti-doble-toma con `cuentas_por_cobrar_cuotas.liquidacion_id` (nueva columna). Es el análogo de las cuotas de préstamo pero del lado CPC.
 
 4. Recalcular totales:
    totalHaberes = SUM items WHERE tipo=HABER
@@ -99,6 +100,7 @@ LiquidacionConcepto {
 3. Para cada item con referenciaTipo:
    - VALE → vale CONFIRMADO → DESCONTADO, vale.liquidacionId = this.id
    - CPP_CUOTA → cuota PAGADA (sin movimiento aparte: ya va dentro del EGRESO_SALARIO total); recalcula CPP
+   - **CPC_CUOTA (2026-07)** → cobra la cuota CPC atómicamente: cuota COBRADA/PARCIAL, actualiza CPC.montoCobrado/estado, **baja `cliente.saldoActual`** y crea `MovimientoCliente` PAGO (obs `LIQUIDACION <periodo> #<id>`). **Sin** `INGRESO_COBRO_CLIENTE` en Caja Mayor (neteado en el EGRESO_SALARIO, igual criterio que CPP_CUOTA).
    - AGUINALDO → aguinaldo (si ≠ PAGADO) → PAGADO, fechaPago, liquidacionId
    - LIQUIDACION_COMISION → comision APROBADA → INTEGRADA
    - VACACION_VENTA → VacacionVenta PENDIENTE → PAGADO, liquidacionId
@@ -115,6 +117,7 @@ Firma: `anular-liquidacion-sueldo(id, motivo)` — permiso `RRHH_LIQUIDACION_PAG
 Si era PAGADA, recorre items y revierte por `referenciaTipo`:
 - **VALE**: estado DESCONTADO → CONFIRMADO, `liquidacionId = null` (con cast `as any` por TypeORM).
 - **CPP_CUOTA**: resta de `montoPagado` cuota+CPP, vuelve a PENDIENTE/PARCIAL, `fechaPago = null`. CPP de PAGADO → ACTIVO.
+- **CPC_CUOTA (2026-07)**: revierte el cobro — cuota → PENDIENTE/PARCIAL, resta CPC.montoCobrado, **sube `cliente.saldoActual`** y borra el `MovimientoCliente` PAGO de esta liquidación. CPC de COBRADO → ACTIVO.
 - **AGUINALDO**: PAGADO → APROBADO, `liquidacionId = null`, `fechaPago = null`.
 - **LIQUIDACION_COMISION**: INTEGRADA → APROBADA.
 - **VACACION_VENTA**: PAGADO → PENDIENTE, `liquidacionId = null`.
@@ -141,7 +144,10 @@ LiquidacionFinal {
   vacacionesNoGozadas: int
   montoVacacionesNoGozadas: decimal
   aguinaldoProporcional: decimal
-  totalLiquidado: decimal
+  totalLiquidado: decimal                // = totalHaberes (bruto, retrocompat)
+  totalHaberes: decimal                  // 2026-07: indemniz + vacaciones + aguinaldo
+  totalDescuentos: decimal               // 2026-07: deudas neteadas (vales + préstamos + crédito)
+  totalNeto: decimal                     // 2026-07: max(0, haberes - descuentos) — lo que sale en efectivo
   moneda: Moneda                         // FK `moneda_id`
   estado: LiquidacionFinalEstado         // BORRADOR | APROBADA | PAGADA | ANULADA
   aprobadoPor?: Usuario
@@ -152,9 +158,11 @@ LiquidacionFinal {
 
 LiquidacionFinalItem {
   liquidacionFinal (CASCADE)             // FK `liquidacion_final_id`
-  concepto: string                       // texto: 'INDEMNIZACION', 'VACACIONES_NO_GOZADAS', 'AGUINALDO_PROPORCIONAL', ...
+  concepto: string                       // 'INDEMNIZACION', 'VACACIONES_NO_GOZADAS', 'AGUINALDO_PROPORCIONAL', 'VALE', 'PRESTAMO_CUOTA', 'CREDITO_CONSUMO'...
   monto: decimal
   descripcion?
+  tipo: HABER | DESCUENTO                 // 2026-07 (default HABER)
+  referenciaTipo?, referenciaId?          // 2026-07: VALE | CPP_CUOTA | CPC_CUOTA — para saldar la deuda al pagar
 }
 ```
 
@@ -175,10 +183,15 @@ LiquidacionFinalItem {
 5. Aguinaldo proporcional:
    totalGanado = SUM(totalHaberes) liquidaciones APROBADA/PAGADA del año del egreso
    aguinaldoProporcional = totalGanado / 12
-6. totalLiquidado = indemnizacion + vacaciones + aguinaldo
-7. Crea LiquidacionFinalItem por cada concepto con monto > 0
-   (INDEMNIZACION, VACACIONES_NO_GOZADAS, AGUINALDO_PROPORCIONAL).
-8. **En la generación** marca el funcionario egresado: `fechaEgreso`, `motivoEgreso`, `activo = false`.
+6. totalHaberes = indemnizacion + vacaciones + aguinaldo (totalLiquidado = totalHaberes, bruto).
+7. **Neteo de deudas (2026-07):** se descuentan de los haberes las deudas pendientes del funcionario en orden de prioridad **vales → cuotas de préstamo (CPP) → consumo a crédito (CPC del cliente por persona_id)**, hasta agotar los haberes. Vales son atómicos (solo se netean completos); cuotas de préstamo/CPC admiten parcial. `totalDescuentos = Σ neteado`, `totalNeto = max(0, totalHaberes - totalDescuentos)` (topado en 0; las deudas no cubiertas quedan abiertas a cobrar). Cada deuda genera un `LiquidacionFinalItem` DESCUENTO con `referenciaTipo`/`referenciaId`.
+8. Crea LiquidacionFinalItem HABER (INDEMNIZACION, VACACIONES_NO_GOZADAS, AGUINALDO_PROPORCIONAL) + los DESCUENTO neteados.
+9. **En la generación** marca el funcionario egresado: `fechaEgreso`, `motivoEgreso`, `activo = false`.
+
+**Pagar (2026-07):** el egreso de Caja Mayor es por `totalNeto` (solo si > 0). Salda cada deuda neteada: VALE → DESCONTADO; CPP_CUOTA → montoPagado += neto (PAGADA/PARCIAL); CPC_CUOTA → cobra cuota + baja `saldoActual` + `MovimientoCliente` PAGO. Todo neteado dentro del EGRESO_SALARIO. **No hay handler `anular-liquidacion-final`** (gap pre-existente).
+
+> ⚠️ **Multimoneda pendiente:** el neteo compara/resta montos de distinta moneda como iguales (`LiquidacionItem`/`LiquidacionFinalItem` no guardan moneda). Ver [reference/known-bugs.md](reference/known-bugs.md).
+> ⚠️ **Sin UI:** ningún componente invoca `generar/aprobar/pagar-liquidacion-final` — el neteo vive solo a nivel handler. Ver [workflows/todos-pendientes.md](../workflows/todos-pendientes.md).
 ```
 
 > Solo puede existir una LiquidacionFinal no anulada por funcionario.

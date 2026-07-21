@@ -2,6 +2,16 @@
 
 Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo sigue roto. La sección de **Seguridad** está mayormente resuelta (bcrypt, JWT en keytar, permisos en backend, must-change-password) — ver detalle abajo y [architecture/auth-permissions.md](../architecture/auth-permissions.md).
 
+## RRHH / Financiero
+
+### Liquidaciones mezclan monedas (multimoneda) — pendiente
+
+**Síntoma:** en el cálculo de liquidación de sueldo y final, un vale/cuota en USD/BRL se netea/suma contra haberes en PYG como si fuera la misma moneda (ej. un vale de 100 USD "cancela" 100 Gs de haberes).
+
+**Causa de raíz:** `LiquidacionItem` y `LiquidacionFinalItem` **no tienen columna de moneda** — al copiar un vale/cuota a un item se pierde su identidad de moneda, y `recalcularTotales` suma `Number(monto)` crudo. Ningún handler de liquidación importa `MonedaCambio`.
+
+**Estado (2026-07):** la **capa de resumen/agregación** ya está arreglada (PR #198): `get-funcionario-resumen-financiero` y `dashboard-rrhh.totalNominaMes` convierten a PYG con `electron/utils/moneda.utils.ts` (`convertirAPrincipal`). El **cálculo interno de liquidación** sigue pendiente — requiere **migración** (agregar moneda + cotización a los items) + **decisión de política**: (a) convertir con la cotización al crear el item, o (b) bloquear/avisar si hay items en otra moneda que la liquidación. No se tocó porque afecta plata que se paga. Ver [../domains/rrhh-liquidaciones.md](../domains/rrhh-liquidaciones.md).
+
 ## Frontend / UI
 
 ### `findPrecioCosto()` retorna 0 hardcodeado

@@ -67,6 +67,25 @@ Persona (datos personales)
 
 Cambios de cargo/salario posteriores generan nuevos registros históricos con `fechaHasta` del anterior.
 
+Al crear con opt-in `crearClienteConveniado`, además crea/reutiliza un `Cliente` sobre la **misma Persona** (tipo CONVENIADO, `credito=true`, `limite_credito` = % del salario) — el sistema contempla que el funcionario consuma a crédito.
+
+### Ficha de funcionario = dashboard padrón (2026-07)
+
+`funcionario-detalle.component` fue convertido al **padrón unificado de dashboards**: stat-chips con el **resumen financiero** (salario, vales pendientes, préstamos, consumo a crédito, total adeudado), acciones rápidas, y —en lugar del chart— el `mat-tab-group` existente (Datos, Historiales, Turnos, Rostros, Documentos). Columna derecha: próximos vencimientos.
+
+**Handler `get-funcionario-resumen-financiero(funcionarioId)`** (`rrhh-funcionarios.handler.ts`, solo lectura): devuelve `{ cliente, vales:{count,total}, prestamos:{count,saldo}, credito:{saldo,cpcActivas}, totalAdeudado, proximosVencimientos[], monedaPrincipalSimbolo, sinCotizacion }`. **Todos los montos se convierten a la moneda principal (PYG)** vía `MonedaCambio.compraLocal` (helper `electron/utils/moneda.utils.ts`); cada vencimiento lleva su moneda real. `sinCotizacion=true` si falta algún cambio (total parcial).
+
+### Aviso cruzado Funcionario ↔ Cliente (2026-07)
+
+Cuando la persona es funcionario y cliente a la vez:
+- Ficha de funcionario: chip **"También es cliente"** (usa `resumen.cliente`) → abre `cliente-detalle`.
+- Detalle de cliente: chip **"También es funcionario"** (handler **`get-funcionario-de-cliente(clienteId)`** que busca el funcionario por el `persona_id` del cliente) → abre `funcionario-detalle`.
+- Navegación cruzada con `import()` dinámico (evita ciclo entre los dos standalone).
+
+### Mobile
+
+`projects/mobile/.../funcionarios/funcionario-detalle.page` — página read-only con el resumen financiero + próximos vencimientos + badge "También es cliente". Los workflows (editar, liquidar) siguen siendo desktop.
+
 ## FuncionarioDocumento
 
 ```typescript

@@ -142,6 +142,7 @@ CuentaPorCobrarCuota {
   monto, montoCobrado: decimal(18,2)
   estado: CuentaPorCobrarCuotaEstado  // PENDIENTE | PARCIAL | COBRADO | CANCELADO
   fechaCobro?: datetime
+  liquidacionId?: int                 // 2026-07: liquidación de sueldo que descuenta esta cuota (funcionario-cliente)
 }
 ```
 
@@ -157,6 +158,10 @@ CuentaPorCobrarCuota {
 5. Crear `MovimientoCliente` tipo PAGO (guarda `cajaMayorMovimientoId` o `cuentaBancariaId`/`montoCuentaBancaria` según la fuente).
 
 `anular-cobro-cpc-cuota` revierte el cobro (cuota/CPC/saldo cliente + contra-asiento de la fuente). Dialogs: `cobrar-cuota-dialog/` (individual) y `cobrar-cpc-rapido-dialog/` (acceso rápido desde Caja Mayor).
+
+### Cobro de CPC vía liquidación de sueldo (funcionario-cliente, 2026-07)
+
+Si el cliente comparte `persona_id` con un funcionario, sus cuotas CPC que vencen en el mes se **descuentan de la liquidación de sueldo** (concepto `CREDITO_CONSUMO`, referenciaTipo `CPC_CUOTA`). Al pagar la liquidación se cobra la cuota atómicamente (cuota COBRADA/PARCIAL, baja `saldoActual`, `MovimientoCliente` PAGO) **sin** movimiento aparte de Caja Mayor (neteado en el EGRESO_SALARIO). Anular la liquidación revierte el cobro. La columna `cuentas_por_cobrar_cuotas.liquidacion_id` evita que una cuota se tome en dos borradores. Detalles → [rrhh-liquidaciones.md](rrhh-liquidaciones.md).
 
 ## MovimientoCliente
 
