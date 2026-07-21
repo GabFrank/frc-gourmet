@@ -2854,6 +2854,28 @@ contextBridge.exposeInMainWorld('api', {
   anularGastoCaja: async (gastoId: number, motivo?: string): Promise<any> => {
     return await ipcRenderer.invoke('anular-gasto-caja', gastoId, motivo);
   },
+  // Egresos de caja PdV (vales/compras pagados desde el cajón)
+  crearValeCaja: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('crear-vale-caja', data);
+  },
+  pagarValeCaja: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('pagar-vale-caja', data);
+  },
+  crearCompraSimplificadaCaja: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('crear-compra-simplificada-caja', data);
+  },
+  pagarCompraCuotaCaja: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('pagar-compra-cuota-caja', data);
+  },
+  anularEgresoCaja: async (egresoId: number, motivo?: string): Promise<any> => {
+    return await ipcRenderer.invoke('anular-egreso-caja', egresoId, motivo);
+  },
+  getEgresosCaja: async (cajaId: number, incluirAnulados?: boolean): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-egresos-caja', cajaId, incluirAnulados);
+  },
+  getValesPendientesFuncionario: async (funcionarioId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-vales-pendientes-funcionario', funcionarioId);
+  },
   editCajaMayorMovimiento: async (movId: number, data: any): Promise<any> => {
     return await ipcRenderer.invoke('edit-caja-mayor-movimiento', movId, data);
   },

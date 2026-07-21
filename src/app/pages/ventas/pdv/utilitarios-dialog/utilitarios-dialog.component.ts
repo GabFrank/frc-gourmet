@@ -7,6 +7,10 @@ import { MatIconModule } from '@angular/material/icon';
 import { CreateRetiroCajaDialogComponent } from 'src/app/pages/financiero/caja-mayor/retiros/create-retiro-caja-dialog/create-retiro-caja-dialog.component';
 import { UltimasVentasDialogComponent } from '../ultimas-ventas-dialog/ultimas-ventas-dialog.component';
 import { CreateGastoCajaDialogComponent } from '../gasto-caja-dialog/gasto-caja-dialog.component';
+import { PagarValeCajaDialogComponent } from '../pagar-vale-caja-dialog/pagar-vale-caja-dialog.component';
+import { PagarCompraCajaDialogComponent } from '../pagar-compra-caja-dialog/pagar-compra-caja-dialog.component';
+import { EgresosCajaDialogComponent } from '../egresos-caja-dialog/egresos-caja-dialog.component';
+import { PermissionService } from 'src/app/services/permission.service';
 
 interface UtilitarioOption {
   key: string;
@@ -15,6 +19,8 @@ interface UtilitarioOption {
   icono: string;
   color: string;
   disabled?: boolean;
+  permiso?: string;
+  permisoAny?: string[];
 }
 
 @Component({
@@ -50,6 +56,30 @@ export class UtilitariosDialogComponent implements OnInit {
       color: '#c62828',
     },
     {
+      key: 'VALE',
+      titulo: 'Vale',
+      descripcion: 'Crear o pagar un vale de funcionario con el efectivo de la caja',
+      icono: 'badge',
+      color: '#2e7d32',
+      permiso: 'PDV_PAGAR_VALE',
+    },
+    {
+      key: 'COMPRA',
+      titulo: 'Compra',
+      descripcion: 'Crear o pagar una compra con el efectivo de la caja',
+      icono: 'shopping_bag',
+      color: '#00838f',
+      permiso: 'PDV_PAGAR_COMPRA',
+    },
+    {
+      key: 'EGRESOS',
+      titulo: 'Egresos de caja',
+      descripcion: 'Ver y anular vales/compras pagados desde el cajón',
+      icono: 'list_alt',
+      color: '#5c6bc0',
+      permisoAny: ['PDV_PAGAR_VALE', 'PDV_PAGAR_COMPRA', 'PDV_ANULAR_EGRESO'],
+    },
+    {
       key: 'ULTIMAS_VENTAS',
       titulo: 'Ultimas Ventas',
       descripcion: 'Ver las últimas ventas de esta caja',
@@ -66,8 +96,11 @@ export class UtilitariosDialogComponent implements OnInit {
     },
   ];
 
+  opcionesVisibles: UtilitarioOption[] = [];
+
   constructor(
     private dialog: MatDialog,
+    private permissionService: PermissionService,
     @Optional() public dialogRef: MatDialogRef<UtilitariosDialogComponent>,
     @Optional() @Inject(MAT_DIALOG_DATA) public data: any,
   ) {}
@@ -75,6 +108,12 @@ export class UtilitariosDialogComponent implements OnInit {
   ngOnInit(): void {
     this.cajaId = this.data?.cajaId || 0;
     this.cajaNombre = this.data?.cajaNombre || '';
+    // Oculta las tarjetas gated cuyo permiso el usuario no tiene.
+    this.opcionesVisibles = this.opciones.filter(o => {
+      if (o.permiso && !this.permissionService.has(o.permiso)) return false;
+      if (o.permisoAny && !o.permisoAny.some(p => this.permissionService.has(p))) return false;
+      return true;
+    });
   }
 
   seleccionar(opt: UtilitarioOption): void {
@@ -96,6 +135,27 @@ export class UtilitariosDialogComponent implements OnInit {
       this.dialogRef?.close();
       this.dialog.open(UltimasVentasDialogComponent, {
         width: '560px',
+        data: { cajaId: this.cajaId, cajaNombre: this.cajaNombre },
+      });
+    } else if (opt.key === 'VALE') {
+      this.dialogRef?.close();
+      this.dialog.open(PagarValeCajaDialogComponent, {
+        width: '600px',
+        maxWidth: '95vw',
+        data: { cajaId: this.cajaId, cajaNombre: this.cajaNombre },
+      });
+    } else if (opt.key === 'COMPRA') {
+      this.dialogRef?.close();
+      this.dialog.open(PagarCompraCajaDialogComponent, {
+        width: '600px',
+        maxWidth: '95vw',
+        data: { cajaId: this.cajaId, cajaNombre: this.cajaNombre },
+      });
+    } else if (opt.key === 'EGRESOS') {
+      this.dialogRef?.close();
+      this.dialog.open(EgresosCajaDialogComponent, {
+        width: '640px',
+        maxWidth: '95vw',
         data: { cajaId: this.cajaId, cajaNombre: this.cajaNombre },
       });
     }

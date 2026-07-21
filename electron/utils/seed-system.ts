@@ -511,6 +511,10 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
     permisos: [
       'HOME_DASHBOARD_VER', 'VENTAS_DASHBOARD_VER', 'CAJA_MAYOR_DASHBOARD_VER',
       'VENTAS_PDV', 'VENTAS_HISTORICO_VER',
+      // Vales/compras pagados desde el cajón del PdV (Utilitarios).
+      // PDV_ANULAR_EGRESO NO se asigna al cajero (separación de funciones:
+      // anular una salida de efectivo es acción de supervisor/gerente).
+      'PDV_PAGAR_VALE', 'PDV_PAGAR_COMPRA',
       'PRODUCTOS_VER',
       'CLIENTES_VER', 'CLIENTES_GESTIONAR', // crear cliente al cobrar venta a credito
       'FINANCIERO_CAJA_VER',

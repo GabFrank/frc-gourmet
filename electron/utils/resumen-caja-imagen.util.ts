@@ -107,6 +107,18 @@ function armarSecciones(resumen: ResumenCaja, monedaFmt: { [id: number]: MonedaF
     gastosRetirosArqueo.push(g);
   }
 
+  // ── Egresos (vales / compras pagados del cajón) ──
+  if ((resumen.egresos || []).length) {
+    const e: Section = { title: 'Egresos (Vales / Compras)', rows: [] };
+    const tot: { [id: number]: number } = {};
+    for (const x of resumen.egresos) {
+      e.rows.push({ label: `${String(x.tipo || 'EGRESO')}: ${String(x.descripcion || '').toUpperCase()}`.slice(0, 40), value: fmt(x.monedaId, x.monto) });
+      tot[Number(x.monedaId)] = (tot[Number(x.monedaId)] || 0) + Number(x.monto || 0);
+    }
+    for (const id of Object.keys(tot).map(Number)) e.rows.push({ label: 'TOTAL EGRESOS', value: fmt(id, tot[id]), cls: 'total' });
+    gastosRetirosArqueo.push(e);
+  }
+
   // ── Retiros ──
   if (resumen.retiros.length) {
     const rt: Section = { title: 'Retiros', rows: [] };

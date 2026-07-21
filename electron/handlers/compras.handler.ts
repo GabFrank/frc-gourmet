@@ -199,6 +199,86 @@ async function recalcularTotalCompra(qr: any, compraId: number): Promise<number>
   return +total.toFixed(2);
 }
 
+// Crea una compra SIMPLIFICADA (FINALIZADO, sin detalles) + su CPP + cuotas, SIN
+// asentar ningún pago. Devuelve los ids para que el caller aplique el pago como
+// quiera (Caja Mayor vía aplicarPagoCpoCuota, o cajón del PdV vía EgresoCaja).
+// NO commitea: corre dentro de la transacción del caller.
+export async function crearCompraSimplificadaTx(
+  qr: any,
+  payload: any,
+  userId: number | undefined,
+  deviceId: number | null,
+): Promise<{ compraId: number; cppId: number; cuotaId: number; total: number }> {
+  const proveedorId = Number(payload.proveedorId);
+  const monedaId = Number(payload.monedaId);
+  const total = +Number(payload.total).toFixed(2);
+  if (!proveedorId) throw new Error('La compra requiere proveedor.');
+  if (!monedaId) throw new Error('La compra requiere moneda.');
+  if (!(total > 0)) throw new Error('El total debe ser mayor a 0.');
+
+  const credito = !!payload.credito;
+  const fuente = String(payload.fuente || 'CAJA_MAYOR').toUpperCase();
+  const fechaBoleta = parseLocalDate(payload.fechaCompra) || new Date();
+
+  const compra = qr.manager.create(Compra, {
+    estado: CompraEstado.FINALIZADO,
+    simplificada: true,
+    isRecepcionMercaderia: false,
+    activo: true,
+    numeroNota: payload.numeroNota?.toUpperCase() || null,
+    tipoBoleta: payload.tipoBoleta || null,
+    fechaCompra: fechaBoleta,
+    credito,
+    proveedor: { id: proveedorId } as any,
+    compraCategoria: payload.compraCategoriaId ? { id: payload.compraCategoriaId } as any : null,
+    moneda: { id: monedaId } as any,
+    formaPagoCompra: fuente === 'CUENTA_BANCARIA' ? FormaPagoCompra.BANCO : FormaPagoCompra.EFECTIVO,
+    cuentaBancaria: (payload.pagarAhora && fuente === 'CUENTA_BANCARIA' && payload.cuentaBancariaId)
+      ? { id: Number(payload.cuentaBancariaId) } as any
+      : null,
+    dispositivo: deviceId != null ? ({ id: deviceId } as any) : null,
+    total,
+  });
+  await setEntityUserTracking(qr.connection, compra, userId, false);
+  const compraSaved = await qr.manager.save(Compra, compra);
+  const compraId = (Array.isArray(compraSaved) ? compraSaved[0] : compraSaved).id;
+
+  const cantidadCuotas = credito ? Math.max(1, Number(payload.cantidadCuotas) || 1) : 1;
+  const fechaInicio = credito
+    ? (parseLocalDate(payload.fechaCreditoInicio) || fechaBoleta)
+    : fechaBoleta;
+
+  const cppEntity = qr.manager.create(CuentaPorPagar, {
+    descripcion: `COMPRA #${compraId} — ${payload.proveedorNombre || ''}`.toUpperCase(),
+    tipo: CuentaPorPagarTipo.COMPRA,
+    proveedor: { id: proveedorId } as any,
+    montoTotal: total,
+    montoPagado: 0,
+    moneda: { id: monedaId } as any,
+    fechaInicio,
+    cantidadCuotas,
+    estado: CuentaPorPagarEstado.ACTIVO,
+    observacion: payload.numeroNota ? `NOTA ${String(payload.numeroNota).toUpperCase()}` : null,
+    compraId,
+  });
+  await setEntityUserTracking(qr.connection, cppEntity, userId, false);
+  const cppSaved = await qr.manager.save(CuentaPorPagar, cppEntity);
+  const cppId = (Array.isArray(cppSaved) ? cppSaved[0] : cppSaved).id;
+
+  await generarCuotasMensualesCPP(qr, cppId, total, cantidadCuotas, fechaInicio, userId);
+
+  compra.cuentaPorPagar = { id: cppId } as any;
+  await qr.manager.save(Compra, compra);
+
+  const primeraCuota = await qr.manager.getRepository(CuentaPorPagarCuota).findOne({
+    where: { cuentaPorPagar: { id: cppId } } as any,
+    order: { numero: 'ASC' },
+  });
+  if (!primeraCuota) throw new Error('No se pudo generar la cuota de la compra.');
+
+  return { compraId, cppId, cuotaId: primeraCuota.id, total };
+}
+
 export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
 
   // ===================== PROVEEDORES =====================
@@ -692,85 +772,21 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       const userId = getCurrentUser()?.id;
       const currentUser = getCurrentUser();
 
-      // Validaciones
-      const proveedorId = Number(payload.proveedorId);
-      const monedaId = Number(payload.monedaId);
-      const total = +Number(payload.total).toFixed(2);
-      if (!proveedorId) throw new Error('La compra requiere proveedor.');
-      if (!monedaId) throw new Error('La compra requiere moneda.');
-      if (!(total > 0)) throw new Error('El total debe ser mayor a 0.');
-
       const credito = !!payload.credito;
       const pagarAhora = !credito && payload.pagarAhora === true;
       const fuente = String(payload.fuente || 'CAJA_MAYOR').toUpperCase();
-
-      const fechaBoleta = parseLocalDate(payload.fechaCompra) || new Date();
       const deviceId = resolveRequestDeviceId(_event);
+      const monedaId = Number(payload.monedaId);
 
-      // 1. Crear la Compra (FINALIZADO, sin detalles)
-      const compra = qr.manager.create(Compra, {
-        estado: CompraEstado.FINALIZADO,
-        simplificada: true,
-        isRecepcionMercaderia: false,
-        activo: true,
-        numeroNota: payload.numeroNota?.toUpperCase() || null,
-        tipoBoleta: payload.tipoBoleta || null,
-        fechaCompra: fechaBoleta,
-        credito,
-        proveedor: { id: proveedorId } as any,
-        compraCategoria: payload.compraCategoriaId ? { id: payload.compraCategoriaId } as any : null,
-        moneda: { id: monedaId } as any,
-        formaPagoCompra: fuente === 'CUENTA_BANCARIA' ? FormaPagoCompra.BANCO : FormaPagoCompra.EFECTIVO,
-        cuentaBancaria: (pagarAhora && fuente === 'CUENTA_BANCARIA' && payload.cuentaBancariaId)
-          ? { id: Number(payload.cuentaBancariaId) } as any
-          : null,
-        dispositivo: deviceId != null ? ({ id: deviceId } as any) : null,
-        total,
-      });
-      await setEntityUserTracking(dataSource, compra, userId, false);
-      const compraSaved = await qr.manager.save(Compra, compra);
-      const compraId = (Array.isArray(compraSaved) ? compraSaved[0] : compraSaved).id;
-
-      // 2. Generar CPP + cuotas (1 contado / N credito)
-      const cantidadCuotas = credito ? Math.max(1, Number(payload.cantidadCuotas) || 1) : 1;
-      const fechaInicio = credito
-        ? (parseLocalDate(payload.fechaCreditoInicio) || fechaBoleta)
-        : fechaBoleta;
-
-      const cppEntity = qr.manager.create(CuentaPorPagar, {
-        descripcion: `COMPRA #${compraId} — ${payload.proveedorNombre || ''}`.toUpperCase(),
-        tipo: CuentaPorPagarTipo.COMPRA,
-        proveedor: { id: proveedorId } as any,
-        montoTotal: total,
-        montoPagado: 0,
-        moneda: { id: monedaId } as any,
-        fechaInicio,
-        cantidadCuotas,
-        estado: CuentaPorPagarEstado.ACTIVO,
-        observacion: payload.numeroNota ? `NOTA ${String(payload.numeroNota).toUpperCase()}` : null,
-        compraId,
-      });
-      await setEntityUserTracking(dataSource, cppEntity, userId, false);
-      const cppSaved = await qr.manager.save(CuentaPorPagar, cppEntity);
-      const cppId = (Array.isArray(cppSaved) ? cppSaved[0] : cppSaved).id;
-
-      await generarCuotasMensualesCPP(qr, cppId, total, cantidadCuotas, fechaInicio, userId);
-
-      compra.cuentaPorPagar = { id: cppId } as any;
-      await qr.manager.save(Compra, compra);
+      // 1-2. Crear la Compra simplificada + CPP + cuotas (sin pago)
+      const { compraId, cuotaId, total } = await crearCompraSimplificadaTx(qr, payload, userId, deviceId);
 
       // 3. Pago inmediato (solo contado + pagarAhora): reutiliza aplicarPagoCpoCuota
       if (pagarAhora) {
-        const cuota = await qr.manager.getRepository(CuentaPorPagarCuota).findOne({
-          where: { cuentaPorPagar: { id: cppId } } as any,
-          order: { numero: 'ASC' },
-        });
-        if (!cuota) throw new Error('No se encontro la cuota para pagar.');
-
         if (fuente === 'CUENTA_BANCARIA') {
           if (!payload.cuentaBancariaId) throw new Error('Seleccione la cuenta bancaria para el pago.');
           await aplicarPagoCpoCuota(qr, {
-            cuotaId: cuota.id,
+            cuotaId,
             monto: total,
             fuente: 'CUENTA_BANCARIA',
             cuentaBancariaId: Number(payload.cuentaBancariaId),
@@ -781,7 +797,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
             throw new Error('Seleccione caja mayor y forma de pago.');
           }
           await aplicarPagoCpoCuota(qr, {
-            cuotaId: cuota.id,
+            cuotaId,
             monto: total,
             fuente: 'CAJA_MAYOR',
             cajaMayorId: Number(payload.cajaMayorId),
