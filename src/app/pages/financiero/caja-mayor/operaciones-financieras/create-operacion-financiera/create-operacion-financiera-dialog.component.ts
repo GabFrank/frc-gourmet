@@ -18,6 +18,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { confirmarSaldosNegativos, SaldoNegativoCheck } from 'src/app/shared/utils/saldo-negativo-confirm';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
+import { CAMPOS_REQUERIDOS, monedasDesdeCuentaBancaria, TipoOperacionFinanciera } from './operacion-financiera-validacion.util';
 
 @Component({
   selector: 'app-create-operacion-financiera-dialog',
@@ -118,21 +119,21 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
     this.form.get('montoOrigen')?.valueChanges.subscribe(() => this.recalcularMontoDestino());
     this.form.get('cotizacion')?.valueChanges.subscribe(() => this.recalcularMontoDestino());
 
-    // Cuando se selecciona una cuenta bancaria, fijar la moneda correspondiente
-    this.form.get('cuentaBancariaOrigenId')?.valueChanges.subscribe((id: number) => {
+    // Cuando se selecciona una cuenta bancaria, fijar la moneda de AMBOS lados
+    // (origen y destino). En un depósito/retiro en efectivo la divisa es la
+    // misma a ambos lados; setear solo un lado dejaba la moneda requerida del
+    // otro lado en null y el formulario inválido (botón Registrar deshabilitado).
+    const aplicarMonedaCuenta = (id: number) => {
       const cb = this.cuentasBancarias.find(c => c.id === id);
       if (cb?.moneda?.id) {
-        this.form.get('monedaOrigenId')?.setValue(cb.moneda.id, { emitEvent: false });
+        const { monedaOrigenId, monedaDestinoId } = monedasDesdeCuentaBancaria(cb.moneda.id);
+        this.form.get('monedaOrigenId')?.setValue(monedaOrigenId, { emitEvent: false });
+        this.form.get('monedaDestinoId')?.setValue(monedaDestinoId, { emitEvent: false });
         this.recalcDecimales();
       }
-    });
-    this.form.get('cuentaBancariaDestinoId')?.valueChanges.subscribe((id: number) => {
-      const cb = this.cuentasBancarias.find(c => c.id === id);
-      if (cb?.moneda?.id) {
-        this.form.get('monedaDestinoId')?.setValue(cb.moneda.id, { emitEvent: false });
-        this.recalcDecimales();
-      }
-    });
+    };
+    this.form.get('cuentaBancariaOrigenId')?.valueChanges.subscribe((id: number) => aplicarMonedaCuenta(id));
+    this.form.get('cuentaBancariaDestinoId')?.valueChanges.subscribe((id: number) => aplicarMonedaCuenta(id));
     this.form.get('monedaOrigenId')?.valueChanges.subscribe(() => { this.recalcDecimales(); this.recalcularMontoDestino(); });
     this.form.get('monedaDestinoId')?.valueChanges.subscribe(() => { this.recalcDecimales(); this.recalcularMontoDestino(); });
   }
@@ -196,63 +197,34 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
     }
   }
 
+  // Validators adicionales (además de `required`) por campo.
+  private static readonly EXTRA_VALIDATORS: Record<string, any[]> = {
+    montoOrigen: [Validators.min(0.01)],
+    montoDestino: [Validators.min(0.01)],
+    cotizacion: [Validators.min(0.000001)],
+  };
+
+  private static readonly TODOS_LOS_CAMPOS = [
+    'cajaMayorOrigenId', 'monedaOrigenId', 'formaPagoOrigenId', 'montoOrigen', 'cuentaBancariaOrigenId',
+    'cajaMayorDestinoId', 'monedaDestinoId', 'formaPagoDestinoId', 'montoDestino', 'cuentaBancariaDestinoId',
+    'cotizacion',
+  ];
+
   applyValidators(tipo: string): void {
     const ctrl = (n: string) => this.form.get(n);
+    const requeridos = CAMPOS_REQUERIDOS[tipo as TipoOperacionFinanciera] || [];
 
-    // Reset todos los validators primero
-    [
-      'cajaMayorOrigenId', 'monedaOrigenId', 'formaPagoOrigenId', 'montoOrigen', 'cuentaBancariaOrigenId',
-      'cajaMayorDestinoId', 'monedaDestinoId', 'formaPagoDestinoId', 'montoDestino', 'cuentaBancariaDestinoId',
-      'cotizacion',
-    ].forEach(n => {
-      ctrl(n)?.clearValidators();
+    // Los campos requeridos se toman de una única fuente de verdad
+    // (operacion-financiera-validacion.util) para que la UI, el validador y el
+    // test no puedan desincronizarse.
+    for (const n of CreateOperacionFinancieraDialogComponent.TODOS_LOS_CAMPOS) {
+      if (requeridos.includes(n)) {
+        ctrl(n)?.setValidators([Validators.required, ...(CreateOperacionFinancieraDialogComponent.EXTRA_VALIDATORS[n] || [])]);
+      } else {
+        ctrl(n)?.clearValidators();
+      }
       ctrl(n)?.updateValueAndValidity({ emitEvent: false });
-    });
-
-    switch (tipo) {
-      case 'CAMBIO_DIVISA':
-        ctrl('cajaMayorOrigenId')?.setValidators([Validators.required]);
-        ctrl('monedaOrigenId')?.setValidators([Validators.required]);
-        ctrl('formaPagoOrigenId')?.setValidators([Validators.required]);
-        ctrl('montoOrigen')?.setValidators([Validators.required, Validators.min(0.01)]);
-        ctrl('monedaDestinoId')?.setValidators([Validators.required]);
-        ctrl('formaPagoDestinoId')?.setValidators([Validators.required]);
-        ctrl('montoDestino')?.setValidators([Validators.required, Validators.min(0.01)]);
-        ctrl('cotizacion')?.setValidators([Validators.required, Validators.min(0.000001)]);
-        break;
-      case 'DEPOSITO_BANCARIO':
-        ctrl('cajaMayorOrigenId')?.setValidators([Validators.required]);
-        ctrl('monedaOrigenId')?.setValidators([Validators.required]);
-        ctrl('formaPagoOrigenId')?.setValidators([Validators.required]);
-        ctrl('montoOrigen')?.setValidators([Validators.required, Validators.min(0.01)]);
-        ctrl('cuentaBancariaDestinoId')?.setValidators([Validators.required]);
-        ctrl('montoDestino')?.setValidators([Validators.required, Validators.min(0.01)]);
-        break;
-      case 'RETIRO_BANCARIO':
-        ctrl('cuentaBancariaOrigenId')?.setValidators([Validators.required]);
-        ctrl('montoOrigen')?.setValidators([Validators.required, Validators.min(0.01)]);
-        ctrl('cajaMayorDestinoId')?.setValidators([Validators.required]);
-        ctrl('monedaDestinoId')?.setValidators([Validators.required]);
-        ctrl('formaPagoDestinoId')?.setValidators([Validators.required]);
-        ctrl('montoDestino')?.setValidators([Validators.required, Validators.min(0.01)]);
-        break;
-      case 'TRANSFERENCIA_ENTRE_CAJAS':
-        ctrl('cajaMayorOrigenId')?.setValidators([Validators.required]);
-        ctrl('monedaOrigenId')?.setValidators([Validators.required]);
-        ctrl('formaPagoOrigenId')?.setValidators([Validators.required]);
-        ctrl('montoOrigen')?.setValidators([Validators.required, Validators.min(0.01)]);
-        ctrl('cajaMayorDestinoId')?.setValidators([Validators.required]);
-        ctrl('monedaDestinoId')?.setValidators([Validators.required]);
-        ctrl('formaPagoDestinoId')?.setValidators([Validators.required]);
-        ctrl('montoDestino')?.setValidators([Validators.required, Validators.min(0.01)]);
-        break;
     }
-
-    [
-      'cajaMayorOrigenId', 'monedaOrigenId', 'formaPagoOrigenId', 'montoOrigen', 'cuentaBancariaOrigenId',
-      'cajaMayorDestinoId', 'monedaDestinoId', 'formaPagoDestinoId', 'montoDestino', 'cuentaBancariaDestinoId',
-      'cotizacion',
-    ].forEach(n => ctrl(n)?.updateValueAndValidity({ emitEvent: false }));
   }
 
   async loadOptions(): Promise<void> {
