@@ -58,6 +58,29 @@ import { RrhhDashboardComponent } from 'src/app/pages/rrhh/dashboard/rrhh-dashbo
 import { TiendaOnlineConfigComponent } from 'src/app/pages/ventas/pedidos-online/tienda-online-config.component';
 import { VentasDashboardComponent } from 'src/app/pages/ventas/dashboard/ventas-dashboard.component';
 import { ZonasDeliveryComponent } from 'src/app/pages/ventas/pedidos-online/zonas-delivery.component';
+// ── Extras curados (destinos no presentes en el sidenav; ver docs/BUSCADOR-GLOBAL.md) ──
+import { ListCajasMayorComponent } from 'src/app/pages/financiero/caja-mayor/list-cajas-mayor/list-cajas-mayor.component';
+import { ListChequerasComponent } from 'src/app/pages/financiero/caja-mayor/cheques/list-chequeras/list-chequeras.component';
+import { ListChequesComponent } from 'src/app/pages/financiero/caja-mayor/cheques/list-cheques/list-cheques.component';
+import { ListCompraCategoriasComponent } from 'src/app/pages/compras/categorias/list-compra-categorias.component';
+import { ListCuentasBancariasComponent } from 'src/app/pages/financiero/caja-mayor/bancos/list-cuentas-bancarias/list-cuentas-bancarias.component';
+import { ListEntradasVariasComponent } from 'src/app/pages/financiero/caja-mayor/entradas-varias/list-entradas-varias/list-entradas-varias.component';
+import { ListEntradaVariaCategoriasComponent } from 'src/app/pages/financiero/caja-mayor/entradas-varias/categorias/list-entrada-varia-categorias.component';
+import { ListFamiliasComponent } from 'src/app/pages/productos/familias/list-familias.component';
+import { ListGastoCategoriasComponent } from 'src/app/pages/financiero/caja-mayor/gastos/categorias/list-gasto-categorias.component';
+import { ListGastosComponent } from 'src/app/pages/financiero/caja-mayor/gastos/list-gastos/list-gastos.component';
+import { ListMaquinasPosComponent } from 'src/app/pages/financiero/caja-mayor/pos/list-maquinas-pos/list-maquinas-pos.component';
+import { ListOperacionesFinancierasComponent } from 'src/app/pages/financiero/caja-mayor/operaciones-financieras/list-operaciones-financieras/list-operaciones-financieras.component';
+import { ListOperacionFinancieraCategoriasComponent } from 'src/app/pages/financiero/caja-mayor/operaciones-financieras/categorias/list-operacion-financiera-categorias.component';
+import { ListProveedoresComponent } from 'src/app/pages/compras/proveedores/list-proveedores.component';
+import { ListRetirosCajaComponent } from 'src/app/pages/financiero/caja-mayor/retiros/list-retiros-caja/list-retiros-caja.component';
+import { ListVentasComponent } from 'src/app/pages/ventas/historial/list-ventas.component';
+import { PdvComponent } from 'src/app/pages/ventas/pdv/pdv.component';
+import { GestionarProductoComponent } from 'src/app/pages/productos/gestionar-producto/gestionar-producto.component';
+import { GestionRecetasComponent } from 'src/app/pages/gestion-recetas/gestion-recetas.component';
+import { ConfigMonedasDialogComponent } from 'src/app/pages/financiero/monedas/config-monedas/config-monedas-dialog.component';
+import { PdvConfigDialogComponent } from 'src/app/shared/components/pdv-config-dialog/pdv-config-dialog.component';
+import { AtajoConfigDialogComponent } from 'src/app/shared/components/atajo-config-dialog/atajo-config-dialog.component';
 
 /**
  * Registro de menús del sidenav para el BUSCADOR GLOBAL (Ctrl+Espacio).
@@ -79,6 +102,10 @@ export interface MenuEntry {
   component: Type<any>;
   tabId: string;
   data?: any;
+  /** 'tab' (default) abre con TabsService; 'dialog' abre con MatDialog. */
+  openMode?: 'tab' | 'dialog';
+  /** Config del MatDialog cuando openMode='dialog' (width, etc.). */
+  dialogConfig?: any;
 }
 
 export const MENU_ENTRIES: MenuEntry[] = [
@@ -144,4 +171,30 @@ export const MENU_ENTRIES: MenuEntry[] = [
   { id: 'kds', label: "KDS — Cocina", keywords: ["kds","cocina","ventas"], icon: 'restaurant', group: "Ventas", esConfig: true, permiso: 'COMANDAS_KDS_VER', title: "KDS — Cocina", component: KdsComponent, tabId: 'kds-tab', data: { source: 'navigation' } },
   { id: 'kds-pantallas', label: "Pantallas KDS", keywords: ["pantallas","kds","ventas"], icon: 'tv', group: "Ventas", esConfig: true, permiso: 'COMANDAS_KDS_CONFIGURAR', title: "Pantallas KDS", component: ListKdsPantallasComponent, tabId: 'kds-pantallas-tab', data: { source: 'navigation' } },
   { id: 'producto-dashboard', label: "Dashboard", keywords: ["dashboard","productos"], icon: 'dashboard', group: "Productos", esConfig: false, permiso: 'PRODUCTOS_DASHBOARD_VER', title: "Dashboard de productos", component: ProductosDashboardComponent, tabId: 'producto-dashboard-tab', data: { source: 'navigation' } },
+
+  // ═══ Extras curados: pantallas navegables fuera del sidenav (v1) ═══
+  { id: 'gastos', label: "Gastos", keywords: ["gastos","egresos","caja mayor"], icon: 'receipt_long', group: "Financiero", esConfig: false, permiso: 'FINANCIERO_CAJA_VER', title: "Gastos", component: ListGastosComponent, tabId: 'gastos-tab', data: {} },
+  { id: 'gasto-categorias', label: "Categorías de Gasto", keywords: ["categoria","gasto","egresos"], icon: 'category', group: "Financiero", esConfig: true, permiso: 'FINANCIERO_CAJA_VER', title: "Categorias de Gasto", component: ListGastoCategoriasComponent, tabId: 'gasto-categorias-tab', data: {} },
+  { id: 'entradas-varias', label: "Entradas Varias", keywords: ["entradas","ingresos","varias"], icon: 'input', group: "Financiero", esConfig: false, permiso: 'FINANCIERO_CAJA_VER', title: "Entradas Varias", component: ListEntradasVariasComponent, tabId: 'entradas-varias-tab', data: {} },
+  { id: 'entrada-varia-categorias', label: "Categorías de Entradas Varias", keywords: ["categoria","entradas","ingresos"], icon: 'category', group: "Financiero", esConfig: true, permiso: 'FINANCIERO_CAJA_VER', title: "Categorias de Entradas Varias", component: ListEntradaVariaCategoriasComponent, tabId: 'entrada-varia-categorias-tab', data: {} },
+  { id: 'operaciones-financieras', label: "Operaciones Financieras", keywords: ["operaciones","financieras","cambio","transferencia"], icon: 'swap_horiz', group: "Financiero", esConfig: false, permiso: 'FINANCIERO_CAJA_VER', title: "Operaciones Financieras", component: ListOperacionesFinancierasComponent, tabId: 'operaciones-financieras-tab', data: {} },
+  { id: 'operacion-financiera-categorias', label: "Categorías de Op. Financieras", keywords: ["categoria","operaciones","financieras"], icon: 'category', group: "Financiero", esConfig: true, permiso: 'FINANCIERO_CAJA_VER', title: "Categorias de Op. Financieras", component: ListOperacionFinancieraCategoriasComponent, tabId: 'operacion-financiera-categorias-tab', data: {} },
+  { id: 'retiros-caja', label: "Retiros de Caja", keywords: ["retiros","caja","efectivo"], icon: 'output', group: "Financiero", esConfig: false, permiso: 'FINANCIERO_CAJA_VER', title: "Retiros de Caja", component: ListRetirosCajaComponent, tabId: 'retiros-caja-tab', data: {} },
+  { id: 'cajas-mayor', label: "Cajas Mayor", keywords: ["cajas","mayor","financiero"], icon: 'account_balance', group: "Financiero", esConfig: false, permiso: 'FINANCIERO_CAJA_VER', title: "Cajas Mayor", component: ListCajasMayorComponent, tabId: 'cajas-mayor-tab', data: {} },
+  { id: 'cuentas-bancarias', label: "Cuentas Bancarias", keywords: ["cuentas","bancarias","banco"], icon: 'account_balance', group: "Financiero", esConfig: false, permiso: 'BANCOS_VER', title: "Cuentas Bancarias", component: ListCuentasBancariasComponent, tabId: 'cuentas-bancarias-tab', data: {} },
+  { id: 'cheques', label: "Cheques", keywords: ["cheques","banco"], icon: 'request_quote', group: "Financiero", esConfig: false, permiso: 'BANCOS_VER', title: "Cheques", component: ListChequesComponent, tabId: 'cheques-tab', data: {} },
+  { id: 'chequeras', label: "Chequeras", keywords: ["chequeras","cheques","banco"], icon: 'menu_book', group: "Financiero", esConfig: true, permiso: 'BANCOS_VER', title: "Chequeras", component: ListChequerasComponent, tabId: 'chequeras-tab', data: {} },
+  { id: 'maquinas-pos', label: "Máquinas POS", keywords: ["maquinas","pos","tarjeta","acreditaciones"], icon: 'point_of_sale', group: "Financiero", esConfig: true, permiso: 'BANCOS_VER', title: "Maquinas POS", component: ListMaquinasPosComponent, tabId: 'maquinas-pos-tab', data: {} },
+  { id: 'compra-categorias', label: "Categorías de Compra", keywords: ["categoria","compra","compras"], icon: 'category', group: "Compras", esConfig: true, permiso: 'COMPRAS_VER', title: "Categorias de Compra", component: ListCompraCategoriasComponent, tabId: 'compra-categorias-tab', data: {} },
+  { id: 'proveedores', label: "Proveedores", keywords: ["proveedores","compras"], icon: 'local_shipping', group: "Compras", esConfig: false, permiso: 'PROVEEDORES_VER', title: "Proveedores", component: ListProveedoresComponent, tabId: 'proveedores-tab', data: {} },
+  { id: 'familias', label: "Familias", keywords: ["familias","subfamilias","productos","rubros"], icon: 'account_tree', group: "Productos", esConfig: true, permiso: 'PRODUCTOS_VER', title: "Familias", component: ListFamiliasComponent, tabId: 'familias-tab', data: {} },
+  { id: 'historial-ventas', label: "Historial de Ventas", keywords: ["historial","ventas","facturas"], icon: 'history', group: "Ventas", esConfig: false, permiso: 'VENTAS_HISTORICO_VER', title: "Historial de Ventas", component: ListVentasComponent, tabId: 'historial-ventas-tab', data: {} },
+  { id: 'pdv', label: "Punto de Venta (PDV)", keywords: ["pdv","punto","venta","caja","mesas"], icon: 'point_of_sale', group: "Ventas", esConfig: false, permiso: 'VENTAS_PDV', title: "Punto de Venta (PDV)", component: PdvComponent, tabId: 'pdv-tab', data: {} },
+  // Pantallas de creación (acción)
+  { id: 'crear-producto', label: "Crear producto", keywords: ["crear","nuevo","producto"], icon: 'add_box', group: "Productos", esConfig: false, permiso: 'PRODUCTOS_VER', title: "Nuevo Producto", component: GestionarProductoComponent, tabId: 'nuevo-producto-tab', data: { mode: 'create' } },
+  { id: 'crear-receta', label: "Crear receta", keywords: ["crear","nueva","receta"], icon: 'add_box', group: "Productos", esConfig: false, permiso: 'PRODUCTOS_VER', title: "Nueva Receta", component: GestionRecetasComponent, tabId: 'nueva-receta-tab', data: { mode: 'create' } },
+  // Diálogos-lanzadores (openMode='dialog')
+  { id: 'config-monedas', label: "Configurar Monedas", keywords: ["configurar","monedas","cotizaciones"], icon: 'payments', group: "Financiero", esConfig: true, permiso: 'MONEDAS_GESTIONAR', title: "Configurar Monedas", component: ConfigMonedasDialogComponent, tabId: 'config-monedas', data: {}, openMode: 'dialog', dialogConfig: { width: '800px', maxWidth: '95vw' } },
+  { id: 'config-pdv', label: "Configuración de PdV", keywords: ["configuracion","pdv","punto","venta"], icon: 'settings', group: "Ventas", esConfig: true, permiso: 'VENTAS_PDV', title: "Configuración de PdV", component: PdvConfigDialogComponent, tabId: 'config-pdv', data: {}, openMode: 'dialog', dialogConfig: { width: '760px', maxWidth: '95vw' } },
+  { id: 'config-atajos', label: "Configurar Atajos", keywords: ["configurar","atajos","accesos","pdv"], icon: 'grid_view', group: "Ventas", esConfig: true, permiso: 'VENTAS_PDV', title: "Configurar Atajos", component: AtajoConfigDialogComponent, tabId: 'config-atajos', data: {}, openMode: 'dialog', dialogConfig: { width: '90vw', maxWidth: '90vw', height: '80vh' } },
 ];

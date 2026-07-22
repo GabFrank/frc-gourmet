@@ -1,7 +1,7 @@
 import { Component, ElementRef, HostListener, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
-import { MatDialogRef, MatDialogModule } from '@angular/material/dialog';
+import { MatDialog, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -76,6 +76,7 @@ export class BuscadorGlobalDialogComponent implements OnInit {
     private repositoryService: RepositoryService,
     private permissionService: PermissionService,
     private tabsService: TabsService,
+    private matDialog: MatDialog,
     private dialogRef: MatDialogRef<BuscadorGlobalDialogComponent>,
   ) {}
 
@@ -101,10 +102,14 @@ export class BuscadorGlobalDialogComponent implements OnInit {
     }
 
     // ── Menús y Configuraciones (100% cliente) ──
+    // Matching por tokens (AND): cada palabra del término debe aparecer. Así
+    // "categoria de gasto" matchea "Categorías de Gasto" (independiente del
+    // orden y tolerante a plural/singular por substring de cada token).
+    const tokens = q.split(/\s+/).filter(Boolean);
     const menuMatches = MENU_ENTRIES.filter((e) => {
       if (e.permiso && !this.permissionService.has(e.permiso)) return false;
       const hay = norm(e.label + ' ' + (e.keywords || []).join(' ') + ' ' + (e.group || ''));
-      return hay.includes(q);
+      return tokens.every((t) => hay.includes(t));
     });
     const menus = menuMatches.filter((e) => !e.esConfig).slice(0, 8);
     const configs = menuMatches.filter((e) => e.esConfig).slice(0, 8);
@@ -205,6 +210,12 @@ export class BuscadorGlobalDialogComponent implements OnInit {
   activar(item: ResultadoItem): void {
     if (item.tipo === 'MENU' && item.entry) {
       const e = item.entry;
+      if (e.openMode === 'dialog') {
+        // Lanzador de diálogo: cerramos el buscador y abrimos el diálogo destino.
+        this.dialogRef.close();
+        this.matDialog.open(e.component, { ...(e.dialogConfig || {}), data: e.data || {} });
+        return;
+      }
       this.tabsService.openTab(e.title, e.component, e.data || {}, e.tabId, true);
     } else if (item.tipo === 'ENTIDAD') {
       const nav = ENTIDAD_NAV[item.seccionKey];

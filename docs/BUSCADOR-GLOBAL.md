@@ -26,7 +26,17 @@ Dos dominios de búsqueda independientes:
 1. **Menús y Configuraciones — 100% en el cliente.** Se filtran desde el
    **registro de menús** `src/app/services/menu-registry.ts` (`MENU_ENTRIES`),
    respetando permisos con `PermissionService.has(permiso)`. Latencia cero.
-   Al elegir un menú, se abre su tab vía `TabsService.openTab(...)`.
+   Al elegir una entrada se abre su tab (`TabsService.openTab`) o, si es un
+   **diálogo-destino** (`openMode: 'dialog'`), se abre con `MatDialog`.
+
+   El registro tiene **dos partes**:
+   - **Sidenav** (generado desde `app.component.ts/html`): los ~62 ítems del menú.
+   - **Extras curados**: pantallas navegables fuera del sidenav (sub-listados
+     como Gastos, Categorías de Gasto, Cuentas Bancarias, Cheques, Entradas
+     Varias, Operaciones Financieras, Retiros, etc.), 2 acciones de creación
+     (Crear producto / Crear receta) y algunos **diálogos-lanzadores** de config
+     (Monedas, PdV, Atajos). Los diálogos **contextuales** (edit/create/confirm/
+     selector/detalle/…) NO se incluyen.
 
 2. **Entidades — un solo handler backend.** `buscar-global(termino)`
    (`electron/handlers/busqueda-global.handler.ts`) corre en **una sola
@@ -53,10 +63,11 @@ input auto-focus, resultados agrupados, navegación por teclado (**↑ ↓** mov
 
 ## ⚠️ Regla: todo menú nuevo debe ser encontrable
 
-**Cada vez que se agrega un menú/submenú nuevo al sidenav** (un `openXxxTab()`
-en `app.component.ts` + su item en `app.component.html`), se **debe** agregar la
-entrada correspondiente en `MENU_ENTRIES` (`src/app/services/menu-registry.ts`)
-para que el buscador global lo encuentre. La entrada lleva:
+**Cada vez que se agrega una pantalla navegable nueva** — un menú del sidenav, o
+una sub-pantalla que se abre con `openTab(...)` desde otro componente, o un
+diálogo-destino — se **debe** agregar la entrada en `MENU_ENTRIES`
+(`src/app/services/menu-registry.ts`) para que el buscador la encuentre. Para
+tabs la entrada lleva:
 
 ```ts
 {
@@ -67,8 +78,12 @@ para que el buscador global lo encuentre. La entrada lleva:
 }
 ```
 
-Si el menú nuevo no se registra, funcionará en el sidenav pero **no aparecerá**
-en el buscador. Esto es parte del checklist de "agregar una pantalla nueva".
+Para un **diálogo-destino** se agrega además `openMode: 'dialog'` y `dialogConfig`
+(el `component` es el del diálogo). No registrar diálogos contextuales
+(edit/create/confirm/selector/detalle/…).
+
+Si la pantalla nueva no se registra, funcionará normal pero **no aparecerá** en
+el buscador. Esto es parte del checklist de "agregar una pantalla nueva".
 
 ## Extensiones futuras (v2)
 
