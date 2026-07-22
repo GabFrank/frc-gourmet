@@ -24,19 +24,18 @@ además hay un producto con "camila", sale en Productos.
 Dos dominios de búsqueda independientes:
 
 1. **Menús y Configuraciones — 100% en el cliente.** Se filtran desde el
-   **registro de menús** `src/app/services/menu-registry.ts` (`MENU_ENTRIES`),
-   respetando permisos con `PermissionService.has(permiso)`. Latencia cero.
-   Al elegir una entrada se abre su tab (`TabsService.openTab`) o, si es un
-   **diálogo-destino** (`openMode: 'dialog'`), se abre con `MatDialog`.
+   **árbol de menú** `src/app/services/menu-tree.ts` (`MENU_TREE`) — la **fuente
+   única** que comparten el sidenav y el buscador. `MenuService.getBuscables()`
+   aplana las hojas indexables (`enBuscador !== false`) y el buscador filtra por
+   permiso con `PermissionService.has(permiso)`. Latencia cero. Al elegir una
+   entrada se abre su tab (`TabsService.openTab`) o, si es un **diálogo-destino**
+   (`action.mode: 'dialog'`), se abre con `MatDialog`.
 
-   El registro tiene **dos partes**:
-   - **Sidenav** (generado desde `app.component.ts/html`): los ~62 ítems del menú.
-   - **Extras curados**: pantallas navegables fuera del sidenav (sub-listados
-     como Gastos, Categorías de Gasto, Cuentas Bancarias, Cheques, Entradas
-     Varias, Operaciones Financieras, Retiros, etc.), 2 acciones de creación
-     (Crear producto / Crear receta) y algunos **diálogos-lanzadores** de config
-     (Monedas, PdV, Atajos). Los diálogos **contextuales** (edit/create/confirm/
-     selector/detalle/…) NO se incluyen.
+   Cada hoja del árbol declara con booleanos dónde aparece: `enSidenav` (menú
+   lateral) y `enBuscador` (buscador). Así hay pantallas que solo viven en el
+   buscador (ej. acciones *Crear producto* / *Crear receta*, con
+   `enSidenav: false`) y otras en ambos. Los diálogos **contextuales**
+   (edit/create/confirm/selector/detalle/…) NO se incluyen.
 
 2. **Entidades — un solo handler backend.** `buscar-global(termino)`
    (`electron/handlers/busqueda-global.handler.ts`) corre en **una sola
@@ -65,21 +64,23 @@ input auto-focus, resultados agrupados, navegación por teclado (**↑ ↓** mov
 
 **Cada vez que se agrega una pantalla navegable nueva** — un menú del sidenav, o
 una sub-pantalla que se abre con `openTab(...)` desde otro componente, o un
-diálogo-destino — se **debe** agregar la entrada en `MENU_ENTRIES`
-(`src/app/services/menu-registry.ts`) para que el buscador la encuentre. Para
-tabs la entrada lleva:
+diálogo-destino — se **debe** agregar su hoja en el árbol único `MENU_TREE`
+(`src/app/services/menu-tree.ts`). Al hacerlo queda disponible en el **sidenav
+y el buscador a la vez**. Una hoja lleva:
 
 ```ts
 {
-  id, label, keywords: ['sinónimos','en','español'], icon, group,
-  esConfig,           // true si es pantalla de configuración/catálogo base
-  permiso,            // el mismo *appHasPermission del item del sidenav
-  title, component, tabId, data,  // EXACTOS del openTab(...) correspondiente
+  id, label, icon, keywords: ['sinónimos','en','español'],
+  permiso,             // el mismo *appHasPermission del item
+  esConfig,            // true → sección "Configuraciones" del buscador
+  enSidenav,           // default true; false = solo buscador (ej. "Crear …")
+  enBuscador,          // default true; false = solo sidenav
+  action: { component, title, tabId, data },  // EXACTOS del openTab(...)
 }
 ```
 
-Para un **diálogo-destino** se agrega además `openMode: 'dialog'` y `dialogConfig`
-(el `component` es el del diálogo). No registrar diálogos contextuales
+Para un **diálogo-destino** el `action` lleva `mode: 'dialog'`, `component` (el
+del diálogo) y `dialogConfig`. No registrar diálogos contextuales
 (edit/create/confirm/selector/detalle/…).
 
 Si la pantalla nueva no se registra, funcionará normal pero **no aparecerá** en

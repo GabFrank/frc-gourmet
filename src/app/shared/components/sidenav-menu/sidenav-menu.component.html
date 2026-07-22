@@ -1,0 +1,46 @@
+<ng-container *ngFor="let node of nodes; trackBy: trackByNode">
+  <!-- ── HOJA (destino) ── -->
+  <ng-container *ngIf="esHoja(node); else rama">
+    <!-- Hoja de nivel superior (ej: Dashboard): estilo item principal -->
+    <a *ngIf="level === 0" mat-list-item class="nav-list-item" (click)="onActivate(node)">
+      <div class="menu-item-content" [ngClass]="{ 'centered': !isMenuExpanded }">
+        <mat-icon class="nav-icon"
+                  [matBadge]="badgeValue(node)" matBadgeColor="warn" matBadgeSize="small">{{ node.icon }}</mat-icon>
+        <span class="nav-title" *ngIf="isMenuExpanded">{{ node.label }}</span>
+      </div>
+    </a>
+    <!-- Hoja anidada -->
+    <a *ngIf="level > 0" mat-list-item (click)="onActivate(node)">
+      <mat-icon matListItemIcon
+                [matBadge]="badgeValue(node)" matBadgeColor="warn" matBadgeSize="small">{{ node.icon }}</mat-icon>
+      <span matListItemTitle *ngIf="isMenuExpanded">{{ node.label }}</span>
+    </a>
+  </ng-container>
+
+  <!-- ── RAMA (grupo) ── -->
+  <ng-template #rama>
+    <mat-expansion-panel class="mat-elevation-z0 nav-expansion-panel"
+                         [class.nav-subpanel]="level > 0"
+                         [expanded]="isExpanded(node)"
+                         [hideToggle]="!isMenuExpanded">
+      <mat-expansion-panel-header class="nav-panel-header" (click)="onHeaderClick($event, node)">
+        <mat-panel-title>
+          <div class="menu-item-content" [ngClass]="{ 'centered': !isMenuExpanded }">
+            <mat-icon [class.nav-icon]="level === 0" [class.nav-subicon]="level > 0">{{ node.icon }}</mat-icon>
+            <span class="nav-title" *ngIf="isMenuExpanded">{{ node.label }}</span>
+          </div>
+        </mat-panel-title>
+      </mat-expansion-panel-header>
+      <div class="submenu-container">
+        <app-sidenav-menu [nodes]="node.children || []"
+                          [isMenuExpanded]="isMenuExpanded"
+                          [level]="level + 1"
+                          [badges]="badges"
+                          [expandedIds]="expandedIds"
+                          (activate)="activate.emit($event)"
+                          (requestExpand)="requestExpand.emit()">
+        </app-sidenav-menu>
+      </div>
+    </mat-expansion-panel>
+  </ng-template>
+</ng-container>

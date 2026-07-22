@@ -13,7 +13,7 @@ Pasos:
 6. Métodos en `RepositoryService` (abstract + impl IPC/HTTP — ver paso 6).
 7. Componentes Angular standalone (`list-*`, `create-edit-*`).
 8. Tab opener en `app.component.ts` + item de menú con `*appHasPermission`.
-9. **Registrar el menú en el buscador global** (`MENU_ENTRIES` en `src/app/services/menu-registry.ts`) — obligatorio, si no el menú no es encontrable con Ctrl+Espacio. Ver [../domains/buscador-global.md](../domains/buscador-global.md).
+9. **Agregar la hoja al árbol de menú único** (`MENU_TREE` en `src/app/services/menu-tree.ts`) — obligatorio: alimenta el sidenav Y el buscador. Elegí `enSidenav`/`enBuscador` según dónde deba verse. Si no se agrega, la pantalla no aparece ni en el menú ni con Ctrl+Espacio. Ver [../domains/buscador-global.md](../domains/buscador-global.md).
 
 ## 1. Entity (TypeORM)
 

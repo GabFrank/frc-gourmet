@@ -13,7 +13,8 @@ import { Subscription } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { PermissionService } from 'src/app/services/permission.service';
 import { TabsService } from 'src/app/services/tabs.service';
-import { MENU_ENTRIES, MenuEntry } from 'src/app/services/menu-registry';
+import { MenuService } from 'src/app/services/menu.service';
+import { MenuLeaf } from 'src/app/services/menu-tree';
 
 import { ListClientesComponent } from 'src/app/pages/personas/clientes/list-clientes.component';
 import { ListProductosComponent } from 'src/app/pages/productos/list-productos/list-productos.component';
@@ -26,7 +27,7 @@ interface ResultadoItem {
   titulo: string;
   subtitulo?: string;
   icono: string;
-  entry?: MenuEntry;      // si tipo=MENU
+  entry?: MenuLeaf;       // si tipo=MENU
   id?: number;            // si tipo=ENTIDAD
 }
 interface Seccion {
@@ -72,15 +73,19 @@ export class BuscadorGlobalDialogComponent implements OnInit {
   private sub?: Subscription;
   private reqId = 0;
 
+  private buscables: MenuLeaf[] = [];
+
   constructor(
     private repositoryService: RepositoryService,
     private permissionService: PermissionService,
     private tabsService: TabsService,
+    private menuService: MenuService,
     private matDialog: MatDialog,
     private dialogRef: MatDialogRef<BuscadorGlobalDialogComponent>,
   ) {}
 
   ngOnInit(): void {
+    this.buscables = this.menuService.getBuscables();
     this.sub = this.control.valueChanges
       .pipe(debounceTime(280), distinctUntilChanged())
       .subscribe((v) => this.buscar(v || ''));
@@ -106,7 +111,7 @@ export class BuscadorGlobalDialogComponent implements OnInit {
     // "categoria de gasto" matchea "Categorías de Gasto" (independiente del
     // orden y tolerante a plural/singular por substring de cada token).
     const tokens = q.split(/\s+/).filter(Boolean);
-    const menuMatches = MENU_ENTRIES.filter((e) => {
+    const menuMatches = this.buscables.filter((e) => {
       if (e.permiso && !this.permissionService.has(e.permiso)) return false;
       const hay = norm(e.label + ' ' + (e.keywords || []).join(' ') + ' ' + (e.group || ''));
       return tokens.every((t) => hay.includes(t));
@@ -114,7 +119,7 @@ export class BuscadorGlobalDialogComponent implements OnInit {
     const menus = menuMatches.filter((e) => !e.esConfig).slice(0, 8);
     const configs = menuMatches.filter((e) => e.esConfig).slice(0, 8);
 
-    const menuSeccion = (key: string, titulo: string, entries: MenuEntry[]): Seccion => ({
+    const menuSeccion = (key: string, titulo: string, entries: MenuLeaf[]): Seccion => ({
       key, titulo,
       items: entries.map((e) => ({
         tipo: 'MENU' as const, seccionKey: key, titulo: e.label,
@@ -209,14 +214,14 @@ export class BuscadorGlobalDialogComponent implements OnInit {
 
   activar(item: ResultadoItem): void {
     if (item.tipo === 'MENU' && item.entry) {
-      const e = item.entry;
-      if (e.openMode === 'dialog') {
+      const a = item.entry.action;
+      if (a.mode === 'dialog') {
         // Lanzador de diálogo: cerramos el buscador y abrimos el diálogo destino.
         this.dialogRef.close();
-        this.matDialog.open(e.component, { ...(e.dialogConfig || {}), data: e.data || {} });
+        this.matDialog.open(a.component, { ...(a.dialogConfig || {}), data: a.data || {} });
         return;
       }
-      this.tabsService.openTab(e.title, e.component, e.data || {}, e.tabId, true);
+      this.tabsService.openTab(a.title, a.component, a.data || {}, a.tabId, true);
     } else if (item.tipo === 'ENTIDAD') {
       const nav = ENTIDAD_NAV[item.seccionKey];
       if (nav) {

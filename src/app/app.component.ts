@@ -109,6 +109,10 @@ import { resolveAppUrl } from './shared/utils/image-url.util';
 import { HasPermissionDirective, HasAnyPermissionDirective } from './shared/directives/has-permission.directive';
 import { SplashOverlayComponent } from './shared/components/splash-overlay/splash-overlay.component';
 import { UserAvatarComponent } from './shared/components/user-avatar/user-avatar.component';
+import { SidenavMenuComponent } from './shared/components/sidenav-menu/sidenav-menu.component';
+import { MenuService } from './services/menu.service';
+import { PermissionService } from './services/permission.service';
+import { MenuNode } from './services/menu-tree';
 
 @Component({
   selector: 'app-root',
@@ -136,6 +140,7 @@ import { UserAvatarComponent } from './shared/components/user-avatar/user-avatar
     HasAnyPermissionDirective,
     SplashOverlayComponent,
     UserAvatarComponent,
+    SidenavMenuComponent,
   ],
 })
 export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
@@ -146,6 +151,11 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   // Track which menu section is expanded
   expandedMenu: string | null = null;
   firsTime = true;
+
+  /** Árbol del sidenav (fuente única: menu-tree.ts), filtrado por permisos. */
+  menuNodes: MenuNode[] = [];
+  /** Estado de expansión compartido del árbol recursivo (por id de nodo). */
+  menuExpandedIds = new Set<string>();
 
   // Authentication state
   isAuthenticated = false;
@@ -221,10 +231,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     private repo: RepositoryService,
     private updateService: UpdateService,
     private empresaService: EmpresaService,
+    private menuService: MenuService,
+    private permissionService: PermissionService,
     // E2.4: solo inyectar para arrancar el listener global de eventos de
     // impresora — el servicio se auto-suscribe en su constructor.
     private _printerEvents: PrinterEventsService,
   ) {
+    // Reconstruir el árbol del sidenav cuando cambian los permisos del usuario
+    // (login/logout/refresh). La fuente única es menu-tree.ts.
+    this.permissionService.codigos$.subscribe(() => {
+      this.menuNodes = this.menuService.getSidenavTree();
+    });
     // Suscribirse al servicio de empresa para mantener el nombre + logo del
     // toolbar sincronizados con cualquier update (login, guardar en
     // configurar-empresa, subir/quitar logo).
@@ -598,6 +615,26 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   // Check if a menu section is expanded
   isMenuSectionExpanded(section: string): boolean {
     return this.expandedMenu === section;
+  }
+
+  /** Abrir el sidenav cuando el árbol recursivo lo pide (click en modo mini). */
+  onSidenavRequestExpand(): void {
+    this.isMenuExpanded = true;
+  }
+
+  /**
+   * Despacho genérico de una hoja del árbol de menú: abre su tab o su diálogo
+   * según `action.mode`. Reemplaza a los ~60 métodos openXTab() del sidenav.
+   */
+  activarNodo(node: MenuNode): void {
+    const action = node.action;
+    if (!action) return;
+    if (action.mode === 'dialog') {
+      this.dialog.open(action.component, { ...(action.dialogConfig || {}), data: action.data || {} });
+    } else {
+      this.tabsService.openTab(action.title, action.component, action.data || {}, action.tabId, true);
+    }
+    this.closeMenu();
   }
 
   toggleTheme(): void {

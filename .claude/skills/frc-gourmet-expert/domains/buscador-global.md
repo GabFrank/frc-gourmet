@@ -10,20 +10,24 @@ Abre un diálogo con input y resultados **agrupados por sección**.
 
 | Sección | Origen | Permiso |
 |---|---|---|
-| Menús y submenús | Cliente — registro de menús | el `permiso` de la entrada |
+| Menús y submenús | Cliente — árbol de menú | el `permiso` de la hoja |
 | Productos | Backend `buscar-global` | `PRODUCTOS_VER` |
 | Clientes | Backend `buscar-global` | `CLIENTES_VER` |
 | Funcionarios | Backend `buscar-global` | `RRHH_FUNCIONARIO_VER` |
 | Proveedores | Backend `buscar-global` | `PROVEEDORES_VER` |
-| Configuraciones | Cliente — registro (`esConfig=true`) | el `permiso` de la entrada |
+| Configuraciones | Cliente — árbol (`esConfig=true`) | el `permiso` de la hoja |
 
 Una persona aparece en **cada** sección que le aplique (clienta Y funcionaria, etc.).
 
 ## Piezas
 
-- **Registro de menús:** `src/app/services/menu-registry.ts` → `MENU_ENTRIES: MenuEntry[]`.
-  Fuente de verdad de los ítems del sidenav para el buscador (metadata + cómo abrir el tab).
-  El sidenav en sí sigue en `app.component.html` (no se refactorizó); el registro es paralelo.
+- **Árbol de menú (fuente única):** `src/app/services/menu-tree.ts` → `MENU_TREE: MenuNode[]`.
+  Un solo árbol que alimenta **el sidenav Y el buscador**. Ramas (`children`, hasta 3
+  niveles) y hojas (`action`). Cada hoja marca `enSidenav`/`enBuscador`. `MenuService`
+  (`src/app/services/menu.service.ts`) resuelve el árbol filtrado por permisos:
+  `getSidenavTree()` para el menú lateral, `getBuscables()` (aplanado) para el buscador.
+  El sidenav se renderiza con el componente recursivo
+  `src/app/shared/components/sidenav-menu/`.
 - **Handler backend:** `electron/handlers/busqueda-global.handler.ts` → canal `buscar-global`.
   Una sola llamada, query acotada por sección (`LIMIT 8`), gating de permisos server-side
   con `getUserPermissionCodes`, ranking prefijo>contiene, búsqueda en UPPERCASE.
@@ -37,8 +41,9 @@ Una persona aparece en **cada** sección que le aplique (clienta Y funcionaria, 
 
 ## ⚠️ Regla dura (SKILL.md #22)
 
-Todo menú nuevo del sidenav DEBE agregarse a `MENU_ENTRIES`, o no será encontrable
-por el buscador. Ver el checklist en `workflows/add-new-entity.md`.
+Toda pantalla navegable nueva DEBE tener su hoja en `MENU_TREE`, o no aparecerá ni en
+el sidenav ni en el buscador. Elegí `enSidenav`/`enBuscador` según dónde deba verse.
+Ver el checklist en `workflows/add-new-entity.md`.
 
 ## Extensiones futuras (v2)
 
