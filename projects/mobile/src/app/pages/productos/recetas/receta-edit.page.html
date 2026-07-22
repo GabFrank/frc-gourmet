@@ -8,6 +8,8 @@
 
   <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
 
+  <!-- Wrapper de scroll: form + secciones scrollean juntos bajo el toolbar fijo. -->
+  <div class="crud-scroll">
   <form class="crud-form" [formGroup]="form" (ngSubmit)="guardarReceta()">
     <mat-form-field appearance="outline">
       <mat-label>Nombre</mat-label>
@@ -147,4 +149,5 @@
   </ng-container>
 
   <p *ngIf="esNuevo" class="re-hint">Guardá la receta para poder agregar ítems y vincular un producto.</p>
+  </div>
 </div>

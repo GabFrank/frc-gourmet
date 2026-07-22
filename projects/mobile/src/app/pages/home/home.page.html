@@ -19,6 +19,22 @@
     <span>Marcar Asistencia</span>
   </a>
 
+  <!-- Acceso directo a cajas mayores abiertas -->
+  <ng-container *ngIf="(cajasMayorAbiertas$ | async) as cajas">
+    <section class="cajas-mayor" *ngIf="cajas.length">
+      <h3 class="section-title">
+        <mat-icon>account_balance</mat-icon>
+        {{ cajas.length === 1 ? 'Caja Mayor abierta' : 'Cajas Mayores abiertas' }}
+      </h3>
+      <a *ngFor="let c of cajas" class="caja-card" [routerLink]="['/financiero/caja-mayor', c.id]">
+        <mat-icon>account_balance_wallet</mat-icon>
+        <span class="caja-nombre">{{ c.nombre }}</span>
+        <span class="caja-estado">Abierta</span>
+        <mat-icon class="caja-chevron">chevron_right</mat-icon>
+      </a>
+    </section>
+  </ng-container>
+
   <section class="quick">
     <a *ngFor="let a of accesos$ | async" class="quick-card" [routerLink]="a.path">
       <mat-icon>{{ a.icon }}</mat-icon>
