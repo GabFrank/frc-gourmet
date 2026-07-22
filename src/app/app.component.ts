@@ -37,6 +37,7 @@ import { HomeComponent } from './pages/home/home.component';
 import { RrhhDashComponent } from './pages/personas/rrhhDash/rrhh-dash.component';
 import { ListUsuariosComponent } from './pages/personas/usuarios/list-usuarios.component';
 import { ListClientesComponent } from './pages/personas/clientes/list-clientes.component';
+import { BuscadorGlobalDialogComponent } from './shared/components/buscador-global-dialog/buscador-global-dialog.component';
 import { ListPedidosOnlineComponent } from './pages/ventas/pedidos-online/list-pedidos-online.component';
 import { TiendaOnlineConfigComponent } from './pages/ventas/pedidos-online/tienda-online-config.component';
 import { ZonasDeliveryComponent } from './pages/ventas/pedidos-online/zonas-delivery.component';
@@ -510,6 +511,32 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // Listen for clicks on the document
+  private buscadorAbierto = false;
+
+  /** Abre el buscador global (paleta). Atajo: Ctrl+Espacio. */
+  abrirBuscador(): void {
+    if (this.buscadorAbierto) return;
+    this.buscadorAbierto = true;
+    const ref = this.dialog.open(BuscadorGlobalDialogComponent, {
+      width: '640px',
+      maxWidth: '95vw',
+      panelClass: 'buscador-global-panel',
+      position: { top: '10vh' },
+      autoFocus: false,
+      restoreFocus: false,
+    });
+    ref.afterClosed().subscribe(() => { this.buscadorAbierto = false; });
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  onBuscadorShortcut(event: KeyboardEvent): void {
+    // Ctrl+Espacio abre el buscador global desde cualquier lado.
+    if (event.ctrlKey && (event.code === 'Space' || event.key === ' ')) {
+      event.preventDefault();
+      this.abrirBuscador();
+    }
+  }
+
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent) {
     // Only process when menu is expanded

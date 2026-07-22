@@ -69,6 +69,12 @@
     </button>
     -->
 
+    <!-- Buscador global (Ctrl+Espacio) -->
+    <button mat-icon-button class="no-drag buscador-btn" (click)="abrirBuscador()"
+            matTooltip="Buscar (Ctrl+Espacio)" aria-label="Buscar">
+      <mat-icon>search</mat-icon>
+    </button>
+
     <!-- Usuario activo: nombre + dropdown con tema, actualizaciones, perfil y logout -->
     <button mat-button [matMenuTriggerFor]="userMenu" class="user-button">
       <app-user-avatar

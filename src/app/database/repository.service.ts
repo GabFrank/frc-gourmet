@@ -678,6 +678,7 @@ export abstract class RepositoryService {
   abstract anularEgresoCaja(egresoId: number, motivo?: string): Observable<any>;
   abstract getEgresosCaja(cajaId: number, incluirAnulados?: boolean): Observable<any[]>;
   abstract getValesPendientesFuncionario(funcionarioId: number): Observable<any[]>;
+  abstract buscarGlobal(termino: string): Observable<any>;
   abstract editCajaMayorMovimiento(movId: number, data: any): Observable<any>;
   abstract getGastosProgramados(): Observable<any[]>;
   abstract getRetirosCaja(filtros?: any): Observable<any[]>;

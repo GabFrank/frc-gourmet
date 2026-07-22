@@ -1615,6 +1615,9 @@ export class RepositoryHttpService extends RepositoryService {
   getValesPendientesFuncionario(funcionarioId: number): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getValesPendientesFuncionario() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  buscarGlobal(termino: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.buscarGlobal() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   editCajaMayorMovimiento(movId: number, data: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.editCajaMayorMovimiento() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
