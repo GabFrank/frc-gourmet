@@ -717,6 +717,8 @@ interface ElectronAPI {
   getEgresosCaja: (cajaId: number, incluirAnulados?: boolean) => Promise<any[]>;
   getValesPendientesFuncionario: (funcionarioId: number) => Promise<any[]>;
   buscarGlobal: (termino: string) => Promise<any>;
+  getMenuConfig: () => Promise<any[]>;
+  saveMenuConfig: (items: any[]) => Promise<any>;
   editCajaMayorMovimiento: (movId: number, data: any) => Promise<any>;
   getGastosProgramados: () => Promise<any[]>;
   getRetirosCaja: (filtros?: any) => Promise<any[]>;
@@ -3233,6 +3235,12 @@ export class RepositoryIpcService extends RepositoryService {
   }
   buscarGlobal(termino: string): Observable<any> {
     return from(this.api.buscarGlobal(termino));
+  }
+  getMenuConfig(): Observable<any[]> {
+    return from(this.api.getMenuConfig());
+  }
+  saveMenuConfig(items: any[]): Observable<any> {
+    return from(this.api.saveMenuConfig(items));
   }
   editGasto(gastoId: number, data: any): Observable<any> {
     return from(this.api.editGasto(gastoId, data));

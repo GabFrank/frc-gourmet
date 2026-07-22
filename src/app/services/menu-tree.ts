@@ -83,6 +83,7 @@ import { GestionarProductoComponent } from 'src/app/pages/productos/gestionar-pr
 import { GestionRecetasComponent } from 'src/app/pages/gestion-recetas/gestion-recetas.component';
 
 // ── Diálogos-destino ──
+import { MenuConfigComponent } from 'src/app/pages/sistema/menu-config/menu-config.component';
 import { ConfigMonedasDialogComponent } from 'src/app/pages/financiero/monedas/config-monedas/config-monedas-dialog.component';
 import { PdvConfigDialogComponent } from 'src/app/shared/components/pdv-config-dialog/pdv-config-dialog.component';
 import { AtajoConfigDialogComponent } from 'src/app/shared/components/atajo-config-dialog/atajo-config-dialog.component';
@@ -111,7 +112,7 @@ import { SectoresImpresorasSettingsComponent } from 'src/app/components/sectores
 // Tipos y helpers puros viven en menu-tree-utils.ts (sin imports de componentes)
 // para poder testearlos en Node. Se re-exportan acá para compatibilidad.
 export {
-  MenuAction, MenuNode, MenuLeaf,
+  MenuAction, MenuNode, MenuLeaf, MenuOverride, OverrideMap,
   esHoja, buildSidenavTree, flattenBuscables,
 } from 'src/app/services/menu-tree-utils';
 import { MenuNode } from 'src/app/services/menu-tree-utils';
@@ -494,6 +495,9 @@ export const MENU_TREE: MenuNode[] = [
       { id: 'mode-config', label: 'Modo de operación', icon: 'hub', permiso: 'SISTEMA_MODO_CONFIGURAR', esConfig: true,
         keywords: ['modo', 'operacion', 'standalone', 'server', 'client'],
         action: { component: ModeConfigComponent, title: 'Modo de operacion', tabId: 'mode-config-tab', data: NAV } },
+      { id: 'menu-config', label: 'Configuración del menú', icon: 'menu_open', permiso: 'SISTEMA_MENU_CONFIGURAR', esConfig: true,
+        keywords: ['menu', 'sidenav', 'buscador', 'navegacion', 'visibilidad', 'orden'],
+        action: { component: MenuConfigComponent, title: 'Configuración del menú', tabId: 'menu-config-tab', data: NAV } },
     ],
   },
 ];

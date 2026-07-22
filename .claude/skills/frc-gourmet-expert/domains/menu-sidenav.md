@@ -16,8 +16,9 @@ para el buscador — se eliminó el registry.)
     `action: { mode?: 'tab'|'dialog', component, title, tabId?, data?, dialogConfig? }`.
   - Helpers puros exportados: `buildSidenavTree(nodes, has)`, `flattenBuscables(nodes)`, `esHoja(n)`.
 - **Servicio:** `src/app/services/menu.service.ts` → `MenuService`.
-  - `getSidenavTree()`: filtra permiso + `enSidenav`, poda ramas vacías.
+  - `getSidenavTree()`: filtra permiso + `enSidenav`, ordena por `orden`, poda ramas vacías.
   - `getBuscables()`: aplana hojas con `enBuscador !== false` (el buscador filtra permiso al tipear).
+  - `loadOverrides()` / `saveOverrides()` / `changes$`: overrides del ADMIN (ver abajo).
 - **Render recursivo:** `src/app/shared/components/sidenav-menu/` (`SidenavMenuComponent`,
   standalone, se auto-referencia para anidar). Ramas → `mat-expansion-panel`;
   hojas → `mat-list-item`. Estado de expansión propio por `id` (Set compartido).
@@ -26,6 +27,24 @@ para el buscador — se eliminó el registry.)
   `PermissionService.codigos$`) y despacha con `activarNodo(node)` (openTab /
   dialog según `action.mode`). Los ~60 métodos `openXTab()` viejos quedaron como
   fallback pero el sidenav ya no los usa.
+
+## Configurable por el ADMIN (overrides)
+
+*Configuración → Configuración del menú* (`MenuConfigComponent`, permiso
+`SISTEMA_MENU_CONFIGURAR`) deja al ADMIN ocultar/mostrar por sidenav y buscador y
+fijar orden, **sin código**.
+
+- Entidad `MenuConfig` (`menu_config`, dominio `sistema`): 1 fila por `nodeId`,
+  columnas `en_sidenav` / `en_buscador` / `orden` nullable (`null` = default del
+  árbol). Migración `1784756065888-AddMenuConfig`.
+- Handlers `menu-config.handler.ts`: `get-menu-config` (lectura, sin permiso),
+  `save-menu-config` (bulk upsert, `ensurePermission('SISTEMA_MENU_CONFIGURAR')`,
+  borra filas que vuelven al default). Registrado en `main.ts`. Preload
+  `getMenuConfig`/`saveMenuConfig` + 3 capas de repository (http = defaults).
+- `MenuService` cachea overrides (`loadOverrides()` en login y tras guardar) y
+  los pasa a `buildSidenavTree`/`flattenBuscables` como `OverrideMap`. El
+  override gana sobre el default; `orden` explícito ordena por encima del índice.
+- El leaf `menu-config` está en el grupo *Configuración* de `MENU_TREE`.
 
 ## Estructura (nivel 1)
 
@@ -45,8 +64,8 @@ verse. No inventar ítems para pantallas inexistentes.
 
 ## Pendiente (serie de PRs)
 
-- **PR 2:** overrides persistidos configurables por el ADMIN (visibilidad/orden
-  por `id`) + UI en Sistema; `MenuService` los aplicará sobre el árbol base.
 - **PR 3:** consolidar dashboard Financiero + Caja Mayor.
 - **No inventados** (aparecen en los prints de RRHH pero no existen aún): *Manual
   de uso*, *Solicitudes de funcionarios*, *Tipos de justificativo*.
+
+_Hecho: PR 1 (árbol único + sidenav 3 niveles), PR 2 (configurable por el ADMIN)._

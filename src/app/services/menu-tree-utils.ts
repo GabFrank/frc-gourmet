@@ -45,26 +45,63 @@ export interface MenuNode {
   action?: MenuAction;
 }
 
+/** Override del ADMIN por id de nodo (persistido en menu_config). */
+export interface MenuOverride {
+  enSidenav?: boolean | null;
+  enBuscador?: boolean | null;
+  orden?: number | null;
+}
+/** Mapa id → override. */
+export type OverrideMap = { [id: string]: MenuOverride };
+
 /** Es hoja si tiene action y no children. */
 export function esHoja(n: MenuNode): boolean {
   return !!n.action && !(n.children && n.children.length);
 }
 
+/** Valor efectivo de un booleano: el override gana si está definido. */
+function effBool(base: boolean, o: boolean | null | undefined): boolean {
+  return o === true || o === false ? o : base;
+}
+
 /**
- * Árbol para el sidenav: filtra por permiso + enSidenav, poda ramas vacías.
- * `has` = PermissionService.has.
+ * Ordena una lista de nodos aplicando `orden` del override (si existe). Los
+ * nodos con `orden` explícito usan ese valor; los demás, su índice natural. En
+ * empate, gana el override explícito (así `orden:0` sube por encima del ítem
+ * que estaba naturalmente primero).
+ */
+function ordenar(nodes: MenuNode[], ov?: OverrideMap): MenuNode[] {
+  return nodes
+    .map((n, i) => ({ n, i, o: ov?.[n.id]?.orden }))
+    .sort((a, b) => {
+      const ta = a.o === null || a.o === undefined;
+      const tb = b.o === null || b.o === undefined;
+      const oa = ta ? a.i : (a.o as number);
+      const ob = tb ? b.i : (b.o as number);
+      if (oa !== ob) return oa - ob;
+      if (ta !== tb) return ta ? 1 : -1; // override explícito primero
+      return a.i - b.i;
+    })
+    .map((x) => x.n);
+}
+
+/**
+ * Árbol para el sidenav: filtra por permiso + enSidenav (con override), ordena
+ * por `orden` (override) y poda ramas vacías.
+ * `has` = PermissionService.has. `ov` = overrides del ADMIN (opcional).
  */
 export function buildSidenavTree(
   nodes: MenuNode[],
   has: (p: string) => boolean,
+  ov?: OverrideMap,
 ): MenuNode[] {
   const out: MenuNode[] = [];
-  for (const n of nodes) {
-    if (n.enSidenav === false) continue;
+  for (const n of ordenar(nodes, ov)) {
+    if (!effBool(n.enSidenav !== false, ov?.[n.id]?.enSidenav)) continue;
     if (esHoja(n)) {
       if (!n.permiso || has(n.permiso)) out.push(n);
     } else {
-      const children = buildSidenavTree(n.children || [], has);
+      const children = buildSidenavTree(n.children || [], has, ov);
       if (children.length) out.push({ ...n, children });
     }
   }
@@ -88,11 +125,11 @@ export interface MenuLeaf {
  * grupo raíz como contexto. No filtra por permiso: eso lo hace el buscador con
  * PermissionService (igual que hoy).
  */
-export function flattenBuscables(nodes: MenuNode[], groupLabel = ''): MenuLeaf[] {
+export function flattenBuscables(nodes: MenuNode[], groupLabel = '', ov?: OverrideMap): MenuLeaf[] {
   const out: MenuLeaf[] = [];
   for (const n of nodes) {
     if (esHoja(n)) {
-      if (n.enBuscador === false) continue;
+      if (!effBool(n.enBuscador !== false, ov?.[n.id]?.enBuscador)) continue;
       out.push({
         id: n.id,
         label: n.label,
@@ -105,7 +142,7 @@ export function flattenBuscables(nodes: MenuNode[], groupLabel = ''): MenuLeaf[]
       });
     } else {
       // El grupo de nivel superior define el contexto; niveles internos lo heredan.
-      out.push(...flattenBuscables(n.children || [], groupLabel || n.label));
+      out.push(...flattenBuscables(n.children || [], groupLabel || n.label, ov));
     }
   }
   return out;

@@ -13,7 +13,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-  MenuNode, esHoja, buildSidenavTree, flattenBuscables,
+  MenuNode, OverrideMap, esHoja, buildSidenavTree, flattenBuscables,
 } from '../src/app/services/menu-tree-utils';
 
 let fallos = 0;
@@ -90,7 +90,32 @@ check('buscables NO incluye ramas (g-fin)', !idsBusc.has('g-fin'));
 const gastos = buscables.find((b) => b.id === 'gastos');
 check('buscables hereda el grupo raíz como contexto (gastos → Financiero)', gastos?.group === 'Financiero');
 
-console.log('\nParte B — invariantes del árbol real (menu-tree.ts)');
+console.log('\nParte B — overrides del ADMIN');
+
+// Override: ocultar "home" del sidenav, ocultar "gastos" del buscador,
+// y reordenar "retiros" antes que "gastos".
+const ov: OverrideMap = {
+  home: { enSidenav: false },
+  gastos: { enBuscador: false },
+  retiros: { orden: 0 },
+};
+const sidenavOv = buildSidenavTree(FIXTURE, has, ov);
+const idsSidenavOv = new Set<string>();
+(function walk(ns: MenuNode[]) { ns.forEach((n) => { idsSidenavOv.add(n.id); walk(n.children || []); }); })(sidenavOv);
+check('override enSidenav:false oculta home del sidenav', !idsSidenavOv.has('home'));
+
+// Orden dentro de Caja Mayor: retiros (orden 0) debe ir antes que gastos.
+const cm = sidenavOv.find((n) => n.id === 'g-fin')?.children?.find((n) => n.id === 'g-cm');
+const orden = (cm?.children || []).map((c) => c.id);
+check('override orden reordena (retiros antes que gastos)', orden.indexOf('retiros') < orden.indexOf('gastos'));
+
+const buscablesOv = flattenBuscables(FIXTURE, '', ov);
+const idsBuscOv = new Set(buscablesOv.map((b) => b.id));
+check('override enBuscador:false oculta gastos del buscador', !idsBuscOv.has('gastos'));
+check('override no afecta a otras hojas del buscador (retiros sigue)', idsBuscOv.has('retiros'));
+check('override enSidenav no afecta al buscador (home sigue buscable)', idsBuscOv.has('home'));
+
+console.log('\nParte C — invariantes del árbol real (menu-tree.ts)');
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'app', 'services', 'menu-tree.ts'), 'utf8');
 // Extraer todos los `id: '...'` dentro de MENU_TREE.
 const ids = Array.from(src.matchAll(/\bid:\s*'([^']+)'/g)).map((m) => m[1]);

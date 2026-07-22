@@ -41,14 +41,39 @@ interface MenuAction {
 
 ## Cómo se resuelve
 
-`MenuService` (`src/app/services/menu.service.ts`) aplica los permisos del
-usuario actual sobre el árbol base:
+`MenuService` (`src/app/services/menu.service.ts`) aplica sobre el árbol base
+(1) los permisos del usuario actual y (2) los **overrides del ADMIN**
+(visibilidad/orden por id, ver más abajo):
 
-- **`getSidenavTree()`** — filtra por `permiso` + `enSidenav` y poda ramas sin
-  hojas visibles. Lo consume `app.component` (`menuNodes`), que se recalcula al
-  emitir `PermissionService.codigos$` (login/logout/refresh).
-- **`getBuscables()`** — aplana las hojas con `enBuscador !== false`. Lo consume
-  el buscador global, que además filtra por permiso al tipear.
+- **`getSidenavTree()`** — filtra por `permiso` + `enSidenav` (con override),
+  ordena por `orden` (override) y poda ramas sin hojas visibles. Lo consume
+  `app.component` (`menuNodes`), que se recalcula al emitir
+  `PermissionService.codigos$` (login/logout/refresh) o `MenuService.changes$`
+  (cuando cambian los overrides).
+- **`getBuscables()`** — aplana las hojas con `enBuscador !== false` (con
+  override). Lo consume el buscador global, que además filtra por permiso al
+  tipear.
+
+## Configurable por el ADMIN
+
+El ADMIN puede sobreescribir por nodo — **sin tocar código** — desde
+*Configuración → Configuración del menú* (`MenuConfigComponent`, permiso
+`SISTEMA_MENU_CONFIGURAR`): ocultar/mostrar en sidenav, ocultar/mostrar en
+buscador y fijar el orden. El árbol (`MENU_TREE`) sigue siendo la fuente de la
+estructura; los overrides solo guardan diferencias.
+
+- **Persistencia:** entidad `MenuConfig` (`menu_config`), una fila por `nodeId`,
+  columnas nullable (`null` = usar default del árbol). Handlers
+  `get-menu-config` (lectura, sin permiso) y `save-menu-config` (bulk upsert,
+  `ensurePermission('SISTEMA_MENU_CONFIGURAR')`, borra las filas que vuelven al
+  default). Capas: `preload` (`getMenuConfig`/`saveMenuConfig`) →
+  `RepositoryService` (ipc/http/abstract).
+- **Aplicación:** `MenuService.loadOverrides()` cachea los overrides en el
+  arranque y tras guardar; los helpers puros `buildSidenavTree` /
+  `flattenBuscables` reciben el `OverrideMap` y lo resuelven (el override gana
+  sobre el default; `orden` explícito ordena por encima del índice natural).
+- **Modo cliente:** `getMenuConfig` HTTP aún no implementado → `MenuService`
+  cae a defaults del árbol sin romper.
 
 ## Render del sidenav
 
@@ -94,9 +119,9 @@ Esta es la regla dura #22 de la skill (toda pantalla navegable debe estar en el
 
 ## Pendiente (próximos PRs de esta serie)
 
-- **PR 2 — Configurable por el ADMIN:** capa de overrides persistidos
-  (visibilidad / orden por `id` de nodo) + pantalla de configuración en Sistema.
-  `MenuService` aplicará esos overrides sobre el árbol base.
 - **PR 3 — Consolidación de dashboards:** unificar el dashboard Financiero con
   las secciones operativas de Caja Mayor para tener un único punto de entrada
   financiero intuitivo.
+
+_Hecho: PR 1 (árbol único + sidenav de 3 niveles), PR 2 (configurable por el
+ADMIN — ver "Configurable por el ADMIN" arriba)._

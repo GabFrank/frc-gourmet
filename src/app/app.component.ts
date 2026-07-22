@@ -238,8 +238,11 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     private _printerEvents: PrinterEventsService,
   ) {
     // Reconstruir el árbol del sidenav cuando cambian los permisos del usuario
-    // (login/logout/refresh). La fuente única es menu-tree.ts.
+    // (login/logout/refresh) o los overrides del ADMIN. Fuente única: menu-tree.ts.
     this.permissionService.codigos$.subscribe(() => {
+      this.menuNodes = this.menuService.getSidenavTree();
+    });
+    this.menuService.changes$.subscribe(() => {
       this.menuNodes = this.menuService.getSidenavTree();
     });
     // Suscribirse al servicio de empresa para mantener el nombre + logo del
@@ -264,6 +267,8 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       // context para tracking). Sin user, dejamos el cache previo / fallback.
       if (this.isAuthenticated) {
         this.empresaService.load();
+        // Cargar overrides del menú (config del ADMIN) para armar el sidenav.
+        this.menuService.loadOverrides().subscribe();
       }
 
       // If user is logged in, fetch login history

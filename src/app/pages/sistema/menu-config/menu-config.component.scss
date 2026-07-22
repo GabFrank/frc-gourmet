@@ -1,0 +1,124 @@
+.menu-config-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 12px;
+  padding: 12px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.header-card {
+  flex: 0 0 auto;
+
+  .header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 4px;
+  }
+
+  .subtitle {
+    margin: 0;
+    color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+    font-size: 13px;
+    max-width: 640px;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+}
+
+.tabla-card {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 0;
+}
+
+.tabla {
+  display: flex;
+  flex-direction: column;
+  min-width: 560px;
+}
+
+.fila {
+  display: grid;
+  grid-template-columns: 1fr 110px 110px 110px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+
+  &.cabecera {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    font-weight: 600;
+    background: var(--surface, #fff);
+    color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+  }
+
+  &.es-rama {
+    background: var(--surface-variant, rgba(0, 0, 0, 0.03));
+
+    .fila-label {
+      font-weight: 600;
+    }
+  }
+}
+
+.col-nombre {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+
+  .fila-icon {
+    font-size: 18px;
+    height: 18px;
+    width: 18px;
+    color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+  }
+
+  .fila-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.col-toggle {
+  display: flex;
+  justify-content: center;
+
+  .na {
+    color: var(--text-disabled, rgba(0, 0, 0, 0.38));
+  }
+}
+
+.col-orden {
+  display: flex;
+  justify-content: center;
+
+  .orden-field {
+    width: 90px;
+
+    ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+      display: none;
+    }
+  }
+}
