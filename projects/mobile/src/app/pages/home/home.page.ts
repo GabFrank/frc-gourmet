@@ -5,9 +5,9 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { Observable, firstValueFrom } from 'rxjs';
-import { map, shareReplay } from 'rxjs/operators';
-import { AuthService, PermissionService, Usuario } from '@frc/shared-core';
+import { Observable, firstValueFrom, of } from 'rxjs';
+import { map, shareReplay, switchMap, catchError } from 'rxjs/operators';
+import { AuthService, PermissionService, RepositoryService, Usuario } from '@frc/shared-core';
 import { NAV_ITEMS, NavItem } from '../../core/shell/nav';
 import { PwaInstallService } from '../../core/services/pwa-install.service';
 import { BarcodeScannerDialogComponent } from '../ventas/mesas/barcode-scanner-dialog.component';
@@ -23,6 +23,7 @@ import { BarcodeScannerDialogComponent } from '../ventas/mesas/barcode-scanner-d
 export class HomePage {
   private readonly auth = inject(AuthService);
   private readonly permissions = inject(PermissionService);
+  private readonly repo = inject(RepositoryService);
   private readonly dialog = inject(MatDialog);
   private readonly snack = inject(MatSnackBar);
   private readonly router = inject(Router);
@@ -38,6 +39,25 @@ export class HomePage {
     ),
     shareReplay(1),
   );
+
+  // Acceso directo a las cajas mayores ABIERTAS (una card por caja). Solo si el
+  // usuario puede ver Caja Mayor. Si no hay abiertas, la sección se oculta.
+  readonly cajasMayorAbiertas$: Observable<{ id: number; nombre: string }[]> =
+    this.permissions.codigos$.pipe(
+      switchMap((set) =>
+        set.has('FINANCIERO_CAJA_VER')
+          ? this.repo.getCajasMayor().pipe(
+              map((list: any[]) =>
+                (list || [])
+                  .filter((c) => (c.estado || '').toUpperCase().includes('ABIERT'))
+                  .map((c) => ({ id: c.id, nombre: c.nombre || `Caja Mayor #${c.id}` })),
+              ),
+              catchError(() => of([] as { id: number; nombre: string }[])),
+            )
+          : of([] as { id: number; nombre: string }[]),
+      ),
+      shareReplay(1),
+    );
 
   /**
    * Abre el lector de QR (cámara) para escanear el código mostrado en la PC.

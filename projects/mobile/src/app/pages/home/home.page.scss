@@ -141,3 +141,68 @@
   z-index: 20;
 }
 
+
+/* Acceso directo a cajas mayores abiertas */
+.cajas-mayor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+
+  mat-icon {
+    font-size: 20px;
+    height: 20px;
+    width: 20px;
+    color: var(--text-secondary);
+  }
+}
+
+.caja-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  text-decoration: none;
+  box-shadow: 0 1px 6px var(--shadow-color);
+
+  > mat-icon:first-child {
+    color: var(--primary, #1976d2);
+  }
+
+  .caja-nombre {
+    flex: 1 1 auto;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .caja-estado {
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--success-color, #2e7d32) 15%, transparent);
+    color: var(--success-color, #2e7d32);
+  }
+
+  .caja-chevron {
+    flex: 0 0 auto;
+    color: var(--text-secondary);
+  }
+}

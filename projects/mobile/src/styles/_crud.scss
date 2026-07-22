@@ -143,6 +143,11 @@
 
 .crud-form {
   flex: 1;
+  // min-height:0 es imprescindible en un flex item con overflow: sin esto el
+  // min-height por defecto (auto = alto del contenido) impide que el form se
+  // encoja, el scroll no funciona y los hijos se aplastan/solapan (ej. el
+  // selector de fuente en gastos, o las secciones en recetas).
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -163,5 +168,19 @@
   .crud-save-btn {
     margin-top: 16px;
     height: 48px;
+  }
+}
+
+/* Wrapper de scroll para pantallas crud-edit que además del form muestran
+   secciones extra (ej. receta-edit: Costo, Ítems, Pasos). El wrapper es el
+   único scroll; el form pasa a flujo normal para no crear un scroll anidado. */
+.crud-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+
+  .crud-form {
+    flex: 0 0 auto;
+    overflow: visible;
   }
 }
