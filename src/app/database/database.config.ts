@@ -160,6 +160,7 @@ import { OnboardingTaskOverride } from './entities/personalizacion/onboarding-ta
 
 // Sistema (config global)
 import { Empresa } from './entities/sistema/empresa.entity';
+import { MenuConfig } from './entities/sistema/menu-config.entity';
 
 // Import compras entities
 import { Proveedor } from './entities/compras/proveedor.entity';
@@ -249,6 +250,7 @@ import { AddLiquidacionIdToCpcCuota1784554795703 } from './migrations/1784554795
 import { AddNeteoDeudasLiquidacionFinal1784555556082 } from './migrations/1784555556082-AddNeteoDeudasLiquidacionFinal';
 import { AddSimplificadaToCompra1784652193704 } from './migrations/1784652193704-AddSimplificadaToCompra';
 import { AddEgresoCaja1784664715714 } from './migrations/1784664715714-AddEgresoCaja';
+import { AddMenuConfig1784756065888 } from './migrations/1784756065888-AddMenuConfig';
 import { AddAnuladoToMovimientoCliente1784136362576 } from './migrations/1784136362576-AddAnuladoToMovimientoCliente';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
@@ -464,6 +466,7 @@ function getEntitiesList(): any[] {
       OnboardingTaskOverride,
       // Sistema (config global)
       Empresa,
+      MenuConfig,
       // Productos entities
       Familia,
       Subfamilia,
@@ -632,6 +635,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddNeteoDeudasLiquidacionFinal1784555556082,
     AddSimplificadaToCompra1784652193704,
     AddEgresoCaja1784664715714,
+    AddMenuConfig1784756065888,
   ];
 }
 

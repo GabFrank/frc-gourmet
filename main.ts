@@ -43,6 +43,8 @@ import { registerKdsHandlers } from './electron/handlers/kds.handler';
 import { registerRecetasHandlers } from './electron/handlers/recetas.handler';
 import { registerCajaMayorHandlers } from './electron/handlers/caja-mayor.handler';
 import { registerGastosCajaHandlers } from './electron/handlers/gastos-caja.handler';
+import { registerBusquedaGlobalHandlers } from './electron/handlers/busqueda-global.handler';
+import { registerMenuConfigHandlers } from './electron/handlers/menu-config.handler';
 import { registerPdvEgresosHandlers } from './electron/handlers/pdv-egresos.handler';
 import { registerBankingHandlers, startAcreditacionesScheduler } from './electron/handlers/banking.handler';
 import { registerCuentasPorPagarHandlers } from './electron/handlers/cuentas-por-pagar.handler';
@@ -216,6 +218,8 @@ function initializeDatabase() {
       registerRecetasHandlers(dataSource, getCurrentUser); // Recetas + Sabores + Variaciones (unificado)
       registerCajaMayorHandlers(dataSource, getCurrentUser); // Caja Mayor + Gastos + Retiros
       registerGastosCajaHandlers(dataSource, getCurrentUser); // Gastos de la caja de venta (PdV)
+      registerBusquedaGlobalHandlers(dataSource, getCurrentUser); // Buscador global (menus se buscan en el cliente)
+      registerMenuConfigHandlers(dataSource, getCurrentUser); // Config del menú (overrides del ADMIN sobre menu-tree)
       registerPdvEgresosHandlers(dataSource, getCurrentUser); // Vales/compras pagados desde el cajón (PdV)
       registerBankingHandlers(dataSource, getCurrentUser); // CuentasBancarias + MaquinasPos + Acreditaciones
       registerCuentasPorPagarHandlers(dataSource, getCurrentUser); // CompraCategoria + CompraCuota + CuentaPorPagar

@@ -45,6 +45,7 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   // Permisos sistema
   { codigo: 'SISTEMA_PERMISO_GESTIONAR', descripcion: 'Gestionar permisos y asignación a roles', modulo: 'SISTEMA' },
   { codigo: 'SISTEMA_ROL_GESTIONAR', descripcion: 'Gestionar roles del sistema', modulo: 'SISTEMA' },
+  { codigo: 'SISTEMA_MENU_CONFIGURAR', descripcion: 'Configurar visibilidad y orden del menú lateral', modulo: 'SISTEMA' },
   // Cuentas por Cobrar (Fase 7)
   { codigo: 'CPC_GESTIONAR', descripcion: 'Gestionar cuentas por cobrar (crear/editar)', modulo: 'FINANCIERO' },
   { codigo: 'CPC_COBRAR', descripcion: 'Registrar cobros de cuotas de clientes', modulo: 'FINANCIERO' },

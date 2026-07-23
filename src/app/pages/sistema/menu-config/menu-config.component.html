@@ -1,0 +1,55 @@
+<div class="menu-config-container">
+  <mat-card class="header-card">
+    <div class="header-row">
+      <div class="header-text">
+        <h2><mat-icon>menu_open</mat-icon> Configuración del menú</h2>
+        <p class="subtitle">
+          Controlá qué aparece en el menú lateral y en el buscador global, y el orden.
+          Los cambios aplican a todos los usuarios (respetando sus permisos).
+        </p>
+      </div>
+      <div class="header-actions">
+        <button mat-stroked-button (click)="restaurar()" [disabled]="guardando || cargando">
+          <mat-icon>restart_alt</mat-icon> Restaurar defaults
+        </button>
+        <button mat-flat-button color="primary" (click)="guardar()" [disabled]="guardando || cargando">
+          <mat-icon>save</mat-icon> Guardar
+        </button>
+      </div>
+    </div>
+  </mat-card>
+
+  <mat-progress-bar *ngIf="cargando || guardando" mode="indeterminate"></mat-progress-bar>
+
+  <mat-card class="tabla-card" *ngIf="!cargando">
+    <div class="tabla">
+      <div class="fila cabecera">
+        <div class="col-nombre">Ítem</div>
+        <div class="col-toggle">Sidenav</div>
+        <div class="col-toggle">Buscador</div>
+        <div class="col-orden">Orden</div>
+      </div>
+
+      <div class="fila" *ngFor="let f of filas" [class.es-rama]="f.esRama">
+        <div class="col-nombre" [style.paddingLeft.px]="f.pad">
+          <mat-icon class="fila-icon">{{ f.icon }}</mat-icon>
+          <span class="fila-label">{{ f.label }}</span>
+        </div>
+        <div class="col-toggle">
+          <mat-slide-toggle color="primary" [(ngModel)]="f.enSidenav"
+                            matTooltip="Mostrar en el menú lateral"></mat-slide-toggle>
+        </div>
+        <div class="col-toggle">
+          <mat-slide-toggle *ngIf="!f.esRama" color="primary" [(ngModel)]="f.enBuscador"
+                            matTooltip="Indexar en el buscador global"></mat-slide-toggle>
+          <span *ngIf="f.esRama" class="na">—</span>
+        </div>
+        <div class="col-orden">
+          <mat-form-field appearance="outline" class="orden-field">
+            <input matInput type="number" [(ngModel)]="f.orden" placeholder="auto">
+          </mat-form-field>
+        </div>
+      </div>
+    </div>
+  </mat-card>
+</div>

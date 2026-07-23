@@ -37,6 +37,7 @@ import { HomeComponent } from './pages/home/home.component';
 import { RrhhDashComponent } from './pages/personas/rrhhDash/rrhh-dash.component';
 import { ListUsuariosComponent } from './pages/personas/usuarios/list-usuarios.component';
 import { ListClientesComponent } from './pages/personas/clientes/list-clientes.component';
+import { BuscadorGlobalDialogComponent } from './shared/components/buscador-global-dialog/buscador-global-dialog.component';
 import { ListPedidosOnlineComponent } from './pages/ventas/pedidos-online/list-pedidos-online.component';
 import { TiendaOnlineConfigComponent } from './pages/ventas/pedidos-online/tienda-online-config.component';
 import { ZonasDeliveryComponent } from './pages/ventas/pedidos-online/zonas-delivery.component';
@@ -108,6 +109,10 @@ import { resolveAppUrl } from './shared/utils/image-url.util';
 import { HasPermissionDirective, HasAnyPermissionDirective } from './shared/directives/has-permission.directive';
 import { SplashOverlayComponent } from './shared/components/splash-overlay/splash-overlay.component';
 import { UserAvatarComponent } from './shared/components/user-avatar/user-avatar.component';
+import { SidenavMenuComponent } from './shared/components/sidenav-menu/sidenav-menu.component';
+import { MenuService } from './services/menu.service';
+import { PermissionService } from './services/permission.service';
+import { MenuNode } from './services/menu-tree';
 
 @Component({
   selector: 'app-root',
@@ -135,6 +140,7 @@ import { UserAvatarComponent } from './shared/components/user-avatar/user-avatar
     HasAnyPermissionDirective,
     SplashOverlayComponent,
     UserAvatarComponent,
+    SidenavMenuComponent,
   ],
 })
 export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
@@ -145,6 +151,11 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   // Track which menu section is expanded
   expandedMenu: string | null = null;
   firsTime = true;
+
+  /** Árbol del sidenav (fuente única: menu-tree.ts), filtrado por permisos. */
+  menuNodes: MenuNode[] = [];
+  /** Estado de expansión compartido del árbol recursivo (por id de nodo). */
+  menuExpandedIds = new Set<string>();
 
   // Authentication state
   isAuthenticated = false;
@@ -220,10 +231,20 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     private repo: RepositoryService,
     private updateService: UpdateService,
     private empresaService: EmpresaService,
+    private menuService: MenuService,
+    private permissionService: PermissionService,
     // E2.4: solo inyectar para arrancar el listener global de eventos de
     // impresora — el servicio se auto-suscribe en su constructor.
     private _printerEvents: PrinterEventsService,
   ) {
+    // Reconstruir el árbol del sidenav cuando cambian los permisos del usuario
+    // (login/logout/refresh) o los overrides del ADMIN. Fuente única: menu-tree.ts.
+    this.permissionService.codigos$.subscribe(() => {
+      this.menuNodes = this.menuService.getSidenavTree();
+    });
+    this.menuService.changes$.subscribe(() => {
+      this.menuNodes = this.menuService.getSidenavTree();
+    });
     // Suscribirse al servicio de empresa para mantener el nombre + logo del
     // toolbar sincronizados con cualquier update (login, guardar en
     // configurar-empresa, subir/quitar logo).
@@ -246,6 +267,8 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       // context para tracking). Sin user, dejamos el cache previo / fallback.
       if (this.isAuthenticated) {
         this.empresaService.load();
+        // Cargar overrides del menú (config del ADMIN) para armar el sidenav.
+        this.menuService.loadOverrides().subscribe();
       }
 
       // If user is logged in, fetch login history
@@ -510,6 +533,32 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // Listen for clicks on the document
+  private buscadorAbierto = false;
+
+  /** Abre el buscador global (paleta). Atajo: Ctrl+Espacio. */
+  abrirBuscador(): void {
+    if (this.buscadorAbierto) return;
+    this.buscadorAbierto = true;
+    const ref = this.dialog.open(BuscadorGlobalDialogComponent, {
+      width: '640px',
+      maxWidth: '95vw',
+      panelClass: 'buscador-global-panel',
+      position: { top: '10vh' },
+      autoFocus: false,
+      restoreFocus: false,
+    });
+    ref.afterClosed().subscribe(() => { this.buscadorAbierto = false; });
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  onBuscadorShortcut(event: KeyboardEvent): void {
+    // Ctrl+Espacio abre el buscador global desde cualquier lado.
+    if (event.ctrlKey && (event.code === 'Space' || event.key === ' ')) {
+      event.preventDefault();
+      this.abrirBuscador();
+    }
+  }
+
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent) {
     // Only process when menu is expanded
@@ -571,6 +620,26 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   // Check if a menu section is expanded
   isMenuSectionExpanded(section: string): boolean {
     return this.expandedMenu === section;
+  }
+
+  /** Abrir el sidenav cuando el árbol recursivo lo pide (click en modo mini). */
+  onSidenavRequestExpand(): void {
+    this.isMenuExpanded = true;
+  }
+
+  /**
+   * Despacho genérico de una hoja del árbol de menú: abre su tab o su diálogo
+   * según `action.mode`. Reemplaza a los ~60 métodos openXTab() del sidenav.
+   */
+  activarNodo(node: MenuNode): void {
+    const action = node.action;
+    if (!action) return;
+    if (action.mode === 'dialog') {
+      this.dialog.open(action.component, { ...(action.dialogConfig || {}), data: action.data || {} });
+    } else {
+      this.tabsService.openTab(action.title, action.component, action.data || {}, action.tabId, true);
+    }
+    this.closeMenu();
   }
 
   toggleTheme(): void {
