@@ -10,7 +10,7 @@
       </div>
     </a>
     <!-- Hoja anidada -->
-    <a *ngIf="level > 0" mat-list-item (click)="onActivate(node)">
+    <a *ngIf="level > 0" mat-list-item (click)="onActivate(node)" [title]="node.label">
       <mat-icon matListItemIcon
                 [matBadge]="badgeValue(node)" matBadgeColor="warn" matBadgeSize="small">{{ node.icon }}</mat-icon>
       <span matListItemTitle *ngIf="isMenuExpanded">{{ node.label }}</span>
@@ -23,7 +23,7 @@
                          [class.nav-subpanel]="level > 0"
                          [expanded]="isExpanded(node)"
                          [hideToggle]="!isMenuExpanded">
-      <mat-expansion-panel-header class="nav-panel-header" (click)="onHeaderClick($event, node)">
+      <mat-expansion-panel-header class="nav-panel-header" (click)="onHeaderClick($event, node)" [title]="node.label">
         <mat-panel-title>
           <div class="menu-item-content" [ngClass]="{ 'centered': !isMenuExpanded }">
             <mat-icon [class.nav-icon]="level === 0" [class.nav-subicon]="level > 0">{{ node.icon }}</mat-icon>
