@@ -63,3 +63,74 @@
     color: var(--text-secondary);
   }
 }
+
+// Accordion de operativa (consolidado desde el dashboard de Caja Mayor)
+.grupo-accordion {
+  ::ng-deep .mat-expansion-panel {
+    background: transparent !important;
+    box-shadow: none !important;
+    border-bottom: 1px solid var(--border-light);
+    border-radius: 0 !important;
+
+    &:last-of-type {
+      border-bottom: none;
+    }
+  }
+
+  ::ng-deep .mat-expansion-panel-header {
+    padding: 0 20px;
+    height: 52px !important;
+  }
+
+  ::ng-deep .mat-expansion-panel-body {
+    padding: 0 20px 16px !important;
+  }
+}
+
+.grupo-icon {
+  margin-right: 10px;
+  color: #7c4dff;
+  opacity: 0.85;
+}
+
+.grupo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.grupo-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+
+  &:hover {
+    background: var(--hover-bg);
+    border-color: rgba(124, 77, 255, 0.4);
+  }
+
+  mat-icon {
+    color: var(--text-secondary);
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+
+  span {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

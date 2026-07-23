@@ -3,7 +3,7 @@
   <div class="dashboard-header">
     <div class="dashboard-header-title">
       <h1 class="dashboard-title">Financiero</h1>
-      <span class="dashboard-subtitle">Configuracion y monitoreo</span>
+      <span class="dashboard-subtitle">Saldos, operaciones y configuración</span>
     </div>
     <div class="dashboard-header-actions">
       <button mat-icon-button (click)="cargarKpis()" [disabled]="loading" matTooltip="Actualizar">
@@ -14,28 +14,43 @@
 
   <div class="dashboard-stats-row">
     <app-dash-stat-chip
+      icon="account_balance_wallet"
+      color="success"
+      [value]="(saldoPYG | number:'1.0-0') + ' Gs'"
+      label="Saldo PYG"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="attach_money"
+      [value]="(saldoUSD | number:'1.0-2') || '0'"
+      label="Saldo USD"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="warning"
+      color="error"
+      [value]="cppVencidos"
+      label="CPP vencidas"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="schedule"
+      color="warning"
+      [value]="chequesPorVencer"
+      label="Cheques 7 dias"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
       icon="point_of_sale"
       [value]="cajasActivas"
       label="Cajas abiertas"
       [loading]="loading">
     </app-dash-stat-chip>
     <app-dash-stat-chip
-      icon="monetization_on"
-      [value]="monedasActivas"
-      label="Monedas activas"
-      [loading]="loading">
-    </app-dash-stat-chip>
-    <app-dash-stat-chip
-      icon="attach_money"
+      icon="show_chart"
       color="success"
-      [value]="formatPYG(cotizacionUSD)"
+      [value]="(cotizacionUSD | number:'1.0-0') || '0'"
       label="USD / PYG"
-      [loading]="loading">
-    </app-dash-stat-chip>
-    <app-dash-stat-chip
-      icon="devices"
-      [value]="dispositivosPdv"
-      label="Dispositivos PdV"
       [loading]="loading">
     </app-dash-stat-chip>
   </div>
@@ -77,16 +92,137 @@
   <div class="dashboard-main-content">
 
     <div class="dashboard-col-left">
+
       <app-dash-chart-card
-        title="Cotizaciones (30 dias)"
-        icon="show_chart"
-        [chartData]="chartData"
+        title="Movimientos ultimos 30 dias"
+        icon="trending_up"
+        [chartData]="movChartData"
         [chartOptions]="chartOptions"
         chartType="line">
       </app-dash-chart-card>
+
+      <app-dash-chart-card
+        title="Cotizaciones (30 dias)"
+        icon="show_chart"
+        [chartData]="cotChartData"
+        [chartOptions]="chartOptions"
+        chartType="line">
+      </app-dash-chart-card>
+
+      <!-- Accordion: toda la operativa financiera agrupada -->
+      <div class="dashboard-card">
+        <app-dash-section-header
+          icon="apps"
+          title="Operativa y configuración">
+        </app-dash-section-header>
+        <mat-divider></mat-divider>
+
+        <mat-accordion multi class="grupo-accordion">
+
+          <mat-expansion-panel expanded>
+            <mat-expansion-panel-header>
+              <mat-panel-title>
+                <mat-icon class="grupo-icon">swap_horiz</mat-icon>
+                Operaciones
+              </mat-panel-title>
+            </mat-expansion-panel-header>
+            <div class="grupo-grid">
+              <button *ngFor="let item of grupoOperaciones" class="grupo-btn" (click)="navigateTo(item.action)">
+                <mat-icon>{{ item.icon }}</mat-icon>
+                <span>{{ item.title }}</span>
+              </button>
+            </div>
+          </mat-expansion-panel>
+
+          <mat-expansion-panel>
+            <mat-expansion-panel-header>
+              <mat-panel-title>
+                <mat-icon class="grupo-icon">request_quote</mat-icon>
+                Cuentas
+              </mat-panel-title>
+            </mat-expansion-panel-header>
+            <div class="grupo-grid">
+              <button *ngFor="let item of grupoCuentas" class="grupo-btn" (click)="navigateTo(item.action)">
+                <mat-icon>{{ item.icon }}</mat-icon>
+                <span>{{ item.title }}</span>
+              </button>
+            </div>
+          </mat-expansion-panel>
+
+          <mat-expansion-panel>
+            <mat-expansion-panel-header>
+              <mat-panel-title>
+                <mat-icon class="grupo-icon">account_balance</mat-icon>
+                Bancos &amp; POS
+              </mat-panel-title>
+            </mat-expansion-panel-header>
+            <div class="grupo-grid">
+              <button *ngFor="let item of grupoBancos" class="grupo-btn" (click)="navigateTo(item.action)">
+                <mat-icon>{{ item.icon }}</mat-icon>
+                <span>{{ item.title }}</span>
+              </button>
+            </div>
+          </mat-expansion-panel>
+
+          <mat-expansion-panel>
+            <mat-expansion-panel-header>
+              <mat-panel-title>
+                <mat-icon class="grupo-icon">settings</mat-icon>
+                Configuración
+              </mat-panel-title>
+            </mat-expansion-panel-header>
+            <div class="grupo-grid">
+              <button *ngFor="let item of grupoConfig" class="grupo-btn" (click)="navigateTo(item.action)">
+                <mat-icon>{{ item.icon }}</mat-icon>
+                <span>{{ item.title }}</span>
+              </button>
+            </div>
+          </mat-expansion-panel>
+
+        </mat-accordion>
+      </div>
     </div>
 
     <div class="dashboard-col-right">
+
+      <!-- Próximos vencimientos -->
+      <div class="dashboard-card">
+        <app-dash-section-header
+          icon="event"
+          title="Proximos vencimientos"
+          [badge]="proximosVencimientos.length"
+          [badgeColor]="proximosVencimientos.length > 0 ? 'warning' : 'default'">
+        </app-dash-section-header>
+        <mat-divider></mat-divider>
+
+        <div *ngIf="!loading && proximosVencimientos.length === 0" class="dashboard-empty-state">
+          <mat-icon>check_circle</mat-icon>
+          <span>Sin vencimientos en 7 dias</span>
+        </div>
+
+        <div class="dashboard-alert-list" *ngIf="proximosVencimientos.length > 0">
+          <div *ngFor="let v of proximosVencimientos"
+               class="dashboard-alert-item"
+               [ngClass]="{
+                 'alert-error': v.dias < 0,
+                 'alert-warning': v.dias >= 0 && v.dias <= 3,
+                 'alert-info': v.dias > 3
+               }">
+            <mat-icon>{{ v.tipo === 'cheque' ? 'receipt' : 'request_quote' }}</mat-icon>
+            <div class="dashboard-alert-info">
+              <span class="dashboard-alert-title">{{ v.descripcion }}</span>
+              <span class="dashboard-alert-detail">
+                {{ v.monto | number:'1.0-0' }} Gs ·
+                <ng-container *ngIf="v.dias < 0">vencido hace {{ -v.dias }}d</ng-container>
+                <ng-container *ngIf="v.dias === 0">vence hoy</ng-container>
+                <ng-container *ngIf="v.dias > 0">en {{ v.dias }} dia(s)</ng-container>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cajas abiertas -->
       <div class="dashboard-card">
         <app-dash-section-header
           icon="point_of_sale"
