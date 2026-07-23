@@ -1,33 +1,110 @@
-// Estilos mínimos para el árbol recursivo del sidenav. El look base (colores,
-// alturas, iconos) lo hereda del sidenav en app.component.scss para respetar
-// el tema claro/oscuro; acá solo se maneja la indentación de subniveles.
+// Estilos del árbol recursivo del sidenav.
+//
+// IMPORTANTE: el sidenav antes vivía en app.component.html, así que lo estilaba
+// app.component.scss. Al mudarlo a este componente (encapsulación de vista
+// propia), esas reglas ya NO llegan acá. Por eso replicamos el layout compacto
+// (icono 24px + margen 16px + texto usando el ancho restante) en vez de heredar
+// los defaults de Material MDC (que dan al icono `margin-right: 32px` y recortan
+// el texto). Bajo `:host ::ng-deep` para no filtrar a otros componentes.
 
 :host {
   display: block;
 }
 
-// Subgrupo anidado (nivel > 0): panel embebido, sin fondo propio ni sombra.
-.nav-subpanel {
-  background: transparent;
+// ── Ítems hoja (mat-list-item) ──
+:host ::ng-deep a.mat-mdc-list-item {
+  height: 48px;
+  padding-left: 16px;
+  padding-right: 8px;
 
-  ::ng-deep .mat-expansion-panel-body {
-    padding: 0;
+  // Slot del icono (wrapper MDC): el gap real vive acá (default 32px → 16px).
+  .mdc-list-item__start {
+    margin-left: 0 !important;
+    margin-right: 16px !important;
   }
 
-  .nav-panel-header {
-    padding-left: 12px;
+  // Icono principal del item.
+  .mat-mdc-list-item-icon {
+    margin: 0 !important;
+    padding: 0 !important;
+    color: inherit;
+    font-size: 24px;
+    height: 24px;
+    width: 24px;
+    line-height: 24px;
+    overflow: visible; // que el glifo no se recorte
   }
 
-  .nav-subicon {
-    margin-right: 12px;
-    font-size: 20px;
-    height: 20px;
-    width: 20px;
-    opacity: 0.85;
+  // Texto: usa el ancho restante; elipsis solo si realmente no entra.
+  .mdc-list-item__primary-text {
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
-// Contenedor de hijos: leve indentación para reflejar jerarquía.
+// ── Hoja de nivel superior (Dashboard, etc.) ──
+.nav-list-item {
+  height: 48px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+}
+
+// ── Header de rama (grupo) ──
+.nav-panel-header {
+  height: 48px;
+  padding: 0 16px;
+}
+
+.menu-item-content {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+
+  .nav-icon,
+  .nav-subicon {
+    margin-right: 16px;
+    font-size: 24px;
+    height: 24px;
+    width: 24px;
+    flex: 0 0 auto;
+  }
+
+  .nav-title {
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  // Modo mini (sidenav colapsado): iconos centrados, sin margen.
+  &.centered {
+    justify-content: center;
+
+    .nav-icon,
+    .nav-subicon {
+      margin-right: 0;
+    }
+  }
+}
+
+// Subgrupo anidado (nivel > 0): panel embebido sin fondo ni sombra.
+.nav-subpanel {
+  background: transparent;
+}
+
+// Body de panel SIN padding lateral (Material lo trae en 24px): así la
+// indentación la controla SOLO .submenu-container de forma uniforme y no se
+// acumula con el padding de Material recortando el texto.
+:host ::ng-deep .nav-expansion-panel .mat-expansion-panel-body {
+  padding: 0 0 4px;
+}
+
+// Indentación por nivel: uniforme para header + hojas del subgrupo, así los
+// iconos quedan alineados dentro del grupo y el grupo se corre respecto al padre.
 .submenu-container {
-  padding-left: 8px;
+  padding-left: 12px;
 }
