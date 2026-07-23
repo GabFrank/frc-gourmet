@@ -2876,6 +2876,17 @@ contextBridge.exposeInMainWorld('api', {
   getValesPendientesFuncionario: async (funcionarioId: number): Promise<any[]> => {
     return await ipcRenderer.invoke('get-vales-pendientes-funcionario', funcionarioId);
   },
+  // Buscador global
+  buscarGlobal: async (termino: string): Promise<any> => {
+    return await ipcRenderer.invoke('buscar-global', termino);
+  },
+  // Config del menú (overrides del ADMIN sobre menu-tree)
+  getMenuConfig: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-menu-config');
+  },
+  saveMenuConfig: async (items: any[]): Promise<any> => {
+    return await ipcRenderer.invoke('save-menu-config', items);
+  },
   editCajaMayorMovimiento: async (movId: number, data: any): Promise<any> => {
     return await ipcRenderer.invoke('edit-caja-mayor-movimiento', movId, data);
   },

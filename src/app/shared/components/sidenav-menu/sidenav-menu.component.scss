@@ -1,0 +1,33 @@
+// Estilos mínimos para el árbol recursivo del sidenav. El look base (colores,
+// alturas, iconos) lo hereda del sidenav en app.component.scss para respetar
+// el tema claro/oscuro; acá solo se maneja la indentación de subniveles.
+
+:host {
+  display: block;
+}
+
+// Subgrupo anidado (nivel > 0): panel embebido, sin fondo propio ni sombra.
+.nav-subpanel {
+  background: transparent;
+
+  ::ng-deep .mat-expansion-panel-body {
+    padding: 0;
+  }
+
+  .nav-panel-header {
+    padding-left: 12px;
+  }
+
+  .nav-subicon {
+    margin-right: 12px;
+    font-size: 20px;
+    height: 20px;
+    width: 20px;
+    opacity: 0.85;
+  }
+}
+
+// Contenedor de hijos: leve indentación para reflejar jerarquía.
+.submenu-container {
+  padding-left: 8px;
+}
