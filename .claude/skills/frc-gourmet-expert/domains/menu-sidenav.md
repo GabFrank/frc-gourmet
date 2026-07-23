@@ -23,6 +23,13 @@ para el buscador — se eliminó el registry.)
   standalone, se auto-referencia para anidar). Ramas → `mat-expansion-panel`;
   hojas → `mat-list-item`. Estado de expansión propio por `id` (Set compartido).
   En modo mini emite `requestExpand`.
+  - ⚠️ **El estilo del sidenav vive en `sidenav-menu.component.scss`, NO en
+    `app.component.scss`.** Al mudar el menú a este componente, la encapsulación
+    de vista dejó afuera las reglas de app.component; sin replicarlas, los ítems
+    caen a los defaults de Material MDC (icono líder `margin-right: 32px` → gap
+    enorme + texto truncado). El layout compacto (icono 24px, gap 16px en
+    `.mdc-list-item__start`, texto con el ancho restante, indentación por nivel
+    vía `.submenu-container`) está en el scss del componente bajo `:host ::ng-deep`.
 - **Host:** `app.component` mantiene `menuNodes` (recalculado al emitir
   `PermissionService.codigos$`) y despacha con `activarNodo(node)` (openTab /
   dialog según `action.mode`). Los ~60 métodos `openXTab()` viejos quedaron como
@@ -55,6 +62,9 @@ Personas · Comisiones · Facturación · Configuración.
   Liquidaciones / Configuración* (3 niveles).
 - **Personas**: separado de RRHH a grupo propio.
 - **Financiero**: absorbió *Caja Mayor* y *Bancos* como subgrupos + *Configuración*.
+  El subgrupo *Caja Mayor* **no tiene dashboard propio** — el único dashboard
+  financiero es el de Financiero (ver domains/dashboards.md); el subgrupo queda
+  solo con la operativa (Cajas Mayor, Gastos, Entradas, Operaciones, Retiros, CPP, CPC).
 
 ## ⚠️ Regla dura (SKILL.md #22)
 

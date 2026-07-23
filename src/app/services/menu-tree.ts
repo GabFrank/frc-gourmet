@@ -1,7 +1,6 @@
 // ── Destinos del sidenav (tabs) ──
 import { BackupRestoreComponent } from 'src/app/pages/configuracion/backup-restore/backup-restore.component';
 import { BuffetDashboardComponent } from 'src/app/pages/ventas/buffet-dashboard/buffet-dashboard.component';
-import { CajaMayorDashboardComponent } from 'src/app/pages/financiero/caja-mayor/dashboard/caja-mayor-dashboard.component';
 import { ComprasDashboardComponent } from 'src/app/pages/compras/dashboard/compras-dashboard.component';
 import { ConfiguracionFacialComponent } from 'src/app/pages/rrhh/configuracion-facial/configuracion-facial.component';
 import { ConfiguracionNotificacionesComponent } from 'src/app/pages/configuracion/notificaciones/configuracion-notificaciones.component';
@@ -247,11 +246,11 @@ export const MENU_TREE: MenuNode[] = [
         keywords: ['cajas', 'arqueo', 'apertura', 'cierre'],
         action: { component: ListCajasComponent, title: 'Cajas', tabId: 'cajas-tab', data: NAV } },
       {
+        // El "dashboard" de Caja Mayor se unificó en el Dashboard Financiero
+        // (arriba). Este subgrupo queda solo con la operativa, sin dashboard
+        // propio, para no duplicar puntos de entrada.
         id: 'grp-caja-mayor', label: 'Caja Mayor', icon: 'account_balance_wallet',
         children: [
-          { id: 'caja-mayor', label: 'Dashboard Caja Mayor', icon: 'dashboard', permiso: 'CAJA_MAYOR_DASHBOARD_VER',
-            keywords: ['caja', 'mayor', 'saldos', 'movimientos'],
-            action: { component: CajaMayorDashboardComponent, title: 'Caja Mayor', tabId: 'caja-mayor-tab', data: NAV } },
           { id: 'cajas-mayor', label: 'Cajas Mayor', icon: 'account_balance', permiso: 'CAJA_MAYOR_DASHBOARD_VER',
             keywords: ['cajas', 'mayor'],
             action: { component: ListCajasMayorComponent, title: 'Cajas Mayor', tabId: 'cajas-mayor-tab', data: {} } },

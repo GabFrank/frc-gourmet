@@ -15,7 +15,7 @@ import { Subscription, firstValueFrom } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { TabsService } from 'src/app/services/tabs.service';
 import { RepositoryService } from 'src/app/database/repository.service';
-import { CajaMayorDashboardComponent } from 'src/app/pages/financiero/caja-mayor/dashboard/caja-mayor-dashboard.component';
+import { FinancieroDashboardComponent } from 'src/app/pages/financiero/dashboard/financiero-dashboard.component';
 import { PdvComponent } from 'src/app/pages/ventas/pdv/pdv.component';
 import { ListNotificacionesRrhhComponent } from 'src/app/pages/rrhh/notificaciones/list-notificaciones-rrhh.component';
 import { abrirShortcut } from 'src/app/shared/utils/dashboard-shortcut-router';
@@ -77,7 +77,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   quickActions = [
     { title: 'Abrir PdV', icon: 'point_of_sale', action: 'pdv', color: '#4caf50' },
-    { title: 'Caja Mayor', icon: 'account_balance', action: 'caja-mayor', color: '#1b5e20' },
+    { title: 'Financiero', icon: 'account_balance', action: 'financiero', color: '#1b5e20' },
     { title: 'Notificaciones', icon: 'notifications', action: 'notificaciones', color: '#f44336' },
   ];
 
@@ -236,8 +236,8 @@ export class HomeComponent implements OnInit, OnDestroy {
       case 'pdv':
         this.tabsService.openTab('Punto de Venta (PDV)', PdvComponent, {}, 'pdv');
         break;
-      case 'caja-mayor':
-        this.tabsService.openTab('Caja Mayor', CajaMayorDashboardComponent);
+      case 'financiero':
+        this.tabsService.openTab('Financiero Dashboard', FinancieroDashboardComponent, { source: 'navigation' }, 'financiero-dashboard-tab', true);
         break;
       case 'notificaciones':
         this.tabsService.openTab('Notificaciones RRHH', ListNotificacionesRrhhComponent);
@@ -375,7 +375,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         break;
       case 'HOME':
         this.snackBar.open(
-          'Para crear tu primer acceso directo, navegá a cualquier dashboard (Caja Mayor, Ventas, etc.) y usá el botón "Guardar como acceso directo".',
+          'Para crear tu primer acceso directo, navegá a cualquier dashboard (Financiero, Ventas, etc.) y usá el botón "Guardar como acceso directo".',
           'OK',
           { duration: 6000 },
         );
