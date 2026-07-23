@@ -51,6 +51,15 @@ export function registerCuentasPorCobrarHandlers(
       if (filtros?.estado) qb.andWhere('cpc.estado = :estado', { estado: filtros.estado });
       if (filtros?.tipo) qb.andWhere('cpc.tipo = :tipo', { tipo: filtros.tipo });
       if (filtros?.clienteId) qb.andWhere('cpc.cliente_id = :cid', { cid: filtros.clienteId });
+      // Filtro por nombre de cliente: razón social (empresa) o nombre+apellido
+      // de la persona. Datos guardados en MAYÚSCULAS; UPPER() por portabilidad.
+      if (filtros?.cliente) {
+        const term = `%${String(filtros.cliente).trim().toUpperCase()}%`;
+        qb.andWhere(
+          '(UPPER(cliente.razon_social) LIKE :t OR UPPER(persona.nombre) LIKE :t OR UPPER(persona.apellido) LIKE :t)',
+          { t: term },
+        );
+      }
 
       if (filtros?.pageSize != null) {
         const pageSize = Number(filtros.pageSize) || 15;
