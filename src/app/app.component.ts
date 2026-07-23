@@ -67,7 +67,6 @@ import { VentasDashboardComponent } from './pages/ventas/dashboard/ventas-dashbo
 import { BuffetDashboardComponent } from './pages/ventas/buffet-dashboard/buffet-dashboard.component';
 import { KdsComponent } from './pages/ventas/kds/kds.component';
 import { ListKdsPantallasComponent } from './pages/ventas/kds/list-kds-pantallas/list-kds-pantallas.component';
-import { CajaMayorDashboardComponent } from './pages/financiero/caja-mayor/dashboard/caja-mayor-dashboard.component';
 import { ListCuentasPorCobrarComponent } from './pages/financiero/caja-mayor/cuentas-por-cobrar/list-cuentas-por-cobrar/list-cuentas-por-cobrar.component';
 import { ListPermisosComponent } from './pages/personalizacion/permisos/list-permisos/list-permisos.component';
 import { ListConfiguracionRrhhComponent } from './pages/rrhh/configuracion/list-configuracion-rrhh/list-configuracion-rrhh.component';
@@ -1121,17 +1120,6 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       ListDispositivosComponent,
       { source: 'navigation' },
       'dispositivos-tab',
-      true
-    );
-    this.closeMenu();
-  }
-
-  openCajaMayorTab() {
-    this.tabsService.openTab(
-      'Caja Mayor',
-      CajaMayorDashboardComponent,
-      { source: 'navigation' },
-      'caja-mayor-tab',
       true
     );
     this.closeMenu();

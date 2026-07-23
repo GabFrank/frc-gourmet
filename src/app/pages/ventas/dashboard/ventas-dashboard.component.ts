@@ -22,7 +22,7 @@ import { PdvConfigDialogComponent } from 'src/app/shared/components/pdv-config-d
 import { PdvMesaDialogComponent } from 'src/app/shared/components/pdv-mesa-dialog/pdv-mesa-dialog.component';
 import { ComandaAbmDialogComponent } from 'src/app/shared/components/comanda-abm-dialog/comanda-abm-dialog.component';
 import { AtajoConfigDialogComponent } from 'src/app/shared/components/atajo-config-dialog/atajo-config-dialog.component';
-import { CajaMayorDashboardComponent } from '../../financiero/caja-mayor/dashboard/caja-mayor-dashboard.component';
+import { FinancieroDashboardComponent } from '../../financiero/dashboard/financiero-dashboard.component';
 import { DashStatChipComponent } from 'src/app/shared/components/dashboard/stat-chip/dash-stat-chip.component';
 import { DashQuickActionComponent } from 'src/app/shared/components/dashboard/quick-action/dash-quick-action.component';
 import { DashRankingListComponent, DashRankingItem } from 'src/app/shared/components/dashboard/ranking-list/dash-ranking-list.component';
@@ -87,7 +87,7 @@ export class VentasDashboardComponent implements OnInit {
     { title: 'Accesos Rapidos', icon: 'touch_app', action: 'atajo-config', color: '#ff9800' },
     { title: 'Precios Delivery', icon: 'local_shipping', action: 'precios-delivery', color: '#e91e63' },
     { title: 'Listado Ventas', icon: 'list_alt', action: 'ventas-list', color: '#2196f3' },
-    { title: 'Caja Mayor', icon: 'account_balance', action: 'caja-mayor', color: '#1b5e20' },
+    { title: 'Financiero', icon: 'account_balance', action: 'financiero', color: '#1b5e20' },
   ];
 
   // --- KPIs ---
@@ -240,8 +240,8 @@ export class VentasDashboardComponent implements OnInit {
       case 'ventas-list':
         this.tabsService.openTab('Historial de Ventas', ListVentasComponent);
         break;
-      case 'caja-mayor':
-        this.tabsService.openTab('Caja Mayor', CajaMayorDashboardComponent);
+      case 'financiero':
+        this.tabsService.openTab('Financiero Dashboard', FinancieroDashboardComponent, { source: 'navigation' }, 'financiero-dashboard-tab', true);
         break;
     }
   }
