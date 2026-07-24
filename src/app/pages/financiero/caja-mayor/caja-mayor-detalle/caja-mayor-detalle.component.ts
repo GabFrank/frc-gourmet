@@ -49,7 +49,8 @@ interface MovimientoConsolidado {
   tipoIsIngreso: boolean;
   detalles: { monedaSimbolo: string; formaPagoNombre?: string; monto: number }[];
   responsableNombre: string;
-  observacion: string;
+  observacion: string;      // texto legible compuesto (display)
+  observacionRaw?: string;  // observacion cruda guardada (para editar)
   anulado: boolean;
   origen: string;             // 'GASTO'|'VALE'|'COBRO_CLIENTE'|... ('' para caja)
   gastoId?: number;
@@ -127,7 +128,7 @@ export class CajaMayorDetalleComponent implements OnInit {
   movimientosConsolidados: MovimientoConsolidado[] = [];
   loading = false;
   loadingMovimientos = false;
-  movimientosColumns = ['fuente', 'fecha', 'tipoMovimiento', 'detalles', 'observacion', 'responsable', 'actions'];
+  movimientosColumns = ['fuente', 'fecha', 'responsable', 'tipoMovimiento', 'observacion', 'detalles', 'actions'];
 
   // Filtro de fuente del panel consolidado: 'TODO' | 'CAJA' | 'BANCO' | '<accountId>'
   fuenteFilter: string = 'TODO';
@@ -625,7 +626,7 @@ export class CajaMayorDetalleComponent implements OnInit {
             formaPagoId: formaPago?.id,
             monto: detalle?.monto,
           },
-          observacion: mov.observacion !== '-' ? mov.observacion : '',
+          observacion: (mov.observacionRaw ?? (mov.observacion !== '-' ? mov.observacion : '')) || '',
         },
       });
       dialogRef.afterClosed().subscribe(result => {

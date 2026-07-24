@@ -19,6 +19,7 @@ import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuent
 import { MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
 import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
+import { Compra } from '../../src/app/database/entities/compras/compra.entity';
 import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
 import { CajaMayorEstado, TipoMovimiento, GastoEstado, GastoDestinoTipo, RetiroCajaEstado, RetiroCajaOrigen } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
@@ -511,6 +512,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           detalles: [detalle],
           responsableNombre: mov.responsable?.persona?.nombre || mov.responsable?.nickname || '-',
           observacion: mov.observacion || '-',
+          observacionRaw: mov.observacionRaw ?? mov.observacion ?? '',
           anulado: !!mov.anulacion,
           origen: '',
           gastoId,
@@ -546,7 +548,9 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           .leftJoinAndSelect('responsable.persona', 'persona')
           .leftJoinAndSelect('mov.gasto', 'gasto')
           .leftJoinAndSelect('gasto.proveedor', 'proveedor')
+          .leftJoinAndSelect('gasto.gastoCategoria', 'gastoCategoria')
           .leftJoinAndSelect('mov.retiroCaja', 'retiroCaja')
+          .leftJoinAndSelect('retiroCaja.caja', 'retiroCajaCaja')
           .leftJoinAndSelect('mov.conteo', 'conteo')
           .leftJoinAndSelect('mov.referenciaAnulacion', 'referenciaAnulacion')
           .where('mov.caja_mayor_id = :cajaMayorId', { cajaMayorId })
@@ -583,6 +587,76 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           for (const m of cajaItems) (m as any).anulacion = byOrigId.get(m.id) || null;
         }
 
+        // ---- Observación legible: se COMPONE al leer (no al crear) para que
+        // los movimientos viejos y nuevos se vean igual. Batch-load por id de
+        // las entidades origen que no son relaciones declaradas del movimiento.
+        const evIds = [...new Set(cajaItems.map((m: any) => m.entradaVariaId).filter(Boolean))] as number[];
+        const opIds = [...new Set(cajaItems.map((m: any) => m.operacionFinancieraId).filter(Boolean))] as number[];
+        const compraIds = [...new Set(cajaItems.map((m: any) => m.compraId).filter(Boolean))] as number[];
+        const evMap = new Map<number, any>();
+        if (evIds.length) {
+          (await dataSource.getRepository(EntradaVaria).find({ where: { id: In(evIds) }, relations: ['entradaVariaCategoria'] }))
+            .forEach((e: any) => evMap.set(e.id, e));
+        }
+        const opMap = new Map<number, any>();
+        if (opIds.length) {
+          (await dataSource.getRepository(OperacionFinanciera).find({ where: { id: In(opIds) }, relations: ['operacionFinancieraCategoria'] }))
+            .forEach((o: any) => opMap.set(o.id, o));
+        }
+        const compraMap = new Map<number, any>();
+        if (compraIds.length) {
+          (await dataSource.getRepository(Compra).find({ where: { id: In(compraIds) }, relations: ['proveedor'] }))
+            .forEach((c: any) => compraMap.set(c.id, c));
+        }
+
+        const opTipoLabel: Record<string, string> = {
+          CAMBIO_DIVISA: 'Cambio de divisa',
+          DEPOSITO_BANCARIO: 'Deposito bancario',
+          RETIRO_BANCARIO: 'Retiro bancario',
+          TRANSFERENCIA_ENTRE_CAJAS: 'Transferencia entre cajas',
+        };
+        const fmtFecha = (d: any): string => {
+          if (!d) return '';
+          const x = new Date(d);
+          if (isNaN(x.getTime())) return '';
+          const p = (n: number) => String(n).padStart(2, '0');
+          return `${p(x.getDate())}/${p(x.getMonth() + 1)}/${x.getFullYear()} ${p(x.getHours())}:${p(x.getMinutes())}`;
+        };
+        // `Base: (CATEGORIA) DESCRIPCION. OBSERVACION` con formateo defensivo
+        // (sin paréntesis vacíos, ni ": "/". " colgando cuando falta el dato).
+        const conDesc = (base: string, cat: any, desc: any, obs?: any): string => {
+          const c = (cat || '').toString().trim();
+          const d = (desc || '').toString().trim();
+          const o = (obs || '').toString().trim();
+          const body = `${c ? `(${c}) ` : ''}${d}`.trim();
+          return `${base}${body ? `: ${body}` : ''}${o ? `. ${o}` : ''}`;
+        };
+        const composeObs = (m: any): string => {
+          const tipo = m.tipoMovimiento || '';
+          if (tipo === 'ANULACION') return m.observacion || '-';
+          if (m.gasto) return conDesc(`Gasto #${m.gasto.id}`, m.gasto.gastoCategoria?.nombre, m.gasto.descripcion);
+          if (m.retiroCaja) {
+            const esCierre = tipo === TipoMovimiento.INGRESO_CIERRE_CAJA;
+            const apertura = fmtFecha(m.retiroCaja.caja?.fechaApertura);
+            return `${esCierre ? 'CIERRE CAJA' : 'RETIRO CAJA'} #${m.retiroCaja.id}${apertura ? ` ${apertura}` : ''}`;
+          }
+          if (m.entradaVariaId && evMap.has(m.entradaVariaId)) {
+            const ev = evMap.get(m.entradaVariaId);
+            return conDesc(`Entrada #${ev.id}`, ev.entradaVariaCategoria?.nombre, ev.descripcion, ev.observacion);
+          }
+          if (m.operacionFinancieraId && opMap.has(m.operacionFinancieraId)) {
+            const op = opMap.get(m.operacionFinancieraId);
+            const label = opTipoLabel[op.tipoOperacion] || 'Operacion financiera';
+            return conDesc(`${label} #${op.id}`, op.operacionFinancieraCategoria?.nombre, op.descripcion, op.observacion);
+          }
+          if (m.compraId && compraMap.has(m.compraId)) {
+            const c = compraMap.get(m.compraId);
+            const prov = (c.proveedor?.nombre || c.proveedor?.razon_social || '').toString().trim();
+            return `Pago compra #${c.id}${prov ? ` ${prov}` : ''}`;
+          }
+          return m.observacion || '-';
+        };
+
         // Mapear a la forma esperada por consolidarCaja (gasto/retiro/referenciaAnulacion como objetos)
         const mapped = cajaItems.map((m: any) => ({
           id: m.id,
@@ -592,7 +666,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           moneda: m.moneda,
           formaPago: m.formaPago,
           responsable: m.responsable,
-          observacion: m.observacion,
+          observacion: composeObs(m),
+          observacionRaw: m.observacion,
           gasto: m.gasto,
           retiroCaja: m.retiroCaja,
           conteo: m.conteo,

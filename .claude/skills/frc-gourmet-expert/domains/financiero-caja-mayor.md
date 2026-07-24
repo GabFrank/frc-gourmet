@@ -49,6 +49,28 @@ Registro **inmutable** de cada movimiento. NUNCA se borra — se anula con contr
 }
 ```
 
+### Columna "Observación" de la tabla de movimientos (se COMPONE al leer)
+
+La tabla de movimientos (`caja-mayor-detalle`) muestra una observación **legible
+compuesta en el handler** `get-movimientos-caja-mayor-consolidados`
+(`caja-mayor.handler.ts`), NO el campo `observacion` crudo. Se compone al leer
+(no al crear) para que los movimientos viejos y nuevos se vean igual. Batch-load
+por id de las entidades origen (que en su mayoría son columnas int sin relación):
+
+| Tipo | Formato | Fuente |
+|---|---|---|
+| Gasto | `Gasto #<id>: (<categoria>) <desc>` | relación `gasto` + `gastoCategoria` |
+| Entrada varia | `Entrada #<id>: (<categoria>) <desc>. <obs>` | lookup `EntradaVaria` by `entradaVariaId` |
+| Op. financiera | `<tipoOp> #<id>: (<categoria>) <desc>. <obs>` | lookup `OperacionFinanciera` by `operacionFinancieraId` |
+| Retiro / Cierre | `RETIRO/CIERRE CAJA #<id> <fechaApertura>` | relación `retiroCaja` → `caja.fechaApertura` |
+| Pago compra | `Pago compra #<id> <proveedor>` | lookup `Compra` by `compraId` |
+| Otros / ajustes / anulaciones | el `observacion` crudo (fallback) | — |
+
+- Formateo defensivo: sin `()`, `: ` ni `. ` colgando cuando falta categoría/desc/obs.
+- La fila lleva **`observacionRaw`** además de `observacion` (compuesta); el
+  diálogo de edición usa `observacionRaw` para no denormalizar el texto compuesto.
+- Orden de columnas: `fuente · fecha · responsable · tipo · observacion · detalle · acciones`.
+
 ### CajaMayorSaldo
 
 Snapshot del saldo por (caja, moneda, formaPago):
