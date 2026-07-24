@@ -13,6 +13,12 @@
 
   <div class="filtros-bar" *ngIf="showFiltros" [formGroup]="filtrosForm">
     <mat-form-field appearance="outline" class="f-field">
+      <mat-label>Cliente</mat-label>
+      <input matInput formControlName="cliente" placeholder="Nombre o razón social"
+             (keyup.enter)="aplicarFiltros()">
+      <mat-icon matSuffix>person_search</mat-icon>
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="f-field">
       <mat-label>Estado</mat-label>
       <mat-select formControlName="estado">
         <mat-option [value]="null">Todos</mat-option>

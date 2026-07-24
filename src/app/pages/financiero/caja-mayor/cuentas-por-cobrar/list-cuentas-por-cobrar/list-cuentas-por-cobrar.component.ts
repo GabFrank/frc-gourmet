@@ -14,6 +14,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatPaginatorModule, MatPaginator, PageEvent } from '@angular/material/paginator';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
+import { MatInputModule } from '@angular/material/input';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
@@ -42,6 +43,7 @@ import { TabsService } from 'src/app/services/tabs.service';
     MatPaginatorModule,
     MatFormFieldModule,
     MatSelectModule,
+    MatInputModule,
     DatePipe,
   ]
 })
@@ -72,6 +74,7 @@ export class ListCuentasPorCobrarComponent implements OnInit {
     this.filtrosForm = this.fb.group({
       estado: [null],
       tipo: [null],
+      cliente: [''],
     });
     this.loadData();
   }
@@ -85,6 +88,7 @@ export class ListCuentasPorCobrarComponent implements OnInit {
       const filtros: any = { page: this.pageIndex, pageSize: this.pageSize };
       if (f.estado) filtros.estado = f.estado;
       if (f.tipo) filtros.tipo = f.tipo;
+      if (f.cliente && f.cliente.trim()) filtros.cliente = f.cliente.trim();
       const r: any = await firstValueFrom(this.repositoryService.getCuentasPorCobrar(filtros));
       this.cuentas = r?.items || [];
       this.total = r?.total || 0;
