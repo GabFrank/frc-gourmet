@@ -27,9 +27,15 @@ para el buscador — se eliminó el registry.)
     `app.component.scss`.** Al mudar el menú a este componente, la encapsulación
     de vista dejó afuera las reglas de app.component; sin replicarlas, los ítems
     caen a los defaults de Material MDC (icono líder `margin-right: 32px` → gap
-    enorme + texto truncado). El layout compacto (icono 24px, gap 16px en
-    `.mdc-list-item__start`, texto con el ancho restante, indentación por nivel
-    vía `.submenu-container`) está en el scss del componente bajo `:host ::ng-deep`.
+    enorme + texto truncado). El layout compacto (icono **20px**, texto **13px**,
+    gap **12px** en `.mdc-list-item__start`, alto de fila 44px, texto con el ancho
+    restante, indentación por nivel **10px** vía `.submenu-container`, y margen a
+    la derecha del `.mat-content` del header para que el título trunque ANTES del
+    chevron) está en el scss del componente bajo `:host ::ng-deep`.
+  - **Colapsar cierra los submenús:** `app.component` limpia `menuExpandedIds`
+    (`.clear()`) en cada punto de colapso (toggle, click afuera, `closeMenu`,
+    init) para que al minimizar el sidenav no queden paneles abiertos rotos en el
+    rail angosto. Al reexpandir arranca con todo cerrado (no se restaura estado).
 - **Host:** `app.component` mantiene `menuNodes` (recalculado al emitir
   `PermissionService.codigos$`) y despacha con `activarNodo(node)` (openTab /
   dialog según `action.mode`). Los ~60 métodos `openXTab()` viejos quedaron como
