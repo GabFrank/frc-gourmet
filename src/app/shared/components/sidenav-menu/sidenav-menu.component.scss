@@ -3,9 +3,18 @@
 // IMPORTANTE: el sidenav antes vivía en app.component.html, así que lo estilaba
 // app.component.scss. Al mudarlo a este componente (encapsulación de vista
 // propia), esas reglas ya NO llegan acá. Por eso replicamos el layout compacto
-// (icono 24px + margen 16px + texto usando el ancho restante) en vez de heredar
-// los defaults de Material MDC (que dan al icono `margin-right: 32px` y recortan
-// el texto). Bajo `:host ::ng-deep` para no filtrar a otros componentes.
+// (icono + gap + texto usando el ancho restante) en vez de heredar los defaults
+// de Material MDC (icono con `margin-right: 32px` que recorta el texto).
+// Bajo `:host ::ng-deep` para no filtrar a otros componentes.
+//
+// Tamaños reducidos (icono 20px, texto 13px, gap 12px) para densidad + para
+// que las labels profundas de 3 niveles entren sin truncar.
+
+$icon-size: 20px;
+$icon-gap: 12px;
+$item-pad-x: 12px;
+$row-height: 44px;
+$level-indent: 10px;
 
 :host {
   display: block;
@@ -13,14 +22,14 @@
 
 // ── Ítems hoja (mat-list-item) ──
 :host ::ng-deep a.mat-mdc-list-item {
-  height: 48px;
-  padding-left: 16px;
-  padding-right: 8px;
+  height: $row-height;
+  padding-left: $item-pad-x;
+  padding-right: 6px;
 
-  // Slot del icono (wrapper MDC): el gap real vive acá (default 32px → 16px).
+  // Slot del icono (wrapper MDC): el gap real vive acá (default 32px → 12px).
   .mdc-list-item__start {
     margin-left: 0 !important;
-    margin-right: 16px !important;
+    margin-right: $icon-gap !important;
   }
 
   // Icono principal del item.
@@ -28,16 +37,16 @@
     margin: 0 !important;
     padding: 0 !important;
     color: inherit;
-    font-size: 24px;
-    height: 24px;
-    width: 24px;
-    line-height: 24px;
+    font-size: $icon-size;
+    height: $icon-size;
+    width: $icon-size;
+    line-height: $icon-size;
     overflow: visible; // que el glifo no se recorte
   }
 
   // Texto: usa el ancho restante; elipsis solo si realmente no entra.
   .mdc-list-item__primary-text {
-    font-size: 14px;
+    font-size: 13px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -46,16 +55,24 @@
 
 // ── Hoja de nivel superior (Dashboard, etc.) ──
 .nav-list-item {
-  height: 48px;
-  padding: 0 16px;
+  height: $row-height;
+  padding: 0 $item-pad-x;
   display: flex;
   align-items: center;
 }
 
 // ── Header de rama (grupo) ──
 .nav-panel-header {
-  height: 48px;
-  padding: 0 16px;
+  height: $row-height;
+  padding: 0 $item-pad-x;
+}
+
+// El contenido del header no debe correr por debajo del chevron de expandir:
+// se le deja un margen a la derecha para que el título trunque ANTES de la flecha.
+:host ::ng-deep .nav-expansion-panel > .mat-expansion-panel-header .mat-content {
+  margin-right: 8px;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .menu-item-content {
@@ -66,15 +83,15 @@
 
   .nav-icon,
   .nav-subicon {
-    margin-right: 16px;
-    font-size: 24px;
-    height: 24px;
-    width: 24px;
+    margin-right: $icon-gap;
+    font-size: $icon-size;
+    height: $icon-size;
+    width: $icon-size;
     flex: 0 0 auto;
   }
 
   .nav-title {
-    font-size: 14px;
+    font-size: 13px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -106,5 +123,5 @@
 // Indentación por nivel: uniforme para header + hojas del subgrupo, así los
 // iconos quedan alineados dentro del grupo y el grupo se corre respecto al padre.
 .submenu-container {
-  padding-left: 12px;
+  padding-left: $level-indent;
 }

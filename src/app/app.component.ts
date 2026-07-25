@@ -468,6 +468,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     // Initialize sidenav in collapsed state
     this.isMenuExpanded = false;
     this.expandedMenu = null;
+    this.menuExpandedIds.clear();
   }
 
   ngOnDestroy() {
@@ -570,6 +571,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
         if (!sidenavElement.contains(event.target as Node) &&
             !toggleButton.contains(event.target as Node)) {
           this.isMenuExpanded = false;
+          this.menuExpandedIds.clear();
         }
       }
     }
@@ -582,9 +584,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     this.isMenuExpanded = !this.isMenuExpanded;
 
-    // When collapsing the menu, reset the expanded menu
+    // When collapsing the menu, reset the expanded menu + cerrar submenús del árbol
     if (!this.isMenuExpanded) {
       this.expandedMenu = null;
+      this.menuExpandedIds.clear();
     }
   }
 
@@ -592,6 +595,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   closeMenu(): void {
     this.isMenuExpanded = false;
     this.expandedMenu = null;
+    this.menuExpandedIds.clear();
   }
 
   // Expand menu when any item is clicked in collapsed mode
