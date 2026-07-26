@@ -1,6 +1,6 @@
 # Índice de handlers IPC
 
-**54 archivos `*.handler.ts`** en `electron/handlers/` (~28.000 líneas totales). Cada uno expone una función `registerXxxHandlers(dataSource, getCurrentUser?)` que se invoca en `main.ts` tras inicializar la BD. Al arranque, `installHandlerRegistry()` monkey-patchea `ipcMain.handle` para que cada canal quede también accesible vía `POST /api/rpc` (modo server). Ver [architecture/electron-bootstrap.md](../architecture/electron-bootstrap.md).
+**54 archivos `*.handler.ts`** en `electron/handlers/` (~28.000 líneas totales). Cada uno expone una función `registerXxxHandlers(dataSource, getCurrentUser?)` que se invoca desde la **fuente única** `registerAllAppHandlers()` en `electron/utils/register-all-handlers.ts` (llamada por `main.ts` tras inicializar la BD, y también por los tests E2E). **No hay una segunda lista en `main.ts`** — agregar un handler nuevo = agregarlo sólo en `register-all-handlers.ts`. Al arranque, `installHandlerRegistry()` monkey-patchea `ipcMain.handle` para que cada canal quede también accesible vía `POST /api/rpc` (modo server). Ver [architecture/electron-bootstrap.md](../architecture/electron-bootstrap.md).
 
 ## Tabla principal (orden alfabético)
 
