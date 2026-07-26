@@ -80,6 +80,17 @@
         >
           {{ sig.label }}
         </button>
+
+        <!-- Recovery: pedido de mesa que no se materializó (ej. sin caja abierta
+             al crearse). El cajero lo empuja a la cuenta de la mesa + cocina. -->
+        <button
+          mat-stroked-button
+          color="primary"
+          *ngIf="p.tipoPedido === 'MESA_QR' && !p.ventaId"
+          (click)="enviarACocina(p)"
+        >
+          <mat-icon>restaurant</mat-icon> Enviar a cocina
+        </button>
       </div>
     </mat-card>
   </div>

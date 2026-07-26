@@ -72,6 +72,7 @@ function mapConfigPublic(cfg: TiendaOnlineConfig): any {
     colorPrimario: cfg.colorPrimario ?? null,
     permitePickup: cfg.permitePickup,
     permiteDelivery: cfg.permiteDelivery,
+    permiteMesa: cfg.permiteMesa,
     prepTimeMinutos: cfg.prepTimeMinutos,
     montoMinimoPedido: Number(cfg.montoMinimoPedido),
     // Client ID de Google OAuth (env). Si está, el storefront muestra el botón.
@@ -116,6 +117,10 @@ export function registerPedidosOnlineConfigHandlers(
     if (data.montoMinimoPedido !== undefined) cfg.montoMinimoPedido = Number(data.montoMinimoPedido) || 0;
     if (data.aceptacionAutomatica !== undefined) cfg.aceptacionAutomatica = !!data.aceptacionAutomatica;
     if (data.horariosJson !== undefined) cfg.horariosJson = data.horariosJson || undefined;
+    // Canal MESA_QR (pedidos en mesa por QR)
+    if (data.permiteMesa !== undefined) cfg.permiteMesa = !!data.permiteMesa;
+    if (data.requiereLanMesa !== undefined) cfg.requiereLanMesa = !!data.requiereLanMesa;
+    if (data.rangoLanMesa !== undefined) cfg.rangoLanMesa = data.rangoLanMesa ? String(data.rangoLanMesa).trim() : undefined;
     const saved = await repo.save(cfg);
     return { success: true, config: { ...saved, abiertaAhora: estaAbierta(saved) } };
   });

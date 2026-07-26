@@ -5,6 +5,7 @@ import { Delivery, DeliveryEstado } from '../../src/app/database/entities/ventas
 import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
 import { VentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
 import { VentaItemObservacion } from '../../src/app/database/entities/ventas/venta-item-observacion.entity';
+import { Observacion } from '../../src/app/database/entities/productos/observacion.entity';
 import { VentaItemAdicional } from '../../src/app/database/entities/ventas/venta-item-adicional.entity';
 import { VentaItemIngredienteModificacion } from '../../src/app/database/entities/ventas/venta-item-ingrediente-modificacion.entity';
 import { PdvGrupoCategoria } from '../../src/app/database/entities/ventas/pdv-grupo-categoria.entity';
@@ -40,6 +41,7 @@ import { ProductoTipo } from '../../src/app/database/entities/productos/producto
 import { Receta } from '../../src/app/database/entities/productos/receta.entity';
 import { RecetaIngrediente } from '../../src/app/database/entities/productos/receta-ingrediente.entity';
 import { RecetaPresentacion } from '../../src/app/database/entities/productos/receta-presentacion.entity';
+import { PrecioCosto } from '../../src/app/database/entities/productos/precio-costo.entity';
 import { StockMovimiento, StockMovimientoTipo, StockMovimientoTipoReferencia } from '../../src/app/database/entities/productos/stock-movimiento.entity';
 import { Combo } from '../../src/app/database/entities/productos/combo.entity';
 import { ComboProducto } from '../../src/app/database/entities/productos/combo-producto.entity';
@@ -51,6 +53,9 @@ import { EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-it
 import { VentaItemSabor } from '../../src/app/database/entities/ventas/venta-item-sabor.entity';
 import { dbQuery } from '../utils/db-query';
 import { computeResumenCaja } from '../utils/resumen-caja.utils';
+import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
+import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
+import { EstadoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { CobroParcial } from '../../src/app/database/entities/ventas/cobro-parcial.entity';
 import { CobroParcialItem } from '../../src/app/database/entities/ventas/cobro-parcial-item.entity';
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
@@ -77,6 +82,279 @@ async function withVentaStockLock<T>(ventaId: number, fn: () => Promise<T>): Pro
     release();
     if (procesarStockTails.get(ventaId) === composed) procesarStockTails.delete(ventaId);
   }
+}
+
+// Serializa la materialización de pedidos online por mesa (proceso Node único).
+// Evita dos ventas ABIERTAS para la misma mesa y la doble materialización de un
+// pedido cuando la auto-materialización y un click manual del cajero coinciden.
+const mesaMaterializeTails = new Map<number, Promise<void>>();
+async function withMesaMaterializeLock<T>(mesaId: number, fn: () => Promise<T>): Promise<T> {
+  const prev = mesaMaterializeTails.get(mesaId) ?? Promise.resolve();
+  let release!: () => void;
+  const myTurn = new Promise<void>((res) => (release = res));
+  const composed = prev.then(() => myTurn);
+  mesaMaterializeTails.set(mesaId, composed);
+  await prev.catch(() => {});
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (mesaMaterializeTails.get(mesaId) === composed) mesaMaterializeTails.delete(mesaId);
+  }
+}
+
+/**
+ * Materializa un PedidoOnline en la Venta ABIERTA de su mesa (canal MESA_QR).
+ * Resuelve/abre la venta de la mesa y vuelca los items como VentaItem (+ sabores
+ * + adicionales + observaciones/nota libre) disparando el KDS/impresión por los
+ * hooks. Idempotente por `pedido.ventaId`. Escrituras en transacción; los hooks
+ * corren post-commit.
+ *
+ * Las observaciones predefinidas se resuelven por texto contra el catálogo
+ * `Observacion`; la nota libre y las no matcheadas se cuelgan de un sentinel
+ * ('NOTA DEL CLIENTE') vía observacionLibre. Las modificaciones de ingredientes
+ * no se capturan en pedidos online (no aplica).
+ *
+ * NO chequea permisos: es una función de sistema, gateada aguas arriba por la
+ * validación de mesa (autoservicio habilitado + LAN). El ipc handler la envuelve
+ * con ensurePermission para el uso manual del cajero.
+ */
+export async function materializarPedidoOnlineEnVenta(
+  dataSource: DataSource,
+  pedidoId: number,
+  opts?: { cajaId?: number },
+  _userId?: number,
+): Promise<{ ventaId: number; yaMaterializado: boolean; itemsCreados: number; observacionesNoMapeadas: any[] }> {
+  // Fast-path (no autoritativo): si ya se materializó, salir sin tomar el lock.
+  const pedidoPre = await dataSource.getRepository(PedidoOnline).findOne({ where: { id: pedidoId } });
+  if (!pedidoPre) throw new Error(`Pedido online ${pedidoId} no encontrado`);
+  if (!pedidoPre.mesaId) throw new Error('El pedido no es de mesa (sin mesaId)');
+  if (pedidoPre.ventaId) {
+    return { ventaId: pedidoPre.ventaId, yaMaterializado: true, itemsCreados: 0, observacionesNoMapeadas: [] };
+  }
+
+  return withMesaMaterializeLock(pedidoPre.mesaId, async () => {
+    const pedido = await dataSource.getRepository(PedidoOnline).findOne({
+      where: { id: pedidoId },
+      relations: ['items'],
+    });
+    if (!pedido) throw new Error(`Pedido online ${pedidoId} no encontrado`);
+    // Idempotencia autoritativa BAJO lock: evita doble materialización del mismo pedido.
+    if (pedido.ventaId) {
+      return { ventaId: pedido.ventaId, yaMaterializado: true, itemsCreados: 0, observacionesNoMapeadas: [] };
+    }
+
+    // Caja: la del parámetro o la única caja abierta.
+    let cajaId: number | undefined = opts?.cajaId ? Number(opts.cajaId) : undefined;
+    if (!cajaId) {
+      const abiertas = await dataSource.getRepository(Caja).find({ where: { estado: CajaEstado.ABIERTO } });
+      if (abiertas.length === 0) throw new Error('no_hay_caja_abierta');
+      if (abiertas.length > 1) throw new Error('caja_ambigua_especificar_cajaId');
+      cajaId = abiertas[0].id;
+    }
+
+    const userId = _userId;
+    const createdItemIds: number[] = [];
+    const observacionesNoMapeadas: any[] = [];
+    let ventaId = 0;
+
+    const qr = dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+    try {
+    const mesaRepo = qr.manager.getRepository(PdvMesa);
+    const ventaRepo = qr.manager.getRepository(Venta);
+    const itemRepo = qr.manager.getRepository(VentaItem);
+    const saborRepo = qr.manager.getRepository(VentaItemSabor);
+    const adicionalRepo = qr.manager.getRepository(VentaItemAdicional);
+    const obsCatRepo = qr.manager.getRepository(Observacion);
+    const obsItemRepo = qr.manager.getRepository(VentaItemObservacion);
+
+    // Sentinel para la nota libre del cliente (VentaItemObservacion.observacion es
+    // FK obligatoria; la nota va en observacionLibre colgada de esta observación).
+    // Se asegura vía dataSource (fuera de la transacción) tolerando la colisión de
+    // unique, para no abortar la materialización si dos mesas lo crean a la vez.
+    let sentinelObsId: number | null = null;
+    const getSentinelObs = async (): Promise<number> => {
+      if (sentinelObsId != null) return sentinelObsId;
+      const desc = 'NOTA DEL CLIENTE';
+      const repoObs = dataSource.getRepository(Observacion);
+      let obs = await repoObs.findOne({ where: { descripcion: desc } });
+      if (!obs) {
+        try { obs = await repoObs.save(repoObs.create({ descripcion: desc, activo: true })); }
+        catch { obs = await repoObs.findOne({ where: { descripcion: desc } }); }
+      }
+      if (!obs) throw new Error('no_se_pudo_asegurar_observacion_sentinel');
+      sentinelObsId = obs.id;
+      return sentinelObsId;
+    };
+
+    const mesa = await mesaRepo.findOneBy({ id: pedido.mesaId });
+    if (!mesa) throw new Error(`Mesa ${pedido.mesaId} no encontrada`);
+
+    // Venta ABIERTA de la mesa (comanda IsNull = cuenta de mesa), o crear una.
+    let venta = await ventaRepo.findOne({
+      where: { mesa: { id: mesa.id }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
+    });
+    if (!venta) {
+      venta = ventaRepo.create({
+        estado: VentaEstado.ABIERTA,
+        caja: { id: cajaId } as any,
+        mesa: { id: mesa.id } as any,
+      });
+      await setEntityUserTracking(dataSource, venta, userId, false);
+      venta = await ventaRepo.save(venta);
+      if (mesa.estado !== PdvMesaEstado.OCUPADO) {
+        mesa.estado = PdvMesaEstado.OCUPADO;
+        await setEntityUserTracking(dataSource, mesa, userId, true);
+        await mesaRepo.save(mesa);
+      }
+    }
+    ventaId = venta.id;
+
+    for (const pItem of pedido.items || []) {
+      let pers: any = {};
+      try { pers = pItem.personalizacion ? JSON.parse(pItem.personalizacion) : {}; } catch { pers = {}; }
+      const sabores: any[] = Array.isArray(pers.sabores) ? pers.sabores : [];
+      const adicionales: any[] = Array.isArray(pers.adicionales) ? pers.adicionales : [];
+
+      // El pedido congela precioUnitario = opcion.valor + Σ adicionales.
+      // Se separa igual que el PdV: precioVentaUnitario base + precioAdicionales.
+      const adicTotal = adicionales.reduce((s, a) => s + (Number(a?.precio) || 0), 0);
+      const precioVentaUnitario = Math.max(0, Number(pItem.precioUnitario || 0) - adicTotal);
+
+      const esPizza = sabores.length > 0;
+      let principalRpId: number | undefined;
+      if (esPizza) {
+        const principal = sabores.reduce(
+          (best, s) => (Number(s?.precioReferencia) || 0) > (Number(best?.precioReferencia) || 0) ? s : best,
+          sabores[0],
+        );
+        principalRpId = principal?.recetaPresentacionId;
+      }
+
+      // Costo (best-effort): el snapshot online no lo trae. Pizza → costo_calculado
+      // por RecetaPresentacion ponderado por proporción; simple → PrecioCosto activo
+      // del producto. Sin dato → 0. Necesario para que margen/CMV no queden inflados.
+      const rpCostos = new Map<number, number>();
+      let precioCostoUnitario = 0;
+      if (esPizza) {
+        for (const s of sabores) {
+          const rpId = Number(s?.recetaPresentacionId) || 0;
+          if (!rpId) continue;
+          if (!rpCostos.has(rpId)) {
+            const rp = await qr.manager.getRepository(RecetaPresentacion).findOne({ where: { id: rpId } });
+            rpCostos.set(rpId, Number(rp?.costo_calculado) || 0);
+          }
+          precioCostoUnitario += (Number(s.proporcion) || 1 / sabores.length) * (rpCostos.get(rpId) || 0);
+        }
+      } else {
+        const pc = await qr.manager.getRepository(PrecioCosto).findOne({
+          where: { producto: { id: pItem.productoId }, activo: true },
+          order: { id: 'DESC' },
+        });
+        precioCostoUnitario = Number(pc?.valor) || 0;
+      }
+
+      const vItem = itemRepo.create({
+        venta: { id: ventaId } as any,
+        producto: { id: pItem.productoId } as any,
+        presentacion: pItem.presentacionId ? ({ id: pItem.presentacionId } as any) : null,
+        cantidad: Number(pItem.cantidad) || 1,
+        precioVentaUnitario,
+        precioCostoUnitario,
+        precioAdicionales: adicTotal,
+        estado: EstadoVentaItem.ACTIVO,
+        recetaPresentacion: principalRpId ? ({ id: principalRpId } as any) : null,
+        ensambladoDescripcion: esPizza ? String(pers?.opcion?.label || '').slice(0, 500) : null,
+        cantidadSabores: sabores.length,
+      });
+      await setEntityUserTracking(dataSource, vItem, userId, false);
+      const savedItem = await itemRepo.save(vItem);
+      createdItemIds.push(savedItem.id);
+
+      // Sabores (pizza mitad y mitad) — ids presentes en el snapshot.
+      for (const s of sabores) {
+        if (!s?.recetaPresentacionId) continue;
+        const vs = saborRepo.create({
+          ventaItem: { id: savedItem.id } as any,
+          recetaPresentacion: { id: s.recetaPresentacionId } as any,
+          proporcion: Number(s.proporcion) || 1 / sabores.length,
+          precioReferencia: Number(s.precioReferencia) || 0,
+          costoReferencia: rpCostos.get(Number(s.recetaPresentacionId) || 0) || 0,
+        });
+        await setEntityUserTracking(dataSource, vs, userId, false);
+        await saborRepo.save(vs);
+      }
+
+      // Adicionales — ids presentes en el snapshot.
+      for (const a of adicionales) {
+        if (!a?.id) continue;
+        const va = adicionalRepo.create({
+          ventaItem: { id: savedItem.id } as any,
+          adicional: { id: a.id } as any,
+          precioCobrado: Number(a.precio) || 0,
+          cantidad: 1,
+        });
+        await setEntityUserTracking(dataSource, va, userId, false);
+        await adicionalRepo.save(va);
+      }
+
+      // Observaciones predefinidas: el snapshot online trae el TEXTO; se resuelve
+      // contra el catálogo global `Observacion` (descripcion única). Las que no
+      // matchean + la nota libre se cuelgan del sentinel vía observacionLibre.
+      const obs: string[] = Array.isArray(pers.observaciones) ? pers.observaciones : [];
+      const libres: string[] = [];
+      for (const texto of obs) {
+        const desc = String(texto || '').trim().toUpperCase();
+        if (!desc) continue;
+        const cat = await obsCatRepo.findOne({ where: { descripcion: desc } });
+        if (cat) {
+          const vo = obsItemRepo.create({
+            ventaItem: { id: savedItem.id } as any,
+            observacion: { id: cat.id } as any,
+          });
+          await setEntityUserTracking(dataSource, vo, userId, false);
+          await obsItemRepo.save(vo);
+        } else {
+          libres.push(desc);
+        }
+      }
+      const notaLibre = pers.notaLibre ? String(pers.notaLibre).trim() : '';
+      if (notaLibre) libres.push(notaLibre);
+      if (libres.length) {
+        const vo = obsItemRepo.create({
+          ventaItem: { id: savedItem.id } as any,
+          observacion: { id: await getSentinelObs() } as any,
+          observacionLibre: libres.join(' · ').slice(0, 500),
+        });
+        await setEntityUserTracking(dataSource, vo, userId, false);
+        await obsItemRepo.save(vo);
+      }
+    }
+
+    pedido.ventaId = ventaId;
+    pedido.estado = EstadoPedidoOnline.EN_PREPARACION;
+    await qr.manager.getRepository(PedidoOnline).save(pedido);
+
+    await qr.commitTransaction();
+  } catch (e) {
+    await qr.rollbackTransaction();
+    throw e;
+  } finally {
+    await qr.release();
+  }
+
+  // Post-commit: disparar KDS + impresión (leen por dataSource, ya visible).
+  for (const itemId of createdItemIds) {
+    try { await crearComandaItemsSiCorresponde(dataSource, itemId); }
+    catch (e) { console.warn('[materializar-pedido-online] hook KDS falló:', e); }
+  }
+  try { await autoPrintComandaIfNeeded(dataSource, ventaId); }
+  catch (e) { console.warn('[materializar-pedido-online] auto-imprimir comanda falló:', e); }
+
+    return { ventaId, yaMaterializado: false, itemsCreados: createdItemIds.length, observacionesNoMapeadas };
+  });
 }
 
 export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
@@ -848,6 +1126,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       console.error('Error creating venta item:', error);
       throw error;
     }
+  });
+
+  // Puente MESA_QR: materializa un PedidoOnline en la Venta de su mesa. La lógica
+  // vive en la función module-level `materializarPedidoOnlineEnVenta` (reutilizable
+  // desde el flujo público). Ver domains/pedidos-online.md (MESA_QR, F2).
+  ipcMain.handle('materializar-pedido-online-en-venta', async (_event: any, pedidoId: number, opts?: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+    return materializarPedidoOnlineEnVenta(dataSource, pedidoId, opts, getCurrentUser()?.id);
   });
 
   ipcMain.handle('updateVentaItem', async (_event: any, id: number, data: any) => {

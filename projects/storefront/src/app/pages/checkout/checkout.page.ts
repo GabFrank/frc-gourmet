@@ -6,6 +6,7 @@ import { PublicApiService } from '../../core/public-api.service';
 import { CartService } from '../../core/cart.service';
 import { AuthService } from '../../core/auth.service';
 import { ConfigService } from '../../core/config.service';
+import { MesaService } from '../../core/mesa.service';
 import { IconComponent } from '../../core/icon.component';
 import { TipoPedido } from '../../core/models';
 
@@ -25,6 +26,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
   cart = inject(CartService);
   auth = inject(AuthService);
   config = inject(ConfigService);
+  mesa = inject(MesaService);
 
   tipo: TipoPedido = 'PICKUP';
   direccion = '';
@@ -45,6 +47,12 @@ export class CheckoutPage implements OnInit, OnDestroy {
   total = 0;
 
   ngOnInit(): void {
+    if (this.mesa.enMesa) {
+      // Modo mesa: no hay pickup/delivery ni mapa; se paga en la caja.
+      this.tipo = 'MESA_QR';
+      this.recomputar();
+      return;
+    }
     if (!this.config.config.permitePickup && this.config.config.permiteDelivery) this.tipo = 'DELIVERY';
     this.recomputar();
     if (this.tipo === 'DELIVERY') this.initMapaLazy();
@@ -126,6 +134,42 @@ export class CheckoutPage implements OnInit, OnDestroy {
 
   confirmar(): void {
     this.error = null;
+
+    // ── Modo MESA_QR: invitado con nombre, sin dirección ni pago (paga en caja) ──
+    if (this.mesa.enMesa) {
+      if (!this.mesa.ctx) {
+        this.error = 'No pudimos validar la mesa. Volvé a escanear el QR de la mesa.';
+        return;
+      }
+      if (!this.mesa.ctx.habilitada) {
+        this.error = 'La mesa todavía no está habilitada para autoservicio. Pedile al mozo que la active.';
+        return;
+      }
+      const nombre = (this.mesa.nombre || '').trim();
+      if (!nombre) { this.error = 'Ingresá tu nombre para el pedido.'; return; }
+      this.enviando = true;
+      const payloadMesa: any = {
+        tipoPedido: 'MESA_QR',
+        mesaToken: this.mesa.token,
+        nombreCliente: nombre,
+        items: this.cart.toPedidoItems(),
+        notas: this.notas.trim() || null,
+      };
+      this.api.call<any>('pedido.crear', [payloadMesa]).subscribe({
+        next: (res) => {
+          this.enviando = false;
+          if (res?.success) {
+            this.cart.limpiar();
+            this.router.navigate(['/mis-pedidos'], { queryParams: { nuevo: res.numero } });
+          } else {
+            this.error = this.mensajeError(res);
+          }
+        },
+        error: (e) => { this.enviando = false; this.error = 'No se pudo enviar el pedido. ' + (e?.message || ''); },
+      });
+      return;
+    }
+
     const coords = this.lat != null && this.lng != null;
     const direccionFinal = this.manual
       ? this.direccion.trim()
@@ -169,6 +213,11 @@ export class CheckoutPage implements OnInit, OnDestroy {
       case 'tienda_cerrada': return 'La tienda está cerrada en este momento.';
       case 'pickup_no_disponible': return 'El retiro no está disponible.';
       case 'delivery_no_disponible': return 'El delivery no está disponible.';
+      case 'mesa_no_disponible': return 'Los pedidos en mesa no están habilitados.';
+      case 'mesa_invalida': return 'El código de la mesa no es válido. Escaneá de nuevo el QR.';
+      case 'mesa_no_habilitada': return 'La mesa no está habilitada. Pedile al mozo que active el autoservicio.';
+      case 'fuera_de_red_local': return 'Para pedir en la mesa tenés que estar conectado al WiFi del local.';
+      case 'falta_nombre': return 'Ingresá tu nombre para el pedido.';
       default: return res?.error || 'No se pudo crear el pedido.';
     }
   }

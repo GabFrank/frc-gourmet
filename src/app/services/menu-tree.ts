@@ -36,6 +36,7 @@ import { ListMonedasComponent } from 'src/app/pages/financiero/monedas/list-mone
 import { ListMotivosValeComponent } from 'src/app/pages/rrhh/motivos-vale/list-motivos-vale.component';
 import { ListNotificacionesRrhhComponent } from 'src/app/pages/rrhh/notificaciones/list-notificaciones-rrhh.component';
 import { ListPedidosOnlineComponent } from 'src/app/pages/ventas/pedidos-online/list-pedidos-online.component';
+import { MesasQrComponent } from 'src/app/pages/ventas/pedidos-online/mesas-qr/mesas-qr.component';
 import { ListPenalizacionesComponent } from 'src/app/pages/rrhh/penalizaciones/list-penalizaciones.component';
 import { ListPermisosComponent } from 'src/app/pages/personalizacion/permisos/list-permisos/list-permisos.component';
 import { ListPersonasComponent } from 'src/app/pages/personas/personas/list-personas.component';
@@ -145,6 +146,9 @@ export const MENU_TREE: MenuNode[] = [
       { id: 'pedidos-online', label: 'Pedidos Online', icon: 'shopping_bag', permiso: 'VENTAS_PDV',
         keywords: ['pedidos', 'online', 'delivery'],
         action: { component: ListPedidosOnlineComponent, title: 'Pedidos Online', tabId: 'pedidos-online-tab', data: NAV } },
+      { id: 'mesas-qr', label: 'QR de Mesas', icon: 'qr_code_2', permiso: 'VENTAS_PDV',
+        keywords: ['qr', 'mesa', 'mesas', 'autoservicio', 'tienda', 'lamina', 'imprimir'],
+        action: { component: MesasQrComponent, title: 'QR de Mesas', tabId: 'mesas-qr-tab', data: NAV } },
       { id: 'kds', label: 'KDS — Cocina', icon: 'restaurant', permiso: 'COMANDAS_KDS_VER',
         keywords: ['kds', 'cocina', 'comandas'],
         action: { component: KdsComponent, title: 'KDS — Cocina', tabId: 'kds-tab', data: NAV } },

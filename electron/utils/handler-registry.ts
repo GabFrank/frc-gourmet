@@ -58,6 +58,8 @@ export interface HandlerInvocationContext {
   deviceId?: number | null;
   /** id de CuentaCliente cuando la invocación viene de la superficie pública /pub. */
   customerId?: number | null;
+  /** IP de origen del request HTTP (para validaciones de red, ej. MESA_QR LAN). */
+  clientIp?: string | null;
 }
 
 /**
@@ -95,6 +97,7 @@ export async function invokeHandlerWithContext(
   if (context?.userId != null) fakeEvent._httpUserId = context.userId;
   if (context?.deviceId != null) fakeEvent._deviceId = context.deviceId;
   if (context?.customerId != null) fakeEvent._customerId = context.customerId;
+  if (context?.clientIp != null) fakeEvent._clientIp = context.clientIp;
   return fn(fakeEvent, ...args);
 }
 

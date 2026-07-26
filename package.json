@@ -61,7 +61,8 @@
     "icons": "node scripts/generate-icons.js",
     "generate:mobile-api": "node scripts/generate-mobile-api-map.js",
     "generate:web-api": "node scripts/generate-mobile-api-map.js",
-    "prepare": "husky || true"
+    "prepare": "husky || true",
+    "test:mesa-qr": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-mesa-qr-e2e.ts"
   },
   "private": true,
   "dependencies": {

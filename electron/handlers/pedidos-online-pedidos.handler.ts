@@ -15,8 +15,11 @@ import {
   CanalPedidoOnline,
   MetodoPagoOnline,
 } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { PdvMesa } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { registerPublicOperation } from '../server/public-routes';
 import { getTiendaConfig, estaAbierta, getPizzaConfig } from './pedidos-online-config.handler';
+import { materializarPedidoOnlineEnVenta } from './ventas.handler';
+import { ipEnRangosLan } from '../utils/ip-lan.util';
 
 /**
  * Pedidos online — Fase 3: creación de pedido + zonas de delivery (superficie pública).
@@ -233,25 +236,54 @@ export function registerPedidosOnlinePedidosHandlers(
   // ============== CREAR PEDIDO (público, requiere cliente) ==============
   ipcMain.handle('crear-pedido-online', async (event: any, data: any) => {
     const customerId = event?._customerId;
-    if (!customerId) return { success: false, error: 'no_autenticado' };
-
     const tipoPedido: TipoPedidoOnline = data?.tipoPedido || TipoPedidoOnline.PICKUP;
     const itemsIn: any[] = Array.isArray(data?.items) ? data.items : [];
     if (!itemsIn.length) return { success: false, error: 'pedido_sin_items' };
 
-    const cuenta = await dataSource
-      .getRepository(CuentaCliente)
-      .findOne({ where: { id: customerId } });
-    if (!cuenta || !cuenta.activo) return { success: false, error: 'cuenta_invalida' };
-
-    // Config de tienda: apertura + tipos de pedido habilitados.
+    // Config de tienda: apertura.
     const cfg = await getTiendaConfig(dataSource);
     if (!estaAbierta(cfg)) return { success: false, error: 'tienda_cerrada' };
-    if (tipoPedido === TipoPedidoOnline.PICKUP && !cfg.permitePickup) {
-      return { success: false, error: 'pickup_no_disponible' };
-    }
-    if (tipoPedido === TipoPedidoOnline.DELIVERY && !cfg.permiteDelivery) {
-      return { success: false, error: 'delivery_no_disponible' };
+
+    // ── Resolución del solicitante según el canal ──
+    // MESA_QR: autoservicio en mesa, invitado permitido (solo nombre obligatorio,
+    // teléfono/cuenta opcional). PICKUP/DELIVERY: exige cliente autenticado.
+    let cuenta: CuentaCliente | null = null;
+    let mesa: PdvMesa | null = null;
+    let nombreClienteInvitado: string | null = null;
+
+    if (tipoPedido === TipoPedidoOnline.MESA_QR) {
+      if (!cfg.permiteMesa) return { success: false, error: 'mesa_no_disponible' };
+      const token = String(data?.mesaToken || '').trim();
+      if (!token) return { success: false, error: 'falta_mesa_token' };
+      mesa = await dataSource.getRepository(PdvMesa).findOne({ where: { qrToken: token } });
+      if (!mesa || !mesa.activo) return { success: false, error: 'mesa_invalida' };
+      // Gate del cajero: la mesa debe estar habilitada para autoservicio.
+      if (!mesa.autoservicioActivo) return { success: false, error: 'mesa_no_habilitada' };
+      // Anti-fraude de red: el pedido debe venir de una IP permitida (la red del
+      // local). Requiere trustProxy si el server está detrás de reverse proxy.
+      if (cfg.requiereLanMesa) {
+        const clientIp = String(event?._clientIp || '');
+        if (!ipEnRangosLan(clientIp, cfg.rangoLanMesa)) {
+          return { success: false, error: 'fuera_de_red_local' };
+        }
+      }
+      nombreClienteInvitado = String(data?.nombreCliente || '').trim().slice(0, 150);
+      if (!nombreClienteInvitado) return { success: false, error: 'falta_nombre' };
+      // Si además viene autenticado, se asocia la cuenta (opcional).
+      if (customerId) {
+        cuenta = await dataSource.getRepository(CuentaCliente).findOne({ where: { id: customerId } });
+        if (cuenta && !cuenta.activo) cuenta = null;
+      }
+    } else {
+      if (!customerId) return { success: false, error: 'no_autenticado' };
+      cuenta = await dataSource.getRepository(CuentaCliente).findOne({ where: { id: customerId } });
+      if (!cuenta || !cuenta.activo) return { success: false, error: 'cuenta_invalida' };
+      if (tipoPedido === TipoPedidoOnline.PICKUP && !cfg.permitePickup) {
+        return { success: false, error: 'pickup_no_disponible' };
+      }
+      if (tipoPedido === TipoPedidoOnline.DELIVERY && !cfg.permiteDelivery) {
+        return { success: false, error: 'delivery_no_disponible' };
+      }
     }
 
     const productoRepo = dataSource.getRepository(Producto);
@@ -364,10 +396,11 @@ export function registerPedidosOnlinePedidosHandlers(
     // Persistencia (con reintento de número por colisión de índice único).
     const pedido = new PedidoOnline();
     pedido.numero = await siguienteNumero(pedidoRepo());
-    pedido.cuentaCliente = cuenta;
-    pedido.nombreCliente = cuenta.nombre || null as any;
-    pedido.telefonoCliente = cuenta.telefono;
+    pedido.cuentaCliente = (cuenta || null) as any;
+    pedido.nombreCliente = (cuenta?.nombre || nombreClienteInvitado || null) as any;
+    pedido.telefonoCliente = (cuenta?.telefono ?? null) as any;
     pedido.tipoPedido = tipoPedido;
+    if (mesa) pedido.mesaId = mesa.id;
     // Aceptación automática: entra ACEPTADO directo; si no, RECIBIDO (revisión en PdV).
     if (cfg.aceptacionAutomatica) {
       pedido.estado = EstadoPedidoOnline.ACEPTADO;
@@ -375,8 +408,13 @@ export function registerPedidosOnlinePedidosHandlers(
     } else {
       pedido.estado = EstadoPedidoOnline.RECIBIDO;
     }
-    pedido.canalOrigen = data?.canalOrigen || CanalPedidoOnline.WEB;
-    pedido.metodoPago = data?.metodoPago || MetodoPagoOnline.EFECTIVO;
+    pedido.canalOrigen = tipoPedido === TipoPedidoOnline.MESA_QR
+      ? CanalPedidoOnline.QR_MESA
+      : (data?.canalOrigen || CanalPedidoOnline.WEB);
+    // MESA_QR: el pago es SIEMPRE en la caja física; el método queda EFECTIVO.
+    pedido.metodoPago = tipoPedido === TipoPedidoOnline.MESA_QR
+      ? MetodoPagoOnline.EFECTIVO
+      : (data?.metodoPago || MetodoPagoOnline.EFECTIVO);
     pedido.fechaProgramada = data?.fechaProgramada ? new Date(data.fechaProgramada) : undefined;
     pedido.subtotal = subtotal;
     pedido.costoEnvio = costoEnvio;
@@ -392,23 +430,43 @@ export function registerPedidosOnlinePedidosHandlers(
     pedido.notas = data?.notas || undefined;
     pedido.items = itemsToSave;
 
+    // El número (`count()+1`) puede colisionar con pedidos concurrentes (ej. un
+    // grupo grande en una mesa mandando varios pedidos en segundos). Se reintenta
+    // regenerando el número; tras N intentos se propaga el error real.
     let saved: PedidoOnline;
-    try {
-      saved = await pedidoRepo().save(pedido);
-    } catch {
-      // Reintento por si el número colisionó con un pedido concurrente.
-      pedido.numero = await siguienteNumero(pedidoRepo());
-      saved = await pedidoRepo().save(pedido);
+    for (let intento = 1; ; intento++) {
+      try {
+        saved = await pedidoRepo().save(pedido);
+        break;
+      } catch (e) {
+        if (intento >= 6) throw e;
+        pedido.numero = await siguienteNumero(pedidoRepo());
+      }
+    }
+
+    // MESA_QR: materializar automáticamente en la venta de la mesa (auto a cocina).
+    // Best-effort: si no hay caja abierta o es ambiguo, el pedido queda para que el
+    // cajero lo materialice desde la bandeja. Nunca falla el pedido por esto.
+    let ventaId: number | null = null;
+    if (tipoPedido === TipoPedidoOnline.MESA_QR) {
+      try {
+        const mat = await materializarPedidoOnlineEnVenta(dataSource, saved.id);
+        ventaId = mat?.ventaId ?? null;
+      } catch (e) {
+        console.warn('[crear-pedido-online] auto-materialización MESA_QR falló:', (e as any)?.message || e);
+      }
     }
 
     return {
       success: true,
       numero: saved.numero,
       pedidoId: saved.id,
-      estado: saved.estado,
+      // Si se materializó, el pedido ya está EN_PREPARACION (en cocina).
+      estado: ventaId ? EstadoPedidoOnline.EN_PREPARACION : saved.estado,
       subtotal,
       costoEnvio,
       total,
+      ventaId,
     };
   });
 
@@ -437,9 +495,31 @@ export function registerPedidosOnlinePedidosHandlers(
     return { success: true, pedido: mapPedido(pedido) };
   });
 
+  // ====== CONTEXTO DE MESA POR TOKEN (público, sin auth) — canal MESA_QR ======
+  // El storefront, al abrir /tienda?mesa=<token>, resuelve el nº de mesa y si el
+  // autoservicio está habilitado. NO devuelve el token (el cliente ya lo tiene).
+  ipcMain.handle('get-mesa-online-por-token', async (_event: any, token: string) => {
+    const t = String(token || '').trim();
+    if (!t) return { success: false, error: 'falta_mesa_token' };
+    const mesa = await dataSource.getRepository(PdvMesa).findOne({ where: { qrToken: t } });
+    if (!mesa || !mesa.activo) return { success: false, error: 'mesa_invalida' };
+    const cfg = await getTiendaConfig(dataSource);
+    return {
+      success: true,
+      mesaId: mesa.id,
+      numero: mesa.numero,
+      habilitada: !!mesa.autoservicioActivo && !!cfg.permiteMesa,
+      permiteMesa: !!cfg.permiteMesa,
+      nombreComercio: cfg.nombreComercio || null,
+    };
+  });
+
   // ---- Operaciones públicas ----
   registerPublicOperation('zonas.get', { channel: 'get-zonas-delivery-online', requiresAuth: false, description: 'Zonas de delivery activas.' });
-  registerPublicOperation('pedido.crear', { channel: 'crear-pedido-online', requiresAuth: true, description: 'Crear un pedido online.' });
+  registerPublicOperation('mesa.get', { channel: 'get-mesa-online-por-token', requiresAuth: false, description: 'Contexto de una mesa por su token QR.' });
+  // pedido.crear usa optionalAuth: MESA_QR admite invitado; PICKUP/DELIVERY exige
+  // cliente (validado dentro del handler). Si viene token de cliente, se resuelve.
+  registerPublicOperation('pedido.crear', { channel: 'crear-pedido-online', requiresAuth: false, optionalAuth: true, description: 'Crear un pedido online.' });
   registerPublicOperation('pedido.mis', { channel: 'get-mis-pedidos-online', requiresAuth: true, description: 'Mis pedidos.' });
   registerPublicOperation('pedido.estado', { channel: 'get-pedido-online-estado', requiresAuth: true, description: 'Estado de un pedido por número.' });
 }

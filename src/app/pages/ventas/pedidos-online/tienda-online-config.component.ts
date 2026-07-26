@@ -66,6 +66,19 @@ import { RepositoryService } from '../../../database/repository.service';
           </mat-slide-toggle>
         </div>
 
+        <h3 class="sub">Pedidos en mesa (QR autoservicio)</h3>
+        <div class="toggles">
+          <mat-slide-toggle [(ngModel)]="cfg.permiteMesa" color="primary">Permite pedidos en mesa (QR)</mat-slide-toggle>
+          <mat-slide-toggle [(ngModel)]="cfg.requiereLanMesa" color="warn">
+            Exigir la red del local (WiFi) para pedir en mesa
+          </mat-slide-toggle>
+        </div>
+        <mat-form-field appearance="outline" class="lan-field" *ngIf="cfg.requiereLanMesa">
+          <mat-label>IPs / CIDR permitidos para mesa (separados por coma)</mat-label>
+          <input matInput [(ngModel)]="cfg.rangoLanMesa" placeholder="Ej: 190.10.20.30 (IP pública del local)" maxlength="255">
+          <mat-hint>Detrás de proxy en la nube: la IP pública de egreso del local. Vacío = rangos privados. Desactivá el toggle en desarrollo.</mat-hint>
+        </mat-form-field>
+
         <div class="actions">
           <button mat-flat-button color="primary" [disabled]="guardando" (click)="guardar()">
             <mat-icon>save</mat-icon> Guardar
@@ -85,6 +98,8 @@ import { RepositoryService } from '../../../database/repository.service';
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0 6px; }
     .grid .full { grid-column: 1 / -1; }
     .toggles { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 18px; }
+    .sub { color: var(--text-primary); margin: 8px 0 4px; font-size: 15px; }
+    .lan-field { width: 100%; margin-bottom: 8px; }
     .actions { display: flex; justify-content: flex-end; }
     @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
   `],

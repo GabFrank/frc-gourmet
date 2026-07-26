@@ -37,6 +37,21 @@ export class PdvMesa extends BaseModel {
   })
   estado!: PdvMesaEstado;
 
+  /**
+   * Token opaco (UUID) codificado en el QR estático de la mesa para el
+   * autoservicio de pedidos (canal MESA_QR). Se resuelve la mesa por este token,
+   * nunca por el número. Ver domains/pedidos-online.md (MESA_QR).
+   */
+  @Column({ name: 'qr_token', type: 'varchar', length: 64, nullable: true, unique: true })
+  qrToken?: string;
+
+  /**
+   * Autoservicio por QR habilitado por el cajero para esta mesa (gate anti-fraude):
+   * la mesa solo acepta pedidos MESA_QR mientras esté en true.
+   */
+  @Column({ name: 'autoservicio_activo', type: 'boolean', default: false })
+  autoservicioActivo!: boolean;
+
   @ManyToOne(() => Reserva, { nullable: true })
   @JoinColumn({ name: 'reserva_id' })
   reserva?: Reserva;

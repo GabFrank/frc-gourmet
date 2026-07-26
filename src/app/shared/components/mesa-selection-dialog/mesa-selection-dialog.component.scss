@@ -127,3 +127,46 @@
   font-weight: bold;
   position: relative;
 }
+
+// Mesa en modo autoatención por QR: ortogonal al estado de fondo (available/
+// occupied/reserved). Se marca con borde celeste + icono de celular, para que el
+// cajero la monitoree en el mapa.
+.autoservicio {
+  outline: 3px solid #07a4ff;
+  outline-offset: -3px;
+}
+
+.autoservicio-icon {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+  color: #07a4ff;
+}
+
+// Cada celda = botón de selección + toggle de autoservicio debajo.
+.table-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.autoservicio-toggle {
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  color: var(--text-disabled);
+
+  .mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  &.on {
+    color: #07a4ff;
+  }
+}

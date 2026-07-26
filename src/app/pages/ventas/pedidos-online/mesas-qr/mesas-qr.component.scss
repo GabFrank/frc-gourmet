@@ -1,0 +1,82 @@
+.mesas-qr-page {
+  padding: 16px;
+}
+
+.toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.url-field {
+  min-width: 320px;
+}
+
+.hint {
+  color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+  font-size: 12px;
+  margin: 0 0 16px;
+
+  &.warn {
+    color: var(--warning-color, #f4ab36);
+    font-weight: 600;
+  }
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.lamina {
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  background: var(--surface, #fff);
+  color: var(--text-primary, inherit);
+  break-inside: avoid;
+
+  .titulo {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .qr {
+    width: 100%;
+    max-width: 220px;
+    height: auto;
+    image-rendering: pixelated;
+  }
+
+  .instruccion {
+    font-size: 13px;
+    margin-top: 8px;
+  }
+}
+
+// Impresión: siempre sobre papel blanco, sin la barra de acciones.
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .mesas-qr-page {
+    padding: 0;
+  }
+
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .lamina {
+    border: 1px solid #000;
+    color: #000;
+    background: #fff;
+    page-break-inside: avoid;
+  }
+}

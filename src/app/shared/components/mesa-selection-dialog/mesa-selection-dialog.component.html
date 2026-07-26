@@ -22,17 +22,29 @@
 
     <!-- Mesas grid -->
     <div class="tables-grid" *ngIf="activeTab === 'MESAS'">
-      <button
-        mat-raised-button
-        *ngFor="let mesa of data.mesas"
-        (click)="selectMesa(mesa)"
-        [class.status-available]="mesa.estado === 'DISPONIBLE'"
-        [class.status-occupied]="mesa.estado !== 'DISPONIBLE'"
-        [class.status-reserved]="mesa.reservado"
-        class="table-button">
-        {{ mesa.numero }}
-        <mat-icon *ngIf="mesa.reservado" class="reserved-icon">event_busy</mat-icon>
-      </button>
+      <div class="table-cell" *ngFor="let mesa of data.mesas">
+        <button
+          mat-raised-button
+          (click)="selectMesa(mesa)"
+          [class.status-available]="mesa.estado === 'DISPONIBLE'"
+          [class.status-occupied]="mesa.estado !== 'DISPONIBLE'"
+          [class.status-reserved]="mesa.reservado"
+          [class.autoservicio]="mesa.autoservicioActivo"
+          class="table-button">
+          {{ mesa.numero }}
+          <mat-icon *ngIf="mesa.reservado" class="reserved-icon">event_busy</mat-icon>
+          <mat-icon *ngIf="mesa.autoservicioActivo" class="autoservicio-icon"
+            matTooltip="Autoatención QR en curso">smartphone</mat-icon>
+        </button>
+        <button
+          mat-icon-button
+          class="autoservicio-toggle"
+          [class.on]="mesa.autoservicioActivo"
+          (click)="toggleAutoservicio(mesa)"
+          [matTooltip]="mesa.autoservicioActivo ? 'Deshabilitar autoservicio QR' : 'Habilitar autoservicio QR'">
+          <mat-icon>{{ mesa.autoservicioActivo ? 'qr_code' : 'qr_code_scanner' }}</mat-icon>
+        </button>
+      </div>
     </div>
 
     <!-- Comandas grid -->
