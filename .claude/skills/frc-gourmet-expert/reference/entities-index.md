@@ -162,3 +162,16 @@
 ## Listas programáticas
 
 Lista completa en `getEntitiesList()` de `src/app/database/database.config.ts`. Para verificar el conteo: `find src/app/database/entities -name '*.entity.ts' | wc -l`.
+
+---
+
+## Entidades nuevas 2026-07 (por dominio)
+
+- **facturacion/**: `Timbrado`, `TimbradoDetalle`, `Factura`, `FacturaItem`, `FacturaPlantilla`, `FacturacionConfig`. → [domains/facturacion.md](../domains/facturacion.md).
+- **pedidos-online/**: `PedidoOnline`, `PedidoOnlineItem`, `CuentaCliente`, `ZonaDelivery`, `TiendaOnlineConfig`, `CustomerRefreshToken`, `CodigoOtp`. → [domains/pedidos-online.md](../domains/pedidos-online.md).
+- **ventas/**: `CobroParcial`, `CobroParcialItem` (+ cache `VentaItem.montoCubierto`, `PagoDetalle.cobroParcialId`). → [domains/ventas-pdv.md](../domains/ventas-pdv.md).
+- **financiero/**: `GastoCaja`, `EgresoCaja` (+ `ConteoDetalle.monto`, `Caja.motivoAjuste`).
+- **auth/**: `DeviceAuthCode` (login por QR).
+- **rrhh/**: `FuncionarioRostro` (+ `Asistencia.metodoRegistro`/`similitudFacial`, `Empresa` geocerca). → [domains/rrhh-asistencia-facial.md](../domains/rrhh-asistencia-facial.md).
+- **productos/**: flags `Producto.disponibleOnline`/`pausadoOnline`, `Compra.simplificada`, `PrecioVenta.recetaPresentacion`, `Presentacion.imageUrl`, `Sabor.imageUrl`.
+- **financiero/**: `MovimientoCliente.anulado`.

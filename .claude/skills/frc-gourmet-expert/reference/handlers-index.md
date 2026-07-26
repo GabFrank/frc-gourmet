@@ -122,3 +122,20 @@ Los handlers sensibles llaman `ensurePermission(dataSource, getCurrentUser, 'COD
 `electron/handlers/caja-mayor-utils.ts`:
 - `actualizarSaldoCajaMayor(qr, cajaMayorId, monedaId, formaPagoId, monto, tipo)` — único punto de actualización de CajaMayorSaldo.
 - `esIngreso(tipo): boolean` — clasifica TipoMovimiento.
+
+---
+
+## Handlers nuevos 2026-07
+
+- `facturacion.handler.ts` — timbrado/plantillas/facturas, numeración atómica. → [domains/facturacion.md](../domains/facturacion.md).
+- `pedidos-online-auth.handler.ts`, `pedidos-online-pedidos.handler.ts`, `pedidos-online-admin.handler.ts` (+ `config`/`menu`) — storefront público (`/pub/*`) + bandeja PdV. → [domains/pedidos-online.md](../domains/pedidos-online.md).
+- `kds.handler.ts` — feed KDS, bump/recall/estado, broadcast de eventos. → [domains/cocina-impresion.md](../domains/cocina-impresion.md).
+- `gastos-caja.handler.ts`, `pdv-egresos.handler.ts` — utilitarios del cajón (GastoCaja / EgresoCaja: vale, compra). → [domains/ventas-pdv.md](../domains/ventas-pdv.md).
+- `asistencia-facial.handler.ts`, `face-models.handler.ts`, `empresa.handler.ts` — fichaje facial + geocerca. → [domains/rrhh-asistencia-facial.md](../domains/rrhh-asistencia-facial.md).
+- Cobro parcial: `getEstadoCobroVenta`/`registrarCobroParcial`/`anularCobroParcial` (en `ventas.handler.ts`).
+- Cajas: `get-cajas-abiertas`, `generar-retiro-cierre-caja`, `puede-ajustar-caja`/`finalizar-ajuste-caja`.
+- Sabores: `get-all-sabores`, `reparar-recetas-compartidas` (en `recetas.handler.ts`).
+- Login QR: rutas Fastify `electron/server/device-auth-routes.ts` (`/api/auth/device/*`).
+- Rutas Fastify: `electron/server/public-routes.ts` (`/pub/*`), `kds-sse-routes.ts` (`/api/kds/stream`), static `/admin/` + `/tienda/`.
+- Impresoras: `list-system-printers`, `scan-network-printers`, `test-printer-connection`, `print-cierre-caja`.
+- WhatsApp: `enviar-resumen-cierre-whatsapp` (+ `whatsapp.service.ts` / `whatsapp-sender.ts`).
