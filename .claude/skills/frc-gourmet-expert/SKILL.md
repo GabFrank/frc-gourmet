@@ -57,14 +57,18 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | **Buscador global** (command palette Ctrl+Espacio, árbol único de menús, handler `buscar-global`) | [domains/buscador-global.md](domains/buscador-global.md) |
 | Login, sesiones, roles, permisos, `getCurrentUser` | [architecture/auth-permissions.md](architecture/auth-permissions.md) |
 | **Productos** (Familia/Subfamilia/Producto/Presentación/Precios) | [domains/productos.md](domains/productos.md) |
-| **Recetas, Sabores, Variaciones** (refactor 2024-07-29, multi-sabor pizza) | [domains/recetas-sabores-variaciones.md](domains/recetas-sabores-variaciones.md) |
-| **Ventas y PdV** (mesas, comandas, atajos, delivery, cobro) | [domains/ventas-pdv.md](domains/ventas-pdv.md) |
-| **Compras** (proveedor, finalizar, pago unificado vía CPP) | [domains/compras-cpp.md](domains/compras-cpp.md) |
+| **Recetas, Sabores, Variaciones** (cada variación su propia receta desde 2026-07, multi-sabor pizza, Gestión de Sabores) | [domains/recetas-sabores-variaciones.md](domains/recetas-sabores-variaciones.md) |
+| **Ventas y PdV** (mesas, comandas, atajos, delivery, cobro parcial por ítems, cajas compartidas, utilitarios del cajón) | [domains/ventas-pdv.md](domains/ventas-pdv.md) |
+| **Compras** (proveedor, finalizar, pago unificado vía CPP, compra simplificada) | [domains/compras-cpp.md](domains/compras-cpp.md) |
+| **Facturación legal** (SET/SIFEN, timbrado+numeración, emisión desde el cobro del PdV, plantillas pdfmake) | [domains/facturacion.md](domains/facturacion.md) |
+| **Pedidos Online / Storefront** (webapp pública tipo iFood, `/pub/*`, auth de cliente, bandeja PdV, pizza online) | [domains/pedidos-online.md](domains/pedidos-online.md) |
 | **Importación de facturas con OCR + IA** (GPT-4o vision, aliases, revisor en tab) | [domains/importacion-facturas-ocr.md](domains/importacion-facturas-ocr.md) |
+| **KDS (Kitchen Display Screen)** (componente compartido desktop/PWA `/kds`, SSE, modo TV, bump bar) | [domains/cocina-impresion.md](domains/cocina-impresion.md) |
 | **Caja Mayor** (movimientos, anulaciones, configuración) | [domains/financiero-caja-mayor.md](domains/financiero-caja-mayor.md) |
 | **Bancos, cheques, POS** (cuentas bancarias, acreditaciones) | [domains/financiero-bancos-pos.md](domains/financiero-bancos-pos.md) |
 | **CPP / CPC** (dirección de flujo, préstamos a funcionarios) | [domains/financiero-cpp-cpc.md](domains/financiero-cpp-cpc.md) |
 | **RRHH** (funcionarios, asistencias, vales, vacaciones) | [domains/rrhh.md](domains/rrhh.md) |
+| **RRHH — Fichaje facial** (reconocimiento facial de asistencia, embeddings on-device, match 1:N, liveness, geocerca, kiosco PWA) | [domains/rrhh-asistencia-facial.md](domains/rrhh-asistencia-facial.md) |
 | **Liquidaciones, comisiones** (sueldo, aguinaldo, equipos) | [domains/rrhh-liquidaciones.md](domains/rrhh-liquidaciones.md) |
 | **Personas, Clientes, Usuarios** | [domains/personas-clientes.md](domains/personas-clientes.md) |
 | **Impresoras térmicas** | [domains/cocina-impresion.md](domains/cocina-impresion.md) |
@@ -114,9 +118,27 @@ Estas las debo respetar SIEMPRE, sin que el usuario las repita:
 
 ---
 
-## 4. Estado actual del repo (snapshot 2026-05-15, ampliado 2026-07)
+## 4. Estado actual del repo (snapshot 2026-05-15, ampliado y reauditado 2026-07-26)
 
 > Esta sección puede quedar desactualizada. Si el usuario pregunta por estado actual, **revisar `git log` y memorias antes de responder**.
+> Canal alpha en `develop` va por **`v1.21.0-alpha.98`** (2026-07). El "primer stable v1.1.0" del snapshot viejo es historia lejana.
+
+### Reauditoría integral 2026-07-26 (subsistemas nuevos)
+
+Auditoría de ~240 commits desde 2026-06-28. Subsistemas **nuevos completos** que ahora tienen doc propio:
+
+- **Facturación legal (SET/SIFEN)** — timbrado + numeración atómica, emisión desde el cobro del PdV, plantillas pdfmake (A4 forzado, total en letras), toggle Resumido. ⚠️ Sin permisos dedicados todavía. → [domains/facturacion.md](domains/facturacion.md).
+- **Pedidos Online / Storefront** — 3er proyecto Angular (`projects/storefront`, base-href `/tienda/`), superficie pública aislada `/pub/*` con whitelist, **JWT de cliente separado del staff** (keytar `customer-jwt-secret`), auth por OTP WhatsApp Cloud / email / Google, bandeja de aceptación en el PdV (polling 15s), pizza sabor×tamaño + mitad y mitad. Solo en **modo server**. → [domains/pedidos-online.md](domains/pedidos-online.md).
+- **KDS (Kitchen Display Screen)** — componente compartido desktop (tab) / PWA `/kds` (TV), **SSE** en web (`kds-sse-routes.ts`) + poll de respaldo, modo TV anti-overscan, bump bar/numpad, detalle por ítem (removidos/cambios/adicionales/observaciones), ABM de pantallas con semáforo. → [domains/cocina-impresion.md](domains/cocina-impresion.md).
+- **RRHH — Fichaje facial** — `@vladmandic/human`, embeddings on-device, match 1:N en backend (coseno+umbral+margen), liveness server-authoritative, geocerca Haversine, kiosco PWA con auto-captura y cola offline, descarga de modelos in-app. → [domains/rrhh-asistencia-facial.md](domains/rrhh-asistencia-facial.md).
+- **Cobro parcial por ítems (PdV)** — entidades `CobroParcial`/`CobroParcialItem` + cache `VentaItem.montoCubierto`, imputación en bruto con `factorAplicado`, tab Items en el diálogo de cobro, chips PAGADO/PARCIAL, ítems cubiertos bloqueados. → [domains/ventas-pdv.md](domains/ventas-pdv.md).
+- **Web `/admin`** — el **frontend desktop completo servido como web** (bundle `dist/frc-gourmet-web`, `--base-href /admin/`), shim HTTP `window.api`→`/api/rpc`, auth de staff. Distinto de la PWA mobile (`/`) y del storefront (`/tienda`). → [architecture/cliente-servidor.md](architecture/cliente-servidor.md), [architecture/mobile-pwa.md](architecture/mobile-pwa.md).
+- **WhatsApp (dos mecanismos):** **Evolution API** (self-hosted, apikey en keytar) para notificaciones RRHH + **resumen de cierre de caja como imagen**; **WhatsApp Cloud (Meta)** solo para el OTP de pedidos online.
+- **Utilitarios del cajón PdV** — tarjetas Gastos (`GastoCaja`), Vale/Compra/Egresos (`EgresoCaja` + `pdv-egresos.handler.ts`, permisos `PDV_PAGAR_VALE`/`PDV_PAGAR_COMPRA`/`PDV_ANULAR_EGRESO`), Últimas Ventas con acciones (reimprimir/cancelar/pagaré). **Compra simplificada sin ítems** (`Compra.simplificada`).
+- **Cajas** — caja **compartida multi-dispositivo** con cobro restringido al dispositivo dueño, **auto-retiro del cierre** (`generarRetiroDelCierre`), **ajustar caja cerrada** (`FINANCIERO_CAJA_AJUSTAR`), guard anti-ventas-huérfanas, conteo simplificado (`ConteoDetalle.monto`).
+- **Login por QR (desktop + PWA)** — Device Authorization Grant (`DeviceAuthCode`, rutas `/api/auth/device/*`), aprobado escaneando desde un dispositivo ya logueado.
+- **Refactor de sabores (2026-07-11):** **cada variación crea su propia `Receta`** (ya NO se comparte una receta base por sabor — corrige el bug de editar "grande" y cambiar "mediano"). Módulo **Gestión de Sabores** (`get-all-sabores`, `variaciones-sabor-dialog`), precio por `receta_presentacion_id`, handler de mantenimiento `reparar-recetas-compartidas`. → [domains/recetas-sabores-variaciones.md](domains/recetas-sabores-variaciones.md).
+- **Batch de seguridad/correctness 2026-07-15 (`docs/HALLAZGOS-AUDITORIA-DESKTOP.md`):** ~20 bugs C/M/A cerrados (doble conteo ledger bancario, stock por sabor en pizza multi-sabor, permisos precio/stock, revertir CPC al cancelar venta a crédito, costo receta / rendimiento, idempotencia anulaciones, TOCTOU stock, hash de password no expuesto al renderer, must-change-password en backend, +23 handlers RRHH con permiso). `BLOCKED_CHANNELS` de `/api/rpc` ampliado de 3 a ~30. → [reference/known-bugs.md](reference/known-bugs.md).
 
 ### Sesión 2026-07 (Funcionario/Vales + Impresoras + Multimoneda)
 

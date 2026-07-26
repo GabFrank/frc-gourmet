@@ -1,8 +1,35 @@
 # TODOs pendientes del proyecto
 
-Snapshot **2026-05-06**, **auditado 2026-06-08**, **revisado 2026-06-28** (seguridad P0 + RecetaAdicional) contra el código. Verificar `git log` y memorias antes de afirmar que algo sigue pendiente.
+Snapshot **2026-05-06**, **auditado 2026-06-08**, **revisado 2026-06-28**, **reauditado integral 2026-07-26** (240 commits desde 2026-06-28) contra el código. Verificar `git log` y memorias antes de afirmar que algo sigue pendiente.
 
 > 📌 **El orden de ataque está en `## Plan de implementación priorizado (P0→P5)` al final.** Lo de arriba es el catálogo detallado.
+
+## Reauditado 2026-07-26 — TODOs que YA se completaron
+
+Confirmado contra código en la reauditoría integral. Estos ya NO son pendientes:
+
+- [x] **KDS (Kitchen Display Screen)** — completo: componente compartido desktop (tab) + PWA `/kds` (TV), SSE en web + poll de respaldo, modo TV, bump bar/numpad, detalle por ítem, ABM de pantallas con semáforo/umbrales. Los estados avanzados de `ComandaItem` (EN_PREPARACION/LISTO/ENTREGADO) ahora tienen UI. → [domains/cocina-impresion.md](../domains/cocina-impresion.md).
+- [x] **Impresión real de tickets/comandas** — `TicketSpec`/`printTicketSpec` estructurado, auto-impresión al cobrar (`PdvConfig.autoImprimirTicketVenta`), enrutado por sector (M2M `producto_sectores` → `sectores_impresoras`), comanda de cocina mejorada (pizza en grande, remociones destacadas), **ticket de cierre de caja** con auto-impresión. Reimprimir comanda (`forceReprint`) y reimprimir ticket/pagaré (menú de Últimas Ventas).
+- [x] **Impresora del sistema + descubrimiento de red** — `connectionType='system'` (RAW por spooler, `@thiagoelg/node-printer` opcional), `list-system-printers`, `scan-network-printers` (mDNS+TCP), `test-printer-connection`. Selector de **columnas** (32/40/42/48) en vez de mm.
+- [x] **Combos UI** — component `producto-combo` como tab del editor de producto + handlers CRUD `createCombo`/`comboProducto`. (No hay página top-level pero el ABM es funcional.)
+- [x] **UI de Observaciones** — component `producto-observaciones` (tab) hace CRUD del catálogo `Observacion` + vínculo `ProductoObservacion`.
+- [x] **Stock UI** — component `producto-stock` (tab) lista movimientos y crea manuales (AJUSTE_POSITIVO/NEGATIVO/DESCARTE/TRANSFERENCIA) vía `create-stock-movimiento`.
+- [x] **Imagen en Presentación + Sabor** — `app-file-upload` + `imageUrl` en `sabor-dialog` y `producto-presentaciones-precios` (con fallback al producto).
+- [x] **Retiros de Efectivo desde PdV** — tarjeta "Retiro de Caja" en el cajón + integrados en el esperado del cierre.
+- [x] **Gastos desde PdV** — entidad `GastoCaja` + `gastos-caja.handler.ts` + `gasto-caja-dialog`.
+- [x] **Vales y Compras desde el PdV** — entidad `EgresoCaja` + `pdv-egresos.handler.ts` (permisos `PDV_PAGAR_VALE`/`PDV_PAGAR_COMPRA`/`PDV_ANULAR_EGRESO`).
+- [x] **Refactor sabores: cada variación su propia receta** — `create-sabor`/`generarVariacionesParaProducto` crean una `Receta` por variación (ya no compartida). Módulo Gestión de Sabores + `reparar-recetas-compartidas`.
+- [x] **Batch de seguridad/correctness 2026-07-15** — ~20 bugs C/M/A cerrados (ver [reference/known-bugs.md](../reference/known-bugs.md)). Incluye permisos en handlers de precio/stock (C-03) y 23 handlers RRHH (M-05).
+
+### Pendientes CONFIRMADOS (siguen abiertos tras la reauditoría)
+
+- [ ] **UI de Liquidación Final** — el backend netea deudas pero **no existe pantalla** (`pages/rrhh/liquidaciones-final/` no existe); falta también `anular-liquidacion-final`.
+- [ ] **Multimoneda DENTRO del cálculo de liquidación** — `LiquidacionItem`/`LiquidacionFinalItem` sin columna moneda; solo se arregló la capa de resumen. Bug de plata → prioridad.
+- [ ] **Promociones UI** — solo entidades; cero componentes/handlers/motor en PdV.
+- [ ] **Producción UI genérica** — solo existe `produccion-buffet-dialog` (BUFFET_POR_PESO); falta la pantalla de producción de elaborados.
+- [ ] **Ensamblado Pizza UI** (`EnsambladoPizza`/`SaborPizza`/`TamanhoPizza`) — legacy sin UI; evaluar deprecar a favor de `RecetaPresentacion`.
+- [ ] **Cancelar Caja** — botón "CANCELAR CAJA" sigue `disabled` ("Próximamente"); `CajaEstado.CANCELADO` existe sin flujo.
+- [ ] **Permisos de Facturación** — el subsistema no tiene códigos de permiso ni gating en el menú.
 
 ## Recientemente completado (auditado 2026-06-08)
 
@@ -232,7 +259,7 @@ Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `proje
 - **Multimoneda en el cálculo de liquidación (sueldo/final)**: `LiquidacionItem`/`LiquidacionFinalItem` no guardan moneda → se netea/suma monedas distintas como iguales. La capa de resumen ya convierte a PYG (PR #198, `electron/utils/moneda.utils.ts`), pero el cálculo interno no. Requiere migración (moneda + cotización en items) + decisión: convertir con cotización vs bloquear/avisar. Ver [reference/known-bugs.md](../reference/known-bugs.md).
 - **Impresoras: validar en Windows real** la conexión `system` (spooler RAW por nombre) y el descubrimiento mDNS — solo se verificó compilación (CI Linux no puede probarlo). El módulo nativo `@thiagoelg/node-printer` es `optionalDependency` (se compila en el release Windows). Wizard LPR guiado sigue pendiente para impresora compartida en otra PC.
 - **Caja Mayor Fase 5**: arqueos/cortes formales + reportes imprimibles.
-- UI de **Combos / Promociones / Producción** (entidades existen, sin UI).
+- UI de **Promociones** (sin UI ni motor) y **Producción genérica** (solo existe el dialog buffet). *Combos ya tiene UI (tab del editor).*
 - **Reportes** Ventas/Compras con exports PDF/Excel.
 - **Compras secundarias**: recepción de mercadería, devoluciones, tab Productos en proveedor-detalle, link CPP→Compra en detalle, C-5 testing E2E.
 - **Visor universal de documentos** (UX RRHH).
@@ -240,8 +267,9 @@ Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `proje
 ### P5 — Features grandes / nuevas
 - **Pago mixto** reutilizable (efectivo+banco, N líneas).
 - **Clientes F3/F4**: loyalty/puntos, direcciones múltiples, cumpleaños, import CSV, reportes avanzados.
-- **KDS** (Kitchen Display Screen) + impresión ESC/POS avanzada.
+- ~~**KDS** + impresión ESC/POS avanzada~~ — ✅ **HECHO** (KDS completo + impresión real). Ver sección "Reauditado 2026-07-26".
 - **Reservas** UI completa.
+- **Pedidos Online / Storefront**: base construida (Fases 0–E). Pendiente: zonas por polígono (Fase 6), pasarelas de pago reales (Bancard/UPay/PagoPar hoy son enums).
 
 ### Continuo (transversal)
 - Testing E2E (Producto→Receta→PdV→Venta→Stock; Compras contado/crédito; multi-moneda).
