@@ -103,6 +103,7 @@ import { registerPedidosOnlineAuthHandlers } from './electron/handlers/pedidos-o
 import { registerPedidosOnlinePedidosHandlers } from './electron/handlers/pedidos-online-pedidos.handler';
 import { registerPedidosOnlineAdminHandlers } from './electron/handlers/pedidos-online-admin.handler';
 import { registerPedidosOnlineConfigHandlers } from './electron/handlers/pedidos-online-config.handler';
+import { registerMesaQrHandlers } from './electron/handlers/mesa-qr.handler';
 import { setNotificacionDataSource } from './electron/services/notificacion.service';
 // Auto-updater
 import { initAutoUpdater } from './electron/utils/auto-updater';
@@ -264,6 +265,7 @@ function initializeDatabase() {
       registerPedidosOnlinePedidosHandlers(dataSource, getCurrentUser); // crear pedido + zonas (público)
       registerPedidosOnlineAdminHandlers(dataSource, getCurrentUser); // bandeja de pedidos en el PdV
       registerPedidosOnlineConfigHandlers(dataSource, getCurrentUser); // config de tienda online
+      registerMesaQrHandlers(dataSource, getCurrentUser); // QR de mesa (MESA_QR autoservicio)
 
       console.log(`[F3] handlerRegistry: ${handlerRegistryCount()} channels registrados (disponibles via IPC + futuro /api/rpc).`);
 
