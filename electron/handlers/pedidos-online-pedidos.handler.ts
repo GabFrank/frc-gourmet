@@ -430,13 +430,18 @@ export function registerPedidosOnlinePedidosHandlers(
     pedido.notas = data?.notas || undefined;
     pedido.items = itemsToSave;
 
+    // El número (`count()+1`) puede colisionar con pedidos concurrentes (ej. un
+    // grupo grande en una mesa mandando varios pedidos en segundos). Se reintenta
+    // regenerando el número; tras N intentos se propaga el error real.
     let saved: PedidoOnline;
-    try {
-      saved = await pedidoRepo().save(pedido);
-    } catch {
-      // Reintento por si el número colisionó con un pedido concurrente.
-      pedido.numero = await siguienteNumero(pedidoRepo());
-      saved = await pedidoRepo().save(pedido);
+    for (let intento = 1; ; intento++) {
+      try {
+        saved = await pedidoRepo().save(pedido);
+        break;
+      } catch (e) {
+        if (intento >= 6) throw e;
+        pedido.numero = await siguienteNumero(pedidoRepo());
+      }
     }
 
     // MESA_QR: materializar automáticamente en la venta de la mesa (auto a cocina).

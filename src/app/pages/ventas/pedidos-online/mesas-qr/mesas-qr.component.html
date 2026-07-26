@@ -18,6 +18,10 @@
     Cada QR apunta a la tienda con el token de la mesa. Verificá que la URL pública sea la correcta antes de imprimir.
   </p>
 
+  <p class="hint warn no-print" *ngIf="faltaUrlPublica">
+    ⚠️ La URL pública debe empezar con <strong>http://</strong> o <strong>https://</strong> (ej. https://app.frc-gourmet.com). Sin una URL absoluta el QR no se puede escanear.
+  </p>
+
   <div class="grid" *ngIf="mesas.length > 0; else vacio">
     <div class="lamina" *ngFor="let m of mesas">
       <div class="titulo">Mesa {{ m.numero }}</div>

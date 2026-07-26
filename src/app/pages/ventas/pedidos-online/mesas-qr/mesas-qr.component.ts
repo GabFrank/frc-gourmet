@@ -44,6 +44,7 @@ export class MesasQrComponent implements OnInit {
   baseUrl = '';
   mesas: MesaQr[] = [];
   cargando = false;
+  faltaUrlPublica = false;
 
   constructor(private snackBar: MatSnackBar) {}
 
@@ -65,6 +66,7 @@ export class MesasQrComponent implements OnInit {
     try {
       const data = await this.api.callIpc('get-qr-mesas', { baseUrl: this.baseUrl });
       this.mesas = Array.isArray(data) ? data : [];
+      this.faltaUrlPublica = this.mesas.some((m: any) => m && m.urlAbsoluta === false);
     } catch (e: any) {
       this.snackBar.open('Error al generar los QR: ' + (e?.message || e), 'OK', { duration: 5000 });
     } finally {

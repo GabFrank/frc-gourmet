@@ -39,22 +39,32 @@ export function registerMesaQrHandlers(
     throw new Error('No se pudo generar un token único para la mesa');
   };
 
+  const esUrlAbsoluta = (base: string): boolean => /^https?:\/\//i.test(base);
+
   const construirUrl = (baseUrl: string | undefined, token: string): string => {
     const path = `/tienda?mesa=${encodeURIComponent(token)}`;
     const base = (baseUrl || '').trim().replace(/\/+$/, '');
     return base ? `${base}${path}` : path;
   };
 
-  /** Asegura (o rota) el token de una mesa y devuelve token + url + imagen QR. */
+  /**
+   * Asegura (o rota) el token de una mesa y devuelve token + url + imagen QR.
+   * Solo genera la imagen QR si la URL es ABSOLUTA (http/https): un QR con ruta
+   * relativa es inservible al escanearlo con la cámara nativa. `urlAbsoluta`
+   * indica al frontend si debe pedir configurar la URL pública antes de imprimir.
+   */
   const armarQrMesa = async (mesa: PdvMesa, baseUrl?: string) => {
     const url = construirUrl(baseUrl, mesa.qrToken!);
+    const urlAbsoluta = esUrlAbsoluta((baseUrl || '').trim());
     let qr = '';
-    try {
-      qr = await QRCode.toDataURL(url, { margin: 1, width: 320 });
-    } catch {
-      /* si falla la generación del QR, igual devolvemos token+url */
+    if (urlAbsoluta) {
+      try {
+        qr = await QRCode.toDataURL(url, { margin: 1, width: 320 });
+      } catch {
+        /* si falla la generación del QR, igual devolvemos token+url */
+      }
     }
-    return { id: mesa.id, numero: mesa.numero, token: mesa.qrToken, url, qr };
+    return { id: mesa.id, numero: mesa.numero, token: mesa.qrToken, url, qr, urlAbsoluta };
   };
 
   // Generar (si falta) o rotar el token de una mesa + devolver su QR.

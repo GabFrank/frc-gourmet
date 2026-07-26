@@ -18,6 +18,11 @@
   color: var(--text-secondary, rgba(0, 0, 0, 0.6));
   font-size: 12px;
   margin: 0 0 16px;
+
+  &.warn {
+    color: var(--warning-color, #f4ab36);
+    font-weight: 600;
+  }
 }
 
 .grid {

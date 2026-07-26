@@ -41,6 +41,7 @@ import { ProductoTipo } from '../../src/app/database/entities/productos/producto
 import { Receta } from '../../src/app/database/entities/productos/receta.entity';
 import { RecetaIngrediente } from '../../src/app/database/entities/productos/receta-ingrediente.entity';
 import { RecetaPresentacion } from '../../src/app/database/entities/productos/receta-presentacion.entity';
+import { PrecioCosto } from '../../src/app/database/entities/productos/precio-costo.entity';
 import { StockMovimiento, StockMovimientoTipo, StockMovimientoTipoReferencia } from '../../src/app/database/entities/productos/stock-movimiento.entity';
 import { Combo } from '../../src/app/database/entities/productos/combo.entity';
 import { ComboProducto } from '../../src/app/database/entities/productos/combo-producto.entity';
@@ -232,13 +233,36 @@ export async function materializarPedidoOnlineEnVenta(
         principalRpId = principal?.recetaPresentacionId;
       }
 
+      // Costo (best-effort): el snapshot online no lo trae. Pizza → costo_calculado
+      // por RecetaPresentacion ponderado por proporción; simple → PrecioCosto activo
+      // del producto. Sin dato → 0. Necesario para que margen/CMV no queden inflados.
+      const rpCostos = new Map<number, number>();
+      let precioCostoUnitario = 0;
+      if (esPizza) {
+        for (const s of sabores) {
+          const rpId = Number(s?.recetaPresentacionId) || 0;
+          if (!rpId) continue;
+          if (!rpCostos.has(rpId)) {
+            const rp = await qr.manager.getRepository(RecetaPresentacion).findOne({ where: { id: rpId } });
+            rpCostos.set(rpId, Number(rp?.costo_calculado) || 0);
+          }
+          precioCostoUnitario += (Number(s.proporcion) || 1 / sabores.length) * (rpCostos.get(rpId) || 0);
+        }
+      } else {
+        const pc = await qr.manager.getRepository(PrecioCosto).findOne({
+          where: { producto: { id: pItem.productoId }, activo: true },
+          order: { id: 'DESC' },
+        });
+        precioCostoUnitario = Number(pc?.valor) || 0;
+      }
+
       const vItem = itemRepo.create({
         venta: { id: ventaId } as any,
         producto: { id: pItem.productoId } as any,
         presentacion: pItem.presentacionId ? ({ id: pItem.presentacionId } as any) : null,
         cantidad: Number(pItem.cantidad) || 1,
         precioVentaUnitario,
-        precioCostoUnitario: 0, // el snapshot online no trae costo (recálculo → F2b)
+        precioCostoUnitario,
         precioAdicionales: adicTotal,
         estado: EstadoVentaItem.ACTIVO,
         recetaPresentacion: principalRpId ? ({ id: principalRpId } as any) : null,
@@ -257,7 +281,7 @@ export async function materializarPedidoOnlineEnVenta(
           recetaPresentacion: { id: s.recetaPresentacionId } as any,
           proporcion: Number(s.proporcion) || 1 / sabores.length,
           precioReferencia: Number(s.precioReferencia) || 0,
-          costoReferencia: 0,
+          costoReferencia: rpCostos.get(Number(s.recetaPresentacionId) || 0) || 0,
         });
         await setEntityUserTracking(dataSource, vs, userId, false);
         await saborRepo.save(vs);
