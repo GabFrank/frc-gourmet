@@ -130,7 +130,16 @@ export interface CartItem {
   precioUnitario: number;      // precio de la opción + Σ adicionales
 }
 
-export type TipoPedido = 'PICKUP' | 'DELIVERY';
+export type TipoPedido = 'PICKUP' | 'DELIVERY' | 'MESA_QR';
+
+/** Contexto de una mesa resuelto por su token QR (op pública `mesa.get`). */
+export interface MesaCtx {
+  mesaId: number;
+  numero: number;
+  habilitada: boolean;
+  permiteMesa: boolean;
+  nombreComercio?: string | null;
+}
 
 export interface PedidoResumen {
   numero: string;
