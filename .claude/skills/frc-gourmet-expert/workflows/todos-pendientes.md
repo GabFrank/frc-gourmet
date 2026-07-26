@@ -54,7 +54,8 @@ Confirmado contra código en la reauditoría integral. Estos ya NO son pendiente
 - [x] **F3b — Validación de red LAN:** `ip-lan.util.ts` + `trustProxy` (env `TRUST_PROXY`) + chequeo de IP contra `rangoLanMesa`.
 - [x] **F4 — Storefront modo mesa:** `MesaService` + banner + checkout modo mesa (invitado, sin dirección/pago).
 - [x] **F5 — PdV monitoreo:** color "autoatención" + toggle de habilitación en `mesa-selection-dialog`.
-- [ ] **F2b (pendiente):** mapear observaciones/nota libre del pedido a `VentaItemObservacion` (el snapshot online es solo texto, sin id de `Observacion`). Modificaciones de ingredientes no se capturan online.
+- [x] **F2b:** mapear observaciones/nota libre del pedido a `VentaItemObservacion` — predefinidas por lookup de texto contra el catálogo `Observacion`; nota libre + no matcheadas vía sentinel `'NOTA DEL CLIENTE'` + `observacionLibre`. (Modificaciones de ingredientes no se capturan online.)
+- [x] **Config UI:** toggles `permiteMesa`/`requiereLanMesa` + campo `rangoLanMesa` en *Config Tienda Online* (el WiFi-check se apaga en dev).
 
 Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) sección "Canal MESA_QR". Referencia de diseño: sistemas tipo Toast/Lightspeed/Odoo (QR estático + sesión, sin login, direct-to-kitchen).
 
