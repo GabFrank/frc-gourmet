@@ -86,3 +86,29 @@ Todas las ops vía `/pub/rpc`:
 - Migrations del dominio usan timestamps rounded consecutivos (contra la convención) — no imitar.
 
 **Archivos clave:** `entities/pedidos-online/*`, `electron/handlers/pedidos-online*.handler.ts` (5), `electron/server/public-routes.ts` + `server.ts`, `electron/utils/customer-jwt.utils.ts` + `whatsapp-sender.ts`, `main.ts` (wiring `:262-266`, storefrontRoot `:367-388`), `pages/ventas/pedidos-online/list-pedidos-online.component.ts`, `projects/storefront/src/app/`.
+
+---
+
+## Canal MESA_QR (pedido en mesa por autoservicio)
+
+> Implementado 2026-07 en la rama `claude/pedidos-mesa-qr` (fases F1–F5 + F3b). El cliente se sienta, escanea un **QR estático de la mesa**, se identifica liviano (solo nombre) y pide desde el celular. El **pago es siempre en la caja física** (sin pasarela online). El pedido se **materializa automáticamente en la venta abierta de la mesa** → cocina (KDS).
+
+**Modelo de seguridad (3 capas):**
+1. **QR estático por mesa** con **token opaco** (`PdvMesa.qrToken`, UUID aleatorio, nunca el número). Lámina imprimible por mesa.
+2. **Habilitación del cajero** (`PdvMesa.autoservicioActivo`): la mesa solo acepta pedidos si el cajero la habilitó. Corta el ataque de escanear una foto del QR desde afuera.
+3. **Validación de red LAN** (`TiendaOnlineConfig.requiereLanMesa` + `rangoLanMesa`): el pedido debe venir de una IP permitida. ⚠️ Detrás del reverse proxy en la nube, los clientes en la WiFi del local egresan por la **IP pública del local** → `rangoLanMesa` debe contener esa IP pública (no un rango privado). Requiere `TRUST_PROXY` en el server para leer `X-Forwarded-For`. Util `electron/utils/ip-lan.util.ts` (`ipEnRangosLan`). Si la topología no expone IPs útiles, poner `requiereLanMesa=false` y confiar en el gate del cajero.
+
+**Datos** (F1a, migración `1785082533104-AddMesaQrAutoservicio`): `PdvMesa.qrToken` (único) + `autoservicioActivo`; `TiendaOnlineConfig.permiteMesa` + `requiereLanMesa` + `rangoLanMesa`.
+
+**Backend:**
+- `mesa-qr.handler.ts` (F1b, `ensurePermission('VENTAS_PDV')`): `generar-qr-mesa(mesaId,{baseUrl?,rotar?})` (asegura/rota token + genera imagen QR con la lib `qrcode`, apunta a `<baseUrl>/tienda?mesa=<token>`), `get-qr-mesas({baseUrl?})` (todas las mesas activas, para la lámina), `set-autoservicio-mesa(mesaId,activo)` (gate del cajero).
+- **Puente** (F2) `materializarPedidoOnlineEnVenta(dataSource, pedidoId, opts?, userId?)` — función **module-level exportada en `ventas.handler.ts`** (sin `ensurePermission`, gateada por la validación de mesa; el ipc handler `materializar-pedido-online-en-venta` la envuelve con permiso). Resuelve/abre la Venta ABIERTA de la mesa (`comanda IsNull`) o la crea con la caja abierta + marca la mesa OCUPADO; vuelca cada `PedidoOnlineItem` como `VentaItem` (separando `precioVentaUnitario` y `precioAdicionales` porque el pedido congela `precioUnitario = base + adicionales`); mapea sabores (pizza) y adicionales inline; escribe en transacción y dispara los hooks KDS/impresión **post-commit**. Idempotente por `pedido.ventaId`. **Observaciones/nota libre no se mapean** (el snapshot online es solo texto, sin id de `Observacion` que es FK obligatoria) → se devuelven en `observacionesNoMapeadas` (pendiente F2b).
+- **`crear-pedido-online`** rama MESA_QR (F3): invitado permitido (nombre obligatorio, `customerId` null OK), resuelve la mesa por `data.mesaToken`, valida `permiteMesa` + `activo` + `autoservicioActivo` + IP LAN, `canalOrigen=QR_MESA`, pago EFECTIVO, y **auto-materializa best-effort** al crear (si no hay caja abierta, queda para la bandeja — nunca falla el pedido).
+- `get-mesa-online-por-token` (público): el storefront resuelve nº de mesa + si está habilitada.
+- **`optionalAuth`** en `public-routes` (`pedido.crear`): resuelve el cliente si viene token pero no rechaza (MESA_QR admite invitado); `mesa.get` es público sin auth.
+
+**Frontend:**
+- **PdV** — `mesa-selection-dialog` (F5): indicador de "autoatención QR en curso" (borde celeste + icono de celular) + toggle por mesa (`set-autoservicio-mesa`, el gate del cajero). Pantalla **"QR de Mesas"** (`pages/ventas/pedidos-online/mesas-qr/`, menú Ventas) con la lámina imprimible.
+- **Storefront** (F4) — `MesaService` captura el token de `/tienda?mesa=<token>` (o sessionStorage) y resuelve `mesa.get`; banner "Estás en la Mesa N"; el checkout en modo mesa pide nombre, sin dirección/mapa/login, total sin envío, y envía `pedido.crear` con `tipoPedido=MESA_QR` + `mesaToken` + `nombreCliente`.
+
+**Pendiente (F2b):** mapear observaciones/nota libre del pedido a `VentaItemObservacion` (requiere guardar `observacionId` en el snapshot online o hacer lookup por texto). Modificaciones de ingredientes no se capturan online.

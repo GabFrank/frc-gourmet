@@ -31,9 +31,9 @@ Confirmado contra código en la reauditoría integral. Estos ya NO son pendiente
 - [ ] **Cancelar Caja** — botón "CANCELAR CAJA" sigue `disabled` ("Próximamente"); `CajaEstado.CANCELADO` existe sin flujo.
 - [ ] **Permisos de Facturación** — el subsistema no tiene códigos de permiso ni gating en el menú.
 
-## 🚧 Feature en curso: Pedidos en Mesa por QR (MESA_QR autoservicio)
+## ✅ Feature implementado (rama `claude/pedidos-mesa-qr`, sin mergear): Pedidos en Mesa por QR (MESA_QR autoservicio)
 
-**Registrado 2026-07-26.** Extiende el módulo `pedidos-online` (sección/canal, **NO** módulo separado). El cliente se sienta, escanea un QR estático de la mesa, se identifica liviano y pide desde el celular; el pago es **obligatoriamente en la caja física** (sin pasarela online). Diseño y decisiones acordadas con el usuario:
+**Registrado 2026-07-26, implementado F1–F5 + F3b la misma sesión.** Extiende el módulo `pedidos-online` (sección/canal, **NO** módulo separado). El cliente se sienta, escanea un QR estático de la mesa, se identifica liviano y pide desde el celular; el pago es **obligatoriamente en la caja física** (sin pasarela online). Diseño y decisiones acordadas con el usuario:
 
 **Modelo de seguridad (3 capas):**
 1. **QR estático por mesa** con **token opaco** (UUID aleatorio en `PdvMesa.qrToken`, nunca el número pelado). Lámina imprimible por mesa.
@@ -46,14 +46,17 @@ Confirmado contra código en la reauditoría integral. Estos ya NO son pendiente
 
 **Estado del terreno** (auditado): el modelo de datos está listo (`PdvMesa`, `Venta.mesa`, `Comanda`, KDS por sector, enums `MESA_QR`/`QR_MESA`, columna `PedidoOnline.mesaId`). **Falta casi todo el cableado.** ⚠️ La **materialización pedido→Venta NO existe para ningún tipo** (ni pickup/delivery) — hay que construirla, es el corazón del feature.
 
-**Plan por fases:**
-- [ ] **F1 — Datos + config:** `PdvMesa.qrToken` + `autoservicioActivo`; `TiendaOnlineConfig.permiteMesa` + `requiereLanMesa` + `rangoLanMesa`. Migración driver-aware. Handler para generar/rotar token + generar QR (lib `qrcode` ya presente) + lámina imprimible.
-- [ ] **F2 — Puente pedido→Venta (genérico):** handler transaccional que resuelve/abre la `Venta` de una `PdvMesa` y vuelca los ítems de un `PedidoOnline` como `VentaItem` (portar lógica de `pdv.component.ts:1766-1790` a backend). Respetar `validarDispositivoCaja`, stock y KDS. Habilita también pickup/delivery a futuro.
-- [ ] **F3 — Backend MESA_QR:** rama en `crear-pedido-online` (validar mesa habilitada + IP LAN + `permiteMesa`, permitir invitado), auto-materialización al crear, exponer `mesaId`/nº de mesa en la bandeja.
-- [ ] **F4 — Storefront modo mesa:** entrada `/tienda?mesa=<token>`, identificación liviana (nombre), checkout sin dirección/pago ("pagás en caja"), contexto de mesa en el carrito.
-- [ ] **F5 — PdV monitoreo:** color "autoatención" en el mapa de mesas + habilitar/deshabilitar mesa + ver pedidos de la mesa.
+**Plan por fases** (implementado 2026-07 en la rama `claude/pedidos-mesa-qr`, sin mergear aún):
+- [x] **F1a — Datos + config:** `PdvMesa.qrToken` + `autoservicioActivo`; `TiendaOnlineConfig.permiteMesa`/`requiereLanMesa`/`rangoLanMesa`. Migración `1785082533104-AddMesaQrAutoservicio`.
+- [x] **F1b — QR de mesa + lámina:** `mesa-qr.handler.ts` (`generar-qr-mesa`/`get-qr-mesas`/`set-autoservicio-mesa`) + componente "QR de Mesas" imprimible.
+- [x] **F2 — Puente pedido→Venta:** `materializarPedidoOnlineEnVenta` (exportada en `ventas.handler.ts`). Transaccional, hooks KDS post-commit, idempotente. Sirve también a pickup/delivery a futuro.
+- [x] **F3 — Backend MESA_QR:** rama en `crear-pedido-online` (invitado, mesa por token, gate + `permiteMesa`), auto-materialización, `mesaId` en la bandeja, `optionalAuth`.
+- [x] **F3b — Validación de red LAN:** `ip-lan.util.ts` + `trustProxy` (env `TRUST_PROXY`) + chequeo de IP contra `rangoLanMesa`.
+- [x] **F4 — Storefront modo mesa:** `MesaService` + banner + checkout modo mesa (invitado, sin dirección/pago).
+- [x] **F5 — PdV monitoreo:** color "autoatención" + toggle de habilitación en `mesa-selection-dialog`.
+- [ ] **F2b (pendiente):** mapear observaciones/nota libre del pedido a `VentaItemObservacion` (el snapshot online es solo texto, sin id de `Observacion`). Modificaciones de ingredientes no se capturan online.
 
-Referencia de diseño e investigación: sistemas tipo Toast/Lightspeed/Odoo (QR estático vs dinámico, sesión de mesa, sin login, direct-to-kitchen). Doc de dominio a crear/extender al implementar: [../domains/pedidos-online.md](../domains/pedidos-online.md).
+Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) sección "Canal MESA_QR". Referencia de diseño: sistemas tipo Toast/Lightspeed/Odoo (QR estático + sesión, sin login, direct-to-kitchen).
 
 ## Recientemente completado (auditado 2026-06-08)
 
