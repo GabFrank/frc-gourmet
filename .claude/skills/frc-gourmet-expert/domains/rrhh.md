@@ -509,7 +509,8 @@ Comisiones: `COMISION_REGLA_VER`, `COMISION_REGLA_EDITAR`, `COMISION_REGLA_GESTI
 - `funcionarios/` — list + detalle (tabs: Datos, Cargos, Salarios, Documentos, Asistencia, Vales, Préstamos, Vacaciones, Liquidaciones).
 - `cargos/`, `turnos/`, `asistencias/`, `feriados/`, `horas-extra/`, `vales/`, `motivos-vale/`, `bonos/`, `aguinaldos/`, `vacaciones/`, `penalizaciones/`, `prestamos-funcionarios/`.
 - `liquidaciones-sueldo/` (list, generar, aprobar, pagar, anular).
-- `liquidaciones-final/`.
+- ⚠️ **`liquidaciones-final/` NO existe** (verificado 2026-07-26). El backend `liquidacion-final.handler.ts` (generar/aprobar/pagar, netea deudas) está completo pero **ningún componente lo invoca** — falta la pantalla, y falta `anular-liquidacion-final`. Es un TODO abierto. → [workflows/todos-pendientes.md](../workflows/todos-pendientes.md).
+- `configuracion-facial/` — descarga de modelos + umbrales del fichaje facial. → [rrhh-asistencia-facial.md](rrhh-asistencia-facial.md).
 - `notificaciones/` — listado con marcar leído.
 - `reportes/` — selector + filtros + export PDF/Excel.
 - `configuracion/` — Configuracion RRHH CRUD.
@@ -532,5 +533,10 @@ Comisiones: `COMISION_REGLA_VER`, `COMISION_REGLA_EDITAR`, `COMISION_REGLA_GESTI
 - `dashboard-rrhh.handler.ts` — KPIs.
 - `notificaciones-rrhh.handler.ts`.
 - `reportes-rrhh.handler.ts` — exports PDF/Excel.
+- `asistencia-facial.handler.ts` — enrolar/eliminar rostro, `fichar-facial` (match 1:N + liveness + geocerca). → [rrhh-asistencia-facial.md](rrhh-asistencia-facial.md).
+- `face-models.handler.ts` — descarga in-app de los modelos de Human.
+- `empresa.handler.ts` — ubicación de la empresa (geocerca del fichaje).
+
+**Fichaje por reconocimiento facial:** entidad `FuncionarioRostro` (embeddings on-device, match 1:N en backend) + columnas `metodoRegistro`/`similitudFacial` en `Asistencia` + geocerca en `Empresa`. Kiosco en la PWA con auto-captura y cola offline. → [rrhh-asistencia-facial.md](rrhh-asistencia-facial.md).
 
 → Liquidaciones y comisiones detalladas: [rrhh-liquidaciones.md](rrhh-liquidaciones.md).

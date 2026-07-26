@@ -273,3 +273,21 @@ Cambios de naming en el refactor general:
 Notas:
 - `receta_adicional` **no es una entidad deprecada**: es la tabla de junction M2M (disponibilidad general de adicionales por receta), todavía en uso. La vinculación con precio/cantidad específicos es la entidad `RecetaAdicionalVinculacion`.
 - Existe un subsistema **separado** de armado de pizzas: `TamanhoPizza`, `SaborPizza`, `EnsambladoPizza`, `EnsambladoPizzaSabor` (tablas `tamanho_pizza`, `sabor_pizza`, `ensamblado_pizza`, `ensamblado_pizza_sabor`). Es distinto del modelo Sabor/RecetaPresentacion descrito arriba; verificar en código cuál usa el flujo concreto antes de asumir. (Marcado para revisión humana — alcance no auditado en detalle.)
+
+---
+
+## Actualización 2026-07 (estado de UIs y precio por variación)
+
+**TODOs que estaban listados como pendientes y en realidad YA tienen UI** (todos como **tabs dentro del editor de producto**, `gestionar-producto`):
+- **Combos** — `producto-combo` (tab) + handlers `createCombo`/`comboProducto` CRUD (`productos.handler.ts`). Falta solo una página top-level dedicada; el ABM funciona.
+- **Observaciones** — `producto-observaciones` (tab): CRUD del catálogo `Observacion` + vínculo `ProductoObservacion`.
+- **Stock** — `producto-stock` (tab): lista movimientos y crea manuales (AJUSTE_POSITIVO/NEGATIVO/DESCARTE/TRANSFERENCIA) vía `create-stock-movimiento`.
+- **Imagen en Presentación + Sabor** — `app-file-upload` + `imageUrl` (fallback al producto).
+
+**Siguen sin UI:** Promociones (solo entidades), Producción genérica (solo `produccion-buffet-dialog`), Ensamblado Pizza legacy (`EnsambladoPizza`/`SaborPizza`/`TamanhoPizza`).
+
+**Precio por variación:** el precio de una variación de pizza vive en `PrecioVenta.receta_presentacion_id` (4ª FK flexible), NO en `receta_id` (`454831c`). Detalles → [recetas-sabores-variaciones.md](recetas-sabores-variaciones.md).
+
+**Flags online:** `Producto.disponibleOnline` / `pausadoOnline` (para el storefront). Detalles → [pedidos-online.md](pedidos-online.md).
+
+**Código de barra:** normalización en guardado y búsqueda (`d18a189`); auto-seleccionar producto en match exacto en el PdV (`39a4601`).
