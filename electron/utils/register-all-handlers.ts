@@ -28,6 +28,7 @@ import { registerCajaMayorHandlers } from '../handlers/caja-mayor.handler';
 import { registerGastosCajaHandlers } from '../handlers/gastos-caja.handler';
 import { registerBusquedaGlobalHandlers } from '../handlers/busqueda-global.handler';
 import { registerPdvEgresosHandlers } from '../handlers/pdv-egresos.handler';
+import { registerMesaQrHandlers } from '../handlers/mesa-qr.handler';
 import { registerBankingHandlers } from '../handlers/banking.handler';
 import { registerCuentasPorPagarHandlers } from '../handlers/cuentas-por-pagar.handler';
 import { registerDashboardShortcutsHandlers } from '../handlers/dashboard-shortcuts.handler';
@@ -89,6 +90,7 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerGastosCajaHandlers(dataSource, getCurrentUser);
   registerBusquedaGlobalHandlers(dataSource, getCurrentUser);
   registerPdvEgresosHandlers(dataSource, getCurrentUser);
+  registerMesaQrHandlers(dataSource, getCurrentUser);
   registerBankingHandlers(dataSource, getCurrentUser);
   registerCuentasPorPagarHandlers(dataSource, getCurrentUser);
   registerDashboardShortcutsHandlers(dataSource, getCurrentUser);
