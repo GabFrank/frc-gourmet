@@ -83,6 +83,25 @@ async function withVentaStockLock<T>(ventaId: number, fn: () => Promise<T>): Pro
   }
 }
 
+// Serializa la materialización de pedidos online por mesa (proceso Node único).
+// Evita dos ventas ABIERTAS para la misma mesa y la doble materialización de un
+// pedido cuando la auto-materialización y un click manual del cajero coinciden.
+const mesaMaterializeTails = new Map<number, Promise<void>>();
+async function withMesaMaterializeLock<T>(mesaId: number, fn: () => Promise<T>): Promise<T> {
+  const prev = mesaMaterializeTails.get(mesaId) ?? Promise.resolve();
+  let release!: () => void;
+  const myTurn = new Promise<void>((res) => (release = res));
+  const composed = prev.then(() => myTurn);
+  mesaMaterializeTails.set(mesaId, composed);
+  await prev.catch(() => {});
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (mesaMaterializeTails.get(mesaId) === composed) mesaMaterializeTails.delete(mesaId);
+  }
+}
+
 /**
  * Materializa un PedidoOnline en la Venta ABIERTA de su mesa (canal MESA_QR).
  * Resuelve/abre la venta de la mesa y vuelca los items como VentaItem (+ sabores
@@ -105,36 +124,43 @@ export async function materializarPedidoOnlineEnVenta(
   opts?: { cajaId?: number },
   _userId?: number,
 ): Promise<{ ventaId: number; yaMaterializado: boolean; itemsCreados: number; observacionesNoMapeadas: any[] }> {
-  const pedido = await dataSource.getRepository(PedidoOnline).findOne({
-    where: { id: pedidoId },
-    relations: ['items'],
-  });
-  if (!pedido) throw new Error(`Pedido online ${pedidoId} no encontrado`);
-  if (!pedido.mesaId) throw new Error('El pedido no es de mesa (sin mesaId)');
-
-  // Idempotencia: ya materializado → no duplicar items.
-  if (pedido.ventaId) {
-    return { ventaId: pedido.ventaId, yaMaterializado: true, itemsCreados: 0, observacionesNoMapeadas: [] };
+  // Fast-path (no autoritativo): si ya se materializó, salir sin tomar el lock.
+  const pedidoPre = await dataSource.getRepository(PedidoOnline).findOne({ where: { id: pedidoId } });
+  if (!pedidoPre) throw new Error(`Pedido online ${pedidoId} no encontrado`);
+  if (!pedidoPre.mesaId) throw new Error('El pedido no es de mesa (sin mesaId)');
+  if (pedidoPre.ventaId) {
+    return { ventaId: pedidoPre.ventaId, yaMaterializado: true, itemsCreados: 0, observacionesNoMapeadas: [] };
   }
 
-  // Caja: la del parámetro o la única caja abierta.
-  let cajaId: number | undefined = opts?.cajaId ? Number(opts.cajaId) : undefined;
-  if (!cajaId) {
-    const abiertas = await dataSource.getRepository(Caja).find({ where: { estado: CajaEstado.ABIERTO } });
-    if (abiertas.length === 0) throw new Error('no_hay_caja_abierta');
-    if (abiertas.length > 1) throw new Error('caja_ambigua_especificar_cajaId');
-    cajaId = abiertas[0].id;
-  }
+  return withMesaMaterializeLock(pedidoPre.mesaId, async () => {
+    const pedido = await dataSource.getRepository(PedidoOnline).findOne({
+      where: { id: pedidoId },
+      relations: ['items'],
+    });
+    if (!pedido) throw new Error(`Pedido online ${pedidoId} no encontrado`);
+    // Idempotencia autoritativa BAJO lock: evita doble materialización del mismo pedido.
+    if (pedido.ventaId) {
+      return { ventaId: pedido.ventaId, yaMaterializado: true, itemsCreados: 0, observacionesNoMapeadas: [] };
+    }
 
-  const userId = _userId;
-  const createdItemIds: number[] = [];
-  const observacionesNoMapeadas: any[] = [];
-  let ventaId = 0;
+    // Caja: la del parámetro o la única caja abierta.
+    let cajaId: number | undefined = opts?.cajaId ? Number(opts.cajaId) : undefined;
+    if (!cajaId) {
+      const abiertas = await dataSource.getRepository(Caja).find({ where: { estado: CajaEstado.ABIERTO } });
+      if (abiertas.length === 0) throw new Error('no_hay_caja_abierta');
+      if (abiertas.length > 1) throw new Error('caja_ambigua_especificar_cajaId');
+      cajaId = abiertas[0].id;
+    }
 
-  const qr = dataSource.createQueryRunner();
-  await qr.connect();
-  await qr.startTransaction();
-  try {
+    const userId = _userId;
+    const createdItemIds: number[] = [];
+    const observacionesNoMapeadas: any[] = [];
+    let ventaId = 0;
+
+    const qr = dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+    try {
     const mesaRepo = qr.manager.getRepository(PdvMesa);
     const ventaRepo = qr.manager.getRepository(Venta);
     const itemRepo = qr.manager.getRepository(VentaItem);
@@ -145,12 +171,19 @@ export async function materializarPedidoOnlineEnVenta(
 
     // Sentinel para la nota libre del cliente (VentaItemObservacion.observacion es
     // FK obligatoria; la nota va en observacionLibre colgada de esta observación).
+    // Se asegura vía dataSource (fuera de la transacción) tolerando la colisión de
+    // unique, para no abortar la materialización si dos mesas lo crean a la vez.
     let sentinelObsId: number | null = null;
     const getSentinelObs = async (): Promise<number> => {
       if (sentinelObsId != null) return sentinelObsId;
       const desc = 'NOTA DEL CLIENTE';
-      let obs = await obsCatRepo.findOne({ where: { descripcion: desc } });
-      if (!obs) obs = await obsCatRepo.save(obsCatRepo.create({ descripcion: desc, activo: true }));
+      const repoObs = dataSource.getRepository(Observacion);
+      let obs = await repoObs.findOne({ where: { descripcion: desc } });
+      if (!obs) {
+        try { obs = await repoObs.save(repoObs.create({ descripcion: desc, activo: true })); }
+        catch { obs = await repoObs.findOne({ where: { descripcion: desc } }); }
+      }
+      if (!obs) throw new Error('no_se_pudo_asegurar_observacion_sentinel');
       sentinelObsId = obs.id;
       return sentinelObsId;
     };
@@ -296,7 +329,8 @@ export async function materializarPedidoOnlineEnVenta(
   try { await autoPrintComandaIfNeeded(dataSource, ventaId); }
   catch (e) { console.warn('[materializar-pedido-online] auto-imprimir comanda falló:', e); }
 
-  return { ventaId, yaMaterializado: false, itemsCreados: createdItemIds.length, observacionesNoMapeadas };
+    return { ventaId, yaMaterializado: false, itemsCreados: createdItemIds.length, observacionesNoMapeadas };
+  });
 }
 
 export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
