@@ -212,6 +212,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
       case 'mesa_no_disponible': return 'Los pedidos en mesa no están habilitados.';
       case 'mesa_invalida': return 'El código de la mesa no es válido. Escaneá de nuevo el QR.';
       case 'mesa_no_habilitada': return 'La mesa no está habilitada. Pedile al mozo que active el autoservicio.';
+      case 'fuera_de_red_local': return 'Para pedir en la mesa tenés que estar conectado al WiFi del local.';
       case 'falta_nombre': return 'Ingresá tu nombre para el pedido.';
       default: return res?.error || 'No se pudo crear el pedido.';
     }

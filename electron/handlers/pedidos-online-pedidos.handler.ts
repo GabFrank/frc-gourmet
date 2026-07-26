@@ -19,6 +19,7 @@ import { PdvMesa } from '../../src/app/database/entities/ventas/pdv-mesa.entity'
 import { registerPublicOperation } from '../server/public-routes';
 import { getTiendaConfig, estaAbierta, getPizzaConfig } from './pedidos-online-config.handler';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
+import { ipEnRangosLan } from '../utils/ip-lan.util';
 
 /**
  * Pedidos online — Fase 3: creación de pedido + zonas de delivery (superficie pública).
@@ -258,6 +259,14 @@ export function registerPedidosOnlinePedidosHandlers(
       if (!mesa || !mesa.activo) return { success: false, error: 'mesa_invalida' };
       // Gate del cajero: la mesa debe estar habilitada para autoservicio.
       if (!mesa.autoservicioActivo) return { success: false, error: 'mesa_no_habilitada' };
+      // Anti-fraude de red: el pedido debe venir de una IP permitida (la red del
+      // local). Requiere trustProxy si el server está detrás de reverse proxy.
+      if (cfg.requiereLanMesa) {
+        const clientIp = String(event?._clientIp || '');
+        if (!ipEnRangosLan(clientIp, cfg.rangoLanMesa)) {
+          return { success: false, error: 'fuera_de_red_local' };
+        }
+      }
       nombreClienteInvitado = String(data?.nombreCliente || '').trim().slice(0, 150);
       if (!nombreClienteInvitado) return { success: false, error: 'falta_nombre' };
       // Si además viene autenticado, se asocia la cuenta (opcional).

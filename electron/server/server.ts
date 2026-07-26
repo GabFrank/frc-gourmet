@@ -80,11 +80,22 @@ async function buildInstance(
   opts: ServerOptions,
   https: { key: Buffer; cert: Buffer } | null,
 ): Promise<FastifyInstance> {
+  // trustProxy: habilita leer el IP real del cliente vía X-Forwarded-For cuando el
+  // server está detrás de un reverse proxy (necesario para la validación de red de
+  // MESA_QR). ⚠️ SOLO habilitar si el server es alcanzable ÚNICAMENTE a través del
+  // proxy de confianza — si no, un cliente directo podría spoofear X-Forwarded-For.
+  // Config por env TRUST_PROXY: 'true'/'1' (confía en todos), o IP/CIDR/lista del
+  // proxy. Sin setear → false (usa el IP del socket).
+  const tpEnv = (process.env['TRUST_PROXY'] || '').trim();
+  const trustProxy: boolean | string =
+    tpEnv === '' ? false : (tpEnv === 'true' || tpEnv === '1') ? true : tpEnv;
+
   const fastify = Fastify({
     logger: {
       level: process.env['NODE_ENV'] === 'development' ? 'info' : 'warn',
     },
     bodyLimit: 50 * 1024 * 1024, // 50MB para uploads de imagenes/adjuntos
+    trustProxy,
     ...(https ? { https } : {}),
   });
 
