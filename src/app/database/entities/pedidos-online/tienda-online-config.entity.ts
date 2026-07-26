@@ -30,6 +30,25 @@ export class TiendaOnlineConfig extends BaseModel {
   @Column({ name: 'permite_delivery', type: 'boolean', default: true })
   permiteDelivery!: boolean;
 
+  /** Habilita el canal de pedidos en mesa por QR (MESA_QR autoservicio). */
+  @Column({ name: 'permite_mesa', type: 'boolean', default: false })
+  permiteMesa!: boolean;
+
+  /**
+   * Exige que el pedido MESA_QR provenga de la red del local. El alpha está
+   * expuesto a internet (app.frc-gourmet.com), así que se valida el IP de origen
+   * del request contra `rangoLanMesa`. Solo aplica al canal QR_MESA.
+   */
+  @Column({ name: 'requiere_lan_mesa', type: 'boolean', default: true })
+  requiereLanMesa!: boolean;
+
+  /**
+   * Rangos LAN permitidos para MESA_QR, como CIDRs separados por coma
+   * (ej. "192.168.0.0/16,10.0.0.0/8"). null = solo los rangos privados por defecto.
+   */
+  @Column({ name: 'rango_lan_mesa', type: 'varchar', length: 255, nullable: true })
+  rangoLanMesa?: string;
+
   /** Tiempo estimado de preparación en minutos (se muestra al cliente). */
   @Column({ name: 'prep_time_minutos', type: 'int', default: 30 })
   prepTimeMinutos!: number;

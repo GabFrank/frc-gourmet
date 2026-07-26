@@ -252,6 +252,7 @@ import { AddSimplificadaToCompra1784652193704 } from './migrations/1784652193704
 import { AddEgresoCaja1784664715714 } from './migrations/1784664715714-AddEgresoCaja';
 import { AddMenuConfig1784756065888 } from './migrations/1784756065888-AddMenuConfig';
 import { AddAnuladoToMovimientoCliente1784136362576 } from './migrations/1784136362576-AddAnuladoToMovimientoCliente';
+import { AddMesaQrAutoservicio1785082533104 } from './migrations/1785082533104-AddMesaQrAutoservicio';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -636,6 +637,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddSimplificadaToCompra1784652193704,
     AddEgresoCaja1784664715714,
     AddMenuConfig1784756065888,
+    AddMesaQrAutoservicio1785082533104,
   ];
 }
 
