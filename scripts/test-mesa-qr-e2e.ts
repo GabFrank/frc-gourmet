@@ -23,6 +23,7 @@ import { ipEnRangosLan } from '../electron/utils/ip-lan.util';
 import { registerVentasHandlers, materializarPedidoOnlineEnVenta } from '../electron/handlers/ventas.handler';
 import { registerPedidosOnlinePedidosHandlers } from '../electron/handlers/pedidos-online-pedidos.handler';
 import { registerPedidosOnlineConfigHandlers } from '../electron/handlers/pedidos-online-config.handler';
+import { registerMesaQrHandlers } from '../electron/handlers/mesa-qr.handler';
 
 let passed = 0, failed = 0;
 function ok(cond: boolean, name: string, extra?: any) {
@@ -43,6 +44,15 @@ async function main() {
   ok(ipEnRangosLan('2800:abc::1') === false, 'IPv6 público sin rango → rechazado');
   ok(ipEnRangosLan('') === false, 'IP vacía → false');
   ok(ipEnRangosLan('basura', '192.168.0.0/16') === false, 'IP inválida → false');
+  ok(ipEnRangosLan('45.6.7.8', '1.2.3.4, 45.6.7.0/24, 9.9.9.9') === true, 'lista separada por coma (matchea la 2ª)');
+  ok(ipEnRangosLan('10.0.0.1', ' 192.168.0.0/16 , 10.0.0.0/8 ') === true, 'lista con espacios');
+  ok(ipEnRangosLan('8.8.8.8', '0.0.0.0/0') === true, 'CIDR /0 acepta todo');
+  ok(ipEnRangosLan('190.1.2.3', '190.1.2.3/32') === true, 'CIDR /32 = IP exacta');
+  ok(ipEnRangosLan('190.1.2.4', '190.1.2.3/32') === false, 'CIDR /32 rechaza vecina');
+  ok(ipEnRangosLan('127.0.0.1') === true, 'loopback IPv4 en default');
+  ok(ipEnRangosLan('::1') === true, 'loopback IPv6 en default');
+  ok(ipEnRangosLan('192.168.1.1', '2800:abc::/32') === false, 'familias mezcladas (IPv4 vs rango IPv6) → false');
+  ok(ipEnRangosLan('2800:abc::1', '2800:abc::/32') === true, 'IPv6 /32');
 
   // ───────────────────────── Setup BD ────────────────────────────────────────
   const tmpDir = path.resolve(__dirname, '../.tmp');
@@ -75,11 +85,15 @@ async function main() {
   const { PrecioCosto } = E('productos/precio-costo.entity');
   const { Observacion } = E('productos/observacion.entity');
   const { Adicional } = E('productos/adicional.entity');
+  const { Receta } = E('productos/receta.entity');
+  const { Sabor } = E('productos/sabor.entity');
+  const { RecetaPresentacion } = E('productos/receta-presentacion.entity');
   const { PdvMesa } = E('ventas/pdv-mesa.entity');
   const { Venta } = E('ventas/venta.entity');
   const { VentaItem } = E('ventas/venta-item.entity');
   const { VentaItemObservacion } = E('ventas/venta-item-observacion.entity');
   const { VentaItemAdicional } = E('ventas/venta-item-adicional.entity');
+  const { VentaItemSabor } = E('ventas/venta-item-sabor.entity');
   const { PedidoOnline } = E('pedidos-online/pedido-online.entity');
   const { PedidoOnlineItem } = E('pedidos-online/pedido-online-item.entity');
   const { TiendaOnlineConfig } = E('pedidos-online/tienda-online-config.entity');
@@ -110,6 +124,20 @@ async function main() {
   const obsPredef = await save(Observacion, { descripcion: 'SIN HIELO', activo: true });
   const adicional = await save(Adicional, { nombre: 'EXTRA LIMON', activo: true });
 
+  // Cadena de pizza (variación): producto ELABORADO_CON_VARIACION + tamaño + sabor
+  // + receta + RecetaPresentacion (con costo_calculado, para el costo del item).
+  const pizza = await save(Producto, {
+    nombre: 'PIZZA', tipo: 'ELABORADO_CON_VARIACION', activo: true, esVendible: true,
+    disponibleOnline: true, pausadoOnline: false, iva: 10, subfamilia,
+  });
+  const presGrande = await save(Presentacion, { nombre: 'GRANDE', cantidad: 1, principal: true, producto: pizza });
+  const saborMuzza = await save(Sabor, { nombre: 'MUZZARELLA', categoria: 'PIZZA', activo: true, producto_id: pizza.id });
+  const recetaPizza = await save(Receta, { nombre: 'PIZZA GRANDE MUZZARELLA', rendimiento: 1, costoCalculado: 0, activo: true });
+  const rp = await save(RecetaPresentacion, {
+    nombre_generado: 'PIZZA GRANDE MUZZARELLA', costo_calculado: 18000, activo: true,
+    receta: recetaPizza, presentacion: presGrande, sabor: saborMuzza,
+  });
+
   const cfgRepo = R(TiendaOnlineConfig);
   const cfg = await cfgRepo.save(cfgRepo.create({
     activa: true, permitePickup: true, permiteDelivery: true,
@@ -119,12 +147,13 @@ async function main() {
   registerVentasHandlers(ds, () => admin);
   registerPedidosOnlineConfigHandlers(ds, () => admin);
   registerPedidosOnlinePedidosHandlers(ds);
+  registerMesaQrHandlers(ds, () => admin);
 
   // helper: crea un PedidoOnline de mesa con 1 item simple (adicional + obs + nota)
   let numeroSeq = 0;
   async function crearPedidoMesa(mesaId: number): Promise<number> {
     const pedido = await save(PedidoOnline, {
-      numero: `PO-${String(++numeroSeq).padStart(6, '0')}`,
+      numero: `T-${String(++numeroSeq).padStart(6, '0')}`,
       mesaId, tipoPedido: 'MESA_QR', estado: 'ACEPTADO', canalOrigen: 'QR_MESA', metodoPago: 'EFECTIVO',
       nombreCliente: 'JUAN', subtotal: 12000, costoEnvio: 0, total: 12000,
     });
@@ -226,11 +255,105 @@ async function main() {
   r = await call({ tipoPedido: 'MESA_QR', mesaToken: 'tok-C', nombreCliente: 'ANA', items: baseItems }, { clientIp: '190.1.2.3' });
   ok(r?.success === true, 'IP permitida → pedido creado', r);
   ok(!!r?.ventaId, 'pedido MESA_QR se materializa (auto a cocina)', r);
+  // LAN default (requiereLanMesa true, sin rango) desde localhost → rango privado
+  await cfgRepo.update(cfg.id, { requiereLanMesa: true, rangoLanMesa: null });
+  r = await call({ tipoPedido: 'MESA_QR', mesaToken: 'tok-C', nombreCliente: 'ANA', items: baseItems }, { clientIp: '127.0.0.1' });
+  ok(r?.success === true, 'LAN default: localhost (rango privado) → permitido', r);
   await cfgRepo.update(cfg.id, { requiereLanMesa: false });
+  // sin items
+  r = await call({ tipoPedido: 'MESA_QR', mesaToken: 'tok-C', nombreCliente: 'ANA', items: [] });
+  ok(r?.error === 'pedido_sin_items', 'sin items → pedido_sin_items', r);
+  // tienda cerrada
+  await cfgRepo.update(cfg.id, { activa: false });
+  r = await call({ tipoPedido: 'MESA_QR', mesaToken: 'tok-C', nombreCliente: 'ANA', items: baseItems });
+  ok(r?.error === 'tienda_cerrada', 'tienda inactiva → tienda_cerrada', r);
+  await cfgRepo.update(cfg.id, { activa: true });
+  // PICKUP sin cliente autenticado → no_autenticado (no aplica el invitado de mesa)
+  r = await call({ tipoPedido: 'PICKUP', items: baseItems }, { customerId: null });
+  ok(r?.error === 'no_autenticado', 'PICKUP sin cliente → no_autenticado', r);
 
   // get-mesa-online-por-token
   const mctx = await invokeHandlerWithContext('get-mesa-online-por-token', { clientIp: '127.0.0.1' }, 'tok-C');
   ok(mctx?.success && mctx?.numero === 3 && mctx?.habilitada === true, 'get-mesa-online-por-token devuelve contexto', mctx);
+
+  // ───────────── Parte E: materialización de pizza (sabores + costo) ──────────
+  console.log('\n[E] materialización pizza (sabores + costo)');
+  const mesaP = await save(PdvMesa, { numero: 10, activo: true, estado: 'DISPONIBLE', autoservicioActivo: true, qrToken: 'tok-P' });
+  const pedidoPizza = await save(PedidoOnline, {
+    numero: `T-${String(++numeroSeq).padStart(6, '0')}`, mesaId: mesaP.id, tipoPedido: 'MESA_QR', estado: 'ACEPTADO',
+    canalOrigen: 'QR_MESA', metodoPago: 'EFECTIVO', nombreCliente: 'LU', subtotal: 40000, costoEnvio: 0, total: 40000,
+  });
+  await save(PedidoOnlineItem, {
+    pedido: pedidoPizza, productoId: pizza.id, presentacionId: presGrande.id,
+    nombreProducto: 'PIZZA', nombrePresentacion: 'GRANDE', cantidad: 1, precioUnitario: 40000, subtotal: 40000,
+    personalizacion: JSON.stringify({
+      opcion: { label: 'GRANDE · MUZZARELLA', tipo: 'PIZZA' },
+      sabores: [{ saborId: saborMuzza.id, nombre: 'MUZZARELLA', proporcion: 1, recetaPresentacionId: rp.id, precioReferencia: 40000 }],
+      adicionales: [], observaciones: [], notaLibre: undefined,
+    }),
+  });
+  const resP = await materializarPedidoOnlineEnVenta(ds, pedidoPizza.id);
+  ok(!!resP.ventaId, 'pizza: materializa', resP);
+  const itemsP = await R(VentaItem).find({ where: { venta: { id: resP.ventaId } }, relations: ['recetaPresentacion'] });
+  ok(itemsP.length === 1, 'pizza: 1 VentaItem');
+  ok(itemsP[0].recetaPresentacion?.id === rp.id, 'pizza: recetaPresentacion principal seteada');
+  ok(Number(itemsP[0].cantidadSabores) === 1, 'pizza: cantidadSabores = 1');
+  ok((itemsP[0].ensambladoDescripcion || '').includes('MUZZARELLA'), 'pizza: ensambladoDescripcion');
+  ok(Number(itemsP[0].precioCostoUnitario) === 18000, 'pizza: costo desde RecetaPresentacion.costo_calculado', itemsP[0].precioCostoUnitario);
+  const saboresRows = await R(VentaItemSabor).find({ where: { ventaItem: { id: itemsP[0].id } } });
+  ok(saboresRows.length === 1, 'pizza: VentaItemSabor creado');
+  ok(Number(saboresRows[0].costoReferencia) === 18000, 'pizza: costoReferencia del sabor');
+
+  // ───────────── Parte F: handlers de QR de mesa ──────────────────────────────
+  console.log('\n[F] handlers de QR de mesa');
+  const mesaQ = await save(PdvMesa, { numero: 20, activo: true, estado: 'DISPONIBLE', autoservicioActivo: false });
+  const g1 = await invokeHandlerWithContext('generar-qr-mesa', {}, mesaQ.id, { baseUrl: 'https://app.frc-gourmet.com' });
+  ok(!!g1?.token && g1.urlAbsoluta === true && String(g1.qr || '').startsWith('data:image'), 'generar-qr-mesa: token + qr + urlAbsoluta');
+  ok(String(g1.url).startsWith('https://') && g1.url.includes('/tienda?mesa='), 'generar-qr-mesa: url absoluta a /tienda');
+  const g2 = await invokeHandlerWithContext('generar-qr-mesa', {}, mesaQ.id, { baseUrl: '' });
+  ok(g2.urlAbsoluta === false && g2.qr === '', 'generar-qr-mesa: baseUrl vacío → sin qr');
+  ok(g2.token === g1.token, 'generar-qr-mesa: token estable sin rotar');
+  const g3 = await invokeHandlerWithContext('generar-qr-mesa', {}, mesaQ.id, { baseUrl: 'https://x.com', rotar: true });
+  ok(g3.token !== g1.token, 'generar-qr-mesa: rotar genera token nuevo');
+  const listaQr = await invokeHandlerWithContext('get-qr-mesas', {}, { baseUrl: 'https://x.com' });
+  ok(Array.isArray(listaQr) && listaQr.length >= 1 && listaQr.every((m: any) => !!m.token), 'get-qr-mesas: todas con token');
+  await invokeHandlerWithContext('set-autoservicio-mesa', {}, mesaQ.id, true);
+  const mq = await R(PdvMesa).findOne({ where: { id: mesaQ.id } });
+  ok(mq?.autoservicioActivo === true, 'set-autoservicio-mesa: habilita');
+  const ctxQ = await invokeHandlerWithContext('get-mesa-online-por-token', { clientIp: '127.0.0.1' }, g3.token);
+  ok(ctxQ?.success && ctxQ?.habilitada === true, 'get-mesa-online-por-token refleja habilitación');
+  await invokeHandlerWithContext('set-autoservicio-mesa', {}, mesaQ.id, false);
+  const ctxQ2 = await invokeHandlerWithContext('get-mesa-online-por-token', { clientIp: '127.0.0.1' }, g3.token);
+  ok(ctxQ2?.habilitada === false, 'set-autoservicio-mesa: deshabilita (reflejado)');
+
+  // ───────────── Parte G: config de tienda (round-trip MESA_QR) ───────────────
+  console.log('\n[G] config de tienda (round-trip)');
+  await invokeHandlerWithContext('update-tienda-online-config', {}, { permiteMesa: true, requiereLanMesa: true, rangoLanMesa: '190.1.2.3, 10.0.0.0/8' });
+  const cfgGet = await invokeHandlerWithContext('get-tienda-online-config', {});
+  ok(cfgGet.permiteMesa === true && cfgGet.requiereLanMesa === true && cfgGet.rangoLanMesa === '190.1.2.3, 10.0.0.0/8', 'update/get config MESA_QR persiste');
+  const cfgPub = await invokeHandlerWithContext('get-tienda-online-config-public', {});
+  ok(cfgPub.permiteMesa === true, 'config pública expone permiteMesa');
+  await invokeHandlerWithContext('update-tienda-online-config', {}, { requiereLanMesa: false });
+
+  // ───────────── Parte H: materialización edge cases ──────────────────────────
+  console.log('\n[H] materialización: edge cases');
+  const mesaRe = await save(PdvMesa, { numero: 30, activo: true, estado: 'OCUPADO', autoservicioActivo: true, qrToken: 'tok-Re' });
+  const ventaExistente = await save(Venta, { estado: 'ABIERTA', mesa: mesaRe, caja });
+  const pedidoRe = await crearPedidoMesa(mesaRe.id);
+  const resRe = await materializarPedidoOnlineEnVenta(ds, pedidoRe);
+  ok(resRe.ventaId === ventaExistente.id, 'reusa la venta ABIERTA existente de la mesa (no crea otra)', { got: resRe.ventaId, exp: ventaExistente.id });
+  const ventasRe = await R(Venta).find({ where: { mesa: { id: mesaRe.id }, estado: 'ABIERTA' } });
+  ok(ventasRe.length === 1, 'sigue habiendo una sola venta abierta');
+
+  const pedidoSinMesa = await save(PedidoOnline, { numero: `T-${String(++numeroSeq).padStart(6, '0')}`, tipoPedido: 'PICKUP', estado: 'RECIBIDO', canalOrigen: 'WEB', metodoPago: 'EFECTIVO', subtotal: 0, costoEnvio: 0, total: 0 });
+  let threw = false;
+  try { await materializarPedidoOnlineEnVenta(ds, pedidoSinMesa.id); } catch { threw = true; }
+  ok(threw, 'pedido sin mesaId → lanza error');
+
+  const mesaMan = await save(PdvMesa, { numero: 31, activo: true, estado: 'DISPONIBLE', autoservicioActivo: true, qrToken: 'tok-Man' });
+  const pedidoMan = await crearPedidoMesa(mesaMan.id);
+  const resMan = await invokeHandlerWithContext('materializar-pedido-online-en-venta', {}, pedidoMan);
+  ok(!!resMan?.ventaId, 'ipc materializar-pedido-online-en-venta (con permiso) funciona', resMan);
 
   await ds.destroy();
 
