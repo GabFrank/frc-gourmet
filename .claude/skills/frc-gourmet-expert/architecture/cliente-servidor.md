@@ -72,3 +72,26 @@ Memoria: `reference_smoke_server_e2e.md`.
 - F1–F5 mergeado en `develop`. Permisos validados en backend (`ensurePermission`) + frontend (`*appHasPermission`).
 - Cliente PWA (`projects/mobile`) construido sobre este server. Ver [mobile-pwa.md](mobile-pwa.md).
 - El server además puede servir la PWA estática (`dist/mobile`) y exponer SSE para KDS.
+
+---
+
+## Actualización 2026-07 — tres superficies web servidas por el nodo `server`
+
+En `mode=server`, el Fastify embebido sirve **tres** frontends distintos, cada uno con su base-href y su modelo de auth. No confundirlos:
+
+| Ruta | Qué es | Bundle | Auth |
+|---|---|---|---|
+| `/` | **PWA mobile** (staff en LAN, operación móvil) | `dist/mobile` (`projects/mobile`) | Staff (JWT `/api/rpc`) |
+| `/admin/` | **Frontend desktop completo servido como web** (panel administrativo full en el navegador, sin Electron) | `dist/frc-gourmet-web` (`--base-href /admin/`) | Staff (JWT `/api/rpc`) |
+| `/tienda/` | **Storefront público** (clientes finales, pedidos online) | `dist/storefront` (`--base-href /tienda/`) | **Cliente** (JWT propio, `/pub/*`) → [pedidos-online.md](../domains/pedidos-online.md) |
+
+### Web `/admin` (`f7cde79`)
+
+Es el **mismo Angular del desktop** corriendo en un browser contra el nodo server. El frontend siempre habla por `window.api`; en web se instala un **shim HTTP** (`src/app/web/api-http.ts`) que enruta cada llamada de `RepositoryIpcService` a `POST /api/rpc`, login por `/api/auth/login`, refresh de JWT en 401, imágenes `app://` proxeadas por `/api/files/by-url`, y **stubea las APIs solo-Electron** (controles de ventana, auto-update, backups) para que los guards del frontend las detecten ausentes. Entry `src/main.web.ts` + `tsconfig.web.json`; config `web` en `angular.json`; `build:web` dentro de `build:prod`. Servido con `@fastify/static` prefijo `/admin/` + SPA fallback.
+
+Fixes de reapertura de navegador: **single-flight del refresh token** (un burst de 401 concurrentes borraba ambos tokens de un refresh de un solo uso) y evento `frc-web-auth-expired` → `AuthService.logout()` cuando el refresh vence (`0167421`/`fffefbc`). En Electron el evento nunca se emite (no-op).
+
+### WhatsApp (dos mecanismos independientes)
+
+- **Evolution API** (self-hosted Baileys, `electron/services/whatsapp.service.ts`) — URL+instancia como config normal, **apikey en keytar** (`notif-evolution-apikey`; canal `set-notif-secret` bloqueado en `/api/rpc`). Usos: notificaciones RRHH y **resumen de cierre de caja como imagen** (`resumen-caja-imagen.util.ts`, `BrowserWindow` offscreen → PNG; hook en `update-caja`, best-effort; handler manual `enviar-resumen-cierre-whatsapp` + botón "Reenviar" en `list-cajas`).
+- **WhatsApp Cloud API (Meta)** (`electron/utils/whatsapp-sender.ts`) — **solo el OTP de pedidos online**; config por env (`WHATSAPP_CLOUD_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID`); sin credenciales usa `provider='dev-log'` (loguea el código y lo devuelve en la respuesta para pruebas).

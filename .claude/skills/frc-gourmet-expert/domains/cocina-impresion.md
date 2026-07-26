@@ -241,3 +241,30 @@ El enrutamiento a estación (cocina, barra, parrilla, etc.) es **100% por la M2M
 - [ ] Resumen completo de cierre de caja imprimible (hoy existe `print-conteo-caja-ticket`, acta breve de conteo).
 
 `PrinterService` Angular en `src/app/services/printer.service.ts`. Componente `PrinterSettingsComponent` en `src/app/components/printer-settings/`. Settings de ruteo en `src/app/components/sectores-impresoras-settings/`. Eventos de impresión en vivo: `src/app/services/printer-events.service.ts`.
+
+---
+
+## Actualización 2026-07 — KDS (frontend) + impresión
+
+### KDS (Kitchen Display Screen) — capa frontend/PWA
+
+Un **único `KdsComponent`** reusado por 3 superficies:
+- **Desktop (tab):** `src/app/pages/ventas/kds/kds.component.ts`, abierto con `openKdsTab()` (menú, permiso `COMANDAS_KDS_VER`).
+- **PWA / TV:** exportado por `shared-core/public-api.ts`, envuelto por `projects/mobile/src/app/pages/kds/kds.page.ts`, ruta `/kds` (full-screen, fuera del shell, `authGuard`).
+
+**Transporte** (`esWeb = !(window.api?.callIpc)`): en Electron/PWA usa `callIpc`; en navegador puro (Google TV) hace `fetch` a `${webBase}/api/rpc` con Bearer. ⚠️ El router `/api/rpc` responde `{result: <valor>}` mientras `callIpc` devuelve el valor directo → hay que **desenvolver `data.result`** en web (`5e0e73c`). Token/server de query o `localStorage` (`kds.token`/`kds.server`).
+
+**Tiempo real:** Electron → canal IPC `onComandaEvent`. Web con token → **SSE** a `/api/kds/stream?token=&sectores=` (`electron/server/kds-sse-routes.ts`, auth por token en query porque EventSource no manda headers; heartbeat 25s). PWA (shim sin token en query) → cae al **poll de respaldo de 12s**. Tick de 1s para timers/semáforo.
+
+**Modo TV** (`7abfe85`): `tvMode` = escala grande + márgenes anti-overscan (persistido); `toggleFullscreen()`. **Detalle por ítem** (`761e400`): removidos/cambios/adicionales/observaciones (mismo detalle que el ticket de cocina; el handler `get-kds-comandas` los adjunta desde `VentaItemAdicional`/`VentaItemObservacion`/`VentaItemIngredienteModificacion`). **Bump bar/numpad:** escribir nº de ticket + Enter = bump; clic = avanza, clic derecho = recall. **Semáforo** verde/amarillo/rojo por antigüedad (umbrales configurables por `KdsPantalla`). ABM de pantallas: `list-kds-pantallas` + `create-edit-kds-pantalla-dialog`.
+
+Auth del TV: reusa el `authGuard` + shim HTTP del PWA (`154f193`); se loguea una vez con un usuario de servicio (`COMANDAS_KDS_VER`) y el token se renueva solo.
+
+### Impresión — cambios
+
+- **`printer.width` = COLUMNAS, no mm** (`5ad4eaf`/`3353173`). La UI (`printer-settings`) elige columnas directamente: 32 (58mm), 40 (matriz 76mm), 42/48 (80mm). `printerWidthToChars()` es dual: `< 50` = ya es cantidad de columnas; `>= 50` = valor legacy en mm mapeado por densidad. (Reemplaza la nota vieja de "ancho en mm".)
+- **`connectionType` térmica genérica:** drivers `epson`/`star`/**`thermal`**.
+- **Comanda de cocina mejorada** (`53fc2fa`, `bf5ed4a`): `SIN X` invertido, `ADD`/adicionales, `CAMBIAR` en negrita, mesa/ticket en grande, corte + safe-area. **Pizza estructurada, una por línea** (`bf5ed4a`): se arma desde `VentaItemSabor` (`recetaPresentacion.sabor/.presentacion`), imprime tamaño + `1/N` por sabor (fracción si proporción uniforme, `%` si manual) en `size:'tall'` bold.
+- **Ticket de cierre de caja** (`a4761a4`): handler `print-cierre-caja({cajaId, printerId?})` + `printCierreCajaInternal` usando `resumen-caja.utils.ts` `computeResumenCaja()` (apertura/cierre, tiempo abierto, arqueo por moneda, retiros). **Auto-impresión al cerrar** desde `create-caja-dialog`. Distinto de `print-conteo-caja-ticket` (acta breve).
+
+> Ambos TODOs históricos "KDS" e "impresión real de tickets/comandas" quedan **completados** con esto (ver [workflows/todos-pendientes.md](../workflows/todos-pendientes.md)).

@@ -37,7 +37,9 @@ Cada combinación `(presentación, sabor)` es una `RecetaPresentacion` con:
 - Sus propios precios (`PrecioVenta` con `receta_presentacion_id`)
 - Una `Receta` asociada (FK `receta_id`)
 
-⚠️ **Matiz importante (verificado en código)**: `RecetaPresentacion.receta` es `@ManyToOne` (NO OneToOne) y la creación automática (`generarVariacionesParaProducto` en `recetas.handler.ts`) hace que **todas las variaciones de un mismo sabor compartan la MISMA `Receta` base** (mismo `receta_id`). Es decir, al crear un sabor se crea **una** receta y se enlaza a cada presentación. Por lo tanto, "out of the box", la pizza grande y la mediana de un sabor comparten ingredientes salvo que el flujo cree/asigne recetas distintas por variación. La flexibilidad por (presentación, sabor) existe a nivel de modelo (cada `RecetaPresentacion` puede apuntar a una receta distinta), pero el alta automática no genera una receta por variación. (Marcado para revisión humana: confirmar si la UI de variaciones asigna recetas independientes al editarlas.)
+> ✅ **Actualizado 2026-07-11 (refactor "cada variación su propia receta").** Antes, `generarVariacionesParaProducto` creaba **una** `Receta` base por sabor y la compartía entre todos los tamaños (editar "grande" cambiaba "mediano" — bug bloqueante). **Ahora ya NO se comparte:** `create-sabor` no crea receta base, y `generarVariacionesParaProducto(queryRunner, productoId, saborId)` (la firma **perdió** el parámetro `recetaId`) crea **una `Receta` propia por cada presentación** y la enlaza a su `RecetaPresentacion`. Cada combinación `(presentación, sabor)` tiene ingredientes y costo independientes por tamaño.
+>
+> `RecetaPresentacion.receta` sigue siendo `@ManyToOne` (`eager:true`, sin cascade) — la cardinalidad permite compartir a nivel de modelo, pero el alta ya no lo hace. Para datos viejos que aún comparten receta existe el handler de reparación **`reparar-recetas-compartidas`** (ver abajo). `delete-sabor` sigue deduplicando `receta_id` con un `Set` antes de borrar (defensivo, protege datos previos al refactor).
 
 ## Entidades
 
@@ -152,7 +154,7 @@ class RecetaPresentacion extends BaseModel {
 }
 ```
 
-**`@ManyToOne` (NO OneToOne)**: varias variaciones pueden compartir la misma `Receta` base (de hecho, el alta automática las comparte por sabor — ver más abajo).
+**`@ManyToOne` (NO OneToOne)**: a nivel de modelo varias variaciones *podrían* compartir la misma `Receta`, pero **desde el refactor 2026-07-11 el alta crea una receta por variación** (ya no se comparte — ver el aviso al inicio del doc).
 
 **`eager: true`** carga la receta automáticamente cada vez que cargás `RecetaPresentacion`. **Costoso** si hay muchas variaciones — considerar lazy en performance hot paths.
 
@@ -341,3 +343,32 @@ Dialogs:
    - Crea `VentaItemAdicional`, `VentaItemIngredienteModificacion`, `VentaItemObservacion` según selección — cada uno opcionalmente vinculado a `ventaItemSabor_id` específico.
 
 → Detalles de venta: [ventas-pdv.md](ventas-pdv.md).
+
+---
+
+## Módulo Gestión de Sabores (2026-07)
+
+Listado **global** de sabores (fuera del editor de producto), en `src/app/pages/gestion-sabores/`.
+
+- **Handler `get-all-sabores`** (`recetas.handler.ts`): filtros `{productoId, categoria, activo, texto}`, join a `producto`, y **conteo de variaciones por sabor** (`variacionesCount`, subconsulta sobre `receta_presentacion.sabor_id`). Devuelve DTO plano. Exige `ensurePermission('SABORES_GESTIONAR')` en las mutaciones; `create-sabor` valida `productoId` entero (guard contra `findOne({id: undefined})`).
+- **Componentes** (estructura real): `list-sabores/` (lista paginada client-side, filtros con botón, toggle activo, crear/editar reusando `SaborDialogComponent` de productos, botón **"Reparar recetas compartidas"**), `gestion-sabor/`, y bajo `dialogs/`: `create-edit-sabor-dialog/`, `ingrediente-sabor-dialog/`, y **`variaciones-sabor-dialog/`** (nuevo).
+- **`variaciones-sabor-dialog`**: carga variaciones del producto filtradas por sabor; por variación permite gestionar precio (`PrecioVentaDialog` con `recetaPresentacionId`), editar variación, **gestionar receta** (abre `GestionRecetasComponent` en tab con `recetaId = v.receta.id` — receta propia por tamaño), toggle activo, y **generar variaciones faltantes** (`generate-variaciones-faltantes`).
+
+## Precio de variación por `receta_presentacion_id` (`454831c`)
+
+El precio de una variación vive en **`PrecioVenta.receta_presentacion_id`** (4ª FK "flexible" de `PrecioVenta`, junto a presentacion/receta/producto), NO en `receta_id`. Antes, como los tamaños compartían receta, mostraban el mismo precio.
+
+- **Lectura**: `get-variaciones-by-producto` y `get-variaciones-by-producto-and-presentacion` consultan `pv.receta_presentacion_id = :rpId AND pv.activo`, ordenan `principal DESC`, exponen `preciosVenta` + `precioPrincipal` por variación.
+- **Escritura**: `create-precio-venta`/`update-precio-venta` aceptan `recetaPresentacionId` como 4ª rama; el flag `principal` se acota a esa `RecetaPresentacion`.
+- **Frontend**: `precio-venta-dialog`, `producto-sabores`, `variacion-dialog` y `variaciones-sabor-dialog` usan `relationField: 'recetaPresentacionId'`. Alinea gestión + PdV + storefront.
+
+## Reparación de recetas compartidas (`d9cbba3`)
+
+**No es una migración** (por el riesgo de un deep-clone corriendo en cada arranque): es un handler de mantenimiento **manual/opt-in**.
+
+- Handler IPC **`reparar-recetas-compartidas`** (`ensurePermission('SABORES_GESTIONAR')`) → `desduplicarRecetasCompartidas` en transacción. Botón en `list-sabores` con confirmación.
+- Lógica en `electron/utils/receta-clone.utils.ts`: agrupa `receta_presentacion` por `receta_id` con `HAVING COUNT(*)>1`; la primera variación (por `id ASC`) conserva la receta original y las demás reciben un **clon** (re-apuntan su `receta_id`). Idempotente.
+- `clonarReceta(manager, recetaId)`: **deep-clone DB-agnóstico** (vía EntityManager, no SQL crudo) del grafo completo — escalares + M2M `adicionalesDisponibles`, ingredientes (+intercambiables), fases (+fase-ingredientes con doble remapeo), materiales y `RecetaAdicionalVinculacion`.
+- Tests: `npm run test:reparar-recetas` (7/7) y `npm run test:receta-por-variacion` (Fase A, 4/4).
+
+> **Nota histórica:** el fix `14253af` corrigió handlers que referenciaban un `Receta.sabor` inexistente; el modelo real es `Sabor → RecetaPresentacion → Receta` (Sabor no tiene FK directa a Receta). El refactor "cada variación su receta" (2026-07-11) es distinto del refactor de *naming* de 2024-07-29.
