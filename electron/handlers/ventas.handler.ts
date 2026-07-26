@@ -5,6 +5,7 @@ import { Delivery, DeliveryEstado } from '../../src/app/database/entities/ventas
 import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
 import { VentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
 import { VentaItemObservacion } from '../../src/app/database/entities/ventas/venta-item-observacion.entity';
+import { Observacion } from '../../src/app/database/entities/productos/observacion.entity';
 import { VentaItemAdicional } from '../../src/app/database/entities/ventas/venta-item-adicional.entity';
 import { VentaItemIngredienteModificacion } from '../../src/app/database/entities/ventas/venta-item-ingrediente-modificacion.entity';
 import { PdvGrupoCategoria } from '../../src/app/database/entities/ventas/pdv-grupo-categoria.entity';
@@ -85,13 +86,18 @@ async function withVentaStockLock<T>(ventaId: number, fn: () => Promise<T>): Pro
 /**
  * Materializa un PedidoOnline en la Venta ABIERTA de su mesa (canal MESA_QR).
  * Resuelve/abre la venta de la mesa y vuelca los items como VentaItem (+ sabores
- * + adicionales) disparando el KDS/impresión por los hooks. Idempotente por
- * `pedido.ventaId`. Escrituras en transacción; los hooks corren post-commit.
+ * + adicionales + observaciones/nota libre) disparando el KDS/impresión por los
+ * hooks. Idempotente por `pedido.ventaId`. Escrituras en transacción; los hooks
+ * corren post-commit.
+ *
+ * Las observaciones predefinidas se resuelven por texto contra el catálogo
+ * `Observacion`; la nota libre y las no matcheadas se cuelgan de un sentinel
+ * ('NOTA DEL CLIENTE') vía observacionLibre. Las modificaciones de ingredientes
+ * no se capturan en pedidos online (no aplica).
  *
  * NO chequea permisos: es una función de sistema, gateada aguas arriba por la
  * validación de mesa (autoservicio habilitado + LAN). El ipc handler la envuelve
- * con ensurePermission para el uso manual del cajero. Observaciones/nota libre
- * no se mapean todavía (snapshot solo texto) → van en observacionesNoMapeadas.
+ * con ensurePermission para el uso manual del cajero.
  */
 export async function materializarPedidoOnlineEnVenta(
   dataSource: DataSource,
@@ -134,6 +140,20 @@ export async function materializarPedidoOnlineEnVenta(
     const itemRepo = qr.manager.getRepository(VentaItem);
     const saborRepo = qr.manager.getRepository(VentaItemSabor);
     const adicionalRepo = qr.manager.getRepository(VentaItemAdicional);
+    const obsCatRepo = qr.manager.getRepository(Observacion);
+    const obsItemRepo = qr.manager.getRepository(VentaItemObservacion);
+
+    // Sentinel para la nota libre del cliente (VentaItemObservacion.observacion es
+    // FK obligatoria; la nota va en observacionLibre colgada de esta observación).
+    let sentinelObsId: number | null = null;
+    const getSentinelObs = async (): Promise<number> => {
+      if (sentinelObsId != null) return sentinelObsId;
+      const desc = 'NOTA DEL CLIENTE';
+      let obs = await obsCatRepo.findOne({ where: { descripcion: desc } });
+      if (!obs) obs = await obsCatRepo.save(obsCatRepo.create({ descripcion: desc, activo: true }));
+      sentinelObsId = obs.id;
+      return sentinelObsId;
+    };
 
     const mesa = await mesaRepo.findOneBy({ id: pedido.mesaId });
     if (!mesa) throw new Error(`Mesa ${pedido.mesaId} no encontrada`);
@@ -223,15 +243,36 @@ export async function materializarPedidoOnlineEnVenta(
         await adicionalRepo.save(va);
       }
 
-      // Observaciones/nota libre: sin id de Observacion en el snapshot → F2b.
+      // Observaciones predefinidas: el snapshot online trae el TEXTO; se resuelve
+      // contra el catálogo global `Observacion` (descripcion única). Las que no
+      // matchean + la nota libre se cuelgan del sentinel vía observacionLibre.
       const obs: string[] = Array.isArray(pers.observaciones) ? pers.observaciones : [];
-      if (obs.length || pers.notaLibre) {
-        observacionesNoMapeadas.push({
-          ventaItemId: savedItem.id,
-          producto: pItem.nombreProducto,
-          observaciones: obs,
-          notaLibre: pers.notaLibre || null,
+      const libres: string[] = [];
+      for (const texto of obs) {
+        const desc = String(texto || '').trim().toUpperCase();
+        if (!desc) continue;
+        const cat = await obsCatRepo.findOne({ where: { descripcion: desc } });
+        if (cat) {
+          const vo = obsItemRepo.create({
+            ventaItem: { id: savedItem.id } as any,
+            observacion: { id: cat.id } as any,
+          });
+          await setEntityUserTracking(dataSource, vo, userId, false);
+          await obsItemRepo.save(vo);
+        } else {
+          libres.push(desc);
+        }
+      }
+      const notaLibre = pers.notaLibre ? String(pers.notaLibre).trim() : '';
+      if (notaLibre) libres.push(notaLibre);
+      if (libres.length) {
+        const vo = obsItemRepo.create({
+          ventaItem: { id: savedItem.id } as any,
+          observacion: { id: await getSentinelObs() } as any,
+          observacionLibre: libres.join(' · ').slice(0, 500),
         });
+        await setEntityUserTracking(dataSource, vo, userId, false);
+        await obsItemRepo.save(vo);
       }
     }
 
