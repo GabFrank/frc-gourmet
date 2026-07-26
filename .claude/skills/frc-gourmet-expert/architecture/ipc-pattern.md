@@ -123,11 +123,21 @@ export function registerProductosHandlers(
 - Operaciones complejas (multi-entity, contra-mov) usar **QueryRunner con transacción atómica**.
 - Error handling: dos patrones coexisten. `throw error` (preferido) o `return { success: false, error: msg }`. **Inconsistencia conocida** — chequear el handler antes de cambiar.
 
-**Registro en main.ts:**
+**Registro — FUENTE ÚNICA (`electron/utils/register-all-handlers.ts`):**
+
+Todos los handlers se registran en **un solo lugar**: la función `registerAllAppHandlers({ dataSource, getCurrentUser, setCurrentUser })` en `electron/utils/register-all-handlers.ts`. Tanto `main.ts` (app real) como los tests E2E (`test-server-standalone.ts`, `test-permissions-e2e.ts`) la llaman. `main.ts` **ya no tiene su propia lista** de `registerXxx(...)`.
+
 ```typescript
-// main.ts líneas 87-122 ya lo tienen. Si añadís handler nuevo:
-registerXxxHandlers(dataSource, getCurrentUser);
+// Para añadir un handler nuevo: agregá SU registro acá y listo.
+// electron/utils/register-all-handlers.ts
+export function registerAllAppHandlers(opts) {
+  // ...
+  registerXxxHandlers(dataSource, getCurrentUser);  // ← acá
+}
+// main.ts sólo hace: registerAllAppHandlers({ dataSource, getCurrentUser, setCurrentUser });
 ```
+
+> ⚠️ **Por qué existe esta fuente única:** antes había DOS listas (una inline en `main.ts` y otra en `register-all-handlers.ts`) que divergían en silencio. Agregar un handler a una y no a la otra producía el bug *"Handler 'X' no registrado en handlerRegistry"* (HTTP 404) — el handler funcionaba por IPC pero no por `/api/rpc`, y los tests no lo detectaban porque usaban la lista incompleta. Con una sola lista el drift es imposible. **Nunca reintroducir una segunda lista de registros en `main.ts`.** Los schedulers, seeds y la migración de arranque sí quedan en `main.ts` (son runtime de la app real, no registro de canales).
 
 ### 3. Preload (contextBridge)
 

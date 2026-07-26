@@ -26,10 +26,9 @@ app.on('ready')
   │            await runBootstrapMigrations(dataSource);        // SQL fixes idempotentes
   │            await migratePlaintextPasswords(dataSource);     // bcrypt
   │            installHandlerRegistry();                        // monkey-patch ipcMain.handle → /api/rpc
-  │            registerXxxHandlers(dataSource, getCurrentUser); // ← orden importa (54 handlers)
+  │            registerAllAppHandlers({ dataSource, getCurrentUser, setCurrentUser }); // fuente ÚNICA (todos los handlers)
   │            dataSource.query('UPDATE ventas SET vendedor_id ...'); // migración 1-vez idempotente
   │            startAcreditacionesScheduler(dataSource, 5);
-  │            registerBackupHandlers / registerDbConfigHandlers / registerAppModeHandlers / registerFacturaImportHandlers
   │            // seeds idempotentes (en orden):
   │            await seedInitialData; seedPermissions; seedConfiguracionRrhh; seedLiquidacionConceptos; seedSystemData;
   │            generarNotificacionesRrhh(); setInterval(..., 24h);
@@ -45,10 +44,15 @@ app.on('activate')   // macOS
 
 ### Orden de registro de handlers
 
-El orden importa porque algunos handlers dependen de seeds o de `getCurrentUser` ya configurado, y `installHandlerRegistry()` debe correr **antes** del primer `registerXxxHandlers` para capturar todos los canales. Bloque real (54 handlers + helpers):
+Todos los `registerXxxHandlers(...)` viven en **una sola función**, `registerAllAppHandlers()` en `electron/utils/register-all-handlers.ts` (fuente única — ver [ipc-pattern.md](ipc-pattern.md#registro)). `main.ts` sólo la llama; **no tiene lista propia**. Los tests E2E llaman la misma función, así que la app real y los tests registran exactamente el mismo set (antes divergían → bug "handler no registrado en handlerRegistry").
+
+`installHandlerRegistry()` debe correr **antes** de `registerAllAppHandlers()` para capturar todos los canales en `handlerRegistry`. El orden dentro de la función es representativo (bloque real en `register-all-handlers.ts`):
 
 ```typescript
-installHandlerRegistry();   // monkey-patch ipcMain.handle
+installHandlerRegistry();   // monkey-patch ipcMain.handle (en main.ts, antes de registrar)
+
+registerAllAppHandlers({ dataSource, getCurrentUser, setCurrentUser });
+// ↓ esta función, en register-all-handlers.ts, hace en orden:
 
 registerPrinterHandlers(dataSource, getCurrentUser);
 registerPersonasHandlers(dataSource, getCurrentUser);
@@ -86,15 +90,18 @@ registerDashboardVentasHandlers(...); registerDashboardComprasHandlers(...);
 registerDashboardProductosHandlers(...); registerDashboardFinancieroHandlers(...);
 registerDashboardCajaMayorHandlers(...);
 
+registerBackupHandlers(...); registerDbConfigHandlers(...);   // BD (sqlite/postgres)
+registerAppModeHandlers(...); registerFacturaImportHandlers(...); // modo + OCR/IA
+setNotificacionDataSource(dataSource);
+registerNotificacionesConfigHandlers(...); registerPasswordRecoveryHandlers(...);
+registerPedidosOnlineHandlers(...) /* + Auth/Pedidos/Admin/Config */; registerMesaQrHandlers(...); // pedidos online + QR de mesa
+// ← fin de registerAllAppHandlers()
+
+// ── lo que sigue lo hace main.ts DESPUÉS de registerAllAppHandlers() ──
 // Migración 1-vez (idempotente):
 dataSource.query(`UPDATE ventas SET vendedor_id = created_by WHERE vendedor_id IS NULL AND created_by IS NOT NULL`);
 
 startAcreditacionesScheduler(dataSource, 5);   // AcreditacionPos PENDIENTE vencida, cada 5 min
-
-registerBackupHandlers(dataSource, getCurrentUser);   // + startAutoBackupScheduler
-registerDbConfigHandlers(dataSource, getCurrentUser); // configuración de BD (sqlite/postgres)
-registerAppModeHandlers(dataSource, getCurrentUser);  // standalone/server/client
-registerFacturaImportHandlers(dataSource, getCurrentUser); // OCR + IA
 
 // Seeds idempotentes (en orden):
 await seedInitialData(dataSource);
