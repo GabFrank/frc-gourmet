@@ -24,6 +24,11 @@ export interface PublicOperation {
   channel: string;
   /** si true, exige JWT de cliente válido en Authorization: Bearer. */
   requiresAuth: boolean;
+  /**
+   * si true (y requiresAuth false): resuelve el cliente si viene token, pero NO
+   * rechaza si falta. Para ops que admiten invitado y cliente (ej. pedido MESA_QR).
+   */
+  optionalAuth?: boolean;
   /** descripción corta para auditar la whitelist. */
   description?: string;
 }
@@ -105,6 +110,10 @@ export function registerPublicRoutes(fastify: FastifyInstance): void {
           reply.code(401);
           return { error: 'cliente_no_autenticado' };
         }
+      } else if (def.optionalAuth) {
+        // Resuelve el cliente si viene token, pero NO rechaza si falta (el handler
+        // decide según el canal — ej. MESA_QR admite invitado).
+        customer = await resolveCustomer(request);
       }
 
       try {

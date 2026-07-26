@@ -47,6 +47,7 @@ function mapPedidoAdmin(p: PedidoOnline): any {
     referenciaDireccion: p.referenciaDireccion ?? null,
     notas: p.notas ?? null,
     ventaId: p.ventaId ?? null,
+    mesaId: p.mesaId ?? null,
     zonaDelivery: p.zonaDelivery ? { id: p.zonaDelivery.id, nombre: p.zonaDelivery.nombre } : null,
     fechaProgramada: p.fechaProgramada ?? null,
     fechaAceptado: p.fechaAceptado ?? null,

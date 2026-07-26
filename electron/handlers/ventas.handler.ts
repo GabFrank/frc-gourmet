@@ -82,6 +82,182 @@ async function withVentaStockLock<T>(ventaId: number, fn: () => Promise<T>): Pro
   }
 }
 
+/**
+ * Materializa un PedidoOnline en la Venta ABIERTA de su mesa (canal MESA_QR).
+ * Resuelve/abre la venta de la mesa y vuelca los items como VentaItem (+ sabores
+ * + adicionales) disparando el KDS/impresión por los hooks. Idempotente por
+ * `pedido.ventaId`. Escrituras en transacción; los hooks corren post-commit.
+ *
+ * NO chequea permisos: es una función de sistema, gateada aguas arriba por la
+ * validación de mesa (autoservicio habilitado + LAN). El ipc handler la envuelve
+ * con ensurePermission para el uso manual del cajero. Observaciones/nota libre
+ * no se mapean todavía (snapshot solo texto) → van en observacionesNoMapeadas.
+ */
+export async function materializarPedidoOnlineEnVenta(
+  dataSource: DataSource,
+  pedidoId: number,
+  opts?: { cajaId?: number },
+  _userId?: number,
+): Promise<{ ventaId: number; yaMaterializado: boolean; itemsCreados: number; observacionesNoMapeadas: any[] }> {
+  const pedido = await dataSource.getRepository(PedidoOnline).findOne({
+    where: { id: pedidoId },
+    relations: ['items'],
+  });
+  if (!pedido) throw new Error(`Pedido online ${pedidoId} no encontrado`);
+  if (!pedido.mesaId) throw new Error('El pedido no es de mesa (sin mesaId)');
+
+  // Idempotencia: ya materializado → no duplicar items.
+  if (pedido.ventaId) {
+    return { ventaId: pedido.ventaId, yaMaterializado: true, itemsCreados: 0, observacionesNoMapeadas: [] };
+  }
+
+  // Caja: la del parámetro o la única caja abierta.
+  let cajaId: number | undefined = opts?.cajaId ? Number(opts.cajaId) : undefined;
+  if (!cajaId) {
+    const abiertas = await dataSource.getRepository(Caja).find({ where: { estado: CajaEstado.ABIERTO } });
+    if (abiertas.length === 0) throw new Error('no_hay_caja_abierta');
+    if (abiertas.length > 1) throw new Error('caja_ambigua_especificar_cajaId');
+    cajaId = abiertas[0].id;
+  }
+
+  const userId = _userId;
+  const createdItemIds: number[] = [];
+  const observacionesNoMapeadas: any[] = [];
+  let ventaId = 0;
+
+  const qr = dataSource.createQueryRunner();
+  await qr.connect();
+  await qr.startTransaction();
+  try {
+    const mesaRepo = qr.manager.getRepository(PdvMesa);
+    const ventaRepo = qr.manager.getRepository(Venta);
+    const itemRepo = qr.manager.getRepository(VentaItem);
+    const saborRepo = qr.manager.getRepository(VentaItemSabor);
+    const adicionalRepo = qr.manager.getRepository(VentaItemAdicional);
+
+    const mesa = await mesaRepo.findOneBy({ id: pedido.mesaId });
+    if (!mesa) throw new Error(`Mesa ${pedido.mesaId} no encontrada`);
+
+    // Venta ABIERTA de la mesa (comanda IsNull = cuenta de mesa), o crear una.
+    let venta = await ventaRepo.findOne({
+      where: { mesa: { id: mesa.id }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
+    });
+    if (!venta) {
+      venta = ventaRepo.create({
+        estado: VentaEstado.ABIERTA,
+        caja: { id: cajaId } as any,
+        mesa: { id: mesa.id } as any,
+      });
+      await setEntityUserTracking(dataSource, venta, userId, false);
+      venta = await ventaRepo.save(venta);
+      if (mesa.estado !== PdvMesaEstado.OCUPADO) {
+        mesa.estado = PdvMesaEstado.OCUPADO;
+        await setEntityUserTracking(dataSource, mesa, userId, true);
+        await mesaRepo.save(mesa);
+      }
+    }
+    ventaId = venta.id;
+
+    for (const pItem of pedido.items || []) {
+      let pers: any = {};
+      try { pers = pItem.personalizacion ? JSON.parse(pItem.personalizacion) : {}; } catch { pers = {}; }
+      const sabores: any[] = Array.isArray(pers.sabores) ? pers.sabores : [];
+      const adicionales: any[] = Array.isArray(pers.adicionales) ? pers.adicionales : [];
+
+      // El pedido congela precioUnitario = opcion.valor + Σ adicionales.
+      // Se separa igual que el PdV: precioVentaUnitario base + precioAdicionales.
+      const adicTotal = adicionales.reduce((s, a) => s + (Number(a?.precio) || 0), 0);
+      const precioVentaUnitario = Math.max(0, Number(pItem.precioUnitario || 0) - adicTotal);
+
+      const esPizza = sabores.length > 0;
+      let principalRpId: number | undefined;
+      if (esPizza) {
+        const principal = sabores.reduce(
+          (best, s) => (Number(s?.precioReferencia) || 0) > (Number(best?.precioReferencia) || 0) ? s : best,
+          sabores[0],
+        );
+        principalRpId = principal?.recetaPresentacionId;
+      }
+
+      const vItem = itemRepo.create({
+        venta: { id: ventaId } as any,
+        producto: { id: pItem.productoId } as any,
+        presentacion: pItem.presentacionId ? ({ id: pItem.presentacionId } as any) : null,
+        cantidad: Number(pItem.cantidad) || 1,
+        precioVentaUnitario,
+        precioCostoUnitario: 0, // el snapshot online no trae costo (recálculo → F2b)
+        precioAdicionales: adicTotal,
+        estado: EstadoVentaItem.ACTIVO,
+        recetaPresentacion: principalRpId ? ({ id: principalRpId } as any) : null,
+        ensambladoDescripcion: esPizza ? String(pers?.opcion?.label || '').slice(0, 500) : null,
+        cantidadSabores: sabores.length,
+      });
+      await setEntityUserTracking(dataSource, vItem, userId, false);
+      const savedItem = await itemRepo.save(vItem);
+      createdItemIds.push(savedItem.id);
+
+      // Sabores (pizza mitad y mitad) — ids presentes en el snapshot.
+      for (const s of sabores) {
+        if (!s?.recetaPresentacionId) continue;
+        const vs = saborRepo.create({
+          ventaItem: { id: savedItem.id } as any,
+          recetaPresentacion: { id: s.recetaPresentacionId } as any,
+          proporcion: Number(s.proporcion) || 1 / sabores.length,
+          precioReferencia: Number(s.precioReferencia) || 0,
+          costoReferencia: 0,
+        });
+        await setEntityUserTracking(dataSource, vs, userId, false);
+        await saborRepo.save(vs);
+      }
+
+      // Adicionales — ids presentes en el snapshot.
+      for (const a of adicionales) {
+        if (!a?.id) continue;
+        const va = adicionalRepo.create({
+          ventaItem: { id: savedItem.id } as any,
+          adicional: { id: a.id } as any,
+          precioCobrado: Number(a.precio) || 0,
+          cantidad: 1,
+        });
+        await setEntityUserTracking(dataSource, va, userId, false);
+        await adicionalRepo.save(va);
+      }
+
+      // Observaciones/nota libre: sin id de Observacion en el snapshot → F2b.
+      const obs: string[] = Array.isArray(pers.observaciones) ? pers.observaciones : [];
+      if (obs.length || pers.notaLibre) {
+        observacionesNoMapeadas.push({
+          ventaItemId: savedItem.id,
+          producto: pItem.nombreProducto,
+          observaciones: obs,
+          notaLibre: pers.notaLibre || null,
+        });
+      }
+    }
+
+    pedido.ventaId = ventaId;
+    pedido.estado = EstadoPedidoOnline.EN_PREPARACION;
+    await qr.manager.getRepository(PedidoOnline).save(pedido);
+
+    await qr.commitTransaction();
+  } catch (e) {
+    await qr.rollbackTransaction();
+    throw e;
+  } finally {
+    await qr.release();
+  }
+
+  // Post-commit: disparar KDS + impresión (leen por dataSource, ya visible).
+  for (const itemId of createdItemIds) {
+    try { await crearComandaItemsSiCorresponde(dataSource, itemId); }
+    catch (e) { console.warn('[materializar-pedido-online] hook KDS falló:', e); }
+  }
+  try { await autoPrintComandaIfNeeded(dataSource, ventaId); }
+  catch (e) { console.warn('[materializar-pedido-online] auto-imprimir comanda falló:', e); }
+
+  return { ventaId, yaMaterializado: false, itemsCreados: createdItemIds.length, observacionesNoMapeadas };
+}
+
 export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Remove this line - get the current user in each handler instead
   // const currentUser = getCurrentUser(); // Get user for tracking
@@ -853,173 +1029,12 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     }
   });
 
-  // ─── Puente: materializar un PedidoOnline en la Venta de su mesa (MESA_QR, F2) ──
-  // Resuelve/abre la Venta ABIERTA de la mesa del pedido y vuelca sus items como
-  // VentaItem (+ sabores + adicionales), disparando el KDS/impresión por los hooks.
-  // Idempotente por `pedido.ventaId`. La escritura en BD va en una transacción; los
-  // hooks (que leen por dataSource) corren DESPUÉS del commit para ver los datos.
-  // Observaciones/nota libre del pedido no se mapean todavía (snapshot solo texto,
-  // sin id de Observacion) → se devuelven en `observacionesNoMapeadas` (F2b).
+  // Puente MESA_QR: materializa un PedidoOnline en la Venta de su mesa. La lógica
+  // vive en la función module-level `materializarPedidoOnlineEnVenta` (reutilizable
+  // desde el flujo público). Ver domains/pedidos-online.md (MESA_QR, F2).
   ipcMain.handle('materializar-pedido-online-en-venta', async (_event: any, pedidoId: number, opts?: any) => {
     await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
-
-    const pedido = await dataSource.getRepository(PedidoOnline).findOne({
-      where: { id: pedidoId },
-      relations: ['items'],
-    });
-    if (!pedido) throw new Error(`Pedido online ${pedidoId} no encontrado`);
-    if (!pedido.mesaId) throw new Error('El pedido no es de mesa (sin mesaId)');
-
-    // Idempotencia: ya materializado → no duplicar items.
-    if (pedido.ventaId) {
-      return { ventaId: pedido.ventaId, yaMaterializado: true, itemsCreados: 0, observacionesNoMapeadas: [] };
-    }
-
-    // Caja: la del parámetro o la única caja abierta.
-    let cajaId: number | undefined = opts?.cajaId ? Number(opts.cajaId) : undefined;
-    if (!cajaId) {
-      const abiertas = await dataSource.getRepository(Caja).find({ where: { estado: CajaEstado.ABIERTO } });
-      if (abiertas.length === 0) throw new Error('no_hay_caja_abierta');
-      if (abiertas.length > 1) throw new Error('caja_ambigua_especificar_cajaId');
-      cajaId = abiertas[0].id;
-    }
-
-    const userId = getCurrentUser()?.id;
-    const createdItemIds: number[] = [];
-    const observacionesNoMapeadas: any[] = [];
-    let ventaId = 0;
-
-    const qr = dataSource.createQueryRunner();
-    await qr.connect();
-    await qr.startTransaction();
-    try {
-      const mesaRepo = qr.manager.getRepository(PdvMesa);
-      const ventaRepo = qr.manager.getRepository(Venta);
-      const itemRepo = qr.manager.getRepository(VentaItem);
-      const saborRepo = qr.manager.getRepository(VentaItemSabor);
-      const adicionalRepo = qr.manager.getRepository(VentaItemAdicional);
-
-      const mesa = await mesaRepo.findOneBy({ id: pedido.mesaId });
-      if (!mesa) throw new Error(`Mesa ${pedido.mesaId} no encontrada`);
-
-      // Venta ABIERTA de la mesa (comanda IsNull = cuenta de mesa), o crear una.
-      let venta = await ventaRepo.findOne({
-        where: { mesa: { id: mesa.id }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
-      });
-      if (!venta) {
-        venta = ventaRepo.create({
-          estado: VentaEstado.ABIERTA,
-          caja: { id: cajaId } as any,
-          mesa: { id: mesa.id } as any,
-        });
-        await setEntityUserTracking(dataSource, venta, userId, false);
-        venta = await ventaRepo.save(venta);
-        if (mesa.estado !== PdvMesaEstado.OCUPADO) {
-          mesa.estado = PdvMesaEstado.OCUPADO;
-          await setEntityUserTracking(dataSource, mesa, userId, true);
-          await mesaRepo.save(mesa);
-        }
-      }
-      ventaId = venta.id;
-
-      for (const pItem of pedido.items || []) {
-        let pers: any = {};
-        try { pers = pItem.personalizacion ? JSON.parse(pItem.personalizacion) : {}; } catch { pers = {}; }
-        const sabores: any[] = Array.isArray(pers.sabores) ? pers.sabores : [];
-        const adicionales: any[] = Array.isArray(pers.adicionales) ? pers.adicionales : [];
-
-        // El pedido congela precioUnitario = opcion.valor + Σ adicionales.
-        // Se separa igual que el PdV: precioVentaUnitario base + precioAdicionales.
-        const adicTotal = adicionales.reduce((s, a) => s + (Number(a?.precio) || 0), 0);
-        const precioVentaUnitario = Math.max(0, Number(pItem.precioUnitario || 0) - adicTotal);
-
-        const esPizza = sabores.length > 0;
-        let principalRpId: number | undefined;
-        if (esPizza) {
-          const principal = sabores.reduce(
-            (best, s) => (Number(s?.precioReferencia) || 0) > (Number(best?.precioReferencia) || 0) ? s : best,
-            sabores[0],
-          );
-          principalRpId = principal?.recetaPresentacionId;
-        }
-
-        const vItem = itemRepo.create({
-          venta: { id: ventaId } as any,
-          producto: { id: pItem.productoId } as any,
-          presentacion: pItem.presentacionId ? ({ id: pItem.presentacionId } as any) : null,
-          cantidad: Number(pItem.cantidad) || 1,
-          precioVentaUnitario,
-          precioCostoUnitario: 0, // el snapshot online no trae costo (recálculo → F2b)
-          precioAdicionales: adicTotal,
-          estado: EstadoVentaItem.ACTIVO,
-          recetaPresentacion: principalRpId ? ({ id: principalRpId } as any) : null,
-          ensambladoDescripcion: esPizza ? String(pers?.opcion?.label || '').slice(0, 500) : null,
-          cantidadSabores: sabores.length,
-        });
-        await setEntityUserTracking(dataSource, vItem, userId, false);
-        const savedItem = await itemRepo.save(vItem);
-        createdItemIds.push(savedItem.id);
-
-        // Sabores (pizza mitad y mitad) — ids presentes en el snapshot.
-        for (const s of sabores) {
-          if (!s?.recetaPresentacionId) continue;
-          const vs = saborRepo.create({
-            ventaItem: { id: savedItem.id } as any,
-            recetaPresentacion: { id: s.recetaPresentacionId } as any,
-            proporcion: Number(s.proporcion) || 1 / sabores.length,
-            precioReferencia: Number(s.precioReferencia) || 0,
-            costoReferencia: 0,
-          });
-          await setEntityUserTracking(dataSource, vs, userId, false);
-          await saborRepo.save(vs);
-        }
-
-        // Adicionales — ids presentes en el snapshot.
-        for (const a of adicionales) {
-          if (!a?.id) continue;
-          const va = adicionalRepo.create({
-            ventaItem: { id: savedItem.id } as any,
-            adicional: { id: a.id } as any,
-            precioCobrado: Number(a.precio) || 0,
-            cantidad: 1,
-          });
-          await setEntityUserTracking(dataSource, va, userId, false);
-          await adicionalRepo.save(va);
-        }
-
-        // Observaciones/nota libre: sin id de Observacion en el snapshot → F2b.
-        const obs: string[] = Array.isArray(pers.observaciones) ? pers.observaciones : [];
-        if (obs.length || pers.notaLibre) {
-          observacionesNoMapeadas.push({
-            ventaItemId: savedItem.id,
-            producto: pItem.nombreProducto,
-            observaciones: obs,
-            notaLibre: pers.notaLibre || null,
-          });
-        }
-      }
-
-      pedido.ventaId = ventaId;
-      pedido.estado = EstadoPedidoOnline.EN_PREPARACION;
-      await qr.manager.getRepository(PedidoOnline).save(pedido);
-
-      await qr.commitTransaction();
-    } catch (e) {
-      await qr.rollbackTransaction();
-      throw e;
-    } finally {
-      await qr.release();
-    }
-
-    // Post-commit: disparar KDS + impresión (leen por dataSource, ya visible).
-    for (const itemId of createdItemIds) {
-      try { await crearComandaItemsSiCorresponde(dataSource, itemId); }
-      catch (e) { console.warn('[materializar-pedido-online] hook KDS falló:', e); }
-    }
-    try { await autoPrintComandaIfNeeded(dataSource, ventaId); }
-    catch (e) { console.warn('[materializar-pedido-online] auto-imprimir comanda falló:', e); }
-
-    return { ventaId, yaMaterializado: false, itemsCreados: createdItemIds.length, observacionesNoMapeadas };
+    return materializarPedidoOnlineEnVenta(dataSource, pedidoId, opts, getCurrentUser()?.id);
   });
 
   ipcMain.handle('updateVentaItem', async (_event: any, id: number, data: any) => {
