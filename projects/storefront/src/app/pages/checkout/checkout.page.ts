@@ -137,7 +137,11 @@ export class CheckoutPage implements OnInit, OnDestroy {
 
     // ── Modo MESA_QR: invitado con nombre, sin dirección ni pago (paga en caja) ──
     if (this.mesa.enMesa) {
-      if (!this.mesa.ctx?.habilitada) {
+      if (!this.mesa.ctx) {
+        this.error = 'No pudimos validar la mesa. Volvé a escanear el QR de la mesa.';
+        return;
+      }
+      if (!this.mesa.ctx.habilitada) {
         this.error = 'La mesa todavía no está habilitada para autoservicio. Pedile al mozo que la active.';
         return;
       }

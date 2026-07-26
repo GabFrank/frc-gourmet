@@ -72,6 +72,33 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
     private snack: MatSnackBar,
   ) {}
 
+  private get api(): any {
+    return (window as any).api;
+  }
+
+  /**
+   * Recovery MESA_QR: materializa manualmente un pedido de mesa que no se
+   * materializó solo (ej. no había caja abierta al crearse) → lo vuelca en la
+   * cuenta de la mesa y lo manda a cocina. Resuelve la única caja abierta; si hay
+   * más de una, avisa (habría que materializar desde el PdV de esa caja).
+   */
+  enviarACocina(p: any): void {
+    this.api.callIpc('materializar-pedido-online-en-venta', p.id).then((res: any) => {
+      if (res?.ventaId) {
+        this.snack.open(`Pedido ${p.numero} enviado a cocina`, 'OK', { duration: 2500 });
+        this.cargar(true);
+      } else {
+        this.snack.open('No se pudo enviar a cocina', 'OK', { duration: 3500 });
+      }
+    }).catch((e: any) => {
+      const msg = String(e?.message || e);
+      const amigable = /no_hay_caja_abierta/.test(msg) ? 'No hay una caja abierta.'
+        : /caja_ambigua/.test(msg) ? 'Hay más de una caja abierta; abrí el pedido desde el PdV de la caja correspondiente.'
+        : msg;
+      this.snack.open('No se pudo enviar a cocina: ' + amigable, 'OK', { duration: 5000 });
+    });
+  }
+
   ngOnInit(): void {
     this.cargar();
     // Auto-refresh cada 15s para detectar pedidos nuevos.
