@@ -122,8 +122,38 @@ JWT secret se persiste en **keytar** (no en código ni env). Se genera al primer
 ### ✅ RESUELTO — Admin `admin/admin` post-instalación (P0-3, PR #22)
 Columna `must_change_password` en `Usuario`. Seed marca el admin default. Dialog bloqueante `force-change-password-dialog` post-login obliga a cambiar antes de cargar el dashboard.
 
-### Renderer puede setCurrentUser (parcialmente cubierto)
-`setCurrentUser` IPC sigue existiendo. P0-1 mitiga porque cada handler revalida permisos contra el usuario actual (si un atacante intenta spoofear, los permisos del rol spoofeado tienen que coincidir). Pero un usuario autenticado con rol bajo podría "ascenderse" si conoce el id de un admin. **Fix pendiente:** validar contra token JWT en cada `setCurrentUser` o eliminar el handler y derivar del login.
+### ✅ RESUELTO — `must_change_password` solo en frontend (M-07, 2026-07-15)
+`auth.utils.ts` `checkPermission` rechaza (FORBIDDEN) si el usuario tiene `mustChangePassword=true`; `change-password` es self-service (no pasa por checkPermission). El flag se refleja en memoria al cambiar. Antes el gate era solo el dialog del frontend.
+
+### ✅ RESUELTO — Hash de password expuesto al renderer (M-08, 2026-07-15)
+`auth.handler.ts` (login/restoreSession/getCurrentUser) serializa el usuario **sin** `usuario.password`.
+
+### Renderer puede setCurrentUser (mitigado en HTTP)
+`setCurrentUser` IPC sigue existiendo. P0-1 mitiga porque cada handler revalida permisos contra el usuario actual. Además, en 2026-07-15 el canal **`set-current-user` entró en `BLOCKED_CHANNELS`** de `/api/rpc` (no invocable por HTTP). El canal IPC local sigue existiendo. **Fix pendiente (menor):** eliminar el handler y derivar del login/JWT.
+
+### Batch de auditoría 2026-07-15 (`docs/HALLAZGOS-AUDITORIA-DESKTOP.md`)
+
+~20 bugs clasificados C (crítico) / M (medio) / A (alto) **cerrados** en la sesión del 2026-07-15. No re-descubrir. Resumen:
+
+| ID | Bug | Estado |
+|---|---|---|
+| C-01 | doble conteo en el ledger bancario | FIXED (dedup por token `#<id>` en `movimientos-bancarios.ts`) |
+| C-02 | stock no descontaba por sabor en pizza multi-sabor | FIXED (`processElaboradoConVariacion` recorre `VentaItemSabor`) |
+| C-03 | handlers de precio/stock sin permiso | FIXED (`PRODUCTOS_GESTIONAR` / `STOCK_MOVIMIENTO_REGISTRAR`) |
+| C-04 | doble descuento de vale/venta-vacación entre periodos | FIXED (guard `liquidacion_id IS NULL OR = esta`) |
+| C-05 | `/api/rpc` default-allow | **PARCIAL** (BLOCKED_CHANNELS 3→~30; default-deny estructural pendiente) |
+| A-01 | cancelar venta a crédito no revertía CPC | FIXED (revierte CPC + saldo cliente, atómico) |
+| A-02 | costo de receta ignoraba rendimiento | FIXED (`costoUnitario = costoTotal / rendimiento`) |
+| A-03 | anular compra no revertía stock | FIXED parcial (guard de stock; costo promedio NO se revierte, follow-up) |
+| A-04/M-06 | comisión de equipo duplicada / reparto ≠ 100% | FIXED (idempotente + valida 100%) |
+| A-05 | `cpp.montoPagado` sobre-sumaba | FIXED (recomputa desde las cuotas) |
+| M-01 | `anular-cobro-cpc` no idempotente | FIXED (col `movimientos_cliente.anulado` + migración) |
+| M-02 | carreras de saldo caja mayor | **PARCIAL** (`FOR UPDATE` solo Postgres; falta lock de `CuentaBancaria`/`Cliente`) |
+| M-04 | TOCTOU en `procesarStockVenta` | FIXED (mutex en memoria por `ventaId`) |
+| M-05 | 23 handlers RRHH sin permiso | FIXED |
+| M-07/M-08 | must-change-password / hash al renderer | FIXED (ver arriba) |
+
+**Aún abiertos/parciales:** C-05 (default-deny estructural), M-02 (locks de cuenta bancaria/cliente), A-03 (revertir costo promedio al anular compra), y el bug multimoneda de liquidaciones (sección RRHH arriba).
 
 ## Performance
 
@@ -148,7 +178,7 @@ PdV refresca el estado de las mesas cada 1 segundo. Con 50 mesas, son ~50 querie
 Aprendidos en la auditoría de bugs de julio 2026 (rama `claude/desktop-forma-pago-efectivo`, PR #181). Ver `docs/HALLAZGOS-AUDITORIA-DESKTOP.md` para la lista completa de bugs clasificados por severidad.
 
 - **Los handlers NO quedan como listeners de `ipcMain`.** `electron/utils/handler-registry.ts` hace **monkey-patch de `ipcMain.handle`** y guarda cada canal en un registro propio. Por eso `ipcMain.listeners('canal')` devuelve `[]`. Llamar `ipcMain.listeners('canal')[0]?.(...)` es un **no-op silencioso** (patrón que dejó a `generar-liquidaciones-comision-mes` sin hacer nada). Para invocar otro handler desde dentro de un handler, **usar `invokeHandler(canal, ...args)`** de `../utils/handler-registry`.
-- **`/api/rpc` es default-allow.** En `mode=server` expone **todos** los handlers con sólo un JWT válido; `BLOCKED_CHANNELS` bloquea apenas 3 canales. La capa de transporte **no** protege nada: cada handler sensible debe traer su propio `ensurePermission(dataSource, getCurrentUser, 'CODIGO')`. No asumir que estar detrás de `/api/rpc` = protegido.
+- **`/api/rpc` es default-allow.** En `mode=server` expone **todos** los handlers con sólo un JWT válido; `BLOCKED_CHANNELS` (`electron/server/rpc-router.ts`) bloquea sólo canales de infraestructura — **ampliado de 3 a ~30 canales** en 2026-07-15 (C-05: backups, db-config, app-mode, auto-update, `set-notif-secret`, `ia-config-set`, seeds, `set-current-user`, `remote-tunnel-*`, etc.). Pero para los ~830 handlers de negocio sigue siendo default-allow (el default-deny estructural sigue pendiente). La capa de transporte **no** protege nada: cada handler sensible debe traer su propio `ensurePermission(dataSource, getCurrentUser, 'CODIGO')`. No asumir que estar detrás de `/api/rpc` = protegido.
 - **Payload de cuenta bancaria va anidado**: los handlers esperan `{ cuentaBancaria: { id } }`, **no** un `cuentaBancariaId` plano (lo descartan al desestructurar). (Ojo: esto es lo contrario de `create-presentacion`/`create-codigo-barra`, que sí toleran ambas formas — no generalizar.)
 - **Anulaciones deben ser multi-detalle.** Documentos como gasto/retiro generan **N** movimientos de caja mayor. Anular debe recorrer **todos** con `find(...)` + contra-balancear cada uno (`actualizarSaldo`), nunca `findOne(...)` (dejaba movimientos sin revertir).
 - **Regla fuente Caja Mayor ⇒ EFECTIVO.** En todo formulario con selector de fuente de pago: si la fuente es Caja Mayor, la forma de pago debe ser EFECTIVO (filtrar `formasPago` a las que contienen `"EFECTIVO"`). Si la fuente es una cuenta bancaria, **no** se pide forma de pago (siempre es transferencia; la moneda la define el banco).

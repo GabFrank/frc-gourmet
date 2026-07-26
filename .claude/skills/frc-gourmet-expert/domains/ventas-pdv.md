@@ -506,3 +506,46 @@ Patrón: master con 2 paneles. Izq: totales/saldos por moneda → tarjeta de con
 → Buffet por kilo (venta por peso): `docs/buffet-por-kilo.md`.
 → Plan de implementación: `docs/PLAN-IMPLEMENTACION-PDV.md`.
 → Errores conocidos: `docs/testing/ERRORES-PDV.md`; checklist de testing: `docs/testing/TESTING-CHECKLIST-PDV.md`.
+
+---
+
+## Actualización 2026-07 (cobro parcial, cajas, utilitarios, login QR)
+
+### Cobro parcial por ítems (F1–F5)
+
+**No usa `PagoDetalle` por ítem.** Modelo nuevo:
+- `CobroParcial` (`cobros_parciales`): una **ronda** de cobro. `venta` (CASCADE), `factorAplicado` decimal(10,6) = `saldoDinero / pendienteBruto` de la ronda (conecta cobertura en bruto con dinero real, absorbiendo descuento/aumento global), `cashTotal`, `activo` (false = anulada), `items[]`.
+- `CobroParcialItem` (`cobro_parcial_items`): imputación **en bruto** de una ronda sobre un ítem. `brutoCubierto`, `cantidad?` informativa. La suma de imputaciones activas de un ítem = `VentaItem.montoCubierto`.
+- Cache: `VentaItem.montoCubierto` (cobertura bruta acumulada) y `PagoDetalle.cobroParcialId` (la ronda que originó la línea de pago). Migración `1783805921597-AddCobroParcialPorItems.ts`.
+
+**Handlers** (`ventas.handler.ts`, permiso `VENTAS_PDV`): `getEstadoCobroVenta(ventaId)` → por ítem `{netoBruto, montoCubierto, estado PENDIENTE/PARCIAL/PAGADO}` (tolerancia 0.5) + `pendienteBruto` + descuento/aumento global; `registrarCobroParcial(ventaId, {imputaciones, pagoDetalleIds, cashTotalPrincipal, factorAplicado})` (transaccional, tope anti-doble-cobro `ITEM_YA_CUBIERTO`); `anularCobroParcial(cobroParcialId)` (desactiva ronda + sus PagoDetalle, recomputa `montoCubierto`). `computeNetoBrutoItem = (precioVentaUnitario + precioAdicionales − descuentoUnitario) × cantidad`.
+
+**UI:** panel de ítems como **tab** dentro del panel izquierdo del `cobrar-venta-dialog` (Pagos | Items) para no ensanchar; footer fijo. En `pdv.component.ts`: chips PAGADO (verde)/PARCIAL (naranja); `bloqueadoPorCobro(item)` impide editar/cancelar/mover ítems con `montoCubierto > 0.5` ("Anulá el cobro parcial primero").
+
+### Cajas
+
+- **Compartida multi-dispositivo** (`0ac7868`): `get-cajas-abiertas` (todas las ABIERTO). El cobro se restringe: el flujo de venta manda `validarDispositivoCaja:true` y `createPago` rechaza con `COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO` si el dispositivo del request ≠ `caja.dispositivo.id`. (Repo HTTP de `getCajasAbiertas` aún NO implementado — pendiente client mode.)
+- **Auto-retiro del cierre** (`5c0f068`): `generarRetiroDelCierre(ds, cajaId, userId)` (`retiro-cierre.util.ts`) crea un `RetiroCaja` origen=CIERRE estado=FLOTANTE con el efectivo por moneda del conteo (idempotente por `conteoCierre.id`). Se dispara automáticamente en `update-caja` al cerrar.
+- **Ajustar caja cerrada** (`34015ca`): `puede-ajustar-caja` (editable solo si CERRADA y el retiro no está INGRESADO en Caja Mayor) + `finalizar-ajuste-caja(cajaId, motivo)` (permiso **`FINANCIERO_CAJA_AJUSTAR`**; regenera el retiro, marca `revisado`/`motivoAjuste`). Migración `AddMotivoAjusteToCaja`.
+- **Guard anti-huérfanas** (`d90867b`): `update-caja` rechaza el cierre si hay ventas ABIERTAS en esa caja (chequeo en backend, inmune a la carrera multi-dispositivo). También "solo quien abrió la caja puede cerrarla".
+- **Retiros manuales en el esperado** (`2504b92`, `resumen-caja.utils.ts`): `esperado = apertura + ventasEfectivo − gastosEfectivo − egresosEfectivo − retirosEfectivoManuales` (el retiro de CIERRE se excluye, se genera del conteo).
+- **Conteo simplificado** (`b4f43ae`): `ConteoDetalle.monto?` = total por moneda sin desglose por billete. Efectivo del cierre = `COALESCE(monto, cantidad×valor)`.
+- **Dispositivo asignado a la PC** (`e267bf5`): la creación de caja prioriza `app-settings.deviceId` (`getDeviceId()`), cae a MAC solo si no está seteado.
+
+### Utilitarios del cajón (`utilitarios-dialog`)
+
+Grid de tarjetas: Retiro de Caja, Gastos, Vale, Compra, Egresos de caja, Últimas Ventas, Cierre Parcial (deshabilitada).
+- **Gastos de caja** (`GastoCaja`, `gastos-caja.handler.ts`): gasto con efectivo del cajón, **distinto del `Gasto` de Caja Mayor**. `create/get/anular-gasto-caja`.
+- **Vales/Compras desde el cajón** (`EgresoCaja`, `pdv-egresos.handler.ts`): la salida de efectivo; el `Vale`/`CuentaPorPagarCuota` sigue siendo la fuente de verdad. `tipo` VALE|COMPRA, `valeCreado` (si el egreso creó el vale, al anular lo ANULA; si solo pagó uno SOLICITADO, vuelve a SOLICITADO). Permisos `PDV_PAGAR_VALE`/`PDV_PAGAR_COMPRA`/`PDV_ANULAR_EGRESO`. Los egresos descuentan de la caja del PdV y aparecen en el cierre; **NO pasan por Caja Mayor**.
+- **Compra simplificada sin ítems** (`b11b379`): `Compra.simplificada`; `crear-compra-simplificada` no mueve stock/costo, solo genera CPP + cuotas + pago opcional. (Distinta del `pagar-compra-caja-dialog` del cajón.)
+- **Últimas Ventas** (`cb14ed2`): menú por venta — detalle, reimprimir ticket, reimprimir pagaré (crédito, vía `get-cpc-by-venta`), cancelar (revierte stock).
+
+### Cobro (fixes)
+
+- **Tolerancia de redondeo con monedas con decimales** (`642bb33`/`66d2ec3`): el saldo neto se redondea a los decimales de la principal; `toleranciaRedondeoPrincipal()` = valor en principal de una unidad mínima de la moneda pagada (ej. 0,01 R$ ≈ 10,9 Gs) habilita Finalizar si el residuo es menor. Sin pagos, tolerancia 0.
+- **Venta a crédito → forma de pago `CREDITO`** (`db5cc29`): reusa la FP renombrada, ya no recrea `CUENTA CORRIENTE`.
+- **Resetear cantidad del buscador a 1** al agregar (`0c4af26`).
+
+### Login por QR (desktop + PWA)
+
+Device Authorization Grant. `DeviceAuthCode` (`device_auth_codes`: `deviceCode` unique, `estado` PENDING/APPROVED/CONSUMED, `expiresAt` ~3min). Rutas Fastify `electron/server/device-auth-routes.ts`: `POST /api/auth/device/start` (público, genera QR), `/approve` (autenticado, aprueba con el JWT del que escanea), `/token` (poll, emite tokens + `LoginSession`, un solo uso). Desktop: `qr-login-dialog` (pollea `api.deviceToken` vía `httpFetch` → requiere nodo server accesible) → `AuthService.applyExternalSession`. PWA: páginas `vincular-dispositivo`/`aprobar-dispositivo`.
