@@ -28,14 +28,109 @@
     <mat-spinner diameter="36"></mat-spinner>
   </div>
 
-  <div *ngIf="!loading && data" class="reportes-body">
-    <!-- Fase 2: KPIs + tarjetas (tendencia, día de semana, horas pico, mix de
-         pago, top productos, menu engineering, combinaciones). -->
-    <div class="reportes-placeholder">
-      <mat-icon>construction</mat-icon>
-      <div>
-        <strong>Andamiaje listo.</strong> Las tarjetas de Ventas se agregan en la Fase 2.
-        <div class="ph-sub">Período: {{ periodoLabel }}<span *ngIf="comparaLabel"> · vs {{ comparaLabel }}</span></div>
+  <div *ngIf="!loading && cargado && data?.kpis" class="reportes-body">
+    <!-- KPIs -->
+    <section class="reportes-kpis">
+      <div class="reportes-kpi" *ngFor="let k of kpis">
+        <div class="k-label">{{ k.label }}</div>
+        <div class="k-value">{{ k.valor }}</div>
+        <span class="k-delta" *ngIf="k.tieneDelta" [class.up]="k.buena" [class.down]="!k.buena">
+          <mat-icon>{{ k.dir === 'up' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>{{ k.deltaTexto }}
+          <span class="vs" *ngIf="comparaLabel">vs {{ comparaLabel }}</span>
+        </span>
+      </div>
+    </section>
+
+    <div class="reportes-grid">
+      <!-- Tendencia -->
+      <div class="col-7">
+        <app-dash-chart-card title="Tendencia del mes" icon="show_chart" chartType="line"
+          [chartData]="tendenciaData" [chartOptions]="tendenciaOptions" [height]="260">
+        </app-dash-chart-card>
+      </div>
+
+      <!-- Día de semana -->
+      <div class="col-5">
+        <app-dash-chart-card title="Ranking por día de la semana" icon="bar_chart" chartType="bar"
+          [chartData]="diaSemanaData" [chartOptions]="diaSemanaOptions" [height]="260">
+          <span class="dashboard-range-chip range-chip-active" *ngIf="mejorDia">Mejor día: {{ mejorDia }}</span>
+        </app-dash-chart-card>
+      </div>
+
+      <!-- Horas pico (heatmap) -->
+      <div class="col-7">
+        <div class="dashboard-card reportes-card">
+          <app-dash-section-header icon="grid_on" title="Horas pico"></app-dash-section-header>
+          <div class="reportes-card-sub">Intensidad de ventas (tickets) por día y hora</div>
+          <div class="hm-wrap" *ngIf="heatmap.horas.length; else sinHoras">
+            <div class="hm" [style.gridTemplateColumns]="'40px repeat(' + heatmap.horas.length + ', 1fr)'">
+              <div></div>
+              <div class="hm-colh" *ngFor="let h of heatmap.horas">{{ h }}</div>
+              <ng-container *ngFor="let fila of heatmap.celdas; let i = index">
+                <div class="hm-lab">{{ heatmap.dias[i] }}</div>
+                <div class="hm-cell" *ngFor="let c of fila"
+                     [style.opacity]="c.opacidad"
+                     [matTooltip]="c.dia + ' · ' + c.hora + ':00 — ' + c.valor + ' tickets'"></div>
+              </ng-container>
+            </div>
+          </div>
+          <ng-template #sinHoras><div class="reportes-empty">Sin datos en el período</div></ng-template>
+        </div>
+      </div>
+
+      <!-- Mix de forma de pago -->
+      <div class="col-5">
+        <div class="dashboard-card reportes-card">
+          <app-dash-section-header icon="payments" title="Mix de forma de pago"></app-dash-section-header>
+          <div class="reportes-card-sub">Participación sobre el total cobrado</div>
+          <div class="mix-row" *ngIf="mixLeyenda.length; else sinMix">
+            <div class="mix-chart">
+              <canvas baseChart [type]="'doughnut'" [data]="mixData" [options]="mixOptions"></canvas>
+            </div>
+            <div class="mix-leyenda">
+              <div class="mix-item" *ngFor="let l of mixLeyenda">
+                <span class="mix-dot" [style.background]="l.color"></span>
+                <span class="mix-nombre">{{ l.nombre }}</span>
+                <span class="mix-pct">{{ l.pct }}%</span>
+              </div>
+            </div>
+          </div>
+          <ng-template #sinMix><div class="reportes-empty">Sin cobros en el período</div></ng-template>
+        </div>
+      </div>
+
+      <!-- Top productos -->
+      <div class="col-6">
+        <app-dash-ranking title="Top productos" icon="emoji_events"
+          [items]="topProductos" emptyText="Sin ventas en el período">
+        </app-dash-ranking>
+      </div>
+
+      <!-- Ingeniería de menú -->
+      <div class="col-6">
+        <app-dash-chart-card title="Ingeniería de menú" icon="scatter_plot" chartType="bubble"
+          [chartData]="scatterData" [chartOptions]="scatterOptions" [height]="260">
+          <span class="me-hint">Popularidad × margen · tamaño = ingreso</span>
+        </app-dash-chart-card>
+      </div>
+
+      <!-- Combinaciones -->
+      <div class="col-12">
+        <div class="dashboard-card reportes-card">
+          <app-dash-section-header icon="join_inner" title="Combinaciones más frecuentes"
+            [badge]="combinaciones.length ? 'market-basket' : null" badgeColor="info"></app-dash-section-header>
+          <div class="reportes-card-sub">Productos que se piden juntos en la misma venta</div>
+          <table class="reportes-tabla" *ngIf="combinaciones.length; else sinCombos">
+            <thead><tr><th>Combinación</th><th class="num">Frecuencia</th></tr></thead>
+            <tbody>
+              <tr *ngFor="let c of combinaciones">
+                <td>{{ c.par }}</td>
+                <td class="num">{{ c.frecuencia }} veces</td>
+              </tr>
+            </tbody>
+          </table>
+          <ng-template #sinCombos><div class="reportes-empty">Sin combinaciones frecuentes en el período</div></ng-template>
+        </div>
       </div>
     </div>
   </div>
