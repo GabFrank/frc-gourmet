@@ -72,10 +72,11 @@ export function resolverPeriodo(
 
   if (comparar) {
     if (rango === 'month' || rango === 'prevMonth') {
-      // Mes calendario anterior, hasta el mismo día del mes (mes-a-fecha).
+      // Mes calendario anterior. Para `month` (mes-a-fecha) se recorta al mismo
+      // día de corte; para `prevMonth` (mes completo) se toma el mes entero.
       const pDesde = new Date(desde.getFullYear(), desde.getMonth() - 1, 1, 0, 0, 0, 0);
-      const diaCorte = hasta.getDate();
       const diasEnMesAnterior = new Date(desde.getFullYear(), desde.getMonth(), 0).getDate();
+      const diaCorte = rango === 'prevMonth' ? diasEnMesAnterior : hasta.getDate();
       const pHasta = new Date(pDesde.getFullYear(), pDesde.getMonth(), Math.min(diaCorte, diasEnMesAnterior), 23, 59, 59, 999);
       anterior = { desde: pDesde, hasta: pHasta };
       labelAnterior = `${MESES[pDesde.getMonth()]} ${pDesde.getFullYear()}`;

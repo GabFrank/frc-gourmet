@@ -28,6 +28,11 @@
     <mat-spinner diameter="36"></mat-spinner>
   </div>
 
+  <div *ngIf="!loading && errorCarga" class="reportes-empty">
+    <mat-icon>error_outline</mat-icon>
+    No se pudo cargar el reporte. Verificá el período e intentá nuevamente.
+  </div>
+
   <div *ngIf="!loading && cargado && data?.kpis" class="reportes-body">
     <!-- KPIs -->
     <section class="reportes-kpis">

@@ -66,7 +66,8 @@
     "test:transferencia-bancaria": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-transferencia-bancaria-e2e.ts",
     "test:reporte-ventas": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-reporte-ventas-e2e.ts",
     "test:reporte-finanzas": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-reporte-finanzas-e2e.ts",
-    "test:config-caja-mayor": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-config-caja-mayor-e2e.ts"
+    "test:config-caja-mayor": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-config-caja-mayor-e2e.ts",
+    "test:reportes-periodo": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-reportes-periodo.ts"
   },
   "private": true,
   "dependencies": {

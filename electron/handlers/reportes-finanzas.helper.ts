@@ -88,32 +88,32 @@ async function porCobrarVencido(ds: DataSource, ctx: Ctx, hoyStr: string): Promi
 }
 
 // ─────────────────────── Flujo de caja por semana ───────────────────────
-async function flujoCaja(ds: DataSource, ctx: Ctx, isPg: boolean, r: RangoFechas) {
-  const dExpr = isPg ? `to_char(mv.fecha, 'YYYY-MM-DD')` : `strftime('%Y-%m-%d', mv.fecha)`;
-  const rows: any[] = await dbQuery(ds, `
-    SELECT ${dExpr} as dia, mv.tipo_movimiento as tipo, mv.moneda_id as moneda_id, m.principal as principal, SUM(mv.monto) as total
-    FROM cajas_mayor_movimientos mv LEFT JOIN monedas m ON m.id = mv.moneda_id
-    WHERE ${MOV_ACTIVO} AND mv.fecha >= ? AND mv.fecha <= ?
-    GROUP BY ${dExpr}, mv.tipo_movimiento, mv.moneda_id, m.principal
-  `, [r.desde.toISOString(), r.hasta.toISOString()]);
-
-  // Días del rango
-  const dias: string[] = [];
+/** Suma ingresos/egresos por cubetas de 7 días (calendario local), una ventana
+ * a la vez con filtro por rango. Evita el desfase UTC/local que produciría un
+ * GROUP BY por fecha extraída en SQL (mv.fecha es datetime UTC), y reconcilia
+ * exactamente con los KPIs de ingresos/egresos (mismo MOV_ACTIVO + conversión). */
+async function flujoCaja(ds: DataSource, ctx: Ctx, r: RangoFechas) {
+  // Días del rango (inicio de día local)
+  const dias: Date[] = [];
   const d = new Date(r.desde); d.setHours(0, 0, 0, 0); const fin = new Date(r.hasta);
-  while (d <= fin) { dias.push(`${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, '0')}-${`${d.getDate()}`.padStart(2, '0')}`); d.setDate(d.getDate() + 1); }
-  const idx: { [k: string]: number } = {}; dias.forEach((k, i) => (idx[k] = i));
-  const ingDia = new Array(dias.length).fill(0);
-  const egDia = new Array(dias.length).fill(0);
-  for (const row of rows) {
-    const i = idx[String(row.dia)]; if (i == null) continue;
-    const gs = convertir(row.total, row.moneda_id, row.principal, ctx);
-    if (INGRESO_SET.has(String(row.tipo))) ingDia[i] += gs; else egDia[i] += gs;
-  }
-  // Cubetas de 7 días
+  while (d <= fin) { dias.push(new Date(d)); d.setDate(d.getDate() + 1); }
+
   const labels: string[] = [], ingresos: number[] = [], egresos: number[] = [], neto: number[] = [];
   for (let i = 0; i < dias.length; i += 7) {
-    const ing = ingDia.slice(i, i + 7).reduce((a, b) => a + b, 0);
-    const eg = egDia.slice(i, i + 7).reduce((a, b) => a + b, 0);
+    const grupo = dias.slice(i, i + 7);
+    const desde = new Date(grupo[0]); desde.setHours(0, 0, 0, 0);
+    const hasta = new Date(grupo[grupo.length - 1]); hasta.setHours(23, 59, 59, 999);
+    const rows: any[] = await dbQuery(ds, `
+      SELECT mv.tipo_movimiento as tipo, mv.moneda_id as moneda_id, m.principal as principal, SUM(mv.monto) as total
+      FROM cajas_mayor_movimientos mv LEFT JOIN monedas m ON m.id = mv.moneda_id
+      WHERE ${MOV_ACTIVO} AND mv.fecha >= ? AND mv.fecha <= ?
+      GROUP BY mv.tipo_movimiento, mv.moneda_id, m.principal
+    `, [desde.toISOString(), hasta.toISOString()]);
+    let ing = 0, eg = 0;
+    for (const row of rows) {
+      const gs = convertir(row.total, row.moneda_id, row.principal, ctx);
+      if (INGRESO_SET.has(String(row.tipo))) ing += gs; else eg += gs;
+    }
     labels.push(`Sem ${Math.floor(i / 7) + 1}`); ingresos.push(ing); egresos.push(eg); neto.push(ing - eg);
   }
   return { labels, ingresos, egresos, neto };
@@ -262,7 +262,6 @@ export async function construirReporteFinanzasCierre(
 ): Promise<any> {
   const periodo = resolverPeriodo(params);
   const { actual, anterior } = periodo;
-  const isPg = dataSource.options.type === 'postgres';
   const monPrincipal = await getMonedaPrincipalId(dataSource);
   const ctx: Ctx = { cotMap: await getCotizacionMap(dataSource, monPrincipal) };
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
@@ -275,7 +274,7 @@ export async function construirReporteFinanzasCierre(
   const cobrarVenc = await porCobrarVencido(dataSource, ctx, hoyStr);
 
   const [flujo, comp, gastosCat, ag, pos, venc] = await Promise.all([
-    flujoCaja(dataSource, ctx, isPg, actual),
+    flujoCaja(dataSource, ctx, actual),
     composicion(dataSource, ctx, actual),
     gastosPorCategoria(dataSource, ctx, actual),
     aging(dataSource, ctx, hoy),

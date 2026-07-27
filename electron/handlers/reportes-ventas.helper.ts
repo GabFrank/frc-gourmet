@@ -26,9 +26,6 @@ function dowExpr(isPg: boolean): string {
 function hourExpr(isPg: boolean): string {
   return isPg ? `EXTRACT(HOUR FROM v.created_at)` : `CAST(strftime('%H', v.created_at) AS INTEGER)`;
 }
-function dayExpr(isPg: boolean): string {
-  return isPg ? `to_char(v.created_at, 'YYYY-MM-DD')` : `strftime('%Y-%m-%d', v.created_at)`;
-}
 
 function esPrincipal(v: any): boolean { return v === true || v === 1 || v === '1'; }
 
@@ -67,27 +64,6 @@ function conDelta(act: number, ant: number | null) {
 }
 
 // ─────────────────────── Serie diaria (Gs) ───────────────────────
-async function sumaDiariaGs(ds: DataSource, ctx: CotCtx, r: RangoFechas): Promise<{ [dia: string]: number }> {
-  const rows: any[] = await dbQuery(ds, `
-    SELECT ${dayExpr(ctx.isPg)} as dia, pd.moneda_id as moneda_id, m.principal as principal,
-           COALESCE(SUM(CASE WHEN pd.tipo = 'PAGO' THEN pd.valor ELSE 0 END), 0)
-         - COALESCE(SUM(CASE WHEN pd.tipo = 'VUELTO' THEN pd.valor ELSE 0 END), 0) as total
-    FROM ventas v
-    JOIN pagos p ON v.pago_id = p.id
-    JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.activo
-    JOIN monedas m ON m.id = pd.moneda_id
-    WHERE v.estado = ? AND v.created_at >= ? AND v.created_at <= ?
-    GROUP BY ${dayExpr(ctx.isPg)}, pd.moneda_id, m.principal
-  `, [VentaEstado.CONCLUIDA, r.desde.toISOString(), r.hasta.toISOString()]);
-  const map: { [dia: string]: number } = {};
-  for (const row of rows) {
-    const cot = esPrincipal(row.principal) ? 1 : (ctx.cotMap[Number(row.moneda_id)] || 0);
-    const dia = String(row.dia);
-    map[dia] = (map[dia] || 0) + Math.round(Number(row.total || 0) * cot);
-  }
-  return map;
-}
-
 function listaDias(r: RangoFechas): Date[] {
   const dias: Date[] = [];
   const d = new Date(r.desde); d.setHours(0, 0, 0, 0);
@@ -95,17 +71,27 @@ function listaDias(r: RangoFechas): Date[] {
   while (d <= fin) { dias.push(new Date(d)); d.setDate(d.getDate() + 1); }
   return dias;
 }
-function claveDia(d: Date): string {
-  const y = d.getFullYear(), m = `${d.getMonth() + 1}`.padStart(2, '0'), dd = `${d.getDate()}`.padStart(2, '0');
-  return `${y}-${m}-${dd}`;
+
+/** Suma diaria en Gs, un día calendario (local) a la vez, con la misma función
+ * que el KPI de facturación. Así la serie reconcilia exactamente con el KPI y
+ * se evita el desfase UTC/local que produciría un GROUP BY por fecha extraída
+ * en SQL (mismo criterio que `buildVentasPorPeriodo` de los dashboards). */
+async function serieDiariaGs(ds: DataSource, ctx: CotCtx, dias: Date[]): Promise<number[]> {
+  const valores: number[] = [];
+  for (const dia of dias) {
+    const desde = new Date(dia); desde.setHours(0, 0, 0, 0);
+    const hasta = new Date(dia); hasta.setHours(23, 59, 59, 999);
+    const { suma } = await sumaVentasRango(ds, ctx.monPrincipal, filtroRango(desde.toISOString(), hasta.toISOString()), ctx.cotMap);
+    valores.push(suma);
+  }
+  return valores;
 }
 
 /** Serie de tendencia: diaria si el rango es ≤ 45 días; si no, agrupada en
  * cubetas de 7 días. actual y anterior comparten la misma cantidad de puntos. */
 async function serieTendencia(ds: DataSource, ctx: CotCtx, actual: RangoFechas, anterior: RangoFechas | null) {
   const diasA = listaDias(actual);
-  const mapA = await sumaDiariaGs(ds, ctx, actual);
-  const valoresDiaA = diasA.map((d) => mapA[claveDia(d)] || 0);
+  const valoresDiaA = await serieDiariaGs(ds, ctx, diasA);
 
   const usarSemanas = diasA.length > 45;
   const bucket = (dias: Date[], valores: number[]) => {
@@ -122,8 +108,7 @@ async function serieTendencia(ds: DataSource, ctx: CotCtx, actual: RangoFechas, 
   let anteriorArr: number[] = [];
   if (anterior) {
     const diasP = listaDias(anterior);
-    const mapP = await sumaDiariaGs(ds, ctx, anterior);
-    const valoresDiaP = diasP.map((d) => mapP[claveDia(d)] || 0);
+    const valoresDiaP = await serieDiariaGs(ds, ctx, diasP);
     anteriorArr = bucket(diasP, valoresDiaP).valores;
     // Alinear longitud con actual (por índice).
     anteriorArr = a.valores.map((_, i) => anteriorArr[i] ?? 0);
@@ -238,26 +223,43 @@ async function combinaciones(ds: DataSource, r: RangoFechas) {
 
 // ─────────────────────── Meseros ───────────────────────
 async function meseros(ds: DataSource, ctx: CotCtx, r: RangoFechas) {
+  // Cantidad de ventas por mesero (independiente de la moneda de pago).
+  const cntRows: any[] = await dbQuery(ds, `
+    SELECT v.created_by as usuario_id, COUNT(*) as cantidad
+    FROM ventas v
+    WHERE v.estado = ? AND v.created_by IS NOT NULL AND v.created_at >= ? AND v.created_at <= ?
+    GROUP BY v.created_by
+  `, [VentaEstado.CONCLUIDA, r.desde.toISOString(), r.hasta.toISOString()]);
+  const cantidadPorUsuario: { [id: number]: number } = {};
+  for (const row of cntRows) cantidadPorUsuario[Number(row.usuario_id)] = Number(row.cantidad || 0);
+
+  // Monto cobrado por mesero, convertido a moneda principal (todas las monedas).
   const rows: any[] = await dbQuery(ds, `
     SELECT u.id as usuario_id, COALESCE(per.nombre, u.nickname) as nombre,
-           COUNT(DISTINCT v.id) as cantidad,
+           pd.moneda_id as moneda_id, m.principal as principal,
            COALESCE(SUM(CASE WHEN pd.tipo = 'PAGO' THEN pd.valor ELSE 0 END), 0)
          - COALESCE(SUM(CASE WHEN pd.tipo = 'VUELTO' THEN pd.valor ELSE 0 END), 0) as total
     FROM ventas v
-    LEFT JOIN pagos p ON v.pago_id = p.id
-    LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.moneda_id = ? AND pd.activo
-    LEFT JOIN usuarios u ON u.id = v.created_by
+    JOIN pagos p ON v.pago_id = p.id
+    JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.activo
+    JOIN monedas m ON m.id = pd.moneda_id
+    JOIN usuarios u ON u.id = v.created_by
     LEFT JOIN personas per ON per.id = u.persona_id
     WHERE v.estado = ? AND v.created_at >= ? AND v.created_at <= ?
-    GROUP BY u.id, per.nombre, u.nickname
-    ORDER BY total DESC
-    LIMIT 8
-  `, [ctx.monPrincipal, VentaEstado.CONCLUIDA, r.desde.toISOString(), r.hasta.toISOString()]);
-  return rows.filter((r2) => r2.usuario_id != null).map((r2) => ({
-    nombre: String(r2.nombre || 'SIN USUARIO').toUpperCase(),
-    cantidad: Number(r2.cantidad || 0),
-    total: Number(r2.total || 0),
-  }));
+    GROUP BY u.id, per.nombre, u.nickname, pd.moneda_id, m.principal
+  `, [VentaEstado.CONCLUIDA, r.desde.toISOString(), r.hasta.toISOString()]);
+
+  const acc: { [id: number]: { nombre: string; total: number } } = {};
+  for (const row of rows) {
+    const id = Number(row.usuario_id);
+    const cot = esPrincipal(row.principal) ? 1 : (ctx.cotMap[Number(row.moneda_id)] || 0);
+    if (!acc[id]) acc[id] = { nombre: String(row.nombre || 'SIN USUARIO').toUpperCase(), total: 0 };
+    acc[id].total += Math.round(Number(row.total || 0) * cot);
+  }
+  return Object.entries(acc)
+    .map(([id, v]) => ({ nombre: v.nombre, cantidad: cantidadPorUsuario[Number(id)] || 0, total: v.total }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 8);
 }
 
 // ─────────────────────── Orquestador ───────────────────────

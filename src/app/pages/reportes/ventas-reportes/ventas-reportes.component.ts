@@ -40,6 +40,7 @@ import { exportarReportePdf, capturarGraficos, primerGraficoBase64, captionKpis 
 export class VentasReportesComponent {
   loading = false;
   cargado = false;
+  errorCarga = false;
   presentando = false;
   enviandoWa = false;
   data: any = null;
@@ -81,7 +82,8 @@ export class VentasReportesComponent {
     const el = this.reporteRoot?.nativeElement;
     if (!this.presentando) {
       this.presentando = true;
-      el?.requestFullscreen?.().catch(() => { /* algunos entornos no lo permiten */ });
+      // Si el entorno rechaza pantalla completa, revertir el estado del botón.
+      el?.requestFullscreen?.().catch(() => { this.presentando = false; });
     } else {
       this.presentando = false;
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -137,15 +139,18 @@ export class VentasReportesComponent {
 
   async onAplicar(params: ReportePeriodoParams): Promise<void> {
     this.loading = true;
+    this.errorCarga = false;
     try {
       this.data = await firstValueFrom(this.repository.getReporteVentasCierre(params));
       this.periodoLabel = this.data?.periodoLabel || '';
       this.comparaLabel = this.data?.periodoLabelAnterior || null;
       this.procesar();
       this.cargado = true;
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error cargando reporte de ventas', e);
       this.data = null;
+      this.errorCarga = true;
+      this.snackBar.open(`No se pudo cargar el reporte: ${e?.message || 'error inesperado'}`, 'Cerrar', { duration: 4000 });
     } finally {
       this.loading = false;
     }

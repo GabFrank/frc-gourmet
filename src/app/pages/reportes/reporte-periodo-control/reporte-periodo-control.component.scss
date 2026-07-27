@@ -1,3 +1,10 @@
+:host {
+  // Rojo de marca (mismo del $custom-primary de styles.scss, palette 500).
+  // Se define localmente para no introducir un token global en este feature.
+  --primary-color: #db392e;
+  --primary-contrast: #ffffff;
+}
+
 .periodbar {
   display: flex;
   align-items: center;
