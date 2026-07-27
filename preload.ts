@@ -2791,7 +2791,7 @@ contextBridge.exposeInMainWorld('api', {
   saveCajaMayorConfiguracion: async (
     cajaMayorId: number,
     data: {
-      formaPagoIds: number[];
+      formaPagoIds?: number[];
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;

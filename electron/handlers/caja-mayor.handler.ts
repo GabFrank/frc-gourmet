@@ -181,6 +181,36 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           responsable: getEffectiveUser(getCurrentUser),
         });
       }
+    } else if (op.tipoOperacion === TipoOperacionFinanciera.TRANSFERENCIA_BANCARIA) {
+      // Revertir AMBAS cuentas: devolver a origen, quitar de destino.
+      if (op.cuentaBancariaOrigen) {
+        const cbO = await cbRepo.findOne({ where: { id: op.cuentaBancariaOrigen.id } });
+        if (cbO) {
+          cbO.saldo = Number(cbO.saldo) + Number(op.montoOrigen || 0);
+          await queryRunner.manager.save(CuentaBancaria, cbO);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: cbO.id,
+            tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
+            monto: Number(op.montoOrigen || 0),
+            observacion: `ANULACION TRANSFERENCIA BANCARIA (ORIGEN) OP.FIN #${op.id}`,
+            responsable: getEffectiveUser(getCurrentUser),
+          });
+        }
+      }
+      if (op.cuentaBancariaDestino) {
+        const cbD = await cbRepo.findOne({ where: { id: op.cuentaBancariaDestino.id } });
+        if (cbD) {
+          cbD.saldo = Number(cbD.saldo) - Number(op.montoDestino || 0);
+          await queryRunner.manager.save(CuentaBancaria, cbD);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: cbD.id,
+            tipo: MovimientoBancarioTipo.AJUSTE_NEGATIVO,
+            monto: Number(op.montoDestino || 0),
+            observacion: `ANULACION TRANSFERENCIA BANCARIA (DESTINO) OP.FIN #${op.id}`,
+            responsable: getEffectiveUser(getCurrentUser),
+          });
+        }
+      }
     }
   };
 
@@ -2438,12 +2468,55 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           await actualizarSaldo(queryRunner, data.cajaMayorDestinoId, data.monedaDestinoId, data.formaPagoDestinoId, Number(data.montoDestino), TipoMovimiento.TRANSFERENCIA_ENTRADA);
           break;
         }
+
+        case TipoOperacionFinanciera.TRANSFERENCIA_BANCARIA: {
+          // Transferencia interna banco → banco. NO toca la caja mayor: solo mueve
+          // saldo entre dos cuentas bancarias. Puede ser entre monedas distintas
+          // (montoDestino ya viene convertido por cotización desde la UI).
+          if (!data.cuentaBancariaOrigenId || !data.cuentaBancariaDestinoId) {
+            throw new Error('Transferencia bancaria requiere cuenta de origen y destino');
+          }
+          if (Number(data.cuentaBancariaOrigenId) === Number(data.cuentaBancariaDestinoId)) {
+            throw new Error('La cuenta de origen y destino no pueden ser la misma');
+          }
+          const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
+          const cbOrigen = await cbRepo.findOne({ where: { id: data.cuentaBancariaOrigenId } });
+          if (!cbOrigen) throw new Error(`Cuenta bancaria origen ${data.cuentaBancariaOrigenId} no encontrada`);
+          const cbDestino = await cbRepo.findOne({ where: { id: data.cuentaBancariaDestinoId } });
+          if (!cbDestino) throw new Error(`Cuenta bancaria destino ${data.cuentaBancariaDestinoId} no encontrada`);
+
+          // Débito en origen
+          cbOrigen.saldo = Number(cbOrigen.saldo) - Number(data.montoOrigen);
+          await queryRunner.manager.save(CuentaBancaria, cbOrigen);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: data.cuentaBancariaOrigenId,
+            tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+            monto: Number(data.montoOrigen),
+            observacion: `TRANSFERENCIA BANCARIA → ${cbDestino.nombre} OP.FIN #${opId}`,
+            responsable: getEffectiveUser(getCurrentUser),
+          });
+
+          // Crédito en destino
+          cbDestino.saldo = Number(cbDestino.saldo) + Number(data.montoDestino);
+          await queryRunner.manager.save(CuentaBancaria, cbDestino);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: data.cuentaBancariaDestinoId,
+            tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
+            monto: Number(data.montoDestino),
+            observacion: `TRANSFERENCIA BANCARIA ← ${cbOrigen.nombre} OP.FIN #${opId}`,
+            responsable: getEffectiveUser(getCurrentUser),
+          });
+          break;
+        }
       }
 
-      // Diferencia opcional → AJUSTE_POSITIVO/NEGATIVO en moneda destino
-      if (data.diferencia && Number(data.diferencia) !== 0 && data.diferenciaDestinoTipo && data.diferenciaDestinoTipo !== DiferenciaDestinoTipo.IGNORAR) {
+      // Diferencia opcional → AJUSTE_POSITIVO/NEGATIVO en moneda destino.
+      // Solo aplica a operaciones con caja mayor; una transferencia banco→banco
+      // no tiene caja donde imputar la diferencia, así que se omite.
+      const cajaMayorDiferenciaId = data.cajaMayorDestinoId || data.cajaMayorOrigenId;
+      if (cajaMayorDiferenciaId && data.diferencia && Number(data.diferencia) !== 0 && data.diferenciaDestinoTipo && data.diferenciaDestinoTipo !== DiferenciaDestinoTipo.IGNORAR) {
         const diferencia = Number(data.diferencia);
-        const cmId = data.cajaMayorDestinoId || data.cajaMayorOrigenId;
+        const cmId = cajaMayorDiferenciaId;
         const monId = data.monedaDestinoId || data.monedaOrigenId;
         const fpId = data.formaPagoDestinoId || data.formaPagoOrigenId;
         const tipoMov = diferencia > 0 ? TipoMovimiento.AJUSTE_POSITIVO : TipoMovimiento.AJUSTE_NEGATIVO;
@@ -2520,7 +2593,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       _event: any,
       cajaMayorId: number,
       data: {
-        formaPagoIds: number[];
+        formaPagoIds?: number[];
         cuentaBancariaIds: number[];
         mostrarCuentasPorPagar?: boolean;
         mostrarCuentasPorCobrar?: boolean;
@@ -2548,11 +2621,19 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           await setEntityUserTracking(dataSource, config, getCurrentUser()?.id, true);
         }
 
-        const fpIds = Array.isArray(data?.formaPagoIds) ? data.formaPagoIds : [];
+        // formaPagoIds es opcional: el diálogo ya no muestra la sección de formas
+        // de pago (en caja mayor solo hay EFECTIVO). Si NO viene, se preservan las
+        // FPs ya cargadas (no vaciar la M:M). Si viene, se reemplaza.
+        if (data?.formaPagoIds !== undefined) {
+          const fpIds = Array.isArray(data.formaPagoIds) ? data.formaPagoIds : [];
+          config.formasPagoVisibles = fpIds.map((id) => ({ id })) as any;
+        }
+        // cuentaBancariaIds llega EN EL ORDEN elegido por drag & drop. La M:M
+        // define visibilidad (sin orden confiable); la columna `cuentasBancariasOrden`
+        // preserva el orden para el sidebar.
         const cbIds = Array.isArray(data?.cuentaBancariaIds) ? data.cuentaBancariaIds : [];
-
-        config.formasPagoVisibles = fpIds.map((id) => ({ id })) as any;
         config.cuentasBancariasVisibles = cbIds.map((id) => ({ id })) as any;
+        config.cuentasBancariasOrden = JSON.stringify(cbIds);
         config.mostrarCuentasPorPagar = data?.mostrarCuentasPorPagar === true;
         config.mostrarCuentasPorCobrar = data?.mostrarCuentasPorCobrar === true;
 

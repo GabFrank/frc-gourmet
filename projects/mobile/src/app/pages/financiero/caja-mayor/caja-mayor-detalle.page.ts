@@ -184,8 +184,11 @@ export class CajaMayorDetallePage implements OnInit {
   }
 
   private aplicarConfig(cfg: any): void {
+    // La sección de formas de pago se quitó del diálogo de config (en caja mayor
+    // solo hay EFECTIVO): una lista vacía se trata como "sin filtro" (mostrar
+    // todo), para no dejar el saldo de efectivo vacío por una M:M vacía.
     const fps = cfg?.formasPagoVisibles || [];
-    this.formaPagoVisibleIds = cfg ? new Set<number>(fps.map((f: any) => f.id)) : null;
+    this.formaPagoVisibleIds = fps.length > 0 ? new Set<number>(fps.map((f: any) => f.id)) : null;
 
     // Cargar saldos crudos y filtrar según la config.
     this.repo.getCajaMayorSaldos(this.id).subscribe({
@@ -202,7 +205,7 @@ export class CajaMayorDetallePage implements OnInit {
     const idsVisibles = new Set<number>(visibles.map((c: any) => c.id));
     this.repo.getCuentasBancarias().subscribe({
       next: (cuentas: any[]) => {
-        this.cuentasBancariasCards = (cuentas || [])
+        const cards = (cuentas || [])
           .filter((c: any) => idsVisibles.has(c.id))
           .map((c: any) => ({
             id: c.id,
@@ -211,8 +214,30 @@ export class CajaMayorDetallePage implements OnInit {
             decimales: c.moneda?.decimales ?? 0,
             saldo: Number(c.saldo) || 0,
           }));
+        // Aplicar el orden elegido por drag & drop en el diálogo (desktop).
+        this.cuentasBancariasCards = this.ordenarPorOrdenGuardado(cards, cfg?.cuentasBancariasOrden);
       },
       error: () => (this.cuentasBancariasCards = []),
+    });
+  }
+
+  /** Ordena por el array JSON de ids guardado; los ausentes van al final por id. */
+  private ordenarPorOrdenGuardado<T extends { id: number }>(cards: T[], ordenRaw: string | null | undefined): T[] {
+    let orden: number[] = [];
+    if (ordenRaw) {
+      try {
+        const arr = JSON.parse(ordenRaw);
+        if (Array.isArray(arr)) orden = arr.map((x) => Number(x)).filter((x) => !isNaN(x));
+      } catch { orden = []; }
+    }
+    if (!orden.length) return cards;
+    const pos = new Map<number, number>();
+    orden.forEach((id, i) => pos.set(id, i));
+    return [...cards].sort((a, b) => {
+      const pa = pos.has(a.id) ? pos.get(a.id)! : Number.MAX_SAFE_INTEGER;
+      const pb = pos.has(b.id) ? pos.get(b.id)! : Number.MAX_SAFE_INTEGER;
+      if (pa !== pb) return pa - pb;
+      return a.id - b.id;
     });
   }
 

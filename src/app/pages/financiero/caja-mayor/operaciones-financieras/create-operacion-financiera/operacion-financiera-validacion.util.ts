@@ -17,7 +17,8 @@ export type TipoOperacionFinanciera =
   | 'CAMBIO_DIVISA'
   | 'DEPOSITO_BANCARIO'
   | 'RETIRO_BANCARIO'
-  | 'TRANSFERENCIA_ENTRE_CAJAS';
+  | 'TRANSFERENCIA_ENTRE_CAJAS'
+  | 'TRANSFERENCIA_BANCARIA';
 
 /** Controles con `Validators.required` por tipo (además de descripcion/fecha). */
 export const CAMPOS_REQUERIDOS: Record<TipoOperacionFinanciera, string[]> = {
@@ -37,6 +38,14 @@ export const CAMPOS_REQUERIDOS: Record<TipoOperacionFinanciera, string[]> = {
     'cajaMayorOrigenId', 'monedaOrigenId', 'formaPagoOrigenId', 'montoOrigen',
     'cajaMayorDestinoId', 'monedaDestinoId', 'formaPagoDestinoId', 'montoDestino',
   ],
+  // Banco → banco. Las monedas se heredan de cada cuenta (una por lado, no
+  // necesariamente la misma), por eso NO se listan como requeridas: se setean
+  // automáticamente al elegir cada cuenta. La cotización solo aplica cuando las
+  // monedas difieren (opcional), y `montoDestino` ya trae el monto convertido.
+  TRANSFERENCIA_BANCARIA: [
+    'cuentaBancariaOrigenId', 'montoOrigen',
+    'cuentaBancariaDestinoId', 'montoDestino',
+  ],
 };
 
 /** Todos los controles de moneda del formulario. */
@@ -48,11 +57,24 @@ export const MONEDAS_EN_UI: Record<TipoOperacionFinanciera, string[]> = {
   DEPOSITO_BANCARIO: [],            // se heredan de la cuenta bancaria
   RETIRO_BANCARIO: [],              // se heredan de la cuenta bancaria
   TRANSFERENCIA_ENTRE_CAJAS: ['monedaOrigenId', 'monedaDestinoId'],
+  TRANSFERENCIA_BANCARIA: [],       // cada moneda se hereda de su cuenta bancaria
 };
 
-/** ¿El tipo usa una cuenta bancaria de la que se hereda la moneda? */
+/**
+ * ¿El tipo usa UNA cuenta bancaria de la que se hereda la MISMA moneda a ambos
+ * lados? (depósito/retiro en efectivo). NO incluye TRANSFERENCIA_BANCARIA, que
+ * usa DOS cuentas con monedas potencialmente distintas — ver `usaDosCuentasBancarias`.
+ */
 export function usaCuentaBancaria(tipo: TipoOperacionFinanciera): boolean {
   return tipo === 'DEPOSITO_BANCARIO' || tipo === 'RETIRO_BANCARIO';
+}
+
+/**
+ * ¿El tipo usa DOS cuentas bancarias (origen y destino), cada una con su propia
+ * moneda? Solo TRANSFERENCIA_BANCARIA (banco → banco, posible multi-moneda).
+ */
+export function usaDosCuentasBancarias(tipo: TipoOperacionFinanciera): boolean {
+  return tipo === 'TRANSFERENCIA_BANCARIA';
 }
 
 /**

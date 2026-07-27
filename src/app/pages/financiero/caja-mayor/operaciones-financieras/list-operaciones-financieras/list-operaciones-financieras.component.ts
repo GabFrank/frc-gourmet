@@ -53,6 +53,7 @@ export class ListOperacionesFinancierasComponent implements OnInit {
     { value: 'DEPOSITO_BANCARIO', label: 'Deposito Bancario' },
     { value: 'RETIRO_BANCARIO', label: 'Retiro Bancario' },
     { value: 'TRANSFERENCIA_ENTRE_CAJAS', label: 'Transferencia entre Cajas' },
+    { value: 'TRANSFERENCIA_BANCARIA', label: 'Transferencia Bancaria' },
   ];
 
   constructor(
@@ -154,6 +155,7 @@ export class ListOperacionesFinancierasComponent implements OnInit {
       case 'DEPOSITO_BANCARIO': return '#43a047';
       case 'RETIRO_BANCARIO': return '#f57c00';
       case 'TRANSFERENCIA_ENTRE_CAJAS': return '#6a1b9a';
+      case 'TRANSFERENCIA_BANCARIA': return '#00838f';
       default: return '#757575';
     }
   }

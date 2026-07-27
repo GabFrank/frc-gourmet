@@ -25,6 +25,7 @@
 - `EntradaVaria` destino banco: suma directa a `cuentaBancaria.saldo`.
 - `OperacionFinanciera DEPOSITO_BANCARIO`: suma a destino.
 - `OperacionFinanciera RETIRO_BANCARIO`: resta de origen.
+- `OperacionFinanciera TRANSFERENCIA_BANCARIA`: resta de `cuentaBancariaOrigen.saldo` (SALIDA_MANUAL) + suma a `cuentaBancariaDestino.saldo` (ENTRADA_MANUAL), sin tocar Caja Mayor. Puede ser multi-moneda (montoDestino con cotización). Ver [financiero-caja-mayor.md](financiero-caja-mayor.md).
 - Cheque cobrado: resta de `cuentaBancaria.saldo` (handler `cobrar-cheque` en banking.handler.ts).
 - AcreditacionPos auto-procesada: suma `montoEsperado` a `cuentaBancaria.saldo`.
 - `acreditar-transferencia-bancaria`: suma instantánea al saldo (cobro con transferencia/PIX; sin comisión, no crea AcreditacionPos).
@@ -178,7 +179,7 @@ async procesarAcreditacionesPendientes() {
 
 ## Configuración por Caja Mayor: cuentas visibles
 
-`CajaMayorConfiguracion.cuentasBancariasVisibles` (M:M) define qué cuentas aparecen como cards en `caja-mayor-detalle`.
+`CajaMayorConfiguracion.cuentasBancariasVisibles` (M:M) define qué cuentas aparecen como cards en `caja-mayor-detalle`. El **orden** de esas cards lo define `CajaMayorConfiguracion.cuentasBancariasOrden` (array JSON de ids), configurable por **drag & drop** en el diálogo `configurar-caja-mayor-dialog`. Ver [financiero-caja-mayor.md](financiero-caja-mayor.md).
 
 Click en card de cuenta bancaria → abre `MovimientosCuentaBancariaDialogComponent` como **TAB** (componente híbrido). ID estable `cb-mov-{id}` evita duplicados.
 
