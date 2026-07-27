@@ -292,8 +292,12 @@ export class CajaMayorDetalleComponent implements OnInit {
       ]);
 
       // Aplica filtros de config: si no hay config, mostrar todas las FPs y ninguna CB.
-      this.formasPagoVisiblesIds = config?.formasPagoVisibles
-        ? new Set<number>((config.formasPagoVisibles as any[]).map((fp) => fp.id))
+      // El diálogo ya no permite filtrar por forma de pago (en caja mayor solo hay
+      // EFECTIVO), así que una lista vacía se trata como "sin filtro" (mostrar todo)
+      // — nunca dejar el sidebar de efectivo vacío por una M:M vacía.
+      const fpVis = (config?.formasPagoVisibles as any[]) || [];
+      this.formasPagoVisiblesIds = fpVis.length > 0
+        ? new Set<number>(fpVis.map((fp) => fp.id))
         : null;
 
       this.mostrarCpp = !!config?.mostrarCuentasPorPagar;
@@ -306,7 +310,7 @@ export class CajaMayorDetalleComponent implements OnInit {
         : [];
       if (cbIds.length > 0) {
         const resumenes = await firstValueFrom(this.repositoryService.getCuentasBancariasResumenes(cbIds));
-        this.cuentasBancariasCards = (resumenes || []).map((r: any) => ({
+        const cards = (resumenes || []).map((r: any) => ({
           id: r.id,
           nombre: r.nombre,
           banco: r.banco,
@@ -316,6 +320,9 @@ export class CajaMayorDetalleComponent implements OnInit {
           saldoFuturo: Number(r.saldoFuturo) || 0,
           saldoReservado: Number(r.saldoReservado) || 0,
         }));
+        // Ordenar por el orden elegido en el diálogo (drag & drop). El resumen no
+        // respeta orden (viene por id); acá se aplica el orden guardado.
+        this.cuentasBancariasCards = this.ordenarCuentasBancarias(cards, config?.cuentasBancariasOrden);
       } else {
         this.cuentasBancariasCards = [];
       }
@@ -465,6 +472,30 @@ export class CajaMayorDetalleComponent implements OnInit {
     }
 
     return Array.from(map.values());
+  }
+
+  /**
+   * Ordena las cards de cuentas bancarias por el orden persistido en la config
+   * (`cuentasBancariasOrden`, array JSON de ids elegido por drag & drop). Las que
+   * no están en el orden guardado quedan al final por id ascendente.
+   */
+  private ordenarCuentasBancarias<T extends { id: number }>(cards: T[], ordenRaw: string | null | undefined): T[] {
+    let orden: number[] = [];
+    if (ordenRaw) {
+      try {
+        const arr = JSON.parse(ordenRaw);
+        if (Array.isArray(arr)) orden = arr.map((x) => Number(x)).filter((x) => !isNaN(x));
+      } catch { orden = []; }
+    }
+    if (!orden.length) return cards;
+    const pos = new Map<number, number>();
+    orden.forEach((id, i) => pos.set(id, i));
+    return [...cards].sort((a, b) => {
+      const pa = pos.has(a.id) ? pos.get(a.id)! : Number.MAX_SAFE_INTEGER;
+      const pb = pos.has(b.id) ? pos.get(b.id)! : Number.MAX_SAFE_INTEGER;
+      if (pa !== pb) return pa - pb;
+      return a.id - b.id;
+    });
   }
 
   // Cambio del toggle de fuente (Todo / Caja / Banco / cuenta puntual)

@@ -8,14 +8,9 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
-
-interface OpcionFp {
-  id: number;
-  nombre: string;
-  visible: boolean;
-}
 
 interface OpcionCb {
   id: number;
@@ -41,12 +36,12 @@ interface OpcionCb {
     MatProgressSpinnerModule,
     MatDividerModule,
     MatSnackBarModule,
+    DragDropModule,
   ],
 })
 export class ConfigurarCajaMayorDialogComponent implements OnInit {
   loading = true;
   guardando = false;
-  formasPago: OpcionFp[] = [];
   cuentasBancarias: OpcionCb[] = [];
   mostrarCuentasPorPagar = false;
   mostrarCuentasPorCobrar = false;
@@ -60,30 +55,18 @@ export class ConfigurarCajaMayorDialogComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
-      const [fps, cbs, config] = await Promise.all([
-        firstValueFrom(this.repositoryService.getFormasPago()),
+      const [cbs, config] = await Promise.all([
         firstValueFrom(this.repositoryService.getCuentasBancarias()),
         firstValueFrom(this.repositoryService.getCajaMayorConfiguracion(this.data.cajaMayorId)),
       ]);
 
-      const fpVisibleIds = new Set<number>(
-        (config?.formasPagoVisibles || []).map((x: any) => x.id),
-      );
       const cbVisibleIds = new Set<number>(
         (config?.cuentasBancariasVisibles || []).map((x: any) => x.id),
       );
       const tieneConfig = !!config;
+      const orden = this.parseOrden(config?.cuentasBancariasOrden);
 
-      this.formasPago = (fps || [])
-        .filter((fp: any) => fp.activo)
-        .map((fp: any) => ({
-          id: fp.id,
-          nombre: fp.nombre,
-          // Sin config previa: marcar todas las FPs (compatibilidad).
-          visible: tieneConfig ? fpVisibleIds.has(fp.id) : true,
-        }));
-
-      this.cuentasBancarias = (cbs || [])
+      const opciones: OpcionCb[] = (cbs || [])
         .filter((cb: any) => cb.activo)
         .map((cb: any) => ({
           id: cb.id,
@@ -95,6 +78,10 @@ export class ConfigurarCajaMayorDialogComponent implements OnInit {
           visible: tieneConfig ? cbVisibleIds.has(cb.id) : false,
         }));
 
+      // Ordenar por el orden guardado (drag & drop): las que están en el array
+      // primero, en esa secuencia; el resto al final por id ascendente.
+      this.cuentasBancarias = this.ordenarPorOrdenGuardado(opciones, orden);
+
       this.mostrarCuentasPorPagar = !!config?.mostrarCuentasPorPagar;
       this.mostrarCuentasPorCobrar = !!config?.mostrarCuentasPorCobrar;
     } catch (error: any) {
@@ -105,8 +92,30 @@ export class ConfigurarCajaMayorDialogComponent implements OnInit {
     }
   }
 
-  toggleTodasFp(check: boolean): void {
-    this.formasPago.forEach((fp) => (fp.visible = check));
+  private parseOrden(raw: string | null | undefined): number[] {
+    if (!raw) return [];
+    try {
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.map((x) => Number(x)).filter((x) => !isNaN(x)) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private ordenarPorOrdenGuardado(opciones: OpcionCb[], orden: number[]): OpcionCb[] {
+    if (!orden.length) return opciones;
+    const pos = new Map<number, number>();
+    orden.forEach((id, i) => pos.set(id, i));
+    return [...opciones].sort((a, b) => {
+      const pa = pos.has(a.id) ? pos.get(a.id)! : Number.MAX_SAFE_INTEGER;
+      const pb = pos.has(b.id) ? pos.get(b.id)! : Number.MAX_SAFE_INTEGER;
+      if (pa !== pb) return pa - pb;
+      return a.id - b.id;
+    });
+  }
+
+  drop(event: CdkDragDrop<OpcionCb[]>): void {
+    moveItemInArray(this.cuentasBancarias, event.previousIndex, event.currentIndex);
   }
 
   toggleTodasCb(check: boolean): void {
@@ -121,11 +130,12 @@ export class ConfigurarCajaMayorDialogComponent implements OnInit {
     if (this.guardando) return;
     this.guardando = true;
     try {
-      const formaPagoIds = this.formasPago.filter((x) => x.visible).map((x) => x.id);
+      // Se envían en el ORDEN de la lista (drag & drop). Solo las visibles.
+      // No se manda formaPagoIds: la sección de formas de pago se quitó (en caja
+      // mayor solo hay EFECTIVO); el backend preserva las FPs existentes.
       const cuentaBancariaIds = this.cuentasBancarias.filter((x) => x.visible).map((x) => x.id);
       await firstValueFrom(
         this.repositoryService.saveCajaMayorConfiguracion(this.data.cajaMayorId, {
-          formaPagoIds,
           cuentaBancariaIds,
           mostrarCuentasPorPagar: this.mostrarCuentasPorPagar,
           mostrarCuentasPorCobrar: this.mostrarCuentasPorCobrar,

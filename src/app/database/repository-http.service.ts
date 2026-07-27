@@ -1536,7 +1536,7 @@ export class RepositoryHttpService extends RepositoryService {
   }
   saveCajaMayorConfiguracion(cajaMayorId: number,
     data: {
-      formaPagoIds: number[];
+      formaPagoIds?: number[];
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;

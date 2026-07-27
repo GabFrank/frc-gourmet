@@ -647,7 +647,7 @@ export abstract class RepositoryService {
   abstract getCajaMayorConfiguracion(cajaMayorId: number): Observable<any>;
   abstract saveCajaMayorConfiguracion(cajaMayorId: number,
     data: {
-      formaPagoIds: number[];
+      formaPagoIds?: number[];
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;

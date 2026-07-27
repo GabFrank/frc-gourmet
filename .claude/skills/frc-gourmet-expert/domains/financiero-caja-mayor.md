@@ -93,12 +93,17 @@ Configuración por caja mayor:
   cajaMayor: CajaMayor (1:1)
   formasPagoVisibles: FormasPago[] (M:M, tabla `caja_mayor_config_formas_pago`)
   cuentasBancariasVisibles: CuentaBancaria[] (M:M, tabla `caja_mayor_config_cuentas_bancarias`)
+  cuentasBancariasOrden?: string   // array JSON de ids: ORDEN de las cuentas en el sidebar (drag & drop)
   mostrarCuentasPorPagar: boolean (default false)
   mostrarCuentasPorCobrar: boolean (default false)
 }
 ```
 
-**Default tolerante**: si no existe config para una caja, mostrar TODAS las FPs y NINGUNA cuenta bancaria.
+**Default tolerante**: si no existe config para una caja, mostrar TODAS las FPs y NINGUNA cuenta bancaria. **Además**: una lista `formasPagoVisibles` **vacía** se trata como "sin filtro" (mostrar todas las FPs de efectivo) — nunca deja el sidebar de efectivo vacío. Aplica en desktop (`caja-mayor-detalle`) y mobile.
+
+**Orden de cuentas bancarias (drag & drop)**: `cuentasBancariasOrden` guarda un array JSON de ids en el orden elegido en el diálogo. La M:M `cuentasBancariasVisibles` define QUÉ cuentas se muestran; esta columna define el ORDEN. El sidebar (desktop + mobile) ordena las cards por ese array; los ids ausentes caen al final por id ascendente. Migración `AddCuentasBancariasOrdenCajaMayorConfig`.
+
+**Diálogo `configurar-caja-mayor-dialog`** (2026-07): la sección "Formas de pago a mostrar" **fue eliminada** (en caja mayor solo circula EFECTIVO, así que filtrar por FP era inútil). El diálogo ya no manda `formaPagoIds`; el handler `save-caja-mayor-configuracion` trata `formaPagoIds === undefined` como "no tocar" (preserva la M:M existente, no la vacía). La lista de cuentas bancarias es **reordenable con drag & drop** (Angular CDK `cdkDropList`/`cdkDragHandle`), y ese orden se persiste en `cuentasBancariasOrden`.
 
 ## TipoMovimiento (23 valores)
 
@@ -341,7 +346,7 @@ Nunca ambas a la vez.
 
 ```typescript
 {
-  tipoOperacion: TipoOperacionFinanciera     // CAMBIO_DIVISA | DEPOSITO_BANCARIO | RETIRO_BANCARIO | TRANSFERENCIA_ENTRE_CAJAS
+  tipoOperacion: TipoOperacionFinanciera     // CAMBIO_DIVISA | DEPOSITO_BANCARIO | RETIRO_BANCARIO | TRANSFERENCIA_ENTRE_CAJAS | TRANSFERENCIA_BANCARIA
   operacionFinancieraCategoria?
   // Origen
   cajaMayorOrigen?, monedaOrigen?, formaPagoOrigen?, montoOrigen?, cuentaBancariaOrigen?
@@ -357,7 +362,7 @@ Nunca ambas a la vez.
 }
 ```
 
-### 4 tipos + flujos
+### 5 tipos + flujos
 
 | Tipo | Flujo |
 |---|---|
@@ -365,11 +370,14 @@ Nunca ambas a la vez.
 | **DEPOSITO_BANCARIO** | Egreso caja mayor (EGRESO_DEPOSITO_BANCO) + suma a `cuentaBancariaDestino.saldo`. |
 | **RETIRO_BANCARIO** | Resta de `cuentaBancariaOrigen.saldo` + Ingreso caja mayor (INGRESO_RETIRO_BANCO). |
 | **TRANSFERENCIA_ENTRE_CAJAS** | Egreso `cajaMayorOrigen` (TRANSFERENCIA_SALIDA) + Ingreso `cajaMayorDestino` (TRANSFERENCIA_ENTRADA). |
+| **TRANSFERENCIA_BANCARIA** | Banco → banco. Resta `cuentaBancariaOrigen.saldo` (MovimientoBancario SALIDA_MANUAL) + suma `cuentaBancariaDestino.saldo` (ENTRADA_MANUAL). **NO toca Caja Mayor.** Puede ser entre monedas distintas (`montoDestino` = `montoOrigen` × cotización, resuelto en la UI). |
 
 `diferenciaDestinoTipo`:
 - GASTO → crea registro `Gasto`.
 - VALE → crea `Vale` RRHH.
 - IGNORAR → solo registra en observación.
+
+> **TRANSFERENCIA_BANCARIA (transferencia interna banco→banco, 2026-07):** transferencia entre dos cuentas bancarias, opcionalmente de monedas distintas (con cotización). Reutiliza `OperacionFinanciera` (los campos `cuentaBancariaOrigen`/`Destino` + `cotizacion` ya existían). Solo mueve saldo bancario — no genera `CajaMayorMovimiento`, así que el **bloque de diferencia se omite** (no hay caja donde imputarla; guardado con `if (cajaMayorDiferenciaId && ...)`). Anulación: revierte AMBAS cuentas (AJUSTE_POSITIVO en origen, AJUSTE_NEGATIVO en destino). Guardas: origen ≠ destino, ambas cuentas deben existir. Permiso `CAJA_MAYOR_OPERAR` (reusa el handler `create-operacion-financiera`). ⚠️ **SQLite tenía un CHECK** en `tipo_operacion` que rechazaba valores nuevos: la migración `DropCheckTipoOperacionFinanciera` recrea la tabla soltando ese CHECK (Postgres ya era `varchar` libre). Tests: `npm run test:transferencia-bancaria` (flujo + saldos + anulación), `npm run test:operacion-financiera` (validador). En el diálogo la moneda de cada lado se hereda de su cuenta (no se pisan entre sí, a diferencia de depósito/retiro); la cotización solo aparece cuando las monedas difieren.
 
 **Diálogo `create-operacion-financiera-dialog` (form único con validators por tipo).** En DEPOSITO/RETIRO la moneda **se hereda de la cuenta bancaria** (no se elige en la UI). Reglas de campos requeridos por tipo en `operacion-financiera-validacion.util.ts` (fuente única para validador + test). **Fix 2026-07 (PR #199):** el botón "Registrar" quedaba deshabilitado en Retiro/Depósito porque solo se seteaba UNA de las dos monedas (la requerida del otro lado quedaba `null`). Ahora al elegir la cuenta bancaria se setean **ambas** monedas (origen y destino) — misma divisa a los dos lados en efectivo. Test: `npm run test:operacion-financiera`.
 
