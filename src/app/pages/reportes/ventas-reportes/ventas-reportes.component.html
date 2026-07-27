@@ -1,4 +1,4 @@
-<div class="dashboard-container reportes-container">
+<div class="dashboard-container reportes-container" #reporteRoot [class.presentando]="presentando">
   <div class="dashboard-header">
     <div class="dashboard-header-title">
       <div class="reportes-eyebrow">Reportes · Ventas</div>
@@ -6,13 +6,13 @@
       <div class="dashboard-subtitle">Desempeño de ventas · comparado con el período anterior</div>
     </div>
     <div class="dashboard-header-actions">
-      <button mat-stroked-button matTooltip="Modo presentación (Fase 5)" disabled>
-        <mat-icon>slideshow</mat-icon> Presentar
+      <button mat-stroked-button matTooltip="Modo presentación (pantalla completa)" [disabled]="!cargado" (click)="togglePresentacion()">
+        <mat-icon>{{ presentando ? 'fullscreen_exit' : 'slideshow' }}</mat-icon> {{ presentando ? 'Salir' : 'Presentar' }}
       </button>
-      <button mat-stroked-button matTooltip="Enviar por WhatsApp (Fase 5)" disabled>
+      <button mat-stroked-button matTooltip="Enviar por WhatsApp" [disabled]="!cargado || enviandoWa" (click)="enviarWhatsapp()">
         <mat-icon>chat</mat-icon> WhatsApp
       </button>
-      <button mat-flat-button color="primary" matTooltip="Exportar a PDF (Fase 5)" disabled>
+      <button mat-flat-button color="primary" matTooltip="Exportar a PDF" [disabled]="!cargado" (click)="exportarPdf()">
         <mat-icon>picture_as_pdf</mat-icon> Exportar PDF
       </button>
     </div>
@@ -43,14 +43,14 @@
 
     <div class="reportes-grid">
       <!-- Tendencia -->
-      <div class="col-7">
+      <div class="col-7" data-rep-titulo="Tendencia del mes">
         <app-dash-chart-card title="Tendencia del mes" icon="show_chart" chartType="line"
           [chartData]="tendenciaData" [chartOptions]="tendenciaOptions" [height]="260">
         </app-dash-chart-card>
       </div>
 
       <!-- Día de semana -->
-      <div class="col-5">
+      <div class="col-5" data-rep-titulo="Ranking por día de la semana">
         <app-dash-chart-card title="Ranking por día de la semana" icon="bar_chart" chartType="bar"
           [chartData]="diaSemanaData" [chartOptions]="diaSemanaOptions" [height]="260">
           <span class="dashboard-range-chip range-chip-active" *ngIf="mejorDia">Mejor día: {{ mejorDia }}</span>
@@ -79,7 +79,7 @@
       </div>
 
       <!-- Mix de forma de pago -->
-      <div class="col-5">
+      <div class="col-5" data-rep-titulo="Mix de forma de pago">
         <div class="dashboard-card reportes-card">
           <app-dash-section-header icon="payments" title="Mix de forma de pago"></app-dash-section-header>
           <div class="reportes-card-sub">Participación sobre el total cobrado</div>
@@ -107,7 +107,7 @@
       </div>
 
       <!-- Ingeniería de menú -->
-      <div class="col-6">
+      <div class="col-6" data-rep-titulo="Ingeniería de menú">
         <app-dash-chart-card title="Ingeniería de menú" icon="scatter_plot" chartType="bubble"
           [chartData]="scatterData" [chartOptions]="scatterOptions" [height]="260">
           <span class="me-hint">Popularidad × margen · tamaño = ingreso</span>

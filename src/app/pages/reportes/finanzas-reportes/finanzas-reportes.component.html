@@ -1,4 +1,4 @@
-<div class="dashboard-container reportes-container">
+<div class="dashboard-container reportes-container" #reporteRoot [class.presentando]="presentando">
   <div class="dashboard-header">
     <div class="dashboard-header-title">
       <div class="reportes-eyebrow">Reportes · Finanzas</div>
@@ -6,13 +6,13 @@
       <div class="dashboard-subtitle">Flujo de caja, gastos y cobranzas · comparado con el período anterior</div>
     </div>
     <div class="dashboard-header-actions">
-      <button mat-stroked-button matTooltip="Modo presentación (Fase 5)" disabled>
-        <mat-icon>slideshow</mat-icon> Presentar
+      <button mat-stroked-button matTooltip="Modo presentación (pantalla completa)" [disabled]="!cargado" (click)="togglePresentacion()">
+        <mat-icon>{{ presentando ? 'fullscreen_exit' : 'slideshow' }}</mat-icon> {{ presentando ? 'Salir' : 'Presentar' }}
       </button>
-      <button mat-stroked-button matTooltip="Enviar por WhatsApp (Fase 5)" disabled>
+      <button mat-stroked-button matTooltip="Enviar por WhatsApp" [disabled]="!cargado || enviandoWa" (click)="enviarWhatsapp()">
         <mat-icon>chat</mat-icon> WhatsApp
       </button>
-      <button mat-flat-button color="primary" matTooltip="Exportar a PDF (Fase 5)" disabled>
+      <button mat-flat-button color="primary" matTooltip="Exportar a PDF" [disabled]="!cargado" (click)="exportarPdf()">
         <mat-icon>picture_as_pdf</mat-icon> Exportar PDF
       </button>
     </div>
@@ -43,14 +43,14 @@
 
     <div class="reportes-grid">
       <!-- Flujo de caja -->
-      <div class="col-7">
+      <div class="col-7" data-rep-titulo="Flujo de caja del mes">
         <app-dash-chart-card title="Flujo de caja del mes" icon="waterfall_chart" chartType="bar"
           [chartData]="flujoData" [chartOptions]="flujoOptions" [height]="270">
         </app-dash-chart-card>
       </div>
 
       <!-- Composición de egresos -->
-      <div class="col-5">
+      <div class="col-5" data-rep-titulo="Composición de egresos">
         <div class="dashboard-card reportes-card">
           <app-dash-section-header icon="trending_down" title="Composición de egresos"></app-dash-section-header>
           <div class="reportes-card-sub">En qué se va la plata</div>
@@ -76,7 +76,7 @@
       </div>
 
       <!-- Composición de ingresos -->
-      <div class="col-5">
+      <div class="col-5" data-rep-titulo="Composición de ingresos">
         <div class="dashboard-card reportes-card">
           <app-dash-section-header icon="trending_up" title="Composición de ingresos"></app-dash-section-header>
           <div class="reportes-card-sub">De dónde entra la plata</div>
@@ -124,7 +124,7 @@
       </div>
 
       <!-- Comisiones POS -->
-      <div class="col-6">
+      <div class="col-6" data-rep-titulo="Comisiones POS">
         <div class="dashboard-card reportes-card">
           <app-dash-section-header icon="credit_card" title="Comisiones POS"
             [badge]="posPct + ' efectivo'" badgeColor="warning"></app-dash-section-header>

@@ -1,8 +1,9 @@
-import { Component } from '@angular/core';
+import { Component, ElementRef, HostListener, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { NgChartsModule } from 'ng2-charts';
 import { ChartConfiguration, ChartData } from 'chart.js';
@@ -18,6 +19,7 @@ import {
   REPORTE_ROJO, REPORTE_AZUL, REPORTE_NARANJA, REPORTE_VERDE, REPORTE_AMARILLO, REPORTE_CATEGORICA,
   formatGs, formatDec, KpiCard, buildKpiCard,
 } from '../reporte-visual';
+import { exportarReportePdf, capturarGraficos, primerGraficoBase64, captionKpis } from '../reporte-export.util';
 
 const AGING_COLORS = [REPORTE_AZUL, REPORTE_AMARILLO, REPORTE_NARANJA, REPORTE_ROJO];
 const AGING_LABELS = ['Por vencer', '1–30 días', '31–60 días', '+60 días'];
@@ -38,15 +40,18 @@ interface Leyenda { nombre: string; pct: number; color: string; }
   standalone: true,
   imports: [
     CommonModule, MatIconModule, MatButtonModule, MatTooltipModule, MatProgressSpinnerModule,
-    NgChartsModule, DashChartCardComponent, DashRankingListComponent, DashSectionHeaderComponent, ReportePeriodoControlComponent,
+    NgChartsModule, MatSnackBarModule, DashChartCardComponent, DashRankingListComponent, DashSectionHeaderComponent, ReportePeriodoControlComponent,
   ],
 })
 export class FinanzasReportesComponent {
   loading = false;
   cargado = false;
+  presentando = false;
+  enviandoWa = false;
   data: any = null;
   periodoLabel = '';
   comparaLabel: string | null = null;
+  @ViewChild('reporteRoot') reporteRoot?: ElementRef<HTMLElement>;
 
   kpis: KpiCard[] = [];
 
@@ -80,9 +85,68 @@ export class FinanzasReportesComponent {
   vencimientos: Array<{ fecha: string; concepto: string; tipo: string; beneficiario: string; monto: string; color: string }> = [];
   totalComprometido = '';
 
-  constructor(private repository: RepositoryService) {}
+  constructor(private repository: RepositoryService, private snackBar: MatSnackBar) {}
 
   setData(_data: any): void {}
+
+  // ── Presentación / Export ──
+  togglePresentacion(): void {
+    const el = this.reporteRoot?.nativeElement;
+    if (!this.presentando) {
+      this.presentando = true;
+      el?.requestFullscreen?.().catch(() => { /* algunos entornos no lo permiten */ });
+    } else {
+      this.presentando = false;
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    }
+  }
+
+  @HostListener('document:fullscreenchange')
+  onFullscreenChange(): void {
+    if (!document.fullscreenElement) this.presentando = false;
+  }
+
+  async exportarPdf(): Promise<void> {
+    const root = this.reporteRoot?.nativeElement;
+    if (!root) return;
+    try {
+      await exportarReportePdf({
+        titulo: 'Reportes Financieros — Cierre de Mes',
+        periodoLabel: this.periodoLabel,
+        comparaLabel: this.comparaLabel,
+        kpis: this.kpis,
+        imagenes: capturarGraficos(root),
+        tablas: this.vencimientos.length ? [{
+          titulo: 'Próximos vencimientos',
+          headers: ['Fecha', 'Concepto', 'Tipo', 'Beneficiario', 'Monto'],
+          filas: this.vencimientos.map((v) => [v.fecha, v.concepto, v.tipo, v.beneficiario, v.monto]),
+        }] : [],
+      });
+    } catch (e) {
+      console.error('Error exportando PDF', e);
+      this.snackBar.open('No se pudo generar el PDF', 'Cerrar', { duration: 3000 });
+    }
+  }
+
+  async enviarWhatsapp(): Promise<void> {
+    const root = this.reporteRoot?.nativeElement;
+    if (!root || this.enviandoWa) return;
+    const base64 = primerGraficoBase64(root);
+    if (!base64) { this.snackBar.open('No hay gráfico para enviar', 'Cerrar', { duration: 3000 }); return; }
+    this.enviandoWa = true;
+    try {
+      const res = await firstValueFrom(this.repository.enviarReporteWhatsapp({
+        base64,
+        caption: captionKpis('Reportes Financieros', this.periodoLabel, this.kpis),
+        fileName: 'reporte-finanzas.png',
+      }));
+      this.snackBar.open(res?.ok ? 'Reporte enviado por WhatsApp' : (res?.omitido || 'No se pudo enviar'), 'Cerrar', { duration: 3500 });
+    } catch (e: any) {
+      this.snackBar.open(`Error: ${e?.message || 'no se pudo enviar'}`, 'Cerrar', { duration: 4000 });
+    } finally {
+      this.enviandoWa = false;
+    }
+  }
 
   async onAplicar(params: ReportePeriodoParams): Promise<void> {
     this.loading = true;

@@ -3806,6 +3806,9 @@ contextBridge.exposeInMainWorld('api', {
   getReporteFinanzasCierre: async (params: any): Promise<any> => {
     return await ipcRenderer.invoke('get-reporte-finanzas-cierre', params);
   },
+  enviarReporteWhatsapp: async (params: any): Promise<any> => {
+    return await ipcRenderer.invoke('enviar-reporte-whatsapp', params);
+  },
 
   // === Reportes RRHH (Fase 8) ===
   getReporteLiquidacionesMesData: async (periodo: string): Promise<any> => {

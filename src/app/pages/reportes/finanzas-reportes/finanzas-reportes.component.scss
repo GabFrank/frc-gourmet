@@ -70,3 +70,12 @@
   .reportes-kpis { grid-template-columns: repeat(2, 1fr); }
   .col-12, .col-7, .col-5, .col-6 { grid-column: span 12; }
 }
+
+/* ── Modo presentación (pantalla completa) ── */
+.reportes-container.presentando {
+  background: var(--background-color);
+  overflow-y: auto;
+  padding: 28px 40px 60px;
+  .reportes-kpi .k-value { font-size: 30px; }
+  .dashboard-title { font-size: 28px; }
+}
