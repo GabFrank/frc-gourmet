@@ -2,6 +2,12 @@
  * Constantes visuales y helpers compartidos por las pantallas de Reportes.
  * La paleta categórica está validada para daltonismo/contraste (dataviz).
  */
+import { Chart, registerables } from 'chart.js';
+
+// Registra todos los controladores/elementos de chart.js (line, bar, doughnut,
+// bubble, scatter…). Idempotente: no molesta si ng2-charts ya registró algo.
+// Necesario para las burbujas (ingeniería de menú) y el flujo bar+line.
+Chart.register(...registerables);
 
 export const REPORTE_ROJO = '#db392e';      // rojo primario del sistema
 export const REPORTE_AZUL = '#2a78d6';
