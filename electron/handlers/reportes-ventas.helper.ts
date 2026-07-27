@@ -72,46 +72,54 @@ function listaDias(r: RangoFechas): Date[] {
   return dias;
 }
 
-/** Suma diaria en Gs, un día calendario (local) a la vez, con la misma función
- * que el KPI de facturación. Así la serie reconcilia exactamente con el KPI y
- * se evita el desfase UTC/local que produciría un GROUP BY por fecha extraída
- * en SQL (mismo criterio que `buildVentasPorPeriodo` de los dashboards). */
-async function serieDiariaGs(ds: DataSource, ctx: CotCtx, dias: Date[]): Promise<number[]> {
-  const valores: number[] = [];
-  for (const dia of dias) {
-    const desde = new Date(dia); desde.setHours(0, 0, 0, 0);
-    const hasta = new Date(dia); hasta.setHours(23, 59, 59, 999);
-    const { suma } = await sumaVentasRango(ds, ctx.monPrincipal, filtroRango(desde.toISOString(), hasta.toISOString()), ctx.cotMap);
-    valores.push(suma);
+/** Suma en Gs de un tramo [inicioDia, finDia] (día calendario local) con la
+ * misma función que el KPI de facturación → la serie reconcilia con el KPI y se
+ * evita el desfase UTC/local de un GROUP BY por fecha extraída en SQL. */
+async function sumaTramoGs(ds: DataSource, ctx: CotCtx, primerDia: Date, ultimoDia: Date): Promise<number> {
+  const desde = new Date(primerDia); desde.setHours(0, 0, 0, 0);
+  const hasta = new Date(ultimoDia); hasta.setHours(23, 59, 59, 999);
+  const { suma } = await sumaVentasRango(ds, ctx.monPrincipal, filtroRango(desde.toISOString(), hasta.toISOString()), ctx.cotMap);
+  return suma;
+}
+
+/** Cubetas de la serie de un rango: diaria si ≤ 45 días, o en ventanas de 7
+ * días si es más largo. Cada cubeta se suma con una sola consulta por rango
+ * (evita cientos de consultas por día en rangos largos). */
+async function serieCubetas(ds: DataSource, ctx: CotCtx, r: RangoFechas, usarSemanas: boolean): Promise<{ labels: string[]; valores: number[] }> {
+  const dias = listaDias(r);
+  const labels: string[] = []; const valores: number[] = [];
+  if (!usarSemanas) {
+    for (const dia of dias) {
+      valores.push(await sumaTramoGs(ds, ctx, dia, dia));
+      labels.push(`${dia.getDate()}`);
+    }
+  } else {
+    for (let i = 0; i < dias.length; i += 7) {
+      const grupo = dias.slice(i, i + 7);
+      valores.push(await sumaTramoGs(ds, ctx, grupo[0], grupo[grupo.length - 1]));
+      labels.push(`S${Math.floor(i / 7) + 1}`);
+    }
   }
-  return valores;
+  return { labels, valores };
 }
 
 /** Serie de tendencia: diaria si el rango es ≤ 45 días; si no, agrupada en
- * cubetas de 7 días. actual y anterior comparten la misma cantidad de puntos. */
+ * cubetas de 7 días. El eje x lo define el período actual; si el período de
+ * comparación tiene más cubetas (p. ej. mes anterior más largo), las cubetas
+ * sobrantes se pliegan en el último punto para que la línea punteada siga
+ * sumando el total completo del período anterior. */
 async function serieTendencia(ds: DataSource, ctx: CotCtx, actual: RangoFechas, anterior: RangoFechas | null) {
-  const diasA = listaDias(actual);
-  const valoresDiaA = await serieDiariaGs(ds, ctx, diasA);
-
-  const usarSemanas = diasA.length > 45;
-  const bucket = (dias: Date[], valores: number[]) => {
-    if (!usarSemanas) return { labels: dias.map((d) => `${d.getDate()}`), valores };
-    const labels: string[] = []; const out: number[] = [];
-    for (let i = 0; i < valores.length; i += 7) {
-      out.push(valores.slice(i, i + 7).reduce((a, b) => a + b, 0));
-      labels.push(`S${Math.floor(i / 7) + 1}`);
-    }
-    return { labels, valores: out };
-  };
-  const a = bucket(diasA, valoresDiaA);
+  const usarSemanas = listaDias(actual).length > 45;
+  const a = await serieCubetas(ds, ctx, actual, usarSemanas);
 
   let anteriorArr: number[] = [];
   if (anterior) {
-    const diasP = listaDias(anterior);
-    const valoresDiaP = await serieDiariaGs(ds, ctx, diasP);
-    anteriorArr = bucket(diasP, valoresDiaP).valores;
-    // Alinear longitud con actual (por índice).
-    anteriorArr = a.valores.map((_, i) => anteriorArr[i] ?? 0);
+    const p = await serieCubetas(ds, ctx, anterior, usarSemanas);
+    anteriorArr = a.valores.map((_, i) => p.valores[i] ?? 0);
+    // Plegar las cubetas sobrantes del anterior en el último punto visible.
+    if (anteriorArr.length > 0 && p.valores.length > a.valores.length) {
+      anteriorArr[anteriorArr.length - 1] += p.valores.slice(a.valores.length).reduce((s, v) => s + v, 0);
+    }
   }
   return { labels: a.labels, actual: a.valores, anterior: anteriorArr };
 }
