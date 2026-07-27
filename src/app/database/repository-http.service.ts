@@ -2405,6 +2405,12 @@ export class RepositoryHttpService extends RepositoryService {
   getDashboardCajaMayorKpis(): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardCajaMayorKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getReporteVentasCierre(_params: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getReporteVentasCierre() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getReporteFinanzasCierre(_params: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getReporteFinanzasCierre() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getReporteLiquidacionesMesData(periodo: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getReporteLiquidacionesMesData() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

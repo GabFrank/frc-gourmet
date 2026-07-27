@@ -1,0 +1,42 @@
+<div class="dashboard-container reportes-container">
+  <div class="dashboard-header">
+    <div class="dashboard-header-title">
+      <div class="reportes-eyebrow">Reportes · Ventas</div>
+      <h1 class="dashboard-title">Cierre de Mes</h1>
+      <div class="dashboard-subtitle">Desempeño de ventas · comparado con el período anterior</div>
+    </div>
+    <div class="dashboard-header-actions">
+      <button mat-stroked-button matTooltip="Modo presentación (Fase 5)" disabled>
+        <mat-icon>slideshow</mat-icon> Presentar
+      </button>
+      <button mat-stroked-button matTooltip="Enviar por WhatsApp (Fase 5)" disabled>
+        <mat-icon>chat</mat-icon> WhatsApp
+      </button>
+      <button mat-flat-button color="primary" matTooltip="Exportar a PDF (Fase 5)" disabled>
+        <mat-icon>picture_as_pdf</mat-icon> Exportar PDF
+      </button>
+    </div>
+  </div>
+
+  <app-reporte-periodo-control
+    [rangoLabel]="periodoLabel"
+    [comparaLabel]="comparaLabel"
+    (aplicar)="onAplicar($event)">
+  </app-reporte-periodo-control>
+
+  <div *ngIf="loading" class="reportes-loading">
+    <mat-spinner diameter="36"></mat-spinner>
+  </div>
+
+  <div *ngIf="!loading && data" class="reportes-body">
+    <!-- Fase 2: KPIs + tarjetas (tendencia, día de semana, horas pico, mix de
+         pago, top productos, menu engineering, combinaciones). -->
+    <div class="reportes-placeholder">
+      <mat-icon>construction</mat-icon>
+      <div>
+        <strong>Andamiaje listo.</strong> Las tarjetas de Ventas se agregan en la Fase 2.
+        <div class="ph-sub">Período: {{ periodoLabel }}<span *ngIf="comparaLabel"> · vs {{ comparaLabel }}</span></div>
+      </div>
+    </div>
+  </div>
+</div>

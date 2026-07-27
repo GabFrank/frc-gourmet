@@ -64,6 +64,7 @@
     "prepare": "husky || true",
     "test:mesa-qr": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-mesa-qr-e2e.ts",
     "test:transferencia-bancaria": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-transferencia-bancaria-e2e.ts",
+    "test:reporte-ventas": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-reporte-ventas-e2e.ts",
     "test:config-caja-mayor": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-config-caja-mayor-e2e.ts"
   },
   "private": true,

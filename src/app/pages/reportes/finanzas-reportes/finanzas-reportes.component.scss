@@ -1,0 +1,39 @@
+.reportes-container {
+  padding: 20px 24px 48px;
+}
+
+.reportes-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-disabled);
+}
+
+.dashboard-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+
+  button mat-icon { margin-right: 2px; }
+}
+
+.reportes-loading {
+  display: flex;
+  justify-content: center;
+  padding: 60px 0;
+}
+
+.reportes-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 22px;
+  border: 1px dashed var(--border-color);
+  border-radius: 14px;
+  color: var(--text-secondary);
+  background: var(--card-background);
+
+  mat-icon { color: var(--primary-color); font-size: 28px; width: 28px; height: 28px; }
+  .ph-sub { font-size: 12.5px; color: var(--text-disabled); margin-top: 4px; }
+}

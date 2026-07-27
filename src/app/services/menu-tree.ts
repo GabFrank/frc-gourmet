@@ -57,6 +57,8 @@ import { ReportesRrhhPageComponent } from 'src/app/pages/rrhh/reportes/reportes-
 import { RrhhDashboardComponent } from 'src/app/pages/rrhh/dashboard/rrhh-dashboard.component';
 import { TiendaOnlineConfigComponent } from 'src/app/pages/ventas/pedidos-online/tienda-online-config.component';
 import { VentasDashboardComponent } from 'src/app/pages/ventas/dashboard/ventas-dashboard.component';
+import { VentasReportesComponent } from 'src/app/pages/reportes/ventas-reportes/ventas-reportes.component';
+import { FinanzasReportesComponent } from 'src/app/pages/reportes/finanzas-reportes/finanzas-reportes.component';
 import { ZonasDeliveryComponent } from 'src/app/pages/ventas/pedidos-online/zonas-delivery.component';
 
 // ── Destinos fuera del sidenav (sub-listados y acciones) ──
@@ -318,6 +320,19 @@ export const MENU_TREE: MenuNode[] = [
             action: { component: ListOperacionFinancieraCategoriasComponent, title: 'Categorias de Op. Financieras', tabId: 'operacion-financiera-categorias-tab', data: {} } },
         ],
       },
+    ],
+  },
+
+  // ═══════════════════════════════ REPORTES ═══════════════════════════════
+  {
+    id: 'grp-reportes', label: 'Reportes', icon: 'assessment',
+    children: [
+      { id: 'reportes-ventas', label: 'Reportes de Ventas', icon: 'insights', permiso: 'VENTAS_REPORTES_VER',
+        keywords: ['reportes', 'reporte', 'ventas', 'cierre', 'mes', 'analisis', 'informe', 'kpi'],
+        action: { component: VentasReportesComponent, title: 'Reportes de Ventas', tabId: 'reportes-ventas-tab', data: NAV } },
+      { id: 'reportes-finanzas', label: 'Reportes Financieros', icon: 'account_balance_wallet', permiso: 'FINANCIERO_REPORTES_VER',
+        keywords: ['reportes', 'reporte', 'finanzas', 'financiero', 'cierre', 'mes', 'flujo', 'caja', 'gastos', 'analisis'],
+        action: { component: FinanzasReportesComponent, title: 'Reportes Financieros', tabId: 'reportes-finanzas-tab', data: NAV } },
     ],
   },
 

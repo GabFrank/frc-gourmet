@@ -1,0 +1,41 @@
+<div class="periodbar">
+  <div class="presets">
+    <button *ngFor="let p of presets" type="button" class="chip"
+            [class.on]="rango === p.value" (click)="seleccionarRango(p.value)">
+      {{ p.label }}
+    </button>
+  </div>
+
+  <div class="period-range" *ngIf="rangoLabel">
+    <mat-icon>event</mat-icon> {{ rangoLabel }}
+  </div>
+
+  <ng-container *ngIf="rango === 'custom'">
+    <mat-form-field appearance="outline" class="date-field">
+      <mat-label>Desde</mat-label>
+      <input matInput [matDatepicker]="dp1" [(ngModel)]="desde">
+      <mat-datepicker-toggle matSuffix [for]="dp1"></mat-datepicker-toggle>
+      <mat-datepicker #dp1></mat-datepicker>
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="date-field">
+      <mat-label>Hasta</mat-label>
+      <input matInput [matDatepicker]="dp2" [(ngModel)]="hasta">
+      <mat-datepicker-toggle matSuffix [for]="dp2"></mat-datepicker-toggle>
+      <mat-datepicker #dp2></mat-datepicker>
+    </mat-form-field>
+  </ng-container>
+
+  <span class="sep"></span>
+
+  <mat-slide-toggle [(ngModel)]="comparar" color="primary" class="cmp-toggle">
+    Comparar<span *ngIf="comparar && comparaLabel"> vs {{ comparaLabel }}</span>
+  </mat-slide-toggle>
+
+  <mat-form-field appearance="outline" class="moneda-field" *ngIf="monedas.length > 1">
+    <mat-select [(ngModel)]="monedaId">
+      <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.simbolo }} {{ m.denominacion }}</mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  <button mat-flat-button color="primary" class="aplicar-btn" (click)="emitir()">Aplicar</button>
+</div>

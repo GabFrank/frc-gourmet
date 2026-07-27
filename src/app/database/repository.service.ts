@@ -944,6 +944,8 @@ export abstract class RepositoryService {
   abstract getDashboardProductosKpis(): Observable<any>;
   abstract getDashboardFinancieroKpis(): Observable<any>;
   abstract getDashboardCajaMayorKpis(): Observable<any>;
+  abstract getReporteVentasCierre(params: any): Observable<any>;
+  abstract getReporteFinanzasCierre(params: any): Observable<any>;
   abstract getReporteLiquidacionesMesData(periodo: string): Observable<any>;
   abstract exportReporteLiquidacionesMesExcel(periodo: string): Observable<any>;
   abstract exportReporteLiquidacionesMesPdf(periodo: string): Observable<any>;

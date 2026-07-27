@@ -28,7 +28,7 @@ function rangoToFechas(rango: Rango): { desde: Date; hasta: Date } {
 // El "total" real de una venta NO vive en la columna ventas.total (no poblada),
 // sino en pagos_detalles (PAGO - VUELTO). Estos helpers calculan el monto cobrado
 // en la moneda principal, igual que getVentasTotalByCaja / getResumenCaja.
-async function getMonedaPrincipalId(dataSource: DataSource): Promise<number> {
+export async function getMonedaPrincipalId(dataSource: DataSource): Promise<number> {
   const rows: any[] = await dbQuery(
     dataSource,
     `SELECT id FROM monedas WHERE principal = true LIMIT 1`,
@@ -40,9 +40,9 @@ async function getMonedaPrincipalId(dataSource: DataSource): Promise<number> {
 // Filtro de ventas para los totales: o por rango de fechas (día calendario, para
 // el histórico) o por caja_id (las cajas abiertas — Opción B: el total "de hoy"
 // sigue la caja abierta, así una caja que cruza medianoche NO reinicia el total).
-type VentaFiltro = { sql: string; params: any[] };
+export type VentaFiltro = { sql: string; params: any[] };
 
-function filtroRango(desdeISO: string, hastaISO: string): VentaFiltro {
+export function filtroRango(desdeISO: string, hastaISO: string): VentaFiltro {
   return { sql: 'v.created_at >= ? AND v.created_at <= ?', params: [desdeISO, hastaISO] };
 }
 
@@ -53,7 +53,7 @@ function filtroCajas(cajaIds: number[]): VentaFiltro {
 
 // Cotización (compraLocal) más reciente de cada moneda origen → principal.
 // { monedaOrigenId: cotizacion }. La principal cotiza en 1 implícitamente.
-async function getCotizacionMap(
+export async function getCotizacionMap(
   dataSource: DataSource,
   monedaPrincipalId: number,
 ): Promise<{ [monedaId: number]: number }> {
@@ -76,7 +76,7 @@ async function getCotizacionMap(
 // su cotización compraLocal — antes solo sumaba la moneda principal, así que el
 // gráfico no reflejaba las ventas cobradas en USD/BRL. `cotizacionMap` se puede
 // precomputar (buildVentasPorPeriodo) o se resuelve internamente si se omite.
-async function sumaVentasRango(
+export async function sumaVentasRango(
   dataSource: DataSource,
   monedaPrincipalId: number,
   filtro: VentaFiltro,
@@ -121,7 +121,7 @@ async function sumaVentasRango(
 // CADA moneda convertida a la moneda principal (Gs) usando la cotización
 // (compra_local) más reciente de monedas_cambio. El total en Gs suma TODAS las
 // monedas convertidas, no solo la principal.
-async function desgloseVentasRango(
+export async function desgloseVentasRango(
   dataSource: DataSource,
   monedaPrincipalId: number,
   filtro: VentaFiltro,

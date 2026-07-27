@@ -88,6 +88,11 @@
 
 // 🎨 Colores de estado (consistentes en ambos temas)
 :root {
+  // Color primario de marca (rojo del $custom-primary de styles.scss, palette 500).
+  --primary-color: #db392e;
+  --primary-color-variant: #b33026;
+  --primary-contrast: #ffffff;
+
   --success-color: #4caf50;
   --warning-color: #ff9800;
   --error-color: #f44336;
