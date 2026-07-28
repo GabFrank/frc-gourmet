@@ -243,7 +243,12 @@ export class FinanzasReportesComponent {
   }
 
   private fmtFecha(iso: string): string {
-    const d = new Date(iso);
+    if (!iso) return '';
+    // Parsear la parte de fecha como LOCAL: new Date('2026-07-15') sería UTC
+    // medianoche y en huso negativo (PY) getDate() devolvería el día anterior.
+    const s = String(iso).slice(0, 10);
+    const [y, m, day] = s.split('-').map(Number);
+    const d = y && m && day ? new Date(y, m - 1, day) : new Date(iso);
     if (isNaN(d.getTime())) return String(iso);
     return `${d.getDate()} ${MESES[d.getMonth()]}`;
   }

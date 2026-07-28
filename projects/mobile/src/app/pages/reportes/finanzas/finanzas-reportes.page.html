@@ -72,18 +72,18 @@
     </section>
 
     <!-- Aging -->
-    <section class="block" *ngIf="agingCobrar || agingPagar">
+    <section class="block" *ngIf="agingCobrar?.hasData || agingPagar?.hasData">
       <h3 class="block-title">Antigüedad de deudas</h3>
-      <div *ngIf="agingCobrar">
-        <div class="aging-h"><span>Por Cobrar</span><span class="tot">{{ agingCobrar.total }}</span></div>
+      <div *ngIf="agingCobrar?.hasData">
+        <div class="aging-h"><span>Por Cobrar</span><span class="tot">{{ agingCobrar!.total }}</span></div>
         <div class="seg-bar">
-          <div class="seg" *ngFor="let s of agingCobrar.segs" [style.flex]="s.pct + ' 0 0'" [style.background]="s.color">{{ s.pct >= 12 ? s.pct + '%' : '' }}</div>
+          <div class="seg" *ngFor="let s of agingCobrar!.segs" [style.flex]="s.pct + ' 0 0'" [style.background]="s.color">{{ s.pct >= 12 ? s.pct + '%' : '' }}</div>
         </div>
       </div>
-      <div *ngIf="agingPagar">
-        <div class="aging-h"><span>Por Pagar</span><span class="tot">{{ agingPagar.total }}</span></div>
+      <div *ngIf="agingPagar?.hasData">
+        <div class="aging-h"><span>Por Pagar</span><span class="tot">{{ agingPagar!.total }}</span></div>
         <div class="seg-bar">
-          <div class="seg" *ngFor="let s of agingPagar.segs" [style.flex]="s.pct + ' 0 0'" [style.background]="s.color">{{ s.pct >= 12 ? s.pct + '%' : '' }}</div>
+          <div class="seg" *ngFor="let s of agingPagar!.segs" [style.flex]="s.pct + ' 0 0'" [style.background]="s.color">{{ s.pct >= 12 ? s.pct + '%' : '' }}</div>
         </div>
       </div>
       <div class="aging-ley">

@@ -1,10 +1,10 @@
 import { Chart, registerables, ChartConfiguration } from 'chart.js';
 
 /**
- * Utilidades visuales de los reportes mobile: registra los controllers de
- * chart.js (ng2-charts NO los registra globalmente en este workspace),
- * expone la paleta de marca, helpers de formato y opciones de gráfico
- * touch-friendly para pantalla chica.
+ * Utilidades visuales de los reportes mobile: paleta de marca, helpers de
+ * formato y opciones de gráfico touch-friendly para pantalla chica.
+ * El registro de controllers de chart.js es defensivo (ng2-charts v4 ya los
+ * registra al importar NgChartsModule; esta llamada extra es idempotente).
  */
 Chart.register(...registerables);
 

@@ -21,7 +21,7 @@ import {
 interface RankRow { nombre: string; valor: string; sub: string; pct: number; }
 interface Leyenda { nombre: string; pct: number; color: string; }
 interface Seg { pct: number; color: string; label: string; monto: string; }
-interface SegBar { total: string; segs: Seg[]; }
+interface SegBar { total: string; segs: Seg[]; hasData: boolean; }
 interface VencRow { fecha: string; concepto: string; tipo: string; beneficiario: string; monto: string; }
 
 const AGING_COLORS = [REP_AZUL, REP_AMARILLO, REP_NARANJA, REP_ROJO];
@@ -161,6 +161,7 @@ export class FinanzasReportesPage implements OnInit {
   private armarSeg(a: any): SegBar {
     return {
       total: fmtGs(a?.total || 0) + ' Gs',
+      hasData: Number(a?.total || 0) > 0,
       segs: (a?.buckets || []).map((monto: number, i: number) => ({
         pct: a.pcts[i], color: AGING_COLORS[i], label: AGING_LABELS[i], monto: fmtGs(monto) + ' Gs',
       })),
@@ -168,7 +169,12 @@ export class FinanzasReportesPage implements OnInit {
   }
 
   private fmtFecha(iso: string): string {
-    const d = new Date(iso);
+    if (!iso) return '';
+    // Parsear la parte de fecha como LOCAL: new Date('2026-07-15') sería UTC
+    // medianoche y en huso negativo (PY) getDate() devolvería el día anterior.
+    const s = String(iso).slice(0, 10);
+    const [y, m, day] = s.split('-').map(Number);
+    const d = y && m && day ? new Date(y, m - 1, day) : new Date(iso);
     if (isNaN(d.getTime())) return String(iso);
     return `${d.getDate()} ${MESES[d.getMonth()]}`;
   }

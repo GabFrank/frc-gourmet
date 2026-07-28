@@ -11,8 +11,8 @@ import { RepositoryService } from '@frc/shared-core';
 import { ReportePeriodoControlComponent } from '../reporte-periodo-control.component';
 import { ReportePeriodoParams } from '../reporte-periodo.model';
 import {
-  KpiCard, buildKpiCard, buildKpiCardPct, chartOptions, fmtGs, fmtNum,
-  REP_ROJO, REP_AZUL, REP_GRIS, REP_CATEGORICA,
+  KpiCard, buildKpiCard, buildKpiCardPct, chartOptions, fmtGs, fmtNum, fmtDec,
+  REP_ROJO, REP_GRIS, REP_CATEGORICA,
 } from '../reporte-visual.util';
 import {
   exportarReportePdf, capturarGraficos, primerGraficoBase64, captionKpis,
@@ -128,7 +128,7 @@ export class VentasReportesPage implements OnInit {
     // Top productos
     const tp = d.topProductos || [];
     this.topProductos = tp.map((p: any) => ({
-      nombre: p.nombre, detalle: `margen ${fmtNum(p.margenPct)}%`, valor: `${fmtNum(p.unidades)} u`, pct: Number(p.popularidad || 0),
+      nombre: p.nombre, detalle: `margen ${fmtDec(p.margenPct)}%`, valor: `${fmtNum(p.unidades)} u`, pct: Number(p.popularidad || 0),
     }));
 
     // Horas pico (top celdas del heatmap)
