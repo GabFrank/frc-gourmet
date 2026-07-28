@@ -1,0 +1,96 @@
+/* Estilos compartidos de los reportes mobile (Ventas + Finanzas). */
+.rep-page {
+  padding: 8px 12px calc(16px + env(safe-area-inset-bottom));
+}
+
+.rep-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-secondary);
+  .sp { flex: 1 1 auto; }
+}
+.rep-periodo-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  small { color: var(--text-secondary); font-weight: 400; }
+}
+
+/* --- KPIs --- */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 8px 0 14px;
+}
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 13px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+}
+.kpi:first-child { grid-column: 1 / -1; background: color-mix(in srgb, var(--error-color) 12%, var(--surface)); border-color: color-mix(in srgb, var(--error-color) 35%, var(--border-color)); }
+.kpi-label { font-size: 0.76rem; color: var(--text-secondary); }
+.kpi-value { font-size: 1.3rem; font-weight: 700; color: var(--text-primary); }
+.kpi:first-child .kpi-value { font-size: 1.6rem; }
+.kpi-delta {
+  display: inline-flex; align-items: center; gap: 2px; font-size: 0.74rem; font-weight: 700; margin-top: 2px;
+  mat-icon { font-size: 14px; width: 14px; height: 14px; }
+  &.up { color: var(--success-color); }
+  &.down { color: var(--error-color); }
+}
+
+/* --- Bloques --- */
+.block {
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.block-title { margin: 0 0 10px; font-size: 0.95rem; font-weight: 600; color: var(--text-primary); }
+
+/* --- Charts --- */
+.chart-box { height: 200px; position: relative; }
+.chart-box.sm { height: 170px; max-width: 240px; margin: 0 auto; }
+
+/* --- Leyenda (dona) --- */
+.leyenda { display: flex; flex-direction: column; gap: 7px; margin-top: 10px; }
+.ley-item { display: flex; align-items: center; gap: 8px; font-size: 0.83rem; }
+.ley-item .dot { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+.ley-nombre { flex: 1 1 auto; color: var(--text-primary); }
+.ley-pct { color: var(--text-secondary); font-weight: 600; }
+
+/* --- Filas simples --- */
+.row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border-color); }
+.row:first-of-type { border-top: none; }
+.c-nombre { flex: 1 1 auto; min-width: 0; font-size: 0.86rem; color: var(--text-primary); }
+.c-nombre small { color: var(--text-secondary); font-size: 0.74rem; }
+.c-num { flex: 0 0 auto; text-align: right; font-size: 0.84rem; color: var(--text-secondary); min-width: 84px; }
+.c-num.strong { color: var(--text-primary); font-weight: 600; }
+
+/* --- Rankings con progress bar --- */
+.rank-row { padding: 8px 0; border-top: 1px solid var(--border-color); }
+.rank-row:first-of-type { border-top: none; }
+.rank-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.rank-nombre { font-size: 0.86rem; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; small { color: var(--text-secondary); font-size: 0.72rem; } }
+.rank-valor { flex: 0 0 auto; font-size: 0.84rem; font-weight: 600; color: var(--text-primary); }
+
+/* --- Aging (barra segmentada) --- */
+.seg-bar { display: flex; height: 24px; border-radius: 8px; overflow: hidden; gap: 2px; margin: 5px 0 8px; }
+.seg { height: 100%; display: flex; align-items: center; justify-content: center; font-size: 0.66rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.5); min-width: 0; }
+.aging-h { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+.aging-h .tot { color: var(--text-secondary); }
+.aging-ley { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+
+/* --- Modo presentación (pantalla completa) --- */
+.rep-page.presentando {
+  background: var(--background-color, var(--surface));
+  overflow-y: auto;
+  height: 100vh;
+  padding: 16px 18px 40px;
+}

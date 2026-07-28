@@ -240,7 +240,7 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
 
 ## Reportes y exports
 
-- [ ] **Reportes de Ventas** con filtros + exports PDF/Excel.
+- [x] **Reportes de cierre de mes (Ventas + Finanzas)** — hub interactivo con período comparativo, modo presentación, export PDF y envío por WhatsApp (2026-07). → [domains/reportes.md](../domains/reportes.md). Pendiente: portar a **modo client** (los 3 métodos HTTP lanzan "no implementado"); export a **Excel**; superficie del ranking de **meseros** (calculado pero no mostrado).
 - [ ] **Reportes de Compras** (ya listados arriba).
 - [ ] **Reportes RRHH** ya tiene base (Fase 8) — auditar coverage de cada reporte.
 - [ ] **Dashboard de Ventas estadísticas** con datos reales (actualmente placeholder).

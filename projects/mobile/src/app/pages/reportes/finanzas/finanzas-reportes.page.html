@@ -1,0 +1,116 @@
+<div class="rep-page" #reporteRoot [class.presentando]="presentando">
+  <div class="rep-actions">
+    <span class="rep-periodo-label" *ngIf="periodoLabel">{{ periodoLabel }}<small *ngIf="comparaLabel"> · vs {{ comparaLabel }}</small></span>
+    <span class="sp"></span>
+    <button mat-icon-button [disabled]="!cargado" (click)="togglePresentacion()" aria-label="Pantalla completa">
+      <mat-icon>{{ presentando ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+    </button>
+    <button mat-icon-button [disabled]="!cargado || enviandoWa" (click)="enviarWhatsapp()" aria-label="WhatsApp">
+      <mat-icon>chat</mat-icon>
+    </button>
+    <button mat-icon-button [disabled]="!cargado" (click)="exportarPdf()" aria-label="Exportar PDF">
+      <mat-icon>picture_as_pdf</mat-icon>
+    </button>
+  </div>
+
+  <app-reporte-periodo-control (aplicar)="onAplicar($event)"></app-reporte-periodo-control>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error && !loading" class="crud-error">{{ error }}</p>
+
+  <ng-container *ngIf="cargado && !loading && data?.kpis">
+    <!-- KPIs -->
+    <div class="kpi-grid">
+      <div class="kpi" *ngFor="let k of kpis">
+        <span class="kpi-label">{{ k.label }}</span>
+        <span class="kpi-value">{{ k.valor }}</span>
+        <span class="kpi-delta" *ngIf="k.tieneDelta" [class.up]="k.buena" [class.down]="!k.buena">
+          <mat-icon>{{ k.dir === 'up' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>{{ k.deltaTexto }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Flujo de caja -->
+    <section class="block" data-rep-titulo="Flujo de caja">
+      <h3 class="block-title">Flujo de caja</h3>
+      <div class="chart-box">
+        <canvas baseChart [type]="'bar'" [data]="flujoData" [options]="barOptions"></canvas>
+      </div>
+    </section>
+
+    <!-- Composición de egresos -->
+    <section class="block" data-rep-titulo="Composición de egresos" *ngIf="egrLeyenda.length">
+      <h3 class="block-title">Composición de egresos</h3>
+      <div class="chart-box sm">
+        <canvas baseChart [type]="'doughnut'" [data]="egrData" [options]="doughnutOptions"></canvas>
+      </div>
+      <div class="leyenda">
+        <div class="ley-item" *ngFor="let l of egrLeyenda">
+          <span class="dot" [style.background]="l.color"></span>
+          <span class="ley-nombre">{{ l.nombre }}</span>
+          <span class="ley-pct">{{ l.pct }}%</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Gastos por categoría -->
+    <section class="block" *ngIf="gastos.length">
+      <h3 class="block-title">Gastos por categoría</h3>
+      <div class="rank-row" *ngFor="let r of gastos">
+        <div class="rank-head"><span class="rank-nombre">{{ r.nombre }} <small>{{ r.sub }}</small></span><span class="rank-valor">{{ r.valor }}</span></div>
+        <mat-progress-bar mode="determinate" [value]="r.pct"></mat-progress-bar>
+      </div>
+    </section>
+
+    <!-- Composición de ingresos -->
+    <section class="block" *ngIf="ingresos.length">
+      <h3 class="block-title">Composición de ingresos</h3>
+      <div class="row" *ngFor="let r of ingresos">
+        <span class="c-nombre">{{ r.nombre }} <small>{{ r.sub }}</small></span>
+        <span class="c-num strong">{{ r.valor }}</span>
+      </div>
+    </section>
+
+    <!-- Aging -->
+    <section class="block" *ngIf="agingCobrar?.hasData || agingPagar?.hasData">
+      <h3 class="block-title">Antigüedad de deudas</h3>
+      <div *ngIf="agingCobrar?.hasData">
+        <div class="aging-h"><span>Por Cobrar</span><span class="tot">{{ agingCobrar!.total }}</span></div>
+        <div class="seg-bar">
+          <div class="seg" *ngFor="let s of agingCobrar!.segs" [style.flex]="s.pct + ' 0 0'" [style.background]="s.color">{{ s.pct >= 12 ? s.pct + '%' : '' }}</div>
+        </div>
+      </div>
+      <div *ngIf="agingPagar?.hasData">
+        <div class="aging-h"><span>Por Pagar</span><span class="tot">{{ agingPagar!.total }}</span></div>
+        <div class="seg-bar">
+          <div class="seg" *ngFor="let s of agingPagar!.segs" [style.flex]="s.pct + ' 0 0'" [style.background]="s.color">{{ s.pct >= 12 ? s.pct + '%' : '' }}</div>
+        </div>
+      </div>
+      <div class="aging-ley">
+        <span class="ley-item" *ngFor="let l of agingLabels; let i = index">
+          <span class="dot" [style.background]="agingColors[i]"></span>{{ l }}
+        </span>
+      </div>
+    </section>
+
+    <!-- Comisiones POS -->
+    <section class="block">
+      <h3 class="block-title">Comisiones POS</h3>
+      <div class="row"><span class="c-nombre">Comisión total</span><span class="c-num strong">{{ posTotal }}</span></div>
+      <div class="row"><span class="c-nombre">Facturado por POS</span><span class="c-num strong">{{ posFacturado }}</span></div>
+      <div class="row"><span class="c-nombre">% promedio</span><span class="c-num strong">{{ posPct }}</span></div>
+    </section>
+
+    <!-- Vencimientos -->
+    <section class="block" *ngIf="vencimientos.length">
+      <h3 class="block-title">Próximos vencimientos <small>· {{ totalComprometido }}</small></h3>
+      <div class="rank-row" *ngFor="let v of vencimientos">
+        <div class="rank-head">
+          <span class="rank-nombre">{{ v.concepto }} <small>{{ v.tipo }} · {{ v.beneficiario }}</small></span>
+          <span class="rank-valor">{{ v.monto }}</span>
+        </div>
+        <span class="c-nombre"><small>{{ v.fecha }}</small></span>
+      </div>
+    </section>
+  </ng-container>
+</div>

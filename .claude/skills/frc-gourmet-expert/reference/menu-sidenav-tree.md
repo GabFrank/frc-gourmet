@@ -60,6 +60,10 @@
    ├ Caja Mayor                      account_balance→ CajaMayorDashboardComponent         [CAJA_MAYOR_DASHBOARD_VER]
    └ Cuentas por Cobrar              request_quote  → ListCuentasPorCobrarComponent       [CPC_GESTIONAR]
 ─────  (mat-divider)
+▾ Reportes                           assessment     (grupo, entre Financiero y RRHH)
+   ├ Reportes de Ventas              trending_up    → VentasReportesComponent             [VENTAS_REPORTES_VER]
+   └ Reportes Financieros            account_balance_wallet → FinanzasReportesComponent    [FINANCIERO_REPORTES_VER]
+─────  (mat-divider)
 ▾ Configuración                      settings
    ├ Datos de la Empresa             business       → ConfigurarEmpresaComponent          [EMPRESA_CONFIGURAR]
    ├ Impresoras                      print          → PrinterSettingsComponent (DIALOG)   [IMPRESORAS_GESTIONAR]

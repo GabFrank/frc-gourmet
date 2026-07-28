@@ -64,6 +64,12 @@ const VENTAS_ITEMS: SectionItem[] = [
   { label: 'Resumen', icon: 'insights', path: '/ventas/resumen', enabled: true },
 ];
 
+/** Reportes de cierre de mes. */
+const REPORTES_ITEMS: SectionItem[] = [
+  { label: 'Reportes de Ventas', icon: 'trending_up', path: '/reportes/ventas', enabled: true },
+  { label: 'Reportes Financieros', icon: 'account_balance_wallet', path: '/reportes/finanzas', enabled: true },
+];
+
 /**
  * Rutas de la PWA mobile. Navegación con Router (no TabsService).
  * - Formularios full-screen (alta/edición) → rutas top-level, ANTES del shell.
@@ -573,6 +579,23 @@ export const routes: Routes = [
         path: 'ventas/resumen',
         data: { title: 'Resumen de ventas' },
         loadComponent: () => import('./pages/ventas/resumen/ventas-resumen.page').then((m) => m.VentasResumenPage),
+      },
+      // --- Reportes de cierre de mes ---
+      {
+        path: 'reportes',
+        pathMatch: 'full',
+        data: { title: 'Reportes', items: REPORTES_ITEMS },
+        loadComponent: () => import('./pages/section-index/section-index.page').then((m) => m.SectionIndexPage),
+      },
+      {
+        path: 'reportes/ventas',
+        data: { title: 'Reportes de Ventas' },
+        loadComponent: () => import('./pages/reportes/ventas/ventas-reportes.page').then((m) => m.VentasReportesPage),
+      },
+      {
+        path: 'reportes/finanzas',
+        data: { title: 'Reportes Financieros' },
+        loadComponent: () => import('./pages/reportes/finanzas/finanzas-reportes.page').then((m) => m.FinanzasReportesPage),
       },
       {
         path: 'financiero/comisiones-reglas',

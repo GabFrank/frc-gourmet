@@ -65,6 +65,8 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'PRODUCTOS_DASHBOARD_VER', descripcion: 'Ver dashboard de Productos con KPIs', modulo: 'PRODUCTOS' },
   { codigo: 'FINANCIERO_DASHBOARD_VER', descripcion: 'Ver dashboard Financiero con KPIs', modulo: 'FINANCIERO' },
   { codigo: 'CAJA_MAYOR_DASHBOARD_VER', descripcion: 'Ver dashboard de Caja Mayor con KPIs', modulo: 'FINANCIERO' },
+  { codigo: 'VENTAS_REPORTES_VER', descripcion: 'Ver reportes de Ventas (cierre de mes)', modulo: 'VENTAS' },
+  { codigo: 'FINANCIERO_REPORTES_VER', descripcion: 'Ver reportes Financieros (cierre de mes)', modulo: 'FINANCIERO' },
 
   // Productos / Recetas / Stock
   { codigo: 'PRODUCTOS_VER', descripcion: 'Ver lista de productos', modulo: 'PRODUCTOS' },

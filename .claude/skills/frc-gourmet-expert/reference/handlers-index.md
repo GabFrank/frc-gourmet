@@ -1,6 +1,6 @@
 # Índice de handlers IPC
 
-**54 archivos `*.handler.ts`** en `electron/handlers/` (~28.000 líneas totales). Cada uno expone una función `registerXxxHandlers(dataSource, getCurrentUser?)` que se invoca desde la **fuente única** `registerAllAppHandlers()` en `electron/utils/register-all-handlers.ts` (llamada por `main.ts` tras inicializar la BD, y también por los tests E2E). **No hay una segunda lista en `main.ts`** — agregar un handler nuevo = agregarlo sólo en `register-all-handlers.ts`. Al arranque, `installHandlerRegistry()` monkey-patchea `ipcMain.handle` para que cada canal quede también accesible vía `POST /api/rpc` (modo server). Ver [architecture/electron-bootstrap.md](../architecture/electron-bootstrap.md).
+**55 archivos `*.handler.ts`** en `electron/handlers/` (~28.000 líneas totales). Cada uno expone una función `registerXxxHandlers(dataSource, getCurrentUser?)` que se invoca desde la **fuente única** `registerAllAppHandlers()` en `electron/utils/register-all-handlers.ts` (llamada por `main.ts` tras inicializar la BD, y también por los tests E2E). **No hay una segunda lista en `main.ts`** — agregar un handler nuevo = agregarlo sólo en `register-all-handlers.ts`. Al arranque, `installHandlerRegistry()` monkey-patchea `ipcMain.handle` para que cada canal quede también accesible vía `POST /api/rpc` (modo server). Ver [architecture/electron-bootstrap.md](../architecture/electron-bootstrap.md).
 
 ## Tabla principal (orden alfabético)
 
@@ -54,6 +54,7 @@
 | **receta-presentacion.handler.ts** | 556 | Helpers `generarNombreVariacion`, `generarSKU` usados desde recetas.handler (NO se registra como handler propio) |
 | **recetas.handler.ts** | 2427 | Receta, RecetaIngrediente*, RecetaAdicionalVinculacion **+ RecetaPresentacion (variaciones) + Sabores** (unificado) |
 | **remote-tunnel.handler.ts** | 172 | Acceso remoto vía Cloudflare quick tunnel |
+| **reportes.handler.ts** | 73 | Reportes de cierre de mes: `get-reporte-ventas-cierre`, `get-reporte-finanzas-cierre`, `enviar-reporte-whatsapp`. Delega en `reportes-{ventas,finanzas}.helper.ts` + `reportes-periodo.util.ts`. → [domains/reportes.md](../domains/reportes.md) |
 | **reportes-rrhh.handler.ts** | 472 | Exports PDF/Excel (pdfmake + exceljs) |
 | **rrhh-funcionarios.handler.ts** | ~530 | Cargo, Funcionario, HistoricoCargo/Salario + alta transaccional. 2026-07: `get-funcionario-resumen-financiero` (deudas convertidas a PYG), `get-funcionario-de-cliente` (vínculo cruzado) |
 | **sabores.handler.ts** | 437 | Sabor + auto-generación de variaciones al crear sabor |

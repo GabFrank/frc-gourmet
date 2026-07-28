@@ -66,7 +66,19 @@ TipoCliente), Productos (Familias, Subfamilias, Adicionales), Compras (Cat. comp
 Read-only: Vales, Liquidaciones, Penalizaciones, Bonos, Aguinaldos, Asistencias, Horas extra, Permisos,
 Notificaciones, Cajas, CxC, Compras, Proveedores, Productos, Comisiones (reglas/equipos/liq).
 **Diferido:** Sabores/Recetas (variaciones), Caja Mayor (needs cajaMayorId), Monedas (sin handler create),
-Préstamos, Config RRHH, Reportes, y workflows de escritura (confirmar vale, generar liquidación, etc.).
+Préstamos, Config RRHH, y workflows de escritura (confirmar vale, generar liquidación, etc.).
+
+**Reportes de cierre de mes (2026-07):** grupo de nav **Reportes** (`/reportes`, permisos
+`VENTAS_REPORTES_VER`/`FINANCIERO_REPORTES_VER`) con 2 páginas mobile-first en
+`pages/reportes/`: **Ventas** (`/reportes/ventas`) y **Finanzas** (`/reportes/finanzas`).
+Consumen los mismos handlers que el desktop vía `/api/rpc` (no hubo backend nuevo; solo
+regenerar el api-map). Visualización **híbrida**: KPIs + rankings en tarjetas/progress-bars,
+y gráficos clave con **ng2-charts** (tendencia+mix en Ventas; flujo+composición en Finanzas)
+— `reporte-visual.util.ts` hace `Chart.register(...registerables)`. Control de período táctil
+propio (`reporte-periodo-control.component.ts`), **export PDF** (pdfmake por import dinámico en
+`reporte-export.util.ts`), **WhatsApp** (handler existente) y **pantalla completa**. Heatmap y
+menu-engineering del desktop se simplifican (horas pico → lista; burbujas → omitidas). Detalle
+del dominio → [../domains/reportes.md](../domains/reportes.md).
 
 ## Reglas al construir pantallas
 
