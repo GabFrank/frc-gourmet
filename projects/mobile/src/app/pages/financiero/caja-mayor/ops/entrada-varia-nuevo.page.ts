@@ -8,6 +8,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
@@ -20,6 +21,10 @@ interface Opcion {
   label: string;
 }
 
+interface CuentaOpcion extends Opcion {
+  monedaId: number;
+}
+
 /**
  * Registrar Entrada Varia (ingreso misceláneo) hacia la Caja Mayor —
  * operación full-screen. destinoTipo fijo en CAJA_MAYOR (las cuentas bancarias
@@ -30,10 +35,16 @@ interface Opcion {
   standalone: true,
   imports: [
     CommonModule, ReactiveFormsModule, MatToolbarModule, MatIconModule, MatButtonModule,
-    MatFormFieldModule, MatInputModule, MatSelectModule, MatAutocompleteModule,
+    MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonToggleModule, MatAutocompleteModule,
     MatProgressBarModule, MatSnackBarModule,
   ],
   templateUrl: './entrada-varia-nuevo.page.html',
+  styles: [
+    `
+      .ev-destino { margin-bottom: 12px; }
+      .ev-hint { margin: 0 4px 8px; font-size: 0.8rem; color: var(--text-secondary); }
+    `,
+  ],
 })
 export class EntradaVariaNuevoPage implements OnInit {
   private readonly fb = inject(FormBuilder);
@@ -47,7 +58,8 @@ export class EntradaVariaNuevoPage implements OnInit {
   categorias: Opcion[] = [];
   categoriasFiltradas: Opcion[] = [];
   monedas: Opcion[] = [];
-  /** Entrada varia siempre es a Caja Mayor → forma de pago fija efectivo. */
+  cuentas: CuentaOpcion[] = [];
+  /** Tramo hacia Caja Mayor → forma de pago fija efectivo. */
   efectivoLabel = 'Efectivo';
   loading = true;
   saving = false;
@@ -55,6 +67,8 @@ export class EntradaVariaNuevoPage implements OnInit {
   readonly categoriaInput = new FormControl<Opcion | string>('', { nonNullable: true });
 
   readonly form = this.fb.nonNullable.group({
+    destinoTipo: ['CAJA_MAYOR' as 'CAJA_MAYOR' | 'CUENTA_BANCARIA'],
+    cuentaBancariaId: [null as number | null],
     entradaVariaCategoriaId: [null as number | null, Validators.required],
     descripcion: ['', Validators.required],
     monto: [null as number | null, [Validators.required, Validators.min(0.01)]],
@@ -63,9 +77,20 @@ export class EntradaVariaNuevoPage implements OnInit {
     observacion: [''],
   });
 
+  get esBanco(): boolean {
+    return this.form.controls.destinoTipo.value === 'CUENTA_BANCARIA';
+  }
+
   ngOnInit(): void {
     this.cajaMayorId = Number(this.route.snapshot.paramMap.get('id'));
     this.cargarCatalogos();
+    // Al cambiar el destino a banco, la moneda se hereda de la cuenta elegida.
+    this.form.controls.destinoTipo.valueChanges.subscribe((d) => this.aplicarDestino(d));
+    this.form.controls.cuentaBancariaId.valueChanges.subscribe((id) => {
+      if (!this.esBanco) return;
+      const cb = this.cuentas.find((c) => c.id === id);
+      if (cb) this.form.controls.monedaId.setValue(cb.monedaId, { emitEvent: false });
+    });
     this.categoriaInput.valueChanges.subscribe((v) => {
       const text = typeof v === 'string' ? v : v?.label || '';
       const q = text.toLowerCase().trim();
@@ -74,6 +99,21 @@ export class EntradaVariaNuevoPage implements OnInit {
         : [...this.categorias];
       if (typeof v === 'string') this.form.controls.entradaVariaCategoriaId.setValue(null);
     });
+  }
+
+  private aplicarDestino(destino: 'CAJA_MAYOR' | 'CUENTA_BANCARIA'): void {
+    const cb = this.form.controls.cuentaBancariaId;
+    if (destino === 'CUENTA_BANCARIA') {
+      cb.setValidators([Validators.required]);
+      if (this.cuentas.length === 1) {
+        cb.setValue(this.cuentas[0].id);
+        this.form.controls.monedaId.setValue(this.cuentas[0].monedaId, { emitEvent: false });
+      }
+    } else {
+      cb.clearValidators();
+      cb.setValue(null);
+    }
+    cb.updateValueAndValidity({ emitEvent: false });
   }
 
   displayCategoria = (c: Opcion | null): string => (c?.label || '');
@@ -88,14 +128,18 @@ export class EntradaVariaNuevoPage implements OnInit {
       firstValueFrom(this.repo.getEntradaVariaCategorias()),
       firstValueFrom(this.repo.getMonedas()),
       firstValueFrom(this.repo.getFormasPago()),
+      firstValueFrom(this.repo.getCuentasBancarias()),
     ])
-      .then(([cats, monedas, formas]: [any[], any[], any[]]) => {
+      .then(([cats, monedas, formas, cuentas]: [any[], any[], any[], any[]]) => {
         this.categorias = (cats || [])
           .filter((c) => c.activo !== false)
           .map((c) => ({ id: c.id, label: c.nombre }));
         this.monedas = (monedas || [])
           .filter((m) => m.activo !== false)
           .map((m) => ({ id: m.id, label: `${m.simbolo} · ${m.denominacion}` }));
+        this.cuentas = (cuentas || [])
+          .filter((c) => c.activo !== false && c.moneda?.id)
+          .map((c) => ({ id: c.id, label: `${c.banco ? c.banco + ' · ' : ''}${c.nombre} (${c.moneda?.simbolo || ''})`, monedaId: c.moneda.id }));
         // Entrada varia siempre es a Caja Mayor → forma de pago efectivo fija.
         const efectivo = formaPagoEfectivo(formas || []);
         this.efectivoLabel = efectivo?.nombre || 'Efectivo';
@@ -128,9 +172,7 @@ export class EntradaVariaNuevoPage implements OnInit {
     }
     this.saving = true;
     const v = this.form.getRawValue();
-    const payload = {
-      destinoTipo: 'CAJA_MAYOR',
-      cajaMayorId: this.cajaMayorId,
+    const base = {
       entradaVariaCategoriaId: v.entradaVariaCategoriaId,
       descripcion: (v.descripcion || '').toUpperCase(),
       monto: v.monto,
@@ -139,6 +181,9 @@ export class EntradaVariaNuevoPage implements OnInit {
       observacion: v.observacion ? v.observacion.toUpperCase() : null,
       fecha: new Date(),
     };
+    const payload = this.esBanco
+      ? { ...base, destinoTipo: 'CUENTA_BANCARIA', cuentaBancariaId: v.cuentaBancariaId }
+      : { ...base, destinoTipo: 'CAJA_MAYOR', cajaMayorId: this.cajaMayorId };
     try {
       await firstValueFrom(this.repo.createEntradaVaria(payload));
       this.snack.open('Entrada varia registrada', 'OK', { duration: 2500 });

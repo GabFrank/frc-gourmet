@@ -4,11 +4,14 @@ import { ActivatedRoute } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService, PermissionService } from '@frc/shared-core';
 import { CobrarCpcDialogComponent, CobrarCpcData } from './cobrar-cpc-dialog.component';
+import { PromptDialogComponent, PromptData } from '../../../core/components/prompt-dialog.component';
 
 interface CuotaVM {
   id: number;
@@ -20,6 +23,7 @@ interface CuotaVM {
   estado: string;
   estadoClase: string;
   cobrable: boolean;
+  puedeAnularCobro: boolean;
 }
 
 /** Detalle de una Cuenta por Cobrar: cabecera + cuotas + cobro (CPC_COBRAR). */
@@ -27,8 +31,8 @@ interface CuotaVM {
   selector: 'app-cxc-detalle',
   standalone: true,
   imports: [
-    CommonModule, MatToolbarModule, MatIconModule, MatButtonModule,
-    MatProgressBarModule, MatDialogModule,
+    CommonModule, MatToolbarModule, MatIconModule, MatButtonModule, MatMenuModule,
+    MatProgressBarModule, MatDialogModule, MatSnackBarModule,
   ],
   templateUrl: './cxc-detalle.page.html',
   styles: [
@@ -43,6 +47,7 @@ export class CxcDetallePage implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly location = inject(Location);
   private readonly dialog = inject(MatDialog);
+  private readonly snack = inject(MatSnackBar);
 
   id = 0;
   titulo = '';
@@ -54,9 +59,13 @@ export class CxcDetallePage implements OnInit {
   loading = true;
   error: string | null = null;
   canCobrar = false;
+  canAnularCobro = false;
 
   ngOnInit(): void {
-    this.perm.codigos$.subscribe(() => (this.canCobrar = this.perm.has('CPC_COBRAR')));
+    this.perm.codigos$.subscribe(() => {
+      this.canCobrar = this.perm.has('CPC_COBRAR');
+      this.canAnularCobro = this.perm.has('CPC_CANCELAR');
+    });
     this.id = Number(this.route.snapshot.paramMap.get('id'));
     this.cargar();
   }
@@ -105,6 +114,7 @@ export class CxcDetallePage implements OnInit {
       estado: estadoLabel,
       estadoClase: estado === 'COBRADO' ? 'ok' : estado === 'CANCELADO' ? 'off' : 'warn',
       cobrable,
+      puedeAnularCobro: cobrado > 0.005 && estado !== 'CANCELADO',
     };
   }
 
@@ -129,5 +139,32 @@ export class CxcDetallePage implements OnInit {
         .afterClosed(),
     );
     if (ok) this.cargar();
+  }
+
+  async anularCobro(c: CuotaVM): Promise<void> {
+    const motivo = await firstValueFrom(
+      this.dialog
+        .open(PromptDialogComponent, {
+          data: {
+            title: 'Anular cobro',
+            message: `${this.titulo} · Cuota ${c.numero} · cobrado ${this.simbolo} ${c.cobrado.toLocaleString()}`,
+            label: 'Motivo de la anulación',
+            confirmText: 'Anular cobro',
+            danger: true,
+          } as PromptData,
+          width: '340px',
+        })
+        .afterClosed(),
+    );
+    if (!motivo) return;
+    try {
+      await firstValueFrom(this.repo.anularCobroCpcCuota({ cuotaId: c.id, motivo }));
+      this.snack.open('Cobro anulado', 'OK', { duration: 2500 });
+      this.cargar();
+    } catch (e) {
+      const raw = String((e as Error)?.message || '');
+      const msg = /PERMISO/.test(raw) ? 'Sin permiso para anular' : raw.replace(/^Error:\s*/, '') || 'No se pudo anular';
+      this.snack.open(msg, 'OK', { duration: 4000 });
+    }
   }
 }

@@ -9,6 +9,19 @@
   <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
 
   <form class="crud-form" [formGroup]="form" (ngSubmit)="guardar()" *ngIf="!loading">
+    <mat-button-toggle-group formControlName="destinoTipo" class="ev-destino">
+      <mat-button-toggle value="CAJA_MAYOR">Caja mayor</mat-button-toggle>
+      <mat-button-toggle value="CUENTA_BANCARIA" [disabled]="cuentas.length === 0">Cuenta bancaria</mat-button-toggle>
+    </mat-button-toggle-group>
+
+    <mat-form-field appearance="outline" *ngIf="esBanco">
+      <mat-label>Cuenta bancaria</mat-label>
+      <mat-select formControlName="cuentaBancariaId">
+        <mat-option *ngFor="let c of cuentas" [value]="c.id">{{ c.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.cuentaBancariaId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
     <mat-form-field appearance="outline">
       <mat-label>Categoría</mat-label>
       <input
@@ -45,7 +58,7 @@
       <mat-error *ngIf="form.controls.monto.hasError('min')">Debe ser mayor a 0</mat-error>
     </mat-form-field>
 
-    <mat-form-field appearance="outline">
+    <mat-form-field appearance="outline" *ngIf="!esBanco">
       <mat-label>Moneda</mat-label>
       <mat-select formControlName="monedaId">
         <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.label }}</mat-option>
@@ -53,9 +66,13 @@
       <mat-error *ngIf="form.controls.monedaId.hasError('required')">Requerido</mat-error>
     </mat-form-field>
 
-    <!-- Entrada varia siempre es a Caja Mayor: efectivo (sin elegir forma de pago). -->
-    <p style="margin: 0 4px 8px; font-size: 0.8rem; color: var(--text-secondary)">
-      Se registra en <strong>{{ efectivoLabel }}</strong>.
+    <!-- Tramo a Caja Mayor: efectivo (sin elegir forma de pago). -->
+    <p class="ev-hint" *ngIf="!esBanco">
+      Se registra en <strong>{{ efectivoLabel }}</strong> en la caja mayor.
+    </p>
+    <!-- Tramo a cuenta bancaria: la moneda se hereda de la cuenta. -->
+    <p class="ev-hint" *ngIf="esBanco">
+      Se acredita en la cuenta bancaria (moneda de la cuenta).
     </p>
 
     <mat-form-field appearance="outline">

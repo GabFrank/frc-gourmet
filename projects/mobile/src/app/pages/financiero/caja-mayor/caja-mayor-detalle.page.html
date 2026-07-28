@@ -19,6 +19,9 @@
       <a mat-menu-item routerLink="/financiero/caja-mayor/configurar/{{ id }}">
         <mat-icon>tune</mat-icon><span>Configurar</span>
       </a>
+      <button mat-menu-item (click)="recalcularSaldos()">
+        <mat-icon>calculate</mat-icon><span>Recalcular saldos</span>
+      </button>
       <button mat-menu-item *ngIf="abierta" (click)="cerrarCaja()">
         <mat-icon color="warn">lock</mat-icon><span>Cerrar caja</span>
       </button>

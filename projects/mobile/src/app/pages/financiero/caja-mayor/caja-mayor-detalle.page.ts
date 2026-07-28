@@ -423,6 +423,23 @@ export class CajaMayorDetallePage implements OnInit {
     this.router.navigate(['/financiero/caja-mayor/editar', this.id]);
   }
 
+  async recalcularSaldos(): Promise<void> {
+    const data: ConfirmData = {
+      title: 'Recalcular saldos',
+      message: 'Reconstruye los saldos sumando todos los movimientos activos. ¿Continuar?',
+      confirmText: 'Recalcular',
+    };
+    const ok = await firstValueFrom(this.dialog.open(ConfirmDialogComponent, { data, width: '340px' }).afterClosed());
+    if (!ok) return;
+    try {
+      await firstValueFrom(this.repo.recalcularSaldos(this.id));
+      this.snack.open('Saldos recalculados', 'OK', { duration: 2500 });
+      this.cargarConfigYSaldos();
+    } catch (e) {
+      this.snack.open(/PERMISO/.test(String((e as Error)?.message)) ? 'Sin permiso' : 'No se pudo recalcular', 'OK', { duration: 3500 });
+    }
+  }
+
   async cerrarCaja(): Promise<void> {
     const data: ConfirmData = {
       title: 'Cerrar caja mayor',
