@@ -65,8 +65,42 @@ CRUD: RRHH (Cargos, Turnos, MotivosVale, Feriados, Personas, Usuarios+roles, Fun
 TipoCliente), Productos (Familias, Subfamilias, Adicionales), Compras (Cat. compra), Financiero (Cat. gasto).
 Read-only: Vales, Liquidaciones, Penalizaciones, Bonos, Aguinaldos, Asistencias, Horas extra, Permisos,
 Notificaciones, Cajas, CxC, Compras, Proveedores, Productos, Comisiones (reglas/equipos/liq).
-**Diferido:** Sabores/Recetas (variaciones), Caja Mayor (needs cajaMayorId), Monedas (sin handler create),
-Préstamos, Config RRHH, Reportes, y workflows de escritura (confirmar vale, generar liquidación, etc.).
+**Diferido:** Sabores/Recetas (variaciones), Monedas (sin handler create),
+Préstamos, Config RRHH, Reportes.
+
+## Cobertura Caja Mayor mobile (actualizado 2026-07-28)
+
+> **La snapshot de mayo decía "Caja Mayor diferida" — YA NO es cierto.** El código mobile
+> (`projects/mobile/src/app/pages/financiero/caja-mayor/`) tiene el módulo operativo construido y
+> el manual de usuario (`manual-usuario/mobile/05-modulo-finanzas.md`) lo refleja. El gap real es
+> el subconjunto "avanzado" del desktop, no el módulo entero.
+
+**Implementado en mobile:**
+- `caja-mayor-list.page` — lista de cajas mayor como cards con saldo resumido por moneda + estado.
+- `caja-mayor-detalle.page` — detalle operativo: saldos por moneda×formaPago, cards de cuentas
+  bancarias visibles (lee `getCajaMayorConfiguracion` para filtrar), historial de movimientos
+  paginado (PAGE_SIZE=15, "Cargar más"), toggle "Ver anulaciones", menú Ingreso/Egreso, y anular
+  movimiento (gate `CAJA_MAYOR_OPERAR`).
+- Operaciones full-screen en `caja-mayor/ops/`: **gasto** (`gasto-form.page`), **entrada varia**,
+  **ajuste +/−** (`ajuste-nuevo.page` por `:signo`), **vale confirmado** (`vale-nuevo.page`),
+  **ingresar retiro** (`ingresar-retiro.page`), **pagar compras en lote** (`pagar-compras.page`).
+- Home muestra accesos directos a las cajas mayor ABIERTAS (`FINANCIERO_CAJA_VER`).
+- Diseño: 1 moneda + 1 forma de pago por operación (el reparto multi-moneda queda en desktop).
+
+**NO implementado en mobile (canales disponibles vía shim HTTP, falta UI):**
+1. Operaciones financieras (`create/anular-operacion-financiera`): cambio divisa, depósito/retiro
+   bancario, transferencia entre cajas, transferencia bancaria.
+2. Cheques / chequeras (`emitir/cobrar/anular-cheque`, `create-chequera`).
+3. Cobro de CxC (`cobrar-cpc-cuota`) — mobile tiene CxC solo lectura.
+4. Pago de CxP genérico (`pagar-cpp-cuota`) + resúmenes `get-caja-mayor-cpp/cpc-resumen` en el
+   sidebar del detalle (mobile solo tiene el pago de cuotas de **compras** en lote).
+5. POS / acreditaciones bancarias (`create-acreditacion-pos`, `acreditar-transferencia-bancaria`,
+   `create-maquina-pos`).
+6. Ciclo de vida de la Caja Mayor: crear (`create-caja-mayor`) y cerrar (`cerrar-caja-mayor`).
+7. Editar config de caja mayor (`save-caja-mayor-configuracion`) — mobile solo la lee.
+8. Egreso caja inicial (`egreso-caja-inicial`) + abrir caja desde conteo.
+9. Editar movimiento (`edit-caja-mayor-movimiento`) — mobile solo anula.
+10. Dashboard/KPIs de caja mayor (`get-dashboard-caja-mayor-kpis`).
 
 ## Reglas al construir pantallas
 

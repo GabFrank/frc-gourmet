@@ -91,10 +91,14 @@ donde el alta es un workflow complejo (no construir a ciegas). Commit por batch.
 - [x] Compras: Categorías de compra (CRUD), Compras (vista), Proveedores (vista)
 - [x] Productos: Familias/Subfamilias/Adicionales (CRUD), Productos (vista)
 - [x] Comisiones: Reglas/Equipos/Liquidaciones (vista, bajo Financiero)
-- **Diferido (complejo/sin handler, requiere sesión atendida):** Sabores/Recetas (variaciones), Caja Mayor
-  (requiere cajaMayorId), Monedas (sin handler create), Notificaciones (shape distinto), Préstamos,
-  Config RRHH, Reportes, y los workflows de escritura (confirmar vale, generar liquidación, cambiar
-  cargo/salario de funcionario, cobrar/pagar).
+- **Diferido (complejo/sin handler, requiere sesión atendida):** Sabores/Recetas (variaciones),
+  Monedas (sin handler create), Notificaciones (shape distinto), Préstamos, Config RRHH, Reportes.
+- **~~Caja Mayor~~ — YA IMPLEMENTADA (actualizado 2026-07-28).** El módulo mobile de Caja Mayor se
+  construyó después de esta snapshot: lista + detalle operativo (saldos, movimientos paginados,
+  anular) + ops full-screen (gasto, entrada varia, ajuste +/−, vale confirmado, ingresar retiro,
+  pagar compras). Falta solo el subconjunto avanzado (operaciones financieras, cheques, cobro CxC /
+  pago CxP genérico, POS, crear/cerrar/configurar caja mayor, editar movimiento, dashboard KPIs).
+  Detalle del gap → `architecture/mobile-pwa.md` §"Cobertura Caja Mayor mobile".
 - Acciones manuales del usuario: TLS headscale, mode=server real, testing visual, validar handlers de
   escritura en runtime (la validación E2E cubrió login+RPC; las altas concretas se prueban con tu server).
 

@@ -397,7 +397,7 @@ Nunca ambas a la vez.
 - `create-edit-caja-mayor/` — CRUD.
 - `caja-mayor-detalle/` — vista operativa.
 - `registrar-ingreso-dialog/` — entrada varia o retiro caja.
-- `registrar-egreso-dialog/` — gasto, compra, vale (card "Registrar Vale" → handler atómico `crear-vale-confirmado` en `vales.handler.ts`), etc.
+- `registrar-egreso-dialog/` — hub de EGRESOS. Lanza 6 sub-diálogos: `CreateEditGastoDialogComponent` (gasto), `CreateEditValeDialogComponent` (card "Registrar Vale" → handler atómico `crear-vale-confirmado` en `vales.handler.ts`), `CrearCompraSimplificadaDialogComponent` (compra simplificada), `PagarComprasDialogComponent` (pago multi-cuota CPP), `EmitirChequeDialogComponent` (emitir cheque), `CreateOperacionFinancieraDialogComponent`. Además crea mov directo (`create-caja-mayor-movimiento`) / movimiento bancario.
 - `edit-movimiento-dialog/` — editar/anular movimiento.
 - `configurar-caja-mayor-dialog/` — qué FPs y cuentas mostrar (M:M).
 - `pagar-compras-dialog/` — pago multi-cuota CPP.
@@ -407,20 +407,30 @@ Nunca ambas a la vez.
 
 ## Handler
 
-`electron/handlers/caja-mayor.handler.ts` (~2530 líneas) — el más grande del proyecto. Cubre (orden aproximado):
-- CRUD CajaMayor (`get-cajas-mayor`, `get-caja-mayor`, `create/update-caja-mayor`, `cerrar-caja-mayor`)
+`electron/handlers/caja-mayor.handler.ts` (~2870 líneas, ~130 KB) — el más grande del proyecto. **53 canales.** Cubre (orden aproximado):
+- CRUD CajaMayor (`get-cajas-mayor`, `get-caja-mayor`, `create/update-caja-mayor` → `FINANCIERO_CAJA_GESTIONAR`, `cerrar-caja-mayor`)
 - Saldos (`get-caja-mayor-saldos`, `recalcular-saldos`)
-- Movimientos: `get-caja-mayor-movimientos` (con `incluirAnulaciones`), `get-movimientos-caja-mayor-consolidados`, `create-caja-mayor-movimiento`, `anular-caja-mayor-movimiento` (bloqueos), `edit-caja-mayor-movimiento`
-- Gastos + GastoCategoria (`create-gasto`, `anular-gasto`, `edit-gasto`, `get-gastos`, `get-gastos-programados`)
-- Retiros (`create-retiro-caja`, `ingresar-retiro-caja`, `generar-retiro-cierre-caja`)
-- Caja inicial / apertura (`egreso-caja-inicial`, `abrir-caja-desde-conteo`)
-- Entradas Varias + categorías (`create-entrada-varia`, `anular-entrada-varia`)
-- Operaciones Financieras + categorías (`create-operacion-financiera`, `anular-operacion-financiera`)
-- Configuración (`get-caja-mayor-configuracion`, set config)
-- Resúmenes CPP/CPC y bancarios (`get-caja-mayor-cpp-resumen`, `get-caja-mayor-cpc-resumen`, `get-cuenta-bancaria-resumen`, `get-cuentas-bancarias-resumenes`)
+- Movimientos: `get-caja-mayor-movimientos` (con `incluirAnulaciones`) — pero la pantalla `caja-mayor-detalle` consume `get-movimientos-caja-mayor-consolidados` (el que compone la observación legible); `create-caja-mayor-movimiento`, `anular-caja-mayor-movimiento` (bloqueos), `edit-caja-mayor-movimiento` (todos `CAJA_MAYOR_OPERAR`)
+- Gastos + GastoCategoria (`create-gasto`, `anular-gasto`, `edit-gasto`, `get-gastos`, `get-gasto`, `get-gastos-programados`, y categorías `get-gasto-categoria(s)`, `create/update/delete-gasto-categoria`)
+- Retiros (`create-retiro-caja`, `ingresar-retiro-caja`, `generar-retiro-cierre-caja`, `get-retiros-caja`, `get-retiro-caja`)
+- Caja inicial / apertura (`egreso-caja-inicial`, `abrir-caja-desde-conteo` → `FINANCIERO_CAJA_GESTIONAR`)
+- Entradas Varias + categorías (`create-entrada-varia`, `anular-entrada-varia`, `get-entradas-varias`, `get-entrada-varia`, y `get/create/update/delete-entrada-varia-categoria`)
+- Operaciones Financieras + categorías (`create-operacion-financiera`, `anular-operacion-financiera`, `get-operaciones-financieras`, `get-operacion-financiera`, y `get/create/update/delete-operacion-financiera-categoria`)
+- Configuración (`get-caja-mayor-configuracion`, `save-caja-mayor-configuracion`) — **sin `ensurePermission`** (get/save de config no exigen permiso)
+- Resúmenes CPP/CPC y bancarios (`get-caja-mayor-cpp-resumen`, `get-caja-mayor-cpc-resumen`, `get-cuenta-bancaria-resumen` singular, `get-cuentas-bancarias-resumenes` batch)
+
+> Los canales de **lectura** (`get-*`) de caja mayor en general **NO** verifican permiso; el gate está en los canales de escritura.
 
 `electron/handlers/caja-mayor-utils.ts` (~51 líneas):
 - `esIngreso(tipo): boolean`
 - `actualizarSaldoCajaMayor(qr, cajaMayorId, monedaId, formaPagoId, monto, tipo): Promise<void>`
+
+### Handlers relacionados (fuera de `caja-mayor.handler.ts`)
+
+- **`dashboard-caja-mayor.handler.ts`** — `get-dashboard-caja-mayor-kpis` (consumido por `dashboard/caja-mayor-dashboard.component.ts`). El dashboard también usa `dashboard-shortcuts.handler.ts` (`get/create/update/delete-dashboard-shortcut`) para accesos directos.
+- **`gastos-caja.handler.ts`** — `create-gasto-caja`, `get-gastos-caja`, `anular-gasto-caja` (permisos `VENTAS_PDV` / `FINANCIERO_CAJA_VER`). ⚠️ **Distinto de los gastos de caja mayor**: opera sobre el efectivo de una **caja PdV**, NO sobre la caja mayor. No confundir con `create-gasto`.
+- **`banking.handler.ts`** (29 canales, permiso `BANCOS_GESTIONAR`), **`cuentas-por-pagar.handler.ts`** (17, `COMPRAS_GESTIONAR`), **`cuentas-por-cobrar.handler.ts`** (11, `CPC_GESTIONAR`/`CPC_COBRAR`/`CPC_CANCELAR`) — bancos/cheques/POS y CPP/CPC. Se consumen desde el detalle de caja mayor y sus sub-carpetas.
+
+**Permisos del dominio (9 códigos):** `FINANCIERO_CAJA_GESTIONAR`, `CAJA_MAYOR_OPERAR`, `BANCOS_GESTIONAR`, `COMPRAS_GESTIONAR`, `CPC_GESTIONAR`, `CPC_COBRAR`, `CPC_CANCELAR`, `VENTAS_PDV`, `FINANCIERO_CAJA_VER`.
 
 → Banking en handler aparte: [financiero-bancos-pos.md](financiero-bancos-pos.md).
