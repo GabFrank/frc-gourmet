@@ -51,6 +51,7 @@ const FINANCIERO_ITEMS: SectionItem[] = [
   { label: 'Cuentas por Pagar', icon: 'payments', path: '/financiero/cxp', enabled: true },
   { label: 'Gastos', icon: 'receipt_long', path: '/financiero/gastos', enabled: true },
   { label: 'Categorías de gasto', icon: 'sell', path: '/financiero/gasto-categorias', enabled: true },
+  { label: 'Operaciones financieras', icon: 'swap_horiz', path: '/financiero/operaciones-financieras', enabled: true },
   { label: 'Cat. de entrada varia', icon: 'sell', path: '/financiero/entrada-varia-categorias', enabled: true },
   { label: 'Cat. de operación financiera', icon: 'sell', path: '/financiero/operacion-financiera-categorias', enabled: true },
   { label: 'Monedas', icon: 'monetization_on', path: '/financiero/monedas', enabled: false },
@@ -409,6 +410,16 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./pages/financiero/caja-mayor/ops/ingresar-retiro.page').then((m) => m.IngresarRetiroPage),
   },
+  {
+    path: 'financiero/caja-mayor/:id/operacion',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/caja-mayor/ops/operacion-financiera-nuevo.page').then((m) => m.OperacionFinancieraNuevoPage),
+  },
+  {
+    path: 'financiero/operaciones-financieras/nueva',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/caja-mayor/ops/operacion-financiera-nuevo.page').then((m) => m.OperacionFinancieraNuevoPage),
+  },
   // Cajas: apertura, detalle/resumen y cierre (full-screen). 'abrir' debe ir
   // ANTES de ':id' para no matchearse como un id.
   {
@@ -587,6 +598,11 @@ export const routes: Routes = [
         path: 'financiero/operacion-financiera-categorias',
         data: { title: 'Cat. de operación financiera' },
         loadComponent: () => import('./pages/financiero/operacion-financiera-categorias/operacion-financiera-categorias-list.page').then((m) => m.OperacionFinancieraCategoriasListPage),
+      },
+      {
+        path: 'financiero/operaciones-financieras',
+        data: { title: 'Operaciones financieras' },
+        loadComponent: () => import('./pages/financiero/caja-mayor/operaciones-financieras-list.page').then((m) => m.OperacionesFinancierasListPage),
       },
       {
         path: 'financiero/cajas',

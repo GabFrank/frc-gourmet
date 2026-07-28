@@ -410,6 +410,9 @@ export class CajaMayorDetallePage implements OnInit {
   ajuste(signo: 'ingreso' | 'egreso'): void {
     this.router.navigate(['/financiero/caja-mayor', this.id, 'ajuste', signo]);
   }
+  operacionFinanciera(): void {
+    this.router.navigate(['/financiero/caja-mayor', this.id, 'operacion']);
+  }
 
   volver(): void {
     this.location.back();
