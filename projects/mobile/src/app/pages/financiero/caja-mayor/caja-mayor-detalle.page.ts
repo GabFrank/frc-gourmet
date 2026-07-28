@@ -353,6 +353,28 @@ export class CajaMayorDetallePage implements OnInit {
     return this.movimientos.length < this.total;
   }
 
+  /**
+   * Observación legible compuesta al LEER (como el desktop), usando las
+   * relaciones que trae `get-caja-mayor-movimientos` (gasto + proveedor,
+   * retiroCaja). Para el resto de los tipos el `observacion` crudo que guardan
+   * los handlers ya es legible ("ENTRADA VARIA: …", "CAMBIO DIVISA (SALIDA): …"),
+   * así que se usa como fallback. No se usa el endpoint consolidado porque
+   * agrupa y descarta los campos que el detalle necesita para anular/editar.
+   */
+  private composeObs(m: any, tipo: string): string {
+    if (tipo === 'ANULACION') return m.observacion || '';
+    if (m.gasto?.id) {
+      const desc = (m.gasto.descripcion || '').toString().trim();
+      const prov = (m.gasto.proveedor?.nombre || m.gasto.proveedor?.razonSocial || '').toString().trim();
+      return `Gasto #${m.gasto.id}${desc ? ': ' + desc : ''}${prov ? ' · ' + prov : ''}`;
+    }
+    if (m.retiroCaja?.id) {
+      const esCierre = tipo === 'INGRESO_CIERRE_CAJA';
+      return `${esCierre ? 'Cierre' : 'Retiro'} de caja #${m.retiroCaja.id}`;
+    }
+    return m.observacion || '';
+  }
+
   private toMovVM(m: any): MovimientoVM {
     const tipo = (m.tipoMovimiento || '').toUpperCase();
     const esAnulacion = tipo === 'ANULACION';
@@ -379,7 +401,7 @@ export class CajaMayorDetallePage implements OnInit {
       fecha: m.fecha,
       formaPago: m.formaPago?.nombre || undefined,
       responsable: m.responsable?.persona?.nombre || m.responsable?.nickname || undefined,
-      observacion: m.observacion || undefined,
+      observacion: this.composeObs(m, tipo),
       gastoId: m.gasto?.id || undefined,
       entradaVariaId: m.entradaVariaId || undefined,
       valeId: m.valeId || undefined,

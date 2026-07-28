@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { ActivatedRoute, Router } from '@angular/router';
+import { RouterTestingModule } from '@angular/router/testing';
 import { Location } from '@angular/common';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -28,12 +28,10 @@ describe('CajaMayorDetallePage — toMovVM (puedeAnular / tipoLabel)', () => {
         .and.returnValue(of({ items: [], total: 0 })),
     };
     TestBed.configureTestingModule({
-      imports: [CajaMayorDetallePage, NoopAnimationsModule],
+      imports: [CajaMayorDetallePage, NoopAnimationsModule, RouterTestingModule],
       providers: [
         { provide: RepositoryService, useValue: repo },
         { provide: PermissionService, useValue: { codigos$: of([]), has: () => true } },
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => '1' } } } },
-        { provide: Router, useValue: { navigate: jasmine.createSpy('navigate') } },
         { provide: Location, useValue: { back: jasmine.createSpy('back') } },
         { provide: MatDialog, useValue: { open: () => ({ afterClosed: () => of(null) }) } },
         { provide: MatSnackBar, useValue: { open: jasmine.createSpy('open') } },
