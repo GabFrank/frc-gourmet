@@ -75,7 +75,9 @@ export function chartOptions(tipo: 'line' | 'bar' | 'doughnut'): ChartConfigurat
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { display: tipo !== 'bar', position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, font: { size: 11 }, color: tick } },
+      // La dona usa leyenda propia en el template; línea y barras la muestran
+      // (línea: Actual/Anterior; barras: Ingresos/Egresos).
+      legend: { display: tipo !== 'doughnut', position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, font: { size: 11 }, color: tick } },
       tooltip: { enabled: true },
     },
   };

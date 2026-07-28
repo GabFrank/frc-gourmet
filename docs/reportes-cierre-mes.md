@@ -47,8 +47,12 @@ npm run test:reporte-ventas     # e2e SQLite: KPIs, series, mix, combinaciones, 
 npm run test:reporte-finanzas   # e2e SQLite: KPIs, anulaciones, aging, POS, vencimientos, flujo
 ```
 
+## Versión mobile (PWA)
+
+El mismo hub está disponible en la **PWA mobile** (`projects/mobile/src/app/pages/reportes/`), con nav propio y las 2 pantallas (`/reportes/ventas`, `/reportes/finanzas`). No necesitó backend nuevo: reusa los mismos handlers por `/api/rpc`. UI mobile-first (tarjetas + progress bars) con gráficos clave en ng2-charts (tendencia/mix en Ventas; flujo/composición en Finanzas); el heatmap se muestra como lista y la ingeniería de menú se omite. Incluye export PDF, WhatsApp y pantalla completa. Validar con `npx ng build mobile`.
+
 ## Pendiente
 
-- **Modo client (HTTP):** los 3 métodos aún lanzan "no implementado" en `repository-http.service.ts`.
+- **Modo client (HTTP) del desktop:** los 3 métodos aún lanzan "no implementado" en `repository-http.service.ts` (el mobile no lo usa; va por el shim).
 - **Export a Excel** (hoy solo PDF).
 - **Ranking de meseros:** se calcula en el backend pero todavía no se muestra en el frontend.

@@ -57,7 +57,17 @@ Cuando el período de comparación tiene más cubetas que el actual (mes anterio
 - `npm run test:reporte-ventas` — e2e SQLite: KPIs, día de semana, top productos + margen, mix, combinaciones, tendencia, comparativo.
 - `npm run test:reporte-finanzas` — e2e SQLite: KPIs, exclusión de anulaciones, composición, gastos, aging CPP, POS, vencimientos, flujo.
 
-## 6. Gotchas / decisiones
+## 6. Versión mobile (PWA)
+
+El mismo hub existe en la **PWA mobile** (`projects/mobile/src/app/pages/reportes/`), agregado 2026-07. **No requirió backend nuevo**: reusa los 3 handlers vía `/api/rpc` (el mobile usa `RepositoryIpcService` de `@frc/shared-core` + el shim HTTP); solo se regeneró el api-map (`npm run generate:mobile-api`).
+
+- **Nav:** grupo `Reportes` en `core/shell/nav.ts` (permisos `VENTAS_REPORTES_VER`/`FINANCIERO_REPORTES_VER`) + índice de sección + rutas `/reportes/ventas` y `/reportes/finanzas` en `app.routes.ts`.
+- **UI 100% nueva mobile-first** (no reusa nada del desktop): `ventas/ventas-reportes.page.ts` y `finanzas/finanzas-reportes.page.ts`, control de período táctil `reporte-periodo-control.component.ts`, estilos `reportes-mobile.scss`, utilidades `reporte-visual.util.ts` (Chart.register + paleta + KPIs + opciones compactas) y `reporte-export.util.ts` (pdfmake por import dinámico, captura de canvas, caption WhatsApp).
+- **Visualización híbrida:** KPIs + rankings en tarjetas/progress-bars; gráficos clave con **ng2-charts** (Ventas: tendencia línea + mix dona; Finanzas: flujo barras + composición egresos dona). El **heatmap** se muestra como lista de horas pico y la **ingeniería de menú (burbujas)** se omite en mobile.
+- **Extras:** export PDF, WhatsApp y pantalla completa (los 3, igual que desktop).
+- **Validar:** `npx ng build mobile` (el pre-commit de husky solo typechequea Electron).
+
+## 7. Gotchas / decisiones
 
 - El **ranking de meseros** (`meseros`) se calcula en el backend pero **aún no se muestra** en el frontend; convierte todas las monedas (dos consultas: cantidad por usuario + monto por usuario/moneda).
 - Modo **client** (HTTP): los 3 métodos aún lanzan error — no están portados. Si se necesita en cliente, implementar en `repository-http.service.ts`.
