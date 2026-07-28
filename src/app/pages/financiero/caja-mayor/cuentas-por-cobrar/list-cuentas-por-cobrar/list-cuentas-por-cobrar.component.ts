@@ -20,7 +20,9 @@ import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateCuentaPorCobrarDialogComponent } from '../create-cuenta-por-cobrar-dialog/create-cuenta-por-cobrar-dialog.component';
 import { CuentaPorCobrarDetalleComponent } from '../cuenta-por-cobrar-detalle/cuenta-por-cobrar-detalle.component';
+import { CobroConsolidadoComponent } from 'src/app/pages/personas/convenios/cobro-consolidado/cobro-consolidado.component';
 import { TabsService } from 'src/app/services/tabs.service';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-cuentas-por-cobrar',
@@ -45,6 +47,7 @@ import { TabsService } from 'src/app/services/tabs.service';
     MatSelectModule,
     MatInputModule,
     DatePipe,
+    HasPermissionDirective,
   ]
 })
 export class ListCuentasPorCobrarComponent implements OnInit {
@@ -56,6 +59,7 @@ export class ListCuentasPorCobrarComponent implements OnInit {
   pageIndex = 0;
   loading = false;
   showFiltros = false;
+  conveniosActivos: any[] = [];
   filtrosForm!: FormGroup;
   estadoOptions = ['ACTIVO', 'COBRADO', 'CANCELADO'];
   tipoOptions = ['CREDITO_VENTA', 'PRESTAMO_CLIENTE', 'OTRO'];
@@ -77,6 +81,16 @@ export class ListCuentasPorCobrarComponent implements OnInit {
       cliente: [''],
     });
     this.loadData();
+    this.loadConvenios();
+  }
+
+  async loadConvenios(): Promise<void> {
+    try {
+      const convenios: any = await firstValueFrom(this.repositoryService.getConvenios({ activo: true }));
+      this.conveniosActivos = convenios || [];
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   setData(_d: any): void {}
@@ -128,6 +142,16 @@ export class ListCuentasPorCobrarComponent implements OnInit {
 
   verDetalle(c: any): void {
     this.tabsService.openTab(`CPC #${c.id}`, CuentaPorCobrarDetalleComponent, { cuentaPorCobrarId: c.id });
+  }
+
+  abrirCobroConsolidado(convenio: any): void {
+    this.tabsService.openTab(
+      `Cobro: ${convenio.nombre}`,
+      CobroConsolidadoComponent,
+      { convenioId: convenio.id },
+      `cobro-consolidado-${convenio.id}`,
+      true,
+    );
   }
 
   async cancelar(c: any): Promise<void> {
