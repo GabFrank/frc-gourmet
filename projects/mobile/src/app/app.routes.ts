@@ -67,7 +67,7 @@ const VENTAS_ITEMS: SectionItem[] = [
 /** Reportes de cierre de mes. */
 const REPORTES_ITEMS: SectionItem[] = [
   { label: 'Reportes de Ventas', icon: 'trending_up', path: '/reportes/ventas', enabled: true },
-  { label: 'Reportes Financieros', icon: 'account_balance_wallet', path: '/reportes/finanzas', enabled: false },
+  { label: 'Reportes Financieros', icon: 'account_balance_wallet', path: '/reportes/finanzas', enabled: true },
 ];
 
 /**
@@ -591,6 +591,11 @@ export const routes: Routes = [
         path: 'reportes/ventas',
         data: { title: 'Reportes de Ventas' },
         loadComponent: () => import('./pages/reportes/ventas/ventas-reportes.page').then((m) => m.VentasReportesPage),
+      },
+      {
+        path: 'reportes/finanzas',
+        data: { title: 'Reportes Financieros' },
+        loadComponent: () => import('./pages/reportes/finanzas/finanzas-reportes.page').then((m) => m.FinanzasReportesPage),
       },
       {
         path: 'financiero/comisiones-reglas',
