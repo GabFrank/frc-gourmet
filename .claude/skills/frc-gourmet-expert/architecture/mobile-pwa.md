@@ -65,8 +65,58 @@ CRUD: RRHH (Cargos, Turnos, MotivosVale, Feriados, Personas, Usuarios+roles, Fun
 TipoCliente), Productos (Familias, Subfamilias, Adicionales), Compras (Cat. compra), Financiero (Cat. gasto).
 Read-only: Vales, Liquidaciones, Penalizaciones, Bonos, Aguinaldos, Asistencias, Horas extra, Permisos,
 Notificaciones, Cajas, CxC, Compras, Proveedores, Productos, Comisiones (reglas/equipos/liq).
-**Diferido:** Sabores/Recetas (variaciones), Caja Mayor (needs cajaMayorId), Monedas (sin handler create),
-Préstamos, Config RRHH, y workflows de escritura (confirmar vale, generar liquidación, etc.).
+**Diferido:** Sabores/Recetas (variaciones), Monedas (sin handler create),
+Préstamos, Config RRHH.
+
+## Cobertura Caja Mayor mobile (actualizado 2026-07-28)
+
+> **La snapshot de mayo decía "Caja Mayor diferida" — YA NO es cierto.** El código mobile
+> (`projects/mobile/src/app/pages/financiero/caja-mayor/`) tiene el módulo operativo construido y
+> el manual de usuario (`manual-usuario/mobile/05-modulo-finanzas.md`) lo refleja. El gap real es
+> el subconjunto "avanzado" del desktop, no el módulo entero.
+
+**Implementado en mobile:**
+- `caja-mayor-list.page` — lista de cajas mayor como cards con saldo resumido por moneda + estado.
+- `caja-mayor-detalle.page` — detalle operativo: saldos por moneda×formaPago, cards de cuentas
+  bancarias visibles (lee `getCajaMayorConfiguracion` para filtrar), historial de movimientos
+  paginado (PAGE_SIZE=15, "Cargar más"), toggle "Ver anulaciones", menú Ingreso/Egreso, y anular
+  movimiento (gate `CAJA_MAYOR_OPERAR`).
+- Operaciones full-screen en `caja-mayor/ops/`: **gasto** (`gasto-form.page`), **entrada varia**,
+  **ajuste +/−** (`ajuste-nuevo.page` por `:signo`), **vale confirmado** (`vale-nuevo.page`),
+  **ingresar retiro** (`ingresar-retiro.page`), **pagar compras en lote** (`pagar-compras.page`).
+- Home muestra accesos directos a las cajas mayor ABIERTAS (`FINANCIERO_CAJA_VER`).
+- Diseño: 1 moneda + 1 forma de pago por operación (el reparto multi-moneda queda en desktop).
+
+**Implementado en la sesión 2026-07-28 (branch `claude/caja-mayor-mobile-pwa-wua4ws`):**
+- ✅ **Operaciones financieras** — form full-screen con los 5 tipos (cambio divisa, depósito/retiro
+  bancario, transferencia entre cajas, transferencia bancaria) + lista + anular. Reusa las reglas de
+  campos requeridos vía `@frc/shared-core` (re-export de `operacion-financiera-validacion.util`,
+  fuente única desktop+mobile). Accesos: menú de sección + menús Ingreso/Egreso del detalle.
+  `pages/financiero/caja-mayor/ops/operacion-financiera-nuevo.page.ts` + `operaciones-financieras-list.page.ts`.
+- ✅ **Cobro de CxC** — `cxc-detalle.page` con cuotas + `cobrar-cpc-dialog` (efectivo a caja mayor,
+  `CPC_COBRAR`); la lista CxC ahora enlaza al detalle.
+- ✅ **Pago de CxP** — `cxp-list.page` + `cxp-detalle.page` con cuotas + `pagar-cpp-dialog`
+  (efectivo desde caja mayor, `COMPRAS_GESTIONAR`, via `pagar-cpp-cuota`). Ítem de menú "Cuentas por Pagar".
+- ✅ **Resúmenes CPP/CPC en el sidebar del detalle** — `getCajaMayorCppResumen/CpcResumen`, mostrados
+  según los flags de la config.
+- ✅ **Ciclo de vida de la Caja Mayor** — crear (`caja-mayor-edit.page` + FAB en la lista) y cerrar
+  (menú de toolbar del detalle, `FINANCIERO_CAJA_GESTIONAR`).
+- ✅ **Configurar caja mayor** — `configurar-caja-mayor.page` con cuentas visibles + orden drag&drop
+  (CDK) + flags mostrar CxP/CxC (`save-caja-mayor-configuracion`). Botón "Configurar" en el detalle.
+- ✅ **Editar movimiento** — `edit-movimiento-dialog` (restringido a ajustes manuales, recalcula saldo).
+- ✅ **Categorías de entrada varia y de operación financiera** — CRUD (clones del patrón gasto-categorias).
+
+**Todavía NO implementado en mobile (canales disponibles vía shim HTTP, falta UI):**
+1. Cheques / chequeras (`emitir/cobrar/anular-cheque`, `create-chequera`).
+2. POS / acreditaciones bancarias (`create-acreditacion-pos`, `acreditar-transferencia-bancaria`,
+   `create-maquina-pos`).
+3. Egreso caja inicial (`egreso-caja-inicial`) + abrir caja desde conteo.
+4. Dashboard/KPIs de caja mayor (`get-dashboard-caja-mayor-kpis`).
+5. Editar movimientos NO-ajuste (mobile solo edita ajustes manuales, para no desincronizar la
+   entidad origen).
+
+> Nota (sesión 2026-07-28): cobro de CxC y pago de CxP contra **cuenta bancaria** YA se agregaron
+> (fuente CAJA_MAYOR efectivo o CUENTA_BANCARIA, filtrando cuentas por la moneda de la cuota).
 
 **Reportes de cierre de mes (2026-07):** grupo de nav **Reportes** (`/reportes`, permisos
 `VENTAS_REPORTES_VER`/`FINANCIERO_REPORTES_VER`) con 2 páginas mobile-first en

@@ -1,0 +1,143 @@
+<div class="crud-edit">
+  <mat-toolbar color="primary" class="crud-edit-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="crud-edit-title">Operación financiera</span>
+    <span class="crud-spacer"></span>
+    <button mat-button (click)="guardar()" [disabled]="saving || loading">Registrar</button>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
+
+  <form class="crud-form" [formGroup]="form" (ngSubmit)="guardar()" *ngIf="!loading">
+    <mat-form-field appearance="outline">
+      <mat-label>Tipo de operación</mat-label>
+      <mat-select formControlName="tipoOperacion">
+        <mat-option *ngFor="let t of tipos" [value]="t.value">{{ t.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Categoría (opcional)</mat-label>
+      <mat-select formControlName="operacionFinancieraCategoriaId">
+        <mat-option [value]="null">— Ninguna —</mat-option>
+        <mat-option *ngFor="let c of categorias" [value]="c.id">{{ c.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Descripción</mat-label>
+      <input matInput formControlName="descripcion" autocapitalize="characters" />
+      <mat-error *ngIf="form.controls.descripcion.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <!-- ORIGEN -->
+    <h3 class="op-section">Origen</h3>
+
+    <mat-form-field appearance="outline" *ngIf="showCajaOrigen">
+      <mat-label>Caja mayor origen</mat-label>
+      <mat-select formControlName="cajaMayorOrigenId">
+        <mat-option *ngFor="let c of cajas" [value]="c.id">{{ c.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.cajaMayorOrigenId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" *ngIf="showCuentaOrigen">
+      <mat-label>Cuenta bancaria origen</mat-label>
+      <mat-select formControlName="cuentaBancariaOrigenId">
+        <mat-option *ngFor="let c of cuentas" [value]="c.id">{{ c.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.cuentaBancariaOrigenId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" *ngIf="showMonedaOrigenSelect">
+      <mat-label>Moneda origen</mat-label>
+      <mat-select formControlName="monedaOrigenId">
+        <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.monedaOrigenId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <p class="op-hint" *ngIf="showCajaOrigen && !showMonedaOrigenSelect && monedaOrigenLabel">
+      Moneda: <strong>{{ monedaOrigenLabel }}</strong> · {{ efectivoLabel }}
+    </p>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Monto origen</mat-label>
+      <input matInput type="number" inputmode="decimal" formControlName="montoOrigen" min="0.01" step="any" />
+      <mat-error *ngIf="form.controls.montoOrigen.hasError('required')">Requerido</mat-error>
+      <mat-error *ngIf="form.controls.montoOrigen.hasError('min')">Debe ser mayor a 0</mat-error>
+    </mat-form-field>
+
+    <!-- COTIZACIÓN -->
+    <mat-form-field appearance="outline" *ngIf="showCotizacion">
+      <mat-label>Cotización</mat-label>
+      <input matInput type="number" inputmode="decimal" formControlName="cotizacion" min="0.000001" step="any" />
+      <mat-hint>Monto destino se calcula automáticamente.</mat-hint>
+      <mat-error *ngIf="form.controls.cotizacion.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <!-- DESTINO -->
+    <h3 class="op-section">Destino</h3>
+
+    <mat-form-field appearance="outline" *ngIf="showCajaDestino">
+      <mat-label>Caja mayor destino</mat-label>
+      <mat-select formControlName="cajaMayorDestinoId">
+        <mat-option *ngFor="let c of cajas" [value]="c.id">{{ c.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.cajaMayorDestinoId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" *ngIf="showCuentaDestino">
+      <mat-label>Cuenta bancaria destino</mat-label>
+      <mat-select formControlName="cuentaBancariaDestinoId">
+        <mat-option *ngFor="let c of cuentas" [value]="c.id">{{ c.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.cuentaBancariaDestinoId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" *ngIf="showMonedaDestinoSelect">
+      <mat-label>Moneda destino</mat-label>
+      <mat-select formControlName="monedaDestinoId">
+        <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.monedaDestinoId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <p class="op-hint" *ngIf="showCajaDestino && !showMonedaDestinoSelect && monedaDestinoLabel">
+      Moneda: <strong>{{ monedaDestinoLabel }}</strong> · {{ efectivoLabel }}
+    </p>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Monto destino</mat-label>
+      <input matInput type="number" inputmode="decimal" formControlName="montoDestino" min="0.01" step="any" />
+      <mat-error *ngIf="form.controls.montoDestino.hasError('required')">Requerido</mat-error>
+      <mat-error *ngIf="form.controls.montoDestino.hasError('min')">Debe ser mayor a 0</mat-error>
+    </mat-form-field>
+
+    <!-- DIFERENCIA (opcional) -->
+    <h3 class="op-section">Diferencia (opcional)</h3>
+    <mat-form-field appearance="outline">
+      <mat-label>Monto de diferencia</mat-label>
+      <input matInput type="number" inputmode="decimal" formControlName="diferencia" step="any" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Destino de la diferencia</mat-label>
+      <mat-select formControlName="diferenciaDestinoTipo">
+        <mat-option *ngFor="let d of diferenciaOpciones" [value]="d.value">{{ d.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Observación de diferencia (opcional)</mat-label>
+      <input matInput formControlName="diferenciaObservacion" autocapitalize="characters" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Observación (opcional)</mat-label>
+      <input matInput formControlName="observacion" autocapitalize="characters" />
+    </mat-form-field>
+
+    <button type="submit" mat-flat-button color="primary" class="crud-save-btn" [disabled]="saving">
+      {{ saving ? 'Registrando…' : 'Registrar operación' }}
+    </button>
+  </form>
+</div>

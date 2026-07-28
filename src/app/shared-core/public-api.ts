@@ -44,3 +44,15 @@ export { PersonaTipo } from '../database/entities/personas/persona-tipo.enum';
 export type { Usuario } from '../database/entities/personas/usuario.entity';
 export type { Moneda } from '../database/entities/financiero/moneda.entity';
 export type { Persona } from '../database/entities/personas/persona.entity';
+
+// --- Utilidades de dominio (datos puros, sin Angular/Electron) ---
+// Reglas de validación de Operación Financiera (fuente única desktop + mobile).
+export {
+  CAMPOS_REQUERIDOS,
+  CAMPOS_MONEDA,
+  MONEDAS_EN_UI,
+  usaCuentaBancaria,
+  usaDosCuentasBancarias,
+  monedasDesdeCuentaBancaria,
+} from '../pages/financiero/caja-mayor/operaciones-financieras/create-operacion-financiera/operacion-financiera-validacion.util';
+export type { TipoOperacionFinanciera } from '../pages/financiero/caja-mayor/operaciones-financieras/create-operacion-financiera/operacion-financiera-validacion.util';

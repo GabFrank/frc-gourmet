@@ -1,8 +1,10 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterModule } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatRippleModule } from '@angular/material/core';
 import { RepositoryService } from '@frc/shared-core';
 
 interface CxcVM {
@@ -18,7 +20,7 @@ interface CxcVM {
 @Component({
   selector: 'app-cxc-list',
   standalone: true,
-  imports: [CommonModule, MatCardModule, MatIconModule, MatProgressBarModule],
+  imports: [CommonModule, RouterModule, MatCardModule, MatIconModule, MatProgressBarModule, MatRippleModule],
   templateUrl: './cxc-list.page.html',
 })
 export class CxcListPage implements OnInit {
