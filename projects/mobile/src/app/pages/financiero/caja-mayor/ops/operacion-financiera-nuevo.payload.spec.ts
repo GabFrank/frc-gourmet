@@ -83,4 +83,21 @@ describe('OperacionFinancieraNuevoPage — payload', () => {
     expect(p.cajaMayorOrigenId).toBe(1);
     expect(p.montoDestino).toBe(500000);
   });
+
+  it('Cambiar de tipo limpia los campos que ya no aplican (no persiste relación bogus)', async () => {
+    // Elijo DEPOSITO y seteo la cuenta destino…
+    component.form.patchValue({ tipoOperacion: 'DEPOSITO_BANCARIO', cuentaBancariaDestinoId: 9 });
+    // …y cambio a CAMBIO_DIVISA: la cuenta destino ya no aplica y debe limpiarse.
+    component.tipoOperacion = 'CAMBIO_DIVISA';
+    (component as any).aplicarTipo();
+    expect(component.form.controls.cuentaBancariaDestinoId.value).toBeNull();
+
+    component.form.patchValue({
+      descripcion: 'cambio', cajaMayorOrigenId: 1, monedaOrigenId: 2, formaPagoOrigenId: 5, montoOrigen: 100,
+      monedaDestinoId: 1, formaPagoDestinoId: 5, montoDestino: 600000, cotizacion: 6000,
+    });
+    await component.guardar();
+    const p = repo.createOperacionFinanciera.calls.mostRecent().args[0];
+    expect(p.cuentaBancariaDestinoId).toBeNull();
+  });
 });

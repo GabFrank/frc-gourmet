@@ -188,6 +188,27 @@ export class OperacionFinancieraNuevoPage implements OnInit {
     this.showMonedaDestinoSelect = t === 'CAMBIO_DIVISA' || t === 'TRANSFERENCIA_ENTRE_CAJAS';
     this.recomputarCotizacion();
 
+    // Limpiar los controles del lado/moneda que NO aplican al tipo elegido, para
+    // no persistir relaciones obsoletas (ej. cuentaBancariaDestinoId arrastrado
+    // de un depósito hacia un cambio de divisa). El handler guarda cualquier *Id
+    // presente como relación, así que el arrastre crearía una relación bogus.
+    const clr = (n: string) => this.form.get(n)?.setValue(null, { emitEvent: false });
+    if (!this.showCajaOrigen) clr('cajaMayorOrigenId');
+    if (!this.showCuentaOrigen) clr('cuentaBancariaOrigenId');
+    if (!this.showCajaDestino) clr('cajaMayorDestinoId');
+    if (!this.showCuentaDestino) clr('cuentaBancariaDestinoId');
+    if (!this.showCotizacion) clr('cotizacion');
+    // Las monedas se re-eligen (select) o se heredan de la cuenta; reset evita arrastre.
+    clr('monedaOrigenId');
+    clr('monedaDestinoId');
+    clr('formaPagoOrigenId');
+    clr('formaPagoDestinoId');
+
+    // Re-preseleccionar la caja de contexto como origen si el tipo la usa.
+    if (this.showCajaOrigen && !this.form.controls.cajaMayorOrigenId.value && this.cajas.some((c) => c.id === this.cajaMayorId)) {
+      this.form.controls.cajaMayorOrigenId.setValue(this.cajaMayorId, { emitEvent: false });
+    }
+
     // Forma de pago de los tramos contra caja = efectivo (fijo).
     if (this.efectivoId) {
       if (this.showCajaOrigen) this.form.controls.formaPagoOrigenId.setValue(this.efectivoId, { emitEvent: false });
