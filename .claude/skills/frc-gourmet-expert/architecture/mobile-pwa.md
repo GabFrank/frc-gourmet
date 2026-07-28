@@ -87,20 +87,34 @@ Préstamos, Config RRHH, Reportes.
 - Home muestra accesos directos a las cajas mayor ABIERTAS (`FINANCIERO_CAJA_VER`).
 - Diseño: 1 moneda + 1 forma de pago por operación (el reparto multi-moneda queda en desktop).
 
-**NO implementado en mobile (canales disponibles vía shim HTTP, falta UI):**
-1. Operaciones financieras (`create/anular-operacion-financiera`): cambio divisa, depósito/retiro
-   bancario, transferencia entre cajas, transferencia bancaria.
-2. Cheques / chequeras (`emitir/cobrar/anular-cheque`, `create-chequera`).
-3. Cobro de CxC (`cobrar-cpc-cuota`) — mobile tiene CxC solo lectura.
-4. Pago de CxP genérico (`pagar-cpp-cuota`) + resúmenes `get-caja-mayor-cpp/cpc-resumen` en el
-   sidebar del detalle (mobile solo tiene el pago de cuotas de **compras** en lote).
-5. POS / acreditaciones bancarias (`create-acreditacion-pos`, `acreditar-transferencia-bancaria`,
+**Implementado en la sesión 2026-07-28 (branch `claude/caja-mayor-mobile-pwa-wua4ws`):**
+- ✅ **Operaciones financieras** — form full-screen con los 5 tipos (cambio divisa, depósito/retiro
+  bancario, transferencia entre cajas, transferencia bancaria) + lista + anular. Reusa las reglas de
+  campos requeridos vía `@frc/shared-core` (re-export de `operacion-financiera-validacion.util`,
+  fuente única desktop+mobile). Accesos: menú de sección + menús Ingreso/Egreso del detalle.
+  `pages/financiero/caja-mayor/ops/operacion-financiera-nuevo.page.ts` + `operaciones-financieras-list.page.ts`.
+- ✅ **Cobro de CxC** — `cxc-detalle.page` con cuotas + `cobrar-cpc-dialog` (efectivo a caja mayor,
+  `CPC_COBRAR`); la lista CxC ahora enlaza al detalle.
+- ✅ **Pago de CxP** — `cxp-list.page` + `cxp-detalle.page` con cuotas + `pagar-cpp-dialog`
+  (efectivo desde caja mayor, `COMPRAS_GESTIONAR`, via `pagar-cpp-cuota`). Ítem de menú "Cuentas por Pagar".
+- ✅ **Resúmenes CPP/CPC en el sidebar del detalle** — `getCajaMayorCppResumen/CpcResumen`, mostrados
+  según los flags de la config.
+- ✅ **Ciclo de vida de la Caja Mayor** — crear (`caja-mayor-edit.page` + FAB en la lista) y cerrar
+  (menú de toolbar del detalle, `FINANCIERO_CAJA_GESTIONAR`).
+- ✅ **Configurar caja mayor** — `configurar-caja-mayor.page` con cuentas visibles + orden drag&drop
+  (CDK) + flags mostrar CxP/CxC (`save-caja-mayor-configuracion`). Botón "Configurar" en el detalle.
+- ✅ **Editar movimiento** — `edit-movimiento-dialog` (restringido a ajustes manuales, recalcula saldo).
+- ✅ **Categorías de entrada varia y de operación financiera** — CRUD (clones del patrón gasto-categorias).
+
+**Todavía NO implementado en mobile (canales disponibles vía shim HTTP, falta UI):**
+1. Cheques / chequeras (`emitir/cobrar/anular-cheque`, `create-chequera`).
+2. POS / acreditaciones bancarias (`create-acreditacion-pos`, `acreditar-transferencia-bancaria`,
    `create-maquina-pos`).
-6. Ciclo de vida de la Caja Mayor: crear (`create-caja-mayor`) y cerrar (`cerrar-caja-mayor`).
-7. Editar config de caja mayor (`save-caja-mayor-configuracion`) — mobile solo la lee.
-8. Egreso caja inicial (`egreso-caja-inicial`) + abrir caja desde conteo.
-9. Editar movimiento (`edit-caja-mayor-movimiento`) — mobile solo anula.
-10. Dashboard/KPIs de caja mayor (`get-dashboard-caja-mayor-kpis`).
+3. Egreso caja inicial (`egreso-caja-inicial`) + abrir caja desde conteo.
+4. Dashboard/KPIs de caja mayor (`get-dashboard-caja-mayor-kpis`).
+5. Editar movimientos NO-ajuste (mobile solo edita ajustes manuales, para no desincronizar la
+   entidad origen); cobro/pago contra **cuenta bancaria** (mobile opera solo efectivo desde/hacia
+   caja mayor — el flujo bancario queda en el escritorio).
 
 ## Reglas al construir pantallas
 
