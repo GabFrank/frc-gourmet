@@ -1,0 +1,44 @@
+<div class="crud-edit">
+  <mat-toolbar color="primary" class="crud-edit-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="crud-edit-title">Configurar caja mayor</span>
+    <span class="crud-spacer"></span>
+    <button mat-button (click)="guardar()" [disabled]="saving || loading">Guardar</button>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
+
+  <div class="crud-form" *ngIf="!loading">
+    <section class="cfg-section">
+      <h3 class="cfg-title">Cuentas bancarias visibles</h3>
+      <p class="cfg-hint">Marcá las cuentas a mostrar en el detalle y arrastrá para ordenarlas.</p>
+
+      <div cdkDropList (cdkDropListDropped)="drop($event)" class="cfg-list">
+        <div class="cfg-row" *ngFor="let c of cuentas" cdkDrag>
+          <mat-icon class="cfg-drag" cdkDragHandle>drag_indicator</mat-icon>
+          <mat-checkbox [(ngModel)]="c.visible" color="primary" class="cfg-check">
+            <span class="cfg-cuenta">{{ c.titulo }}</span>
+            <span class="cfg-moneda">{{ c.simbolo }}</span>
+          </mat-checkbox>
+        </div>
+        <p *ngIf="cuentas.length === 0" class="crud-empty">No hay cuentas bancarias.</p>
+      </div>
+    </section>
+
+    <section class="cfg-section">
+      <h3 class="cfg-title">Resúmenes en el detalle</h3>
+      <div class="cfg-toggles" [formGroup]="form">
+        <mat-slide-toggle formControlName="mostrarCuentasPorPagar" color="primary">
+          Mostrar Cuentas por Pagar
+        </mat-slide-toggle>
+        <mat-slide-toggle formControlName="mostrarCuentasPorCobrar" color="primary">
+          Mostrar Cuentas por Cobrar
+        </mat-slide-toggle>
+      </div>
+    </section>
+
+    <button mat-flat-button color="primary" class="crud-save-btn" (click)="guardar()" [disabled]="saving">
+      {{ saving ? 'Guardando…' : 'Guardar configuración' }}
+    </button>
+  </div>
+</div>

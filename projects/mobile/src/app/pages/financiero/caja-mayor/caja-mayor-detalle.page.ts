@@ -14,6 +14,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService, PermissionService } from '@frc/shared-core';
 import { ConfirmDialogComponent, ConfirmData } from '../../../core/components/confirm-dialog.component';
 import { PromptDialogComponent, PromptData } from '../../../core/components/prompt-dialog.component';
+import { EditMovimientoDialogComponent, EditMovimientoData } from './edit-movimiento-dialog.component';
 
 /** Etiquetas legibles por tipo de movimiento. */
 const TIPO_LABELS: Record<string, string> = {
@@ -79,7 +80,11 @@ interface MovimientoVM {
   gastoId?: number;
   entradaVariaId?: number;
   valeId?: number;
+  monedaId?: number;
+  formaPagoId?: number;
+  observacion_raw?: string;
   puedeAnular: boolean;
+  puedeEditar: boolean;
 }
 
 const PAGE_SIZE = 15;
@@ -122,6 +127,7 @@ export class CajaMayorDetallePage implements OnInit {
   abierta = true;
   canOperar = false;
   canPagarCompras = false;
+  canGestionar = false;
 
   saldos: SaldoMonedaVM[] = [];
   cuentasBancariasCards: CuentaBancariaCardVM[] = [];
@@ -141,6 +147,7 @@ export class CajaMayorDetallePage implements OnInit {
     this.perm.codigos$.subscribe(() => {
       this.canOperar = this.perm.has('CAJA_MAYOR_OPERAR');
       this.canPagarCompras = this.perm.has('COMPRAS_GESTIONAR');
+      this.canGestionar = this.perm.has('FINANCIERO_CAJA_GESTIONAR');
     });
     this.id = Number(this.route.snapshot.paramMap.get('id'));
     this.cargar();
@@ -312,6 +319,9 @@ export class CajaMayorDetallePage implements OnInit {
     // (el backend los bloquea o dejaría estados cruzados inconsistentes).
     const anulable =
       !!m.gasto?.id || !!m.entradaVariaId || !!m.valeId || tipo === 'AJUSTE_POSITIVO' || tipo === 'AJUSTE_NEGATIVO';
+    // Solo editamos ajustes manuales: no tienen entidad de origen que se
+    // desincronice con el cambio de monto/moneda/forma de pago.
+    const editable = tipo === 'AJUSTE_POSITIVO' || tipo === 'AJUSTE_NEGATIVO';
     return {
       id: m.id,
       tipoLabel: TIPO_LABELS[tipo] || tipo,
@@ -329,7 +339,11 @@ export class CajaMayorDetallePage implements OnInit {
       gastoId: m.gasto?.id || undefined,
       entradaVariaId: m.entradaVariaId || undefined,
       valeId: m.valeId || undefined,
+      monedaId: m.moneda?.id || undefined,
+      formaPagoId: m.formaPago?.id || undefined,
+      observacion_raw: m.observacion || undefined,
       puedeAnular: !esAnulacion && !anulado && anulable,
+      puedeEditar: !esAnulacion && !anulado && editable,
     };
   }
 
@@ -355,6 +369,51 @@ export class CajaMayorDetallePage implements OnInit {
 
   volver(): void {
     this.location.back();
+  }
+
+  // --- Ciclo de vida de la caja mayor ---
+  editarCaja(): void {
+    this.router.navigate(['/financiero/caja-mayor/editar', this.id]);
+  }
+
+  async cerrarCaja(): Promise<void> {
+    const data: ConfirmData = {
+      title: 'Cerrar caja mayor',
+      message: `¿Cerrar "${this.nombre}"? No se podrán registrar más movimientos.`,
+      confirmText: 'Cerrar',
+      danger: true,
+    };
+    const ok = await firstValueFrom(this.dialog.open(ConfirmDialogComponent, { data, width: '340px' }).afterClosed());
+    if (!ok) return;
+    try {
+      await firstValueFrom(this.repo.cerrarCajaMayor(this.id));
+      this.snack.open('Caja mayor cerrada', 'OK', { duration: 2500 });
+      this.cargar();
+    } catch (e) {
+      this.snack.open(/PERMISO/.test(String((e as Error)?.message)) ? 'Sin permiso para cerrar' : 'No se pudo cerrar', 'OK', { duration: 3500 });
+    }
+  }
+
+  async editarMov(mov: MovimientoVM): Promise<void> {
+    const ok = await firstValueFrom(
+      this.dialog
+        .open(EditMovimientoDialogComponent, {
+          data: {
+            movId: mov.id,
+            tipoLabel: mov.tipoLabel,
+            monedaId: mov.monedaId,
+            formaPagoId: mov.formaPagoId,
+            monto: mov.monto,
+            observacion: mov.observacion_raw,
+          } as EditMovimientoData,
+          width: '360px',
+        })
+        .afterClosed(),
+    );
+    if (ok) {
+      this.cargarConfigYSaldos();
+      this.recargarMovimientos();
+    }
   }
 
   async anular(mov: MovimientoVM): Promise<void> {

@@ -27,4 +27,8 @@
 
     <p *ngIf="items.length === 0" class="crud-empty">No hay cajas mayor.</p>
   </div>
+
+  <a *ngIf="canGestionar" class="crud-fab" mat-fab color="primary" routerLink="/financiero/caja-mayor/nueva" aria-label="Nueva caja mayor">
+    <mat-icon>add</mat-icon>
+  </a>
 </div>

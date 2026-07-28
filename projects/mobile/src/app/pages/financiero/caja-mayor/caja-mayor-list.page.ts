@@ -3,9 +3,10 @@ import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatRippleModule } from '@angular/material/core';
-import { RepositoryService } from '@frc/shared-core';
+import { RepositoryService, PermissionService } from '@frc/shared-core';
 
 interface SaldoMoneda {
   simbolo: string;
@@ -30,18 +31,21 @@ interface CajaMayorVM {
 @Component({
   selector: 'app-caja-mayor-list',
   standalone: true,
-  imports: [CommonModule, RouterModule, MatCardModule, MatIconModule, MatProgressBarModule, MatRippleModule],
+  imports: [CommonModule, RouterModule, MatCardModule, MatIconModule, MatButtonModule, MatProgressBarModule, MatRippleModule],
   templateUrl: './caja-mayor-list.page.html',
   styleUrls: ['./caja-mayor.scss'],
 })
 export class CajaMayorListPage implements OnInit {
   private readonly repo = inject(RepositoryService);
+  private readonly perm = inject(PermissionService);
 
   items: CajaMayorVM[] = [];
   loading = true;
   error: string | null = null;
+  canGestionar = false;
 
   ngOnInit(): void {
+    this.perm.codigos$.subscribe(() => (this.canGestionar = this.perm.has('FINANCIERO_CAJA_GESTIONAR')));
     this.repo.getCajasMayor().subscribe({
       next: (data) => {
         this.items = (data || []).map((c: any) => this.toVM(c));

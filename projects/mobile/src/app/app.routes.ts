@@ -50,6 +50,8 @@ const FINANCIERO_ITEMS: SectionItem[] = [
   { label: 'Cuentas por Cobrar', icon: 'request_quote', path: '/financiero/cxc', enabled: true },
   { label: 'Gastos', icon: 'receipt_long', path: '/financiero/gastos', enabled: true },
   { label: 'Categorías de gasto', icon: 'sell', path: '/financiero/gasto-categorias', enabled: true },
+  { label: 'Cat. de entrada varia', icon: 'sell', path: '/financiero/entrada-varia-categorias', enabled: true },
+  { label: 'Cat. de operación financiera', icon: 'sell', path: '/financiero/operacion-financiera-categorias', enabled: true },
   { label: 'Monedas', icon: 'monetization_on', path: '/financiero/monedas', enabled: false },
   { label: 'Caja Mayor', icon: 'account_balance', path: '/financiero/caja-mayor', enabled: true },
   { label: 'Cuentas bancarias', icon: 'savings', path: '/financiero/cuentas-bancarias', enabled: true },
@@ -327,6 +329,43 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./pages/financiero/gasto-categorias/gasto-categoria-edit.page').then((m) => m.GastoCategoriaEditPage),
   },
+  {
+    path: 'financiero/entrada-varia-categorias/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/entrada-varia-categorias/entrada-varia-categoria-edit.page').then((m) => m.EntradaVariaCategoriaEditPage),
+  },
+  {
+    path: 'financiero/entrada-varia-categorias/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/entrada-varia-categorias/entrada-varia-categoria-edit.page').then((m) => m.EntradaVariaCategoriaEditPage),
+  },
+  {
+    path: 'financiero/operacion-financiera-categorias/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/operacion-financiera-categorias/operacion-financiera-categoria-edit.page').then((m) => m.OperacionFinancieraCategoriaEditPage),
+  },
+  {
+    path: 'financiero/operacion-financiera-categorias/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/operacion-financiera-categorias/operacion-financiera-categoria-edit.page').then((m) => m.OperacionFinancieraCategoriaEditPage),
+  },
+  // Caja Mayor: alta ('nueva') y edición de datos ('editar/:id') full-screen.
+  // Declaradas antes del shell y antes de 'financiero/caja-mayor/:id' (detalle).
+  {
+    path: 'financiero/caja-mayor/nueva',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/caja-mayor/caja-mayor-edit.page').then((m) => m.CajaMayorEditPage),
+  },
+  {
+    path: 'financiero/caja-mayor/editar/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/caja-mayor/caja-mayor-edit.page').then((m) => m.CajaMayorEditPage),
+  },
+  {
+    path: 'financiero/caja-mayor/configurar/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/caja-mayor/configurar-caja-mayor.page').then((m) => m.ConfigurarCajaMayorPage),
+  },
   // Operaciones de Caja Mayor (formularios full-screen). Rutas más profundas que
   // el detalle (financiero/caja-mayor/:id), declaradas antes del shell.
   {
@@ -526,6 +565,16 @@ export const routes: Routes = [
         path: 'financiero/gasto-categorias',
         data: { title: 'Categorías de gasto' },
         loadComponent: () => import('./pages/financiero/gasto-categorias/gasto-categorias-list.page').then((m) => m.GastoCategoriasListPage),
+      },
+      {
+        path: 'financiero/entrada-varia-categorias',
+        data: { title: 'Cat. de entrada varia' },
+        loadComponent: () => import('./pages/financiero/entrada-varia-categorias/entrada-varia-categorias-list.page').then((m) => m.EntradaVariaCategoriasListPage),
+      },
+      {
+        path: 'financiero/operacion-financiera-categorias',
+        data: { title: 'Cat. de operación financiera' },
+        loadComponent: () => import('./pages/financiero/operacion-financiera-categorias/operacion-financiera-categorias-list.page').then((m) => m.OperacionFinancieraCategoriasListPage),
       },
       {
         path: 'financiero/cajas',

@@ -4,6 +4,25 @@
     <span class="cm-bar-title">{{ nombre || 'Caja Mayor' }}</span>
     <span class="cm-spacer"></span>
     <span class="crud-chip" [class.off]="!abierta">{{ abierta ? 'Abierta' : 'Cerrada' }}</span>
+    <button
+      *ngIf="canGestionar && !loading && !error"
+      mat-icon-button
+      [matMenuTriggerFor]="cajaMenu"
+      aria-label="Acciones de la caja"
+    >
+      <mat-icon>more_vert</mat-icon>
+    </button>
+    <mat-menu #cajaMenu="matMenu">
+      <button mat-menu-item (click)="editarCaja()">
+        <mat-icon>edit</mat-icon><span>Editar datos</span>
+      </button>
+      <a mat-menu-item routerLink="/financiero/caja-mayor/configurar/{{ id }}">
+        <mat-icon>tune</mat-icon><span>Configurar</span>
+      </a>
+      <button mat-menu-item *ngIf="abierta" (click)="cerrarCaja()">
+        <mat-icon color="warn">lock</mat-icon><span>Cerrar caja</span>
+      </button>
+    </mat-menu>
   </mat-toolbar>
 
   <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
@@ -82,7 +101,7 @@
             </div>
           </div>
           <button
-            *ngIf="canOperar && m.puedeAnular && abierta"
+            *ngIf="canOperar && (m.puedeAnular || m.puedeEditar) && abierta"
             mat-icon-button
             [matMenuTriggerFor]="menu"
             aria-label="Acciones"
@@ -90,7 +109,10 @@
             <mat-icon>more_vert</mat-icon>
           </button>
           <mat-menu #menu="matMenu">
-            <button mat-menu-item (click)="anular(m)">
+            <button mat-menu-item *ngIf="m.puedeEditar" (click)="editarMov(m)">
+              <mat-icon>edit</mat-icon><span>Editar</span>
+            </button>
+            <button mat-menu-item *ngIf="m.puedeAnular" (click)="anular(m)">
               <mat-icon color="warn">block</mat-icon><span>Anular</span>
             </button>
           </mat-menu>
