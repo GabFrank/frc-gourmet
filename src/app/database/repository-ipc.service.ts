@@ -1057,6 +1057,9 @@ interface ElectronAPI {
   getDashboardProductosKpis: () => Promise<any>;
   getDashboardFinancieroKpis: () => Promise<any>;
   getDashboardCajaMayorKpis: () => Promise<any>;
+  getReporteVentasCierre: (params: any) => Promise<any>;
+  getReporteFinanzasCierre: (params: any) => Promise<any>;
+  enviarReporteWhatsapp: (params: { base64: string; caption?: string; fileName?: string; destino?: string }) => Promise<any>;
 
   // Reportes RRHH (Fase 8)
   getReporteLiquidacionesMesData: (periodo: string) => Promise<any>;
@@ -4100,6 +4103,15 @@ export class RepositoryIpcService extends RepositoryService {
   }
   getDashboardCajaMayorKpis(): Observable<any> {
     return from(this.api.getDashboardCajaMayorKpis());
+  }
+  getReporteVentasCierre(params: any): Observable<any> {
+    return from(this.api.getReporteVentasCierre(params));
+  }
+  getReporteFinanzasCierre(params: any): Observable<any> {
+    return from(this.api.getReporteFinanzasCierre(params));
+  }
+  enviarReporteWhatsapp(params: { base64: string; caption?: string; fileName?: string; destino?: string }): Observable<any> {
+    return from(this.api.enviarReporteWhatsapp(params));
   }
 
   // ===================== REPORTES RRHH (Fase 8) =====================

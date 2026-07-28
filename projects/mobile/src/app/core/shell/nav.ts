@@ -35,4 +35,10 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'RRHH',
     permisos: ['RRHH_DASHBOARD_VER', 'RRHH_FUNCIONARIO_VER'],
   },
+  {
+    path: '/reportes',
+    icon: 'assessment',
+    label: 'Reportes',
+    permisos: ['VENTAS_REPORTES_VER', 'FINANCIERO_REPORTES_VER'],
+  },
 ];

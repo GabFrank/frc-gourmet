@@ -78,6 +78,7 @@ import { registerDashboardComprasHandlers } from '../handlers/dashboard-compras.
 import { registerDashboardProductosHandlers } from '../handlers/dashboard-productos.handler';
 import { registerDashboardFinancieroHandlers } from '../handlers/dashboard-financiero.handler';
 import { registerDashboardCajaMayorHandlers } from '../handlers/dashboard-caja-mayor.handler';
+import { registerReportesHandlers } from '../handlers/reportes.handler';
 import { registerPedidosOnlineHandlers } from '../handlers/pedidos-online.handler';
 import { registerPedidosOnlineAuthHandlers } from '../handlers/pedidos-online-auth.handler';
 import { registerPedidosOnlinePedidosHandlers } from '../handlers/pedidos-online-pedidos.handler';
@@ -164,6 +165,9 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerDashboardProductosHandlers(dataSource, getCurrentUser);
   registerDashboardFinancieroHandlers(dataSource, getCurrentUser);
   registerDashboardCajaMayorHandlers(dataSource, getCurrentUser);
+
+  // Hub de Reportes (cierre de mes): Ventas + Finanzas
+  registerReportesHandlers(dataSource, getCurrentUser);
 
   // Pedidos online (web app): menu publicable + superficie publica /pub
   registerPedidosOnlineHandlers(dataSource, getCurrentUser);

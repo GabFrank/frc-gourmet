@@ -1,0 +1,169 @@
+<div class="dashboard-container reportes-container" #reporteRoot [class.presentando]="presentando">
+  <div class="dashboard-header">
+    <div class="dashboard-header-title">
+      <div class="reportes-eyebrow">Reportes · Finanzas</div>
+      <h1 class="dashboard-title">Cierre de Mes</h1>
+      <div class="dashboard-subtitle">Flujo de caja, gastos y cobranzas · comparado con el período anterior</div>
+    </div>
+    <div class="dashboard-header-actions">
+      <button mat-stroked-button matTooltip="Modo presentación (pantalla completa)" [disabled]="!cargado" (click)="togglePresentacion()">
+        <mat-icon>{{ presentando ? 'fullscreen_exit' : 'slideshow' }}</mat-icon> {{ presentando ? 'Salir' : 'Presentar' }}
+      </button>
+      <button mat-stroked-button matTooltip="Enviar por WhatsApp" [disabled]="!cargado || enviandoWa" (click)="enviarWhatsapp()">
+        <mat-icon>chat</mat-icon> WhatsApp
+      </button>
+      <button mat-flat-button color="primary" matTooltip="Exportar a PDF" [disabled]="!cargado" (click)="exportarPdf()">
+        <mat-icon>picture_as_pdf</mat-icon> Exportar PDF
+      </button>
+    </div>
+  </div>
+
+  <app-reporte-periodo-control
+    [rangoLabel]="periodoLabel"
+    [comparaLabel]="comparaLabel"
+    (aplicar)="onAplicar($event)">
+  </app-reporte-periodo-control>
+
+  <div *ngIf="loading" class="reportes-loading">
+    <mat-spinner diameter="36"></mat-spinner>
+  </div>
+
+  <div *ngIf="!loading && errorCarga" class="reportes-empty">
+    <mat-icon>error_outline</mat-icon>
+    No se pudo cargar el reporte. Verificá el período e intentá nuevamente.
+  </div>
+
+  <div *ngIf="!loading && cargado && data?.kpis" class="reportes-body">
+    <!-- KPIs -->
+    <section class="reportes-kpis">
+      <div class="reportes-kpi" *ngFor="let k of kpis">
+        <div class="k-label">{{ k.label }}</div>
+        <div class="k-value">{{ k.valor }}</div>
+        <span class="k-delta" *ngIf="k.tieneDelta" [class.up]="k.buena" [class.down]="!k.buena">
+          <mat-icon>{{ k.dir === 'up' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>{{ k.deltaTexto }}
+          <span class="vs" *ngIf="comparaLabel">vs {{ comparaLabel }}</span>
+        </span>
+      </div>
+    </section>
+
+    <div class="reportes-grid">
+      <!-- Flujo de caja -->
+      <div class="col-7" data-rep-titulo="Flujo de caja del mes">
+        <app-dash-chart-card title="Flujo de caja del mes" icon="waterfall_chart" chartType="bar"
+          [chartData]="flujoData" [chartOptions]="flujoOptions" [height]="270">
+        </app-dash-chart-card>
+      </div>
+
+      <!-- Composición de egresos -->
+      <div class="col-5" data-rep-titulo="Composición de egresos">
+        <div class="dashboard-card reportes-card">
+          <app-dash-section-header icon="trending_down" title="Composición de egresos"></app-dash-section-header>
+          <div class="reportes-card-sub">En qué se va la plata</div>
+          <div class="mix-row" *ngIf="egrLeyenda.length; else sinEgr">
+            <div class="mix-chart"><canvas baseChart [type]="'doughnut'" [data]="egrData" [options]="mixOptions"></canvas></div>
+            <div class="mix-leyenda">
+              <div class="mix-item" *ngFor="let l of egrLeyenda">
+                <span class="mix-dot" [style.background]="l.color"></span>
+                <span class="mix-nombre">{{ l.nombre }}</span>
+                <span class="mix-pct">{{ l.pct }}%</span>
+              </div>
+            </div>
+          </div>
+          <ng-template #sinEgr><div class="reportes-empty">Sin egresos en el período</div></ng-template>
+        </div>
+      </div>
+
+      <!-- Gastos por categoría -->
+      <div class="col-7">
+        <app-dash-ranking title="Gastos por categoría" icon="pie_chart"
+          [items]="gastosRanking" emptyText="Sin gastos en el período">
+        </app-dash-ranking>
+      </div>
+
+      <!-- Composición de ingresos -->
+      <div class="col-5" data-rep-titulo="Composición de ingresos">
+        <div class="dashboard-card reportes-card">
+          <app-dash-section-header icon="trending_up" title="Composición de ingresos"></app-dash-section-header>
+          <div class="reportes-card-sub">De dónde entra la plata</div>
+          <div class="mix-row" *ngIf="ingLeyenda.length; else sinIng">
+            <div class="mix-chart"><canvas baseChart [type]="'doughnut'" [data]="ingData" [options]="mixOptions"></canvas></div>
+            <div class="mix-leyenda">
+              <div class="mix-item" *ngFor="let l of ingLeyenda">
+                <span class="mix-dot" [style.background]="l.color"></span>
+                <span class="mix-nombre">{{ l.nombre }}</span>
+                <span class="mix-pct">{{ l.pct }}%</span>
+              </div>
+            </div>
+          </div>
+          <ng-template #sinIng><div class="reportes-empty">Sin ingresos en el período</div></ng-template>
+        </div>
+      </div>
+
+      <!-- Aging -->
+      <div class="col-6">
+        <div class="dashboard-card reportes-card">
+          <app-dash-section-header icon="schedule" title="Antigüedad de deudas"></app-dash-section-header>
+          <div class="reportes-card-sub">Saldos por vencer y vencidos, por tramo</div>
+
+          <div class="aging-row" *ngIf="agingCobrar">
+            <div class="aging-h"><span>Por Cobrar (clientes)</span><span class="tot">{{ agingCobrar.total }}</span></div>
+            <div class="seg-bar">
+              <div class="seg" *ngFor="let s of agingCobrar.segs" [style.flex]="s.pct + ' 0 0'" [style.background]="s.color"
+                   [matTooltip]="s.label + ' — ' + s.monto">{{ s.pct >= 12 ? s.pct + '%' : '' }}</div>
+            </div>
+          </div>
+          <div class="aging-row" *ngIf="agingPagar">
+            <div class="aging-h"><span>Por Pagar (proveedores)</span><span class="tot">{{ agingPagar.total }}</span></div>
+            <div class="seg-bar">
+              <div class="seg" *ngFor="let s of agingPagar.segs" [style.flex]="s.pct + ' 0 0'" [style.background]="s.color"
+                   [matTooltip]="s.label + ' — ' + s.monto">{{ s.pct >= 12 ? s.pct + '%' : '' }}</div>
+            </div>
+          </div>
+
+          <div class="aging-leyenda">
+            <span class="mix-item" *ngFor="let l of agingLabels; let i = index">
+              <span class="mix-dot" [style.background]="agingColors[i]"></span>{{ l }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Comisiones POS -->
+      <div class="col-6" data-rep-titulo="Comisiones POS">
+        <div class="dashboard-card reportes-card">
+          <app-dash-section-header icon="credit_card" title="Comisiones POS"
+            [badge]="posPct + ' efectivo'" badgeColor="warning"></app-dash-section-header>
+          <div class="pos-stat">
+            <div><div class="big">{{ posTotal }}</div><div class="sub">comisión total del mes</div></div>
+            <div><div class="big alt">{{ posFacturado }}</div><div class="sub">facturado por POS</div></div>
+          </div>
+          <div style="height: 170px">
+            <canvas baseChart [type]="'bar'" [data]="posData" [options]="posOptions"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vencimientos -->
+      <div class="col-12">
+        <div class="dashboard-card reportes-card">
+          <app-dash-section-header icon="event_upcoming" title="Próximos vencimientos"
+            [badge]="totalComprometido + ' comprometidos'" badgeColor="error"></app-dash-section-header>
+          <div class="reportes-card-sub">Cuentas por pagar y cheques a vencer en los próximos 30 días</div>
+          <table class="reportes-tabla" *ngIf="vencimientos.length; else sinVenc">
+            <thead><tr><th>Fecha</th><th>Concepto</th><th>Tipo</th><th>Proveedor / Beneficiario</th><th class="num">Monto</th></tr></thead>
+            <tbody>
+              <tr *ngFor="let v of vencimientos">
+                <td class="nowrap">{{ v.fecha }}</td>
+                <td>{{ v.concepto }}</td>
+                <td><span class="pill" [style.background]="v.color">{{ v.tipo }}</span></td>
+                <td>{{ v.beneficiario }}</td>
+                <td class="num">{{ v.monto }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <ng-template #sinVenc><div class="reportes-empty">Sin vencimientos en los próximos 30 días</div></ng-template>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
