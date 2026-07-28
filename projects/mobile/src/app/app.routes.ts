@@ -48,6 +48,7 @@ const COMPRAS_ITEMS: SectionItem[] = [
 const FINANCIERO_ITEMS: SectionItem[] = [
   { label: 'Cajas', icon: 'point_of_sale', path: '/financiero/cajas', enabled: true },
   { label: 'Cuentas por Cobrar', icon: 'request_quote', path: '/financiero/cxc', enabled: true },
+  { label: 'Cuentas por Pagar', icon: 'payments', path: '/financiero/cxp', enabled: true },
   { label: 'Gastos', icon: 'receipt_long', path: '/financiero/gastos', enabled: true },
   { label: 'Categorías de gasto', icon: 'sell', path: '/financiero/gasto-categorias', enabled: true },
   { label: 'Cat. de entrada varia', icon: 'sell', path: '/financiero/entrada-varia-categorias', enabled: true },
@@ -441,6 +442,17 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./pages/financiero/cuentas-bancarias/cuenta-bancaria-edit.page').then((m) => m.CuentaBancariaEditPage),
   },
+  // Detalles de cuentas corrientes (full-screen: cabecera + cuotas + pagar/cobrar).
+  {
+    path: 'financiero/cxp/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/cxp/cxp-detalle.page').then((m) => m.CxpDetallePage),
+  },
+  {
+    path: 'financiero/cxc/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/financiero/cxc/cxc-detalle.page').then((m) => m.CxcDetallePage),
+  },
 
   // --- Shell autenticado (listados / índices) ---
   {
@@ -595,6 +607,11 @@ export const routes: Routes = [
         path: 'financiero/cxc',
         data: { title: 'Cuentas por Cobrar' },
         loadComponent: () => import('./pages/financiero/cxc/cxc-list.page').then((m) => m.CxcListPage),
+      },
+      {
+        path: 'financiero/cxp',
+        data: { title: 'Cuentas por Pagar' },
+        loadComponent: () => import('./pages/financiero/cxp/cxp-list.page').then((m) => m.CxpListPage),
       },
       {
         path: 'financiero/caja-mayor',

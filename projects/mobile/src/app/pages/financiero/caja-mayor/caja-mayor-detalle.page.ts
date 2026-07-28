@@ -63,6 +63,15 @@ interface CuentaBancariaCardVM {
   saldo: number;
 }
 
+interface ResumenVM {
+  simbolo: string;
+  denominacion: string;
+  esteMes: number;
+  mesQueViene: number;
+  total: number;
+  vencidas: number;
+}
+
 interface MovimientoVM {
   id: number;
   tipoLabel: string;
@@ -131,6 +140,10 @@ export class CajaMayorDetallePage implements OnInit {
 
   saldos: SaldoMonedaVM[] = [];
   cuentasBancariasCards: CuentaBancariaCardVM[] = [];
+  mostrarCpp = false;
+  mostrarCpc = false;
+  cppResumen: ResumenVM[] = [];
+  cpcResumen: ResumenVM[] = [];
   /** ids de formas de pago visibles según la config de la caja. null = mostrar todas (no hay config). */
   private formaPagoVisibleIds: Set<number> | null = null;
   movimientos: MovimientoVM[] = [];
@@ -197,6 +210,26 @@ export class CajaMayorDetallePage implements OnInit {
     const fps = cfg?.formasPagoVisibles || [];
     this.formaPagoVisibleIds = fps.length > 0 ? new Set<number>(fps.map((f: any) => f.id)) : null;
 
+    // Resúmenes CPP/CPC según flags de la config (globales, no por caja).
+    this.mostrarCpp = cfg?.mostrarCuentasPorPagar === true;
+    this.mostrarCpc = cfg?.mostrarCuentasPorCobrar === true;
+    if (this.mostrarCpp) {
+      this.repo.getCajaMayorCppResumen().subscribe({
+        next: (rows: any[]) => (this.cppResumen = this.mapResumen(rows)),
+        error: () => (this.cppResumen = []),
+      });
+    } else {
+      this.cppResumen = [];
+    }
+    if (this.mostrarCpc) {
+      this.repo.getCajaMayorCpcResumen().subscribe({
+        next: (rows: any[]) => (this.cpcResumen = this.mapResumen(rows)),
+        error: () => (this.cpcResumen = []),
+      });
+    } else {
+      this.cpcResumen = [];
+    }
+
     // Cargar saldos crudos y filtrar según la config.
     this.repo.getCajaMayorSaldos(this.id).subscribe({
       next: (data: any[]) => (this.saldos = this.agruparSaldos(data || [])),
@@ -226,6 +259,17 @@ export class CajaMayorDetallePage implements OnInit {
       },
       error: () => (this.cuentasBancariasCards = []),
     });
+  }
+
+  private mapResumen(rows: any[]): ResumenVM[] {
+    return (rows || []).map((r) => ({
+      simbolo: r.monedaSimbolo || '',
+      denominacion: r.monedaDenominacion || '',
+      esteMes: Number(r.esteMes) || 0,
+      mesQueViene: Number(r.mesQueViene) || 0,
+      total: Number(r.total) || 0,
+      vencidas: Number(r.vencidas) || 0,
+    }));
   }
 
   /** Ordena por el array JSON de ids guardado; los ausentes van al final por id. */

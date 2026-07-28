@@ -1,0 +1,30 @@
+<div class="crud-edit">
+  <mat-toolbar color="primary" class="crud-edit-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="crud-edit-title">{{ titulo || 'Cuenta por Cobrar' }}</span>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <div class="crud-form" *ngIf="!loading && !error">
+    <p class="cxc-saldo">Saldo total: <strong>{{ simbolo }} {{ saldoTotal | number: '1.0-' + decimales }}</strong></p>
+
+    <div class="crud-list">
+      <div class="crud-card" *ngFor="let c of cuotas">
+        <div class="crud-card-body">
+          <div class="crud-card-main">
+            <span class="crud-name">Cuota {{ c.numero }}</span>
+            <span class="crud-sub">Vence: {{ c.vencimiento | date: 'dd/MM/yy' }}</span>
+            <span class="crud-sub">Saldo: {{ simbolo }} {{ c.saldo | number: '1.0-' + decimales }} de {{ simbolo }} {{ c.monto | number: '1.0-' + decimales }}</span>
+          </div>
+          <span class="crud-chip" [class.off]="c.estadoClase === 'off'" [class.warn]="c.estadoClase === 'warn'">{{ c.estado }}</span>
+          <button *ngIf="canCobrar && c.cobrable" mat-icon-button color="primary" (click)="cobrar(c)" aria-label="Cobrar">
+            <mat-icon>request_quote</mat-icon>
+          </button>
+        </div>
+      </div>
+      <p *ngIf="cuotas.length === 0" class="crud-empty">No hay cuotas.</p>
+    </div>
+  </div>
+</div>

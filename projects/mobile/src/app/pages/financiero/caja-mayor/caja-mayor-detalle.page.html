@@ -61,6 +61,46 @@
       </div>
     </section>
 
+    <!-- Resumen Cuentas por Pagar (según config) -->
+    <section class="cm-section" *ngIf="mostrarCpp">
+      <div class="cm-mov-head">
+        <h3 class="cm-section-title">Cuentas por Pagar</h3>
+        <a mat-button color="primary" routerLink="/financiero/cxp">Ver todas</a>
+      </div>
+      <div class="cm-saldos-grid">
+        <div class="cm-saldo-card" *ngFor="let r of cppResumen">
+          <div class="cm-saldo-head">
+            <span class="cm-saldo-total">{{ r.simbolo }} {{ r.total | number: '1.0-2' }}</span>
+            <span class="cm-saldo-moneda">{{ r.denominacion }}</span>
+          </div>
+          <div class="cm-saldo-detalle"><span>Este mes</span><span>{{ r.simbolo }} {{ r.esteMes | number: '1.0-2' }}</span></div>
+          <div class="cm-saldo-detalle"><span>Mes que viene</span><span>{{ r.simbolo }} {{ r.mesQueViene | number: '1.0-2' }}</span></div>
+          <div class="cm-saldo-detalle"><span>Vencidas</span><span>{{ r.simbolo }} {{ r.vencidas | number: '1.0-2' }}</span></div>
+        </div>
+        <p *ngIf="cppResumen.length === 0" class="crud-empty">Sin cuentas por pagar pendientes.</p>
+      </div>
+    </section>
+
+    <!-- Resumen Cuentas por Cobrar (según config) -->
+    <section class="cm-section" *ngIf="mostrarCpc">
+      <div class="cm-mov-head">
+        <h3 class="cm-section-title">Cuentas por Cobrar</h3>
+        <a mat-button color="primary" routerLink="/financiero/cxc">Ver todas</a>
+      </div>
+      <div class="cm-saldos-grid">
+        <div class="cm-saldo-card" *ngFor="let r of cpcResumen">
+          <div class="cm-saldo-head">
+            <span class="cm-saldo-total">{{ r.simbolo }} {{ r.total | number: '1.0-2' }}</span>
+            <span class="cm-saldo-moneda">{{ r.denominacion }}</span>
+          </div>
+          <div class="cm-saldo-detalle"><span>Este mes</span><span>{{ r.simbolo }} {{ r.esteMes | number: '1.0-2' }}</span></div>
+          <div class="cm-saldo-detalle"><span>Mes que viene</span><span>{{ r.simbolo }} {{ r.mesQueViene | number: '1.0-2' }}</span></div>
+          <div class="cm-saldo-detalle"><span>Vencidas</span><span>{{ r.simbolo }} {{ r.vencidas | number: '1.0-2' }}</span></div>
+        </div>
+        <p *ngIf="cpcResumen.length === 0" class="crud-empty">Sin cuentas por cobrar pendientes.</p>
+      </div>
+    </section>
+
     <!-- Movimientos -->
     <section class="cm-section">
       <div class="cm-mov-head">
