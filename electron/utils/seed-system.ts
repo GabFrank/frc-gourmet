@@ -519,7 +519,9 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       // Vales/compras pagados desde el cajón del PdV (Utilitarios).
       // PDV_ANULAR_EGRESO NO se asigna al cajero (separación de funciones:
       // anular una salida de efectivo es acción de supervisor/gerente).
-      'PDV_PAGAR_VALE', 'PDV_PAGAR_COMPRA',
+      // PDV_RETIRO sí: el cajero retira efectivo del cajón; el retiro queda
+      // FLOTANTE hasta que alguien con CAJA_MAYOR_OPERAR lo ingresa a Caja Mayor.
+      'PDV_PAGAR_VALE', 'PDV_PAGAR_COMPRA', 'PDV_RETIRO',
       'PRODUCTOS_VER',
       'CLIENTES_VER', 'CLIENTES_GESTIONAR', // crear cliente al cobrar venta a credito
       'FINANCIERO_CAJA_VER',

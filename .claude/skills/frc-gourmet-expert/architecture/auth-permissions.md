@@ -89,7 +89,7 @@ Usuario ─(UsuarioRole)─► Role ─(RolePermission)─► Permission
 
 ### Seed de permisos
 
-`electron/handlers/permissions.handler.ts` — el array `SEED_PERMISOS` define **101 permisos** pre-cargados al startup (`seedPermissions()`, idempotente por `codigo`). Agregar un permiso = añadirlo al array; al siguiente arranque se inserta y `syncAdminPermissions()` se lo asigna al rol ADMINISTRADOR.
+`electron/handlers/permissions.handler.ts` — el array `SEED_PERMISOS` define **102 permisos** pre-cargados al startup (`seedPermissions()`, idempotente por `codigo`). Agregar un permiso = añadirlo al array; al siguiente arranque se inserta y `syncAdminPermissions()` se lo asigna al rol ADMINISTRADOR.
 
 Categorías (prefijos): `HOME_*`, `VENTAS_*`, `COMANDAS_KDS_*`, `FACTURACION_*` (VER, EMITIR, ANULAR, TIMBRADO_GESTIONAR, PLANTILLA_GESTIONAR, CONFIGURAR — agregados 2026-07 en el barrido P0), `RRHH_*`, `PERSONAS_*`, `USUARIOS_*`, `CLIENTES_*`, `COMISION_*`, `PRODUCTOS_*` / `RECETAS_*` / `SABORES_*` / `ADICIONALES_*` / `INGREDIENTES_*` / `STOCK_MOVIMIENTO_*` / `CATEGORIAS_*`, `COMPRAS_*`, `FINANCIERO_*` / `CAJA_MAYOR_*` / `MONEDAS_*` / `CPC_*`, `EMPRESA_*`, `IMPRESORAS_*` / `SECTORES_IMPRESORAS_*` / `DISPOSITIVOS_*`, `SISTEMA_*` (BACKUP, CONFIGURAR_IA, BD_CONFIGURAR, MODO_CONFIGURAR, PERMISO_GESTIONAR, ROL_GESTIONAR).
 

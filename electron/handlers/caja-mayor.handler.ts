@@ -1641,7 +1641,11 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
   // hasta que sea verificado en caja mayor); sin destino queda como FLOTANTE.
   ipcMain.handle('create-retiro-caja', async (_event: any, data: any) => {
     try {
-      await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
+      // Crear un retiro solo registra la salida de efectivo del cajón; queda
+      // FLOTANTE y NO toca saldos de Caja Mayor (eso ocurre en 'ingresar-retiro-caja',
+      // que sigue exigiendo CAJA_MAYOR_OPERAR). Por eso el cajero (PDV_RETIRO)
+      // puede crearlo; el ingreso posterior lo hace alguien con CAJA_MAYOR_OPERAR.
+      await ensurePermission(dataSource, getCurrentUser, ['PDV_RETIRO', 'CAJA_MAYOR_OPERAR']);
       const repo = dataSource.getRepository(RetiroCaja);
       const { detalles, ...retiroData } = data;
 
