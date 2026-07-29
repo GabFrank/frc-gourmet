@@ -13,6 +13,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 
 import { MenuService } from 'src/app/services/menu.service';
 import { MENU_TREE, MenuNode, esHoja, OverrideMap } from 'src/app/services/menu-tree';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 /** Fila plana del árbol para la tabla de configuración. */
 interface Fila {
@@ -42,6 +43,7 @@ interface Fila {
     CommonModule, FormsModule, MatCardModule, MatIconModule, MatButtonModule,
     MatSlideToggleModule, MatInputModule, MatFormFieldModule, MatTooltipModule,
     MatSnackBarModule, MatProgressBarModule,
+    HasPermissionDirective,
   ],
   templateUrl: './menu-config.component.html',
   styleUrls: ['./menu-config.component.scss'],

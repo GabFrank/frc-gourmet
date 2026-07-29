@@ -1,7 +1,7 @@
 <div class="kds-pantallas-container">
   <div class="header">
     <h2>Pantallas KDS</h2>
-    <button mat-flat-button color="primary" (click)="nueva()">
+    <button mat-flat-button color="primary" (click)="nueva()" *appHasPermission="'COMANDAS_KDS_CONFIGURAR'">
       <mat-icon>add</mat-icon> Nueva pantalla
     </button>
   </div>
@@ -45,10 +45,10 @@
           <mat-icon>more_vert</mat-icon>
         </button>
         <mat-menu #menu="matMenu">
-          <button mat-menu-item (click)="editar(p)">
+          <button mat-menu-item (click)="editar(p)" *appHasPermission="'COMANDAS_KDS_CONFIGURAR'">
             <mat-icon>edit</mat-icon><span>Editar</span>
           </button>
-          <button mat-menu-item (click)="eliminar(p)">
+          <button mat-menu-item (click)="eliminar(p)" *appHasPermission="'COMANDAS_KDS_CONFIGURAR'">
             <mat-icon color="warn">delete</mat-icon><span>Eliminar</span>
           </button>
         </mat-menu>

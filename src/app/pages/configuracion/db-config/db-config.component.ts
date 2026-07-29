@@ -15,6 +15,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { DbConfigDto, DbConfigService } from 'src/app/services/db-config.service';
 import { InitPostgresDialogComponent, InitPostgresDialogData, InitPostgresDialogResult } from './init-postgres-dialog/init-postgres-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 const PASSWORD_MASK = '***';
 
@@ -35,6 +36,7 @@ const PASSWORD_MASK = '***';
     MatSnackBarModule,
     MatTabsModule,
     MatTooltipModule,
+    HasPermissionDirective,
   ],
   templateUrl: './db-config.component.html',
   styleUrls: ['./db-config.component.scss'],

@@ -15,6 +15,7 @@ import { Subscription, firstValueFrom } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { TabsService } from 'src/app/services/tabs.service';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { PermissionService } from 'src/app/services/permission.service';
 import { FinancieroDashboardComponent } from 'src/app/pages/financiero/dashboard/financiero-dashboard.component';
 import { PdvComponent } from 'src/app/pages/ventas/pdv/pdv.component';
 import { ListNotificacionesRrhhComponent } from 'src/app/pages/rrhh/notificaciones/list-notificaciones-rrhh.component';
@@ -76,10 +77,12 @@ export class HomeComponent implements OnInit, OnDestroy {
   private subs = new Subscription();
 
   quickActions = [
-    { title: 'Abrir PdV', icon: 'point_of_sale', action: 'pdv', color: '#4caf50' },
-    { title: 'Financiero', icon: 'account_balance', action: 'financiero', color: '#1b5e20' },
-    { title: 'Notificaciones', icon: 'notifications', action: 'notificaciones', color: '#f44336' },
+    { title: 'Abrir PdV', icon: 'point_of_sale', action: 'pdv', color: '#4caf50', permiso: 'VENTAS_PDV' },
+    { title: 'Financiero', icon: 'account_balance', action: 'financiero', color: '#1b5e20', permiso: 'FINANCIERO_DASHBOARD_VER' },
+    { title: 'Notificaciones', icon: 'notifications', action: 'notificaciones', color: '#f44336', permiso: 'RRHH_NOTIFICACIONES_VER' },
   ];
+  // Accesos rápidos visibles según los permisos del usuario.
+  visibleQuickActions: typeof this.quickActions = [];
 
   ventasHoy = 0;
   totalHoyPYG = 0;
@@ -114,9 +117,17 @@ export class HomeComponent implements OnInit, OnDestroy {
     private snackBar: MatSnackBar,
     private onboardingService: OnboardingService,
     private dialog: MatDialog,
+    private permission: PermissionService,
   ) {}
 
   ngOnInit(): void {
+    this.subs.add(
+      this.permission.codigos$.subscribe(() => {
+        this.visibleQuickActions = this.quickActions.filter(
+          (a) => !a.permiso || this.permission.has(a.permiso),
+        );
+      }),
+    );
     this.cargarKpis();
     this.loadShortcuts();
     this.cargarPwaAccess();

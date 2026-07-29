@@ -11,19 +11,19 @@
       <span class="fecha-apertura">Apertura: {{cajaMayor?.fechaApertura | date:'dd/MM/yyyy HH:mm'}}</span>
     </div>
     <div class="header-actions" *ngIf="cajaMayor?.estado === 'ABIERTA'">
-      <button mat-raised-button color="primary" (click)="registrarIngreso()">
+      <button mat-raised-button color="primary" (click)="registrarIngreso()" *appHasPermission="'CAJA_MAYOR_OPERAR'">
         <mat-icon>add_circle</mat-icon>
         Registrar Ingreso
       </button>
-      <button mat-raised-button color="accent" (click)="registrarEgreso()">
+      <button mat-raised-button color="accent" (click)="registrarEgreso()" *appHasPermission="'CAJA_MAYOR_OPERAR'">
         <mat-icon>remove_circle</mat-icon>
         Registrar Egreso
       </button>
-      <button mat-stroked-button (click)="egresoCajaInicial()" matTooltip="Retirar efectivo para abrir una caja">
+      <button mat-stroked-button (click)="egresoCajaInicial()" matTooltip="Retirar efectivo para abrir una caja" *appHasPermission="'CAJA_MAYOR_OPERAR'">
         <mat-icon>output</mat-icon>
         Egreso de caja inicial
       </button>
-      <button mat-raised-button color="primary" (click)="cobrarCpcRapido()" matTooltip="Cobrar cuota de un cliente">
+      <button mat-raised-button color="primary" (click)="cobrarCpcRapido()" matTooltip="Cobrar cuota de un cliente" *appHasPermission="'CPC_COBRAR'">
         <mat-icon>payments</mat-icon>
         Cobrar a cliente
       </button>
@@ -31,7 +31,7 @@
         <mat-icon>tune</mat-icon>
         Configurar
       </button>
-      <button mat-raised-button color="warn" (click)="cerrarCajaMayor()">
+      <button mat-raised-button color="warn" (click)="cerrarCajaMayor()" *appHasPermission="'FINANCIERO_CAJA_GESTIONAR'">
         <mat-icon>lock</mat-icon>
         Cerrar Caja Mayor
       </button>
@@ -365,22 +365,24 @@
                 <mat-icon>more_vert</mat-icon>
               </button>
               <mat-menu #movMenu="matMenu">
-                <button mat-menu-item (click)="editarMovimiento(row)">
+                <button mat-menu-item (click)="editarMovimiento(row)" *appHasPermission="'CAJA_MAYOR_OPERAR'">
                   <mat-icon>edit</mat-icon>
                   <span>Editar</span>
                 </button>
-                <button mat-menu-item (click)="anularMovimiento(row)">
+                <button mat-menu-item (click)="anularMovimiento(row)" *appHasPermission="'CAJA_MAYOR_OPERAR'">
                   <mat-icon color="warn">block</mat-icon>
                   <span>Anular</span>
                 </button>
-                <button
-                  mat-menu-item
-                  *ngIf="row.tipoMovimiento === 'EGRESO_CAJA_INICIAL' && row.conteoId"
-                  (click)="abrirCajaDesdeConteo(row)"
-                >
-                  <mat-icon>point_of_sale</mat-icon>
-                  <span>Abrir caja con este conteo</span>
-                </button>
+                <ng-container *appHasPermission="'FINANCIERO_CAJA_GESTIONAR'">
+                  <button
+                    mat-menu-item
+                    *ngIf="row.tipoMovimiento === 'EGRESO_CAJA_INICIAL' && row.conteoId"
+                    (click)="abrirCajaDesdeConteo(row)"
+                  >
+                    <mat-icon>point_of_sale</mat-icon>
+                    <span>Abrir caja con este conteo</span>
+                  </button>
+                </ng-container>
               </mat-menu>
               <button mat-icon-button *ngIf="row.fuente === 'BANCO'" (click)="verMovimientoBanco(row)"
                       matTooltip="Ver movimientos de la cuenta">

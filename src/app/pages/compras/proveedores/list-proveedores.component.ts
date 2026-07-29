@@ -19,6 +19,7 @@ import { RepositoryService } from '../../../database/repository.service';
 import { Proveedor } from '../../../database/entities/compras/proveedor.entity';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateEditProveedorComponent } from './create-edit-proveedor.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 import { firstValueFrom } from 'rxjs';
 
 @Component({
@@ -41,7 +42,8 @@ import { firstValueFrom } from 'rxjs';
     ReactiveFormsModule,
     MatSnackBarModule,
     MatDialogModule,
-    ConfirmationDialogComponent
+    ConfirmationDialogComponent,
+    HasPermissionDirective
   ],
   templateUrl: './list-proveedores.component.html',
   styleUrls: ['./list-proveedores.component.scss']

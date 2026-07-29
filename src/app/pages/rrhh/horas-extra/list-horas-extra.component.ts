@@ -18,6 +18,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 const TIPOS = ['DIURNA', 'NOCTURNA', 'FERIADO'];
 
@@ -42,6 +43,7 @@ const TIPOS = ['DIURNA', 'NOCTURNA', 'FERIADO'];
     MatSnackBarModule,
     MatDialogModule,
     MatSlideToggleModule,
+    HasPermissionDirective,
   ],
   template: `
     <div class="page">
@@ -49,9 +51,11 @@ const TIPOS = ['DIURNA', 'NOCTURNA', 'FERIADO'];
         <mat-card-content>
           <div class="header">
             <div class="title"><mat-icon>more_time</mat-icon> <h2>Horas extra</h2></div>
-            <button mat-flat-button color="primary" (click)="showCreateForm()" *ngIf="!showInlineForm">
-              <mat-icon>add</mat-icon> Registrar HE
-            </button>
+            <ng-container *appHasPermission="'RRHH_ASISTENCIA_REGISTRAR'">
+              <button mat-flat-button color="primary" (click)="showCreateForm()" *ngIf="!showInlineForm">
+                <mat-icon>add</mat-icon> Registrar HE
+              </button>
+            </ng-container>
           </div>
         </mat-card-content>
       </mat-card>
@@ -156,7 +160,7 @@ const TIPOS = ['DIURNA', 'NOCTURNA', 'FERIADO'];
                   <mat-icon>more_vert</mat-icon>
                 </button>
                 <mat-menu #menu="matMenu">
-                  <button mat-menu-item (click)="anular(h)"><mat-icon>cancel</mat-icon><span>Anular</span></button>
+                  <button *appHasPermission="'RRHH_ASISTENCIA_REGISTRAR'" mat-menu-item (click)="anular(h)"><mat-icon>cancel</mat-icon><span>Anular</span></button>
                 </mat-menu>
               </td>
             </ng-container>

@@ -12,6 +12,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateEditKdsPantallaDialogComponent } from '../create-edit-kds-pantalla-dialog/create-edit-kds-pantalla-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-kds-pantallas',
@@ -26,6 +27,7 @@ import { CreateEditKdsPantallaDialogComponent } from '../create-edit-kds-pantall
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatDialogModule,
+    HasPermissionDirective,
   ],
   templateUrl: './list-kds-pantallas.component.html',
   styleUrls: ['./list-kds-pantallas.component.scss'],

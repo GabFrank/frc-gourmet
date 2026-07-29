@@ -21,6 +21,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
 import { CreateEditCuentaPorPagarDialogComponent } from '../create-edit-cuenta-por-pagar-dialog/create-edit-cuenta-por-pagar-dialog.component';
 import { CuentaPorPagarDetalleComponent } from '../cuenta-por-pagar-detalle/cuenta-por-pagar-detalle.component';
 import { TabsService } from 'src/app/services/tabs.service';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-cuentas-por-pagar',
@@ -45,6 +46,7 @@ import { TabsService } from 'src/app/services/tabs.service';
     MatSelectModule,
     MatSlideToggleModule,
     DatePipe,
+    HasPermissionDirective,
   ]
 })
 export class ListCuentasPorPagarComponent implements OnInit {

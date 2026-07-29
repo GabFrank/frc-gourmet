@@ -17,6 +17,7 @@ import { ConfirmationDialogComponent } from '../../../shared/components/confirma
 import { CreateEditConvenioDialogComponent } from './create-edit-convenio-dialog/create-edit-convenio-dialog.component';
 import { AsignarClientesDialogComponent } from './asignar-clientes-dialog/asignar-clientes-dialog.component';
 import { CobroConsolidadoComponent } from './cobro-consolidado/cobro-consolidado.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-convenios',
@@ -33,6 +34,7 @@ import { CobroConsolidadoComponent } from './cobro-consolidado/cobro-consolidado
     MatTooltipModule,
     MatSnackBarModule,
     MatDialogModule,
+    HasPermissionDirective,
   ],
   templateUrl: './list-convenios.component.html',
   styleUrls: ['./list-convenios.component.scss'],

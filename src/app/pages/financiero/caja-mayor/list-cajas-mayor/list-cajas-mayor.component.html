@@ -1,7 +1,7 @@
 <div class="list-container">
   <div class="header">
     <h2>Cajas Mayor</h2>
-    <button mat-raised-button color="primary" (click)="openCreateDialog()">
+    <button mat-raised-button color="primary" (click)="openCreateDialog()" *appHasPermission="'FINANCIERO_CAJA_GESTIONAR'">
       <mat-icon>add</mat-icon>
       Nueva Caja Mayor
     </button>
@@ -60,7 +60,7 @@
               <mat-icon>visibility</mat-icon>
               <span>Ver Detalle</span>
             </button>
-            <button mat-menu-item [matMenuTriggerFor]="accesoSub">
+            <button mat-menu-item [matMenuTriggerFor]="accesoSub" *appHasPermission="'CAJA_MAYOR_OPERAR'">
               <mat-icon>add_link</mat-icon>
               <span>Crear acceso directo</span>
             </button>
@@ -75,10 +75,12 @@
                 <mat-icon>savings</mat-icon><span>En Dashboard Caja Mayor</span>
               </button>
             </mat-menu>
-            <button mat-menu-item (click)="cerrarCaja(row)" *ngIf="row.estado === 'ABIERTA'">
-              <mat-icon>lock</mat-icon>
-              <span>Cerrar Caja</span>
-            </button>
+            <ng-container *appHasPermission="'FINANCIERO_CAJA_GESTIONAR'">
+              <button mat-menu-item (click)="cerrarCaja(row)" *ngIf="row.estado === 'ABIERTA'">
+                <mat-icon>lock</mat-icon>
+                <span>Cerrar Caja</span>
+              </button>
+            </ng-container>
           </mat-menu>
         </td>
       </ng-container>

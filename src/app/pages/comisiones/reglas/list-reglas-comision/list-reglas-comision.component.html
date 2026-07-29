@@ -6,7 +6,7 @@
           <mat-icon>percent</mat-icon>
           <h2>Reglas de Comisión</h2>
         </div>
-        <button mat-flat-button color="primary" (click)="abrirCreate()">
+        <button mat-flat-button color="primary" (click)="abrirCreate()" *appHasPermission="'COMISION_REGLA_GESTIONAR'">
           <mat-icon>add</mat-icon> Nueva regla
         </button>
       </div>
@@ -61,13 +61,15 @@
               <mat-icon>more_vert</mat-icon>
             </button>
             <mat-menu #menu="matMenu">
-              <button mat-menu-item (click)="abrirEdit(r)">
+              <button mat-menu-item (click)="abrirEdit(r)" *appHasPermission="'COMISION_REGLA_EDITAR'">
                 <mat-icon>edit</mat-icon> Editar
               </button>
-              <button mat-menu-item (click)="abrirAsignarFuncionarios(r)" *ngIf="!r.esEquipo">
-                <mat-icon>person_add</mat-icon> Asignar funcionarios
-              </button>
-              <button mat-menu-item (click)="eliminar(r)" class="text-danger">
+              <ng-container *appHasPermission="'COMISION_REGLA_GESTIONAR'">
+                <button mat-menu-item (click)="abrirAsignarFuncionarios(r)" *ngIf="!r.esEquipo">
+                  <mat-icon>person_add</mat-icon> Asignar funcionarios
+                </button>
+              </ng-container>
+              <button mat-menu-item (click)="eliminar(r)" class="text-danger" *appHasPermission="'COMISION_REGLA_GESTIONAR'">
                 <mat-icon>delete</mat-icon> Eliminar
               </button>
             </mat-menu>

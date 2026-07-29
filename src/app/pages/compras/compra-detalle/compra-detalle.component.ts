@@ -13,6 +13,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { PromptDialogComponent, PromptDialogData } from 'src/app/shared/components/prompt-dialog/prompt-dialog.component';
 import { TabsService } from 'src/app/services/tabs.service';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-compra-detalle',
@@ -30,6 +31,7 @@ import { TabsService } from 'src/app/services/tabs.service';
     MatDividerModule,
     DatePipe,
     DecimalPipe,
+    HasPermissionDirective,
   ],
   templateUrl: './compra-detalle.component.html',
   styleUrls: ['./compra-detalle.component.scss'],

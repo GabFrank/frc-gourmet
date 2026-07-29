@@ -57,7 +57,7 @@
       </div>
 
       <!-- Acciones -->
-      <div class="acciones">
+      <div class="acciones" *appHasPermission="'VENTAS_PDV'">
         <ng-container *ngIf="p.estado === 'RECIBIDO'">
           <ng-container *ngIf="confirmandoRechazoId !== p.id">
             <button mat-flat-button color="primary" (click)="aceptar(p)">

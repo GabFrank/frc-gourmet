@@ -2,10 +2,12 @@
   <div class="header">
     <h2>{{esDialog && chequeraNombre ? 'Historico de Cheques - ' + chequeraNombre : 'Cheques'}}</h2>
     <div class="header-actions">
-      <button mat-raised-button color="primary" (click)="openEmitirDialog()" *ngIf="!esDialog">
-        <mat-icon>add</mat-icon>
-        Emitir Cheque
-      </button>
+      <ng-container *appHasPermission="'BANCOS_GESTIONAR'">
+        <button mat-raised-button color="primary" (click)="openEmitirDialog()" *ngIf="!esDialog">
+          <mat-icon>add</mat-icon>
+          Emitir Cheque
+        </button>
+      </ng-container>
       <button mat-icon-button (click)="cerrarDialog()" *ngIf="esDialog" matTooltip="Cerrar">
         <mat-icon>close</mat-icon>
       </button>
@@ -114,12 +116,14 @@
             <mat-icon>more_vert</mat-icon>
           </button>
           <mat-menu #menu="matMenu">
-            <button mat-menu-item (click)="cobrar(row)" *ngIf="row.estado === 'DIFERIDO'">
-              <mat-icon>paid</mat-icon><span>Cobrar</span>
-            </button>
-            <button mat-menu-item (click)="anular(row)">
-              <mat-icon>cancel</mat-icon><span>Anular</span>
-            </button>
+            <ng-container *appHasPermission="'BANCOS_GESTIONAR'">
+              <button mat-menu-item (click)="cobrar(row)" *ngIf="row.estado === 'DIFERIDO'">
+                <mat-icon>paid</mat-icon><span>Cobrar</span>
+              </button>
+              <button mat-menu-item (click)="anular(row)">
+                <mat-icon>cancel</mat-icon><span>Anular</span>
+              </button>
+            </ng-container>
           </mat-menu>
         </td>
       </ng-container>

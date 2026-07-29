@@ -17,6 +17,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
 import { CreateEditCajaMayorDialogComponent } from '../create-edit-caja-mayor/create-edit-caja-mayor-dialog.component';
 import { CajaMayorDetalleComponent } from '../caja-mayor-detalle/caja-mayor-detalle.component';
 import { CrearAccesoDirectoDialogComponent } from 'src/app/shared/components/crear-acceso-directo-dialog/crear-acceso-directo-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-cajas-mayor',
@@ -36,6 +37,7 @@ import { CrearAccesoDirectoDialogComponent } from 'src/app/shared/components/cre
     MatSnackBarModule,
     MatTooltipModule,
     DatePipe,
+    HasPermissionDirective,
   ]
 })
 export class ListCajasMayorComponent implements OnInit {

@@ -2,7 +2,7 @@
   <div class="header-container">
     <h2>CAJAS</h2>
     <div class="actions">
-      <button mat-raised-button color="primary" (click)="openCaja()">
+      <button mat-raised-button color="primary" (click)="openCaja()" *appHasPermission="'FINANCIERO_CAJA_GESTIONAR'">
         <mat-icon>add</mat-icon> ABRIR CAJA
       </button>
       <button mat-icon-button matTooltip="LIMPIAR FILTROS" (click)="clearFilters()">
@@ -117,38 +117,40 @@
             <mat-icon>account_balance_wallet</mat-icon>
             <span>IR A CONTEO</span>
           </button>
-          <button
-            mat-menu-item
-            *ngIf="row.caja.estado === 'CERRADO'"
-            (click)="ajustarConteo(row.caja)"
-          >
-            <mat-icon>edit</mat-icon>
-            <span>AJUSTAR CONTEO</span>
-          </button>
-          <button
-            mat-menu-item
-            *ngIf="row.caja.estado === 'CERRADO'"
-            (click)="agregarGasto(row.caja)"
-          >
-            <mat-icon>receipt_long</mat-icon>
-            <span>AGREGAR GASTO</span>
-          </button>
-          <button
-            mat-menu-item
-            *ngIf="row.caja.estado === 'CERRADO'"
-            (click)="agregarRetiro(row.caja)"
-          >
-            <mat-icon>payments</mat-icon>
-            <span>AGREGAR RETIRO</span>
-          </button>
-          <button
-            mat-menu-item
-            *ngIf="row.caja.estado === 'CERRADO'"
-            (click)="generarRetiroCierre(row.caja)"
-          >
-            <mat-icon>move_up</mat-icon>
-            <span>GENERAR RETIRO DEL CIERRE</span>
-          </button>
+          <ng-container *appHasPermission="'FINANCIERO_CAJA_AJUSTAR'">
+            <button
+              mat-menu-item
+              *ngIf="row.caja.estado === 'CERRADO'"
+              (click)="ajustarConteo(row.caja)"
+            >
+              <mat-icon>edit</mat-icon>
+              <span>AJUSTAR CONTEO</span>
+            </button>
+            <button
+              mat-menu-item
+              *ngIf="row.caja.estado === 'CERRADO'"
+              (click)="agregarGasto(row.caja)"
+            >
+              <mat-icon>receipt_long</mat-icon>
+              <span>AGREGAR GASTO</span>
+            </button>
+            <button
+              mat-menu-item
+              *ngIf="row.caja.estado === 'CERRADO'"
+              (click)="agregarRetiro(row.caja)"
+            >
+              <mat-icon>payments</mat-icon>
+              <span>AGREGAR RETIRO</span>
+            </button>
+            <button
+              mat-menu-item
+              *ngIf="row.caja.estado === 'CERRADO'"
+              (click)="generarRetiroCierre(row.caja)"
+            >
+              <mat-icon>move_up</mat-icon>
+              <span>GENERAR RETIRO DEL CIERRE</span>
+            </button>
+          </ng-container>
           <button
             mat-menu-item
             *ngIf="row.caja.estado === 'CERRADO'"

@@ -14,6 +14,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateEditCuentaBancariaDialogComponent } from '../create-edit-cuenta-bancaria/create-edit-cuenta-bancaria-dialog.component';
 import { MovimientosCuentaBancariaDialogComponent } from '../movimientos-cuenta-bancaria-dialog/movimientos-cuenta-bancaria-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-cuentas-bancarias',
@@ -31,6 +32,7 @@ import { MovimientosCuentaBancariaDialogComponent } from '../movimientos-cuenta-
     MatSnackBarModule,
     MatDialogModule,
     MatTooltipModule,
+    HasPermissionDirective,
   ]
 })
 export class ListCuentasBancariasComponent implements OnInit {

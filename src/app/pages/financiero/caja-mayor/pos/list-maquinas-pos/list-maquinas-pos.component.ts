@@ -13,6 +13,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateEditMaquinaPosDialogComponent } from '../create-edit-maquina-pos/create-edit-maquina-pos-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-maquinas-pos',
@@ -30,6 +31,7 @@ import { CreateEditMaquinaPosDialogComponent } from '../create-edit-maquina-pos/
     MatSnackBarModule,
     MatDialogModule,
     MatTooltipModule,
+    HasPermissionDirective,
   ]
 })
 export class ListMaquinasPosComponent implements OnInit {

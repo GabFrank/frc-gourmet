@@ -25,6 +25,7 @@ import { ConfigMonedasDialogComponent } from '../config-monedas/config-monedas-d
 import { ListaBilletesDialogComponent } from '../billetes/lista-billetes-dialog.component';
 import { CreateEditMonedaCambioDialogComponent } from '../cambios/create-edit-moneda-cambio-dialog.component';
 import { ListMonedasCambioDialogComponent } from '../cambios/list-monedas-cambio-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-monedas',
@@ -49,7 +50,8 @@ import { ListMonedasCambioDialogComponent } from '../cambios/list-monedas-cambio
     MatTooltipModule,
     ConfirmationDialogComponent,
     CreateEditMonedaCambioDialogComponent,
-    ListMonedasCambioDialogComponent
+    ListMonedasCambioDialogComponent,
+    HasPermissionDirective
   ],
   templateUrl: './list-monedas.component.html',
   styleUrls: ['./list-monedas.component.scss']

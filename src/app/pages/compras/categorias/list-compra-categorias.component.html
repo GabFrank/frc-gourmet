@@ -1,9 +1,11 @@
 <div class="page-container">
   <div class="page-header">
     <h2>Categorías de Compra</h2>
-    <button mat-raised-button color="primary" (click)="showCreateForm()" *ngIf="!showInlineForm">
-      <mat-icon>add</mat-icon> Nueva Categoría
-    </button>
+    <ng-container *appHasPermission="'COMPRAS_GESTIONAR'">
+      <button mat-raised-button color="primary" (click)="showCreateForm()" *ngIf="!showInlineForm">
+        <mat-icon>add</mat-icon> Nueva Categoría
+      </button>
+    </ng-container>
   </div>
 
   <mat-card *ngIf="showInlineForm" class="inline-form">
@@ -51,8 +53,10 @@
         <td mat-cell *matCellDef="let c">
           <button mat-icon-button [matMenuTriggerFor]="m"><mat-icon>more_vert</mat-icon></button>
           <mat-menu #m="matMenu">
-            <button mat-menu-item (click)="editCategoria(c)"><mat-icon>edit</mat-icon><span>Editar</span></button>
-            <button mat-menu-item (click)="desactivar(c)" *ngIf="c.activo"><mat-icon>block</mat-icon><span>Desactivar</span></button>
+            <button mat-menu-item (click)="editCategoria(c)" *appHasPermission="'COMPRAS_GESTIONAR'"><mat-icon>edit</mat-icon><span>Editar</span></button>
+            <ng-container *appHasPermission="'COMPRAS_GESTIONAR'">
+              <button mat-menu-item (click)="desactivar(c)" *ngIf="c.activo"><mat-icon>block</mat-icon><span>Desactivar</span></button>
+            </ng-container>
           </mat-menu>
         </td>
       </ng-container>

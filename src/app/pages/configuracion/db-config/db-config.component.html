@@ -106,7 +106,7 @@
             <mat-spinner *ngIf="testing" diameter="16" class="inline-spinner"></mat-spinner>
           </button>
 
-          <button mat-raised-button color="primary" (click)="saveAndRestart()" [disabled]="testing || saving || initializing">
+          <button *appHasPermission="'SISTEMA_BD_CONFIGURAR'" mat-raised-button color="primary" (click)="saveAndRestart()" [disabled]="testing || saving || initializing">
             <mat-icon>restart_alt</mat-icon>
             <span>Guardar y reiniciar</span>
             <mat-spinner *ngIf="saving" diameter="16" class="inline-spinner"></mat-spinner>

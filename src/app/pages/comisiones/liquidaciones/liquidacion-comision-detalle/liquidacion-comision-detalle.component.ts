@@ -11,6 +11,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-liquidacion-comision-detalle',
@@ -26,6 +27,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
     MatCardModule,
     MatChipsModule,
     MatSnackBarModule,
+    HasPermissionDirective,
   ],
   templateUrl: './liquidacion-comision-detalle.component.html',
   styleUrls: ['./liquidacion-comision-detalle.component.scss'],

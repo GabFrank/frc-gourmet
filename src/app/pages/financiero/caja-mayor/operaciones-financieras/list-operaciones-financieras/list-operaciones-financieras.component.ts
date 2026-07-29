@@ -21,6 +21,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateOperacionFinancieraDialogComponent } from '../create-operacion-financiera/create-operacion-financiera-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-operaciones-financieras',
@@ -34,6 +35,7 @@ import { CreateOperacionFinancieraDialogComponent } from '../create-operacion-fi
     MatFormFieldModule, MatInputModule, MatSelectModule, MatDatepickerModule,
     MatNativeDateModule, MatTooltipModule, MatPaginatorModule,
     DatePipe, DecimalPipe,
+    HasPermissionDirective,
   ]
 })
 export class ListOperacionesFinancierasComponent implements OnInit {

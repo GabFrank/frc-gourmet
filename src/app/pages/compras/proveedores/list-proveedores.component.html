@@ -37,7 +37,7 @@
             Limpiar
           </button>
           <span class="spacer"></span>
-          <button mat-raised-button color="accent" (click)="addProveedor()">
+          <button mat-raised-button color="accent" (click)="addProveedor()" *appHasPermission="'PROVEEDORES_GESTIONAR'">
             <mat-icon>add</mat-icon>
             Nuevo Proveedor
           </button>
@@ -101,15 +101,15 @@
               <mat-icon>more_vert</mat-icon>
             </button>
             <mat-menu #menu="matMenu">
-              <button mat-menu-item (click)="editProveedor(proveedor)">
+              <button mat-menu-item (click)="editProveedor(proveedor)" *appHasPermission="'PROVEEDORES_GESTIONAR'">
                 <mat-icon>edit</mat-icon>
                 <span>Editar</span>
               </button>
-              <button mat-menu-item (click)="toggleProveedorStatus(proveedor)">
+              <button mat-menu-item (click)="toggleProveedorStatus(proveedor)" *appHasPermission="'PROVEEDORES_GESTIONAR'">
                 <mat-icon>{{ proveedor.activo ? 'block' : 'check_circle' }}</mat-icon>
                 <span>{{ proveedor.activo ? 'Desactivar' : 'Activar' }}</span>
               </button>
-              <button mat-menu-item (click)="deleteProveedor(proveedor)">
+              <button mat-menu-item (click)="deleteProveedor(proveedor)" *appHasPermission="'PROVEEDORES_GESTIONAR'">
                 <mat-icon>delete</mat-icon>
                 <span>Eliminar</span>
               </button>

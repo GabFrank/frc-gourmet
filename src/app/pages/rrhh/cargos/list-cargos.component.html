@@ -8,10 +8,12 @@
           <span class="subtitle">Catalogo de cargos laborales (no son roles de sistema)</span>
         </div>
         <div class="actions">
-          <button mat-flat-button color="primary" (click)="showCreateForm()" *ngIf="!showInlineForm">
-            <mat-icon>add</mat-icon>
-            Nuevo cargo
-          </button>
+          <ng-container *appHasPermission="'RRHH_CONFIG_EDITAR'">
+            <button mat-flat-button color="primary" (click)="showCreateForm()" *ngIf="!showInlineForm">
+              <mat-icon>add</mat-icon>
+              Nuevo cargo
+            </button>
+          </ng-container>
         </div>
       </div>
     </mat-card-content>
@@ -76,14 +78,16 @@
               <mat-icon>more_vert</mat-icon>
             </button>
             <mat-menu #menu="matMenu">
-              <button mat-menu-item (click)="editCargo(c)">
+              <button *appHasPermission="'RRHH_CONFIG_EDITAR'" mat-menu-item (click)="editCargo(c)">
                 <mat-icon>edit</mat-icon>
                 <span>Editar</span>
               </button>
-              <button mat-menu-item (click)="deleteCargo(c)" *ngIf="c.activo">
-                <mat-icon>block</mat-icon>
-                <span>Desactivar</span>
-              </button>
+              <ng-container *appHasPermission="'RRHH_CONFIG_EDITAR'">
+                <button mat-menu-item (click)="deleteCargo(c)" *ngIf="c.activo">
+                  <mat-icon>block</mat-icon>
+                  <span>Desactivar</span>
+                </button>
+              </ng-container>
             </mat-menu>
           </td>
         </ng-container>

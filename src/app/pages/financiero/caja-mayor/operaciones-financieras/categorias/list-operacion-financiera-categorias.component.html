@@ -1,7 +1,7 @@
 <div class="list-container">
   <div class="header">
     <h2>Categorias de Operaciones Financieras</h2>
-    <button mat-raised-button color="primary" (click)="showCreateForm()">
+    <button mat-raised-button color="primary" (click)="showCreateForm()" *appHasPermission="'CAJA_MAYOR_OPERAR'">
       <mat-icon>add</mat-icon>
       Nueva Categoria
     </button>
@@ -61,12 +61,14 @@
             <mat-icon>more_vert</mat-icon>
           </button>
           <mat-menu #menu="matMenu">
-            <button mat-menu-item (click)="editCategoria(row)">
+            <button mat-menu-item (click)="editCategoria(row)" *appHasPermission="'CAJA_MAYOR_OPERAR'">
               <mat-icon>edit</mat-icon><span>Editar</span>
             </button>
-            <button mat-menu-item (click)="desactivar(row)" *ngIf="row.activo">
-              <mat-icon>block</mat-icon><span>Desactivar</span>
-            </button>
+            <ng-container *appHasPermission="'CAJA_MAYOR_OPERAR'">
+              <button mat-menu-item (click)="desactivar(row)" *ngIf="row.activo">
+                <mat-icon>block</mat-icon><span>Desactivar</span>
+              </button>
+            </ng-container>
           </mat-menu>
         </td>
       </ng-container>

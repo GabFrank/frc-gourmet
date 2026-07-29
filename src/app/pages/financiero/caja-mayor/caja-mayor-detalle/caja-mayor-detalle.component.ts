@@ -38,6 +38,7 @@ import { MovimientosCuentaBancariaDialogComponent } from '../bancos/movimientos-
 import { EgresoCajaInicialDialogComponent } from '../egreso-caja-inicial-dialog/egreso-caja-inicial-dialog.component';
 import { AbrirCajaDesdeConteoDialogComponent } from '../abrir-caja-desde-conteo-dialog/abrir-caja-desde-conteo-dialog.component';
 import { TabsService } from 'src/app/services/tabs.service';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 interface MovimientoConsolidado {
   fuente: 'CAJA' | 'BANCO';
@@ -95,6 +96,7 @@ interface MovimientoConsolidado {
     MatDatepickerModule,
     MatNativeDateModule,
     DatePipe,
+    HasPermissionDirective,
   ]
 })
 export class CajaMayorDetalleComponent implements OnInit {

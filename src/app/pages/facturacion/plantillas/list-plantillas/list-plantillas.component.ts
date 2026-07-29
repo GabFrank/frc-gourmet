@@ -15,6 +15,7 @@ import { FacturaPlantilla } from '../../../../database/entities/facturacion/fact
 import { ConfirmationDialogComponent } from '../../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreatePlantillaDialogComponent } from '../create-plantilla-dialog/create-plantilla-dialog.component';
 import { FacturaPlantillaDesignerComponent } from '../designer/factura-plantilla-designer.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-plantillas',
@@ -29,6 +30,7 @@ import { FacturaPlantillaDesignerComponent } from '../designer/factura-plantilla
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatDialogModule,
+    HasPermissionDirective,
   ],
   templateUrl: './list-plantillas.component.html',
   styleUrls: ['./list-plantillas.component.scss'],

@@ -19,6 +19,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { AssignPermisosRoleDialogComponent } from '../assign-permisos-role-dialog/assign-permisos-role-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-permisos',
@@ -42,6 +43,7 @@ import { AssignPermisosRoleDialogComponent } from '../assign-permisos-role-dialo
     MatTooltipModule,
     MatTabsModule,
     MatSlideToggleModule,
+    HasPermissionDirective,
   ],
 })
 export class ListPermisosComponent implements OnInit {

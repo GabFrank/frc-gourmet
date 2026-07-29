@@ -81,15 +81,17 @@
                 <mat-icon>more_vert</mat-icon>
               </button>
               <mat-menu #cuotaMenu="matMenu">
-                <button mat-menu-item (click)="pagar(r)" *ngIf="r.estado !== 'PAGADA'">
-                  <mat-icon>payments</mat-icon><span>Pagar</span>
-                </button>
-                <button mat-menu-item (click)="pagoMixto(r)" *ngIf="permiteMixto && r.estado !== 'PAGADA'">
-                  <mat-icon>call_split</mat-icon><span>Pago mixto (varias formas/monedas)</span>
-                </button>
-                <button mat-menu-item (click)="anularPagoMixto(r)" *ngIf="tieneMixto(r)">
-                  <mat-icon>undo</mat-icon><span>Anular pago mixto</span>
-                </button>
+                <ng-container *appHasPermission="'COMPRAS_GESTIONAR'">
+                  <button mat-menu-item (click)="pagar(r)" *ngIf="r.estado !== 'PAGADA'">
+                    <mat-icon>payments</mat-icon><span>Pagar</span>
+                  </button>
+                  <button mat-menu-item (click)="pagoMixto(r)" *ngIf="permiteMixto && r.estado !== 'PAGADA'">
+                    <mat-icon>call_split</mat-icon><span>Pago mixto (varias formas/monedas)</span>
+                  </button>
+                  <button mat-menu-item (click)="anularPagoMixto(r)" *ngIf="tieneMixto(r)">
+                    <mat-icon>undo</mat-icon><span>Anular pago mixto</span>
+                  </button>
+                </ng-container>
               </mat-menu>
             </ng-container>
           </td>

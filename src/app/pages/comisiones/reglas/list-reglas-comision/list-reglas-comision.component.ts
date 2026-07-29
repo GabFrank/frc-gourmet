@@ -14,6 +14,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateEditReglaDialogComponent } from '../create-edit-regla-dialog/create-edit-regla-dialog.component';
 import { AsignarFuncionariosDialogComponent } from '../asignar-funcionarios-dialog/asignar-funcionarios-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-reglas-comision',
@@ -29,6 +30,7 @@ import { AsignarFuncionariosDialogComponent } from '../asignar-funcionarios-dial
     MatSnackBarModule,
     MatDialogModule,
     MatChipsModule,
+    HasPermissionDirective,
   ],
   templateUrl: './list-reglas-comision.component.html',
   styleUrls: ['./list-reglas-comision.component.scss'],

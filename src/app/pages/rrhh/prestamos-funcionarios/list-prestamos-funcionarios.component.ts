@@ -18,6 +18,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
 import { CrearPrestamoFuncionarioDialogComponent } from './crear-prestamo-funcionario-dialog.component';
 import { PagarCuotaDialogComponent } from 'src/app/pages/financiero/caja-mayor/cuentas-por-pagar/pagar-cuota-dialog/pagar-cuota-dialog.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-prestamos-funcionarios',
@@ -37,6 +38,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
     MatSnackBarModule,
     MatDialogModule,
     MatExpansionModule,
+    HasPermissionDirective,
   ],
   template: `
     <div class="page">
@@ -44,7 +46,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
         <mat-card-content>
           <div class="header">
             <div class="title"><mat-icon>account_balance</mat-icon> <h2>Prestamos a funcionarios</h2></div>
-            <button mat-flat-button color="primary" (click)="abrirCrear()">
+            <button *appHasPermission="'RRHH_PRESTAMO_OTORGAR'" mat-flat-button color="primary" (click)="abrirCrear()">
               <mat-icon>add</mat-icon> Nuevo prestamo
             </button>
           </div>
@@ -139,12 +141,14 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
                         <mat-icon>more_vert</mat-icon>
                       </button>
                       <mat-menu #menuC="matMenu">
-                        <button mat-menu-item (click)="pagarCuota(p, c)">
+                        <button *appHasPermission="'RRHH_PRESTAMO_OTORGAR'" mat-menu-item (click)="pagarCuota(p, c)">
                           <mat-icon>payments</mat-icon><span>Cobrar cuota</span>
                         </button>
-                        <button mat-menu-item (click)="anularCuota(p, c)" *ngIf="(c.montoPagado || 0) === 0">
-                          <mat-icon>cancel</mat-icon><span>Anular cuota</span>
-                        </button>
+                        <ng-container *appHasPermission="'RRHH_PRESTAMO_OTORGAR'">
+                          <button mat-menu-item (click)="anularCuota(p, c)" *ngIf="(c.montoPagado || 0) === 0">
+                            <mat-icon>cancel</mat-icon><span>Anular cuota</span>
+                          </button>
+                        </ng-container>
                       </mat-menu>
                     </td>
                   </ng-container>
