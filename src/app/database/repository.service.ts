@@ -724,6 +724,9 @@ export abstract class RepositoryService {
   abstract cancelarCuentaPorPagar(id: number): Observable<any>;
   abstract getCuentaPorPagarCuotas(cppId: number): Observable<any[]>;
   abstract pagarCppCuota(payload: any): Observable<any>;
+  abstract pagarCppCuotaMixto(payload: any): Observable<any>;
+  abstract anularPagoMixtoCuota(payload: any): Observable<any>;
+  abstract getCuotasConPagoMixto(cuentaPorPagarId: number): Observable<any>;
   abstract pagarCuotasComprasLote(payload: any): Observable<any>;
   abstract getCuotasPendientesCompras(filtros?: any): Observable<any[]>;
   abstract cancelarCppCuota(payload: any): Observable<any>;

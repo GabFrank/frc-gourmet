@@ -15,6 +15,8 @@ import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuent
 import { MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
 import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
+import { PagoCuotaCppDetalle } from '../../src/app/database/entities/financiero/pago-cuota-cpp-detalle.entity';
+import { getCotizacionCompraLocal } from '../utils/moneda.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
@@ -266,6 +268,135 @@ export async function aplicarPagoCpoCuota(
   }
 
   return { cuota, cpp, tipoMov };
+}
+
+export interface PagoMixtoLinea {
+  monedaId: number;
+  formaPagoId?: number;       // requerido si fuente = CAJA_MAYOR
+  monto: number;              // en la moneda de la linea (monedaId)
+  cotizacion?: number;        // override; si falta se busca de MonedaCambio.compraLocal
+  fuente?: 'CAJA_MAYOR' | 'CUENTA_BANCARIA';
+  cajaMayorId?: number;       // requerido si CAJA_MAYOR
+  cuentaBancariaId?: number;  // requerido si CUENTA_BANCARIA
+}
+
+// Aplica un pago MIXTO a una cuota de CuentaPorPagar: N lineas, cada una con su
+// moneda + forma de pago. Convierte cada linea a la moneda del CPP (cotizacion
+// manual u obtenida de MonedaCambio.compraLocal), crea el movimiento (Caja Mayor
+// o banco) por linea, guarda un PagoCuotaCppDetalle, y aplica el estado de dominio
+// (cuota + CPP) UNA sola vez con la suma convertida. NO commitea: el caller maneja
+// commit/rollback. Reutiliza `aplicarEstadoPagoCuota` para no duplicar la logica
+// de estado (idempotente, recomputa cpp.montoPagado como suma de cuotas).
+export async function aplicarPagoMixtoCuota(
+  queryRunner: any,
+  payload: { cuotaId: number; lineas: PagoMixtoLinea[]; observacion?: string },
+  currentUser: Usuario | null,
+  dataSource: DataSource,
+): Promise<{ cuotaId: number; totalCpp: number; lineas: number }> {
+  const lineas = payload.lineas || [];
+  if (!lineas.length) throw new Error('El pago mixto requiere al menos una linea.');
+
+  const cuota = await queryRunner.manager.getRepository(CuentaPorPagarCuota).findOne({
+    where: { id: payload.cuotaId },
+    relations: ['cuentaPorPagar', 'cuentaPorPagar.moneda'],
+  });
+  if (!cuota) throw new Error(`CuentaPorPagarCuota ${payload.cuotaId} no encontrada`);
+  if (cuota.estado === CuotaEstado.PAGADA) throw new Error(`Cuota #${cuota.numero} ya pagada`);
+  if (cuota.estado === CuotaEstado.CANCELADA) throw new Error(`Cuota #${cuota.numero} esta anulada`);
+  const cppMonedaId: number | undefined = cuota.cuentaPorPagar?.moneda?.id;
+  if (!cppMonedaId) throw new Error('La cuenta por pagar no tiene moneda definida.');
+
+  const observacion = (payload.observacion || '').toUpperCase();
+  const obsBase = `PAGO MIXTO CUOTA #${cuota.numero} CPP #${cuota.cuentaPorPagar?.id || '?'}`;
+  const cu = currentUser;
+
+  // 1) Validar cada linea y calcular su conversion a la moneda del CPP (antes de mover dinero).
+  const preparadas: Array<{ l: PagoMixtoLinea; fuente: 'CAJA_MAYOR' | 'CUENTA_BANCARIA'; cotizacion: number; montoCpp: number }> = [];
+  let totalCpp = 0;
+  for (const l of lineas) {
+    const monto = Number(l.monto);
+    if (!(monto > 0)) throw new Error('Cada linea de pago debe tener un monto mayor a 0.');
+    const fuente: 'CAJA_MAYOR' | 'CUENTA_BANCARIA' = l.fuente === 'CUENTA_BANCARIA' ? 'CUENTA_BANCARIA' : 'CAJA_MAYOR';
+    if (fuente === 'CAJA_MAYOR' && (!l.cajaMayorId || !l.formaPagoId)) {
+      throw new Error('Una linea de Caja Mayor requiere caja y forma de pago.');
+    }
+    if (fuente === 'CUENTA_BANCARIA' && !l.cuentaBancariaId) {
+      throw new Error('Una linea de cuenta bancaria requiere la cuenta.');
+    }
+    let cotizacion: number | null = l.cotizacion != null ? Number(l.cotizacion) : null;
+    if (cotizacion == null) {
+      cotizacion = await getCotizacionCompraLocal(dataSource, Number(l.monedaId), cppMonedaId);
+    }
+    if (cotizacion == null || !(cotizacion > 0)) {
+      throw new Error('Falta la cotizacion para convertir una linea a la moneda de la deuda.');
+    }
+    const montoCpp = +(monto * cotizacion).toFixed(2);
+    totalCpp += montoCpp;
+    preparadas.push({ l, fuente, cotizacion, montoCpp });
+  }
+  totalCpp = +totalCpp.toFixed(2);
+
+  const restante = +(Number(cuota.monto) - Number(cuota.montoPagado)).toFixed(2);
+  if (totalCpp > restante + 0.005) {
+    throw new Error(`El total del pago (${totalCpp}) supera el saldo de la cuota (${restante}).`);
+  }
+
+  // 2) Ejecutar cada linea: movimiento (caja o banco) + fila de detalle.
+  for (const p of preparadas) {
+    const l = p.l;
+    let cajaMayorMovimientoId: number | undefined;
+    let cuentaBancariaId: number | undefined;
+    if (p.fuente === 'CAJA_MAYOR') {
+      const mov = queryRunner.manager.create(CajaMayorMovimiento, {
+        cajaMayor: { id: l.cajaMayorId } as any,
+        tipoMovimiento: TipoMovimiento.EGRESO_CUOTA_COMPRA,
+        moneda: { id: l.monedaId } as any,
+        formaPago: { id: l.formaPagoId } as any,
+        monto: Number(l.monto),
+        fecha: new Date(),
+        observacion: observacion ? `${obsBase} — ${observacion}` : obsBase,
+        cuentaPorPagarCuotaId: cuota.id,
+      });
+      if (cu) mov.responsable = cu;
+      await setEntityUserTracking(dataSource, mov, cu?.id, false);
+      const saved = await queryRunner.manager.save(CajaMayorMovimiento, mov);
+      cajaMayorMovimientoId = saved.id;
+      await descontarSaldoCajaMayor(queryRunner, Number(l.cajaMayorId), Number(l.monedaId), Number(l.formaPagoId), Number(l.monto));
+    } else {
+      const cb = await queryRunner.manager.getRepository(CuentaBancaria).findOne({ where: { id: Number(l.cuentaBancariaId) } });
+      if (!cb) throw new Error('Cuenta bancaria no encontrada');
+      cb.saldo = +(Number(cb.saldo) - Number(l.monto)).toFixed(2);
+      await queryRunner.manager.save(CuentaBancaria, cb);
+      await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+        cuentaBancariaId: Number(l.cuentaBancariaId),
+        tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+        monto: Number(l.monto),
+        observacion: observacion ? `${obsBase} — ${observacion}` : obsBase,
+        responsable: cu,
+      });
+      cuentaBancariaId = Number(l.cuentaBancariaId);
+    }
+
+    const det = queryRunner.manager.create(PagoCuotaCppDetalle, {
+      cuentaPorPagarCuotaId: cuota.id,
+      moneda: { id: l.monedaId } as any,
+      formaPago: l.formaPagoId ? ({ id: l.formaPagoId } as any) : null,
+      fuente: p.fuente,
+      montoOrigen: Number(l.monto),
+      cotizacion: p.cotizacion,
+      montoCpp: p.montoCpp,
+      cajaMayorMovimientoId: cajaMayorMovimientoId ?? null,
+      cuentaBancariaId: cuentaBancariaId ?? null,
+      observacion: observacion || null,
+    } as any);
+    await setEntityUserTracking(dataSource, det, cu?.id, false);
+    await queryRunner.manager.save(PagoCuotaCppDetalle, det);
+  }
+
+  // 3) Estado de dominio (cuota + CPP) una sola vez con la suma convertida.
+  await aplicarEstadoPagoCuota(queryRunner, cuota.id, totalCpp, cu, dataSource);
+
+  return { cuotaId: cuota.id, totalCpp, lineas: preparadas.length };
 }
 
 export function registerCuentasPorPagarHandlers(
@@ -725,6 +856,129 @@ export function registerCuentasPorPagarHandlers(
     } finally {
       await queryRunner.release();
     }
+  });
+
+  // Pago MIXTO de una cuota CPP (compra): varias formas de pago y/o monedas en una
+  // sola operacion. Payload: { cuotaId, lineas: [{ monedaId, formaPagoId?, monto,
+  // cotizacion?, fuente?, cajaMayorId?, cuentaBancariaId? }], observacion? }.
+  // Cada linea se convierte a la moneda del CPP; la suma reduce la cuota.
+  ipcMain.handle('pagar-cpp-cuota-mixto', async (_event, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const res = await aplicarPagoMixtoCuota(
+        queryRunner,
+        {
+          cuotaId: Number(payload.cuotaId),
+          lineas: payload.lineas || payload.detalles || [],
+          observacion: payload.observacion,
+        },
+        getCurrentUser(),
+        dataSource,
+      );
+      await queryRunner.commitTransaction();
+      return { success: true, ...res };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error en pago mixto de cuota CPP:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  // Anula TODOS los pagos mixtos de una cuota: por cada linea revierte el
+  // movimiento (contra-movimiento ANULACION en Caja Mayor o ajuste positivo en
+  // banco) y descuenta del montoPagado de la cuota/CPP la suma convertida. El
+  // ledger de Caja Mayor (EGRESO original + ANULACION) queda como auditoria.
+  ipcMain.handle('anular-pago-mixto-cuota', async (_event, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const cuotaId = Number(payload.cuotaId);
+      const motivo = (payload.motivo || '').toUpperCase();
+      const cu = getCurrentUser();
+      const detRepo = queryRunner.manager.getRepository(PagoCuotaCppDetalle);
+      const detalles = await detRepo.find({
+        where: { cuentaPorPagarCuotaId: cuotaId },
+        relations: ['moneda', 'formaPago'],
+      });
+      if (!detalles.length) throw new Error('La cuota no tiene pagos mixtos para anular.');
+
+      let totalCppRevertir = 0;
+      for (const det of detalles) {
+        totalCppRevertir += Number(det.montoCpp);
+        if (det.fuente === 'CUENTA_BANCARIA' && det.cuentaBancariaId) {
+          const cb = await queryRunner.manager.getRepository(CuentaBancaria).findOne({ where: { id: det.cuentaBancariaId } });
+          if (cb) {
+            cb.saldo = +(Number(cb.saldo) + Number(det.montoOrigen)).toFixed(2);
+            await queryRunner.manager.save(CuentaBancaria, cb);
+            await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+              cuentaBancariaId: det.cuentaBancariaId,
+              tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
+              monto: Number(det.montoOrigen),
+              observacion: `ANULACION PAGO MIXTO CUOTA #${cuotaId}` + (motivo ? ` - ${motivo}` : ''),
+              responsable: cu,
+            });
+          }
+        } else if (det.cajaMayorMovimientoId) {
+          const orig = await queryRunner.manager.getRepository(CajaMayorMovimiento).findOne({
+            where: { id: det.cajaMayorMovimientoId },
+            relations: ['cajaMayor', 'moneda', 'formaPago'],
+          });
+          if (orig) {
+            const contra = queryRunner.manager.create(CajaMayorMovimiento, {
+              cajaMayor: orig.cajaMayor,
+              tipoMovimiento: TipoMovimiento.ANULACION,
+              moneda: orig.moneda,
+              formaPago: orig.formaPago,
+              monto: orig.monto,
+              fecha: new Date(),
+              observacion: `ANULACION PAGO MIXTO CUOTA #${cuotaId}` + (motivo ? ` - ${motivo}` : ''),
+              referenciaAnulacion: orig,
+            });
+            if (cu) contra.responsable = cu;
+            await setEntityUserTracking(dataSource, contra, cu?.id, false);
+            await queryRunner.manager.save(CajaMayorMovimiento, contra);
+            await sumarSaldoCajaMayor(queryRunner, orig.cajaMayor.id, orig.moneda.id, orig.formaPago.id, Number(orig.monto));
+          }
+        }
+      }
+
+      // Revertir el estado de dominio (cuota + CPP) por el total convertido.
+      await revertirEstadoPagoCuota(queryRunner, cuotaId, +totalCppRevertir.toFixed(2), cu, dataSource);
+
+      // Quitar los detalles (el ledger de Caja Mayor queda como auditoria).
+      await detRepo.remove(detalles);
+
+      await queryRunner.commitTransaction();
+      return { success: true, revertido: +totalCppRevertir.toFixed(2), lineas: detalles.length };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error anulando pago mixto de cuota:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  // IDs de cuotas (de un CPP) que tienen pagos mixtos registrados. Para que la UI
+  // muestre la accion "Anular pago mixto" solo donde aplica.
+  ipcMain.handle('get-cuotas-con-pago-mixto', async (_event, cuentaPorPagarId: number) => {
+    const rows = await dataSource
+      .getRepository(CuentaPorPagarCuota)
+      .createQueryBuilder('cuota')
+      .select('cuota.id', 'cuotaId')
+      .distinct(true)
+      .innerJoin(PagoCuotaCppDetalle, 'det', 'det.cuenta_por_pagar_cuota_id = cuota.id')
+      .innerJoin('cuota.cuentaPorPagar', 'cpp')
+      .where('cpp.id = :cppId', { cppId: cuentaPorPagarId })
+      .getRawMany();
+    return (rows || []).map((r: any) => Number(r.cuotaId));
   });
 
   // Pagar varias cuotas CPP tipo COMPRA en una sola transaccion (lote).

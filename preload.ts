@@ -3035,6 +3035,15 @@ contextBridge.exposeInMainWorld('api', {
   pagarCppCuota: async (payload: any): Promise<any> => {
     return await ipcRenderer.invoke('pagar-cpp-cuota', payload);
   },
+  pagarCppCuotaMixto: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('pagar-cpp-cuota-mixto', payload);
+  },
+  anularPagoMixtoCuota: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('anular-pago-mixto-cuota', payload);
+  },
+  getCuotasConPagoMixto: async (cuentaPorPagarId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cuotas-con-pago-mixto', cuentaPorPagarId);
+  },
   pagarCuotasComprasLote: async (payload: any): Promise<any> => {
     return await ipcRenderer.invoke('pagar-cuotas-compras-lote', payload);
   },

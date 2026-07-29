@@ -219,6 +219,29 @@ Componente: `src/app/pages/financiero/caja-mayor/pagar-compras-dialog/`.
   - Descuenta saldo vía `descontarSaldoCajaMayor` (o `sumarSaldoCajaMayor` si PRESTAMO_FUNCIONARIO, que es ingreso).
 - Si fuente=CUENTA_BANCARIA: resta `cuentaBancaria.saldo` (suma si PRESTAMO_FUNCIONARIO).
 
+## Pago mixto de cuota (multi-forma / multi-moneda)
+
+Permite pagar UNA cuota de CPP (compra) con **varias formas de pago y/o monedas** en una sola operación, imitando el detalle del Gasto. Alcance: fuente **Caja Mayor** (cada línea con su moneda + forma; para pagar por banco se usa el flujo single-forma existente).
+
+**Aditivo — no toca `cuentas_por_pagar(_cuotas)`.** `cuota.monto`/`montoPagado` siguen en la moneda del CPP; cada línea se **convierte** a esa moneda y la SUMA reduce la cuota. Los pagos single-forma existentes no cambian (ruta separada).
+
+- **Entidad nueva** `PagoCuotaCppDetalle` (`entities/financiero/pago-cuota-cpp-detalle.entity.ts`, tabla `pago_cuota_cpp_detalles`): una fila por línea — `cuentaPorPagarCuotaId`, `moneda`, `formaPago?`, `fuente`, `montoOrigen` (moneda de la línea), `cotizacion`, `montoCpp` (convertido), `cajaMayorMovimientoId?`, `cuentaBancariaId?`. Guarda cotización + monto convertido para que una anulación sea determinística (reversal-ready). Migración `1785320463398-AddPagoCuotaCppDetalle.ts` (driver-aware, `IF NOT EXISTS`).
+- **Helper** `aplicarPagoMixtoCuota(qr, { cuotaId, lineas, observacion? }, user, ds)` (`cuentas-por-pagar.handler.ts`): valida y convierte cada línea a la moneda del CPP (cotización manual o `getCotizacionCompraLocal` de `electron/utils/moneda.utils.ts`; error si falta), crea un `CajaMayorMovimiento EGRESO_CUOTA_COMPRA` (o débito bancario) por línea + un `PagoCuotaCppDetalle`, y llama **una sola vez** a `aplicarEstadoPagoCuota` con la suma convertida. No sobre-paga (valida ≤ saldo).
+- **Handler IPC** `pagar-cpp-cuota-mixto` (permiso `COMPRAS_GESTIONAR`). Expuesto como `repo.pagarCppCuotaMixto(payload)` (`payload = { cuotaId, lineas:[{ monedaId, formaPagoId, monto, cotizacion?, fuente, cajaMayorId }], observacion? }`).
+- **UI** `pago-mixto-cuota-dialog/` (`financiero/caja-mayor/pago-mixto-cuota-dialog/`): tabla de líneas (moneda + forma + monto) con conversión en vivo a la moneda de la deuda y total vs saldo; reusa `CurrencyInputDirective` y `confirmarSaldosNegativos`. Se accede desde:
+  1. **Diálogo "Pagar compras" (lote)** — menú ⋮ por fila → "Pago mixto". Cubre también el **"pagar ahora"** al finalizar una compra compleja (ese flujo abre este diálogo).
+  2. **Detalle de CPP** (`cuenta-por-pagar-detalle`) — menú de la cuota → "Pago mixto" (solo si `cpp.tipo === 'COMPRA'`).
+  3. **Compra simplificada** (`crear-compra-simplificada-dialog`) — checkbox "Pago mixto": crea la compra sin pagar y abre el diálogo para su cuota (mismo patrón que el "pagar ahora" del complejo).
+  4. **Cajón del PdV** (`pagar-compra-caja-dialog`, modos Crear y Pagar) — checkbox "Pago mixto": N líneas efectivo (moneda + forma + monto) que se asientan como `EgresoCaja` (NO pasan por Caja Mayor) + un `PagoCuotaCppDetalle` con `fuente='PDV_CAJA'` y `egresoCajaId`. Los canales `crear-compra-simplificada-caja` / `pagar-compra-cuota-caja` aceptan `lineas` (backward-compat: sin `lineas` = pago single). Helper `aplicarPagoMixtoCajaCuota` en `pdv-egresos.handler.ts`; conversión con `getCotizacionCompraLocal`. Migración `1785335253817-AddEgresoCajaToPagoCuotaDetalle.ts` (columna `egreso_caja_id`). **Anulación:** `anular-egreso-caja` revierte por línea — si el egreso tiene un `PagoCuotaCppDetalle`, descuenta su `montoCpp` (moneda del CPP) y borra el detalle; si no, el `egreso.monto` (single, como siempre).
+
+### Anulación del pago mixto
+
+`anular-pago-mixto-cuota` (permiso `COMPRAS_GESTIONAR`, `repo.anularPagoMixtoCuota({ cuotaId, motivo? })`): por cada `PagoCuotaCppDetalle` de la cuota revierte el movimiento (contra-movimiento `ANULACION` en Caja Mayor con `sumarSaldoCajaMayor`, o `AJUSTE_POSITIVO` en banco), descuenta del `montoPagado` (cuota + CPP) la suma convertida (`revertirEstadoPagoCuota`) y elimina los detalles (el ledger de Caja Mayor queda de auditoría). `get-cuotas-con-pago-mixto(cppId)` devuelve las cuotas con pago mixto para mostrar la acción. UI: menú de la cuota en `cuenta-por-pagar-detalle` → "Anular pago mixto" (disponible aunque la cuota esté PAGADA). Esto además **cubre el gap preexistente** de que `anular-caja-mayor-movimiento` bloqueaba (redirige a "Cuentas por Pagar") los movimientos con `cuentaPorPagarCuotaId` — al menos para los pagos mixtos.
+
+**Cobertura total:** diálogo "Pagar compras" (lote) · "pagar ahora" de compra compleja · pago individual de cuota (detalle CPP) · compra simplificada · **cajón del PdV** · anulación (Caja Mayor/banco vía `anular-pago-mixto-cuota`; cajón vía `anular-egreso-caja`).
+
+**Pendiente:** una anulación general de pagos **single-forma** vía Caja Mayor/banco (los single-forma no crean `PagoCuotaCppDetalle`, así que su reversa sigue sin handler dedicado — solo los mixtos y el cajón se pueden anular hoy).
+
 ## Filtros default en lista
 
 **Lista CPP general** (`get-cuentas-por-pagar`): acepta `excluirContadoCompras: boolean` (default `false` → lista todo).

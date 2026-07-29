@@ -113,6 +113,14 @@
 
     <!-- CONTADO: opción de pagar ahora -->
     <ng-container *ngIf="!esCredito">
+      <mat-checkbox formControlName="pagoMixto" class="pagar-ahora-check">
+        Pago mixto (varias formas/monedas)
+      </mat-checkbox>
+      <div *ngIf="esMixto" class="hint-text">
+        Se abrirá el pago mixto tras crear la compra.
+      </div>
+
+      <ng-container *ngIf="!esMixto">
       <mat-checkbox formControlName="pagarAhora" class="pagar-ahora-check">
         Pagar ahora
       </mat-checkbox>
@@ -159,6 +167,7 @@
           </mat-select>
           <mat-error>La cuenta bancaria es requerida</mat-error>
         </mat-form-field>
+      </ng-container>
       </ng-container>
     </ng-container>
 

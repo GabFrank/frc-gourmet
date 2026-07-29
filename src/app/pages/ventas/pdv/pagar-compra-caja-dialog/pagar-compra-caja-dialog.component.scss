@@ -105,3 +105,42 @@ h2[mat-dialog-title] {
     gap: 0;
   }
 }
+
+.mixto-check {
+  display: block;
+  margin: 4px 0 8px;
+}
+
+.mixto-box {
+  border: 1px solid var(--border-color, rgba(128, 128, 128, 0.3));
+  border-radius: 8px;
+  padding: 8px 10px 12px;
+  margin-bottom: 8px;
+
+  .mixto-table {
+    width: 100%;
+    background: transparent;
+
+    .num { text-align: right; }
+
+    .cell-field {
+      width: 100%;
+      margin: 4px 0 -1.25em;
+    }
+    .cell-field.monto input { text-align: right; }
+  }
+
+  .add-linea { margin: 8px 0 4px; }
+
+  .mixto-total {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    padding: 2px 0;
+    color: var(--text-primary);
+
+    .strong { font-weight: 600; }
+  }
+
+  .warn-text { color: var(--warning-color, #fb8c00); }
+}

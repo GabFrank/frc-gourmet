@@ -10,12 +10,14 @@ import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.en
 import { CuentaPorPagar } from '../../src/app/database/entities/financiero/cuenta-por-pagar.entity';
 import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
 import { CuotaEstado, CuentaPorPagarTipo } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
+import { PagoCuotaCppDetalle } from '../../src/app/database/entities/financiero/pago-cuota-cpp-detalle.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { ensurePermission } from '../utils/auth.utils';
 import { aplicarEstadoPagoCuota, revertirEstadoPagoCuota } from './cuentas-por-pagar.handler';
+import { getCotizacionCompraLocal } from '../utils/moneda.utils';
 import { crearCompraSimplificadaTx } from './compras.handler';
 
 /**
@@ -60,6 +62,62 @@ export function registerPdvEgresosHandlers(
       throw new Error('La forma de pago debe mover caja (efectivo) para pagar desde el cajón.');
     }
     return fp;
+  }
+
+  // Pago MIXTO de una cuota de compra desde el cajón: N lineas efectivo (moneda +
+  // forma + monto). Cada linea se convierte a la moneda de la deuda (CPP), asienta
+  // un EgresoCaja y un PagoCuotaCppDetalle (fuente PDV_CAJA, con egresoCajaId); la
+  // suma convertida se aplica al estado de dominio UNA vez. NO commitea.
+  async function aplicarPagoMixtoCajaCuota(
+    qr: any,
+    p: { caja: Caja; cuotaId: number; cuotaNumero: number; cppMonedaId: number; saldo: number; lineas: any[]; descripcion: string; fecha: Date; userId?: number },
+    currentUser: Usuario | null,
+  ): Promise<number> {
+    const lineas = p.lineas || [];
+    if (!lineas.length) throw new Error('El pago mixto requiere al menos una linea.');
+    if (!p.cppMonedaId) throw new Error('La cuota no tiene moneda.');
+
+    const prep: Array<{ monedaId: number; formaPagoId: number; monto: number; cot: number; montoCpp: number }> = [];
+    let totalCpp = 0;
+    for (const l of lineas) {
+      const monto = +Number(l.monto).toFixed(2);
+      if (!(monto > 0)) throw new Error('Cada linea de pago debe tener un monto mayor a 0.');
+      const fp = await validarFormaPagoEfectivo(qr, Number(l.formaPagoId));
+      let cot: number | null = l.cotizacion != null ? Number(l.cotizacion) : null;
+      if (cot == null) cot = await getCotizacionCompraLocal(dataSource, Number(l.monedaId), p.cppMonedaId);
+      if (cot == null || !(cot > 0)) throw new Error('Falta la cotizacion para convertir una linea a la moneda de la deuda.');
+      const montoCpp = +(monto * cot).toFixed(2);
+      totalCpp += montoCpp;
+      prep.push({ monedaId: Number(l.monedaId), formaPagoId: fp.id, monto, cot, montoCpp });
+    }
+    totalCpp = +totalCpp.toFixed(2);
+    if (totalCpp > Number(p.saldo) + 0.005) {
+      throw new Error(`El total del pago (${totalCpp}) supera el saldo de la cuota (${p.saldo}).`);
+    }
+
+    // Estado de dominio una sola vez con la suma convertida.
+    await aplicarEstadoPagoCuota(qr, p.cuotaId, totalCpp, currentUser, dataSource);
+
+    // Un EgresoCaja + un detalle por linea.
+    for (const it of prep) {
+      const egreso = await crearEgresoCaja(qr, {
+        caja: p.caja, tipo: 'COMPRA', monto: it.monto, monedaId: it.monedaId, formaPagoId: it.formaPagoId,
+        cuentaPorPagarCuotaId: p.cuotaId, descripcion: p.descripcion, fecha: p.fecha, userId: p.userId,
+      });
+      const det = qr.manager.create(PagoCuotaCppDetalle, {
+        cuentaPorPagarCuotaId: p.cuotaId,
+        moneda: { id: it.monedaId } as any,
+        formaPago: { id: it.formaPagoId } as any,
+        fuente: 'PDV_CAJA',
+        montoOrigen: it.monto,
+        cotizacion: it.cot,
+        montoCpp: it.montoCpp,
+        egresoCajaId: egreso.id,
+      } as any);
+      await setEntityUserTracking(dataSource, det, p.userId, false);
+      await qr.manager.save(PagoCuotaCppDetalle, det);
+    }
+    return totalCpp;
   }
 
   // ─── Crear + pagar un vale desde el cajón del PdV ───────────────────────────
@@ -181,22 +239,31 @@ export function registerPdvEgresosHandlers(
       const userId = getCurrentUser()?.id;
       const currentUser = getCurrentUser();
       const deviceId = resolveRequestDeviceId(_event);
-      const formaPago = await validarFormaPagoEfectivo(qr, Number(data.formaPagoId));
       const monedaId = Number(data.monedaId);
+      const esMixto = Array.isArray(data.lineas) && data.lineas.length > 0;
+      const fecha = parseLocalDate(data.fechaCompra) || new Date();
 
       // Compra desde el PdV: siempre contado, sin pago a Caja Mayor.
       const { compraId, cuotaId, total } = await crearCompraSimplificadaTx(
         qr, { ...data, credito: false, pagarAhora: false, fuente: 'EFECTIVO' }, userId, deviceId,
       );
 
-      // Marca la cuota como pagada (estado de dominio) sin asentar en Caja Mayor.
-      await aplicarEstadoPagoCuota(qr, cuotaId, total, currentUser, dataSource);
-
-      const egreso = await crearEgresoCaja(qr, {
-        caja, tipo: 'COMPRA', monto: total, monedaId, formaPagoId: formaPago.id,
-        cuentaPorPagarCuotaId: cuotaId, descripcion: `COMPRA #${compraId} ${data.proveedorNombre || ''}`.trim(),
-        fecha: parseLocalDate(data.fechaCompra) || new Date(), userId,
-      });
+      const descripcion = `COMPRA #${compraId} ${data.proveedorNombre || ''}`.trim();
+      let egreso: EgresoCaja | null = null;
+      if (esMixto) {
+        await aplicarPagoMixtoCajaCuota(qr, {
+          caja, cuotaId, cuotaNumero: 1, cppMonedaId: monedaId, saldo: total,
+          lineas: data.lineas, descripcion, fecha, userId,
+        }, currentUser);
+      } else {
+        const formaPago = await validarFormaPagoEfectivo(qr, Number(data.formaPagoId));
+        // Marca la cuota como pagada (estado de dominio) sin asentar en Caja Mayor.
+        await aplicarEstadoPagoCuota(qr, cuotaId, total, currentUser, dataSource);
+        egreso = await crearEgresoCaja(qr, {
+          caja, tipo: 'COMPRA', monto: total, monedaId, formaPagoId: formaPago.id,
+          cuentaPorPagarCuotaId: cuotaId, descripcion, fecha, userId,
+        });
+      }
 
       await qr.commitTransaction();
       return { compraId, cuotaId, egreso };
@@ -220,7 +287,6 @@ export function registerPdvEgresosHandlers(
     try {
       const userId = getCurrentUser()?.id;
       const currentUser = getCurrentUser();
-      const formaPago = await validarFormaPagoEfectivo(qr, Number(data.formaPagoId));
 
       const cuota = await qr.manager.findOne(CuentaPorPagarCuota, {
         where: { id: Number(data.cuotaId) },
@@ -234,18 +300,27 @@ export function registerPdvEgresosHandlers(
       const monedaId = cpp?.moneda?.id;
       if (!monedaId) throw new Error('La cuota no tiene moneda.');
       const saldo = +(Number(cuota.monto) - Number(cuota.montoPagado)).toFixed(2);
-      const monto = data.monto != null ? +Number(data.monto).toFixed(2) : saldo;
-      if (monto <= 0 || monto > saldo + 0.005) {
-        throw new Error(`Monto inválido (saldo pendiente: ${saldo}).`);
+      const esMixto = Array.isArray(data.lineas) && data.lineas.length > 0;
+      const descripcion = `PAGO CUOTA #${cuota.numero} CPP #${cpp.id}`;
+
+      let egreso: EgresoCaja | null = null;
+      if (esMixto) {
+        await aplicarPagoMixtoCajaCuota(qr, {
+          caja, cuotaId: cuota.id, cuotaNumero: cuota.numero, cppMonedaId: monedaId, saldo,
+          lineas: data.lineas, descripcion, fecha: new Date(), userId,
+        }, currentUser);
+      } else {
+        const formaPago = await validarFormaPagoEfectivo(qr, Number(data.formaPagoId));
+        const monto = data.monto != null ? +Number(data.monto).toFixed(2) : saldo;
+        if (monto <= 0 || monto > saldo + 0.005) {
+          throw new Error(`Monto inválido (saldo pendiente: ${saldo}).`);
+        }
+        await aplicarEstadoPagoCuota(qr, cuota.id, monto, currentUser, dataSource);
+        egreso = await crearEgresoCaja(qr, {
+          caja, tipo: 'COMPRA', monto, monedaId, formaPagoId: formaPago.id,
+          cuentaPorPagarCuotaId: cuota.id, descripcion, fecha: new Date(), userId,
+        });
       }
-
-      await aplicarEstadoPagoCuota(qr, cuota.id, monto, currentUser, dataSource);
-
-      const egreso = await crearEgresoCaja(qr, {
-        caja, tipo: 'COMPRA', monto, monedaId, formaPagoId: formaPago.id,
-        cuentaPorPagarCuotaId: cuota.id, descripcion: `PAGO CUOTA #${cuota.numero} CPP #${cpp.id}`,
-        fecha: new Date(), userId,
-      });
 
       await qr.commitTransaction();
       return { cuotaId: cuota.id, egreso };
@@ -290,7 +365,12 @@ export function registerPdvEgresosHandlers(
         }
       } else if (egreso.tipo === 'COMPRA' && egreso.cuentaPorPagarCuotaId) {
         // Des-paga SOLO el monto de este egreso (respeta otros pagos parciales).
-        await revertirEstadoPagoCuota(qr, egreso.cuentaPorPagarCuotaId, Number(egreso.monto), currentUser, dataSource);
+        // Si el egreso es una linea de pago mixto, revertir por el monto convertido
+        // a la moneda del CPP (no por el monto en la moneda de la linea).
+        const det = await qr.manager.getRepository(PagoCuotaCppDetalle).findOne({ where: { egresoCajaId: egreso.id } });
+        const montoRevertir = det ? Number(det.montoCpp) : Number(egreso.monto);
+        await revertirEstadoPagoCuota(qr, egreso.cuentaPorPagarCuotaId, montoRevertir, currentUser, dataSource);
+        if (det) await qr.manager.remove(PagoCuotaCppDetalle, det);
       }
 
       egreso.estado = 'ANULADO';

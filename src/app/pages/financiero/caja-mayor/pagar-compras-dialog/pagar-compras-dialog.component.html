@@ -86,6 +86,21 @@
         </td>
       </ng-container>
 
+      <ng-container matColumnDef="acciones">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let row">
+          <button mat-icon-button [matMenuTriggerFor]="rowMenu" matTooltip="Más acciones">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #rowMenu="matMenu">
+            <button mat-menu-item (click)="pagoMixto(row)">
+              <mat-icon>call_split</mat-icon>
+              <span>Pago mixto (varias formas/monedas)</span>
+            </button>
+          </mat-menu>
+        </td>
+      </ng-container>
+
       <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
       <tr mat-row *matRowDef="let row; columns: displayedColumns;" [class.row-selected]="row.selected"></tr>
 
