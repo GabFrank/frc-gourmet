@@ -142,6 +142,7 @@ import { CuentaPorCobrar } from './entities/financiero/cuenta-por-cobrar.entity'
 import { CuentaPorCobrarCuota } from './entities/financiero/cuenta-por-cobrar-cuota.entity';
 import { CobroConsolidado } from './entities/financiero/cobro-consolidado.entity';
 import { CobroConsolidadoDetalle } from './entities/financiero/cobro-consolidado-detalle.entity';
+import { PagoCuotaCppDetalle } from './entities/financiero/pago-cuota-cpp-detalle.entity';
 import { MovimientoCliente } from './entities/financiero/movimiento-cliente.entity';
 
 // Entradas Varias + Operaciones Financieras (caja mayor)
@@ -218,6 +219,7 @@ import { AddPrinterTicketToDispositivo1779200000000 } from './migrations/1779200
 import { AddDestinoToGasto1779300000000 } from './migrations/1779300000000-AddDestinoToGasto';
 import { AddCuentaBancariaToLiquidacionSueldo1779400000000 } from './migrations/1779400000000-AddCuentaBancariaToLiquidacionSueldo';
 import { AddConveniosCobroConsolidado1779500000000 } from './migrations/1779500000000-AddConveniosCobroConsolidado';
+import { AddPagoCuotaCppDetalle1785320463398 } from './migrations/1785320463398-AddPagoCuotaCppDetalle';
 import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVacacionVentas';
 import { AddCuentaBancariaToPagosCobros1779700000000 } from './migrations/1779700000000-AddCuentaBancariaToPagosCobros';
 import { AddCotizacionBancariaToPagosCobros1779800000000 } from './migrations/1779800000000-AddCotizacionBancariaToPagosCobros';
@@ -456,6 +458,7 @@ function getEntitiesList(): any[] {
       CuentaPorCobrarCuota,
       CobroConsolidado,
       CobroConsolidadoDetalle,
+      PagoCuotaCppDetalle,
       MovimientoCliente,
       // Entradas Varias + Operaciones Financieras + Chequeras + Cheques
       EntradaVariaCategoria,
@@ -642,6 +645,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddMesaQrAutoservicio1785082533104,
     DropCheckTipoOperacionFinanciera1785170061312,
     AddCuentasBancariasOrdenCajaMayorConfig1785170062316,
+    AddPagoCuotaCppDetalle1785320463398,
   ];
 }
 

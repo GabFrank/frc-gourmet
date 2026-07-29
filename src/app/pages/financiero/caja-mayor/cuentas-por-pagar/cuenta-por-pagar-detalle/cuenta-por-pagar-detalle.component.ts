@@ -86,6 +86,37 @@ export class CuentaPorPagarDetalleComponent implements OnInit {
     ref.afterClosed().subscribe(r => { if (r) this.loadData(); });
   }
 
+  // El pago mixto (varias formas/monedas) aplica a cuotas de compras (tipo COMPRA).
+  get permiteMixto(): boolean {
+    return this.cpp?.tipo === 'COMPRA';
+  }
+
+  async pagoMixto(cuota: any): Promise<void> {
+    const saldo = +(Number(cuota.monto || 0) - Number(cuota.montoPagado || 0)).toFixed(2);
+    const { PagoMixtoCuotaDialogComponent } = await import(
+      '../../pago-mixto-cuota-dialog/pago-mixto-cuota-dialog.component'
+    );
+    const ref = this.dialog.open(PagoMixtoCuotaDialogComponent, {
+      width: '720px',
+      maxWidth: '95vw',
+      data: {
+        cuota: {
+          id: cuota.id,
+          numero: cuota.numero,
+          saldoPendiente: saldo,
+          monedaId: this.cpp?.moneda?.id,
+          monedaSimbolo: this.cpp?.moneda?.simbolo,
+          monedaDenominacion: this.cpp?.moneda?.denominacion,
+          cppId: this.cpp?.id,
+          proveedorNombre: this.cpp?.proveedor?.nombre,
+          compraNumeroNota: this.cpp?.observacion,
+        },
+      },
+    });
+    const ok = await firstValueFrom(ref.afterClosed());
+    if (ok) this.loadData();
+  }
+
   estadoColor(estado: string): string {
     switch (estado) {
       case 'PENDIENTE': return '#9e9e9e';

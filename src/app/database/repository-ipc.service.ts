@@ -773,6 +773,7 @@ interface ElectronAPI {
   cancelarCuentaPorPagar: (id: number) => Promise<any>;
   getCuentaPorPagarCuotas: (cppId: number) => Promise<any[]>;
   pagarCppCuota: (payload: any) => Promise<any>;
+  pagarCppCuotaMixto: (payload: any) => Promise<any>;
   pagarCuotasComprasLote: (payload: any) => Promise<any>;
   getCuotasPendientesCompras: (filtros?: any) => Promise<any[]>;
   cancelarCppCuota: (payload: any) => Promise<any>;
@@ -3386,6 +3387,9 @@ export class RepositoryIpcService extends RepositoryService {
   }
   pagarCppCuota(payload: any): Observable<any> {
     return from(this.api.pagarCppCuota(payload));
+  }
+  pagarCppCuotaMixto(payload: any): Observable<any> {
+    return from(this.api.pagarCppCuotaMixto(payload));
   }
   pagarCuotasComprasLote(payload: any): Observable<any> {
     return from(this.api.pagarCuotasComprasLote(payload));

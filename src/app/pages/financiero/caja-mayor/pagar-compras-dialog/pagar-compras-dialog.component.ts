@@ -10,6 +10,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -69,6 +70,7 @@ interface CuotaRow {
     MatRadioModule,
     MatButtonToggleModule,
     MatCheckboxModule,
+    MatMenuModule,
     MatTableModule,
     MatTooltipModule,
     MatProgressSpinnerModule,
@@ -80,7 +82,7 @@ interface CuotaRow {
   ],
 })
 export class PagarComprasDialogComponent implements OnInit {
-  readonly displayedColumns = ['select', 'proveedor', 'compra', 'cuota', 'vencimiento', 'saldo', 'monto'];
+  readonly displayedColumns = ['select', 'proveedor', 'compra', 'cuota', 'vencimiento', 'saldo', 'monto', 'acciones'];
 
   loading = true;
   saving = false;
@@ -319,6 +321,35 @@ export class PagarComprasDialogComponent implements OnInit {
 
   cancelar(): void {
     this.dialogRef?.close(false);
+  }
+
+  // Abre el pago mixto (varias formas/monedas) para una cuota puntual. Al confirmar
+  // se recarga la lista de cuotas pendientes (la cuota puede quedar PARCIAL o pagada).
+  async pagoMixto(row: CuotaRow): Promise<void> {
+    const { PagoMixtoCuotaDialogComponent } = await import(
+      'src/app/pages/financiero/caja-mayor/pago-mixto-cuota-dialog/pago-mixto-cuota-dialog.component'
+    );
+    const ref = this.dialog.open(PagoMixtoCuotaDialogComponent, {
+      width: '720px',
+      maxWidth: '95vw',
+      data: {
+        cuota: {
+          id: row.id,
+          numero: row.numero,
+          saldoPendiente: row.saldoPendiente,
+          monedaId: row.monedaId,
+          monedaSimbolo: row.monedaSimbolo,
+          monedaDenominacion: row.monedaDenominacion,
+          cppId: row.cppId,
+          proveedorNombre: row.proveedorNombre,
+          compraNumeroNota: row.compraNumeroNota,
+        },
+      },
+    });
+    const ok = await firstValueFrom(ref.afterClosed());
+    if (ok) {
+      await this.loadAll();
+    }
   }
 
   private async confirmarSaldoSiNegativo(f: any, monto: number): Promise<boolean> {

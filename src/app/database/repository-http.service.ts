@@ -1754,6 +1754,9 @@ export class RepositoryHttpService extends RepositoryService {
   pagarCppCuota(payload: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.pagarCppCuota() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  pagarCppCuotaMixto(payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.pagarCppCuotaMixto() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   pagarCuotasComprasLote(payload: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.pagarCuotasComprasLote() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

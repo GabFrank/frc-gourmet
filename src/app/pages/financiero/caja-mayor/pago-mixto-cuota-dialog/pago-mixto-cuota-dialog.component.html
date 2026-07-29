@@ -1,0 +1,131 @@
+<h2 mat-dialog-title>Pago mixto de cuota</h2>
+
+<mat-dialog-content class="pm-content">
+  <div *ngIf="loading" class="pm-spinner">
+    <mat-spinner diameter="36"></mat-spinner>
+  </div>
+
+  <ng-container *ngIf="!loading">
+    <!-- Resumen de la deuda -->
+    <div class="pm-resumen">
+      <div class="pm-resumen-item">
+        <span class="pm-label">Cuota</span>
+        <span class="pm-value">
+          #{{ cuota.numero || cuota.id }}
+          <span *ngIf="cuota.proveedorNombre">· {{ cuota.proveedorNombre }}</span>
+          <span *ngIf="cuota.compraNumeroNota">· Nota {{ cuota.compraNumeroNota }}</span>
+        </span>
+      </div>
+      <div class="pm-resumen-item">
+        <span class="pm-label">Saldo a pagar</span>
+        <span class="pm-value pm-strong">
+          {{ cuota.monedaSimbolo }} {{ cuota.saldoPendiente | number:'1.0-2' }}
+          <span class="pm-moneda">{{ cuota.monedaDenominacion }}</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- Caja -->
+    <mat-form-field appearance="outline" class="pm-full">
+      <mat-label>Caja Mayor</mat-label>
+      <mat-select [(ngModel)]="cajaMayorId">
+        <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{ c.nombre }}</mat-option>
+      </mat-select>
+      <mat-hint *ngIf="!cajasMayor.length">No hay cajas abiertas</mat-hint>
+    </mat-form-field>
+
+    <!-- Lineas de pago -->
+    <div class="pm-section-title">Formas de pago</div>
+    <table mat-table [dataSource]="lineas" class="pm-table">
+      <ng-container matColumnDef="moneda">
+        <th mat-header-cell *matHeaderCellDef>Moneda</th>
+        <td mat-cell *matCellDef="let l">
+          <mat-form-field appearance="outline" class="pm-cell-field">
+            <mat-select [(ngModel)]="l.monedaId" (ngModelChange)="onMonedaChange(l)">
+              <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="forma">
+        <th mat-header-cell *matHeaderCellDef>Forma de pago</th>
+        <td mat-cell *matCellDef="let l">
+          <mat-form-field appearance="outline" class="pm-cell-field">
+            <mat-select [(ngModel)]="l.formaPagoId">
+              <mat-option *ngFor="let f of formasPago" [value]="f.id">{{ f.descripcion || f.nombre }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="monto">
+        <th mat-header-cell *matHeaderCellDef class="num">Monto</th>
+        <td mat-cell *matCellDef="let l" class="num">
+          <mat-form-field appearance="outline" class="pm-cell-field pm-monto">
+            <input matInput type="text" inputmode="decimal"
+                   appCurrencyInput [decimals]="l.decimales"
+                   [ngModel]="l.monto"
+                   (ngModelChange)="onMontoChange(l, $event)">
+          </mat-form-field>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="convertido">
+        <th mat-header-cell *matHeaderCellDef class="num">En {{ cuota.monedaSimbolo || cuota.monedaDenominacion }}</th>
+        <td mat-cell *matCellDef="let l" class="num">
+          <ng-container *ngIf="convertido(l) !== null; else sinCotiz">
+            {{ convertido(l) | number:'1.0-2' }}
+          </ng-container>
+          <ng-template #sinCotiz>
+            <span class="pm-warn" matTooltip="No hay cotización para convertir esta moneda a la de la deuda">Sin cotización</span>
+          </ng-template>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="acciones">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let l; let i = index">
+          <button mat-icon-button color="warn" (click)="quitarLinea(i)"
+                  [disabled]="lineas.length <= 1" matTooltip="Quitar línea">
+            <mat-icon>delete_outline</mat-icon>
+          </button>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+
+    <button mat-stroked-button class="pm-add" (click)="agregarLinea()">
+      <mat-icon>add</mat-icon> Agregar forma de pago
+    </button>
+
+    <!-- Totales -->
+    <div class="pm-totales">
+      <div class="pm-total-row">
+        <span>Total a pagar</span>
+        <span class="pm-strong">{{ totalConvertido | number:'1.0-2' }} {{ cuota.monedaDenominacion }}</span>
+      </div>
+      <div class="pm-total-row"
+           [class.pm-ok]="restante === 0"
+           [class.pm-warn]="restante > 0">
+        <span>{{ restante > 0 ? 'Queda pendiente' : 'Restante' }}</span>
+        <span>{{ restante | number:'1.0-2' }}</span>
+      </div>
+    </div>
+
+    <mat-form-field appearance="outline" class="pm-full">
+      <mat-label>Observación</mat-label>
+      <input matInput [(ngModel)]="observacion" maxlength="255">
+    </mat-form-field>
+  </ng-container>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancelar()" [disabled]="saving">Cancelar</button>
+  <button mat-flat-button color="primary" (click)="confirmar()" [disabled]="!isValido() || saving">
+    <mat-icon *ngIf="saving">hourglass_empty</mat-icon>
+    Confirmar pago
+  </button>
+</mat-dialog-actions>
