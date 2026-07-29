@@ -478,6 +478,9 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       'STOCK_MOVIMIENTO_VER', 'STOCK_MOVIMIENTO_REGISTRAR',
       // Ventas
       'VENTAS_PDV', 'VENTAS_HISTORICO_VER',
+      // Facturación legal
+      'FACTURACION_VER', 'FACTURACION_EMITIR', 'FACTURACION_ANULAR',
+      'FACTURACION_TIMBRADO_GESTIONAR', 'FACTURACION_PLANTILLA_GESTIONAR', 'FACTURACION_CONFIGURAR',
       // Compras + Proveedores
       'COMPRAS_VER', 'COMPRAS_GESTIONAR',
       'PROVEEDORES_VER', 'PROVEEDORES_GESTIONAR',
@@ -511,6 +514,8 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
     permisos: [
       'HOME_DASHBOARD_VER', 'VENTAS_DASHBOARD_VER', 'CAJA_MAYOR_DASHBOARD_VER',
       'VENTAS_PDV', 'VENTAS_HISTORICO_VER',
+      // Facturación: el cajero factura al cobrar en el PdV
+      'FACTURACION_VER', 'FACTURACION_EMITIR',
       // Vales/compras pagados desde el cajón del PdV (Utilitarios).
       // PDV_ANULAR_EGRESO NO se asigna al cajero (separación de funciones:
       // anular una salida de efectivo es acción de supervisor/gerente).

@@ -436,6 +436,7 @@ export function registerBackupHandlers(
 
   ipcMain.handle('backup-config-set', async (_e, partial: Partial<BackupConfig>) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_BACKUP');
       const current = readBackupConfig(userDataPath);
       const next: BackupConfig = { ...current, ...partial };
       if (next.mode !== 'interval' && next.mode !== 'daily') next.mode = 'daily';
@@ -458,6 +459,7 @@ export function registerBackupHandlers(
 
   ipcMain.handle('backup-trigger-auto-now', async () => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_BACKUP');
       const cfg = readBackupConfig(userDataPath);
       const result = await createBackupInternal({
         userDataPath,

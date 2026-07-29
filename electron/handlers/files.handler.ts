@@ -1,6 +1,9 @@
 import { app, ipcMain, shell } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
+import { DataSource } from 'typeorm';
+import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { ensurePermission } from '../utils/auth.utils';
 import { deleteImageDerivatives } from '../utils/image-resize.utils';
 import {
   ALLOWED_CARPETAS,
@@ -29,14 +32,19 @@ function urlToAbsolute(url: string): string | null {
   return path.join(app.getPath('userData'), parsed.carpeta, parsed.relPath);
 }
 
-export function registerFilesHandlers(): void {
+export function registerFilesHandlers(
+  dataSource: DataSource,
+  getCurrentUser: () => Usuario | null,
+): void {
 
   ipcMain.handle('save-file', async (_event, input: SaveFileInput): Promise<SaveFileResult> => {
+    await ensurePermission(dataSource, getCurrentUser, 'DOCUMENTOS_ADJUNTAR');
     // Lógica compartida con la ruta Fastify de subida por QR (file-save.utils).
     return saveFileToBucket(input);
   });
 
   ipcMain.handle('delete-file', async (_event, input: { url: string }): Promise<{ ok: boolean }> => {
+    await ensurePermission(dataSource, getCurrentUser, 'DOCUMENTOS_ADJUNTOS_ELIMINAR');
     const abs = urlToAbsolute(input.url);
     if (!abs) return { ok: false };
     try {

@@ -90,6 +90,14 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'PDV_PAGAR_COMPRA', descripcion: 'Crear/pagar compras desde el cajón del PdV', modulo: 'VENTAS' },
   { codigo: 'PDV_ANULAR_EGRESO', descripcion: 'Anular egresos de caja (vales/compras) del PdV', modulo: 'VENTAS' },
 
+  // Facturación legal (SET/SIFEN)
+  { codigo: 'FACTURACION_VER', descripcion: 'Ver facturas, timbrados y plantillas', modulo: 'FACTURACION' },
+  { codigo: 'FACTURACION_EMITIR', descripcion: 'Emitir facturas legales', modulo: 'FACTURACION' },
+  { codigo: 'FACTURACION_ANULAR', descripcion: 'Anular facturas emitidas', modulo: 'FACTURACION' },
+  { codigo: 'FACTURACION_TIMBRADO_GESTIONAR', descripcion: 'Gestionar timbrados y numeración', modulo: 'FACTURACION' },
+  { codigo: 'FACTURACION_PLANTILLA_GESTIONAR', descripcion: 'Gestionar plantillas/diseños de factura', modulo: 'FACTURACION' },
+  { codigo: 'FACTURACION_CONFIGURAR', descripcion: 'Configurar numeración/timbrado activo de facturación', modulo: 'FACTURACION' },
+
   // Compras / Proveedores
   { codigo: 'COMPRAS_VER', descripcion: 'Ver lista de compras', modulo: 'COMPRAS' },
   { codigo: 'COMPRAS_GESTIONAR', descripcion: 'Crear/editar/anular compras', modulo: 'COMPRAS' },

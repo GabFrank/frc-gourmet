@@ -380,6 +380,7 @@ export function registerBankingHandlers(
   // Procesa acreditaciones pendientes vencidas (manual / lazy on access)
   ipcMain.handle('procesar-acreditaciones-auto', async () => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
       return await procesarAcreditacionesPendientes(dataSource);
     } catch (error) {
       console.error('Error procesando acreditaciones auto:', error);

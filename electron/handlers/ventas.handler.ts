@@ -530,6 +530,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createDelivery', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Delivery);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -542,6 +543,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updateDelivery', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Delivery);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Delivery ID ${id} not found`);
@@ -556,6 +558,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deleteDelivery', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Delivery);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Delivery ID ${id} not found`);
@@ -703,6 +706,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createVenta', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Venta);
       const entity: any = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -1092,6 +1096,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createVentaItem', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItem);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -1138,6 +1143,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updateVentaItem', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
@@ -1162,6 +1168,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('deleteVentaItem', async (_event: any, id: number) => {
     // return a boolean if success or not
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
@@ -1197,6 +1204,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createVentaItemObservacion', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemObservacion);
       const entity = repo.create(data);
       return await repo.save(entity);
@@ -1208,6 +1216,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deleteVentaItemObservacion', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemObservacion);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`VentaItemObservacion ID ${id} not found`);
@@ -1235,6 +1244,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createVentaItemAdicional', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemAdicional);
       const entity = repo.create(data);
       return await repo.save(entity);
@@ -1246,6 +1256,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deleteVentaItemAdicional', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemAdicional);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`VentaItemAdicional ID ${id} not found`);
@@ -1273,6 +1284,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createVentaItemIngredienteModificacion', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemIngredienteModificacion);
       const entity = repo.create(data);
       return await repo.save(entity);
@@ -1284,6 +1296,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deleteVentaItemIngredienteModificacion', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemIngredienteModificacion);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`VentaItemIngredienteModificacion ID ${id} not found`);
@@ -2003,6 +2016,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createComanda', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Comanda);
       const entity: any = repo.create({ ...data, estado: ComandaEstado.DISPONIBLE });
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -2020,6 +2034,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updateComanda', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Comanda);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Comanda ID ${id} not found`);
@@ -2049,6 +2064,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deleteComanda', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Comanda);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Comanda ID ${id} not found`);
@@ -2106,6 +2122,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('abrirComanda', async (_event: any, comandaId: number, data: { mesaId?: number, sectorId?: number, observacion?: string }) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Comanda);
       const entity = await repo.findOneBy({ id: comandaId });
       if (!entity) throw new Error(`Comanda ID ${comandaId} not found`);
@@ -2149,6 +2166,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('cerrarComanda', async (_event: any, comandaId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Comanda);
       const entity = await repo.findOne({ where: { id: comandaId }, relations: ['pdv_mesa'] });
       if (!entity) throw new Error(`Comanda ID ${comandaId} not found`);
@@ -2188,6 +2206,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createBatchComandas', async (_event: any, batchData: any[]) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Comanda);
       const results: any[] = [];
       for (const data of batchData) {
@@ -2312,6 +2331,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   // --- Stock: Procesar movimientos de stock al finalizar venta ---
   ipcMain.handle('procesarStockVenta', async (_event: any, ventaId: number) => {
+   await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
    return withVentaStockLock(ventaId, async () => {
     const stockRepo = dataSource.getRepository(StockMovimiento);
     const ventaItemRepo = dataSource.getRepository(VentaItem);
@@ -2705,6 +2725,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   // --- Stock: Revertir movimientos de stock al cancelar venta finalizada ---
   ipcMain.handle('revertirStockVenta', async (_event: any, ventaId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
     const stockRepo = dataSource.getRepository(StockMovimiento);
 
     try {
@@ -3091,6 +3112,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createVentaItemSabor', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemSabor);
       const entity = repo.create({
         ventaItem: { id: data.ventaItemId },
@@ -3126,6 +3148,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deleteVentaItemSaboresByItem', async (_event: any, ventaItemId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       await dataSource.getRepository(VentaItemSabor).delete({ ventaItem: { id: ventaItemId } });
       return { success: true };
     } catch (error) {
