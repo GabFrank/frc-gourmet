@@ -107,10 +107,12 @@
               <mat-icon>visibility</mat-icon>
               <span>Ver Detalles</span>
             </button>
-            <button mat-menu-item (click)="ingresarACajaMayor(row)" *ngIf="row.retiro.estado === 'FLOTANTE' || row.retiro.estado === 'VINCULADO_PENDIENTE'">
-              <mat-icon>move_up</mat-icon>
-              <span>{{row.retiro.estado === 'VINCULADO_PENDIENTE' ? 'Verificar e Ingresar' : 'Ingresar a Caja Mayor'}}</span>
-            </button>
+            <ng-container *appHasPermission="'CAJA_MAYOR_OPERAR'">
+              <button mat-menu-item (click)="ingresarACajaMayor(row)" *ngIf="row.retiro.estado === 'FLOTANTE' || row.retiro.estado === 'VINCULADO_PENDIENTE'">
+                <mat-icon>move_up</mat-icon>
+                <span>{{row.retiro.estado === 'VINCULADO_PENDIENTE' ? 'Verificar e Ingresar' : 'Ingresar a Caja Mayor'}}</span>
+              </button>
+            </ng-container>
           </mat-menu>
         </td>
       </ng-container>

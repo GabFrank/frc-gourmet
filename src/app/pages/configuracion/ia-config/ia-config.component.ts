@@ -21,6 +21,7 @@ import {
   IaPromptSugerenciaDto,
 } from 'src/app/services/factura-import.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-ia-config',
@@ -41,6 +42,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
     MatSnackBarModule,
     MatTabsModule,
     MatTooltipModule,
+    HasPermissionDirective,
   ],
   templateUrl: './ia-config.component.html',
   styleUrls: ['./ia-config.component.scss'],

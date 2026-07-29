@@ -17,6 +17,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '../../../../database/repository.service';
 import { ConfirmationDialogComponent } from '../../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CurrencyInputDirective } from '../../../../shared/directives/currency-input.directive';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-vacacion-detalle-dialog',
@@ -38,6 +39,7 @@ import { CurrencyInputDirective } from '../../../../shared/directives/currency-i
     MatTooltipModule,
     MatSnackBarModule,
     CurrencyInputDirective,
+    HasPermissionDirective,
   ],
   templateUrl: './vacacion-detalle-dialog.component.html',
   styleUrls: ['./vacacion-detalle-dialog.component.scss'],

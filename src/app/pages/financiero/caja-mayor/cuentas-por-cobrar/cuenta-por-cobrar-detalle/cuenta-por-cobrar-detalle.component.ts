@@ -14,6 +14,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CobrarCuotaDialogComponent } from '../cobrar-cuota-dialog/cobrar-cuota-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-cuenta-por-cobrar-detalle',
@@ -33,6 +34,7 @@ import { CobrarCuotaDialogComponent } from '../cobrar-cuota-dialog/cobrar-cuota-
     MatMenuModule,
     MatTooltipModule,
     DatePipe,
+    HasPermissionDirective,
   ]
 })
 export class CuentaPorCobrarDetalleComponent implements OnInit {

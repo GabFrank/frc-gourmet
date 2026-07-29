@@ -27,6 +27,7 @@ import { UploadDocumentoDialogComponent } from '../upload-documento-dialog/uploa
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { AsignarTurnoFuncionarioDialogComponent } from '../asignar-turno-dialog/asignar-turno-funcionario-dialog.component';
 import { EnrolarRostroDialogComponent } from '../enrolar-rostro-dialog/enrolar-rostro-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-funcionario-detalle',
@@ -51,6 +52,7 @@ import { EnrolarRostroDialogComponent } from '../enrolar-rostro-dialog/enrolar-r
     DashStatChipComponent,
     DashQuickActionComponent,
     DashSectionHeaderComponent,
+    HasPermissionDirective,
   ],
 })
 export class FuncionarioDetalleComponent implements OnInit {

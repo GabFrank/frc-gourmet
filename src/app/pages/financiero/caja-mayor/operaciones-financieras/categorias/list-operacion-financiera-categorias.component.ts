@@ -16,6 +16,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-operacion-financiera-categorias',
@@ -27,6 +28,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
     MatTableModule, MatButtonModule, MatIconModule, MatMenuModule, MatCardModule,
     MatProgressSpinnerModule, MatFormFieldModule, MatInputModule, MatSelectModule,
     MatSnackBarModule, MatDialogModule, MatTooltipModule,
+    HasPermissionDirective,
   ]
 })
 export class ListOperacionFinancieraCategoriasComponent implements OnInit {

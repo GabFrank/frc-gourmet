@@ -8,14 +8,16 @@
           <span class="subtitle">Parametros legales y operativos (referencia PY 2026)</span>
         </div>
         <div class="actions">
-          <button mat-stroked-button color="primary" (click)="resemenbrarBase()" matTooltip="Crea las configuraciones base que no existan">
+          <button *appHasPermission="'RRHH_CONFIG_EDITAR'" mat-stroked-button color="primary" (click)="resemenbrarBase()" matTooltip="Crea las configuraciones base que no existan">
             <mat-icon>cloud_download</mat-icon>
             Sembrar base
           </button>
-          <button mat-flat-button color="primary" (click)="showCreateForm()" *ngIf="!showInlineForm">
-            <mat-icon>add</mat-icon>
-            Nueva clave
-          </button>
+          <ng-container *appHasPermission="'RRHH_CONFIG_EDITAR'">
+            <button mat-flat-button color="primary" (click)="showCreateForm()" *ngIf="!showInlineForm">
+              <mat-icon>add</mat-icon>
+              Nueva clave
+            </button>
+          </ng-container>
         </div>
       </div>
     </mat-card-content>
@@ -91,11 +93,11 @@
               <mat-icon>more_vert</mat-icon>
             </button>
             <mat-menu #menu="matMenu">
-              <button mat-menu-item (click)="editConfig(c)">
+              <button *appHasPermission="'RRHH_CONFIG_EDITAR'" mat-menu-item (click)="editConfig(c)">
                 <mat-icon>edit</mat-icon>
                 <span>Editar</span>
               </button>
-              <button mat-menu-item (click)="deleteConfig(c)">
+              <button *appHasPermission="'RRHH_CONFIG_EDITAR'" mat-menu-item (click)="deleteConfig(c)">
                 <mat-icon>delete</mat-icon>
                 <span>Eliminar</span>
               </button>

@@ -15,6 +15,7 @@ import { Timbrado } from '../../../../database/entities/facturacion/timbrado.ent
 import { ConfirmationDialogComponent } from '../../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateEditTimbradoComponent } from '../create-edit-timbrado/create-edit-timbrado.component';
 import { TimbradoDetallesDialogComponent } from '../timbrado-detalles-dialog/timbrado-detalles-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-timbrados',
@@ -30,6 +31,7 @@ import { TimbradoDetallesDialogComponent } from '../timbrado-detalles-dialog/tim
     MatChipsModule,
     MatSnackBarModule,
     MatDialogModule,
+    HasPermissionDirective,
   ],
   templateUrl: './list-timbrados.component.html',
   styleUrls: ['./list-timbrados.component.scss'],

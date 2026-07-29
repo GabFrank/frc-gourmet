@@ -14,6 +14,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { AppMode, AppModeDto, AppModeService, DispositivoOption } from 'src/app/services/app-mode.service';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-mode-config',
@@ -32,6 +33,7 @@ import { AppMode, AppModeDto, AppModeService, DispositivoOption } from 'src/app/
     MatSelectModule,
     MatSnackBarModule,
     MatTooltipModule,
+    HasPermissionDirective,
   ],
   templateUrl: './mode-config.component.html',
   styleUrls: ['./mode-config.component.scss'],

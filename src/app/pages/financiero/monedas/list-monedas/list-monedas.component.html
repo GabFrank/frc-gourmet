@@ -40,7 +40,7 @@
               <mat-icon>settings</mat-icon>
               Configurar Monedas para Cajas
             </button>
-            <button mat-raised-button color="accent" (click)="addMoneda()">
+            <button mat-raised-button color="accent" (click)="addMoneda()" *appHasPermission="'MONEDAS_GESTIONAR'">
               <mat-icon>add</mat-icon>
               Nueva Moneda
             </button>
@@ -97,7 +97,7 @@
               <mat-icon>more_vert</mat-icon>
             </button>
             <mat-menu #menu="matMenu">
-              <button mat-menu-item (click)="editMoneda(moneda)">
+              <button mat-menu-item (click)="editMoneda(moneda)" *appHasPermission="'MONEDAS_GESTIONAR'">
                 <mat-icon>edit</mat-icon>
                 <span>Editar</span>
               </button>
@@ -109,7 +109,7 @@
                 <mat-icon>currency_exchange</mat-icon>
                 <span>Tipo de cambio</span>
               </button>
-              <button mat-menu-item (click)="deleteMoneda(moneda.id!)">
+              <button mat-menu-item (click)="deleteMoneda(moneda.id!)" *appHasPermission="'MONEDAS_GESTIONAR'">
                 <mat-icon>delete</mat-icon>
                 <span>Eliminar</span>
               </button>

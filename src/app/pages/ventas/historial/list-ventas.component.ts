@@ -23,6 +23,7 @@ import { Caja } from '../../../database/entities/financiero/caja.entity';
 import { DetalleVentaDialogComponent } from '../../../shared/components/detalle-venta-dialog/detalle-venta-dialog.component';
 import { FiltrosVentasDialogComponent, FiltrosAvanzados } from '../../../shared/components/filtros-ventas-dialog/filtros-ventas-dialog.component';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 export interface VentaRow {
   venta: Venta;
@@ -53,6 +54,7 @@ export interface VentaRow {
     MatPaginatorModule,
     MatTooltipModule,
     MatBadgeModule,
+    HasPermissionDirective,
   ],
 })
 export class ListVentasComponent implements OnInit {

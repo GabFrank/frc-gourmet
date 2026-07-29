@@ -162,6 +162,7 @@ export function registerConfiguracionRrhhHandlers(
 
   ipcMain.handle('seed-configuracion-rrhh', async () => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
       await seedConfiguracionRrhh(dataSource);
       return { success: true };
     } catch (error) {

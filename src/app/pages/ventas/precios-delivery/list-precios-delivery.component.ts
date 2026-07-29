@@ -12,6 +12,7 @@ import { RepositoryService } from '../../../database/repository.service';
 import { PrecioDelivery } from '../../../database/entities/ventas/precio-delivery.entity';
 import { CreateEditPrecioDeliveryDialogComponent } from './create-edit-precio-delivery-dialog.component';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-precios-delivery',
@@ -26,6 +27,7 @@ import { ConfirmationDialogComponent } from '../../../shared/components/confirma
     MatMenuModule,
     MatDialogModule,
     MatChipsModule,
+    HasPermissionDirective,
   ],
 })
 export class ListPreciosDeliveryComponent implements OnInit {

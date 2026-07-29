@@ -7,14 +7,16 @@
           <h2>Permisos del sistema</h2>
         </div>
         <div class="actions">
-          <button mat-stroked-button color="primary" (click)="resemenbrarPermisosBase()" matTooltip="Crea los permisos del catalogo base que no existan">
+          <button *appHasPermission="'SISTEMA_PERMISO_GESTIONAR'" mat-stroked-button color="primary" (click)="resemenbrarPermisosBase()" matTooltip="Crea los permisos del catalogo base que no existan">
             <mat-icon>cloud_download</mat-icon>
             Sembrar base
           </button>
-          <button mat-flat-button color="primary" (click)="showCreateForm()" *ngIf="!showInlineForm">
-            <mat-icon>add</mat-icon>
-            Nuevo permiso
-          </button>
+          <ng-container *appHasPermission="'SISTEMA_PERMISO_GESTIONAR'">
+            <button mat-flat-button color="primary" (click)="showCreateForm()" *ngIf="!showInlineForm">
+              <mat-icon>add</mat-icon>
+              Nuevo permiso
+            </button>
+          </ng-container>
         </div>
       </div>
     </mat-card-content>
@@ -96,11 +98,11 @@
               <mat-icon>more_vert</mat-icon>
             </button>
             <mat-menu #menu="matMenu">
-              <button mat-menu-item (click)="editPermiso(p)">
+              <button *appHasPermission="'SISTEMA_PERMISO_GESTIONAR'" mat-menu-item (click)="editPermiso(p)">
                 <mat-icon>edit</mat-icon>
                 <span>Editar</span>
               </button>
-              <button mat-menu-item (click)="deletePermiso(p)">
+              <button *appHasPermission="'SISTEMA_PERMISO_GESTIONAR'" mat-menu-item (click)="deletePermiso(p)">
                 <mat-icon>delete</mat-icon>
                 <span>Eliminar</span>
               </button>
@@ -125,10 +127,12 @@
     </mat-card-header>
     <mat-card-content>
       <div class="roles-list">
-        <button mat-stroked-button *ngFor="let r of roles" (click)="abrirAsignacion(r)">
-          <mat-icon>group</mat-icon>
-          {{ r.descripcion }}
-        </button>
+        <ng-container *appHasPermission="'SISTEMA_ROL_GESTIONAR'">
+          <button mat-stroked-button *ngFor="let r of roles" (click)="abrirAsignacion(r)">
+            <mat-icon>group</mat-icon>
+            {{ r.descripcion }}
+          </button>
+        </ng-container>
       </div>
       <div *ngIf="!roles?.length" class="empty">No hay roles cargados.</div>
     </mat-card-content>

@@ -5,7 +5,7 @@
       <button mat-stroked-button (click)="toggleFiltros()">
         <mat-icon>{{showFiltros ? 'expand_less' : 'filter_list'}}</mat-icon> Filtros
       </button>
-      <button mat-raised-button color="primary" (click)="crear()">
+      <button mat-raised-button color="primary" (click)="crear()" *appHasPermission="'COMPRAS_GESTIONAR'">
         <mat-icon>add</mat-icon> Nueva Cuenta
       </button>
     </div>
@@ -108,7 +108,9 @@
           <button mat-icon-button [matMenuTriggerFor]="m"><mat-icon>more_vert</mat-icon></button>
           <mat-menu #m="matMenu">
             <button mat-menu-item (click)="verDetalle(r)"><mat-icon>visibility</mat-icon><span>Ver detalle</span></button>
-            <button mat-menu-item (click)="cancelar(r)" *ngIf="r.estado === 'ACTIVO'"><mat-icon color="warn">block</mat-icon><span>Cancelar</span></button>
+            <ng-container *appHasPermission="'COMPRAS_GESTIONAR'">
+              <button mat-menu-item (click)="cancelar(r)" *ngIf="r.estado === 'ACTIVO'"><mat-icon color="warn">block</mat-icon><span>Cancelar</span></button>
+            </ng-container>
           </mat-menu>
         </td>
       </ng-container>

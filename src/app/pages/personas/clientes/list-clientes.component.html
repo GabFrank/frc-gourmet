@@ -56,7 +56,7 @@
             </button>
           </div>
           <div class="right-actions">
-            <button mat-raised-button color="accent" type="button" (click)="nuevoCliente()">
+            <button mat-raised-button color="accent" type="button" (click)="nuevoCliente()" *appHasPermission="'CLIENTES_GESTIONAR'">
               <mat-icon>add</mat-icon>
               Nuevo cliente
             </button>
@@ -139,7 +139,7 @@
               <mat-icon>more_vert</mat-icon>
             </button>
             <mat-menu #menu="matMenu">
-              <button mat-menu-item (click)="editarCliente(row)">
+              <button mat-menu-item (click)="editarCliente(row)" *appHasPermission="'CLIENTES_GESTIONAR'">
                 <mat-icon>edit</mat-icon>
                 <span>Editar</span>
               </button>
@@ -147,11 +147,11 @@
                 <mat-icon>account_balance_wallet</mat-icon>
                 <span>Ver estado de cuenta</span>
               </button>
-              <button mat-menu-item (click)="toggleActivo(row)">
+              <button mat-menu-item (click)="toggleActivo(row)" *appHasPermission="'CLIENTES_GESTIONAR'">
                 <mat-icon>{{ row.activo ? 'toggle_on' : 'toggle_off' }}</mat-icon>
                 <span>{{ row.activo ? 'Desactivar' : 'Activar' }}</span>
               </button>
-              <button mat-menu-item (click)="eliminarCliente(row)">
+              <button mat-menu-item (click)="eliminarCliente(row)" *appHasPermission="'CLIENTES_GESTIONAR'">
                 <mat-icon>delete</mat-icon>
                 <span>Eliminar</span>
               </button>

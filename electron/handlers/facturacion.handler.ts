@@ -8,6 +8,7 @@ import { FacturaItem } from '../../src/app/database/entities/facturacion/factura
 import { FacturacionConfig } from '../../src/app/database/entities/facturacion/facturacion-config.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { ensurePermission } from '../utils/auth.utils';
 
 /**
  * Handlers IPC del modulo de facturacion.
@@ -52,6 +53,7 @@ export function registerFacturacionHandlers(
 
   ipcMain.handle('create-timbrado', async (_e: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FACTURACION_TIMBRADO_GESTIONAR');
       const repo = dataSource.getRepository(Timbrado);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, uid(), false);
@@ -64,6 +66,7 @@ export function registerFacturacionHandlers(
 
   ipcMain.handle('update-timbrado', async (_e: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FACTURACION_TIMBRADO_GESTIONAR');
       const repo = dataSource.getRepository(Timbrado);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Timbrado ${id} not found`);
@@ -78,6 +81,7 @@ export function registerFacturacionHandlers(
 
   ipcMain.handle('delete-timbrado', async (_e: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FACTURACION_TIMBRADO_GESTIONAR');
       const repo = dataSource.getRepository(Timbrado);
       const facturaRepo = dataSource.getRepository(Factura);
       const usados = await facturaRepo
@@ -114,6 +118,7 @@ export function registerFacturacionHandlers(
 
   ipcMain.handle('create-timbrado-detalle', async (_e: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FACTURACION_TIMBRADO_GESTIONAR');
       const repo = dataSource.getRepository(TimbradoDetalle);
       if (data.numeroActual == null) data.numeroActual = data.rangoDesde ?? 1;
       const entity = repo.create(data);
@@ -127,6 +132,7 @@ export function registerFacturacionHandlers(
 
   ipcMain.handle('update-timbrado-detalle', async (_e: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FACTURACION_TIMBRADO_GESTIONAR');
       const repo = dataSource.getRepository(TimbradoDetalle);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`TimbradoDetalle ${id} not found`);
@@ -141,6 +147,7 @@ export function registerFacturacionHandlers(
 
   ipcMain.handle('delete-timbrado-detalle', async (_e: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FACTURACION_TIMBRADO_GESTIONAR');
       const repo = dataSource.getRepository(TimbradoDetalle);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`TimbradoDetalle ${id} not found`);
@@ -176,6 +183,7 @@ export function registerFacturacionHandlers(
 
   ipcMain.handle('create-factura-plantilla', async (_e: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FACTURACION_PLANTILLA_GESTIONAR');
       const repo = dataSource.getRepository(FacturaPlantilla);
       if (data.predeterminada) {
         await repo.update({ tipo: data.tipo, predeterminada: true }, { predeterminada: false });
@@ -191,6 +199,7 @@ export function registerFacturacionHandlers(
 
   ipcMain.handle('update-factura-plantilla', async (_e: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FACTURACION_PLANTILLA_GESTIONAR');
       const repo = dataSource.getRepository(FacturaPlantilla);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`FacturaPlantilla ${id} not found`);
@@ -208,6 +217,7 @@ export function registerFacturacionHandlers(
 
   ipcMain.handle('delete-factura-plantilla', async (_e: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FACTURACION_PLANTILLA_GESTIONAR');
       const repo = dataSource.getRepository(FacturaPlantilla);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`FacturaPlantilla ${id} not found`);
@@ -261,6 +271,7 @@ export function registerFacturacionHandlers(
   ipcMain.handle('create-factura', async (_e: any, data: any) => {
     const { factura, items } = data || {};
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FACTURACION_EMITIR');
       return await dataSource.transaction(async (manager) => {
         const facturaRepo = manager.getRepository(Factura);
         const itemRepo = manager.getRepository(FacturaItem);
@@ -343,6 +354,7 @@ export function registerFacturacionHandlers(
 
   ipcMain.handle('save-facturacion-config', async (_e: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FACTURACION_CONFIGURAR');
       const repo = dataSource.getRepository(FacturacionConfig);
       let cfg = await repo.findOne({ where: {}, order: { id: 'ASC' } });
       if (!cfg) cfg = repo.create({});
@@ -362,6 +374,7 @@ export function registerFacturacionHandlers(
 
   ipcMain.handle('anular-factura', async (_e: any, id: number, motivo: string) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FACTURACION_ANULAR');
       const repo = dataSource.getRepository(Factura);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Factura ${id} not found`);

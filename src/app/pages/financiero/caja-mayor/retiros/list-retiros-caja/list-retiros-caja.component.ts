@@ -19,6 +19,7 @@ import { ReactiveFormsModule, FormControl } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { IngresarRetiroCajaDialogComponent } from '../ingresar-retiro-caja-dialog/ingresar-retiro-caja-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 interface RetiroRow {
   retiro: any;
@@ -49,6 +50,7 @@ interface RetiroRow {
     MatNativeDateModule,
     MatTooltipModule,
     DatePipe,
+    HasPermissionDirective,
   ]
 })
 export class ListRetirosCajaComponent implements OnInit {

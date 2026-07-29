@@ -20,6 +20,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateEditGastoDialogComponent } from '../create-edit-gasto/create-edit-gasto-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-gastos',
@@ -45,6 +46,7 @@ import { CreateEditGastoDialogComponent } from '../create-edit-gasto/create-edit
     MatNativeDateModule,
     MatTooltipModule,
     DatePipe,
+    HasPermissionDirective,
   ]
 })
 export class ListGastosComponent implements OnInit {

@@ -14,6 +14,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { NotificacionesService } from '../../../services/notificaciones.service';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 interface ReceptorForm {
   id?: number;
@@ -41,6 +42,7 @@ interface ReceptorForm {
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatTooltipModule,
+    HasPermissionDirective,
   ],
   templateUrl: './configuracion-notificaciones.component.html',
   styleUrls: ['./configuracion-notificaciones.component.scss'],

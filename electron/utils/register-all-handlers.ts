@@ -109,8 +109,8 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerPrinterHandlers(dataSource, getCurrentUser);
   registerPersonasHandlers(dataSource, getCurrentUser);
   registerAuthHandlers(dataSource, getCurrentUser, setCurrentUser);
-  registerImageHandlers(dataSource);
-  registerFilesHandlers(); // generic file IPCs (save/delete/read/open)
+  registerImageHandlers(dataSource, getCurrentUser);
+  registerFilesHandlers(dataSource, getCurrentUser); // generic file IPCs (save/delete/read/open)
   registerQrUploadHandler(dataSource); // emparejamiento QR -> subida desde la PWA mobile
   registerAdjuntosHandlers(dataSource, getCurrentUser); // CRUD generico de adjuntos polimorficos
   registerDocumentosTicketsHandlers(dataSource, getCurrentUser); // Tickets termicos (comanda multi-sector, venta, recibos, vales, etc.)

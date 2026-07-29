@@ -18,6 +18,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { MarcarAsistenciaMasivaDialogComponent } from './marcar-asistencia-masiva-dialog.component';
 import { MarcarAsistenciaDialogComponent } from './marcar-asistencia-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 const ESTADOS = ['PRESENTE', 'AUSENTE', 'TARDANZA', 'MEDIA_FALTA', 'JUSTIFICADO', 'FERIADO', 'VACACION'];
 
@@ -40,6 +41,7 @@ const ESTADOS = ['PRESENTE', 'AUSENTE', 'TARDANZA', 'MEDIA_FALTA', 'JUSTIFICADO'
     MatNativeDateModule,
     MatSnackBarModule,
     MatDialogModule,
+    HasPermissionDirective,
   ],
   template: `
     <div class="page">
@@ -48,10 +50,10 @@ const ESTADOS = ['PRESENTE', 'AUSENTE', 'TARDANZA', 'MEDIA_FALTA', 'JUSTIFICADO'
           <div class="header">
             <div class="title"><mat-icon>fact_check</mat-icon> <h2>Asistencias</h2></div>
             <div class="header-actions">
-              <button mat-stroked-button color="primary" (click)="abrirIndividual()">
+              <button *appHasPermission="'RRHH_ASISTENCIA_REGISTRAR'" mat-stroked-button color="primary" (click)="abrirIndividual()">
                 <mat-icon>person_add</mat-icon> Marcar individual
               </button>
-              <button mat-flat-button color="primary" (click)="abrirMasiva()">
+              <button *appHasPermission="'RRHH_ASISTENCIA_REGISTRAR'" mat-flat-button color="primary" (click)="abrirMasiva()">
                 <mat-icon>group</mat-icon> Marcar masiva
               </button>
             </div>
@@ -125,7 +127,7 @@ const ESTADOS = ['PRESENTE', 'AUSENTE', 'TARDANZA', 'MEDIA_FALTA', 'JUSTIFICADO'
               <td mat-cell *matCellDef="let a">
                 <button mat-icon-button [matMenuTriggerFor]="menu"><mat-icon>more_vert</mat-icon></button>
                 <mat-menu #menu="matMenu">
-                  <button mat-menu-item (click)="justificar(a)" [disabled]="a.justificada">
+                  <button *appHasPermission="'RRHH_ASISTENCIA_JUSTIFICAR'" mat-menu-item (click)="justificar(a)" [disabled]="a.justificada">
                     <mat-icon>check</mat-icon><span>Justificar</span>
                   </button>
                 </mat-menu>

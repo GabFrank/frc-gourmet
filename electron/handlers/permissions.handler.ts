@@ -85,10 +85,19 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
 
   // Ventas
   { codigo: 'VENTAS_PDV', descripcion: 'Operar punto de venta (PdV/mesas/comandas)', modulo: 'VENTAS' },
+  { codigo: 'VENTAS_PDV_CONFIGURAR', descripcion: 'Configurar el PdV (categorías, ítems, atajos, mesas, sectores, config)', modulo: 'VENTAS' },
   { codigo: 'VENTAS_HISTORICO_VER', descripcion: 'Ver historico de ventas concluidas', modulo: 'VENTAS' },
   { codigo: 'PDV_PAGAR_VALE', descripcion: 'Crear/pagar vales de funcionario desde el cajón del PdV', modulo: 'VENTAS' },
   { codigo: 'PDV_PAGAR_COMPRA', descripcion: 'Crear/pagar compras desde el cajón del PdV', modulo: 'VENTAS' },
   { codigo: 'PDV_ANULAR_EGRESO', descripcion: 'Anular egresos de caja (vales/compras) del PdV', modulo: 'VENTAS' },
+
+  // Facturación legal (SET/SIFEN)
+  { codigo: 'FACTURACION_VER', descripcion: 'Ver facturas, timbrados y plantillas', modulo: 'FACTURACION' },
+  { codigo: 'FACTURACION_EMITIR', descripcion: 'Emitir facturas legales', modulo: 'FACTURACION' },
+  { codigo: 'FACTURACION_ANULAR', descripcion: 'Anular facturas emitidas', modulo: 'FACTURACION' },
+  { codigo: 'FACTURACION_TIMBRADO_GESTIONAR', descripcion: 'Gestionar timbrados y numeración', modulo: 'FACTURACION' },
+  { codigo: 'FACTURACION_PLANTILLA_GESTIONAR', descripcion: 'Gestionar plantillas/diseños de factura', modulo: 'FACTURACION' },
+  { codigo: 'FACTURACION_CONFIGURAR', descripcion: 'Configurar numeración/timbrado activo de facturación', modulo: 'FACTURACION' },
 
   // Compras / Proveedores
   { codigo: 'COMPRAS_VER', descripcion: 'Ver lista de compras', modulo: 'COMPRAS' },

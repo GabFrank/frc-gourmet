@@ -27,6 +27,7 @@ import { CreateEditUsuarioComponent } from '../usuarios/create-edit-usuario.comp
 import { TabsService } from 'src/app/services/tabs.service';
 import { ListUsuariosComponent } from '../usuarios/list-usuarios.component';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 
 // Extended interface to include display values
 interface PersonaViewModel extends Partial<Persona> {
@@ -59,7 +60,8 @@ interface PersonaViewModel extends Partial<Persona> {
     RouterModule,
     CreateEditUsuarioComponent,
     ListUsuariosComponent,
-    ConfirmationDialogComponent
+    ConfirmationDialogComponent,
+    HasPermissionDirective
   ],
   templateUrl: './list-personas.component.html',
   styleUrls: ['./list-personas.component.scss']

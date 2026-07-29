@@ -76,10 +76,10 @@
 
   <!-- Acciones rápidas -->
   <div class="dashboard-quick-actions" *ngIf="funcionario">
-    <app-dash-quick-action icon="edit" title="Editar datos" color="#7c4dff" (action)="abrirEditar()"></app-dash-quick-action>
-    <app-dash-quick-action icon="swap_horiz" title="Cambiar cargo" color="#2196f3" [disabled]="!funcionario.activo" (action)="abrirCambioCargo()"></app-dash-quick-action>
-    <app-dash-quick-action icon="attach_money" title="Ajustar salario" color="#4caf50" [disabled]="!funcionario.activo" (action)="abrirCambioSalario()"></app-dash-quick-action>
-    <app-dash-quick-action icon="person_off" title="Registrar egreso" color="#f44336" [disabled]="!funcionario.activo" (action)="abrirEgreso()"></app-dash-quick-action>
+    <app-dash-quick-action *appHasPermission="'RRHH_FUNCIONARIO_EDITAR'" icon="edit" title="Editar datos" color="#7c4dff" (action)="abrirEditar()"></app-dash-quick-action>
+    <app-dash-quick-action *appHasPermission="'RRHH_FUNCIONARIO_EDITAR'" icon="swap_horiz" title="Cambiar cargo" color="#2196f3" [disabled]="!funcionario.activo" (action)="abrirCambioCargo()"></app-dash-quick-action>
+    <app-dash-quick-action *appHasPermission="'RRHH_FUNCIONARIO_EDITAR'" icon="attach_money" title="Ajustar salario" color="#4caf50" [disabled]="!funcionario.activo" (action)="abrirCambioSalario()"></app-dash-quick-action>
+    <app-dash-quick-action *appHasPermission="'RRHH_FUNCIONARIO_EGRESAR'" icon="person_off" title="Registrar egreso" color="#f44336" [disabled]="!funcionario.activo" (action)="abrirEgreso()"></app-dash-quick-action>
   </div>
 
   <!-- Contenido principal: tabs (izq) + próximos vencimientos (der) -->
@@ -179,7 +179,7 @@
           <mat-tab label="Turnos">
             <div class="tab-body">
               <div class="tab-actions">
-                <button mat-flat-button color="primary" (click)="abrirAsignarTurno()" [disabled]="!funcionario.activo">
+                <button *appHasPermission="'RRHH_FUNCIONARIO_EDITAR'" mat-flat-button color="primary" (click)="abrirAsignarTurno()" [disabled]="!funcionario.activo">
                   <mat-icon>schedule</mat-icon>
                   Asignar nuevo turno
                 </button>
@@ -212,12 +212,14 @@
                         <mat-icon>more_vert</mat-icon>
                       </button>
                       <mat-menu #menuT="matMenu">
-                        <button mat-menu-item (click)="editarTurno(t)">
+                        <button *appHasPermission="'RRHH_FUNCIONARIO_EDITAR'" mat-menu-item (click)="editarTurno(t)">
                           <mat-icon>edit</mat-icon><span>Editar fecha desde</span>
                         </button>
-                        <button mat-menu-item (click)="cerrarTurno(t)" *ngIf="!t.fechaHasta">
-                          <mat-icon>event_busy</mat-icon><span>Cerrar asignacion</span>
-                        </button>
+                        <ng-container *appHasPermission="'RRHH_FUNCIONARIO_EDITAR'">
+                          <button mat-menu-item (click)="cerrarTurno(t)" *ngIf="!t.fechaHasta">
+                            <mat-icon>event_busy</mat-icon><span>Cerrar asignacion</span>
+                          </button>
+                        </ng-container>
                       </mat-menu>
                     </td>
                   </ng-container>
@@ -232,7 +234,7 @@
           <mat-tab label="Rostros">
             <div class="tab-body">
               <div class="tab-actions">
-                <button mat-flat-button color="primary" (click)="abrirEnrolarRostro()" [disabled]="!funcionario.activo">
+                <button *appHasPermission="'RRHH_FUNCIONARIO_EDITAR'" mat-flat-button color="primary" (click)="abrirEnrolarRostro()" [disabled]="!funcionario.activo">
                   <mat-icon>face</mat-icon>
                   Registrar rostro
                 </button>
@@ -257,7 +259,7 @@
                         <mat-icon>more_vert</mat-icon>
                       </button>
                       <mat-menu #menuR="matMenu">
-                        <button mat-menu-item (click)="eliminarRostro(r)">
+                        <button *appHasPermission="'RRHH_FUNCIONARIO_EDITAR'" mat-menu-item (click)="eliminarRostro(r)">
                           <mat-icon>delete</mat-icon><span>Eliminar</span>
                         </button>
                       </mat-menu>
@@ -276,7 +278,7 @@
           <mat-tab label="Documentos">
             <div class="tab-body">
               <div class="tab-actions">
-                <button mat-flat-button color="primary" (click)="abrirSubirDocumento()">
+                <button *appHasPermission="'DOCUMENTOS_ADJUNTAR'" mat-flat-button color="primary" (click)="abrirSubirDocumento()">
                   <mat-icon>upload_file</mat-icon>
                   Subir documento
                 </button>
@@ -319,7 +321,7 @@
                         <button mat-menu-item (click)="descargarDocumento(d)">
                           <mat-icon>download</mat-icon><span>Descargar</span>
                         </button>
-                        <button mat-menu-item (click)="eliminarDocumento(d)">
+                        <button *appHasPermission="'DOCUMENTOS_ADJUNTOS_ELIMINAR'" mat-menu-item (click)="eliminarDocumento(d)">
                           <mat-icon>delete</mat-icon><span>Eliminar</span>
                         </button>
                       </mat-menu>

@@ -29,6 +29,7 @@ import {
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { RestoreConfirmDialogComponent } from './restore-confirm-dialog.component';
 import { ResetDbConfirmDialogComponent } from './reset-db-confirm-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-backup-restore',
@@ -54,6 +55,7 @@ import { ResetDbConfirmDialogComponent } from './reset-db-confirm-dialog.compone
     MatTableModule,
     MatTabsModule,
     MatTooltipModule,
+    HasPermissionDirective,
   ],
   templateUrl: './backup-restore.component.html',
   styleUrls: ['./backup-restore.component.scss'],

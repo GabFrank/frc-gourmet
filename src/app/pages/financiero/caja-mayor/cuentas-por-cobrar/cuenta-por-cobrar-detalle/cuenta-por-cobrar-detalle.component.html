@@ -86,12 +86,16 @@
             <mat-icon>more_vert</mat-icon>
           </button>
           <mat-menu #m="matMenu">
-            <button mat-menu-item (click)="cobrar(c)" *ngIf="c.estado === 'PENDIENTE' || c.estado === 'PARCIAL'">
-              <mat-icon>payments</mat-icon><span>Cobrar cuota</span>
-            </button>
-            <button mat-menu-item (click)="anularCobro(c)" *ngIf="c.montoCobrado > 0 && c.estado !== 'CANCELADO'">
-              <mat-icon>undo</mat-icon><span>Anular cobro</span>
-            </button>
+            <ng-container *appHasPermission="'CPC_COBRAR'">
+              <button mat-menu-item (click)="cobrar(c)" *ngIf="c.estado === 'PENDIENTE' || c.estado === 'PARCIAL'">
+                <mat-icon>payments</mat-icon><span>Cobrar cuota</span>
+              </button>
+            </ng-container>
+            <ng-container *appHasPermission="'CPC_ANULAR'">
+              <button mat-menu-item (click)="anularCobro(c)" *ngIf="c.montoCobrado > 0 && c.estado !== 'CANCELADO'">
+                <mat-icon>undo</mat-icon><span>Anular cobro</span>
+              </button>
+            </ng-container>
           </mat-menu>
         </td>
       </ng-container>

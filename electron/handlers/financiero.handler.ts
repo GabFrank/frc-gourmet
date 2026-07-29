@@ -164,6 +164,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('createMoneda', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(Moneda);
       if (data.principal) {
         await repo.update({ principal: true }, { principal: false });
@@ -179,6 +180,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('updateMoneda', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(Moneda);
       if (data.principal) {
         await repo.update({ principal: true, id: Not(id) }, { principal: false });
@@ -197,6 +199,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('deleteMoneda', async (_event: any, id: number) => {
     // Note: Hard delete. Consider dependencies (PrecioVenta, MonedaBillete, CajaMoneda, etc.)
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(Moneda);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Moneda ID ${id} not found`);
@@ -224,6 +227,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('create-tipo-precio', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(TipoPrecio);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -246,6 +250,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-tipo-precio', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(TipoPrecio);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`TipoPrecio ID ${id} not found`);
@@ -260,6 +265,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('delete-tipo-precio', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(TipoPrecio);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`TipoPrecio ID ${id} not found`);
@@ -296,6 +302,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('create-moneda-billete', async (_event: IpcMainInvokeEvent, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(MonedaBillete);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -308,6 +315,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-moneda-billete', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(MonedaBillete);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`MonedaBillete ID ${id} not found`);
@@ -323,6 +331,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('delete-moneda-billete', async (_event: IpcMainInvokeEvent, id: number) => {
     // Note: Hard delete. Consider dependencies (ConteoDetalle)
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(MonedaBillete);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`MonedaBillete ID ${id} not found`);
@@ -358,6 +367,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('create-conteo', async (_event: IpcMainInvokeEvent, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(Conteo);
       const entity: any = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -375,6 +385,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-conteo', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(Conteo);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Conteo ID ${id} not found`);
@@ -390,6 +401,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('delete-conteo', async (_event: IpcMainInvokeEvent, id: number) => {
     // Note: Hard delete. Conteos might be linked to Cajas, consider implications.
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(Conteo);
       const entity = await repo.findOne({ where: { id }, relations: ['detalles'] }); // Load detalles to delete them first
       if (!entity) throw new Error(`Conteo ID ${id} not found`);
@@ -429,6 +441,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('create-conteo-detalle', async (_event: IpcMainInvokeEvent, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(ConteoDetalle);
       const entity = repo.create(data);
       // No user tracking needed usually for details
@@ -441,6 +454,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-conteo-detalle', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(ConteoDetalle);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`ConteoDetalle ID ${id} not found`);
@@ -456,6 +470,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('delete-conteo-detalle', async (_event: IpcMainInvokeEvent, id: number) => {
     // Note: Hard delete.
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(ConteoDetalle);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`ConteoDetalle ID ${id} not found`);
@@ -766,6 +781,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('delete-caja', async (_event: IpcMainInvokeEvent, id: number) => {
     // Note: Hard delete. Consider implications if caja records are critical audit trails.
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(Caja);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Caja ID ${id} not found`);
@@ -828,6 +844,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('create-caja-moneda', async (_event: IpcMainInvokeEvent, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(CajaMoneda);
       const entity = repo.create(data);
       // No user tracking typically needed for config like this
@@ -840,6 +857,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-caja-moneda', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(CajaMoneda);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`CajaMoneda ID ${id} not found`);
@@ -855,6 +873,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('delete-caja-moneda', async (_event: IpcMainInvokeEvent, id: number) => {
     // Note: Hard delete.
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(CajaMoneda);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`CajaMoneda ID ${id} not found`);
@@ -867,6 +886,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   // Bulk save for CajaMoneda settings
   ipcMain.handle('save-cajas-monedas', async (_event: IpcMainInvokeEvent, updates: any[]) => {
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -949,6 +969,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-moneda-cambio', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(MonedaCambio);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`MonedaCambio ID ${id} not found`);
@@ -964,6 +985,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('delete-moneda-cambio', async (_event: IpcMainInvokeEvent, id: number) => {
     // Note: Hard delete.
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(MonedaCambio);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`MonedaCambio ID ${id} not found`);

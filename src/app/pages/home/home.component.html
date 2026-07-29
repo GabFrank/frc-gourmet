@@ -53,7 +53,7 @@
   </div>
 
   <div class="dashboard-quick-actions">
-    <app-dash-quick-action *ngFor="let a of quickActions"
+    <app-dash-quick-action *ngFor="let a of visibleQuickActions"
       [icon]="a.icon"
       [title]="a.title"
       [color]="a.color"

@@ -12,6 +12,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateEditEquipoDialogComponent } from '../create-edit-equipo-dialog/create-edit-equipo-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-equipos-comision',
@@ -26,6 +27,7 @@ import { CreateEditEquipoDialogComponent } from '../create-edit-equipo-dialog/cr
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatDialogModule,
+    HasPermissionDirective,
   ],
   templateUrl: './list-equipos-comision.component.html',
   styleUrls: ['./list-equipos-comision.component.scss'],

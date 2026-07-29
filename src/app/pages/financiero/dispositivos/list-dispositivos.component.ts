@@ -16,6 +16,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { Dispositivo } from 'src/app/database/entities/financiero/dispositivo.entity';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CreateEditDispositivoComponent } from './create-edit-dispositivo.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-dispositivos',
@@ -37,7 +38,8 @@ import { CreateEditDispositivoComponent } from './create-edit-dispositivo.compon
     MatSnackBarModule,
     MatSlideToggleModule,
     MatMenuModule,
-    CreateEditDispositivoComponent
+    CreateEditDispositivoComponent,
+    HasPermissionDirective
   ]
 })
 export class ListDispositivosComponent implements OnInit {

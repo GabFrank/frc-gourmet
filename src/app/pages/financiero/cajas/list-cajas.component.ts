@@ -28,6 +28,7 @@ import { PromptDialogComponent } from 'src/app/shared/components/prompt-dialog/p
 import { CreateGastoCajaDialogComponent } from 'src/app/pages/ventas/pdv/gasto-caja-dialog/gasto-caja-dialog.component';
 import { CreateRetiroCajaDialogComponent } from 'src/app/pages/financiero/caja-mayor/retiros/create-retiro-caja-dialog/create-retiro-caja-dialog.component';
 import { AuthService } from 'src/app/services/auth.service';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 // Confirmation dialog for existing open caja
 @Component({
@@ -91,7 +92,8 @@ interface CajaRow {
     MatButtonToggleModule,
     MatAutocompleteModule,
     MatMenuModule,
-    CreateCajaDialogComponent
+    CreateCajaDialogComponent,
+    HasPermissionDirective
   ]
 })
 export class ListCajasComponent implements OnInit {

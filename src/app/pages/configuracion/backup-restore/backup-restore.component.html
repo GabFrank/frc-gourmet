@@ -80,25 +80,25 @@
           </mat-card-header>
           <mat-card-content>
             <div class="action-grid">
-              <button mat-stroked-button color="primary"
+              <button *appHasPermission="'SISTEMA_BACKUP'" mat-stroked-button color="primary"
                       (click)="createBackupLocal(false)"
                       [disabled]="loading">
                 <mat-icon>save</mat-icon>
                 <span>Backup rápido (solo BD)</span>
               </button>
-              <button mat-stroked-button color="primary"
+              <button *appHasPermission="'SISTEMA_BACKUP'" mat-stroked-button color="primary"
                       (click)="createBackupLocal(true)"
                       [disabled]="loading">
                 <mat-icon>archive</mat-icon>
                 <span>Backup completo (BD + imágenes)</span>
               </button>
-              <button mat-stroked-button
+              <button *appHasPermission="'SISTEMA_BACKUP'" mat-stroked-button
                       (click)="createAndExport(false)"
                       [disabled]="loading">
                 <mat-icon>file_download</mat-icon>
                 <span>Exportar BD a archivo...</span>
               </button>
-              <button mat-stroked-button
+              <button *appHasPermission="'SISTEMA_BACKUP'" mat-stroked-button
                       (click)="createAndExport(true)"
                       [disabled]="loading">
                 <mat-icon>folder_zip</mat-icon>
@@ -114,7 +114,7 @@
             <mat-card-subtitle>Reemplaza la BD actual con un backup. La app se reinicia.</mat-card-subtitle>
           </mat-card-header>
           <mat-card-content>
-            <button mat-flat-button color="warn"
+            <button *appHasPermission="'SISTEMA_BACKUP'" mat-flat-button color="warn"
                     (click)="restoreFromFile()"
                     [disabled]="loading">
               <mat-icon>restore</mat-icon>
@@ -184,11 +184,11 @@
                       <mat-icon>more_vert</mat-icon>
                     </button>
                     <mat-menu #rowMenu="matMenu">
-                      <button mat-menu-item (click)="restoreFromList(row)">
+                      <button *appHasPermission="'SISTEMA_BACKUP'" mat-menu-item (click)="restoreFromList(row)">
                         <mat-icon>restore</mat-icon>
                         <span>Restaurar este backup</span>
                       </button>
-                      <button mat-menu-item (click)="deleteBackup(row)">
+                      <button *appHasPermission="'SISTEMA_BACKUP'" mat-menu-item (click)="deleteBackup(row)">
                         <mat-icon>delete</mat-icon>
                         <span>Eliminar</span>
                       </button>
@@ -306,11 +306,11 @@
             </div>
 
             <div class="form-row buttons-row">
-              <button mat-flat-button color="primary" (click)="saveConfig()" [disabled]="loading">
+              <button *appHasPermission="'SISTEMA_BACKUP'" mat-flat-button color="primary" (click)="saveConfig()" [disabled]="loading">
                 <mat-icon>save</mat-icon>
                 <span>Guardar configuración</span>
               </button>
-              <button mat-stroked-button (click)="triggerAutoBackupNow()" [disabled]="loading">
+              <button *appHasPermission="'SISTEMA_BACKUP'" mat-stroked-button (click)="triggerAutoBackupNow()" [disabled]="loading">
                 <mat-icon>flash_on</mat-icon>
                 <span>Ejecutar ahora</span>
               </button>
@@ -348,7 +348,7 @@
               </ul>
               <p>La app se reiniciará automáticamente.</p>
             </div>
-            <button mat-flat-button color="warn" (click)="resetDatabase()" [disabled]="loading">
+            <button *appHasPermission="'SISTEMA_BACKUP'" mat-flat-button color="warn" (click)="resetDatabase()" [disabled]="loading">
               <mat-icon>delete_forever</mat-icon>
               <span>Resetear base de datos</span>
             </button>

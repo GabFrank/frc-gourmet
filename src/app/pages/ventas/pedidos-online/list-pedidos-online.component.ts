@@ -8,6 +8,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { RepositoryService } from '../../../database/repository.service';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 /**
  * Bandeja de PEDIDOS ONLINE en el PdV (Fase 4).
@@ -28,6 +29,7 @@ import { RepositoryService } from '../../../database/repository.service';
     MatFormFieldModule,
     MatSelectModule,
     MatSnackBarModule,
+    HasPermissionDirective,
   ],
   templateUrl: './list-pedidos-online.component.html',
   styleUrls: ['./list-pedidos-online.component.scss'],

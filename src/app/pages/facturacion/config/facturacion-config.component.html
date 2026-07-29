@@ -40,7 +40,7 @@
       </mat-checkbox>
 
       <div class="actions">
-        <button mat-raised-button color="primary" (click)="save()" [disabled]="isSaving">
+        <button *appHasPermission="'FACTURACION_CONFIGURAR'" mat-raised-button color="primary" (click)="save()" [disabled]="isSaving">
           <mat-icon>save</mat-icon> Guardar configuración
         </button>
       </div>

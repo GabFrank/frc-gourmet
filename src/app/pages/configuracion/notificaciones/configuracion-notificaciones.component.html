@@ -114,7 +114,7 @@
         </mat-card>
 
         <div class="actions-bar">
-          <button mat-raised-button color="primary" (click)="guardarConfig()" [disabled]="saving">
+          <button *appHasPermission="'NOTIFICACIONES_CONFIGURAR'" mat-raised-button color="primary" (click)="guardarConfig()" [disabled]="saving">
             <mat-icon>save</mat-icon> Guardar configuracion
           </button>
         </div>

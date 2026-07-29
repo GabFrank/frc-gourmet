@@ -17,6 +17,7 @@ import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 const TIPOS = ['CUMPLEANIOS', 'NAVIDAD', 'DESEMPENIO', 'PRODUCTIVIDAD', 'OTRO'];
 
@@ -40,6 +41,7 @@ const TIPOS = ['CUMPLEANIOS', 'NAVIDAD', 'DESEMPENIO', 'PRODUCTIVIDAD', 'OTRO'];
     MatNativeDateModule,
     MatSnackBarModule,
     MatDialogModule,
+    HasPermissionDirective,
   ],
   template: `
     <div class="page">
@@ -47,9 +49,11 @@ const TIPOS = ['CUMPLEANIOS', 'NAVIDAD', 'DESEMPENIO', 'PRODUCTIVIDAD', 'OTRO'];
         <mat-card-content>
           <div class="header">
             <div class="title"><mat-icon>card_giftcard</mat-icon> <h2>Bonos</h2></div>
-            <button mat-flat-button color="primary" (click)="showCreateForm()" *ngIf="!showInlineForm">
-              <mat-icon>add</mat-icon> Nuevo bono
-            </button>
+            <ng-container *appHasPermission="'RRHH_BONO_OTORGAR'">
+              <button mat-flat-button color="primary" (click)="showCreateForm()" *ngIf="!showInlineForm">
+                <mat-icon>add</mat-icon> Nuevo bono
+              </button>
+            </ng-container>
           </div>
         </mat-card-content>
       </mat-card>
@@ -145,7 +149,7 @@ const TIPOS = ['CUMPLEANIOS', 'NAVIDAD', 'DESEMPENIO', 'PRODUCTIVIDAD', 'OTRO'];
                   <mat-icon>more_vert</mat-icon>
                 </button>
                 <mat-menu #menu="matMenu">
-                  <button mat-menu-item (click)="anular(b)"><mat-icon>cancel</mat-icon><span>Anular</span></button>
+                  <button *appHasPermission="'RRHH_BONO_OTORGAR'" mat-menu-item (click)="anular(b)"><mat-icon>cancel</mat-icon><span>Anular</span></button>
                 </mat-menu>
               </td>
             </ng-container>

@@ -16,6 +16,7 @@ import { RepositoryService } from '../../../../database/repository.service';
 import { Factura } from '../../../../database/entities/facturacion/factura.entity';
 import { ConfirmationDialogComponent } from '../../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { FacturarDialogComponent } from '../facturar-dialog/facturar-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-facturas',
@@ -33,6 +34,7 @@ import { FacturarDialogComponent } from '../facturar-dialog/facturar-dialog.comp
     MatSelectModule,
     MatSnackBarModule,
     MatDialogModule,
+    HasPermissionDirective,
   ],
   templateUrl: './list-facturas.component.html',
   styleUrls: ['./list-facturas.component.scss'],

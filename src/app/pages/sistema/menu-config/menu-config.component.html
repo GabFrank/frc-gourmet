@@ -9,10 +9,10 @@
         </p>
       </div>
       <div class="header-actions">
-        <button mat-stroked-button (click)="restaurar()" [disabled]="guardando || cargando">
+        <button *appHasPermission="'SISTEMA_MENU_CONFIGURAR'" mat-stroked-button (click)="restaurar()" [disabled]="guardando || cargando">
           <mat-icon>restart_alt</mat-icon> Restaurar defaults
         </button>
-        <button mat-flat-button color="primary" (click)="guardar()" [disabled]="guardando || cargando">
+        <button *appHasPermission="'SISTEMA_MENU_CONFIGURAR'" mat-flat-button color="primary" (click)="guardar()" [disabled]="guardando || cargando">
           <mat-icon>save</mat-icon> Guardar
         </button>
       </div>
