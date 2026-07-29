@@ -66,7 +66,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | **KDS (Kitchen Display Screen)** (componente compartido desktop/PWA `/kds`, SSE, modo TV, bump bar) | [domains/cocina-impresion.md](domains/cocina-impresion.md) |
 | **Caja Mayor** (movimientos, anulaciones, configuración) | [domains/financiero-caja-mayor.md](domains/financiero-caja-mayor.md) |
 | **Bancos, cheques, POS** (cuentas bancarias, acreditaciones) | [domains/financiero-bancos-pos.md](domains/financiero-bancos-pos.md) |
-| **CPP / CPC** (dirección de flujo, préstamos a funcionarios) | [domains/financiero-cpp-cpc.md](domains/financiero-cpp-cpc.md) |
+| **CPP / CPC** (dirección de flujo, préstamos a funcionarios, **cobro consolidado por convenio**) | [domains/financiero-cpp-cpc.md](domains/financiero-cpp-cpc.md) |
 | **RRHH** (funcionarios, asistencias, vales, vacaciones) | [domains/rrhh.md](domains/rrhh.md) |
 | **RRHH — Fichaje facial** (reconocimiento facial de asistencia, embeddings on-device, match 1:N, liveness, geocerca, kiosco PWA) | [domains/rrhh-asistencia-facial.md](domains/rrhh-asistencia-facial.md) |
 | **Liquidaciones, comisiones** (sueldo, aguinaldo, equipos) | [domains/rrhh-liquidaciones.md](domains/rrhh-liquidaciones.md) |

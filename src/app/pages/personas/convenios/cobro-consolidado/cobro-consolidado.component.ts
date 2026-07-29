@@ -58,7 +58,7 @@ export class CobroConsolidadoComponent {
   cuentasBancarias: any[] = [];
 
   form!: FormGroup;
-  colsDeuda = ['nombre', 'documento', 'cuotas', 'deuda'];
+  colsDeuda = ['nombre', 'documento', 'compras', 'deuda'];
   colsHistorial = ['fecha', 'monto', 'clientes', 'estado', 'acciones'];
 
   constructor(

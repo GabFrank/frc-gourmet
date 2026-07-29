@@ -163,6 +163,32 @@ CuentaPorCobrarCuota {
 
 Si el cliente comparte `persona_id` con un funcionario, sus cuotas CPC que vencen en el mes se **descuentan de la liquidación de sueldo** (concepto `CREDITO_CONSUMO`, referenciaTipo `CPC_CUOTA`). Al pagar la liquidación se cobra la cuota atómicamente (cuota COBRADA/PARCIAL, baja `saldoActual`, `MovimientoCliente` PAGO) **sin** movimiento aparte de Caja Mayor (neteado en el EGRESO_SALARIO). Anular la liquidación revierte el cobro. La columna `cuentas_por_cobrar_cuotas.liquidacion_id` evita que una cuota se tome en dos borradores. Detalles → [rrhh-liquidaciones.md](rrhh-liquidaciones.md).
 
+## Cobro Consolidado por Convenio
+
+Cobra de una sola vez **toda la deuda cobrable de todos los clientes que comparten un `Convenio`** (agrupación empresa/entidad — ver [personas-clientes.md](personas-clientes.md) §Convenio). Pensado para que la empresa pague a fin de mes la cuenta de sus funcionarios/afiliados y luego descuente internamente.
+
+### Entidades
+
+- `CobroConsolidado` (`entities/financiero/cobro-consolidado.entity.ts`): cabecera — `convenio`, `fecha`, `montoTotal`, `cantidadClientes`, `fuente` (`CAJA_MAYOR`|`CUENTA_BANCARIA`), `cajaMayorId`/`monedaId`/`formaPagoId`/`cuentaBancariaId`, `observacion`, `estado` (`ACTIVO`). Enums en `cobro-consolidado-enums.ts`.
+- `CobroConsolidadoDetalle`: una fila por cliente cobrado — `cliente`, `montoCobrado`, `saldoAnterior`. Base de los recibos.
+- Migración: `1779500000000-AddConveniosCobroConsolidado.ts`.
+
+### Handler (`electron/handlers/convenios.handler.ts`)
+
+- `get-cobro-consolidado-preview(convenioId)` → `computeCobroPreview`: por cada cliente del convenio suma sus cuotas cobrables (`getCuotasCobrablesCliente`: cuotas `PENDIENTE`/`PARCIAL` de CPC `ACTIVO`, venc. ASC). Devuelve `{ convenio, clientes:[{ id, nombre, documento, cantidadCompras, deuda }], total, cantidadConDeuda }`, ordenado por deuda desc. **`cantidadCompras` = cantidad de CPC distintas con deuda pendiente** (operaciones a crédito / compras del cliente), NO cantidad de cuotas — cada venta a crédito genera una `CuentaPorCobrar`.
+- `export-cobro-consolidado-preview-pdf(convenioId)` → PDF "REPORTE DE COBRO CONSOLIDADO" con columnas **CLIENTE · DOCUMENTO · COMPRAS · DEUDA** + total (pdfmake, `pdfTablaMontos`).
+- `registrar-cobro-consolidado(payload)` (**`ensurePermission` `CPC_COBRAR`**, transaccional): por cada cliente con deuda liquida sus cuotas cobrables en bruto (cuota→`COBRADO`/`PARCIAL`, actualiza cada CPC y la marca `COBRADO` si se saldó), genera el ingreso (Caja Mayor: 1 `CajaMayorMovimiento INGRESO_COBRO_CLIENTE` por cliente + `actualizarSaldoCajaMayor`; Cuenta bancaria: **1 solo crédito por el total** al final + `registrarMovimientoBancario ENTRADA_MANUAL`), baja `cliente.saldoActual`, crea `MovimientoCliente PAGO` y un `CobroConsolidadoDetalle` por cliente. Acepta `clienteIds` opcional para cobrar solo un subconjunto. Falla si ningún cliente tiene deuda cobrable.
+- `export-recibo-cobro-consolidado-pdf(cobroConsolidadoId)` → PDF con un recibo compacto por cliente (3 por hoja A4, líneas de corte punteadas). Se descarga automáticamente al registrar.
+- `get-cobros-consolidados(filtros?)` / `get-cobro-consolidado(id)`: historial (filtra por `convenioId`/`estado`).
+
+### Acceso (UI)
+
+Dos entradas, **ambas abren la tab `CobroConsolidadoComponent`** (`pages/personas/convenios/cobro-consolidado/`) con `{ convenioId }`:
+1. **Personas → Convenios** → menú ⋮ de la fila → **"Cobro consolidado"** (`list-convenios.component`).
+2. **Cuentas por Cobrar** (lista, `financiero/caja-mayor/cuentas-por-cobrar/list-cuentas-por-cobrar`) → botón de header **"Cobro consolidado"** con menú de convenios activos (gated `*appHasPermission="'CLIENTES_VER'"`).
+
+La tab muestra: resumen (total + clientes con deuda), form de cobro (Caja Mayor / Cuenta bancaria), tabla "Deuda por cliente" (Cliente · Documento · **Compras** · Deuda) e historial de cobros con descarga de recibos. **No es una hoja del `MENU_TREE`** — se accede siempre desde un convenio.
+
 ## MovimientoCliente
 
 Tracking paralelo a Caja Mayor para auditar interacciones con un cliente:

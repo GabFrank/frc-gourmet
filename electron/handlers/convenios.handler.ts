@@ -102,12 +102,17 @@ async function computeCobroPreview(dataSource: DataSource, convenioId: number): 
     const deuda = +cuotas
       .reduce((s, c: any) => s + (Number(c.monto) - Number(c.montoCobrado)), 0)
       .toFixed(2);
+    // Cantidad de compras (operaciones a credito) con deuda pendiente: CPC
+    // distintas, no cuotas. Cada venta a credito genera una CuentaPorCobrar.
+    const cantidadCompras = new Set(
+      cuotas.map((c: any) => c.cuentaPorCobrar?.id).filter((id: any) => id != null),
+    ).size;
     total += deuda;
     clientes.push({
       id: cli.id,
       nombre: nombreCliente(cli),
       documento: cli.ruc || cli.persona?.documento || null,
-      cantidadCuotas: cuotas.length,
+      cantidadCompras,
       deuda,
     });
   }
@@ -262,7 +267,7 @@ export function registerConveniosHandlers(
     const empresaHeader = await pdfHeaderEmpresa(dataSource, { showLogo: true });
     const filas = preview.clientes
       .filter((c: any) => c.deuda > 0)
-      .map((c: any) => [c.nombre, c.documento || '—', String(c.cantidadCuotas), pdfFmtMonto(c.deuda)]);
+      .map((c: any) => [c.nombre, c.documento || '—', String(c.cantidadCompras), pdfFmtMonto(c.deuda)]);
 
     const docDef = {
       pageSize: 'A4',
@@ -280,7 +285,7 @@ export function registerConveniosHandlers(
           margin: [0, 0, 0, 8],
         },
         pdfTablaMontos(
-          ['CLIENTE', 'DOCUMENTO', 'CUOTAS', 'DEUDA'],
+          ['CLIENTE', 'DOCUMENTO', 'COMPRAS', 'DEUDA'],
           filas,
           { montoCols: [3], totalLabel: 'TOTAL A COBRAR', totalValue: preview.total, totalCol: 3 },
         ),
