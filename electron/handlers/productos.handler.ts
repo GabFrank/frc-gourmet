@@ -825,6 +825,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('set-presentacion-principal', async (_event: any, presentacionId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const presentacionRepository = dataSource.getRepository(Presentacion);
       const currentUser = getCurrentUser();
 
@@ -867,6 +868,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('toggle-presentacion-activo', async (_event: any, presentacionId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const presentacionRepository = dataSource.getRepository(Presentacion);
       const currentUser = getCurrentUser();
 
@@ -948,6 +950,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-codigo-barra', async (_event: any, codigoBarraData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       console.log('Creating codigo barra with data:', codigoBarraData);
 
       const codigoBarraRepository = dataSource.getRepository(CodigoBarra);
@@ -995,6 +998,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('update-codigo-barra', async (_event: any, codigoBarraId: number, codigoBarraData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const codigoBarraRepository = dataSource.getRepository(CodigoBarra);
       const currentUser = getCurrentUser();
 
@@ -1037,6 +1041,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('delete-codigo-barra', async (_event: any, codigoBarraId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const codigoBarraRepository = dataSource.getRepository(CodigoBarra);
       const currentUser = getCurrentUser();
 
@@ -1207,6 +1212,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('createObservacion', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const observacionRepository = dataSource.getRepository(Observacion);
       const currentUser = getCurrentUser();
 
@@ -1225,6 +1231,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('updateObservacion', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const observacionRepository = dataSource.getRepository(Observacion);
       const currentUser = getCurrentUser();
 
@@ -1246,6 +1253,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('deleteObservacion', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const observacionRepository = dataSource.getRepository(Observacion);
       const currentUser = getCurrentUser();
 
@@ -1279,6 +1287,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-producto-observacion', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const productoObservacionRepository = dataSource.getRepository(ProductoObservacion);
       const currentUser = getCurrentUser();
 
@@ -1298,6 +1307,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('delete-producto-observacion', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const productoObservacionRepository = dataSource.getRepository(ProductoObservacion);
       const currentUser = getCurrentUser();
 
@@ -1410,6 +1420,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('createCombo', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const comboRepository = dataSource.getRepository(Combo);
       const currentUser = getCurrentUser();
 
@@ -1429,6 +1440,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('updateCombo', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const comboRepository = dataSource.getRepository(Combo);
       const currentUser = getCurrentUser();
 
@@ -1450,6 +1462,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('deleteCombo', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const comboRepository = dataSource.getRepository(Combo);
       const currentUser = getCurrentUser();
 
@@ -1483,6 +1496,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('createComboProducto', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const comboProductoRepository = dataSource.getRepository(ComboProducto);
       const currentUser = getCurrentUser();
 
@@ -1505,6 +1519,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('updateComboProducto', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const comboProductoRepository = dataSource.getRepository(ComboProducto);
       const currentUser = getCurrentUser();
 
@@ -1530,6 +1545,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('deleteComboProducto', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const comboProductoRepository = dataSource.getRepository(ComboProducto);
       const currentUser = getCurrentUser();
 

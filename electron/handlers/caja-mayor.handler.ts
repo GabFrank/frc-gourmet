@@ -2599,6 +2599,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         mostrarCuentasPorCobrar?: boolean;
       }
     ) => {
+      await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
       const queryRunner = dataSource.createQueryRunner();
       await queryRunner.connect();
       await queryRunner.startTransaction();

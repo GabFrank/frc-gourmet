@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
+import { ensurePermission } from '../utils/auth.utils';
 import { NotificacionRrhh } from '../../src/app/database/entities/rrhh/notificacion-rrhh.entity';
 import { TipoNotificacionRrhh, PrioridadNotificacion } from '../../src/app/database/entities/rrhh/notificacion-rrhh-enums';
 import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.entity';
@@ -269,7 +270,7 @@ export async function generarNotificacionesRrhh(): Promise<void> {
 
 export function registerNotificacionesRrhhHandlers(
   dataSource: DataSource,
-  _getCurrentUser: () => Usuario | null,
+  getCurrentUser: () => Usuario | null,
 ): void {
   _dataSource = dataSource;
 
@@ -329,6 +330,7 @@ export function registerNotificacionesRrhhHandlers(
 
   ipcMain.handle('generar-notificaciones-rrhh', async () => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_NOTIFICACIONES_VER');
       await generarNotificacionesRrhh();
       return { success: true };
     } catch (error) {

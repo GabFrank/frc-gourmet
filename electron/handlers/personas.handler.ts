@@ -886,6 +886,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
     direccion?: string;
   }) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, ['VENTAS_PDV', 'CLIENTES_GESTIONAR']);
       if (!data?.nombre || !data.nombre.trim()) throw new Error('El nombre es obligatorio');
       const currentUser = getCurrentUser();
       const personaRepo = dataSource.getRepository(Persona);
@@ -923,6 +924,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('crear-cliente-rapido', async (_event: any, data: { telefono: string; nombre?: string; direccion?: string }) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, ['VENTAS_PDV', 'CLIENTES_GESTIONAR']);
       const currentUser = getCurrentUser();
       const personaRepo = dataSource.getRepository(Persona);
       const clienteRepo = dataSource.getRepository(Cliente);

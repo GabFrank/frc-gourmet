@@ -114,6 +114,7 @@ export function registerFacturaImportHandlers(
   });
 
   ipcMain.handle('ia-prompt-sugerencia-create', async (_e, payload: { texto: string; motivo?: string; documentoOrigenId?: number; origen?: string }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_IMPORTAR_FACTURA');
     const userId = getCurrentUser()?.id;
     const repo = dataSource.getRepository(IaPromptSugerencia);
     const texto = (payload?.texto || '').trim();

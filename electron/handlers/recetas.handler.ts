@@ -637,6 +637,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('actualizar-costo-receta', async (_event: any, recetaId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
       await calculateRecipeCost(recetaId);
       return { success: true };
     } catch (error) {
@@ -856,6 +857,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
     eliminarDeOtrasVariaciones: boolean;
   }) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
       const recetaIngredienteRepository = dataSource.getRepository(RecetaIngrediente);
       const currentUser = getCurrentUser();
 
@@ -1214,6 +1216,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('create-receta-for-adicional', async (_event: any, adicionalId: number, recetaData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'ADICIONALES_GESTIONAR');
       const adicionalRepository = dataSource.getRepository(Adicional);
       const recetaRepository = dataSource.getRepository(Receta);
       const currentUser = getCurrentUser();
@@ -1247,6 +1250,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('update-receta-for-adicional', async (_event: any, adicionalId: number, recetaData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'ADICIONALES_GESTIONAR');
       const adicionalRepository = dataSource.getRepository(Adicional);
       const recetaRepository = dataSource.getRepository(Receta);
       const currentUser = getCurrentUser();
@@ -1280,6 +1284,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('delete-receta-for-adicional', async (_event: any, adicionalId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'ADICIONALES_GESTIONAR');
       const adicionalRepository = dataSource.getRepository(Adicional);
       const currentUser = getCurrentUser();
 
@@ -1399,6 +1404,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('create-receta-adicional-vinculacion', async (_event: any, vinculacionData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'ADICIONALES_GESTIONAR');
       const vinculacionRepository = dataSource.getRepository(RecetaAdicionalVinculacion);
       const currentUser = getCurrentUser();
 
@@ -1422,6 +1428,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('update-receta-adicional-vinculacion', async (_event: any, vinculacionId: number, vinculacionData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'ADICIONALES_GESTIONAR');
       const vinculacionRepository = dataSource.getRepository(RecetaAdicionalVinculacion);
       const currentUser = getCurrentUser();
 
@@ -1454,6 +1461,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('delete-receta-adicional-vinculacion', async (_event: any, vinculacionId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'ADICIONALES_GESTIONAR');
       const vinculacionRepository = dataSource.getRepository(RecetaAdicionalVinculacion);
       const vinculacion = await vinculacionRepository.findOne({ where: { id: vinculacionId } });
       if (!vinculacion) {
@@ -1472,6 +1480,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   // Handler to recalculate all recipe costs
   ipcMain.handle('recalculate-all-recipe-costs', async () => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
       const recetaRepository = dataSource.getRepository(Receta);
       const allRecetas = await recetaRepository.find({
         order: { nombre: 'ASC' }
@@ -1508,6 +1517,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   // Handler to recalculate a single recipe cost
   ipcMain.handle('recalculate-recipe-cost', async (_event: any, recetaId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
       const newCost = await calculateRecipeCost(recetaId);
       return { success: true, costoCalculado: newCost };
     } catch (error) {
@@ -1846,6 +1856,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('create-receta-presentacion', async (_e: IpcMainInvokeEvent, variacionData: { recetaId: number; presentacionId: number; nombre_generado?: string; sku?: string; precio_ajuste?: number; }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1888,12 +1899,14 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('update-receta-presentacion', async (_e: IpcMainInvokeEvent, id: number, data: Partial<RecetaPresentacion>) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
     await dataSource.getRepository(RecetaPresentacion).update(id, { ...data, nombre_generado: data.nombre_generado?.toUpperCase() });
     const updated = await dataSource.getRepository(RecetaPresentacion).findOne({ where: { id }, relations: ['receta', 'presentacion', 'sabor', 'preciosVenta'] });
     return updated;
   });
 
   ipcMain.handle('delete-receta-presentacion', async (_e: IpcMainInvokeEvent, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1911,6 +1924,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('bulk-update-variaciones', async (_e: IpcMainInvokeEvent, updates: Array<{ variacionId: number; precio_ajuste?: number; activo?: boolean;}>) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1937,11 +1951,13 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('recalcular-costo-variacion', async (_e: IpcMainInvokeEvent, variacionId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
     const resultado = await recalcularCostoVariacion(variacionId);
     return { ...resultado, mensaje: `Costo recalculado: $${resultado.costoAnterior.toFixed(2)} → $${resultado.costoNuevo.toFixed(2)}` };
   });
 
   ipcMain.handle('generate-variaciones-faltantes', async (_e: IpcMainInvokeEvent, productoId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
     if (!Number.isInteger(productoId)) {
       throw new Error('generate-variaciones-faltantes: productoId inválido o ausente');
     }
@@ -2015,6 +2031,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('create-or-update-sabor', async (_event: any, saborData: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'SABORES_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
