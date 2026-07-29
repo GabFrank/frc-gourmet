@@ -101,6 +101,8 @@ Permission {
 
 Relación M:N con `Cliente` vía tabla `cliente_convenios`; el lado dueño del `JoinTable` es `Cliente`. Páginas en `src/app/pages/personas/convenios/`.
 
+**Cobro consolidado:** cada convenio permite cobrar de una vez la deuda cobrable de todos sus clientes (cuotas CPC pendientes), generar el ingreso (Caja Mayor o cuenta bancaria) y emitir un recibo por cliente. Se accede desde: (1) **Personas → Convenios** → menú ⋮ de la fila → "Cobro consolidado"; (2) botón **"Cobro consolidado"** en el header de la lista de **Cuentas por Cobrar**. Ambos abren la tab `CobroConsolidadoComponent`. El reporte/preview muestra por cliente la columna **Compras** (cantidad de CPC distintas con deuda, no cuotas). Detalle completo (entidades, handler, flujo transaccional, PDFs) → [../domains/financiero-cpp-cpc.md](../domains/financiero-cpp-cpc.md) §Cobro Consolidado por Convenio.
+
 ### TipoCliente
 
 `src/app/database/entities/personas/tipo-cliente.entity.ts` (tabla `tipo_clientes`):
