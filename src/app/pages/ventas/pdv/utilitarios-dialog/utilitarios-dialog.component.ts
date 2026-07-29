@@ -47,6 +47,10 @@ export class UtilitariosDialogComponent implements OnInit {
       descripcion: 'Registrar retiro de efectivo de la caja de venta',
       icono: 'output',
       color: '#e65100',
+      // El retiro crea un movimiento en Caja Mayor (backend exige
+      // CAJA_MAYOR_OPERAR); ocultamos la tarjeta a roles sin ese permiso
+      // para no mostrar una acción que fallará al guardar.
+      permiso: 'CAJA_MAYOR_OPERAR',
     },
     {
       key: 'GASTOS',
