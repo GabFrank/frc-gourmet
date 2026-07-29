@@ -220,6 +220,7 @@ import { AddDestinoToGasto1779300000000 } from './migrations/1779300000000-AddDe
 import { AddCuentaBancariaToLiquidacionSueldo1779400000000 } from './migrations/1779400000000-AddCuentaBancariaToLiquidacionSueldo';
 import { AddConveniosCobroConsolidado1779500000000 } from './migrations/1779500000000-AddConveniosCobroConsolidado';
 import { AddPagoCuotaCppDetalle1785320463398 } from './migrations/1785320463398-AddPagoCuotaCppDetalle';
+import { AddEgresoCajaToPagoCuotaDetalle1785335253817 } from './migrations/1785335253817-AddEgresoCajaToPagoCuotaDetalle';
 import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVacacionVentas';
 import { AddCuentaBancariaToPagosCobros1779700000000 } from './migrations/1779700000000-AddCuentaBancariaToPagosCobros';
 import { AddCotizacionBancariaToPagosCobros1779800000000 } from './migrations/1779800000000-AddCotizacionBancariaToPagosCobros';
@@ -646,6 +647,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     DropCheckTipoOperacionFinanciera1785170061312,
     AddCuentasBancariasOrdenCajaMayorConfig1785170062316,
     AddPagoCuotaCppDetalle1785320463398,
+    AddEgresoCajaToPagoCuotaDetalle1785335253817,
   ];
 }
 

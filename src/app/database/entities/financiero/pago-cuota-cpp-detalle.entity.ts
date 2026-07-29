@@ -55,6 +55,10 @@ export class PagoCuotaCppDetalle extends BaseModel {
   @Column({ name: 'cuenta_bancaria_id', type: 'int', nullable: true })
   cuentaBancariaId?: number;
 
+  // Egreso del cajon del PdV generado por esta linea (si fuente = PDV_CAJA).
+  @Column({ name: 'egreso_caja_id', type: 'int', nullable: true })
+  egresoCajaId?: number;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   observacion?: string;
 }

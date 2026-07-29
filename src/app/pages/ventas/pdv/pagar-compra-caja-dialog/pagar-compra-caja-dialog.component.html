@@ -80,20 +80,88 @@
         <mat-error>Requerida</mat-error>
       </mat-form-field>
 
-      <mat-form-field appearance="outline" class="flex-field">
+      <mat-form-field appearance="outline" class="flex-field" *ngIf="!esMixto">
         <mat-label>Monto</mat-label>
         <input matInput type="text" formControlName="monto" appCurrencyInput [decimals]="decimalesMoneda" placeholder="0">
         <mat-error>Requerido</mat-error>
       </mat-form-field>
     </div>
 
-    <mat-form-field appearance="outline" class="full-width">
+    <mat-checkbox formControlName="pagoMixto" class="mixto-check">
+      Pago mixto (varias formas/monedas)
+    </mat-checkbox>
+
+    <mat-form-field appearance="outline" class="full-width" *ngIf="!esMixto">
       <mat-label>Forma de pago (efectivo)</mat-label>
       <mat-select formControlName="formaPagoId">
         <mat-option *ngFor="let fp of formasPago" [value]="fp.id">{{ fp.nombre }}</mat-option>
       </mat-select>
       <mat-error>Requerida</mat-error>
     </mat-form-field>
+
+    <!-- Editor de líneas mixtas -->
+    <div *ngIf="esMixto" class="mixto-box">
+      <table mat-table [dataSource]="lineas" class="mixto-table">
+        <ng-container matColumnDef="moneda">
+          <th mat-header-cell *matHeaderCellDef>Moneda</th>
+          <td mat-cell *matCellDef="let l">
+            <mat-form-field appearance="outline" class="cell-field">
+              <mat-select [(ngModel)]="l.monedaId" [ngModelOptions]="{ standalone: true }" (ngModelChange)="onLineaMonedaChange(l)">
+                <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="forma">
+          <th mat-header-cell *matHeaderCellDef>Forma</th>
+          <td mat-cell *matCellDef="let l">
+            <mat-form-field appearance="outline" class="cell-field">
+              <mat-select [(ngModel)]="l.formaPagoId" [ngModelOptions]="{ standalone: true }">
+                <mat-option *ngFor="let fp of formasPago" [value]="fp.id">{{ fp.nombre }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="monto">
+          <th mat-header-cell *matHeaderCellDef class="num">Monto</th>
+          <td mat-cell *matCellDef="let l" class="num">
+            <mat-form-field appearance="outline" class="cell-field monto">
+              <input matInput type="text" inputmode="decimal" appCurrencyInput [decimals]="l.decimales"
+                     [ngModel]="l.monto" [ngModelOptions]="{ standalone: true }"
+                     (ngModelChange)="onLineaMontoChange(l, $event)">
+            </mat-form-field>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="convertido">
+          <th mat-header-cell *matHeaderCellDef class="num">Convertido</th>
+          <td mat-cell *matCellDef="let l" class="num">
+            <ng-container *ngIf="convertido(l) !== null; else sinCotiz">{{ convertido(l) | number:'1.0-2' }}</ng-container>
+            <ng-template #sinCotiz><span class="warn-text" matTooltip="No hay cotización para esta moneda">Sin cotización</span></ng-template>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let l; let i = index">
+            <button mat-icon-button color="warn" type="button" (click)="quitarLinea(i)" [disabled]="lineas.length <= 1">
+              <mat-icon>delete_outline</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="lineasCols"></tr>
+        <tr mat-row *matRowDef="let row; columns: lineasCols;"></tr>
+      </table>
+      <button mat-stroked-button type="button" class="add-linea" (click)="agregarLinea()">
+        <mat-icon>add</mat-icon> Agregar forma de pago
+      </button>
+      <div class="mixto-total">
+        <span>Total{{ esPagar ? '' : ' (compra)' }}</span>
+        <span class="strong">{{ totalConvertido | number:'1.0-2' }}</span>
+      </div>
+      <div class="mixto-total" *ngIf="esPagar">
+        <span>Saldo de la cuota</span>
+        <span>{{ saldoCuotaSeleccionada | number:'1.0-2' }}</span>
+      </div>
+    </div>
 
     <div *ngIf="saldoInsuficiente" class="warn-banner">
       <mat-icon>warning</mat-icon>
