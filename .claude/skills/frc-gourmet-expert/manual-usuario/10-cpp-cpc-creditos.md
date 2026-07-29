@@ -56,6 +56,16 @@ Al confirmar:
 
 → Capítulo 7, sección "Pagar compra" (dialog `pagar-compras-dialog`).
 
+#### Pago mixto de una cuota de compra (varias formas / monedas)
+
+Una cuota de **compra** se puede pagar con **varias formas de pago y/o monedas** de una sola vez (igual que un gasto). Accesos:
+- **Pagar compras** (Caja Mayor) → menú **⋮** de la fila → **"Pago mixto"**.
+- **Detalle de la cuenta por pagar** → menú de la cuota → **"Pago mixto"**.
+- **Compra simplificada** → tildar **"Pago mixto"** (crea la compra y abre el pago).
+- **Cajón del PdV** (Utilitarios → Compra) → tildar **"Pago mixto"** (efectivo, varias monedas).
+
+En el diálogo agregás una **línea por cada forma/moneda** (Moneda + Forma + Monto). Cada línea se **convierte** a la moneda de la deuda con la cotización; el total convertido no puede superar el saldo. Para desarmarlo, en el detalle de la cuenta por pagar: menú de la cuota → **"Anular pago mixto"** (revierte los movimientos y el saldo).
+
 #### Cuota de préstamo bancario
 
 **Menu → Financiero → Caja Mayor → Cuentas por Pagar → tu CPP → click cuota → "Pagar"**.

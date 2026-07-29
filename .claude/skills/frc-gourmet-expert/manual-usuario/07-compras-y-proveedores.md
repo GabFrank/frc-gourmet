@@ -137,6 +137,10 @@ Click "Pagar":
 - Estados de cuota: PARCIAL si pago parcial, PAGADA si total.
 - Si todas cuotas PAGADAS → CPP estado=PAGADO.
 
+### Pago mixto (varias formas / monedas)
+
+Para pagar UNA cuota con **varias formas de pago y/o monedas** a la vez: en la fila de la cuota, menú **⋮ → "Pago mixto"**. Agregás una línea por forma/moneda; cada una se convierte a la moneda de la deuda. También disponible en la **compra simplificada** (checkbox "Pago mixto") y en el **cajón del PdV**. Detalle → [10-cpp-cpc-creditos.md](10-cpp-cpc-creditos.md) sección "Pago mixto".
+
 ## 7. Anular compra
 
 Click ⋮ → "Anular".
