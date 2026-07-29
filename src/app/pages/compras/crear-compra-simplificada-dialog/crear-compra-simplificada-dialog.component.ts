@@ -1,7 +1,7 @@
 import { Component, OnInit, Optional, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -72,6 +72,7 @@ export class CrearCompraSimplificadaDialogComponent implements OnInit {
     private fb: FormBuilder,
     private repositoryService: RepositoryService,
     private snackBar: MatSnackBar,
+    private dialog: MatDialog,
     @Optional() public dialogRef: MatDialogRef<CrearCompraSimplificadaDialogComponent>,
     @Optional() @Inject(MAT_DIALOG_DATA) public data: any,
   ) {}
@@ -91,6 +92,7 @@ export class CrearCompraSimplificadaDialogComponent implements OnInit {
       cantidadCuotas: [1, [Validators.min(1)]],
       fechaCreditoInicio: [new Date()],
       pagarAhora: [true],
+      pagoMixto: [false],
       fuente: ['CAJA_MAYOR'],
       cajaMayorId: [this.cajaMayorId || null],
       formaPagoId: [null],
@@ -100,6 +102,7 @@ export class CrearCompraSimplificadaDialogComponent implements OnInit {
     this.form.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
     this.form.get('credito')!.valueChanges.subscribe(() => this.aplicarValidadoresPago());
     this.form.get('pagarAhora')!.valueChanges.subscribe(() => this.aplicarValidadoresPago());
+    this.form.get('pagoMixto')!.valueChanges.subscribe(() => this.aplicarValidadoresPago());
     this.form.get('fuente')!.valueChanges.subscribe(() => this.aplicarValidadoresPago());
 
     this.loadData();
@@ -109,8 +112,12 @@ export class CrearCompraSimplificadaDialogComponent implements OnInit {
     return !!this.form?.get('credito')?.value;
   }
 
+  get esMixto(): boolean {
+    return !this.esCredito && !!this.form?.get('pagoMixto')?.value;
+  }
+
   get pagaAhora(): boolean {
-    return !this.esCredito && !!this.form?.get('pagarAhora')?.value;
+    return !this.esCredito && !this.esMixto && !!this.form?.get('pagarAhora')?.value;
   }
 
   get esBanco(): boolean {
@@ -222,6 +229,10 @@ export class CrearCompraSimplificadaDialogComponent implements OnInit {
     if (f.credito) {
       payload.cantidadCuotas = Number(f.cantidadCuotas) || 1;
       payload.fechaCreditoInicio = f.fechaCreditoInicio;
+    } else if (f.pagoMixto) {
+      // Pago mixto: se crea la compra SIN pagar y luego se abre el diálogo de
+      // pago mixto para su cuota (mismo patrón que el "pagar ahora" del complejo).
+      payload.pagarAhora = false;
     } else {
       payload.pagarAhora = !!f.pagarAhora;
       if (f.pagarAhora) {
@@ -237,7 +248,10 @@ export class CrearCompraSimplificadaDialogComponent implements OnInit {
 
     this.saving = true;
     try {
-      await firstValueFrom(this.repositoryService.crearCompraSimplificada(payload));
+      const compra: any = await firstValueFrom(this.repositoryService.crearCompraSimplificada(payload));
+      if (!f.credito && f.pagoMixto) {
+        await this.abrirPagoMixto(compra, proveedor?.nombre);
+      }
       this.snackBar.open('Compra simplificada registrada correctamente', 'Cerrar', { duration: 3000 });
       this.dialogRef?.close(true);
     } catch (error: any) {
@@ -246,6 +260,37 @@ export class CrearCompraSimplificadaDialogComponent implements OnInit {
     } finally {
       this.saving = false;
     }
+  }
+
+  // Abre el diálogo de pago mixto para la (única) cuota de la compra recién creada.
+  private async abrirPagoMixto(compra: any, proveedorNombre?: string): Promise<void> {
+    const cppId = compra?.cuentaPorPagar?.id;
+    if (!cppId) return;
+    const cuotas: any[] = await firstValueFrom(this.repositoryService.getCuentaPorPagarCuotas(cppId));
+    const cuota = (cuotas || [])[0];
+    if (!cuota) return;
+    const saldo = +(Number(cuota.monto || 0) - Number(cuota.montoPagado || 0)).toFixed(2);
+    const { PagoMixtoCuotaDialogComponent } = await import(
+      'src/app/pages/financiero/caja-mayor/pago-mixto-cuota-dialog/pago-mixto-cuota-dialog.component'
+    );
+    const ref = this.dialog.open(PagoMixtoCuotaDialogComponent, {
+      width: '720px',
+      maxWidth: '95vw',
+      data: {
+        cuota: {
+          id: cuota.id,
+          numero: cuota.numero,
+          saldoPendiente: saldo,
+          monedaId: compra?.moneda?.id,
+          monedaSimbolo: compra?.moneda?.simbolo,
+          monedaDenominacion: compra?.moneda?.denominacion,
+          cppId,
+          proveedorNombre: proveedorNombre,
+          compraNumeroNota: compra?.numeroNota,
+        },
+      },
+    });
+    await firstValueFrom(ref.afterClosed());
   }
 
   cancel(): void {

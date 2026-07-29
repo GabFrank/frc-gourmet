@@ -889,6 +889,98 @@ export function registerCuentasPorPagarHandlers(
     }
   });
 
+  // Anula TODOS los pagos mixtos de una cuota: por cada linea revierte el
+  // movimiento (contra-movimiento ANULACION en Caja Mayor o ajuste positivo en
+  // banco) y descuenta del montoPagado de la cuota/CPP la suma convertida. El
+  // ledger de Caja Mayor (EGRESO original + ANULACION) queda como auditoria.
+  ipcMain.handle('anular-pago-mixto-cuota', async (_event, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const cuotaId = Number(payload.cuotaId);
+      const motivo = (payload.motivo || '').toUpperCase();
+      const cu = getCurrentUser();
+      const detRepo = queryRunner.manager.getRepository(PagoCuotaCppDetalle);
+      const detalles = await detRepo.find({
+        where: { cuentaPorPagarCuotaId: cuotaId },
+        relations: ['moneda', 'formaPago'],
+      });
+      if (!detalles.length) throw new Error('La cuota no tiene pagos mixtos para anular.');
+
+      let totalCppRevertir = 0;
+      for (const det of detalles) {
+        totalCppRevertir += Number(det.montoCpp);
+        if (det.fuente === 'CUENTA_BANCARIA' && det.cuentaBancariaId) {
+          const cb = await queryRunner.manager.getRepository(CuentaBancaria).findOne({ where: { id: det.cuentaBancariaId } });
+          if (cb) {
+            cb.saldo = +(Number(cb.saldo) + Number(det.montoOrigen)).toFixed(2);
+            await queryRunner.manager.save(CuentaBancaria, cb);
+            await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+              cuentaBancariaId: det.cuentaBancariaId,
+              tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
+              monto: Number(det.montoOrigen),
+              observacion: `ANULACION PAGO MIXTO CUOTA #${cuotaId}` + (motivo ? ` - ${motivo}` : ''),
+              responsable: cu,
+            });
+          }
+        } else if (det.cajaMayorMovimientoId) {
+          const orig = await queryRunner.manager.getRepository(CajaMayorMovimiento).findOne({
+            where: { id: det.cajaMayorMovimientoId },
+            relations: ['cajaMayor', 'moneda', 'formaPago'],
+          });
+          if (orig) {
+            const contra = queryRunner.manager.create(CajaMayorMovimiento, {
+              cajaMayor: orig.cajaMayor,
+              tipoMovimiento: TipoMovimiento.ANULACION,
+              moneda: orig.moneda,
+              formaPago: orig.formaPago,
+              monto: orig.monto,
+              fecha: new Date(),
+              observacion: `ANULACION PAGO MIXTO CUOTA #${cuotaId}` + (motivo ? ` - ${motivo}` : ''),
+              referenciaAnulacion: orig,
+            });
+            if (cu) contra.responsable = cu;
+            await setEntityUserTracking(dataSource, contra, cu?.id, false);
+            await queryRunner.manager.save(CajaMayorMovimiento, contra);
+            await sumarSaldoCajaMayor(queryRunner, orig.cajaMayor.id, orig.moneda.id, orig.formaPago.id, Number(orig.monto));
+          }
+        }
+      }
+
+      // Revertir el estado de dominio (cuota + CPP) por el total convertido.
+      await revertirEstadoPagoCuota(queryRunner, cuotaId, +totalCppRevertir.toFixed(2), cu, dataSource);
+
+      // Quitar los detalles (el ledger de Caja Mayor queda como auditoria).
+      await detRepo.remove(detalles);
+
+      await queryRunner.commitTransaction();
+      return { success: true, revertido: +totalCppRevertir.toFixed(2), lineas: detalles.length };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error anulando pago mixto de cuota:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  // IDs de cuotas (de un CPP) que tienen pagos mixtos registrados. Para que la UI
+  // muestre la accion "Anular pago mixto" solo donde aplica.
+  ipcMain.handle('get-cuotas-con-pago-mixto', async (_event, cuentaPorPagarId: number) => {
+    const rows = await dataSource
+      .getRepository(CuentaPorPagarCuota)
+      .createQueryBuilder('cuota')
+      .select('cuota.id', 'cuotaId')
+      .distinct(true)
+      .innerJoin(PagoCuotaCppDetalle, 'det', 'det.cuenta_por_pagar_cuota_id = cuota.id')
+      .innerJoin('cuota.cuentaPorPagar', 'cpp')
+      .where('cpp.id = :cppId', { cppId: cuentaPorPagarId })
+      .getRawMany();
+    return (rows || []).map((r: any) => Number(r.cuotaId));
+  });
+
   // Pagar varias cuotas CPP tipo COMPRA en una sola transaccion (lote).
   // Reutiliza el helper aplicarPagoCpoCuota por cada cuota.
   // Payload: {

@@ -13,6 +13,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { PagarCuotaDialogComponent } from '../pagar-cuota-dialog/pagar-cuota-dialog.component';
+import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
   selector: 'app-cuenta-por-pagar-detalle',
@@ -38,6 +39,7 @@ export class CuentaPorPagarDetalleComponent implements OnInit {
   cuentaPorPagarId: number | null = null;
   cpp: any = null;
   cuotas: any[] = [];
+  cuotasConMixto = new Set<number>();
   loading = false;
   cuotaColumns = ['numero', 'fechaVencimiento', 'monto', 'montoPagado', 'restante', 'estado', 'fechaPago', 'actions'];
 
@@ -66,6 +68,10 @@ export class CuentaPorPagarDetalleComponent implements OnInit {
       ]);
       this.cpp = cpp;
       this.cuotas = cuotas || [];
+      try {
+        const ids: any = await firstValueFrom(this.repositoryService.getCuotasConPagoMixto(this.cuentaPorPagarId));
+        this.cuotasConMixto = new Set<number>((ids || []).map((n: any) => Number(n)));
+      } catch { this.cuotasConMixto = new Set<number>(); }
     } catch (e) {
       console.error(e);
       this.snackBar.open('Error al cargar', 'Cerrar', { duration: 3000 });
@@ -115,6 +121,30 @@ export class CuentaPorPagarDetalleComponent implements OnInit {
     });
     const ok = await firstValueFrom(ref.afterClosed());
     if (ok) this.loadData();
+  }
+
+  tieneMixto(cuota: any): boolean {
+    return this.cuotasConMixto.has(Number(cuota.id));
+  }
+
+  async anularPagoMixto(cuota: any): Promise<void> {
+    const ref = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Anular pago mixto',
+        message: `¿Anular los pagos mixtos de la cuota #${cuota.numero}? Se revertirán los movimientos de Caja Mayor/banco y el saldo de la cuota.`,
+      },
+    });
+    const ok = await firstValueFrom(ref.afterClosed());
+    if (!ok) return;
+    try {
+      await firstValueFrom(this.repositoryService.anularPagoMixtoCuota({ cuotaId: cuota.id, motivo: 'ANULACION MANUAL' }));
+      this.snackBar.open('Pago mixto anulado', 'Cerrar', { duration: 3000 });
+      this.loadData();
+    } catch (e: any) {
+      console.error(e);
+      const msg = (e?.message || String(e)).replace(/^Error invoking remote method '[^']+': Error: /, '');
+      this.snackBar.open(msg, 'Cerrar', { duration: 5000 });
+    }
   }
 
   estadoColor(estado: string): string {

@@ -231,8 +231,13 @@ Permite pagar UNA cuota de CPP (compra) con **varias formas de pago y/o monedas*
 - **UI** `pago-mixto-cuota-dialog/` (`financiero/caja-mayor/pago-mixto-cuota-dialog/`): tabla de líneas (moneda + forma + monto) con conversión en vivo a la moneda de la deuda y total vs saldo; reusa `CurrencyInputDirective` y `confirmarSaldosNegativos`. Se accede desde:
   1. **Diálogo "Pagar compras" (lote)** — menú ⋮ por fila → "Pago mixto". Cubre también el **"pagar ahora"** al finalizar una compra compleja (ese flujo abre este diálogo).
   2. **Detalle de CPP** (`cuenta-por-pagar-detalle`) — menú de la cuota → "Pago mixto" (solo si `cpp.tipo === 'COMPRA'`).
+  3. **Compra simplificada** (`crear-compra-simplificada-dialog`) — checkbox "Pago mixto": crea la compra sin pagar y abre el diálogo para su cuota (mismo patrón que el "pagar ahora" del complejo).
 
-**Pendiente (fase 2):** pago mixto inline en la **compra simplificada** (hoy: se crea y luego se paga mixto desde la lista/detalle) y en el **cajón del PdV** (`EgresoCaja`, otra entidad/reversa); y el **handler de anulación** de un pago de cuota vía Caja Mayor/banco (gap preexistente — hoy `anular-caja-mayor-movimiento` redirige a un handler CPP que no existe; el diseño deja los datos listos para construirlo).
+### Anulación del pago mixto
+
+`anular-pago-mixto-cuota` (permiso `COMPRAS_GESTIONAR`, `repo.anularPagoMixtoCuota({ cuotaId, motivo? })`): por cada `PagoCuotaCppDetalle` de la cuota revierte el movimiento (contra-movimiento `ANULACION` en Caja Mayor con `sumarSaldoCajaMayor`, o `AJUSTE_POSITIVO` en banco), descuenta del `montoPagado` (cuota + CPP) la suma convertida (`revertirEstadoPagoCuota`) y elimina los detalles (el ledger de Caja Mayor queda de auditoría). `get-cuotas-con-pago-mixto(cppId)` devuelve las cuotas con pago mixto para mostrar la acción. UI: menú de la cuota en `cuenta-por-pagar-detalle` → "Anular pago mixto" (disponible aunque la cuota esté PAGADA). Esto además **cubre el gap preexistente** de que `anular-caja-mayor-movimiento` bloqueaba (redirige a "Cuentas por Pagar") los movimientos con `cuentaPorPagarCuotaId` — al menos para los pagos mixtos.
+
+**Pendiente (fase 3):** pago mixto en el **cajón del PdV** (`EgresoCaja`, otra entidad/reversa — el flujo rápido no se toca todavía); y una anulación general de pagos **single-forma** vía Caja Mayor/banco (los single-forma no crean `PagoCuotaCppDetalle`, así que su reversa sigue sin handler).
 
 ## Filtros default en lista
 
