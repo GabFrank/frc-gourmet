@@ -1,0 +1,126 @@
+<div class="crud-edit">
+  <mat-toolbar color="primary" class="crud-edit-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="crud-edit-title">Nueva compra</span>
+    <span class="crud-spacer"></span>
+    <button mat-button (click)="guardar()" [disabled]="saving || loading">Guardar</button>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
+
+  <form class="crud-form" [formGroup]="form" (ngSubmit)="guardar()" *ngIf="!loading">
+    <!-- Proveedor -->
+    <mat-form-field appearance="outline">
+      <mat-label>Proveedor</mat-label>
+      <input matInput [formControl]="proveedorInput" [matAutocomplete]="provAuto" placeholder="Buscar proveedor…"
+        (blur)="form.controls.proveedorId.markAsTouched()" />
+      <mat-icon matSuffix>search</mat-icon>
+      <mat-autocomplete #provAuto="matAutocomplete" [displayWith]="displayProveedor" (optionSelected)="onProveedorSelected($event.option.value)">
+        <mat-option *ngFor="let p of proveedoresFiltrados" [value]="p">{{ p.label }}</mat-option>
+      </mat-autocomplete>
+      <mat-error *ngIf="form.controls.proveedorId.hasError('required') && form.controls.proveedorId.touched">
+        Seleccioná un proveedor de la lista
+      </mat-error>
+    </mat-form-field>
+
+    <!-- Moneda + Total -->
+    <mat-form-field appearance="outline">
+      <mat-label>Moneda</mat-label>
+      <mat-select formControlName="monedaId">
+        <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.label }}</mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.controls.monedaId.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Total</mat-label>
+      <input matInput type="number" inputmode="decimal" formControlName="total" min="0.01" step="any" />
+      <mat-error *ngIf="form.controls.total.hasError('required')">Requerido</mat-error>
+      <mat-error *ngIf="form.controls.total.hasError('min')">Debe ser mayor a 0</mat-error>
+    </mat-form-field>
+
+    <!-- Categoría (opcional) -->
+    <mat-form-field appearance="outline">
+      <mat-label>Categoría (opcional)</mat-label>
+      <mat-select formControlName="compraCategoriaId">
+        <mat-option [value]="null">—</mat-option>
+        <mat-option *ngFor="let c of categorias" [value]="c.id">{{ c.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <!-- Datos de la boleta -->
+    <mat-form-field appearance="outline">
+      <mat-label>N° de nota (opcional)</mat-label>
+      <input matInput formControlName="numeroNota" autocapitalize="characters" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Tipo de boleta (opcional)</mat-label>
+      <mat-select formControlName="tipoBoleta">
+        <mat-option [value]="null">—</mat-option>
+        <mat-option *ngFor="let t of tiposBoleta" [value]="t">{{ t | titlecase }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Fecha de compra</mat-label>
+      <input matInput type="date" formControlName="fechaCompra" />
+      <mat-error *ngIf="form.controls.fechaCompra.hasError('required')">Requerido</mat-error>
+    </mat-form-field>
+
+    <!-- Condición: contado / crédito -->
+    <mat-slide-toggle formControlName="credito" color="primary" class="ccs-toggle">A crédito</mat-slide-toggle>
+
+    <ng-container *ngIf="esCredito">
+      <mat-form-field appearance="outline">
+        <mat-label>Cantidad de cuotas</mat-label>
+        <input matInput type="number" min="1" formControlName="cantidadCuotas" />
+        <mat-error *ngIf="form.controls.cantidadCuotas.hasError('min') || form.controls.cantidadCuotas.hasError('required')">Mínimo 1</mat-error>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Fecha primera cuota</mat-label>
+        <input matInput type="date" formControlName="fechaCreditoInicio" />
+      </mat-form-field>
+    </ng-container>
+
+    <!-- Pago inmediato (solo contado) -->
+    <mat-slide-toggle *ngIf="!esCredito" formControlName="pagarAhora" color="primary" class="ccs-toggle">
+      Registrar pago ahora
+    </mat-slide-toggle>
+
+    <ng-container *ngIf="esPagarAhora">
+      <mat-button-toggle-group formControlName="fuente" class="ccs-fuente">
+        <mat-button-toggle value="CAJA_MAYOR"><mat-icon>account_balance_wallet</mat-icon> Caja Mayor</mat-button-toggle>
+        <mat-button-toggle value="CUENTA_BANCARIA" [disabled]="cuentasBancarias.length === 0">
+          <mat-icon>account_balance</mat-icon> Banco
+        </mat-button-toggle>
+      </mat-button-toggle-group>
+
+      <mat-form-field appearance="outline" *ngIf="!esBanco">
+        <mat-label>Caja Mayor</mat-label>
+        <mat-select formControlName="cajaMayorId">
+          <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{ c.label }}</mat-option>
+        </mat-select>
+        <mat-error *ngIf="form.controls.cajaMayorId.hasError('required')">Requerido</mat-error>
+      </mat-form-field>
+      <p class="ccs-hint" *ngIf="!esBanco">Se registra en <strong>{{ efectivoLabel }}</strong>.</p>
+
+      <mat-form-field appearance="outline" *ngIf="esBanco">
+        <mat-label>Cuenta bancaria</mat-label>
+        <mat-select formControlName="cuentaBancariaId">
+          <mat-option *ngFor="let c of cuentasBancarias" [value]="c.id">{{ c.label }}</mat-option>
+        </mat-select>
+        <mat-error *ngIf="form.controls.cuentaBancariaId.hasError('required')">Requerido</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Observación del pago (opcional)</mat-label>
+        <input matInput formControlName="observacionPago" />
+      </mat-form-field>
+    </ng-container>
+
+    <button type="submit" mat-flat-button color="primary" class="crud-save-btn" [disabled]="saving">
+      {{ saving ? 'Guardando…' : 'Guardar compra' }}
+    </button>
+  </form>
+</div>

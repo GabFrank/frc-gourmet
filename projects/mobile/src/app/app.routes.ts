@@ -521,6 +521,13 @@ export const routes: Routes = [
     data: { permiso: 'BANCOS_VER' },
     loadComponent: () => import('./pages/financiero/cuentas-bancarias/cuenta-bancaria-edit.page').then((m) => m.CuentaBancariaEditPage),
   },
+  // Alta de compra simplificada (full-screen).
+  {
+    path: 'compras/nueva',
+    canActivate: [authGuard, permisoGuard],
+    data: { permiso: 'COMPRAS_GESTIONAR' },
+    loadComponent: () => import('./pages/compras/compras/crear-compra-simplificada.page').then((m) => m.CrearCompraSimplificadaPage),
+  },
   // Detalle de compra (full-screen: cabecera + ítems + cuotas + finalizar/anular).
   {
     path: 'compras/lista/:id',
