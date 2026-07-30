@@ -1,0 +1,47 @@
+.cl-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 0 0;
+
+  mat-form-field {
+    flex: 1 1 140px;
+  }
+
+  .cl-search {
+    flex: 1 1 100%;
+  }
+}
+
+.cl-chips {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+/* Colores de estado adicionales (además de ok/warn/off de _crud.scss).
+   Celeste (info) para ABIERTO; rojo (anul) para CANCELADO; naranja (pend)
+   para el pago PENDIENTE. */
+.crud-chip {
+  &.info {
+    background: color-mix(in srgb, var(--info-color) 16%, transparent);
+    color: var(--info-color);
+  }
+
+  &.anul {
+    background: color-mix(in srgb, var(--error-color) 16%, transparent);
+    color: var(--error-color);
+  }
+
+  &.pend {
+    background: color-mix(in srgb, var(--warning-color) 22%, transparent);
+    color: var(--warning-color);
+  }
+}
+
+.cl-mas {
+  margin: 12px auto 0;
+  width: 100%;
+  max-width: 260px;
+}

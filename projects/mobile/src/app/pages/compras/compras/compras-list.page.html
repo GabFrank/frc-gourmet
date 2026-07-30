@@ -1,21 +1,90 @@
 <div class="crud-page">
+  <!-- Filtros -->
+  <form class="cl-filtros" [formGroup]="filtros">
+    <mat-form-field appearance="outline" class="cl-search">
+      <mat-label>Buscar (nota / proveedor)</mat-label>
+      <input matInput formControlName="search" (keyup.enter)="buscar()" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Proveedor</mat-label>
+      <mat-select formControlName="proveedorId">
+        <mat-option [value]="null">Todos</mat-option>
+        <mat-option *ngFor="let p of proveedores" [value]="p.id">{{ p.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Estado</mat-label>
+      <mat-select formControlName="estado">
+        <mat-option [value]="null">Todos</mat-option>
+        <mat-option *ngFor="let e of estados" [value]="e">{{ e | titlecase }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Condición</mat-label>
+      <mat-select formControlName="credito">
+        <mat-option [value]="null">Todas</mat-option>
+        <mat-option [value]="false">Contado</mat-option>
+        <mat-option [value]="true">Crédito</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Desde</mat-label>
+      <input matInput type="date" formControlName="fechaDesde" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Hasta</mat-label>
+      <input matInput type="date" formControlName="fechaHasta" />
+    </mat-form-field>
+  </form>
+  <div class="crud-filterbar">
+    <button mat-stroked-button (click)="limpiar()">Limpiar</button>
+    <button mat-flat-button color="primary" class="crud-filter-btn" (click)="buscar()">Filtrar</button>
+  </div>
+
   <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
   <p *ngIf="error" class="crud-error">{{ error }}</p>
 
   <div class="crud-list" *ngIf="!loading && !error">
-    <mat-card *ngFor="let c of items" class="crud-card" appearance="outlined">
+    <a *ngFor="let c of items" class="crud-card" mat-ripple [routerLink]="['/compras/lista', c.id]">
       <div class="crud-card-body">
         <div class="crud-card-main">
-          <span class="crud-name">{{ c.proveedor?.nombre || ('Compra #' + c.id) }}</span>
+          <span class="crud-name">{{ c.proveedor }}</span>
           <span class="crud-sub">
             <span *ngIf="c.numeroNota">Nota {{ c.numeroNota }} · </span>
             <span *ngIf="c.fechaCompra">{{ c.fechaCompra | date: 'dd/MM/yyyy' }} · </span>
-            Total {{ c.total | number: '1.0-2' }}
+            {{ c.simbolo }} {{ c.total | number: '1.0-' + c.decimales }}
           </span>
+          <span class="crud-sub" *ngIf="c.cuotasTotal">Cuotas: {{ c.cuotasPagadas }}/{{ c.cuotasTotal }}</span>
         </div>
-        <span class="crud-chip warn">{{ c.estado }}</span>
+        <div class="cl-chips">
+          <span class="crud-chip" [ngClass]="c.estadoClase">{{ c.estado | titlecase }}</span>
+          <span class="crud-chip" *ngIf="c.estadoPago" [ngClass]="c.estadoPagoClase">{{ c.estadoPago | titlecase }}</span>
+        </div>
+        <mat-icon>chevron_right</mat-icon>
       </div>
-    </mat-card>
+    </a>
+
     <p *ngIf="items.length === 0" class="crud-empty">No hay compras.</p>
+
+    <button
+      *ngIf="hayMas"
+      mat-stroked-button
+      class="cl-mas"
+      (click)="cargarMas()"
+      [disabled]="loadingMore"
+    >
+      {{ loadingMore ? 'Cargando…' : 'Cargar más' }}
+    </button>
   </div>
+
+  <a
+    *ngIf="canGestionar"
+    mat-fab
+    color="primary"
+    class="crud-fab"
+    routerLink="/compras/nueva"
+    aria-label="Nueva compra"
+  >
+    <mat-icon>add</mat-icon>
+  </a>
 </div>
