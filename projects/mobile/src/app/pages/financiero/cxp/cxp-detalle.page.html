@@ -19,9 +19,25 @@
             <span class="crud-sub">Saldo: {{ simbolo }} {{ c.saldo | number: '1.0-' + decimales }} de {{ simbolo }} {{ c.monto | number: '1.0-' + decimales }}</span>
           </div>
           <span class="crud-chip" [class.off]="c.estadoClase === 'off'" [class.warn]="c.estadoClase === 'warn'">{{ c.estado }}</span>
-          <button *ngIf="canPagar && c.pagable" mat-icon-button color="primary" (click)="pagar(c)" aria-label="Pagar">
-            <mat-icon>payments</mat-icon>
+          <button
+            *ngIf="canPagar && (c.pagable || c.tieneMixto)"
+            mat-icon-button
+            [matMenuTriggerFor]="menu"
+            aria-label="Acciones de la cuota"
+          >
+            <mat-icon>more_vert</mat-icon>
           </button>
+          <mat-menu #menu="matMenu">
+            <button mat-menu-item *ngIf="c.pagable" (click)="pagar(c)">
+              <mat-icon>payments</mat-icon><span>Pagar</span>
+            </button>
+            <button mat-menu-item *ngIf="c.pagable && esCompra" (click)="pagarMixto(c)">
+              <mat-icon>call_split</mat-icon><span>Pago mixto</span>
+            </button>
+            <button mat-menu-item *ngIf="c.tieneMixto" (click)="anularMixto(c)">
+              <mat-icon>undo</mat-icon><span>Anular pago mixto</span>
+            </button>
+          </mat-menu>
         </div>
       </div>
       <p *ngIf="cuotas.length === 0" class="crud-empty">No hay cuotas.</p>
