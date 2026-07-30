@@ -42,6 +42,7 @@ const COMPRAS_ITEMS: SectionItem[] = [
   { label: 'Compras', icon: 'shopping_cart', path: '/compras/lista', enabled: true, permiso: 'COMPRAS_VER' },
   { label: 'Proveedores', icon: 'local_shipping', path: '/compras/proveedores', enabled: true, permiso: 'PROVEEDORES_VER' },
   { label: 'Categorías de compra', icon: 'sell', path: '/compras/categorias', enabled: true, permiso: 'COMPRAS_GESTIONAR' },
+  { label: 'Dashboard de compras', icon: 'insights', path: '/compras/dashboard', enabled: true, permiso: 'COMPRAS_DASHBOARD_VER' },
   { label: 'Importaciones IA', icon: 'auto_awesome', path: '/compras/importaciones', enabled: false, permiso: 'COMPRAS_IMPORTAR_FACTURA' },
 ];
 
@@ -833,6 +834,12 @@ export const routes: Routes = [
         canActivate: [permisoGuard],
         data: { title: 'Categorías de compra', permiso: 'COMPRAS_GESTIONAR' },
         loadComponent: () => import('./pages/compras/categorias/compra-categorias-list.page').then((m) => m.CompraCategoriasListPage),
+      },
+      {
+        path: 'compras/dashboard',
+        canActivate: [permisoGuard],
+        data: { title: 'Dashboard de compras', permiso: 'COMPRAS_DASHBOARD_VER' },
+        loadComponent: () => import('./pages/compras/dashboard/compras-dashboard.page').then((m) => m.ComprasDashboardPage),
       },
       {
         path: 'compras/lista',

@@ -1,0 +1,64 @@
+<div class="crud-page">
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <ng-container *ngIf="!loading && !error">
+    <!-- KPIs -->
+    <div class="cd-kpis">
+      <div class="cd-kpi">
+        <span class="cd-kpi-val">{{ comprasMes | number: '1.0-0' }}</span>
+        <span class="cd-kpi-lbl">Compras del mes</span>
+      </div>
+      <div class="cd-kpi">
+        <span class="cd-kpi-val">₲ {{ totalMes | number: '1.0-0' }}</span>
+        <span class="cd-kpi-lbl">Total del mes</span>
+      </div>
+      <div class="cd-kpi">
+        <span class="cd-kpi-val warn">{{ cppPorVencer | number: '1.0-0' }}</span>
+        <span class="cd-kpi-lbl">Cuotas por vencer (7d)</span>
+      </div>
+      <div class="cd-kpi">
+        <span class="cd-kpi-val err">₲ {{ cppVencido | number: '1.0-0' }}</span>
+        <span class="cd-kpi-lbl">Vencido</span>
+      </div>
+    </div>
+
+    <!-- Top proveedores -->
+    <mat-card class="cd-card" appearance="outlined">
+      <h3 class="cd-title">Top proveedores del mes</h3>
+      <p *ngIf="top.length === 0" class="crud-empty">Sin compras este mes.</p>
+      <div class="cd-rank" *ngFor="let p of top">
+        <div class="cd-rank-head">
+          <span class="cd-rank-name">{{ p.nombre }}</span>
+          <span class="cd-rank-total">₲ {{ p.total | number: '1.0-0' }}</span>
+        </div>
+        <div class="cd-bar"><div class="cd-bar-fill" [style.width.%]="p.porcentaje"></div></div>
+        <span class="cd-rank-sub">{{ p.cantidad }} compra(s)</span>
+      </div>
+    </mat-card>
+
+    <!-- Próximos vencimientos -->
+    <mat-card class="cd-card" appearance="outlined">
+      <h3 class="cd-title">Próximos vencimientos</h3>
+      <p *ngIf="vencimientos.length === 0" class="crud-empty">Sin vencimientos próximos.</p>
+      <div class="cd-venc" *ngFor="let v of vencimientos">
+        <div class="cd-venc-main">
+          <span class="cd-venc-name">{{ v.proveedor }}</span>
+          <span class="cd-venc-sub">{{ v.fecha | date: 'dd/MM/yyyy' }} · ₲ {{ v.monto | number: '1.0-0' }}</span>
+        </div>
+        <span class="crud-chip" [ngClass]="v.clase">{{ v.label }}</span>
+      </div>
+    </mat-card>
+
+    <!-- Compras por período -->
+    <mat-card class="cd-card" appearance="outlined">
+      <h3 class="cd-title">Compras por mes</h3>
+      <div class="cd-chart">
+        <div class="cd-chart-col" *ngFor="let b of barras">
+          <div class="cd-chart-bar" [style.height.%]="b.altura" [attr.title]="b.monto"></div>
+          <span class="cd-chart-lbl">{{ b.label }}</span>
+        </div>
+      </div>
+    </mat-card>
+  </ng-container>
+</div>
