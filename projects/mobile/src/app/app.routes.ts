@@ -364,6 +364,19 @@ export const routes: Routes = [
     data: { permiso: 'COMPRAS_GESTIONAR' },
     loadComponent: () => import('./pages/compras/categorias/compra-categoria-edit.page').then((m) => m.CompraCategoriaEditPage),
   },
+  // Proveedores: alta ('nuevo' antes de ':id') y edición (full-screen).
+  {
+    path: 'compras/proveedores/nuevo',
+    canActivate: [authGuard, permisoGuard],
+    data: { permiso: 'PROVEEDORES_GESTIONAR' },
+    loadComponent: () => import('./pages/compras/proveedores/proveedor-edit.page').then((m) => m.ProveedorEditPage),
+  },
+  {
+    path: 'compras/proveedores/:id',
+    canActivate: [authGuard, permisoGuard],
+    data: { permiso: 'PROVEEDORES_GESTIONAR' },
+    loadComponent: () => import('./pages/compras/proveedores/proveedor-edit.page').then((m) => m.ProveedorEditPage),
+  },
   {
     path: 'financiero/gasto-categorias/nuevo',
     canActivate: [authGuard, permisoGuard],
