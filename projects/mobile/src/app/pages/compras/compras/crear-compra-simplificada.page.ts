@@ -59,12 +59,14 @@ export class CrearCompraSimplificadaPage implements OnInit {
   categorias: Opcion[] = [];
   cajasMayor: Opcion[] = [];
   cuentasBancarias: CuentaOpcion[] = [];
+  cuentasFiltradas: CuentaOpcion[] = [];
 
   efectivoLabel = 'Efectivo';
   private efectivoFormaId: number | null = null;
 
   loading = true;
   saving = false;
+  error: string | null = null;
 
   readonly proveedorInput = new FormControl<Opcion | string>('', { nonNullable: true });
 
@@ -114,11 +116,16 @@ export class CrearCompraSimplificadaPage implements OnInit {
     this.form.controls.credito.valueChanges.subscribe(() => this.aplicarValidadores());
     this.form.controls.pagarAhora.valueChanges.subscribe(() => this.aplicarValidadores());
     this.form.controls.fuente.valueChanges.subscribe(() => this.aplicarValidadores());
+    // Al cambiar la moneda, filtrar cuentas bancarias compatibles (evita pagar
+    // una compra en una moneda con una cuenta de otra moneda, que el backend
+    // descontaría sin convertir).
+    this.form.controls.monedaId.valueChanges.subscribe(() => this.filtrarCuentas());
     this.cargar();
   }
 
-  private cargar(): void {
+  cargar(): void {
     this.loading = true;
+    this.error = null;
     Promise.all([
       firstValueFrom(this.repo.getProveedores()),
       firstValueFrom(this.repo.getMonedas()),
@@ -128,7 +135,9 @@ export class CrearCompraSimplificadaPage implements OnInit {
       firstValueFrom(this.repo.getCuentasBancarias()),
     ])
       .then(([provs, monedas, cats, formas, cajas, cuentas]: [any[], any[], any[], any[], any[], any[]]) => {
-        this.proveedores = (provs || []).map((p) => ({ id: p.id, label: p.nombre || p.razonSocial || `Proveedor #${p.id}` }));
+        this.proveedores = (provs || [])
+          .filter((p) => p.activo !== false)
+          .map((p) => ({ id: p.id, label: p.nombre || p.razon_social || `Proveedor #${p.id}` }));
         this.proveedoresFiltrados = [...this.proveedores];
         this.monedas = (monedas || []).filter((m) => m.activo !== false).map((m) => ({ id: m.id, label: `${m.simbolo} · ${m.denominacion}` }));
         this.categorias = (cats || []).filter((c) => c.activo !== false).map((c) => ({ id: c.id, label: c.nombre }));
@@ -142,16 +151,27 @@ export class CrearCompraSimplificadaPage implements OnInit {
           .filter((c) => c.activo !== false && c.moneda?.id)
           .map((c) => ({ id: c.id, label: `${c.banco ? c.banco + ' · ' : ''}${c.nombre} (${c.moneda?.simbolo || ''})`, monedaId: c.moneda.id }));
 
-        const principal = (monedas || []).find((m) => m.principal);
+        const principal = (monedas || []).find((m) => m.principal && m.activo !== false);
         if (principal) this.form.controls.monedaId.setValue(principal.id);
         else if (this.monedas.length === 1) this.form.controls.monedaId.setValue(this.monedas[0].id);
         if (this.cajasMayor.length === 1) this.form.controls.cajaMayorId.setValue(this.cajasMayor[0].id);
+        this.filtrarCuentas();
         this.loading = false;
       })
       .catch(() => {
-        this.snack.open('No se pudieron cargar los catálogos', 'OK', { duration: 3000 });
+        this.error = 'No se pudieron cargar los catálogos. Verificá la conexión y reintentá.';
         this.loading = false;
       });
+  }
+
+  /** Cuentas bancarias compatibles con la moneda elegida (misma moneda). */
+  private filtrarCuentas(): void {
+    const monedaId = this.form.controls.monedaId.value;
+    this.cuentasFiltradas = this.cuentasBancarias.filter((c) => c.monedaId === monedaId);
+    const sel = this.form.controls.cuentaBancariaId.value;
+    if (sel != null && !this.cuentasFiltradas.some((c) => c.id === sel)) {
+      this.form.controls.cuentaBancariaId.setValue(null);
+    }
   }
 
   private aplicarValidadores(): void {

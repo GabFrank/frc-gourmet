@@ -8,7 +8,12 @@
 
   <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
 
-  <form class="crud-form" [formGroup]="form" (ngSubmit)="guardar()" *ngIf="!loading">
+  <div *ngIf="error && !loading" class="ccs-error">
+    <p class="crud-error">{{ error }}</p>
+    <button mat-stroked-button color="primary" (click)="cargar()">Reintentar</button>
+  </div>
+
+  <form class="crud-form" [formGroup]="form" (ngSubmit)="guardar()" *ngIf="!loading && !error">
     <!-- Proveedor -->
     <mat-form-field appearance="outline">
       <mat-label>Proveedor</mat-label>
@@ -91,7 +96,7 @@
     <ng-container *ngIf="esPagarAhora">
       <mat-button-toggle-group formControlName="fuente" class="ccs-fuente">
         <mat-button-toggle value="CAJA_MAYOR"><mat-icon>account_balance_wallet</mat-icon> Caja Mayor</mat-button-toggle>
-        <mat-button-toggle value="CUENTA_BANCARIA" [disabled]="cuentasBancarias.length === 0">
+        <mat-button-toggle value="CUENTA_BANCARIA" [disabled]="cuentasFiltradas.length === 0">
           <mat-icon>account_balance</mat-icon> Banco
         </mat-button-toggle>
       </mat-button-toggle-group>
@@ -108,7 +113,7 @@
       <mat-form-field appearance="outline" *ngIf="esBanco">
         <mat-label>Cuenta bancaria</mat-label>
         <mat-select formControlName="cuentaBancariaId">
-          <mat-option *ngFor="let c of cuentasBancarias" [value]="c.id">{{ c.label }}</mat-option>
+          <mat-option *ngFor="let c of cuentasFiltradas" [value]="c.id">{{ c.label }}</mat-option>
         </mat-select>
         <mat-error *ngIf="form.controls.cuentaBancariaId.hasError('required')">Requerido</mat-error>
       </mat-form-field>

@@ -10,6 +10,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatRippleModule } from '@angular/material/core';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService, PermissionService } from '@frc/shared-core';
 
@@ -27,6 +28,7 @@ interface CompraVM {
   decimales: number;
   total: number;
   estado: string;
+  estadoLabel: string;
   estadoClase: string;
   estadoPago: string | null;
   estadoPagoClase: string;
@@ -38,6 +40,13 @@ const ESTADO_CLASE: Record<string, string> = {
   ABIERTO: 'info',
   FINALIZADO: 'ok',
   CANCELADO: 'anul',
+};
+
+// Etiquetas alineadas con el desktop (list-compras): Borrador/Finalizada/Anulada.
+const ESTADO_LABEL: Record<string, string> = {
+  ABIERTO: 'Borrador',
+  FINALIZADO: 'Finalizada',
+  CANCELADO: 'Anulada',
 };
 
 const ESTADO_PAGO_CLASE: Record<string, string> = {
@@ -60,7 +69,7 @@ const PAGE_SIZE = 20;
   imports: [
     CommonModule, RouterModule, ReactiveFormsModule, MatCardModule, MatIconModule,
     MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule,
-    MatProgressBarModule, MatRippleModule,
+    MatProgressBarModule, MatRippleModule, MatSnackBarModule,
   ],
   templateUrl: './compras-list.page.html',
   styleUrls: ['./compras-list.page.scss'],
@@ -69,6 +78,7 @@ export class ComprasListPage implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly repo = inject(RepositoryService);
   private readonly perm = inject(PermissionService);
+  private readonly snack = inject(MatSnackBar);
 
   readonly estados = ESTADOS;
   proveedores: Opcion[] = [];
@@ -148,6 +158,7 @@ export class ComprasListPage implements OnInit {
       error: () => {
         this.page -= 1;
         this.loadingMore = false;
+        this.snack.open('No se pudieron cargar más compras', 'OK', { duration: 3000 });
       },
     });
   }
@@ -162,13 +173,14 @@ export class ComprasListPage implements OnInit {
     const estadoPago = c.estadoPago ? String(c.estadoPago).toUpperCase() : null;
     return {
       id: c.id,
-      proveedor: c.proveedor?.nombre || c.proveedor?.razonSocial || `Compra #${c.id}`,
+      proveedor: c.proveedor?.nombre || c.proveedor?.razon_social || `Compra #${c.id}`,
       numeroNota: c.numeroNota,
       fechaCompra: c.fechaCompra,
       simbolo: c.moneda?.simbolo || '',
       decimales: c.moneda?.decimales ?? 0,
       total: Number(c.total ?? c.montoTotal ?? 0),
       estado,
+      estadoLabel: ESTADO_LABEL[estado] || estado,
       estadoClase: ESTADO_CLASE[estado] || 'off',
       estadoPago,
       estadoPagoClase: estadoPago ? ESTADO_PAGO_CLASE[estadoPago] || 'off' : 'off',

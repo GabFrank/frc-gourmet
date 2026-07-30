@@ -41,6 +41,15 @@ export interface FinalizarCompraResult {
     MatInputModule, MatSlideToggleModule, MatButtonModule, MatProgressBarModule, MatSnackBarModule,
   ],
   templateUrl: './finalizar-compra-dialog.component.html',
+  styles: [
+    `
+      .fcd-sub { margin: 0 0 4px; font-weight: 500; color: var(--text-primary); }
+      .fcd-total { margin: 0 0 2px; font-weight: 700; }
+      .fcd-cond { margin: 0 0 12px; font-size: 0.82rem; color: var(--text-secondary); }
+      .fcd-hint { margin: 4px 4px 0; font-size: 0.8rem; color: var(--text-secondary); }
+      mat-form-field { width: 100%; }
+    `,
+  ],
 })
 export class FinalizarCompraDialogComponent implements OnInit {
   private readonly fb = inject(FormBuilder);

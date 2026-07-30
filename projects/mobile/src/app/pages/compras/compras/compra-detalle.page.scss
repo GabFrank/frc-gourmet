@@ -64,7 +64,7 @@
   align-items: center;
   gap: 10px;
   padding: 8px 0;
-  border-top: 1px solid var(--divider, rgba(128, 128, 128, 0.2));
+  border-top: 1px solid var(--border-color);
 
   &:first-of-type {
     border-top: none;

@@ -20,8 +20,11 @@
     </ng-container>
 
     <mat-slide-toggle *ngIf="!data.credito" formControlName="pagarAhora" color="primary">
-      Registrar pago ahora
+      Pagar al finalizar
     </mat-slide-toggle>
+    <p class="fcd-hint" *ngIf="!data.credito && form.controls.pagarAhora.value">
+      Al finalizar se abrirá Cuentas por Pagar para registrar el cobro de la cuota.
+    </p>
   </form>
 </mat-dialog-content>
 

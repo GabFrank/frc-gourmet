@@ -16,3 +16,12 @@
   color: var(--text-secondary);
   margin: 0 4px 4px;
 }
+
+.ccs-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 16px;
+  text-align: center;
+}

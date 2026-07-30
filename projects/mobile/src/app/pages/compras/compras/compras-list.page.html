@@ -57,7 +57,7 @@
           <span class="crud-sub" *ngIf="c.cuotasTotal">Cuotas: {{ c.cuotasPagadas }}/{{ c.cuotasTotal }}</span>
         </div>
         <div class="cl-chips">
-          <span class="crud-chip" [ngClass]="c.estadoClase">{{ c.estado | titlecase }}</span>
+          <span class="crud-chip" [ngClass]="c.estadoClase">{{ c.estadoLabel }}</span>
           <span class="crud-chip" *ngIf="c.estadoPago" [ngClass]="c.estadoPagoClase">{{ c.estadoPago | titlecase }}</span>
         </div>
         <mat-icon>chevron_right</mat-icon>

@@ -36,6 +36,13 @@ const ESTADO_CLASE: Record<string, string> = {
   CANCELADO: 'anul',
 };
 
+// Etiquetas alineadas con el desktop (list-compras): Borrador/Finalizada/Anulada.
+const ESTADO_LABEL: Record<string, string> = {
+  ABIERTO: 'Borrador',
+  FINALIZADO: 'Finalizada',
+  CANCELADO: 'Anulada',
+};
+
 /**
  * Detalle de una compra: cabecera + ítems + cuotas del CPP. Acciones (gate
  * COMPRAS_GESTIONAR): Finalizar (solo ABIERTO) y Anular (solo no CANCELADO).
@@ -72,6 +79,7 @@ export class CompraDetallePage implements OnInit {
   decimales = 0;
   total = 0;
   estado = '';
+  estadoLabel = '';
   estadoClase = 'off';
   credito = false;
   simplificada = false;
@@ -106,6 +114,7 @@ export class CompraDetallePage implements OnInit {
           return;
         }
         this.estado = (c.estado || '').toUpperCase();
+        this.estadoLabel = ESTADO_LABEL[this.estado] || this.estado;
         this.estadoClase = ESTADO_CLASE[this.estado] || 'off';
         this.proveedor = c.proveedor?.nombre || c.proveedor?.razonSocial || `Compra #${c.id}`;
         this.numeroNota = c.numeroNota || '';
@@ -199,7 +208,7 @@ export class CompraDetallePage implements OnInit {
         .open(PromptDialogComponent, {
           data: {
             title: 'Anular compra',
-            message: `${this.proveedor} · ${this.simbolo} ${this.total.toLocaleString()}`,
+            message: `${this.proveedor} · ${this.simbolo} ${this.total.toLocaleString('es-PY', { maximumFractionDigits: this.decimales })}`,
             label: 'Motivo de la anulación',
             confirmText: 'Anular',
             danger: true,

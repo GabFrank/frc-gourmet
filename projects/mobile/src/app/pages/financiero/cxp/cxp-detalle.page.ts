@@ -12,7 +12,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService, PermissionService } from '@frc/shared-core';
 import { PagarCppDialogComponent, PagarCppData } from './pagar-cpp-dialog.component';
 import { PagoMixtoCppDialogComponent, PagoMixtoCppData } from './pago-mixto-cpp-dialog.component';
-import { ConfirmDialogComponent, ConfirmData } from '../../../core/components/confirm-dialog.component';
+import { PromptDialogComponent, PromptData } from '../../../core/components/prompt-dialog.component';
 
 interface CuotaVM {
   id: number;
@@ -171,16 +171,24 @@ export class CxpDetallePage implements OnInit {
   }
 
   async anularMixto(c: CuotaVM): Promise<void> {
-    const data: ConfirmData = {
-      title: 'Anular pago mixto',
-      message: `¿Anular el pago mixto de la cuota ${c.numero}? Se revierten los movimientos de caja mayor.`,
-      confirmText: 'Anular',
-      danger: true,
-    };
-    const ok = await firstValueFrom(this.dialog.open(ConfirmDialogComponent, { data, width: '340px' }).afterClosed());
-    if (!ok) return;
+    const motivo = await firstValueFrom(
+      this.dialog
+        .open(PromptDialogComponent, {
+          data: {
+            title: 'Anular pago mixto',
+            message: `Se revierten los movimientos de caja mayor de la cuota ${c.numero}.`,
+            label: 'Motivo (opcional)',
+            confirmText: 'Anular',
+            danger: true,
+            required: false,
+          } as PromptData,
+          width: '340px',
+        })
+        .afterClosed(),
+    );
+    if (motivo === undefined) return; // cancelado (confirmar con vacío devuelve '')
     try {
-      await firstValueFrom(this.repo.anularPagoMixtoCuota({ cuotaId: c.id }));
+      await firstValueFrom(this.repo.anularPagoMixtoCuota({ cuotaId: c.id, motivo: motivo || undefined }));
       this.snack.open('Pago mixto anulado', 'OK', { duration: 2500 });
       this.cargar();
     } catch (e) {
