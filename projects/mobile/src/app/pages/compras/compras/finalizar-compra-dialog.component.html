@@ -1,0 +1,31 @@
+<h2 mat-dialog-title>Finalizar compra</h2>
+<mat-progress-bar *ngIf="saving" mode="indeterminate"></mat-progress-bar>
+
+<mat-dialog-content>
+  <p class="fcd-sub">{{ data.titulo }}</p>
+  <p class="fcd-total">Total: {{ data.simbolo }} {{ data.total | number: '1.0-' + data.decimales }}</p>
+  <p class="fcd-cond">{{ data.credito ? 'A crédito' : 'Contado' }}</p>
+
+  <form [formGroup]="form">
+    <ng-container *ngIf="data.credito">
+      <mat-form-field appearance="outline">
+        <mat-label>Cantidad de cuotas</mat-label>
+        <input matInput type="number" min="1" formControlName="cantidadCuotas" />
+        <mat-error *ngIf="form.controls.cantidadCuotas.hasError('min')">Mínimo 1</mat-error>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Fecha primera cuota</mat-label>
+        <input matInput type="date" formControlName="fechaCreditoInicio" />
+      </mat-form-field>
+    </ng-container>
+
+    <mat-slide-toggle *ngIf="!data.credito" formControlName="pagarAhora" color="primary">
+      Registrar pago ahora
+    </mat-slide-toggle>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancelar()" [disabled]="saving">Cancelar</button>
+  <button mat-flat-button color="primary" (click)="confirmar()" [disabled]="saving">Finalizar</button>
+</mat-dialog-actions>

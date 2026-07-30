@@ -521,6 +521,13 @@ export const routes: Routes = [
     data: { permiso: 'BANCOS_VER' },
     loadComponent: () => import('./pages/financiero/cuentas-bancarias/cuenta-bancaria-edit.page').then((m) => m.CuentaBancariaEditPage),
   },
+  // Detalle de compra (full-screen: cabecera + ítems + cuotas + finalizar/anular).
+  {
+    path: 'compras/lista/:id',
+    canActivate: [authGuard, permisoGuard],
+    data: { permiso: 'COMPRAS_VER' },
+    loadComponent: () => import('./pages/compras/compras/compra-detalle.page').then((m) => m.CompraDetallePage),
+  },
   // Detalles de cuentas corrientes (full-screen: cabecera + cuotas + pagar/cobrar).
   {
     path: 'financiero/cxp/:id',
