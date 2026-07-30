@@ -3,7 +3,7 @@
  * AUTO-GENERADO por scripts/generate-mobile-api-map.js — NO editar a mano.
  * Mapa método de window.api → canal IPC (extraído de preload.ts).
  * Regenerar tras tocar preload.ts: `node scripts/generate-mobile-api-map.js`.
- * Total: 827 métodos.
+ * Total: 830 métodos.
  */
 export const API_CHANNEL_MAP: Record<string, string> = {
   "abrirCajaDesdeConteo": "abrir-caja-desde-conteo",
@@ -30,6 +30,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "anularLiquidacionComision": "anular-liquidacion-comision",
   "anularLiquidacionSueldo": "anular-liquidacion-sueldo",
   "anularOperacionFinanciera": "anular-operacion-financiera",
+  "anularPagoMixtoCuota": "anular-pago-mixto-cuota",
   "anularPenalizacion": "anular-penalizacion",
   "anularVale": "anular-vale",
   "anularVentaVacacion": "anular-venta-vacacion",
@@ -422,6 +423,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getCuentasBancariasResumenes": "get-cuentas-bancarias-resumenes",
   "getCuentasPorCobrar": "get-cuentas-por-cobrar",
   "getCuentasPorPagar": "get-cuentas-por-pagar",
+  "getCuotasConPagoMixto": "get-cuotas-con-pago-mixto",
   "getCuotasPendientesCompras": "get-cuotas-pendientes-compras",
   "getCurrentUser": "getCurrentUser",
   "getDashboardCajaMayorKpis": "get-dashboard-caja-mayor-kpis",
@@ -672,6 +674,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "pagarCompraCuota": "pagar-compra-cuota",
   "pagarCompraCuotaCaja": "pagar-compra-cuota-caja",
   "pagarCppCuota": "pagar-cpp-cuota",
+  "pagarCppCuotaMixto": "pagar-cpp-cuota-mixto",
   "pagarCuotasComprasLote": "pagar-cuotas-compras-lote",
   "pagarLiquidacionFinal": "pagar-liquidacion-final",
   "pagarLiquidacionSueldo": "pagar-liquidacion-sueldo",
