@@ -1,0 +1,27 @@
+.ccs-toggle {
+  margin: 8px 4px;
+}
+
+.ccs-fuente {
+  width: 100%;
+  margin: 4px 0;
+
+  .mat-button-toggle {
+    flex: 1;
+  }
+}
+
+.ccs-hint {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin: 0 4px 4px;
+}
+
+.ccs-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 16px;
+  text-align: center;
+}

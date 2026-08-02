@@ -2,6 +2,12 @@
 
 Workflow de compras a proveedores con pago unificado vía CPP (refactor 2026-05-05).
 
+> **Cliente mobile (PWA):** desde 2026-07-30 hay **paridad práctica** en el mobile: lista con
+> filtros + estado de pago, detalle, finalizar/anular, alta simplificada, CRUD de proveedores,
+> pago mixto de cuota (+ anular) y dashboard. Todo por `/api/rpc` (sin backend nuevo). **Diferido:**
+> compra compleja multi-ítem y OCR/IA. Detalle → [../architecture/mobile-pwa.md](../architecture/mobile-pwa.md)
+> ("Cobertura Compras mobile"). Manual de pruebas: `docs/testing/TESTING-CHECKLIST-COMPRAS-PWA.md`.
+
 > **Vinculado:** existe un módulo de **Importación de facturas con OCR + IA** que crea Compras borrador (estado ABIERTO) a partir de fotos/PDFs vía GPT-4o vision, con sistema de aliases que aprende. Una vez creado el borrador desde OCR, el flujo de **finalización** (stock, costo, CPP) es el mismo que se describe acá. Documentación dedicada → [importacion-facturas-ocr.md](importacion-facturas-ocr.md).
 
 ## Estados de la compra

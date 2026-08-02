@@ -1,0 +1,59 @@
+<h2 mat-dialog-title>Pago mixto</h2>
+<mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
+
+<mat-dialog-content>
+  <p class="pmx-sub">{{ data.titulo }}</p>
+  <p class="pmx-saldo">Saldo: {{ data.simbolo }} {{ data.saldo | number: '1.0-' + data.decimales }}</p>
+
+  <mat-form-field appearance="outline" class="pmx-full">
+    <mat-label>Caja mayor</mat-label>
+    <mat-select [(ngModel)]="cajaMayorId" (ngModelChange)="recompute()">
+      <mat-option *ngFor="let c of cajas" [value]="c.id">{{ c.label }}</mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  <div class="pmx-linea" *ngFor="let l of lineas; let i = index">
+    <mat-form-field appearance="outline" class="pmx-moneda">
+      <mat-label>Moneda</mat-label>
+      <mat-select [(ngModel)]="l.monedaId" (ngModelChange)="recompute()">
+        <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="pmx-forma">
+      <mat-label>Forma</mat-label>
+      <mat-select [(ngModel)]="l.formaPagoId" (ngModelChange)="recompute()">
+        <mat-option *ngFor="let f of formas" [value]="f.id">{{ f.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="pmx-monto">
+      <mat-label>Monto</mat-label>
+      <input matInput type="number" inputmode="decimal" min="0.01" step="any" [(ngModel)]="l.monto" (ngModelChange)="recompute()" />
+    </mat-form-field>
+    <button mat-icon-button type="button" *ngIf="lineas.length > 1" (click)="quitarLinea(i)" aria-label="Quitar línea">
+      <mat-icon>close</mat-icon>
+    </button>
+    <span class="pmx-conv" [class.pmx-err]="l.convertido === null && (l.monto || 0) > 0">
+      {{ l.convertido !== null ? (data.simbolo + ' ' + (l.convertido | number: '1.0-' + data.decimales)) : 'sin cotización' }}
+    </span>
+  </div>
+
+  <button mat-stroked-button type="button" class="pmx-add" (click)="agregarLinea()">
+    <mat-icon>add</mat-icon> Agregar línea
+  </button>
+
+  <div class="pmx-totales">
+    <span>Total: {{ data.simbolo }} {{ totalConvertido | number: '1.0-' + data.decimales }}</span>
+    <span [class.pmx-err]="restante < 0">Restante: {{ data.simbolo }} {{ restante | number: '1.0-' + data.decimales }}</span>
+  </div>
+  <p class="pmx-err" *ngIf="hayLineaSinCotizacion">Falta cotización para alguna moneda. Cargala en el escritorio.</p>
+
+  <mat-form-field appearance="outline" class="pmx-full">
+    <mat-label>Observación (opcional)</mat-label>
+    <input matInput [(ngModel)]="observacion" autocapitalize="characters" />
+  </mat-form-field>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="ref.close(false)" [disabled]="saving">Cancelar</button>
+  <button mat-flat-button color="primary" (click)="confirmar()" [disabled]="saving || loading || !valido">Pagar</button>
+</mat-dialog-actions>

@@ -135,3 +135,20 @@ Como `<img>` no manda headers, usar **fetch→blobURL** (o token firmado por que
 - Commit entre fases y entre pasos grandes. Branch `feat/mobile-pwa-cliente` → PR a `develop`.
 - Verificar compilación con `npm run build` (nunca `npm start`).
 - Respetar reglas duras del proyecto (UPPERCASE en BD, colores de tema, etc.) también en mobile.
+
+## Bitácora — Compras PWA (paridad práctica, 2026-07-30)
+
+Branch `claude/mejoras-compras-pwa-07tnam`. Ola administrativa de Compras llevada a paridad práctica
+con desktop (sin backend nuevo; se regeneró el api-map para el pago mixto). En 6 fases con commit +
+push y tests por fase:
+
+- **F1** Lista de compras: filtros + paginación (`getComprasPaginado`) + estado de pago.
+- **F2** Detalle de compra + Finalizar (`finalizar-compra`) + Anular (`anular-compra`).
+- **F3** Alta de compra simplificada (`crear-compra-simplificada`, total-based).
+- **F4** CRUD de proveedores (`createProveedor`/`updateProveedor`/`deleteProveedor`).
+- **F5** Pago mixto de cuota CPP (`pagar-cpp-cuota-mixto`) + anular (`anular-pago-mixto-cuota`).
+- **F6** Dashboard de compras (`get-dashboard-compras-kpis`).
+
+Diferido y documentado: compra compleja multi-ítem y OCR/IA de facturas.
+Detalle de cobertura → skill `architecture/mobile-pwa.md`. Manual de pruebas →
+`docs/testing/TESTING-CHECKLIST-COMPRAS-PWA.md`.

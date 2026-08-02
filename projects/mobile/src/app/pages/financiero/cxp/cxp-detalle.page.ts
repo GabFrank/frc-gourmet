@@ -4,11 +4,15 @@ import { ActivatedRoute } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService, PermissionService } from '@frc/shared-core';
 import { PagarCppDialogComponent, PagarCppData } from './pagar-cpp-dialog.component';
+import { PagoMixtoCppDialogComponent, PagoMixtoCppData } from './pago-mixto-cpp-dialog.component';
+import { PromptDialogComponent, PromptData } from '../../../core/components/prompt-dialog.component';
 
 interface CuotaVM {
   id: number;
@@ -20,15 +24,16 @@ interface CuotaVM {
   estado: string;
   estadoClase: string;
   pagable: boolean;
+  tieneMixto: boolean;
 }
 
-/** Detalle de una Cuenta por Pagar: cabecera + cuotas + pago (COMPRAS_GESTIONAR). */
+/** Detalle de una Cuenta por Pagar: cabecera + cuotas + pago simple/mixto (COMPRAS_GESTIONAR). */
 @Component({
   selector: 'app-cxp-detalle',
   standalone: true,
   imports: [
-    CommonModule, MatToolbarModule, MatIconModule, MatButtonModule,
-    MatProgressBarModule, MatDialogModule,
+    CommonModule, MatToolbarModule, MatIconModule, MatButtonModule, MatMenuModule,
+    MatProgressBarModule, MatDialogModule, MatSnackBarModule,
   ],
   templateUrl: './cxp-detalle.page.html',
   styles: [
@@ -43,6 +48,7 @@ export class CxpDetallePage implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly location = inject(Location);
   private readonly dialog = inject(MatDialog);
+  private readonly snack = inject(MatSnackBar);
 
   id = 0;
   titulo = '';
@@ -50,6 +56,7 @@ export class CxpDetallePage implements OnInit {
   decimales = 0;
   monedaId = 0;
   saldoTotal = 0;
+  esCompra = false;
   cuotas: CuotaVM[] = [];
   loading = true;
   error: string | null = null;
@@ -68,7 +75,7 @@ export class CxpDetallePage implements OnInit {
       firstValueFrom(this.repo.getCuentaPorPagar(this.id)),
       firstValueFrom(this.repo.getCuentaPorPagarCuotas(this.id)),
     ])
-      .then(([cpp, cuotas]: [any, any[]]) => {
+      .then(async ([cpp, cuotas]: [any, any[]]) => {
         if (cpp) {
           const prov = cpp.proveedor?.razonSocial || cpp.proveedor?.nombre || cpp.funcionario?.persona?.nombre || '';
           this.titulo = prov || cpp.descripcion || `CxP #${this.id}`;
@@ -76,8 +83,20 @@ export class CxpDetallePage implements OnInit {
           this.decimales = cpp.moneda?.decimales ?? 0;
           this.monedaId = cpp.moneda?.id || 0;
           this.saldoTotal = (Number(cpp.montoTotal) || 0) - (Number(cpp.montoPagado) || 0);
+          this.esCompra = (cpp.tipo || '').toUpperCase() === 'COMPRA';
         }
-        this.cuotas = (cuotas || []).map((c) => this.toVM(c));
+        // Cuotas con pago mixto (para ofrecer la anulación).
+        let mixtoIds = new Set<number>();
+        if (this.esCompra) {
+          try {
+            const conMixto: any = await firstValueFrom(this.repo.getCuotasConPagoMixto(this.id));
+            const arr: any[] = Array.isArray(conMixto) ? conMixto : conMixto?.cuotas || [];
+            mixtoIds = new Set(arr.map((x) => Number(x?.id ?? x?.cuotaId ?? x)));
+          } catch {
+            mixtoIds = new Set();
+          }
+        }
+        this.cuotas = (cuotas || []).map((c) => this.toVM(c, mixtoIds));
         this.loading = false;
       })
       .catch(() => {
@@ -86,7 +105,7 @@ export class CxpDetallePage implements OnInit {
       });
   }
 
-  private toVM(c: any): CuotaVM {
+  private toVM(c: any, mixtoIds: Set<number>): CuotaVM {
     const estado = (c.estado || '').toUpperCase();
     const monto = Number(c.monto) || 0;
     const pagado = Number(c.montoPagado) || 0;
@@ -105,6 +124,7 @@ export class CxpDetallePage implements OnInit {
       estado: estadoLabel,
       estadoClase: estado === 'PAGADA' ? 'ok' : estado === 'CANCELADA' ? 'off' : 'warn',
       pagable,
+      tieneMixto: mixtoIds.has(Number(c.id)),
     };
   }
 
@@ -129,5 +149,51 @@ export class CxpDetallePage implements OnInit {
         .afterClosed(),
     );
     if (ok) this.cargar();
+  }
+
+  async pagarMixto(c: CuotaVM): Promise<void> {
+    const ok = await firstValueFrom(
+      this.dialog
+        .open(PagoMixtoCppDialogComponent, {
+          data: {
+            cuotaId: c.id,
+            titulo: `${this.titulo} · Cuota ${c.numero}`,
+            saldo: c.saldo,
+            monedaId: this.monedaId,
+            simbolo: this.simbolo,
+            decimales: this.decimales,
+          } as PagoMixtoCppData,
+          width: '420px',
+        })
+        .afterClosed(),
+    );
+    if (ok) this.cargar();
+  }
+
+  async anularMixto(c: CuotaVM): Promise<void> {
+    const motivo = await firstValueFrom(
+      this.dialog
+        .open(PromptDialogComponent, {
+          data: {
+            title: 'Anular pago mixto',
+            message: `Se revierten los movimientos de caja mayor de la cuota ${c.numero}.`,
+            label: 'Motivo (opcional)',
+            confirmText: 'Anular',
+            danger: true,
+            required: false,
+          } as PromptData,
+          width: '340px',
+        })
+        .afterClosed(),
+    );
+    if (motivo === undefined) return; // cancelado (confirmar con vacío devuelve '')
+    try {
+      await firstValueFrom(this.repo.anularPagoMixtoCuota({ cuotaId: c.id, motivo: motivo || undefined }));
+      this.snack.open('Pago mixto anulado', 'OK', { duration: 2500 });
+      this.cargar();
+    } catch (e) {
+      const raw = String((e as Error)?.message || '');
+      this.snack.open(/PERMISO/.test(raw) ? 'Sin permiso' : raw.replace(/^Error:\s*/, '') || 'No se pudo anular', 'OK', { duration: 4000 });
+    }
   }
 }

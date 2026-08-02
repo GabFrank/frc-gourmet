@@ -130,6 +130,41 @@ propio (`reporte-periodo-control.component.ts`), **export PDF** (pdfmake por imp
 menu-engineering del desktop se simplifican (horas pico → lista; burbujas → omitidas). Detalle
 del dominio → [../domains/reportes.md](../domains/reportes.md).
 
+## Cobertura Compras mobile (actualizado 2026-07-30)
+
+> **La snapshot de mayo decía "Compras/Proveedores read-only" — YA NO es cierto.** Se implementó
+> paridad práctica del módulo Compras (branch `claude/mejoras-compras-pwa-07tnam`). No hubo backend
+> nuevo: todo enruta por `/api/rpc` (se regeneró el api-map para sumar los canales de pago mixto).
+
+**Implementado en mobile:**
+- **Lista de compras** (`pages/compras/compras/compras-list.page`) — filtros (búsqueda, proveedor,
+  estado, condición contado/crédito, fechas), paginación "Cargar más" vía `getComprasPaginado`,
+  chips de estado (Borrador/Finalizada/Anulada) + estado de pago (Pagado/Parcial/Pendiente,
+  derivado del CPP). FAB de alta (`COMPRAS_GESTIONAR`).
+- **Detalle de compra** (`compra-detalle.page`, ruta top-level `compras/lista/:id`) — cabecera +
+  ítems + cuotas del CPP; acciones **Finalizar** (solo ABIERTO, `finalizar-compra-dialog`) y
+  **Anular** (motivo). Oculta cuotas/enlace CxP si está anulada.
+- **Alta de compra simplificada** (`crear-compra-simplificada.page`, `compras/nueva`) — total-based
+  (sin ítems); contado/crédito y pago inmediato (caja mayor efectivo o banco de la misma moneda).
+  Filtra proveedores/moneda inactivos; error persistente con reintento.
+- **CRUD de proveedores** (`proveedor-edit.page` + lista con FAB/menú) — `PROVEEDORES_GESTIONAR`;
+  UPPERCASE en el componente (el handler no lo hace). El backend ya soportaba create/update/delete.
+- **Pago mixto de cuota CPP** (`financiero/cxp/pago-mixto-cpp-dialog`) — N líneas moneda+forma+monto
+  desde caja mayor, conversión `MonedaCambio.compraLocal` (misma regla que desktop) + **anular pago
+  mixto** (con motivo) integrados en `cxp-detalle` (menú por cuota, solo CPP tipo COMPRA).
+- **Dashboard de compras** (`pages/compras/dashboard/compras-dashboard.page`, `COMPRAS_DASHBOARD_VER`)
+  — KPIs, top proveedores, próximos vencimientos, compras por mes (mini-barras CSS, sin chart lib).
+- Tests: specs de payload/mapeo/conversión por fase (Jasmine/Karma headless).
+
+**Diferido (documentado):**
+1. **Compra compleja multi-ítem** (editor con panel productos-proveedor + histórico). En mobile el
+   alta primaria es la simplificada.
+2. **Importación de facturas OCR + IA** (`list-factura-imports`, `revisar-factura`, config IA). Sigue
+   en desktop; el celular alimenta fotos vía la subida por QR existente. El ítem "Importaciones IA"
+   del índice queda `enabled: false`.
+
+Manual de pruebas: `docs/testing/TESTING-CHECKLIST-COMPRAS-PWA.md`.
+
 ## Reglas al construir pantallas
 
 1. **Verificar que exista el handler de escritura** (`create-X`/`update-X`/`delete-X`), no solo el método

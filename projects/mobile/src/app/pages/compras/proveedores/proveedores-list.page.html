@@ -24,8 +24,30 @@
           </span>
         </div>
         <span class="crud-chip" [class.off]="!p.activo">{{ p.activo ? 'Activo' : 'Inactivo' }}</span>
+        <button *ngIf="canEdit" mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+          <mat-icon>more_vert</mat-icon>
+        </button>
+        <mat-menu #menu="matMenu">
+          <button mat-menu-item [routerLink]="['/compras/proveedores', p.id]">
+            <mat-icon>edit</mat-icon><span>Editar</span>
+          </button>
+          <button mat-menu-item (click)="eliminar(p)">
+            <mat-icon>delete</mat-icon><span>Eliminar</span>
+          </button>
+        </mat-menu>
       </div>
     </mat-card>
     <p *ngIf="items.length === 0" class="crud-empty">No hay proveedores.</p>
   </div>
+
+  <a
+    *ngIf="canEdit"
+    mat-fab
+    color="primary"
+    class="crud-fab"
+    routerLink="/compras/proveedores/nuevo"
+    aria-label="Nuevo proveedor"
+  >
+    <mat-icon>add</mat-icon>
+  </a>
 </div>

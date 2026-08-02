@@ -42,6 +42,7 @@ const COMPRAS_ITEMS: SectionItem[] = [
   { label: 'Compras', icon: 'shopping_cart', path: '/compras/lista', enabled: true, permiso: 'COMPRAS_VER' },
   { label: 'Proveedores', icon: 'local_shipping', path: '/compras/proveedores', enabled: true, permiso: 'PROVEEDORES_VER' },
   { label: 'Categorías de compra', icon: 'sell', path: '/compras/categorias', enabled: true, permiso: 'COMPRAS_GESTIONAR' },
+  { label: 'Dashboard de compras', icon: 'insights', path: '/compras/dashboard', enabled: true, permiso: 'COMPRAS_DASHBOARD_VER' },
   { label: 'Importaciones IA', icon: 'auto_awesome', path: '/compras/importaciones', enabled: false, permiso: 'COMPRAS_IMPORTAR_FACTURA' },
 ];
 
@@ -364,6 +365,19 @@ export const routes: Routes = [
     data: { permiso: 'COMPRAS_GESTIONAR' },
     loadComponent: () => import('./pages/compras/categorias/compra-categoria-edit.page').then((m) => m.CompraCategoriaEditPage),
   },
+  // Proveedores: alta ('nuevo' antes de ':id') y edición (full-screen).
+  {
+    path: 'compras/proveedores/nuevo',
+    canActivate: [authGuard, permisoGuard],
+    data: { permiso: 'PROVEEDORES_GESTIONAR' },
+    loadComponent: () => import('./pages/compras/proveedores/proveedor-edit.page').then((m) => m.ProveedorEditPage),
+  },
+  {
+    path: 'compras/proveedores/:id',
+    canActivate: [authGuard, permisoGuard],
+    data: { permiso: 'PROVEEDORES_GESTIONAR' },
+    loadComponent: () => import('./pages/compras/proveedores/proveedor-edit.page').then((m) => m.ProveedorEditPage),
+  },
   {
     path: 'financiero/gasto-categorias/nuevo',
     canActivate: [authGuard, permisoGuard],
@@ -520,6 +534,20 @@ export const routes: Routes = [
     canActivate: [authGuard, permisoGuard],
     data: { permiso: 'BANCOS_VER' },
     loadComponent: () => import('./pages/financiero/cuentas-bancarias/cuenta-bancaria-edit.page').then((m) => m.CuentaBancariaEditPage),
+  },
+  // Alta de compra simplificada (full-screen).
+  {
+    path: 'compras/nueva',
+    canActivate: [authGuard, permisoGuard],
+    data: { permiso: 'COMPRAS_GESTIONAR' },
+    loadComponent: () => import('./pages/compras/compras/crear-compra-simplificada.page').then((m) => m.CrearCompraSimplificadaPage),
+  },
+  // Detalle de compra (full-screen: cabecera + ítems + cuotas + finalizar/anular).
+  {
+    path: 'compras/lista/:id',
+    canActivate: [authGuard, permisoGuard],
+    data: { permiso: 'COMPRAS_VER' },
+    loadComponent: () => import('./pages/compras/compras/compra-detalle.page').then((m) => m.CompraDetallePage),
   },
   // Detalles de cuentas corrientes (full-screen: cabecera + cuotas + pagar/cobrar).
   {
@@ -806,6 +834,12 @@ export const routes: Routes = [
         canActivate: [permisoGuard],
         data: { title: 'Categorías de compra', permiso: 'COMPRAS_GESTIONAR' },
         loadComponent: () => import('./pages/compras/categorias/compra-categorias-list.page').then((m) => m.CompraCategoriasListPage),
+      },
+      {
+        path: 'compras/dashboard',
+        canActivate: [permisoGuard],
+        data: { title: 'Dashboard de compras', permiso: 'COMPRAS_DASHBOARD_VER' },
+        loadComponent: () => import('./pages/compras/dashboard/compras-dashboard.page').then((m) => m.ComprasDashboardPage),
       },
       {
         path: 'compras/lista',
