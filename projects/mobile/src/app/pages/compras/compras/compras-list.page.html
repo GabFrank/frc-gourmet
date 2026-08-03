@@ -1,45 +1,62 @@
 <div class="crud-page">
-  <!-- Filtros -->
-  <form class="cl-filtros" [formGroup]="filtros">
-    <mat-form-field appearance="outline" class="cl-search">
-      <mat-label>Buscar (nota / proveedor)</mat-label>
-      <input matInput formControlName="search" (keyup.enter)="buscar()" />
-    </mat-form-field>
-    <mat-form-field appearance="outline">
-      <mat-label>Proveedor</mat-label>
-      <mat-select formControlName="proveedorId">
-        <mat-option [value]="null">Todos</mat-option>
-        <mat-option *ngFor="let p of proveedores" [value]="p.id">{{ p.label }}</mat-option>
-      </mat-select>
-    </mat-form-field>
-    <mat-form-field appearance="outline">
-      <mat-label>Estado</mat-label>
-      <mat-select formControlName="estado">
-        <mat-option [value]="null">Todos</mat-option>
-        <mat-option *ngFor="let e of estados" [value]="e">{{ e | titlecase }}</mat-option>
-      </mat-select>
-    </mat-form-field>
-    <mat-form-field appearance="outline">
-      <mat-label>Condición</mat-label>
-      <mat-select formControlName="credito">
-        <mat-option [value]="null">Todas</mat-option>
-        <mat-option [value]="false">Contado</mat-option>
-        <mat-option [value]="true">Crédito</mat-option>
-      </mat-select>
-    </mat-form-field>
-    <mat-form-field appearance="outline">
-      <mat-label>Desde</mat-label>
-      <input matInput type="date" formControlName="fechaDesde" />
-    </mat-form-field>
-    <mat-form-field appearance="outline">
-      <mat-label>Hasta</mat-label>
-      <input matInput type="date" formControlName="fechaHasta" />
-    </mat-form-field>
+  <form [formGroup]="filtros">
+    <!-- Búsqueda siempre visible + toggle de filtros avanzados -->
+    <div class="crud-searchbar">
+      <mat-form-field appearance="outline" class="crud-search">
+        <mat-label>Buscar (nota / proveedor)</mat-label>
+        <input matInput formControlName="search" (keyup.enter)="buscar()" />
+        <mat-icon matSuffix>search</mat-icon>
+      </mat-form-field>
+      <button
+        mat-icon-button
+        type="button"
+        class="crud-filter-toggle"
+        [class.active]="filtrosActivos > 0"
+        (click)="toggleFiltros()"
+        aria-label="Filtros"
+      >
+        <mat-icon [matBadge]="filtrosActivos" [matBadgeHidden]="filtrosActivos === 0" matBadgeColor="accent" matBadgeSize="small">tune</mat-icon>
+      </button>
+    </div>
+
+    <!-- Filtros avanzados (colapsables) -->
+    <div class="crud-filter-panel" *ngIf="filtrosAbiertos">
+      <mat-form-field appearance="outline">
+        <mat-label>Proveedor</mat-label>
+        <mat-select formControlName="proveedorId">
+          <mat-option [value]="null">Todos</mat-option>
+          <mat-option *ngFor="let p of proveedores" [value]="p.id">{{ p.label }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Estado</mat-label>
+        <mat-select formControlName="estado">
+          <mat-option [value]="null">Todos</mat-option>
+          <mat-option *ngFor="let e of estados" [value]="e">{{ e | titlecase }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Condición</mat-label>
+        <mat-select formControlName="credito">
+          <mat-option [value]="null">Todas</mat-option>
+          <mat-option [value]="false">Contado</mat-option>
+          <mat-option [value]="true">Crédito</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Desde</mat-label>
+        <input matInput type="date" formControlName="fechaDesde" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Hasta</mat-label>
+        <input matInput type="date" formControlName="fechaHasta" />
+      </mat-form-field>
+      <div class="crud-filter-actions">
+        <button mat-stroked-button type="button" (click)="limpiar()">Limpiar</button>
+        <button mat-flat-button color="primary" type="button" (click)="aplicar()">Aplicar</button>
+      </div>
+    </div>
   </form>
-  <div class="crud-filterbar">
-    <button mat-stroked-button (click)="limpiar()">Limpiar</button>
-    <button mat-flat-button color="primary" class="crud-filter-btn" (click)="buscar()">Filtrar</button>
-  </div>
 
   <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
   <p *ngIf="error" class="crud-error">{{ error }}</p>

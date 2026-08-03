@@ -10,6 +10,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatRippleModule } from '@angular/material/core';
+import { MatBadgeModule } from '@angular/material/badge';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService, PermissionService } from '@frc/shared-core';
@@ -69,7 +70,7 @@ const PAGE_SIZE = 20;
   imports: [
     CommonModule, RouterModule, ReactiveFormsModule, MatCardModule, MatIconModule,
     MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule,
-    MatProgressBarModule, MatRippleModule, MatSnackBarModule,
+    MatProgressBarModule, MatRippleModule, MatBadgeModule, MatSnackBarModule,
   ],
   templateUrl: './compras-list.page.html',
   styleUrls: ['./compras-list.page.scss'],
@@ -87,6 +88,9 @@ export class ComprasListPage implements OnInit {
   loadingMore = false;
   error: string | null = null;
   canGestionar = false;
+
+  filtrosAbiertos = false;
+  filtrosActivos = 0;
 
   private page = 1;
   total = 0;
@@ -108,9 +112,31 @@ export class ComprasListPage implements OnInit {
     this.perm.codigos$.subscribe(() => (this.canGestionar = this.perm.has('COMPRAS_GESTIONAR')));
     firstValueFrom(this.repo.getProveedores())
       .then((provs: any[]) => {
-        this.proveedores = (provs || []).map((p) => ({ id: p.id, label: p.nombre || p.razonSocial || `Proveedor #${p.id}` }));
+        this.proveedores = (provs || []).map((p) => ({ id: p.id, label: p.nombre || p.razon_social || `Proveedor #${p.id}` }));
       })
       .catch(() => undefined);
+    // Contador de filtros avanzados activos (excluye la búsqueda, que va aparte).
+    this.filtros.valueChanges.subscribe(() => (this.filtrosActivos = this.contarFiltros()));
+    this.buscar();
+  }
+
+  toggleFiltros(): void {
+    this.filtrosAbiertos = !this.filtrosAbiertos;
+  }
+
+  private contarFiltros(): number {
+    const v = this.filtros.getRawValue();
+    let n = 0;
+    if (v.proveedorId != null) n++;
+    if (v.estado) n++;
+    if (v.credito != null) n++;
+    if (v.fechaDesde) n++;
+    if (v.fechaHasta) n++;
+    return n;
+  }
+
+  aplicar(): void {
+    this.filtrosAbiertos = false;
     this.buscar();
   }
 

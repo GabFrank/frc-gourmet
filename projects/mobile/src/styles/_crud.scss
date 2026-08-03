@@ -184,3 +184,71 @@
     overflow: visible;
   }
 }
+
+/* --- Card navegable (item de lista que abre un detalle al tocarlo) ---
+   Un <a class="crud-card"> o <button class="crud-card"> se ve IGUAL que un
+   <mat-card class="crud-card" appearance="outlined">: superficie con borde,
+   texto legible y sin el color/subrayado de link. Es el patrón para listas
+   "tap-to-open" (toda la card navega). Para listas con acciones usar
+   <mat-card> + menú ⋮. */
+a.crud-card,
+button.crud-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+
+  &:active {
+    background: var(--surface-hover);
+  }
+}
+
+/* --- Barra de búsqueda + toggle de filtros (patrón de filtro colapsable) ---
+   La búsqueda queda siempre visible; los filtros avanzados se despliegan con el
+   botón `tune` (badge = cantidad de filtros activos), así la lista se ve de una
+   sin scrollear campos. Usar junto con `.crud-filter-panel`. */
+.crud-searchbar {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding-top: 12px;
+
+  .crud-search {
+    flex: 1;
+  }
+
+  .crud-filter-toggle {
+    flex: 0 0 auto;
+    margin-top: 4px;
+    color: var(--text-secondary);
+
+    &.active {
+      color: var(--primary-color);
+    }
+  }
+}
+
+/* --- Panel de filtros avanzados (colapsable) --- */
+.crud-filter-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0 8px;
+
+  mat-form-field {
+    flex: 1 1 140px;
+  }
+
+  .crud-filter-actions {
+    flex: 1 1 100%;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+  }
+}
