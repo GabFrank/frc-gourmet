@@ -79,6 +79,20 @@ describe('ComprasListPage — filtros y mapeo', () => {
     expect(cancel.estadoClase).toBe('anul');
   });
 
+  it('contarFiltros()/aplicar(): cuenta avanzados (no la búsqueda) y cierra el panel', () => {
+    // Solo búsqueda → 0 filtros avanzados.
+    component.filtros.patchValue({ search: 'algo' });
+    expect((component as any).contarFiltros()).toBe(0);
+    // Proveedor + estado + condición contado → 3.
+    component.filtros.patchValue({ proveedorId: 3, estado: 'FINALIZADO', credito: false });
+    expect((component as any).contarFiltros()).toBe(3);
+    // Toggle + aplicar cierra el panel.
+    component.toggleFiltros();
+    expect(component.filtrosAbiertos).toBe(true);
+    component.aplicar();
+    expect(component.filtrosAbiertos).toBe(false);
+  });
+
   it('cargarMas(): concatena la página siguiente', () => {
     component.total = 40;
     (component as any).items = [{ id: 1 } as any];

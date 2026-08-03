@@ -165,6 +165,34 @@ del dominio → [../domains/reportes.md](../domains/reportes.md).
 
 Manual de pruebas: `docs/testing/TESTING-CHECKLIST-COMPRAS-PWA.md`.
 
+## Patrones de lista y filtros (design system mobile)
+
+Definidos en `projects/mobile/src/styles/_crud.scss`. Toda lista nueva debe seguirlos.
+
+### Cards de lista
+- **Lista con acciones** (editar/eliminar/etc.): `<mat-card class="crud-card" appearance="outlined">`
+  + menú `⋮` (`more_vert` → `mat-menu`). Es el patrón mayoritario (~25 listas: productos,
+  clientes, funcionarios, categorías, etc.).
+- **Lista "tap-to-open"** (toda la card navega al detalle): `<a class="crud-card" mat-ripple
+  [routerLink]="[...]">`. `_crud.scss` estila `a.crud-card`/`button.crud-card` para que se vea
+  **igual** que una `mat-card` (fondo `--surface`, borde `--border-color`, texto `--text-primary`,
+  sin color/subrayado de link). Ej: compras, CxP, CxC.
+- **NUNCA** dejar el texto de la lista como link crudo (azul/subrayado). Si usás `<a>`, tiene que
+  llevar `class="crud-card"` para heredar el estilo de card.
+- Estructura interna: `.crud-card-body` > `.crud-card-main` (`.crud-name` + `.crud-sub`) + chips
+  (`.crud-chip` con `ok`/`warn`/`off`/`info`/`pend`/`anul`) + `chevron_right` si navega.
+
+### Filtros colapsables
+Para listas con más de 1–2 filtros, **no** apilar todos los campos (empuja la lista fuera de vista).
+Patrón: búsqueda siempre visible + panel colapsable.
+- `.crud-searchbar`: fila con el `mat-form-field` de búsqueda (`.crud-search`) + botón
+  `.crud-filter-toggle` (ícono `tune`, `matBadge` = cantidad de filtros activos, clase `active`
+  cuando hay filtros).
+- `.crud-filter-panel` (`*ngIf` de un flag `filtrosAbiertos`): campos avanzados en flex-wrap +
+  `.crud-filter-actions` (Limpiar / Aplicar). "Aplicar" cierra el panel y ejecuta la búsqueda.
+- Contador de activos en el componente (`contarFiltros()`), recomputado en `filtros.valueChanges`.
+- Ejemplo de referencia: `pages/compras/compras/compras-list.page.*`.
+
 ## Reglas al construir pantallas
 
 1. **Verificar que exista el handler de escritura** (`create-X`/`update-X`/`delete-X`), no solo el método
