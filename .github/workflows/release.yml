@@ -133,25 +133,31 @@ jobs:
         if: matrix.os != 'windows-2022'
         run: npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
 
-      # Windows: install COMPLETO (con optionals) para que @thiagoelg/node-printer
-      # quede en el arbol de dependencias RESUELTO. Es la unica forma confiable de que
-      # electron-builder lo empaquete: aunque este declarado en optionalDependencies
-      # y fisicamente en node_modules, electron-builder FILTRA node_modules al arbol
-      # de produccion resuelto (lockfile). Instalarlo con `npm install --no-save`
-      # DESPUES de un `npm ci --omit=optional` NO lo mete en ese arbol -> la app
-      # publicada tira "Cannot find module '@thiagoelg/node-printer'" al imprimir
-      # (regresion arrastrada por #216/#222/#224).
+      # Windows: node-printer (driver del spooler `system`) requiere 3 cosas, cada
+      # una arregla un modo de fallo distinto que arrastramos en #216/#222/#224/#225:
       #
-      # canvas tambien se resuelve con el install completo, pero electron-rebuild lo
-      # intenta recompilar contra Electron y rompe (cairo ausente en Windows). La app
-      # usa @napi-rs/canvas, asi que borramos node_modules/canvas antes de empaquetar.
-      # Se VERIFICA que node-printer quedo instalado, para no volver a publicar un
-      # instalador roto.
+      # 1) Install base sin optionals (evita canvas/cairo). Un `npm ci` completo NO
+      #    sirve: node-printer es optional y si su build falla npm lo DROPEA en
+      #    silencio -> ni queda en node_modules (fallo de #225).
+      # 2) `npm install` EXPLICITO de node-printer: al pedirlo por nombre npm lo
+      #    instala de verdad y su build es fatal-si-falla (no se dropea). Esto SI
+      #    lo deja en node_modules (comprobado en #224/alpha.111).
+      # 3) Moverlo a `dependencies` en package.json (efimero, solo en el runner):
+      #    electron-builder arma el paquete desde el arbol de deps de PRODUCCION,
+      #    asi que una optional instalada con --no-save queda en node_modules pero
+      #    NO se empaqueta -> la app tira "Cannot find module @thiagoelg/node-printer"
+      #    (fallo de alpha.111). Como dependency de produccion + presente en
+      #    node_modules, electron-builder SI lo incluye y lo recompila contra Electron.
+      #
+      # canvas se borra (electron-rebuild lo rompe por cairo; la app usa @napi-rs/canvas).
+      # require.resolve verifica que quedo, para no volver a publicar un instalador roto.
       - name: Install deps (Windows, con node-printer)
         if: matrix.os == 'windows-2022'
         shell: bash
         run: |
-          npm ci --legacy-peer-deps --no-audit --no-fund
+          npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
+          npm install --no-save --no-audit --no-fund @thiagoelg/node-printer@0.6.2
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies=p.dependencies||{};p.dependencies['@thiagoelg/node-printer']=(p.optionalDependencies||{})['@thiagoelg/node-printer']||'^0.6.2';if(p.optionalDependencies)delete p.optionalDependencies['@thiagoelg/node-printer'];fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');console.log('node-printer movido a dependencies para el empaquetado');"
           node -e "require.resolve('@thiagoelg/node-printer/package.json')"
           rm -rf node_modules/canvas
 
