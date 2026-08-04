@@ -133,31 +133,32 @@ jobs:
         if: matrix.os != 'windows-2022'
         run: npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
 
-      # Windows: node-printer (driver del spooler `system`) requiere 3 cosas, cada
-      # una arregla un modo de fallo distinto que arrastramos en #216/#222/#224/#225:
+      # Windows: node-printer (driver del spooler `system`).
       #
-      # 1) Install base sin optionals (evita canvas/cairo). Un `npm ci` completo NO
-      #    sirve: node-printer es optional y si su build falla npm lo DROPEA en
-      #    silencio -> ni queda en node_modules (fallo de #225).
-      # 2) `npm install` EXPLICITO de node-printer: al pedirlo por nombre npm lo
-      #    instala de verdad y su build es fatal-si-falla (no se dropea). Esto SI
-      #    lo deja en node_modules (comprobado en #224/alpha.111).
-      # 3) Moverlo a `dependencies` en package.json (efimero, solo en el runner):
-      #    electron-builder arma el paquete desde el arbol de deps de PRODUCCION,
-      #    asi que una optional instalada con --no-save queda en node_modules pero
-      #    NO se empaqueta -> la app tira "Cannot find module @thiagoelg/node-printer"
-      #    (fallo de alpha.111). Como dependency de produccion + presente en
-      #    node_modules, electron-builder SI lo incluye y lo recompila contra Electron.
+      # CAUSA RAIZ (confirmada en logs alpha.111/112/siguiente): el build nativo de
+      # @thiagoelg/node-printer FALLA en el runner y, como esta en optionalDependencies,
+      # npm lo DROPEA en silencio -> nunca queda en node_modules (ni con `npm ci`, ni
+      # con `npm install --no-save` explicito: los "added N packages" son sus deps, no
+      # el modulo). Por eso la app tira "Cannot find module @thiagoelg/node-printer".
       #
-      # canvas se borra (electron-rebuild lo rompe por cairo; la app usa @napi-rs/canvas).
-      # require.resolve verifica que quedo, para no volver a publicar un instalador roto.
+      # Fix:
+      # 1) Base sin optionals (evita canvas/cairo).
+      # 2) Declararlo dependency REQUERIDA en package.json ANTES de instalar: asi su
+      #    build NO se dropea; si falla, el job FALLA con el error real de prebuild/
+      #    node-gyp (visible), en vez de seguir en silencio. Ademas electron-builder
+      #    lo empaqueta al ser dep de produccion.
+      # 3) Instalarlo forzando build desde fuente (--build-from-source + --foreground-scripts):
+      #    compila con VS2022 (windows-2022) en vez de depender de un prebuilt inexistente
+      #    para Node 18, y muestra la salida del compilador.
+      #
+      # require.resolve verifica; canvas se borra (electron-rebuild lo rompe por cairo).
       - name: Install deps (Windows, con node-printer)
         if: matrix.os == 'windows-2022'
         shell: bash
         run: |
           npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
-          npm install --no-save --no-audit --no-fund @thiagoelg/node-printer@0.6.2
-          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies=p.dependencies||{};p.dependencies['@thiagoelg/node-printer']=(p.optionalDependencies||{})['@thiagoelg/node-printer']||'^0.6.2';if(p.optionalDependencies)delete p.optionalDependencies['@thiagoelg/node-printer'];fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');console.log('node-printer movido a dependencies para el empaquetado');"
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies=p.dependencies||{};p.dependencies['@thiagoelg/node-printer']=(p.optionalDependencies||{})['@thiagoelg/node-printer']||'^0.6.2';if(p.optionalDependencies)delete p.optionalDependencies['@thiagoelg/node-printer'];fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');console.log('node-printer declarado como dependency requerida');"
+          npm install --no-save --no-audit --no-fund --foreground-scripts --build-from-source @thiagoelg/node-printer@0.6.2
           node -e "require.resolve('@thiagoelg/node-printer/package.json')"
           rm -rf node_modules/canvas
 
