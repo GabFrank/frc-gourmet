@@ -124,35 +124,35 @@ jobs:
           "
           echo "package.json bumped a ${VERSION}"
 
-      - name: Install deps
-        # --omit=optional skip canvas (transitive de pdfjs-dist@optionalDependencies).
-        # canvas intenta compilar cairo y rompe en ambos OS porque no tenemos los
-        # headers nativos. El codigo usa @napi-rs/canvas (prebuilt napi binary)
-        # que monkey-patchea CanvasFactory de pdfjs, asi que canvas nativo no
-        # hace falta.
+      # Instalacion de dependencias, bifurcada por OS:
+      #
+      # Linux: --omit=optional saltea canvas (transitive de pdfjs-dist, compila
+      # cairo y rompe) y node-printer (exige CUPS). El codigo usa @napi-rs/canvas
+      # (prebuilt napi), no el canvas nativo.
+      - name: Install deps (Linux)
+        if: matrix.os != 'windows-2022'
         run: npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
 
-      # @thiagoelg/node-printer es la unica optionalDependency directa que la app
-      # necesita: driver del spooler del SO (conexion de impresora tipo `system`,
-      # la via recomendada para una USB local en Windows). El `npm ci --omit=optional`
-      # de arriba lo excluye (junto con canvas), asi que lo instalamos aparte para que
-      # electron-builder lo empaquete (asarUnpack) y lo recompile contra Electron.
+      # Windows: install COMPLETO (con optionals) para que @thiagoelg/node-printer
+      # quede en el arbol de dependencias RESUELTO. Es la unica forma confiable de que
+      # electron-builder lo empaquete: aunque este declarado en optionalDependencies
+      # y fisicamente en node_modules, electron-builder FILTRA node_modules al arbol
+      # de produccion resuelto (lockfile). Instalarlo con `npm install --no-save`
+      # DESPUES de un `npm ci --omit=optional` NO lo mete en ese arbol -> la app
+      # publicada tira "Cannot find module '@thiagoelg/node-printer'" al imprimir
+      # (regresion arrastrada por #216/#222/#224).
       #
-      # NO usar --omit=optional en este install: node-printer ESTA en
-      # optionalDependencies, y ese flag lo omitiria -> la app instalada tira
-      # "Cannot find module '@thiagoelg/node-printer'" al imprimir.
-      #
-      # Este install re-resuelve el arbol y reintroduce canvas (optional transitiva
-      # de pdfjs-dist), que electron-rebuild luego intenta compilar y rompe (cairo
-      # ausente en Windows / node-gyp). La app usa @napi-rs/canvas (prebuilt), NO el
-      # canvas nativo, asi que lo borramos para que no se recompile.
-      #
-      # Solo en Windows: en Linux el binario exige CUPS y la via `system` degrada.
-      - name: Install system-printer native module (Windows)
+      # canvas tambien se resuelve con el install completo, pero electron-rebuild lo
+      # intenta recompilar contra Electron y rompe (cairo ausente en Windows). La app
+      # usa @napi-rs/canvas, asi que borramos node_modules/canvas antes de empaquetar.
+      # Se VERIFICA que node-printer quedo instalado, para no volver a publicar un
+      # instalador roto.
+      - name: Install deps (Windows, con node-printer)
         if: matrix.os == 'windows-2022'
         shell: bash
         run: |
-          npm install --no-save --no-audit --no-fund @thiagoelg/node-printer@0.6.2
+          npm ci --legacy-peer-deps --no-audit --no-fund
+          node -e "require.resolve('@thiagoelg/node-printer/package.json')"
           rm -rf node_modules/canvas
 
       - name: Build app
