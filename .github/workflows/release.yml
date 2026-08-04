@@ -135,26 +135,30 @@ jobs:
 
       # Windows: node-printer (driver del spooler `system`).
       #
-      # CAUSA RAIZ (confirmada en logs alpha.111/112/siguiente): el build nativo de
-      # @thiagoelg/node-printer FALLA en el runner y, como esta en optionalDependencies,
-      # npm lo DROPEA en silencio -> nunca queda en node_modules (ni con `npm ci`, ni
-      # con `npm install --no-save` explicito: los "added N packages" son sus deps, no
-      # el modulo). Por eso la app tira "Cannot find module @thiagoelg/node-printer".
+      # CAUSA RAIZ (log del build, definitiva): node-printer trae un node-gyp 8.4.1
+      # viejo; su `gyp_main.py` hace `from distutils.version import StrictVersion`.
+      # El runner usa Python 3.12, y distutils FUE ELIMINADO del stdlib en Python 3.12
+      # (PEP 632) -> "ModuleNotFoundError: No module named 'distutils'" -> node-gyp
+      # falla al configurar -> node-printer no compila -> npm lo dropea (optional) ->
+      # nunca queda en node_modules -> la app tira "Cannot find module @thiagoelg/node-printer".
+      # (No era ni VS ni el empaquetado; VS2022 se detecta bien.)
       #
-      # Fix:
-      # 1) Base sin optionals (evita canvas/cairo).
-      # 2) Declararlo dependency REQUERIDA en package.json ANTES de instalar: asi su
-      #    build NO se dropea; si falla, el job FALLA con el error real de prebuild/
-      #    node-gyp (visible), en vez de seguir en silencio. Ademas electron-builder
-      #    lo empaqueta al ser dep de produccion.
-      # 3) Instalarlo forzando build desde fuente (--build-from-source + --foreground-scripts):
-      #    compila con VS2022 (windows-2022) en vez de depender de un prebuilt inexistente
-      #    para Node 18, y muestra la salida del compilador.
-      #
-      # require.resolve verifica; canvas se borra (electron-rebuild lo rompe por cairo).
+      # Fix: usar Python 3.11 (que SI trae distutils) para node-gyp, via npm_config_python.
+      # Ademas se lo declara dependency REQUERIDA (si algo falla, el job falla con el
+      # error real en vez de dropearlo en silencio) y electron-builder lo empaqueta.
+      - name: Setup Python 3.11 for node-gyp (Windows)
+        if: matrix.os == 'windows-2022'
+        id: py311
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Install deps (Windows, con node-printer)
         if: matrix.os == 'windows-2022'
         shell: bash
+        env:
+          # node-gyp usa este Python (3.11 con distutils) en vez del 3.12 del runner.
+          npm_config_python: ${{ steps.py311.outputs.python-path }}
         run: |
           npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
           node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies=p.dependencies||{};p.dependencies['@thiagoelg/node-printer']=(p.optionalDependencies||{})['@thiagoelg/node-printer']||'^0.6.2';if(p.optionalDependencies)delete p.optionalDependencies['@thiagoelg/node-printer'];fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');console.log('node-printer declarado como dependency requerida');"
