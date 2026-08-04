@@ -133,21 +133,27 @@ jobs:
         run: npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
 
       # @thiagoelg/node-printer es la unica optionalDependency directa que la app
-      # necesita: es el driver del spooler del SO (conexion de impresora tipo
-      # `system`, la via recomendada para una USB local en Windows). El paso de
-      # arriba usa --omit=optional para saltear canvas (cairo), pero eso tambien
-      # excluye este modulo -> la app instalada tiraba "Cannot find module
-      # '@thiagoelg/node-printer'" al imprimir. Lo instalamos aparte para que
+      # necesita: driver del spooler del SO (conexion de impresora tipo `system`,
+      # la via recomendada para una USB local en Windows). El `npm ci --omit=optional`
+      # de arriba lo excluye (junto con canvas), asi que lo instalamos aparte para que
       # electron-builder lo empaquete (asarUnpack) y lo recompile contra Electron.
-      # IMPORTANTE: va con --omit=optional. Un `npm install` sin ese flag re-resuelve
-      # el arbol y RE-ARRASTRA canvas (optional de pdfjs-dist), que luego electron
-      # rebuild intenta compilar y rompe (cairo ausente en Windows). Con el flag,
-      # solo se agrega node-printer sin reintroducir canvas.
-      # Solo en Windows: en Linux el binario nativo exige CUPS y la via `system`
-      # degrada por diseno.
+      #
+      # NO usar --omit=optional en este install: node-printer ESTA en
+      # optionalDependencies, y ese flag lo omitiria -> la app instalada tira
+      # "Cannot find module '@thiagoelg/node-printer'" al imprimir.
+      #
+      # Este install re-resuelve el arbol y reintroduce canvas (optional transitiva
+      # de pdfjs-dist), que electron-rebuild luego intenta compilar y rompe (cairo
+      # ausente en Windows / node-gyp). La app usa @napi-rs/canvas (prebuilt), NO el
+      # canvas nativo, asi que lo borramos para que no se recompile.
+      #
+      # Solo en Windows: en Linux el binario exige CUPS y la via `system` degrada.
       - name: Install system-printer native module (Windows)
         if: matrix.os == 'windows-2022'
-        run: npm install --no-save --no-audit --no-fund --omit=optional @thiagoelg/node-printer@0.6.2
+        shell: bash
+        run: |
+          npm install --no-save --no-audit --no-fund @thiagoelg/node-printer@0.6.2
+          rm -rf node_modules/canvas
 
       - name: Build app
         run: npm run build:prod
