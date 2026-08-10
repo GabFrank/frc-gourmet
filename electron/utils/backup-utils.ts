@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { readAppSettings, updateAppSettings, BackupSettings } from './app-settings.utils';
+import { readAppSettings, updateAppSettings, BackupSettings, DbType, PgBackupFormat } from './app-settings.utils';
 
 export interface BackupMetadata {
   fileName: string;
@@ -13,9 +13,16 @@ export interface BackupMetadata {
   hasImages?: boolean;
   appVersion?: string;
   notes?: string;
+  /** Driver de origen del backup (por extensión / manifest). */
+  dbType?: DbType;
 }
 
 export type BackupMode = 'interval' | 'daily';
+
+/** Driver de BD configurado actualmente. */
+export function getDbType(userDataPath: string): DbType {
+  return readAppSettings(userDataPath).database?.type || 'sqlite';
+}
 
 export interface BackupConfig {
   autoBackupEnabled: boolean;
@@ -31,6 +38,12 @@ export interface BackupConfig {
   customBackupDir?: string;
   includeImages: boolean;
   lastAutoBackupAt?: string;
+  /** Postgres: formato del dump ('custom' = .dump comprimido; 'plain' = .sql). */
+  pgFormat?: PgBackupFormat;
+  /** Postgres: carpeta con binarios pg_dump/pg_restore/psql (vacío = autodetect). */
+  pgBinDir?: string;
+  /** WhatsApp: número/JID destino para enviar backups (vacío = deshabilitado). */
+  whatsappDestino?: string;
 }
 
 export const DEFAULT_BACKUP_CONFIG: BackupConfig = {
@@ -42,6 +55,9 @@ export const DEFAULT_BACKUP_CONFIG: BackupConfig = {
   customBackupDir: undefined,
   includeImages: false,
   lastAutoBackupAt: undefined,
+  pgFormat: 'custom',
+  pgBinDir: undefined,
+  whatsappDestino: undefined,
 };
 
 const LEGACY_CONFIG_FILE_NAME = 'backup-config.json';
@@ -102,10 +118,21 @@ export function timestampSlug(d: Date = new Date()): string {
   return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 
-export function buildBackupFileName(opts: { withImages: boolean; isAutomatic: boolean; date?: Date }): string {
+/**
+ * Nombre de archivo del backup. Cuando `withImages` es true el contenedor es
+ * `.frcbak` (BD + imágenes). Cuando es solo-BD, la extensión depende del driver:
+ * SQLite → `.db`, Postgres → `.dump` (custom) o `.sql` (plano), vía `dbExt`.
+ */
+export function buildBackupFileName(opts: {
+  withImages: boolean;
+  isAutomatic: boolean;
+  date?: Date;
+  /** Extensión de la BD para backup solo-BD. Default 'db' (SQLite). */
+  dbExt?: 'db' | 'dump' | 'sql';
+}): string {
   const slug = timestampSlug(opts.date);
   const tag = opts.isAutomatic ? 'auto' : 'manual';
-  const ext = opts.withImages ? 'frcbak' : 'db';
+  const ext = opts.withImages ? 'frcbak' : (opts.dbExt || 'db');
   return `${BACKUP_PREFIX}_${tag}_${slug}.${ext}`;
 }
 
@@ -114,6 +141,14 @@ export function fileSha256(filePath: string): string {
   const data = fs.readFileSync(filePath);
   hash.update(data);
   return hash.digest('hex');
+}
+
+/** Deriva el driver de origen de un backup por su extensión (best-effort). */
+export function backupDbTypeFromName(fileName: string): DbType | undefined {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith('.db')) return 'sqlite';
+  if (lower.endsWith('.dump') || lower.endsWith('.sql')) return 'postgres';
+  return undefined; // .frcbak: se resuelve leyendo el manifest
 }
 
 export function listBackupsInDir(dir: string): BackupMetadata[] {
@@ -127,6 +162,15 @@ export function listBackupsInDir(dir: string): BackupMetadata[] {
     const stat = fs.statSync(full);
     const isAutomatic = entry.name.includes('_auto_');
     const hasImages = entry.name.endsWith('.frcbak');
+    let dbType = backupDbTypeFromName(entry.name);
+    if (hasImages && !dbType) {
+      // Contenedor .frcbak: leer el manifest (header liviano) para el driver.
+      try {
+        dbType = readFrcBakManifest(full).dbType || 'sqlite';
+      } catch {
+        dbType = undefined;
+      }
+    }
     result.push({
       fileName: entry.name,
       fullPath: full,
@@ -134,6 +178,7 @@ export function listBackupsInDir(dir: string): BackupMetadata[] {
       createdAt: stat.mtime,
       isAutomatic,
       hasImages,
+      dbType,
     });
   }
   return result.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -188,19 +233,34 @@ export interface FrcBakManifest {
   appVersion?: string;
   notes?: string;
   dbHash: string;
+  /** Driver de la BD respaldada. Ausente en backups viejos => 'sqlite'. */
+  dbType?: DbType;
+  /** Nombre relativo del archivo de BD dentro del contenedor. Ausente => 'frc-gourmet.db'. */
+  dbFileName?: string;
   files: { relPath: string; size: number; sha256: string }[];
+}
+
+/** Nombre del archivo de BD dentro de un .frcbak, tolerante a backups viejos. */
+export function frcBakDbFileName(manifest: FrcBakManifest): string {
+  return manifest.dbFileName || 'frc-gourmet.db';
 }
 
 export function packFrcBak(opts: {
   outFile: string;
+  /** Ruta del archivo de BD a incluir (SQLite .db o dump de Postgres). */
   dbPath: string;
+  /** Nombre con el que se guarda la BD dentro del contenedor. Default 'frc-gourmet.db'. */
+  dbFileName?: string;
+  /** Driver de la BD respaldada. Default 'sqlite'. */
+  dbType?: DbType;
   imagesDirs: { relRoot: string; absDir: string }[];
   appVersion?: string;
   notes?: string;
 }): { manifest: FrcBakManifest; size: number } {
   const filesToInclude: { relPath: string; absPath: string }[] = [];
 
-  filesToInclude.push({ relPath: 'frc-gourmet.db', absPath: opts.dbPath });
+  const dbFileName = opts.dbFileName || 'frc-gourmet.db';
+  filesToInclude.push({ relPath: dbFileName, absPath: opts.dbPath });
 
   for (const imgDir of opts.imagesDirs) {
     if (!fs.existsSync(imgDir.absDir)) continue;
@@ -225,6 +285,8 @@ export function packFrcBak(opts: {
     createdAt: new Date().toISOString(),
     appVersion: opts.appVersion,
     notes: opts.notes,
+    dbType: opts.dbType || 'sqlite',
+    dbFileName,
     dbHash: fileSha256(opts.dbPath),
     files: filesToInclude.map(f => ({
       relPath: f.relPath,
@@ -283,7 +345,18 @@ export function readFrcBakManifest(filePath: string): FrcBakManifest {
   }
 }
 
-export function unpackFrcBak(opts: { srcFile: string; targetUserDataPath: string }): { manifest: FrcBakManifest } {
+/**
+ * Extrae un .frcbak. Las imágenes se escriben en `targetUserDataPath`. El
+ * archivo de BD se escribe en `dbDest` si se provee (Postgres: un dump temporal
+ * que luego restaura pg_restore), o en `targetUserDataPath/<dbFileName>` por
+ * defecto (SQLite: reemplaza el .db en su lugar). Devuelve la ruta final del
+ * archivo de BD extraído para que el llamador lo procese/limpie.
+ */
+export function unpackFrcBak(opts: {
+  srcFile: string;
+  targetUserDataPath: string;
+  dbDest?: string;
+}): { manifest: FrcBakManifest; dbDestPath: string } {
   const fd = fs.openSync(opts.srcFile, 'r');
   try {
     const lenBuf = Buffer.alloc(4);
@@ -293,11 +366,15 @@ export function unpackFrcBak(opts: { srcFile: string; targetUserDataPath: string
     fs.readSync(fd, manifestBuf, 0, len, 4);
     const manifest: FrcBakManifest = JSON.parse(manifestBuf.toString('utf-8'));
 
+    const dbFileName = frcBakDbFileName(manifest);
+    const dbDestPath = opts.dbDest || path.join(opts.targetUserDataPath, dbFileName);
+
     let offset = 4 + len;
     const buf = Buffer.alloc(64 * 1024);
 
     for (const file of manifest.files) {
-      const targetAbs = path.join(opts.targetUserDataPath, file.relPath);
+      const isDbFile = file.relPath === dbFileName;
+      const targetAbs = isDbFile ? dbDestPath : path.join(opts.targetUserDataPath, file.relPath);
       const targetDir = path.dirname(targetAbs);
       if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
       const outFd = fs.openSync(targetAbs, 'w');
@@ -317,7 +394,7 @@ export function unpackFrcBak(opts: { srcFile: string; targetUserDataPath: string
         fs.closeSync(outFd);
       }
     }
-    return { manifest };
+    return { manifest, dbDestPath };
   } finally {
     fs.closeSync(fd);
   }

@@ -3897,6 +3897,9 @@ contextBridge.exposeInMainWorld('api', {
   backupRestore: async (opts: { filePath: string }): Promise<any> => {
     return await ipcRenderer.invoke('backup-restore', opts);
   },
+  backupSendWhatsapp: async (opts: { fullPath: string; destino?: string; caption?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('backup-send-whatsapp', opts);
+  },
   backupConfigGet: async (): Promise<any> => {
     return await ipcRenderer.invoke('backup-config-get');
   },

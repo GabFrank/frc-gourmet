@@ -119,24 +119,25 @@ export async function sendWhatsappMedia(
   apikey: string,
   numberOrJid: string,
   base64: string,
-  opts: { fileName?: string; caption?: string; mimetype?: string } = {},
+  opts: { fileName?: string; caption?: string; mimetype?: string; mediatype?: 'image' | 'document' | 'video' | 'audio' } = {},
 ): Promise<SendWhatsappResult> {
   assertEvolutionConfig(cfg, apikey);
   if (!numberOrJid) throw new Error('Numero/grupo de WhatsApp vacio');
-  if (!base64) throw new Error('Imagen (base64) vacia');
+  if (!base64) throw new Error('Contenido (base64) vacio');
+  const mediatype = opts.mediatype || 'image';
   const endpoint = `${baseUrl(cfg)}/message/sendMedia/${encodeURIComponent(cfg.instance)}`;
   const { status, json, raw } = await postJson(
     endpoint,
     apikey,
     {
       number: numberOrJid,
-      mediatype: 'image',
-      mimetype: opts.mimetype || 'image/png',
+      mediatype,
+      mimetype: opts.mimetype || (mediatype === 'image' ? 'image/png' : 'application/octet-stream'),
       media: base64,
-      fileName: opts.fileName || 'cierre-caja.png',
+      fileName: opts.fileName || (mediatype === 'image' ? 'cierre-caja.png' : 'archivo'),
       caption: opts.caption || '',
     },
-    30000,
+    120000, // dumps de BD pueden ser grandes: timeout amplio
   );
   if (status < 200 || status >= 300) {
     const msg = (json && (json.message || json.error)) || raw || `HTTP ${status}`;
@@ -144,6 +145,33 @@ export async function sendWhatsappMedia(
   }
   const id = json?.key?.id || json?.id || '';
   return { id };
+}
+
+/**
+ * Envía un archivo (documento) por WhatsApp via Evolution API. Lee el archivo
+ * de disco y lo manda como `mediatype: 'document'`. Pensado para enviar backups
+ * de la BD (.db / .dump / .sql / .frcbak) al número/grupo configurado.
+ */
+export async function sendWhatsappDocumentFile(
+  cfg: EvolutionConfig,
+  apikey: string,
+  numberOrJid: string,
+  filePath: string,
+  opts: { fileName?: string; caption?: string; mimetype?: string } = {},
+): Promise<SendWhatsappResult> {
+  // require diferido para no acoplar fs a los llamadores del servicio.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fs = require('fs') as typeof import('fs');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const path = require('path') as typeof import('path');
+  if (!filePath || !fs.existsSync(filePath)) throw new Error('Archivo a enviar no encontrado');
+  const base64 = fs.readFileSync(filePath).toString('base64');
+  return sendWhatsappMedia(cfg, apikey, numberOrJid, base64, {
+    mediatype: 'document',
+    fileName: opts.fileName || path.basename(filePath),
+    caption: opts.caption || '',
+    mimetype: opts.mimetype || 'application/octet-stream',
+  });
 }
 
 export interface EvolutionStateResult {
