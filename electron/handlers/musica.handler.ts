@@ -25,6 +25,13 @@ import { PlanBloque } from '../../src/app/database/entities/musica/plan-bloque.e
 import { PRESETS_MUSICA, getPreset } from '../utils/musica-presets';
 import { generarPlanDelDia, getBloqueVigente } from '../services/musica-planner.service';
 import { descubrirMusica, rechazarTrack } from '../services/musica-descubrimiento.service';
+import {
+  iniciarRuntimeMusica,
+  detenerRuntimeMusica,
+  getEstadoRuntime,
+  cambiarVariante,
+} from '../services/musica-runtime.service';
+import { VarianteEnergia } from '../../src/app/database/entities/musica/musica-enums';
 import { MusicaFeedback } from '../../src/app/database/entities/musica/musica-feedback.entity';
 import { TipoFeedback } from '../../src/app/database/entities/musica/musica-enums';
 
@@ -662,6 +669,34 @@ export function registerMusicaHandlers(
     });
     const vigente = await getBloqueVigente(dataSource);
     return { plan, bloques, bloqueVigenteId: vigente?.id ?? null };
+  });
+
+  // ───────────────── Runtime automatico ─────────────────
+
+  ipcMain.handle('musica-runtime-estado', async () => {
+    await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONTROLAR]);
+    return getEstadoRuntime();
+  });
+
+  /**
+   * Cambia la variante de energia del bloque actual (suave/normal/movido).
+   * Es la reaccion al salon sin re-planificar: las tres playlists ya existen.
+   */
+  ipcMain.handle('musica-variante', async (_event, variante: VarianteEnergia) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONTROLAR);
+    await cambiarVariante(variante);
+    return { success: true };
+  });
+
+  ipcMain.handle('musica-runtime-toggle', async (_event, activar: boolean) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    updateAppSettings(userData(), (s) => ({
+      ...s,
+      musica: { ...s.musica, habilitado: !!activar },
+    }));
+    if (activar) iniciarRuntimeMusica(dataSource, userData());
+    else detenerRuntimeMusica();
+    return { success: true, habilitado: !!activar };
   });
 
   ipcMain.handle('musica-veto-eliminar', async (_event, id: number) => {

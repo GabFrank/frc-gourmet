@@ -24,6 +24,7 @@ import { Usuario } from './src/app/database/entities/personas/usuario.entity';
 import { installHandlerRegistry, handlerRegistryCount } from './electron/utils/handler-registry';
 import { startServer, stopServer } from './electron/server/server';
 import { registerAllAppHandlers } from './electron/utils/register-all-handlers';
+import { iniciarRuntimeMusica } from './electron/services/musica-runtime.service';
 import { startAcreditacionesScheduler } from './electron/handlers/banking.handler';
 import { seedPermissions } from './electron/handlers/permissions.handler';
 import { seedConfiguracionRrhh } from './electron/handlers/configuracion-rrhh.handler';
@@ -257,6 +258,19 @@ function initializeDatabase() {
       // Generar notificaciones RRHH al startup y cada 24h
       generarNotificacionesRrhh().catch((e) => console.error('Error generando notificaciones RRHH:', e));
       setInterval(() => { generarNotificacionesRrhh().catch((e) => console.error('Error notif RRHH interval:', e)); }, 24 * 60 * 60 * 1000);
+
+      // Musica ambiental: el runtime solo arranca si el modulo esta habilitado.
+      // Reacciona por evento (cambio de bloque) con un heartbeat de 2 min; no
+      // elige tema por tema. Ver docs/DISENO-OPERATIVO-MUSICA.md 3.3.
+      try {
+        const settingsMusica = readAppSettings(app.getPath('userData')).musica;
+        if (settingsMusica?.habilitado) {
+          iniciarRuntimeMusica(dataSource, app.getPath('userData'));
+          console.log('[musica] Runtime iniciado.');
+        }
+      } catch (e) {
+        console.error('[musica] No se pudo iniciar el runtime:', e);
+      }
     })
     .catch((error) => {
       console.error('Failed to initialize database:', error);
