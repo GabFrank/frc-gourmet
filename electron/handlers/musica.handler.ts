@@ -20,7 +20,22 @@ import {
   TipoSemilla,
   TipoVeto,
 } from '../../src/app/database/entities/musica/musica-enums';
+import { PlanProgramacion } from '../../src/app/database/entities/musica/plan-programacion.entity';
+import { PlanBloque } from '../../src/app/database/entities/musica/plan-bloque.entity';
 import { PRESETS_MUSICA, getPreset } from '../utils/musica-presets';
+import { generarPlanDelDia, getBloqueVigente } from '../services/musica-planner.service';
+
+/**
+ * Fecha local en YYYY-MM-DD. `toISOString()` daria UTC y en Paraguay (UTC-3)
+ * la noche caeria al dia siguiente: el plan de las 21:00 del sabado se
+ * guardaria como domingo.
+ */
+function fechaLocalHoy(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
 import { ensurePermission } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { readAppSettings, updateAppSettings } from '../utils/app-settings.utils';
@@ -522,6 +537,40 @@ export function registerMusicaHandlers(
       return await repo.save(entity);
     },
   );
+
+  // ───────────────── Plan del dia ─────────────────
+
+  /**
+   * Genera el plan y materializa las playlists. El dia se resuelve de una vez:
+   * ver docs/DISENO-OPERATIVO-MUSICA.md 3.3.
+   */
+  ipcMain.handle(
+    'musica-generar-plan',
+    async (_event, data?: { fecha?: string; instruccion?: string }) => {
+      await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+      const fecha = data?.fecha || fechaLocalHoy();
+      return await generarPlanDelDia(dataSource, userData(), fecha, {
+        instruccion: data?.instruccion,
+        usuarioId: getCurrentUser()?.id,
+      });
+    },
+  );
+
+  ipcMain.handle('musica-plan-del-dia', async (_event, fecha?: string) => {
+    await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONTROLAR]);
+    const planRepo = dataSource.getRepository(PlanProgramacion);
+    const plan = await planRepo.findOne({ where: { fecha: fecha || fechaLocalHoy() } });
+    if (!plan) return null;
+
+    const planBloqueRepo = dataSource.getRepository(PlanBloque);
+    const bloques = await planBloqueRepo.find({
+      where: { plan: { id: plan.id } },
+      relations: ['bloque'],
+      order: { id: 'ASC' },
+    });
+    const vigente = await getBloqueVigente(dataSource);
+    return { plan, bloques, bloqueVigenteId: vigente?.id ?? null };
+  });
 
   ipcMain.handle('musica-veto-eliminar', async (_event, id: number) => {
     await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
