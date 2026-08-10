@@ -104,6 +104,15 @@ export interface MusicaSettings {
   deviceId?: string | null;
   deviceNombre?: string | null;
   habilitado: boolean;
+  /**
+   * Lo que descubre la IA entra directo al repertorio en vez de esperar
+   * aprobación. Default true: el dueño recurrió a la app justamente porque no
+   * tiene tiempo de curar, así que el modelo es corregir por sustracción
+   * ("no va") y no aprobar de a uno.
+   */
+  autoAprobarDescubrimientos?: boolean;
+  /** Texto libre del dueño sobre el local. Va literal al prompt (F1.5). */
+  brief?: string;
   // El refresh token persiste en keytar, NO en este JSON.
   // PKCE no usa client_secret: no se guarda en ningún lado.
 }
@@ -156,6 +165,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     deviceId: null,
     deviceNombre: null,
     habilitado: false,
+    autoAprobarDescubrimientos: true,
+    brief: '',
   },
   deviceId: null,
   timezone: 'America/Asuncion',

@@ -1,0 +1,484 @@
+/**
+ * Descubrimiento de musica nueva con IA.
+ *
+ * EL PROBLEMA QUE RESUELVE: el dueno no tiene tiempo de armar playlists — por
+ * eso existe este modulo. Con solo re-mezclar las 4 playlists que ya tenia, el
+ * local seguiria escuchando lo mismo de siempre. El repertorio tiene que
+ * crecer solo.
+ *
+ * POR QUE CON IA Y NO CON SPOTIFY: la API de Spotify ya no recomienda nada
+ * (`recommendations` y `related-artists` se apagaron en nov-2024) y su `search`
+ * devuelve 10 resultados como maximo desde feb-2026. Es inutil para descubrir.
+ *
+ * La division de trabajo que si funciona:
+ *
+ *      EL LLM DESCUBRE  →  SPOTIFY RESUELVE
+ *
+ * El modelo conoce catalogo, generos, epocas y escenas: propone "artista —
+ * tema". Spotify solo se usa para convertir ese texto en un track real, que es
+ * justo para lo que su `search` sigue sirviendo.
+ *
+ * APRENDIZAJE: cada rechazo del dueno entra al prompt de la proxima ronda como
+ * ejemplo negativo. El sistema no se "reentrena": se le da mejor contexto.
+ */
+import { DataSource } from 'typeorm';
+import { MusicaTrack } from '../../src/app/database/entities/musica/musica-track.entity';
+import { MusicaVeto } from '../../src/app/database/entities/musica/musica-veto.entity';
+import { BloqueProgramacion } from '../../src/app/database/entities/musica/bloque-programacion.entity';
+import { MusicaFeedback } from '../../src/app/database/entities/musica/musica-feedback.entity';
+import {
+  EstadoTrack,
+  TipoFeedback,
+  TipoVeto,
+} from '../../src/app/database/entities/musica/musica-enums';
+import { readIaConfig } from '../utils/ia-config.utils';
+import { readAppSettings } from '../utils/app-settings.utils';
+import { spotifyApi } from './spotify.service';
+
+/** Cuantos candidatos pide por llamada. Mas que esto degrada la calidad. */
+const CANDIDATOS_POR_RONDA = 40;
+/** Muestra del repertorio que se manda como "esto ya lo tengo". */
+const MUESTRA_ARTISTAS = 60;
+/** Rechazos que se mandan como ejemplos negativos. */
+const MAX_RECHAZOS_EN_PROMPT = 40;
+/** Descarta intros, skits y sets largos que no sirven de fondo. */
+const DURACION_MIN_MS = 60_000;
+const DURACION_MAX_MS = 600_000;
+
+export interface CandidatoIa {
+  artista: string;
+  tema: string;
+  genero?: string;
+  motivo?: string;
+  escenas?: string[];
+}
+
+export interface ResultadoDescubrimiento {
+  propuestos: number;
+  agregados: number;
+  yaEstaban: number;
+  noEncontrados: number;
+  filtrados: number;
+  detalleFiltrados: string[];
+  agregadosDetalle: Array<{ artista: string; tema: string; motivo?: string }>;
+}
+
+/* ─────────────────────── Contexto del local ─────────────────────── */
+
+interface ContextoMusical {
+  generosPreferidos: string[];
+  generosVetados: string[];
+  artistasVetados: string[];
+  artistasEnPool: string[];
+  rechazados: string[];
+  gustados: string[];
+  bloques: Array<{ nombre: string; energia: number; generos: string[]; notas?: string }>;
+}
+
+async function construirContexto(
+  dataSource: DataSource,
+  bloque?: BloqueProgramacion | null,
+): Promise<ContextoMusical> {
+  const vetoRepo = dataSource.getRepository(MusicaVeto);
+  const trackRepo = dataSource.getRepository(MusicaTrack);
+  const bloqueRepo = dataSource.getRepository(BloqueProgramacion);
+  const feedbackRepo = dataSource.getRepository(MusicaFeedback);
+
+  const vetos = await vetoRepo.find({ where: { activo: true } });
+  const bloques = bloque
+    ? [bloque]
+    : await bloqueRepo.find({ where: { activo: true }, order: { diaSemana: 'ASC' } });
+
+  // Artistas mas presentes en el pool: el modelo necesita saber que ya hay
+  // para proponer OTRA cosa, no mas de lo mismo.
+  const artistas = await trackRepo
+    .createQueryBuilder('t')
+    .select('t.artista', 'artista')
+    .addSelect('COUNT(*)', 'cantidad')
+    .where('t.estado != :vetado', { vetado: EstadoTrack.VETADO })
+    .groupBy('t.artista')
+    .orderBy('cantidad', 'DESC')
+    .limit(MUESTRA_ARTISTAS)
+    .getRawMany();
+
+  const rechazados = await trackRepo.find({
+    where: { estado: EstadoTrack.VETADO },
+    take: MAX_RECHAZOS_EN_PROMPT,
+    order: { updatedAt: 'DESC' },
+  });
+
+  const gustados = await feedbackRepo.find({
+    where: { tipo: TipoFeedback.MAS_DE_ESTO },
+    take: 20,
+    order: { fecha: 'DESC' },
+  });
+
+  // Los generos preferidos salen de la grilla: son los que el dueno ya eligio
+  // bloque por bloque, no una lista aparte que habria que mantener.
+  const generosPreferidos = new Set<string>();
+  for (const b of bloques) for (const g of b.generosPreferidos || []) generosPreferidos.add(g);
+
+  return {
+    generosPreferidos: Array.from(generosPreferidos),
+    generosVetados: vetos.filter((v) => v.tipo === TipoVeto.GENERO).map((v) => v.valor),
+    artistasVetados: vetos
+      .filter((v) => v.tipo === TipoVeto.ARTISTA)
+      .map((v) => v.etiqueta || v.valor),
+    artistasEnPool: artistas.map((a) => a.artista),
+    rechazados: rechazados.map((t) => `${t.artista} — ${t.titulo}`),
+    gustados: gustados.map((f) => `${f.titulo || ''}`).filter(Boolean),
+    bloques: bloques.map((b) => ({
+      nombre: b.nombre,
+      energia: b.energia,
+      generos: b.generosPreferidos || [],
+      notas: b.notas,
+    })),
+  };
+}
+
+function construirPrompt(ctx: ContextoMusical, cantidad: number, brief?: string): string {
+  const lineas: string[] = [];
+
+  lineas.push(
+    'Sos el curador musical de un restaurante. Tu tarea es proponer musica NUEVA para su ambiente,',
+    'que encaje con su identidad pero que NO sea lo que ya tiene sonando.',
+    '',
+  );
+
+  if (brief) {
+    lineas.push('SOBRE EL LOCAL (escrito por el dueno):', brief, '');
+  }
+
+  if (ctx.bloques.length) {
+    lineas.push('MOMENTOS DEL DIA A CUBRIR:');
+    for (const b of ctx.bloques) {
+      lineas.push(
+        `- ${b.nombre} (energia ${b.energia}/5)${b.generos.length ? `: ${b.generos.join(', ')}` : ''}` +
+          (b.notas ? ` — ${b.notas}` : ''),
+      );
+    }
+    lineas.push('');
+  }
+
+  if (ctx.generosPreferidos.length) {
+    lineas.push(`ESTILOS QUE LE GUSTAN: ${ctx.generosPreferidos.join(', ')}`, '');
+  }
+
+  lineas.push(
+    'PROHIBIDO (no propongas nada de esto, es motivo de rechazo inmediato):',
+    `- Generos: ${ctx.generosVetados.join(', ') || '—'}`,
+    `- Artistas: ${ctx.artistasVetados.join(', ') || '—'}`,
+    '- Canciones con contenido explicito, vulgar o de doble sentido (es un local familiar).',
+    '- Canciones tristes, melancolicas o de despecho: el ambiente tiene que ser alegre.',
+    '',
+  );
+
+  if (ctx.artistasEnPool.length) {
+    lineas.push(
+      'ARTISTAS QUE YA TIENE (proponer OTROS; a lo sumo un tema distinto de estos si es muy afin):',
+      ctx.artistasEnPool.join(', '),
+      '',
+    );
+  }
+
+  if (ctx.rechazados.length) {
+    lineas.push(
+      'YA RECHAZO ESTO (aprende del patron y evita cosas parecidas):',
+      ctx.rechazados.join(' | '),
+      '',
+    );
+  }
+
+  if (ctx.gustados.length) {
+    lineas.push('LE GUSTO ESPECIALMENTE (mas en esta linea):', ctx.gustados.join(' | '), '');
+  }
+
+  lineas.push(
+    `Proponé ${cantidad} canciones. Reglas:`,
+    '- Variedad real: no mas de 1 tema por artista en toda la lista.',
+    '- Canciones que existan en Spotify, con el nombre exacto del artista y del tema.',
+    '- Mezclá conocidas con hallazgos menos obvios, pero siempre agradables de fondo.',
+    '- Priorizá la escena/momento del dia que mas material necesite.',
+    '',
+    'Devolvé SOLO JSON con esta forma:',
+    '{"candidatos":[{"artista":"","tema":"","genero":"","escenas":["almuerzo"],"motivo":"por que encaja, breve"}]}',
+  );
+
+  return lineas.join('\n');
+}
+
+/* ─────────────────────── Llamada al modelo ─────────────────────── */
+
+async function pedirCandidatosAlModelo(
+  userDataPath: string,
+  prompt: string,
+): Promise<CandidatoIa[]> {
+  const ia = await readIaConfig(userDataPath);
+  if (!ia.openaiApiKey) {
+    throw new Error(
+      'FALTA LA API KEY DE IA. CARGALA EN CONFIGURACION → CONFIGURAR IA PARA USAR EL DESCUBRIMIENTO.',
+    );
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 90_000);
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${ia.openaiApiKey}`,
+      },
+      body: JSON.stringify({
+        model: ia.modelo || 'gpt-4o',
+        messages: [
+          { role: 'system', content: prompt },
+          { role: 'user', content: 'Dame la lista de canciones en JSON.' },
+        ],
+        response_format: { type: 'json_object' },
+        // Algo de temperatura a proposito: con 0 propone siempre lo mismo y el
+        // repertorio dejaria de crecer despues de un par de rondas.
+        temperature: 0.8,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      if (res.status === 401) throw new Error('LA API KEY DE IA NO ES VALIDA.');
+      if (res.status === 429) {
+        throw new Error('SIN CREDITOS O LIMITE DE IA ALCANZADO. REVISA TU CUENTA DE OPENAI.');
+      }
+      throw new Error(`ERROR DE IA (${res.status}): ${txt.slice(0, 200)}`);
+    }
+
+    const payload: any = await res.json();
+    const content = payload?.choices?.[0]?.message?.content;
+    if (!content) throw new Error('LA IA NO DEVOLVIO RESPUESTA.');
+
+    const parsed = JSON.parse(content);
+    const candidatos = parsed?.candidatos ?? parsed?.canciones ?? [];
+    if (!Array.isArray(candidatos)) throw new Error('LA IA DEVOLVIO UN FORMATO INESPERADO.');
+    return candidatos.filter((c: any) => c?.artista && c?.tema);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* ─────────────────────── Resolucion en Spotify ─────────────────────── */
+
+function normalizar(s: string): string {
+  return (s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    // "(Remastered 2011)", "- Live", "feat. X" ensucian la comparacion.
+    .replace(/\(.*?\)|\[.*?\]/g, '')
+    .replace(/\b(feat|ft|with)\.?\s.*$/i, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Convierte "artista — tema" en un track real. Acepta el match solo si artista
+ * y titulo coinciden razonablemente: sin esto, Spotify devuelve cualquier cosa
+ * para nombres que no existen y el pool se llena de basura.
+ */
+async function resolverEnSpotify(
+  userDataPath: string,
+  candidato: CandidatoIa,
+): Promise<any | null> {
+  const q = `track:${candidato.tema} artist:${candidato.artista}`;
+  const res = await spotifyApi(
+    userDataPath,
+    'GET',
+    `/search?q=${encodeURIComponent(q)}&type=track&limit=5`,
+  );
+  const items: any[] = res?.tracks?.items || [];
+  if (items.length === 0) return null;
+
+  const artistaBuscado = normalizar(candidato.artista);
+  const temaBuscado = normalizar(candidato.tema);
+
+  for (const item of items) {
+    const artistas = (item.artists || []).map((a: any) => normalizar(a.name));
+    const titulo = normalizar(item.name);
+    const artistaOk = artistas.some(
+      (a: string) => a === artistaBuscado || a.includes(artistaBuscado) || artistaBuscado.includes(a),
+    );
+    const temaOk = titulo === temaBuscado || titulo.includes(temaBuscado) || temaBuscado.includes(titulo);
+    if (artistaOk && temaOk) return item;
+  }
+  return null;
+}
+
+/* ─────────────────────── Flujo principal ─────────────────────── */
+
+export async function descubrirMusica(
+  dataSource: DataSource,
+  userDataPath: string,
+  opts?: { cantidad?: number; bloqueId?: number; brief?: string; usuarioId?: number },
+): Promise<ResultadoDescubrimiento> {
+  const trackRepo = dataSource.getRepository(MusicaTrack);
+  const vetoRepo = dataSource.getRepository(MusicaVeto);
+  const bloqueRepo = dataSource.getRepository(BloqueProgramacion);
+
+  const bloque = opts?.bloqueId
+    ? await bloqueRepo.findOne({ where: { id: opts.bloqueId } })
+    : null;
+
+  const ctx = await construirContexto(dataSource, bloque);
+  const cantidad = opts?.cantidad || CANDIDATOS_POR_RONDA;
+  const prompt = construirPrompt(ctx, cantidad, opts?.brief);
+  const candidatos = await pedirCandidatosAlModelo(userDataPath, prompt);
+
+  const { musica } = readAppSettings(userDataPath);
+  const autoAprobar = musica.autoAprobarDescubrimientos !== false;
+
+  const vetos = await vetoRepo.find({ where: { activo: true } });
+  const artistasVetados = new Set(
+    vetos.filter((v) => v.tipo === TipoVeto.ARTISTA).map((v) => (v.etiqueta || v.valor).toUpperCase()),
+  );
+  const generosVetados = vetos.filter((v) => v.tipo === TipoVeto.GENERO).map((v) => v.valor);
+
+  const resultado: ResultadoDescubrimiento = {
+    propuestos: candidatos.length,
+    agregados: 0,
+    yaEstaban: 0,
+    noEncontrados: 0,
+    filtrados: 0,
+    detalleFiltrados: [],
+    agregadosDetalle: [],
+  };
+
+  for (const c of candidatos) {
+    // Filtro barato ANTES de gastar un request de Spotify.
+    if (artistasVetados.has((c.artista || '').toUpperCase())) {
+      resultado.filtrados++;
+      resultado.detalleFiltrados.push(`${c.artista} — ${c.tema}: artista vetado`);
+      continue;
+    }
+    const generoCand = (c.genero || '').toUpperCase();
+    if (generoCand && generosVetados.some((g) => generoCand.includes(g) || g.includes(generoCand))) {
+      resultado.filtrados++;
+      resultado.detalleFiltrados.push(`${c.artista} — ${c.tema}: genero vetado (${c.genero})`);
+      continue;
+    }
+
+    let item: any = null;
+    try {
+      item = await resolverEnSpotify(userDataPath, c);
+    } catch {
+      // Un fallo puntual de la API no debe abortar la ronda entera.
+      item = null;
+    }
+    if (!item) {
+      resultado.noEncontrados++;
+      continue;
+    }
+
+    const yaExiste = await trackRepo.findOne({ where: { spotifyId: item.id } });
+    if (yaExiste) {
+      resultado.yaEstaban++;
+      continue;
+    }
+    if (item.explicit) {
+      resultado.filtrados++;
+      resultado.detalleFiltrados.push(`${c.artista} — ${c.tema}: marcado explicit`);
+      continue;
+    }
+    const dur = item.duration_ms || 0;
+    if (dur < DURACION_MIN_MS || dur > DURACION_MAX_MS) {
+      resultado.filtrados++;
+      resultado.detalleFiltrados.push(`${c.artista} — ${c.tema}: duracion fuera de rango`);
+      continue;
+    }
+
+    const track = trackRepo.create({
+      spotifyId: item.id,
+      isrc: item.external_ids?.isrc ?? undefined,
+      titulo: (item.name || '').toUpperCase(),
+      artista: (item.artists || []).map((a: any) => a.name).join(', ').toUpperCase(),
+      artistaId: item.artists?.[0]?.id ?? undefined,
+      album: item.album?.name ? String(item.album.name).toUpperCase() : undefined,
+      imagenUrl: item.album?.images?.[0]?.url ?? undefined,
+      duracionMs: dur,
+      explicit: false,
+      genero: c.genero ? c.genero.toUpperCase() : undefined,
+      escenas: c.escenas,
+      // El descubrimiento entra aprobado por defecto: el dueno pidio no tener
+      // que curar a mano. Se corrige por sustraccion (boton "no va").
+      estado: autoAprobar ? EstadoTrack.APROBADO : EstadoTrack.SUGERIDO,
+    } as MusicaTrack);
+    await trackRepo.save(track);
+
+    resultado.agregados++;
+    resultado.agregadosDetalle.push({ artista: track.artista, tema: track.titulo, motivo: c.motivo });
+  }
+
+  return resultado;
+}
+
+/**
+ * Rechazo del dueno: saca el tema del repertorio y lo convierte en ejemplo
+ * negativo para las proximas rondas de descubrimiento.
+ *
+ * `tambienArtista` corta de raiz cuando el problema es el artista entero.
+ */
+export async function rechazarTrack(
+  dataSource: DataSource,
+  spotifyId: string,
+  opts?: { tambienArtista?: boolean; bloqueId?: number },
+): Promise<{ success: boolean; artistaVetado: boolean }> {
+  const trackRepo = dataSource.getRepository(MusicaTrack);
+  const vetoRepo = dataSource.getRepository(MusicaVeto);
+  const feedbackRepo = dataSource.getRepository(MusicaFeedback);
+
+  const track = await trackRepo.findOne({ where: { spotifyId } });
+  if (!track) throw new Error('EL TEMA NO ESTA EN EL REPERTORIO.');
+
+  track.estado = EstadoTrack.VETADO;
+  track.score = (track.score || 0) - 1;
+  await trackRepo.save(track);
+
+  await feedbackRepo.save(
+    feedbackRepo.create({
+      spotifyId,
+      artistaId: track.artistaId,
+      titulo: track.titulo,
+      tipo: TipoFeedback.NO_VA,
+      bloqueId: opts?.bloqueId,
+      fecha: new Date(),
+    }),
+  );
+
+  let artistaVetado = false;
+  if (opts?.tambienArtista && track.artistaId) {
+    const ya = await vetoRepo.findOne({
+      where: { tipo: TipoVeto.ARTISTA, valor: track.artistaId, activo: true },
+    });
+    if (!ya) {
+      await vetoRepo.save(
+        vetoRepo.create({
+          tipo: TipoVeto.ARTISTA,
+          valor: track.artistaId,
+          etiqueta: track.artista,
+          bloqueId: null,
+          motivo: 'RECHAZADO POR EL USUARIO',
+          activo: true,
+        }),
+      );
+    }
+    // Los otros temas del artista tambien salen del repertorio.
+    await trackRepo
+      .createQueryBuilder()
+      .update(MusicaTrack)
+      .set({ estado: EstadoTrack.VETADO })
+      .where('artistaId = :id', { id: track.artistaId })
+      .execute();
+    artistaVetado = true;
+  }
+
+  return { success: true, artistaVetado };
+}

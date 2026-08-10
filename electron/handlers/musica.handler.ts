@@ -24,6 +24,9 @@ import { PlanProgramacion } from '../../src/app/database/entities/musica/plan-pr
 import { PlanBloque } from '../../src/app/database/entities/musica/plan-bloque.entity';
 import { PRESETS_MUSICA, getPreset } from '../utils/musica-presets';
 import { generarPlanDelDia, getBloqueVigente } from '../services/musica-planner.service';
+import { descubrirMusica, rechazarTrack } from '../services/musica-descubrimiento.service';
+import { MusicaFeedback } from '../../src/app/database/entities/musica/musica-feedback.entity';
+import { TipoFeedback } from '../../src/app/database/entities/musica/musica-enums';
 
 /**
  * Fecha local en YYYY-MM-DD. `toISOString()` daria UTC y en Paraguay (UTC-3)
@@ -85,13 +88,24 @@ export function registerMusicaHandlers(
       deviceId: musica.deviceId ?? null,
       deviceNombre: musica.deviceNombre ?? null,
       habilitado: musica.habilitado,
+      autoAprobarDescubrimientos: musica.autoAprobarDescubrimientos !== false,
+      brief: musica.brief || '',
       conectado: await estaConectado(),
     };
   });
 
   ipcMain.handle(
     'musica-set-config',
-    async (_event, data: { spotifyClientId?: string; redirectPort?: number; habilitado?: boolean }) => {
+    async (
+      _event,
+      data: {
+        spotifyClientId?: string;
+        redirectPort?: number;
+        habilitado?: boolean;
+        autoAprobarDescubrimientos?: boolean;
+        brief?: string;
+      },
+    ) => {
       await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
       updateAppSettings(userData(), (s) => ({
         ...s,
@@ -104,6 +118,12 @@ export function registerMusicaHandlers(
           redirectPort:
             data.redirectPort !== undefined ? Number(data.redirectPort) || 8888 : s.musica.redirectPort,
           habilitado: data.habilitado !== undefined ? !!data.habilitado : s.musica.habilitado,
+          autoAprobarDescubrimientos:
+            data.autoAprobarDescubrimientos !== undefined
+              ? !!data.autoAprobarDescubrimientos
+              : s.musica.autoAprobarDescubrimientos,
+          // Sin UPPERCASE: va literal al prompt del descubridor.
+          brief: data.brief !== undefined ? data.brief : s.musica.brief,
         },
       }));
       return { success: true };
@@ -535,6 +555,68 @@ export function registerMusicaHandlers(
       });
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
+    },
+  );
+
+  // ───────────────── Descubrimiento con IA ─────────────────
+
+  /**
+   * Pide musica nueva al modelo y la resuelve en Spotify. Es el corazon del
+   * modulo: sin esto el local seguiria escuchando siempre lo mismo, que es el
+   * problema que motivo todo.
+   */
+  ipcMain.handle(
+    'musica-descubrir',
+    async (_event, data?: { cantidad?: number; bloqueId?: number }) => {
+      await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+      const { musica } = readAppSettings(userData());
+      return await descubrirMusica(dataSource, userData(), {
+        cantidad: data?.cantidad,
+        bloqueId: data?.bloqueId,
+        brief: musica.brief || undefined,
+        usuarioId: getCurrentUser()?.id,
+      });
+    },
+  );
+
+  /**
+   * "No va": saca el tema del repertorio y lo convierte en ejemplo negativo
+   * para las proximas rondas. Lo pueden usar cajeros, gerentes y admin.
+   */
+  ipcMain.handle(
+    'musica-rechazar',
+    async (_event, data: { spotifyId: string; tambienArtista?: boolean; bloqueId?: number }) => {
+      await ensurePermission(dataSource, getCurrentUser, PERM_CONTROLAR);
+      return await rechazarTrack(dataSource, data.spotifyId, {
+        tambienArtista: data.tambienArtista,
+        bloqueId: data.bloqueId,
+      });
+    },
+  );
+
+  /** "Mas de esto": sube el score y alimenta el prompt de descubrimiento. */
+  ipcMain.handle(
+    'musica-me-gusta',
+    async (_event, data: { spotifyId: string; bloqueId?: number }) => {
+      await ensurePermission(dataSource, getCurrentUser, PERM_CONTROLAR);
+      const trackRepo = dataSource.getRepository(MusicaTrack);
+      const feedbackRepo = dataSource.getRepository(MusicaFeedback);
+      const track = await trackRepo.findOne({ where: { spotifyId: data.spotifyId } });
+      if (track) {
+        track.score = (track.score || 0) + 1;
+        await trackRepo.save(track);
+      }
+      await feedbackRepo.save(
+        feedbackRepo.create({
+          spotifyId: data.spotifyId,
+          artistaId: track?.artistaId,
+          titulo: track?.titulo,
+          tipo: TipoFeedback.MAS_DE_ESTO,
+          bloqueId: data.bloqueId,
+          fecha: new Date(),
+        }),
+      );
+      return { success: true };
     },
   );
 
