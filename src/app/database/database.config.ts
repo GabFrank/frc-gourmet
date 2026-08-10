@@ -25,6 +25,14 @@ import { EventoNotificacion } from './entities/notificaciones/evento-notificacio
 import { ReceptorNotificacion } from './entities/notificaciones/receptor-notificacion.entity';
 import { SuscripcionNotificacion } from './entities/notificaciones/suscripcion-notificacion.entity';
 import { LogNotificacion } from './entities/notificaciones/log-notificacion.entity';
+import { MusicaSemilla } from './entities/musica/musica-semilla.entity';
+import { MusicaTrack } from './entities/musica/musica-track.entity';
+import { MusicaVeto } from './entities/musica/musica-veto.entity';
+import { BloqueProgramacion } from './entities/musica/bloque-programacion.entity';
+import { PlanProgramacion } from './entities/musica/plan-programacion.entity';
+import { PlanBloque } from './entities/musica/plan-bloque.entity';
+import { TrackLog } from './entities/musica/track-log.entity';
+import { MusicaFeedback } from './entities/musica/musica-feedback.entity';
 
 // RRHH entities
 import { ConfiguracionRrhh } from './entities/rrhh/configuracion-rrhh.entity';
@@ -258,6 +266,7 @@ import { AddAnuladoToMovimientoCliente1784136362576 } from './migrations/1784136
 import { AddMesaQrAutoservicio1785082533104 } from './migrations/1785082533104-AddMesaQrAutoservicio';
 import { DropCheckTipoOperacionFinanciera1785170061312 } from './migrations/1785170061312-DropCheckTipoOperacionFinanciera';
 import { AddCuentasBancariasOrdenCajaMayorConfig1785170062316 } from './migrations/1785170062316-AddCuentasBancariasOrdenCajaMayorConfig';
+import { MusicaAmbiental1786378422682 } from './migrations/1786378422682-MusicaAmbiental';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -384,6 +393,15 @@ function getEntitiesList(): any[] {
       ReceptorNotificacion,
       SuscripcionNotificacion,
       LogNotificacion,
+      // Musica ambiental (Spotify Connect)
+      MusicaSemilla,
+      MusicaTrack,
+      MusicaVeto,
+      BloqueProgramacion,
+      PlanProgramacion,
+      PlanBloque,
+      TrackLog,
+      MusicaFeedback,
       // RRHH entities
       ConfiguracionRrhh,
       Cargo,
@@ -646,6 +664,8 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddMesaQrAutoservicio1785082533104,
     DropCheckTipoOperacionFinanciera1785170061312,
     AddCuentasBancariasOrdenCajaMayorConfig1785170062316,
+    // Musica ambiental (Spotify Connect): repertorio, bloques y planes
+    MusicaAmbiental1786378422682,
     AddPagoCuotaCppDetalle1785320463398,
     AddEgresoCajaToPagoCuotaDetalle1785335253817,
   ];
