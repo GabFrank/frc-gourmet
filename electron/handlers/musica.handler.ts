@@ -25,6 +25,7 @@ import { PlanBloque } from '../../src/app/database/entities/musica/plan-bloque.e
 import { PRESETS_MUSICA, getPreset } from '../utils/musica-presets';
 import { generarPlanDelDia, getBloqueVigente } from '../services/musica-planner.service';
 import { descubrirMusica, rechazarTrack } from '../services/musica-descubrimiento.service';
+import { enriquecerFeatures, etiquetarTracks } from '../services/musica-features.service';
 import {
   iniciarRuntimeMusica,
   detenerRuntimeMusica,
@@ -636,6 +637,24 @@ export function registerMusicaHandlers(
       return { success: true };
     },
   );
+
+  // ───────────────── Enriquecimiento del repertorio ─────────────────
+
+  /**
+   * Completa BPM/energia/valencia con ReccoBeats. Sin estos datos los perfiles
+   * por bloque no muerden: el filtro deja pasar lo que no tiene el dato y las
+   * tres variantes salen iguales.
+   */
+  ipcMain.handle('musica-enriquecer', async (_event, limite?: number) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    return await enriquecerFeatures(dataSource, userData(), limite || 200);
+  });
+
+  /** Etiquetado semantico en lote: escena, ambiente, apto familiar, idioma. */
+  ipcMain.handle('musica-etiquetar', async (_event, limite?: number) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    return await etiquetarTracks(dataSource, userData(), limite || 200);
+  });
 
   // ───────────────── Plan del dia ─────────────────
 

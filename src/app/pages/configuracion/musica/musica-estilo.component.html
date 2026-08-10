@@ -21,6 +21,18 @@
         </div>
       </div>
       <mat-progress-bar mode="determinate" [value]="porcentajeAprobados"></mat-progress-bar>
+
+      <div class="acciones-fila" *ngIf="resumen.total > 0">
+        <button mat-stroked-button (click)="enriquecer()" [disabled]="enriqueciendo">
+          <mat-icon>insights</mat-icon> Analizar temas
+        </button>
+        <mat-progress-spinner *ngIf="enriqueciendo" mode="indeterminate" diameter="24"></mat-progress-spinner>
+        <span class="ayuda" *ngIf="resumen.sinFeatures">
+          {{ resumen.sinFeatures | number: '1.0-2' }} temas sin BPM ni energía: hasta analizarlos, los
+          bloques no distinguen el almuerzo de la noche.
+        </span>
+      </div>
+
       <p class="ayuda" *ngIf="resumen.total < 300">
         Con menos de 300 temas el día se repite. Usá "Descubrir música" varias veces hasta llegar a
         600–800.

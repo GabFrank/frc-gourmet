@@ -137,6 +137,12 @@ export interface MusicaAvanzado {
   candidatosPorRonda: number;
   /** Si se aceptan temas marcados como explícitos por Spotify. */
   permitirExplicit: boolean;
+  /**
+   * Base de la API de ReccoBeats (reemplazo del `audio-features` que Spotify
+   * apagó). Configurable porque su documentación pública no fija la URL ni el
+   * esquema: si cambia, se corrige acá sin recompilar.
+   */
+  reccobeatsUrl?: string;
   // El refresh token persiste en keytar, NO en este JSON.
   // PKCE no usa client_secret: no se guarda en ningún lado.
 }
@@ -200,6 +206,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
       duracionMaxSeg: 600,
       candidatosPorRonda: 40,
       permitirExplicit: false,
+      reccobeatsUrl: 'https://api.reccobeats.com/v1',
     },
   },
   deviceId: null,

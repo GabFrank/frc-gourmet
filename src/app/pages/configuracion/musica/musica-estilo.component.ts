@@ -55,6 +55,7 @@ export class MusicaEstiloComponent implements OnInit {
   cargando = false;
   importando = false;
   descubriendo = false;
+  enriqueciendo = false;
 
   semillas: MusicaSemilla[] = [];
   nuevaUrl = '';
@@ -232,6 +233,33 @@ export class MusicaEstiloComponent implements OnInit {
       this.mostrarError(e);
     } finally {
       this.descubriendo = false;
+    }
+  }
+
+  /**
+   * Completa BPM/energía/valencia y el etiquetado semántico. Se corren juntos
+   * porque son dos mitades de lo mismo: sin ambos, los perfiles por bloque no
+   * distinguen el almuerzo de la noche.
+   */
+  async enriquecer(): Promise<void> {
+    this.enriqueciendo = true;
+    this.ultimoResultado = null;
+    try {
+      const features = await this.musicaService.enriquecer(300);
+      const etiquetas = await this.musicaService.etiquetar(300);
+      await this.refrescarResumen();
+      this.ultimoResultado = {
+        titulo:
+          `${features.conFeatures} temas con BPM/energía · ${etiquetas.etiquetados} etiquetados` +
+          (features.sinDatos ? ` · ${features.sinDatos} sin datos en ReccoBeats` : ''),
+        detalle: [...features.errores, ...etiquetas.errores],
+        agregados: [],
+      };
+      this.snackBar.open('Repertorio enriquecido', 'OK', { duration: 4000 });
+    } catch (e: any) {
+      this.mostrarError(e);
+    } finally {
+      this.enriqueciendo = false;
     }
   }
 

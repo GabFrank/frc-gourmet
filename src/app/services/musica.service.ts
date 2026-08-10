@@ -243,6 +243,25 @@ export class MusicaService {
     return this.api.callIpc('musica-track-estado', { id, estado });
   }
 
+  // ─────────── Enriquecimiento del repertorio ───────────
+
+  enriquecer(limite?: number): Promise<{
+    procesados: number;
+    conFeatures: number;
+    sinDatos: number;
+    errores: string[];
+  }> {
+    return this.api.callIpc('musica-enriquecer', limite);
+  }
+
+  etiquetar(limite?: number): Promise<{
+    procesados: number;
+    etiquetados: number;
+    errores: string[];
+  }> {
+    return this.api.callIpc('musica-etiquetar', limite);
+  }
+
   // ─────────── Descubrimiento con IA ───────────
 
   descubrir(cantidad?: number, bloqueId?: number): Promise<ResultadoDescubrimiento> {
