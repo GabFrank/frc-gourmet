@@ -91,6 +91,7 @@ import { registerAppModeHandlers } from '../handlers/app-mode.handler';
 import { registerFacturaImportHandlers } from '../handlers/factura-import.handler';
 import { registerNotificacionesConfigHandlers } from '../handlers/notificaciones-config.handler';
 import { registerPasswordRecoveryHandlers } from '../handlers/password-recovery.handler';
+import { registerMusicaHandlers } from '../handlers/musica.handler';
 import { setNotificacionDataSource } from '../services/notificacion.service';
 
 export interface RegisterAllOptions {
@@ -189,4 +190,6 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   setNotificacionDataSource(dataSource);
   registerNotificacionesConfigHandlers(dataSource, getCurrentUser);
   registerPasswordRecoveryHandlers(dataSource, getCurrentUser);
+  // Musica ambiental: control de Spotify Connect (la app de Spotify de esta PC)
+  registerMusicaHandlers(dataSource, getCurrentUser);
 }

@@ -131,6 +131,11 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'SISTEMA_MODO_CONFIGURAR', descripcion: 'Configurar modo de operacion (standalone/server/client)', modulo: 'SISTEMA' },
   { codigo: 'NOTIFICACIONES_CONFIGURAR', descripcion: 'Configurar notificaciones por Email/WhatsApp (canales, receptores, eventos)', modulo: 'SISTEMA' },
 
+  // Musica ambiental (Spotify Connect)
+  { codigo: 'MUSICA_VER', descripcion: 'Ver el estado de la musica ambiental del local', modulo: 'SISTEMA' },
+  { codigo: 'MUSICA_CONTROLAR', descripcion: 'Controlar la reproduccion: play/pausa, siguiente, volumen', modulo: 'SISTEMA' },
+  { codigo: 'MUSICA_CONFIGURAR', descripcion: 'Conectar la cuenta de Spotify y elegir el dispositivo de salida', modulo: 'SISTEMA' },
+
   // Documentos (PDFs A4 firmables, tickets térmicos, adjuntos)
   { codigo: 'DOCUMENTOS_GENERAR_PDF', descripcion: 'Generar PDFs A4 (pagarés, recibos, liquidaciones, reportes operativos)', modulo: 'DOCUMENTOS' },
   { codigo: 'DOCUMENTOS_IMPRIMIR_TICKET', descripcion: 'Imprimir tickets térmicos (venta, comanda, pre-cuenta)', modulo: 'DOCUMENTOS' },

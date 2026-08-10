@@ -90,6 +90,24 @@ export interface IaSettings {
   // openaiApiKey persiste en keytar, NO en este JSON.
 }
 
+export interface MusicaSettings {
+  /** Client ID de la app de Spotify del local (cada local crea la suya). */
+  spotifyClientId: string;
+  /**
+   * Puerto del listener loopback que recibe el callback de OAuth. Spotify sólo
+   * acepta http:// en loopback con IP explícita, así que el redirect URI es
+   * `http://127.0.0.1:<puerto>/callback` y debe estar cargado igual en el
+   * dashboard de Spotify.
+   */
+  redirectPort: number;
+  /** Device de Spotify Connect elegido como salida de audio del local. */
+  deviceId?: string | null;
+  deviceNombre?: string | null;
+  habilitado: boolean;
+  // El refresh token persiste en keytar, NO en este JSON.
+  // PKCE no usa client_secret: no se guarda en ningún lado.
+}
+
 export interface AppSettings {
   mode: AppMode;
   database: DatabaseSettings;
@@ -97,6 +115,7 @@ export interface AppSettings {
   update: UpdateSettings;
   backup: BackupSettings;
   ia: IaSettings;
+  musica: MusicaSettings;
   /**
    * F5 paso 3: dispositivo "fisico" identificado para este proceso.
    * - standalone/server: el PC donde corre la app (selección manual).
@@ -129,6 +148,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   ia: {
     modelo: 'gpt-4o',
+    habilitado: false,
+  },
+  musica: {
+    spotifyClientId: '',
+    redirectPort: 8888,
+    deviceId: null,
+    deviceNombre: null,
     habilitado: false,
   },
   deviceId: null,

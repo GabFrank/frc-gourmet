@@ -1,0 +1,188 @@
+<div class="musica-container">
+  <div class="page-header">
+    <div>
+      <h2><mat-icon>music_note</mat-icon> Música ambiental</h2>
+      <p class="subtitulo">
+        FRC Gourmet controla la app de Spotify instalada en esta PC. El audio sale por Spotify;
+        la programación la decide el sistema.
+      </p>
+    </div>
+    <span class="estado-chip" [class.estado-ok]="conectado" [class.estado-off]="!conectado">
+      {{ estadoMensaje }}
+    </span>
+  </div>
+
+  <mat-progress-spinner *ngIf="loading" mode="indeterminate" diameter="32"></mat-progress-spinner>
+
+  <!-- ─────────── Reproductor ─────────── -->
+  <mat-card class="card-reproductor" *ngIf="conectado">
+    <mat-card-content>
+      <div class="reproductor">
+        <img *ngIf="estado?.imagenUrl" [src]="estado?.imagenUrl" alt="Carátula" class="caratula" />
+        <div *ngIf="!estado?.imagenUrl" class="caratula caratula-vacia">
+          <mat-icon>album</mat-icon>
+        </div>
+
+        <div class="info">
+          <div class="titulo">{{ tituloActual }}</div>
+          <div class="artista">{{ artistaActual }}</div>
+          <div class="barra-progreso">
+            <div class="barra-relleno" [style.width.%]="progresoPorcentaje"></div>
+          </div>
+          <div class="tiempo">{{ progresoTexto }}</div>
+        </div>
+
+        <div class="controles" *appHasPermission="'MUSICA_CONTROLAR'">
+          <button mat-icon-button (click)="anterior()" matTooltip="Anterior">
+            <mat-icon>skip_previous</mat-icon>
+          </button>
+          <button
+            mat-fab
+            color="primary"
+            *ngIf="!estado?.reproduciendo"
+            (click)="play()"
+            matTooltip="Reproducir"
+          >
+            <mat-icon>play_arrow</mat-icon>
+          </button>
+          <button
+            mat-fab
+            color="primary"
+            *ngIf="estado?.reproduciendo"
+            (click)="pausar()"
+            matTooltip="Pausar"
+          >
+            <mat-icon>pause</mat-icon>
+          </button>
+          <button mat-icon-button (click)="siguiente()" matTooltip="Siguiente">
+            <mat-icon>skip_next</mat-icon>
+          </button>
+        </div>
+      </div>
+
+      <div class="volumen" *appHasPermission="'MUSICA_CONTROLAR'">
+        <mat-icon>volume_up</mat-icon>
+        <mat-slider min="0" max="100" step="1" discrete>
+          <input matSliderThumb [(ngModel)]="volumen" (valueChange)="cambiarVolumen()" />
+        </mat-slider>
+        <span class="volumen-valor">{{ volumen | number: '1.0-2' }}%</span>
+        <span class="spacer"></span>
+        <button mat-stroked-button (click)="refrescarEstado()">
+          <mat-icon>refresh</mat-icon> Actualizar
+        </button>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- ─────────── Dispositivo de salida ─────────── -->
+  <mat-card *ngIf="conectado">
+    <mat-card-header>
+      <mat-card-title>Salida de audio</mat-card-title>
+      <mat-card-subtitle>
+        Dispositivo actual:
+        <strong>{{ deviceNombreSeleccionado || 'ninguno seleccionado' }}</strong>
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="acciones-fila">
+        <button mat-stroked-button (click)="abrirSpotify()">
+          <mat-icon>launch</mat-icon> Abrir Spotify en esta PC
+        </button>
+        <button mat-flat-button color="primary" (click)="buscarDispositivos()" [disabled]="buscandoDispositivos">
+          <mat-icon>speaker</mat-icon> Buscar dispositivos
+        </button>
+        <mat-progress-spinner
+          *ngIf="buscandoDispositivos"
+          mode="indeterminate"
+          diameter="24"
+        ></mat-progress-spinner>
+      </div>
+
+      <p class="ayuda" *ngIf="dispositivos.length === 0">
+        La app de Spotify tiene que estar abierta y con sesión iniciada en la cuenta del local para
+        que aparezca acá.
+      </p>
+
+      <mat-list *ngIf="dispositivos.length > 0">
+        <mat-list-item
+          *ngFor="let d of dispositivos"
+          class="dispositivo"
+          [class.dispositivo-activo]="d.id === deviceIdSeleccionado"
+        >
+          <mat-icon matListItemIcon>{{ d.activo ? 'volume_up' : 'devices' }}</mat-icon>
+          <div matListItemTitle>{{ d.nombre }}</div>
+          <div matListItemLine>{{ d.tipo }}</div>
+          <button
+            mat-stroked-button
+            matListItemMeta
+            *appHasPermission="'MUSICA_CONFIGURAR'"
+            [disabled]="d.id === deviceIdSeleccionado"
+            (click)="seleccionarDispositivo(d)"
+          >
+            {{ d.id === deviceIdSeleccionado ? 'En uso' : 'Usar' }}
+          </button>
+        </mat-list-item>
+      </mat-list>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- ─────────── Configuración / conexión ─────────── -->
+  <mat-card *appHasPermission="'MUSICA_CONFIGURAR'">
+    <mat-card-header>
+      <mat-card-title>Conexión con Spotify</mat-card-title>
+      <mat-card-subtitle>
+        Cada local usa su propia app de Spotify y su propia cuenta Premium dedicada.
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="form-grid">
+        <mat-form-field appearance="outline" class="campo-ancho">
+          <mat-label>Client ID de la app de Spotify</mat-label>
+          <input matInput [(ngModel)]="spotifyClientId" placeholder="32 caracteres" />
+          <mat-hint>Se obtiene en developer.spotify.com → Dashboard → tu app</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Puerto del callback</mat-label>
+          <input matInput type="number" [(ngModel)]="redirectPort" />
+        </mat-form-field>
+      </div>
+
+      <div class="redirect-uri">
+        <mat-icon>link</mat-icon>
+        <div>
+          <div class="redirect-label">Redirect URI — cargalo igual en el dashboard de Spotify</div>
+          <code>{{ redirectUri }}</code>
+        </div>
+      </div>
+
+      <mat-slide-toggle [(ngModel)]="habilitado">Módulo de música habilitado</mat-slide-toggle>
+
+      <mat-divider></mat-divider>
+
+      <div class="acciones-fila">
+        <button mat-flat-button color="primary" (click)="guardarConfig()" [disabled]="loading">
+          <mat-icon>save</mat-icon> Guardar
+        </button>
+        <button
+          mat-flat-button
+          color="accent"
+          *ngIf="!conectado"
+          (click)="conectar()"
+          [disabled]="conectando || !spotifyClientId"
+        >
+          <mat-icon>link</mat-icon> Conectar Spotify
+        </button>
+        <button mat-stroked-button color="warn" *ngIf="conectado" (click)="desconectar()">
+          <mat-icon>link_off</mat-icon> Desconectar
+        </button>
+        <mat-progress-spinner *ngIf="conectando" mode="indeterminate" diameter="24"></mat-progress-spinner>
+      </div>
+
+      <p class="ayuda">
+        Al conectar se abre el navegador para autorizar. Se hace una sola vez: después la sesión se
+        renueva sola. La cuenta debe tener <strong>Spotify Premium</strong>.
+      </p>
+    </mat-card-content>
+  </mat-card>
+</div>
