@@ -16,6 +16,8 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatTabsModule } from '@angular/material/tabs';
 import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 import { MusicaEstiloComponent } from './musica-estilo.component';
+import { MusicaRepertorioComponent } from './musica-repertorio.component';
+import { MusicaProgramacionComponent } from './musica-programacion.component';
 import {
   DispositivoSpotify,
   EstadoReproduccion,
@@ -51,6 +53,8 @@ import {
     MatTabsModule,
     HasPermissionDirective,
     MusicaEstiloComponent,
+    MusicaRepertorioComponent,
+    MusicaProgramacionComponent,
   ],
   templateUrl: './musica.component.html',
   styleUrls: ['./musica.component.scss'],
@@ -79,6 +83,9 @@ export class MusicaComponent implements OnInit, OnDestroy {
   progresoPorcentaje = 0;
   volumen = 50;
   estadoMensaje = 'SIN CONEXION';
+
+  /** Se incrementa cuando el pool cambia, para que Repertorio recargue. */
+  refrescarRepertorio = 0;
 
   private pollHandle: any = null;
 
@@ -118,6 +125,10 @@ export class MusicaComponent implements OnInit, OnDestroy {
       clearInterval(this.pollHandle);
       this.pollHandle = null;
     }
+  }
+
+  onPoolCambio(): void {
+    this.refrescarRepertorio++;
   }
 
   async cargarConfig(): Promise<void> {

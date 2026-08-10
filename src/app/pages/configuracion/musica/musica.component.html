@@ -190,7 +190,15 @@
   </mat-tab>
 
   <mat-tab label="Mi estilo" [disabled]="!conectado">
-    <app-musica-estilo></app-musica-estilo>
+    <app-musica-estilo (poolCambio)="onPoolCambio()"></app-musica-estilo>
+  </mat-tab>
+
+  <mat-tab label="Repertorio" [disabled]="!conectado">
+    <app-musica-repertorio [refrescar]="refrescarRepertorio"></app-musica-repertorio>
+  </mat-tab>
+
+  <mat-tab label="Programación" [disabled]="!conectado">
+    <app-musica-programacion></app-musica-programacion>
   </mat-tab>
   </mat-tab-group>
 </div>

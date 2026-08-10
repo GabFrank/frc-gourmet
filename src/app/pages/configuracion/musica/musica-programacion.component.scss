@@ -1,0 +1,122 @@
+.programacion-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px;
+}
+
+.card-plan {
+  border-left: 3px solid var(--primary-color);
+}
+
+mat-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.acciones-fila {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 12px 0 0;
+}
+
+.form-grid {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.campo-ancho {
+  flex: 1 1 360px;
+  width: 100%;
+}
+
+.campo-chico {
+  width: 150px;
+}
+
+.ayuda {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin: 8px 0 0;
+}
+
+.resultado {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+
+  h4 {
+    margin: 0 0 6px;
+    font-size: 14px;
+    color: var(--text-primary);
+  }
+}
+
+.advertencia {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: #ef6c00;
+  font-size: 13px;
+  padding: 3px 0;
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+}
+
+mat-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 320px;
+}
+
+.bloque-hora {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bloque-nombre {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+mat-panel-description {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  color: var(--text-secondary);
+  font-size: 12px;
+
+  .generos {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 340px;
+  }
+}
+
+.avanzado-bloque {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+
+  h4 {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+}
