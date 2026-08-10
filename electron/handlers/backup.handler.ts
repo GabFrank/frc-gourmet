@@ -25,6 +25,7 @@ import {
   listBackupsInDir,
   nextDailyRunAt,
   packFrcBak,
+  pruneSafetyBackups,
   readBackupConfig,
   readFrcBakManifest,
   rmDirRecursive,
@@ -293,20 +294,23 @@ function relaunchApp(): void {
 async function restorePostgres(userDataPath: string, filePath: string): Promise<RestoreResult> {
   const cfg = readBackupConfig(userDataPath);
   const conn = await getPgConn(userDataPath);
-  const backupDir = getBackupDir(userDataPath);
+  const backupDir = getBackupDir(userDataPath, cfg.customBackupDir);
+  const isFrcBak = isFrcBakFile(filePath);
 
   let dumpPath = filePath;
   let format: PgFormat | null;
   let tmpToClean: string | null = null;
 
-  if (isFrcBakFile(filePath)) {
+  if (isFrcBak) {
     const manifest = readFrcBakManifest(filePath);
     if ((manifest.dbType || 'sqlite') !== 'postgres') {
       return { success: false, message: 'El backup seleccionado es de SQLite y no es compatible con la BD Postgres actual.' };
     }
     const ext = path.extname(frcBakDbFileName(manifest)).replace('.', '') || 'dump';
     const tmp = path.join(backupDir, `.tmp-restore-${process.pid}-${Date.now()}.${ext}`);
-    const { dbDestPath } = unpackFrcBak({ srcFile: filePath, targetUserDataPath: userDataPath, dbDest: tmp });
+    // Solo el dump por ahora: las imágenes se vuelcan DESPUÉS de un restore
+    // exitoso para no pisarlas si la BD falla (no hay rollback de imágenes).
+    const { dbDestPath } = unpackFrcBak({ srcFile: filePath, targetUserDataPath: userDataPath, dbDest: tmp, mode: 'db-only' });
     dumpPath = dbDestPath;
     tmpToClean = dbDestPath;
     format = pgFormatFromFile(dbDestPath);
@@ -322,14 +326,20 @@ async function restorePostgres(userDataPath: string, filePath: string): Promise<
     return { success: false, message: 'No se pudo determinar el formato del dump.' };
   }
 
-  // Safety dump antes de tocar nada.
-  let safetyPath: string | undefined;
+  // Safety dump antes de tocar nada. El restore es destructivo (dropea el
+  // schema); si NO podemos crear el respaldo de seguridad (binario/conexión con
+  // problemas) abortamos ANTES de tocar la BD para no perder datos sin red.
+  let safetyPath: string;
   try {
     safetyPath = path.join(backupDir, `pre-restore-${Date.now()}.${pgDumpExtension(format)}`);
     await pgDump(conn, format, safetyPath, { binDir: cfg.pgBinDir });
-  } catch (e) {
-    console.warn('No se pudo crear safety dump pre-restore Postgres:', e);
-    safetyPath = undefined;
+    pruneSafetyBackups(backupDir);
+  } catch (e: any) {
+    if (tmpToClean) { try { fs.unlinkSync(tmpToClean); } catch { /* noop */ } }
+    return {
+      success: false,
+      message: 'No se pudo crear el backup de seguridad previo (' + (e?.message || e) + '). Se abortó la restauración para no perder datos.',
+    };
   }
 
   await closeAppDb();
@@ -338,16 +348,23 @@ async function restorePostgres(userDataPath: string, filePath: string): Promise<
     await pgRestore(conn, format, dumpPath, { binDir: cfg.pgBinDir });
   } catch (e: any) {
     // Intentar rollback desde el safety dump.
-    if (safetyPath && fs.existsSync(safetyPath)) {
-      try {
-        await pgRestore(conn, format, safetyPath, { binDir: cfg.pgBinDir });
-      } catch (rollbackErr) {
-        console.error('Rollback del safety dump también falló:', rollbackErr);
-      }
+    try {
+      await pgRestore(conn, format, safetyPath, { binDir: cfg.pgBinDir });
+    } catch (rollbackErr) {
+      console.error('Rollback del safety dump también falló:', rollbackErr);
     }
     return { success: false, message: 'Error restaurando Postgres: ' + (e?.message || e), safetyBackupPath: safetyPath };
   } finally {
     if (tmpToClean) { try { fs.unlinkSync(tmpToClean); } catch { /* noop */ } }
+  }
+
+  // Restore OK: ahora sí volcamos las imágenes del contenedor (best-effort).
+  if (isFrcBak) {
+    try {
+      unpackFrcBak({ srcFile: filePath, targetUserDataPath: userDataPath, mode: 'images-only' });
+    } catch (e) {
+      console.warn('Restore de BD OK pero fallo al extraer imágenes del .frcbak:', e);
+    }
   }
 
   relaunchApp();
@@ -374,14 +391,18 @@ async function restoreSqlite(userDataPath: string, filePath: string): Promise<Re
     return { success: false, message: 'Archivo .db inválido (header SQLite no detectado).' };
   }
 
+  const cfg = readBackupConfig(userDataPath);
   const dbPath = getDbPath(userDataPath);
-  const safetyName = `pre-restore-${Date.now()}.db.bak`;
-  const safetyPath = path.join(getBackupDir(userDataPath), safetyName);
+  const backupDir = getBackupDir(userDataPath, cfg.customBackupDir);
+  const safetyPath = path.join(backupDir, `pre-restore-${Date.now()}.db.bak`);
+
+  // Cerrar la BD ANTES de copiar el safety para checkpointear el WAL y no
+  // dejar afuera las últimas transacciones.
+  await closeAppDb();
   if (fs.existsSync(dbPath)) {
     fs.copyFileSync(dbPath, safetyPath);
+    pruneSafetyBackups(backupDir);
   }
-
-  await closeAppDb();
 
   try {
     if (isDb) {
@@ -751,15 +772,19 @@ export function registerBackupHandlers(
 
       const dbType = getDbType(userDataPath);
 
+      const cfg = readBackupConfig(userDataPath);
+      const backupDir = getBackupDir(userDataPath, cfg.customBackupDir);
+
       if (dbType === 'postgres') {
-        const cfg = readBackupConfig(userDataPath);
         const conn = await getPgConn(userDataPath);
-        // Safety dump antes de resetear.
+        // Safety dump antes de resetear (best-effort: el reset es un wipe
+        // intencional confirmado por el usuario).
         let safetyPath: string | undefined;
         try {
           const format = pgFormatFromConfig(cfg);
-          safetyPath = path.join(getBackupDir(userDataPath), `pre-reset-${Date.now()}.${pgDumpExtension(format)}`);
+          safetyPath = path.join(backupDir, `pre-reset-${Date.now()}.${pgDumpExtension(format)}`);
           await pgDump(conn, format, safetyPath, { binDir: cfg.pgBinDir });
+          pruneSafetyBackups(backupDir);
         } catch (e) {
           console.warn('No se pudo crear safety dump pre-reset Postgres:', e);
           safetyPath = undefined;
@@ -779,16 +804,21 @@ export function registerBackupHandlers(
       }
 
       const dbPath = getDbPath(userDataPath);
-      const safetyName = `pre-reset-${Date.now()}.db.bak`;
-      const safetyPath = path.join(getBackupDir(userDataPath), safetyName);
+      const safetyPath = path.join(backupDir, `pre-reset-${Date.now()}.db.bak`);
+
+      // Cerrar ANTES de copiar el safety (checkpoint del WAL).
+      await closeAppDb();
       if (fs.existsSync(dbPath)) {
         fs.copyFileSync(dbPath, safetyPath);
+        pruneSafetyBackups(backupDir);
       }
-
-      await closeAppDb();
 
       try {
         if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+        // Eliminar también los sidecar del WAL para arrancar 100% limpio.
+        for (const sidecar of [`${dbPath}-wal`, `${dbPath}-shm`]) {
+          if (fs.existsSync(sidecar)) { try { fs.unlinkSync(sidecar); } catch { /* noop */ } }
+        }
       } catch (e: any) {
         return { success: false, message: 'No se pudo eliminar la BD: ' + (e?.message || e) };
       }

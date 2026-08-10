@@ -47,6 +47,7 @@ import {
   unpackFrcBak,
   readFrcBakManifest,
   frcBakDbFileName,
+  pruneSafetyBackups,
 } from '../electron/utils/backup-utils';
 
 let passed = 0;
@@ -253,6 +254,66 @@ async function main() {
     // Backup viejo (sin dbType) => se asume sqlite / frc-gourmet.db
     ok(frcBakDbFileName({ version: 1, createdAt: '', dbHash: '', files: [] } as any) === 'frc-gourmet.db',
       'frcBakDbFileName fallback backup viejo -> frc-gourmet.db');
+
+    // ========== Modos de unpack (db-only / images-only) ==========
+    console.log('\n[pg-backup] unpackFrcBak modos + seguridad');
+    const udDbOnly = path.join(workDir, 'ud-db-only');
+    fs.mkdirSync(udDbOnly, { recursive: true });
+    const dbOnlyDest = path.join(workDir, 'dbonly.dump');
+    unpackFrcBak({ srcFile: frcbak, targetUserDataPath: udDbOnly, dbDest: dbOnlyDest, mode: 'db-only' });
+    ok(fs.existsSync(dbOnlyDest), 'db-only: extrajo el dump');
+    ok(!fs.existsSync(path.join(udDbOnly, 'profile-images', 'a.png')), 'db-only: NO extrajo imágenes');
+
+    const udImgOnly = path.join(workDir, 'ud-img-only');
+    fs.mkdirSync(udImgOnly, { recursive: true });
+    const imgOnlyDbDest = path.join(workDir, 'shouldnot.dump');
+    unpackFrcBak({ srcFile: frcbak, targetUserDataPath: udImgOnly, dbDest: imgOnlyDbDest, mode: 'images-only' });
+    ok(fs.existsSync(path.join(udImgOnly, 'profile-images', 'a.png')), 'images-only: extrajo imágenes');
+    ok(!fs.existsSync(imgOnlyDbDest), 'images-only: NO extrajo el dump');
+
+    // Path traversal: construir un .frcbak malicioso a mano y verificar rechazo.
+    const evilManifest = {
+      version: 1, createdAt: 'x', dbType: 'sqlite', dbFileName: 'frc-gourmet.db', dbHash: '',
+      files: [{ relPath: '../evil.bin', size: 3, sha256: '' }],
+    };
+    const mBuf = Buffer.from(JSON.stringify(evilManifest), 'utf-8');
+    const lenBuf = Buffer.alloc(4); lenBuf.writeUInt32BE(mBuf.length, 0);
+    const evilPath = path.join(workDir, 'evil.frcbak');
+    fs.writeFileSync(evilPath, Buffer.concat([lenBuf, mBuf, Buffer.from('XYZ')]));
+    let traversalBlocked = false;
+    try {
+      unpackFrcBak({ srcFile: evilPath, targetUserDataPath: path.join(workDir, 'evil-ud'), mode: 'images-only' });
+    } catch (e: any) {
+      traversalBlocked = /insegura/i.test(e?.message || '');
+    }
+    ok(traversalBlocked, 'path traversal en relPath es rechazado');
+    ok(!fs.existsSync(path.join(workDir, 'evil.bin')), 'archivo fuera del userData NO fue escrito');
+
+    // Manifest length inválido (corrupto)
+    const badLen = Buffer.alloc(4); badLen.writeUInt32BE(50 * 1024 * 1024, 0);
+    const badPath = path.join(workDir, 'bad.frcbak');
+    fs.writeFileSync(badPath, Buffer.concat([badLen, Buffer.from('{}')]));
+    let lenBlocked = false;
+    try { unpackFrcBak({ srcFile: badPath, targetUserDataPath: workDir }); }
+    catch (e: any) { lenBlocked = /Manifest length/i.test(e?.message || ''); }
+    ok(lenBlocked, 'manifest length inválido es rechazado');
+
+    // ========== pruneSafetyBackups ==========
+    console.log('\n[pg-backup] pruneSafetyBackups');
+    const pruneDir = path.join(workDir, 'prune');
+    fs.mkdirSync(pruneDir, { recursive: true });
+    for (let i = 0; i < 8; i++) {
+      const f = path.join(pruneDir, `pre-restore-${1000 + i}.dump`);
+      fs.writeFileSync(f, 'x');
+      // mtime creciente para orden determinístico
+      const t = new Date(2020, 0, 1, 0, 0, i);
+      fs.utimesSync(f, t, t);
+    }
+    fs.writeFileSync(path.join(pruneDir, 'frc-gourmet-backup_auto_x.dump'), 'keep'); // no es safety
+    const pruned = pruneSafetyBackups(pruneDir, 3);
+    const remaining = fs.readdirSync(pruneDir).filter((n) => n.startsWith('pre-restore-'));
+    ok(pruned.deleted.length === 5 && remaining.length === 3, 'pruneSafetyBackups deja los 3 más nuevos', { deleted: pruned.deleted.length, remaining: remaining.length });
+    ok(fs.existsSync(path.join(pruneDir, 'frc-gourmet-backup_auto_x.dump')), 'prune no toca backups normales');
 
   } finally {
     if (started) {

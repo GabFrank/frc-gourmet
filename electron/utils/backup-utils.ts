@@ -352,29 +352,59 @@ export function readFrcBakManifest(filePath: string): FrcBakManifest {
  * defecto (SQLite: reemplaza el .db en su lugar). Devuelve la ruta final del
  * archivo de BD extraído para que el llamador lo procese/limpie.
  */
+export type UnpackMode = 'all' | 'db-only' | 'images-only';
+
 export function unpackFrcBak(opts: {
   srcFile: string;
   targetUserDataPath: string;
   dbDest?: string;
+  /**
+   * 'all' (default) = db + imágenes. 'db-only' = solo el archivo de BD (a
+   * dbDest). 'images-only' = solo las imágenes. Permite restaurar Postgres en 2
+   * pasos (extraer dump -> restaurar -> recién ahí volcar imágenes) para no
+   * pisar las imágenes si el restore de la BD falla.
+   */
+  mode?: UnpackMode;
 }): { manifest: FrcBakManifest; dbDestPath: string } {
+  const mode = opts.mode || 'all';
   const fd = fs.openSync(opts.srcFile, 'r');
   try {
     const lenBuf = Buffer.alloc(4);
     fs.readSync(fd, lenBuf, 0, 4, 0);
     const len = lenBuf.readUInt32BE(0);
+    if (len <= 0 || len > 10 * 1024 * 1024) {
+      throw new Error('Manifest length invalido en .frcbak');
+    }
     const manifestBuf = Buffer.alloc(len);
     fs.readSync(fd, manifestBuf, 0, len, 4);
     const manifest: FrcBakManifest = JSON.parse(manifestBuf.toString('utf-8'));
 
     const dbFileName = frcBakDbFileName(manifest);
     const dbDestPath = opts.dbDest || path.join(opts.targetUserDataPath, dbFileName);
+    const targetRoot = path.resolve(opts.targetUserDataPath);
 
     let offset = 4 + len;
     const buf = Buffer.alloc(64 * 1024);
 
     for (const file of manifest.files) {
       const isDbFile = file.relPath === dbFileName;
-      const targetAbs = isDbFile ? dbDestPath : path.join(opts.targetUserDataPath, file.relPath);
+      const wanted = mode === 'all' || (mode === 'db-only' ? isDbFile : !isDbFile);
+      if (!wanted) {
+        offset += file.size; // saltar bytes, mantener alineación
+        continue;
+      }
+
+      let targetAbs: string;
+      if (isDbFile) {
+        targetAbs = dbDestPath; // ruta controlada por el llamador (confiable)
+      } else {
+        // Anti path-traversal: el relPath viene del manifest (archivo potencialmente
+        // no confiable, ej recibido por WhatsApp). Debe quedar dentro del userData.
+        targetAbs = path.resolve(targetRoot, file.relPath);
+        if (targetAbs !== targetRoot && !targetAbs.startsWith(targetRoot + path.sep)) {
+          throw new Error(`Ruta insegura en .frcbak: ${file.relPath}`);
+        }
+      }
       const targetDir = path.dirname(targetAbs);
       if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
       const outFd = fs.openSync(targetAbs, 'w');
@@ -479,6 +509,30 @@ export function nextDailyRunAt(now: Date, dailyTime?: string): Date {
     next.setDate(next.getDate() + 1);
   }
   return next;
+}
+
+/** Prefijos de los backups de seguridad automáticos (pre-restore / pre-reset). */
+const SAFETY_PREFIXES = ['pre-restore-', 'pre-reset-'];
+
+/**
+ * Poda los backups de seguridad viejos (pre-restore-* / pre-reset-*), dejando
+ * los `keep` más recientes. Evita la acumulación indefinida — sobre todo en
+ * Postgres, donde cada safety es un dump completo de la BD.
+ */
+export function pruneSafetyBackups(dir: string, keep = 5): { deleted: string[] } {
+  if (!fs.existsSync(dir)) return { deleted: [] };
+  const entries = fs.readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isFile() && SAFETY_PREFIXES.some((p) => e.name.startsWith(p)))
+    .map((e) => {
+      const full = path.join(dir, e.name);
+      return { name: e.name, full, mtime: fs.statSync(full).mtimeMs };
+    })
+    .sort((a, b) => b.mtime - a.mtime);
+  const deleted: string[] = [];
+  for (const f of entries.slice(Math.max(0, keep))) {
+    try { fs.unlinkSync(f.full); deleted.push(f.name); } catch { /* noop */ }
+  }
+  return { deleted };
 }
 
 export function applyRetention(dir: string, keepCount: number): { deleted: string[] } {
