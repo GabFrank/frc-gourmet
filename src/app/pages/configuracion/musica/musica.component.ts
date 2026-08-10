@@ -13,7 +13,9 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatListModule } from '@angular/material/list';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatTabsModule } from '@angular/material/tabs';
 import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
+import { MusicaEstiloComponent } from './musica-estilo.component';
 import {
   DispositivoSpotify,
   EstadoReproduccion,
@@ -46,7 +48,9 @@ import {
     MatTooltipModule,
     MatListModule,
     MatDividerModule,
+    MatTabsModule,
     HasPermissionDirective,
+    MusicaEstiloComponent,
   ],
   templateUrl: './musica.component.html',
   styleUrls: ['./musica.component.scss'],

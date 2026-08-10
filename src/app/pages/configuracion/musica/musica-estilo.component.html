@@ -1,0 +1,172 @@
+<div class="estilo-container">
+  <!-- ─────────── Estado del repertorio ─────────── -->
+  <mat-card class="card-resumen" *ngIf="resumen">
+    <mat-card-content>
+      <div class="resumen-fila">
+        <div class="metrica">
+          <span class="valor">{{ resumen.total | number: '1.0-2' }}</span>
+          <span class="etiqueta">temas en el repertorio</span>
+        </div>
+        <div class="metrica">
+          <span class="valor ok">{{ resumen.aprobados | number: '1.0-2' }}</span>
+          <span class="etiqueta">pueden sonar</span>
+        </div>
+        <div class="metrica" *ngIf="resumen.sugeridos">
+          <span class="valor pendiente">{{ resumen.sugeridos | number: '1.0-2' }}</span>
+          <span class="etiqueta">esperando aprobación</span>
+        </div>
+        <div class="metrica" *ngIf="resumen.vetados">
+          <span class="valor veto">{{ resumen.vetados | number: '1.0-2' }}</span>
+          <span class="etiqueta">descartados</span>
+        </div>
+      </div>
+      <mat-progress-bar mode="determinate" [value]="porcentajeAprobados"></mat-progress-bar>
+      <p class="ayuda" *ngIf="resumen.total < 300">
+        Con menos de 300 temas el día se repite. Usá "Descubrir música" varias veces hasta llegar a
+        600–800.
+      </p>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- ─────────── Descubrimiento con IA ─────────── -->
+  <mat-card class="card-descubrir">
+    <mat-card-header>
+      <mat-card-title><mat-icon>auto_awesome</mat-icon> Descubrir música nueva</mat-card-title>
+      <mat-card-subtitle>
+        La IA propone temas según el estilo del local y Spotify los resuelve. Lo que rechaces mejora
+        la próxima ronda.
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="acciones-fila">
+        <mat-form-field appearance="outline" class="campo-corto">
+          <mat-label>Cantidad a proponer</mat-label>
+          <input matInput type="number" [(ngModel)]="cantidadDescubrir" min="10" max="60" />
+        </mat-form-field>
+
+        <button mat-flat-button color="accent" (click)="descubrir()" [disabled]="descubriendo">
+          <mat-icon>travel_explore</mat-icon> Descubrir música
+        </button>
+        <mat-progress-spinner *ngIf="descubriendo" mode="indeterminate" diameter="24"></mat-progress-spinner>
+        <span class="ayuda" *ngIf="descubriendo">Consultando a la IA y resolviendo en Spotify…</span>
+      </div>
+
+      <mat-slide-toggle [(ngModel)]="autoAprobar" (change)="guardarBrief()">
+        Aceptar automáticamente lo que pase los filtros
+      </mat-slide-toggle>
+      <p class="ayuda">
+        Si lo apagás, lo descubierto queda esperando tu aprobación en la pestaña Repertorio.
+      </p>
+
+      <!-- Resultado de la última ronda -->
+      <div class="resultado" *ngIf="ultimoResultado">
+        <h4>{{ ultimoResultado.titulo }}</h4>
+        <div class="lista-resultado" *ngIf="ultimoResultado.agregados.length">
+          <div class="item-resultado" *ngFor="let a of ultimoResultado.agregados">
+            <mat-icon class="icono-ok">add_circle</mat-icon> {{ a }}
+          </div>
+        </div>
+        <details *ngIf="ultimoResultado.detalle.length">
+          <summary>Ver descartados ({{ ultimoResultado.detalle.length }})</summary>
+          <div class="item-resultado descartado" *ngFor="let d of ultimoResultado.detalle">
+            {{ d }}
+          </div>
+        </details>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- ─────────── Brief del local ─────────── -->
+  <mat-card>
+    <mat-card-header>
+      <mat-card-title>Contá cómo es tu local</mat-card-title>
+      <mat-card-subtitle>
+        Con tus palabras: qué es, qué público tiene, qué te gusta y qué no querés escuchar. Esto guía
+        a la IA en cada búsqueda.
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <mat-form-field appearance="outline" class="campo-ancho">
+        <mat-label>Descripción del local</mat-label>
+        <textarea
+          matInput
+          [(ngModel)]="brief"
+          rows="8"
+          placeholder="Ej: Somos una hamburguesería con buffet al mediodía en Salto del Guairá. Público 25+, turistas brasileños y familias. Nos gusta el rock alternativo alegre, bossa, pagode. Evitamos funk, rap y música triste."
+        ></textarea>
+      </mat-form-field>
+      <button mat-flat-button color="primary" (click)="guardarBrief()">
+        <mat-icon>save</mat-icon> Guardar descripción
+      </button>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- ─────────── Semillas ─────────── -->
+  <mat-card>
+    <mat-card-header>
+      <mat-card-title>Mis playlists de referencia</mat-card-title>
+      <mat-card-subtitle>
+        Pegá links de playlists o artistas de Spotify que representen lo que querés que suene.
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="acciones-fila">
+        <mat-form-field appearance="outline" class="campo-ancho">
+          <mat-label>Link de Spotify</mat-label>
+          <input
+            matInput
+            [(ngModel)]="nuevaUrl"
+            (keyup.enter)="agregarSemilla()"
+            placeholder="https://open.spotify.com/playlist/…"
+          />
+          <mat-hint>También sirve un link de artista o de un tema suelto</mat-hint>
+        </mat-form-field>
+        <button mat-flat-button color="primary" (click)="agregarSemilla()" [disabled]="cargando || !nuevaUrl">
+          <mat-icon>add</mat-icon> Agregar
+        </button>
+      </div>
+
+      <div class="acciones-fila">
+        <button mat-stroked-button (click)="importarTodas()" [disabled]="importando">
+          <mat-icon>sync</mat-icon> Reimportar todo
+        </button>
+        <button mat-stroked-button (click)="agregarBiblioteca()" [disabled]="importando"
+          matTooltip="Trae las playlists guardadas en la cuenta de Spotify conectada">
+          <mat-icon>library_music</mat-icon> Traer biblioteca de la cuenta
+        </button>
+        <mat-progress-spinner *ngIf="importando" mode="indeterminate" diameter="24"></mat-progress-spinner>
+      </div>
+
+      <p class="ayuda" *ngIf="semillas.length === 0">
+        Todavía no cargaste ninguna. También podés arrancar solo con la descripción del local y el
+        botón "Descubrir música".
+      </p>
+
+      <div class="semillas-grid">
+        <div class="semilla" *ngFor="let s of semillas">
+          <img *ngIf="s.imagenUrl" [src]="s.imagenUrl" alt="" class="semilla-img" />
+          <div *ngIf="!s.imagenUrl" class="semilla-img semilla-img-vacia">
+            <mat-icon>queue_music</mat-icon>
+          </div>
+          <div class="semilla-info">
+            <div class="semilla-nombre">{{ s.nombre }}</div>
+            <div class="semilla-meta">
+              {{ s.tipo }} · {{ s.tracksImportados | number: '1.0-2' }} temas
+            </div>
+          </div>
+          <button mat-icon-button [matMenuTriggerFor]="menuSemilla">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #menuSemilla="matMenu">
+            <button mat-menu-item (click)="importarSemilla(s.id)">
+              <mat-icon>sync</mat-icon><span>Reimportar</span>
+            </button>
+            <button mat-menu-item (click)="eliminarSemilla(s)">
+              <mat-icon>delete</mat-icon><span>Quitar</span>
+            </button>
+          </mat-menu>
+        </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

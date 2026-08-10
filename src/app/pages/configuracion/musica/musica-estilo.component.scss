@@ -1,0 +1,172 @@
+.estilo-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px;
+}
+
+.card-resumen {
+  .resumen-fila {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  .metrica {
+    display: flex;
+    flex-direction: column;
+
+    .valor {
+      font-size: 26px;
+      font-weight: 600;
+      color: var(--text-primary);
+
+      &.ok {
+        color: #2e7d32;
+      }
+      &.pendiente {
+        color: #ef6c00;
+      }
+      &.veto {
+        color: #c62828;
+      }
+    }
+
+    .etiqueta {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+  }
+}
+
+.card-descubrir {
+  border-left: 3px solid var(--primary-color);
+}
+
+mat-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.acciones-fila {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+.campo-ancho {
+  flex: 1 1 360px;
+}
+
+.campo-corto {
+  width: 160px;
+}
+
+.ayuda {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin: 6px 0 0;
+}
+
+.resultado {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+
+  h4 {
+    margin: 0 0 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+  }
+
+  .lista-resultado {
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  details summary {
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-top: 8px;
+  }
+}
+
+.item-resultado {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  padding: 3px 0;
+
+  .icono-ok {
+    color: #2e7d32;
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+
+  &.descartado {
+    color: var(--text-secondary);
+    padding-left: 22px;
+  }
+}
+
+.semillas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.semilla {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+
+  .semilla-img {
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .semilla-img-vacia {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--hover-bg);
+
+    mat-icon {
+      color: var(--text-secondary);
+    }
+  }
+
+  .semilla-info {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .semilla-nombre {
+    color: var(--text-primary);
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .semilla-meta {
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+}
