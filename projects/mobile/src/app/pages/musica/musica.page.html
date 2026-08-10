@@ -1,0 +1,91 @@
+<mat-toolbar color="primary" class="toolbar">
+  <button mat-icon-button (click)="volver()"><mat-icon>arrow_back</mat-icon></button>
+  <span>Música</span>
+  <span class="spacer"></span>
+  <button mat-icon-button [matMenuTriggerFor]="menu"><mat-icon>more_vert</mat-icon></button>
+  <mat-menu #menu="matMenu">
+    <button mat-menu-item (click)="refrescar()">
+      <mat-icon>refresh</mat-icon><span>Actualizar</span>
+    </button>
+    <button mat-menu-item (click)="regenerar()">
+      <mat-icon>auto_fix_high</mat-icon><span>Regenerar plan de hoy</span>
+    </button>
+  </mat-menu>
+</mat-toolbar>
+
+<mat-progress-bar *ngIf="cargando" mode="indeterminate"></mat-progress-bar>
+
+<div class="contenido">
+  <div class="chip-estado" [ngClass]="chipClase">{{ chipEstado }}</div>
+
+  <div class="alerta" *ngIf="runtime?.ultimoError">
+    <mat-icon>warning</mat-icon>
+    <span>{{ runtime?.ultimoError }}</span>
+  </div>
+
+  <!-- Ahora suena -->
+  <div class="ahora">
+    <img *ngIf="estado?.imagenUrl" [src]="estado?.imagenUrl" alt="" class="caratula" />
+    <div *ngIf="!estado?.imagenUrl" class="caratula caratula-vacia">
+      <mat-icon>album</mat-icon>
+    </div>
+
+    <div class="titulo">{{ titulo }}</div>
+    <div class="artista">{{ artista }}</div>
+
+    <div class="barra">
+      <div class="relleno" [style.width.%]="progresoPorcentaje"></div>
+    </div>
+    <div class="tiempo">{{ progresoTexto }}</div>
+  </div>
+
+  <!-- Controles -->
+  <div class="controles">
+    <button mat-fab color="primary" (click)="play()" *ngIf="!estado?.reproduciendo">
+      <mat-icon>play_arrow</mat-icon>
+    </button>
+    <button mat-fab color="primary" (click)="pausar()" *ngIf="estado?.reproduciendo">
+      <mat-icon>pause</mat-icon>
+    </button>
+    <button mat-fab color="accent" (click)="siguiente()">
+      <mat-icon>skip_next</mat-icon>
+    </button>
+  </div>
+
+  <!-- Feedback: los dos botones -->
+  <div class="feedback">
+    <button mat-stroked-button class="btn-no-va" (click)="noVa()">
+      <mat-icon>thumb_down</mat-icon> No va
+    </button>
+    <button mat-stroked-button class="btn-mas" (click)="meGusta()">
+      <mat-icon>thumb_up</mat-icon> Más de esto
+    </button>
+  </div>
+
+  <!-- Clima del momento -->
+  <div class="seccion">
+    <div class="seccion-titulo">Clima ahora</div>
+    <mat-button-toggle-group [value]="variante" class="variantes">
+      <mat-button-toggle value="SUAVE" (click)="cambiarVariante('SUAVE')">Suave</mat-button-toggle>
+      <mat-button-toggle value="NORMAL" (click)="cambiarVariante('NORMAL')">Normal</mat-button-toggle>
+      <mat-button-toggle value="MOVIDO" (click)="cambiarVariante('MOVIDO')">Movido</mat-button-toggle>
+    </mat-button-toggle-group>
+    <p class="ayuda">Vuelve solo al plan cuando empieza el próximo bloque.</p>
+  </div>
+
+  <!-- Volumen -->
+  <div class="seccion">
+    <div class="seccion-titulo">Volumen</div>
+    <div class="fila-volumen">
+      <mat-icon>volume_down</mat-icon>
+      <mat-slider min="0" max="100" step="1" class="slider">
+        <input matSliderThumb [(ngModel)]="volumen" (valueChange)="cambiarVolumen()" />
+      </mat-slider>
+      <span class="valor">{{ volumen | number: '1.0-2' }}%</span>
+    </div>
+  </div>
+
+  <div class="pie" *ngIf="estado?.dispositivoNombre">
+    Sonando en {{ estado?.dispositivoNombre }}
+  </div>
+</div>

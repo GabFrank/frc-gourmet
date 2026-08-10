@@ -41,4 +41,12 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Reportes',
     permisos: ['VENTAS_REPORTES_VER', 'FINANCIERO_REPORTES_VER'],
   },
+  // El mozo entra con MUSICA_VER (mira que suena); cajero/gerente/admin
+  // ademas controlan, porque tienen MUSICA_CONTROLAR.
+  {
+    path: '/musica',
+    icon: 'music_note',
+    label: 'Música',
+    permisos: ['MUSICA_VER', 'MUSICA_CONTROLAR'],
+  },
 ];
