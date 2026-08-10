@@ -35,15 +35,18 @@ import { readIaConfig } from '../utils/ia-config.utils';
 import { readAppSettings } from '../utils/app-settings.utils';
 import { spotifyApi } from './spotify.service';
 
-/** Cuantos candidatos pide por llamada. Mas que esto degrada la calidad. */
+/**
+ * Defaults; se sobreescriben desde Configuracion (musica.avanzado).
+ * Mas de ~40 candidatos por llamada degrada la calidad de las propuestas.
+ */
 const CANDIDATOS_POR_RONDA = 40;
 /** Muestra del repertorio que se manda como "esto ya lo tengo". */
 const MUESTRA_ARTISTAS = 60;
 /** Rechazos que se mandan como ejemplos negativos. */
 const MAX_RECHAZOS_EN_PROMPT = 40;
 /** Descarta intros, skits y sets largos que no sirven de fondo. */
-const DURACION_MIN_MS = 60_000;
-const DURACION_MAX_MS = 600_000;
+const DURACION_MIN_MS_DEFAULT = 60_000;
+const DURACION_MAX_MS_DEFAULT = 600_000;
 
 export interface CandidatoIa {
   artista: string;
@@ -329,12 +332,19 @@ export async function descubrirMusica(
     : null;
 
   const ctx = await construirContexto(dataSource, bloque);
-  const cantidad = opts?.cantidad || CANDIDATOS_POR_RONDA;
+  const cantidad =
+    opts?.cantidad ||
+    readAppSettings(userDataPath).musica.avanzado?.candidatosPorRonda ||
+    CANDIDATOS_POR_RONDA;
   const prompt = construirPrompt(ctx, cantidad, opts?.brief);
   const candidatos = await pedirCandidatosAlModelo(userDataPath, prompt);
 
   const { musica } = readAppSettings(userDataPath);
   const autoAprobar = musica.autoAprobarDescubrimientos !== false;
+  const av = musica.avanzado;
+  const durMin = av?.duracionMinSeg ? av.duracionMinSeg * 1000 : DURACION_MIN_MS_DEFAULT;
+  const durMax = av?.duracionMaxSeg ? av.duracionMaxSeg * 1000 : DURACION_MAX_MS_DEFAULT;
+  const permitirExplicit = av?.permitirExplicit === true;
 
   const vetos = await vetoRepo.find({ where: { activo: true } });
   const artistasVetados = new Set(
@@ -383,13 +393,13 @@ export async function descubrirMusica(
       resultado.yaEstaban++;
       continue;
     }
-    if (item.explicit) {
+    if (item.explicit && !permitirExplicit) {
       resultado.filtrados++;
       resultado.detalleFiltrados.push(`${c.artista} — ${c.tema}: marcado explicit`);
       continue;
     }
     const dur = item.duration_ms || 0;
-    if (dur < DURACION_MIN_MS || dur > DURACION_MAX_MS) {
+    if (dur < durMin || dur > durMax) {
       resultado.filtrados++;
       resultado.detalleFiltrados.push(`${c.artista} — ${c.tema}: duracion fuera de rango`);
       continue;
@@ -404,7 +414,7 @@ export async function descubrirMusica(
       album: item.album?.name ? String(item.album.name).toUpperCase() : undefined,
       imagenUrl: item.album?.images?.[0]?.url ?? undefined,
       duracionMs: dur,
-      explicit: false,
+      explicit: !!item.explicit,
       genero: c.genero ? c.genero.toUpperCase() : undefined,
       escenas: c.escenas,
       // El descubrimiento entra aprobado por defecto: el dueno pidio no tener

@@ -113,6 +113,30 @@ export interface MusicaSettings {
   autoAprobarDescubrimientos?: boolean;
   /** Texto libre del dueño sobre el local. Va literal al prompt (F1.5). */
   brief?: string;
+  /**
+   * Ajustes finos del generador y del descubridor. Estaban hardcodeados; se
+   * exponen porque el valor correcto depende del local y del estilo musical.
+   * Cada bloque puede sobreescribir los que le apliquen.
+   */
+  avanzado?: MusicaAvanzado;
+}
+
+export interface MusicaAvanzado {
+  /** Tope de temas por artista cuando el bloque no define el suyo. */
+  maxPorArtistaDefault: number;
+  /** Días que un tema no se repite. */
+  ventanaAntirepeticionDias: number;
+  /** Cuánto más larga que el bloque se genera la playlist. */
+  factorDuracion: number;
+  /** Desplazamiento de BPM entre variantes (suave −delta, movido +delta). */
+  deltaBpmVariante: number;
+  /** Descarta intros, skits y sets largos que no sirven de fondo. */
+  duracionMinSeg: number;
+  duracionMaxSeg: number;
+  /** Cuántos temas pide la IA por ronda de descubrimiento. */
+  candidatosPorRonda: number;
+  /** Si se aceptan temas marcados como explícitos por Spotify. */
+  permitirExplicit: boolean;
   // El refresh token persiste en keytar, NO en este JSON.
   // PKCE no usa client_secret: no se guarda en ningún lado.
 }
@@ -167,6 +191,16 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     habilitado: false,
     autoAprobarDescubrimientos: true,
     brief: '',
+    avanzado: {
+      maxPorArtistaDefault: 2,
+      ventanaAntirepeticionDias: 3,
+      factorDuracion: 1.5,
+      deltaBpmVariante: 12,
+      duracionMinSeg: 60,
+      duracionMaxSeg: 600,
+      candidatosPorRonda: 40,
+      permitirExplicit: false,
+    },
   },
   deviceId: null,
   timezone: 'America/Asuncion',

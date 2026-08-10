@@ -267,6 +267,7 @@ import { AddMesaQrAutoservicio1785082533104 } from './migrations/1785082533104-A
 import { DropCheckTipoOperacionFinanciera1785170061312 } from './migrations/1785170061312-DropCheckTipoOperacionFinanciera';
 import { AddCuentasBancariasOrdenCajaMayorConfig1785170062316 } from './migrations/1785170062316-AddCuentasBancariasOrdenCajaMayorConfig';
 import { MusicaAmbiental1786378422682 } from './migrations/1786378422682-MusicaAmbiental';
+import { MusicaOpcionesAvanzadas1786383979096 } from './migrations/1786383979096-MusicaOpcionesAvanzadas';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -666,6 +667,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddCuentasBancariasOrdenCajaMayorConfig1785170062316,
     // Musica ambiental (Spotify Connect): repertorio, bloques y planes
     MusicaAmbiental1786378422682,
+    MusicaOpcionesAvanzadas1786383979096,
     AddPagoCuotaCppDetalle1785320463398,
     AddEgresoCajaToPagoCuotaDetalle1785335253817,
   ];

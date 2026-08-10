@@ -61,6 +61,28 @@ export class BloqueProgramacion extends BaseModel {
   @Column({ type: 'text', nullable: true })
   notas?: string;
 
+  /**
+   * Cuantos temas del mismo artista se permiten en la playlist de este bloque.
+   * `null` = sin limite.
+   *
+   * Es por bloque y no global a proposito: en un bloque de covers bossa varios
+   * temas del mismo interprete son lo esperado, mientras que en la noche de
+   * rock repetir artista es justamente el problema a evitar.
+   */
+  @Column({ type: 'int', nullable: true })
+  maxPorArtista?: number | null;
+
+  /** Aunque tenga cupo, no poner dos temas del mismo artista seguidos. */
+  @Column({ default: true })
+  evitarArtistaConsecutivo!: boolean;
+
+  /**
+   * Cuanto mas larga que el bloque se genera la playlist. `null` = usa el
+   * valor global. Sirve para bloques donde interesa mas variedad.
+   */
+  @Column({ type: 'float', nullable: true })
+  factorDuracion?: number | null;
+
   @Column({ type: 'int', default: 0 })
   orden!: number;
 

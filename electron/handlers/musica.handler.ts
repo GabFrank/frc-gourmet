@@ -41,7 +41,11 @@ function fechaLocalHoy(): string {
 }
 import { ensurePermission } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
-import { readAppSettings, updateAppSettings } from '../utils/app-settings.utils';
+import {
+  readAppSettings,
+  updateAppSettings,
+  MusicaAvanzado,
+} from '../utils/app-settings.utils';
 import {
   extraerIdSpotify,
   importarSemilla,
@@ -90,6 +94,7 @@ export function registerMusicaHandlers(
       habilitado: musica.habilitado,
       autoAprobarDescubrimientos: musica.autoAprobarDescubrimientos !== false,
       brief: musica.brief || '',
+      avanzado: musica.avanzado,
       conectado: await estaConectado(),
     };
   });
@@ -104,6 +109,7 @@ export function registerMusicaHandlers(
         habilitado?: boolean;
         autoAprobarDescubrimientos?: boolean;
         brief?: string;
+        avanzado?: Partial<MusicaAvanzado>;
       },
     ) => {
       await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
@@ -124,6 +130,10 @@ export function registerMusicaHandlers(
               : s.musica.autoAprobarDescubrimientos,
           // Sin UPPERCASE: va literal al prompt del descubridor.
           brief: data.brief !== undefined ? data.brief : s.musica.brief,
+          // Merge parcial: la UI puede mandar solo el campo que cambio.
+          avanzado: data.avanzado
+            ? ({ ...s.musica.avanzado, ...data.avanzado } as MusicaAvanzado)
+            : s.musica.avanzado,
         },
       }));
       return { success: true };

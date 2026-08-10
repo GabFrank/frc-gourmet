@@ -26,17 +26,27 @@ import {
   VarianteEnergia,
 } from '../../src/app/database/entities/musica/musica-enums';
 import { spotifyApi } from './spotify.service';
+import { readAppSettings } from '../utils/app-settings.utils';
 
 /**
- * La playlist se genera 1,5x mas larga que su bloque. Si se terminara antes de
- * tiempo, Spotify arranca su autoplay de recomendaciones — exactamente lo que
- * este modulo existe para evitar.
+ * Valores por defecto. Todos son configurables desde la UI (globalmente en
+ * app-settings, y el limite por artista ademas por bloque): el valor correcto
+ * depende del estilo musical, no del sistema.
  */
-const FACTOR_DURACION = 1.5;
-/** Mata el "se trabo un artista y sono 3 horas". */
-const MAX_POR_ARTISTA_POR_BLOQUE = 2;
-/** Dias que un track no se repite. */
-const VENTANA_ANTIREPETICION_DIAS = 3;
+const DEFAULTS = {
+  /**
+   * La playlist se genera 1,5x mas larga que su bloque. Si se terminara antes
+   * de tiempo, Spotify arranca su autoplay de recomendaciones — exactamente lo
+   * que este modulo existe para evitar.
+   */
+  factorDuracion: 1.5,
+  /** Mata el "se trabo un artista y sono 3 horas". */
+  maxPorArtistaDefault: 2,
+  /** Dias que un track no se repite. */
+  ventanaAntirepeticionDias: 3,
+  /** Desplazamiento de BPM entre variantes. */
+  deltaBpmVariante: 12,
+};
 /** Limite duro de la API al escribir items de playlist. */
 const MAX_URIS_POR_REQUEST = 100;
 /** Prefijo reconocible: el importador lo usa para no re-importar lo generado. */
@@ -71,9 +81,11 @@ function duracionBloqueMs(bloque: BloqueProgramacion): number {
 function perfilDeVariante(
   bloque: BloqueProgramacion,
   variante: VarianteEnergia,
+  deltaBpm: number,
 ): { bpmMin: number; bpmMax: number; valenciaMin: number } {
   const base = { bpmMin: bloque.bpmMin ?? 60, bpmMax: bloque.bpmMax ?? 200 };
-  const delta = variante === VarianteEnergia.SUAVE ? -12 : variante === VarianteEnergia.MOVIDO ? 12 : 0;
+  const delta =
+    variante === VarianteEnergia.SUAVE ? -deltaBpm : variante === VarianteEnergia.MOVIDO ? deltaBpm : 0;
   return {
     bpmMin: Math.max(40, base.bpmMin + delta),
     bpmMax: Math.min(220, base.bpmMax + delta),
@@ -141,8 +153,9 @@ function seleccionarTracks(
   bloque: BloqueProgramacion,
   variante: VarianteEnergia,
   duracionObjetivoMs: number,
+  opciones: { maxPorArtista: number | null; evitarConsecutivo: boolean; deltaBpm: number },
 ): { elegidos: MusicaTrack[]; relajado: boolean } {
-  const perfil = perfilDeVariante(bloque, variante);
+  const perfil = perfilDeVariante(bloque, variante, opciones.deltaBpm);
 
   const enPerfil = (t: MusicaTrack, estricto: boolean): boolean => {
     if (!estricto) return true;
@@ -168,9 +181,12 @@ function seleccionarTracks(
     for (const t of orden) {
       if (duracion >= duracionObjetivoMs) break;
       const artista = t.artistaId || t.artista;
-      if ((porArtista.get(artista) || 0) >= MAX_POR_ARTISTA_POR_BLOQUE) continue;
-      // Nunca dos del mismo artista seguidos, aunque tenga cupo.
-      if (artista === ultimoArtista) continue;
+      // maxPorArtista null = sin limite (util en bloques de covers, donde
+      // varios temas del mismo interprete son lo esperado).
+      if (opciones.maxPorArtista != null && (porArtista.get(artista) || 0) >= opciones.maxPorArtista) {
+        continue;
+      }
+      if (opciones.evitarConsecutivo && artista === ultimoArtista) continue;
 
       elegidos.push(t);
       porArtista.set(artista, (porArtista.get(artista) || 0) + 1);
@@ -245,6 +261,7 @@ export async function generarPlanDelDia(
 ): Promise<ResultadoPlan> {
   const advertencias: string[] = [];
   const diaSemana = new Date(`${fecha}T12:00:00`).getDay();
+  const avanzado = { ...DEFAULTS, ...(readAppSettings(userDataPath).musica.avanzado || {}) };
 
   const bloqueRepo = dataSource.getRepository(BloqueProgramacion);
   const bloques = await bloqueRepo.find({
@@ -271,7 +288,7 @@ export async function generarPlanDelDia(
   // Anti-repeticion: lo que sono en los ultimos dias queda afuera, salvo que
   // el pool sea tan chico que no alcance para llenar el dia.
   const corte = new Date();
-  corte.setDate(corte.getDate() - VENTANA_ANTIREPETICION_DIAS);
+  corte.setDate(corte.getDate() - avanzado.ventanaAntirepeticionDias);
   const frescos = aprobados.filter((t) => !t.ultimaVez || new Date(t.ultimaVez) < corte);
   const base = frescos.length >= 40 ? frescos : aprobados;
   if (base === aprobados && frescos.length < 40) {
@@ -315,10 +332,18 @@ export async function generarPlanDelDia(
       continue;
     }
 
-    const objetivoMs = duracionBloqueMs(bloque) * FACTOR_DURACION;
+    const objetivoMs = duracionBloqueMs(bloque) * (bloque.factorDuracion ?? avanzado.factorDuracion);
 
     for (const variante of [VarianteEnergia.SUAVE, VarianteEnergia.NORMAL, VarianteEnergia.MOVIDO]) {
-      const { elegidos, relajado } = seleccionarTracks(candidatos, bloque, variante, objetivoMs);
+      const { elegidos, relajado } = seleccionarTracks(candidatos, bloque, variante, objetivoMs, {
+        // `undefined` en el bloque = heredar el global; `null` = sin limite.
+        maxPorArtista:
+          bloque.maxPorArtista === undefined
+            ? avanzado.maxPorArtistaDefault
+            : bloque.maxPorArtista,
+        evitarConsecutivo: bloque.evitarArtistaConsecutivo !== false,
+        deltaBpm: avanzado.deltaBpmVariante,
+      });
       if (elegidos.length === 0) {
         advertencias.push(`"${bloque.nombre}" (${variante}): sin temas disponibles.`);
         continue;
