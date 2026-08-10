@@ -13,7 +13,14 @@ import { DataSource } from 'typeorm';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { MusicaSemilla } from '../../src/app/database/entities/musica/musica-semilla.entity';
 import { MusicaTrack } from '../../src/app/database/entities/musica/musica-track.entity';
-import { EstadoTrack, TipoSemilla } from '../../src/app/database/entities/musica/musica-enums';
+import { MusicaVeto } from '../../src/app/database/entities/musica/musica-veto.entity';
+import { BloqueProgramacion } from '../../src/app/database/entities/musica/bloque-programacion.entity';
+import {
+  EstadoTrack,
+  TipoSemilla,
+  TipoVeto,
+} from '../../src/app/database/entities/musica/musica-enums';
+import { PRESETS_MUSICA, getPreset } from '../utils/musica-presets';
 import { ensurePermission } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { readAppSettings, updateAppSettings } from '../utils/app-settings.utils';
@@ -346,4 +353,184 @@ export function registerMusicaHandlers(
       return await repo.save(track);
     },
   );
+
+  // ───────────────── Grilla de bloques (F1) ─────────────────
+
+  ipcMain.handle('musica-bloques-listar', async () => {
+    await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);
+    const repo = dataSource.getRepository(BloqueProgramacion);
+    return await repo.find({
+      where: { activo: true },
+      order: { diaSemana: 'ASC', horaDesde: 'ASC' },
+    });
+  });
+
+  ipcMain.handle('musica-bloque-guardar', async (_event, data: Partial<BloqueProgramacion>) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    const repo = dataSource.getRepository(BloqueProgramacion);
+
+    const entity = data.id
+      ? await repo.findOne({ where: { id: data.id } })
+      : repo.create({ activo: true } as BloqueProgramacion);
+    if (!entity) throw new Error(`BLOQUE ${data.id} NO ENCONTRADO`);
+
+    if (data.diaSemana !== undefined) entity.diaSemana = data.diaSemana;
+    if (data.nombre !== undefined) entity.nombre = (data.nombre || '').toUpperCase();
+    if (data.horaDesde !== undefined) entity.horaDesde = data.horaDesde;
+    if (data.horaHasta !== undefined) entity.horaHasta = data.horaHasta;
+    if (data.energia !== undefined) entity.energia = data.energia;
+    if (data.volumen !== undefined) entity.volumen = data.volumen;
+    if (data.generosPreferidos !== undefined) entity.generosPreferidos = data.generosPreferidos;
+    if (data.generosEvitar !== undefined) entity.generosEvitar = data.generosEvitar;
+    if (data.bpmMin !== undefined) entity.bpmMin = data.bpmMin;
+    if (data.bpmMax !== undefined) entity.bpmMax = data.bpmMax;
+    if (data.valenciaMin !== undefined) entity.valenciaMin = data.valenciaMin;
+    // `notas` NO se pasa a UPPERCASE: es texto libre del dueno y va literal al
+    // prompt del planificador. Gritarlo degrada la lectura del modelo.
+    if (data.notas !== undefined) entity.notas = data.notas;
+    if (data.orden !== undefined) entity.orden = data.orden;
+
+    await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, !!data.id);
+    return await repo.save(entity);
+  });
+
+  ipcMain.handle('musica-bloque-eliminar', async (_event, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    const repo = dataSource.getRepository(BloqueProgramacion);
+    const entity = await repo.findOne({ where: { id } });
+    if (!entity) throw new Error(`BLOQUE ${id} NO ENCONTRADO`);
+    entity.activo = false;
+    await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
+    await repo.save(entity);
+    return { success: true };
+  });
+
+  ipcMain.handle('musica-presets-listar', async () => {
+    await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);
+    return PRESETS_MUSICA.map((p) => ({
+      codigo: p.codigo,
+      nombre: p.nombre,
+      descripcion: p.descripcion,
+      cantidadBloques: p.bloques.length,
+    }));
+  });
+
+  /**
+   * Deja la grilla lista a partir de un preset. Nadie configura un modulo
+   * desde una pantalla en blanco.
+   *
+   * `reemplazar` da de baja la grilla anterior; sin eso, aplicar dos veces
+   * duplicaria los bloques y el dia tendria dos programaciones solapadas.
+   */
+  ipcMain.handle(
+    'musica-aplicar-preset',
+    async (_event, data: { codigo: string; reemplazar?: boolean }) => {
+      await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+      const preset = getPreset(data.codigo);
+      if (!preset) throw new Error(`PRESET ${data.codigo} NO ENCONTRADO`);
+
+      const bloqueRepo = dataSource.getRepository(BloqueProgramacion);
+      const vetoRepo = dataSource.getRepository(MusicaVeto);
+
+      if (data.reemplazar) {
+        const previos = await bloqueRepo.find({ where: { activo: true } });
+        for (const b of previos) b.activo = false;
+        if (previos.length) await bloqueRepo.save(previos);
+      }
+
+      const creados: BloqueProgramacion[] = [];
+      for (const [i, b] of preset.bloques.entries()) {
+        const entity = bloqueRepo.create({
+          diaSemana: b.diaSemana,
+          nombre: b.nombre.toUpperCase(),
+          horaDesde: b.horaDesde,
+          horaHasta: b.horaHasta,
+          energia: b.energia,
+          volumen: b.volumen,
+          generosPreferidos: b.generosPreferidos,
+          generosEvitar: b.generosEvitar,
+          bpmMin: b.bpmMin,
+          bpmMax: b.bpmMax,
+          // El bloque manda; si no define nada, rige la regla transversal.
+          valenciaMin: b.valenciaMin ?? preset.valenciaMinGlobal,
+          notas: b.notas,
+          orden: i,
+          activo: true,
+        } as BloqueProgramacion);
+        await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
+        creados.push(entity);
+      }
+      await bloqueRepo.save(creados);
+
+      // Vetos globales del preset, sin pisar los que ya existan.
+      let vetosNuevos = 0;
+      for (const genero of preset.generosVetados) {
+        const ya = await vetoRepo.findOne({
+          where: { tipo: TipoVeto.GENERO, valor: genero, activo: true },
+        });
+        if (ya) continue;
+        const veto = vetoRepo.create({
+          tipo: TipoVeto.GENERO,
+          valor: genero,
+          etiqueta: genero,
+          bloqueId: null,
+          motivo: `PRESET ${preset.codigo}`,
+          activo: true,
+        });
+        await setEntityUserTracking(dataSource, veto, getCurrentUser()?.id, false);
+        await vetoRepo.save(veto);
+        vetosNuevos++;
+      }
+
+      return { bloques: creados.length, vetos: vetosNuevos };
+    },
+  );
+
+  // ───────────────── Vetos ─────────────────
+
+  ipcMain.handle('musica-vetos-listar', async () => {
+    await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);
+    const repo = dataSource.getRepository(MusicaVeto);
+    return await repo.find({ where: { activo: true }, order: { tipo: 'ASC', valor: 'ASC' } });
+  });
+
+  ipcMain.handle(
+    'musica-veto-crear',
+    async (
+      _event,
+      data: { tipo: TipoVeto; valor: string; etiqueta?: string; bloqueId?: number | null },
+    ) => {
+      await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+      const repo = dataSource.getRepository(MusicaVeto);
+      const valor = (data.valor || '').toUpperCase().trim();
+      if (!valor) throw new Error('EL VETO NECESITA UN VALOR.');
+
+      const ya = await repo.findOne({
+        where: { tipo: data.tipo, valor, bloqueId: data.bloqueId ?? null, activo: true },
+      });
+      if (ya) return ya;
+
+      const entity = repo.create({
+        tipo: data.tipo,
+        valor,
+        etiqueta: data.etiqueta ? data.etiqueta.toUpperCase() : valor,
+        bloqueId: data.bloqueId ?? null,
+        motivo: 'MANUAL',
+        activo: true,
+      });
+      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
+      return await repo.save(entity);
+    },
+  );
+
+  ipcMain.handle('musica-veto-eliminar', async (_event, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    const repo = dataSource.getRepository(MusicaVeto);
+    const entity = await repo.findOne({ where: { id } });
+    if (!entity) throw new Error(`VETO ${id} NO ENCONTRADO`);
+    entity.activo = false;
+    await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
+    await repo.save(entity);
+    return { success: true };
+  });
 }

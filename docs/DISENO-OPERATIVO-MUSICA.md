@@ -400,6 +400,23 @@ Consecuencias que el planificador debe tener siempre presentes:
 | Sunset domingo | 16:00–19:00 | 2 | Chill, electrónica sunset, bossa, pagode suave. El bloque más identitario del local |
 | Domingo noche | 19:00–00:00 | 3 | Pagode y sertanejo alegres, pop suave, música paraguaya |
 
+### 9.4 bis — Semillas reales aportadas por el dueño (2026-08-10)
+
+Playlists que el local ya venía usando. Se cargan desde *Mi estilo*; el pool que producen es independiente de la cuenta conectada (los `spotifyId` son universales), así que lo importado en desarrollo sirve igual en producción.
+
+```
+https://open.spotify.com/playlist/7rEk1qXOjh2tKgVYjTiCMc
+https://open.spotify.com/playlist/5CM35hd3A1LtdVLqz0TTJt
+https://open.spotify.com/playlist/1tcvpuZZmHPZJgXad3rF1M
+https://open.spotify.com/playlist/37i9dQZF1DWUIDYTCle9M9   ← ver nota
+```
+
+> ⚠️ **La cuarta no es importable.** El prefijo `37i9dQZF` identifica a las playlists **editoriales propias de Spotify**, que quedaron fuera del acceso por API en la poda de noviembre 2024 (junto con `recommendations`, `related-artists` y `featured playlists`). Devuelve 404 para apps nuevas. Alternativa: abrirla en Spotify, copiar sus temas a una playlist propia y sembrar ese link.
+>
+> Las otras tres son playlists de usuario y se leen sin problema **aunque pertenezcan a otra cuenta**, siempre que sean públicas: `GET /playlists/{id}` no exige ser el dueño. Por eso se pueden importar desde la cuenta personal usada en desarrollo.
+
+**No usar la semilla `BIBLIOTECA` mientras se trabaje con una cuenta personal**: levantaría las playlists privadas del desarrollador y contaminaría el repertorio del local con gusto ajeno.
+
 ### 9.4 Semillas sugeridas (a aprobar en la bandeja de sugeridos)
 
 Son **propuestas del sistema**, no verdad revelada: entran a la bandeja y el dueño aprueba o rechaza antes de que suenen.
