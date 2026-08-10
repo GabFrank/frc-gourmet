@@ -145,6 +145,8 @@ Tres decisiones distintas, con costos y frecuencias distintas. Mezclarlas es el 
 
 > **Decisión (2026-08-10): el plan del día se resuelve de una sola vez.** No hay un loop que elija tema por tema. Ver §3.3.
 
+> **Cambio de prioridad (2026-08-10): el descubrimiento con IA es el corazón del módulo, no un extra de F2.** El dueño no tiene playlists suficientes ni tiempo de armarlas — que es exactamente por lo que recurrió a la app. Re-mezclar sus 4 playlists dejaría al local escuchando lo mismo de siempre. Ver §3.4.
+
 ### 3.1 Etiquetado (una vez por track)
 
 Entrada: artista, título, álbum, año, género de Spotify, BPM/energía/valencia de ReccoBeats.
@@ -242,6 +244,26 @@ La **histéresis de 10 minutos** es deliberada: sin ella la música cambiaría d
 
 ---
 
+### 3.4 Descubrimiento: el LLM descubre, Spotify resuelve
+
+Spotify ya no recomienda nada (`recommendations` y `related-artists` murieron en nov-2024) y su `search` devuelve 10 resultados: **es inútil para descubrir, pero perfecto para resolver**. De ahí la división de trabajo:
+
+```
+Contexto del local ──► LLM ──► "artista — tema" ──► search de Spotify ──► track real ──► repertorio
+```
+
+El prompt lleva: el **brief**, los **bloques con sus notas**, los **géneros preferidos de la grilla**, los **vetos**, los **artistas que ya tiene** (para que proponga otros) y —clave— **lo que ya rechazó**, como ejemplo negativo.
+
+**Ese último punto es todo el aprendizaje del sistema.** No se reentrena nada: cada "no va" mejora el contexto de la próxima ronda. Es más rápido, más barato y auditable.
+
+Filtros que atraviesa cada candidato, en orden:
+
+1. Artista o género vetado → descartado **antes** de gastar un request a Spotify
+2. Resolución con match estricto de artista + título normalizado (sin `(Remastered)`, sin `feat.`) — sin esto Spotify devuelve cualquier cosa para nombres que no existen y el repertorio se llena de basura
+3. `explicit` (configurable), duración fuera de rango, y duplicados
+
+Lo que sobrevive entra **aprobado directamente** por defecto: el dueño pidió no curar de a uno. `temperature: 0.8` a propósito — con 0 el modelo propone siempre lo mismo y el repertorio dejaría de crecer a la segunda ronda.
+
 ## 4. Pantallas
 
 > **La PWA mobile es el control principal, no un espejo del desktop.** El PC del PdV está ocupado cobrando y con clientes adelante; nadie va a ir hasta la caja para saltear un tema. El encargado controla la música desde el celular, caminando por el salón — que es además donde realmente se escucha cómo suena.
@@ -337,8 +359,8 @@ Sobre lo ya listado en el plan técnico:
 | Fase | Contenido | Criterio de terminado |
 |---|---|---|
 | **F0** ✅ escrito | Conexión OAuth + control manual + selección de device | Suena música del local controlada desde FRC Gourmet |
-| **F1** | Entidades + grilla de bloques + semillas + pool básico (playlists/artistas) + **generador de playlists por bloque** + cambio por evento + watchdog + **control completo en la PWA (§4.1) con SSE** + config en desktop | El local suena solo todo el día, con bloques y anti-repetición, **sigue sonando aunque se cierre la app**, y el encargado lo maneja desde el celular. Sin IA todavía |
-| **F1.5** | **Brief en texto → configuración automática** (§1 Nivel −1): `MusicaBrief`, `musica-interpretar-brief`, vista simple/avanzada con overrides | El dueño configura el local escribiendo, no llenando formularios |
+| **F1** ✅ **implementado** | Entidades + migraciones + grilla con presets + semillas + importador + **descubrimiento con IA** + generador de las 3 playlists por bloque + runtime por eventos con watchdog + UI desktop (4 pestañas) + control en la PWA | El local suena solo todo el día, sigue sonando aunque se cierre la app, el repertorio crece con IA y el encargado lo maneja desde el celular |
+| **F1.5** | **Brief en texto → configuración automática** (§1 Nivel −1): interpretar el brief con LLM para generar la grilla completa, vista simple/avanzada con overrides. *(El brief ya se guarda y alimenta el descubrimiento; falta que genere los bloques.)* | El dueño configura el local escribiendo, no llenando formularios |
 | **F2** | Etiquetado (ReccoBeats + LLM en lote) + vetos + bandeja de sugeridos + rotación semanal | Selección por escena/energía real, repertorio que se renueva |
 | **F3** | Planificador diario con LLM (notas del dueño, ventas por franja, clima, feriados) + señales del PdV en el runtime + feedback de 2 botones | Plan diario con justificación + reacción al salón |
 | **F4** | Historial, dashboard música↔ventas, multi-local, feature flag | Vendible |
