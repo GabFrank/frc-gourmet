@@ -81,6 +81,14 @@ export async function interpretarBrief(
     '- maxPorArtista: null solo si en ese bloque no molesta repetir artista (por ejemplo un',
     '  bloque de covers de un mismo proyecto). Si no, 2.',
     '- generosVetados: lo que el dueño dijo que NO quiere, en términos de género.',
+    // El modelo tiende a etiquetar el primer bloque del dia como "apertura y
+    // montaje" aunque a esa hora ya haya clientes: en la prueba real el domingo
+    // abria 16:00 con publico y lo llamo montaje, perdiendo el "sunset" que el
+    // dueno habia pedido explicitamente.
+    '- El NOMBRE del bloque tiene que describir lo que pasa en ese momento según la descripción',
+    '  (SUNSET, ALMUERZO BUFFET, SOBREMESA, CENA…). Usá "apertura/montaje" SOLO si a esa hora el',
+    '  local todavía no recibe clientes. Si el dueño nombró un clima para un momento (por ejemplo',
+    '  "los domingos va estilo sunset"), ese bloque debe llamarse y sonar así.',
     '',
     'DESCRIPCIÓN DEL LOCAL:',
     texto,
@@ -128,15 +136,71 @@ export async function interpretarBrief(
       throw new Error('LA IA NO PUDO ARMAR LA PROGRAMACION. PROBA DESCRIBIENDO LOS HORARIOS.');
     }
 
+    const normalizados = bloques
+      .map(normalizarBloque)
+      .filter((b): b is BloquePropuesto => b !== null);
+    const { completos, diasCompletados } = completarDiasFaltantes(normalizados);
+
     return {
-      resumen: parsed.resumen || '',
+      resumen:
+        (parsed.resumen || '') +
+        (diasCompletados.length
+          ? ` (${diasCompletados.map((d) => NOMBRES_DIA[d]).join(', ')} se completaron replicando el patrón del día equivalente)`
+          : ''),
       generosVetados: Array.isArray(parsed.generosVetados) ? parsed.generosVetados : [],
       valenciaMinGlobal: Number(parsed.valenciaMinGlobal) || 0.45,
-      bloques: bloques.map(normalizarBloque).filter((b): b is BloquePropuesto => b !== null),
+      bloques: completos,
     };
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Completa los días que el modelo no devolvió.
+ *
+ * Pedirle que repita la estructura para los siete días es poco confiable: en la
+ * prueba real devolvió solo lunes, viernes y domingo. Un día sin bloques deja al
+ * local SIN MÚSICA ese día entero, así que se replica el patrón del día
+ * equivalente: los laborables copian de otro laborable, el sábado del viernes
+ * (o del sábado si vino), y el domingo nunca se inventa — si el local no abre,
+ * no debe tener bloques.
+ */
+function completarDiasFaltantes(bloques: BloquePropuesto[]): {
+  completos: BloquePropuesto[];
+  diasCompletados: number[];
+} {
+  const porDia = new Map<number, BloquePropuesto[]>();
+  for (const b of bloques) {
+    if (!porDia.has(b.diaSemana)) porDia.set(b.diaSemana, []);
+    porDia.get(b.diaSemana)!.push(b);
+  }
+
+  const LABORABLES = [1, 2, 3, 4, 5];
+  const modeloLaborable = LABORABLES.map((d) => porDia.get(d)).find((v) => v && v.length);
+  const diasCompletados: number[] = [];
+  const salida = [...bloques];
+
+  // Laborables: se copian del primer laborable que haya venido.
+  for (const dia of LABORABLES) {
+    if (porDia.get(dia)?.length || !modeloLaborable) continue;
+    for (const b of modeloLaborable) salida.push({ ...b, diaSemana: dia });
+    diasCompletados.push(dia);
+  }
+
+  // Sábado: se parece al viernes (fin de semana), no al lunes.
+  if (!porDia.get(6)?.length) {
+    const base = porDia.get(5)?.length ? porDia.get(5)! : modeloLaborable;
+    if (base) {
+      for (const b of base) salida.push({ ...b, diaSemana: 6 });
+      diasCompletados.push(6);
+    }
+  }
+
+  // El domingo NO se completa: si el modelo no lo trajo puede ser que el local
+  // no abra. Inventarlo haría sonar música un día cerrado.
+
+  return { completos: salida, diasCompletados };
 }
 
 /** El modelo puede devolver horas sueltas o fuera de rango: se sanean acá. */
