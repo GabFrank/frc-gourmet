@@ -478,3 +478,35 @@ Pendientes:
 2. **Volumen por bloque**: hay que calibrarlo en el local con el sistema andando — no se puede definir en papel. Se ajusta en el piloto.
 3. ~~¿Quién puede votar "no va"?~~ **Resuelto:** sólo **cajeros, gerentes y admin**. Se implementa con permisos, sin código extra: `MUSICA_CONTROLAR` va a los roles CAJERO / GERENTE / ADMIN en el seed; los mozos reciben sólo `MUSICA_VER` (ven qué suena, no intervienen).
 4. ~~Playlists propias existentes~~ **Resuelto:** el dueño las carga **desde la app**, no por seed. Implicancia para F1: la pantalla **"Mi estilo"** (pegar links de playlists + buscar artistas semilla + importar la biblioteca de la cuenta) es parte del entregable mínimo, porque sin ella el pool arranca vacío y no hay nada que sonar.
+
+---
+
+## 11. Hallazgos de la primera prueba real (2026-08-11)
+
+Sesión con Spotify y OpenAI reales sobre la cuenta de desarrollo. **Funcionó de punta a punta hasta la creación de las playlists**, y encontró seis bugs que ninguna revisión de código había detectado. Vale registrarlos porque casi todos son de la misma familia: *supuestos sobre datos que vienen de afuera*.
+
+| # | Bug | Por qué no se veía antes |
+|---|---|---|
+| 1 | Playlists ajenas no se pueden importar (403) | La doc de Spotify lo dice en la guía de migración, no en la referencia del endpoint |
+| 2 | `POST /users/{id}/playlists` deprecado → `POST /me/playlists` | Cuarto endpoint que Spotify cambió; sólo se ve al escribir |
+| 3 | **Horas comparadas como texto**: `'17:00' < '00:00'` es falso | El turno noche nunca resultaba vigente y su playlist duraba 30 min |
+| 4 | Veto bidireccional: `FUNK BRASILEIRO` descartaba funk americano | Sólo se nota mirando *por qué* se descartó cada tema |
+| 5 | El LLM disfraza géneros vetados ("J Balvin: latin pop") | Un filtro que depende de una etiqueta del modelo, el modelo la acomoda |
+| 6 | El LLM no cubre los 7 días aunque se le pida | Devolvió 3 días, y luego 7 con dos a medio cubrir |
+
+**Tres lecciones que valen más allá de este módulo:**
+
+1. **Mostrar el motivo de cada descarte no es un lujo de UI.** Los bugs 4 y 5 fueron visibles sólo porque la pantalla lista qué se filtró y por qué. Sin eso, el sistema hubiera estado descartando música válida en silencio, para siempre.
+2. **Todo lo que el LLM devuelva y alimente una regla dura hay que verificarlo contra un dato duro.** Los géneros ahora se validan contra `/artists/{id}` de Spotify; los días faltantes se completan por código. El modelo aporta criterio, no contabilidad.
+3. **La estructura repetitiva no se le pide al modelo.** Pedirle 35 bloques (7 días × 5 momentos) da resultados incompletos; pedirle el patrón y replicarlo por código es determinista y gratis.
+
+### Resultado medido
+
+```
+31 bloques · 7 días completos · sin duplicados
+427 temas aprobados · 27,8 h de música
+15 playlists creadas (5 bloques × 3 variantes)
+plan generado por IA (origen = IA, con justificación del día)
+```
+
+Las duraciones confirman el fix de medianoche: bloque de 7 h → playlist de 10,5 h (factor 1,5×).

@@ -144,6 +144,9 @@ HMAC-SHA256 sobre el secreto de keytar, comparación en tiempo constante. Se pid
 
 **Reacción al salón** (`musica-runtime.service`): ocupación ≥80% + ventas → `MOVIDO`; ocupación ≤30% con mesas ocupadas → `SUAVE`. Con **histéresis de 10 min**: sin ella la música cambiaría de humor cada vez que entra o sale una mesa. Nunca pisa el modo manual.
 
+**Validado contra Spotify y OpenAI reales (2026-08-11):** conexión, brief → grilla de 31 bloques, 3 rondas de descubrimiento (427 temas), plan generado por IA y **15 playlists creadas**. Las duraciones confirmaron el fix de medianoche: el bloque de 7 h produce 10,5 h de playlist (1,5×).
+
 **Pendiente:**
 - **Dashboard música ↔ ventas** por bloque (los datos ya se registran en `TrackLog`).
-- **Validar ReccoBeats contra la API real**: su doc pública no fija esquema ni base URL, así que el cliente es defensivo pero no está probado contra respuestas reales.
+- **Validar ReccoBeats contra la API real**: su doc pública no fija esquema ni base URL, así que el cliente es defensivo pero **no se ejecutó ni una vez**. Hasta entonces `bpm`/`valencia` están vacíos y las tres variantes de energía salen casi iguales.
+- **Sembrar la música local con semillas de ARTISTA**: el modelo no conoce la escena paraguaya y no la propone aunque el brief la nombre.
