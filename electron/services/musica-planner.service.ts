@@ -235,8 +235,11 @@ async function asegurarPlaylist(
     }
   }
 
-  const me = await spotifyApi(userDataPath, 'GET', '/me');
-  const creada = await spotifyApi(userDataPath, 'POST', `/users/${me.id}/playlists`, {
+  // `POST /users/{id}/playlists` quedo DEPRECADO en la limpieza de feb-2026,
+  // junto con el resto de los endpoints de /users/{id}: devuelve 403. El
+  // reemplazo crea la playlist en la cuenta autenticada, que es justo lo que
+  // necesitamos.
+  const creada = await spotifyApi(userDataPath, 'POST', '/me/playlists', {
     name: nombre,
     // Privada: es la musica del local, no una publicacion.
     public: false,

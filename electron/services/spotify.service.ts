@@ -328,10 +328,17 @@ export async function spotifyApi(
       // casi siempre falta de Premium; en /playlists es que la cuenta conectada
       // no es duena ni colaboradora de esa playlist (desde feb-2026 Spotify
       // solo devuelve el contenido de playlists propias o colaborativas).
-      if (path.startsWith('/playlists') || path.startsWith('/users')) {
+      if (method === 'GET' && (path.startsWith('/playlists') || path.startsWith('/users'))) {
         throw new Error(
           'SPOTIFY NO PERMITE LEER ESA PLAYLIST: LA CUENTA CONECTADA NO ES DUENA NI COLABORADORA. ' +
             'COPIA LOS TEMAS A UNA PLAYLIST DE ESTA CUENTA, O HACELA COLABORATIVA E INVITALA.',
+        );
+      }
+      if (path.startsWith('/playlists') || path.startsWith('/users') || path === '/me/playlists') {
+        // Escribir en playlists propias: casi siempre es scope faltante.
+        throw new Error(
+          `SPOTIFY RECHAZO LA OPERACION SOBRE LA PLAYLIST (${detalle}). ` +
+            'SI ACABAS DE ACTUALIZAR LA APP, DESCONECTA Y VOLVE A CONECTAR SPOTIFY PARA RENOVAR LOS PERMISOS.',
         );
       }
       throw new Error(`SPOTIFY RECHAZO LA OPERACION (${detalle}). VERIFICA QUE LA CUENTA TENGA PREMIUM ACTIVO.`);
