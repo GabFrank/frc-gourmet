@@ -107,9 +107,38 @@
           placeholder="Ej: Somos una hamburguesería con buffet al mediodía en Salto del Guairá. Público 25+, turistas brasileños y familias. Nos gusta el rock alternativo alegre, bossa, pagode. Evitamos funk, rap y música triste."
         ></textarea>
       </mat-form-field>
-      <button mat-flat-button color="primary" (click)="guardarBrief()">
-        <mat-icon>save</mat-icon> Guardar descripción
-      </button>
+      <div class="acciones-fila">
+        <button mat-flat-button color="primary" (click)="guardarBrief()">
+          <mat-icon>save</mat-icon> Guardar descripción
+        </button>
+        <button
+          mat-flat-button
+          color="accent"
+          (click)="generarProgramacion()"
+          [disabled]="interpretando || !brief"
+        >
+          <mat-icon>schedule</mat-icon> Generar programación desde este texto
+        </button>
+        <mat-progress-spinner *ngIf="interpretando" mode="indeterminate" diameter="24"></mat-progress-spinner>
+      </div>
+
+      <!-- Propuesta de grilla: se revisa antes de aplicar -->
+      <div class="resultado" *ngIf="propuesta">
+        <h4>Programación propuesta</h4>
+        <p class="ayuda" *ngIf="propuestaResumen">{{ propuestaResumen }}</p>
+        <div class="item-resultado" *ngFor="let d of propuestaDescripcion">{{ d }}</div>
+
+        <mat-slide-toggle [(ngModel)]="preservarManuales" class="toggle-preservar">
+          Respetar los bloques que edité a mano
+        </mat-slide-toggle>
+
+        <div class="acciones-fila">
+          <button mat-flat-button color="primary" (click)="aplicarProgramacion()">
+            <mat-icon>check</mat-icon> Aplicar esta programación
+          </button>
+          <button mat-stroked-button (click)="descartarPropuesta()">Descartar</button>
+        </div>
+      </div>
     </mat-card-content>
   </mat-card>
 

@@ -56,6 +56,13 @@ export class MusicaEstiloComponent implements OnInit {
   importando = false;
   descubriendo = false;
   enriqueciendo = false;
+  interpretando = false;
+
+  /** Propuesta de grilla devuelta por la IA, pendiente de aplicar. */
+  propuesta: any = null;
+  propuestaResumen = '';
+  propuestaDescripcion: string[] = [];
+  preservarManuales = true;
 
   semillas: MusicaSemilla[] = [];
   nuevaUrl = '';
@@ -211,6 +218,51 @@ export class MusicaEstiloComponent implements OnInit {
     } catch (e: any) {
       this.mostrarError(e);
     }
+  }
+
+  /**
+   * Genera la programación semanal a partir del brief. NO la aplica: primero se
+   * muestra para revisar. La IA propone, el dueño dispone.
+   */
+  async generarProgramacion(): Promise<void> {
+    this.interpretando = true;
+    this.propuesta = null;
+    try {
+      const r = await this.musicaService.interpretarBrief(this.brief);
+      this.propuesta = r.propuesta;
+      this.propuestaResumen = r.propuesta?.resumen || '';
+      this.propuestaDescripcion = r.descripcion || [];
+    } catch (e: any) {
+      this.mostrarError(e);
+    } finally {
+      this.interpretando = false;
+    }
+  }
+
+  async aplicarProgramacion(): Promise<void> {
+    if (!this.propuesta) return;
+    this.interpretando = true;
+    try {
+      const r = await this.musicaService.aplicarConfig(
+        this.propuesta,
+        this.brief,
+        this.preservarManuales,
+      );
+      let msg = `${r.bloques} bloques y ${r.vetos} vetos aplicados`;
+      if (r.preservados) msg += ` · ${r.preservados} bloques tuyos respetados`;
+      this.snackBar.open(msg, 'OK', { duration: 6000 });
+      this.propuesta = null;
+      this.propuestaDescripcion = [];
+    } catch (e: any) {
+      this.mostrarError(e);
+    } finally {
+      this.interpretando = false;
+    }
+  }
+
+  descartarPropuesta(): void {
+    this.propuesta = null;
+    this.propuestaDescripcion = [];
   }
 
   async descubrir(): Promise<void> {

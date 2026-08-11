@@ -27,6 +27,12 @@ import { generarPlanDelDia, getBloqueVigente } from '../services/musica-planner.
 import { descubrirMusica, rechazarTrack } from '../services/musica-descubrimiento.service';
 import { enriquecerFeatures, etiquetarTracks } from '../services/musica-features.service';
 import {
+  interpretarBrief,
+  aplicarConfiguracion,
+  describirPropuesta,
+  ConfiguracionPropuesta,
+} from '../services/musica-brief.service';
+import {
   iniciarRuntimeMusica,
   detenerRuntimeMusica,
   getEstadoRuntime,
@@ -635,6 +641,35 @@ export function registerMusicaHandlers(
         }),
       );
       return { success: true };
+    },
+  );
+
+  // ───────────────── Brief → programacion (F1.5) ─────────────────
+
+  /**
+   * Interpreta la descripcion del local y devuelve la grilla propuesta SIN
+   * aplicarla. La IA propone, el dueno dispone: siempre hay un paso de revision.
+   */
+  ipcMain.handle('musica-interpretar-brief', async (_event, brief: string) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    const propuesta = await interpretarBrief(userData(), brief);
+    return { propuesta, descripcion: describirPropuesta(propuesta) };
+  });
+
+  ipcMain.handle(
+    'musica-aplicar-config',
+    async (
+      _event,
+      data: { propuesta: ConfiguracionPropuesta; brief: string; preservarManuales?: boolean },
+    ) => {
+      await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+      return await aplicarConfiguracion(dataSource, userData(), data.propuesta, {
+        brief: data.brief,
+        // Por defecto se respetan los bloques editados a mano: pisarlos en
+        // silencio haria que el dueno no vuelva a confiar en "Regenerar".
+        preservarManuales: data.preservarManuales !== false,
+        usuarioId: getCurrentUser()?.id,
+      });
     },
   );
 

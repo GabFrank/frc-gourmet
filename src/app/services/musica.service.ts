@@ -243,6 +243,20 @@ export class MusicaService {
     return this.api.callIpc('musica-track-estado', { id, estado });
   }
 
+  // ─────────── Brief → programación ───────────
+
+  interpretarBrief(brief: string): Promise<{ propuesta: any; descripcion: string[] }> {
+    return this.api.callIpc('musica-interpretar-brief', brief);
+  }
+
+  aplicarConfig(
+    propuesta: any,
+    brief: string,
+    preservarManuales: boolean,
+  ): Promise<{ bloques: number; vetos: number; preservados: number }> {
+    return this.api.callIpc('musica-aplicar-config', { propuesta, brief, preservarManuales });
+  }
+
   // ─────────── Enriquecimiento del repertorio ───────────
 
   enriquecer(limite?: number): Promise<{
