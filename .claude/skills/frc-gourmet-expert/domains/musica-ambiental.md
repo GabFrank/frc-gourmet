@@ -55,6 +55,10 @@ Es el corazón del módulo. Como Spotify ya no recomienda, **el criterio musical
 | `electron/services/spotify.service.ts` | OAuth PKCE, listener loopback, refresh con rotación, wrapper de API con reintento en 401 y `Retry-After` en 429, operaciones de player |
 | `electron/services/musica-pool.service.ts` | Importa semillas (playlist/artista/track/biblioteca) al repertorio |
 | `electron/services/musica-descubrimiento.service.ts` | Prompt + OpenAI + resolución en Spotify + filtros. También `rechazarTrack` |
+| `electron/services/musica-features.service.ts` | ReccoBeats (BPM/energía/valencia) + etiquetado semántico con LLM en lote |
+| `electron/services/musica-brief.service.ts` | Brief en texto → grilla semanal completa (F1.5) |
+| `electron/services/musica-agente.service.ts` | Planificador diario: ajusta el perfil de cada bloque (F3) |
+| `electron/services/musica-salon.service.ts` | Señales del PdV: ocupación, ritmo de ventas, ventas por franja |
 | `electron/services/musica-planner.service.ts` | Genera el plan y materializa las playlists. `getBloqueVigente` |
 | `electron/services/musica-runtime.service.ts` | Heartbeat de 2 min: cambio de bloque, watchdog, modo manual, `TrackLog` |
 | `electron/handlers/musica.handler.ts` | ~30 handlers, todos con `ensurePermission` |
@@ -97,7 +101,7 @@ Es el corazón del módulo. Como Spotify ya no recomienda, **el criterio musical
 6. **`notas` del bloque y `brief` NO van a UPPERCASE** (excepción a la regla del proyecto): van literales al prompt, y gritarlos degrada la lectura del modelo.
 7. **`temperature: 0.8` en el descubrimiento es deliberado**: con 0 el modelo propone siempre lo mismo y el repertorio deja de crecer.
 8. **El match de resolución es estricto** (artista + título normalizado). Sin eso Spotify devuelve cualquier cosa para nombres inventados y el pool se llena de basura.
-9. **BPM/valencia están vacíos hasta F2** (enriquecimiento con ReccoBeats). Mientras tanto los filtros de perfil dejan pasar lo que no tiene el dato, así que las tres variantes salen parecidas.
+9. **Hasta correr "Analizar temas", BPM/valencia están vacíos** y los filtros de perfil dejan pasar lo que no tiene el dato: las tres variantes salen parecidas. El aviso está en la UI, pero es la causa #1 de "no distingue el almuerzo de la noche".
 10. **`migration:generate` no sirve en este repo**: el DataSource del CLI apunta a una SQLite vacía y genera el esquema completo (2000+ líneas). Además falla salvo con `TS_NODE_COMPILER_OPTIONS='{"module":"commonjs"}'`. Las migraciones de este módulo se escribieron a mano.
 11. **SQLite no soporta `IF NOT EXISTS` en `ADD COLUMN`**: la migración de opciones avanzadas consulta el esquema con `getTable()` antes de agregar cada columna.
 
@@ -105,11 +109,21 @@ Es el corazón del módulo. Como Spotify ya no recomienda, **el criterio musical
 
 ## 5. Estado y qué falta
 
-**F1 implementado** (branch `feat/musica-ambiental`): conexión y control, repertorio con importador, descubrimiento con IA, grilla con presets, generador de playlists, runtime automático, UI desktop y PWA.
+**F0 a F3 implementados** (branch `feat/musica-ambiental`, 16 commits): conexión y control, repertorio con importador, descubrimiento con IA, brief → grilla, enriquecimiento con ReccoBeats + etiquetado, generador de playlists, planificador diario, runtime que reacciona al salón, UI desktop (4 pestañas) y control en la PWA.
+
+**Las tres decisiones de IA, por frecuencia** (nunca mezclarlas):
+
+| Decisión | Quién | Cuándo | temperature |
+|---|---|---|---|
+| Etiquetar un track | LLM en lote de 50 | una vez por track | 0 (clasificación) |
+| Interpretar el brief | LLM | al configurar | 0.3 (estructura) |
+| Planificar el día | LLM, 1 llamada | 1×/día | 0.4 |
+| Descubrir música | LLM | a pedido | **0.8** (con 0 propone siempre lo mismo) |
+| Elegir el próximo tema | **código** | por evento | — |
+
+**Reacción al salón** (`musica-runtime.service`): ocupación ≥80% + ventas → `MOVIDO`; ocupación ≤30% con mesas ocupadas → `SUAVE`. Con **histéresis de 10 min**: sin ella la música cambiaría de humor cada vez que entra o sale una mesa. Nunca pisa el modo manual.
 
 **Pendiente:**
-- **F1.5** — el brief se guarda y alimenta el descubrimiento, pero **todavía no genera la grilla** con LLM.
-- **F2** — enriquecimiento con ReccoBeats (BPM/energía/valencia reales) + etiquetado semántico en lote. Sin esto los perfiles por bloque no muerden.
-- **F3** — planificador diario con LLM + señales del PdV (ocupación, ritmo de ventas, KDS) para cambiar de variante por evento.
 - **SSE** — hoy la PWA hace poll de 10 s; el diseño prevé `/api/musica/stream` como el KDS.
-- **Dashboard música ↔ ventas** por bloque.
+- **Dashboard música ↔ ventas** por bloque (los datos ya se registran en `TrackLog`).
+- **Validar ReccoBeats contra la API real**: su doc pública no fija esquema ni base URL, así que el cliente es defensivo pero no está probado contra respuestas reales.
