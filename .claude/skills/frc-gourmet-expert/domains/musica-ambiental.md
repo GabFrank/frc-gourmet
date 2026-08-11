@@ -116,7 +116,7 @@ HMAC-SHA256 sobre el secreto de keytar, comparación en tiempo constante. Se pid
 
 1. **El pool es portable, las playlists no.** Los `spotifyId` son universales: lo importado con una cuenta sirve con otra. Pero las playlists `FRC · …` se crean en la cuenta conectada — en desarrollo con cuenta personal, aparecen ahí.
 2. **Las playlists editoriales de Spotify (`37i9dQZF…`) no son importables**: quedaron fuera de la API en nov-2024. Devuelven 404.
-3. **Se pueden leer playlists públicas de cualquier cuenta**; las privadas, solo de la cuenta autorizada.
+3. **Solo se importan playlists de las que la cuenta conectada es DUEÑA o COLABORADORA.** No alcanza con que sean públicas: desde la migración de feb-2026, Spotify devuelve la metadata pero **omite `items`** para playlists ajenas, y en Development Mode responde directamente **403**. Para sembrar con playlists de otra cuenta hay que copiar los temas a una propia, hacerlas colaborativas, o conectar la cuenta dueña.
 4. **El importador ignora las playlists `FRC · `** — reimportarlas sería un bucle: el pool alimenta la playlist y la playlist vuelve al pool.
 5. **Al reimportar no se pisa `estado`/`score`/etiquetado**: un tema vetado no vuelve a aprobarse porque reaparezca en otra playlist.
 6. **`notas` del bloque y `brief` NO van a UPPERCASE** (excepción a la regla del proyecto): van literales al prompt, y gritarlos degrada la lectura del modelo.

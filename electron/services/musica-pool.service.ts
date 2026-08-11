@@ -141,6 +141,15 @@ async function traerTracksDePlaylist(userDataPath: string, playlistId: string): 
       `/playlists/${playlistId}/items?limit=${PAGE_PLAYLIST}&offset=${offset}`,
     );
     const items = page?.items || [];
+    // Spotify devuelve la playlist con metadata pero SIN `items` cuando la
+    // cuenta conectada no es duena ni colaboradora. Sin este aviso, la
+    // importacion diria "0 temas" y parecerian una playlist vacia.
+    if (offset === 0 && items.length === 0 && page && !Array.isArray(page.items)) {
+      throw new Error(
+        'ESA PLAYLIST NO ES DE LA CUENTA CONECTADA: SPOTIFY NO DEVUELVE SU CONTENIDO. ' +
+          'COPIA LOS TEMAS A UNA PLAYLIST PROPIA O HACELA COLABORATIVA.',
+      );
+    }
     if (items.length === 0) break;
 
     for (const it of items) {

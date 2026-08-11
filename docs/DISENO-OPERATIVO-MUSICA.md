@@ -435,7 +435,9 @@ https://open.spotify.com/playlist/37i9dQZF1DWUIDYTCle9M9   ← ver nota
 
 > ⚠️ **La cuarta no es importable.** El prefijo `37i9dQZF` identifica a las playlists **editoriales propias de Spotify**, que quedaron fuera del acceso por API en la poda de noviembre 2024 (junto con `recommendations`, `related-artists` y `featured playlists`). Devuelve 404 para apps nuevas. Alternativa: abrirla en Spotify, copiar sus temas a una playlist propia y sembrar ese link.
 >
-> Las otras tres son playlists de usuario y se leen sin problema **aunque pertenezcan a otra cuenta**, siempre que sean públicas: `GET /playlists/{id}` no exige ser el dueño. Por eso se pueden importar desde la cuenta personal usada en desarrollo.
+> ⚠️ **Corrección (probado 2026-08-11):** las otras tres **tampoco se importan desde una cuenta ajena**. Spotify solo devuelve el contenido (`items`) de playlists que la cuenta conectada **posee o colabora**; para el resto manda solo metadata, y en Development Mode responde **403**. Como en desarrollo se usa una cuenta personal y las playlists son de la cuenta del local, hay que copiar los temas a una playlist propia, hacerlas colaborativas, o conectar la cuenta dueña.
+>
+> Esto **refuerza el valor del descubrimiento con IA**: no depende de tener playlists previas, que es justamente el problema original del dueño.
 
 **No usar la semilla `BIBLIOTECA` mientras se trabaje con una cuenta personal**: levantaría las playlists privadas del desarrollador y contaminaría el repertorio del local con gusto ajeno.
 

@@ -324,6 +324,16 @@ export async function spotifyApi(
     const data: any = await res.json().catch(() => ({}));
     const detalle = data?.error?.message || `HTTP ${res.status}`;
     if (res.status === 403) {
+      // Un 403 significa cosas distintas segun el endpoint: en /me/player es
+      // casi siempre falta de Premium; en /playlists es que la cuenta conectada
+      // no es duena ni colaboradora de esa playlist (desde feb-2026 Spotify
+      // solo devuelve el contenido de playlists propias o colaborativas).
+      if (path.startsWith('/playlists') || path.startsWith('/users')) {
+        throw new Error(
+          'SPOTIFY NO PERMITE LEER ESA PLAYLIST: LA CUENTA CONECTADA NO ES DUENA NI COLABORADORA. ' +
+            'COPIA LOS TEMAS A UNA PLAYLIST DE ESTA CUENTA, O HACELA COLABORATIVA E INVITALA.',
+        );
+      }
       throw new Error(`SPOTIFY RECHAZO LA OPERACION (${detalle}). VERIFICA QUE LA CUENTA TENGA PREMIUM ACTIVO.`);
     }
     if (res.status === 404) {
