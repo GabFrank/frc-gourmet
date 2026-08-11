@@ -71,6 +71,8 @@ export interface UpdateSettings {
 
 export type BackupMode = 'interval' | 'daily';
 
+export type PgBackupFormat = 'custom' | 'plain';
+
 export interface BackupSettings {
   autoBackupEnabled: boolean;
   /** 'daily' = una vez por día (default); 'interval' = cada N horas desde el arranque. */
@@ -82,6 +84,23 @@ export interface BackupSettings {
   customBackupDir?: string;
   includeImages: boolean;
   lastAutoBackupAt?: string;
+  /**
+   * Postgres: formato del dump. 'custom' = pg_dump -Fc (.dump comprimido,
+   * restaura con pg_restore); 'plain' = SQL de texto (.sql, restaura con psql).
+   * Solo aplica cuando database.type === 'postgres'. Default 'custom'.
+   */
+  pgFormat?: PgBackupFormat;
+  /**
+   * Postgres: carpeta con los binarios pg_dump/pg_restore/psql, si no están en
+   * el PATH del sistema. Vacío = autodetección (PATH + rutas típicas del SO).
+   */
+  pgBinDir?: string;
+  /**
+   * Número/JID de WhatsApp destino para enviar backups (formato internacional,
+   * ej 595991123456, o JID de grupo). Reusa la conexión Evolution API de
+   * Notificaciones. Vacío = envío deshabilitado hasta configurarlo.
+   */
+  whatsappDestino?: string;
 }
 
 export interface IaSettings {

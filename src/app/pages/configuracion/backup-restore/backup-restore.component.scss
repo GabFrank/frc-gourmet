@@ -148,6 +148,11 @@ mat-card {
       min-width: 220px;
     }
 
+    .wide-field {
+      flex: 1;
+      min-width: 320px;
+    }
+
     .hint-text {
       font-size: 12px;
       color: var(--text-secondary);

@@ -44,6 +44,7 @@ const BLOCKED_CHANNELS = new Set<string>([
   'backup-create-and-export',
   'backup-trigger-auto-now',
   'backup-config-set',
+  'backup-send-whatsapp',
   'backup-pick-folder',
   'backup-pick-restore-file',
 
