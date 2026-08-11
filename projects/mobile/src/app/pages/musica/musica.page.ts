@@ -1,7 +1,6 @@
 import { Component, NgZone, OnDestroy, OnInit, inject } from '@angular/core';
-import { CommonModule, Location } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -49,7 +48,6 @@ interface EstadoRuntime {
   imports: [
     CommonModule,
     FormsModule,
-    MatToolbarModule,
     MatIconModule,
     MatButtonModule,
     MatButtonToggleModule,
@@ -64,7 +62,6 @@ interface EstadoRuntime {
 })
 export class MusicaPage implements OnInit, OnDestroy {
   private readonly snack = inject(MatSnackBar);
-  private readonly location = inject(Location);
   private readonly zone = inject(NgZone);
 
   cargando = false;
@@ -139,10 +136,6 @@ export class MusicaPage implements OnInit, OnDestroy {
     } catch {
       this.enVivo = false;
     }
-  }
-
-  volver(): void {
-    this.location.back();
   }
 
   async refrescar(silencioso = false): Promise<void> {

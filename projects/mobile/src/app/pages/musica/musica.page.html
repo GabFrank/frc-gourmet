@@ -1,18 +1,8 @@
-<mat-toolbar color="primary" class="toolbar">
-  <button mat-icon-button (click)="volver()"><mat-icon>arrow_back</mat-icon></button>
-  <span>Música</span>
-  <span class="spacer"></span>
-  <button mat-icon-button [matMenuTriggerFor]="menu"><mat-icon>more_vert</mat-icon></button>
-  <mat-menu #menu="matMenu">
-    <button mat-menu-item (click)="refrescar()">
-      <mat-icon>refresh</mat-icon><span>Actualizar</span>
-    </button>
-    <button mat-menu-item (click)="regenerar()">
-      <mat-icon>auto_fix_high</mat-icon><span>Regenerar plan de hoy</span>
-    </button>
-  </mat-menu>
-</mat-toolbar>
-
+<!--
+  Sin toolbar propia: el shell de la PWA ya aporta título y navegación, y dos
+  barras apiladas comen ~56px de alto en un teléfono, justo donde más falta.
+  Las acciones viven en la fila de estado.
+-->
 <mat-progress-bar *ngIf="cargando" mode="indeterminate"></mat-progress-bar>
 
 <div class="contenido">
@@ -21,6 +11,18 @@
     <span class="en-vivo" *ngIf="enVivo" matTooltip="Los cambios llegan al instante">
       <mat-icon>bolt</mat-icon> en vivo
     </span>
+    <span class="spacer"></span>
+    <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+      <mat-icon>more_vert</mat-icon>
+    </button>
+    <mat-menu #menu="matMenu">
+      <button mat-menu-item (click)="refrescar()">
+        <mat-icon>refresh</mat-icon><span>Actualizar</span>
+      </button>
+      <button mat-menu-item (click)="regenerar()">
+        <mat-icon>auto_fix_high</mat-icon><span>Regenerar plan de hoy</span>
+      </button>
+    </mat-menu>
   </div>
 
   <div class="alerta" *ngIf="runtime?.ultimoError">
@@ -59,10 +61,10 @@
 
   <!-- Feedback: los dos botones -->
   <div class="feedback">
-    <button mat-stroked-button class="btn-no-va" (click)="noVa()">
+    <button mat-flat-button class="btn-no-va" (click)="noVa()">
       <mat-icon>thumb_down</mat-icon> No va
     </button>
-    <button mat-stroked-button class="btn-mas" (click)="meGusta()">
+    <button mat-flat-button class="btn-mas" (click)="meGusta()">
       <mat-icon>thumb_up</mat-icon> Más de esto
     </button>
   </div>

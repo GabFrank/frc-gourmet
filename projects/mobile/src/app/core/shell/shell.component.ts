@@ -7,8 +7,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { Observable } from 'rxjs';
-import { filter, map, shareReplay, startWith } from 'rxjs/operators';
+import { Observable, combineLatest, from, of } from 'rxjs';
+import { catchError, filter, map, shareReplay, startWith, switchMap } from 'rxjs/operators';
 import { AuthService, PermissionService, ThemeService, Usuario } from '@frc/shared-core';
 import { NAV_ITEMS, NavItem } from './nav';
 import { OfflineBannerComponent } from '../components/offline-banner.component';
@@ -50,11 +50,37 @@ export class ShellComponent implements OnInit {
   private loadedVersion = '';
   buscandoUpdate = false;
 
+  /**
+   * ¿El módulo de música sirve para algo ahora mismo? Exige `client_id` Y cuenta
+   * conectada: sin conexión la pantalla solo puede mostrar un error, y desde la
+   * PWA no se puede reconectar (la autorización abre el navegador en la PC del
+   * local). Ocultarlo es más honesto que ofrecer un destino roto.
+   *
+   * Si el handler falla (permiso o server viejo) se asume que no está
+   * disponible: ocultar de más es preferible a ofrecer algo que no funciona.
+   */
+  private readonly musicaDisponible$: Observable<boolean> = from(
+    Promise.resolve((window as any).api?.callIpc?.('musica-disponible') ?? null),
+  ).pipe(
+    map((r: any) => !!r?.configurado && !!r?.conectado),
+    catchError(() => of(false)),
+    startWith(false),
+    shareReplay(1),
+  );
+
   // Navegación filtrada por permisos: los destinos con `permisos` solo se
   // muestran si el usuario tiene al menos uno (Compras/Finanzas/RRHH).
-  readonly nav$: Observable<NavItem[]> = this.permissions.codigos$.pipe(
-    map((set) =>
-      NAV_ITEMS.filter((i) => !i.permisos || i.permisos.some((p) => set.has(p.toUpperCase()))),
+  // Música además exige que el local tenga Spotify configurado.
+  readonly nav$: Observable<NavItem[]> = combineLatest([
+    this.permissions.codigos$,
+    this.musicaDisponible$,
+  ]).pipe(
+    map(([set, hayMusica]) =>
+      NAV_ITEMS.filter((i) => {
+        if (i.permisos && !i.permisos.some((p) => set.has(p.toUpperCase()))) return false;
+        if (i.path === '/musica' && !hayMusica) return false;
+        return true;
+      }),
     ),
     shareReplay(1),
   );

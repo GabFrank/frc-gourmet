@@ -115,6 +115,21 @@ export function registerMusicaHandlers(
     };
   });
 
+  /**
+   * Chequeo liviano para la navegacion: si el local no configuro Spotify, el
+   * modulo no tiene nada que mostrar y el destino se oculta del menu. Devuelve
+   * solo booleanos — no expone client id ni estado de la cuenta.
+   */
+  ipcMain.handle('musica-disponible', async () => {
+    await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONTROLAR, PERM_CONFIGURAR]);
+    const { musica } = readAppSettings(userData());
+    return {
+      configurado: !!(musica.spotifyClientId || '').trim(),
+      conectado: await estaConectado(),
+      habilitado: !!musica.habilitado,
+    };
+  });
+
   ipcMain.handle(
     'musica-set-config',
     async (

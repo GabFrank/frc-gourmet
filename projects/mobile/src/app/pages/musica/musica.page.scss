@@ -24,16 +24,23 @@
 .chip-fila {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 10px;
+
+  .spacer {
+    flex: 1 1 auto;
+  }
 }
 
 .en-vivo {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
+  padding: 4px 10px;
+  border-radius: 12px;
   font-size: 11px;
-  color: #2e7d32;
+  font-weight: 600;
+  background: rgba(76, 175, 80, 0.22);
+  color: #a5d6a7;
 
   mat-icon {
     font-size: 14px;
@@ -42,26 +49,30 @@
   }
 }
 
+/**
+ * Los chips llevan FONDO, no solo borde: sobre el gris oscuro del tema, un
+ * texto de color sin fondo queda practicamente ilegible en un telefono a la luz
+ * del salon. Se usan tonos claros del color sobre un fondo tenue del mismo tono.
+ */
 .chip-estado {
-  align-self: center;
-  padding: 6px 16px;
+  padding: 6px 14px;
   border-radius: 16px;
   font-size: 12px;
   font-weight: 600;
-  border: 1px solid var(--border-color, rgba(128, 128, 128, 0.4));
-  color: var(--text-secondary, #888);
+  background: rgba(255, 255, 255, 0.08);
+  color: #e8e8e8;
 
   &.chip-ok {
-    color: #2e7d32;
-    border-color: #2e7d32;
+    background: rgba(76, 175, 80, 0.22);
+    color: #a5d6a7;
   }
   &.chip-warn {
-    color: #ef6c00;
-    border-color: #ef6c00;
+    background: rgba(255, 152, 0, 0.22);
+    color: #ffcc80;
   }
   &.chip-error {
-    color: #c62828;
-    border-color: #c62828;
+    background: rgba(244, 67, 54, 0.22);
+    color: #ef9a9a;
   }
 }
 
@@ -71,9 +82,12 @@
   gap: 8px;
   padding: 10px 12px;
   border-radius: 8px;
-  border: 1px solid #ef6c00;
-  color: #ef6c00;
+  background: rgba(255, 152, 0, 0.15);
+  border-left: 3px solid #ef6c00;
+  color: #ffcc80;
   font-size: 13px;
+  // El texto llega en MAYUSCULAS desde el backend y en un parrafo largo cansa.
+  text-transform: none;
 }
 
 .ahora {
@@ -127,7 +141,7 @@
 
   .relleno {
     height: 100%;
-    background: var(--primary-color, #3f51b5);
+    background: var(--primary-color, #d84315);
     transition: width 1s linear;
   }
 }
@@ -153,14 +167,16 @@
     font-size: 15px;
   }
 
+  // Fondo solido y texto blanco: son los dos botones que mas se usan, con el
+  // telefono en la mano y en un salon con luz calida.
   .btn-no-va {
-    color: #c62828;
-    border-color: #c62828;
+    background: #c62828;
+    color: #fff;
   }
 
   .btn-mas {
-    color: #2e7d32;
-    border-color: #2e7d32;
+    background: #2e7d32;
+    color: #fff;
   }
 }
 
@@ -179,6 +195,16 @@
 
   mat-button-toggle {
     flex: 1 1 0;
+  }
+
+  // Sin esto el seleccionado casi no se distingue de los otros dos.
+  ::ng-deep .mat-button-toggle-checked {
+    background: var(--primary-color, #d84315) !important;
+
+    .mat-button-toggle-label-content {
+      color: #fff !important;
+      font-weight: 600;
+    }
   }
 }
 

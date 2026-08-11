@@ -97,7 +97,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 
 Estas las debo respetar SIEMPRE, sin que el usuario las repita:
 
-1. **Nunca correr `npm start`** — el usuario lo corre manualmente. Para verificar compilación: `npm run build`.
+1. **El agente levanta y monitorea los servidores** (`npm start`, reinicios). Regla actualizada 2026-08-11: antes la corría el usuario, ahora no hace falta. Al relanzar, matar primero lo anterior — el Electron viejo **retiene el puerto 7070 del server Fastify** aunque se cierre la ventana (`lsof -ti:7070`). Para verificar sólo compilación sigue sirviendo `npm run build`.
 2. **Editar sólo `.ts`** — los `.js` y `.js.map` se autogeneran de TypeScript.
 3. **Strings en UPPERCASE en BD** — convertir en handlers o componentes antes de guardar.
 4. **No funciones en templates Angular** — pre-computar en propiedades, usar pipes para transformar. **Sin getters tampoco.**

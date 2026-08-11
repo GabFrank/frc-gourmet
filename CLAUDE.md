@@ -12,7 +12,7 @@ FRC Gourmet is a restaurant management app built with **Angular 15 + Electron 24
 
 ## Commands
 
-- **Dev (full app):** `npm start` — runs Angular dev server on port 4201 and Electron together. **The user runs this manually from their terminal; never run `npm start` from Claude Code.**
+- **Dev (full app):** `npm start` — runs Angular dev server on port 4201 and Electron together. **Claude Code can run and monitor it** (updated 2026-08-11; the old rule reserved this for the user). When relaunching, kill the previous instance first: the old Electron process keeps holding the Fastify server port (7070) even after the window closes — check with `lsof -ti:7070`.
 - **Check compilation:** `npm run build` — quick compile (Electron TS + Angular dev build)
 - **Strict pre-push check:** `npm run check` — AOT production build; catches template/type errors the dev build tolerates. Run before pushing.
 - **Angular only:** `npm run ng:serve` (port 4201)
