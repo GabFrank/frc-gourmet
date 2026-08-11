@@ -56,6 +56,12 @@ const BLOCKED_CHANNELS = new Set<string>([
   'app-mode-save',
   'app-mode-test-server',
 
+  // Musica: abren cosas EN LA PC DEL SERVIDOR (el navegador de autorizacion y
+  // la app de Spotify). Disparar eso desde un cliente remoto no tiene sentido y
+  // es superficie de sobra: se hacen desde el desktop del local.
+  'musica-conectar',
+  'musica-abrir-spotify',
+
   // Actualización / ciclo de vida del proceso servidor
   'auto-update:quit-and-install',
   'auto-update:check-now',

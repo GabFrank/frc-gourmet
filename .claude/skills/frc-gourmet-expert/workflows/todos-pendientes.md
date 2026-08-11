@@ -303,3 +303,23 @@ Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `proje
 ### Continuo (transversal)
 - Testing E2E (Producto→Receta→PdV→Venta→Stock; Compras contado/crédito; multi-moneda).
 - Probar margen/precio sugerido de receta con una receta con ingredientes (implementado, sin probar).
+
+### Música ambiental (branch `feat/musica-ambiental`)
+
+**Probado y funcionando** (2026-08-11, con Spotify y OpenAI reales): conexión y control del reproductor, brief → grilla semanal, descubrimiento con IA (427 temas en 3 rondas), generación del plan y **creación de las 15 playlists en Spotify**, con el planificador de F3 corriendo (`origen = IA`).
+
+**Sin probar todavía:**
+- **`Analizar temas` (ReccoBeats)** — el único paso que nunca se ejecutó. El cliente se escribió a ciegas porque su doc pública no publica el esquema de respuesta ni la base URL; es defensivo y la URL es configurable en *Opciones generales*. **Hasta que corra, `bpm`/`valencia` están vacíos y las tres variantes de energía salen casi iguales** (sólo cambia el orden).
+- **Runtime en horario real** — que el cambio de bloque dispare la playlist correcta.
+- **SSE a través del túnel Cloudflare** — funciona en localhost; falta ver si un proxy bufferea el stream.
+- **Reacción al salón** — necesita mesas ocupadas y ventas reales.
+
+**Ajustes de UX pendientes:**
+- El toggle *"Permitir explícitos"* está en Programación → Opciones generales, pero **el filtro actúa en el descubrimiento**: hay que moverlo o duplicarlo junto a ese botón.
+- Al aplicar la programación, **la propuesta desaparece** sin poder copiarla.
+- Si la importación de una semilla falla, **la semilla queda creada con 0 temas** y "Reimportar todo" la reintenta cada vez. Debería revertirse.
+- Tamaños de inputs y espaciados en general (el dueño marcó que hay varios).
+
+**Notas de operación:**
+- **La música paraguaya no aparece por descubrimiento**: el modelo no conoce bien esa escena. Se siembra con **semillas de artista** (Kchiporros, Tierra Adentro) — los links de artista funcionan desde cualquier cuenta, a diferencia de las playlists ajenas.
+- En desarrollo las playlists `FRC · …` se crean en la **cuenta personal** conectada, no en la del local.

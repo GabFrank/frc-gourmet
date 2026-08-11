@@ -28,6 +28,7 @@ import { registerAuthRoutes } from './auth-routes';
 import { registerDeviceAuthRoutes } from './device-auth-routes';
 import { registerFileRoutes } from './file-routes';
 import { registerKdsSseRoutes } from './kds-sse-routes';
+import { registerMusicaSseRoutes } from './musica-sse-routes';
 import { registerPublicRoutes } from './public-routes';
 import { registerQrUploadRoutes } from './qr-upload-routes';
 import { registerAuthPlugin } from './auth-middleware';
@@ -144,6 +145,7 @@ async function buildInstance(
 
   // KDS: stream SSE para pantallas web en tiempo real (auth por token en query)
   registerKdsSseRoutes(fastify);
+  registerMusicaSseRoutes(fastify);
 
   // Pedidos online: namespace público `/pub/*` con whitelist + JWT de cliente.
   // Separado de `/api/rpc` (staff). Se registra ANTES del static/SPA fallback

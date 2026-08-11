@@ -787,6 +787,15 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/ventas/resumen/ventas-resumen.page').then((m) => m.VentasResumenPage),
       },
       // --- Reportes de cierre de mes ---
+      // Musica ambiental: el control principal del modulo vive aca, no en el
+      // desktop — el PC del PdV esta ocupado cobrando y el encargado escucha
+      // como suena caminando por el salon.
+      {
+        path: 'musica',
+        canActivate: [permisoGuard],
+        data: { title: 'Música', permiso: 'MUSICA_VER' },
+        loadComponent: () => import('./pages/musica/musica.page').then((m) => m.MusicaPage),
+      },
       {
         path: 'reportes',
         pathMatch: 'full',

@@ -96,6 +96,15 @@ function storeTokens(access: string | null, refresh: string | null): void {
  * device grant). Actualiza el cache en memoria y localStorage para que los
  * siguientes requests viajen autenticados sin recargar.
  */
+/**
+ * Base efectiva hacia el server (LAN-directa si fue detectada, si no el origen).
+ * La expone para quien no pasa por `window.api`, como el `EventSource` de los
+ * streams SSE, que arma su URL a mano.
+ */
+export function getApiBase(): string {
+  return currentBase();
+}
+
 export function setSessionTokens(access: string | null, refresh: string | null): void {
   storeTokens(access, refresh);
 }

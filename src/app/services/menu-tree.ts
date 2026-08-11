@@ -4,6 +4,7 @@ import { BuffetDashboardComponent } from 'src/app/pages/ventas/buffet-dashboard/
 import { ComprasDashboardComponent } from 'src/app/pages/compras/dashboard/compras-dashboard.component';
 import { ConfiguracionFacialComponent } from 'src/app/pages/rrhh/configuracion-facial/configuracion-facial.component';
 import { ConfiguracionNotificacionesComponent } from 'src/app/pages/configuracion/notificaciones/configuracion-notificaciones.component';
+import { MusicaComponent } from 'src/app/pages/configuracion/musica/musica.component';
 import { ConfigurarEmpresaComponent } from 'src/app/pages/sistema/configurar-empresa/configurar-empresa.component';
 import { DbConfigComponent } from 'src/app/pages/configuracion/db-config/db-config.component';
 import { FacturacionConfigComponent } from 'src/app/pages/facturacion/config/facturacion-config.component';
@@ -501,6 +502,9 @@ export const MENU_TREE: MenuNode[] = [
       { id: 'configuracion-notificaciones', label: 'Notificaciones', icon: 'notifications_active', permiso: 'NOTIFICACIONES_CONFIGURAR', esConfig: true,
         keywords: ['notificaciones', 'config'],
         action: { component: ConfiguracionNotificacionesComponent, title: 'Notificaciones', tabId: 'configuracion-notificaciones-tab', data: NAV } },
+      { id: 'musica', label: 'Música ambiental', icon: 'music_note', permiso: 'MUSICA_VER', esConfig: true,
+        keywords: ['musica', 'spotify', 'ambiental', 'playlist', 'sonido'],
+        action: { component: MusicaComponent, title: 'Música ambiental', tabId: 'musica-tab', data: NAV } },
       { id: 'backup-restore', label: 'Backup y Restauración', icon: 'backup', permiso: 'SISTEMA_BACKUP', esConfig: true,
         keywords: ['backup', 'restauracion', 'respaldo'],
         action: { component: BackupRestoreComponent, title: 'Backup y Restauración', tabId: 'backup-restore-tab', data: NAV } },

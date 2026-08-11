@@ -109,6 +109,63 @@ export interface IaSettings {
   // openaiApiKey persiste en keytar, NO en este JSON.
 }
 
+export interface MusicaSettings {
+  /** Client ID de la app de Spotify del local (cada local crea la suya). */
+  spotifyClientId: string;
+  /**
+   * Puerto del listener loopback que recibe el callback de OAuth. Spotify sólo
+   * acepta http:// en loopback con IP explícita, así que el redirect URI es
+   * `http://127.0.0.1:<puerto>/callback` y debe estar cargado igual en el
+   * dashboard de Spotify.
+   */
+  redirectPort: number;
+  /** Device de Spotify Connect elegido como salida de audio del local. */
+  deviceId?: string | null;
+  deviceNombre?: string | null;
+  habilitado: boolean;
+  /**
+   * Lo que descubre la IA entra directo al repertorio en vez de esperar
+   * aprobación. Default true: el dueño recurrió a la app justamente porque no
+   * tiene tiempo de curar, así que el modelo es corregir por sustracción
+   * ("no va") y no aprobar de a uno.
+   */
+  autoAprobarDescubrimientos?: boolean;
+  /** Texto libre del dueño sobre el local. Va literal al prompt (F1.5). */
+  brief?: string;
+  /**
+   * Ajustes finos del generador y del descubridor. Estaban hardcodeados; se
+   * exponen porque el valor correcto depende del local y del estilo musical.
+   * Cada bloque puede sobreescribir los que le apliquen.
+   */
+  avanzado?: MusicaAvanzado;
+}
+
+export interface MusicaAvanzado {
+  /** Tope de temas por artista cuando el bloque no define el suyo. */
+  maxPorArtistaDefault: number;
+  /** Días que un tema no se repite. */
+  ventanaAntirepeticionDias: number;
+  /** Cuánto más larga que el bloque se genera la playlist. */
+  factorDuracion: number;
+  /** Desplazamiento de BPM entre variantes (suave −delta, movido +delta). */
+  deltaBpmVariante: number;
+  /** Descarta intros, skits y sets largos que no sirven de fondo. */
+  duracionMinSeg: number;
+  duracionMaxSeg: number;
+  /** Cuántos temas pide la IA por ronda de descubrimiento. */
+  candidatosPorRonda: number;
+  /** Si se aceptan temas marcados como explícitos por Spotify. */
+  permitirExplicit: boolean;
+  /**
+   * Base de la API de ReccoBeats (reemplazo del `audio-features` que Spotify
+   * apagó). Configurable porque su documentación pública no fija la URL ni el
+   * esquema: si cambia, se corrige acá sin recompilar.
+   */
+  reccobeatsUrl?: string;
+  // El refresh token persiste en keytar, NO en este JSON.
+  // PKCE no usa client_secret: no se guarda en ningún lado.
+}
+
 export interface AppSettings {
   mode: AppMode;
   database: DatabaseSettings;
@@ -116,6 +173,7 @@ export interface AppSettings {
   update: UpdateSettings;
   backup: BackupSettings;
   ia: IaSettings;
+  musica: MusicaSettings;
   /**
    * F5 paso 3: dispositivo "fisico" identificado para este proceso.
    * - standalone/server: el PC donde corre la app (selección manual).
@@ -149,6 +207,26 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   ia: {
     modelo: 'gpt-4o',
     habilitado: false,
+  },
+  musica: {
+    spotifyClientId: '',
+    redirectPort: 8888,
+    deviceId: null,
+    deviceNombre: null,
+    habilitado: false,
+    autoAprobarDescubrimientos: true,
+    brief: '',
+    avanzado: {
+      maxPorArtistaDefault: 2,
+      ventanaAntirepeticionDias: 3,
+      factorDuracion: 1.5,
+      deltaBpmVariante: 12,
+      duracionMinSeg: 60,
+      duracionMaxSeg: 600,
+      candidatosPorRonda: 40,
+      permitirExplicit: false,
+      reccobeatsUrl: 'https://api.reccobeats.com/v1',
+    },
   },
   deviceId: null,
   timezone: 'America/Asuncion',

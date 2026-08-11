@@ -1,13 +1,17 @@
 import { FastifyInstance } from 'fastify';
 import { comandaEvents, ComandaEventPayload } from '../utils/comanda-events.utils';
+import { consumirStreamToken } from '../utils/stream-token.utils';
 
 /**
  * KDS Fase 3 — stream SSE para pantallas web (Google TV / tablet) en modo
  * servidor. Las pantallas se conectan a `GET /api/kds/stream` y reciben cada
  * cambio de ComandaItem en tiempo real sin polling.
  *
- * Auth: como `EventSource` del navegador no permite mandar headers, el JWT va
- * por query (`?token=...`). Se verifica con el mismo secreto que el resto.
+ * Auth: como `EventSource` del navegador no permite mandar headers, el token va
+ * por query (`?token=...`). Es un **token efimero de un solo uso** emitido por
+ * el RPC `stream-token`, NO el JWT de sesion: la query queda en logs de acceso,
+ * historial y proxies, y un token de sesion sirve para todo el /api/rpc.
+ * Ver `electron/utils/stream-token.utils.ts`.
  *
  * Filtro opcional por sectores: `?sectores=1,3` → solo eventos de esos sectores
  * (los que no traen sectorId, ej. algunos cancelados, se dejan pasar).
@@ -19,12 +23,10 @@ export function registerKdsSseRoutes(fastify: FastifyInstance): void {
   fastify.get('/api/kds/stream', async (request, reply) => {
     const q = request.query as any;
 
-    // Auth por token en query (EventSource no manda Authorization header).
-    const token = (q?.token || '').toString();
-    try {
-      if (!token) throw new Error('sin token');
-      (fastify as any).jwt.verify(token);
-    } catch {
+    // Auth por token efimero en query (EventSource no manda headers).
+    const verificacion = await consumirStreamToken((q?.token || '').toString(), 'kds');
+    if (!verificacion.ok) {
+      console.warn('[kds-sse] conexion rechazada:', verificacion.motivo);
       reply.code(401).send({ error: 'unauthorized' });
       return;
     }
