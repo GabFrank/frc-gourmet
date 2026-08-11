@@ -24,6 +24,7 @@ import { MusicaTrack } from '../../src/app/database/entities/musica/musica-track
 import { EstadoTrack } from '../../src/app/database/entities/musica/musica-enums';
 import { readIaConfig } from '../utils/ia-config.utils';
 import { readAppSettings } from '../utils/app-settings.utils';
+import { MusicaEstilo } from '../../src/app/database/entities/musica/musica-estilo.entity';
 
 const RECCOBEATS_BASE_DEFAULT = 'https://api.reccobeats.com/v1';
 /** Ids por request al pedir el mapeo spotify → reccobeats. */
@@ -41,6 +42,8 @@ export interface ResultadoEnriquecimiento {
 export interface ResultadoEtiquetado {
   procesados: number;
   etiquetados: number;
+  /** Cuantos recibieron estilo del modelo por no tenerlo de otra fuente. */
+  estilosAsignados: number;
   errores: string[];
 }
 
@@ -209,11 +212,13 @@ export async function etiquetarTracks(
   const pendientes = await repo.find({
     where: { etiquetado: false, estado: EstadoTrack.APROBADO },
     take: limite,
+    relations: ['estilo'],
   });
 
   const resultado: ResultadoEtiquetado = {
     procesados: pendientes.length,
     etiquetados: 0,
+    estilosAsignados: 0,
     errores: [],
   };
   if (pendientes.length === 0) return resultado;
@@ -222,6 +227,13 @@ export async function etiquetarTracks(
   if (!ia.openaiApiKey) {
     throw new Error('FALTA LA API KEY DE IA. CARGALA EN CONFIGURACION → CONFIGURAR IA.');
   }
+
+  // Ultimo escalon de la cascada de clasificacion: lo que no resolvieron
+  // Spotify, MusicBrainz ni la herencia por artista, lo decide el modelo — pero
+  // eligiendo de la lista cerrada del local, nunca inventando.
+  const catalogo = await dataSource.getRepository(MusicaEstilo).find({ where: { activo: true } });
+  const estilosDisponibles = catalogo.map((e) => e.nombre);
+  const estiloPorNombre = new Map(catalogo.map((e) => [e.nombre.toUpperCase(), e]));
 
   for (let i = 0; i < pendientes.length; i += LOTE_ETIQUETADO) {
     const lote = pendientes.slice(i, i + LOTE_ETIQUETADO);
@@ -240,11 +252,21 @@ export async function etiquetarTracks(
       '- aptoFamiliar: false si tiene contenido sexual, vulgar o de doble sentido, aunque no',
       '  esté marcada como explícita. true en caso contrario.',
       '- idioma: código ISO de 2 letras ("es", "pt", "en", "instrumental" si no tiene letra).',
+      // El estilo se elige de una lista CERRADA. Antes el modelo inventaba
+      // nombres ("BOSSA N' ROSES", "ELECTRÓNICA SUNSET") que no existian en
+      // ningun tema, y por eso la configuracion por genero no tenia efecto.
+      ...(estilosDisponibles.length
+        ? [
+            '- estilo: elegí EXACTAMENTE UNO de esta lista, tal cual está escrito.',
+            `  No inventes nombres nuevos. Si ninguno encaja, devolvé "".`,
+            `  LISTA: ${estilosDisponibles.join(' | ')}`,
+          ]
+        : []),
       '',
       'CANCIONES:',
       listado,
       '',
-      'Devolvé SOLO JSON: {"tracks":[{"n":1,"escenas":[],"ambiente":"","familiaridad":"","aptoFamiliar":true,"idioma":""}]}',
+      'Devolvé SOLO JSON: {"tracks":[{"n":1,"escenas":[],"ambiente":"","familiaridad":"","aptoFamiliar":true,"idioma":"","estilo":""}]}',
     ].join('\n');
 
     try {
@@ -281,6 +303,17 @@ export async function etiquetarTracks(
         track.aptoFamiliar = fila.aptoFamiliar !== false;
         track.idioma = fila.idioma || undefined;
         track.etiquetado = true;
+
+        // Solo si nadie lo clasifico antes: Spotify y MusicBrainz son dato duro
+        // y el modelo es la ultima opcion, no la primera. `estiloFijado` protege
+        // ademas lo que el dueno corrigio a mano.
+        if (!track.estilo && !track.estiloFijado && fila.estilo) {
+          const elegido = estiloPorNombre.get(String(fila.estilo).toUpperCase());
+          if (elegido) {
+            track.estilo = elegido;
+            resultado.estilosAsignados++;
+          }
+        }
         // El etiquetado es tambien un filtro de contenido: lo que el modelo
         // marca como no apto sale del repertorio sin pasar por el dueno.
         if (fila.aptoFamiliar === false) track.estado = EstadoTrack.VETADO;

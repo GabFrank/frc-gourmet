@@ -1,0 +1,137 @@
+/**
+ * Variables locales: este proyecto no tiene paleta global de custom properties,
+ * cada componente declara las suyas con su bloque dark.
+ */
+:host {
+  --mz-texto: #333333;
+  --mz-suave: #666666;
+  --mz-borde: #e0e0e0;
+  --mz-fila-alt: rgba(0, 0, 0, 0.03);
+}
+
+:host-context(.dark-theme),
+:host-context([data-theme='dark']) {
+  --mz-texto: #ffffff;
+  --mz-suave: #cccccc;
+  --mz-borde: rgba(255, 255, 255, 0.12);
+  --mz-fila-alt: rgba(255, 255, 255, 0.04);
+}
+@media (prefers-color-scheme: dark) {
+  :host {
+    --mz-texto: #ffffff;
+    --mz-suave: #cccccc;
+    --mz-borde: rgba(255, 255, 255, 0.12);
+    --mz-fila-alt: rgba(255, 255, 255, 0.04);
+  }
+}
+
+.cargando {
+  display: flex;
+  justify-content: center;
+  padding: 32px;
+}
+
+.intro {
+  font-size: 13px;
+  color: var(--mz-suave);
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+
+  th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--mz-suave);
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--mz-borde);
+  }
+
+  td {
+    padding: 7px 8px;
+    border-bottom: 1px solid var(--mz-borde);
+    color: var(--mz-texto);
+  }
+
+  tr:nth-child(even) td {
+    background: var(--mz-fila-alt);
+  }
+
+  .num {
+    text-align: right;
+  }
+
+  .suave {
+    color: var(--mz-suave);
+    font-size: 12px;
+  }
+}
+
+.pct {
+  width: 62px;
+  padding: 5px 7px;
+  text-align: right;
+  border: 1px solid var(--mz-borde);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--mz-texto);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+
+  &:focus {
+    outline: none;
+    border-color: #f57c00;
+  }
+}
+
+.falta {
+  color: #ffb74d;
+  font-weight: 600;
+}
+
+.alcanza mat-icon {
+  color: #66bb6a;
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.resumen {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--mz-fila-alt);
+  font-size: 13px;
+  color: var(--mz-texto);
+
+  &.error {
+    background: rgba(244, 67, 54, 0.16);
+  }
+
+  mat-icon {
+    font-size: 17px;
+    width: 17px;
+    height: 17px;
+    vertical-align: middle;
+  }
+}
+
+.msg-error {
+  color: #ef9a9a;
+  font-weight: 600;
+}
+
+.msg-falta {
+  color: #ffcc80;
+}

@@ -4055,4 +4055,16 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('comanda-item-updates', listener);
   },
 
+  /**
+   * Musica: suscribe al canal `musica-events` (emitido desde
+   * `electron/utils/musica-events.utils.ts`). Devuelve función para desuscribir.
+   * El canal ya existía para alimentar el SSE de la PWA; esto lo hace llegar
+   * también al header del desktop, que así se entera de los cambios sin poll.
+   */
+  onMusicaEvent: (handler: (payload: any) => void): (() => void) => {
+    const listener = (_event: any, data: any) => handler(data);
+    ipcRenderer.on('musica-events', listener);
+    return () => ipcRenderer.removeListener('musica-events', listener);
+  },
+
 });

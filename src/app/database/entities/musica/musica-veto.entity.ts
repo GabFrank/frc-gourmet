@@ -1,6 +1,7 @@
-import { Column, Entity, Index } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import { TipoVeto } from './musica-enums';
+import { MusicaEstilo } from './musica-estilo.entity';
 
 /**
  * Lo que NO puede sonar. Es mas facil de expresar para el dueno que lo que si,
@@ -21,6 +22,15 @@ export class MusicaVeto extends BaseModel {
   @Index()
   @Column()
   valor!: string;
+
+  /**
+   * Estilo vetado cuando `tipo = ESTILO`. Reemplaza a la comparacion de strings
+   * de `tipo = GENERO`, que vetaba de mas por usar `includes()`.
+   */
+  @Index()
+  @ManyToOne(() => MusicaEstilo, { nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'estilo_id' })
+  estilo?: MusicaEstilo | null;
 
   /** Nombre legible para la UI. */
   @Column({ nullable: true })

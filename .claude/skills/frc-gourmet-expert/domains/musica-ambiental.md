@@ -52,6 +52,8 @@ Es el corazón del módulo. Como Spotify ya no recomienda, **el criterio musical
 
 | Archivo | Rol |
 |---|---|
+| `electron/services/musica-estilos.service.ts` | Catálogo canónico, alias, reclasificación, mezcla por bloque y cálculo de déficit |
+| `electron/services/musicbrainz.service.ts` | Género por ISRC (género de grabación, no de artista) |
 | `electron/services/spotify.service.ts` | OAuth PKCE, listener loopback, refresh con rotación, wrapper de API con reintento en 401 y `Retry-After` en 429, operaciones de player |
 | `electron/services/musica-pool.service.ts` | Importa semillas (playlist/artista/track/biblioteca) al repertorio |
 | `electron/services/musica-descubrimiento.service.ts` | Prompt + OpenAI + resolución en Spotify + filtros. También `rechazarTrack` |
@@ -67,13 +69,14 @@ Es el corazón del módulo. Como Spotify ya no recomienda, **el criterio musical
 | `electron/handlers/musica.handler.ts` | ~30 handlers, todos con `ensurePermission` |
 | `electron/utils/musica-presets.ts` | Preset `RESTAURANTE_BAR` (grilla semanal completa + vetos) |
 | `electron/utils/musica-secrets.util.ts` | Refresh token en keytar |
-| `src/app/pages/configuracion/musica/` | 4 pestañas: Reproductor · Mi estilo · Repertorio · Programación |
+| `src/app/pages/configuracion/musica/` | 5 pestañas: Reproductor · Mi estilo · Repertorio · **Estilos** · Programación |
+| `src/app/shared/components/musica-control-dialog/` | Control rápido desde el header del PdV (gemelo del de la PWA) |
 | `projects/mobile/src/app/pages/musica/` | Control principal en la PWA |
 | `src/app/database/entities/musica/` | 8 entidades |
 
-**Entidades:** `MusicaSemilla`, `MusicaTrack`, `MusicaVeto`, `BloqueProgramacion`, `PlanProgramacion`, `PlanBloque`, `TrackLog`, `MusicaFeedback`.
+**Entidades:** `MusicaSemilla`, `MusicaTrack`, `MusicaVeto`, `BloqueProgramacion`, `PlanProgramacion`, `PlanBloque`, `TrackLog`, `MusicaFeedback`, `MusicaEstilo`, `MusicaEstiloAlias`, `BloqueEstiloMezcla`.
 
-**Migraciones:** `1786378422682-MusicaAmbiental` (8 tablas), `1786383979096-MusicaOpcionesAvanzadas` (opciones por bloque).
+**Migraciones:** `1786378422682-MusicaAmbiental` (8 tablas), `1786383979096-MusicaOpcionesAvanzadas` (opciones por bloque), `1786475808081-MusicaCatalogoEstilos` (catálogo, alias, mezcla + columnas en tracks y vetos).
 
 **Permisos:** `MUSICA_VER` (mozos) · `MUSICA_CONTROLAR` (cajero/gerente/admin: controlan y votan) · `MUSICA_CONFIGURAR` (gerente/admin).
 
@@ -112,6 +115,52 @@ HMAC-SHA256 sobre el secreto de keytar, comparación en tiempo constante. Se pid
 
 **Ojo con proxies:** SSE se rompe si algo bufferea la respuesta. Va `X-Accel-Buffering: no` y heartbeat de 25 s, pero **falta probarlo a través del túnel Cloudflare** — en localhost siempre funciona.
 
+## 3.bis Catálogo de estilos (F4) — el vocabulario único
+
+**El problema que resuelve.** El módulo tenía **cuatro vocabularios que no se hablaban**:
+
+| Quién | Vocabulario | Origen |
+|---|---|---|
+| Los temas | `MPB`, `ELECTRÓNICA`, `ELECTRONIC`… (59 valores) | Spotify, géneros **de artista** |
+| La grilla | `BOSSA N' ROSES`, `ELECTRÓNICA SUNSET` | inventado por el LLM al leer el brief |
+| Los vetos | strings sueltos comparados con `includes()` | manual |
+| El descubrimiento | los de la grilla | — |
+
+Dos consecuencias verificadas contra la base real:
+
+1. **`generosPreferidos` del bloque NUNCA se leyó en el planner.** Configurar "almuerzo: bossa" no tenía ningún efecto sobre lo que sonaba — la playlist se armaba solo por BPM + valencia + score + azar. Y aunque se leyera, no habría matcheado: los nombres de la grilla tenían **cero temas** cada uno.
+2. **El veto por género vetaba de más**: `FUNK` mataba al funk americano por culpa de `FUNK BRASILEIRO`.
+
+**El modelo.**
+
+| Tabla | Rol |
+|---|---|
+| `musica_estilos` | vocabulario canónico del local (nombre único) |
+| `musica_estilo_alias` | **capa anticorrupción**: género crudo normalizado → estilo, con **UNIQUE en `valor`** |
+| `musica_bloque_estilo_mezcla` | `(bloque, estilo, porcentaje)` — la receta de cada bloque |
+| `musica_tracks.estilo_id` + `estiloFijado` | estilo resuelto y **persistido**; `estiloFijado` protege la curación manual |
+| `musica_vetos.estilo_id` + `TipoVeto.ESTILO` | veto por id, sin ambigüedad de strings |
+
+El UNIQUE en `alias.valor` es la pieza clave: hace **imposible** que un género crudo apunte a dos estilos, que es como se degradan estas tablas sin restricción.
+
+**Cascada de clasificación**, en orden de precisión y costo:
+
+```
+1. Spotify /artists/{id}   → género de ARTISTA     gratis, grueso
+2. MusicBrainz por ISRC    → género de GRABACIÓN   1 req/seg, preciso
+3. Alias                   → traduce al catálogo   gratis
+4. Herencia por artista    → gratis, determinista
+5. LLM (en el etiquetado)  → elige de la lista CERRADA, nunca inventa
+```
+
+**Cuotas en el planner.** `seleccionarTracks` reparte por estilo **intercalando**: en cada paso toma de la cuota más atrasada respecto de su objetivo. Llenar cubeta por cubeta daría media hora de bossa seguida y después media hora de pagode — dos playlists pegadas. Cuando una cuota se queda sin material, reparte el hueco y lo reporta en `cuotasIncumplidas`.
+
+**Los porcentajes no tienen que sumar 100.** Lo que falte se completa con el resto del repertorio. Sumar menos es una forma válida de decir "quiero bossa y pagode, el resto me da igual".
+
+**Déficit.** `calcularDeficit()` devuelve, por bloque y estilo, cuánta música pide la cuota contra cuánta hay. Es lo que evita pedir 50% de bossa teniendo 7 temas y que la playlist repita los mismos siete toda la tarde.
+
+**Por qué no Chosic ni Every Noise At Once:** ninguno tiene API pública. Every Noise quedó congelado cuando su autor dejó Spotify a fines de 2023. Consumirlos sería scraping — frágil, contra sus términos, y deuda de mantenimiento en un sistema que corre solo en el local.
+
 ## 4. Gotchas
 
 1. **El pool es portable, las playlists no.** Los `spotifyId` son universales: lo importado con una cuenta sirve con otra. Pero las playlists `FRC · …` se crean en la cuenta conectada — en desarrollo con cuenta personal, aparecen ahí.
@@ -125,6 +174,12 @@ HMAC-SHA256 sobre el secreto de keytar, comparación en tiempo constante. Se pid
 9. **Hasta correr "Analizar temas", BPM/valencia están vacíos** y los filtros de perfil dejan pasar lo que no tiene el dato: las tres variantes salen parecidas. El aviso está en la UI, pero es la causa #1 de "no distingue el almuerzo de la noche".
 10. **`migration:generate` no sirve en este repo**: el DataSource del CLI apunta a una SQLite vacía y genera el esquema completo (2000+ líneas). Además falla salvo con `TS_NODE_COMPILER_OPTIONS='{"module":"commonjs"}'`. Las migraciones de este módulo se escribieron a mano.
 11. **SQLite no soporta `IF NOT EXISTS` en `ADD COLUMN`**: la migración de opciones avanzadas consulta el esquema con `getTable()` antes de agregar cada columna.
+12. **Spotify NO expone género por tema.** El género que declara el sello al publicar se queda en la distribuidora; los endpoints de track no tienen campo de género. Lo único disponible es `genres` del **artista**, que además viene **vacío** para artistas con poca data — típicamente los regionales. Por eso 142 de 427 temas quedaron sin clasificar. La respuesta es MusicBrainz por ISRC, que sí da género de grabación.
+13. **`GET /artists?ids=` devuelve 403 para esta app** (verificado: los 3 lotes fallaron con credenciales válidas), mientras que `/artists/{id}` individual funciona. El backfill intenta el lote y cae a uno por uno.
+14. **`relations: ['estilo']` no es opcional.** `repo.find()` sin él deja `t.estilo` en `undefined` en TODOS los temas: la herencia por artista hereda cero y el planner manda todo el pool a la cubeta "(resto)". Costó dos bugs.
+15. **MusicBrainz exige `User-Agent` identificable** con forma de contacto, y bloquea a quien no lo manda. Límite de cortesía: 1 request/segundo; pasarse devuelve 503 y termina en bloqueo de IP.
+16. **El etiquetado con LLM VETA temas solo.** `aptoFamiliar === false` pone el tema en `VETADO` sin pasar por el dueño. El modelo juzga con título + artista + género, **sin la letra**. Medido: 6,9% en inglés, 7,8% en portugués, 5% en español — sin sesgo cultural, pero 19 de 21 no estaban marcados como explícitos por Spotify.
+17. **El listener loopback del OAuth hay que cancelarlo a mano.** Espera hasta `OAUTH_TIMEOUT_MS` (3 min) y nada más lo cierra: abandonar el flujo dejaba el puerto tomado **por la propia app**, y el reintento moría con `EADDRINUSE` mostrando un error que culpaba a otro programa. Hoy `cancelarConexionSpotify()` lo aborta, lo llaman el `ngOnDestroy` de la pantalla y el propio `conectarSpotify()` antes de bindear. Ojo: `server.close()` **no** basta si hay conexiones abiertas — va con `closeAllConnections()`, y la respuesta HTML se termina de mandar antes de cortar el socket.
 
 ---
 
@@ -148,5 +203,15 @@ HMAC-SHA256 sobre el secreto de keytar, comparación en tiempo constante. Se pid
 
 **Pendiente:**
 - **Dashboard música ↔ ventas** por bloque (los datos ya se registran en `TrackLog`).
-- **Validar ReccoBeats contra la API real**: su doc pública no fija esquema ni base URL, así que el cliente es defensivo pero **no se ejecutó ni una vez**. Hasta entonces `bpm`/`valencia` están vacíos y las tres variantes de energía salen casi iguales.
+- **ReccoBeats YA se ejecutó contra la API real (2026-08-11)**: funcionó. Cobertura 234 de 300 procesados (78%); el resto no está en su base. Datos sanos: BPM 75–200, energía 0.13–0.98, valencia 0.04–0.97.
+- **Los rangos de BPM de la grilla están mal calibrados.** Los escribió el LLM al interpretar el brief con una intuición equivocada: SOBREMESA pide 50–70 BPM y **el repertorio no tiene NADA por debajo de 75**. La bossa nova real mide 91–144 (promedio 117). Ese bloque cae siempre en modo relajado y su perfil nunca muerde. Corregir con los datos reales, no con intuición.
 - **Sembrar la música local con semillas de ARTISTA**: el modelo no conoce la escena paraguaya y no la propone aunque el brief la nombre.
+
+---
+
+## 6. Tests
+
+| Comando | Qué cubre |
+|---|---|
+| `npm run test:musica-estilos` | Normalización de géneros, siembra idempotente, `estiloFijado`, validación de mezcla, cálculo de déficit, medianoche como fin de bloque. Corre migraciones sobre SQLite limpia |
+| `npm run test:musica-cuotas` | El algoritmo de cuotas: proporciones, **intercalado** (que la bossa no salga toda junta), cuota sin material, límite por artista, sin repetidos. Función pura, sin red ni base |

@@ -342,6 +342,11 @@ async function resolverEnSpotify(
  */
 const cacheGenerosArtista = new Map<string, string[]>();
 
+/** Rechazos del mismo artista que disparan la sugerencia de vetarlo entero. */
+const RECHAZOS_PARA_SUGERIR_VETO = 3;
+/** Ventana del conteo: un "no va" de hace medio ano no deberia pesar hoy. */
+const DIAS_VENTANA_RECHAZOS = 30;
+
 async function generosDelArtista(userDataPath: string, artistaId?: string): Promise<string[]> {
   if (!artistaId) return [];
   const cacheado = cacheGenerosArtista.get(artistaId);
@@ -499,7 +504,16 @@ export async function rechazarTrack(
   dataSource: DataSource,
   spotifyId: string,
   opts?: { tambienArtista?: boolean; bloqueId?: number },
-): Promise<{ success: boolean; artistaVetado: boolean }> {
+): Promise<{
+  success: boolean;
+  artistaVetado: boolean;
+  /** Cuantas veces se rechazo a este artista en la ventana. */
+  rechazosDelArtista: number;
+  /** true = mostrar "¿sacamos a X del todo?". La decision la toma el usuario. */
+  sugerirVetarArtista: boolean;
+  artistaId?: string;
+  artistaNombre?: string;
+}> {
   const trackRepo = dataSource.getRepository(MusicaTrack);
   const vetoRepo = dataSource.getRepository(MusicaVeto);
   const feedbackRepo = dataSource.getRepository(MusicaFeedback);
@@ -521,6 +535,26 @@ export async function rechazarTrack(
       fecha: new Date(),
     }),
   );
+
+  // Conteo de rechazos del artista. Estaba documentado desde F1 ("tres 'No va'
+  // al mismo artista generan un veto") pero NUNCA se implemento: el feedback se
+  // guardaba y nadie lo leia. Ahora se cuenta, y al llegar al umbral se DEVUELVE
+  // la sugerencia en vez de vetar solo: sacar un artista entero del repertorio
+  // por tres clicks de un cajero apurado es dificil de deshacer si nadie mira.
+  let rechazosDelArtista = 0;
+  let sugerirVetarArtista = false;
+  if (track.artistaId) {
+    const desde = new Date();
+    desde.setDate(desde.getDate() - DIAS_VENTANA_RECHAZOS);
+    rechazosDelArtista = await feedbackRepo
+      .createQueryBuilder('f')
+      .where('f.artistaId = :id', { id: track.artistaId })
+      .andWhere('f.tipo = :tipo', { tipo: TipoFeedback.NO_VA })
+      .andWhere('f.fecha >= :desde', { desde })
+      .getCount();
+    sugerirVetarArtista =
+      !opts?.tambienArtista && rechazosDelArtista >= RECHAZOS_PARA_SUGERIR_VETO;
+  }
 
   let artistaVetado = false;
   if (opts?.tambienArtista && track.artistaId) {
@@ -549,5 +583,12 @@ export async function rechazarTrack(
     artistaVetado = true;
   }
 
-  return { success: true, artistaVetado };
+  return {
+    success: true,
+    artistaVetado,
+    rechazosDelArtista,
+    sugerirVetarArtista,
+    artistaId: track.artistaId,
+    artistaNombre: track.artista,
+  };
 }

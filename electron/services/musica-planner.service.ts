@@ -28,6 +28,7 @@ import {
 import { spotifyApi } from './spotify.service';
 import { readAppSettings } from '../utils/app-settings.utils';
 import { planificarDia, aplicarAjustes } from './musica-agente.service';
+import { getMezcla } from './musica-estilos.service';
 
 /**
  * Valores por defecto. Todos son configurables desde la UI (globalmente en
@@ -109,7 +110,10 @@ function perfilDeVariante(
 
 interface Vetos {
   artistas: Set<string>;
+  /** Heredados (`tipo = GENERO`): comparacion de texto, heuristica. */
   generos: Set<string>;
+  /** Ids del catalogo (`tipo = ESTILO`): comparacion exacta. */
+  estilos: Set<number>;
   tracks: Set<string>;
   idiomas: Set<string>;
 }
@@ -117,19 +121,22 @@ interface Vetos {
 /** Vetos globales + los del bloque. */
 async function cargarVetos(dataSource: DataSource, bloqueId: number): Promise<Vetos> {
   const repo = dataSource.getRepository(MusicaVeto);
-  const todos = await repo.find({ where: { activo: true } });
+  const todos = await repo.find({ where: { activo: true }, relations: ['estilo'] });
   const aplican = todos.filter((v) => v.bloqueId == null || v.bloqueId === bloqueId);
 
   const vetos: Vetos = {
     artistas: new Set(),
     generos: new Set(),
+    estilos: new Set(),
     tracks: new Set(),
     idiomas: new Set(),
   };
   for (const v of aplican) {
     if (v.tipo === TipoVeto.ARTISTA) vetos.artistas.add(v.valor);
     else if (v.tipo === TipoVeto.GENERO) vetos.generos.add(v.valor);
-    else if (v.tipo === TipoVeto.TRACK) vetos.tracks.add(v.valor);
+    else if (v.tipo === TipoVeto.ESTILO) {
+      if (v.estilo?.id) vetos.estilos.add(v.estilo.id);
+    } else if (v.tipo === TipoVeto.TRACK) vetos.tracks.add(v.valor);
     else if (v.tipo === TipoVeto.IDIOMA) vetos.idiomas.add(v.valor);
   }
   return vetos;
@@ -141,11 +148,16 @@ function pasaVetos(track: MusicaTrack, vetos: Vetos): boolean {
   if (vetos.artistas.has(track.artista)) return false;
   if (track.idioma && vetos.idiomas.has(track.idioma)) return false;
 
-  // Comparacion de generos en UNA sola direccion: el genero del tema tiene que
-  // contener al veto completo. La inclusion bidireccional generaba falsos
-  // positivos graves — un veto de "FUNK BRASILEIRO" descartaba el funk
-  // americano (soul/groove), que no tiene nada que ver, porque
-  // "FUNK BRASILEIRO".includes("FUNK") es verdadero.
+  // Veto por ESTILO: comparacion de ids contra el catalogo, sin ambiguedad.
+  // Es el reemplazo del veto por genero, que comparaba strings.
+  if (track.estilo?.id && vetos.estilos.has(track.estilo.id)) return false;
+
+  // Vetos por genero (heredados). Comparacion en UNA sola direccion: el genero
+  // del tema tiene que contener al veto completo. La inclusion bidireccional
+  // generaba falsos positivos graves — un veto de "FUNK BRASILEIRO" descartaba
+  // el funk americano, que no tiene nada que ver, porque
+  // "FUNK BRASILEIRO".includes("FUNK") es verdadero. Aun asi sigue siendo
+  // heuristica: por eso los vetos nuevos se cargan como ESTILO.
   const genero = (track.genero || '').toUpperCase();
   if (genero) {
     for (const g of vetos.generos) {
@@ -163,13 +175,19 @@ function pasaVetos(track: MusicaTrack, vetos: Vetos): boolean {
  * Una playlist que se agota deja entrar el autoplay de Spotify, que es peor que
  * un tema levemente fuera de perfil.
  */
-function seleccionarTracks(
+export function seleccionarTracks(
   candidatos: MusicaTrack[],
   bloque: BloqueProgramacion,
   variante: VarianteEnergia,
   duracionObjetivoMs: number,
-  opciones: { maxPorArtista: number | null; evitarConsecutivo: boolean; deltaBpm: number },
-): { elegidos: MusicaTrack[]; relajado: boolean } {
+  opciones: {
+    maxPorArtista: number | null;
+    evitarConsecutivo: boolean;
+    deltaBpm: number;
+    /** Cuotas por estilo del bloque. Vacio = comportamiento sin cuotas. */
+    mezcla: Array<{ estiloId: number; estiloNombre: string; porcentaje: number }>;
+  },
+): { elegidos: MusicaTrack[]; relajado: boolean; cuotasIncumplidas: string[] } {
   const perfil = perfilDeVariante(bloque, variante, opciones.deltaBpm);
 
   const enPerfil = (t: MusicaTrack, estricto: boolean): boolean => {
@@ -179,21 +197,111 @@ function seleccionarTracks(
     return true;
   };
 
+  const dur = (t: MusicaTrack) => t.duracionMs || 210_000;
+
+  /** Score primero, con desempate aleatorio para que dos dias no salgan iguales. */
+  const ordenar = (lista: MusicaTrack[]) =>
+    lista
+      .map((t) => ({ t, peso: (t.score || 0) + Math.random() }))
+      .sort((a, b) => b.peso - a.peso)
+      .map((x) => x.t);
+
+  const cuotasIncumplidas: string[] = [];
+
+  /**
+   * Reparte por cuotas y las INTERCALA.
+   *
+   * Llenar cubeta por cubeta daria media hora de bossa seguida y despues media
+   * hora de pagode, que en el salon se escucha como dos playlists pegadas. En
+   * cada paso se toma de la cubeta que va mas atrasada respecto de su cuota, asi
+   * la mezcla queda repartida a lo largo del bloque.
+   */
   const armar = (estricto: boolean): MusicaTrack[] => {
+    const disponibles = candidatos.filter((t) => enPerfil(t, estricto));
+    if (!opciones.mezcla.length) return armarSimple(disponibles);
+
+    const conCuota = new Set(opciones.mezcla.map((m) => m.estiloId));
+    const cubetas = opciones.mezcla.map((m) => ({
+      nombre: m.estiloNombre,
+      objetivoMs: (duracionObjetivoMs * m.porcentaje) / 100,
+      puestoMs: 0,
+      pendientes: ordenar(disponibles.filter((t) => t.estilo?.id === m.estiloId)),
+      agotada: false,
+    }));
+
+    // El resto absorbe lo que no cubren las cuotas. Si suman 100 igual existe,
+    // porque una cuota puede quedarse sin material y hay que llenar el hueco.
+    const restoObjetivo = Math.max(
+      0,
+      duracionObjetivoMs - cubetas.reduce((acc, c) => acc + c.objetivoMs, 0),
+    );
+    cubetas.push({
+      nombre: '(resto)',
+      objetivoMs: restoObjetivo,
+      puestoMs: 0,
+      pendientes: ordenar(disponibles.filter((t) => !t.estilo || !conCuota.has(t.estilo.id))),
+      agotada: false,
+    });
+
+    const porArtista = new Map<string, number>();
+    const elegidos: MusicaTrack[] = [];
+    const usados = new Set<number>();
+    let duracion = 0;
+    let ultimoArtista = '';
+
+    const cabeEnArtista = (t: MusicaTrack) => {
+      const artista = t.artistaId || t.artista;
+      if (opciones.maxPorArtista != null && (porArtista.get(artista) || 0) >= opciones.maxPorArtista) {
+        return false;
+      }
+      return !(opciones.evitarConsecutivo && artista === ultimoArtista);
+    };
+
+    while (duracion < duracionObjetivoMs) {
+      // La cubeta mas atrasada respecto de su cuota. Las que ya no tienen
+      // objetivo (0%) o quedaron sin material no compiten.
+      const candidata = cubetas
+        .filter((c) => !c.agotada && c.objetivoMs > 0)
+        .sort((a, b) => a.puestoMs / a.objetivoMs - b.puestoMs / b.objetivoMs)[0];
+      if (!candidata) break;
+
+      let elegido: MusicaTrack | null = null;
+      while (candidata.pendientes.length) {
+        const t = candidata.pendientes.shift()!;
+        if (usados.has(t.id) || !cabeEnArtista(t)) continue;
+        elegido = t;
+        break;
+      }
+
+      if (!elegido) {
+        // Se quedo sin material que cumpla los limites: su cuota se reparte
+        // entre las demas, y se avisa en vez de fallar en silencio.
+        candidata.agotada = true;
+        if (candidata.nombre !== '(resto)' && candidata.puestoMs < candidata.objetivoMs * 0.9) {
+          cuotasIncumplidas.push(candidata.nombre);
+        }
+        continue;
+      }
+
+      const artista = elegido.artistaId || elegido.artista;
+      elegidos.push(elegido);
+      usados.add(elegido.id);
+      porArtista.set(artista, (porArtista.get(artista) || 0) + 1);
+      ultimoArtista = artista;
+      candidata.puestoMs += dur(elegido);
+      duracion += dur(elegido);
+    }
+    return elegidos;
+  };
+
+  /** Sin cuotas: el comportamiento de siempre. */
+  const armarSimple = (disponibles: MusicaTrack[]): MusicaTrack[] => {
     const porArtista = new Map<string, number>();
     const elegidos: MusicaTrack[] = [];
     let duracion = 0;
     let ultimoArtista = '';
 
-    // Score primero, y desempate aleatorio para que dos dias con el mismo pool
-    // no produzcan exactamente la misma playlist.
-    const orden = candidatos
-      .filter((t) => enPerfil(t, estricto))
-      .map((t) => ({ t, peso: (t.score || 0) + Math.random() }))
-      .sort((a, b) => b.peso - a.peso)
-      .map((x) => x.t);
-
-    for (const t of orden) {
+    for (const t of ordenar(disponibles)) {
       if (duracion >= duracionObjetivoMs) break;
       const artista = t.artistaId || t.artista;
       // maxPorArtista null = sin limite (util en bloques de covers, donde
@@ -206,17 +314,19 @@ function seleccionarTracks(
       elegidos.push(t);
       porArtista.set(artista, (porArtista.get(artista) || 0) + 1);
       ultimoArtista = artista;
-      duracion += t.duracionMs || 210_000;
+      duracion += dur(t);
     }
     return elegidos;
   };
 
   const estrictos = armar(true);
-  const duracionEstricta = estrictos.reduce((acc, t) => acc + (t.duracionMs || 210_000), 0);
+  const duracionEstricta = estrictos.reduce((acc, t) => acc + dur(t), 0);
   if (duracionEstricta >= duracionObjetivoMs * 0.8) {
-    return { elegidos: estrictos, relajado: false };
+    return { elegidos: estrictos, relajado: false, cuotasIncumplidas };
   }
-  return { elegidos: armar(false), relajado: true };
+  // Al relajar se rehace todo, asi que el diagnostico anterior ya no vale.
+  cuotasIncumplidas.length = 0;
+  return { elegidos: armar(false), relajado: true, cuotasIncumplidas };
 }
 
 /** Crea la playlist en la cuenta del local si el PlanBloque aun no tiene una. */
@@ -303,7 +413,12 @@ export async function generarPlanDelDia(
   const bloquesEfectivos = aplicarAjustes(bloques, planIa);
 
   const trackRepo = dataSource.getRepository(MusicaTrack);
-  const aprobados = await trackRepo.find({ where: { estado: EstadoTrack.APROBADO } });
+  // `relations: ['estilo']` es obligatorio para las cuotas: sin el, `t.estilo`
+  // viene undefined y todo el pool caeria en la cubeta "(resto)".
+  const aprobados = await trackRepo.find({
+    where: { estado: EstadoTrack.APROBADO },
+    relations: ['estilo'],
+  });
   if (aprobados.length === 0) {
     throw new Error(
       'EL REPERTORIO ESTA VACIO. CARGA PLAYLISTS O ARTISTAS EN "MI ESTILO" E IMPORTALOS.',
@@ -359,20 +474,36 @@ export async function generarPlanDelDia(
     }
 
     const objetivoMs = duracionBloqueMs(bloque) * (bloque.factorDuracion ?? avanzado.factorDuracion);
+    // Cuotas por estilo del bloque: "en el almuerzo 50% bossa, 20% pagode".
+    const mezcla = await getMezcla(dataSource, bloque.id);
 
     for (const variante of [VarianteEnergia.SUAVE, VarianteEnergia.NORMAL, VarianteEnergia.MOVIDO]) {
-      const { elegidos, relajado } = seleccionarTracks(candidatos, bloque, variante, objetivoMs, {
-        // `undefined` en el bloque = heredar el global; `null` = sin limite.
-        maxPorArtista:
-          bloque.maxPorArtista === undefined
-            ? avanzado.maxPorArtistaDefault
-            : bloque.maxPorArtista,
-        evitarConsecutivo: bloque.evitarArtistaConsecutivo !== false,
-        deltaBpm: avanzado.deltaBpmVariante,
-      });
+      const { elegidos, relajado, cuotasIncumplidas } = seleccionarTracks(
+        candidatos,
+        bloque,
+        variante,
+        objetivoMs,
+        {
+          // `undefined` en el bloque = heredar el global; `null` = sin limite.
+          maxPorArtista:
+            bloque.maxPorArtista === undefined
+              ? avanzado.maxPorArtistaDefault
+              : bloque.maxPorArtista,
+          evitarConsecutivo: bloque.evitarArtistaConsecutivo !== false,
+          deltaBpm: avanzado.deltaBpmVariante,
+          mezcla,
+        },
+      );
       if (elegidos.length === 0) {
         advertencias.push(`"${bloque.nombre}" (${variante}): sin temas disponibles.`);
         continue;
+      }
+      // Una cuota que no se pudo cumplir es informacion, no un fallo: significa
+      // que falta repertorio de ese estilo y hay que salir a descubrirlo.
+      if (cuotasIncumplidas.length) {
+        advertencias.push(
+          `"${bloque.nombre}" (${variante}): falto material para ${[...new Set(cuotasIncumplidas)].join(', ')}.`,
+        );
       }
       if (relajado) {
         advertencias.push(

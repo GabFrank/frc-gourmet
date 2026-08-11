@@ -1,35 +1,22 @@
-<!--
-  Sin toolbar propia: el shell de la PWA ya aporta título y navegación, y dos
-  barras apiladas comen ~56px de alto en un teléfono, justo donde más falta.
-  Las acciones viven en la fila de estado.
--->
 <mat-progress-bar *ngIf="cargando" mode="indeterminate"></mat-progress-bar>
 
+<div class="encabezado">
+  <div class="chip-estado" [ngClass]="chipClase">{{ chipEstado }}</div>
+  <span class="spacer"></span>
+  <button mat-icon-button (click)="refrescar()" matTooltip="Actualizar" aria-label="Actualizar">
+    <mat-icon>refresh</mat-icon>
+  </button>
+  <button mat-icon-button (click)="cerrar()" matTooltip="Cerrar" aria-label="Cerrar">
+    <mat-icon>close</mat-icon>
+  </button>
+</div>
+
+<div class="alerta" *ngIf="runtime?.ultimoError">
+  <mat-icon>warning</mat-icon>
+  <span>{{ runtime?.ultimoError }}</span>
+</div>
+
 <div class="contenido">
-  <div class="chip-fila">
-    <div class="chip-estado" [ngClass]="chipClase">{{ chipEstado }}</div>
-    <span class="en-vivo" *ngIf="enVivo" matTooltip="Los cambios llegan al instante">
-      <mat-icon>bolt</mat-icon> en vivo
-    </span>
-    <span class="spacer"></span>
-    <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
-      <mat-icon>more_vert</mat-icon>
-    </button>
-    <mat-menu #menu="matMenu">
-      <button mat-menu-item (click)="refrescar()">
-        <mat-icon>refresh</mat-icon><span>Actualizar</span>
-      </button>
-      <button mat-menu-item (click)="regenerar()">
-        <mat-icon>auto_fix_high</mat-icon><span>Regenerar plan de hoy</span>
-      </button>
-    </mat-menu>
-  </div>
-
-  <div class="alerta" *ngIf="runtime?.ultimoError">
-    <mat-icon>warning</mat-icon>
-    <span>{{ runtime?.ultimoError }}</span>
-  </div>
-
   <!-- Ahora suena -->
   <div class="ahora">
     <img *ngIf="estado?.imagenUrl" [src]="estado?.imagenUrl" alt="" class="caratula" />
@@ -37,29 +24,33 @@
       <mat-icon>album</mat-icon>
     </div>
 
-    <div class="titulo">{{ titulo }}</div>
-    <div class="artista">{{ artista }}</div>
-
-    <div class="barra">
-      <div class="relleno" [style.width.%]="progresoPorcentaje"></div>
+    <div class="datos">
+      <div class="track-titulo" [matTooltip]="titulo">{{ titulo }}</div>
+      <div class="artista">{{ artista }}</div>
+      <div class="barra">
+        <div class="relleno" [style.width.%]="progresoPorcentaje"></div>
+      </div>
+      <div class="tiempo">{{ progresoTexto }}</div>
     </div>
-    <div class="tiempo">{{ progresoTexto }}</div>
   </div>
 
   <!-- Controles -->
   <div class="controles">
-    <button mat-fab color="primary" (click)="play()" *ngIf="!estado?.reproduciendo">
+    <button mat-fab color="primary" (click)="play()" *ngIf="!estado?.reproduciendo"
+            matTooltip="Reproducir" aria-label="Reproducir">
       <mat-icon>play_arrow</mat-icon>
     </button>
-    <button mat-fab color="primary" (click)="pausar()" *ngIf="estado?.reproduciendo">
+    <button mat-fab color="primary" (click)="pausar()" *ngIf="estado?.reproduciendo"
+            matTooltip="Pausar" aria-label="Pausar">
       <mat-icon>pause</mat-icon>
     </button>
-    <button mat-fab color="accent" (click)="siguiente()">
+    <button mat-fab color="accent" (click)="siguiente()"
+            matTooltip="Siguiente" aria-label="Siguiente">
       <mat-icon>skip_next</mat-icon>
     </button>
   </div>
 
-  <!-- Feedback: los dos botones -->
+  <!-- Feedback -->
   <div class="feedback">
     <button mat-flat-button class="btn-no-va" (click)="noVa()">
       <mat-icon>thumb_down</mat-icon> No va
@@ -69,7 +60,7 @@
     </button>
   </div>
 
-  <!-- Clima del momento -->
+  <!-- Clima -->
   <div class="seccion">
     <div class="seccion-titulo">Clima ahora</div>
     <mat-button-toggle-group [value]="variante" class="variantes">

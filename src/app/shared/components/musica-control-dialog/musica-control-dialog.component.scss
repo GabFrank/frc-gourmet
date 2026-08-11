@@ -1,0 +1,265 @@
+/**
+ * Las variables se definen ACA, no en `styles.scss`: en este proyecto no hay
+ * paleta global de custom properties — cada componente declara las suyas en
+ * `:host` con su bloque dark (ver `paginated-dropdown.component.scss`).
+ */
+:host {
+  display: block;
+
+  --musica-texto: #333333;
+  --musica-texto-suave: #666666;
+  --musica-borde: #e0e0e0;
+  --musica-pista: rgba(0, 0, 0, 0.12);
+  /* Naranja de acento de la app: el mismo que usa `.titulo` en styles.scss. */
+  --musica-acento: #f57c00;
+}
+
+// La app togglea dark con `body.dark-theme`, no solo por preferencia del SO.
+:host-context(.dark-theme),
+:host-context([data-theme='dark']) {
+  --musica-texto: #ffffff;
+  --musica-texto-suave: #cccccc;
+  --musica-borde: rgba(255, 255, 255, 0.12);
+  --musica-pista: rgba(255, 255, 255, 0.14);
+}
+@media (prefers-color-scheme: dark) {
+  :host {
+    --musica-texto: #ffffff;
+    --musica-texto-suave: #cccccc;
+    --musica-borde: rgba(255, 255, 255, 0.12);
+    --musica-pista: rgba(255, 255, 255, 0.14);
+  }
+}
+
+.encabezado {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 6px 16px;
+  border-bottom: 1px solid var(--musica-borde);
+
+  .spacer {
+    flex: 1 1 auto;
+  }
+}
+
+/**
+ * Los chips llevan FONDO, no solo borde: sobre la superficie del tema oscuro un
+ * texto de color sin fondo queda casi ilegible. Mismo criterio que en la PWA.
+ */
+.chip-estado {
+  padding: 5px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+
+  &.chip-ok {
+    background: rgba(76, 175, 80, 0.22);
+    color: #a5d6a7;
+  }
+
+  &.chip-warn {
+    background: rgba(255, 167, 38, 0.22);
+    color: #ffcc80;
+  }
+
+  &.chip-error {
+    background: rgba(244, 67, 54, 0.22);
+    color: #ef9a9a;
+  }
+
+  &.chip-off {
+    background: rgba(158, 158, 158, 0.2);
+    color: var(--musica-texto-suave);
+  }
+}
+
+.alerta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 16px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(244, 67, 54, 0.16);
+  color: #ef9a9a;
+  font-size: 13px;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.contenido {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ─────────── Ahora suena ─────────── */
+
+.ahora {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+
+  .caratula {
+    width: 84px;
+    height: 84px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex: 0 0 auto;
+  }
+
+  .caratula-vacia {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--musica-pista);
+    color: var(--musica-texto-suave);
+  }
+
+  .datos {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /**
+   * `track-titulo`, no `titulo`: `styles.scss` tiene una regla global
+   * `.titulo { color: #f57c00 !important }` que pintaba este texto de naranja.
+   */
+  .track-titulo {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--musica-texto);
+    /* El título puede ser larguísimo: se trunca en vez de romper el diálogo. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .artista {
+    font-size: 13px;
+    color: var(--musica-texto-suave);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 8px;
+  }
+
+  .barra {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--musica-pista);
+    overflow: hidden;
+
+    .relleno {
+      height: 100%;
+      background: var(--musica-acento);
+    }
+  }
+
+  .tiempo {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--musica-texto-suave);
+  }
+}
+
+/* ─────────── Controles ─────────── */
+
+.controles {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+
+.feedback {
+  display: flex;
+  gap: 10px;
+
+  button {
+    flex: 1 1 0;
+  }
+
+  /**
+   * Botones sólidos, no `stroked`: son las dos acciones que más se usan y sobre
+   * el fondo del tema un botón sin relleno se lee como texto deshabilitado.
+   */
+  .btn-no-va {
+    background: #c62828;
+    color: #fff;
+  }
+
+  .btn-mas {
+    background: #2e7d32;
+    color: #fff;
+  }
+}
+
+/* ─────────── Secciones ─────────── */
+
+.seccion-titulo {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--musica-texto-suave);
+  margin-bottom: 8px;
+}
+
+.variantes {
+  width: 100%;
+
+  ::ng-deep .mat-button-toggle {
+    flex: 1 1 0;
+  }
+
+  /**
+   * Material marca el seleccionado con un gris apenas más oscuro, que sobre el
+   * tema oscuro no se distingue del resto. Se pinta con el acento para que se
+   * vea de un vistazo cuál clima está activo.
+   */
+  ::ng-deep .mat-button-toggle-checked {
+    background: var(--musica-acento);
+
+    .mat-button-toggle-label-content {
+      color: #ffffff;
+      font-weight: 600;
+    }
+  }
+}
+
+.ayuda {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--musica-texto-suave);
+}
+
+.fila-volumen {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  .slider {
+    flex: 1 1 auto;
+  }
+
+  .valor {
+    min-width: 44px;
+    text-align: right;
+    font-size: 13px;
+    color: var(--musica-texto-suave);
+  }
+}
+
+.pie {
+  text-align: center;
+  font-size: 11px;
+  color: var(--musica-texto-suave);
+}

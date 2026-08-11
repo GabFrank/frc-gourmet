@@ -60,6 +60,7 @@ const BLOCKED_CHANNELS = new Set<string>([
   // la app de Spotify). Disparar eso desde un cliente remoto no tiene sentido y
   // es superficie de sobra: se hacen desde el desktop del local.
   'musica-conectar',
+  'musica-cancelar-conexion',
   'musica-abrir-spotify',
 
   // Actualización / ciclo de vida del proceso servidor

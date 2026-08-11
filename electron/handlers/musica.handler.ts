@@ -39,7 +39,23 @@ import {
   getEstadoRuntime,
   getEstadoSalon,
   cambiarVariante,
+  limpiarErrorRuntime,
 } from '../services/musica-runtime.service';
+import {
+  listarEstilos,
+  guardarEstilo,
+  eliminarEstilo,
+  asignarAlias,
+  quitarAlias,
+  sembrarCatalogo,
+  reclasificarPool,
+  clasificarTodo,
+  generosSinClasificar,
+  fijarEstiloTrack,
+  getMezcla,
+  guardarMezcla,
+  calcularDeficit,
+} from '../services/musica-estilos.service';
 import { VarianteEnergia } from '../../src/app/database/entities/musica/musica-enums';
 import { MusicaFeedback } from '../../src/app/database/entities/musica/musica-feedback.entity';
 import { TipoFeedback } from '../../src/app/database/entities/musica/musica-enums';
@@ -70,6 +86,7 @@ import {
 import {
   spotifyApi,
   conectarSpotify,
+  cancelarConexionSpotify,
   desconectarSpotify,
   estaConectado,
   getRedirectUri,
@@ -112,6 +129,21 @@ export function registerMusicaHandlers(
       brief: musica.brief || '',
       avanzado: musica.avanzado,
       conectado: await estaConectado(),
+    };
+  });
+
+  /**
+   * Chequeo liviano para la navegacion: si el local no configuro Spotify, el
+   * modulo no tiene nada que mostrar y el destino se oculta del menu. Devuelve
+   * solo booleanos — no expone client id ni estado de la cuenta.
+   */
+  ipcMain.handle('musica-disponible', async () => {
+    await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONTROLAR, PERM_CONFIGURAR]);
+    const { musica } = readAppSettings(userData());
+    return {
+      configurado: !!(musica.spotifyClientId || '').trim(),
+      conectado: await estaConectado(),
+      habilitado: !!musica.habilitado,
     };
   });
 
@@ -164,6 +196,15 @@ export function registerMusicaHandlers(
     return { success: true, nombreUsuario };
   });
 
+  // La llama la pantalla de Musica al cerrarse: si el usuario abandono el flujo
+  // de OAuth a medias, libera el puerto loopback en vez de dejarlo tomado hasta
+  // que venza el timeout de 3 minutos.
+  ipcMain.handle('musica-cancelar-conexion', async () => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    cancelarConexionSpotify('SE CERRO LA PANTALLA DE MUSICA');
+    return { success: true };
+  });
+
   ipcMain.handle('musica-desconectar', async () => {
     await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
     await desconectarSpotify(userData());
@@ -206,21 +247,27 @@ export function registerMusicaHandlers(
     return await getEstado(userData());
   });
 
+  // Los comandos que salen bien limpian la alerta: son la prueba de que el
+  // player volvio a responder, y esperar al proximo heartbeat (2 min) deja el
+  // cartel de error puesto sobre una situacion ya resuelta.
   ipcMain.handle('musica-play', async (_event, contextUri?: string) => {
     await ensurePermission(dataSource, getCurrentUser, PERM_CONTROLAR);
     await reproducir(userData(), contextUri);
+    limpiarErrorRuntime();
     return { success: true };
   });
 
   ipcMain.handle('musica-pausar', async () => {
     await ensurePermission(dataSource, getCurrentUser, PERM_CONTROLAR);
     await pausar(userData());
+    limpiarErrorRuntime();
     return { success: true };
   });
 
   ipcMain.handle('musica-siguiente', async () => {
     await ensurePermission(dataSource, getCurrentUser, PERM_CONTROLAR);
     await siguiente(userData());
+    limpiarErrorRuntime();
     return { success: true };
   });
 
@@ -233,6 +280,7 @@ export function registerMusicaHandlers(
   ipcMain.handle('musica-volumen', async (_event, porcentaje: number) => {
     await ensurePermission(dataSource, getCurrentUser, PERM_CONTROLAR);
     await setVolumen(userData(), porcentaje);
+    limpiarErrorRuntime();
     return { success: true };
   });
 
@@ -546,6 +594,96 @@ export function registerMusicaHandlers(
       return { bloques: creados.length, vetos: vetosNuevos };
     },
   );
+
+  // ───────────────── Catalogo de estilos (F4) ─────────────────
+
+  ipcMain.handle('musica-estilos-listar', async () => {
+    await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);
+    return await listarEstilos(dataSource);
+  });
+
+  ipcMain.handle('musica-estilo-guardar', async (_event, datos: any) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    return await guardarEstilo(dataSource, datos);
+  });
+
+  ipcMain.handle('musica-estilo-eliminar', async (_event, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    return await eliminarEstilo(dataSource, id);
+  });
+
+  ipcMain.handle(
+    'musica-estilo-alias-asignar',
+    async (_event, { genero, estiloId }: { genero: string; estiloId: number }) => {
+      await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+      return await asignarAlias(dataSource, genero, estiloId);
+    },
+  );
+
+  ipcMain.handle('musica-estilo-alias-quitar', async (_event, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    return await quitarAlias(dataSource, id);
+  });
+
+  /** Crea el catalogo inicial agrupando los generos que ya estan en el pool. */
+  ipcMain.handle('musica-estilos-sembrar', async () => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    const siembra = await sembrarCatalogo(dataSource);
+    // Sembrar sin reclasificar deja el catalogo sin efecto: van juntos.
+    const reclasificacion = await reclasificarPool(dataSource);
+    return { ...siembra, ...reclasificacion };
+  });
+
+  ipcMain.handle('musica-estilos-reclasificar', async () => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    return await reclasificarPool(dataSource);
+  });
+
+  /**
+   * Cascada completa: trae generos de Spotify, reclasifica por alias y hereda
+   * del mismo artista. Es lo que hay que correr despues de importar musica.
+   */
+  ipcMain.handle(
+    'musica-estilos-clasificar-todo',
+    async (_event, opts?: { conMusicBrainz?: boolean; limiteMusicBrainz?: number }) => {
+      await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+      return await clasificarTodo(dataSource, userData(), opts);
+    },
+  );
+
+  ipcMain.handle('musica-generos-sin-clasificar', async () => {
+    await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);
+    return await generosSinClasificar(dataSource);
+  });
+
+  ipcMain.handle(
+    'musica-track-estilo',
+    async (_event, { trackId, estiloId }: { trackId: number; estiloId: number | null }) => {
+      await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+      return await fijarEstiloTrack(dataSource, trackId, estiloId);
+    },
+  );
+
+  ipcMain.handle('musica-mezcla-get', async (_event, bloqueId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);
+    return await getMezcla(dataSource, bloqueId);
+  });
+
+  ipcMain.handle(
+    'musica-mezcla-guardar',
+    async (_event, { bloqueId, items }: { bloqueId: number; items: any[] }) => {
+      await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+      return await guardarMezcla(dataSource, bloqueId, items);
+    },
+  );
+
+  /** Cuanta musica falta por estilo para que las cuotas se puedan cumplir. */
+  ipcMain.handle('musica-deficit', async (_event, bloqueId?: number) => {
+    await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);
+    const { musica } = readAppSettings(userData());
+    const factor = musica.avanzado?.factorDuracion ?? 1.5;
+    return await calcularDeficit(dataSource, factor, bloqueId);
+  });
 
   // ───────────────── Vetos ─────────────────
 

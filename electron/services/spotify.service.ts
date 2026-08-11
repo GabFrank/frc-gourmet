@@ -63,6 +63,16 @@ interface TokenCache {
 }
 let tokenCache: TokenCache | null = null;
 
+/**
+ * Cancelador del listener loopback en curso, si hay uno.
+ *
+ * El listener vive hasta 3 minutos esperando que el usuario autorice en el
+ * navegador. Sin esto, cerrar la pantalla de Musica (o reintentar Conectar)
+ * dejaba el puerto tomado por la propia app hasta que venciera el timeout, y
+ * el siguiente intento moria con EADDRINUSE.
+ */
+let cancelarListenerActivo: ((motivo: string) => void) | null = null;
+
 /* ───────────────────── PKCE ───────────────────── */
 
 function base64Url(buf: Buffer): string {
@@ -102,6 +112,9 @@ function getClientId(userDataPath: string): string {
  * Se hace UNA sola vez por local: de ahi en adelante todo es refresh silencioso.
  */
 export async function conectarSpotify(userDataPath: string): Promise<{ nombreUsuario: string }> {
+  // Un intento anterior abandonado sigue con el puerto tomado: liberarlo antes
+  // de bindear, si no el reintento falla con EADDRINUSE contra uno mismo.
+  cancelarConexionSpotify('SE INICIO UN NUEVO INTENTO DE CONEXION');
   const clientId = getClientId(userDataPath);
   const { musica } = readAppSettings(userDataPath);
   const redirectUri = getRedirectUri(userDataPath);
@@ -134,8 +147,18 @@ export async function conectarSpotify(userDataPath: string): Promise<{ nombreUsu
 }
 
 /**
+ * Aborta el listener loopback en curso y libera el puerto en el acto.
+ *
+ * Lo llama la pantalla de Musica al cerrarse y el propio `conectarSpotify()`
+ * antes de bindear. Si no hay nada en curso no hace nada.
+ */
+export function cancelarConexionSpotify(motivo = 'CONEXION CANCELADA'): void {
+  cancelarListenerActivo?.(motivo);
+}
+
+/**
  * Listener HTTP efimero en 127.0.0.1 que recibe el `code`. Se cierra apenas
- * llega el callback, expira el timeout o falla el bind del puerto.
+ * llega el callback, se cancela, expira el timeout o falla el bind del puerto.
  */
 function esperarCallback(
   puerto: number,
@@ -154,26 +177,36 @@ function esperarCallback(
       const code = url.searchParams.get('code');
       const state = url.searchParams.get('state');
 
-      const responder = (titulo: string, detalle: string) => {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      // `Connection: close` evita que el navegador deje el socket en keep-alive
+      // colgando de un server que ya cerramos.
+      const responder = (titulo: string, detalle: string, alTerminar: () => void) => {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', Connection: 'close' });
         res.end(
           `<!doctype html><meta charset="utf-8"><title>FRC Gourmet</title>` +
             `<div style="font-family:system-ui,sans-serif;text-align:center;margin-top:15vh">` +
             `<h2>${titulo}</h2><p>${detalle}</p>` +
             `<p style="opacity:.6">Ya podes cerrar esta ventana y volver a FRC Gourmet.</p></div>`,
+          // Recien cuando la respuesta salio se puede matar el socket, si no el
+          // navegador muestra una pagina cortada.
+          alTerminar,
         );
       };
 
       if (error) {
-        responder('No se pudo conectar', `Spotify devolvio: ${error}`);
-        finalizar(new Error(`SPOTIFY RECHAZO LA AUTORIZACION: ${error}`));
+        responder('No se pudo conectar', `Spotify devolvio: ${error}`, () =>
+          finalizar(new Error(`SPOTIFY RECHAZO LA AUTORIZACION: ${error}`)),
+        );
       } else if (!code || state !== stateEsperado) {
         // state distinto = respuesta que no corresponde a este intento.
-        responder('No se pudo conectar', 'La respuesta de Spotify no es valida.');
-        finalizar(new Error('RESPUESTA DE SPOTIFY INVALIDA (STATE NO COINCIDE)'));
+        responder('No se pudo conectar', 'La respuesta de Spotify no es valida.', () =>
+          finalizar(new Error('RESPUESTA DE SPOTIFY INVALIDA (STATE NO COINCIDE)')),
+        );
       } else {
-        responder('Spotify conectado', 'FRC Gourmet ya puede controlar la musica del local.');
-        finalizar(null, code);
+        responder(
+          'Spotify conectado',
+          'FRC Gourmet ya puede controlar la musica del local.',
+          () => finalizar(null, code),
+        );
       }
     });
 
@@ -186,20 +219,31 @@ function esperarCallback(
       if (resuelto) return;
       resuelto = true;
       clearTimeout(timeout);
+      if (cancelarListenerActivo === cancelar) cancelarListenerActivo = null;
+      // `close()` solo deja de aceptar conexiones nuevas: sin cortar las
+      // abiertas el server queda vivo esperandolas.
+      (server as http.Server & { closeAllConnections?: () => void }).closeAllConnections?.();
       server.close();
       if (err) reject(err);
       else resolve(code as string);
     }
 
+    function cancelar(motivo: string) {
+      finalizar(new Error(motivo));
+    }
+
     server.on('error', (e: NodeJS.ErrnoException) => {
       const msg =
         e.code === 'EADDRINUSE'
-          ? `EL PUERTO ${puerto} ESTA OCUPADO. CAMBIALO EN CONFIGURACION → MUSICA (Y EN EL DASHBOARD DE SPOTIFY).`
+          ? `EL PUERTO ${puerto} YA ESTA EN USO POR OTRO PROGRAMA. CERRALO, O CAMBIA EL PUERTO EN CONFIGURACION → MUSICA (Y EN EL DASHBOARD DE SPOTIFY).`
           : `NO SE PUDO ABRIR EL PUERTO ${puerto}: ${e.message}`;
       finalizar(new Error(msg));
     });
 
-    server.listen(puerto, '127.0.0.1', onListening);
+    server.listen(puerto, '127.0.0.1', () => {
+      cancelarListenerActivo = cancelar;
+      onListening();
+    });
   });
 }
 
@@ -344,6 +388,14 @@ export async function spotifyApi(
       throw new Error(`SPOTIFY RECHAZO LA OPERACION (${detalle}). VERIFICA QUE LA CUENTA TENGA PREMIUM ACTIVO.`);
     }
     if (res.status === 404) {
+      // Spotify le da un id NUEVO al device cada vez que se abre la app, asi que
+      // el guardado se vuelve fantasma tras un reinicio y todo responde 404. Se
+      // descarta y se reintenta una vez contra el device activo del momento.
+      if (path.includes('device_id=') && !_esReintento) {
+        olvidarDispositivo(userDataPath);
+        const sinDevice = path.replace(/([?&])device_id=[^&]*&?/, '$1').replace(/[?&]$/, '');
+        return await spotifyApi(userDataPath, method, sinDevice, body, true);
+      }
       throw new Error(
         'SPOTIFY NO ENCUENTRA UN REPRODUCTOR ACTIVO. ABRI LA APP DE SPOTIFY EN ESTA PC Y VOLVE A INTENTAR.',
       );
@@ -393,6 +445,38 @@ function getDeviceQuery(userDataPath: string): string {
   return musica.deviceId ? `?device_id=${encodeURIComponent(musica.deviceId)}` : '';
 }
 
+/** Descarta el device guardado: quedo fantasma y hay que volver a detectarlo. */
+function olvidarDispositivo(userDataPath: string): void {
+  updateAppSettings(userDataPath, (s) => ({
+    ...s,
+    musica: { ...s.musica, deviceId: null, deviceNombre: null },
+  }));
+}
+
+/**
+ * Si no hay device fijado, adopta el que este sonando.
+ *
+ * Sin esto los comandos van "al device activo del momento": alcanza con que
+ * Spotify quede ocioso un rato para que no haya ninguno y todo devuelva 404
+ * ("no encuentra un reproductor activo") aunque la app este abierta. Con el id
+ * guardado, Spotify despierta ese device solo.
+ *
+ * Solo completa el hueco: si el usuario ya eligio uno a mano, no se pisa.
+ */
+function adoptarDispositivoActivo(
+  userDataPath: string,
+  deviceId: string | null,
+  deviceNombre: string | null,
+): void {
+  if (!deviceId) return;
+  const { musica } = readAppSettings(userDataPath);
+  if (musica.deviceId) return;
+  updateAppSettings(userDataPath, (s) => ({
+    ...s,
+    musica: { ...s.musica, deviceId, deviceNombre: deviceNombre ?? s.musica.deviceNombre },
+  }));
+}
+
 export interface EstadoReproduccion {
   reproduciendo: boolean;
   track: string | null;
@@ -410,6 +494,7 @@ export async function getEstado(userDataPath: string): Promise<EstadoReproduccio
   const data = await spotifyApi(userDataPath, 'GET', '/me/player');
   if (!data) return null; // 204: no hay sesion activa en ningun device
   const item = data.item;
+  adoptarDispositivoActivo(userDataPath, data.device?.id ?? null, data.device?.name ?? null);
   return {
     reproduciendo: !!data.is_playing,
     track: item?.name ?? null,

@@ -20,6 +20,7 @@ import {
   MusicaAvanzado,
   MusicaService,
 } from 'src/app/services/musica.service';
+import { MusicaMezclaDialogComponent } from './musica-mezcla-dialog.component';
 
 interface DiaConBloques {
   dia: number;
@@ -33,6 +34,9 @@ interface BloqueVista extends BloqueProgramacion {
   limiteTexto: string;
   /** Espejo editable: la UI usa 'sin-limite' | 'heredar' | número. */
   modoLimite: string;
+  /** Resumen de la mezcla de estilos, ya formateado (no hay funciones en template). */
+  mezclaTexto: string;
+  mezclaCount: number;
 }
 
 const NOMBRES_DIA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -103,6 +107,7 @@ export class MusicaProgramacionComponent implements OnInit {
       if (!this.presetElegido && presets.length) this.presetElegido = presets[0].codigo;
       this.avanzado = config.avanzado || null;
       this.armarDias(bloques);
+      await this.cargarMezclas();
     } catch (e: any) {
       this.mostrarError(e);
     } finally {
@@ -133,9 +138,93 @@ export class MusicaProgramacionComponent implements OnInit {
       horarioTexto: `${b.horaDesde} – ${b.horaHasta}`,
       generosTexto: (b.generosPreferidos || []).join(', ') || 'sin estilos definidos',
       limiteTexto,
+      mezclaTexto: 'sin mezcla definida',
+      mezclaCount: 0,
       modoLimite:
         b.maxPorArtista === null ? 'sin-limite' : b.maxPorArtista === undefined ? 'heredar' : 'fijo',
     };
+  }
+
+  // ─────────── Mezcla de estilos ───────────
+
+  /**
+   * Trae la mezcla de todos los bloques y la deja pre-formateada.
+   *
+   * Se pre-computa acá y no en el template porque en este proyecto no van
+   * llamadas a funciones ni getters en las plantillas.
+   */
+  private async cargarMezclas(): Promise<void> {
+    const todos = this.dias.flatMap((d) => d.bloques);
+    const vistos = new Set<number>();
+    await Promise.all(
+      todos.map(async (b) => {
+        if (!b.id || vistos.has(b.id)) return;
+        vistos.add(b.id);
+        try {
+          const mezcla = await this.musicaService.getMezcla(b.id);
+          const texto = mezcla.map((m) => `${m.estiloNombre} ${m.porcentaje}%`).join(' · ');
+          for (const otro of todos.filter((x) => x.id === b.id)) {
+            otro.mezclaCount = mezcla.length;
+            otro.mezclaTexto = texto || 'sin mezcla definida';
+          }
+        } catch {
+          // Un bloque sin mezcla no es un error: queda con el texto por defecto.
+        }
+      }),
+    );
+  }
+
+  abrirMezcla(b: BloqueVista): void {
+    const ref = this.dialog.open(MusicaMezclaDialogComponent, {
+      width: '720px',
+      maxWidth: '95vw',
+      data: { bloqueId: b.id, bloqueNombre: b.nombre },
+    });
+    ref.afterClosed().subscribe(async (guardado) => {
+      if (guardado) await this.cargarMezclas();
+    });
+  }
+
+  /**
+   * Copia la mezcla a los bloques con el MISMO NOMBRE en los otros dias.
+   *
+   * La grilla tiene 31 bloques en 7 dias; configurar "almuerzo" siete veces a
+   * mano es la clase de tarea que hace que la funcion no se use.
+   */
+  async copiarMezclaATodos(b: BloqueVista): Promise<void> {
+    const destinos = this.dias
+      .flatMap((d) => d.bloques)
+      .filter((x) => x.nombre === b.nombre && x.id !== b.id);
+    if (!destinos.length) {
+      this.snackBar.open('NO HAY OTROS BLOQUES CON ESE NOMBRE', 'OK', { duration: 3000 });
+      return;
+    }
+
+    const ref = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Copiar mezcla',
+        message: `¿Aplicar la mezcla de "${b.nombre}" a los otros ${destinos.length} bloques con el mismo nombre?\nSe reemplaza la mezcla que tengan.`,
+      },
+    });
+    ref.afterClosed().subscribe(async (ok) => {
+      if (!ok) return;
+      this.cargando = true;
+      try {
+        const mezcla = await this.musicaService.getMezcla(b.id);
+        const items = mezcla.map((m) => ({ estiloId: m.estiloId, porcentaje: m.porcentaje }));
+        // Secuencial y no en paralelo: cada guardado borra y reinserta filas, y
+        // en SQLite las escrituras concurrentes se pisan.
+        for (const destino of destinos) {
+          await this.musicaService.guardarMezcla(destino.id, items);
+        }
+        await this.cargarMezclas();
+        this.snackBar.open(`MEZCLA COPIADA A ${destinos.length} BLOQUES`, 'OK', { duration: 3500 });
+      } catch (e: any) {
+        this.mostrarError(e);
+      } finally {
+        this.cargando = false;
+      }
+    });
   }
 
   // ─────────── Preset ───────────
