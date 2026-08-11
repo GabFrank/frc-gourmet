@@ -44,6 +44,18 @@ export interface ConfiguracionPropuesta {
 
 const NOMBRES_DIA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 
+/** 'HH:MM' → minutos desde medianoche. */
+function aMinutos(hhmm: string): number {
+  const [h, m] = (hhmm || '0:0').split(':').map((n) => parseInt(n, 10) || 0);
+  return h * 60 + m;
+}
+
+/** '00:00' como cierre = medianoche del día siguiente (ver musica-planner). */
+function aMinutosFin(hhmm: string): number {
+  const min = aMinutos(hhmm);
+  return min === 0 ? 24 * 60 : min;
+}
+
 /** Pide la configuración al modelo. NO la aplica. */
 export async function interpretarBrief(
   userDataPath: string,
@@ -194,8 +206,13 @@ function completarDiasFaltantes(bloques: BloquePropuesto[]): {
    */
   const completarDia = (dia: number, modelo: BloquePropuesto[]): boolean => {
     const propios = porDia.get(dia) || [];
+    // Comparar en MINUTOS y no como texto: '17:00' < '00:00' es falso porque
+    // '1' > '0', asi que un bloque que cierra a medianoche nunca se detectaba
+    // como solapado y se duplicaba.
     const cubre = (desde: string, hasta: string) =>
-      propios.some((p) => p.horaDesde < hasta && p.horaHasta > desde);
+      propios.some(
+        (p) => aMinutos(p.horaDesde) < aMinutosFin(hasta) && aMinutosFin(p.horaHasta) > aMinutos(desde),
+      );
 
     let agregoAlgo = false;
     for (const b of modelo) {
@@ -221,7 +238,18 @@ function completarDiasFaltantes(bloques: BloquePropuesto[]): {
   // El domingo NO se completa: si el modelo no lo trajo puede ser que el local
   // no abra. Inventarlo haría sonar música un día cerrado.
 
-  return { completos: salida, diasCompletados };
+  // El modelo a veces repite el mismo bloque dentro de un día (en la prueba
+  // devolvió "CENA Y NOCHE" dos veces el lunes). Dos bloques idénticos en el
+  // mismo horario dejarían al runtime eligiendo cualquiera de los dos.
+  const vistos = new Set<string>();
+  const sinDuplicados = salida.filter((b) => {
+    const clave = `${b.diaSemana}|${b.horaDesde}|${b.horaHasta}|${b.nombre}`;
+    if (vistos.has(clave)) return false;
+    vistos.add(clave);
+    return true;
+  });
+
+  return { completos: sinDuplicados, diasCompletados };
 }
 
 /** El modelo puede devolver horas sueltas o fuera de rango: se sanean acá. */

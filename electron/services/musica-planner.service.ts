@@ -67,9 +67,22 @@ function aMinutos(hhmm: string): number {
   return h * 60 + m;
 }
 
+/**
+ * Minutos del FIN de un bloque. '00:00' como hora de cierre significa medianoche
+ * del dia siguiente, no las cero horas del mismo dia.
+ *
+ * Sin esto, un bloque 17:00-00:00 daba duracion negativa (la playlist de la
+ * noche se generaba de 30 minutos en vez de 7 horas) y nunca resultaba vigente
+ * (de 17:00 a medianoche no sonaba nada) — justo el turno principal del local.
+ */
+function aMinutosFin(hhmm: string): number {
+  const min = aMinutos(hhmm);
+  return min === 0 ? 24 * 60 : min;
+}
+
 function duracionBloqueMs(bloque: BloqueProgramacion): number {
   const desde = aMinutos(bloque.horaDesde);
-  const hasta = aMinutos(bloque.horaHasta);
+  const hasta = aMinutosFin(bloque.horaHasta);
   const minutos = Math.max(30, hasta - desde);
   return minutos * 60 * 1000;
 }
@@ -415,7 +428,7 @@ export async function getBloqueVigente(
   const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
   return (
     bloques.find(
-      (b) => minutosAhora >= aMinutos(b.horaDesde) && minutosAhora < aMinutos(b.horaHasta),
+      (b) => minutosAhora >= aMinutos(b.horaDesde) && minutosAhora < aMinutosFin(b.horaHasta),
     ) ?? null
   );
 }
