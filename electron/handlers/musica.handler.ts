@@ -26,6 +26,7 @@ import { PRESETS_MUSICA, getPreset } from '../utils/musica-presets';
 import { generarPlanDelDia, getBloqueVigente } from '../services/musica-planner.service';
 import { descubrirMusica, rechazarTrack } from '../services/musica-descubrimiento.service';
 import { enriquecerFeatures, etiquetarTracks } from '../services/musica-features.service';
+import { emitirStreamToken, StreamScope } from '../utils/stream-token.utils';
 import {
   interpretarBrief,
   aplicarConfiguracion,
@@ -724,6 +725,23 @@ export function registerMusicaHandlers(
     });
     const vigente = await getBloqueVigente(dataSource);
     return { plan, bloques, bloqueVigenteId: vigente?.id ?? null };
+  });
+
+  // ───────────────── Stream SSE ─────────────────
+
+  /**
+   * Emite el token efimero para abrir un stream SSE. Va por RPC (autenticado
+   * con el JWT en header) y devuelve un token de 60s, de un solo uso y de
+   * alcance acotado: `EventSource` no puede mandar headers, y poner el token de
+   * sesion en la query lo dejaria en logs, historial y proxies.
+   *
+   * Sirve tanto a musica como al KDS, que comparten el problema.
+   */
+  ipcMain.handle('stream-token', async (_event, scope: StreamScope) => {
+    const permisos =
+      scope === 'kds' ? ['COMANDAS_KDS_VER', 'COMANDAS_KDS_OPERAR'] : [PERM_VER, PERM_CONTROLAR];
+    const usuario = await ensurePermission(dataSource, getCurrentUser, permisos);
+    return await emitirStreamToken(usuario.id, scope === 'kds' ? 'kds' : 'musica');
   });
 
   // ───────────────── Runtime automatico ─────────────────

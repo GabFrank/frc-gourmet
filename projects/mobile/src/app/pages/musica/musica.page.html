@@ -16,7 +16,12 @@
 <mat-progress-bar *ngIf="cargando" mode="indeterminate"></mat-progress-bar>
 
 <div class="contenido">
-  <div class="chip-estado" [ngClass]="chipClase">{{ chipEstado }}</div>
+  <div class="chip-fila">
+    <div class="chip-estado" [ngClass]="chipClase">{{ chipEstado }}</div>
+    <span class="en-vivo" *ngIf="enVivo" matTooltip="Los cambios llegan al instante">
+      <mat-icon>bolt</mat-icon> en vivo
+    </span>
+  </div>
 
   <div class="alerta" *ngIf="runtime?.ultimoError">
     <mat-icon>warning</mat-icon>

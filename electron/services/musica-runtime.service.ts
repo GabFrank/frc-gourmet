@@ -25,6 +25,7 @@ import { readAppSettings } from '../utils/app-settings.utils';
 import { getEstado, reproducir, setVolumen, normalizarModoReproduccion } from './spotify.service';
 import { getBloqueVigente, generarPlanDelDia } from './musica-planner.service';
 import { leerEstadoSalon } from './musica-salon.service';
+import { emitirEventoMusica } from '../utils/musica-events.utils';
 
 const HEARTBEAT_MS = 120_000;
 /** Cuanto dura el modo manual tras detectar un cambio hecho a mano. */
@@ -102,6 +103,7 @@ export async function cambiarVariante(variante: VarianteEnergia): Promise<void> 
   if (!dataSourceRef) throw new Error('EL MODULO DE MUSICA NO ESTA INICIADO.');
   estado.variante = variante;
   await reproducirBloqueActual(true);
+  emitirEventoMusica({ tipo: 'VARIANTE', detalle: 'Cambio manual', variante });
 }
 
 async function tick(): Promise<void> {
@@ -131,6 +133,12 @@ async function tick(): Promise<void> {
       estado.variante = VarianteEnergia.NORMAL;
       estado.bloqueId = bloque?.id ?? null;
       estado.bloqueNombre = bloque?.nombre ?? null;
+      emitirEventoMusica({
+        tipo: 'BLOQUE',
+        detalle: bloque?.nombre ?? 'fuera de horario',
+        bloqueId: estado.bloqueId,
+        variante: estado.variante,
+      });
     }
 
     if (!bloque) {
@@ -150,6 +158,7 @@ async function tick(): Promise<void> {
     estado.ultimoError = null;
   } catch (e) {
     estado.ultimoError = (e as Error).message;
+    emitirEventoMusica({ tipo: 'ALERTA', detalle: estado.ultimoError });
   }
 }
 
@@ -186,6 +195,12 @@ async function reaccionarAlSalon(bloque: BloqueProgramacion): Promise<void> {
 
   estado.variante = deseada;
   await reproducirBloqueActual(true);
+  emitirEventoMusica({
+    tipo: 'VARIANTE',
+    detalle: `Salón ${Math.round(salon.ocupacionPct)}% ocupado`,
+    bloqueId: estado.bloqueId,
+    variante: deseada,
+  });
   console.log(
     `[musica] Salon ${Math.round(salon.ocupacionPct)}% ocupado, ` +
       `${salon.ventasUltimaHora} ventas/h → variante ${deseada} en "${bloque.nombre}".`,
@@ -207,6 +222,7 @@ async function estaSonandoLoNuestro(): Promise<boolean> {
   if (!trackIdsEsperados.has(id)) {
     estado.modoManual = true;
     modoManualHasta = Date.now() + MODO_MANUAL_MS;
+    emitirEventoMusica({ tipo: 'MODO', detalle: 'Modo manual: alguien cambió la música a mano' });
     return true; // suena algo: no lo pisamos
   }
   return true;
@@ -295,6 +311,12 @@ async function registrarLoQueSuena(): Promise<void> {
   const clave = `${actual.track}::${actual.artista}`;
   if (clave === ultimoTrackLogueado) return;
   ultimoTrackLogueado = clave;
+  emitirEventoMusica({
+    tipo: 'TRACK',
+    detalle: `${actual.track} — ${actual.artista}`,
+    bloqueId: estado.bloqueId,
+    variante: estado.variante,
+  });
 
   const trackRepo = dataSourceRef.getRepository(MusicaTrack);
   const track = await trackRepo.findOne({

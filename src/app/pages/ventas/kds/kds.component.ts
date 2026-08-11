@@ -210,22 +210,41 @@ export class KdsComponent implements OnInit, OnDestroy {
       this.conectado = true;
       return;
     }
-    // SSE solo en modo navegador puro con token (?token=...). En el PWA (shim
-    // HTTP) no hay token para el stream → se usa el poll de respaldo (12s), que
-    // ya viaja autenticado por callIpc. Evita reintentos de EventSource sin auth.
-    if (!this.webToken) {
-      this.conectado = false;
-      return;
-    }
+    void this.conectarSse();
+  }
+
+  /**
+   * Abre el stream con un token EFÍMERO pedido por RPC. Antes se mandaba el JWT
+   * de sesión por query, lo que lo dejaba en logs de acceso, historial y
+   * proxies; y como la PWA no tenía ese token a mano, ahí ni siquiera había
+   * SSE. Con el token de stream (60s, un solo uso, alcance acotado) funcionan
+   * los dos: navegador puro y PWA.
+   */
+  private async conectarSse(): Promise<void> {
     try {
+      const t = await this.invokeData('stream-token', 'kds');
+      const token = t?.token;
+      if (!token) {
+        this.conectado = false;
+        return;
+      }
+      const base = this.webBase || '';
       const secs = this.selectedSectorIds.join(',');
-      const url = `${this.webBase}/api/kds/stream?token=${encodeURIComponent(this.webToken)}&sectores=${secs}`;
+      const url = `${base}/api/kds/stream?token=${encodeURIComponent(token)}&sectores=${secs}`;
       this.eventSource = new EventSource(url);
       this.eventSource.onmessage = () => this.scheduleReload();
       this.eventSource.onopen = () => { this.conectado = true; };
-      this.eventSource.onerror = () => { this.conectado = false; };
+      this.eventSource.onerror = () => {
+        // El token ya se consumió: reconectar exige pedir uno nuevo, así que se
+        // cierra y se reintenta con backoff. El poll de respaldo cubre el hueco.
+        this.conectado = false;
+        this.eventSource?.close();
+        this.eventSource = undefined;
+        setTimeout(() => void this.conectarSse(), 15000);
+      };
     } catch (e) {
       console.warn('[KDS] SSE no disponible:', e);
+      this.conectado = false;
     }
   }
 

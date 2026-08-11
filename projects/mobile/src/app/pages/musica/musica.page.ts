@@ -9,6 +9,8 @@ import { MatSliderModule } from '@angular/material/slider';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { getApiBase } from '../../core/data/api-http';
 
 interface EstadoReproduccion {
   reproduciendo: boolean;
@@ -55,6 +57,7 @@ interface EstadoRuntime {
     MatProgressBarModule,
     MatSnackBarModule,
     MatMenuModule,
+    MatTooltipModule,
   ],
   templateUrl: './musica.page.html',
   styleUrls: ['./musica.page.scss'],
@@ -78,6 +81,10 @@ export class MusicaPage implements OnInit, OnDestroy {
   chipClase = 'chip-off';
 
   private timer: any = null;
+  private eventSource?: EventSource;
+  private reconexion: any = null;
+  /** true = los cambios llegan empujados; false = se depende del poll. */
+  enVivo = false;
 
   private get api(): any {
     return (window as any).api;
@@ -85,15 +92,53 @@ export class MusicaPage implements OnInit, OnDestroy {
 
   async ngOnInit(): Promise<void> {
     await this.refrescar();
-    // Poll de 10 s: en un celular, refrescar mas seguido es bateria tirada, y
-    // el estado que importa (que suena, que bloque rige) cambia por minutos.
+    void this.conectarSse();
+    // Poll de respaldo, mucho mas lento que antes (60 s en vez de 10): con SSE
+    // los cambios llegan empujados, y este intervalo solo cubre el hueco si el
+    // stream se cae o un proxy lo bloquea. En un celular, refrescar seguido es
+    // bateria tirada.
     this.zone.runOutsideAngular(() => {
-      this.timer = setInterval(() => this.zone.run(() => void this.refrescar(true)), 10000);
+      this.timer = setInterval(() => this.zone.run(() => void this.refrescar(true)), 60000);
     });
   }
 
   ngOnDestroy(): void {
     if (this.timer) clearInterval(this.timer);
+    if (this.reconexion) clearTimeout(this.reconexion);
+    this.eventSource?.close();
+  }
+
+  /**
+   * Stream de eventos del servidor. El token es efimero (60 s, un solo uso):
+   * `EventSource` no puede mandar headers y poner el JWT de sesion en la query
+   * lo dejaria en logs, historial y proxies.
+   */
+  private async conectarSse(): Promise<void> {
+    try {
+      const t = await this.api.callIpc('stream-token', 'musica');
+      if (!t?.token) return;
+
+      // Misma base que el resto del tráfico: si la PWA detectó la LAN directa,
+      // el stream también va por ahí en vez de dar la vuelta por el túnel.
+      const base = getApiBase();
+      this.eventSource = new EventSource(
+        `${base}/api/musica/stream?token=${encodeURIComponent(t.token)}`,
+      );
+
+      this.eventSource.onopen = () => this.zone.run(() => { this.enVivo = true; });
+      this.eventSource.onmessage = () =>
+        // El stream avisa que algo cambio; el detalle se pide por RPC.
+        this.zone.run(() => void this.refrescar(true));
+      this.eventSource.onerror = () => {
+        this.zone.run(() => { this.enVivo = false; });
+        // El token ya se consumio: hay que pedir uno nuevo para reconectar.
+        this.eventSource?.close();
+        this.eventSource = undefined;
+        this.reconexion = setTimeout(() => void this.conectarSse(), 20000);
+      };
+    } catch {
+      this.enVivo = false;
+    }
   }
 
   volver(): void {

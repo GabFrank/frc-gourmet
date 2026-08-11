@@ -21,6 +21,27 @@
   padding-bottom: 40px;
 }
 
+.chip-fila {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.en-vivo {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  color: #2e7d32;
+
+  mat-icon {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+  }
+}
+
 .chip-estado {
   align-self: center;
   padding: 6px 16px;

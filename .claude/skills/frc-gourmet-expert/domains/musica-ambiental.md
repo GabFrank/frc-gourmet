@@ -61,6 +61,9 @@ Es el corazón del módulo. Como Spotify ya no recomienda, **el criterio musical
 | `electron/services/musica-salon.service.ts` | Señales del PdV: ocupación, ritmo de ventas, ventas por franja |
 | `electron/services/musica-planner.service.ts` | Genera el plan y materializa las playlists. `getBloqueVigente` |
 | `electron/services/musica-runtime.service.ts` | Heartbeat de 2 min: cambio de bloque, watchdog, modo manual, `TrackLog` |
+| `electron/server/musica-sse-routes.ts` | Stream SSE `/api/musica/stream` |
+| `electron/utils/musica-events.utils.ts` | Emisor de eventos (IPC + EventEmitter para el SSE) |
+| `electron/utils/stream-token.utils.ts` | **Tokens efímeros de stream — compartido con el KDS** |
 | `electron/handlers/musica.handler.ts` | ~30 handlers, todos con `ensurePermission` |
 | `electron/utils/musica-presets.ts` | Preset `RESTAURANTE_BAR` (grilla semanal completa + vetos) |
 | `electron/utils/musica-secrets.util.ts` | Refresh token en keytar |
@@ -90,6 +93,24 @@ Es el corazón del módulo. Como Spotify ya no recomienda, **el criterio musical
 **Fecha del plan en hora local, nunca `toISOString()`**: en Paraguay (UTC-3) el plan de las 21:00 del sábado se guardaría como domingo y el local sonaría con la grilla equivocada toda la noche.
 
 ---
+
+## 3.1 Streams SSE y tokens efímeros (compartido con el KDS)
+
+`EventSource` **no permite mandar headers**, así que el token va por query. Mandar ahí el JWT de sesión —como hacía el KDS— lo deja escrito en logs de acceso, historial del navegador y proxies, y ese token sirve para **todo** `/api/rpc`.
+
+Por eso existe `stream-token.utils.ts`: un token aparte con tres límites que el de sesión no tiene.
+
+| Límite | Valor | Por qué |
+|---|---|---|
+| Vida | 60 s | solo para **abrir**; el stream ya abierto sigue vivo aunque el token venza |
+| Usos | 1 (nonce consumido) | reusarlo desde un log no sirve |
+| Alcance | `kds` \| `musica` | no abre el RPC |
+
+HMAC-SHA256 sobre el secreto de keytar, comparación en tiempo constante. Se pide por RPC autenticado (`stream-token`) y **esto habilitó SSE en la PWA**, que antes no podía usarlo por no tener el token a mano.
+
+**Reconexión:** el token se consume al abrir, así que reconectar exige pedir uno nuevo — el cliente cierra el `EventSource` y reintenta con backoff (15-20 s). El poll de respaldo (60 s en música, 12 s en KDS) cubre el hueco: **nunca se depende solo del stream**.
+
+**Ojo con proxies:** SSE se rompe si algo bufferea la respuesta. Va `X-Accel-Buffering: no` y heartbeat de 25 s, pero **falta probarlo a través del túnel Cloudflare** — en localhost siempre funciona.
 
 ## 4. Gotchas
 
@@ -124,6 +145,5 @@ Es el corazón del módulo. Como Spotify ya no recomienda, **el criterio musical
 **Reacción al salón** (`musica-runtime.service`): ocupación ≥80% + ventas → `MOVIDO`; ocupación ≤30% con mesas ocupadas → `SUAVE`. Con **histéresis de 10 min**: sin ella la música cambiaría de humor cada vez que entra o sale una mesa. Nunca pisa el modo manual.
 
 **Pendiente:**
-- **SSE** — hoy la PWA hace poll de 10 s; el diseño prevé `/api/musica/stream` como el KDS.
 - **Dashboard música ↔ ventas** por bloque (los datos ya se registran en `TrackLog`).
 - **Validar ReccoBeats contra la API real**: su doc pública no fija esquema ni base URL, así que el cliente es defensivo pero no está probado contra respuestas reales.
