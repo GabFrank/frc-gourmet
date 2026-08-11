@@ -27,6 +27,7 @@ import {
 } from '../../src/app/database/entities/musica/musica-enums';
 import { spotifyApi } from './spotify.service';
 import { readAppSettings } from '../utils/app-settings.utils';
+import { planificarDia, aplicarAjustes } from './musica-agente.service';
 
 /**
  * Valores por defecto. Todos son configurables desde la UI (globalmente en
@@ -277,6 +278,13 @@ export async function generarPlanDelDia(
     );
   }
 
+  // El agente ajusta el perfil del dia (energia/BPM por bloque) mirando ventas
+  // reales, feriado y las notas del dueno. Si la IA no esta configurada o
+  // falla, devuelve null y se usa la grilla tal cual: la musica no depende de
+  // la IA, la IA la mejora.
+  const planIa = await planificarDia(dataSource, userDataPath, fecha, opts?.instruccion);
+  const bloquesEfectivos = aplicarAjustes(bloques, planIa);
+
   const trackRepo = dataSource.getRepository(MusicaTrack);
   const aprobados = await trackRepo.find({ where: { estado: EstadoTrack.APROBADO } });
   if (aprobados.length === 0) {
@@ -303,12 +311,13 @@ export async function generarPlanDelDia(
   if (!plan) {
     plan = planRepo.create({ fecha, origen: OrigenPlan.REGLAS, activo: true });
   }
-  plan.origen = OrigenPlan.REGLAS;
+  plan.origen = planIa ? OrigenPlan.IA : OrigenPlan.REGLAS;
   plan.instruccion = opts?.instruccion;
-  plan.justificacion =
-    `Plan generado por reglas a partir de la grilla del dia (${bloques.length} bloques) ` +
-    `sobre ${base.length} temas aprobados.` +
-    (opts?.instruccion ? ` Pedido: "${opts.instruccion}".` : '');
+  plan.justificacion = planIa?.justificacion
+    ? planIa.justificacion
+    : `Plan generado por reglas a partir de la grilla del dia (${bloques.length} bloques) ` +
+      `sobre ${base.length} temas aprobados.` +
+      (opts?.instruccion ? ` Pedido: "${opts.instruccion}".` : '');
   await planRepo.save(plan);
 
   // Reusar las playlists del plan anterior del mismo bloque/variante: son fijas
@@ -324,7 +333,7 @@ export async function generarPlanDelDia(
   }
 
   let playlists = 0;
-  for (const bloque of bloques) {
+  for (const bloque of bloquesEfectivos) {
     const vetos = await cargarVetos(dataSource, bloque.id);
     const candidatos = base.filter((t) => pasaVetos(t, vetos));
     if (candidatos.length === 0) {

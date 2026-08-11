@@ -24,10 +24,19 @@ import { VarianteEnergia } from '../../src/app/database/entities/musica/musica-e
 import { readAppSettings } from '../utils/app-settings.utils';
 import { getEstado, reproducir, setVolumen, normalizarModoReproduccion } from './spotify.service';
 import { getBloqueVigente, generarPlanDelDia } from './musica-planner.service';
+import { leerEstadoSalon } from './musica-salon.service';
 
 const HEARTBEAT_MS = 120_000;
 /** Cuanto dura el modo manual tras detectar un cambio hecho a mano. */
 const MODO_MANUAL_MS = 30 * 60_000;
+/**
+ * El salon tiene que sostener la condicion este tiempo antes de cambiar de
+ * variante. Sin histeresis la musica cambiaria de humor cada vez que entra o
+ * sale una mesa, que es peor que no reaccionar.
+ */
+const HISTERESIS_MS = 10 * 60_000;
+const OCUPACION_ALTA = 80;
+const OCUPACION_BAJA = 30;
 
 export interface EstadoRuntime {
   activo: boolean;
@@ -57,9 +66,18 @@ const estado: EstadoRuntime = {
 let trackIdsEsperados = new Set<string>();
 let modoManualHasta = 0;
 let ultimoTrackLogueado = '';
+/** Desde cuando se sostiene la condicion actual del salon. */
+let condicionSalonDesde = 0;
+let condicionSalon: VarianteEnergia | null = null;
 
 export function getEstadoRuntime(): EstadoRuntime {
   return { ...estado };
+}
+
+/** Estado del salon para mostrarlo junto al del reproductor. */
+export async function getEstadoSalon() {
+  if (!dataSourceRef) return null;
+  return await leerEstadoSalon(dataSourceRef);
 }
 
 export function iniciarRuntimeMusica(dataSource: DataSource, userDataPath: string): void {
@@ -122,6 +140,7 @@ async function tick(): Promise<void> {
     }
 
     await registrarLoQueSuena();
+    await reaccionarAlSalon(bloque);
 
     const debeArrancar = cambioDeBloque || !(await estaSonandoLoNuestro());
     if (debeArrancar && !estado.modoManual) {
@@ -132,6 +151,45 @@ async function tick(): Promise<void> {
   } catch (e) {
     estado.ultimoError = (e as Error).message;
   }
+}
+
+/**
+ * Sube o baja la energia segun lo que pasa en el salon — el diferencial del
+ * modulo, porque ningun proveedor de musica tiene el punto de venta.
+ *
+ * Solo cambia si la condicion se SOSTIENE (ver HISTERESIS_MS), y nunca en modo
+ * manual: si el encargado eligio un clima a mano, el salon no se lo pisa.
+ */
+async function reaccionarAlSalon(bloque: BloqueProgramacion): Promise<void> {
+  if (!dataSourceRef || estado.modoManual) return;
+
+  const salon = await leerEstadoSalon(dataSourceRef);
+  // Sin mesas cargadas no hay señal: el local puede ser solo mostrador.
+  if (salon.mesasTotales === 0) return;
+
+  let deseada: VarianteEnergia = VarianteEnergia.NORMAL;
+  if (salon.ocupacionPct >= OCUPACION_ALTA && salon.ventasPorMinuto > 0) {
+    // Lleno y vendiendo: subir el ritmo ayuda a rotar mesas.
+    deseada = VarianteEnergia.MOVIDO;
+  } else if (salon.ocupacionPct > 0 && salon.ocupacionPct <= OCUPACION_BAJA) {
+    // Poca gente pero hay mesas ocupadas: bajar el tempo alarga la estadia.
+    deseada = VarianteEnergia.SUAVE;
+  }
+
+  if (deseada !== condicionSalon) {
+    condicionSalon = deseada;
+    condicionSalonDesde = Date.now();
+    return;
+  }
+  if (Date.now() - condicionSalonDesde < HISTERESIS_MS) return;
+  if (deseada === estado.variante) return;
+
+  estado.variante = deseada;
+  await reproducirBloqueActual(true);
+  console.log(
+    `[musica] Salon ${Math.round(salon.ocupacionPct)}% ocupado, ` +
+      `${salon.ventasUltimaHora} ventas/h → variante ${deseada} en "${bloque.nombre}".`,
+  );
 }
 
 /**

@@ -36,6 +36,7 @@ import {
   iniciarRuntimeMusica,
   detenerRuntimeMusica,
   getEstadoRuntime,
+  getEstadoSalon,
   cambiarVariante,
 } from '../services/musica-runtime.service';
 import { VarianteEnergia } from '../../src/app/database/entities/musica/musica-enums';
@@ -729,7 +730,9 @@ export function registerMusicaHandlers(
 
   ipcMain.handle('musica-runtime-estado', async () => {
     await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONTROLAR]);
-    return getEstadoRuntime();
+    // El estado del salon viaja junto: es lo que explica por que la musica
+    // esta donde esta ("70% ocupado" justifica la variante movida).
+    return { ...getEstadoRuntime(), salon: await getEstadoSalon() };
   });
 
   /**
