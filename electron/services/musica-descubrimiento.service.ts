@@ -205,12 +205,19 @@ function construirPrompt(ctx: ContextoMusical, cantidad: number, brief?: string)
     // Sin esto el modelo se va a lo que mas abunda en su entrenamiento (indie
     // anglo) e ignora los estilos regionales que el dueno nombro, que suelen
     // ser justamente la identidad del local.
-    '- OBLIGATORIO: si la descripcion o los estilos mencionan generos regionales o en otro idioma',
-    '  (bossa nova, MPB, pagode, sertanejo, musica paraguaya, cumbia, flamenco, etc.), TIENEN que',
-    '  estar representados en la lista, repartidos entre los momentos que les corresponden. Una',
-    '  lista solo en ingles es una respuesta INCORRECTA cuando el local pidio esos estilos.',
-    '- Respetá el idioma del publico: si el local recibe clientes de otro pais, incluí musica en',
-    '  ese idioma en proporcion a lo que diga la descripcion.',
+    '- EQUILIBRIO: la lista tiene que reflejar TODOS los estilos que pidio el local, repartidos',
+    '  entre los momentos que les corresponden. Ningun idioma ni pais puede pasar del 50% de la',
+    '  lista. Una lista entera en ingles es incorrecta si el local pidio generos regionales; una',
+    '  lista entera de un solo pais tambien lo es si el local ademas pidio hits mundiales o rock.',
+    '- Si la descripcion nombra ARTISTAS concretos (por ejemplo bandas locales), incluí temas de',
+    '  esos artistas o de otros muy afines a ellos: son la identidad del local.',
+    // El veto se evalua sobre el genero que declara el modelo, asi que una
+    // etiqueta imprecisa lo esquiva: en la prueba entraron temas de rap
+    // declarados como "MPB moderna" o "pop alternativo".
+    '- El campo "genero" tiene que ser el genero REAL Y PRINCIPAL del artista, no una etiqueta',
+    '  suavizada. Si el artista es de rap, hip hop o trap, el genero es "rap" aunque el tema',
+    '  puntual suene melodico. Declarar un genero equivocado para esquivar un veto es una',
+    '  respuesta INCORRECTA: si el artista pertenece a un genero vetado, NO lo propongas.',
     '',
     'Devolvé SOLO JSON con esta forma:',
     '{"candidatos":[{"artista":"","tema":"","genero":"","escenas":["almuerzo"],"motivo":"por que encaja, breve"}]}',

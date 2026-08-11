@@ -177,25 +177,46 @@ function completarDiasFaltantes(bloques: BloquePropuesto[]): {
   }
 
   const LABORABLES = [1, 2, 3, 4, 5];
-  const modeloLaborable = LABORABLES.map((d) => porDia.get(d)).find((v) => v && v.length);
+  // El día modelo es el que MÁS bloques trajo: copiar de uno incompleto
+  // propagaría su hueco a toda la semana.
+  const modeloLaborable = LABORABLES.map((d) => porDia.get(d) || [])
+    .filter((v) => v.length)
+    .sort((a, b) => b.length - a.length)[0];
   const diasCompletados: number[] = [];
   const salida = [...bloques];
 
-  // Laborables: se copian del primer laborable que haya venido.
+  /**
+   * Completa un día con los bloques del modelo cuyo horario no esté ya cubierto.
+   *
+   * No alcanza con rellenar días vacíos: en la prueba real el viernes y el
+   * sábado vinieron SOLO con la noche, así que el local quedaba sin música de
+   * 09:00 a 17:00 — justo el buffet del sábado. Se rellenan los HUECOS.
+   */
+  const completarDia = (dia: number, modelo: BloquePropuesto[]): boolean => {
+    const propios = porDia.get(dia) || [];
+    const cubre = (desde: string, hasta: string) =>
+      propios.some((p) => p.horaDesde < hasta && p.horaHasta > desde);
+
+    let agregoAlgo = false;
+    for (const b of modelo) {
+      if (cubre(b.horaDesde, b.horaHasta)) continue;
+      salida.push({ ...b, diaSemana: dia });
+      agregoAlgo = true;
+    }
+    return agregoAlgo;
+  };
+
+  // Laborables: se copian del laborable más completo que haya venido.
   for (const dia of LABORABLES) {
-    if (porDia.get(dia)?.length || !modeloLaborable) continue;
-    for (const b of modeloLaborable) salida.push({ ...b, diaSemana: dia });
-    diasCompletados.push(dia);
+    if (!modeloLaborable) break;
+    if (completarDia(dia, modeloLaborable)) diasCompletados.push(dia);
   }
 
-  // Sábado: se parece al viernes (fin de semana), no al lunes.
-  if (!porDia.get(6)?.length) {
-    const base = porDia.get(5)?.length ? porDia.get(5)! : modeloLaborable;
-    if (base) {
-      for (const b of base) salida.push({ ...b, diaSemana: 6 });
-      diasCompletados.push(6);
-    }
-  }
+  // Sábado: se parece al viernes (fin de semana), no al lunes. Se usa el
+  // viernes YA COMPLETADO como modelo, para no arrastrarle el mismo hueco.
+  const viernesCompleto = salida.filter((b) => b.diaSemana === 5);
+  const baseSabado = viernesCompleto.length ? viernesCompleto : modeloLaborable;
+  if (baseSabado && completarDia(6, baseSabado)) diasCompletados.push(6);
 
   // El domingo NO se completa: si el modelo no lo trajo puede ser que el local
   // no abra. Inventarlo haría sonar música un día cerrado.
