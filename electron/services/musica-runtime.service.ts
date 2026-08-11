@@ -65,6 +65,19 @@ const estado: EstadoRuntime = {
 
 /** Tracks que pusimos nosotros: sirve para detectar intervencion manual. */
 let trackIdsEsperados = new Set<string>();
+/**
+ * El primer tick tras iniciar el proceso ADOPTA lo que ya esta pasando en vez
+ * de mandar.
+ *
+ * Todo este estado vive en memoria y arranca vacio, asi que sin esta bandera un
+ * reinicio se ve identico a un cambio de bloque: `bloqueId` en null hace que
+ * `cambioDeBloque` de true, y `trackIdsEsperados` vacio hace que
+ * `estaSonandoLoNuestro()` de false. Cualquiera de las dos alcanza para relanzar
+ * la playlist, y como `reproducir()` no manda `offset`, Spotify vuelve al track
+ * 1. Cada actualizacion o reinicio de la PC repetia los mismos temas del
+ * arranque del bloque.
+ */
+let arrancando = true;
 let modoManualHasta = 0;
 let ultimoTrackLogueado = '';
 /** Desde cuando se sostiene la condicion actual del salon. */
@@ -73,6 +86,18 @@ let condicionSalon: VarianteEnergia | null = null;
 
 export function getEstadoRuntime(): EstadoRuntime {
   return { ...estado };
+}
+
+/**
+ * Borra la alerta en cuanto algo vuelve a funcionar.
+ *
+ * El heartbeat corre cada 2 minutos: sin esto, un fallo pasajero de Spotify
+ * dejaba el cartel "no encuentra un reproductor activo" en pantalla todo ese
+ * rato, aunque el encargado ya hubiera arreglado la causa y la musica estuviera
+ * sonando. Lo llaman los comandos del player cuando salen bien.
+ */
+export function limpiarErrorRuntime(): void {
+  estado.ultimoError = null;
 }
 
 /** Estado del salon para mostrarlo junto al del reproductor. */
@@ -84,6 +109,8 @@ export async function getEstadoSalon() {
 export function iniciarRuntimeMusica(dataSource: DataSource, userDataPath: string): void {
   dataSourceRef = dataSource;
   userDataRef = userDataPath;
+  // Vuelve a modo "adoptar" tambien si el runtime se reinicia en caliente.
+  arrancando = true;
   if (timer) clearInterval(timer);
   timer = setInterval(() => {
     void tick();
@@ -98,10 +125,20 @@ export function detenerRuntimeMusica(): void {
   estado.activo = false;
 }
 
-/** Fuerza una variante distinta dentro del bloque actual (salon lleno/vacio). */
+/**
+ * Fuerza una variante distinta dentro del bloque actual (salon lleno/vacio).
+ *
+ * Entra en modo manual, igual que cuando alguien cambia la musica desde Spotify:
+ * sin eso `reaccionarAlSalon()` volvia a imponer la variante que dicta la
+ * ocupacion apenas se cumplia la histeresis, y la eleccion del encargado duraba
+ * 10 minutos. El modo manual vence solo a la media hora, y un cambio de bloque
+ * lo limpia antes.
+ */
 export async function cambiarVariante(variante: VarianteEnergia): Promise<void> {
   if (!dataSourceRef) throw new Error('EL MODULO DE MUSICA NO ESTA INICIADO.');
   estado.variante = variante;
+  estado.modoManual = true;
+  modoManualHasta = Date.now() + MODO_MANUAL_MS;
   await reproducirBloqueActual(true);
   emitirEventoMusica({ tipo: 'VARIANTE', detalle: 'Cambio manual', variante });
 }
@@ -124,7 +161,19 @@ async function tick(): Promise<void> {
     }
 
     const bloque = await getBloqueVigente(dataSourceRef);
-    const cambioDeBloque = (bloque?.id ?? null) !== estado.bloqueId;
+    // En el arranque no hay bloque anterior con el cual comparar: se adopta el
+    // vigente en silencio. Tratarlo como cambio reiniciaria la playlist.
+    const cambioDeBloque = !arrancando && (bloque?.id ?? null) !== estado.bloqueId;
+
+    if (arrancando) {
+      estado.bloqueId = bloque?.id ?? null;
+      estado.bloqueNombre = bloque?.nombre ?? null;
+      // Reconstruir que deberia estar sonando para reconocerlo. Van las tres
+      // variantes: al reiniciar no sabemos en cual estabamos, y con solo la
+      // NORMAL un tema de SUAVE o MOVIDO pareceria intervencion manual.
+      if (bloque) await cargarEsperadosDeTodasLasVariantes(bloque.id);
+      arrancando = false;
+    }
 
     if (cambioDeBloque) {
       // Un bloque nuevo devuelve el control al sistema: si el encargado puso
@@ -144,6 +193,9 @@ async function tick(): Promise<void> {
     if (!bloque) {
       // Fuera de horario: no se toca nada. Si el local sigue abierto por algo
       // excepcional, la musica que este sonando sigue.
+      // El error se limpia igual: si no, el ultimo fallo del dia quedaba en
+      // pantalla toda la noche, porque este `return` saltea el limpiado final.
+      estado.ultimoError = null;
       return;
     }
 
@@ -259,6 +311,22 @@ async function reproducirBloqueActual(forzar: boolean): Promise<void> {
 
   // Cache de lo que deberia sonar, para detectar intervencion manual.
   await cargarEsperados(planBloque.trackIds || []);
+}
+
+/**
+ * Une los tracks de las tres variantes del bloque.
+ *
+ * Se usa solo al arrancar: no sabemos en que variante estabamos antes del
+ * reinicio, y cargar solo la NORMAL haria pasar por "intervencion manual"
+ * cualquier tema de SUAVE o MOVIDO que estuviera sonando.
+ */
+async function cargarEsperadosDeTodasLasVariantes(bloqueId: number): Promise<void> {
+  const ids: string[] = [];
+  for (const v of [VarianteEnergia.SUAVE, VarianteEnergia.NORMAL, VarianteEnergia.MOVIDO]) {
+    const pb = await getPlanBloque(bloqueId, v);
+    if (pb?.trackIds?.length) ids.push(...pb.trackIds);
+  }
+  await cargarEsperados([...new Set(ids)]);
 }
 
 async function cargarEsperados(spotifyIds: string[]): Promise<void> {

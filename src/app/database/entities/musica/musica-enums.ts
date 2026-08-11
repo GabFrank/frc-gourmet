@@ -10,7 +10,14 @@ export enum TipoSemilla {
 
 export enum TipoVeto {
   ARTISTA = 'ARTISTA',
+  /**
+   * @deprecated Texto libre comparado con `includes()`, que vetaba de mas:
+   * `FUNK` mataba al funk americano por culpa de `FUNK BRASILEIRO`. Se conserva
+   * para no romper los vetos ya cargados; los nuevos usan `ESTILO`.
+   */
   GENERO = 'GENERO',
+  /** Veto contra el catalogo canonico: sin ambiguedad de strings. */
+  ESTILO = 'ESTILO',
   TRACK = 'TRACK',
   IDIOMA = 'IDIOMA',
 }

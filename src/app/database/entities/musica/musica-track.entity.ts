@@ -1,6 +1,7 @@
-import { Column, Entity, Index } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import { EstadoTrack } from './musica-enums';
+import { MusicaEstilo } from './musica-estilo.entity';
 
 /**
  * El repertorio del local: indice PROPIO de tracks con sus caracteristicas.
@@ -66,8 +67,38 @@ export class MusicaTrack extends BaseModel {
   @Column({ type: 'float', nullable: true })
   danceability?: number;
 
+  /**
+   * Genero CRUDO como lo devuelve Spotify en `/artists/{id}`. Se conserva tal
+   * cual, sin normalizar: es el dato de origen y la entrada de la tabla de
+   * alias. Para decidir que suena en cada bloque se usa `estilo`, no esto.
+   *
+   * Ojo: es genero de ARTISTA, no de tema. `MPB` cubre desde Gal Costa hasta
+   * Marcelo D2, por eso solo no alcanza para clasificar.
+   */
   @Column({ nullable: true })
   genero?: string;
+
+  /**
+   * Estilo canonico del local. Se RESUELVE Y PERSISTE al importar/etiquetar en
+   * vez de calcularse por string en cada consulta: el planner necesita filtrar
+   * cientos de temas por cuota y hacerlo con LIKE sobre texto libre seria caro
+   * y fragil.
+   *
+   * `null` = sin clasificar. La pantalla de estilos los muestra aparte para que
+   * no se acumulen en silencio, que es como se pudren estas taxonomias.
+   */
+  @Index()
+  @ManyToOne(() => MusicaEstilo, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'estilo_id' })
+  estilo?: MusicaEstilo | null;
+
+  /**
+   * El dueno corrigio el estilo a mano: la reclasificacion automatica no lo
+   * pisa. Sin esto, cada vez que se recalcula el catalogo se perderia toda la
+   * curacion manual, y nadie corrige dos veces lo mismo.
+   */
+  @Column({ default: false })
+  estiloFijado!: boolean;
 
   // ─────────── Etiquetado semantico (LLM, una sola vez) ───────────
 

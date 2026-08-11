@@ -106,6 +106,30 @@
             </mat-form-field>
           </div>
 
+          <!--
+            Mezcla de estilos: es lo que decide QUE suena en el bloque. Los
+            "géneros preferidos" de más abajo alimentan solo al descubrimiento;
+            durante mucho tiempo el planner los ignoró y configurar ahí no tenía
+            ningún efecto sobre la playlist.
+          -->
+          <div class="mezcla-fila">
+            <div class="mezcla-texto">
+              <span class="mezcla-titulo">Mezcla de estilos</span>
+              <span class="mezcla-detalle">{{ b.mezclaTexto }}</span>
+            </div>
+            <button mat-stroked-button (click)="abrirMezcla(b)">
+              <mat-icon>tune</mat-icon> Configurar mezcla
+            </button>
+            <button
+              mat-button
+              *ngIf="b.mezclaCount > 0"
+              (click)="copiarMezclaATodos(b)"
+              matTooltip="Aplica esta misma mezcla a los bloques con el mismo nombre en los otros días"
+            >
+              <mat-icon>content_copy</mat-icon> Copiar a toda la semana
+            </button>
+          </div>
+
           <mat-form-field appearance="outline" class="campo-ancho">
             <mat-label>Notas sobre este momento</mat-label>
             <textarea

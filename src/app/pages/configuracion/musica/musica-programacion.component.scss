@@ -120,3 +120,41 @@ mat-panel-description {
     letter-spacing: 0.4px;
   }
 }
+
+/**
+ * Fila de mezcla de estilos. Va arriba de los "géneros preferidos" porque es lo
+ * que realmente decide qué suena: los géneros preferidos solo alimentan al
+ * descubrimiento.
+ */
+.mezcla-fila {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 4px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+
+  .mezcla-texto {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 240px;
+    min-width: 0;
+  }
+
+  .mezcla-titulo {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+
+  .mezcla-detalle {
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

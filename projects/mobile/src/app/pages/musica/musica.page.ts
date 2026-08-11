@@ -9,6 +9,8 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { Subject } from 'rxjs';
+import { debounceTime } from 'rxjs/operators';
 import { getApiBase } from '../../core/data/api-http';
 
 interface EstadoReproduccion {
@@ -80,6 +82,19 @@ export class MusicaPage implements OnInit, OnDestroy {
   private timer: any = null;
   private eventSource?: EventSource;
   private reconexion: any = null;
+  /**
+   * El arrastre emite un valor por paso. Sin agrupar, un solo gesto dispara
+   * decenas de PUT a Spotify que ademas llegan DESORDENADOS: el ultimo en
+   * aterrizar gana, y no es el ultimo que pidio el dedo.
+   */
+  private readonly volumenPedido$ = new Subject<number>();
+  /**
+   * Cuando toco el volumen por ultima vez. Spotify tarda ~1,5-2 s en reflejar
+   * el cambio en `/me/player`, asi que durante ese rato hay que ignorar lo que
+   * devuelve o el slider salta solo al valor viejo.
+   */
+  private ultimoCambioVolumen = 0;
+  private static readonly GRACIA_VOLUMEN_MS = 3000;
   /** true = los cambios llegan empujados; false = se depende del poll. */
   enVivo = false;
 
@@ -88,6 +103,9 @@ export class MusicaPage implements OnInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
+    this.volumenPedido$.pipe(debounceTime(300)).subscribe((v) => {
+      void this.enviarVolumen(v);
+    });
     await this.refrescar();
     void this.conectarSse();
     // Poll de respaldo, mucho mas lento que antes (60 s en vez de 10): con SSE
@@ -102,6 +120,7 @@ export class MusicaPage implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.timer) clearInterval(this.timer);
     if (this.reconexion) clearTimeout(this.reconexion);
+    this.volumenPedido$.complete();
     this.eventSource?.close();
   }
 
@@ -171,7 +190,10 @@ export class MusicaPage implements OnInit, OnDestroy {
     this.artista = e.artista || '';
     this.progresoPorcentaje = e.duracionMs ? (e.progresoMs / e.duracionMs) * 100 : 0;
     this.progresoTexto = `${this.fmt(e.progresoMs)} / ${this.fmt(e.duracionMs)}`;
-    if (e.volumen !== null) this.volumen = e.volumen;
+    // Recien pasada la gracia el valor de Spotify es confiable: antes todavia
+    // puede ser el anterior, y pisaria el que el usuario acaba de elegir.
+    const recienTocado = Date.now() - this.ultimoCambioVolumen < MusicaPage.GRACIA_VOLUMEN_MS;
+    if (e.volumen !== null && !recienTocado) this.volumen = e.volumen;
 
     if (this.runtime) {
       this.variante = this.runtime.variante || 'NORMAL';
@@ -210,8 +232,19 @@ export class MusicaPage implements OnInit, OnDestroy {
     await this.accion(() => this.api.callIpc('musica-siguiente'));
   }
 
-  async cambiarVolumen(): Promise<void> {
-    await this.accion(() => this.api.callIpc('musica-volumen', this.volumen));
+  /** Cada paso del arrastre. Agrupa y no refresca: eso lo hace `enviarVolumen`. */
+  cambiarVolumen(): void {
+    this.ultimoCambioVolumen = Date.now();
+    this.volumenPedido$.next(this.volumen);
+  }
+
+  private async enviarVolumen(v: number): Promise<void> {
+    try {
+      await this.api.callIpc('musica-volumen', v);
+      this.ultimoCambioVolumen = Date.now();
+    } catch (e: any) {
+      this.error(e);
+    }
   }
 
   async cambiarVariante(v: string): Promise<void> {
@@ -227,16 +260,40 @@ export class MusicaPage implements OnInit, OnDestroy {
       return;
     }
     try {
-      await this.api.callIpc('musica-rechazar', {
+      const r = await this.api.callIpc('musica-rechazar', {
         spotifyId,
         bloqueId: this.runtime?.bloqueId ?? undefined,
       });
       await this.api.callIpc('musica-siguiente');
       this.snack.open('Sacado del repertorio', 'OK', { duration: 2500 });
       setTimeout(() => void this.refrescar(true), 800);
+      // Al tercer rechazo del mismo artista se pregunta en vez de vetar solo.
+      // El id va por variable: para cuando el encargado contesta, la musica ya
+      // salto al tema siguiente y re-resolverlo vetaria al artista equivocado.
+      if (r?.sugerirVetarArtista) this.preguntarVetoArtista(spotifyId, r);
     } catch (e: any) {
       this.error(e);
     }
+  }
+
+  private preguntarVetoArtista(spotifyIdRechazado: string, r: any): void {
+    const ref = this.snack.open(
+      `Sacaste ${r.rechazosDelArtista} temas de ${r.artistaNombre} este mes`,
+      'NO SUENE MÁS',
+      { duration: 12000 },
+    );
+    ref.onAction().subscribe(async () => {
+      try {
+        await this.api.callIpc('musica-rechazar', {
+          spotifyId: spotifyIdRechazado,
+          tambienArtista: true,
+          bloqueId: this.runtime?.bloqueId ?? undefined,
+        });
+        this.snack.open(`${r.artistaNombre} no vuelve a sonar`, 'OK', { duration: 4000 });
+      } catch (e: any) {
+        this.error(e);
+      }
+    });
   }
 
   async meGusta(): Promise<void> {

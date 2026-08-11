@@ -1,0 +1,80 @@
+<h2 mat-dialog-title>Mezcla de estilos — {{ data.bloqueNombre }}</h2>
+
+<mat-dialog-content>
+  <div class="cargando" *ngIf="cargando">
+    <mat-spinner diameter="32"></mat-spinner>
+  </div>
+
+  <ng-container *ngIf="!cargando">
+    <p class="intro">
+      Qué proporción de cada estilo querés en este bloque. La playlist se genera de
+      <strong>{{ objetivoHoras | number: '1.0-1' }} h</strong>. No hace falta llegar a 100%:
+      lo que falte se completa con el resto del repertorio.
+    </p>
+
+    <table class="tabla">
+      <thead>
+        <tr>
+          <th>Estilo</th>
+          <th class="num">En el repertorio</th>
+          <th class="num">%</th>
+          <th class="num">Pide</th>
+          <th class="num">Faltan</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let f of filas" [class.sin-material]="f.faltan > 0">
+          <td>{{ f.nombre }}</td>
+          <td class="num suave">
+            {{ f.tracks | number: '1.0-0' }} temas · {{ f.horas | number: '1.0-1' }} h
+          </td>
+          <td class="num">
+            <input
+              type="number"
+              min="0"
+              max="100"
+              class="pct"
+              [(ngModel)]="f.porcentaje"
+              (ngModelChange)="recalcular()"
+            />
+          </td>
+          <td class="num suave">
+            {{ f.horasPedidas > 0 ? (f.horasPedidas | number: '1.0-1') + ' h' : '—' }}
+          </td>
+          <td class="num">
+            <span *ngIf="f.faltan > 0" class="falta">{{ f.faltan | number: '1.0-0' }} temas</span>
+            <span *ngIf="f.faltan === 0 && f.porcentaje > 0" class="alcanza">
+              <mat-icon>check</mat-icon>
+            </span>
+            <span *ngIf="f.porcentaje === 0" class="suave">—</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="resumen" [class.error]="excedido">
+      <span>Total: <strong>{{ totalPorcentaje | number: '1.0-0' }}%</strong></span>
+      <span *ngIf="excedido" class="msg-error">
+        <mat-icon>error</mat-icon> No puede pasar de 100%
+      </span>
+      <span *ngIf="!excedido && totalFaltan > 0" class="msg-falta">
+        <mat-icon>warning</mat-icon>
+        Faltan {{ totalFaltan | number: '1.0-0' }} temas para cubrir esta mezcla — usá
+        "Descubrir música" para conseguirlos
+      </span>
+    </div>
+  </ng-container>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="limpiar()" [disabled]="guardando">Limpiar</button>
+  <button mat-button (click)="cerrar()" [disabled]="guardando">Cancelar</button>
+  <button
+    mat-flat-button
+    color="primary"
+    (click)="guardar()"
+    [disabled]="guardando || excedido || cargando"
+  >
+    Guardar
+  </button>
+</mat-dialog-actions>

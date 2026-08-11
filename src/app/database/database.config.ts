@@ -33,6 +33,9 @@ import { PlanProgramacion } from './entities/musica/plan-programacion.entity';
 import { PlanBloque } from './entities/musica/plan-bloque.entity';
 import { TrackLog } from './entities/musica/track-log.entity';
 import { MusicaFeedback } from './entities/musica/musica-feedback.entity';
+import { MusicaEstilo } from './entities/musica/musica-estilo.entity';
+import { MusicaEstiloAlias } from './entities/musica/musica-estilo-alias.entity';
+import { BloqueEstiloMezcla } from './entities/musica/bloque-estilo-mezcla.entity';
 
 // RRHH entities
 import { ConfiguracionRrhh } from './entities/rrhh/configuracion-rrhh.entity';
@@ -268,6 +271,7 @@ import { DropCheckTipoOperacionFinanciera1785170061312 } from './migrations/1785
 import { AddCuentasBancariasOrdenCajaMayorConfig1785170062316 } from './migrations/1785170062316-AddCuentasBancariasOrdenCajaMayorConfig';
 import { MusicaAmbiental1786378422682 } from './migrations/1786378422682-MusicaAmbiental';
 import { MusicaOpcionesAvanzadas1786383979096 } from './migrations/1786383979096-MusicaOpcionesAvanzadas';
+import { MusicaCatalogoEstilos1786475808081 } from './migrations/1786475808081-MusicaCatalogoEstilos';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -403,6 +407,9 @@ function getEntitiesList(): any[] {
       PlanBloque,
       TrackLog,
       MusicaFeedback,
+      MusicaEstilo,
+      MusicaEstiloAlias,
+      BloqueEstiloMezcla,
       // RRHH entities
       ConfiguracionRrhh,
       Cargo,
@@ -668,6 +675,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     // Musica ambiental (Spotify Connect): repertorio, bloques y planes
     MusicaAmbiental1786378422682,
     MusicaOpcionesAvanzadas1786383979096,
+    MusicaCatalogoEstilos1786475808081,
     AddPagoCuotaCppDetalle1785320463398,
     AddEgresoCajaToPagoCuotaDetalle1785335253817,
   ];

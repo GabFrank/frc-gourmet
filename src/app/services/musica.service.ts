@@ -117,6 +117,61 @@ export interface DispositivoSpotify {
   volumen: number | null;
 }
 
+export interface EstiloConDatos {
+  id: number;
+  nombre: string;
+  descripcion?: string;
+  orden: number;
+  activo: boolean;
+  /** Géneros crudos de Spotify que caen en este estilo. */
+  alias: string[];
+  tracks: number;
+  duracionMs: number;
+}
+
+export interface MezclaItem {
+  estiloId: number;
+  estiloNombre: string;
+  porcentaje: number;
+}
+
+export interface DeficitEstilo {
+  estiloId: number;
+  estiloNombre: string;
+  porcentaje: number;
+  necesarioMs: number;
+  disponibleMs: number;
+  tracksDisponibles: number;
+  faltanteMs: number;
+  tracksFaltantes: number;
+}
+
+export interface DeficitBloque {
+  bloqueId: number;
+  bloqueNombre: string;
+  diaSemana: number;
+  objetivoMs: number;
+  estilos: DeficitEstilo[];
+  faltanteTotalMs: number;
+}
+
+export interface EstadoRuntime {
+  activo: boolean;
+  bloqueId: number | null;
+  bloqueNombre: string | null;
+  variante: string;
+  modoManual: boolean;
+  ultimoError: string | null;
+  ultimoChequeo?: string | null;
+  salon?: {
+    mesasTotales: number;
+    mesasOcupadas: number;
+    ocupacionPct: number;
+    ventasPorMinuto: number;
+    ventasUltimaHora: number;
+  } | null;
+}
+
 export interface EstadoReproduccion {
   reproduciendo: boolean;
   track: string | null;
@@ -153,6 +208,11 @@ export class MusicaService {
 
   conectar(): Promise<{ success: boolean; nombreUsuario: string }> {
     return this.api.callIpc('musica-conectar');
+  }
+
+  /** Aborta un OAuth a medias y libera el puerto loopback en el acto. */
+  cancelarConexion(): Promise<{ success: boolean }> {
+    return this.api.callIpc('musica-cancelar-conexion');
   }
 
   desconectar(): Promise<{ success: boolean }> {
@@ -193,6 +253,30 @@ export class MusicaService {
 
   setVolumen(porcentaje: number): Promise<{ success: boolean }> {
     return this.api.callIpc('musica-volumen', porcentaje);
+  }
+
+  getRuntimeEstado(): Promise<EstadoRuntime> {
+    return this.api.callIpc('musica-runtime-estado');
+  }
+
+  /** Fuerza el clima del bloque actual. Entra en modo manual por 30 minutos. */
+  setVariante(variante: string): Promise<{ success: boolean }> {
+    return this.api.callIpc('musica-variante', variante);
+  }
+
+  /** Para esconder el control cuando no hay Spotify configurado ni conectado. */
+  disponible(): Promise<{ configurado: boolean; conectado: boolean; habilitado: boolean }> {
+    return this.api.callIpc('musica-disponible');
+  }
+
+  /**
+   * Eventos empujados desde el main (`musica-events`): bloque, variante, alerta.
+   * Devuelve la función para desuscribir.
+   */
+  onEvento(handler: (payload: any) => void): () => void {
+    return this.api.onMusicaEvent
+      ? this.api.onMusicaEvent(handler)
+      : () => undefined;
   }
 
   // ─────────── Semillas y repertorio ───────────
@@ -241,6 +325,62 @@ export class MusicaService {
 
   cambiarEstadoTrack(id: number, estado: string): Promise<MusicaTrack> {
     return this.api.callIpc('musica-track-estado', { id, estado });
+  }
+
+  // ─────────── Catálogo de estilos (F4) ───────────
+
+  listarEstilos(): Promise<EstiloConDatos[]> {
+    return this.api.callIpc('musica-estilos-listar');
+  }
+
+  guardarEstilo(datos: {
+    id?: number;
+    nombre: string;
+    descripcion?: string;
+    orden?: number;
+    activo?: boolean;
+  }): Promise<any> {
+    return this.api.callIpc('musica-estilo-guardar', datos);
+  }
+
+  eliminarEstilo(id: number): Promise<{
+    success: boolean;
+    tracksLiberados: number;
+    mezclasBorradas: number;
+  }> {
+    return this.api.callIpc('musica-estilo-eliminar', id);
+  }
+
+  asignarAlias(genero: string, estiloId: number): Promise<any> {
+    return this.api.callIpc('musica-estilo-alias-asignar', { genero, estiloId });
+  }
+
+  sembrarEstilos(): Promise<any> {
+    return this.api.callIpc('musica-estilos-sembrar');
+  }
+
+  /** Cascada completa: Spotify → MusicBrainz → alias → herencia. */
+  clasificarTodo(opts?: { conMusicBrainz?: boolean; limiteMusicBrainz?: number }): Promise<any> {
+    return this.api.callIpc('musica-estilos-clasificar-todo', opts);
+  }
+
+  generosSinClasificar(): Promise<Array<{ genero: string; cantidad: number }>> {
+    return this.api.callIpc('musica-generos-sin-clasificar');
+  }
+
+  getMezcla(bloqueId: number): Promise<MezclaItem[]> {
+    return this.api.callIpc('musica-mezcla-get', bloqueId);
+  }
+
+  guardarMezcla(
+    bloqueId: number,
+    items: Array<{ estiloId: number; porcentaje: number }>,
+  ): Promise<{ success: boolean }> {
+    return this.api.callIpc('musica-mezcla-guardar', { bloqueId, items });
+  }
+
+  getDeficit(bloqueId?: number): Promise<DeficitBloque[]> {
+    return this.api.callIpc('musica-deficit', bloqueId);
   }
 
   // ─────────── Brief → programación ───────────

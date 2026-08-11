@@ -69,6 +69,23 @@
     </button>
     -->
 
+    <!--
+      Control de música. El texto va en un slot de ANCHO FIJO con ellipsis: el
+      título cambia cada 3 minutos y su largo varía muchísimo, y sin ancho fijo
+      el header se reacomodaría solo todo el día al lado del reloj.
+    -->
+    <ng-container *appHasPermission="'MUSICA_CONTROLAR'">
+      <button mat-button class="no-drag musica-btn"
+              *ngIf="musicaDisponible"
+              [class.alerta]="musicaAlerta"
+              [class.pausado]="!musicaSonando"
+              (click)="abrirMusica()"
+              [matTooltip]="musicaTooltip" aria-label="Música">
+        <mat-icon>{{ musicaAlerta ? 'warning' : (musicaSonando ? 'music_note' : 'music_off') }}</mat-icon>
+        <span class="musica-texto">{{ musicaTexto }}</span>
+      </button>
+    </ng-container>
+
     <!-- Buscador global (Ctrl+Espacio) -->
     <button mat-icon-button class="no-drag buscador-btn" (click)="abrirBuscador()"
             matTooltip="Buscar (Ctrl+Espacio)" aria-label="Buscar">

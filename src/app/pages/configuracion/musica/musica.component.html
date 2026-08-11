@@ -197,6 +197,14 @@
     <app-musica-repertorio [refrescar]="refrescarRepertorio"></app-musica-repertorio>
   </mat-tab>
 
+  <!--
+    Estilos va ANTES de Programación a propósito: la mezcla por bloque se
+    configura eligiendo estilos, así que el catálogo tiene que existir primero.
+  -->
+  <mat-tab label="Estilos" [disabled]="!conectado">
+    <app-musica-estilos></app-musica-estilos>
+  </mat-tab>
+
   <mat-tab label="Programación" [disabled]="!conectado">
     <app-musica-programacion></app-musica-programacion>
   </mat-tab>

@@ -14,10 +14,13 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatListModule } from '@angular/material/list';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTabsModule } from '@angular/material/tabs';
+import { Subject } from 'rxjs';
+import { debounceTime } from 'rxjs/operators';
 import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 import { MusicaEstiloComponent } from './musica-estilo.component';
 import { MusicaRepertorioComponent } from './musica-repertorio.component';
 import { MusicaProgramacionComponent } from './musica-programacion.component';
+import { MusicaEstilosComponent } from './musica-estilos.component';
 import {
   DispositivoSpotify,
   EstadoReproduccion,
@@ -55,6 +58,7 @@ import {
     MusicaEstiloComponent,
     MusicaRepertorioComponent,
     MusicaProgramacionComponent,
+    MusicaEstilosComponent,
   ],
   templateUrl: './musica.component.html',
   styleUrls: ['./musica.component.scss'],
@@ -88,6 +92,20 @@ export class MusicaComponent implements OnInit, OnDestroy {
   refrescarRepertorio = 0;
 
   private pollHandle: any = null;
+  private destruido = false;
+  /**
+   * El arrastre del slider emite un valor por paso: sin agrupar son decenas de
+   * PUT a Spotify que ademas llegan desordenados, y gana el ultimo en aterrizar
+   * en vez del ultimo que pidio el usuario.
+   */
+  private readonly volumenPedido$ = new Subject<number>();
+  /**
+   * Spotify tarda ~1,5-2 s en reflejar el volumen en `/me/player`. Durante ese
+   * rato hay que ignorar lo que devuelve, o el poll pisa el valor recien
+   * elegido con el anterior y el slider salta solo.
+   */
+  private ultimoCambioVolumen = 0;
+  private static readonly GRACIA_VOLUMEN_MS = 3000;
 
   constructor(
     private musicaService: MusicaService,
@@ -96,6 +114,9 @@ export class MusicaComponent implements OnInit, OnDestroy {
   ) {}
 
   async ngOnInit(): Promise<void> {
+    this.volumenPedido$.pipe(debounceTime(300)).subscribe((v) => {
+      void this.enviarVolumen(v);
+    });
     await this.cargarConfig();
     if (this.conectado) {
       await this.refrescarEstado();
@@ -104,7 +125,14 @@ export class MusicaComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destruido = true;
     this.detenerPoll();
+    this.volumenPedido$.complete();
+    // Si se cierra la pestana con el OAuth a medias, el listener loopback
+    // seguiria ocupando el puerto hasta que venza su timeout de 3 minutos.
+    if (this.conectando) {
+      void this.musicaService.cancelarConexion().catch(() => undefined);
+    }
   }
 
   /**
@@ -172,11 +200,15 @@ export class MusicaComponent implements OnInit, OnDestroy {
     this.estadoMensaje = 'ESPERANDO AUTORIZACION EN EL NAVEGADOR…';
     try {
       const res = await this.musicaService.conectar();
+      if (this.destruido) return;
       this.snackBar.open(`SPOTIFY CONECTADO: ${res.nombreUsuario}`, 'OK', { duration: 4000 });
       await this.cargarConfig();
       await this.buscarDispositivos();
       this.iniciarPoll();
     } catch (e: any) {
+      // Si la pestana ya se cerro, el rechazo es el que provocamos nosotros al
+      // cancelar: no hay a quien mostrarle el error.
+      if (this.destruido) return;
       this.mostrarError(e);
       this.estadoMensaje = 'SIN CONEXION';
     } finally {
@@ -255,7 +287,9 @@ export class MusicaComponent implements OnInit, OnDestroy {
       this.progresoTexto = `${this.formatearMs(estado.progresoMs)} / ${this.formatearMs(estado.duracionMs)}`;
       this.progresoPorcentaje =
         estado.duracionMs > 0 ? (estado.progresoMs / estado.duracionMs) * 100 : 0;
-      if (estado.volumen !== null) this.volumen = estado.volumen;
+      const recienTocado =
+        Date.now() - this.ultimoCambioVolumen < MusicaComponent.GRACIA_VOLUMEN_MS;
+      if (estado.volumen !== null && !recienTocado) this.volumen = estado.volumen;
       this.estadoMensaje = estado.reproduciendo
         ? `SONANDO EN ${estado.dispositivoNombre || 'DISPOSITIVO'}`
         : 'EN PAUSA';
@@ -280,8 +314,19 @@ export class MusicaComponent implements OnInit, OnDestroy {
     await this.ejecutarControl(() => this.musicaService.anterior());
   }
 
-  async cambiarVolumen(): Promise<void> {
-    await this.ejecutarControl(() => this.musicaService.setVolumen(this.volumen));
+  /** Cada paso del arrastre. Agrupa y no refresca: eso lo hace `enviarVolumen`. */
+  cambiarVolumen(): void {
+    this.ultimoCambioVolumen = Date.now();
+    this.volumenPedido$.next(this.volumen);
+  }
+
+  private async enviarVolumen(v: number): Promise<void> {
+    try {
+      await this.musicaService.setVolumen(v);
+      this.ultimoCambioVolumen = Date.now();
+    } catch (e: any) {
+      if (!this.destruido) this.mostrarError(e);
+    }
   }
 
   private async ejecutarControl(accion: () => Promise<unknown>): Promise<void> {

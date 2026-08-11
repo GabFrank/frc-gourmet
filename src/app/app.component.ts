@@ -102,6 +102,8 @@ import { RepositoryService } from './database/repository.service';
 import { UpdateService } from './services/update.service';
 import { PrinterEventsService } from './services/printer-events.service';
 import { UpdateChannelDialogComponent } from './shared/components/update-channel-dialog/update-channel-dialog.component';
+import { MusicaControlDialogComponent } from './shared/components/musica-control-dialog/musica-control-dialog.component';
+import { MusicaService } from './services/musica.service';
 import { EmpresaService } from './shared/services/empresa.service';
 import { ConfigurarEmpresaComponent } from './pages/sistema/configurar-empresa/configurar-empresa.component';
 import { resolveAppUrl } from './shared/utils/image-url.util';
@@ -183,6 +185,24 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   updateDownloaded = false;
   private updateStatusSub: Subscription | null = null;
 
+  /**
+   * Control de musica en el header.
+   *
+   * Quien esta en la caja es el primero que escucha "cambia esa musica", y
+   * abrir Configuracion → Musica es una pestana entera. El boton solo aparece
+   * si Spotify esta configurado y conectado (`musica-disponible`) y el usuario
+   * tiene permiso.
+   */
+  musicaDisponible = false;
+  musicaSonando = false;
+  musicaAlerta = false;
+  /** Titulo truncado para el header. Ancho fijo en CSS: no debe mover el layout. */
+  musicaTexto = '';
+  /** Titulo + artista completos, para el tooltip. */
+  musicaTooltip = 'Música';
+  private musicaUnsub: (() => void) | null = null;
+  private musicaInterval: any = null;
+
   // Window controls (custom titlebar). En macOS los semáforos nativos
   // quedan a la izquierda por `titleBarStyle:hiddenInset` en main.ts, así
   // que ocultamos los controles custom para no duplicar.
@@ -232,6 +252,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     private empresaService: EmpresaService,
     private menuService: MenuService,
     private permissionService: PermissionService,
+    private musicaService: MusicaService,
     // E2.4: solo inyectar para arrancar el listener global de eventos de
     // impresora — el servicio se auto-suscribe en su constructor.
     private _printerEvents: PrinterEventsService,
@@ -240,6 +261,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     // (login/logout/refresh) o los overrides del ADMIN. Fuente única: menu-tree.ts.
     this.permissionService.codigos$.subscribe(() => {
       this.menuNodes = this.menuService.getSidenavTree();
+      // El control de música pregunta al backend, que exige sesión: en
+      // `ngOnInit` todavía no hay usuario y la llamada muere con NO AUTENTICADO.
+      // Este es el momento en que ya hay permisos cargados.
+      void this.iniciarMusicaHeader();
     });
     this.menuService.changes$.subscribe(() => {
       this.menuNodes = this.menuService.getSidenavTree();
@@ -415,6 +440,82 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     this.cotizacionInterval = setInterval(() => this.refreshCotizacion(), 5 * 60 * 1000);
   }
 
+  /**
+   * Estado de musica para el header.
+   *
+   * Se alimenta del canal `musica-events` que ya emitia el main para el SSE de
+   * la PWA: el tema cambia cada 3 minutos, un poll corto en la pantalla de cobro
+   * seria gasto permanente. El intervalo lento es solo la red de seguridad para
+   * el avance normal de tema, que no emite evento.
+   */
+  private async iniciarMusicaHeader(): Promise<void> {
+    // `codigos$` emite en cada login/logout/cambio de permisos: sin esta guarda
+    // se acumularían suscripciones e intervalos.
+    this.detenerMusicaHeader();
+    if (!this.authService.isLoggedIn) return;
+    try {
+      const d = await this.musicaService.disponible();
+      this.musicaDisponible = !!d?.configurado && !!d?.conectado;
+    } catch {
+      // Sin permiso de música, o Spotify sin configurar: el botón no va.
+      this.musicaDisponible = false;
+    }
+    if (!this.musicaDisponible) return;
+
+    await this.refrescarMusicaHeader();
+    this.musicaUnsub = this.musicaService.onEvento(() =>
+      this.ngZone.run(() => void this.refrescarMusicaHeader()),
+    );
+    this.ngZone.runOutsideAngular(() => {
+      this.musicaInterval = setInterval(
+        () => this.ngZone.run(() => void this.refrescarMusicaHeader()),
+        60 * 1000,
+      );
+    });
+  }
+
+  private detenerMusicaHeader(): void {
+    if (this.musicaInterval) {
+      clearInterval(this.musicaInterval);
+      this.musicaInterval = null;
+    }
+    if (this.musicaUnsub) {
+      this.musicaUnsub();
+      this.musicaUnsub = null;
+    }
+    this.musicaDisponible = false;
+  }
+
+  private async refrescarMusicaHeader(): Promise<void> {
+    try {
+      const [estado, runtime] = await Promise.all([
+        this.musicaService.getEstado(),
+        this.musicaService.getRuntimeEstado(),
+      ]);
+      this.musicaSonando = !!estado?.reproduciendo;
+      this.musicaAlerta = !!runtime?.ultimoError;
+      const titulo = estado?.track || '';
+      const artista = estado?.artista || '';
+      this.musicaTexto = titulo || 'Sin reproducir';
+      this.musicaTooltip = titulo
+        ? `${titulo}${artista ? ' — ' + artista : ''}`
+        : 'Música — nada sonando';
+      if (runtime?.ultimoError) this.musicaTooltip = runtime.ultimoError;
+    } catch {
+      // Un fallo puntual no debe vaciar el header: se deja lo último visible.
+      this.musicaAlerta = true;
+    }
+  }
+
+  abrirMusica(): void {
+    this.dialog.open(MusicaControlDialogComponent, {
+      width: '460px',
+      maxWidth: '95vw',
+      panelClass: 'musica-control-panel',
+      autoFocus: false,
+    });
+  }
+
   private async refreshCotizacion(): Promise<void> {
     try {
       const res: any = await firstValueFrom(this.repo.getCotizacionMercado());
@@ -494,6 +595,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       clearTimeout(this.splashTimer);
       this.splashTimer = null;
     }
+    this.detenerMusicaHeader();
   }
 
   openUpdateDialog(): void {
