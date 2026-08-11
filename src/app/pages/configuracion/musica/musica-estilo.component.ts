@@ -63,6 +63,8 @@ export class MusicaEstiloComponent implements OnInit {
   propuestaResumen = '';
   propuestaDescripcion: string[] = [];
   preservarManuales = true;
+  /** Sin grilla, el descubrimiento pierde los géneros por bloque. */
+  hayBloques = false;
 
   semillas: MusicaSemilla[] = [];
   nuevaUrl = '';
@@ -90,12 +92,14 @@ export class MusicaEstiloComponent implements OnInit {
   async cargar(): Promise<void> {
     this.cargando = true;
     try {
-      const [semillas, resumen, config] = await Promise.all([
+      const [semillas, resumen, config, bloques] = await Promise.all([
         this.musicaService.listarSemillas(),
         this.musicaService.getResumenPool(),
         this.musicaService.getConfig(),
+        this.musicaService.listarBloques(),
       ]);
       this.semillas = semillas;
+      this.hayBloques = bloques.length > 0;
       this.aplicarResumen(resumen);
       this.brief = config.brief || '';
       this.autoAprobar = config.autoAprobarDescubrimientos !== false;
@@ -253,6 +257,7 @@ export class MusicaEstiloComponent implements OnInit {
       this.snackBar.open(msg, 'OK', { duration: 6000 });
       this.propuesta = null;
       this.propuestaDescripcion = [];
+      this.hayBloques = true;
     } catch (e: any) {
       this.mostrarError(e);
     } finally {

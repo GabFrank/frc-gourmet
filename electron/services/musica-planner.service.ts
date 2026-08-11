@@ -128,14 +128,15 @@ function pasaVetos(track: MusicaTrack, vetos: Vetos): boolean {
   if (vetos.artistas.has(track.artista)) return false;
   if (track.idioma && vetos.idiomas.has(track.idioma)) return false;
 
-  // El genero puede venir de Spotify o de la etiqueta del LLM; ambos son texto
-  // libre, asi que se compara por inclusion en vez de igualdad exacta
-  // ("ROCK ALTERNATIVO" debe caer bajo un veto de "ROCK PESADO"? no — por eso
-  // la comparacion es por token completo contenido).
+  // Comparacion de generos en UNA sola direccion: el genero del tema tiene que
+  // contener al veto completo. La inclusion bidireccional generaba falsos
+  // positivos graves — un veto de "FUNK BRASILEIRO" descartaba el funk
+  // americano (soul/groove), que no tiene nada que ver, porque
+  // "FUNK BRASILEIRO".includes("FUNK") es verdadero.
   const genero = (track.genero || '').toUpperCase();
   if (genero) {
     for (const g of vetos.generos) {
-      if (genero.includes(g) || g.includes(genero)) return false;
+      if (genero.includes(g)) return false;
     }
   }
   return true;

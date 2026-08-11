@@ -50,6 +50,46 @@ mat-card-title {
   gap: 8px;
 }
 
+/** El orden importa: la grilla da contexto a la búsqueda de música. */
+.paso {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+
+  &.opcional {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px dashed var(--border-color);
+  }
+}
+
+.aviso-orden {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 12px 0;
+  border: 1px solid #ef6c00;
+  border-radius: 8px;
+  color: #ef6c00;
+  font-size: 13px;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+}
+
 .acciones-fila {
   display: flex;
   align-items: center;

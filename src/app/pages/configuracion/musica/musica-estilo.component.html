@@ -40,58 +40,10 @@
     </mat-card-content>
   </mat-card>
 
-  <!-- ─────────── Descubrimiento con IA ─────────── -->
-  <mat-card class="card-descubrir">
-    <mat-card-header>
-      <mat-card-title><mat-icon>auto_awesome</mat-icon> Descubrir música nueva</mat-card-title>
-      <mat-card-subtitle>
-        La IA propone temas según el estilo del local y Spotify los resuelve. Lo que rechaces mejora
-        la próxima ronda.
-      </mat-card-subtitle>
-    </mat-card-header>
-    <mat-card-content>
-      <div class="acciones-fila">
-        <mat-form-field appearance="outline" class="campo-corto">
-          <mat-label>Cantidad a proponer</mat-label>
-          <input matInput type="number" [(ngModel)]="cantidadDescubrir" min="10" max="60" />
-        </mat-form-field>
-
-        <button mat-flat-button color="accent" (click)="descubrir()" [disabled]="descubriendo">
-          <mat-icon>travel_explore</mat-icon> Descubrir música
-        </button>
-        <mat-progress-spinner *ngIf="descubriendo" mode="indeterminate" diameter="24"></mat-progress-spinner>
-        <span class="ayuda" *ngIf="descubriendo">Consultando a la IA y resolviendo en Spotify…</span>
-      </div>
-
-      <mat-slide-toggle [(ngModel)]="autoAprobar" (change)="guardarBrief()">
-        Aceptar automáticamente lo que pase los filtros
-      </mat-slide-toggle>
-      <p class="ayuda">
-        Si lo apagás, lo descubierto queda esperando tu aprobación en la pestaña Repertorio.
-      </p>
-
-      <!-- Resultado de la última ronda -->
-      <div class="resultado" *ngIf="ultimoResultado">
-        <h4>{{ ultimoResultado.titulo }}</h4>
-        <div class="lista-resultado" *ngIf="ultimoResultado.agregados.length">
-          <div class="item-resultado" *ngFor="let a of ultimoResultado.agregados">
-            <mat-icon class="icono-ok">add_circle</mat-icon> {{ a }}
-          </div>
-        </div>
-        <details *ngIf="ultimoResultado.detalle.length">
-          <summary>Ver descartados ({{ ultimoResultado.detalle.length }})</summary>
-          <div class="item-resultado descartado" *ngFor="let d of ultimoResultado.detalle">
-            {{ d }}
-          </div>
-        </details>
-      </div>
-    </mat-card-content>
-  </mat-card>
-
   <!-- ─────────── Brief del local ─────────── -->
   <mat-card>
     <mat-card-header>
-      <mat-card-title>Contá cómo es tu local</mat-card-title>
+      <mat-card-title><span class="paso">1</span> Contá cómo es tu local</mat-card-title>
       <mat-card-subtitle>
         Con tus palabras: qué es, qué público tiene, qué te gusta y qué no querés escuchar. Esto guía
         a la IA en cada búsqueda.
@@ -123,7 +75,7 @@
           (click)="generarProgramacion()"
           [disabled]="interpretando || !brief"
         >
-          <mat-icon>schedule</mat-icon> Generar programación desde este texto
+          <mat-icon>schedule</mat-icon> 2 · Generar programación desde este texto
         </button>
         <mat-progress-spinner *ngIf="interpretando" mode="indeterminate" diameter="24"></mat-progress-spinner>
       </div>
@@ -148,10 +100,67 @@
     </mat-card-content>
   </mat-card>
 
+  <!-- ─────────── Descubrimiento con IA ─────────── -->
+  <mat-card class="card-descubrir">
+    <mat-card-header>
+      <mat-card-title><span class="paso">3</span> Descubrir música nueva</mat-card-title>
+      <mat-card-subtitle>
+        La IA propone temas según el estilo del local y Spotify los resuelve. Lo que rechaces mejora
+        la próxima ronda.
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="acciones-fila">
+        <mat-form-field appearance="outline" class="campo-corto">
+          <mat-label>Cantidad a proponer</mat-label>
+          <input matInput type="number" [(ngModel)]="cantidadDescubrir" min="10" max="60" />
+        </mat-form-field>
+
+        <button mat-flat-button color="accent" (click)="descubrir()" [disabled]="descubriendo">
+          <mat-icon>travel_explore</mat-icon> Descubrir música
+        </button>
+        <mat-progress-spinner *ngIf="descubriendo" mode="indeterminate" diameter="24"></mat-progress-spinner>
+        <span class="ayuda" *ngIf="descubriendo">Consultando a la IA y resolviendo en Spotify…</span>
+      </div>
+
+      <div class="aviso-orden" *ngIf="!hayBloques">
+        <mat-icon>info</mat-icon>
+        <span>
+          Todavía no hay programación. La búsqueda usa los estilos de cada bloque para cubrir el
+          almuerzo, la tarde y la noche por separado: generala primero (paso 2) y los resultados van
+          a ser mucho más precisos.
+        </span>
+      </div>
+
+      <mat-slide-toggle [(ngModel)]="autoAprobar" (change)="guardarBrief()">
+        Aceptar automáticamente lo que pase los filtros
+      </mat-slide-toggle>
+      <p class="ayuda">
+        Si lo apagás, lo descubierto queda esperando tu aprobación en la pestaña Repertorio.
+      </p>
+
+      <!-- Resultado de la última ronda -->
+      <div class="resultado" *ngIf="ultimoResultado">
+        <h4>{{ ultimoResultado.titulo }}</h4>
+        <div class="lista-resultado" *ngIf="ultimoResultado.agregados.length">
+          <div class="item-resultado" *ngFor="let a of ultimoResultado.agregados">
+            <mat-icon class="icono-ok">add_circle</mat-icon> {{ a }}
+          </div>
+        </div>
+        <details *ngIf="ultimoResultado.detalle.length">
+          <summary>Ver descartados ({{ ultimoResultado.detalle.length }})</summary>
+          <div class="item-resultado descartado" *ngFor="let d of ultimoResultado.detalle">
+            {{ d }}
+          </div>
+        </details>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
   <!-- ─────────── Semillas ─────────── -->
   <mat-card>
     <mat-card-header>
-      <mat-card-title>Mis playlists de referencia</mat-card-title>
+      <mat-card-title><span class="paso opcional">+</span> Mis playlists de referencia</mat-card-title>
       <mat-card-subtitle>
         Pegá links de playlists o artistas de Spotify que representen lo que querés que suene.
       </mat-card-subtitle>

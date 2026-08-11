@@ -202,6 +202,15 @@ function construirPrompt(ctx: ContextoMusical, cantidad: number, brief?: string)
     '- Canciones que existan en Spotify, con el nombre exacto del artista y del tema.',
     '- Mezclá conocidas con hallazgos menos obvios, pero siempre agradables de fondo.',
     '- Priorizá la escena/momento del dia que mas material necesite.',
+    // Sin esto el modelo se va a lo que mas abunda en su entrenamiento (indie
+    // anglo) e ignora los estilos regionales que el dueno nombro, que suelen
+    // ser justamente la identidad del local.
+    '- OBLIGATORIO: si la descripcion o los estilos mencionan generos regionales o en otro idioma',
+    '  (bossa nova, MPB, pagode, sertanejo, musica paraguaya, cumbia, flamenco, etc.), TIENEN que',
+    '  estar representados en la lista, repartidos entre los momentos que les corresponden. Una',
+    '  lista solo en ingles es una respuesta INCORRECTA cuando el local pidio esos estilos.',
+    '- Respetá el idioma del publico: si el local recibe clientes de otro pais, incluí musica en',
+    '  ese idioma en proporcion a lo que diga la descripcion.',
     '',
     'Devolvé SOLO JSON con esta forma:',
     '{"candidatos":[{"artista":"","tema":"","genero":"","escenas":["almuerzo"],"motivo":"por que encaja, breve"}]}',
@@ -369,8 +378,11 @@ export async function descubrirMusica(
       resultado.detalleFiltrados.push(`${c.artista} — ${c.tema}: artista vetado`);
       continue;
     }
+    // Una sola direccion (ver pasaVetos en musica-planner): con inclusion
+    // bidireccional, vetar "FUNK BRASILEIRO" descartaba tambien el funk
+    // americano, que es soul/groove y no tiene relacion.
     const generoCand = (c.genero || '').toUpperCase();
-    if (generoCand && generosVetados.some((g) => generoCand.includes(g) || g.includes(generoCand))) {
+    if (generoCand && generosVetados.some((g) => generoCand.includes(g))) {
       resultado.filtrados++;
       resultado.detalleFiltrados.push(`${c.artista} — ${c.tema}: genero vetado (${c.genero})`);
       continue;
