@@ -31,6 +31,6 @@ export class MusicaFeedback extends BaseModel {
   @Column({ type: 'int', nullable: true })
   bloqueId?: number;
 
-  @Column({ type: 'datetime' })
+  @Column()
   fecha!: Date;
 }

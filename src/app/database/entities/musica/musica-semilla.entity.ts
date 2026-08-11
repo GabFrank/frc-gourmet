@@ -40,7 +40,7 @@ export class MusicaSemilla extends BaseModel {
   @Column({ type: 'int', default: 0 })
   tracksImportados!: number;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ nullable: true })
   ultimaImportacion?: Date;
 
   @Column({ default: true })

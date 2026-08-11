@@ -48,6 +48,6 @@ export class PlanBloque extends BaseModel {
   @Column({ type: 'int', default: 0 })
   duracionMs!: number;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ nullable: true })
   materializadoAt?: Date;
 }

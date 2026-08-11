@@ -29,10 +29,10 @@ export class TrackLog extends BaseModel {
   variante?: VarianteEnergia;
 
   @Index()
-  @Column({ type: 'datetime' })
+  @Column()
   inicio!: Date;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ nullable: true })
   fin?: Date;
 
   /** True si se salteo (por "no va" o por quedar fuera de perfil). */

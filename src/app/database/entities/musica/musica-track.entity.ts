@@ -108,7 +108,7 @@ export class MusicaTrack extends BaseModel {
 
   /** Ultima vez que sono: alimenta la ventana anti-repeticion. */
   @Index()
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ nullable: true })
   ultimaVez?: Date;
 
   @Column({ type: 'int', default: 0 })
