@@ -58,8 +58,59 @@ mat-card-title {
   margin: 12px 0;
 }
 
+/**
+ * `flex` solo aplica dentro de un contenedor flex. Este campo se usa en los dos
+ * contextos (suelto en la tarjeta y dentro de `.acciones-fila`), así que el
+ * ancho base va por `width` y el flex solo cuando corresponde.
+ */
 .campo-ancho {
+  width: 100%;
+}
+
+.acciones-fila .campo-ancho {
   flex: 1 1 360px;
+  width: auto;
+}
+
+/**
+ * Brief del local: textarea PLANO, sin `mat-form-field`.
+ *
+ * `styles.scss` fija `.mat-mdc-form-field-flex { height: 40px !important }`
+ * para todo `appearance="outline"` — pensado para compactar inputs de una
+ * línea, pero deja cualquier textarea con el marco de 40px y el contenido
+ * desbordado. Ganarle por especificidad es frágil y se rompe al primer cambio
+ * del tema; sin Material el problema directamente no existe.
+ */
+.brief-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.brief-textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--card-background);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+
+  &::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.7;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--primary-color);
+  }
 }
 
 .campo-corto {

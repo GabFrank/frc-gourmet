@@ -98,15 +98,21 @@
       </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
-      <mat-form-field appearance="outline" class="campo-ancho">
-        <mat-label>Descripción del local</mat-label>
-        <textarea
-          matInput
-          [(ngModel)]="brief"
-          rows="8"
-          placeholder="Ej: Somos una hamburguesería con buffet al mediodía en Salto del Guairá. Público 25+, turistas brasileños y familias. Nos gusta el rock alternativo alegre, bossa, pagode. Evitamos funk, rap y música triste."
-        ></textarea>
-      </mat-form-field>
+      <!--
+        Textarea PLANO, fuera de mat-form-field: styles.scss fija
+        `.mat-mdc-form-field-flex { height: 40px !important }` para todo
+        appearance="outline", lo que aplasta el marco a una línea y desborda el
+        texto. Pelearle por especificidad es frágil; sin Material el problema no
+        existe.
+      -->
+      <label class="brief-label" for="brief-local">Descripción del local</label>
+      <textarea
+        id="brief-local"
+        class="brief-textarea"
+        [(ngModel)]="brief"
+        rows="10"
+        placeholder="Ej: Somos una hamburguesería con buffet al mediodía en Salto del Guairá. Público 25+, turistas brasileños y familias. Nos gusta el rock alternativo alegre, bossa, pagode. Evitamos funk, rap y música triste."
+      ></textarea>
       <div class="acciones-fila">
         <button mat-flat-button color="primary" (click)="guardarBrief()">
           <mat-icon>save</mat-icon> Guardar descripción
