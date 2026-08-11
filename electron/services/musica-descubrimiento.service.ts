@@ -332,6 +332,31 @@ async function resolverEnSpotify(
   return null;
 }
 
+/**
+ * Generos REALES del artista segun Spotify, cacheados por id.
+ *
+ * El veto no puede depender del genero que declara el modelo: aun pidiendole
+ * explicitamente el genero principal, disfraza los vetados para colarlos
+ * ("J Balvin: latin pop" cuando es reggaeton, "Marcelo D2: MPB" cuando es rap).
+ * Spotify publica los generos del artista y eso es dato duro, no opinion.
+ */
+const cacheGenerosArtista = new Map<string, string[]>();
+
+async function generosDelArtista(userDataPath: string, artistaId?: string): Promise<string[]> {
+  if (!artistaId) return [];
+  const cacheado = cacheGenerosArtista.get(artistaId);
+  if (cacheado) return cacheado;
+  try {
+    const artista = await spotifyApi(userDataPath, 'GET', `/artists/${artistaId}`);
+    const generos: string[] = (artista?.genres || []).map((g: string) => g.toUpperCase());
+    cacheGenerosArtista.set(artistaId, generos);
+    return generos;
+  } catch {
+    // Si Spotify no responde no se bloquea el tema: el resto de los filtros sigue.
+    return [];
+  }
+}
+
 /* ─────────────────────── Flujo principal ─────────────────────── */
 
 export async function descubrirMusica(
@@ -407,6 +432,19 @@ export async function descubrirMusica(
       continue;
     }
 
+    // Veto sobre los generos REALES del artista, no sobre lo que declaro la IA.
+    const generosReales = await generosDelArtista(userDataPath, item.artists?.[0]?.id);
+    const vetadoReal = generosReales.find((real) =>
+      generosVetados.some((veto) => real.includes(veto) || veto.includes(real)),
+    );
+    if (vetadoReal) {
+      resultado.filtrados++;
+      resultado.detalleFiltrados.push(
+        `${c.artista} — ${c.tema}: el artista es de un género vetado según Spotify (${vetadoReal.toLowerCase()})`,
+      );
+      continue;
+    }
+
     const yaExiste = await trackRepo.findOne({ where: { spotifyId: item.id } });
     if (yaExiste) {
       resultado.yaEstaban++;
@@ -434,7 +472,9 @@ export async function descubrirMusica(
       imagenUrl: item.album?.images?.[0]?.url ?? undefined,
       duracionMs: dur,
       explicit: !!item.explicit,
-      genero: c.genero ? c.genero.toUpperCase() : undefined,
+      // Se guarda el genero de Spotify si existe: es mas confiable que la
+      // etiqueta del modelo, y es lo que despues filtra el generador.
+      genero: generosReales[0] || (c.genero ? c.genero.toUpperCase() : undefined),
       escenas: c.escenas,
       // El descubrimiento entra aprobado por defecto: el dueno pidio no tener
       // que curar a mano. Se corrige por sustraccion (boton "no va").
