@@ -1,0 +1,78 @@
+<div class="crud-page">
+  <!-- Filtros: sin live-filtering, botón Filtrar explícito -->
+  <div class="crud-filter-panel filtros">
+    <mat-form-field appearance="outline" class="campo-buscar">
+      <mat-label>Buscar tema o artista</mat-label>
+      <input matInput [(ngModel)]="filtroTexto" (keyup.enter)="filtrar()" />
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="campo-estado">
+      <mat-label>Estado</mat-label>
+      <mat-select [(ngModel)]="filtroEstado">
+        <mat-option value="APROBADO">Puede sonar</mat-option>
+        <mat-option value="SUGERIDO">Esperando aprobación</mat-option>
+        <mat-option value="VETADO">Descartados</mat-option>
+        <mat-option value="">Todos</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <div class="crud-filter-actions">
+      <span class="total">{{ total | number: '1.0-2' }} temas</span>
+      <button mat-stroked-button (click)="limpiarFiltros()">Limpiar</button>
+      <button mat-flat-button color="primary" (click)="filtrar()">
+        <mat-icon>search</mat-icon> Filtrar
+      </button>
+    </div>
+  </div>
+
+  <mat-progress-bar *ngIf="cargando" mode="indeterminate"></mat-progress-bar>
+
+  <div class="crud-list" *ngIf="!cargando">
+    <mat-card *ngFor="let f of filas" class="crud-card" appearance="outlined">
+      <div class="crud-card-body">
+        <img *ngIf="f.imagenUrl" [src]="f.imagenUrl" alt="" class="crud-thumb" />
+        <div *ngIf="!f.imagenUrl" class="crud-thumb thumb-vacia">
+          <mat-icon>music_note</mat-icon>
+        </div>
+        <div class="crud-card-main">
+          <span class="crud-name">{{ f.titulo }}</span>
+          <span class="crud-sub">{{ f.artista }}</span>
+          <span class="crud-sub datos">
+            {{ f.genero || '—' }} · {{ f.duracionTexto }} · {{ f.bpmTexto }}
+            <ng-container *ngIf="f.vecesSonado"> · sonó {{ f.vecesSonado | number: '1.0-2' }}×</ng-container>
+          </span>
+        </div>
+        <span class="crud-chip" [ngClass]="f.estadoClase">{{ f.estadoTexto }}</span>
+        <button mat-icon-button [matMenuTriggerFor]="menu" *ngIf="canControlar || canConfigurar">
+          <mat-icon>more_vert</mat-icon>
+        </button>
+        <mat-menu #menu="matMenu">
+          <button mat-menu-item (click)="noVa(f)" *ngIf="canControlar && f.estado !== 'VETADO'">
+            <mat-icon>thumb_down</mat-icon><span>No va — sacar del repertorio</span>
+          </button>
+          <button mat-menu-item (click)="vetarArtista(f)" *ngIf="canControlar">
+            <mat-icon>block</mat-icon><span>Vetar a {{ f.artista }}</span>
+          </button>
+          <button mat-menu-item (click)="meGusta(f)" *ngIf="canControlar">
+            <mat-icon>thumb_up</mat-icon><span>Más de esto</span>
+          </button>
+          <button mat-menu-item (click)="aprobar(f)" *ngIf="canConfigurar && f.estado !== 'APROBADO'">
+            <mat-icon>check_circle</mat-icon><span>Aprobar</span>
+          </button>
+        </mat-menu>
+      </div>
+    </mat-card>
+
+    <p class="crud-empty" *ngIf="filas.length === 0">
+      No hay temas con ese filtro. Si el repertorio está vacío, cargá playlists o usá "Descubrir
+      música" en Mi estilo.
+    </p>
+  </div>
+
+  <mat-paginator
+    *ngIf="total > 0"
+    [length]="total"
+    [pageSize]="pageSize"
+    [pageIndex]="page"
+    [pageSizeOptions]="[25, 50, 100]"
+    (page)="cambiarPagina($event)"
+  ></mat-paginator>
+</div>

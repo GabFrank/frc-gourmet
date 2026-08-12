@@ -1,0 +1,37 @@
+.filtros {
+  padding-top: 12px;
+
+  .campo-buscar {
+    flex: 1 1 180px;
+  }
+
+  .campo-estado {
+    flex: 1 1 140px;
+  }
+
+  .crud-filter-actions {
+    align-items: center;
+
+    .total {
+      margin-right: auto;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+    }
+  }
+}
+
+.thumb-vacia {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.crud-sub.datos {
+  font-size: 0.75rem;
+}
+
+.crud-chip.veto {
+  background: color-mix(in srgb, var(--error-color) 16%, transparent);
+  color: var(--error-color);
+}
