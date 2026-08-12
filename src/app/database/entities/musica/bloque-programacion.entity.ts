@@ -78,7 +78,12 @@ export class BloqueProgramacion extends BaseModel {
    * ~100. Preferir es util; exigir dejaria la playlist corta y entraria el
    * autoplay de Spotify, que es peor que un tema fuera de momento.
    */
-  @Column({ nullable: true })
+  // `type` explicito: el tipo TS es una union (`string | null`), y de una union
+  // el metadata de decoradores emite `Object`, que Postgres rechaza al validar
+  // ("Data type Object ... is not supported"). SQLite lo tolera, asi que el
+  // fallo aparece solo en el job de migraciones. El `| null` se mantiene porque
+  // el handler asigna null a proposito para limpiar la columna.
+  @Column({ type: 'varchar', nullable: true })
   escenaPreferida?: string | null;
 
   /**
