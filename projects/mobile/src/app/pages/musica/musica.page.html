@@ -48,6 +48,9 @@
 
   <!-- Controles -->
   <div class="controles">
+    <button mat-fab class="btn-secundario" (click)="anterior()" aria-label="Anterior">
+      <mat-icon>skip_previous</mat-icon>
+    </button>
     <button mat-fab color="primary" (click)="play()" *ngIf="!estado?.reproduciendo">
       <mat-icon>play_arrow</mat-icon>
     </button>

@@ -40,7 +40,7 @@ const CONFIG_ITEMS: SectionItem[] = [
  */
 const MUSICA_CFG_ITEMS: SectionItem[] = [
   { label: 'Control', icon: 'play_circle', path: '/musica', enabled: true, permiso: ['MUSICA_VER', 'MUSICA_CONTROLAR'] },
-  { label: 'Conexión Spotify', icon: 'link', path: '/configuracion/musica/conexion', enabled: false, permiso: 'MUSICA_CONFIGURAR' },
+  { label: 'Conexión Spotify', icon: 'link', path: '/configuracion/musica/conexion', enabled: true, permiso: 'MUSICA_CONFIGURAR' },
   { label: 'Mi estilo', icon: 'tune', path: '/configuracion/musica/estilo', enabled: false, permiso: 'MUSICA_CONFIGURAR' },
   { label: 'Repertorio', icon: 'library_music', path: '/configuracion/musica/repertorio', enabled: false, permiso: 'MUSICA_CONFIGURAR' },
   { label: 'Estilos', icon: 'graphic_eq', path: '/configuracion/musica/estilos', enabled: false, permiso: 'MUSICA_CONFIGURAR' },
@@ -830,6 +830,12 @@ export const routes: Routes = [
         canActivate: [permisoGuard],
         data: { title: 'Música ambiente', permiso: 'MUSICA_CONFIGURAR', items: MUSICA_CFG_ITEMS },
         loadComponent: () => import('./pages/section-index/section-index.page').then((m) => m.SectionIndexPage),
+      },
+      {
+        path: 'configuracion/musica/conexion',
+        canActivate: [permisoGuard],
+        data: { title: 'Conexión Spotify', permiso: 'MUSICA_CONFIGURAR' },
+        loadComponent: () => import('./pages/configuracion/musica/musica-conexion.page').then((m) => m.MusicaConexionPage),
       },
       {
         path: 'reportes',

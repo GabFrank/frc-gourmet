@@ -154,7 +154,14 @@
 .controles {
   display: flex;
   justify-content: center;
+  align-items: center;
   gap: 24px;
+
+  // Anterior: presente para paridad, pero secundario frente a play/siguiente.
+  .btn-secundario {
+    background: var(--surface-variant);
+    color: var(--text-primary);
+  }
 }
 
 .feedback {

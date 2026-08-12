@@ -228,6 +228,10 @@ export class MusicaPage implements OnInit, OnDestroy {
     await this.accion(() => this.api.callIpc('musica-pausar'));
   }
 
+  async anterior(): Promise<void> {
+    await this.accion(() => this.api.callIpc('musica-anterior'));
+  }
+
   async siguiente(): Promise<void> {
     await this.accion(() => this.api.callIpc('musica-siguiente'));
   }
