@@ -1,0 +1,41 @@
+.tarjeta {
+  margin-bottom: 12px;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.resultado {
+  padding: 10px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: var(--surface-variant);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+
+  div {
+    margin: 2px 0;
+  }
+}
+
+.crud-sub.alias {
+  font-size: 0.75rem;
+  white-space: normal;
+}
+
+.alta {
+  margin-top: 12px;
+
+  .campo {
+    width: 100%;
+  }
+}
+
+.select-estilo {
+  flex: 0 0 auto;
+  width: 150px;
+}

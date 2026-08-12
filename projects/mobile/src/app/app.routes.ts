@@ -43,7 +43,7 @@ const MUSICA_CFG_ITEMS: SectionItem[] = [
   { label: 'Conexión Spotify', icon: 'link', path: '/configuracion/musica/conexion', enabled: true, permiso: 'MUSICA_CONFIGURAR' },
   { label: 'Mi estilo', icon: 'tune', path: '/configuracion/musica/estilo', enabled: true, permiso: 'MUSICA_CONFIGURAR' },
   { label: 'Repertorio', icon: 'library_music', path: '/configuracion/musica/repertorio', enabled: true, permiso: 'MUSICA_CONFIGURAR' },
-  { label: 'Estilos', icon: 'graphic_eq', path: '/configuracion/musica/estilos', enabled: false, permiso: 'MUSICA_CONFIGURAR' },
+  { label: 'Estilos', icon: 'graphic_eq', path: '/configuracion/musica/estilos', enabled: true, permiso: 'MUSICA_CONFIGURAR' },
   { label: 'Programación', icon: 'calendar_month', path: '/configuracion/musica/programacion', enabled: false, permiso: 'MUSICA_CONFIGURAR' },
 ];
 
@@ -848,6 +848,12 @@ export const routes: Routes = [
         canActivate: [permisoGuard],
         data: { title: 'Repertorio', permiso: 'MUSICA_CONFIGURAR' },
         loadComponent: () => import('./pages/configuracion/musica/musica-repertorio.page').then((m) => m.MusicaRepertorioPage),
+      },
+      {
+        path: 'configuracion/musica/estilos',
+        canActivate: [permisoGuard],
+        data: { title: 'Estilos', permiso: 'MUSICA_CONFIGURAR' },
+        loadComponent: () => import('./pages/configuracion/musica/musica-estilos.page').then((m) => m.MusicaEstilosPage),
       },
       {
         path: 'reportes',
