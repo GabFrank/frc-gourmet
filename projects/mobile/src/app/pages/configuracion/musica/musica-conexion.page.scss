@@ -3,14 +3,13 @@
   padding: 12px 0 4px;
 }
 
+// Estados: solo la paleta permitida (verde = conectado, naranja = sin conexión).
 .estado-chip {
   padding: 4px 12px;
   border-radius: 999px;
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  background: color-mix(in srgb, var(--text-secondary) 16%, transparent);
-  color: var(--text-secondary);
 
   &.ok {
     background: color-mix(in srgb, var(--success-color) 18%, transparent);
@@ -30,13 +29,13 @@
   padding: 12px;
   margin-bottom: 12px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  background: color-mix(in srgb, var(--info-color) 10%, transparent);
   color: var(--text-primary);
   font-size: 0.85rem;
 
   mat-icon {
     flex: 0 0 auto;
-    color: var(--primary-color);
+    color: var(--info-color);
   }
 }
 
@@ -86,6 +85,6 @@
 }
 
 .dispositivo.activo {
-  background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  background: color-mix(in srgb, var(--info-color) 10%, transparent);
   border-radius: 8px;
 }

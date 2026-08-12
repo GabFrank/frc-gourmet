@@ -59,8 +59,8 @@
   height: 22px;
   margin-right: 6px;
   border-radius: 50%;
-  background: var(--primary-color);
-  color: #fff;
+  background: var(--info-color);
+  color: var(--info-text);
   font-size: 0.8rem;
   font-weight: 700;
 
@@ -103,12 +103,12 @@
   padding: 10px;
   margin: 12px 0;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  background: color-mix(in srgb, var(--info-color) 10%, transparent);
   font-size: 0.82rem;
 
   mat-icon {
     flex: 0 0 auto;
-    color: var(--primary-color);
+    color: var(--info-color);
   }
 }
 

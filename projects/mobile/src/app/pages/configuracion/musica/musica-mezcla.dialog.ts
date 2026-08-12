@@ -44,10 +44,10 @@ interface FilaMezcla {
   templateUrl: './musica-mezcla.dialog.html',
   styleUrls: ['./musica-mezcla.dialog.scss'],
 })
-export class MusicaMezclaDialog implements OnInit {
+export class MusicaMezclaDialogComponent implements OnInit {
   private readonly musica = inject(MusicaService);
   private readonly snack = inject(MatSnackBar);
-  private readonly dialogRef = inject(MatDialogRef<MusicaMezclaDialog>);
+  private readonly dialogRef = inject(MatDialogRef<MusicaMezclaDialogComponent>);
 
   cargando = false;
   guardando = false;

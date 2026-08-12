@@ -15,7 +15,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { BloqueProgramacion, MusicaAvanzado, MusicaService } from '@frc/shared-core';
 import { ConfirmDialogComponent } from '../../../core/components/confirm-dialog.component';
-import { MusicaMezclaDialog } from './musica-mezcla.dialog';
+import { MusicaMezclaDialogComponent } from './musica-mezcla.dialog';
 
 interface DiaConBloques {
   dia: number;
@@ -156,7 +156,7 @@ export class MusicaProgramacionPage implements OnInit {
   }
 
   abrirMezcla(b: BloqueVista): void {
-    const ref = this.dialog.open(MusicaMezclaDialog, {
+    const ref = this.dialog.open(MusicaMezclaDialogComponent, {
       width: '560px',
       maxWidth: '95vw',
       data: { bloqueId: b.id, bloqueNombre: b.nombre },
