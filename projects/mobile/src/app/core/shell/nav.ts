@@ -49,4 +49,12 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Música',
     permisos: ['MUSICA_VER', 'MUSICA_CONTROLAR'],
   },
+  // Configuracion: hoy solo Musica ambiente (gerente/admin). A futuro suma mas
+  // opciones; el SectionIndexPage filtra los tiles por permiso.
+  {
+    path: '/configuracion',
+    icon: 'settings',
+    label: 'Configuración',
+    permisos: ['MUSICA_CONFIGURAR'],
+  },
 ];

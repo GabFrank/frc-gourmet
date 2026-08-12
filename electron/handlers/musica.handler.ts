@@ -498,6 +498,15 @@ export function registerMusicaHandlers(
     // prompt del planificador. Gritarlo degrada la lectura del modelo.
     if (data.notas !== undefined) entity.notas = data.notas;
     if (data.orden !== undefined) entity.orden = data.orden;
+    // Opciones avanzadas del bloque. Estaban en la entidad y en la UI, pero no
+    // se persistian: los cuatro controles del panel avanzado no hacian nada.
+    // `maxPorArtista` viaja con su centinela (null = heredar, 0 = sin limite);
+    // ver el comentario de la entidad.
+    if (data.maxPorArtista !== undefined) entity.maxPorArtista = data.maxPorArtista;
+    if (data.evitarArtistaConsecutivo !== undefined) {
+      entity.evitarArtistaConsecutivo = data.evitarArtistaConsecutivo;
+    }
+    if (data.factorDuracion !== undefined) entity.factorDuracion = data.factorDuracion;
 
     await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, !!data.id);
     return await repo.save(entity);

@@ -1,0 +1,150 @@
+.tarjeta {
+  margin-bottom: 12px;
+}
+
+.campo {
+  width: 100%;
+}
+
+.campo-corto {
+  width: 110px;
+}
+
+.resumen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 10px;
+}
+
+.metrica {
+  display: flex;
+  flex-direction: column;
+
+  .valor {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-primary);
+
+    &.ok {
+      color: var(--success-color);
+    }
+    &.pend {
+      color: var(--warning-color);
+    }
+    &.veto {
+      color: var(--error-color);
+    }
+  }
+
+  .etiqueta {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+  }
+}
+
+.acciones {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.paso {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--info-color);
+  color: var(--info-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+
+  &.opcional {
+    background: var(--surface-variant);
+    color: var(--text-secondary);
+  }
+}
+
+.ayuda {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin: 8px 0 0;
+}
+
+.aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  margin: 12px 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--info-color) 10%, transparent);
+  font-size: 0.82rem;
+
+  mat-icon {
+    flex: 0 0 auto;
+    color: var(--info-color);
+  }
+}
+
+.toggle {
+  margin: 12px 0 4px;
+}
+
+.resultado {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+
+  h4 {
+    margin: 0 0 8px;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+  }
+
+  .lista {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: var(--text-primary);
+
+    &.descartado {
+      color: var(--text-secondary);
+    }
+  }
+
+  .ok-icon {
+    color: var(--success-color);
+    font-size: 18px;
+    height: 18px;
+    width: 18px;
+  }
+
+  details summary {
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    margin: 8px 0 4px;
+  }
+}
+
+.semilla {
+  .thumb-vacia {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+  }
+}

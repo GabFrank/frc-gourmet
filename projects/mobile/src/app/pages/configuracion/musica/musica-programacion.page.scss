@@ -1,0 +1,136 @@
+.tarjeta {
+  margin-bottom: 12px;
+}
+
+.campo {
+  width: 100%;
+}
+
+.chico {
+  flex: 1 1 120px;
+  min-width: 100px;
+}
+
+.form-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.bloque-acciones {
+  margin-top: 14px;
+}
+
+.ayuda {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin: 8px 0 0;
+}
+
+.resultado {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+
+  h4 {
+    margin: 0 0 6px;
+    font-size: 0.92rem;
+    color: var(--text-primary);
+  }
+
+  .advertencia {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: var(--warning-color);
+
+    mat-icon {
+      font-size: 18px;
+      height: 18px;
+      width: 18px;
+    }
+  }
+}
+
+// En un teléfono el header del acordeón es angosto: la hora y la energía se
+// mantienen enteras y el nombre absorbe el sobrante con elipsis.
+::ng-deep .mat-expansion-panel-header {
+  padding: 0 12px;
+}
+
+mat-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.bloque-hora {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.bloque-nombre {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.bloque-energia {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--info-color) 16%, transparent);
+  color: var(--info-color);
+}
+
+.mezcla {
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--surface-variant);
+
+  .mezcla-texto {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 4px;
+  }
+
+  .mezcla-titulo {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+  }
+
+  .mezcla-detalle {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+  }
+}
+
+.avanzado-bloque {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+
+  h4 {
+    margin: 0 0 8px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+  }
+}
