@@ -28,6 +28,7 @@ import { BloqueProgramacion } from '../../src/app/database/entities/musica/bloqu
 import { MusicaFeedback } from '../../src/app/database/entities/musica/musica-feedback.entity';
 import {
   EstadoTrack,
+  normalizarEscenas,
   TipoFeedback,
   TipoVeto,
 } from '../../src/app/database/entities/musica/musica-enums';
@@ -480,7 +481,9 @@ export async function descubrirMusica(
       // Se guarda el genero de Spotify si existe: es mas confiable que la
       // etiqueta del modelo, y es lo que despues filtra el generador.
       genero: generosReales[0] || (c.genero ? c.genero.toUpperCase() : undefined),
-      escenas: c.escenas,
+      // Mismo vocabulario cerrado que el etiquetado: si entra texto libre aca,
+      // el filtro por escena del bloque no lo encuentra nunca.
+      escenas: normalizarEscenas(c.escenas),
       // El descubrimiento entra aprobado por defecto: el dueno pidio no tener
       // que curar a mano. Se corrige por sustraccion (boton "no va").
       estado: autoAprobar ? EstadoTrack.APROBADO : EstadoTrack.SUGERIDO,

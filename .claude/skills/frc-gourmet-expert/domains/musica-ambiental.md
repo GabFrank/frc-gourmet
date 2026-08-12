@@ -52,7 +52,7 @@ Es el corazón del módulo. Como Spotify ya no recomienda, **el criterio musical
 
 | Archivo | Rol |
 |---|---|
-| `electron/services/musica-estilos.service.ts` | Catálogo canónico, alias, reclasificación, mezcla por bloque y cálculo de déficit |
+| `electron/services/musica-estilos.service.ts` | Catálogo canónico, alias, **resolución de estilo por precedencia** (`resolverEstilo` / `aplicarResolucion` / `RELACIONES_ESTILO`), reclasificación, desacuerdos, mezcla por bloque y cálculo de déficit |
 | `electron/services/musicbrainz.service.ts` | Género por ISRC (género de grabación, no de artista) |
 | `electron/services/spotify.service.ts` | OAuth PKCE, listener loopback, refresh con rotación, wrapper de API con reintento en 401 y `Retry-After` en 429, operaciones de player |
 | `electron/services/musica-pool.service.ts` | Importa semillas (playlist/artista/track/biblioteca) al repertorio |
@@ -76,7 +76,7 @@ Es el corazón del módulo. Como Spotify ya no recomienda, **el criterio musical
 
 **Entidades:** `MusicaSemilla`, `MusicaTrack`, `MusicaVeto`, `BloqueProgramacion`, `PlanProgramacion`, `PlanBloque`, `TrackLog`, `MusicaFeedback`, `MusicaEstilo`, `MusicaEstiloAlias`, `BloqueEstiloMezcla`.
 
-**Migraciones:** `1786378422682-MusicaAmbiental` (8 tablas), `1786383979096-MusicaOpcionesAvanzadas` (opciones por bloque), `1786475808081-MusicaCatalogoEstilos` (catálogo, alias, mezcla + columnas en tracks y vetos).
+**Migraciones:** `1786378422682-MusicaAmbiental` (8 tablas), `1786383979096-MusicaOpcionesAvanzadas` (opciones por bloque), `1786475808081-MusicaCatalogoEstilos` (catálogo, alias, mezcla + columnas en tracks y vetos), `1786563231306-MusicaClasificacionSemantica` (3 columnas de opinión + backfill, normalización del vocabulario ya guardado, `animosEvitar` / `escenaPreferida` en el bloque).
 
 **Permisos:** `MUSICA_VER` (mozos) · `MUSICA_CONTROLAR` (cajero/gerente/admin: controlan y votan) · `MUSICA_CONFIGURAR` (gerente/admin).
 
@@ -153,6 +153,42 @@ El UNIQUE en `alias.valor` es la pieza clave: hace **imposible** que un género 
 5. LLM (en el etiquetado)  → elige de la lista CERRADA, nunca inventa
 ```
 
+## 3.ter Tres opiniones y una resolución (2026-08-12)
+
+**El problema.** Con **una sola** columna `estilo_id`, la última capa en correr pisaba a las anteriores. Como la reclasificación por género corre **después** del etiquetado, el veredicto del LLM se revertía en la corrida siguiente, en silencio.
+
+Eso hacía **estructuralmente imposible** una distinción que el local sí necesita: *bossa covers* vs *bossa clásica* son el mismo género (`BOSSA NOVA`) y solo se distinguen entendiendo el tema. El `UNIQUE` de `alias.valor` —que es lo que impide que la tabla se pudra— es a la vez lo que impide expresar "un género, dos estilos".
+
+**El modelo.** Tres columnas de opinión + una resuelta:
+
+| Columna | Quién escribe | Gana porque |
+|---|---|---|
+| `estilo_manual_id` | el dueño (`fijarEstiloTrack`) | ya miró ese tema |
+| `estilo_agente_id` | el LLM (`etiquetarTracks`) | es el único que **entiende** el tema |
+| `estilo_genero_id` | alias + herencia (`reclasificarPool`) | barato, estable, reproducible |
+| `estilo_id` | **`aplicarResolucion()`** | valor resuelto; es el único que lee el planner |
+
+`resolverEstilo()` es la regla, y vive en **un solo lugar**: `manual ?? agente ?? genero`. Toda escritura de cualquiera de las tres tiene que pasar por `aplicarResolucion()` — si cada capa recalculara por su cuenta, en meses `estilo_id` no coincidiría con ninguna fuente y nadie sabría por qué.
+
+**Consecuencia práctica:** `Clasificar` dejó de ser destructivo. Se puede correr en cualquier orden y cuantas veces se quiera.
+
+**Los desacuerdos son la cola de curación.** Donde `estilo_agente ≠ estilo_genero` casi siempre hay una distinción que la taxonomía de géneros no sabe expresar. `desacuerdosDeEstilo()` los lista y la pestaña Estilos los muestra. Se arma sola.
+
+**La descripción del estilo va al prompt.** Sin ella el modelo recibe solo nombres y no tiene con qué elegir entre dos estilos del mismo género.
+
+## 3.quater Ejes semánticos: ánimo y momento
+
+El etiquetador ya completaba `ambiente`, `escenas`, `familiaridad` e `idioma` — **al 100% del repertorio** — y **ninguna línea del backend los leía**. Mientras tanto el planner seleccionaba por BPM y valencia, que ReccoBeats cubre al 87% y que no distinguen una balada linda de una de despecho.
+
+El brief del local dice *"nada triste"* y había **45 temas `MELANCOLICO`** sonando: la regla estaba escrita y no se aplicaba, porque los vetos aceptan artista, género, estilo, tema e idioma — ninguno describe el ánimo.
+
+| Campo del bloque | Comportamiento | Por qué |
+|---|---|---|
+| `animosEvitar` | **exclusión dura**, ni siquiera se relaja | es una regla explícita del dueño, no un parámetro de perfil |
+| `escenaPreferida` | **preferencia**: suma 1 al peso de orden | de 278 temas solo 38 declaran `ALMUERZO`; como filtro duro dejaría el bloque a un tercio y entraría el autoplay de Spotify |
+
+**Vocabulario cerrado, validado al escribir.** `AnimoTrack` y `EscenaTrack` en `musica-enums.ts`, con `normalizarAnimo()` / `normalizarEscenas()` y un mapa de sinónimos. No alcanza con pedirlo en el prompt: en producción el modelo devolvió `energico` **51 veces** y `energetico` **16** para el mismo concepto, y un filtro por `energico` perdía esos 16 en silencio.
+
 **Cuotas en el planner.** `seleccionarTracks` reparte por estilo **intercalando**: en cada paso toma de la cuota más atrasada respecto de su objetivo. Llenar cubeta por cubeta daría media hora de bossa seguida y después media hora de pagode — dos playlists pegadas. Cuando una cuota se queda sin material, reparte el hueco y lo reporta en `cuotasIncumplidas`.
 
 **Los porcentajes no tienen que sumar 100.** Lo que falte se completa con el resto del repertorio. Sumar menos es una forma válida de decir "quiero bossa y pagode, el resto me da igual".
@@ -179,7 +215,11 @@ El UNIQUE en `alias.valor` es la pieza clave: hace **imposible** que un género 
 14. **`relations: ['estilo']` no es opcional.** `repo.find()` sin él deja `t.estilo` en `undefined` en TODOS los temas: la herencia por artista hereda cero y el planner manda todo el pool a la cubeta "(resto)". Costó dos bugs.
 15. **MusicBrainz exige `User-Agent` identificable** con forma de contacto, y bloquea a quien no lo manda. Límite de cortesía: 1 request/segundo; pasarse devuelve 503 y termina en bloqueo de IP.
 16. **El etiquetado con LLM VETA temas solo.** `aptoFamiliar === false` pone el tema en `VETADO` sin pasar por el dueño. El modelo juzga con título + artista + género, **sin la letra**. Medido: 6,9% en inglés, 7,8% en portugués, 5% en español — sin sesgo cultural, pero 19 de 21 no estaban marcados como explícitos por Spotify.
-17. **El listener loopback del OAuth hay que cancelarlo a mano.** Espera hasta `OAUTH_TIMEOUT_MS` (3 min) y nada más lo cierra: abandonar el flujo dejaba el puerto tomado **por la propia app**, y el reintento moría con `EADDRINUSE` mostrando un error que culpaba a otro programa. Hoy `cancelarConexionSpotify()` lo aborta, lo llaman el `ngOnDestroy` de la pantalla y el propio `conectarSpotify()` antes de bindear. Ojo: `server.close()` **no** basta si hay conexiones abiertas — va con `closeAllConnections()`, y la respuesta HTML se termina de mandar antes de cortar el socket.
+17. **Nunca escribir `estilo_id` directo.** Se escribe la columna de la fuente que corresponda (`estiloManual` / `estiloAgente` / `estiloGenero`) y después `aplicarResolucion()`. Escribir el resuelto a mano lo desincroniza de sus fuentes y la próxima corrida lo revierte. Las relaciones a cargar están en `RELACIONES_ESTILO` — y aplica el gotcha 14: sin ellas, `resolverEstilo()` ve `undefined` y **borraría** el estilo al guardar.
+18. **El vocabulario del LLM deriva solo.** `energico` (51) y `energetico` (16) para el mismo concepto, en producción. El prompt es una sugerencia; la garantía es `normalizarAnimo()` / `normalizarEscenas()` al escribir. Todo eje semántico nuevo necesita su enum y su normalizador, no solo una línea en el prompt.
+19. **El ánimo prohibido no se relaja.** El planner relaja BPM y valencia cuando falta material, pero `animosEvitar` se respeta siempre. Es deliberado: preferimos playlist corta antes que un tema de despecho en el almuerzo familiar.
+20. **La escena es preferencia, no filtro.** Convertirla en filtro duro vacía el bloque: la cobertura por escena es muy despareja (`TARDE` 204 temas, `ALMUERZO` 38, `APERTURA` 1).
+21. **El listener loopback del OAuth hay que cancelarlo a mano.** Espera hasta `OAUTH_TIMEOUT_MS` (3 min) y nada más lo cierra: abandonar el flujo dejaba el puerto tomado **por la propia app**, y el reintento moría con `EADDRINUSE` mostrando un error que culpaba a otro programa. Hoy `cancelarConexionSpotify()` lo aborta, lo llaman el `ngOnDestroy` de la pantalla y el propio `conectarSpotify()` antes de bindear. Ojo: `server.close()` **no** basta si hay conexiones abiertas — va con `closeAllConnections()`, y la respuesta HTML se termina de mandar antes de cortar el socket.
 
 ---
 
@@ -201,7 +241,16 @@ El UNIQUE en `alias.valor` es la pieza clave: hace **imposible** que un género 
 
 **Validado contra Spotify y OpenAI reales (2026-08-11):** conexión, brief → grilla de 31 bloques, 3 rondas de descubrimiento (427 temas), plan generado por IA y **15 playlists creadas**. Las duraciones confirmaron el fix de medianoche: el bloque de 7 h produce 10,5 h de playlist (1,5×).
 
+**Medido en producción (2026-08-12, 278 temas aprobados).** El limitante del módulo **no es el algoritmo, es el repertorio**. Las cuotas funcionan: el ALMUERZO del miércoles pedía BOSSA 50 / PAGODE 40 / CHILL 5 / SOUL 5 y la playlist salió con 65 temas y 4,43 h contra un objetivo de 6 h — el 95% de todo lo que existe en esos cuatro estilos. Cuando una cubeta se seca, su cuota la absorben las demás, así que lo que suena termina siendo ≈ BOSSA 40 / PAGODE 9 / CHILL 18 / SOUL 33.
+
+Reparto real, muy sesgado a lo anglo: `INDIE 53 · POP 47 · ROCK 44 · BOSSA/MPB 27 · ELECTRONICA 26 · SOUL 25` contra `PAGODE 6 · SERTANEJO 6 · BRASIL FESTIVO 0`.
+
+**Antes de tocar el planner, mirar `musica-deficit` del bloque.** Una cuota solo es realista si el estilo tiene material para `duración × factorDuracion (1.5) × porcentaje`.
+
+Dos hallazgos del mismo día: los 278 aprobados están **todos clasificados** (cero sin estilo), y el estilo `BOSSA / MPB` tiene los alias `MPB` y `POP BRASILENO` **vacíos** — los 27 temas vienen etiquetados `BOSSA NOVA` a secas, así que el nombre del estilo miente.
+
 **Pendiente:**
+- **Semilla que declara su estilo.** La procedencia es el discriminador más barato y confiable: un tema que entró por la playlist *Bossa Nova Covers* **es** un cover, y eso es un hecho del origen, no una inferencia. Requiere columna en `MusicaSemilla` + migración. Con la cadena de precedencia ya en su lugar, entraría entre manual y agente.
 - **Dashboard música ↔ ventas** por bloque (los datos ya se registran en `TrackLog`).
 - **ReccoBeats YA se ejecutó contra la API real (2026-08-11)**: funcionó. Cobertura 234 de 300 procesados (78%); el resto no está en su base. Datos sanos: BPM 75–200, energía 0.13–0.98, valencia 0.04–0.97.
 - **Los rangos de BPM de la grilla están mal calibrados.** Los escribió el LLM al interpretar el brief con una intuición equivocada: SOBREMESA pide 50–70 BPM y **el repertorio no tiene NADA por debajo de 75**. La bossa nova real mide 91–144 (promedio 117). Ese bloque cae siempre en modo relajado y su perfil nunca muerde. Corregir con los datos reales, no con intuición.
@@ -213,5 +262,5 @@ El UNIQUE en `alias.valor` es la pieza clave: hace **imposible** que un género 
 
 | Comando | Qué cubre |
 |---|---|
-| `npm run test:musica-estilos` | Normalización de géneros, siembra idempotente, `estiloFijado`, validación de mezcla, cálculo de déficit, medianoche como fin de bloque. Corre migraciones sobre SQLite limpia |
-| `npm run test:musica-cuotas` | El algoritmo de cuotas: proporciones, **intercalado** (que la bossa no salga toda junta), cuota sin material, límite por artista, sin repetidos. Función pura, sin red ni base |
+| `npm run test:musica-estilos` | Normalización de géneros, siembra idempotente, `estiloFijado`, **precedencia manual › agente › género** (que reclasificar no pise al agente, y que quitar la corrección manual vuelva al agente en vez de dejar el tema sin estilo), **desacuerdos**, validación de mezcla, cálculo de déficit, medianoche como fin de bloque. Corre migraciones sobre SQLite limpia |
+| `npm run test:musica-cuotas` | El algoritmo de cuotas: proporciones, **intercalado** (que la bossa no salga toda junta), cuota sin material, límite por artista, sin repetidos. Más los **ejes semánticos**: que el ánimo prohibido no entre ni siquiera en modo relajado, y que la escena preferida ordene sin dejar la playlist corta. Función pura, sin red ni base |

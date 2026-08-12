@@ -125,3 +125,13 @@
     display: none;
   }
 }
+
+/* Marca los temas cuyo estilo fue corregido a mano en la tabla de desacuerdos. */
+.icono-manual {
+  font-size: 15px;
+  width: 15px;
+  height: 15px;
+  vertical-align: middle;
+  margin-left: 4px;
+  color: var(--es-suave);
+}

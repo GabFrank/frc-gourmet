@@ -49,9 +49,37 @@ export class BloqueProgramacion extends BaseModel {
   /**
    * Valencia minima: implementa "nada triste". Se baja en los bloques chill,
    * donde algo de melancolia es aceptable.
+   *
+   * Ojo: cubre el 87% del repertorio (ReccoBeats no responde por todos) y un
+   * tema sin valencia pasa el filtro. Para la regla dura usar `animosEvitar`.
    */
   @Column({ type: 'float', nullable: true })
   valenciaMin?: number;
+
+  /**
+   * Animos que NO pueden sonar en este bloque (`AnimoTrack`). Exclusion dura:
+   * ni siquiera se relaja cuando falta material, porque es una regla explicita
+   * del dueno y no una preferencia de perfil.
+   *
+   * Existe porque el brief dice "nada triste" y hasta ahora el planner no
+   * tenia como cumplirlo: los vetos aceptan artista, genero, estilo, tema e
+   * idioma — ninguno describe el animo. Con 45 temas marcados MELANCOLICO en
+   * el repertorio aprobado, la regla estaba escrita y no se aplicaba.
+   */
+  @Column({ type: 'simple-json', nullable: true })
+  animosEvitar?: string[];
+
+  /**
+   * Momento del dia de este bloque (`EscenaTrack`). Es PREFERENCIA, no filtro:
+   * suma en el orden de seleccion y nada mas.
+   *
+   * Deliberado. Como filtro duro vaciaria el bloque: de 278 temas aprobados
+   * solo 38 tienen ALMUERZO entre sus escenas, y el objetivo de ese bloque son
+   * ~100. Preferir es util; exigir dejaria la playlist corta y entraria el
+   * autoplay de Spotify, que es peor que un tema fuera de momento.
+   */
+  @Column({ nullable: true })
+  escenaPreferida?: string | null;
 
   /**
    * Texto libre del dueno sobre este momento ("los domingos al mediodia viene

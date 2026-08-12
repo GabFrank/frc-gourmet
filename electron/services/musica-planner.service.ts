@@ -205,7 +205,18 @@ export function seleccionarTracks(
 ): { elegidos: MusicaTrack[]; relajado: boolean; cuotasIncumplidas: string[] } {
   const perfil = perfilDeVariante(bloque, variante, opciones.deltaBpm);
 
+  /**
+   * Animos prohibidos en este bloque. Es una regla EXPLICITA del dueno ("nada
+   * triste"), no un parametro de perfil, asi que se aplica tambien en modo
+   * relajado: preferimos una playlist corta antes que meter un tema de
+   * despecho en el almuerzo familiar.
+   */
+  const animosVetados = new Set((bloque.animosEvitar || []).map((a) => String(a).toUpperCase()));
+  const animoPermitido = (t: MusicaTrack): boolean =>
+    !animosVetados.size || !t.ambiente || !animosVetados.has(String(t.ambiente).toUpperCase());
+
   const enPerfil = (t: MusicaTrack, estricto: boolean): boolean => {
+    if (!animoPermitido(t)) return false;
     if (!estricto) return true;
     if (t.bpm != null && (t.bpm < perfil.bpmMin || t.bpm > perfil.bpmMax)) return false;
     if (perfil.valenciaMin && t.valencia != null && t.valencia < perfil.valenciaMin) return false;
@@ -214,10 +225,24 @@ export function seleccionarTracks(
 
   const dur = (t: MusicaTrack) => t.duracionMs || 210_000;
 
+  /**
+   * La escena del bloque PREFIERE, no filtra: de 278 temas aprobados solo 38
+   * declaran ALMUERZO, asi que exigirla dejaria el bloque en un tercio de lo
+   * necesario y entraria el autoplay de Spotify.
+   *
+   * El bono es 1 a proposito: el desempate aleatorio vale 0..1, asi que a igual
+   * score el tema del momento gana siempre, pero un tema muy puntuado de otra
+   * escena lo sigue superando.
+   */
+  const escena = (bloque.escenaPreferida || '').toUpperCase();
+  const BONO_ESCENA = 1;
+  const bonoEscena = (t: MusicaTrack): number =>
+    escena && (t.escenas || []).some((e) => String(e).toUpperCase() === escena) ? BONO_ESCENA : 0;
+
   /** Score primero, con desempate aleatorio para que dos dias no salgan iguales. */
   const ordenar = (lista: MusicaTrack[]) =>
     lista
-      .map((t) => ({ t, peso: (t.score || 0) + Math.random() }))
+      .map((t) => ({ t, peso: (t.score || 0) + bonoEscena(t) + Math.random() }))
       .sort((a, b) => b.peso - a.peso)
       .map((x) => x.t);
 

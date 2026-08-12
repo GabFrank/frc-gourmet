@@ -130,6 +130,30 @@
             </button>
           </div>
 
+          <!--
+            Ejes semánticos: los completa el agente para cada tema y son los
+            únicos que describen CÓMO SE SIENTE y CUÁNDO VA, que es lo que el
+            BPM y la valencia no saben decir.
+          -->
+          <div class="form-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>Qué no suene</mat-label>
+              <mat-select [(ngModel)]="b.animosEvitar" multiple>
+                <mat-option *ngFor="let a of animos" [value]="a">{{ a }}</mat-option>
+              </mat-select>
+              <mat-hint>Se excluye siempre, aunque falte material</mat-hint>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Momento del día</mat-label>
+              <mat-select [(ngModel)]="b.escenaPreferida">
+                <mat-option [value]="null">Sin preferencia</mat-option>
+                <mat-option *ngFor="let e of escenas" [value]="e">{{ e }}</mat-option>
+              </mat-select>
+              <mat-hint>Prefiere, no filtra: no deja la playlist corta</mat-hint>
+            </mat-form-field>
+          </div>
+
           <mat-form-field appearance="outline" class="campo-ancho">
             <mat-label>Notas sobre este momento</mat-label>
             <textarea

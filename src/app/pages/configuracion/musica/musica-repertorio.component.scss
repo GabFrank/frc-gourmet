@@ -93,3 +93,18 @@
   text-align: center;
   padding: 24px 8px;
 }
+
+/* Estilo del tema: el que no tiene queda apagado, el corregido a mano marcado. */
+.sin-estilo {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.icono-manual {
+  font-size: 15px;
+  width: 15px;
+  height: 15px;
+  vertical-align: middle;
+  margin-left: 4px;
+  color: var(--text-secondary);
+}

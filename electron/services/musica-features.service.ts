@@ -21,10 +21,17 @@
  */
 import { DataSource, IsNull } from 'typeorm';
 import { MusicaTrack } from '../../src/app/database/entities/musica/musica-track.entity';
-import { EstadoTrack } from '../../src/app/database/entities/musica/musica-enums';
+import {
+  ANIMOS,
+  ESCENAS,
+  EstadoTrack,
+  normalizarAnimo,
+  normalizarEscenas,
+} from '../../src/app/database/entities/musica/musica-enums';
 import { readIaConfig } from '../utils/ia-config.utils';
 import { readAppSettings } from '../utils/app-settings.utils';
 import { MusicaEstilo } from '../../src/app/database/entities/musica/musica-estilo.entity';
+import { aplicarResolucion, RELACIONES_ESTILO } from './musica-estilos.service';
 
 const RECCOBEATS_BASE_DEFAULT = 'https://api.reccobeats.com/v1';
 /** Ids por request al pedir el mapeo spotify → reccobeats. */
@@ -212,7 +219,7 @@ export async function etiquetarTracks(
   const pendientes = await repo.find({
     where: { etiquetado: false, estado: EstadoTrack.APROBADO },
     take: limite,
-    relations: ['estilo'],
+    relations: RELACIONES_ESTILO,
   });
 
   const resultado: ResultadoEtiquetado = {
@@ -232,7 +239,12 @@ export async function etiquetarTracks(
   // Spotify, MusicBrainz ni la herencia por artista, lo decide el modelo — pero
   // eligiendo de la lista cerrada del local, nunca inventando.
   const catalogo = await dataSource.getRepository(MusicaEstilo).find({ where: { activo: true } });
-  const estilosDisponibles = catalogo.map((e) => e.nombre);
+  // Con la DESCRIPCION, no solo el nombre: dos estilos pueden ser el mismo
+  // genero y distinguirse por otra cosa ("bossa covers" vs "bossa clasica" son
+  // ambos BOSSA NOVA). Sin la descripcion el modelo no tiene con que elegir.
+  const estilosDisponibles = catalogo.map((e) =>
+    e.descripcion ? `${e.nombre} (${e.descripcion})` : e.nombre,
+  );
   const estiloPorNombre = new Map(catalogo.map((e) => [e.nombre.toUpperCase(), e]));
 
   for (let i = 0; i < pendientes.length; i += LOTE_ETIQUETADO) {
@@ -245,9 +257,11 @@ export async function etiquetarTracks(
       'Sos el curador musical de un restaurante familiar. Etiquetá cada canción de la lista.',
       '',
       'Para cada una devolvé:',
-      '- escenas: en qué momentos del día encaja. Valores posibles: "apertura", "almuerzo",',
-      '  "sobremesa", "tarde", "cena", "noche", "sunset".',
-      '- ambiente: "relajado" | "alegre" | "energico" | "melancolico".',
+      // El vocabulario sale del enum, no de un literal: si alguien agrega un
+      // valor y el prompt queda viejo, el modelo nunca lo devuelve.
+      `- escenas: en qué momentos del día encaja. Valores posibles: ${ESCENAS.join(', ')}.`,
+      `- ambiente: uno solo de ${ANIMOS.join(' | ')}. Usá MELANCOLICO para lo triste,`,
+      '  de despecho o nostálgico, aunque suene lindo.',
       '- familiaridad: "conocida" si es un hit reconocible, "descubrimiento" si no.',
       '- aptoFamiliar: false si tiene contenido sexual, vulgar o de doble sentido, aunque no',
       '  esté marcada como explícita. true en caso contrario.',
@@ -257,8 +271,11 @@ export async function etiquetarTracks(
       // ningun tema, y por eso la configuracion por genero no tenia efecto.
       ...(estilosDisponibles.length
         ? [
-            '- estilo: elegí EXACTAMENTE UNO de esta lista, tal cual está escrito.',
-            `  No inventes nombres nuevos. Si ninguno encaja, devolvé "".`,
+            '- estilo: elegí EXACTAMENTE UNO de esta lista. Devolvé SOLO el nombre,',
+            '  sin el texto entre paréntesis, que está para que sepas qué es cada uno.',
+            '  No inventes nombres nuevos. Si ninguno encaja, devolvé "".',
+            '  Fijate en quién interpreta, no solo en el género: una banda de covers',
+            '  no es lo mismo que el género original aunque suene parecido.',
             `  LISTA: ${estilosDisponibles.join(' | ')}`,
           ]
         : []),
@@ -297,23 +314,33 @@ export async function etiquetarTracks(
         const idx = Number(fila?.n) - 1;
         const track = lote[idx];
         if (!track) continue;
-        track.escenas = Array.isArray(fila.escenas) ? fila.escenas : undefined;
-        track.ambiente = fila.ambiente || undefined;
-        track.familiaridad = fila.familiaridad || undefined;
+        // Vocabulario cerrado validado ACA, no en el prompt: el modelo ya
+        // devolvio `energetico` y `energico` para el mismo concepto, y un valor
+        // fuera de vocabulario no filtra nada, solo ensucia en silencio.
+        track.escenas = normalizarEscenas(fila.escenas);
+        track.ambiente = normalizarAnimo(fila.ambiente) ?? undefined;
+        track.familiaridad = fila.familiaridad
+          ? String(fila.familiaridad).toUpperCase()
+          : undefined;
         track.aptoFamiliar = fila.aptoFamiliar !== false;
         track.idioma = fila.idioma || undefined;
         track.etiquetado = true;
 
-        // Solo si nadie lo clasifico antes: Spotify y MusicBrainz son dato duro
-        // y el modelo es la ultima opcion, no la primera. `estiloFijado` protege
-        // ademas lo que el dueno corrigio a mano.
-        if (!track.estilo && !track.estiloFijado && fila.estilo) {
-          const elegido = estiloPorNombre.get(String(fila.estilo).toUpperCase());
-          if (elegido) {
-            track.estilo = elegido;
+        // El agente SIEMPRE deja su veredicto en su propia columna, opine o no
+        // el genero. Antes solo escribia si el tema estaba sin clasificar, asi
+        // que su criterio —el unico que entiende el tema— se descartaba justo
+        // donde mas valia: cuando difiere del genero.
+        if (fila.estilo) {
+          // Tolerante a que devuelva el nombre con la descripcion pegada: la
+          // lista se la mandamos asi y el modelo a veces la copia entera.
+          const nombre = String(fila.estilo).split('(')[0].trim().toUpperCase();
+          const elegido = estiloPorNombre.get(nombre);
+          if (elegido && elegido.id !== track.estiloAgente?.id) {
+            track.estiloAgente = elegido;
             resultado.estilosAsignados++;
           }
         }
+        aplicarResolucion(track);
         // El etiquetado es tambien un filtro de contenido: lo que el modelo
         // marca como no apto sale del repertorio sin pasar por el dueno.
         if (fila.aptoFamiliar === false) track.estado = EstadoTrack.VETADO;

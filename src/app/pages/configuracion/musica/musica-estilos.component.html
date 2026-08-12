@@ -57,6 +57,9 @@
                 <mat-icon>more_vert</mat-icon>
               </button>
               <mat-menu #menu="matMenu">
+                <button mat-menu-item (click)="editarEstilo(e)">
+                  <mat-icon>edit</mat-icon><span>Editar</span>
+                </button>
                 <button mat-menu-item (click)="eliminarEstilo(e)">
                   <mat-icon>delete</mat-icon><span>Eliminar</span>
                 </button>
@@ -113,6 +116,49 @@
                   <mat-option *ngFor="let e of estilos" [value]="e.id">{{ e.nombre }}</mat-option>
                 </mat-select>
               </mat-form-field>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </mat-card-content>
+  </mat-card>
+
+  <!--
+    Donde el agente y el género discrepan casi siempre hay una distinción real
+    que la taxonomía de géneros no sabe expresar: "bossa covers" y "bossa
+    clásica" son ambos BOSSA NOVA. Manda el agente, que es el único que
+    entiende el tema; esta lista está para poder revisarlo y corregir a mano.
+  -->
+  <mat-card class="tarjeta" *ngIf="desacuerdos.length">
+    <mat-card-header>
+      <mat-card-title>El agente y el género no coinciden ({{ desacuerdos.length }})</mat-card-title>
+      <mat-card-subtitle>
+        No son errores. Manda el agente, porque entiende el tema y el género solo conoce etiquetas.
+        Si alguno está mal, corregilo desde Repertorio y tu corrección gana sobre los dos.
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <table class="tabla">
+        <thead>
+          <tr>
+            <th>Tema</th>
+            <th>Género</th>
+            <th>Dice el agente</th>
+            <th>Dice el género</th>
+            <th>Queda como</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let d of desacuerdos">
+            <td class="nombre">{{ d.artista }} — {{ d.titulo }}</td>
+            <td class="suave">{{ d.genero || '—' }}</td>
+            <td>{{ d.estiloAgente }}</td>
+            <td class="suave">{{ d.estiloGenero }}</td>
+            <td class="nombre">
+              {{ d.resuelto }}
+              <mat-icon *ngIf="d.hayManual" class="icono-manual" matTooltip="Corregido a mano">
+                push_pin
+              </mat-icon>
             </td>
           </tr>
         </tbody>
