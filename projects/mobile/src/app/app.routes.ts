@@ -27,6 +27,26 @@ const RRHH_ITEMS: SectionItem[] = [
   { label: 'Notificaciones', icon: 'notifications', path: '/rrhh/notificaciones', enabled: true, permiso: 'RRHH_NOTIFICACIONES_VER' },
 ];
 
+/** Opciones de Configuración (se van habilitando por ola). Hoy: Música ambiente. */
+const CONFIG_ITEMS: SectionItem[] = [
+  { label: 'Música ambiente', icon: 'music_note', path: '/configuracion/musica', enabled: true, permiso: 'MUSICA_CONFIGURAR' },
+];
+
+/**
+ * Sub-pantallas del módulo Música ambiente en la PWA. Espejo del desktop
+ * (`src/app/pages/configuracion/musica`). Se habilitan por fase; `Conexión`,
+ * `Abrir Spotify` y el OAuth se hacen desde el desktop (canales bloqueados por
+ * HTTP), por eso Conexión sólo edita config + elige dispositivo + desvincula.
+ */
+const MUSICA_CFG_ITEMS: SectionItem[] = [
+  { label: 'Control', icon: 'play_circle', path: '/musica', enabled: true, permiso: ['MUSICA_VER', 'MUSICA_CONTROLAR'] },
+  { label: 'Conexión Spotify', icon: 'link', path: '/configuracion/musica/conexion', enabled: false, permiso: 'MUSICA_CONFIGURAR' },
+  { label: 'Mi estilo', icon: 'tune', path: '/configuracion/musica/estilo', enabled: false, permiso: 'MUSICA_CONFIGURAR' },
+  { label: 'Repertorio', icon: 'library_music', path: '/configuracion/musica/repertorio', enabled: false, permiso: 'MUSICA_CONFIGURAR' },
+  { label: 'Estilos', icon: 'graphic_eq', path: '/configuracion/musica/estilos', enabled: false, permiso: 'MUSICA_CONFIGURAR' },
+  { label: 'Programación', icon: 'calendar_month', path: '/configuracion/musica/programacion', enabled: false, permiso: 'MUSICA_CONFIGURAR' },
+];
+
 /** Sub-módulos de Productos. */
 const PRODUCTOS_ITEMS: SectionItem[] = [
   { label: 'Familias', icon: 'category', path: '/productos/familias', enabled: true, permiso: 'CATEGORIAS_GESTIONAR' },
@@ -795,6 +815,21 @@ export const routes: Routes = [
         canActivate: [permisoGuard],
         data: { title: 'Música', permiso: 'MUSICA_VER' },
         loadComponent: () => import('./pages/musica/musica.page').then((m) => m.MusicaPage),
+      },
+      // --- Configuración (índice) → Música ambiente (índice) → sub-pantallas ---
+      {
+        path: 'configuracion',
+        pathMatch: 'full',
+        canActivate: [permisoGuard],
+        data: { title: 'Configuración', permiso: 'MUSICA_CONFIGURAR', items: CONFIG_ITEMS },
+        loadComponent: () => import('./pages/section-index/section-index.page').then((m) => m.SectionIndexPage),
+      },
+      {
+        path: 'configuracion/musica',
+        pathMatch: 'full',
+        canActivate: [permisoGuard],
+        data: { title: 'Música ambiente', permiso: 'MUSICA_CONFIGURAR', items: MUSICA_CFG_ITEMS },
+        loadComponent: () => import('./pages/section-index/section-index.page').then((m) => m.SectionIndexPage),
       },
       {
         path: 'reportes',

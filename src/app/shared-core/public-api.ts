@@ -39,6 +39,37 @@ export { KdsComponent } from '../pages/ventas/kds/kds.component';
 
 // --- Enums de dominio (valores puros, sin decoradores TypeORM) ---
 export { PersonaTipo } from '../database/entities/personas/persona-tipo.enum';
+export {
+  TipoSemilla,
+  TipoVeto,
+  EstadoTrack,
+  VarianteEnergia,
+  TipoFeedback,
+  OrigenPlan,
+} from '../database/entities/musica/musica-enums';
+
+// --- Música ambiental: service + interfaces (reusado tal cual por la PWA) ---
+// El service sólo usa `window.api.callIpc` (browser-safe); en mobile ese
+// window.api lo provee el shim HTTP. El desktop sigue importándolo por su ruta
+// relativa; la PWA lo importa por este barrel.
+export { MusicaService } from '../services/musica.service';
+export type {
+  MusicaAvanzado,
+  MusicaConfig,
+  MusicaSemilla,
+  MusicaTrack,
+  ResumenPool,
+  ResultadoDescubrimiento,
+  BloqueProgramacion,
+  ResultadoPlan,
+  DispositivoSpotify,
+  EstiloConDatos,
+  MezclaItem,
+  DeficitEstilo,
+  DeficitBloque,
+  EstadoRuntime,
+  EstadoReproduccion,
+} from '../services/musica.service';
 
 // --- Entities (solo tipos en el bundle browser) ---
 export type { Usuario } from '../database/entities/personas/usuario.entity';
