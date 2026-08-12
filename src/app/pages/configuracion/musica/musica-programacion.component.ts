@@ -127,10 +127,11 @@ export class MusicaProgramacionComponent implements OnInit {
   }
 
   private aVista(b: BloqueProgramacion): BloqueVista {
+    // null = heredar, 0 = sin limite, N = tope propio.
     const limiteTexto =
-      b.maxPorArtista === null
+      b.maxPorArtista === 0
         ? 'Sin límite de artista'
-        : b.maxPorArtista === undefined
+        : b.maxPorArtista == null
           ? 'Límite por defecto'
           : `Máx ${b.maxPorArtista} por artista`;
     return {
@@ -140,8 +141,7 @@ export class MusicaProgramacionComponent implements OnInit {
       limiteTexto,
       mezclaTexto: 'sin mezcla definida',
       mezclaCount: 0,
-      modoLimite:
-        b.maxPorArtista === null ? 'sin-limite' : b.maxPorArtista === undefined ? 'heredar' : 'fijo',
+      modoLimite: b.maxPorArtista === 0 ? 'sin-limite' : b.maxPorArtista == null ? 'heredar' : 'fijo',
     };
   }
 
@@ -260,8 +260,11 @@ export class MusicaProgramacionComponent implements OnInit {
 
   async guardarBloque(b: BloqueVista): Promise<void> {
     try {
+      // `undefined` para "heredar" no llegaba al backend (se pierde al
+      // serializar), asi que se manda el centinela: null = heredar, 0 = sin
+      // limite. Ver `BloqueProgramacion.maxPorArtista`.
       const maxPorArtista =
-        b.modoLimite === 'sin-limite' ? null : b.modoLimite === 'heredar' ? undefined : b.maxPorArtista;
+        b.modoLimite === 'sin-limite' ? 0 : b.modoLimite === 'heredar' ? null : b.maxPorArtista;
       await this.musicaService.guardarBloque({
         id: b.id,
         nombre: b.nombre,

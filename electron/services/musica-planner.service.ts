@@ -89,6 +89,21 @@ function duracionBloqueMs(bloque: BloqueProgramacion): number {
 }
 
 /**
+ * Traduce el cupo guardado en el bloque al que usa la seleccion.
+ *
+ * En la BD: `null` = heredar el global, `0` = sin limite, `N>0` = tope propio.
+ * Aca abajo `null` significa "sin limite", que es lo que espera
+ * `seleccionarTracks`. Ver el comentario de `BloqueProgramacion.maxPorArtista`.
+ */
+export function resolverMaxPorArtista(
+  valorBloque: number | null | undefined,
+  global: number,
+): number | null {
+  if (valorBloque === null || valorBloque === undefined) return global;
+  return valorBloque > 0 ? valorBloque : null;
+}
+
+/**
  * Desplaza el perfil del bloque segun la variante. Las tres playlists de un
  * bloque comparten identidad pero no intensidad: es lo que permite reaccionar
  * al salon cambiando de playlist en vez de re-planificar.
@@ -484,11 +499,10 @@ export async function generarPlanDelDia(
         variante,
         objetivoMs,
         {
-          // `undefined` en el bloque = heredar el global; `null` = sin limite.
-          maxPorArtista:
-            bloque.maxPorArtista === undefined
-              ? avanzado.maxPorArtistaDefault
-              : bloque.maxPorArtista,
+          maxPorArtista: resolverMaxPorArtista(
+            bloque.maxPorArtista,
+            avanzado.maxPorArtistaDefault,
+          ),
           evitarConsecutivo: bloque.evitarArtistaConsecutivo !== false,
           deltaBpm: avanzado.deltaBpmVariante,
           mezcla,

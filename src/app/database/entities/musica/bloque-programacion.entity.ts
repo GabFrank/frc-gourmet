@@ -63,7 +63,18 @@ export class BloqueProgramacion extends BaseModel {
 
   /**
    * Cuantos temas del mismo artista se permiten en la playlist de este bloque.
-   * `null` = sin limite.
+   *
+   * Tres estados sobre una sola columna:
+   *   `null` = heredar el global (`avanzado.maxPorArtistaDefault`)
+   *   `0`    = sin limite
+   *   `N>0`  = tope propio de este bloque
+   *
+   * El `0` es centinela y no "cero temas por artista" (que no tendria sentido
+   * como cupo). Hace falta porque `undefined` —que era como se representaba
+   * "heredar"— no sobrevive: TypeORM devuelve `null` al leer la columna, y
+   * ademas se pierde al serializar tanto por IPC como por HTTP en modo cliente.
+   * Sin esto, todo bloque leido de la BD parecia "sin limite" y el tope global
+   * no se aplicaba nunca: un artista podia coparse el bloque entero.
    *
    * Es por bloque y no global a proposito: en un bloque de covers bossa varios
    * temas del mismo interprete son lo esperado, mientras que en la noche de

@@ -279,7 +279,11 @@ function normalizarBloque(b: any): BloquePropuesto | null {
     valenciaMin: Number(b?.valenciaMin) || undefined,
     // Sin UPPERCASE: va literal al prompt del planificador.
     notas: b?.notas ? String(b.notas) : undefined,
-    maxPorArtista: b?.maxPorArtista === null ? null : Number(b?.maxPorArtista) || undefined,
+    // El prompt le pide al modelo `null` para "no molesta repetir artista".
+    // Adentro eso se guarda como 0, porque `null` en la columna significa
+    // "heredar el global" (ver `BloqueProgramacion.maxPorArtista`). Si el
+    // modelo no lo define, se hereda.
+    maxPorArtista: b?.maxPorArtista === null ? 0 : Number(b?.maxPorArtista) || null,
   };
 }
 

@@ -116,8 +116,8 @@ export class MusicaProgramacionPage implements OnInit {
       horarioTexto: `${b.horaDesde} – ${b.horaHasta}`,
       mezclaTexto: 'sin mezcla definida',
       mezclaCount: 0,
-      modoLimite:
-        b.maxPorArtista === null ? 'sin-limite' : b.maxPorArtista === undefined ? 'heredar' : 'fijo',
+      // null = heredar el global, 0 = sin límite, N = tope propio del bloque.
+      modoLimite: b.maxPorArtista === 0 ? 'sin-limite' : b.maxPorArtista == null ? 'heredar' : 'fijo',
     };
   }
 
@@ -226,8 +226,9 @@ export class MusicaProgramacionPage implements OnInit {
 
   async guardarBloque(b: BloqueVista): Promise<void> {
     try {
+      // Centinela en vez de `undefined`: no sobrevive al JSON de /api/rpc.
       const maxPorArtista =
-        b.modoLimite === 'sin-limite' ? null : b.modoLimite === 'heredar' ? undefined : b.maxPorArtista;
+        b.modoLimite === 'sin-limite' ? 0 : b.modoLimite === 'heredar' ? null : b.maxPorArtista;
       await this.musica.guardarBloque({
         id: b.id,
         nombre: b.nombre,
