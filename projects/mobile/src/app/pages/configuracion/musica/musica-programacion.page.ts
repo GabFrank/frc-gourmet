@@ -10,12 +10,11 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { BloqueProgramacion, MusicaAvanzado, MusicaService } from '@frc/shared-core';
 import { ConfirmDialogComponent } from '../../../core/components/confirm-dialog.component';
-import { MusicaMezclaDialogComponent } from './musica-mezcla.dialog';
+import { MusicaMezclaDialogComponent } from './musica-mezcla-dialog.component';
 
 interface DiaConBloques {
   dia: number;
@@ -25,8 +24,7 @@ interface DiaConBloques {
 
 interface BloqueVista extends BloqueProgramacion {
   horarioTexto: string;
-  generosTexto: string;
-  limiteTexto: string;
+  /** Espejo editable del límite: 'heredar' | 'sin-limite' | 'fijo'. */
   modoLimite: string;
   mezclaTexto: string;
   mezclaCount: number;
@@ -54,7 +52,6 @@ const NOMBRES_DIA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Vier
     MatExpansionModule,
     MatSlideToggleModule,
     MatProgressBarModule,
-    MatProgressSpinnerModule,
     MatSnackBarModule,
     MatDialogModule,
   ],
@@ -114,17 +111,9 @@ export class MusicaProgramacionPage implements OnInit {
   }
 
   private aVista(b: BloqueProgramacion): BloqueVista {
-    const limiteTexto =
-      b.maxPorArtista === null
-        ? 'Sin límite de artista'
-        : b.maxPorArtista === undefined
-          ? 'Límite por defecto'
-          : `Máx ${b.maxPorArtista} por artista`;
     return {
       ...b,
       horarioTexto: `${b.horaDesde} – ${b.horaHasta}`,
-      generosTexto: (b.generosPreferidos || []).join(', ') || 'sin estilos definidos',
-      limiteTexto,
       mezclaTexto: 'sin mezcla definida',
       mezclaCount: 0,
       modoLimite:

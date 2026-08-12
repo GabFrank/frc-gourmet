@@ -6,19 +6,19 @@
     <mat-card-content>
       <div class="resumen">
         <div class="metrica">
-          <span class="valor">{{ resumen.total | number: '1.0-2' }}</span>
+          <span class="valor">{{ resumen.total | number: '1.0-0' }}</span>
           <span class="etiqueta">en el repertorio</span>
         </div>
         <div class="metrica">
-          <span class="valor ok">{{ resumen.aprobados | number: '1.0-2' }}</span>
+          <span class="valor ok">{{ resumen.aprobados | number: '1.0-0' }}</span>
           <span class="etiqueta">pueden sonar</span>
         </div>
         <div class="metrica" *ngIf="resumen.sugeridos">
-          <span class="valor pend">{{ resumen.sugeridos | number: '1.0-2' }}</span>
+          <span class="valor pend">{{ resumen.sugeridos | number: '1.0-0' }}</span>
           <span class="etiqueta">esperando</span>
         </div>
         <div class="metrica" *ngIf="resumen.vetados">
-          <span class="valor veto">{{ resumen.vetados | number: '1.0-2' }}</span>
+          <span class="valor veto">{{ resumen.vetados | number: '1.0-0' }}</span>
           <span class="etiqueta">descartados</span>
         </div>
       </div>
@@ -31,7 +31,7 @@
         <mat-progress-spinner *ngIf="enriqueciendo" mode="indeterminate" diameter="24"></mat-progress-spinner>
       </div>
       <p class="ayuda" *ngIf="resumen.sinFeatures">
-        {{ resumen.sinFeatures | number: '1.0-2' }} temas sin BPM ni energía: hasta analizarlos, los
+        {{ resumen.sinFeatures | number: '1.0-0' }} temas sin BPM ni energía: hasta analizarlos, los
         bloques no distinguen el almuerzo de la noche.
       </p>
       <p class="ayuda" *ngIf="resumen.total < 300">
@@ -50,14 +50,15 @@
       </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
-      <label class="brief-label" for="brief-local">Descripción del local</label>
-      <textarea
-        id="brief-local"
-        class="brief-textarea"
-        [(ngModel)]="brief"
-        rows="8"
-        placeholder="Ej: Hamburguesería con buffet al mediodía en Salto del Guairá. Público 25+, turistas brasileños y familias. Nos gusta el rock alternativo alegre, bossa, pagode. Evitamos funk, rap y música triste."
-      ></textarea>
+      <mat-form-field appearance="outline" class="campo">
+        <mat-label>Descripción del local</mat-label>
+        <textarea
+          matInput
+          rows="8"
+          [(ngModel)]="brief"
+          placeholder="Ej: Hamburguesería con buffet al mediodía en Salto del Guairá. Público 25+, turistas brasileños y familias. Nos gusta el rock alternativo alegre, bossa, pagode. Evitamos funk, rap y música triste."
+        ></textarea>
+      </mat-form-field>
       <div class="acciones">
         <button mat-flat-button color="primary" (click)="guardarBrief()">
           <mat-icon>save</mat-icon> Guardar descripción
@@ -114,7 +115,7 @@
         </span>
       </div>
 
-      <mat-slide-toggle [(ngModel)]="autoAprobar" (change)="guardarBrief()">
+      <mat-slide-toggle [(ngModel)]="autoAprobar" (change)="guardarAutoAprobar()">
         Aceptar automáticamente lo que pase los filtros
       </mat-slide-toggle>
       <p class="ayuda">Si lo apagás, lo descubierto queda esperando tu aprobación en Repertorio.</p>
@@ -176,7 +177,7 @@
             </div>
             <div class="crud-card-main">
               <span class="crud-name">{{ s.nombre }}</span>
-              <span class="crud-sub">{{ s.tipo }} · {{ s.tracksImportados | number: '1.0-2' }} temas</span>
+              <span class="crud-sub">{{ s.tipo }} · {{ s.tracksImportados | number: '1.0-0' }} temas</span>
             </div>
             <button mat-icon-button [matMenuTriggerFor]="menuSemilla">
               <mat-icon>more_vert</mat-icon>

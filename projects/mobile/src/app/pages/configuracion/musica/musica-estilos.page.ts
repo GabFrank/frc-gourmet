@@ -9,7 +9,6 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { EstiloConDatos, MusicaService } from '@frc/shared-core';
@@ -40,7 +39,6 @@ interface EstiloVista extends EstiloConDatos {
     MatInputModule,
     MatSelectModule,
     MatProgressBarModule,
-    MatProgressSpinnerModule,
     MatSnackBarModule,
     MatDialogModule,
   ],

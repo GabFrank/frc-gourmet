@@ -209,6 +209,18 @@ export class MusicaEstiloPage implements OnInit {
     }
   }
 
+  /**
+   * Solo el toggle. Guardar el brief acá persistiría un texto que el usuario
+   * puede estar editando y todavía no quiso guardar.
+   */
+  async guardarAutoAprobar(): Promise<void> {
+    try {
+      await this.musica.setConfig({ autoAprobarDescubrimientos: this.autoAprobar });
+    } catch (e: any) {
+      this.error(e);
+    }
+  }
+
   async generarProgramacion(): Promise<void> {
     this.interpretando = true;
     this.propuesta = null;

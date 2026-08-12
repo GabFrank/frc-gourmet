@@ -8,7 +8,6 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
@@ -41,7 +40,6 @@ interface FilaTrack extends MusicaTrack {
     MatButtonModule,
     MatIconModule,
     MatMenuModule,
-    MatPaginatorModule,
     MatProgressBarModule,
     MatSnackBarModule,
     MatDialogModule,
@@ -55,11 +53,15 @@ export class MusicaRepertorioPage implements OnInit {
   private readonly dialog = inject(MatDialog);
   private readonly perm = inject(PermissionService);
 
+  /** "Cargar más" en vez de paginador: es el patrón de listas de la PWA. */
+  private static readonly PAGE_SIZE = 25;
+
   cargando = false;
+  cargandoMas = false;
   filas: FilaTrack[] = [];
   total = 0;
   page = 0;
-  pageSize = 25;
+  hayMas = false;
 
   filtroTexto = '';
   filtroEstado = 'APROBADO';
@@ -75,23 +77,47 @@ export class MusicaRepertorioPage implements OnInit {
     await this.buscar();
   }
 
-  /** Filtro explícito con botón: sin live filtering. */
+  /** Filtro explícito con botón: sin live filtering. Reinicia la paginación. */
   async buscar(): Promise<void> {
     this.cargando = true;
+    this.page = 0;
     try {
-      const r = await this.musica.listarTracks({
-        estado: this.filtroEstado || undefined,
-        texto: this.filtroTexto || undefined,
-        page: this.page,
-        pageSize: this.pageSize,
-      });
+      const r = await this.consultar();
       this.total = r.total;
       this.filas = r.items.map((t) => this.aFila(t));
+      this.hayMas = this.filas.length < this.total;
     } catch (e: any) {
       this.error(e);
     } finally {
       this.cargando = false;
     }
+  }
+
+  /** Agrega la página siguiente al final, sin recargar lo ya listado. */
+  async cargarMas(): Promise<void> {
+    if (this.cargandoMas || !this.hayMas) return;
+    this.cargandoMas = true;
+    this.page += 1;
+    try {
+      const r = await this.consultar();
+      this.total = r.total;
+      this.filas = [...this.filas, ...r.items.map((t) => this.aFila(t))];
+      this.hayMas = this.filas.length < this.total;
+    } catch (e: any) {
+      this.page -= 1;
+      this.error(e);
+    } finally {
+      this.cargandoMas = false;
+    }
+  }
+
+  private consultar() {
+    return this.musica.listarTracks({
+      estado: this.filtroEstado || undefined,
+      texto: this.filtroTexto || undefined,
+      page: this.page,
+      pageSize: MusicaRepertorioPage.PAGE_SIZE,
+    });
   }
 
   private aFila(t: MusicaTrack): FilaTrack {
@@ -108,21 +134,13 @@ export class MusicaRepertorioPage implements OnInit {
     };
   }
 
-  async cambiarPagina(e: PageEvent): Promise<void> {
-    this.page = e.pageIndex;
-    this.pageSize = e.pageSize;
-    await this.buscar();
-  }
-
   async limpiarFiltros(): Promise<void> {
     this.filtroTexto = '';
     this.filtroEstado = 'APROBADO';
-    this.page = 0;
     await this.buscar();
   }
 
   async filtrar(): Promise<void> {
-    this.page = 0;
     await this.buscar();
   }
 

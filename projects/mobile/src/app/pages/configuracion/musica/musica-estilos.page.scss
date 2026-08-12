@@ -15,7 +15,8 @@
   border-radius: 10px;
   background: var(--surface-variant);
   font-size: 0.8rem;
-  color: var(--text-secondary);
+  // --text-secondary sobre --surface-variant no llega a AA en dark.
+  color: var(--text-primary);
 
   div {
     margin: 2px 0;
@@ -35,7 +36,17 @@
   }
 }
 
+.sin-clasificar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+
+  // Los géneros crudos vienen sin espacios: sin esto estiran la card.
+  .crud-name {
+    overflow-wrap: anywhere;
+  }
+}
+
 .select-estilo {
-  flex: 0 0 auto;
-  width: 150px;
+  width: 100%;
 }

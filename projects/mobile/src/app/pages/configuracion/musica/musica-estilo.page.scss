@@ -70,26 +70,6 @@
   }
 }
 
-.brief-label {
-  display: block;
-  font-size: 0.82rem;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-}
-
-.brief-textarea {
-  width: 100%;
-  box-sizing: border-box;
-  resize: vertical;
-  padding: 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border-color);
-  background: var(--surface);
-  color: var(--text-primary);
-  font: inherit;
-  line-height: 1.4;
-}
-
 .ayuda {
   font-size: 0.82rem;
   color: var(--text-secondary);

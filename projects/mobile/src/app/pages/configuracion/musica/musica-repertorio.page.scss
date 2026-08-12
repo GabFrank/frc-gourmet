@@ -35,3 +35,9 @@
   background: color-mix(in srgb, var(--error-color) 16%, transparent);
   color: var(--error-color);
 }
+
+.mr-mas {
+  margin: 12px auto 0;
+  width: 100%;
+  max-width: 260px;
+}

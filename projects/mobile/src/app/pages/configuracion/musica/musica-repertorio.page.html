@@ -15,7 +15,7 @@
       </mat-select>
     </mat-form-field>
     <div class="crud-filter-actions">
-      <span class="total">{{ total | number: '1.0-2' }} temas</span>
+      <span class="total">{{ total | number: '1.0-0' }} temas</span>
       <button mat-stroked-button (click)="limpiarFiltros()">Limpiar</button>
       <button mat-flat-button color="primary" (click)="filtrar()">
         <mat-icon>search</mat-icon> Filtrar
@@ -37,7 +37,7 @@
           <span class="crud-sub">{{ f.artista }}</span>
           <span class="crud-sub datos">
             {{ f.genero || '—' }} · {{ f.duracionTexto }} · {{ f.bpmTexto }}
-            <ng-container *ngIf="f.vecesSonado"> · sonó {{ f.vecesSonado | number: '1.0-2' }}×</ng-container>
+            <ng-container *ngIf="f.vecesSonado"> · sonó {{ f.vecesSonado | number: '1.0-0' }}×</ng-container>
           </span>
         </div>
         <span class="crud-chip" [ngClass]="f.estadoClase">{{ f.estadoTexto }}</span>
@@ -65,14 +65,15 @@
       No hay temas con ese filtro. Si el repertorio está vacío, cargá playlists o usá "Descubrir
       música" en Mi estilo.
     </p>
-  </div>
 
-  <mat-paginator
-    *ngIf="total > 0"
-    [length]="total"
-    [pageSize]="pageSize"
-    [pageIndex]="page"
-    [pageSizeOptions]="[25, 50, 100]"
-    (page)="cambiarPagina($event)"
-  ></mat-paginator>
+    <mat-progress-bar *ngIf="cargandoMas" mode="indeterminate"></mat-progress-bar>
+    <button
+      *ngIf="hayMas && !cargandoMas"
+      mat-stroked-button
+      class="mr-mas"
+      (click)="cargarMas()"
+    >
+      Cargar más
+    </button>
+  </div>
 </div>

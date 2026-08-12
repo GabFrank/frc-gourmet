@@ -61,14 +61,42 @@
   }
 }
 
+// En un teléfono el header del acordeón es angosto: la hora y la energía se
+// mantienen enteras y el nombre absorbe el sobrante con elipsis.
+::ng-deep .mat-expansion-panel-header {
+  padding: 0 12px;
+}
+
+mat-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .bloque-hora {
+  flex: 0 0 auto;
   font-weight: 600;
-  margin-right: 10px;
   color: var(--text-primary);
 }
 
 .bloque-nombre {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-secondary);
+}
+
+.bloque-energia {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--info-color) 16%, transparent);
+  color: var(--info-color);
 }
 
 .mezcla {

@@ -3,23 +3,12 @@
   padding: 12px 0 4px;
 }
 
-// Estados: solo la paleta permitida (verde = conectado, naranja = sin conexión).
-.estado-chip {
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-
-  &.ok {
-    background: color-mix(in srgb, var(--success-color) 18%, transparent);
-    color: var(--success-color);
-  }
-
-  &.off {
-    background: color-mix(in srgb, var(--warning-color) 18%, transparent);
-    color: var(--warning-color);
-  }
+// Reusa `.crud-chip` de _crud.scss; acá solo el modificador de estado.
+// `.off` compartido es gris, que la paleta de estados no admite: se pisa por
+// naranja (sin conexión = atención). `.ok` cae en el verde del base.
+.crud-chip.off {
+  background: color-mix(in srgb, var(--warning-color) 18%, transparent);
+  color: var(--warning-color);
 }
 
 .aviso {

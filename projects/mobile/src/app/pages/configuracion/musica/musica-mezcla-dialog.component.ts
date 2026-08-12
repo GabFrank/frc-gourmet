@@ -41,8 +41,8 @@ interface FilaMezcla {
     MatProgressSpinnerModule,
     MatSnackBarModule,
   ],
-  templateUrl: './musica-mezcla.dialog.html',
-  styleUrls: ['./musica-mezcla.dialog.scss'],
+  templateUrl: './musica-mezcla-dialog.component.html',
+  styleUrls: ['./musica-mezcla-dialog.component.scss'],
 })
 export class MusicaMezclaDialogComponent implements OnInit {
   private readonly musica = inject(MusicaService);

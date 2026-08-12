@@ -61,12 +61,19 @@
     <mat-card-content>
       <mat-accordion multi="false">
         <mat-expansion-panel *ngFor="let b of d.bloques">
+          <!--
+            Sin mat-panel-description: Material le da el 50% del ancho y en un
+            teléfono el nombre del bloque quedaba recortado sin elipsis. La
+            energía entra como badge compacto dentro del título.
+          -->
           <mat-expansion-panel-header>
             <mat-panel-title>
               <span class="bloque-hora">{{ b.horarioTexto }}</span>
               <span class="bloque-nombre">{{ b.nombre }}</span>
+              <span class="bloque-energia" [attr.aria-label]="'energía ' + b.energia + ' de 5'">
+                E{{ b.energia }}
+              </span>
             </mat-panel-title>
-            <mat-panel-description>energía {{ b.energia }}/5</mat-panel-description>
           </mat-expansion-panel-header>
 
           <div class="form-grid">
