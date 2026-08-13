@@ -320,6 +320,11 @@ Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `proje
 - Si la importación de una semilla falla, **la semilla queda creada con 0 temas** y "Reimportar todo" la reintenta cada vez. Debería revertirse.
 - Tamaños de inputs y espaciados en general (el dueño marcó que hay varios).
 
+**Pendiente después de la clasificación semántica (2026-08-12):**
+- **Semilla que declara su estilo.** La procedencia es el discriminador más barato y confiable: lo que entró por *Bossa Nova Covers* **es** un cover, sin inferencia. Columna en `MusicaSemilla` + migración; encaja entre manual y agente en la cadena de precedencia que ya existe.
+- **El repertorio, no el algoritmo, es el limitante.** Medido en producción: `PAGODE 6 temas · SERTANEJO 6 · BRASIL FESTIVO 0` contra `INDIE 53 · POP 47 · ROCK 44`. Cualquier cuota brasileña por encima del 10% es inalcanzable hasta salir a descubrir material. Mirar `musica-deficit` del bloque antes de tocar nada.
+- **Paridad en la PWA mobile**: los ejes de ánimo y momento y las acciones nuevas de catálogo están solo en el desktop. No es regresión (el handler solo actualiza lo que recibe), pero la programación desde el teléfono queda incompleta.
+
 **Notas de operación:**
 - **La música paraguaya no aparece por descubrimiento**: el modelo no conoce bien esa escena. Se siembra con **semillas de artista** (Kchiporros, Tierra Adentro) — los links de artista funcionan desde cualquier cuenta, a diferencia de las playlists ajenas.
 - En desarrollo las playlists `FRC · …` se crean en la **cuenta personal** conectada, no en la del local.

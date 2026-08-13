@@ -272,6 +272,7 @@ import { AddCuentasBancariasOrdenCajaMayorConfig1785170062316 } from './migratio
 import { MusicaAmbiental1786378422682 } from './migrations/1786378422682-MusicaAmbiental';
 import { MusicaOpcionesAvanzadas1786383979096 } from './migrations/1786383979096-MusicaOpcionesAvanzadas';
 import { MusicaCatalogoEstilos1786475808081 } from './migrations/1786475808081-MusicaCatalogoEstilos';
+import { MusicaClasificacionSemantica1786563231306 } from './migrations/1786563231306-MusicaClasificacionSemantica';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -676,6 +677,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     MusicaAmbiental1786378422682,
     MusicaOpcionesAvanzadas1786383979096,
     MusicaCatalogoEstilos1786475808081,
+    MusicaClasificacionSemantica1786563231306,
     AddPagoCuotaCppDetalle1785320463398,
     AddEgresoCajaToPagoCuotaDetalle1785335253817,
   ];

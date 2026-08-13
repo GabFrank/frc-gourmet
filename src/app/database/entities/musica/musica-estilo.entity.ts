@@ -30,9 +30,15 @@ export class MusicaEstilo extends BaseModel {
   @Column()
   nombre!: string;
 
-  /** Para que el dueno recuerde que metio adentro cuando agrupo generos. */
+  /**
+   * Que agrupa este estilo, en una frase.
+   *
+   * No es solo un recordatorio para el dueno: viaja al prompt del etiquetador y
+   * es lo que le permite al modelo elegir entre dos estilos que comparten
+   * genero ("bossa covers" y "bossa clasica" son ambos BOSSA NOVA).
+   */
   @Column({ type: 'text', nullable: true })
-  descripcion?: string;
+  descripcion?: string | null;
 
   @Column({ type: 'int', default: 0 })
   orden!: number;

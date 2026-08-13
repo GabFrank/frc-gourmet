@@ -1,0 +1,98 @@
+/**
+ * Variables locales: este proyecto no tiene paleta global de custom properties,
+ * cada componente declara las suyas con su bloque dark.
+ */
+:host {
+  --ee-texto: #333333;
+  --ee-suave: #666666;
+  --ee-borde: #e0e0e0;
+  --ee-fila: rgba(0, 0, 0, 0.03);
+}
+
+:host-context(.dark-theme),
+:host-context([data-theme='dark']) {
+  --ee-texto: #ffffff;
+  --ee-suave: #cccccc;
+  --ee-borde: rgba(255, 255, 255, 0.12);
+  --ee-fila: rgba(255, 255, 255, 0.04);
+}
+@media (prefers-color-scheme: dark) {
+  :host {
+    --ee-texto: #ffffff;
+    --ee-suave: #cccccc;
+    --ee-borde: rgba(255, 255, 255, 0.12);
+    --ee-fila: rgba(255, 255, 255, 0.04);
+  }
+}
+
+.cargando {
+  display: flex;
+  justify-content: center;
+  padding: 32px;
+}
+
+.ancho {
+  width: 100%;
+}
+
+.seccion {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ee-borde);
+}
+
+.seccion-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ee-suave);
+}
+
+.contador {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: var(--ee-fila);
+  color: var(--ee-texto);
+}
+
+.ayuda,
+.vacio {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ee-suave);
+  margin: 6px 0 10px;
+}
+
+.alias-lista {
+  display: flex;
+  flex-direction: column;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.alias-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 4px 2px 10px;
+  border-radius: 6px;
+}
+
+.alias-fila:nth-child(odd) {
+  background: var(--ee-fila);
+}
+
+.alias-valor {
+  font-size: 13px;
+  color: var(--ee-texto);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

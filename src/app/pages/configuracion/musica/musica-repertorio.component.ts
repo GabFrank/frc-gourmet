@@ -16,12 +16,15 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { MusicaService, MusicaTrack } from 'src/app/services/musica.service';
+import { EstiloConDatos, MusicaService, MusicaTrack } from 'src/app/services/musica.service';
 
 interface FilaTrack extends MusicaTrack {
   duracionTexto: string;
   bpmTexto: string;
   estadoClase: string;
+  estiloTexto: string;
+  /** Corregido a mano: se marca para distinguirlo de lo que decidió el sistema. */
+  estiloManualMarcado: boolean;
 }
 
 /**
@@ -67,7 +70,10 @@ export class MusicaRepertorioComponent implements OnInit, OnChanges {
   filtroTexto = '';
   filtroEstado = 'APROBADO';
 
-  columnas = ['tema', 'genero', 'datos', 'estado', 'acciones'];
+  columnas = ['tema', 'genero', 'estilo', 'datos', 'estado', 'acciones'];
+
+  /** Para el submenú "Cambiar estilo". */
+  estilos: EstiloConDatos[] = [];
 
   constructor(
     private musicaService: MusicaService,
@@ -76,6 +82,12 @@ export class MusicaRepertorioComponent implements OnInit, OnChanges {
   ) {}
 
   async ngOnInit(): Promise<void> {
+    // Sin catálogo la acción de corregir estilo no tiene destinos: no es un
+    // error, simplemente el menú queda sin esa opción.
+    this.musicaService
+      .listarEstilos()
+      .then((e) => (this.estilos = e))
+      .catch(() => (this.estilos = []));
     await this.buscar();
   }
 
@@ -113,7 +125,27 @@ export class MusicaRepertorioComponent implements OnInit, OnChanges {
       bpmTexto: t.bpm ? `${Math.round(t.bpm)} BPM` : '—',
       estadoClase:
         t.estado === 'APROBADO' ? 'estado-ok' : t.estado === 'VETADO' ? 'estado-veto' : 'estado-pend',
+      estiloTexto: t.estilo?.nombre || 'sin estilo',
+      estiloManualMarcado: !!t.estiloManual,
     };
+  }
+
+  /**
+   * Corrección manual del estilo. Gana sobre el agente y sobre el género, así
+   * que ninguna reclasificación posterior la pisa.
+   */
+  async cambiarEstilo(fila: FilaTrack, estiloId: number | null): Promise<void> {
+    try {
+      await this.musicaService.fijarEstiloTrack(fila.id, estiloId);
+      this.snackBar.open(
+        estiloId ? 'ESTILO CORREGIDO' : 'CORRECCIÓN QUITADA: VUELVE A LA AUTOMÁTICA',
+        'OK',
+        { duration: 3000 },
+      );
+      await this.buscar();
+    } catch (e: any) {
+      this.mostrarError(e);
+    }
   }
 
   async cambiarPagina(e: PageEvent): Promise<void> {

@@ -78,35 +78,75 @@ export class MusicaTrack extends BaseModel {
   @Column({ nullable: true })
   genero?: string;
 
-  /**
-   * Estilo canonico del local. Se RESUELVE Y PERSISTE al importar/etiquetar en
-   * vez de calcularse por string en cada consulta: el planner necesita filtrar
-   * cientos de temas por cuota y hacerlo con LIKE sobre texto libre seria caro
-   * y fragil.
+  /* ─────────── Clasificacion por estilo ───────────
    *
-   * `null` = sin clasificar. La pantalla de estilos los muestra aparte para que
-   * no se acumulen en silencio, que es como se pudren estas taxonomias.
+   * Tres fuentes OPINAN y cada una escribe SOLO su columna; `estilo` es el
+   * valor resuelto por precedencia (ver `resolverEstilo`) y es el unico que
+   * lee el planner.
+   *
+   * Antes habia una sola columna y la ultima capa en correr pisaba a las
+   * demas. Eso hacia imposible una distincion real del local: "bossa covers"
+   * vs "bossa clasica" son el MISMO genero (`BOSSA NOVA`) y solo se distinguen
+   * entendiendo el tema, asi que el agente acertaba y la reclasificacion por
+   * genero lo revertia en la corrida siguiente, en silencio.
+   *
+   * Guardar las opiniones por separado tiene un segundo beneficio: donde el
+   * agente y el genero DIFIEREN hay, casi siempre, una distincion que la
+   * taxonomia de generos no sabe expresar. Esa lista es la cola de curacion y
+   * se arma sola.
    */
+
+  /** Valor resuelto = manual ?? agente ?? genero. Lo unico que lee el planner. */
   @Index()
   @ManyToOne(() => MusicaEstilo, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'estilo_id' })
   estilo?: MusicaEstilo | null;
 
+  /** Correccion del dueno. Gana siempre: ninguna corrida automatica la pisa. */
+  @Index()
+  @ManyToOne(() => MusicaEstilo, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'estilo_manual_id' })
+  estiloManual?: MusicaEstilo | null;
+
   /**
-   * El dueno corrigio el estilo a mano: la reclasificacion automatica no lo
-   * pisa. Sin esto, cada vez que se recalcula el catalogo se perderia toda la
-   * curacion manual, y nadie corrige dos veces lo mismo.
+   * Veredicto del LLM. Va ARRIBA del genero porque es el unico que "entiende"
+   * el tema: sabe que Nouvelle Vague es un proyecto de covers aunque su genero
+   * declarado sea bossa nova.
+   */
+  @Index()
+  @ManyToOne(() => MusicaEstilo, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'estilo_agente_id' })
+  estiloAgente?: MusicaEstilo | null;
+
+  /** Derivado del genero crudo via tabla de alias, o heredado del artista. */
+  @Index()
+  @ManyToOne(() => MusicaEstilo, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'estilo_genero_id' })
+  estiloGenero?: MusicaEstilo | null;
+
+  /**
+   * @deprecated Reemplazado por `estiloManual` (fijado = tiene manual). Se
+   * conserva por la regla de migraciones aditivas; se sigue escribiendo para
+   * que un rollback a la version anterior no pierda la curacion manual.
    */
   @Column({ default: false })
   estiloFijado!: boolean;
 
   // ─────────── Etiquetado semantico (LLM, una sola vez) ───────────
 
-  /** Momentos donde encaja: ['almuerzo', 'cena', 'sunset']. */
+  /** Momentos donde encaja. Vocabulario cerrado: ver `EscenaTrack`. */
   @Column({ type: 'simple-json', nullable: true })
   escenas?: string[];
 
-  /** 'relajado' | 'alegre' | 'energico' | ... */
+  /**
+   * Como se siente el tema. Vocabulario cerrado: ver `AnimoTrack`.
+   *
+   * Es lo que hace cumplir "nada triste" del brief: la valencia de ReccoBeats
+   * cubre el 87% del repertorio y no distingue una balada linda de una de
+   * despecho, mientras que esta columna esta al 100% y la escribe quien
+   * entiende la letra.
+   */
+  @Index()
   @Column({ nullable: true })
   ambiente?: string;
 

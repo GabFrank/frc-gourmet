@@ -21,6 +21,7 @@ import {
   MusicaService,
 } from 'src/app/services/musica.service';
 import { MusicaMezclaDialogComponent } from './musica-mezcla-dialog.component';
+import { ANIMOS, ESCENAS } from 'src/app/database/entities/musica/musica-enums';
 
 interface DiaConBloques {
   dia: number;
@@ -76,6 +77,10 @@ export class MusicaProgramacionComponent implements OnInit {
 
   dias: DiaConBloques[] = [];
   hayBloques = false;
+
+  /** Vocabulario cerrado, el mismo que valida el backend. */
+  readonly animos = ANIMOS;
+  readonly escenas = ESCENAS;
 
   presets: Array<{ codigo: string; nombre: string; descripcion: string; cantidadBloques: number }> = [];
   presetElegido = '';
@@ -275,6 +280,8 @@ export class MusicaProgramacionComponent implements OnInit {
         maxPorArtista,
         evitarArtistaConsecutivo: b.evitarArtistaConsecutivo,
         factorDuracion: b.factorDuracion ?? null,
+        animosEvitar: b.animosEvitar || [],
+        escenaPreferida: b.escenaPreferida ?? null,
         notas: b.notas,
       });
       this.snackBar.open('BLOQUE GUARDADO', 'OK', { duration: 2000 });

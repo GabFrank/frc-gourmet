@@ -60,6 +60,10 @@ export interface MusicaTrack {
   estado: string;
   score: number;
   vecesSonado: number;
+  /** Estilo resuelto (manual › agente › género). Es el que usa el planner. */
+  estilo?: { id: number; nombre: string } | null;
+  /** Presente solo si alguien lo corrigió a mano. */
+  estiloManual?: { id: number; nombre: string } | null;
 }
 
 export interface ResumenPool {
@@ -97,6 +101,10 @@ export interface BloqueProgramacion {
   maxPorArtista?: number | null;
   evitarArtistaConsecutivo: boolean;
   factorDuracion?: number | null;
+  /** Ánimos que no pueden sonar acá (`ANIMOS`). Exclusión dura. */
+  animosEvitar?: string[];
+  /** Momento del día del bloque (`ESCENAS`). Preferencia, no filtro. */
+  escenaPreferida?: string | null;
   notas?: string;
   orden: number;
 }
@@ -125,8 +133,28 @@ export interface EstiloConDatos {
   activo: boolean;
   /** Géneros crudos de Spotify que caen en este estilo. */
   alias: string[];
+  /** Lo mismo con id, para poder quitarlos o reasignarlos desde la UI. */
+  aliasDetalle: Array<{ id: number; valor: string }>;
   tracks: number;
   duracionMs: number;
+}
+
+/**
+ * Un tema donde el agente y el género discrepan.
+ *
+ * No es un error: es donde el género no alcanza para expresar una distinción
+ * que al local sí le importa (bossa covers vs bossa clásica son ambos
+ * `BOSSA NOVA`). Manda el agente; esta lista existe para poder revisarlo.
+ */
+export interface DesacuerdoEstilo {
+  trackId: number;
+  titulo: string;
+  artista: string;
+  genero: string | null;
+  estiloAgente: string;
+  estiloGenero: string;
+  resuelto: string;
+  hayManual: boolean;
 }
 
 export interface MezclaItem {
@@ -353,6 +381,24 @@ export class MusicaService {
 
   asignarAlias(genero: string, estiloId: number): Promise<any> {
     return this.api.callIpc('musica-estilo-alias-asignar', { genero, estiloId });
+  }
+
+  quitarAlias(id: number): Promise<{ success: boolean }> {
+    return this.api.callIpc('musica-estilo-alias-quitar', id);
+  }
+
+  /**
+   * Corrección manual del estilo de un tema. Gana sobre el agente y sobre el
+   * género. Con `estiloId = null` se borra la corrección y vuelve a mandar la
+   * clasificación automática.
+   */
+  fijarEstiloTrack(trackId: number, estiloId: number | null): Promise<any> {
+    return this.api.callIpc('musica-track-estilo', { trackId, estiloId });
+  }
+
+  /** Temas donde el agente y el género no coinciden: la cola de curación. */
+  desacuerdosDeEstilo(): Promise<DesacuerdoEstilo[]> {
+    return this.api.callIpc('musica-estilos-desacuerdos');
   }
 
   sembrarEstilos(): Promise<any> {

@@ -13,7 +13,8 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { EstiloConDatos, MusicaService } from 'src/app/services/musica.service';
+import { DesacuerdoEstilo, EstiloConDatos, MusicaService } from 'src/app/services/musica.service';
+import { MusicaEstiloEditarDialogComponent } from './musica-estilo-editar-dialog.component';
 
 interface EstiloVista extends EstiloConDatos {
   horasTexto: string;
@@ -61,6 +62,13 @@ export class MusicaEstilosComponent implements OnInit {
   sinClasificar: Array<{ genero: string; cantidad: number }> = [];
   hayCatalogo = false;
 
+  /**
+   * Temas donde el agente y el género discrepan. Manda el agente; esta lista
+   * está para poder mirarlo, porque es justo donde vive la distinción que la
+   * taxonomía de géneros no sabe expresar.
+   */
+  desacuerdos: DesacuerdoEstilo[] = [];
+
   /** Alta rápida de estilo. */
   nuevoNombre = '';
 
@@ -80,9 +88,10 @@ export class MusicaEstilosComponent implements OnInit {
   async cargar(): Promise<void> {
     this.cargando = true;
     try {
-      const [estilos, sueltos] = await Promise.all([
+      const [estilos, sueltos, desacuerdos] = await Promise.all([
         this.musicaService.listarEstilos(),
         this.musicaService.generosSinClasificar(),
+        this.musicaService.desacuerdosDeEstilo(),
       ]);
       this.estilos = estilos.map((e) => ({
         ...e,
@@ -91,6 +100,7 @@ export class MusicaEstilosComponent implements OnInit {
       }));
       this.hayCatalogo = this.estilos.length > 0;
       this.sinClasificar = sueltos;
+      this.desacuerdos = desacuerdos;
     } catch (e: any) {
       this.mostrarError(e);
     } finally {
@@ -160,6 +170,22 @@ export class MusicaEstilosComponent implements OnInit {
     } catch (e: any) {
       this.mostrarError(e);
     }
+  }
+
+  /** Nombre, descripción y géneros del estilo. */
+  editarEstilo(e: EstiloVista): void {
+    const ref = this.dialog.open(MusicaEstiloEditarDialogComponent, {
+      width: '560px',
+      maxWidth: '95vw',
+      data: { estiloId: e.id },
+    });
+    ref.afterClosed().subscribe(async (r) => {
+      if (!r) return;
+      // Mover o quitar un género no cambia nada por sí solo: los temas siguen
+      // apuntando al estilo viejo hasta que se recorre el pool de nuevo.
+      if (r.reclasificar) await this.clasificar(false);
+      else if (r.guardado) await this.cargar();
+    });
   }
 
   /**

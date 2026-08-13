@@ -24,6 +24,7 @@ import { DataSource } from 'typeorm';
 import { getDataSourceOptions } from '../src/app/database/database.config';
 import { MusicaTrack } from '../src/app/database/entities/musica/musica-track.entity';
 import { BloqueProgramacion } from '../src/app/database/entities/musica/bloque-programacion.entity';
+import { MusicaEstilo } from '../src/app/database/entities/musica/musica-estilo.entity';
 import { EstadoTrack } from '../src/app/database/entities/musica/musica-enums';
 import {
   normalizarGenero,
@@ -37,6 +38,10 @@ import {
   generosSinClasificar,
   fijarEstiloTrack,
   contarSinEstilo,
+  guardarEstilo,
+  aplicarResolucion,
+  desacuerdosDeEstilo,
+  RELACIONES_ESTILO,
 } from '../electron/services/musica-estilos.service';
 
 let passed = 0;
@@ -166,6 +171,111 @@ async function main() {
     'el estilo fijado a mano NO se pisa al reclasificar',
     s8Despues?.estilo?.nombre,
   );
+
+  // ─────────── Precedencia entre las tres opiniones ───────────
+  //
+  // El caso real que motivó esto: un cover de bossa tiene género BOSSA NOVA,
+  // así que el alias lo manda a "BOSSA / MPB" y el agente —que entiende que es
+  // un cover— lo manda a "BOSSA COVERS". Antes la reclasificación corría
+  // después del etiquetado y revertía al agente en silencio.
+  console.log('\nprecedencia manual › agente › género');
+  const covers = await guardarEstilo(ds, {
+    nombre: 'BOSSA COVERS',
+    descripcion: 'Covers modernos de pop y rock en clave bossa.',
+  });
+  const cover = await trackRepo.save(
+    track(ds, {
+      spotifyId: 'cover1',
+      titulo: 'Creep',
+      artista: 'Bossa Covers',
+      artistaId: 'artCover',
+      genero: 'BOSSA NOVA',
+    }),
+  );
+
+  // El género ya lo clasificó como bossa clásica.
+  await reclasificarPool(ds);
+  const trasGenero = await trackRepo.findOne({
+    where: { id: cover.id },
+    relations: RELACIONES_ESTILO,
+  });
+  ok(trasGenero?.estiloGenero?.id === bossa.id, 'el género escribe su propia columna');
+  ok(trasGenero?.estilo?.id === bossa.id, 'sin otra opinión, manda el género');
+
+  // Ahora opina el agente (se simula: el etiquetado real necesita la API).
+  trasGenero!.estiloAgente = covers;
+  aplicarResolucion(trasGenero!);
+  await trackRepo.save(trasGenero!);
+  ok(
+    (await trackRepo.findOne({ where: { id: cover.id }, relations: RELACIONES_ESTILO }))?.estilo
+      ?.id === covers.id,
+    'el agente le gana al género',
+  );
+
+  // La prueba que importa: reclasificar NO puede revertirlo.
+  await reclasificarPool(ds);
+  const trasReclasificar = await trackRepo.findOne({
+    where: { id: cover.id },
+    relations: RELACIONES_ESTILO,
+  });
+  ok(
+    trasReclasificar?.estilo?.id === covers.id,
+    'reclasificar por género NO pisa al agente',
+    trasReclasificar?.estilo?.nombre,
+  );
+  ok(
+    trasReclasificar?.estiloGenero?.id === bossa.id,
+    'y la opinión del género se conserva aparte',
+  );
+
+  // El dueño corrige a mano: gana sobre los dos.
+  await fijarEstiloTrack(ds, cover.id, bossa.id);
+  await reclasificarPool(ds);
+  ok(
+    (await trackRepo.findOne({ where: { id: cover.id }, relations: RELACIONES_ESTILO }))?.estilo
+      ?.id === bossa.id,
+    'la corrección manual gana sobre el agente',
+  );
+
+  // Y quitarla devuelve el control a lo automático, no deja el tema huérfano.
+  await fijarEstiloTrack(ds, cover.id, null);
+  const trasQuitar = await trackRepo.findOne({
+    where: { id: cover.id },
+    relations: RELACIONES_ESTILO,
+  });
+  ok(
+    trasQuitar?.estilo?.id === covers.id,
+    'quitar la corrección vuelve al agente, no deja sin estilo',
+    trasQuitar?.estilo?.nombre,
+  );
+
+  // La descripción viaja al prompt del etiquetador, así que poder CORREGIRLA
+  // —incluido vaciarla— importa. Asignar `undefined` en TypeORM no genera
+  // UPDATE: la descripción vieja sobrevivía y seguía yendo al modelo.
+  console.log('\ndescripción del estilo');
+  await guardarEstilo(ds, { id: covers.id, nombre: 'BOSSA COVERS', descripcion: 'Otra cosa.' });
+  ok(
+    (await ds.getRepository(MusicaEstilo).findOne({ where: { id: covers.id } }))?.descripcion ===
+      'Otra cosa.',
+    'se puede cambiar la descripción',
+  );
+  await guardarEstilo(ds, { id: covers.id, nombre: 'BOSSA COVERS', descripcion: '' });
+  ok(
+    !(await ds.getRepository(MusicaEstilo).findOne({ where: { id: covers.id } }))?.descripcion,
+    'vaciar la descripción la borra de verdad en la base',
+  );
+
+  // ─────────── Cola de curación ───────────
+  console.log('\ndesacuerdos');
+  const desacuerdos = await desacuerdosDeEstilo(ds);
+  const delCover = desacuerdos.find((d) => d.trackId === cover.id);
+  ok(!!delCover, 'el tema donde agente y género difieren aparece en la lista');
+  ok(
+    delCover?.estiloAgente === 'BOSSA COVERS' && delCover?.estiloGenero === 'BOSSA / MPB',
+    'la lista muestra las dos opiniones',
+    delCover,
+  );
+  ok(delCover?.resuelto === 'BOSSA COVERS', 'y cuál quedó vigente');
 
   // ─────────── Mezcla ───────────
   console.log('\nguardarMezcla');

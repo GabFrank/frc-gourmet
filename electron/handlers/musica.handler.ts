@@ -16,7 +16,10 @@ import { MusicaTrack } from '../../src/app/database/entities/musica/musica-track
 import { MusicaVeto } from '../../src/app/database/entities/musica/musica-veto.entity';
 import { BloqueProgramacion } from '../../src/app/database/entities/musica/bloque-programacion.entity';
 import {
+  AnimoTrack,
+  ESCENAS,
   EstadoTrack,
+  normalizarAnimo,
   TipoSemilla,
   TipoVeto,
 } from '../../src/app/database/entities/musica/musica-enums';
@@ -52,6 +55,7 @@ import {
   clasificarTodo,
   generosSinClasificar,
   fijarEstiloTrack,
+  desacuerdosDeEstilo,
   getMezcla,
   guardarMezcla,
   calcularDeficit,
@@ -439,7 +443,11 @@ export function registerMusicaHandlers(
           q: `%${filtros.texto.toUpperCase()}%`,
         });
       }
+      // Con las relaciones de estilo: la pantalla muestra en que estilo quedo
+      // cada tema y permite corregirlo, y sin esto vendrian todas undefined.
       const [items, total] = await qb
+        .leftJoinAndSelect('t.estilo', 'estilo')
+        .leftJoinAndSelect('t.estiloManual', 'estiloManual')
         .orderBy('t.artista', 'ASC')
         .addOrderBy('t.titulo', 'ASC')
         .skip(page * pageSize)
@@ -494,6 +502,17 @@ export function registerMusicaHandlers(
     if (data.bpmMin !== undefined) entity.bpmMin = data.bpmMin;
     if (data.bpmMax !== undefined) entity.bpmMax = data.bpmMax;
     if (data.valenciaMin !== undefined) entity.valenciaMin = data.valenciaMin;
+    // Ejes semanticos. Se normalizan aca —no se confia en la UI— porque este
+    // handler tambien entra por HTTP en modo cliente.
+    if (data.animosEvitar !== undefined) {
+      entity.animosEvitar = (data.animosEvitar || [])
+        .map((a) => normalizarAnimo(a))
+        .filter((a): a is AnimoTrack => !!a);
+    }
+    if (data.escenaPreferida !== undefined) {
+      const escena = (data.escenaPreferida || '').toUpperCase();
+      entity.escenaPreferida = (ESCENAS as string[]).includes(escena) ? escena : null;
+    }
     // `notas` NO se pasa a UPPERCASE: es texto libre del dueno y va literal al
     // prompt del planificador. Gritarlo degrada la lectura del modelo.
     if (data.notas !== undefined) entity.notas = data.notas;
@@ -672,6 +691,12 @@ export function registerMusicaHandlers(
       return await fijarEstiloTrack(dataSource, trackId, estiloId);
     },
   );
+
+  /** Donde el agente y el genero no coinciden: la cola de curacion. */
+  ipcMain.handle('musica-estilos-desacuerdos', async () => {
+    await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);
+    return await desacuerdosDeEstilo(dataSource);
+  });
 
   ipcMain.handle('musica-mezcla-get', async (_event, bloqueId: number) => {
     await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);

@@ -185,6 +185,8 @@ export interface EstiloConDatos {
   activo: boolean;
   /** Generos crudos que caen en este estilo. */
   alias: string[];
+  /** Lo mismo con id, para poder quitarlos o reasignarlos desde la UI. */
+  aliasDetalle: Array<{ id: number; valor: string }>;
   /** Temas APROBADOS clasificados aca. */
   tracks: number;
   /** Duracion total de esos temas. Es lo que se compara contra las cuotas. */
@@ -223,6 +225,10 @@ export async function listarEstilos(dataSource: DataSource): Promise<EstiloConDa
     orden: e.orden,
     activo: e.activo,
     alias: alias.filter((a) => a.estilo?.id === e.id).map((a) => a.valor).sort(),
+    aliasDetalle: alias
+      .filter((a) => a.estilo?.id === e.id)
+      .map((a) => ({ id: a.id, valor: a.valor }))
+      .sort((x, y) => x.valor.localeCompare(y.valor)),
     tracks: porEstilo.get(e.id)?.cantidad || 0,
     duracionMs: porEstilo.get(e.id)?.duracion || 0,
   }));
@@ -244,7 +250,11 @@ export async function guardarEstilo(
   const estilo = datos.id ? await repo.findOne({ where: { id: datos.id } }) : repo.create();
   if (!estilo) throw new Error('ESTILO NO ENCONTRADO.');
   estilo.nombre = nombre;
-  estilo.descripcion = datos.descripcion?.trim() || undefined;
+  // `null` y no `undefined`: TypeORM omite del UPDATE las props en `undefined`,
+  // asi que vaciar la descripcion desde la UI no borraba nada y el texto viejo
+  // seguia yendo al prompt del etiquetador. Ver la regla del proyecto sobre
+  // nulear columnas.
+  estilo.descripcion = datos.descripcion?.trim() || null;
   if (datos.orden != null) estilo.orden = datos.orden;
   if (datos.activo != null) estilo.activo = datos.activo;
   return await repo.save(estilo);
@@ -398,11 +408,51 @@ export async function resolverEstiloId(
   return alias?.estilo?.id ?? null;
 }
 
-/**
- * Recorre el repertorio y asigna estilo segun los alias.
+/* ─────────────────── Resolucion de estilo por precedencia ───────────────────
  *
- * NO toca los que tienen `estiloFijado`: sin esa proteccion, cada reclasificacion
- * borraria toda la curacion manual, y nadie corrige dos veces lo mismo.
+ * Tres fuentes opinan y cada una escribe SOLO su columna. `estilo` es el valor
+ * resuelto y lo unico que consulta el planner.
+ *
+ * El orden no es arbitrario:
+ *
+ *   manual  — el dueno ya miro ese tema. Ninguna corrida automatica lo discute.
+ *   agente  — es el unico que ENTIENDE el tema. Sabe que Nouvelle Vague es un
+ *             proyecto de covers aunque su genero declarado sea `BOSSA NOVA`,
+ *             y esa distincion no existe en ninguna taxonomia de generos.
+ *   genero  — barato, estable y reproducible, pero solo sabe de generos.
+ *
+ * Antes habia una sola columna: la ultima capa en correr pisaba a las demas, y
+ * como el genero corre despues del etiquetado, el veredicto del agente se
+ * perdia en la corrida siguiente sin dejar rastro.
+ */
+
+/** Relaciones que hay que cargar para poder resolver sin lecturas extra. */
+export const RELACIONES_ESTILO = ['estilo', 'estiloManual', 'estiloAgente', 'estiloGenero'];
+
+/** Precedencia pura, sin efectos. Unico lugar donde vive la regla. */
+export function resolverEstilo(track: MusicaTrack): MusicaEstilo | null {
+  return track.estiloManual ?? track.estiloAgente ?? track.estiloGenero ?? null;
+}
+
+/**
+ * Recalcula `estilo` y avisa si cambio, para guardar solo lo que cambia.
+ *
+ * Toda escritura de cualquiera de las tres columnas tiene que pasar por aca: si
+ * cada capa recalculara por su cuenta, en unos meses `estilo` no coincidiria
+ * con ninguna de sus fuentes y nadie sabria por que.
+ */
+export function aplicarResolucion(track: MusicaTrack): boolean {
+  const resuelto = resolverEstilo(track);
+  if ((resuelto?.id ?? null) === (track.estilo?.id ?? null)) return false;
+  track.estilo = resuelto;
+  return true;
+}
+
+/**
+ * Recorre el repertorio y asigna el estilo QUE SE DEDUCE DEL GENERO via alias.
+ *
+ * Escribe `estiloGenero` y nada mas. Si el dueno o el agente opinaron distinto,
+ * su opinion sigue mandando: esto ya no pisa a nadie.
  */
 export async function reclasificarPool(
   dataSource: DataSource,
@@ -415,30 +465,68 @@ export async function reclasificarPool(
     if (a.estilo) mapa.set(a.valor, a.estilo);
   }
 
-  // Con `relations` para poder comparar contra el estilo actual y guardar solo
-  // lo que cambia; sin el, `t.estilo` es undefined y se reescribe todo el pool.
-  const tracks = await trackRepo.find({ relations: ['estilo'] });
+  // Con `relations` para poder comparar contra lo actual y guardar solo lo que
+  // cambia; sin ellas las relaciones vienen undefined y se reescribe todo.
+  const tracks = await trackRepo.find({ relations: RELACIONES_ESTILO });
   const resultado = { procesados: tracks.length, clasificados: 0, sinEstilo: 0, respetados: 0 };
   const aGuardar: MusicaTrack[] = [];
 
   for (const t of tracks) {
-    if (t.estiloFijado) {
-      resultado.respetados++;
-      continue;
-    }
-    const estilo = mapa.get(normalizarGenero(t.genero || '')) || null;
-    if (!estilo) resultado.sinEstilo++;
+    const porGenero = mapa.get(normalizarGenero(t.genero || '')) || null;
+    if (!porGenero) resultado.sinEstilo++;
     else resultado.clasificados++;
 
-    const actual = t.estilo?.id ?? null;
-    if ((estilo?.id ?? null) !== actual) {
-      t.estilo = estilo;
-      aGuardar.push(t);
+    // `respetados` = casos donde una fuente de mas peso decide el valor final.
+    // Es la cuenta que le importa al usuario: cuanto de lo suyo NO se toco.
+    if (t.estiloManual || t.estiloAgente) resultado.respetados++;
+
+    let cambio = false;
+    if ((porGenero?.id ?? null) !== (t.estiloGenero?.id ?? null)) {
+      t.estiloGenero = porGenero;
+      cambio = true;
     }
+    if (aplicarResolucion(t) || cambio) aGuardar.push(t);
   }
 
   if (aGuardar.length) await trackRepo.save(aGuardar, { chunk: 100 });
   return resultado;
+}
+
+/**
+ * Temas donde el agente y el genero NO coinciden.
+ *
+ * No es una lista de errores: es donde el genero no alcanza para expresar una
+ * distincion que al local si le importa —"bossa covers" y "bossa clasica" son
+ * ambos `BOSSA NOVA`— y por eso es la cola de curacion natural. Se arma sola.
+ */
+export async function desacuerdosDeEstilo(dataSource: DataSource): Promise<
+  Array<{
+    trackId: number;
+    titulo: string;
+    artista: string;
+    genero: string | null;
+    estiloAgente: string;
+    estiloGenero: string;
+    resuelto: string;
+    hayManual: boolean;
+  }>
+> {
+  const tracks = await dataSource.getRepository(MusicaTrack).find({
+    where: { estado: EstadoTrack.APROBADO },
+    relations: RELACIONES_ESTILO,
+  });
+  return tracks
+    .filter((t) => t.estiloAgente && t.estiloGenero && t.estiloAgente.id !== t.estiloGenero.id)
+    .map((t) => ({
+      trackId: t.id,
+      titulo: t.titulo,
+      artista: t.artista,
+      genero: t.genero ?? null,
+      estiloAgente: t.estiloAgente!.nombre,
+      estiloGenero: t.estiloGenero!.nombre,
+      resuelto: resolverEstilo(t)?.nombre ?? '',
+      hayManual: !!t.estiloManual,
+    }));
 }
 
 /* ─────────────────────── Mezcla por bloque ─────────────────────── */
@@ -813,25 +901,30 @@ export async function heredarEstiloPorArtista(
   dataSource: DataSource,
 ): Promise<{ candidatos: number; heredados: number }> {
   const repo = dataSource.getRepository(MusicaTrack);
-  // `relations` es obligatorio: sin el, `t.estilo` viene undefined en TODOS los
-  // temas y el mapa de artistas queda vacio, asi que no se hereda nada.
-  const todos = await repo.find({ relations: ['estilo'] });
+  // `relations` es obligatorio: sin ellas las relaciones vienen undefined en
+  // TODOS los temas y el mapa de artistas queda vacio, asi que no hereda nada.
+  const todos = await repo.find({ relations: RELACIONES_ESTILO });
 
+  // Se toma el estilo RESUELTO del artista como fuente, pero se escribe en
+  // `estiloGenero`: es una deduccion determinista, del mismo rango que el
+  // alias, y no debe competir con el veredicto del agente sobre ESTE tema.
   const estiloDeArtista = new Map<string, MusicaEstilo>();
   for (const t of todos) {
-    if (t.artistaId && t.estilo && !estiloDeArtista.has(t.artistaId)) {
-      estiloDeArtista.set(t.artistaId, t.estilo);
+    const resuelto = resolverEstilo(t);
+    if (t.artistaId && resuelto && !estiloDeArtista.has(t.artistaId)) {
+      estiloDeArtista.set(t.artistaId, resuelto);
     }
   }
 
   const aGuardar: MusicaTrack[] = [];
   let candidatos = 0;
   for (const t of todos) {
-    if (t.estilo || t.estiloFijado || !t.artistaId) continue;
+    if (resolverEstilo(t) || !t.artistaId) continue;
     candidatos++;
     const estilo = estiloDeArtista.get(t.artistaId);
     if (!estilo) continue;
-    t.estilo = estilo;
+    t.estiloGenero = estilo;
+    aplicarResolucion(t);
     aGuardar.push(t);
   }
   if (aGuardar.length) await repo.save(aGuardar, { chunk: 100 });
@@ -882,24 +975,32 @@ export async function contarSinEstilo(dataSource: DataSource): Promise<number> {
     .count({ where: { estado: EstadoTrack.APROBADO, estilo: IsNull() } });
 }
 
-/** Fija el estilo de un track a mano y lo protege de la reclasificacion. */
+/**
+ * Fija el estilo de un track a mano: gana sobre el agente y sobre el genero.
+ *
+ * Con `estiloId = null` se BORRA la correccion manual y el tema vuelve a lo que
+ * digan las capas automaticas — no queda sin estilo. Es lo que espera quien se
+ * arrepiente de una correccion.
+ */
 export async function fijarEstiloTrack(
   dataSource: DataSource,
   trackId: number,
   estiloId: number | null,
 ): Promise<MusicaTrack> {
   const repo = dataSource.getRepository(MusicaTrack);
-  const track = await repo.findOne({ where: { id: trackId } });
+  const track = await repo.findOne({ where: { id: trackId }, relations: RELACIONES_ESTILO });
   if (!track) throw new Error('TEMA NO ENCONTRADO.');
   if (estiloId) {
     const estilo = await dataSource.getRepository(MusicaEstilo).findOne({ where: { id: estiloId } });
     if (!estilo) throw new Error('ESTILO NO ENCONTRADO.');
-    track.estilo = estilo;
-    track.estiloFijado = true;
+    track.estiloManual = estilo;
   } else {
-    track.estilo = null;
-    track.estiloFijado = false;
+    track.estiloManual = null;
   }
+  // `estiloFijado` quedo deprecada pero se sigue escribiendo: si alguien vuelve
+  // a la version anterior, la curacion manual se respeta igual.
+  track.estiloFijado = !!estiloId;
+  aplicarResolucion(track);
   return await repo.save(track);
 }
 
